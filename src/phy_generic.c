@@ -76,20 +76,15 @@ static void generic_set_cq_line(void* user, uint8_t state)
     /* Template: drive C/Q line high/low in SIO mode. */
 }
 
-/** @brief Template hook to read supply voltage in mV (negative if unavailable). */
-static int generic_get_voltage_mv(void* user)
+/** @brief Template hook: physical faults currently active (phy.h flags, 0=ok).
+ *
+ * Report the conditions this transceiver can observe; the device maps each flag
+ * to an EventCode (iolink_dll_fault_map_t). */
+static uint8_t generic_get_faults(void* user)
 {
     (void) user;
-    /* Template: return supply voltage in mV, or negative if unavailable. */
-    return -1;
-}
-
-/** @brief Template hook returning true when a short-circuit fault is detected. */
-static bool generic_is_short_circuit(void* user)
-{
-    (void) user;
-    /* Template: return true if fault detected. */
-    return false;
+    /* Template: OR in IOLINK_PHY_FAULT_* for the faults detected right now. */
+    return 0U;
 }
 
 static const iolink_phy_api_t g_phy_generic = {.init = generic_init,
@@ -99,8 +94,7 @@ static const iolink_phy_api_t g_phy_generic = {.init = generic_init,
                                                .recv_byte = generic_recv_byte,
                                                .detect_wakeup = generic_detect_wakeup,
                                                .set_cq_line = generic_set_cq_line,
-                                               .get_voltage_mv = generic_get_voltage_mv,
-                                               .is_short_circuit = generic_is_short_circuit};
+                                               .get_faults = generic_get_faults};
 
 const iolink_phy_api_t* iolink_phy_generic_get(void)
 {

@@ -177,13 +177,14 @@ static void test_event_memory_layout(void** state)
     /* Table 58 / Figure A.22: StatusCode type 2, bit 7 set, bits 0-1 active. */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x83U);
 
-    /* Slot 1 at addresses 1,2,3: qualifier 0xF2 (appears|error|device|DL), 0x1801. */
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xF2U);
+    /* Slot 1 at addresses 1,2,3: qualifier 0xF4
+       (MODE=appears, TYPE=error, SOURCE=device, INSTANCE=Application), 0x1801. */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xF4U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x02U), 0x18U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x03U), 0x01U);
 
     /* Slot 2 at addresses 4,5,6: 0x1803. */
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0xF2U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0xF4U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x05U), 0x18U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x06U), 0x03U);
 
@@ -229,7 +230,82 @@ static void test_event_memory_confirm(void** state)
     assert_true(iolink_events_flag(&ctx));
     iolink_events_memory_write(&ctx, 0x01U, 0xAAU);
     assert_true(iolink_events_flag(&ctx));
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xE2U); /* warning qualifier */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xE4U); /* warning qualifier */
+}
+
+static void test_event_disappears_removes_entry(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    iolink_events_init(&ctx);
+
+    iolink_event_trigger(&ctx, 0x1801U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, 0x7710U, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x83U);
+
+    /* A.6.4: an Event with MODE "disappears" removes the entry of the same
+       EventCode again instead of adding one, and raises the Event flag so the
+       master re-reads. */
+    iolink_events_memory_write(&ctx, 0x00U, 0x00U); /* confirm: release memory */
+    assert_false(iolink_events_flag(&ctx));
+
+    iolink_event_trigger_mode(&ctx, 0x1801U, IOLINK_EVENT_TYPE_ERROR,
+                              IOLINK_EVENT_MODE_DISAPPEARS);
+    assert_true(iolink_events_flag(&ctx));
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x00U); /* no active event left */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0x00U);
+
+    /* Nothing was queued for the disappearance itself. */
+    assert_false(iolink_events_pending(&ctx));
+
+    /* A disappearance for a code that is not pending is a no-op (flag only). */
+    iolink_event_trigger_mode(&ctx, 0x1234U, IOLINK_EVENT_TYPE_ERROR,
+                              IOLINK_EVENT_MODE_DISAPPEARS);
+    assert_true(iolink_events_flag(&ctx));
+    assert_false(iolink_events_pending(&ctx));
+}
+
+static void test_event_disappears_keeps_other_codes(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    iolink_events_init(&ctx);
+
+    iolink_event_trigger(&ctx, 0x1801U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, 0x7710U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger_mode(&ctx, 0x1801U, IOLINK_EVENT_TYPE_ERROR,
+                              IOLINK_EVENT_MODE_DISAPPEARS);
+
+    /* Only the matching code is removed; the other entry stays in slot 1. */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xF4U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x02U), 0x77U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x03U), 0x10U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0x00U);
+
+    iolink_event_t ev;
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.code, 0x7710U);
+    assert_false(iolink_events_pop(&ctx, &ev));
+}
+
+static void test_event_single_shot_mode(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    iolink_events_init(&ctx);
+
+    iolink_event_trigger_mode(&ctx, 0x8C01U, IOLINK_EVENT_TYPE_WARNING,
+                              IOLINK_EVENT_MODE_SINGLE_SHOT);
+    assert_true(iolink_events_flag(&ctx));
+    /* MODE = single shot (1) in bits 7:6, TYPE = warning, INSTANCE = Application. */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0x64U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x02U), 0x8CU);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x03U), 0x01U);
+
+    iolink_event_t ev;
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_SINGLE_SHOT);
 }
 
 int main(void)
@@ -240,6 +316,9 @@ int main(void)
         cmocka_unit_test(test_event_peek),          cmocka_unit_test(test_event_helpers),
         cmocka_unit_test(test_event_classify),      cmocka_unit_test(test_event_memory_layout),
         cmocka_unit_test(test_event_memory_frozen), cmocka_unit_test(test_event_memory_confirm),
+        cmocka_unit_test(test_event_disappears_removes_entry),
+        cmocka_unit_test(test_event_disappears_keeps_other_codes),
+        cmocka_unit_test(test_event_single_shot_mode),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

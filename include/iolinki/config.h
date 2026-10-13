@@ -50,6 +50,17 @@
 #define IOLINK_EVENT_QUEUE_SIZE 4U
 #endif
 
+/**
+ * @brief Minimum delay between an "Event appears" and its "Event disappears".
+ *
+ * The event dispatcher must not issue a disappearance within this window
+ * (A.6.4 / Annex A dispatch rules); a condition that clears sooner is held until
+ * the window has elapsed. Default: 50 ms
+ */
+#ifndef IOLINK_EVENT_MIN_APPEAR_MS
+#define IOLINK_EVENT_MIN_APPEAR_MS 50U
+#endif
+
 /* -------------------------------------------------------------------------
  * Process Data Configuration
  * ------------------------------------------------------------------------- */

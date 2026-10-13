@@ -486,29 +486,107 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
     ctx->last_response_us = iolink_time_get_us();
 }
 
-/** @brief Poll PHY voltage and short-circuit status and raise events on faults. */
+/** @brief Library default fault -> IO-Link event mapping.
+ *
+ * Keeps the historical codes so an existing device is unaffected; a device that
+ * declares its own events (its IODD) overrides this with
+ * iolink_dll_set_fault_map().
+ *
+ * NOTE: IOLINK_EVENT_PHY_VOLTAGE_FAULT (0x1805) is the specification's
+ * master-side "PHY overtemperature" code, not a device supply-voltage code. A
+ * device declaring its own diagnostics should map the supply fault to a device
+ * code of its own, e.g. the standardized 0x5111 (primary supply voltage
+ * underrun). */
+static const iolink_dll_fault_map_t g_default_fault_map = {
+    .undervoltage = {IOLINK_EVENT_PHY_VOLTAGE_FAULT, IOLINK_EVENT_TYPE_WARNING},
+    .overtemp = {IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD, IOLINK_EVENT_TYPE_ERROR},
+    .short_circuit = {IOLINK_EVENT_PHY_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR},
+};
+
+/** @brief Announce fault *transitions* as IO-Link events.
+ *
+ * Implements the dispatcher rules of A.6.4: an "appears" is issued once when a
+ * fault starts and is not repeated while it persists (the Event flag already
+ * tells the master to re-read), and the matching "disappears" is issued when the
+ * fault ends, but never within IOLINK_EVENT_MIN_APPEAR_MS of the "appears" - a
+ * shorter glitch keeps the fault announced until the window has elapsed. */
+static void dll_dispatch_fault_events(iolink_dll_ctx_t* ctx, uint8_t faults, uint32_t now_ms)
+{
+    const iolink_dll_fault_event_t* const map[3] = {&ctx->fault_map.undervoltage,
+                                                    &ctx->fault_map.overtemp,
+                                                    &ctx->fault_map.short_circuit};
+    for (uint8_t i = 0U; i < 3U; i++) {
+        uint8_t bit = (uint8_t) (1U << i);
+        bool present = (faults & bit) != 0U;
+        bool reported = (ctx->faults_reported & bit) != 0U;
+
+        if (present && !reported) {
+            ctx->faults_reported |= bit;
+            ctx->fault_appears_ms[i] = now_ms;
+            if (map[i]->code != 0U) {
+                iolink_event_trigger_mode(&ctx->events, map[i]->code, map[i]->type,
+                                          IOLINK_EVENT_MODE_APPEARS);
+            }
+        }
+        else if (!present && reported) {
+            if ((uint32_t) (now_ms - ctx->fault_appears_ms[i]) < IOLINK_EVENT_MIN_APPEAR_MS) {
+                continue; /* too soon: retry on a later poll */
+            }
+            ctx->faults_reported &= (uint8_t) ~bit;
+            if (map[i]->code != 0U) {
+                iolink_event_trigger_mode(&ctx->events, map[i]->code, map[i]->type,
+                                          IOLINK_EVENT_MODE_DISAPPEARS);
+            }
+        }
+        else {
+            /* present && reported : already announced (de-duplicated).
+               !present && !reported : nothing to do. */
+        }
+    }
+}
+
+/** @brief Poll the PHY diagnostics: count faults every cycle, report the edges.
+ *
+ * A PHY that implements get_faults() states the physical condition directly; the
+ * legacy get_voltage_mv() / is_short_circuit() hooks are used otherwise, so
+ * existing PHYs keep working. The counters accumulate while a fault is present;
+ * how the fault is reported on the wire is the device's fault map. */
 static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
 {
     if ((ctx == NULL) || (ctx->phy == NULL)) {
         return;
     }
 
-    if (ctx->phy->get_voltage_mv != NULL) {
-        int voltage = ctx->phy->get_voltage_mv(ctx->phy->user);
-        if ((voltage < 18000) || (voltage > 30000)) {
-            ctx->voltage_faults++;
-            iolink_event_trigger(&ctx->events, IOLINK_EVENT_PHY_VOLTAGE_FAULT,
-                                 IOLINK_EVENT_TYPE_WARNING);
+    uint8_t faults = 0U;
+    if (ctx->phy->get_faults != NULL) {
+        faults = (uint8_t) (ctx->phy->get_faults(ctx->phy->user) & IOLINK_PHY_FAULT_ALL);
+    }
+    else {
+        if (ctx->phy->get_voltage_mv != NULL) {
+            int voltage_mv = ctx->phy->get_voltage_mv(ctx->phy->user);
+            /* A negative reading means "measurement unavailable", not a fault. */
+            if ((voltage_mv >= 0) && ((voltage_mv < IOLINK_PHY_VOLTAGE_MIN_MV) ||
+                                      (voltage_mv > IOLINK_PHY_VOLTAGE_MAX_MV))) {
+                faults |= IOLINK_PHY_FAULT_UNDERVOLTAGE;
+            }
+        }
+        if ((ctx->phy->is_short_circuit != NULL) &&
+            ctx->phy->is_short_circuit(ctx->phy->user)) {
+            faults |= IOLINK_PHY_FAULT_SHORT_CIRCUIT;
         }
     }
 
-    if (ctx->phy->is_short_circuit != NULL) {
-        if (ctx->phy->is_short_circuit(ctx->phy->user)) {
-            ctx->short_circuits++;
-            iolink_event_trigger(&ctx->events, IOLINK_EVENT_PHY_SHORT_CIRCUIT,
-                                 IOLINK_EVENT_TYPE_ERROR);
-        }
+    if ((faults & IOLINK_PHY_FAULT_UNDERVOLTAGE) != 0U) {
+        ctx->voltage_faults++;
     }
+    if ((faults & IOLINK_PHY_FAULT_OVERTEMP) != 0U) {
+        ctx->overtemp_faults++;
+    }
+    if ((faults & IOLINK_PHY_FAULT_SHORT_CIRCUIT) != 0U) {
+        ctx->short_circuits++;
+    }
+
+    dll_dispatch_fault_events(ctx, faults, iolink_time_get_ms());
 }
 
 void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
@@ -548,6 +626,7 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
 
     ctx->t_ren_limit_us = dll_get_t_ren_limit_us(ctx);
     ctx->t_byte_limit_us = dll_get_t_byte_limit_us(ctx);
+    ctx->fault_map = g_default_fault_map;
 
     /*
      * Initial line mode depends on whether the PHY can observe the electrical
@@ -1097,7 +1176,16 @@ void iolink_dll_get_stats(const iolink_dll_ctx_t* ctx, iolink_dll_stats_t* out_s
     out_stats->t_pd_violations = ctx->t_pd_violations;
     out_stats->total_retries = ctx->total_retries;
     out_stats->voltage_faults = ctx->voltage_faults;
+    out_stats->overtemp_faults = ctx->overtemp_faults;
     out_stats->short_circuits = ctx->short_circuits;
+}
+
+void iolink_dll_set_fault_map(iolink_dll_ctx_t* ctx, const iolink_dll_fault_map_t* map)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    ctx->fault_map = (map != NULL) ? *map : g_default_fault_map;
 }
 
 void iolink_dll_set_timing_enforcement(iolink_dll_ctx_t* ctx, bool enable)

@@ -35,6 +35,18 @@ typedef enum
 } iolink_event_type_t;
 
 /**
+ * @brief IO-Link Event Modes (A.6.4, Table A.20).
+ *
+ * The values are the on-wire MODE field of the EventQualifier.
+ */
+typedef enum
+{
+    IOLINK_EVENT_MODE_SINGLE_SHOT = 1U, /**< One-off event, no disappearance follows */
+    IOLINK_EVENT_MODE_DISAPPEARS = 2U,  /**< The condition has ended */
+    IOLINK_EVENT_MODE_APPEARS = 3U      /**< The condition has started */
+} iolink_event_mode_t;
+
+/**
  * @brief Standard IO-Link Event Codes (Spec V1.1.2)
  */
 /* Communication Layer Events (0x18XX) */
@@ -101,6 +113,7 @@ typedef struct
 {
     uint16_t code;            /**< 16-bit IO-Link EventCode (per spec or device-specific) */
     iolink_event_type_t type; /**< Severity level */
+    iolink_event_mode_t mode; /**< Appears / disappears / single shot */
 } iolink_event_t;
 
 /**
@@ -137,11 +150,31 @@ void iolink_events_init(iolink_events_ctx_t* ctx);
  * Adds an event to the internal queue. If the queue is full, the newest event
  * is typically dropped or the oldest overwritten (depending on implementation).
  *
+ * Equivalent to iolink_event_trigger_mode() with IOLINK_EVENT_MODE_APPEARS.
+ *
  * @param ctx Event context
  * @param code 16-bit IO-Link EventCode
  * @param type Severity level
  */
 void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type);
+
+/**
+ * @brief Trigger a new diagnostic event with an explicit mode
+ *
+ * IOLINK_EVENT_MODE_APPEARS / _SINGLE_SHOT add an entry to the event memory.
+ * IOLINK_EVENT_MODE_DISAPPEARS removes the entry of the same EventCode again
+ * (A.6.4: "Upon occurrence of an Event with MODE Event disappears, the
+ * corresponding entry shall be removed") and raises the Event flag so the master
+ * re-reads. A device that pairs appearances with disappearances must not repeat
+ * an appearance before the matching disappearance has been issued.
+ *
+ * @param ctx Event context
+ * @param code 16-bit IO-Link EventCode
+ * @param type Severity level
+ * @param mode Event mode
+ */
+void iolink_event_trigger_mode(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type,
+                               iolink_event_mode_t mode);
 
 /**
  * @brief Check if any events are pending for Master retrieval

@@ -52,6 +52,34 @@ typedef void (*iolink_dll_state_cb_t)(void* user, iolink_dll_state_t state);
 #include "iolinki/data_storage.h"
 
 /**
+ * @brief How one physical fault is reported to the master.
+ *
+ * The stack only detects the physical condition (phy.h get_faults). Which
+ * EventCode and EventType represent it on the wire is device-specific data
+ * (declared in the device's IODD), so it is supplied by the device instead of
+ * being hard-coded in the stack.
+ */
+typedef struct
+{
+    uint16_t code;            /**< IO-Link EventCode; 0 = do not report this fault */
+    iolink_event_type_t type; /**< Severity (notification / warning / error) */
+} iolink_dll_fault_event_t;
+
+/**
+ * @brief Fault -> IO-Link event mapping (device profile data).
+ *
+ * iolink_dll_init() installs documented defaults; a device that declares other
+ * codes (e.g. ST's vendor-specific 0x1800/0x1801) overrides them with
+ * iolink_dll_set_fault_map().
+ */
+typedef struct
+{
+    iolink_dll_fault_event_t undervoltage;  /**< IOLINK_PHY_FAULT_UNDERVOLTAGE */
+    iolink_dll_fault_event_t overtemp;      /**< IOLINK_PHY_FAULT_OVERTEMP */
+    iolink_dll_fault_event_t short_circuit; /**< IOLINK_PHY_FAULT_SHORT_CIRCUIT */
+} iolink_dll_fault_map_t;
+
+/**
  * @brief Data Link Layer Context
  *
  * Internal state and data storage for the DLL engine.
@@ -135,7 +163,11 @@ typedef struct
     uint32_t total_retries;         /**< Cumulative retry count */
     uint8_t max_retries;            /**< Configured max retries (default 3) */
     uint32_t voltage_faults;        /**< Cumulative voltage fault count */
+    uint32_t overtemp_faults;       /**< Cumulative over-temperature fault count */
     uint32_t short_circuits;        /**< Cumulative short circuit count */
+    uint8_t faults_reported;         /**< Faults announced as "appears" and not yet "disappears" */
+    uint32_t fault_appears_ms[3];    /**< When each fault bit (0..2) was announced, in ms */
+    iolink_dll_fault_map_t fault_map; /**< Fault -> event mapping (device overridable) */
     uint8_t fallback_count;         /**< Consecutive fallback count for SIO transition */
     uint8_t sio_fallback_threshold; /**< Fallback threshold to enter SIO mode (default 3) */
 
@@ -167,6 +199,7 @@ typedef struct
     uint32_t t_pd_violations;    /**< t_pd violations */
     uint32_t total_retries;      /**< Cumulative retry count */
     uint32_t voltage_faults;     /**< Cumulative voltage fault count */
+    uint32_t overtemp_faults;    /**< Cumulative over-temperature fault count */
     uint32_t short_circuits;     /**< Cumulative short circuit count */
 } iolink_dll_stats_t;
 
@@ -278,6 +311,19 @@ iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_ctx_t* ctx);
  * @param[out] out_stats Output stats structure, populated with a counter snapshot
  */
 void iolink_dll_get_stats(const iolink_dll_ctx_t* ctx, iolink_dll_stats_t* out_stats);
+
+/**
+ * @brief Override the fault -> IO-Link event mapping.
+ *
+ * iolink_dll_init() installs defaults (see the implementation); call this after
+ * init to report the physical faults with the codes and severities the device
+ * declares. A fault whose code is 0 is detected and counted but not reported as
+ * an event.
+ *
+ * @param ctx DLL context
+ * @param map Mapping to copy; NULL restores the defaults
+ */
+void iolink_dll_set_fault_map(iolink_dll_ctx_t* ctx, const iolink_dll_fault_map_t* map);
 
 /**
  * @brief Enable/disable timing enforcement (t_ren / t_cycle)

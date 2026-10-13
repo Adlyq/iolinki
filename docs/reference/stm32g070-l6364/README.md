@@ -103,6 +103,35 @@ another PHY or MCU unchanged.
   and `iolink_device_pd_output_read()`. The DLL never runs in an ISR, so the
   per-iteration fallback critical section only blocked the transceiver interrupt.
   An application-provided lock hook is still honoured when supplied.
+- **PHY diagnostics report *physical* faults; the EventCodes are device data.**
+  `iolink_phy_api_t.get_faults()` returns a bitmask of `IOLINK_PHY_FAULT_*`
+  (under-voltage / over-temperature / short-circuit) and the DLL raises events
+  through `iolink_dll_fault_map_t` (EventCode + EventType), installed per device
+  with `iolink_dll_set_fault_map()`. Previously `dll_poll_diagnostics()`
+  hard-coded 0x1805/0x1806, so a device with its own diagnostics (or an IODD with
+  vendor-specific codes) could not be expressed. Two defects in the same path are
+  fixed: a *negative* `get_voltage_mv()` means "measurement unavailable" and is no
+  longer a fault (`phy_generic`'s template returns -1, so every generic-PHY device
+  raised a voltage event on every cycle), and a fault that persists now raises its
+  event once instead of on every cycle - the Event flag already tells the master
+  to re-read. The legacy `get_voltage_mv()`/`is_short_circuit()` hooks still work
+  when `get_faults()` is not provided.
+- **Events support appears *and* disappears (A.6.4).** `iolink_event_mode_t`
+  (`IOLINK_EVENT_MODE_APPEARS` / `_DISAPPEARS` / `_SINGLE_SHOT`) is carried in the
+  `iolink_event_t` and encoded in the EventQualifier MODE field, so the DLL can
+  announce a fault and later withdraw it: an "appears" is issued on the 0->1 edge,
+  the matching "disappears" on the 1->0 edge (never within
+  `IOLINK_EVENT_MIN_APPEAR_MS`, 50 ms, of the appearance - a shorter glitch keeps
+  the fault announced until the window elapses, as the dispatcher rules require).
+  A disappearance removes the entry of the same EventCode from the event memory
+  instead of adding one, per "Upon occurrence of an Event with MODE Event
+  disappears, the corresponding entry shall be removed".
+- **EventQualifier INSTANCE field corrected.** It used `0x02`, a *reserved*
+  INSTANCE value (Table A.17); it is now `0x04` = "Application". For an
+  error-class event this yields `0xF4`, exactly the value ST's ministack emits for
+  `StackEventsQualifier(APPLICATION, DEVICE, EVENT_ERROR, APPEARS)`. The
+  StatusCode octet is now `0x00` (instead of `0x80`) when no event is active, so a
+  disappearance leaves a clean "no events" image.
 
 ## 3. Runtime behaviour changes (`dll.c`, `device.c`, `include/iolinki/*.h`)
 
@@ -182,6 +211,14 @@ application (the STM32G070 + L6364 firmware project), not to this repository:
   `od_resp_len` is what the reply builder and the ISDU capability page read, the
   override also yields capability code `4` rather than `5`.
 - **Operating baudrate**: COM3.
+- **Diagnostic events**: the transceiver's physical faults
+  (`L6364 STATUS:UV` / `:SOT` / `:SSC`, exposed through `get_faults()`) are mapped
+  to the codes and severities ST's ministack application used -
+  `0x1800` under-voltage (Error), `0x1801` over-temperature (Warning), `0x7710`
+  short circuit (Error). The two 0x18xx codes are ST's vendor-specific IODD codes,
+  chosen so this device is indistinguishable from the ST reference device under
+  the same master; a device with its own IODD replaces them by changing the
+  `st_fault_map` it passes to `iolink_dll_set_fault_map()`.
 - **The PHY**: the `recv_frame()`, `stage_reply()` and `set_cyclic_frame_len()`
   implementations, plus `detect_wakeup == NULL` (the L6364 owns the SIO / wake-up
   handshake), per the contracts in section 2.

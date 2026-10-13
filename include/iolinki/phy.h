@@ -45,6 +45,24 @@ typedef enum
 } iolink_baudrate_t;
 
 /**
+ * @brief Physical fault flags returned by iolink_phy_api_t.get_faults().
+ *
+ * A PHY reports the physical condition; the device decides how it is reported
+ * on the wire (see iolink_dll_fault_map_t in dll.h).
+ */
+#define IOLINK_PHY_FAULT_UNDERVOLTAGE  (1U << 0) /**< L+ supply below tolerance */
+#define IOLINK_PHY_FAULT_OVERTEMP      (1U << 1) /**< Transceiver over-temperature */
+#define IOLINK_PHY_FAULT_SHORT_CIRCUIT (1U << 2) /**< C/Q (or L+) short circuit */
+/** All defined physical fault flags. */
+#define IOLINK_PHY_FAULT_ALL                                                             \
+    (IOLINK_PHY_FAULT_UNDERVOLTAGE | IOLINK_PHY_FAULT_OVERTEMP |                         \
+     IOLINK_PHY_FAULT_SHORT_CIRCUIT)
+
+/** Valid L+ window for the legacy iolink_phy_api_t.get_voltage_mv() hook, in mV. */
+#define IOLINK_PHY_VOLTAGE_MIN_MV (18000)
+#define IOLINK_PHY_VOLTAGE_MAX_MV (30000)
+
+/**
  * @brief Physical Layer (PHY) API Structure
  *
  * This interface defines the contract between the stack and the hardware-specific
@@ -144,14 +162,36 @@ typedef struct
     void (*set_cq_line)(void* user, uint8_t state);
 
     /**
-     * @brief Get L+ supply voltage
+     * @brief Optional: physical faults currently active, as a bitmask of
+     *        IOLINK_PHY_FAULT_* flags (0 when none).
+     *
+     * This is the preferred diagnostics channel: a PHY describes *what* is
+     * physically wrong and needs no knowledge of IO-Link EventCodes. The DLL
+     * watches the 0->1 edges and reports each fault through the device's
+     * fault -> EventCode mapping (iolink_dll_fault_map_t), so the codes stay
+     * device-specific data instead of being hard-coded in the stack.
+     * @return Active fault flags.
+     */
+    uint8_t (*get_faults)(void* user);
+
+    /**
+     * @brief Legacy alternative to get_faults(): measured L+ supply voltage.
+     *
+     * Only consulted when get_faults() is NULL. A *negative* return means
+     * "measurement unavailable" and is not a fault; a non-negative reading
+     * outside [IOLINK_PHY_VOLTAGE_MIN_MV, IOLINK_PHY_VOLTAGE_MAX_MV] raises
+     * IOLINK_PHY_FAULT_UNDERVOLTAGE.
      * @return Voltage in millivolts, negative if measurement unavailable
      */
     int (*get_voltage_mv)(void* user);
 
     /**
-     * @brief Check for hardware fault condition
-     * @return true if short circuit or overtemperature detected
+     * @brief Legacy alternative to get_faults(): hardware fault condition.
+     *
+     * Only consulted when get_faults() is NULL. The documented contract is
+     * "short circuit or overtemperature detected", i.e. the cause is not
+     * distinguishable, so it raises IOLINK_PHY_FAULT_SHORT_CIRCUIT.
+     * @return true if a fault is detected
      */
     bool (*is_short_circuit)(void* user);
 } iolink_phy_api_t;

@@ -27,10 +27,14 @@ void iolink_events_init(iolink_events_ctx_t* ctx)
     }
 }
 
-/** @brief EventQualifier for an event type (A.6.4, Figure A.24). */
-static uint8_t event_qualifier(iolink_event_type_t type)
+/** @brief EventQualifier for an event (A.6.4, Figure A.24).
+ *
+ * MODE (bits 7:6), TYPE (bits 5:4), SOURCE (bit 3, 0 = device) and INSTANCE
+ * (bits 2:0). INSTANCE is "Application" (Table A.17, value 4), the same value
+ * ST's ministack puts on the wire. */
+static uint8_t event_qualifier(iolink_event_type_t type, iolink_event_mode_t mode)
 {
-    uint8_t q = 0xC0U; /* MODE = event appears */
+    uint8_t q = (uint8_t) (((uint8_t) mode & 0x03U) << 6);
     switch (type) {
         case IOLINK_EVENT_TYPE_NOTIFICATION:
             q |= (0x01U << 4);
@@ -44,7 +48,7 @@ static uint8_t event_qualifier(iolink_event_type_t type)
         default:
             break;
     }
-    q |= 0x02U; /* SOURCE = device, INSTANCE = DL */
+    q |= 0x04U; /* INSTANCE = Application */
     return q;
 }
 
@@ -62,12 +66,17 @@ static void event_memory_rebuild(iolink_events_ctx_t* ctx)
     for (uint8_t i = 0U; i < slots; i++) {
         uint8_t idx = (uint8_t) ((ctx->head + i) % IOLINK_EVENT_QUEUE_SIZE);
         const iolink_event_t* ev = &ctx->queue[idx];
-        ctx->memory[1U + i * 3U] = event_qualifier(ev->type);
+        ctx->memory[1U + i * 3U] = event_qualifier(ev->type, ev->mode);
         ctx->memory[2U + i * 3U] = (uint8_t) (ev->code >> 8);
         ctx->memory[3U + i * 3U] = (uint8_t) (ev->code & 0xFFU);
     }
-    /* StatusCode type 2: Event Details = 1, bits 0-5 = one bit per active slot
-       (Figure A.22/A.23: bit 0 is Event 1, bit 1 is Event 2, ...). */
+    /* StatusCode type 2: Event Details = 1 and bits 0-5 = one bit per active slot
+       (Figure A.22/A.23: bit 0 is Event 1, bit 1 is Event 2, ...). With no active
+       event the octet is 0x00 (no event details, e.g. after a disappearance). */
+    if (slots == 0U) {
+        ctx->memory[0] = 0x00U;
+        return;
+    }
     uint8_t active = 0U;
     for (uint8_t i = 0U; i < slots; i++) {
         active |= (uint8_t) (1U << i);
@@ -75,7 +84,42 @@ static void event_memory_rebuild(iolink_events_ctx_t* ctx)
     ctx->memory[0] = (uint8_t) (0x80U | active);
 }
 
-void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type)
+/** @brief Drop every queued event with this EventCode (ring buffer compaction).
+ *
+ * Used by an "Event disappears": the corresponding entry is removed from the
+ * DetailedDeviceStatus instead of being added again (A.6.4). Returns true if
+ * anything was removed. The caller holds the critical section. */
+static bool event_queue_remove(iolink_events_ctx_t* ctx, uint16_t code)
+{
+    uint8_t count = ctx->count;
+    if (count == 0U) {
+        return false;
+    }
+
+    uint8_t head = ctx->head;
+    bool removed = false;
+    ctx->head = 0U;
+    ctx->tail = 0U;
+    ctx->count = 0U;
+
+    for (uint8_t i = 0U; i < count; i++) {
+        const iolink_event_t* ev = &ctx->queue[(uint8_t) ((head + i) % IOLINK_EVENT_QUEUE_SIZE)];
+        uint8_t idx = (uint8_t) ((head + i) % IOLINK_EVENT_QUEUE_SIZE);
+        if (ev->code == code) {
+            removed = true;
+            continue;
+        }
+        /* The write index never overtakes the read index, so compacting in place
+           is safe. */
+        ctx->queue[ctx->tail] = ctx->queue[idx];
+        ctx->tail = (uint8_t) ((ctx->tail + 1U) % IOLINK_EVENT_QUEUE_SIZE);
+        ctx->count++;
+    }
+    return removed;
+}
+
+void iolink_event_trigger_mode(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type,
+                               iolink_event_mode_t mode)
 {
     if (ctx == NULL) {
         return;
@@ -83,16 +127,22 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
 
     iolink_critical_enter();
 
-    if (ctx->count >= IOLINK_EVENT_QUEUE_SIZE) {
-        /* Drop oldest (inline to avoid recursive lock) */
-        ctx->head = (uint8_t) ((ctx->head + 1U) % IOLINK_EVENT_QUEUE_SIZE);
-        ctx->count--;
+    if (mode == IOLINK_EVENT_MODE_DISAPPEARS) {
+        (void) event_queue_remove(ctx, code);
     }
+    else {
+        if (ctx->count >= IOLINK_EVENT_QUEUE_SIZE) {
+            /* Drop oldest (inline to avoid recursive lock) */
+            ctx->head = (uint8_t) ((ctx->head + 1U) % IOLINK_EVENT_QUEUE_SIZE);
+            ctx->count--;
+        }
 
-    ctx->queue[ctx->tail].code = code;
-    ctx->queue[ctx->tail].type = type;
-    ctx->tail = (uint8_t) ((ctx->tail + 1U) % IOLINK_EVENT_QUEUE_SIZE);
-    ctx->count++;
+        ctx->queue[ctx->tail].code = code;
+        ctx->queue[ctx->tail].type = type;
+        ctx->queue[ctx->tail].mode = mode;
+        ctx->tail = (uint8_t) ((ctx->tail + 1U) % IOLINK_EVENT_QUEUE_SIZE);
+        ctx->count++;
+    }
 
     /* Table 60 T2/T3: write the memory, then set the Event flag. The memory is
        frozen on the first master read so a readout is consistent; events queued
@@ -103,6 +153,11 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
     ctx->flag = true;
 
     iolink_critical_exit();
+}
+
+void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type)
+{
+    iolink_event_trigger_mode(ctx, code, type, IOLINK_EVENT_MODE_APPEARS);
 }
 
 bool iolink_events_flag(const iolink_events_ctx_t* ctx)
