@@ -24,6 +24,10 @@ The companion master stack is [iolinki-master](https://github.com/w1ne/iolinki-m
 - **[Testing Guide](TESTING.md)** - Unit tests, integration tests, and Virtual Master
 - **[Platform Porting](PORTING.md)** - How to port to new platforms and RTOSes
 
+## Reference
+
+- **[STM32G070 + L6364](reference/stm32g070-l6364/README.md)** - Local modifications for an ST L6364 single-octet port, with the supporting reverse-engineering notes
+
 ## Tools
 
 - **[Virtual Master](../tools/virtual_master/README.md)** - Python Virtual IO-Link Master
@@ -32,6 +36,7 @@ The companion master stack is [iolinki-master](https://github.com/w1ne/iolinki-m
 ## Specification
 
 - **[IO-Link Interface Spec V1.1.5](IOL-Interface-Spec_10002_V1.1.5_Oct2025/)** - Official specification
+- **[IO-Link Interface Spec V1.1.3](IOL-Interface-Spec_10002_V1.1.3_Jun2019/)** - Revision cited by the STM32G070 + L6364 notes
 
 ## API Documentation (Doxygen)
 
