@@ -10,6 +10,7 @@
 #define IOLINK_H
 
 #include <stdint.h>
+#include "iolinki/phy.h"
 
 /**
  * @file iolink.h
@@ -51,6 +52,7 @@ typedef struct
     uint8_t pd_in_len;              /**< Process Data Input length (Device to Master) in bytes */
     uint8_t pd_out_len;             /**< Process Data Output length (Master to Device) in bytes */
     uint32_t t_pd_us;               /**< Power-on delay (t_pd) in microseconds */
+    iolink_baudrate_t baudrate;     /**< Operating baudrate (COM1..COM3); firmware patch. */
 } iolink_config_t;
 
 /**

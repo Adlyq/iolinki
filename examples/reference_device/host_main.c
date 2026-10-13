@@ -72,8 +72,10 @@ int main(void)
         if (reference_device_tick(&app, false) != 0) return 2;
         exchange(&app, &link, frame, sizeof(frame));
         if (iolink_device_get_state(&app.device) != IOLINK_DLL_STATE_OPERATE) return 3;
-        /* Device response: 3 input bytes, 2 OD bytes, CKS. */
-        if ((link.tx_len != 6) || (memcmp(link.tx, app.input, sizeof(app.input)) != 0)) return 4;
+        /* Device response (Figure A.9/A.13/A.14): 2 OD bytes, 3 input bytes, CKS. */
+        if ((link.tx_len != 6) ||
+            (memcmp(&link.tx[2], app.input, sizeof(app.input)) != 0))
+            return 4;
         uint8_t checksum = link.tx[5] & 0x3FU;
         link.tx[5] &= 0xC0U;
         if (checksum != iolink_checksum6(link.tx, link.tx_len)) return 5;

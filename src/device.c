@@ -55,6 +55,15 @@ static void device_state_cb(void* user, iolink_dll_state_t state)
 static void device_apply_stack_config(iolink_device_ctx_t* ctx)
 {
     ctx->dll.m_seq_type = (uint8_t) ctx->stack_config.m_seq_type;
+
+    /* OD (On-request Data) octet counts, single source of truth (Table A.10):
+     * TYPE_1_1/TYPE_2_1 carry no OD channel, and TYPE_2_V is the two-octet
+     * variant (OPERATE M-sequence code 5). od_resp_len is normally the same as
+     * od_len; a device profile with an asymmetric OD channel (e.g. a master whose
+     * cyclic message omits the OD octet while still expecting one echoed) may
+     * override either after iolink_device_init(). */
+    ctx->dll.od_len = (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
+    ctx->dll.od_resp_len = ctx->dll.od_len;
     ctx->dll.pd_in_len = ctx->stack_config.pd_in_len;
     ctx->dll.pd_out_len = ctx->stack_config.pd_out_len;
     ctx->dll.min_cycle_time_us = (uint32_t) ctx->stack_config.min_cycle_time * 100U;
@@ -66,14 +75,29 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
         ctx->dll.t_pd_deadline_us = 0U;
     }
 
-    /* Table A.10: TYPE_2_1/TYPE_2_2 carry one On-request Data octet; TYPE_2_V is
-       the two-octet variant (OPERATE M-sequence code 5). */
-    ctx->dll.od_len = (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
+    /* The OD octet counts (od_len / od_resp_len) are derived once, above, from
+     * the M-sequence type (single source of truth). */
+
+    /* TYPE_2_V has a deterministic cyclic reply ([OD][PD-in]CKS). If the bound
+     * PHY can pre-stage and transmit it from its own interrupt (stage_reply),
+     * hand it over: then dll_handle_operate_type1_2 must not send it again.
+     * Without that capability the DLL keeps sending the reply itself. */
+    ctx->dll.cyclic_reply_precached =
+        (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && (ctx->dll.phy != NULL) &&
+        (ctx->dll.phy->stage_reply != NULL);
 
     ctx->dll.pd_in_len_current = ctx->dll.pd_in_len;
     ctx->dll.pd_out_len_current = ctx->dll.pd_out_len;
     ctx->dll.pd_in_len_max = ctx->dll.pd_in_len;
     ctx->dll.pd_out_len_max = ctx->dll.pd_out_len;
+
+    /* The DLL owns the cyclic M-sequence length: declare it to the PHY (which
+     * only uses it to delimit the incoming cyclic frame). */
+    iolink_dll_apply_cyclic_frame_len(&ctx->dll);
+
+    /* Firmware patch: honor the configured operating baudrate (COM1..COM3). */
+    ctx->dll.operating_baudrate = ctx->stack_config.baudrate;
+    (void) iolink_dll_set_baudrate(&ctx->dll, ctx->stack_config.baudrate);
 }
 
 size_t iolink_device_ctx_size(void)
@@ -105,6 +129,7 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     ctx->dll.isdu.params_ctx = &ctx->params;
     ctx->dll.isdu.vendor_service = config->vendor_service;
     ctx->dll.isdu.vendor_user = config->user;
+    ctx->dll.isdu.direct_param_write_cb = config->on_direct_param_write;
     ctx->dll.state_cb = device_state_cb;
     ctx->dll.state_cb_user = ctx;
     if (config->ds_storage != NULL) {
@@ -160,11 +185,12 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
         return -1;
     }
 
+    /* NOTE (ST-alignment B2): the iolinki DLL only ever runs in the main
+     * context (no ISR calls into it), so the previous __disable_irq() fallback
+     * (which blocked the IOD_INT ISR for the whole copy on every main-loop
+     * iteration) is removed. An application-provided lock hook is still honored. */
     if ((ctx->config != NULL) && (ctx->config->lock != NULL)) {
         ctx->config->lock(ctx->config->user);
-    }
-    else {
-        iolink_critical_enter();
     }
 
     (void) memcpy(ctx->dll.pd_in, data, len);
@@ -175,8 +201,11 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     if ((ctx->config != NULL) && (ctx->config->unlock != NULL)) {
         ctx->config->unlock(ctx->config->user);
     }
-    else {
-        iolink_critical_exit();
+
+    /* Deterministic cyclic reply: rebuild the pre-staged image so the PHY can
+     * transmit it at master-frame end without the main loop in the path. */
+    if (ctx->dll.cyclic_reply_precached) {
+        iolink_dll_prepare_cyclic_reply(&ctx->dll);
     }
 
     return 0;
@@ -193,18 +222,12 @@ int iolink_device_pd_output_read(iolink_device_ctx_t* ctx, uint8_t* data, size_t
     if ((ctx->config != NULL) && (ctx->config->lock != NULL)) {
         ctx->config->lock(ctx->config->user);
     }
-    else {
-        iolink_critical_enter();
-    }
 
     read_len = (len < ctx->dll.pd_out_len_current) ? (uint8_t) len : ctx->dll.pd_out_len_current;
     (void) memcpy(data, ctx->dll.pd_out, read_len);
 
     if ((ctx->config != NULL) && (ctx->config->unlock != NULL)) {
         ctx->config->unlock(ctx->config->user);
-    }
-    else {
-        iolink_critical_exit();
     }
 
     return (int) read_len;

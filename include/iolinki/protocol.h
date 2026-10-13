@@ -123,18 +123,41 @@
 /**
  * @defgroup iolinki_protocol_sys_cmd System Commands (Index 0x0002)
  * @ingroup iolinki_protocol
+ *
+ * NOTE (spec conformance): Table B.9 "Coding of SystemCommand (ISDU)" defines
+ *     0x01 ParamUploadStart     0x02 ParamUploadEnd
+ *     0x03 ParamDownloadStart   0x04 ParamDownloadEnd
+ *     0x05 ParamDownloadStore   0x06 ParamBreak
+ *     0x07-0x3F Reserved        0x40-0x7F Reserved for profiles
+ *     0x80 Device reset         0x81 Application reset
+ *     0x82 Restore factory      0x83 Back-to-box
+ *     0x84-0x9F Reserved        0xA0-0xFF Vendor specific
+ * and the DS_Command codes at Index 0x0003/subindex 1 are
+ *     0x01 DS_UploadStart 0x02 DS_UploadEnd 0x03 DS_DownloadStart
+ *     0x04 DS_DownloadEnd 0x05 DS_Break.
+ * The values below (0x05-0x09, 0x83, 0x84, 0x95-0x97) do NOT match Table B.9:
+ * they are shifted by two (so the standard ParamDownloadStart 0x03 etc. are
+ * rejected as FUNC_NOTAVAIL) and reuse reserved codes. Left unchanged on
+ * purpose: this project does not use Data Storage (ds_storage == NULL) and the
+ * reference master sends no SystemCommand, so there is no behavioural impact.
+ * Recorded here for a future conformant fix.
  * @{
  */
-#define IOLINK_CMD_PARAM_DOWNLOAD_START 0x05U /**< ParamDownloadStart command. */
-#define IOLINK_CMD_PARAM_DOWNLOAD_END 0x06U   /**< ParamDownloadEnd command. */
-#define IOLINK_CMD_PARAM_UPLOAD_START 0x07U   /**< ParamUploadStart command. */
-#define IOLINK_CMD_PARAM_UPLOAD_END 0x08U     /**< ParamUploadEnd command. */
-#define IOLINK_CMD_PARAM_DOWNLOAD_STORE 0x09U /**< ParamDownloadStore (V1.0/optional). */
+#define IOLINK_CMD_PARAM_DOWNLOAD_START 0x05U /**< NON-CONFORMANT: Table B.9 0x05 = ParamDownloadStore, 0x03 = ParamDownloadStart. */
+#define IOLINK_CMD_PARAM_DOWNLOAD_END 0x06U   /**< NON-CONFORMANT: Table B.9 0x06 = ParamBreak, 0x04 = ParamDownloadEnd. */
+#define IOLINK_CMD_PARAM_UPLOAD_START 0x07U   /**< NON-CONFORMANT: Table B.9 0x07 is Reserved, 0x01 = ParamUploadStart. */
+#define IOLINK_CMD_PARAM_UPLOAD_END 0x08U     /**< NON-CONFORMANT: Table B.9 0x08 is Reserved, 0x02 = ParamUploadEnd. */
+#define IOLINK_CMD_PARAM_DOWNLOAD_STORE 0x09U /**< NON-CONFORMANT: Table B.9 0x09 is Reserved, 0x05 = ParamDownloadStore. */
 /** @} */
 
 /**
  * @defgroup iolinki_protocol_legacy_cmd Legacy / Non-Standard Commands (Deprecating)
  * @ingroup iolinki_protocol
+ *
+ * NOTE (spec conformance): 0x80/0x81/0x82 match Table B.9. 0x83 is "Back-to-box"
+ * in the spec, not "restore application defaults"; 0x84 is Reserved in the spec;
+ * 0x95-0x97 fall in the reserved 0x84-0x9F range (vendor codes start at 0xA0).
+ * Unchanged on purpose (see the SystemCommand note above).
  * @{
  */
 #define IOLINK_CMD_DEVICE_RESET 0x80U             /**< Device reset command. */
@@ -164,7 +187,7 @@
  * @{
  */
 #define IOLINK_ISDU_ERROR_NONE 0x00U               /**< No error. */
-#define IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL 0x11U  /**< Requested service not available. */
+#define IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL 0x11U  /**< Table C.1 IDX_NOTAVAIL: index does not exist. */
 #define IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL 0x12U /**< Requested subindex not available. */
 #define IOLINK_ISDU_ERROR_NOT_ACCESSIBLE 0x23U     /**< Object access denied (Table C.1). */
 #define IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL \

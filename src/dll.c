@@ -103,10 +103,19 @@ static uint32_t dll_get_t_ren_limit_us(const iolink_dll_ctx_t* ctx)
     return IOLINK_T_REN_US;
 }
 
-/** @brief Return the inter-byte timeout (16 bit-times) in us for the active baudrate. */
+/** @brief Return the inter-byte timeout in us for the active baudrate, or 0 when
+ *  the PHY delimits frames in hardware (recv_frame). */
 static uint32_t dll_get_t_byte_limit_us(const iolink_dll_ctx_t* ctx)
 {
     if (ctx == NULL) {
+        return 0U;
+    }
+    /* A PHY that hands over whole, already frame-delimited M-sequences resolves
+     * the boundary itself (octet count + CKT type, or the transceiver's DAT/CHK
+     * frame-end time-out), so the DLL must not second-guess it with a polled
+     * inter-octet timer: the main-loop DLL is slower than t_byte and would reset
+     * the frame mid-assembly. The byte-wise fallback keeps the t_byte delimiting. */
+    if ((ctx->phy != NULL) && (ctx->phy->recv_frame != NULL)) {
         return 0U;
     }
     uint32_t t_bit_us;
@@ -136,21 +145,51 @@ static bool dll_t_pd_active(const iolink_dll_ctx_t* ctx)
     return iolink_time_get_us() < ctx->t_pd_deadline_us;
 }
 
-/** @brief Drain all pending RX bytes from the PHY; returns true if any were seen. */
+/** @brief Drain all pending RX data from the PHY; returns true if any was seen. */
 static bool dll_drain_rx(iolink_dll_ctx_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->phy == NULL) || (ctx->phy->recv_byte == NULL)) {
+    if ((ctx == NULL) || (ctx->phy == NULL)) {
         return false;
     }
-    bool saw_byte = false;
-    uint8_t byte = 0U;
-    while (ctx->phy->recv_byte(ctx->phy->user, &byte) > 0) {
-        saw_byte = true;
+    bool saw_data = false;
+    if (ctx->phy->recv_frame != NULL) {
+        uint8_t frame[48];
+        uint8_t flen;
+        for (;;) {
+            flen = (uint8_t) sizeof(frame);
+            if (ctx->phy->recv_frame(ctx->phy->user, frame, &flen) <= 0) {
+                break;
+            }
+            saw_data = true;
+        }
+        return saw_data;
     }
-    return saw_byte;
+    if (ctx->phy->recv_byte != NULL) {
+        uint8_t byte = 0U;
+        while (ctx->phy->recv_byte(ctx->phy->user, &byte) > 0) {
+            saw_data = true;
+        }
+    }
+    return saw_data;
 }
 
 /** @brief Handle a communication failure: count retries and revert toward SIO/STARTUP. */
+static void dll_recover_to_idle(iolink_dll_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    /* Firmware patch: a PHY without wake-up detection (detect_wakeup == NULL)
+     * owns the SIO/wake-up handshake itself and must stay in SDCI; switching it
+     * to SIO would latch it with no way to leave (it never reports a wake-up). */
+    if (ctx->phy->detect_wakeup != NULL) {
+        iolink_dll_set_sio_mode(ctx);
+    }
+    else {
+        iolink_dll_set_sdci_mode(ctx);
+    }
+}
+
 static void dll_enter_fallback(iolink_dll_ctx_t* ctx)
 {
     if (ctx == NULL) {
@@ -164,8 +203,8 @@ static void dll_enter_fallback(iolink_dll_ctx_t* ctx)
         /* Communication could not be sustained: enter FALLBACK, revert the PHY
            to SIO at COM1, then settle back to STARTUP to await a new wake-up. */
         dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
-        iolink_dll_set_sio_mode(ctx);
-        iolink_dll_set_baudrate(ctx, IOLINK_BAUDRATE_COM1);
+        dll_recover_to_idle(ctx);
+        iolink_dll_set_baudrate(ctx, ctx->operating_baudrate);
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
         ctx->fallback_count = 0U;
         ctx->frame_index = 0U;
@@ -173,7 +212,7 @@ static void dll_enter_fallback(iolink_dll_ctx_t* ctx)
                              IOLINK_EVENT_TYPE_WARNING);
     }
     else if (ctx->state != IOLINK_DLL_STATE_OPERATE && ctx->state != IOLINK_DLL_STATE_ESTAB_COM) {
-        iolink_dll_set_baudrate(ctx, IOLINK_BAUDRATE_COM1);
+        iolink_dll_set_baudrate(ctx, ctx->operating_baudrate);
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
     }
 }
@@ -385,24 +424,36 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
         }
     }
 
-    /* A.1.5 reply layout: [PD-in octets][OD octets] CKS, with no leading status
-       octet. CKS carries the Event flag (bit 7), the PD-validity flag (bit 6,
-       1 = invalid) and the 6-bit message checksum (bits 0-5). */
-    /* A Type-0 WRITE is answered by the CKS only; a Type-0 READ by OD + CKS
-       (A.1.5, Figure A.5). Multi-type replies always carry the OD octets. */
+    if (ctx->cyclic_reply_precached) {
+        /* The cyclic reply is deterministic: the PHY builds it from the
+         * registered PD-in source and transmits it from its own interrupt at
+         * master-frame end, so the DLL must not send it again. Only maintain the
+         * fallback counter + timestamp. */
+        ctx->fallback_count = 0U;
+        ctx->last_response_us = iolink_time_get_us();
+        return;
+    }
+
+    /* Device reply layout (Figure A.9/A.10/A.13/A.14): the On-request Data octets
+       come FIRST, then the Process Data In octets, then the CKS octet:
+           [OD...][PD-In...]CKS
+       This mirrors the master message, which places its OD after the PD-out. The
+       CKS carries the Event flag (bit 7), the PD-validity flag (bit 6, 1 = invalid)
+       and the 6-bit message checksum (bits 0-5); there is no leading status octet.
+       A Type-0 WRITE is answered by the CKS only (Figure A.5). */
     const bool type0_write = (dll_expected_type_bits(ctx) == IOLINK_MSEQ_TYPE_0) &&
                              ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U);
-    const uint8_t od_reply_len = type0_write ? 0U : ctx->od_len;
+    const uint8_t od_emit_len = type0_write ? 0U : ctx->od_resp_len;
 
     uint8_t resp[IOLINK_PD_IN_MAX_SIZE + 5];
     uint16_t pos = 0U;
+    for (uint8_t i = 0U; i < od_emit_len; i++) {
+        resp[pos] = (i < 2U) ? od_out[i] : 0x00U;
+        pos++;
+    }
     if (ctx->pd_in_len_current > 0U) {
         memcpy(&resp[pos], ctx->pd_in, ctx->pd_in_len_current);
         pos += ctx->pd_in_len_current;
-    }
-    if (od_reply_len > 0U) {
-        memcpy(&resp[pos], od_out, od_reply_len);
-        pos += od_reply_len;
     }
 
     uint8_t cks = 0x00U;
@@ -470,9 +521,11 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     ctx->enforce_timing = (IOLINK_TIMING_ENFORCE_DEFAULT != 0U);
     ctx->sio_fallback_threshold = 3U;
 
-    /* Table A.10: TYPE_2_1/TYPE_2_2 carry one On-request Data octet; TYPE_2_V is
-       the two-octet variant (OPERATE M-sequence code 5). */
-    ctx->od_len = (ctx->m_seq_type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
+    /* The OD octet counts (od_len / od_resp_len) are derived from the M-sequence
+     * type once it is known - device_apply_stack_config() applies them with the
+     * stack configuration. A bare init leaves both at 0. */
+    ctx->od_len = 0U;
+    ctx->od_resp_len = 0U;
 
     ctx->pd_in_len_current = ctx->pd_in_len;
     ctx->pd_out_len_current = ctx->pd_out_len;
@@ -481,6 +534,7 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     ctx->pd_valid = true;
 
     ctx->baudrate = IOLINK_BAUDRATE_COM2;
+    ctx->operating_baudrate = IOLINK_BAUDRATE_COM2;
     if (ctx->phy->set_baudrate != NULL) {
         ctx->phy->set_baudrate(ctx->phy->user, IOLINK_BAUDRATE_COM2);
     }
@@ -517,6 +571,260 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     }
 }
 
+void iolink_dll_prepare_cyclic_reply(iolink_dll_ctx_t* ctx)
+{
+    if ((ctx == NULL) || !ctx->cyclic_reply_precached || (ctx->phy == NULL) ||
+        (ctx->phy->stage_reply == NULL)) {
+        return;
+    }
+
+    const uint8_t nxt = (uint8_t) (1U - ctx->cyclic_stage_active);
+    uint8_t* out = ctx->cyclic_stage[nxt];
+    size_t pos = 0U;
+
+    /* Device reply layout (Figure A.9/A.10/A.13/A.14): [OD...][PD-in...]CKS. */
+    for (uint8_t i = 0U; i < ctx->od_resp_len; i++) {
+        /* The cyclic On-request Data channel is idle for this profile: the master
+         * polls it with FlowCTRL IDLE and transfers ISDU acyclically (Type-0), so
+         * the OD octet carries no ISDU data (0x00). */
+        out[pos++] = 0x00U;
+    }
+    if (ctx->pd_in_len_current > 0U) {
+        (void) memcpy(&out[pos], ctx->pd_in, ctx->pd_in_len_current);
+        pos += ctx->pd_in_len_current;
+    }
+
+    uint8_t cks = 0x00U;
+    if (iolink_events_flag(&ctx->events)) {
+        cks |= 0x80U;
+    }
+    if (!ctx->pd_valid) {
+        cks |= 0x40U;
+    }
+    out[pos] = cks;
+    out[pos] = (uint8_t) (cks | iolink_checksum6(out, pos + 1U));
+    pos++;
+
+    ctx->cyclic_stage_len[nxt] = (uint8_t) pos;
+    ctx->cyclic_stage_active = nxt;
+
+    /* Hand the fully written slot to the PHY. The DLL only ever writes the slot
+     * it did NOT hand last, so the handed image stays stable while the PHY copies
+     * it at frame end. No critical section is needed here (main-context only). */
+    ctx->phy->stage_reply(ctx->phy->user, ctx->cyclic_stage[nxt], pos);
+}
+
+void iolink_dll_apply_cyclic_frame_len(iolink_dll_ctx_t* ctx)
+{
+    if ((ctx == NULL) || (ctx->phy == NULL) || (ctx->phy->set_cyclic_frame_len == NULL)) {
+        return;
+    }
+    ctx->phy->set_cyclic_frame_len(
+        ctx->phy->user,
+        (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + ctx->pd_out_len_current + ctx->od_len));
+}
+
+/* Derive the expected request length for the M-sequence whose first octet
+ * (the MC byte) is now in ctx->frame_buf[0], from the current DLL state.
+ * Shared by both RX paths (whole-frame and byte-wise). */
+static void dll_rx_begin(iolink_dll_ctx_t* ctx)
+{
+    const uint8_t mc_byte = ctx->frame_buf[0];
+    const uint8_t type0_channel = (uint8_t) (mc_byte & IOLINK_MC_COMM_CHANNEL_MASK);
+    const bool type0_od_write = (dll_expected_type_bits(ctx) == IOLINK_MSEQ_TYPE_0) &&
+                                ((mc_byte & IOLINK_MC_RW_MASK) == 0U) &&
+                                ((type0_channel == IOLINK_MC_CHANNEL_PAGE) ||
+                                 (type0_channel == IOLINK_MC_CHANNEL_DIAGNOSIS) ||
+                                 (type0_channel == IOLINK_MC_CHANNEL_ISDU));
+    if (type0_od_write) {
+        /* Figure A.5: a Type-0 write carries exactly ONE OD octet
+           whatever OD width the OPERATE M-sequence uses. */
+        ctx->req_len = (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + 1U);
+    }
+    else {
+        /* STARTUP/PREOPERATE expect Type 0; ESTAB_COM and OPERATE use
+           the configured type (C5/Table 47). The transition command is
+           the sole Type-0 exchange once a multi type is configured. */
+        uint8_t type_bits = dll_expected_type_bits(ctx);
+        bool transition_cmd = (ctx->state == IOLINK_DLL_STATE_ESTAB_COM) &&
+                              (mc_byte == IOLINK_MC_TRANSITION_COMMAND);
+        if (!transition_cmd && (type_bits != IOLINK_MSEQ_TYPE_0)) {
+            ctx->req_len = dll_expected_req_len(ctx, type_bits);
+        }
+        else {
+            ctx->req_len = 2U;
+        }
+    }
+}
+
+/* Dispatch a complete M-sequence held in ctx->frame_buf (frame_index octets),
+ * with req_len already derived by dll_rx_begin(). Leaves frame_index 0. */
+static void dll_process_rx_frame(iolink_dll_ctx_t* ctx)
+{
+    if ((ctx->frame_index == 0U) || (ctx->frame_index < ctx->req_len)) {
+        return;
+    }
+
+    uint64_t now_us_proc = iolink_time_get_us();
+    if ((ctx->enforce_timing) && (ctx->min_cycle_time_us > 0U) &&
+        (ctx->last_cycle_start_us != 0U)) {
+        if (now_us_proc - ctx->last_cycle_start_us < (uint64_t) ctx->min_cycle_time_us) {
+            ctx->timing_errors++;
+            ctx->t_cycle_violations++;
+            iolink_event_trigger(&ctx->events, IOLINK_EVENT_COMM_TIMING,
+                                 IOLINK_EVENT_TYPE_WARNING);
+        }
+    }
+    ctx->last_cycle_start_us = now_us_proc;
+
+    /* A.1.6/Figure A.2: the master message carries the checksum in the
+       CKT octet (the second octet); its bits 0-5 are zeroed before the
+       A.1.6 checksum is computed over every message octet. The CKT is
+       also where the M-sequence type (bits 6-7) lives. */
+    uint8_t crc_buf[sizeof(ctx->frame_buf)];
+    (void) memcpy(crc_buf, ctx->frame_buf, ctx->req_len);
+    const uint8_t expected_ck = (uint8_t) (crc_buf[1] & 0x3FU);
+    crc_buf[1] = (uint8_t) (crc_buf[1] & IOLINK_MSEQ_TYPE_MASK);
+    bool crc_ok = (iolink_checksum6(crc_buf, ctx->req_len) == expected_ck);
+
+    /* C5/Table 47: the CKT type bits must match the M-sequence type in
+       force. STARTUP and PREOPERATE are Type-0 only; in OPERATE the
+       configured type is expected. An illegal type is an illegal
+       M-sequence: report it and return to STARTUP (Table 47 T8/T11). */
+    uint8_t rx_type = (uint8_t) (ctx->frame_buf[1] & IOLINK_MSEQ_TYPE_MASK);
+    uint8_t exp_type = IOLINK_MSEQ_TYPE_0;
+    if ((ctx->state == IOLINK_DLL_STATE_OPERATE) ||
+        ((ctx->state == IOLINK_DLL_STATE_ESTAB_COM) &&
+         (ctx->frame_buf[0] != IOLINK_MC_TRANSITION_COMMAND))) {
+        exp_type = dll_mseq_type_bits(ctx->m_seq_type);
+    }
+    bool type_ok = (rx_type == exp_type);
+
+    if (crc_ok && type_ok) {
+        ctx->last_valid_frame_ms = iolink_time_get_ms();   /* heartbeat */
+        bool was_establishing = (ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) ||
+                                (ctx->state == IOLINK_DLL_STATE_STARTUP);
+        if (was_establishing) {
+            dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
+            ctx->dsio_deadline_ms = 0U; /* valid message cancels T_DSIO */
+        }
+
+        if (ctx->state == IOLINK_DLL_STATE_PREOPERATE) {
+            uint8_t mc = ctx->frame_buf[0];
+            bool page_read = ((mc & IOLINK_MC_RW_MASK) != 0U) &&
+                             ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == 0x20U);
+            if (was_establishing && (ctx->req_len == 2U) && page_read) {
+                /* First message after wake-up is the spec startup probe
+                   (transition T1): a Type-0 READ of a Direct Parameter page
+                   octet on the page channel. Answer from the direct-parameter
+                   source rather than feeding the MC into ISDU. Later PREOPERATE
+                   Type-0 frames are ISDU traffic and are not intercepted. */
+                dll_handle_page_channel_read(ctx, mc);
+            }
+            else if (ctx->req_len == 2U) {
+                if (mc == IOLINK_MC_TRANSITION_COMMAND) {
+                    dll_handle_preoperate(ctx, mc, ctx->frame_buf[1]);
+                }
+                else {
+                    dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
+                }
+            }
+            else if ((ctx->req_len == 3U) && dll_is_fallback_command(ctx)) {
+                /* Table B.2/43: FALLBACK MasterCommand 0x5A. */
+                dll_handle_fallback_command(ctx);
+            }
+            else if ((ctx->req_len == 3U) && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
+                     ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == 0x20U) &&
+                     ((mc & IOLINK_MC_ADDR_MASK) == 0x00U) &&
+                     (ctx->frame_buf[2] == IOLINK_CMD_DEVICE_OPERATE)) {
+                /* Spec DeviceOperate: page-channel Type-0 WRITE of
+                   MasterCommand 0x99 to Direct Parameter address 0x00.
+                   Figure A.5: a Type-0 write reply is the CKS only.
+                   NOTE (spec conformance): Table B.2 also defines
+                   MasterCommands 0x97 (STARTUP), 0x98
+                   (ProcessDataOutputOperate) and 0x9A (PREOPERATE); only
+                   0x5A (FALLBACK) and 0x99 (DeviceOperate) are handled
+                   here. The reference master only uses 0x99, so the other
+                   commands are intentionally not implemented yet. */
+                dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
+                ctx->fallback_count = 0U;
+
+                uint8_t resp[1];
+                uint8_t cks = 0x00U;
+                if (iolink_events_flag(&ctx->events)) {
+                    cks |= 0x80U;
+                }
+                if (!ctx->pd_valid) {
+                    cks |= 0x40U;
+                }
+                resp[0] = cks;
+                resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));
+                if (ctx->phy->send != NULL) {
+                    ctx->phy->send(ctx->phy->user, resp, 1);
+                }
+                ctx->last_response_us = iolink_time_get_us();
+            }
+            else if (ctx->req_len == 3U) {
+                /* Any other 3-octet Type-0 OD write in PREOPERATE is
+                   ISDU or diagnosis traffic (7.3.6 allows ISDU before
+                   OPERATE). It is a TYPE_0 frame: one OD octet at
+                   offset 2 and a CKS-only reply (Figure A.5), never the
+                   configured OPERATE PD widths. */
+                dll_handle_type0_od_write(ctx, ctx->frame_buf[0], ctx->frame_buf[2]);
+            }
+        }
+        else if (ctx->state == IOLINK_DLL_STATE_ESTAB_COM) {
+            if (ctx->frame_buf[0] == IOLINK_MC_TRANSITION_COMMAND) {
+                dll_handle_preoperate(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
+            }
+            else {
+                /* The first valid non-transition frame establishes
+                   communication and moves to OPERATE, Type 0 included. */
+                dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
+                if (ctx->req_len == 2U) {
+                    dll_handle_operate_type0(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
+                }
+                else {
+                    dll_handle_operate_type1_2(ctx);
+                }
+            }
+        }
+        else if (ctx->state == IOLINK_DLL_STATE_OPERATE) {
+            /* Transitions are forbidden; every communication channel is
+               valid in OPERATE (page/diagnosis/ISDU/process). */
+            if ((ctx->req_len == 3U) && (dll_is_fallback_command(ctx))) {
+                /* Table B.2/43, Table 47 T9: OPERATE -> SIO after T_FBD. */
+                dll_handle_fallback_command(ctx);
+            }
+            else if (ctx->frame_buf[0] == IOLINK_MC_TRANSITION_COMMAND) {
+                ctx->framing_errors++;
+                dll_enter_fallback(ctx);
+            }
+            else if (ctx->req_len == 2U) {
+                dll_handle_operate_type0(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
+            }
+            else {
+                dll_handle_operate_type1_2(ctx);
+            }
+        }
+    }
+    else if (crc_ok && !type_ok) {
+        /* Illegal M-sequence type: report it and go to STARTUP (T11). */
+        ctx->framing_errors++;
+        iolink_event_trigger(&ctx->events, IOLINK_EVENT_CODE_COMM_ERR_GENERAL,
+                             IOLINK_EVENT_TYPE_ERROR);
+        dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
+        ctx->frame_index = 0U;
+        return;
+    }
+    else {
+        ctx->crc_errors++;
+        ctx->framing_errors++;
+        dll_enter_fallback(ctx);
+    }
+    ctx->frame_index = 0U;
+}
+
 void iolink_dll_process(iolink_dll_ctx_t* ctx)
 {
     if ((ctx == NULL) || (ctx->phy == NULL)) {
@@ -530,12 +838,27 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
 
     uint32_t now_ms = iolink_time_get_ms();
     uint64_t now_ms64 = iolink_time_get_us() / 1000U;
+
+    /* OPERATE supervision: if the master stops delivering valid frames (stops
+       talking, or its frames no longer pass CRC/type), drop back to STARTUP/SIO
+       and refresh the PHY so the device does not stay stuck "connected" while
+       the master has actually gone offline / is restarting the port. */
+    if ((ctx->state == IOLINK_DLL_STATE_OPERATE) && (ctx->last_valid_frame_ms != 0U) &&
+        ((uint32_t)(now_ms - ctx->last_valid_frame_ms) > IOLINK_OPERATE_TIMEOUT_MS)) {
+        ctx->last_valid_frame_ms = 0U;
+        ctx->timeout_errors++;
+        iolink_dll_set_baudrate(ctx, ctx->operating_baudrate);
+        dll_recover_to_idle(ctx);
+        dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
+        ctx->frame_index = 0U;
+    }
+
     if ((ctx->last_activity_ms != 0U) && (now_ms - ctx->last_activity_ms > 1000U)) {
         ctx->last_activity_ms = 0U; /* Prevent repeated resets */
         ctx->timeout_errors++;      /* Link went idle past the inactivity window */
         if (ctx->phy_mode != IOLINK_PHY_MODE_SIO) {
-            iolink_dll_set_baudrate(ctx, IOLINK_BAUDRATE_COM1);
-            iolink_dll_set_sio_mode(ctx);
+            iolink_dll_set_baudrate(ctx, ctx->operating_baudrate);
+            dll_recover_to_idle(ctx);
         }
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
         ctx->frame_index = 0U;
@@ -550,8 +873,8 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
             ctx->dsio_deadline_ms = 0U;
             ctx->wakeup_seen = false;
             ctx->timeout_errors++;
-            iolink_dll_set_baudrate(ctx, IOLINK_BAUDRATE_COM1);
-            iolink_dll_set_sio_mode(ctx);
+            iolink_dll_set_baudrate(ctx, ctx->operating_baudrate);
+            dll_recover_to_idle(ctx);
             dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
             ctx->frame_index = 0U;
         }
@@ -566,8 +889,8 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
          (ctx->state == IOLINK_DLL_STATE_PREOPERATE))) {
         if (now_ms64 >= ctx->fallback_deadline_ms) {
             ctx->fallback_deadline_ms = 0U;
-            iolink_dll_set_baudrate(ctx, IOLINK_BAUDRATE_COM1);
-            iolink_dll_set_sio_mode(ctx);
+            iolink_dll_set_baudrate(ctx, ctx->operating_baudrate);
+            dll_recover_to_idle(ctx);
             dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
             ctx->frame_index = 0U;
         }
@@ -605,6 +928,11 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
         if (ctx->last_byte_us != 0U) {
             uint64_t now_us = iolink_time_get_us();
             if (now_us - ctx->last_byte_us > (uint64_t) ctx->t_byte_limit_us) {
+                /* Inter-octet gap longer than t_byte on a byte-wise PHY: the
+                 * partial M-sequence is discarded (the next octet starts a fresh
+                 * frame) and, as upstream, the link is treated as broken. Only
+                 * reached when the PHY does not delimit frames itself
+                 * (t_byte_limit_us is 0 for a recv_frame PHY). */
                 ctx->timing_errors++;
                 ctx->t_byte_violations++;
                 ctx->framing_errors++;
@@ -622,232 +950,78 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
         }
     }
 
-    uint8_t byte;
-    while (ctx->phy->recv_byte != NULL) {
-        int received = ctx->phy->recv_byte(ctx->phy->user, &byte);
-        if (received <= 0) {
-            if (received < 0) {
-                /* A transport loss invalidates any already consumed prefix. */
-                ctx->frame_index = 0U;
-                ctx->last_byte_us = 0U;
+    uint8_t frame[sizeof(ctx->frame_buf)];
+    uint8_t flen;
+
+    if (ctx->phy->recv_frame != NULL) {
+        /* Frame-delimited PHY (a single-octet transceiver): the PHY resolves the
+         * M-sequence boundary in hardware (octet count + CKT type, or its
+         * frame-end time-out), so a whole frame arrives at once. */
+        for (;;) {
+            flen = (uint8_t) sizeof(frame);
+            if (ctx->phy->recv_frame(ctx->phy->user, frame, &flen) <= 0) {
+                break;
+            }
+            if (flen > sizeof(ctx->frame_buf)) {
                 ctx->framing_errors++;
-            }
-            break;
-        }
-        uint64_t now_us = iolink_time_get_us();
-        ctx->last_activity_ms = iolink_time_get_ms();
-        if ((ctx->frame_index > 0U) && (ctx->enforce_timing) && (ctx->t_byte_limit_us > 0U)) {
-            if (ctx->last_byte_us != 0U) {
-                if (now_us - ctx->last_byte_us > (uint64_t) ctx->t_byte_limit_us) {
-                    ctx->timing_errors++;
-                    ctx->t_byte_violations++;
-                    ctx->framing_errors++;
-                    iolink_event_trigger(&ctx->events, IOLINK_EVENT_COMM_TIMING,
-                                         IOLINK_EVENT_TYPE_WARNING);
-                    ctx->frame_index = 0U;
-                }
-            }
-        }
-        ctx->last_byte_us = now_us;
-
-        if (ctx->frame_index == 0U) {
-            ctx->frame_buf[0] = byte;
-            ctx->frame_index = 1U;
-            ctx->last_frame_us = now_us;
-
-            /* A Type-0 WRITE on an OD-carrying channel (page, diagnosis, ISDU)
-               carries one OD octet after the CKT: MC + CKT + OD. This covers
-               DeviceOperate/FALLBACK MasterCommands and every ISDU/event write.
-               Type-0 reads carry no OD input; their reply is OD + CKS (A.1.5). */
-            const uint8_t type0_channel = (uint8_t) (byte & IOLINK_MC_COMM_CHANNEL_MASK);
-            const bool type0_od_write = (dll_expected_type_bits(ctx) == IOLINK_MSEQ_TYPE_0) &&
-                                        ((byte & IOLINK_MC_RW_MASK) == 0U) &&
-                                        ((type0_channel == IOLINK_MC_CHANNEL_PAGE) ||
-                                         (type0_channel == IOLINK_MC_CHANNEL_DIAGNOSIS) ||
-                                         (type0_channel == IOLINK_MC_CHANNEL_ISDU));
-            if (type0_od_write) {
-                /* Figure A.5: a Type-0 write carries exactly ONE OD octet
-                   whatever OD width the OPERATE M-sequence uses. */
-                ctx->req_len = (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + 1U);
-            }
-            else {
-                /* STARTUP/PREOPERATE expect Type 0; ESTAB_COM and OPERATE use
-                   the configured type (C5/Table 47). The transition command is
-                   the sole Type-0 exchange once a multi type is configured.
-                   The M-sequence length is independent of the baudrate. */
-                uint8_t type_bits = dll_expected_type_bits(ctx);
-                bool transition_cmd = (ctx->state == IOLINK_DLL_STATE_ESTAB_COM) &&
-                                      (byte == IOLINK_MC_TRANSITION_COMMAND);
-                if (!transition_cmd && (type_bits != IOLINK_MSEQ_TYPE_0)) {
-                    ctx->req_len = dll_expected_req_len(ctx, type_bits);
-                }
-                else {
-                    ctx->req_len = 2U;
-                }
-            }
-        }
-        else {
-            if (ctx->frame_index < sizeof(ctx->frame_buf)) {
-                ctx->frame_buf[ctx->frame_index++] = byte;
-            }
-            else {
-                ctx->frame_index = 0U;
-                ctx->framing_errors++;
-            }
-        }
-
-        if ((ctx->frame_index > 0U) && (ctx->frame_index >= ctx->req_len)) {
-            uint64_t now_us_proc = iolink_time_get_us();
-            if ((ctx->enforce_timing) && (ctx->min_cycle_time_us > 0U) &&
-                (ctx->last_cycle_start_us != 0U)) {
-                if (now_us_proc - ctx->last_cycle_start_us < (uint64_t) ctx->min_cycle_time_us) {
-                    ctx->timing_errors++;
-                    ctx->t_cycle_violations++;
-                    iolink_event_trigger(&ctx->events, IOLINK_EVENT_COMM_TIMING,
-                                         IOLINK_EVENT_TYPE_WARNING);
-                }
-            }
-            ctx->last_cycle_start_us = now_us_proc;
-
-            /* A.1.6/Figure A.2: the master message carries the checksum in the
-               CKT octet (the second octet); its bits 0-5 are zeroed before the
-               A.1.6 checksum is computed over every message octet. The CKT is
-               also where the M-sequence type (bits 6-7) lives. */
-            uint8_t crc_buf[sizeof(ctx->frame_buf)];
-            (void) memcpy(crc_buf, ctx->frame_buf, ctx->req_len);
-            const uint8_t expected_ck = (uint8_t) (crc_buf[1] & 0x3FU);
-            crc_buf[1] = (uint8_t) (crc_buf[1] & IOLINK_MSEQ_TYPE_MASK);
-            bool crc_ok = (iolink_checksum6(crc_buf, ctx->req_len) == expected_ck);
-
-            /* C5/Table 47: the CKT type bits must match the M-sequence type in
-               force. STARTUP and PREOPERATE are Type-0 only; in OPERATE the
-               configured type is expected. An illegal type is an illegal
-               M-sequence: report it and return to STARTUP (Table 47 T8/T11). */
-            uint8_t rx_type = (uint8_t) (ctx->frame_buf[1] & IOLINK_MSEQ_TYPE_MASK);
-            uint8_t exp_type = IOLINK_MSEQ_TYPE_0;
-            if ((ctx->state == IOLINK_DLL_STATE_OPERATE) ||
-                ((ctx->state == IOLINK_DLL_STATE_ESTAB_COM) &&
-                 (ctx->frame_buf[0] != IOLINK_MC_TRANSITION_COMMAND))) {
-                exp_type = dll_mseq_type_bits(ctx->m_seq_type);
-            }
-            bool type_ok = (rx_type == exp_type);
-
-            if (crc_ok && type_ok) {
-                bool was_establishing = (ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) ||
-                                        (ctx->state == IOLINK_DLL_STATE_STARTUP);
-                if (was_establishing) {
-                    dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
-                    ctx->dsio_deadline_ms = 0U; /* valid message cancels T_DSIO */
-                }
-
-                if (ctx->state == IOLINK_DLL_STATE_PREOPERATE) {
-                    uint8_t mc = ctx->frame_buf[0];
-                    bool page_read = ((mc & IOLINK_MC_RW_MASK) != 0U) &&
-                                     ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == 0x20U);
-                    if (was_establishing && (ctx->req_len == 2U) && page_read) {
-                        /* First message after wake-up is the spec startup probe
-                           (transition T1): a Type-0 READ of a Direct Parameter page
-                           octet on the page channel. Answer from the direct-parameter
-                           source rather than feeding the MC into ISDU. Later PREOPERATE
-                           Type-0 frames are ISDU traffic and are not intercepted. */
-                        dll_handle_page_channel_read(ctx, mc);
-                    }
-                    else if (ctx->req_len == 2U) {
-                        if (mc == IOLINK_MC_TRANSITION_COMMAND) {
-                            dll_handle_preoperate(ctx, mc, ctx->frame_buf[1]);
-                        }
-                        else {
-                            dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
-                        }
-                    }
-                    else if ((ctx->req_len == 3U) && dll_is_fallback_command(ctx)) {
-                        /* Table B.2/43: FALLBACK MasterCommand 0x5A. */
-                        dll_handle_fallback_command(ctx);
-                    }
-                    else if ((ctx->req_len == 3U) && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
-                             ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == 0x20U) &&
-                             ((mc & IOLINK_MC_ADDR_MASK) == 0x00U) &&
-                             (ctx->frame_buf[2] == IOLINK_CMD_DEVICE_OPERATE)) {
-                        /* Spec DeviceOperate: page-channel Type-0 WRITE of
-                           MasterCommand 0x99 to Direct Parameter address 0x00.
-                           Figure A.5: a Type-0 write reply is the CKS only. */
-                        dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
-                        ctx->fallback_count = 0U;
-
-                        uint8_t resp[1];
-                        uint8_t cks = 0x00U;
-                        if (iolink_events_flag(&ctx->events)) {
-                            cks |= 0x80U;
-                        }
-                        if (!ctx->pd_valid) {
-                            cks |= 0x40U;
-                        }
-                        resp[0] = cks;
-                        resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));
-                        if (ctx->phy->send != NULL) {
-                            ctx->phy->send(ctx->phy->user, resp, 1);
-                        }
-                        ctx->last_response_us = iolink_time_get_us();
-                    }
-                    else if (ctx->req_len == 3U) {
-                        /* Any other 3-octet Type-0 OD write in PREOPERATE is
-                           ISDU or diagnosis traffic (7.3.6 allows ISDU before
-                           OPERATE). It is a TYPE_0 frame: one OD octet at
-                           offset 2 and a CKS-only reply (Figure A.5), never the
-                           configured OPERATE PD widths. */
-                        dll_handle_type0_od_write(ctx, ctx->frame_buf[0], ctx->frame_buf[2]);
-                    }
-                }
-                else if (ctx->state == IOLINK_DLL_STATE_ESTAB_COM) {
-                    if (ctx->frame_buf[0] == IOLINK_MC_TRANSITION_COMMAND) {
-                        dll_handle_preoperate(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
-                    }
-                    else {
-                        /* The first valid non-transition frame establishes
-                           communication and moves to OPERATE, Type 0 included. */
-                        dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
-                        if (ctx->req_len == 2U) {
-                            dll_handle_operate_type0(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
-                        }
-                        else {
-                            dll_handle_operate_type1_2(ctx);
-                        }
-                    }
-                }
-                else if (ctx->state == IOLINK_DLL_STATE_OPERATE) {
-                    /* Transitions are forbidden; every communication channel is
-                       valid in OPERATE (page/diagnosis/ISDU/process). */
-                    if ((ctx->req_len == 3U) && (dll_is_fallback_command(ctx))) {
-                        /* Table B.2/43, Table 47 T9: OPERATE -> SIO after T_FBD. */
-                        dll_handle_fallback_command(ctx);
-                    }
-                    else if (ctx->frame_buf[0] == IOLINK_MC_TRANSITION_COMMAND) {
-                        ctx->framing_errors++;
-                        dll_enter_fallback(ctx);
-                    }
-                    else if (ctx->req_len == 2U) {
-                        dll_handle_operate_type0(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
-                    }
-                    else {
-                        dll_handle_operate_type1_2(ctx);
-                    }
-                }
-            }
-            else if (crc_ok && !type_ok) {
-                /* Illegal M-sequence type: report it and go to STARTUP (T11). */
-                ctx->framing_errors++;
-                iolink_event_trigger(&ctx->events, IOLINK_EVENT_CODE_COMM_ERR_GENERAL,
-                                     IOLINK_EVENT_TYPE_ERROR);
-                dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
-                ctx->frame_index = 0U;
                 continue;
             }
-            else {
-                ctx->crc_errors++;
-                ctx->framing_errors++;
-                dll_enter_fallback(ctx);
+            (void) memcpy(ctx->frame_buf, frame, flen);
+            ctx->frame_index = flen;
+            ctx->last_activity_ms = iolink_time_get_ms();
+            ctx->last_byte_us = iolink_time_get_us();
+            dll_rx_begin(ctx);
+            dll_process_rx_frame(ctx);
+        }
+    }
+    else if (ctx->phy->recv_byte != NULL) {
+        /* Byte-wise PHY (upstream behaviour): reconstruct the M-sequence octet by
+         * octet; the t_byte time-out delimits and resynchronises the frame. */
+        uint8_t byte;
+        for (;;) {
+            int received = ctx->phy->recv_byte(ctx->phy->user, &byte);
+            if (received <= 0) {
+                if (received < 0) {
+                    /* A transport loss invalidates any already consumed prefix. */
+                    ctx->frame_index = 0U;
+                    ctx->last_byte_us = 0U;
+                    ctx->framing_errors++;
+                }
+                break;
             }
-            ctx->frame_index = 0U;
+            uint64_t now_us = iolink_time_get_us();
+            ctx->last_activity_ms = iolink_time_get_ms();
+            if ((ctx->frame_index > 0U) && (ctx->enforce_timing) &&
+                (ctx->t_byte_limit_us > 0U)) {
+                if (ctx->last_byte_us != 0U) {
+                    if (now_us - ctx->last_byte_us > (uint64_t) ctx->t_byte_limit_us) {
+                        ctx->timing_errors++;
+                        ctx->t_byte_violations++;
+                        ctx->framing_errors++;
+                        iolink_event_trigger(&ctx->events, IOLINK_EVENT_COMM_TIMING,
+                                             IOLINK_EVENT_TYPE_WARNING);
+                        ctx->frame_index = 0U;
+                    }
+                }
+            }
+            ctx->last_byte_us = now_us;
+
+            if (ctx->frame_index == 0U) {
+                ctx->frame_buf[0] = byte;
+                ctx->frame_index = 1U;
+                ctx->last_frame_us = now_us;
+                dll_rx_begin(ctx);
+            }
+            else if (ctx->frame_index < sizeof(ctx->frame_buf)) {
+                ctx->frame_buf[ctx->frame_index] = byte;
+                ctx->frame_index++;
+            }
+            else {
+                ctx->frame_index = 0U;
+                ctx->framing_errors++;
+            }
+
+            dll_process_rx_frame(ctx);
         }
     }
 }

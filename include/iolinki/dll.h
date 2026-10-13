@@ -60,7 +60,8 @@ typedef struct
 {
     iolink_dll_state_t state;    /**< Current DLL state */
     const iolink_phy_api_t* phy; /**< Bound PHY API implementation */
-    uint32_t last_activity_ms;   /**< Timestamp of last valid frame */
+    uint32_t last_activity_ms;   /**< Timestamp of last received byte */
+    uint32_t last_valid_frame_ms;/**< Timestamp of the last checksum/type-valid frame */
     bool wakeup_seen;            /**< Wake-up detected (if PHY supports it) */
 
     /* Configuration */
@@ -68,6 +69,22 @@ typedef struct
     uint8_t pd_in_len;          /**< Input Process Data length */
     uint8_t pd_out_len;         /**< Output Process Data length */
     uint8_t od_len;             /**< On-request Data length (1 or 2 bytes) */
+    uint8_t od_resp_len;        /**< OD octets emitted in the device reply (may differ
+                                     from od_len for ST i-link-public masters, which
+                                     send no OD but expect one echoed) */
+    bool cyclic_reply_precached;/**< Cyclic OPERATE reply is deterministic (TYPE_2_V):
+                                     the DLL builds it via
+                                     iolink_dll_prepare_cyclic_reply() and the PHY
+                                     transmits the staged image from its own
+                                     interrupt, so dll_handle_operate_type1_2 must
+                                     not send it again */
+    /* Double-buffered cyclic reply image: the DLL writes the inactive slot and
+     * then swaps cyclic_stage_active atomically; the PHY only ever reads the slot
+     * the active index points at. Used only when cyclic_reply_precached is set and
+     * the PHY provides stage_reply. */
+    uint8_t cyclic_stage[2][IOLINK_PD_IN_MAX_SIZE + IOLINK_OD_MAX_SIZE + 1U];
+    uint8_t cyclic_stage_len[2];
+    volatile uint8_t cyclic_stage_active;
     bool pd_valid;              /**< Current PD_In validity status */
     uint32_t min_cycle_time_us; /**< Minimum cycle time in microseconds */
     bool enforce_timing;        /**< Enable timing checks (t_ren / t_cycle) */
@@ -86,6 +103,7 @@ typedef struct
 
     /* Baudrate Support */
     iolink_baudrate_t baudrate; /**< Negotiated baudrate (COM1-COM3) */
+    iolink_baudrate_t operating_baudrate; /**< Configured device operating baudrate (firmware patch) */
 
     /* Unified Frame Assembly */
     uint8_t frame_buf[48];         /**< Raw frame assembly buffer */
@@ -170,6 +188,28 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy);
  * @param ctx DLL context to process
  */
 void iolink_dll_process(iolink_dll_ctx_t* ctx);
+
+/**
+ * @brief Build and pre-stage the deterministic cyclic reply image.
+ *
+ * Only meaningful when cyclic_reply_precached is set and the bound PHY provides
+ * stage_reply(): builds the reply ([OD...][PD-in...]CKS, Figure A.9/A.13/A.14)
+ * from the current PD-in, validity and event state into the inactive slot of the
+ * double buffer, swaps the active index atomically and hands the PHY the image.
+ * Call it whenever the PD-in image changes (e.g. once per main-loop cycle).
+ * @param ctx DLL context
+ */
+void iolink_dll_prepare_cyclic_reply(iolink_dll_ctx_t* ctx);
+
+/**
+ * @brief Push the expected cyclic M-sequence length to the PHY.
+ *
+ * The DLL is the single source for the cyclic frame length
+ * (IOLINK_M_SEQ_HEADER_LEN + PD-out + OD); the PHY only needs it to delimit the
+ * incoming cyclic frame. Call after the PD/OD configuration is applied.
+ * @param ctx DLL context
+ */
+void iolink_dll_apply_cyclic_frame_len(iolink_dll_ctx_t* ctx);
 
 /**
  * @brief Set current PD lengths for variable types (1_V, 2_V)

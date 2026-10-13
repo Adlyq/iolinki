@@ -73,6 +73,9 @@ typedef struct
         void* user, uint16_t index, uint8_t subindex, bool write, const uint8_t* input,
         size_t length, uint8_t* output,
         size_t* output_length); /**< Optional vendor ISDU callback; see isdu.h. */
+    void (*on_direct_param_write)(
+        void* user, uint8_t subindex, const uint8_t* data,
+        size_t length); /**< Optional: Direct Parameter page 2 write notification. */
 } iolink_device_config_t;
 
 /**

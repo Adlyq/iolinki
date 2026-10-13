@@ -101,6 +101,9 @@ typedef struct
                               const uint8_t* input, size_t length, uint8_t* output,
                               size_t* output_length);
     void* vendor_user;
+    /* Optional notification fired after a Direct Parameter page 2 write is
+     * committed; subindex is 1-based (1..16), data points at the written octets. */
+    void (*direct_param_write_cb)(void* user, uint8_t subindex, const uint8_t* data, size_t length);
     bool vendor_positive;            /**< Disambiguates successful 0x80xx vendor payloads. */
     void* event_ctx;                 /**< Diagnostic host backlink */
     void* ds_ctx;                    /**< Data Storage context for system commands */

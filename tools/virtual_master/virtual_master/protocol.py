@@ -237,7 +237,7 @@ class MSequenceGenerator:
 
 
 class DeviceResponse:
-    """Parse a Device reply: [PD-in octets][OD octets] CKS (A.1.5).
+    """Parse a Device reply: [OD octets][PD-in octets] CKS (A.1.5, Figures A.9/A.13/A.14).
 
     There is no leading status octet: the Event flag (bit 7) and the PD
     validity flag (bit 6, 1 = invalid) live in the trailing CKS octet together
@@ -264,16 +264,17 @@ class DeviceResponse:
         self.checksum = data[-1]
         body = data[:-1]
 
-        expected = pd_in_len + od_len
+        expected = od_len + pd_in_len
         if len(body) > expected and od_len > 0:
             print(f"[DEBUG] Resp raw={data.hex()} expected body={expected}")
 
-        self.pd = body[:pd_in_len]
-        self.payload = body[pd_in_len:]
-        if len(body) >= (pd_in_len + 1):
-            self.od = body[pd_in_len]
-            if od_len >= 2 and len(body) >= (pd_in_len + 2):
-                self.od2 = body[pd_in_len + 1]
+        # Device reply layout (A.1.5, Figures A.9/A.13/A.14): the On-request Data
+        # octets come first, then the Process Data In octets.
+        self.payload = body[:od_len]
+        self.od = body[0] if len(body) >= 1 else 0
+        if od_len >= 2 and len(body) >= 2:
+            self.od2 = body[1]
+        self.pd = body[od_len:]
 
         frame = bytearray(data)
         frame[-1] &= M_SEQUENCE_TYPE_MASK  # checksum bits zeroed, flags kept

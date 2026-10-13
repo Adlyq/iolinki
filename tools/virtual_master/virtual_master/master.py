@@ -214,7 +214,7 @@ class VirtualMaster:
         od1 = od[1] if len(od) > 1 else 0
         frame = self.generator.generate_type1(mc, self._type_bits(), pd, od0, od1)
         self.uart.send_bytes(frame)
-        # A multi-type reply is always [PD-in][OD] CKS (A.1.5).
+        # A multi-type reply is always [OD][PD-in] CKS (A.1.5, Figures A.9/A.13/A.14).
         reply_len = self.pd_in_len + self.od_len + 1
         data = self.uart.recv_bytes(reply_len, timeout_ms=300)
         if not data:

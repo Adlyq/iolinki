@@ -653,7 +653,12 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
     }
 }
 
-/** @brief Execute a SystemCommand (reset, factory restore, data-storage commands). */
+/** @brief Execute a SystemCommand (reset, factory restore, data-storage commands).
+ *
+ * NOTE (spec conformance): the data-storage command values handled here
+ * (IOLINK_CMD_PARAM_*) do not match the standard Table B.9 coding; see the note
+ * at those defines in protocol.h. Left unchanged because this project does not
+ * use Data Storage and the reference master sends no SystemCommand. */
 static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
     switch (cmd) {
@@ -918,7 +923,7 @@ static uint8_t direct_param_encode_pd(uint8_t octets)
  * bit0 = ISDU supported, bits1-3 = OPERATE M-sequence code (Table A.10),
  * bits4-5 = PREOPERATE M-sequence code (Table A.8; TYPE_0 = 0 here).
  */
-static uint8_t direct_param_mseq_capability(uint8_t m_seq_type)
+static uint8_t direct_param_mseq_capability(uint8_t m_seq_type, uint8_t od_width)
 {
     uint8_t cap = 0x01U; /* ISDU supported */
     uint8_t operate_code;
@@ -930,7 +935,9 @@ static uint8_t direct_param_mseq_capability(uint8_t m_seq_type)
             operate_code = 6U; /* 8 OD octets, no PD */
             break;
         case IOLINK_M_SEQ_TYPE_2_V:
-            operate_code = 5U; /* OD 2, variable PD */
+            /* Table A.10 codes the variable types by their On-request Data width
+             * (1 OD octet -> code 4, 2 OD octets -> code 5). */
+            operate_code = (od_width >= 2U) ? 5U : 4U;
             break;
         case IOLINK_M_SEQ_TYPE_1_1:
         case IOLINK_M_SEQ_TYPE_2_1:
@@ -952,16 +959,18 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
     uint8_t pd_in = 0U;
     uint8_t pd_out = 0U;
     uint8_t m_seq = 0U;
+    uint8_t od_width = 0U;
     if (ctx->dll_ctx != NULL) {
         const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
         iolink_dll_get_pd_length(dll, &pd_in, &pd_out);
         m_seq = dll->m_seq_type;
+        od_width = dll->od_resp_len;
     }
 
     (void) memset(page, 0, 16);
     /* 0x00 MasterCommand (W) and 0x01 MasterCycleTime default to 0. */
     page[0x02] = (info != NULL) ? info->min_cycle_time : 0U; /* MinCycleTime */
-    page[0x03] = direct_param_mseq_capability(m_seq);        /* M-sequenceCapability */
+    page[0x03] = direct_param_mseq_capability(m_seq, od_width); /* M-sequenceCapability */
     page[0x04] = 0x11U;                                      /* RevisionID = v1.1 */
     page[0x05] = direct_param_encode_pd(pd_in);              /* ProcessDataIn */
     page[0x06] = direct_param_encode_pd(pd_out);             /* ProcessDataOut */
@@ -1008,10 +1017,16 @@ static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
             }
             (void) memcpy(page2_storage, ctx->buffer, n);
             ctx->response_len = 0U;
+            if (ctx->direct_param_write_cb != NULL) {
+                ctx->direct_param_write_cb(ctx->vendor_user, 0U, page2_storage, n);
+            }
         }
         else if ((sub <= 16U) && (ctx->buffer_idx >= 1U)) {
             page2_storage[sub - 1U] = ctx->buffer[0];
             ctx->response_len = 0U;
+            if (ctx->direct_param_write_cb != NULL) {
+                ctx->direct_param_write_cb(ctx->vendor_user, sub, &page2_storage[sub - 1U], 1U);
+            }
         }
         else {
             ctx->response_buf[0] = 0x80U;
@@ -1092,7 +1107,22 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
 static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
 {
     ctx->vendor_positive = false;
-    if ((ctx->header.index >= 0x0100U) && (ctx->vendor_service != NULL)) {
+    /* ISDU index space (Figure B.6 / Table B.8): the device-specific ranges are
+     * 0x0040-0x00FE ("Preferred Index") and 0x0100-0x3FFF ("Extended Index"), and
+     * are served by the application's vendor_service. Indices outside those
+     * ranges are standardized (0x0000-0x003F), reserved (0x00FF, 0x5100-0xFFFF)
+     * or profile specific (0x4000-0x50FF) and never reach the vendor service.
+     *
+     * NOTE (untested on the wire): the >= 0x0100 path is exercised by the
+     * reference master; the 0x0040-0x00FE path is NOT, because no master-side
+     * ISDU access to a < 0x0100 device-specific index has been issued yet.
+     * Verify with a master ISDU read/write of e.g. 0x00EF / 0x00EE before
+     * relying on it. */
+    const uint16_t idx = ctx->header.index;
+    const bool device_specific_index = ((idx >= 0x0040U) && (idx <= 0x00FEU)) ||
+                                       ((idx >= 0x0100U) && (idx <= 0x3FFFU));
+    bool vendor_route = (ctx->vendor_service != NULL) && device_specific_index;
+    if (vendor_route) {
 #if IOLINK_ISDU_BUFFER_SIZE > 238U
         size_t length = 235U;
 #else

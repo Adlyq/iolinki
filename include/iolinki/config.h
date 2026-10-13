@@ -105,6 +105,18 @@
 #endif
 
 /**
+ * @brief OPERATE supervision window in milliseconds.
+ *
+ * If no checksum/type-valid frame arrives for this long while the DLL is in
+ * OPERATE, the master is considered gone: the device returns to STARTUP/SIO and
+ * refreshes the PHY, so a subsequent master restart (WURQ) is handled cleanly
+ * instead of leaving the device stuck showing "connected".
+ */
+#ifndef IOLINK_OPERATE_TIMEOUT_MS
+#define IOLINK_OPERATE_TIMEOUT_MS 200U
+#endif
+
+/**
  * @brief Fallback to SIO after a failed wake-up without a valid message (T_DSIO).
  *
  * Spec Table 47 T10: 60..300 ms, default 300 ms.
