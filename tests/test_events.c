@@ -79,16 +79,16 @@ static void test_phy_diagnostic_codes(void** state)
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
 
-    iolink_event_trigger(&ctx, IOLINK_EVENT_PHY_VOLTAGE_FAULT, IOLINK_EVENT_TYPE_WARNING);
-    iolink_event_trigger(&ctx, IOLINK_EVENT_PHY_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, IOLINK_EVENT_TYPE_WARNING);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR);
 
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENT_PHY_VOLTAGE_FAULT);
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
 
     assert_true(iolink_events_pop(&ctx, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENT_PHY_SHORT_CIRCUIT);
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_SHORT_CIRCUIT);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_ERROR);
 }
 

@@ -145,7 +145,7 @@ static void test_voltage_monitoring_low(void** state)
     assert_true(iolink_events_pending(&ctx.events));
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx.events, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENT_PHY_VOLTAGE_FAULT);
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
 }
 
@@ -167,7 +167,7 @@ static void test_voltage_monitoring_high(void** state)
     assert_true(iolink_events_pending(&ctx.events));
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx.events, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENT_PHY_VOLTAGE_FAULT);
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN);
 }
 
 static void test_voltage_monitoring_multiple_cycles(void** state)
@@ -208,7 +208,7 @@ static void test_short_circuit_detection(void** state)
     assert_true(iolink_events_pending(&ctx.events));
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx.events, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENT_PHY_SHORT_CIRCUIT);
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_SHORT_CIRCUIT);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_ERROR);
 }
 
@@ -297,16 +297,16 @@ static void test_faults_default_mapping(void** state)
     assert_int_equal(stats.overtemp_faults, 1);
     assert_int_equal(stats.short_circuits, 1);
 
-    /* Defaults keep the historical codes; over-temperature gets its own code. */
+    /* Defaults use the standardized device codes (Table D.1): 0x5111, 0x4000, 0x7710. */
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx.events, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENT_PHY_VOLTAGE_FAULT);
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
     assert_true(iolink_events_pop(&ctx.events, &ev));
     assert_int_equal(ev.code, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_ERROR);
     assert_true(iolink_events_pop(&ctx.events, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENT_PHY_SHORT_CIRCUIT);
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_SHORT_CIRCUIT);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_ERROR);
     assert_false(iolink_events_pending(&ctx.events));
 }
@@ -347,8 +347,9 @@ static void test_faults_appear_then_disappear(void** state)
     assert_true(iolink_events_flag(&ctx.events));
     assert_int_equal(iolink_events_memory_read(&ctx.events, 0x00U), 0x81U);
     assert_int_equal(iolink_events_memory_read(&ctx.events, 0x01U), 0xF4U);
-    assert_int_equal(iolink_events_memory_read(&ctx.events, 0x02U), 0x18U);
-    assert_int_equal(iolink_events_memory_read(&ctx.events, 0x03U), 0x06U);
+    /* Default short-circuit code is the standardized device code 0x7710. */
+    assert_int_equal(iolink_events_memory_read(&ctx.events, 0x02U), 0x77U);
+    assert_int_equal(iolink_events_memory_read(&ctx.events, 0x03U), 0x10U);
 
     /* Master confirms the readout (Table 60 T5). */
     iolink_events_memory_write(&ctx.events, 0x00U, 0x00U);
@@ -376,7 +377,7 @@ static void test_faults_appear_then_disappear(void** state)
     mock_faults = IOLINK_PHY_FAULT_SHORT_CIRCUIT;
     iolink_dll_process(&ctx);
     assert_true(iolink_events_pop(&ctx.events, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENT_PHY_SHORT_CIRCUIT);
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_SHORT_CIRCUIT);
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
 }
 
@@ -418,7 +419,7 @@ static void test_faults_unreported_code(void** state)
     const iolink_dll_fault_map_t map = {
         .undervoltage = {0U, IOLINK_EVENT_TYPE_WARNING},
         .overtemp = {IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD, IOLINK_EVENT_TYPE_ERROR},
-        .short_circuit = {IOLINK_EVENT_PHY_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR},
+        .short_circuit = {IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR},
     };
     mock_faults = IOLINK_PHY_FAULT_UNDERVOLTAGE;
 

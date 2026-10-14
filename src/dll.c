@@ -546,15 +546,15 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
  * declares its own events (its IODD) overrides this with
  * iolink_dll_set_fault_map().
  *
- * NOTE: IOLINK_EVENT_PHY_VOLTAGE_FAULT (0x1805) is the specification's
- * master-side "PHY overtemperature" code, not a device supply-voltage code. A
- * device declaring its own diagnostics should map the supply fault to a device
- * code of its own, e.g. the standardized 0x5111 (primary supply voltage
- * underrun). */
+ * The codes are the standardized *device* EventCodes of Table D.1 (the
+ * 0x18xx range is vendor-specific and 0x1805/0x1806 are the master/port codes
+ * "PHY overtemperature" / "Short circuit at L+", so they must not be used for
+ * device faults). A device that declares its own IODD overrides this with
+ * iolink_dll_set_fault_map(). */
 static const iolink_dll_fault_map_t g_default_fault_map = {
-    .undervoltage = {IOLINK_EVENT_PHY_VOLTAGE_FAULT, IOLINK_EVENT_TYPE_WARNING},
-    .overtemp = {IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD, IOLINK_EVENT_TYPE_ERROR},
-    .short_circuit = {IOLINK_EVENT_PHY_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR},
+    .undervoltage = {IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, IOLINK_EVENT_TYPE_WARNING}, /* 0x5111 */
+    .overtemp = {IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD, IOLINK_EVENT_TYPE_ERROR},          /* 0x4000 */
+    .short_circuit = {IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR},            /* 0x7710 */
 };
 
 /** @brief Announce fault *transitions* as IO-Link events.

@@ -46,29 +46,25 @@ typedef enum
     IOLINK_EVENT_MODE_APPEARS = 3U      /**< The condition has started */
 } iolink_event_mode_t;
 
-/**
- * @brief Standard IO-Link Event Codes (Spec V1.1.2)
+/*
+ * Device vendor-specific communication events.
+ *
+ * Spec V1.1.3 Table D.1 reserves 0x1800-0x18FF for vendor-specific *Device*
+ * events. These values coincide numerically with the Master/Port codes of
+ * Table D.2 (e.g. 0x1804 = "Short circuit at C/Q"), but the EventQualifier
+ * SOURCE bit (0 = Device, 1 = Master/Port) disambiguates them on the wire.
+ * There is no standardized Device code for these conditions, so a device may
+ * also remap them via iolink_dll_set_fault_map()/its own triggers.
+ *
+ * Do NOT reuse these for standardized device conditions: the specification
+ * defines dedicated Device codes (0x4xxx temperature, 0x5xxx supply/hardware,
+ * 0x6xxx software/parameter, 0x77xx wiring, 0x8Cxx application) - see the
+ * IOLINK_EVENTCODE_* block below.
  */
-/* Communication Layer Events (0x18XX) */
 #define IOLINK_EVENT_COMM_CRC 0x1801U     /**< CRC error in communication */
 #define IOLINK_EVENT_COMM_TIMEOUT 0x1802U /**< Timeout in communication */
 #define IOLINK_EVENT_COMM_FRAMING 0x1803U /**< Framing error in communication */
 #define IOLINK_EVENT_COMM_TIMING 0x1804U  /**< Timing violation in communication */
-
-/* PHY Diagnostic Event Codes (0x18XX) */
-#define IOLINK_EVENT_PHY_VOLTAGE_FAULT 0x1805U /**< L+ voltage out of range */
-#define IOLINK_EVENT_PHY_SHORT_CIRCUIT 0x1806U /**< Short circuit detected */
-
-/* Application Layer Events (0x5XXX) */
-#define IOLINK_EVENT_APP_TEMP_UNDERFLOW 0x5110U /**< Temperature below operating range */
-#define IOLINK_EVENT_APP_TEMP_OVERFLOW 0x5120U  /**< Temperature above operating range */
-#define IOLINK_EVENT_APP_TEMP_SHOCK 0x5130U     /**< Rapid temperature change */
-
-/* Hardware/Device Events (0x6XXX) */
-#define IOLINK_EVENT_HW_GENERAL_FAULT 0x6000U  /**< General hardware fault */
-#define IOLINK_EVENT_HW_MEMORY_FAULT 0x6310U   /**< Memory error detected */
-#define IOLINK_EVENT_HW_SENSOR_FAULT 0x6320U   /**< Sensor element fault */
-#define IOLINK_EVENT_HW_ACTUATOR_FAULT 0x6330U /**< Actuator element fault */
 
 /*
  * Standardized IO-Link EventCodes for Devices, per V1.1.5 Annex D, Table D.1.

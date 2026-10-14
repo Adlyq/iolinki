@@ -197,8 +197,12 @@
 /** @} */
 
 /**
- * @defgroup iolinki_protocol_event_codes Standard IO-Link Event Codes (0x1XXX-0x8XXX)
+ * @defgroup iolinki_protocol_event_codes Device vendor-specific communication events
  * @ingroup iolinki_protocol
+ *
+ * These live in the spec's vendor-specific *device* range 0x1800-0x18FF (Table D.1).
+ * The numeric values coincide with Master/Port codes (Table D.2); the
+ * EventQualifier SOURCE bit distinguishes them. See include/iolinki/events.h.
  * @{
  */
 #define IOLINK_EVENT_CODE_COMM_ERR_GENERAL 0x1800U /**< General communication error. */
