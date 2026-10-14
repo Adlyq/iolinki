@@ -746,6 +746,121 @@ static void test_dll_master_command_in_operate(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_STARTUP);
 }
 
+/* Captures the first reply octet (the OD of a READ reply) for the ISDU tests. */
+static uint8_t g_isdu_reply_od;
+static int test_dll_capture_od(const LargestIntegralType value,
+                               const LargestIntegralType check_value_data)
+{
+    (void) check_value_data;
+    const uint8_t* data = (const uint8_t*) value;
+    g_isdu_reply_od = data[0];
+    return 1;
+}
+
+/* 7.3.6.2 / Figure A.14: an acyclic ISDU READ in OPERATE keeps the negotiated
+   PD (the OD uses a separate acyclic channel), so the frame is the full
+   TYPE_2_V M-sequence and the device reply carries the ISDU response octet in
+   the leading OD field: [OD][PD-in]CKS. The DLL must actually serve it. */
+static void test_dll_operate_isdu_read_serves_od(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+                              .od_width = 1,
+                              .pd_in_len = 2,
+                              .pd_out_len = 2};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    move_to_operate_ctx(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    /* Prime a pending ISDU response (READ of VendorID, index 0x000A). */
+    assert_int_equal(isdu_send_read_request(&dev.ctx.dll.isdu, IOLINK_IDX_VENDOR_ID, 0x00), 1);
+
+    /* Acyclic READ: MC = READ | ISDU | FlowCTRL START; PD-out(2), no OD. */
+    uint8_t frame[4] = {
+        (uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START),
+        IOLINK_MSEQ_TYPE_2, 0x11U, 0x22U};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
+    test_dll_feed_frame(frame, 4U);
+
+    g_isdu_reply_od = 0x00U;
+    expect_check(mock_phy_send, data, test_dll_capture_od, (void*) (uintptr_t) 0U);
+    expect_value(mock_phy_send, len, 4); /* [OD][PD-in(2)]CKS */
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev.ctx);
+
+    /* OD = ISDU READ-RESPONSE (+) I-Service (0xD0 | length), i.e. not "No
+       Service" (0x00) - proof the DLL served the response. */
+    assert_int_equal((g_isdu_reply_od & 0xF0U), 0xD0U);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+}
+
+/* 7.3.6.2: an acyclic ISDU WRITE in OPERATE carries the request octet in the
+   trailing OD field and is answered by [PD-in]CKS (no OD). */
+static void test_dll_operate_isdu_write_dispatched(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+                              .od_width = 1,
+                              .pd_in_len = 2,
+                              .pd_out_len = 2};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    move_to_operate_ctx(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    /* Acyclic WRITE: MC = WRITE | ISDU | FlowCTRL START; PD-out(2) + OD(1). */
+    uint8_t frame[5] = {(uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START),
+                        IOLINK_MSEQ_TYPE_2, 0x11U, 0x22U,
+                        (uint8_t) (0x90U | 0x03U) /* I-Service READ, Length 3 */};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 5));
+    test_dll_feed_frame(frame, 5U);
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 3); /* write reply: PD-in(2) + CKS */
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev.ctx);
+
+    /* The OD octet reached the ISDU engine: WRITE START accepted. */
+    assert_true(dev.ctx.dll.isdu.flowctrl_seen);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+}
+
+/* Regression: the cyclic frame (ISDU channel + FlowCTRL IDLE) keeps its full
+   PD width and answers No Service (0x00) in the OD - it must NOT be misread as
+   a short acyclic frame. */
+static void test_dll_operate_cyclic_idle_od_zero(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+                              .od_width = 1,
+                              .pd_in_len = 2,
+                              .pd_out_len = 2};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    move_to_operate_ctx(&dev.ctx);
+
+    uint8_t frame[4] = {
+        (uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_IDLE),
+        IOLINK_MSEQ_TYPE_2, 0x11U, 0x22U};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
+    test_dll_feed_frame(frame, 4U);
+    g_isdu_reply_od = 0xFFU;
+    expect_check(mock_phy_send, data, test_dll_capture_od, (void*) (uintptr_t) 0U);
+    expect_value(mock_phy_send, len, 4); /* [OD][PD-in(2)]CKS */
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(g_isdu_reply_od, 0x00U);
+}
+
 /* Table B.1: a write to DPP1 0x01 (MasterCycleTime) is stored, not discarded. */
 static void test_dll_master_cycle_time_stored(void** state)
 {
@@ -785,6 +900,12 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_dll_process_data_operate, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_type2_write_carries_od, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_master_command_in_operate, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_operate_isdu_read_serves_od, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_operate_isdu_write_dispatched, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_operate_cyclic_idle_od_zero, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_master_cycle_time_stored, test_setup,
                                         test_teardown),

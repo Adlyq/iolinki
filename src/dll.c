@@ -476,8 +476,14 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
         memcpy(od_in, &ctx->frame_buf[od_offset], req_od);
     }
 
-    if (!dll_dispatch_od(ctx, mc, od_in, req_od, od_out)) {
-        for (uint16_t i = 0; i < req_od; i++) {
+    /* dll_dispatch_od interprets od_len as the request width on a WRITE and as
+     * the reply width on a READ, because for a READ the OD octets carry the
+     * device response (an ISDU response, a Direct-Parameter octet, or an event
+     * memory octet). Pass req_od for a WRITE and resp_od for a READ so an
+     * acyclic ISDU / DPP read in OPERATE is actually served (7.3.6.2, A.1.2). */
+    const uint8_t dispatch_od = write ? req_od : resp_od;
+    if (!dll_dispatch_od(ctx, mc, od_in, dispatch_od, od_out)) {
+        for (uint16_t i = 0; i < dispatch_od; i++) {
             od_out[i] = 0U;
         }
     }
