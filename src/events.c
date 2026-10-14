@@ -27,12 +27,14 @@ void iolink_events_init(iolink_events_ctx_t* ctx)
     }
 }
 
-/** @brief EventQualifier for an event (A.6.4, Figure A.24).
+/** @brief Build an EventQualifier octet (A.6.4, Figure A.24).
  *
- * MODE (bits 7:6), TYPE (bits 5:4), SOURCE (bit 3, 0 = device) and INSTANCE
- * (bits 2:0). INSTANCE is "Application" (Table A.17, value 4), the same value
- * ST's ministack puts on the wire. */
-static uint8_t event_qualifier(iolink_event_type_t type, iolink_event_mode_t mode)
+ * Layout: MODE (bits 7:6, Table A.20), TYPE (bits 5:4, Table A.19),
+ * SOURCE (bit 3, 0 = device, Table A.18) and INSTANCE (bits 2:0, Table A.17,
+ * value 4 = Application). Shared by the Table 58 event memory
+ * (event_memory_rebuild) and the DetailedDeviceStatus index builder so both
+ * channels report identical qualifiers. */
+uint8_t iolink_events_qualifier(iolink_event_type_t type, iolink_event_mode_t mode)
 {
     uint8_t q = (uint8_t) (((uint8_t) mode & 0x03U) << 6);
     switch (type) {
@@ -66,7 +68,7 @@ static void event_memory_rebuild(iolink_events_ctx_t* ctx)
     for (uint8_t i = 0U; i < slots; i++) {
         uint8_t idx = (uint8_t) ((ctx->head + i) % IOLINK_EVENT_QUEUE_SIZE);
         const iolink_event_t* ev = &ctx->queue[idx];
-        ctx->memory[1U + i * 3U] = event_qualifier(ev->type, ev->mode);
+        ctx->memory[1U + i * 3U] = iolink_events_qualifier(ev->type, ev->mode);
         ctx->memory[2U + i * 3U] = (uint8_t) (ev->code >> 8);
         ctx->memory[3U + i * 3U] = (uint8_t) (ev->code & 0xFFU);
     }

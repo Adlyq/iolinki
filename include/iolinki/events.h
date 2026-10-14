@@ -145,6 +145,20 @@ typedef struct
 void iolink_events_init(iolink_events_ctx_t* ctx);
 
 /**
+ * @brief Build an EventQualifier octet (Figure A.24, Tables A.17-A.20).
+ *
+ * Single source of truth for the qualifier bit layout: MODE (bits 7:6),
+ * TYPE (bits 5:4), SOURCE (bit 3, always device) and INSTANCE (bits 2:0,
+ * always Application = 4). Used by both the Table 58 event memory and the
+ * DetailedDeviceStatus (Index 0x0025) builder.
+ *
+ * @param type Severity level (Notification / Warning / Error)
+ * @param mode Event mode (Appears / Disappears / Single shot)
+ * @return EventQualifier octet
+ */
+uint8_t iolink_events_qualifier(iolink_event_type_t type, iolink_event_mode_t mode);
+
+/**
  * @brief Trigger a new diagnostic event
  *
  * Adds an event to the internal queue. If the queue is full, the newest event

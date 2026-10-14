@@ -141,12 +141,13 @@
  * ------------------------------------------------------------------------- */
 
 /**
- * @brief Maximum On-Request Data size in bytes.
- * Type 1: 1 byte, Type 2: 2 bytes, Type 2_V extended: 4 bytes.
- * Default: 4 bytes (supports all types including extended Type 2_V)
+ * @brief Maximum On-Request Data width m in bytes (Table A.10).
+ * TYPE_1_V/TYPE_2_V allow 1/2/8/32 octets; default the buffer to the spec
+ * maximum so any configured od_width fits.
+ * Default: 32 bytes.
  */
 #ifndef IOLINK_OD_MAX_SIZE
-#define IOLINK_OD_MAX_SIZE 4U
+#define IOLINK_OD_MAX_SIZE 32U
 #endif
 
 /**

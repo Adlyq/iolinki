@@ -109,26 +109,28 @@ static void test_full_stack_timing_enforcement(void** state)
     iolink_device_set_t_ren_limit_us(&dev.ctx, 100);
     iolink_phy_mock_set_send_delay_us(500);
 
-    uint8_t frame[4] = {0x80, IOLINK_MSEQ_TYPE_1, 0x00, 0x00};
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
+    /* TYPE_1_1 OD width 0: READ request = MC + CKT + PD(1) = 3 bytes,
+       reply = PD-in(1) + CKS = 2 bytes. */
+    uint8_t frame[3] = {0x80, IOLINK_MSEQ_TYPE_1, 0x00};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 3));
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 3; i++) {
         will_return(mock_phy_recv_byte, 1);
         will_return(mock_phy_recv_byte, frame[i]);
     }
     will_return(mock_phy_recv_byte, 0);
     expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 3);
+    expect_value(mock_phy_send, len, 2);
     will_return(mock_phy_send, 0);
     iolink_device_process(&dev.ctx);
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 3; i++) {
         will_return(mock_phy_recv_byte, 1);
         will_return(mock_phy_recv_byte, frame[i]);
     }
     will_return(mock_phy_recv_byte, 0);
     expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 3);
+    expect_value(mock_phy_send, len, 2);
     will_return(mock_phy_send, 0);
     iolink_device_process(&dev.ctx);
 

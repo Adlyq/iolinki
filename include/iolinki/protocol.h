@@ -65,8 +65,13 @@
 #define IOLINK_FLOWCTRL_COUNT_MASK 0x0FU /**< COUNT M-sequence counter mask. */
 
 /** @brief MasterCommand value written to Direct Parameter page address 0x00 (Table B.2). */
-#define IOLINK_CMD_FALLBACK 0x5AU       /**< Transition to SIO (T_FBD, Table 43). */
-#define IOLINK_CMD_DEVICE_OPERATE 0x99U /**< Switch to OPERATE. */
+#define IOLINK_CMD_FALLBACK 0x5AU             /**< Transition to SIO (T_FBD, Table 43). */
+#define IOLINK_CMD_MASTER_IDENT 0x95U         /**< MasterIdent: master revision > 1.0. */
+#define IOLINK_CMD_DEVICE_IDENT 0x96U         /**< DeviceIdent: check DPP for changed entries. */
+#define IOLINK_CMD_DEVICE_STARTUP 0x97U       /**< DeviceStartup: -> STARTUP. */
+#define IOLINK_CMD_PROCESS_DATA_OPERATE 0x98U /**< ProcessDataOutputOperate: PD valid, -> OPERATE. */
+#define IOLINK_CMD_DEVICE_OPERATE 0x99U       /**< DeviceOperate: PD invalid, -> OPERATE. */
+#define IOLINK_CMD_DEVICE_PREOPERATE 0x9AU    /**< DevicePreoperate: -> PREOPERATE. */
 /** @} */
 
 /**
@@ -121,10 +126,10 @@
 /** @} */
 
 /**
- * @defgroup iolinki_protocol_sys_cmd System Commands (Index 0x0002)
+ * @defgroup iolinki_protocol_sys_cmd System Commands (Index 0x0002, Table B.9)
  * @ingroup iolinki_protocol
  *
- * NOTE (spec conformance): Table B.9 "Coding of SystemCommand (ISDU)" defines
+ * Table B.9 "Coding of SystemCommand (ISDU)":
  *     0x01 ParamUploadStart     0x02 ParamUploadEnd
  *     0x03 ParamDownloadStart   0x04 ParamDownloadEnd
  *     0x05 ParamDownloadStore   0x06 ParamBreak
@@ -132,42 +137,26 @@
  *     0x80 Device reset         0x81 Application reset
  *     0x82 Restore factory      0x83 Back-to-box
  *     0x84-0x9F Reserved        0xA0-0xFF Vendor specific
- * and the DS_Command codes at Index 0x0003/subindex 1 are
- *     0x01 DS_UploadStart 0x02 DS_UploadEnd 0x03 DS_DownloadStart
- *     0x04 DS_DownloadEnd 0x05 DS_Break.
- * The values below (0x05-0x09, 0x83, 0x84, 0x95-0x97) do NOT match Table B.9:
- * they are shifted by two (so the standard ParamDownloadStart 0x03 etc. are
- * rejected as FUNC_NOTAVAIL) and reuse reserved codes. Left unchanged on
- * purpose: this project does not use Data Storage (ds_storage == NULL) and the
- * reference master sends no SystemCommand, so there is no behavioural impact.
- * Recorded here for a future conformant fix.
+ * The DS_Command codes at Index 0x0003/subindex 1 use the same 0x01-0x05 values.
  * @{
  */
-#define IOLINK_CMD_PARAM_DOWNLOAD_START 0x05U /**< NON-CONFORMANT: Table B.9 0x05 = ParamDownloadStore, 0x03 = ParamDownloadStart. */
-#define IOLINK_CMD_PARAM_DOWNLOAD_END 0x06U   /**< NON-CONFORMANT: Table B.9 0x06 = ParamBreak, 0x04 = ParamDownloadEnd. */
-#define IOLINK_CMD_PARAM_UPLOAD_START 0x07U   /**< NON-CONFORMANT: Table B.9 0x07 is Reserved, 0x01 = ParamUploadStart. */
-#define IOLINK_CMD_PARAM_UPLOAD_END 0x08U     /**< NON-CONFORMANT: Table B.9 0x08 is Reserved, 0x02 = ParamUploadEnd. */
-#define IOLINK_CMD_PARAM_DOWNLOAD_STORE 0x09U /**< NON-CONFORMANT: Table B.9 0x09 is Reserved, 0x05 = ParamDownloadStore. */
+#define IOLINK_CMD_PARAM_UPLOAD_START 0x01U   /**< ParamUploadStart. */
+#define IOLINK_CMD_PARAM_UPLOAD_END 0x02U     /**< ParamUploadEnd. */
+#define IOLINK_CMD_PARAM_DOWNLOAD_START 0x03U /**< ParamDownloadStart. */
+#define IOLINK_CMD_PARAM_DOWNLOAD_END 0x04U   /**< ParamDownloadEnd. */
+#define IOLINK_CMD_PARAM_DOWNLOAD_STORE 0x05U /**< ParamDownloadStore. */
+#define IOLINK_CMD_PARAM_BREAK 0x06U          /**< ParamBreak. */
 /** @} */
 
 /**
- * @defgroup iolinki_protocol_legacy_cmd Legacy / Non-Standard Commands (Deprecating)
+ * @defgroup iolinki_protocol_sys_cmd_reset Reset / factory System Commands (Table B.9)
  * @ingroup iolinki_protocol
- *
- * NOTE (spec conformance): 0x80/0x81/0x82 match Table B.9. 0x83 is "Back-to-box"
- * in the spec, not "restore application defaults"; 0x84 is Reserved in the spec;
- * 0x95-0x97 fall in the reserved 0x84-0x9F range (vendor codes start at 0xA0).
- * Unchanged on purpose (see the SystemCommand note above).
  * @{
  */
-#define IOLINK_CMD_DEVICE_RESET 0x80U             /**< Device reset command. */
-#define IOLINK_CMD_APPLICATION_RESET 0x81U        /**< Application reset command. */
-#define IOLINK_CMD_RESTORE_FACTORY_SETTINGS 0x82U /**< Restore factory settings command. */
-#define IOLINK_CMD_RESTORE_APP_DEFAULTS 0x83U     /**< Restore application defaults command. */
-#define IOLINK_CMD_SET_COMM_MODE 0x84U            /**< Set communication mode command. */
-#define IOLINK_CMD_PARAM_UPLOAD 0x95U             /**< Parameter upload command. */
-#define IOLINK_CMD_PARAM_DOWNLOAD 0x96U           /**< Parameter download command. */
-#define IOLINK_CMD_PARAM_BREAK 0x97U              /**< Parameter break command. */
+#define IOLINK_CMD_DEVICE_RESET 0x80U             /**< Device reset (10.7.2). */
+#define IOLINK_CMD_APPLICATION_RESET 0x81U        /**< Application reset (10.7.3). */
+#define IOLINK_CMD_RESTORE_FACTORY_SETTINGS 0x82U /**< Restore factory settings (10.7.4). */
+#define IOLINK_CMD_BACK_TO_BOX 0x83U              /**< Back-to-box (10.7.5). */
 /** @} */
 
 /**
@@ -191,11 +180,12 @@
 #define IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL 0x12U /**< Requested subindex not available. */
 #define IOLINK_ISDU_ERROR_NOT_ACCESSIBLE 0x23U     /**< Object access denied (Table C.1). */
 #define IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL \
-    0x35U                                       /**< Command function not available (Table C.1). */
-#define IOLINK_ISDU_ERROR_BUSY 0x30U            /**< Device busy. */
-#define IOLINK_ISDU_ERROR_WRITE_PROTECTED 0x23U /**< Access denied, Table C.1. */
-#define IOLINK_ISDU_ERROR_PARAM_INCONSISTENT 0x40U /**< Parameter set inconsistent. */
-#define IOLINK_ISDU_ERROR_SEGMENTATION 0x81U       /**< Segmentation error. */
+    0x35U /**< Command function not available (Table C.1). */
+#define IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL \
+    0x20U /**< SERV_NOTAVAIL: service temporarily not available (Table C.1). */
+#define IOLINK_ISDU_ERROR_WRITE_PROTECTED 0x23U       /**< Access denied, Table C.1. */
+#define IOLINK_ISDU_ERROR_PARAM_INCONSISTENT 0x41U    /**< PAR_SETINCONSIST (Table C.1). */
+#define IOLINK_ISDU_ERROR_PARAM_SET_INVALID 0x40U     /**< PAR_SETINVALID (Table C.1). */
 /** @} */
 
 /**

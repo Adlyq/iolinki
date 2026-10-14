@@ -41,19 +41,19 @@ static void test_pd_input_output(void** state)
     uint8_t input[2] = {0x11, 0x22};
     iolink_device_pd_input_update(&dev.ctx, input, 2, true);
 
-    /* 2. Simulate Master Frame (Type 2_2: MC, CKT, PD_OUT(2), OD(1)) -> 5 bytes.
-       Table A.10: TYPE_2_2 carries one OD octet. The CKT carries the Type-2 bits
-       (A.1.3). */
-    uint8_t frame[5] = {0x80, IOLINK_MSEQ_TYPE_2, 0x00, 0x00, 0x00};
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 5));
+    /* 2. Simulate Master Frame. Figure A.14: a READ request carries the PD-out
+       but no OD, so TYPE_2_2 = MC, CKT, PD_OUT(2) = 4 bytes. The CKT carries the
+       Type-2 bits (A.1.3). */
+    uint8_t frame[4] = {0x80, IOLINK_MSEQ_TYPE_2, 0x00, 0x00};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 4; i++) {
         will_return(mock_phy_recv_byte, 1);
         will_return(mock_phy_recv_byte, frame[i]);
     }
     will_return(mock_phy_recv_byte, 0);
 
-    /* Response: PD_IN(2), OD(1), CKS(1) = 4 bytes for TYPE_2_2 (A.1.5) */
+    /* Response (Figure A.14): OD(1) + PD_IN(2) + CKS(1) = 4 bytes. */
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 4);
     will_return(mock_phy_send, 0);

@@ -39,20 +39,20 @@ static void test_m_seq_type_1_1(void** state)
     uint8_t input_pd[2] = {0xAA, 0xBB};
     iolink_device_pd_input_update(&dev.ctx, input_pd, 2, true);
 
-    /* Type 1_1 with 2-byte PD: Req = MC, CKT, PD(2), OD(1), CK = 6 bytes.
-       The CKT carries the Type-1 bits (A.1.3). */
-    uint8_t frame[] = {0x80, IOLINK_MSEQ_TYPE_1, 0x11, 0x22, 0x00};
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 5));
+    /* TYPE_1_1 has OD width 0 (Figure A.6). READ request (Figure A.14) =
+       MC, CKT, PD-out(2) = 4 bytes. The CKT carries the Type-1 bits (A.1.3). */
+    uint8_t frame[] = {0x80, IOLINK_MSEQ_TYPE_1, 0x11, 0x22};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 4; i++) {
         will_return(mock_phy_recv_byte, 1);
         will_return(mock_phy_recv_byte, frame[i]);
     }
     will_return(mock_phy_recv_byte, 0);
 
-    /* Resp = PD(2), OD(1), CKS = 4 bytes (A.1.5, no status octet) */
+    /* Resp = PD-in(2), CKS = 3 bytes */
     expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 4);
+    expect_value(mock_phy_send, len, 3);
     will_return(mock_phy_send, 0);
 
     iolink_device_process(&dev.ctx);

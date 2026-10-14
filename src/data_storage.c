@@ -309,7 +309,7 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
     }
 
     switch (cmd) {
-        case IOLINK_CMD_PARAM_UPLOAD_START: /* 0x07 */
+        case IOLINK_CMD_PARAM_UPLOAD_START: /* 0x01 */
             /* Master wants to read parameters (Upload) */
             if (ctx->state != IOLINK_DS_STATE_IDLE) {
                 return -1; /* Busy */
@@ -318,14 +318,14 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
             ctx->state = IOLINK_DS_STATE_UPLOAD_REQ;
             break;
 
-        case IOLINK_CMD_PARAM_UPLOAD_END: /* 0x08 */
+        case IOLINK_CMD_PARAM_UPLOAD_END: /* 0x02 */
             /* Finish upload */
             if (ctx->state == IOLINK_DS_STATE_UPLOADING) {
                 ctx->state = IOLINK_DS_STATE_IDLE;
             }
             break;
 
-        case IOLINK_CMD_PARAM_DOWNLOAD_START: /* 0x05 */
+        case IOLINK_CMD_PARAM_DOWNLOAD_START: /* 0x03 */
             /* Master wants to write parameters (Download) */
             if (ctx->state != IOLINK_DS_STATE_IDLE) {
                 return -1; /* Busy */
@@ -334,7 +334,8 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
             ctx->state = IOLINK_DS_STATE_DOWNLOAD_REQ;
             break;
 
-        case IOLINK_CMD_PARAM_DOWNLOAD_END: /* 0x06 */
+        case IOLINK_CMD_PARAM_DOWNLOAD_END:    /* 0x04 */
+        case IOLINK_CMD_PARAM_DOWNLOAD_STORE:  /* 0x05: finalize + start Data Storage */
             /* Commit the parameter image staged via DS_Data (0x0003). */
             if (ctx->state == IOLINK_DS_STATE_DOWNLOADING) {
                 if (ctx->image_len > 0U) {
@@ -344,7 +345,7 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
             }
             break;
 
-        case IOLINK_CMD_PARAM_BREAK: /* 0x97 / Standard Break */
+        case IOLINK_CMD_PARAM_BREAK: /* 0x06 */
             return iolink_ds_abort(ctx);
 
         default:

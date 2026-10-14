@@ -99,17 +99,18 @@ static void test_dll_preoperate_to_operate(void** state)
     iolink_device_process(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_ESTAB_COM);
 
-    /* ESTAB_COM -> OPERATE on first valid frame */
-    uint8_t frame[4] = {0x80, IOLINK_MSEQ_TYPE_1, 0x00, 0x00};
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
-    for (int i = 0; i < 4; i++) {
+    /* ESTAB_COM -> OPERATE on first valid frame.
+       TYPE_1_1 has OD width 0, so the READ request is MC + CKT + PD-out (3 octets). */
+    uint8_t frame[3] = {0x80, IOLINK_MSEQ_TYPE_1, 0x00};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 3));
+    for (int i = 0; i < 3; i++) {
         will_return(mock_phy_recv_byte, 1);
         will_return(mock_phy_recv_byte, frame[i]);
     }
     will_return(mock_phy_recv_byte, 0);
 
     expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 3);
+    expect_value(mock_phy_send, len, 2); /* OD(0) + PD-in(1) + CKS */
     will_return(mock_phy_send, 0);
 
     iolink_device_process(&dev.ctx);
@@ -142,24 +143,24 @@ static void test_dll_fallback_on_crc_errors(void** state)
     /* No response for Transition Command */
     iolink_device_process(&dev.ctx);
 
-    /* ESTAB_COM -> OPERATE */
-    uint8_t ok_frame[4] = {0x80, IOLINK_MSEQ_TYPE_1, 0x00, 0x00};
-    ok_frame[1] = (uint8_t) (ok_frame[1] | iolink_checksum6(ok_frame, 4));
-    for (int i = 0; i < 4; i++) {
+    /* ESTAB_COM -> OPERATE. TYPE_1_1: READ request = MC + CKT + PD-out (3 octets). */
+    uint8_t ok_frame[3] = {0x80, IOLINK_MSEQ_TYPE_1, 0x00};
+    ok_frame[1] = (uint8_t) (ok_frame[1] | iolink_checksum6(ok_frame, 3));
+    for (int i = 0; i < 3; i++) {
         will_return(mock_phy_recv_byte, 1);
         will_return(mock_phy_recv_byte, ok_frame[i]);
     }
     will_return(mock_phy_recv_byte, 0);
     expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 3);
+    expect_value(mock_phy_send, len, 2); /* OD(0) + PD-in(1) + CKS */
     will_return(mock_phy_send, 0);
     iolink_device_process(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 
-    /* Inject CRC errors to trigger fallback */
+    /* Inject CRC errors to trigger fallback (3-octet frames for TYPE_1_1). */
     for (int r = 0; r < 3; r++) {
-        uint8_t bad_frame[5] = {0x80, 0x00, 0x00, 0x00, 0xFF};
-        for (int i = 0; i < 5; i++) {
+        uint8_t bad_frame[3] = {0x80, 0x00, 0x00};
+        for (int i = 0; i < 3; i++) {
             will_return(mock_phy_recv_byte, 1);
             will_return(mock_phy_recv_byte, bad_frame[i]);
         }
@@ -518,10 +519,274 @@ static void test_dll_receive_error_discards_partial_frame(void** state)
     assert_int_equal(dev.ctx.dll.frame_index, 0);
 }
 
+/* Feed a complete master frame to the device one octet at a time, then signal
+   end-of-bytes so the DLL processes it. */
+static void test_dll_feed_frame(const uint8_t* frame, size_t len)
+{
+    for (size_t i = 0U; i < len; i++) {
+        will_return(mock_phy_recv_byte, 1);
+        will_return(mock_phy_recv_byte, frame[i]);
+    }
+    will_return(mock_phy_recv_byte, 0);
+}
+
+/* Bring the device up to PREOPERATE via wake-up + the spec Type-0 page probe. */
+static void test_dll_up_to_preoperate(iolink_test_device_t* dev)
+{
+    iolink_phy_mock_set_wakeup(1);
+    iolink_device_process(&dev->ctx);
+    usleep(200);
+
+    uint8_t probe[2] = {0xA2U, 0x00U};
+    probe[1] = (uint8_t) (probe[1] | iolink_checksum6(probe, 2U));
+    test_dll_feed_frame(probe, 2U);
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 2);
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev->ctx);
+}
+
+/* Table B.2: the extended MasterCommands (0x97/0x98/0x9A) drive the DLL state
+   machine. Each is a page-channel Type-0 write answered with the CKS only. */
+static void test_dll_master_commands(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 2, .pd_out_len = 2};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    test_dll_up_to_preoperate(&dev);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
+
+    /* 0x9A DevicePreoperate: acknowledged, remains PREOPERATE. */
+    uint8_t pre[3] = {0x20U, 0x00U, IOLINK_CMD_DEVICE_PREOPERATE};
+    pre[1] = (uint8_t) (pre[1] | iolink_checksum6(pre, 3U));
+    test_dll_feed_frame(pre, 3U);
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 1);
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
+
+    /* 0x97 DeviceStartup: -> STARTUP. */
+    uint8_t stu[3] = {0x20U, 0x00U, IOLINK_CMD_DEVICE_STARTUP};
+    stu[1] = (uint8_t) (stu[1] | iolink_checksum6(stu, 3U));
+    test_dll_feed_frame(stu, 3U);
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 1);
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_STARTUP);
+}
+
+/* Table B.2/43: FALLBACK (0x5A) is a page-channel write to DPP1 address 0 and
+   must arm the SIO transition from PREOPERATE (Type-0) too. */
+static void test_dll_fallback_command_preoperate(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 1, .pd_out_len = 1};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    test_dll_up_to_preoperate(&dev);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
+
+    /* Type-0 write: MC 0x20, CKT, OD 0x5A -> CKS-only reply, FALLBACK armed. */
+    uint8_t frame[3] = {0x20U, 0x00U, IOLINK_CMD_FALLBACK};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 3));
+    test_dll_feed_frame(frame, 3U);
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 1);
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_FALLBACK);
+}
+
+/* Table B.2/43: FALLBACK (0x5A) inside the OPERATE Type-2 frame (PD-out before
+   OD) must also arm the SIO transition. */
+static void test_dll_fallback_command_operate(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+                              .od_width = 1,
+                              .pd_in_len = 1,
+                              .pd_out_len = 1};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    move_to_operate_ctx(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    /* Type-2 write: MC 0x20, CKT, PD-out(1), OD 0x5A -> [PD-in]CKS reply. */
+    uint8_t frame[4] = {0x20U, IOLINK_MSEQ_TYPE_2, 0x00U, IOLINK_CMD_FALLBACK};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
+    test_dll_feed_frame(frame, 4U);
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 2);
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_FALLBACK);
+}
+
+/* Table B.2: 0x99 DeviceOperate marks the process output invalid. */
+static void test_dll_device_operate_clears_pd_valid(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+                              .od_width = 1,
+                              .pd_in_len = 1,
+                              .pd_out_len = 1};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    move_to_operate_ctx(&dev.ctx);
+
+    uint8_t pd[1] = {0xAAU};
+    iolink_device_pd_input_update(&dev.ctx, pd, 1U, true);
+    assert_true(dev.ctx.dll.pd_valid);
+
+    uint8_t frame[4] = {0x20U, IOLINK_MSEQ_TYPE_2, 0x00U, IOLINK_CMD_DEVICE_OPERATE};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
+    test_dll_feed_frame(frame, 4U);
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 2);
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev.ctx);
+    assert_false(dev.ctx.dll.pd_valid);
+}
+
+/* 0x98 ProcessDataOutputOperate: ESTAB_COM and PD marked valid. */
+static void test_dll_process_data_operate(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 2, .pd_out_len = 2};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    test_dll_up_to_preoperate(&dev);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
+
+    uint8_t pdo[3] = {0x20U, 0x00U, IOLINK_CMD_PROCESS_DATA_OPERATE};
+    pdo[1] = (uint8_t) (pdo[1] | iolink_checksum6(pdo, 3U));
+    test_dll_feed_frame(pdo, 3U);
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 1);
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_ESTAB_COM);
+    assert_true(dev.ctx.dll.pd_valid);
+}
+
+/* Figure A.14: a WRITE request (MC bit 7 = 0) carries the OD octets after
+   PD-out; the device reply then carries no OD. Verified by the OD side effect:
+   a Type-2 page write to DPP1 0x01 must store MasterCycleTime from the OD field. */
+static void test_dll_type2_write_carries_od(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+                              .od_width = 1,
+                              .pd_in_len = 1,
+                              .pd_out_len = 1};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    move_to_operate_ctx(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    /* MC 0x21 = page channel, WRITE, address 0x01 (MasterCycleTime).
+       Frame: MC CKT PD-out(1) OD(1) = 4 octets; OD (0x29) must reach the store. */
+    uint8_t frame[4] = {0x21U, IOLINK_MSEQ_TYPE_2, 0x5AU, 0x29U};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
+    test_dll_feed_frame(frame, 4U);
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 2); /* write reply: PD-in(1) + CKS, no OD */
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(dev.ctx.dll.master_cycle_time, 0x29U);
+}
+
+/* Table B.2 in OPERATE: an extended MasterCommand arrives inside the cyclic
+   Type-2 frame as a page-channel write to DPP1 address 0 (PD-out precedes OD).
+   0x97 DeviceStartup must switch the device back to STARTUP. */
+static void test_dll_master_command_in_operate(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+                              .od_width = 1,
+                              .pd_in_len = 1,
+                              .pd_out_len = 1};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    move_to_operate_ctx(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    /* MC 0x20 = page channel, WRITE, address 0. Frame: MC CKT PD-out(1) OD(1). */
+    uint8_t frame[4] = {0x20U, IOLINK_MSEQ_TYPE_2, 0x00U, IOLINK_CMD_DEVICE_STARTUP};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
+    test_dll_feed_frame(frame, 4U);
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 2); /* write reply: PD-in(1) + CKS */
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_STARTUP);
+}
+
+/* Table B.1: a write to DPP1 0x01 (MasterCycleTime) is stored, not discarded. */
+static void test_dll_master_cycle_time_stored(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 2, .pd_out_len = 2};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    test_dll_up_to_preoperate(&dev);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
+
+    /* MC 0x21 = write | page channel | address 0x01; OD = 0x29 (4.1 ms, tb=00). */
+    uint8_t wr[3] = {0x21U, 0x00U, 0x29U};
+    wr[1] = (uint8_t) (wr[1] | iolink_checksum6(wr, 3U));
+    test_dll_feed_frame(wr, 3U);
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 1);
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(dev.ctx.dll.master_cycle_time, 0x29U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_dll_receive_error_discards_partial_frame, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_master_commands, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_fallback_command_preoperate, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_fallback_command_operate, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_device_operate_clears_pd_valid, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_process_data_operate, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_type2_write_carries_od, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_master_command_in_operate, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_master_cycle_time_stored, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_wakeup_to_preoperate, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_preoperate_to_operate, test_setup, test_teardown),

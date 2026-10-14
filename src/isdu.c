@@ -328,7 +328,7 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
         if (flowctrl != expected) {
             /* Structure violation: drop the request, go to Idle, next read
                answers No Service (0x00) (Table 54 T13). */
-            ctx->error_code = IOLINK_ISDU_ERROR_SEGMENTATION;
+            ctx->error_code = IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL;
             isdu_transport_reset(ctx);
             return;
         }
@@ -677,20 +677,17 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             isdu_params_factory_reset(ctx);
             break;
 
-        case IOLINK_CMD_RESTORE_APP_DEFAULTS: /* 0x83 */
-            /* Reset application-specific parameters (currently same as factory) */
+        case IOLINK_CMD_BACK_TO_BOX: /* 0x83 (10.7.5) */
+            /* Restore factory defaults (device returns to the out-of-box state). */
             isdu_params_factory_reset(ctx);
             break;
 
-        case IOLINK_CMD_SET_COMM_MODE: /* 0x84 */
-            /* Communication mode switching handled by DLL - this is a no-op */
-            break;
-
-        /* Standard Data Storage Commands (0x05-0x08) */
-        case IOLINK_CMD_PARAM_DOWNLOAD_START:
-        case IOLINK_CMD_PARAM_DOWNLOAD_END:
+        /* Standard Data Storage Commands (Table B.9, 0x01-0x05) */
         case IOLINK_CMD_PARAM_UPLOAD_START:
         case IOLINK_CMD_PARAM_UPLOAD_END:
+        case IOLINK_CMD_PARAM_DOWNLOAD_START:
+        case IOLINK_CMD_PARAM_DOWNLOAD_END:
+        case IOLINK_CMD_PARAM_DOWNLOAD_STORE:
             if (ctx->ds_ctx != NULL) {
                 uint16_t locks = iolink_device_info_get_access_locks();
                 int ret = iolink_ds_handle_command((iolink_ds_ctx_t*) ctx->ds_ctx, cmd, locks);
@@ -698,7 +695,7 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                 if (ret != 0) {
                     ctx->response_buf[0] = 0x80U;
                     if (ret == -1) {
-                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_BUSY; /* 0x30 */
+                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL;
                     }
                     else if (ret == -2) {
                         ctx->response_buf[1] =
@@ -715,35 +712,7 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             }
             break;
 
-        /* Legacy/Custom DS Commands (0x95-0x97) - Mapped to standard flows if possible */
-        case IOLINK_CMD_PARAM_UPLOAD: /* 0x95 -> 0x07 Start Upload */
-            if (ctx->ds_ctx != NULL) {
-                /* Legacy mapped to Upload Start */
-                if (iolink_ds_start_upload((iolink_ds_ctx_t*) ctx->ds_ctx) != 0) {
-                    ctx->response_buf[0] = 0x80U;
-                    ctx->response_buf[1] = IOLINK_ISDU_ERROR_BUSY;
-                    ctx->response_len = 2U;
-                    ctx->response_idx = 0U;
-                    ctx->state = ISDU_STATE_RESPONSE_READY;
-                    return;
-                }
-            }
-            break;
-
-        case IOLINK_CMD_PARAM_DOWNLOAD: /* 0x96 -> 0x05 Start Download */
-            if (ctx->ds_ctx != NULL) {
-                if (iolink_ds_start_download((iolink_ds_ctx_t*) ctx->ds_ctx) != 0) {
-                    ctx->response_buf[0] = 0x80U;
-                    ctx->response_buf[1] = IOLINK_ISDU_ERROR_BUSY;
-                    ctx->response_len = 2U;
-                    ctx->response_idx = 0U;
-                    ctx->state = ISDU_STATE_RESPONSE_READY;
-                    return;
-                }
-            }
-            break;
-
-        case IOLINK_CMD_PARAM_BREAK: /* 0x97 */
+        case IOLINK_CMD_PARAM_BREAK: /* 0x06 */
             /* Abort current Data Storage operation */
             if (ctx->ds_ctx != NULL) {
                 (void) iolink_ds_abort((iolink_ds_ctx_t*) ctx->ds_ctx);
@@ -804,41 +773,28 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
 
     iolink_critical_enter();
     iolink_events_ctx_t* event_ctx = (iolink_events_ctx_t*) ctx->event_ctx;
-    uint8_t count = event_ctx->count;
-    if (count > 8U) count = 8U; /* Limit to 8 events in response */
+    const uint8_t count = event_ctx->count;
+    uint8_t out = 0U;
 
-    for (uint8_t i = 0U; i < count; i++) {
+    for (uint8_t i = 0U; (i < count) && (out < 8U); i++) {
         /* Calculate index in FIFO */
         uint8_t idx = (uint8_t) ((event_ctx->head + i) % IOLINK_EVENT_QUEUE_SIZE);
         const iolink_event_t* ev = &event_ctx->queue[idx];
 
-        /* EventQualifier byte per IO-Link V1.1.5 (Table B.1):
-         *   MODE     (bits 7-6): 11 = event appears
-         *   TYPE     (bits 5-4): 01 notification, 10 warning, 11 error
-         *   SOURCE   (bit  3)  : 0 = device (local)
-         *   INSTANCE (bits 2-0): 2 = data link layer (DL) for comm events
-         */
-        uint8_t qualifier = 0xC0U; /* MODE = event appears */
-        switch (ev->type) {
-            case IOLINK_EVENT_TYPE_NOTIFICATION:
-                qualifier |= (0x01U << 4);
-                break;
-            case IOLINK_EVENT_TYPE_WARNING:
-                qualifier |= (0x02U << 4);
-                break;
-            case IOLINK_EVENT_TYPE_ERROR:
-                qualifier |= (0x03U << 4);
-                break;
-            default:
-                break;
+        /* Table B.14: DetailedDeviceStatus carries Error/Warning entries only;
+           Notification events are reported on the diagnosis channel, not here. */
+        if (ev->type == IOLINK_EVENT_TYPE_NOTIFICATION) {
+            continue;
         }
-        qualifier |= 0x02U; /* INSTANCE = DL */
 
-        ctx->response_buf[i * 3U] = qualifier;
-        ctx->response_buf[i * 3U + 1U] = (uint8_t) (ev->code >> 8);
-        ctx->response_buf[i * 3U + 2U] = (uint8_t) (ev->code & 0xFF);
+        /* Qualifier built by the shared events helper (single source of truth):
+           MODE/TYPE/SOURCE/INSTANCE per Figure A.24 (INSTANCE = Application = 4). */
+        ctx->response_buf[out * 3U] = iolink_events_qualifier(ev->type, ev->mode);
+        ctx->response_buf[out * 3U + 1U] = (uint8_t) (ev->code >> 8);
+        ctx->response_buf[out * 3U + 2U] = (uint8_t) (ev->code & 0xFF);
+        out++;
     }
-    ctx->response_len = (uint8_t) (count * 3U);
+    ctx->response_len = (uint8_t) (out * 3U);
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
     iolink_critical_exit();
@@ -925,28 +881,10 @@ static uint8_t direct_param_encode_pd(uint8_t octets)
  */
 static uint8_t direct_param_mseq_capability(uint8_t m_seq_type, uint8_t od_width)
 {
+    /* OPERATE code from the shared Table A.10 helper (single source of truth with
+     * the frame-width derivation in device.c). */
+    const uint8_t operate_code = iolink_mseq_operate_code(m_seq_type, od_width);
     uint8_t cap = 0x01U; /* ISDU supported */
-    uint8_t operate_code;
-    switch (m_seq_type) {
-        case IOLINK_M_SEQ_TYPE_1_2:
-            operate_code = 1U; /* 2 OD octets, no PD */
-            break;
-        case IOLINK_M_SEQ_TYPE_1_V:
-            operate_code = 6U; /* 8 OD octets, no PD */
-            break;
-        case IOLINK_M_SEQ_TYPE_2_V:
-            /* Table A.10 codes the variable types by their On-request Data width
-             * (1 OD octet -> code 4, 2 OD octets -> code 5). */
-            operate_code = (od_width >= 2U) ? 5U : 4U;
-            break;
-        case IOLINK_M_SEQ_TYPE_1_1:
-        case IOLINK_M_SEQ_TYPE_2_1:
-        case IOLINK_M_SEQ_TYPE_2_2:
-        case IOLINK_M_SEQ_TYPE_0:
-        default:
-            operate_code = 0U; /* Type 0 / Type 2_x with 1 OD octet */
-            break;
-    }
     cap |= (uint8_t) ((operate_code & 0x07U) << 1);
     /* PREOPERATE M-sequence in this stack is TYPE_0 (code 0) -> bits 4-5 = 0. */
     return cap;
@@ -964,7 +902,7 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
         const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
         iolink_dll_get_pd_length(dll, &pd_in, &pd_out);
         m_seq = dll->m_seq_type;
-        od_width = dll->od_resp_len;
+        od_width = dll->od_width;
     }
 
     (void) memset(page, 0, 16);

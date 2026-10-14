@@ -177,8 +177,7 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     iolink_m_seq_type_t type = iolink_device_get_m_seq_type(ctx);
     uint8_t pd_out_len = iolink_device_get_pd_out_len(ctx);
     uint8_t pd_in_len = iolink_device_get_pd_in_len(ctx);
-    /* Table A.10: only TYPE_2_V carries two OD octets (OPERATE code 5). */
-    uint8_t od_len = (type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
+    uint8_t od_width = ctx->dll.od_width;
 
     if (type == IOLINK_M_SEQ_TYPE_0) {
         uint8_t idle_mc = 0x00;
@@ -198,9 +197,10 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
 
     uint8_t frame[64];
     memset(frame, 0, sizeof(frame));
-    /* Figure A.2: master message is MC, CKT, data... with the A.1.6 checksum in
-       the CKT octet (byte 1); there is no trailing checksum octet. */
-    uint8_t frame_len = (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + pd_out_len + od_len);
+    /* Figure A.2/A.14: master message is MC, CKT, PD-out... with the A.1.6
+       checksum in the CKT octet (byte 1). A READ request (MC bit 7 = 1) carries
+       the PD-out octets but no OD octets. */
+    uint8_t frame_len = (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + pd_out_len);
     frame[0] = 0x80;
     frame[1] = ((type == IOLINK_M_SEQ_TYPE_2_1) || (type == IOLINK_M_SEQ_TYPE_2_2) ||
                 (type == IOLINK_M_SEQ_TYPE_2_V))
@@ -214,7 +214,8 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     }
     will_return(mock_phy_recv_byte, 0);
 
-    uint8_t resp_len = (uint8_t) (pd_in_len + od_len + 1U);
+    /* Device reply (Figure A.14): [OD][PD-in]CKS. */
+    uint8_t resp_len = (uint8_t) (od_width + pd_in_len + 1U);
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, resp_len);
     will_return(mock_phy_send, 0);

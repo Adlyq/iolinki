@@ -96,10 +96,11 @@ typedef struct
     uint8_t m_seq_type;         /**< Supported M-sequence type */
     uint8_t pd_in_len;          /**< Input Process Data length */
     uint8_t pd_out_len;         /**< Output Process Data length */
-    uint8_t od_len;             /**< On-request Data length (1 or 2 bytes) */
-    uint8_t od_resp_len;        /**< OD octets emitted in the device reply (may differ
-                                     from od_len for ST i-link-public masters, which
-                                     send no OD but expect one echoed) */
+    uint8_t od_width;           /**< OPERATE OD width m (Table A.10). Whether a frame
+                                     carries OD is decided per frame from the MC R/W
+                                     bit (Figure A.14): a WRITE request carries OD
+                                     after PD-out, a READ reply carries OD before PD-in,
+                                     and the opposite direction carries none. */
     bool cyclic_reply_precached;/**< Cyclic OPERATE reply is deterministic (TYPE_2_V):
                                      the DLL builds it via
                                      iolink_dll_prepare_cyclic_reply() and the PHY
@@ -114,6 +115,8 @@ typedef struct
     uint8_t cyclic_stage_len[2];
     volatile uint8_t cyclic_stage_active;
     bool pd_valid;              /**< Current PD_In validity status */
+    uint8_t master_cycle_time;  /**< DPP1 0x01, the cycle-time octet written by the
+                                     Master (Table B.1/B.3); 0 = not yet written */
     uint32_t min_cycle_time_us; /**< Minimum cycle time in microseconds */
     bool enforce_timing;        /**< Enable timing checks (t_ren / t_cycle) */
     uint32_t t_ren_limit_us;    /**< Current t_ren limit in microseconds */
@@ -133,8 +136,10 @@ typedef struct
     iolink_baudrate_t baudrate; /**< Negotiated baudrate (COM1-COM3) */
     iolink_baudrate_t operating_baudrate; /**< Configured device operating baudrate (firmware patch) */
 
-    /* Unified Frame Assembly */
-    uint8_t frame_buf[48];         /**< Raw frame assembly buffer */
+    /* Unified Frame Assembly: a master request is MC + CKT + PD-out + OD, so
+       size it from the compile-time maxima (was a fixed 48, too small once the
+       OD width may reach IOLINK_OD_MAX_SIZE). */
+    uint8_t frame_buf[IOLINK_PD_OUT_MAX_SIZE + IOLINK_OD_MAX_SIZE + 2U];
     uint8_t frame_index;           /**< Current byte index in assembly */
     uint8_t req_len;               /**< Expected length of current frame type */
     uint64_t last_frame_us;        /**< Microsecond timestamp of last frame start */

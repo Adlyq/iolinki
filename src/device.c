@@ -56,17 +56,17 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
 {
     ctx->dll.m_seq_type = (uint8_t) ctx->stack_config.m_seq_type;
 
-    /* OD (On-request Data) octet counts, single source of truth (Table A.10):
-     * TYPE_1_1/TYPE_2_1 carry no OD channel, and TYPE_2_V is the two-octet
-     * variant (OPERATE M-sequence code 5). od_resp_len is normally the same as
-     * od_len; a device profile with an asymmetric OD channel (e.g. a master whose
-     * cyclic message omits the OD octet while still expecting one echoed) may
-     * override either after iolink_device_init(). */
-    ctx->dll.od_len = (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
-    ctx->dll.od_resp_len = ctx->dll.od_len;
+    /* OD (On-request Data) width, single source of truth (Table A.10): the type's
+     * OD octet count m. config.od_width overrides the per-type default for the
+     * variable-width types (1_V/2_V). Whether a given frame actually carries OD
+     * is decided per frame from the MC R/W bit (Figure A.14), not stored here. */
+    ctx->dll.od_width = ctx->stack_config.od_width;
+    if (ctx->dll.od_width == 0U) {
+        ctx->dll.od_width = iolink_mseq_default_od_width((uint8_t) ctx->stack_config.m_seq_type);
+    }
     ctx->dll.pd_in_len = ctx->stack_config.pd_in_len;
     ctx->dll.pd_out_len = ctx->stack_config.pd_out_len;
-    ctx->dll.min_cycle_time_us = (uint32_t) ctx->stack_config.min_cycle_time * 100U;
+    ctx->dll.min_cycle_time_us = iolink_cycle_time_to_us(ctx->stack_config.min_cycle_time);
     ctx->dll.t_pd_delay_us = ctx->stack_config.t_pd_us;
     if (ctx->dll.t_pd_delay_us > 0U) {
         ctx->dll.t_pd_deadline_us = iolink_time_get_us() + (uint64_t) ctx->dll.t_pd_delay_us;
@@ -74,9 +74,6 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     else {
         ctx->dll.t_pd_deadline_us = 0U;
     }
-
-    /* The OD octet counts (od_len / od_resp_len) are derived once, above, from
-     * the M-sequence type (single source of truth). */
 
     /* TYPE_2_V has a deterministic cyclic reply ([OD][PD-in]CKS). If the bound
      * PHY can pre-stage and transmit it from its own interrupt (stage_reply),

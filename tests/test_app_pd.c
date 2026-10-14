@@ -24,10 +24,11 @@
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 
-/* Check the A.1.5 reply layout: [PD-in][OD] CKS with no leading status octet.
+/* Check the Figure A.14 reply layout: [OD][PD-in] CKS with no leading status
+   octet.
    expect_nothing=0 asserts the PD-valid flag (CKS bit 6 clear); 1 asserts the
    PD-invalid flag (CKS bit 6 set). The configured TYPE_2_2 reply is
-   PD-in(2) + OD(1) + CKS, so the CKS is the fourth octet. */
+   OD(1) + PD-in(2) + CKS, so the CKS is the fourth octet. */
 static int check_reply_flags(const LargestIntegralType value,
                              const LargestIntegralType check_value_data)
 {
@@ -54,19 +55,19 @@ static void test_reply_layout_no_status_octet(void** state)
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
     move_to_operate_ctx(&dev.ctx);
 
-    uint8_t frame[5] = {0x80, IOLINK_MSEQ_TYPE_2, 0x00, 0x00, 0x00};
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 5));
+    uint8_t frame[4] = {0x80, IOLINK_MSEQ_TYPE_2, 0x00, 0x00};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
 
     uint8_t input[2] = {0x11, 0x22};
     iolink_device_pd_input_update(&dev.ctx, input, 2, true);
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 4; i++) {
         will_return(mock_phy_recv_byte, 1);
         will_return(mock_phy_recv_byte, frame[i]);
     }
     will_return(mock_phy_recv_byte, 0);
 
-    /* 2 PD-in + 1 OD + CKS = 4 octets (TYPE_2_2 per Table A.10), PD valid so
+    /* 1 OD + 2 PD-in + CKS = 4 octets (Figure A.14), PD valid so
        CKS bit 6 is clear. */
     expect_check(mock_phy_send, data, check_reply_flags, (void*) (uintptr_t) 0U);
     expect_value(mock_phy_send, len, 4);
@@ -85,13 +86,13 @@ static void test_reply_flags_pd_invalid(void** state)
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
     move_to_operate_ctx(&dev.ctx);
 
-    uint8_t frame[5] = {0x80, IOLINK_MSEQ_TYPE_2, 0x00, 0x00, 0x00};
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 5));
+    uint8_t frame[4] = {0x80, IOLINK_MSEQ_TYPE_2, 0x00, 0x00};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
 
     /* Mark the input Process Data as invalid; CKS bit 6 must be set. */
     iolink_device_pd_input_update(&dev.ctx, (const uint8_t*) "\x11\x22", 2, false);
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 4; i++) {
         will_return(mock_phy_recv_byte, 1);
         will_return(mock_phy_recv_byte, frame[i]);
     }

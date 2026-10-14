@@ -35,19 +35,15 @@ static void test_crc_error_recovery(void** state)
 
     move_to_operate_ctx(&dev.ctx);
 
-    /* 2. Simulate 3 CRC errors (Type 1_1 with 1-byte PD: MC, CKT, PD(1), OD(1), CK = 5 bytes) */
+    /* 2. Simulate 3 CRC errors. TYPE_1_1 has OD width 0, so a READ request is
+       MC + CKT + PD(1) = 3 bytes; the bad checksum is carried in the CKT. */
     for (int r = 0; r < 3; r++) {
-        /* Provide the whole frame in the mock queue */
         will_return(mock_phy_recv_byte, 1);
         will_return(mock_phy_recv_byte, 0x80); /* MC */
         will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, 0x00); /* CKT */
+        will_return(mock_phy_recv_byte, 0x00); /* CKT (bad checksum) */
         will_return(mock_phy_recv_byte, 1);
         will_return(mock_phy_recv_byte, 0x00); /* PD */
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, 0x00); /* OD */
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, 0xFF); /* Bad CRC */
         will_return(mock_phy_recv_byte, 0);    /* End frame */
 
         /* One call to process the whole available frame */

@@ -54,7 +54,7 @@ if(CMOCKA_FOUND)
     target_sources(test_reference_device PRIVATE ../examples/reference_device/reference_device.c)
     target_include_directories(test_reference_device PRIVATE ../examples/reference_device)
     add_iolink_test(test_crc test_crc.c)
-    add_iolink_test(test_frame test_frame.c)
+    # test_frame REMOVED with src/frame.c (dead code, wrong frame layout).
     add_iolink_test(test_dll test_dll.c)
     add_iolink_test(test_pd test_pd.c)
     add_iolink_test(test_isdu test_isdu.c)

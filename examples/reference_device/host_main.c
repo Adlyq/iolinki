@@ -66,18 +66,19 @@ int main(void)
     exchange(&app, &link, transition, sizeof(transition));
 
     for (unsigned cycle = 0; cycle < 100; cycle++) {
-        /* Type 2_V: MC, CKT, 1 PD-out, 2 OD. Button remains released here. */
-        uint8_t frame[5] = {0x80, IOLINK_MSEQ_TYPE_2, (uint8_t) (cycle & 1U), 0, 0};
+        /* TYPE_2_V READ request (Figure A.14): MC, CKT, 1 PD-out, no OD.
+           Button remains released here. */
+        uint8_t frame[3] = {0x80, IOLINK_MSEQ_TYPE_2, (uint8_t) (cycle & 1U)};
         frame[1] |= iolink_checksum6(frame, sizeof(frame));
         if (reference_device_tick(&app, false) != 0) return 2;
         exchange(&app, &link, frame, sizeof(frame));
         if (iolink_device_get_state(&app.device) != IOLINK_DLL_STATE_OPERATE) return 3;
-        /* Device response (Figure A.9/A.13/A.14): 2 OD bytes, 3 input bytes, CKS. */
-        if ((link.tx_len != 6) ||
-            (memcmp(&link.tx[2], app.input, sizeof(app.input)) != 0))
+        /* Device response (Figure A.14): 1 OD byte, 3 input bytes, CKS = 5. */
+        if ((link.tx_len != 5) ||
+            (memcmp(&link.tx[1], app.input, sizeof(app.input)) != 0))
             return 4;
-        uint8_t checksum = link.tx[5] & 0x3FU;
-        link.tx[5] &= 0xC0U;
+        uint8_t checksum = link.tx[4] & 0x3FU;
+        link.tx[4] &= 0xC0U;
         if (checksum != iolink_checksum6(link.tx, link.tx_len)) return 5;
         uint8_t output = 0;
         if ((iolink_device_pd_output_read(&app.device, &output, 1) != 1) ||

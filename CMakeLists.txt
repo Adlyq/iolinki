@@ -23,7 +23,8 @@ add_library(iolinki STATIC
     src/phy_l6362a.c
     src/phy_virtual.c
     src/crc.c
-    src/frame.c
+    # src/frame.c REMOVED: unused dead code that encoded the pre-Figure-A.14
+    # reply layout ([PD-in][OD]CKS) contradicting dll.c; use dll.c instead.
     src/dll.c
     src/isdu.c
     src/events.c

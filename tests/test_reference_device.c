@@ -18,7 +18,8 @@ static void test_reference_device_payload(void** state)
     assert_int_equal(iolink_device_get_pd_in_len(&app.device), 3);
     assert_int_equal(iolink_device_get_pd_out_len(&app.device), 1);
     move_to_operate_ctx(&app.device);
-    uint8_t frame[5] = {0x80, IOLINK_MSEQ_TYPE_2, 1, 0, 0};
+    /* TYPE_2_V READ request (Figure A.14): MC, CKT, PD-out(1) = 3 bytes, no OD. */
+    uint8_t frame[3] = {0x80, IOLINK_MSEQ_TYPE_2, 1};
     frame[1] |= iolink_checksum6(frame, sizeof(frame));
     for (size_t i = 0; i < sizeof(frame); i++) {
         will_return(mock_phy_recv_byte, 1);
@@ -26,8 +27,8 @@ static void test_reference_device_payload(void** state)
     }
     will_return(mock_phy_recv_byte, 0);
     expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 6);
-    will_return(mock_phy_send, 6);
+    expect_value(mock_phy_send, len, 5); /* OD(1) + PD-in(3) + CKS = 5 */
+    will_return(mock_phy_send, 5);
     iolink_device_process(&app.device);
     assert_int_equal(reference_device_tick(&app, true), 0);
     assert_true(app.led);
