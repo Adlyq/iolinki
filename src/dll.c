@@ -106,18 +106,18 @@ static uint32_t dll_get_t_ren_limit_us(const iolink_dll_ctx_t* ctx)
 }
 
 /** @brief Return the inter-byte timeout in us for the active baudrate, or 0 when
- *  the PHY delimits frames in hardware (recv_frame). */
+ *  the library ISR pump delimits frames (rx_octet PHY). */
 static uint32_t dll_get_t_byte_limit_us(const iolink_dll_ctx_t* ctx)
 {
     if (ctx == NULL) {
         return 0U;
     }
-    /* A PHY that hands over whole, already frame-delimited M-sequences resolves
-     * the boundary itself (octet count + CKT type, or the transceiver's DAT/CHK
-     * frame-end time-out), so the DLL must not second-guess it with a polled
-     * inter-octet timer: the main-loop DLL is slower than t_byte and would reset
-     * the frame mid-assembly. The byte-wise fallback keeps the t_byte delimiting. */
-    if ((ctx->phy != NULL) && (ctx->phy->recv_frame != NULL)) {
+    /* A raw-octet PHY (single-octet transceiver) is framed by the library ISR
+     * pump itself (octet count + CKT type, or the transceiver's DAT/CHK frame-end
+     * time-out), so the main-loop DLL must not second-guess it with a polled
+     * inter-octet timer: the main loop is slower than t_byte and would reset the
+     * frame mid-assembly. The byte-wise fallback keeps the t_byte delimiting. */
+    if ((ctx->phy != NULL) && (ctx->phy->rx_octet != NULL)) {
         return 0U;
     }
     uint32_t t_bit_us;
@@ -138,6 +138,64 @@ static uint32_t dll_get_t_byte_limit_us(const iolink_dll_ctx_t* ctx)
     return t_bit_us * 16U;
 }
 
+/** @brief Map a pre-staged reply variant to its slot, or -1 if not pre-staged. */
+static int dll_variant_slot(iolink_reply_variant_t variant)
+{
+    switch (variant) {
+        case IOLINK_REPLY_CYCLIC_READ:
+            return 0;
+        case IOLINK_REPLY_CYCLIC_WRITE:
+            return 1;
+        case IOLINK_REPLY_ACYCLIC_READ:
+            return 2;
+        default:
+            return -1;
+    }
+}
+
+static void dll_isr_tx_step(iolink_dll_ctx_t* ctx);
+static void dll_build_variant(iolink_dll_ctx_t* ctx, iolink_reply_variant_t variant);
+
+/** @brief Send a main-context reply (Type-0 in STARTUP/PREOPERATE, or a
+ *         streaming PHY).
+ *
+ * For a raw-octet PHY the library stages @p data verbatim (the CKS is already
+ * included) and starts the transmission; the ISR pump feeds the remaining octets
+ * as the transceiver requests them. The application lock keeps the setup atomic
+ * with respect to the data interrupt (the library does not know the EXTI). For a
+ * streaming PHY, send() transmits the bytes directly. */
+static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
+{
+    if ((ctx == NULL) || (ctx->phy == NULL) || (data == NULL) || (len == 0U) ||
+        (len > sizeof(ctx->isr_tx_payload))) {
+        return;
+    }
+    if (ctx->phy->rx_octet != NULL) {
+        if (ctx->phy->tx_octet == NULL) {
+            return;
+        }
+        if (ctx->lock != NULL) {
+            ctx->lock(ctx->lock_user);
+        }
+        if (ctx->isr_tx_active != 0U) {
+            ctx->phy->tx_end(ctx->phy->user); /* abort a stale transmission */
+            ctx->isr_tx_active = 0U;
+        }
+        (void) memcpy(ctx->isr_tx_payload, data, len);
+        ctx->isr_tx_len = (uint8_t) len;
+        ctx->isr_tx_idx = 0U;
+        ctx->isr_tx_has_cks = 0U; /* verbatim: the bytes carry the CKS */
+        ctx->isr_tx_active = 1U;
+        dll_isr_tx_step(ctx); /* writes the first octet */
+        if (ctx->unlock != NULL) {
+            ctx->unlock(ctx->lock_user);
+        }
+    }
+    else if (ctx->phy->send != NULL) {
+        ctx->phy->send(ctx->phy->user, data, len);
+    }
+}
+
 /** @brief Return true while the power-down/PD guard window (t_PD) is still active. */
 static bool dll_t_pd_active(const iolink_dll_ctx_t* ctx)
 {
@@ -154,14 +212,11 @@ static bool dll_drain_rx(iolink_dll_ctx_t* ctx)
         return false;
     }
     bool saw_data = false;
-    if (ctx->phy->recv_frame != NULL) {
-        uint8_t frame[48];
-        uint8_t flen;
-        for (;;) {
-            flen = (uint8_t) sizeof(frame);
-            if (ctx->phy->recv_frame(ctx->phy->user, frame, &flen) <= 0) {
-                break;
-            }
+    if (ctx->phy->rx_octet != NULL) {
+        /* Raw-octet PHY: the ISR pump fills the mailbox; draining it just drops
+         * a frame that arrived while the t_pd guard was active. */
+        if (ctx->isr_frame_ready != 0U) {
+            ctx->isr_frame_ready = 0U;
             saw_data = true;
         }
         return saw_data;
@@ -311,9 +366,7 @@ static void dll_handle_page_channel_read(iolink_dll_ctx_t* ctx, uint8_t mc)
         iolink_isdu_direct_param_page1_octet(&ctx->isdu, (uint8_t) (mc & IOLINK_MC_ADDR_MASK));
     resp[1] = 0x00U;
     resp[1] = iolink_checksum6(resp, 2U);
-    if (ctx->phy->send != NULL) {
-        ctx->phy->send(ctx->phy->user, resp, 2);
-    }
+    dll_send(ctx, resp, 2);
     ctx->last_response_us = iolink_time_get_us();
 }
 
@@ -409,17 +462,13 @@ static void dll_handle_operate_type0(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t 
     if (type0_write) {
         resp[0] = ck_flags;
         resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));
-        if (ctx->phy->send != NULL) {
-            ctx->phy->send(ctx->phy->user, resp, 1);
-        }
+        dll_send(ctx, resp, 1);
     }
     else {
         resp[0] = od_resp;
         resp[1] = ck_flags;
         resp[1] = (uint8_t) (resp[1] | iolink_checksum6(resp, 2U));
-        if (ctx->phy->send != NULL) {
-            ctx->phy->send(ctx->phy->user, resp, 2);
-        }
+        dll_send(ctx, resp, 2);
     }
     ctx->last_response_us = iolink_time_get_us();
 }
@@ -439,9 +488,7 @@ static void dll_handle_type0_od_write(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t
         resp[0] |= 0x40U;
     }
     resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));
-    if (ctx->phy->send != NULL) {
-        ctx->phy->send(ctx->phy->user, resp, 1);
-    }
+    dll_send(ctx, resp, 1);
     ctx->last_response_us = iolink_time_get_us();
 }
 
@@ -489,10 +536,17 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
     }
 
     if (ctx->cyclic_reply_precached) {
-        /* The cyclic reply is deterministic: the PHY builds it from the
-         * registered PD-in source and transmits it from its own interrupt at
-         * master-frame end, so the DLL must not send it again. Only maintain the
-         * fallback counter + timestamp. */
+        /* OPERATE with a raw-octet PHY: the library ISR pump transmits the whole
+         * reply at frame end, so the main pump never sends here. A process-channel
+         * request uses the pre-built cyclic payload; a non-cyclic OD read uses the
+         * staged response (refreshed below); a non-cyclic write reply is [PD-in]
+         * (the cyclic-write payload). */
+        if (!write && ((mc & IOLINK_MC_COMM_CHANNEL_MASK) != IOLINK_MC_CHANNEL_PROCESS)) {
+            for (uint8_t i = 0U; i < ctx->od_width; i++) {
+                ctx->last_od_resp[i] = od_out[i];
+            }
+            dll_build_variant(ctx, IOLINK_REPLY_ACYCLIC_READ);
+        }
         ctx->fallback_count = 0U;
         ctx->last_response_us = iolink_time_get_us();
         return;
@@ -527,8 +581,8 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
     resp[pos] = (uint8_t) (resp[pos] | iolink_checksum6(resp, pos + 1U));
     pos++;
 
-    if (ctx->phy->send != NULL) {
-        ctx->phy->send(ctx->phy->user, resp, pos);
+    if ((ctx->phy->rx_octet != NULL) || (ctx->phy->send != NULL)) {
+        dll_send(ctx, resp, pos);
         ctx->fallback_count = 0U;
         uint32_t end_tx_us = (uint32_t) iolink_time_get_us();
         ctx->response_time_us = end_tx_us - (uint32_t) ctx->last_cycle_start_us;
@@ -687,6 +741,10 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     ctx->t_byte_limit_us = dll_get_t_byte_limit_us(ctx);
     ctx->fault_map = g_default_fault_map;
 
+    /* OPERATE acyclic OD response starts as Busy (0x01, Table A.14) until the
+     * main pump answers the first OD read. */
+    ctx->last_od_resp[0] = 0x01U;
+
     /*
      * Initial line mode depends on whether the PHY can observe the electrical
      * C/Q wake-up pulse:
@@ -709,66 +767,72 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     }
 }
 
-void iolink_dll_prepare_cyclic_reply(iolink_dll_ctx_t* ctx)
+/* Build one OPERATE reply PAYLOAD (no CKS) into the inactive slot of its double
+ * buffer and flip the active index. The CKS octet is appended by the ISR pump
+ * while transmitting. */
+static void dll_build_variant(iolink_dll_ctx_t* ctx, iolink_reply_variant_t variant)
 {
-    if ((ctx == NULL) || !ctx->cyclic_reply_precached || (ctx->phy == NULL) ||
-        (ctx->phy->stage_reply == NULL)) {
+    const int slot = dll_variant_slot(variant);
+    if (slot < 0) {
         return;
     }
-
-    const uint8_t nxt = (uint8_t) (1U - ctx->cyclic_stage_active);
-    uint8_t* out = ctx->cyclic_stage[nxt];
+    const uint8_t nxt = (uint8_t) (1U - ctx->cyclic_stage_active[slot]);
+    uint8_t* out = ctx->cyclic_stage[slot][nxt];
     size_t pos = 0U;
 
-    /* Device reply layout (Figure A.9/A.10/A.13/A.14): [OD...][PD-in...]CKS. */
-    for (uint8_t i = 0U; i < ctx->od_width; i++) {
-        /* The cyclic On-request Data channel is idle for this profile: the master
-         * polls it with FlowCTRL IDLE and transfers ISDU acyclically (Type-0), so
-         * the OD octet carries no ISDU data (0x00). */
-        out[pos++] = 0x00U;
+    /* Device READ reply layout (Figure A.9/A.14): [OD...][PD-in...]CKS. The
+     * process-channel OD is idle (the master polls it with FlowCTRL IDLE); the
+     * OD-channel read carries the staged response. A WRITE reply (Figure A.14)
+     * carries no OD: [PD-in...]CKS. */
+    if (variant == IOLINK_REPLY_CYCLIC_READ) {
+        for (uint8_t i = 0U; i < ctx->od_width; i++) {
+            out[pos++] = 0x00U;
+        }
+    }
+    else if (variant == IOLINK_REPLY_ACYCLIC_READ) {
+        for (uint8_t i = 0U; i < ctx->od_width; i++) {
+            out[pos++] = ctx->last_od_resp[i];
+        }
     }
     if (ctx->pd_in_len_current > 0U) {
         (void) memcpy(&out[pos], ctx->pd_in, ctx->pd_in_len_current);
         pos += ctx->pd_in_len_current;
     }
 
-    uint8_t cks = 0x00U;
+    uint8_t flags = 0x00U;
     if (iolink_events_flag(&ctx->events)) {
-        cks |= 0x80U;
+        flags |= 0x80U;
     }
     if (!ctx->pd_valid) {
-        cks |= 0x40U;
+        flags |= 0x40U;
     }
-    out[pos] = cks;
-    out[pos] = (uint8_t) (cks | iolink_checksum6(out, pos + 1U));
-    pos++;
 
-    ctx->cyclic_stage_len[nxt] = (uint8_t) pos;
-    ctx->cyclic_stage_active = nxt;
-
-    /* Hand the fully written slot to the PHY. The DLL only ever writes the slot
-     * it did NOT hand last, so the handed image stays stable while the PHY copies
-     * it at frame end. No critical section is needed here (main-context only). */
-    ctx->phy->stage_reply(ctx->phy->user, ctx->cyclic_stage[nxt], pos);
+    ctx->cyclic_stage_len[slot][nxt] = (uint8_t) pos;
+    ctx->cyclic_stage_flags[slot][nxt] = flags;
+    /* Flip the active index last: the ISR pump copies the active slot at frame
+     * end, so the payload it reads is always fully written. */
+    ctx->cyclic_stage_active[slot] = nxt;
 }
 
-void iolink_dll_apply_cyclic_frame_len(iolink_dll_ctx_t* ctx)
+void iolink_dll_prepare_cyclic_reply(iolink_dll_ctx_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->phy == NULL) || (ctx->phy->set_cyclic_frame_len == NULL)) {
+    if ((ctx == NULL) || !ctx->cyclic_reply_precached || (ctx->phy == NULL) ||
+        (ctx->phy->tx_octet == NULL)) {
         return;
     }
-    /* The steady cyclic request is a READ (Figure A.14), so it carries the
-       PD-out octets but no OD: MC + CKT + PD-out. */
-    ctx->phy->set_cyclic_frame_len(
-        ctx->phy->user, (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + ctx->pd_out_len_current));
+
+    /* Pre-build every OPERATE variant so the ISR pump can transmit the matching
+     * one at frame end without running the main pump. */
+    dll_build_variant(ctx, IOLINK_REPLY_CYCLIC_READ);
+    dll_build_variant(ctx, IOLINK_REPLY_CYCLIC_WRITE);
+    dll_build_variant(ctx, IOLINK_REPLY_ACYCLIC_READ);
 }
 
 /* Derive the expected request length for the M-sequence whose first octet
- * (the MC byte) is now in ctx->frame_buf[0], from the current DLL state.
- * Shared by both RX paths (whole-frame and byte-wise). */
-static void dll_rx_begin(iolink_dll_ctx_t* ctx)
+ * (the MC byte) is @p mc_byte, from the current DLL state. Pure / read-only so
+ * the ISR pump can call it directly; shared by both RX paths. */
+static uint8_t dll_compute_req_len(const iolink_dll_ctx_t* ctx, uint8_t mc_byte)
 {
-    const uint8_t mc_byte = ctx->frame_buf[0];
     const uint8_t type0_channel = (uint8_t) (mc_byte & IOLINK_MC_COMM_CHANNEL_MASK);
     const bool type0_od_write = (dll_expected_type_bits(ctx) == IOLINK_MSEQ_TYPE_0) &&
                                 ((mc_byte & IOLINK_MC_RW_MASK) == 0U) &&
@@ -778,22 +842,51 @@ static void dll_rx_begin(iolink_dll_ctx_t* ctx)
     if (type0_od_write) {
         /* Figure A.5: a Type-0 write carries exactly ONE OD octet
            whatever OD width the OPERATE M-sequence uses. */
-        ctx->req_len = (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + 1U);
+        return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + 1U);
     }
-    else {
-        /* STARTUP/PREOPERATE expect Type 0; ESTAB_COM and OPERATE use
-           the configured type (C5/Table 47). The transition command is
-           the sole Type-0 exchange once a multi type is configured. */
-        uint8_t type_bits = dll_expected_type_bits(ctx);
-        bool transition_cmd = (ctx->state == IOLINK_DLL_STATE_ESTAB_COM) &&
-                              (mc_byte == IOLINK_MC_TRANSITION_COMMAND);
-        if (!transition_cmd && (type_bits != IOLINK_MSEQ_TYPE_0)) {
-            ctx->req_len = dll_expected_req_len(ctx, type_bits, mc_byte);
-        }
-        else {
-            ctx->req_len = 2U;
-        }
+    /* STARTUP/PREOPERATE expect Type 0; ESTAB_COM and OPERATE use the configured
+       type (C5/Table 47). The transition command is the sole Type-0 exchange
+       once a multi type is configured. */
+    uint8_t type_bits = dll_expected_type_bits(ctx);
+    bool transition_cmd = (ctx->state == IOLINK_DLL_STATE_ESTAB_COM) &&
+                          (mc_byte == IOLINK_MC_TRANSITION_COMMAND);
+    if (!transition_cmd && (type_bits != IOLINK_MSEQ_TYPE_0)) {
+        return dll_expected_req_len(ctx, type_bits, mc_byte);
     }
+    return 2U;
+}
+
+/* Derive the expected request length for the M-sequence whose first octet
+ * (the MC byte) is now in ctx->frame_buf[0]. */
+static void dll_rx_begin(iolink_dll_ctx_t* ctx)
+{
+    ctx->req_len = dll_compute_req_len(ctx, ctx->frame_buf[0]);
+}
+
+uint8_t iolink_dll_expected_req_len(const iolink_dll_ctx_t* ctx, uint8_t mc)
+{
+    if (ctx == NULL) {
+        return 0U;
+    }
+    return dll_compute_req_len(ctx, mc);
+}
+
+iolink_reply_variant_t iolink_dll_reply_variant(const iolink_dll_ctx_t* ctx, uint8_t mc)
+{
+    if (ctx == NULL) {
+        return IOLINK_REPLY_NONE;
+    }
+    const bool write = ((mc & IOLINK_MC_RW_MASK) == 0U);
+    if (dll_expected_type_bits(ctx) == IOLINK_MSEQ_TYPE_0) {
+        return write ? IOLINK_REPLY_TYPE0_CKS : IOLINK_REPLY_TYPE0_OD;
+    }
+    if ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PROCESS) {
+        return write ? IOLINK_REPLY_CYCLIC_WRITE : IOLINK_REPLY_CYCLIC_READ;
+    }
+    /* Non-cyclic OD channel (ISDU / page / diagnosis). A WRITE reply carries no
+     * OD, so it reuses the cyclic-write payload [PD-in]. A READ reply carries the
+     * staged OD response (Busy until the main pump has answered). */
+    return write ? IOLINK_REPLY_CYCLIC_WRITE : IOLINK_REPLY_ACYCLIC_READ;
 }
 
 /* Dispatch a complete M-sequence held in ctx->frame_buf (frame_index octets),
@@ -1032,7 +1125,7 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
                  * partial M-sequence is discarded (the next octet starts a fresh
                  * frame) and, as upstream, the link is treated as broken. Only
                  * reached when the PHY does not delimit frames itself
-                 * (t_byte_limit_us is 0 for a recv_frame PHY). */
+                 * (t_byte_limit_us is 0 for a raw-octet PHY). */
                 ctx->timing_errors++;
                 ctx->t_byte_violations++;
                 ctx->framing_errors++;
@@ -1050,28 +1143,24 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
         }
     }
 
-    uint8_t frame[sizeof(ctx->frame_buf)];
-    uint8_t flen;
-
-    if (ctx->phy->recv_frame != NULL) {
-        /* Frame-delimited PHY (a single-octet transceiver): the PHY resolves the
-         * M-sequence boundary in hardware (octet count + CKT type, or its
-         * frame-end time-out), so a whole frame arrives at once. */
-        for (;;) {
-            flen = (uint8_t) sizeof(frame);
-            if (ctx->phy->recv_frame(ctx->phy->user, frame, &flen) <= 0) {
-                break;
-            }
+    if (ctx->phy->rx_octet != NULL) {
+        /* Raw-octet PHY (single-octet transceiver): the library ISR pump has
+         * already framed the M-sequence and published it to the mailbox. Consume
+         * one frame here and run the protocol on it. */
+        if (ctx->isr_frame_ready != 0U) {
+            uint8_t flen = ctx->isr_frame_len;
+            ctx->isr_frame_ready = 0U;
             if (flen > sizeof(ctx->frame_buf)) {
                 ctx->framing_errors++;
-                continue;
             }
-            (void) memcpy(ctx->frame_buf, frame, flen);
-            ctx->frame_index = flen;
-            ctx->last_activity_ms = iolink_time_get_ms();
-            ctx->last_byte_us = iolink_time_get_us();
-            dll_rx_begin(ctx);
-            dll_process_rx_frame(ctx);
+            else {
+                (void) memcpy(ctx->frame_buf, (const void*) ctx->isr_frame_buf, flen);
+                ctx->frame_index = flen;
+                ctx->last_activity_ms = iolink_time_get_ms();
+                ctx->last_byte_us = iolink_time_get_us();
+                dll_rx_begin(ctx);
+                dll_process_rx_frame(ctx);
+            }
         }
     }
     else if (ctx->phy->recv_byte != NULL) {
@@ -1122,6 +1211,142 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
             }
 
             dll_process_rx_frame(ctx);
+        }
+    }
+}
+
+/* Copy the accumulated RX octets into the mailbox for the main pump. Called from
+ * the ISR; drops the frame if the previous one has not been consumed yet. */
+static void dll_publish_isr_frame(iolink_dll_ctx_t* ctx, uint8_t len)
+{
+    if ((ctx->isr_frame_ready != 0U) || (len > sizeof(ctx->isr_frame_buf))) {
+        return;
+    }
+    for (uint8_t i = 0U; i < len; i++) {
+        ctx->isr_frame_buf[i] = ctx->isr_rx_buf[i];
+    }
+    ctx->isr_frame_len = len;
+    ctx->isr_frame_ready = 1U;   /* publish last */
+}
+
+/* Send one step of the active reply: the next payload octet, then the computed
+ * CKS (CKS mode), then the frame end. One call per transceiver request. */
+static void dll_isr_tx_step(iolink_dll_ctx_t* ctx)
+{
+    if (ctx->isr_tx_idx < ctx->isr_tx_len) {
+        const uint8_t b = ctx->isr_tx_payload[ctx->isr_tx_idx];
+        (void) ctx->phy->tx_octet(ctx->phy->user, b);
+        if (ctx->isr_tx_has_cks != 0U) {
+            ctx->isr_tx_acc = (uint8_t) (ctx->isr_tx_acc ^ b);
+        }
+        ctx->isr_tx_idx++;
+    }
+    else if ((ctx->isr_tx_has_cks != 0U) && (ctx->isr_tx_idx == ctx->isr_tx_len)) {
+        /* Payload done: emit CKS = flags | checksum6(acc ^ flags). */
+        const uint8_t acc = (uint8_t) (ctx->isr_tx_acc ^ ctx->isr_tx_flags);
+        const uint8_t cks = (uint8_t) (ctx->isr_tx_flags | iolink_checksum6_from_acc(acc));
+        (void) ctx->phy->tx_octet(ctx->phy->user, cks);
+        ctx->isr_tx_idx++;
+    }
+    else {
+        if (ctx->phy->tx_end != NULL) {
+            ctx->phy->tx_end(ctx->phy->user);
+        }
+        ctx->isr_tx_active = 0U;
+    }
+}
+
+/* Select the pre-staged OPERATE reply payload matching the just-framed request
+ * and start transmitting it from the ISR (the CKS is computed as the octets are
+ * sent). A Type-0 request has no pre-staged variant; the main pump answers it. */
+static void dll_isr_start_reply(iolink_dll_ctx_t* ctx)
+{
+    const iolink_reply_variant_t variant =
+        iolink_dll_reply_variant(ctx, (uint8_t) ctx->isr_frame_buf[0]);
+    const int slot = dll_variant_slot(variant);
+    if ((slot < 0) || (ctx->phy->tx_octet == NULL)) {
+        return;
+    }
+    const uint8_t active = ctx->cyclic_stage_active[slot];
+    const uint8_t len = ctx->cyclic_stage_len[slot][active];
+
+    for (uint8_t i = 0U; i < len; i++) {
+        ctx->isr_tx_payload[i] = ctx->cyclic_stage[slot][active][i];
+    }
+    ctx->isr_tx_len = len;
+    ctx->isr_tx_flags = ctx->cyclic_stage_flags[slot][active];
+    ctx->isr_tx_idx = 0U;
+    ctx->isr_tx_acc = 0x52U; /* A.1.6 seed */
+    ctx->isr_tx_has_cks = 1U;
+    ctx->isr_tx_active = 1U;
+    dll_isr_tx_step(ctx); /* write the first octet (or the CKS if no payload) */
+}
+
+void iolink_dll_process_isr(iolink_dll_ctx_t* ctx)
+{
+    if ((ctx == NULL) || (ctx->phy == NULL) || (ctx->phy->rx_octet == NULL) ||
+        (ctx->phy->int_active == NULL)) {
+        return;
+    }
+
+    /* Level re-check: the data interrupt may latch a crosstalk edge; bail out at
+     * zero cost unless the transceiver is genuinely requesting service. */
+    if (ctx->phy->int_active(ctx->phy->user) == 0U) {
+        return;
+    }
+
+    /* Drain a back-to-back burst, bounded so a wedged line cannot spin forever. */
+    for (uint32_t guard = 0U; (guard < 64U) && (ctx->phy->int_active(ctx->phy->user) != 0U);
+         guard++) {
+        /* Reply draining: the transceiver requests the next reply octet. Feed
+         * exactly one and yield (the next request arrives as another interrupt). */
+        if (ctx->isr_tx_active != 0U) {
+            dll_isr_tx_step(ctx);
+            break;
+        }
+
+        uint8_t data = 0U;
+        uint8_t st = 0U;
+        int ok = ctx->phy->rx_octet(ctx->phy->user, &data, &st);
+
+        if ((st & IOLINK_PHY_STATUS_CHK) != 0U) {
+            /* Frame-end time-out / receive error: Type-0 frames have no length in
+             * the header, so this delimits them. Publish whatever was accumulated
+             * and reset the transceiver's receive engine (as the ST engine does). */
+            if (ctx->isr_rx_cnt != 0U) {
+                dll_publish_isr_frame(ctx, ctx->isr_rx_cnt);
+            }
+            ctx->isr_rx_cnt = 0U;
+            ctx->isr_rx_expect = 0U;
+            if (ctx->phy->tx_end != NULL) {
+                ctx->phy->tx_end(ctx->phy->user);
+            }
+            break;
+        }
+
+        if (ok <= 0) {
+            break;
+        }
+
+        if (ctx->isr_rx_cnt < sizeof(ctx->isr_rx_buf)) {
+            ctx->isr_rx_buf[ctx->isr_rx_cnt] = data;
+            ctx->isr_rx_cnt++;
+        }
+
+        /* The second octet (CKT) completes the header: derive the request length
+         * for the multi-octet (Type-1/2) types. A Type-0 request (2..3 octets) is
+         * left to the CHK frame-end indication above, matching the byte engine. */
+        if (ctx->isr_rx_cnt == 2U) {
+            const uint8_t exp = iolink_dll_expected_req_len(ctx, (uint8_t) ctx->isr_rx_buf[0]);
+            ctx->isr_rx_expect = (exp > 3U) ? exp : 0U;
+        }
+
+        if ((ctx->isr_rx_expect != 0U) && (ctx->isr_rx_cnt >= ctx->isr_rx_expect)) {
+            dll_publish_isr_frame(ctx, ctx->isr_rx_expect);
+            ctx->isr_rx_cnt = 0U;
+            ctx->isr_rx_expect = 0U;
+            dll_isr_start_reply(ctx);
+            break;   /* frame done; the reply drains on later interrupts */
         }
     }
 }

@@ -58,6 +58,19 @@ typedef enum
     (IOLINK_PHY_FAULT_UNDERVOLTAGE | IOLINK_PHY_FAULT_OVERTEMP |                         \
      IOLINK_PHY_FAULT_SHORT_CIRCUIT)
 
+/**
+ * @brief Normalized status bits returned by the raw-octet hooks
+ *        (iolink_phy_api_t.rx_octet()).
+ *
+ * A raw-octet PHY translates its own transceiver status into these bits so the
+ * library framing engine stays device-agnostic. The library only needs the
+ * frame-end/error indication: on a single-octet transceiver that is the
+ * "data + check" condition raised at the end of a master frame (octet-count
+ * time-out) or on a receive error.
+ */
+#define IOLINK_PHY_STATUS_CHK        (1U << 0) /**< Frame-end time-out / receive error */
+#define IOLINK_PHY_STATUS_DATA_READY (1U << 1) /**< A received octet is available */
+
 /** Valid L+ window for the legacy iolink_phy_api_t.get_voltage_mv() hook, in mV. */
 #define IOLINK_PHY_VOLTAGE_MIN_MV (18000)
 #define IOLINK_PHY_VOLTAGE_MAX_MV (30000)
@@ -99,17 +112,38 @@ typedef struct
     int (*send)(void* user, const uint8_t* data, size_t len);
 
     /**
-     * @brief Pre-stage the deterministic cyclic reply image.
+     * @brief Read one received octet and its transceiver status (raw-octet PHY).
      *
-     * When the cyclic reply is deterministic (cyclic_reply_precached), the DLL
-     * builds the whole M-sequence reply image (On-request Data + PD-in + CKS) and
-     * hands it over here; the PHY transmits it verbatim at the next master-frame
-     * end without interpreting its contents. The buffer stays valid until the next
-     * stage_reply() call (the DLL double buffers it), so the PHY may retain the
-     * pointer. Optional: when NULL the DLL sends the cyclic reply itself via
-     * send().
+     * For a single-octet transceiver (e.g. the L6364 in SPI single-octet mode)
+     * the library owns M-sequence framing: it pulls received octets here and
+     * feeds reply octets through tx_octet()/tx_end(). @p status is a PHY status
+     * octet (see IOLINK_PHY_STATUS_*). Optional: NULL for a streaming PHY that
+     * uses recv_byte()/send().
+     * @return 1 if an octet was read into @p data, 0 if none was pending,
+     *         negative on transport error.
      */
-    void (*stage_reply)(void* user, const uint8_t* img, size_t len);
+    int (*rx_octet)(void* user, uint8_t* data, uint8_t* status);
+
+    /**
+     * @brief Write one reply octet (raw-octet PHY).
+     *
+     * The library feeds the reply octet by octet as the transceiver requests it
+     * (writing the first octet starts the frame); it accumulates the message
+     * checksum while sending and emits the final CKS octet before tx_end(). The
+     * SPI arbitration with the data interrupt is the PHY's responsibility.
+     * @return Normalized PHY status octet for the access (IOLINK_PHY_STATUS_*).
+     */
+    int (*tx_octet)(void* user, uint8_t data);
+
+    /** @brief Terminate the current device transmission (write the frame end). */
+    void (*tx_end)(void* user);
+
+    /**
+     * @brief Current level of the transceiver data-interrupt line.
+     * @return 1 while asserted, 0 otherwise. Used to gate the ISR pump and to
+     *         drain a back-to-back burst.
+     */
+    uint8_t (*int_active)(void* user);
 
     /**
      * @brief Non-blocking receive for a single byte
@@ -117,29 +151,6 @@ typedef struct
      * @return 1 if byte available and read, 0 if nothing received, negative on error
      */
     int (*recv_byte)(void* user, uint8_t* byte);
-
-    /**
-     * @brief Non-blocking receive of a complete, frame-delimited M-sequence.
-     *
-     * For single-octet transceivers the PHY interrupts delimit the frame (octet
-     * count + CKT type / frame-end time-out), so the stack receives a whole
-     * M-sequence at once instead of reconstructing it from bytes with a t_byte
-     * timer. @p len is in/out: input is the buffer capacity, output is the
-     * received frame length. Optional: may be NULL (fall back to recv_byte).
-     * @return 1 if a complete frame was copied, 0 if no frame available
-     */
-    int (*recv_frame)(void* user, uint8_t* buf, uint8_t* len);
-
-    /**
-     * @brief Declare the expected cyclic (Type-1/Type-2) frame length in octets.
-     *
-     * The DLL owns the M-sequence length (it derives it from the configured PD and
-     * OD widths); the PHY needs it only to delimit the incoming cyclic frame
-     * (Type-0 frames are delimited by the frame-end time-out instead). Keeping a
-     * single source avoids deriving the same length twice. Optional: may be NULL.
-     * @param len  MC + CKT + PD-out + OD octets of the cyclic frame
-     */
-    void (*set_cyclic_frame_len)(void* user, uint8_t len);
 
     /* Optional Diagnostic/Support Functions (can be NULL) */
 

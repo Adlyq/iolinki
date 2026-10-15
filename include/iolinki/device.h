@@ -120,6 +120,17 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
 void iolink_device_process(iolink_device_ctx_t* ctx);
 
 /**
+ * @brief ISR-side pump for a raw-octet PHY (single-octet transceiver).
+ *
+ * Called from the PHY data-interrupt handler: frames the incoming M-sequence and
+ * feeds the reply octets, publishing the complete request to a mailbox that the
+ * main-context iolink_device_process() consumes. Runs no protocol logic. No-op
+ * for a PHY without the raw-octet hooks.
+ * @param ctx Device context.
+ */
+void iolink_device_process_isr(iolink_device_ctx_t* ctx);
+
+/**
  * @brief Update the input process data (Device -> Master).
  * @param ctx    Device context.
  * @param data   Input process data bytes to publish.

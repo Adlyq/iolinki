@@ -33,7 +33,7 @@
  *   D1_6 = D3_8 xor D2_8
  *   D0_6 = D1_8 xor D0_8
  */
-static uint8_t iolink_checksum6_from_acc(uint8_t acc)
+uint8_t iolink_checksum6_from_acc(uint8_t acc)
 {
     const uint8_t b0 = (uint8_t) (acc & 0x01U);
     const uint8_t b1 = (uint8_t) ((acc >> 1U) & 0x01U);

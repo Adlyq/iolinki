@@ -47,6 +47,30 @@ typedef enum
  */
 typedef void (*iolink_dll_state_cb_t)(void* user, iolink_dll_state_t state);
 
+/**
+ * @brief Which reply layout an incoming M-sequence requires (Figure A.5/A.14).
+ *
+ * Derived purely from the request's MC octet plus the current state / configured
+ * M-sequence type, so the ISR-side pump can select a pre-built reply image
+ * without running any protocol logic itself. The content of each variant is
+ * still produced by the main pump.
+ */
+typedef enum
+{
+    IOLINK_REPLY_NONE = 0U,    /**< No pre-staged variant (main pump answers) */
+    IOLINK_REPLY_CYCLIC_READ,  /**< OPERATE process READ  : payload [OD...][PD-in...] */
+    IOLINK_REPLY_CYCLIC_WRITE, /**< OPERATE process WRITE : payload [PD-in...] (no OD) */
+    IOLINK_REPLY_ACYCLIC_READ, /**< OPERATE OD READ (ISDU/page/diag): payload
+                                    [od_resp...][PD-in...] (Busy until answered) */
+    IOLINK_REPLY_TYPE0_OD,     /**< Type-0 READ   : answered by the main pump */
+    IOLINK_REPLY_TYPE0_CKS     /**< Type-0 WRITE  : answered by the main pump */
+} iolink_reply_variant_t;
+
+/** Number of pre-staged OPERATE reply payload variants (see below). */
+#define IOLINK_REPLY_VARIANT_COUNT 3U
+/** Largest M-sequence the library frames (request or reply), in octets. */
+#define IOLINK_M_SEQ_MAX_LEN (IOLINK_PD_OUT_MAX_SIZE + IOLINK_OD_MAX_SIZE + 2U)
+
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
 #include "iolinki/data_storage.h"
@@ -88,6 +112,12 @@ typedef struct
 {
     iolink_dll_state_t state;    /**< Current DLL state */
     const iolink_phy_api_t* phy; /**< Bound PHY API implementation */
+    /* Optional application critical-section hooks. Used by dll_send() to start a
+     * main-context (Type-0) transmission atomically with respect to the data
+     * interrupt. The library does not know the platform's lock mechanism. */
+    void (*lock)(void* user);
+    void (*unlock)(void* user);
+    void* lock_user;
     uint32_t last_activity_ms;   /**< Timestamp of last received byte */
     uint32_t last_valid_frame_ms;/**< Timestamp of the last checksum/type-valid frame */
     bool wakeup_seen;            /**< Wake-up detected (if PHY supports it) */
@@ -101,19 +131,44 @@ typedef struct
                                      bit (Figure A.14): a WRITE request carries OD
                                      after PD-out, a READ reply carries OD before PD-in,
                                      and the opposite direction carries none. */
-    bool cyclic_reply_precached;/**< Cyclic OPERATE reply is deterministic (TYPE_2_V):
-                                     the DLL builds it via
-                                     iolink_dll_prepare_cyclic_reply() and the PHY
-                                     transmits the staged image from its own
-                                     interrupt, so dll_handle_operate_type1_2 must
-                                     not send it again */
-    /* Double-buffered cyclic reply image: the DLL writes the inactive slot and
-     * then swaps cyclic_stage_active atomically; the PHY only ever reads the slot
-     * the active index points at. Used only when cyclic_reply_precached is set and
-     * the PHY provides stage_reply. */
-    uint8_t cyclic_stage[2][IOLINK_PD_IN_MAX_SIZE + IOLINK_OD_MAX_SIZE + 1U];
-    uint8_t cyclic_stage_len[2];
-    volatile uint8_t cyclic_stage_active;
+    bool cyclic_reply_precached;/**< Bound PHY is a raw-octet transactional PHY:
+                                     the library ISR pump frames the M-sequence and
+                                     transmits the pre-built cyclic variant at frame
+                                     end, so dll_handle_operate_type1_2 must not
+                                     send it again. */
+    /* Pre-staged OPERATE reply PAYLOADS (no CKS), each double buffered: the main
+     * pump writes the inactive slot and swaps cyclic_stage_active[]; the ISR pump
+     * copies the active slot at frame end and appends the computed CKS. Slots:
+     *   0 = CYCLIC_READ   [0x00 x od_width][PD-in]
+     *   1 = CYCLIC_WRITE  [PD-in]
+     *   2 = ACYCLIC_READ  [last_od_resp][PD-in]   (Busy until the response is ready)
+     * Flags (Event / PD-invalid) for the CKS octet are staged per slot. */
+    uint8_t cyclic_stage[IOLINK_REPLY_VARIANT_COUNT][2][IOLINK_M_SEQ_MAX_LEN];
+    uint8_t cyclic_stage_len[IOLINK_REPLY_VARIANT_COUNT][2];
+    uint8_t cyclic_stage_flags[IOLINK_REPLY_VARIANT_COUNT][2];
+    volatile uint8_t cyclic_stage_active[IOLINK_REPLY_VARIANT_COUNT];
+    /* Last OPERATE acyclic OD response octets (main pump writes, prepares the
+     * ACYCLIC_READ payload with them). Initialised to Busy (0x01). */
+    uint8_t last_od_resp[IOLINK_OD_MAX_SIZE];
+
+    /* Raw-octet ISR pump state (owned by the library, driven from the PHY data
+     * interrupt). Only these fields are touched from ISR context; the reply
+     * staging buffer + octet feed are owned by the library (the PHY only does
+     * the SPI electrical access). */
+    uint8_t isr_rx_buf[IOLINK_M_SEQ_MAX_LEN];    /**< RX octets accumulated */
+    uint8_t isr_rx_cnt;                          /**< Octets accumulated this frame */
+    uint8_t isr_rx_expect;                       /**< Expected length (0 = unknown) */
+    volatile uint8_t isr_frame_buf[IOLINK_M_SEQ_MAX_LEN]; /**< Mailbox: request */
+    volatile uint8_t isr_frame_len;              /**< Mailbox length */
+    volatile uint8_t isr_frame_ready;            /**< Mailbox ready flag */
+    /* Reply transmission, fed one octet per data request. */
+    uint8_t isr_tx_payload[IOLINK_M_SEQ_MAX_LEN];/**< Staged reply octets */
+    volatile uint8_t isr_tx_len;                 /**< Payload octets held */
+    volatile uint8_t isr_tx_idx;                 /**< Next octet index */
+    volatile uint8_t isr_tx_flags;               /**< CKS status flags */
+    volatile uint8_t isr_tx_acc;                 /**< Running checksum accumulator */
+    volatile uint8_t isr_tx_has_cks;             /**< 1 = append computed CKS */
+    volatile uint8_t isr_tx_active;              /**< 1 while draining */
     bool pd_valid;              /**< Current PD_In validity status */
     uint8_t master_cycle_time;  /**< DPP1 0x01, the cycle-time octet written by the
                                      Master (Table B.1/B.3); 0 = not yet written */
@@ -228,26 +283,58 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy);
 void iolink_dll_process(iolink_dll_ctx_t* ctx);
 
 /**
- * @brief Build and pre-stage the deterministic cyclic reply image.
+ * @brief Expected length (octets) of the master request whose MC octet is @p mc.
  *
- * Only meaningful when cyclic_reply_precached is set and the bound PHY provides
- * stage_reply(): builds the reply ([OD...][PD-in...]CKS, Figure A.9/A.13/A.14)
- * from the current PD-in, validity and event state into the inactive slot of the
- * double buffer, swaps the active index atomically and hands the PHY the image.
- * Call it whenever the PD-in image changes (e.g. once per main-loop cycle).
+ * Pure, ISR-safe and read-only: derived from the DLL state / configured type and
+ * the MC octet alone. The library ISR pump uses it to delimit the incoming
+ * M-sequence; the main pump reuses it for the same frame.
+ * @param ctx DLL context (read only)
+ * @param mc  Master-command (first) octet of the request
+ * @return Expected request length in octets (2 for a Type-0 message).
+ */
+uint8_t iolink_dll_expected_req_len(const iolink_dll_ctx_t* ctx, uint8_t mc);
+
+/**
+ * @brief Which reply layout the request @p mc requires.
+ *
+ * Pure, ISR-safe and read-only. The ISR pump selects the matching pre-staged
+ * reply variant from it; it must be kept consistent with the reply the main pump
+ * builds in iolink_dll_prepare_cyclic_reply().
+ * @param ctx DLL context (read only)
+ * @param mc  Master-command (first) octet of the request
+ * @return Reply variant to transmit.
+ */
+iolink_reply_variant_t iolink_dll_reply_variant(const iolink_dll_ctx_t* ctx, uint8_t mc);
+
+/**
+ * @brief Build and pre-stage the deterministic cyclic reply variants.
+ *
+ * Only meaningful when cyclic_reply_precached is set (raw-octet PHY): builds
+ * both direction variants from the current PD-in, validity and event state into
+ * the inactive slot of each double buffer (read: [OD...][PD-in...]CKS, Figure
+ * A.9/A.14; write: [PD-in...]CKS, Figure A.14) and swaps the active index
+ * atomically. The ISR pump selects the matching one at frame end. Call it
+ * whenever the PD-in image changes (e.g. once per main-loop cycle).
  * @param ctx DLL context
  */
 void iolink_dll_prepare_cyclic_reply(iolink_dll_ctx_t* ctx);
 
 /**
- * @brief Push the expected cyclic M-sequence length to the PHY.
+ * @brief ISR-side pump for a raw-octet (single-octet transceiver) PHY.
  *
- * The DLL is the single source for the cyclic frame length
- * (IOLINK_M_SEQ_HEADER_LEN + PD-out + OD); the PHY only needs it to delimit the
- * incoming cyclic frame. Call after the PD/OD configuration is applied.
+ * Called from the PHY data-interrupt handler. It pulls received octets via
+ * phy->rx_octet(), frames the M-sequence (using the pure
+ * iolink_dll_expected_req_len()), publishes the complete request to the mailbox
+ * consumed by iolink_dll_process(), selects the pre-built reply variant from the
+ * request (iolink_dll_reply_variant()) and feeds the reply octets via
+ * phy->tx_octet()/tx_end(). It never runs protocol logic (ISDU / params /
+ * events / vendor); those stay in the main pump.
+ *
+ * Safe to call with no data pending; returns immediately when the INT line is
+ * not asserted. No-op for a PHY without rx_octet().
  * @param ctx DLL context
  */
-void iolink_dll_apply_cyclic_frame_len(iolink_dll_ctx_t* ctx);
+void iolink_dll_process_isr(iolink_dll_ctx_t* ctx);
 
 /**
  * @brief Set current PD lengths for variable types (1_V, 2_V)

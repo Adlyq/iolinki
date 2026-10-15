@@ -39,6 +39,21 @@
  */
 uint8_t iolink_checksum6(const uint8_t* octets, size_t len);
 
+/**
+ * @brief Compress an 8-bit XOR accumulator to the 6-bit IO-Link checksum (A.1).
+ *
+ * The A.1.6 checksum is `C(0x52 XOR octet0 XOR octet1 ...)`, where C is the
+ * linear 8-to-6-bit compression. Because XOR accumulation is order-independent
+ * and C is GF(2)-linear, a caller that streams the message octet by octet can
+ * fold each octet in as `acc ^= octet` (starting from the 0x52 seed) and apply
+ * this function once at the end. Used by the library ISR pump so the checksum is
+ * computed while the reply is transmitted.
+ *
+ * @param acc 8-bit accumulator (seed already folded in)
+ * @return uint8_t 6-bit compressed checksum (0x00-0x3F)
+ */
+uint8_t iolink_checksum6_from_acc(uint8_t acc);
+
 /** @} */ /* end of iolinki_crc */
 
 #endif  // IOLINK_CRC_H

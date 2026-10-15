@@ -56,6 +56,14 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
 {
     ctx->dll.m_seq_type = (uint8_t) ctx->stack_config.m_seq_type;
 
+    /* Hand the application lock to the DLL so dll_send() can start a main-context
+     * (Type-0) transmission atomically with respect to the data interrupt. */
+    if (ctx->config != NULL) {
+        ctx->dll.lock = ctx->config->lock;
+        ctx->dll.unlock = ctx->config->unlock;
+        ctx->dll.lock_user = ctx->config->user;
+    }
+
     /* OD (On-request Data) width, single source of truth (Table A.10): the type's
      * OD octet count m. config.od_width overrides the per-type default for the
      * variable-width types (1_V/2_V). Whether a given frame actually carries OD
@@ -75,22 +83,19 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
         ctx->dll.t_pd_deadline_us = 0U;
     }
 
-    /* TYPE_2_V has a deterministic cyclic reply ([OD][PD-in]CKS). If the bound
-     * PHY can pre-stage and transmit it from its own interrupt (stage_reply),
-     * hand it over: then dll_handle_operate_type1_2 must not send it again.
-     * Without that capability the DLL keeps sending the reply itself. */
+    /* TYPE_2_V has a deterministic cyclic reply (read: [OD][PD-in]CKS, write:
+     * [PD-in]CKS). If the bound PHY is a raw-octet transactional PHY, the library
+     * ISR pump frames the exchange and transmits the pre-built cyclic variant at
+     * frame end; then dll_handle_operate_type1_2 must not send it again. A
+     * streaming PHY keeps sending the reply itself. */
     ctx->dll.cyclic_reply_precached =
         (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && (ctx->dll.phy != NULL) &&
-        (ctx->dll.phy->stage_reply != NULL);
+        (ctx->dll.phy->rx_octet != NULL) && (ctx->dll.phy->tx_octet != NULL);
 
     ctx->dll.pd_in_len_current = ctx->dll.pd_in_len;
     ctx->dll.pd_out_len_current = ctx->dll.pd_out_len;
     ctx->dll.pd_in_len_max = ctx->dll.pd_in_len;
     ctx->dll.pd_out_len_max = ctx->dll.pd_out_len;
-
-    /* The DLL owns the cyclic M-sequence length: declare it to the PHY (which
-     * only uses it to delimit the incoming cyclic frame). */
-    iolink_dll_apply_cyclic_frame_len(&ctx->dll);
 
     /* Firmware patch: honor the configured operating baudrate (COM1..COM3). */
     ctx->dll.operating_baudrate = ctx->stack_config.baudrate;
@@ -175,6 +180,17 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
     }
 }
 
+void iolink_device_process_isr(iolink_device_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    /* Only the raw-octet framing/TX pump runs here; every protocol service
+     * (ISDU, parameters, events, vendor, application callbacks) stays in the
+     * main-context iolink_device_process() call. */
+    iolink_dll_process_isr(&ctx->dll);
+}
+
 int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data, size_t len,
                                   bool valid)
 {
@@ -182,10 +198,12 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
         return -1;
     }
 
-    /* NOTE (ST-alignment B2): the iolinki DLL only ever runs in the main
-     * context (no ISR calls into it), so the previous __disable_irq() fallback
-     * (which blocked the IOD_INT ISR for the whole copy on every main-loop
-     * iteration) is removed. An application-provided lock hook is still honored. */
+    /* pd_in is written only here (main context) and read only by the main pump
+     * (iolink_device_process / prepare_cyclic_reply); the ISR pump never touches
+     * it. An application-provided lock hook is still honored around the copy, and
+     * the reply variants are double buffered so the ISR pump never reads a
+     * half-written image (it only ever reads the slot cyclic_stage_active points
+     * at, after the index flip). */
     if ((ctx->config != NULL) && (ctx->config->lock != NULL)) {
         ctx->config->lock(ctx->config->user);
     }
@@ -199,8 +217,9 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
         ctx->config->unlock(ctx->config->user);
     }
 
-    /* Deterministic cyclic reply: rebuild the pre-staged image so the PHY can
-     * transmit it at master-frame end without the main loop in the path. */
+    /* Rebuild both cyclic reply variants so the library ISR pump can transmit the
+     * matching one (read/write) at master-frame end without the main loop in the
+     * path. The double buffer makes this safe against the ISR. */
     if (ctx->dll.cyclic_reply_precached) {
         iolink_dll_prepare_cyclic_reply(&ctx->dll);
     }
