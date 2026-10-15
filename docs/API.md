@@ -71,11 +71,19 @@ Process IO-Link stack logic. Must be called periodically (e.g., every 1ms).
 
 ### PHY API Structure
 
-Copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `void* user` first. `init`, `set_mode`, and `set_baudrate` are required. `send` returns the number of bytes sent, or a negative error. `recv_byte` returns 1 when a byte was read, 0 when none is waiting, or a negative error. `detect_wakeup`, `set_cq_line`, `get_voltage_mv`, and `is_short_circuit` may be NULL.
+Copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `void* user` first. `init`, `set_mode`, and `set_baudrate` are required.
+
+There are two transport profiles:
+
+- **Streaming** — implement `send` (returns bytes sent, or a negative error) and `recv_byte` (returns 1 when a byte was read, 0 when none is waiting, negative on error). The DLL frames the M-sequence using the `t_byte` timer.
+- **Raw-octet** — implement `rx_octet` / `tx_octet` / `tx_end` / `int_active` instead. The library owns framing; connect the transceiver data interrupt to `iolink_device_process_isr()`. `rx_octet` returns 1 when an octet was read (with a normalized status in `IOLINK_PHY_STATUS_*`), 0 when none is pending. `tx_octet` writes one reply octet (the first starts the frame); `tx_end` terminates it.
+
+Optional (may be NULL): `detect_wakeup`, `set_cq_line`, `get_faults`, `get_voltage_mv`, `is_short_circuit`.
 
 `IOLINK_BAUDRATE_COM1`, `COM2`, and `COM3` are 0, 1, and 2. They select 4.8, 38.4, and 230.4 kbit/s. They are not the baud number itself.
 
 ```c
+/* Streaming profile */
 static int my_phy_send(void* user, const uint8_t* data, size_t len) {
     (void)user;
     (void)data;
@@ -88,6 +96,15 @@ static int my_phy_recv_byte(void* user, uint8_t* byte) {
     return 0;
 }
 ```
+
+### Feature trimming
+
+`iolink_phy_api_t` members and whole subsystems can be compiled out via `config.h`
+(`IOLINK_PHY_FEATURE_*` / `IOLINK_FEATURE_*`, default all `1`). A build may set
+`IOLINK_MINIMAL_PROFILE` to drop the trimmed set (streaming transport, wake-up
+detection, manual C/Q, legacy diagnostics, data storage, system commands,
+legacy params). The library computes the reply checksum with
+`iolink_checksum6_from_acc()` while transmitting (raw-octet profile).
 
 ## Application Layer API
 
