@@ -25,6 +25,26 @@
  */
 
 /* -------------------------------------------------------------------------
+ * PHY / line-state configuration
+ * ------------------------------------------------------------------------- */
+
+/**
+ * @brief Whether the bound PHY owns the C/Q line state (wake-up / SIO<->SDCI).
+ *
+ * When non-zero the DLL skips the electrical wake-up handshake and runs in SDCI
+ * (the PHY is contractually an already-established SDCI link). When zero (the
+ * default) the DLL infers this at run time from the PHY: a PHY without a
+ * wake-up detector (detect_wakeup == NULL) is treated as owning the line state.
+ *
+ * Override to 1 in the build system for a PHY such as the L6364 that manages the
+ * SIO/wake-up handshake itself.
+ * Default: 0 (keep the run-time inference).
+ */
+#ifndef IOLINK_PHY_OWNS_LINE_STATE
+#define IOLINK_PHY_OWNS_LINE_STATE 0
+#endif
+
+/* -------------------------------------------------------------------------
  * ISDU Configuration
  * ------------------------------------------------------------------------- */
 

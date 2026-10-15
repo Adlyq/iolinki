@@ -114,7 +114,7 @@ typedef struct
     /**
      * @brief Read one received octet and its transceiver status (raw-octet PHY).
      *
-     * For a single-octet transceiver (e.g. the L6364 in SPI single-octet mode)
+     * For a single-octet transceiver (e.g. a single-octet SPI transceiver)
      * the library owns M-sequence framing: it pulls received octets here and
      * feeds reply octets through tx_octet()/tx_end(). @p status is a PHY status
      * octet (see IOLINK_PHY_STATUS_*). Optional: NULL for a streaming PHY that

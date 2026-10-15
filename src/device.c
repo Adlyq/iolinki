@@ -89,15 +89,17 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
      * frame end; then dll_handle_operate_type1_2 must not send it again. A
      * streaming PHY keeps sending the reply itself. */
     ctx->dll.cyclic_reply_precached =
-        (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && (ctx->dll.phy != NULL) &&
-        (ctx->dll.phy->rx_octet != NULL) && (ctx->dll.phy->tx_octet != NULL);
+        (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && dll_phy_is_raw_octet(&ctx->dll) &&
+        (ctx->dll.phy->tx_octet != NULL);
 
     ctx->dll.pd_in_len_current = ctx->dll.pd_in_len;
     ctx->dll.pd_out_len_current = ctx->dll.pd_out_len;
     ctx->dll.pd_in_len_max = ctx->dll.pd_in_len;
     ctx->dll.pd_out_len_max = ctx->dll.pd_out_len;
 
-    /* Firmware patch: honor the configured operating baudrate (COM1..COM3). */
+    /* Device operating baudrate (COM1..COM3). It is a fixed device property: on
+     * recovery the DLL re-asserts it rather than downgrading, and the master
+     * re-establishes COM by scanning. */
     ctx->dll.operating_baudrate = ctx->stack_config.baudrate;
     (void) iolink_dll_set_baudrate(&ctx->dll, ctx->stack_config.baudrate);
 }

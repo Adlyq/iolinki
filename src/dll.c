@@ -117,7 +117,7 @@ static uint32_t dll_get_t_byte_limit_us(const iolink_dll_ctx_t* ctx)
      * time-out), so the main-loop DLL must not second-guess it with a polled
      * inter-octet timer: the main loop is slower than t_byte and would reset the
      * frame mid-assembly. The byte-wise fallback keeps the t_byte delimiting. */
-    if ((ctx->phy != NULL) && (ctx->phy->rx_octet != NULL)) {
+    if (dll_phy_is_raw_octet(ctx)) {
         return 0U;
     }
     uint32_t t_bit_us;
@@ -170,7 +170,7 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
         (len > sizeof(ctx->isr_tx_payload))) {
         return;
     }
-    if (ctx->phy->rx_octet != NULL) {
+    if (dll_phy_is_raw_octet(ctx)) {
         if (ctx->phy->tx_octet == NULL) {
             return;
         }
@@ -212,7 +212,7 @@ static bool dll_drain_rx(iolink_dll_ctx_t* ctx)
         return false;
     }
     bool saw_data = false;
-    if (ctx->phy->rx_octet != NULL) {
+    if (dll_phy_is_raw_octet(ctx)) {
         /* Raw-octet PHY: the ISR pump fills the mailbox; draining it just drops
          * a frame that arrived while the t_pd guard was active. */
         if (ctx->isr_frame_ready != 0U) {
@@ -230,20 +230,34 @@ static bool dll_drain_rx(iolink_dll_ctx_t* ctx)
     return saw_data;
 }
 
+/** @brief Whether the bound PHY owns the C/Q line state (wake-up / SIO<->SDCI).
+ *
+ * Compile-time override IOLINK_PHY_OWNS_LINE_STATE (config.h); otherwise inferred
+ * from the PHY: a PHY without a wake-up detector cannot leave SIO, so it is an
+ * already-established SDCI link. */
+static inline bool dll_phy_owns_line_state(const iolink_dll_ctx_t* ctx)
+{
+#if IOLINK_PHY_OWNS_LINE_STATE
+    (void) ctx;
+    return true;
+#else
+    return !dll_phy_has_wakeup(ctx);
+#endif
+}
+
 /** @brief Handle a communication failure: count retries and revert toward SIO/STARTUP. */
 static void dll_recover_to_idle(iolink_dll_ctx_t* ctx)
 {
     if (ctx == NULL) {
         return;
     }
-    /* Firmware patch: a PHY without wake-up detection (detect_wakeup == NULL)
-     * owns the SIO/wake-up handshake itself and must stay in SDCI; switching it
-     * to SIO would latch it with no way to leave (it never reports a wake-up). */
-    if (ctx->phy->detect_wakeup != NULL) {
-        iolink_dll_set_sio_mode(ctx);
+    /* A PHY that owns the line state stays in SDCI; switching it to SIO would
+     * latch it with no way to leave (it never reports a wake-up). */
+    if (dll_phy_owns_line_state(ctx)) {
+        iolink_dll_set_sdci_mode(ctx);
     }
     else {
-        iolink_dll_set_sdci_mode(ctx);
+        iolink_dll_set_sio_mode(ctx);
     }
 }
 
@@ -581,7 +595,7 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
     resp[pos] = (uint8_t) (resp[pos] | iolink_checksum6(resp, pos + 1U));
     pos++;
 
-    if ((ctx->phy->rx_octet != NULL) || (ctx->phy->send != NULL)) {
+    if (dll_phy_is_raw_octet(ctx) || (ctx->phy->send != NULL)) {
         dll_send(ctx, resp, pos);
         ctx->fallback_count = 0U;
         uint32_t end_tx_us = (uint32_t) iolink_time_get_us();
@@ -754,16 +768,17 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
      *    detected, matching the IO-Link startup handshake.
      *
      *  - PHYs that cannot (detect_wakeup == NULL, e.g. a plain UART sitting
-     *    behind a transceiver that has already established COM) would otherwise
-     *    sit in SIO forever and never service M-sequences. Such a link is, by
-     *    contract, an already-established SDCI link, so start in SDCI and accept
-     *    M-sequences immediately.
+     *    behind a transceiver that has already established COM, or a PHY that
+     *    declares IOLINK_PHY_OWNS_LINE_STATE) would otherwise sit in SIO forever
+     *    and never service M-sequences. Such a link is, by contract, an
+     *    already-established SDCI link, so start in SDCI and accept M-sequences
+     *    immediately.
      */
-    if (ctx->phy->detect_wakeup != NULL) {
-        iolink_dll_set_sio_mode(ctx);
+    if (dll_phy_owns_line_state(ctx)) {
+        iolink_dll_set_sdci_mode(ctx);
     }
     else {
-        iolink_dll_set_sdci_mode(ctx);
+        iolink_dll_set_sio_mode(ctx);
     }
 }
 
@@ -1099,7 +1114,7 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
     }
 
     if (ctx->phy_mode == IOLINK_PHY_MODE_SIO) {
-        if ((ctx->frame_index == 0U) && (ctx->phy->detect_wakeup != NULL)) {
+        if ((ctx->frame_index == 0U) && dll_phy_has_wakeup(ctx)) {
             if (ctx->phy->detect_wakeup(ctx->phy->user) > 0) {
                 ctx->wakeup_seen = true;
                 dll_set_state(ctx, IOLINK_DLL_STATE_AWAITING_COMM);
@@ -1143,7 +1158,7 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
         }
     }
 
-    if (ctx->phy->rx_octet != NULL) {
+    if (dll_phy_is_raw_octet(ctx)) {
         /* Raw-octet PHY (single-octet transceiver): the library ISR pump has
          * already framed the M-sequence and published it to the mailbox. Consume
          * one frame here and run the protocol on it. */
@@ -1284,8 +1299,7 @@ static void dll_isr_start_reply(iolink_dll_ctx_t* ctx)
 
 void iolink_dll_process_isr(iolink_dll_ctx_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->phy == NULL) || (ctx->phy->rx_octet == NULL) ||
-        (ctx->phy->int_active == NULL)) {
+    if ((ctx == NULL) || !dll_phy_is_raw_octet(ctx) || (ctx->phy->int_active == NULL)) {
         return;
     }
 

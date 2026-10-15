@@ -189,7 +189,7 @@ typedef struct
 
     /* Baudrate Support */
     iolink_baudrate_t baudrate; /**< Negotiated baudrate (COM1-COM3) */
-    iolink_baudrate_t operating_baudrate; /**< Configured device operating baudrate (firmware patch) */
+    iolink_baudrate_t operating_baudrate; /**< Device operating COM (fixed; re-asserted on recovery) */
 
     /* Unified Frame Assembly: a master request is MC + CKT + PD-out + OD, so
        size it from the compile-time maxima (was a fixed 48, too small once the
@@ -243,6 +243,31 @@ typedef struct
     iolink_dll_state_cb_t state_cb; /**< Optional state-change hook (set by core) */
     void* state_cb_user;            /**< User pointer passed to state_cb */
 } iolink_dll_ctx_t;
+
+/**
+ * @brief PHY transport capability helpers.
+ *
+ * The bound PHY's transport profile is expressed by which hooks it implements
+ * (a NULL hook means the capability is absent):
+ *  - raw-octet  : rx_octet present (the library frames; single-octet transceiver)
+ *  - streaming  : recv_byte present (byte pipe; the DLL frames with t_byte)
+ *  - wake-up    : detect_wakeup present (the PHY can observe the C/Q wake-up)
+ * These keep the profile checks in one place instead of scattering NULL tests.
+ */
+static inline bool dll_phy_is_raw_octet(const iolink_dll_ctx_t* ctx)
+{
+    return (ctx->phy != NULL) && (ctx->phy->rx_octet != NULL);
+}
+
+static inline bool dll_phy_is_streaming(const iolink_dll_ctx_t* ctx)
+{
+    return (ctx->phy != NULL) && (ctx->phy->recv_byte != NULL);
+}
+
+static inline bool dll_phy_has_wakeup(const iolink_dll_ctx_t* ctx)
+{
+    return (ctx->phy != NULL) && (ctx->phy->detect_wakeup != NULL);
+}
 
 /**
  * @brief DLL statistics snapshot

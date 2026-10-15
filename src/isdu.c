@@ -655,10 +655,9 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
 
 /** @brief Execute a SystemCommand (reset, factory restore, data-storage commands).
  *
- * NOTE (spec conformance): the data-storage command values handled here
- * (IOLINK_CMD_PARAM_*) do not match the standard Table B.9 coding; see the note
- * at those defines in protocol.h. Left unchanged because this project does not
- * use Data Storage and the reference master sends no SystemCommand. */
+ * Command coding follows Table B.9 (see IOLINK_CMD_PARAM_* / IOLINK_CMD_*_RESET
+ * in protocol.h). Data Storage is optional: with no ds_storage backend bound the
+ * storage commands are acknowledged without a persistence effect. */
 static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
     switch (cmd) {
