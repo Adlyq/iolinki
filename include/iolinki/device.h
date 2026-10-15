@@ -9,6 +9,8 @@
 #ifndef IOLINK_DEVICE_H
 #define IOLINK_DEVICE_H
 
+#include "iolinki/config.h"
+
 #include "iolinki/application.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/device_info.h"

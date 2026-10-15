@@ -13,6 +13,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#include "iolinki/config.h"
+
 /**
  * @file phy.h
  * @brief IO-Link Physical Layer (PHY) Abstraction Interface
@@ -103,6 +105,7 @@ typedef struct
      */
     void (*set_baudrate)(void* user, iolink_baudrate_t baudrate);
 
+#if IOLINK_PHY_FEATURE_STREAMING
     /**
      * @brief Send a buffer of data over the line
      * @param data Pointer to source buffer
@@ -110,6 +113,7 @@ typedef struct
      * @return Number of bytes actually sent, or negative on error
      */
     int (*send)(void* user, const uint8_t* data, size_t len);
+#endif
 
     /**
      * @brief Read one received octet and its transceiver status (raw-octet PHY).
@@ -145,15 +149,18 @@ typedef struct
      */
     uint8_t (*int_active)(void* user);
 
+#if IOLINK_PHY_FEATURE_STREAMING
     /**
      * @brief Non-blocking receive for a single byte
      * @param byte Pointer to store received byte
      * @return 1 if byte available and read, 0 if nothing received, negative on error
      */
     int (*recv_byte)(void* user, uint8_t* byte);
+#endif
 
     /* Optional Diagnostic/Support Functions (can be NULL) */
 
+#if IOLINK_PHY_FEATURE_WAKEUP
     /**
      * @brief Detect wake-up pulse (80µs pulse on C/Q line)
      *
@@ -165,12 +172,15 @@ typedef struct
      * @return 1 if wake-up pulse detected during current window, 0 otherwise
      */
     int (*detect_wakeup)(void* user);
+#endif
 
+#if IOLINK_PHY_FEATURE_SIO_CQ
     /**
      * @brief Manually set C/Q line state (for SIO push-pull)
      * @param state 0 for Low, 1 for High
      */
     void (*set_cq_line)(void* user, uint8_t state);
+#endif
 
     /**
      * @brief Optional: physical faults currently active, as a bitmask of
@@ -185,6 +195,7 @@ typedef struct
      */
     uint8_t (*get_faults)(void* user);
 
+#if IOLINK_PHY_FEATURE_LEGACY_DIAG
     /**
      * @brief Legacy alternative to get_faults(): measured L+ supply voltage.
      *
@@ -205,6 +216,7 @@ typedef struct
      * @return true if a fault is detected
      */
     bool (*is_short_circuit)(void* user);
+#endif /* IOLINK_PHY_FEATURE_LEGACY_DIAG */
 } iolink_phy_api_t;
 
 /** @} */ /* end of iolinki_phy */

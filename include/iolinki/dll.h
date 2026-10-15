@@ -261,12 +261,22 @@ static inline bool dll_phy_is_raw_octet(const iolink_dll_ctx_t* ctx)
 
 static inline bool dll_phy_is_streaming(const iolink_dll_ctx_t* ctx)
 {
+#if IOLINK_PHY_FEATURE_STREAMING
     return (ctx->phy != NULL) && (ctx->phy->recv_byte != NULL);
+#else
+    (void) ctx;
+    return false;
+#endif
 }
 
 static inline bool dll_phy_has_wakeup(const iolink_dll_ctx_t* ctx)
 {
+#if IOLINK_PHY_FEATURE_WAKEUP
     return (ctx->phy != NULL) && (ctx->phy->detect_wakeup != NULL);
+#else
+    (void) ctx;
+    return false;
+#endif
 }
 
 /**

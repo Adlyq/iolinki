@@ -66,7 +66,12 @@ static int isdu_params_get(const iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
         return iolink_params_ctx_get(ctx->params_ctx, index, subindex, buffer, max_len);
     }
+#if IOLINK_FEATURE_LEGACY_PARAMS
     return iolink_params_get(index, subindex, buffer, max_len);
+#else
+    (void) index; (void) subindex; (void) buffer; (void) max_len;
+    return -1;
+#endif
 }
 
 /** @brief Write a parameter via the bound params context, or the legacy global set. */
@@ -76,7 +81,12 @@ static int isdu_params_set(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subin
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
         return iolink_params_ctx_set(ctx->params_ctx, index, subindex, data, len, persist);
     }
+#if IOLINK_FEATURE_LEGACY_PARAMS
     return iolink_params_set(index, subindex, data, len, persist);
+#else
+    (void) index; (void) subindex; (void) data; (void) len; (void) persist;
+    return -1;
+#endif
 }
 
 /** @brief Factory-reset the bound parameter context, or the legacy global set. */
@@ -89,9 +99,11 @@ static void isdu_params_factory_reset(iolink_isdu_ctx_t* ctx)
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
         iolink_params_ctx_factory_reset(ctx->params_ctx);
     }
+#if IOLINK_FEATURE_LEGACY_PARAMS
     else {
         iolink_params_factory_reset();
     }
+#endif
 }
 
 /* handle_standard_commands() is defined below; the transport executes it once a
@@ -658,9 +670,11 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
  * Command coding follows Table B.9 (see IOLINK_CMD_PARAM_* / IOLINK_CMD_*_RESET
  * in protocol.h). Data Storage is optional: with no ds_storage backend bound the
  * storage commands are acknowledged without a persistence effect. */
+#if (IOLINK_FEATURE_SYSTEM_COMMAND || IOLINK_FEATURE_DATA_STORAGE)
 static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
     switch (cmd) {
+#if IOLINK_FEATURE_SYSTEM_COMMAND
         case IOLINK_CMD_DEVICE_RESET: /* 0x80 */
             /* Set reset flag for application to handle */
             ctx->reset_pending = true;
@@ -680,7 +694,9 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             /* Restore factory defaults (device returns to the out-of-box state). */
             isdu_params_factory_reset(ctx);
             break;
+#endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
 
+#if IOLINK_FEATURE_DATA_STORAGE
         /* Standard Data Storage Commands (Table B.9, 0x01-0x05) */
         case IOLINK_CMD_PARAM_UPLOAD_START:
         case IOLINK_CMD_PARAM_UPLOAD_END:
@@ -717,6 +733,7 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                 (void) iolink_ds_abort((iolink_ds_ctx_t*) ctx->ds_ctx);
             }
             break;
+#endif /* IOLINK_FEATURE_DATA_STORAGE */
 
         default:
             /* Unsupported command value: FUNC_NOTAVAIL (Table C.1 / C.2.14). */
@@ -733,6 +750,7 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
+#endif /* IOLINK_FEATURE_SYSTEM_COMMAND || IOLINK_FEATURE_DATA_STORAGE */
 
 /** @brief Read or write the DeviceAccessLocks parameter (index 0x000C). */
 static void handle_access_locks(iolink_isdu_ctx_t* ctx)
@@ -998,6 +1016,7 @@ static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
 
+#if IOLINK_FEATURE_DATA_STORAGE
 /** @brief Serve the Data Storage index: backup (read image) or restore (apply image). */
 static void handle_data_storage(iolink_isdu_ctx_t* ctx)
 {
@@ -1039,6 +1058,7 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
+#endif /* IOLINK_FEATURE_DATA_STORAGE */
 
 /** @brief Dispatch an executed ISDU request to the handler for its index. */
 static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
@@ -1088,10 +1108,13 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
     else if (ctx->header.index == IOLINK_IDX_SYSTEM_COMMAND) {
         if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
             /* Mandatory System Commands */
+#if (IOLINK_FEATURE_SYSTEM_COMMAND || IOLINK_FEATURE_DATA_STORAGE)
             if (ctx->buffer_idx > 0U) {
                 handle_system_command(ctx, ctx->buffer[0]);
             }
-            else {
+            else
+#endif
+            {
                 ctx->response_buf[0] = 0x80U;
                 ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
                 ctx->response_len = 2U;
@@ -1114,9 +1137,11 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
              (ctx->header.index == IOLINK_IDX_DIRECT_PARAMETERS_2)) {
         handle_direct_parameters(ctx);
     }
+#if IOLINK_FEATURE_DATA_STORAGE
     else if (ctx->header.index == IOLINK_IDX_DATA_STORAGE) {
         handle_data_storage(ctx);
     }
+#endif
     else if (ctx->header.index == IOLINK_IDX_DEVICE_ACCESS_LOCKS) {
         handle_access_locks(ctx);
     }

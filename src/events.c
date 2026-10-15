@@ -20,6 +20,8 @@
 #include "iolinki/utils.h"
 #include <string.h>
 
+#if IOLINK_FEATURE_EVENTS
+
 void iolink_events_init(iolink_events_ctx_t* ctx)
 {
     if (!iolink_ctx_zero(ctx, sizeof(iolink_events_ctx_t))) {
@@ -356,3 +358,5 @@ iolink_event_type_t iolink_event_classify(uint16_t code)
             return IOLINK_EVENT_TYPE_ERROR;
     }
 }
+
+#endif /* IOLINK_FEATURE_EVENTS */

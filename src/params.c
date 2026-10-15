@@ -34,9 +34,11 @@ typedef struct
     /* Future: user parameters, etc. */
 } iolink_params_nvm_t;
 
+#if IOLINK_FEATURE_LEGACY_PARAMS
 static iolink_device_info_ctx_t g_legacy_device_info_ctx;
 static iolink_params_ctx_t g_legacy_params_ctx;
 static bool g_legacy_params_ctx_initialized = false;
+#endif
 
 /** @brief Copy up to 32 bytes into a NUL-terminated tag buffer and mark it valid. */
 static void copy_tag(char* dst, bool* valid, const uint8_t* data, size_t len)
@@ -214,6 +216,7 @@ void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx)
     (void) params_ctx_write_nvm(ctx);
 }
 
+#if IOLINK_FEATURE_LEGACY_PARAMS
 /** @brief Lazily initialize and return the process-wide legacy parameter context. */
 static iolink_params_ctx_t* legacy_params_ctx(void)
 {
@@ -252,3 +255,4 @@ void iolink_params_factory_reset(void)
     iolink_params_ctx_factory_reset(legacy_params_ctx());
     (void) iolink_device_info_set_application_tag("", 0U);
 }
+#endif /* IOLINK_FEATURE_LEGACY_PARAMS */

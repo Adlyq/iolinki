@@ -136,11 +136,13 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     ctx->dll.isdu.direct_param_write_cb = config->on_direct_param_write;
     ctx->dll.state_cb = device_state_cb;
     ctx->dll.state_cb_user = ctx;
+#if IOLINK_FEATURE_DATA_STORAGE
     if (config->ds_storage != NULL) {
         iolink_ds_init(&ctx->dll.ds, config->ds_storage);
         ctx->dll.isdu.ds_ctx = &ctx->dll.ds;
     }
     iolink_ds_bind_params(&ctx->dll.ds, &ctx->params);
+#endif
     device_apply_stack_config(ctx);
 
     if ((config->app_callbacks != NULL) && (config->app_callbacks->on_startup != NULL)) {
@@ -158,6 +160,7 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
 
     iolink_dll_process(&ctx->dll);
 
+#if IOLINK_FEATURE_SYSTEM_COMMAND
     if (ctx->dll.isdu.reset_pending) {
         ctx->dll.isdu.reset_pending = false;
         if (ctx->reset_handler != NULL) {
@@ -170,6 +173,7 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
             ctx->reset_handler(IOLINK_RESET_APPLICATION);
         }
     }
+#endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
 
     if ((ctx->config != NULL) && (ctx->config->app_callbacks != NULL) &&
         (ctx->dll.state == IOLINK_DLL_STATE_OPERATE)) {

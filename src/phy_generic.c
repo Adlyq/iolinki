@@ -41,6 +41,7 @@ static void generic_set_baudrate(void* user, iolink_baudrate_t baudrate)
     /* Template: configure UART speed for COM1/2/3. */
 }
 
+#if IOLINK_PHY_FEATURE_STREAMING
 /** @brief Template hook to transmit data over the C/Q line. */
 static int generic_send(void* user, const uint8_t* data, size_t len)
 {
@@ -59,7 +60,9 @@ static int generic_recv_byte(void* user, uint8_t* byte)
     /* Template: non-blocking receive. */
     return 0;
 }
+#endif /* IOLINK_PHY_FEATURE_STREAMING */
 
+#if IOLINK_PHY_FEATURE_WAKEUP
 /** @brief Template hook to detect the 80us wake-up pulse on the C/Q line. */
 static int generic_detect_wakeup(void* user)
 {
@@ -67,7 +70,9 @@ static int generic_detect_wakeup(void* user)
     /* Template: detect 80us wake-up pulse on C/Q line. */
     return 0;
 }
+#endif /* IOLINK_PHY_FEATURE_WAKEUP */
 
+#if IOLINK_PHY_FEATURE_SIO_CQ
 /** @brief Template hook to drive the C/Q line high/low in SIO mode. */
 static void generic_set_cq_line(void* user, uint8_t state)
 {
@@ -75,6 +80,7 @@ static void generic_set_cq_line(void* user, uint8_t state)
     (void) state;
     /* Template: drive C/Q line high/low in SIO mode. */
 }
+#endif /* IOLINK_PHY_FEATURE_SIO_CQ */
 
 /** @brief Template hook: physical faults currently active (phy.h flags, 0=ok).
  *
@@ -87,14 +93,21 @@ static uint8_t generic_get_faults(void* user)
     return 0U;
 }
 
-static const iolink_phy_api_t g_phy_generic = {.init = generic_init,
-                                               .set_mode = generic_set_mode,
-                                               .set_baudrate = generic_set_baudrate,
-                                               .send = generic_send,
-                                               .recv_byte = generic_recv_byte,
-                                               .detect_wakeup = generic_detect_wakeup,
-                                               .set_cq_line = generic_set_cq_line,
-                                               .get_faults = generic_get_faults};
+static const iolink_phy_api_t g_phy_generic = {
+    .init = generic_init,
+    .set_mode = generic_set_mode,
+    .set_baudrate = generic_set_baudrate,
+#if IOLINK_PHY_FEATURE_STREAMING
+    .send = generic_send,
+    .recv_byte = generic_recv_byte,
+#endif
+#if IOLINK_PHY_FEATURE_WAKEUP
+    .detect_wakeup = generic_detect_wakeup,
+#endif
+#if IOLINK_PHY_FEATURE_SIO_CQ
+    .set_cq_line = generic_set_cq_line,
+#endif
+    .get_faults = generic_get_faults};
 
 const iolink_phy_api_t* iolink_phy_generic_get(void)
 {

@@ -191,9 +191,11 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
             ctx->unlock(ctx->lock_user);
         }
     }
+#if IOLINK_PHY_FEATURE_STREAMING
     else if (ctx->phy->send != NULL) {
         ctx->phy->send(ctx->phy->user, data, len);
     }
+#endif
 }
 
 /** @brief Return true while the power-down/PD guard window (t_PD) is still active. */
@@ -221,12 +223,14 @@ static bool dll_drain_rx(iolink_dll_ctx_t* ctx)
         }
         return saw_data;
     }
+#if IOLINK_PHY_FEATURE_STREAMING
     if (ctx->phy->recv_byte != NULL) {
         uint8_t byte = 0U;
         while (ctx->phy->recv_byte(ctx->phy->user, &byte) > 0) {
             saw_data = true;
         }
     }
+#endif
     return saw_data;
 }
 
@@ -344,9 +348,11 @@ static bool dll_apply_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
         case IOLINK_CMD_FALLBACK: /* 0x5A: arm the SIO transition (Table 43) */
             dll_arm_fallback(ctx);
             break;
+#if IOLINK_FEATURE_MASTER_IDENT
         case IOLINK_CMD_MASTER_IDENT: /* 0x95 */
         case IOLINK_CMD_DEVICE_IDENT: /* 0x96 */
             break; /* acknowledged, no state change */
+#endif
         default:
             return false; /* not a MasterCommand */
     }
@@ -595,7 +601,11 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
     resp[pos] = (uint8_t) (resp[pos] | iolink_checksum6(resp, pos + 1U));
     pos++;
 
+#if IOLINK_PHY_FEATURE_STREAMING
     if (dll_phy_is_raw_octet(ctx) || (ctx->phy->send != NULL)) {
+#else
+    if (dll_phy_is_raw_octet(ctx)) {
+#endif
         dll_send(ctx, resp, pos);
         ctx->fallback_count = 0U;
         uint32_t end_tx_us = (uint32_t) iolink_time_get_us();
@@ -689,6 +699,7 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
     if (ctx->phy->get_faults != NULL) {
         faults = (uint8_t) (ctx->phy->get_faults(ctx->phy->user) & IOLINK_PHY_FAULT_ALL);
     }
+#if IOLINK_PHY_FEATURE_LEGACY_DIAG
     else {
         if (ctx->phy->get_voltage_mv != NULL) {
             int voltage_mv = ctx->phy->get_voltage_mv(ctx->phy->user);
@@ -703,6 +714,7 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
             faults |= IOLINK_PHY_FAULT_SHORT_CIRCUIT;
         }
     }
+#endif /* IOLINK_PHY_FEATURE_LEGACY_DIAG */
 
     if ((faults & IOLINK_PHY_FAULT_UNDERVOLTAGE) != 0U) {
         ctx->voltage_faults++;
@@ -746,10 +758,12 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
 
     iolink_events_init(&ctx->events);
     iolink_isdu_init(&ctx->isdu);
+#if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_init(&ctx->ds, NULL);
+    ctx->isdu.ds_ctx = &ctx->ds;
+#endif
     ctx->isdu.event_ctx = &ctx->events;
     ctx->isdu.dll_ctx = ctx;
-    ctx->isdu.ds_ctx = &ctx->ds;
 
     ctx->t_ren_limit_us = dll_get_t_ren_limit_us(ctx);
     ctx->t_byte_limit_us = dll_get_t_byte_limit_us(ctx);
@@ -1114,6 +1128,7 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
     }
 
     if (ctx->phy_mode == IOLINK_PHY_MODE_SIO) {
+#if IOLINK_PHY_FEATURE_WAKEUP
         if ((ctx->frame_index == 0U) && dll_phy_has_wakeup(ctx)) {
             if (ctx->phy->detect_wakeup(ctx->phy->user) > 0) {
                 ctx->wakeup_seen = true;
@@ -1129,6 +1144,7 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
                 ctx->last_activity_ms = iolink_time_get_ms();
             }
         }
+#endif
         return;
     }
 
@@ -1178,6 +1194,7 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
             }
         }
     }
+#if IOLINK_PHY_FEATURE_STREAMING
     else if (ctx->phy->recv_byte != NULL) {
         /* Byte-wise PHY (upstream behaviour): reconstruct the M-sequence octet by
          * octet; the t_byte time-out delimits and resynchronises the frame. */
@@ -1228,6 +1245,7 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
             dll_process_rx_frame(ctx);
         }
     }
+#endif /* IOLINK_PHY_FEATURE_STREAMING */
 }
 
 /* Copy the accumulated RX octets into the mailbox for the main pump. Called from

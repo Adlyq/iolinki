@@ -287,6 +287,29 @@ uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_even
  */
 iolink_event_type_t iolink_event_classify(uint16_t code);
 
+#if !IOLINK_FEATURE_EVENTS
+/*
+ * Diagnostic Events subsystem trimmed (config.h IOLINK_FEATURE_EVENTS = 0).
+ * The macro shims below neutralise every entry point so call sites need no #if:
+ * no events are queued, the CKS event flag stays 0 and the diagnosis/event
+ * indices read back as empty. The iolink_events_ctx_t type and field are kept
+ * (small) so the preceding declarations stay valid.
+ */
+#define iolink_events_init(ctx)                            ((void) 0)
+#define iolink_events_qualifier(type, mode)                (0U)
+#define iolink_event_trigger(ctx, code, type)              ((void) 0)
+#define iolink_event_trigger_mode(ctx, code, type, mode, i) ((void) 0)
+#define iolink_events_pending(ctx)                         (false)
+#define iolink_events_flag(ctx)                            (false)
+#define iolink_events_memory_read(ctx, addr)               (0U)
+#define iolink_events_memory_write(ctx, addr, value)       ((void) 0)
+#define iolink_events_pop(ctx, event)                      (false)
+#define iolink_events_peek(ctx, event)                     (false)
+#define iolink_events_get_highest_severity(ctx)            (0U)
+#define iolink_events_get_all(ctx, out, n)                 (0U)
+#define iolink_event_classify(code)                        (IOLINK_EVENT_TYPE_ERROR)
+#endif /* !IOLINK_FEATURE_EVENTS */
+
 /** @} */ /* end of iolinki_events */
 
 #endif  // IOLINK_EVENTS_H

@@ -45,6 +45,83 @@
 #endif
 
 /* -------------------------------------------------------------------------
+ * Feature trimming (compile-time)
+ *
+ * Each macro is 1 (compiled in, the default full stack) or 0 (removed). The
+ * project build overrides the unused ones to 0 for a smaller image. Trimmed
+ * code that is actually used results in a compile error, which is the intended
+ * guard. See Docs/裁剪与配置.md.
+ *
+ * IOLINK_MINIMAL_PROFILE is a convenience switch that defaults the trimmed
+ * features below off; an explicit -D always wins (guarded with #ifndef).
+ * It does not affect IOLINK_FEATURE_EVENTS (kept by this project).
+ * ------------------------------------------------------------------------- */
+
+#ifdef IOLINK_MINIMAL_PROFILE
+#ifndef IOLINK_FEATURE_DATA_STORAGE
+#define IOLINK_FEATURE_DATA_STORAGE 0
+#endif
+#ifndef IOLINK_FEATURE_SYSTEM_COMMAND
+#define IOLINK_FEATURE_SYSTEM_COMMAND 0
+#endif
+#ifndef IOLINK_FEATURE_MASTER_IDENT
+#define IOLINK_FEATURE_MASTER_IDENT 0
+#endif
+#ifndef IOLINK_FEATURE_LEGACY_PARAMS
+#define IOLINK_FEATURE_LEGACY_PARAMS 0
+#endif
+#ifndef IOLINK_PHY_FEATURE_STREAMING
+#define IOLINK_PHY_FEATURE_STREAMING 0
+#endif
+#ifndef IOLINK_PHY_FEATURE_WAKEUP
+#define IOLINK_PHY_FEATURE_WAKEUP 0
+#endif
+#ifndef IOLINK_PHY_FEATURE_SIO_CQ
+#define IOLINK_PHY_FEATURE_SIO_CQ 0
+#endif
+#ifndef IOLINK_PHY_FEATURE_LEGACY_DIAG
+#define IOLINK_PHY_FEATURE_LEGACY_DIAG 0
+#endif
+#endif /* IOLINK_MINIMAL_PROFILE */
+
+/** @brief Data Storage subsystem (data_storage.c, ISDU DS service, ds ctx). */
+#ifndef IOLINK_FEATURE_DATA_STORAGE
+#define IOLINK_FEATURE_DATA_STORAGE 1
+#endif
+/** @brief ISDU SystemCommand handling (0x01-0x06, 0x80-0x83). */
+#ifndef IOLINK_FEATURE_SYSTEM_COMMAND
+#define IOLINK_FEATURE_SYSTEM_COMMAND 1
+#endif
+/** @brief MasterCommand ident subset (0x95/0x96). */
+#ifndef IOLINK_FEATURE_MASTER_IDENT
+#define IOLINK_FEATURE_MASTER_IDENT 1
+#endif
+/** @brief Diagnostic Events engine + DDS + CKS event flag + fault polling. */
+#ifndef IOLINK_FEATURE_EVENTS
+#define IOLINK_FEATURE_EVENTS 1
+#endif
+/** @brief Legacy global params API + g_legacy_* globals (ctx API preferred). */
+#ifndef IOLINK_FEATURE_LEGACY_PARAMS
+#define IOLINK_FEATURE_LEGACY_PARAMS 1
+#endif
+/** @brief PHY streaming transport (send + recv_byte). */
+#ifndef IOLINK_PHY_FEATURE_STREAMING
+#define IOLINK_PHY_FEATURE_STREAMING 1
+#endif
+/** @brief PHY wake-up detection (detect_wakeup). */
+#ifndef IOLINK_PHY_FEATURE_WAKEUP
+#define IOLINK_PHY_FEATURE_WAKEUP 1
+#endif
+/** @brief PHY manual C/Q push-pull (set_cq_line). */
+#ifndef IOLINK_PHY_FEATURE_SIO_CQ
+#define IOLINK_PHY_FEATURE_SIO_CQ 1
+#endif
+/** @brief PHY legacy diagnostics (get_voltage_mv + is_short_circuit). */
+#ifndef IOLINK_PHY_FEATURE_LEGACY_DIAG
+#define IOLINK_PHY_FEATURE_LEGACY_DIAG 1
+#endif
+
+/* -------------------------------------------------------------------------
  * ISDU Configuration
  * ------------------------------------------------------------------------- */
 
