@@ -444,7 +444,9 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
 
     if (ctx->phy->get_voltage_mv != NULL) {
         int voltage = ctx->phy->get_voltage_mv(ctx->phy->user);
-        if ((voltage < 18000) || (voltage > 30000)) {
+        /* A negative reading means "measurement unavailable", not a fault
+           (phy_generic's template hook returns -1). */
+        if ((voltage >= 0) && ((voltage < 18000) || (voltage > 30000))) {
             ctx->voltage_faults++;
             iolink_event_trigger(&ctx->events, IOLINK_EVENT_PHY_VOLTAGE_FAULT,
                                  IOLINK_EVENT_TYPE_WARNING);
