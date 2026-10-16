@@ -78,8 +78,9 @@ def test_pd_toggle_bit():
         time.sleep(0.1)
 
         # MC 0x00 is a WRITE M-sequence: the reply is [PD-in] CKS with no OD
-        # and no status octet (Figures A.9/A.10; A.1.5): PD validity lives in
-        # CKS bit 6 (1 = invalid).
+        # and no status octet; a READ reply carries the OD octets first
+        # ([OD][PD-in] CKS, Figures A.9/A.10). PD validity lives in CKS bit 6
+        # (1 = invalid) (A.1.5).
         for i in range(5):
             response = master.run_cycle(pd_out=bytes([0xAA, 0xBB]))
             if not response or not response.valid:
