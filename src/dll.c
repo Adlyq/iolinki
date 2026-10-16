@@ -448,7 +448,8 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
            (phy_generic's template hook returns -1). */
         if ((voltage >= 0) && ((voltage < 18000) || (voltage > 30000))) {
             ctx->voltage_faults++;
-            iolink_event_trigger(&ctx->events, IOLINK_EVENT_PHY_VOLTAGE_FAULT,
+            /* Table D.1 device code 0x5111 "Primary supply voltage underrun". */
+            iolink_event_trigger(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN,
                                  IOLINK_EVENT_TYPE_WARNING);
         }
     }
@@ -456,7 +457,8 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
     if (ctx->phy->is_short_circuit != NULL) {
         if (ctx->phy->is_short_circuit(ctx->phy->user)) {
             ctx->short_circuits++;
-            iolink_event_trigger(&ctx->events, IOLINK_EVENT_PHY_SHORT_CIRCUIT,
+            /* Table D.1 device code 0x7710 "Short circuit". */
+            iolink_event_trigger(&ctx->events, IOLINK_EVENTCODE_SHORT_CIRCUIT,
                                  IOLINK_EVENT_TYPE_ERROR);
         }
     }

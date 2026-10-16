@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **BREAKING:** the mislabelled `IOLINK_EVENT_PHY_VOLTAGE_FAULT` (0x1805) and
+  `IOLINK_EVENT_PHY_SHORT_CIRCUIT` (0x1806) macros are removed. Those values are
+  Table D.2 Master/Port codes ("Overtemperature", "Short circuit at L+"), not
+  Device codes. `dll_poll_diagnostics()` now reports the standardized Table D.1
+  Device codes `IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN` (0x5111) and
+  `IOLINK_EVENTCODE_SHORT_CIRCUIT` (0x7710). Callers that referenced the removed
+  macros must switch to the `IOLINK_EVENTCODE_*` names.
+
+### Fixed
+- EventQualifier INSTANCE now encodes `0x04` (Application, Table A.17) instead of
+  the reserved `0x02` in both the Table 58 event memory and the
+  DetailedDeviceStatus (Index 0x0025) builder; an error-class device event is
+  qualifier `0xF4`.
+- `dll_poll_diagnostics()` no longer treats a negative `get_voltage_mv()` as an
+  under/over-voltage fault: a negative reading means "measurement unavailable"
+  (the generic PHY template returns `-1`), so generic-PHY devices no longer raise
+  a voltage event on every poll.
+
 ## [2.1.1] - 2026-10-02
 
 ### Fixed

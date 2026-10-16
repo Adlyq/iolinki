@@ -34,18 +34,21 @@ typedef enum
     IOLINK_EVENT_TYPE_ERROR = 2U         /**< Critical failure, operation might be degraded */
 } iolink_event_type_t;
 
-/**
- * @brief Standard IO-Link Event Codes (Spec V1.1.2)
+/*
+ * Device vendor-specific communication events.
+ *
+ * Table D.1 of the IO-Link V1.1.5 specification reserves 0x1800-0x18FF for
+ * vendor-specific Device events. These values coincide numerically with the
+ * Master/Port codes of Table D.2 (e.g. 0x1805 = "Overtemperature" and
+ * 0x1806 = "Short circuit at L+" on the port); the EventQualifier SOURCE bit
+ * (Table A.18: 0 = Device) tells the two uses apart. Standardized device
+ * conditions have dedicated Table D.1 codes - use the IOLINK_EVENTCODE_*
+ * block below for those, never these vendor-specific values.
  */
-/* Communication Layer Events (0x18XX) */
 #define IOLINK_EVENT_COMM_CRC 0x1801U     /**< CRC error in communication */
 #define IOLINK_EVENT_COMM_TIMEOUT 0x1802U /**< Timeout in communication */
 #define IOLINK_EVENT_COMM_FRAMING 0x1803U /**< Framing error in communication */
 #define IOLINK_EVENT_COMM_TIMING 0x1804U  /**< Timing violation in communication */
-
-/* PHY Diagnostic Event Codes (0x18XX) */
-#define IOLINK_EVENT_PHY_VOLTAGE_FAULT 0x1805U /**< L+ voltage out of range */
-#define IOLINK_EVENT_PHY_SHORT_CIRCUIT 0x1806U /**< Short circuit detected */
 
 /* Application Layer Events (0x5XXX) */
 #define IOLINK_EVENT_APP_TEMP_UNDERFLOW 0x5110U /**< Temperature below operating range */

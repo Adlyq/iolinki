@@ -123,11 +123,12 @@ static void test_voltage_monitoring_low(void** state)
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.voltage_faults, 1);
 
-    /* Event should be triggered */
+    /* Event should be triggered with the Table D.1 device code
+       "Primary supply voltage underrun" (0x5111). */
     assert_true(iolink_events_pending(&ctx.events));
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx.events, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENT_PHY_VOLTAGE_FAULT);
+    assert_int_equal(ev.code, 0x5111U);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
 }
 
@@ -145,11 +146,11 @@ static void test_voltage_monitoring_high(void** state)
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.voltage_faults, 1);
 
-    /* Event should be triggered */
+    /* Event should be triggered with the standardized supply-voltage code. */
     assert_true(iolink_events_pending(&ctx.events));
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx.events, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENT_PHY_VOLTAGE_FAULT);
+    assert_int_equal(ev.code, 0x5111U);
 }
 
 static void test_voltage_measurement_unavailable(void** state)
@@ -223,11 +224,12 @@ static void test_short_circuit_detection(void** state)
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.short_circuits, 1);
 
-    /* Event should be triggered */
+    /* Event should be triggered with the Table D.1 device code
+       "Short circuit" (0x7710). */
     assert_true(iolink_events_pending(&ctx.events));
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx.events, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENT_PHY_SHORT_CIRCUIT);
+    assert_int_equal(ev.code, 0x7710U);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_ERROR);
 }
 
