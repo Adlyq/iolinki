@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   under/over-voltage fault: a negative reading means "measurement unavailable"
   (the generic PHY template returns `-1`), so generic-PHY devices no longer raise
   a voltage event on every poll.
+- Vendor-specific ISDU indices in the Preferred Index range `0x0040`-`0x00FE`
+  are now routed to the application vendor service (B.2.27), alongside the
+  Extended Index range from `0x0100`; unsupported vendor indices keep answering
+  `0x11` (Service not available). The built-in error-statistics object at
+  `0x0040` remains the fallback when no vendor handler is registered.
 
 ## [2.1.1] - 2026-10-02
 

@@ -46,6 +46,102 @@ static uint8_t count_only(void* user, uint16_t index, uint8_t subindex, bool wri
     return 0;
 }
 
+typedef struct
+{
+    unsigned calls;
+    uint16_t last_index;
+} preferred_spy_t;
+
+static uint8_t preferred_spy(void* user, uint16_t index, uint8_t subindex, bool write,
+                             const uint8_t* input, size_t length, uint8_t* output,
+                             size_t* capacity)
+{
+    preferred_spy_t* spy = user;
+    spy->calls++;
+    spy->last_index = index;
+    assert(subindex == 0 && !write && length == 0);
+    (void) input;
+    assert(*capacity >= 1);
+    output[0] = 0x6A;
+    *capacity = 1;
+    return 0;
+}
+
+static uint8_t unavailable(void* user, uint16_t index, uint8_t subindex, bool write,
+                           const uint8_t* input, size_t length, uint8_t* output, size_t* capacity)
+{
+    (void) user;
+    (void) index;
+    (void) subindex;
+    (void) write;
+    (void) input;
+    (void) length;
+    (void) output;
+    (void) capacity;
+    return 0x11U; /* Service not available (Table C.1). */
+}
+
+/* Feed one 16-bit indexed read (I-Service 0xB, Length 5) of `index`, subindex 0. */
+static void read_index(iolink_isdu_ctx_t* ctx, uint16_t index)
+{
+    uint8_t request[5] = {0xB5U, 0x00U, 0x00U, 0x00U, 0x00U};
+    request[1] = (uint8_t) (index >> 8);
+    request[2] = (uint8_t) (index & 0xFFU);
+    request[3] = 0x00U; /* Subindex 0. */
+    request[4] = (uint8_t) (request[0] ^ request[1] ^ request[2] ^ request[3]);
+    for (size_t i = 0; i < sizeof(request); i++) {
+        iolink_isdu_od_write(ctx, i == 0 ? IOLINK_FLOWCTRL_START : (uint8_t) i, request + i, 1);
+    }
+    iolink_isdu_process(ctx);
+}
+
+static void assert_negative_service_not_available(const iolink_isdu_ctx_t* ctx)
+{
+    assert(ctx->response_len == 2 && ctx->response_buf[0] == 0x80);
+    assert(ctx->response_buf[1] == 0x11);
+}
+
+/* B.2.27: Preferred Indices 0x0040-0x00FE are device-specific and reach the
+   application vendor service, exactly like the Extended Index range. */
+static void preferred_index_routing(void)
+{
+    iolink_isdu_ctx_t ctx;
+    preferred_spy_t spy = {0U, 0U};
+    iolink_isdu_init(&ctx);
+    ctx.vendor_service = preferred_spy;
+    ctx.vendor_user = &spy;
+
+    read_index(&ctx, 0x0080U);
+    assert(spy.calls == 1 && spy.last_index == 0x0080U);
+    assert(ctx.response_len == 1 && ctx.response_buf[0] == 0x6A);
+
+    /* The vendor handler owns the whole device-specific range: with one
+       registered, even 0x0040 reaches it (the built-in error statistics object
+       serves only when no handler is registered). */
+    read_index(&ctx, 0x0040U);
+    assert(spy.calls == 2 && spy.last_index == 0x0040U);
+    assert(ctx.response_len == 1 && ctx.response_buf[0] == 0x6A);
+
+    /* 0x00FF is reserved and 0x003F is reserved for profiles: neither range
+       may reach the vendor service, and the master gets 0x11. */
+    read_index(&ctx, 0x00FFU);
+    assert(spy.calls == 2);
+    assert_negative_service_not_available(&ctx);
+    read_index(&ctx, 0x003FU);
+    assert(spy.calls == 2);
+    assert_negative_service_not_available(&ctx);
+
+    /* A Preferred Index the application rejects keeps the 0x11 error. */
+    ctx.vendor_service = unavailable;
+    read_index(&ctx, 0x0080U);
+    assert_negative_service_not_available(&ctx);
+
+    /* No handler: unknown device-specific indices answer 0x11 too. */
+    ctx.vendor_service = NULL;
+    read_index(&ctx, 0x0041U);
+    assert_negative_service_not_available(&ctx);
+}
+
 static void truncated_requests_never_execute(void)
 {
     const uint8_t requests[][4] = {
@@ -81,6 +177,7 @@ static void truncated_requests_never_execute(void)
 int main(void)
 {
     truncated_requests_never_execute();
+    preferred_index_routing();
     iolink_isdu_ctx_t ctx;
     unsigned calls = 0;
     iolink_isdu_init(&ctx);

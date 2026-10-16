@@ -94,9 +94,10 @@ typedef struct
     uint8_t error_code;    /**< IO-Link ISDU Error Code (0x80XX) */
 
     /* Pointers to external dependencies */
-    /* Optional application service for vendor indices >= 0x0100. Output length
-     * enters as capacity; return zero on success or an ISDU additional error
-     * code. Callback must be bounded and must not retain buffer pointers. */
+    /* Optional application service for device-specific indices 0x0040-0x00FE
+     * (Preferred Index) and >= 0x0100 (Extended Index). Output length enters
+     * as capacity; return zero on success or an ISDU additional error code.
+     * Callback must be bounded and must not retain buffer pointers. */
     uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex, bool write,
                               const uint8_t* input, size_t length, uint8_t* output,
                               size_t* output_length);

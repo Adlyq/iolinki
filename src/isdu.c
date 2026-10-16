@@ -1092,7 +1092,13 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
 static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
 {
     ctx->vendor_positive = false;
-    if ((ctx->header.index >= 0x0100U) && (ctx->vendor_service != NULL)) {
+    /* B.2.27: Preferred Indices 0x0040-0x00FE are device-specific like the
+       Extended Index range from 0x0100; both reach the application vendor
+       service. 0x00FF itself is reserved. */
+    const uint16_t index = ctx->header.index;
+    const bool device_specific =
+        ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
+    if (device_specific && (ctx->vendor_service != NULL)) {
 #if IOLINK_ISDU_BUFFER_SIZE > 238U
         size_t length = 235U;
 #else
