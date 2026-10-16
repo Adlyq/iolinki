@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **OPERATE M-sequence reply layout.** Replies now match Figures
+  A.9/A.10/A.13/A.14: the reply to a READ M-sequence is `[OD][PD-in] CKS` and
+  the reply to a WRITE M-sequence is `[PD-in] CKS` with no OD octet.
+  `iolink_frame_decode_operate_response`, the Python virtual master and the
+  reference example follow the same layout. Wire change for the multi-octet
+  OPERATE M-sequence types.
+
 ## [2.1.1] - 2026-10-02
 
 ### Fixed
