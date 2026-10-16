@@ -807,11 +807,11 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
         uint8_t idx = (uint8_t) ((event_ctx->head + i) % IOLINK_EVENT_QUEUE_SIZE);
         const iolink_event_t* ev = &event_ctx->queue[idx];
 
-        /* EventQualifier byte per IO-Link V1.1.5 (Table B.1):
+        /* EventQualifier byte per IO-Link V1.1.5 (Figure A.24):
          *   MODE     (bits 7-6): 11 = event appears
          *   TYPE     (bits 5-4): 01 notification, 10 warning, 11 error
-         *   SOURCE   (bit  3)  : 0 = device (local)
-         *   INSTANCE (bits 2-0): 2 = data link layer (DL) for comm events
+         *   SOURCE   (bit  3)  : 0 = device (Table A.18)
+         *   INSTANCE (bits 2-0): 4 = Application (Table A.17)
          */
         uint8_t qualifier = 0xC0U; /* MODE = event appears */
         switch (ev->type) {
@@ -827,7 +827,7 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
             default:
                 break;
         }
-        qualifier |= 0x02U; /* INSTANCE = DL */
+        qualifier |= 0x04U; /* INSTANCE = Application */
 
         ctx->response_buf[i * 3U] = qualifier;
         ctx->response_buf[i * 3U + 1U] = (uint8_t) (ev->code >> 8);
