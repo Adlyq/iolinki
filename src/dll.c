@@ -385,24 +385,22 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
         }
     }
 
-    /* A.1.5 reply layout: [PD-in octets][OD octets] CKS, with no leading status
-       octet. CKS carries the Event flag (bit 7), the PD-validity flag (bit 6,
-       1 = invalid) and the 6-bit message checksum (bits 0-5). */
-    /* A Type-0 WRITE is answered by the CKS only; a Type-0 READ by OD + CKS
-       (A.1.5, Figure A.5). Multi-type replies always carry the OD octets. */
-    const bool type0_write = (dll_expected_type_bits(ctx) == IOLINK_MSEQ_TYPE_0) &&
-                             ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U);
-    const uint8_t od_reply_len = type0_write ? 0U : ctx->od_len;
+    /* Figures A.9/A.10/A.13/A.14: the reply to a READ M-sequence is
+       [OD octets][PD-in octets] CKS; the reply to a WRITE M-sequence carries no
+       OD and is [PD-in octets] CKS. CKS carries the Event flag (bit 7), the
+       PD-validity flag (bit 6, 1 = invalid) and the 6-bit message checksum
+       (bits 0-5); there is no leading status octet (A.1.5). */
+    const bool read = ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) != 0U);
 
     uint8_t resp[IOLINK_PD_IN_MAX_SIZE + 5];
     uint16_t pos = 0U;
+    if (read && (ctx->od_len > 0U)) {
+        memcpy(&resp[pos], od_out, ctx->od_len);
+        pos += ctx->od_len;
+    }
     if (ctx->pd_in_len_current > 0U) {
         memcpy(&resp[pos], ctx->pd_in, ctx->pd_in_len_current);
         pos += ctx->pd_in_len_current;
-    }
-    if (od_reply_len > 0U) {
-        memcpy(&resp[pos], od_out, od_reply_len);
-        pos += od_reply_len;
     }
 
     uint8_t cks = 0x00U;

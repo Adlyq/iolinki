@@ -85,11 +85,12 @@ static void test_encode_type1_allows_max_od_len(void** state)
         (int) sizeof(frame));
 }
 
-static void test_decode_operate_response_with_pd(void** state)
+static void test_decode_operate_response_read_layout(void** state)
 {
     (void) state;
-    /* [PD-in 0xA5][OD 0x00] CKS(no flags) = 0xA5 0x00 0x22 (A.1.5/A.1.6). */
-    const uint8_t frame[] = {0xA5U, 0x00U, 0x22U};
+    /* Figures A.9/A.10/A.13/A.14: a READ reply is [OD][PD-in] CKS.
+       OD 0x11, PD-in 0xA5, CKS(no flags) = 0x27 (A.1.5/A.1.6). */
+    const uint8_t frame[] = {0x11U, 0xA5U, 0x27U};
     iolink_frame_operate_response_t resp = {0};
 
     assert_int_equal(iolink_frame_decode_operate_response(frame, sizeof(frame), 1U, 1U, &resp), 0);
@@ -98,14 +99,32 @@ static void test_decode_operate_response_with_pd(void** state)
     assert_false(resp.event_pending);
     assert_int_equal(resp.pd_len, 1U);
     assert_int_equal(resp.pd[0], 0xA5U);
-    assert_int_equal(resp.od[0], 0x00U);
+    assert_int_equal(resp.od_len, 1U);
+    assert_int_equal(resp.od[0], 0x11U);
+}
+
+static void test_decode_operate_response_write_layout(void** state)
+{
+    (void) state;
+    /* Figures A.9/A.10/A.13/A.14: a WRITE reply carries no OD: [PD-in] CKS.
+       PD-in 0xA5, CKS(no flags) = 0x22 (A.1.6). */
+    const uint8_t frame[] = {0xA5U, 0x22U};
+    iolink_frame_operate_response_t resp = {0};
+
+    assert_int_equal(iolink_frame_decode_operate_response(frame, sizeof(frame), 1U, 0U, &resp), 0);
+    assert_true(resp.checksum_ok);
+    assert_true(resp.pd_valid);
+    assert_false(resp.event_pending);
+    assert_int_equal(resp.pd_len, 1U);
+    assert_int_equal(resp.pd[0], 0xA5U);
+    assert_int_equal(resp.od_len, 0U);
 }
 
 static void test_decode_operate_response_event_flag(void** state)
 {
     (void) state;
-    /* Same message with the Event flag (CKS bit 7) set: 0xA5 0x00 0x8A. */
-    const uint8_t frame[] = {0xA5U, 0x00U, 0x8AU};
+    /* Same READ message with the Event flag (CKS bit 7) set: 0x11 0xA5 0x8F. */
+    const uint8_t frame[] = {0x11U, 0xA5U, 0x8FU};
     iolink_frame_operate_response_t resp = {0};
 
     assert_int_equal(iolink_frame_decode_operate_response(frame, sizeof(frame), 1U, 1U, &resp), 0);
@@ -117,8 +136,8 @@ static void test_decode_operate_response_event_flag(void** state)
 static void test_decode_operate_response_pd_invalid_flag(void** state)
 {
     (void) state;
-    /* CKS bit 6 set means PD is invalid: 0xA5 0x00 0x7A. */
-    const uint8_t frame[] = {0xA5U, 0x00U, 0x7AU};
+    /* CKS bit 6 set means PD is invalid: 0x11 0xA5 0x7F. */
+    const uint8_t frame[] = {0x11U, 0xA5U, 0x7FU};
     iolink_frame_operate_response_t resp = {0};
 
     assert_int_equal(iolink_frame_decode_operate_response(frame, sizeof(frame), 1U, 1U, &resp), 0);
@@ -130,7 +149,7 @@ static void test_decode_operate_response_bad_checksum_succeeds_with_flag_false(v
 {
     (void) state;
     /* Correct layout, wrong checksum bits. */
-    const uint8_t frame[] = {0xA5U, 0x00U, 0x00U};
+    const uint8_t frame[] = {0x11U, 0xA5U, 0x00U};
     iolink_frame_operate_response_t resp = {0};
 
     assert_int_equal(iolink_frame_decode_operate_response(frame, sizeof(frame), 1U, 1U, &resp), 0);
@@ -138,6 +157,8 @@ static void test_decode_operate_response_bad_checksum_succeeds_with_flag_false(v
     assert_true(resp.pd_valid);
     assert_int_equal(resp.pd_len, 1U);
     assert_int_equal(resp.pd[0], 0xA5U);
+    assert_int_equal(resp.od_len, 1U);
+    assert_int_equal(resp.od[0], 0x11U);
 }
 
 static void test_decode_operate_response_rejects_oversized_pd_in_len(void** state)
@@ -151,6 +172,17 @@ static void test_decode_operate_response_rejects_oversized_pd_in_len(void** stat
                      -1);
 }
 
+static void test_decode_operate_response_rejects_oversized_od_len(void** state)
+{
+    (void) state;
+    const uint8_t frame[] = {0x00U, 0x00U};
+    iolink_frame_operate_response_t resp = {0};
+
+    assert_int_equal(iolink_frame_decode_operate_response(
+                         frame, sizeof(frame), 0U, (uint8_t) (IOLINK_OD_MAX_SIZE + 1U), &resp),
+                     -1);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -161,11 +193,13 @@ int main(void)
         cmocka_unit_test(test_encode_type1_rejects_zero_od_len),
         cmocka_unit_test(test_encode_type1_rejects_oversized_od_len),
         cmocka_unit_test(test_encode_type1_allows_max_od_len),
-        cmocka_unit_test(test_decode_operate_response_with_pd),
+        cmocka_unit_test(test_decode_operate_response_read_layout),
+        cmocka_unit_test(test_decode_operate_response_write_layout),
         cmocka_unit_test(test_decode_operate_response_event_flag),
         cmocka_unit_test(test_decode_operate_response_pd_invalid_flag),
         cmocka_unit_test(test_decode_operate_response_bad_checksum_succeeds_with_flag_false),
         cmocka_unit_test(test_decode_operate_response_rejects_oversized_pd_in_len),
+        cmocka_unit_test(test_decode_operate_response_rejects_oversized_od_len),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

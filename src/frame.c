@@ -83,18 +83,19 @@ int iolink_frame_decode_operate_response(const uint8_t* frame, size_t frame_len,
                                          uint8_t od_len, iolink_frame_operate_response_t* out)
 {
     size_t pos = 0U;
-    const size_t expected_len = pd_in_len + od_len + 1U;
+    const size_t expected_len = (size_t) od_len + (size_t) pd_in_len + 1U;
 
-    if ((frame == NULL) || (out == NULL) || (pd_in_len > IOLINK_PD_IN_MAX_SIZE) || (od_len == 0U) ||
+    if ((frame == NULL) || (out == NULL) || (pd_in_len > IOLINK_PD_IN_MAX_SIZE) ||
         (od_len > IOLINK_OD_MAX_SIZE) || (frame_len != expected_len)) {
         return -1;
     }
 
     memset(out, 0, sizeof(*out));
 
-    /* A.1.5: the reply is [PD-in][OD] CKS with no leading status octet. The CKS
-       octet carries the Event flag in bit 7, the PD-invalid flag in bit 6 (so
-       PD is valid when bit 6 is clear) and the 6-bit checksum in bits 0-5. */
+    /* Figures A.9/A.10/A.13/A.14: the reply is [OD][PD-in] CKS; a WRITE reply
+       carries no OD and is [PD-in] CKS. The CKS octet carries the Event flag in
+       bit 7, the PD-invalid flag in bit 6 (so PD is valid when bit 6 is clear)
+       and the 6-bit checksum in bits 0-5 (A.1.5). */
     const uint8_t cks = frame[frame_len - 1U];
     out->status = cks;
     out->event_pending = ((cks & 0x80U) != 0U);
@@ -109,15 +110,16 @@ int iolink_frame_decode_operate_response(const uint8_t* frame, size_t frame_len,
     msg[frame_len - 1U] = (uint8_t) (msg[frame_len - 1U] & 0xC0U);
     out->checksum_ok = (iolink_checksum6(msg, frame_len) == (uint8_t) (cks & 0x3FU));
 
+    if (od_len > 0U) {
+        memcpy(out->od, &frame[pos], od_len);
+        out->od_len = od_len;
+        pos += od_len;
+    }
+
     if (pd_in_len > 0U) {
         memcpy(out->pd, &frame[pos], pd_in_len);
         out->pd_len = pd_in_len;
-        pos += pd_in_len;
     }
-
-    /* od_len is guaranteed non-zero by the guard above. */
-    memcpy(out->od, &frame[pos], od_len);
-    out->od_len = od_len;
 
     return 0;
 }
