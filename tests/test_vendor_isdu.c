@@ -53,8 +53,7 @@ typedef struct
 } preferred_spy_t;
 
 static uint8_t preferred_spy(void* user, uint16_t index, uint8_t subindex, bool write,
-                             const uint8_t* input, size_t length, uint8_t* output,
-                             size_t* capacity)
+                             const uint8_t* input, size_t length, uint8_t* output, size_t* capacity)
 {
     preferred_spy_t* spy = user;
     spy->calls++;

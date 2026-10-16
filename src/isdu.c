@@ -1096,8 +1096,7 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
        Extended Index range from 0x0100; both reach the application vendor
        service. 0x00FF itself is reserved. */
     const uint16_t index = ctx->header.index;
-    const bool device_specific =
-        ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
+    const bool device_specific = ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
     if (device_specific && (ctx->vendor_service != NULL)) {
 #if IOLINK_ISDU_BUFFER_SIZE > 238U
         size_t length = 235U;
