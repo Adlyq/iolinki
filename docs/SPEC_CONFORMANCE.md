@@ -19,7 +19,7 @@ Run the green suite with `ctest -E test_spec_conformance`; the gap tracker with
 | Item | Status | Implementation | Test |
 |---|---|---|---|
 | Streaming transport (`send`/`recv_byte`), default | PASS | `src/dll.c`, `src/frame.c` | `test_dll`, `test_frame` |
-| Opt-in two-pump ISR transport (`-DIOLINK_ISR_PUMP=ON`) | PASS (build) | `src/dll.c` (`#if` block) | unit harness pending |
+| Opt-in two-pump ISR transport (`-DIOLINK_ISR_PUMP=ON`) | PASS | `src/dll.c` (`#if` block) | `test_dll_isr` + the full protocol suite via the test warp |
 | M-sequence Types 0/1_1/1_2/1_V/2_1/2_2/2_V | PASS | `src/dll.c`, `src/frame.c` | `test_m_sequence_types`, `test_dll` |
 | OD width / OPERATE codes 0-7 (Table A.10) | PASS | `include/iolinki/iolink.h` | `test_protocol_tables` |
 | Checksum A.1.6 (incl. streaming accumulator) | PASS | `src/crc.c` | `test_crc`, `test_crc_vectors` |
