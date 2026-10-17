@@ -17,6 +17,8 @@ ctest -R test_dll
 
 # Opt-in two-pump / ISR transport (same src/dll.c, #if-guarded)
 cmake -B build_isr -DIOLINK_ISR_PUMP=ON && cmake --build build_isr
+# The test suite is transport-agnostic via the warp in tests/test_helpers.c:
+(cd build_isr && ctest -E test_spec_conformance)
 
 # Quality gate (strict -Werror build, cppcheck, clang-format, MISRA, Doxygen)
 ./check_quality.sh
