@@ -916,9 +916,17 @@ static uint8_t direct_param_encode_pd(uint8_t octets)
  * bit0 = ISDU supported, bits1-3 = OPERATE M-sequence code (Table A.10),
  * bits4-5 = PREOPERATE M-sequence code (Table A.8; TYPE_0 = 0 here).
  */
-static uint8_t direct_param_mseq_capability(uint8_t m_seq_type)
+static uint8_t direct_param_mseq_capability(uint8_t m_seq_type, uint8_t od_width)
 {
     uint8_t cap = 0x01U; /* ISDU supported */
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* Table A.10 OPERATE code follows the actual OD width (1/2/8/32). */
+    if (od_width == 0U) {
+        od_width = iolink_mseq_default_od_width(m_seq_type);
+    }
+    const uint8_t operate_code = iolink_mseq_operate_code(m_seq_type, od_width);
+#else
+    (void) od_width;
     uint8_t operate_code;
     switch (m_seq_type) {
         case IOLINK_M_SEQ_TYPE_1_2:
@@ -930,14 +938,11 @@ static uint8_t direct_param_mseq_capability(uint8_t m_seq_type)
         case IOLINK_M_SEQ_TYPE_2_V:
             operate_code = 5U; /* OD 2, variable PD */
             break;
-        case IOLINK_M_SEQ_TYPE_1_1:
-        case IOLINK_M_SEQ_TYPE_2_1:
-        case IOLINK_M_SEQ_TYPE_2_2:
-        case IOLINK_M_SEQ_TYPE_0:
         default:
             operate_code = 0U; /* Type 0 / Type 2_x with 1 OD octet */
             break;
     }
+#endif
     cap |= (uint8_t) ((operate_code & 0x07U) << 1);
     /* PREOPERATE M-sequence in this stack is TYPE_0 (code 0) -> bits 4-5 = 0. */
     return cap;
@@ -950,16 +955,18 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
     uint8_t pd_in = 0U;
     uint8_t pd_out = 0U;
     uint8_t m_seq = 0U;
+    uint8_t od_width = 0U;
     if (ctx->dll_ctx != NULL) {
         const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
         iolink_dll_get_pd_length(dll, &pd_in, &pd_out);
         m_seq = dll->m_seq_type;
+        od_width = dll->od_width;
     }
 
     (void) memset(page, 0, 16);
     /* 0x00 MasterCommand (W) and 0x01 MasterCycleTime default to 0. */
     page[0x02] = (info != NULL) ? info->min_cycle_time : 0U; /* MinCycleTime */
-    page[0x03] = direct_param_mseq_capability(m_seq);        /* M-sequenceCapability */
+    page[0x03] = direct_param_mseq_capability(m_seq, od_width); /* M-sequenceCapability */
     page[0x04] = 0x11U;                                      /* RevisionID = v1.1 */
     page[0x05] = direct_param_encode_pd(pd_in);              /* ProcessDataIn */
     page[0x06] = direct_param_encode_pd(pd_out);             /* ProcessDataOut */

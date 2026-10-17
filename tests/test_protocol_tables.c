@@ -57,7 +57,7 @@ static void test_mseq_default_od_width(void** state)
     assert_int_equal(iolink_mseq_default_od_width(IOLINK_M_SEQ_TYPE_1_V), 8U);
     assert_int_equal(iolink_mseq_default_od_width(IOLINK_M_SEQ_TYPE_2_1), 1U);
     assert_int_equal(iolink_mseq_default_od_width(IOLINK_M_SEQ_TYPE_2_2), 1U);
-    assert_int_equal(iolink_mseq_default_od_width(IOLINK_M_SEQ_TYPE_2_V), 1U);
+    assert_int_equal(iolink_mseq_default_od_width(IOLINK_M_SEQ_TYPE_2_V), 2U);
 }
 
 /* Table A.10: OPERATE M-sequence code (0..7) from type + OD width. */

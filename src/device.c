@@ -79,9 +79,17 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     /* Two-pump transport: the ISR frames requests and transmits the pre-staged
      * cyclic reply, so the DLL needs the OD width and whether the bound PHY can
      * send a staged reply from ISR context. */
-    /* Commit 1 keeps upstream's OD width (1/2 octets); the TYPE_1_V/TYPE_2_V
-     * 8/32-octet extension is a separate, drop-able patch. */
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* Opt-in 8/32-octet OD extension (Table A.10): TYPE_1_V defaults to 8,
+     * TYPE_2_V to 2, overridable. Drop when upstream gains native support. */
+    ctx->dll.od_width = ctx->stack_config.od_width;
+    if (ctx->dll.od_width == 0U) {
+        ctx->dll.od_width = iolink_mseq_default_od_width((uint8_t) ctx->dll.m_seq_type);
+    }
+#else
+    /* Streaming keeps upstream's 1/2-octet OD width. */
     ctx->dll.od_width = ctx->dll.od_len;
+#endif
     ctx->dll.cyclic_reply_precached =
         (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && dll_phy_has_tx(&ctx->dll);
 #endif
