@@ -103,6 +103,22 @@ static int read_object_with_dll(uint16_t index, iolink_dll_ctx_t* dll, uint8_t* 
     return isdu_collect_response(&ctx, out, out_size);
 }
 
+/* Accept every vendor-service access (used to exercise the parameter lock). */
+static uint8_t vendor_service_ok(void* user, uint16_t index, uint8_t subindex, bool write,
+                                 const uint8_t* input, size_t length, uint8_t* output,
+                                 size_t* output_length)
+{
+    (void) user;
+    (void) index;
+    (void) subindex;
+    (void) write;
+    (void) input;
+    (void) length;
+    (void) output;
+    *output_length = 0U;
+    return 0U;
+}
+
 /* Write an object and copy the response; returns the response length. */
 static int write_object(uint16_t index, const uint8_t* data, uint8_t len, uint8_t* out,
                         size_t out_size)
@@ -221,19 +237,55 @@ static void test_parameter_lock_blocks_tag_write(void** state)
 {
     (void) state;
 
+    /* Establish a known value before enabling the lock. */
+    const uint8_t original[] = {'X', 'Y', 'Z'};
+    uint8_t out[8] = {0};
+    int n = write_object(IOLINK_IDX_APPLICATION_TAG, original, sizeof(original), out, sizeof(out));
+    assert_int_equal(n, 0);
+
     iolink_device_info_set_access_locks(IOLINK_LOCK_PARAM);
 
-    uint8_t out[8] = {0};
-    const uint8_t tag[] = {'X', 'Y', 'Z'};
-    int n = write_object(IOLINK_IDX_APPLICATION_TAG, tag, sizeof(tag), out, sizeof(out));
+    const uint8_t overwrite[] = {'A', 'B', 'C'};
+    n = write_object(IOLINK_IDX_APPLICATION_TAG, overwrite, sizeof(overwrite), out, sizeof(out));
     assert_int_equal(n, 2);
     assert_int_equal(out[0], 0x80U);
     assert_int_equal(out[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 
-    /* Reads remain available while only the parameter lock is set. */
+    /* B.2.4: Read access is not affected and the locked write did not change
+     * the stored value. */
     uint8_t readback[16] = {0};
     n = read_object(IOLINK_IDX_APPLICATION_TAG, readback, sizeof(readback));
-    assert_true(n >= 0);
+    assert_int_equal(n, (int) sizeof(original));
+    assert_memory_equal(readback, original, sizeof(original));
+}
+
+/* B.2.4: the Parameter lock also inhibits writes to device-specific
+ * parameters; reads still reach the vendor service. */
+static void test_parameter_lock_blocks_vendor_write(void** state)
+{
+    (void) state;
+
+    iolink_device_info_set_access_locks(IOLINK_LOCK_PARAM);
+
+    iolink_isdu_ctx_t ctx;
+    iolink_isdu_init(&ctx);
+    ctx.vendor_service = vendor_service_ok;
+    const uint8_t value = 0x5AU;
+    assert_int_equal(isdu_send_write_request(&ctx, 0x0040U, 0U, &value, 1U), 1);
+    iolink_isdu_process(&ctx);
+
+    uint8_t out[8] = {0};
+    int n = isdu_collect_response(&ctx, out, sizeof(out));
+    assert_int_equal(n, 2);
+    assert_int_equal(out[0], 0x80U);
+    assert_int_equal(out[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+
+    iolink_isdu_init(&ctx);
+    ctx.vendor_service = vendor_service_ok;
+    assert_int_equal(isdu_send_read_request(&ctx, 0x0040U, 0U), 1);
+    iolink_isdu_process(&ctx);
+    n = isdu_collect_response(&ctx, out, sizeof(out));
+    assert_int_equal(n, 0);
 }
 
 /* B.2.8-B.2.15: identification strings are truncated to their fixedLength
@@ -273,6 +325,7 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_read_only_identification_rejects_write, setup,
                                         teardown),
         cmocka_unit_test_setup_teardown(test_parameter_lock_blocks_tag_write, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_parameter_lock_blocks_vendor_write, setup, teardown),
         cmocka_unit_test_setup_teardown(test_identification_string_length_limits, setup, teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
