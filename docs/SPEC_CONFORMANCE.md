@@ -7,12 +7,9 @@ proves it**, ordered by the bundled specification.
 > The V1.1.3 PDF is historical. When a doc/comment disagrees with V1.1.5, the
 > PDF wins.
 
-Status: **PASS** (implemented + tested), **PARTIAL** (subset covered),
-**GAP** (expected failure in `tests/test_spec_conformance.c`), **N/A**
-(conditional on a profile).
-
-Run the green suite with `ctest -E test_spec_conformance`; the gap tracker with
-`ctest -R test_spec_conformance --output-on-failure`.
+Status: **PASS** (implemented + tested), **PARTIAL** (subset covered), **N/A**
+(conditional on a profile). All previously tracked gaps are closed, so the full
+suite (including `test_spec_conformance`) is green: `ctest --output-on-failure`.
 
 ## Transport
 
@@ -32,18 +29,18 @@ Run the green suite with `ctest -E test_spec_conformance`; the gap tracker with
 | 0x0000/0x0001 | Direct Parameter pages 1/2 | PASS | `test_dll`, `test_isdu` |
 | 0x0002 | SystemCommand (0x01-0x06, 0x80-0x83; 0x84-0x9F reserved) | PASS | `test_system_commands`, `test_isdu`, `test_isdu_wire` |
 | 0x0003 | DataStorageIndex | PARTIAL | `test_ds` |
-| 0x0004-0x000B | Reserved (VendorID/DeviceID are DPP1) | GAP | `test_vendor_device_id_indices_reserved` |
-| 0x000C | DeviceAccessLocks | PARTIAL | `test_ident_indices`, `test_ds`; param-lock enforcement GAP |
+| 0x0004-0x000B | Reserved (VendorID/DeviceID are DPP1) | PASS | `test_vendor_device_id_indices_reserved` |
+| 0x000C | DeviceAccessLocks | PASS | `test_ident_indices`, `test_ds`, `test_spec_conformance` |
 | 0x000D | ProfileCharacteristic (contains FunctionID) | PASS | `test_ident_indices` |
-| 0x0010-0x0017 | Identification strings | PARTIAL | `test_ident_indices`; fixedLength clamp GAP |
+| 0x0010-0x0017 | Identification strings | PASS | `test_ident_indices`, `test_spec_conformance` |
 | 0x0018-0x001A | Application/Function/Location tags | PASS | `test_isdu` |
-| 0x001B | ProductURI (conditional) | GAP | `test_product_uri_index` |
-| 0x0020 | ErrorCount (optional) | GAP | `test_error_count_index` |
+| 0x001B | ProductURI (conditional) | PASS | `test_product_uri_index` |
+| 0x0020 | ErrorCount (optional) | PASS | `test_error_count_index` |
 | 0x0024 | DeviceStatus | PASS | `test_isdu`, `test_events` |
 | 0x0025 | DetailedDeviceStatus | PASS | `test_isdu` |
-| 0x0028 | ProcessDataInput (last valid PD-in) | GAP | `test_process_data_input_returns_pd` |
-| 0x0029 | ProcessDataOutput (last valid PD-out) | GAP | `test_process_data_output_returns_pd` |
-| read-only objects reject WRITE | GAP | `test_read_only_identification_rejects_write` |
+| 0x0028 | ProcessDataInput (last valid PD-in) | PASS | `test_process_data_input_returns_pd`, `test_isdu` |
+| 0x0029 | ProcessDataOutput (last valid PD-out) | PASS | `test_process_data_output_returns_pd` |
+| read-only objects reject WRITE (0x80 0x23) | PASS | `test_read_only_identification_rejects_write`, `test_isdu_wire` |
 
 ## Events, Data Storage, Timing, Locks
 
@@ -54,20 +51,22 @@ Run the green suite with `ctest -E test_spec_conformance`; the gap tracker with
 | Data Storage serialize/apply/checksum/locks/recovery | PARTIAL | `test_ds`, `test_system_commands` |
 | t_ren / t_cycle / t_pd / OPERATE supervision / T_DSIO / T_FBD | PASS | `test_timing` |
 | Access Locks read/write, DS lock | PASS | `test_ident_indices`, `test_ds` |
-| Parameter lock (bit 0) enforcement | GAP | `test_parameter_lock_blocks_tag_write` |
+| Parameter lock (bit 0) enforcement | PASS | `test_parameter_lock_blocks_tag_write` |
 
-## Gap backlog (`tests/test_spec_conformance.c`)
+## Conformance closures
 
-| Test | Required change |
-|---|---|
-| `test_vendor_device_id_indices_reserved` | Remove 0x000A/0x000B handlers (DPP1 only). |
-| `test_error_count_index` | Serve 2-octet ErrorCount at 0x0020. |
-| `test_product_uri_index` | Add ProductURI storage + serve 0x001B. |
-| `test_process_data_input_returns_pd` | Return PD-in bytes for 0x0028. |
-| `test_process_data_output_returns_pd` | Serve last valid PD-out at 0x0029. |
-| `test_read_only_identification_rejects_write` | Reject WRITE with `0x80 0x23`. |
-| `test_parameter_lock_blocks_tag_write` | Enforce Access-Locks bit 0. |
-| `test_identification_string_length_limits` | Clamp strings to fixedLength. |
+`tests/test_spec_conformance.c` now passes; it pins the behaviour that was
+previously missing:
+
+- 0x000A/0x000B are reserved (VendorID/DeviceID live in DPP1).
+- ErrorCount (0x0020) returns the summed DLL error counters.
+- ProductURI (0x001B) is served read-only.
+- ProcessDataInput/Output (0x0028/0x0029) return the last valid PD data.
+- A WRITE to a known read-only object answers `0x80 0x23`; an unknown index
+  keeps `0x80 0x11`.
+- DeviceAccessLocks bit 0 blocks parameter writes (tags and DPP2), not reads or
+  Data Storage downloads.
+- Identification strings are clamped to their fixedLength (64 / SerialNumber 16).
 
 ## Deliberate divergences from upstream (PDF wins)
 

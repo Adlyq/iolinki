@@ -8,25 +8,13 @@
 
 /**
  * @file test_spec_conformance.c
- * @brief Spec-conformance assertions for behaviour the stack does not yet
- *        implement correctly. The authoritative reference is the bundled
- *        IO-Link Interface and System Specification V1.1.5 (Oct 2025).
+ * @brief Conformance assertions for the mandatory ISDU objects and access
+ *        rules, checked against the bundled IO-Link V1.1.5 specification.
  *
- * These tests encode the REQUIRED behaviour and are expected to fail until the
- * corresponding stack gaps are closed. They are kept in their own binary so a
- * red result is attributable to the known gaps:
- *
- *   - VendorID/DeviceID are not ISDU indices: Table B.8 reserves 0x0004-0x000B
- *     (both live in Direct Parameter Page 1). The stack still serves 0x000A/
- *     0x000B as objects.
- *   - ErrorCount (0x0020, UIntegerT16) is not served.
- *   - ProductURI (0x001B, conditional on a profile) is not served.
- *   - ProcessDataInput (0x0028) must return the last valid process input data,
- *     not a 1-octet length; ProcessDataOutput (0x0029) is not served.
- *   - Read-only identification objects accept WRITE instead of answering
- *     0x80 0x23 (Table C.1 "Index not accessible").
- *   - The Parameter Lock (DeviceAccessLocks bit 0) is not enforced on writes.
- *   - String objects do not enforce their fixedLength limits (B.2.8-B.2.15).
+ * Covers: reserved 0x000A/0x000B indices, ErrorCount (0x0020), ProductURI
+ * (0x001B), ProcessDataInput/Output (0x0028/0x0029), read-only WRITE rejection
+ * (Table C.1), the Parameter access lock (Table B.2.4) and the identification
+ * string fixedLength limits (B.2.8-B.2.15).
  */
 
 #include <stdarg.h>
