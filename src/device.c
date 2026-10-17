@@ -78,18 +78,13 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
 #if IOLINK_PHY_FEATURE_ISR_PUMP
     /* Two-pump transport: the ISR frames requests and transmits the pre-staged
      * cyclic reply, so the DLL needs the OD width and whether the bound PHY can
-     * send a staged reply from ISR context. */
-#if IOLINK_PHY_FEATURE_ISR_PUMP
-    /* Opt-in 8/32-octet OD extension (Table A.10): TYPE_1_V defaults to 8,
-     * TYPE_2_V to 2, overridable. Drop when upstream gains native support. */
+     * send a staged reply from ISR context. The OD width defaults to upstream's
+     * 1/2 octets; the opt-in 8/32-byte extension is enabled via config.od_width
+     * (drop that extension when upstream gains native support). */
     ctx->dll.od_width = ctx->stack_config.od_width;
     if (ctx->dll.od_width == 0U) {
-        ctx->dll.od_width = iolink_mseq_default_od_width((uint8_t) ctx->dll.m_seq_type);
+        ctx->dll.od_width = ctx->dll.od_len;
     }
-#else
-    /* Streaming keeps upstream's 1/2-octet OD width. */
-    ctx->dll.od_width = ctx->dll.od_len;
-#endif
     ctx->dll.cyclic_reply_precached =
         (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && dll_phy_has_tx(&ctx->dll);
 #endif
@@ -132,6 +127,12 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     }
     iolink_ds_bind_params(&ctx->dll.ds, &ctx->params);
     device_apply_stack_config(ctx);
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* Seed the pre-staged cyclic variants so the first ISR reply is complete. */
+    if (ctx->dll.cyclic_reply_precached) {
+        iolink_dll_prepare_cyclic_reply(&ctx->dll);
+    }
+#endif
 
     if ((config->app_callbacks != NULL) && (config->app_callbacks->on_startup != NULL)) {
         config->app_callbacks->on_startup();

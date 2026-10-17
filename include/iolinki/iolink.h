@@ -72,8 +72,6 @@ static inline uint8_t iolink_mseq_default_od_width(uint8_t m_seq_type)
             return 2U;
         case IOLINK_M_SEQ_TYPE_1_V:
             return 8U;
-        case IOLINK_M_SEQ_TYPE_2_V:
-            return 2U;
         default:
             return 1U;
     }
