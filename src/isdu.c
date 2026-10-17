@@ -472,6 +472,12 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
             isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
             return;
         }
+        /* Table B.2.4: with the Parameter (write) access lock set, every
+           read/write parameter except DeviceAccessLocks is write-protected. */
+        if ((iolink_device_info_get_access_locks() & IOLINK_LOCK_PARAM) != 0U) {
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+            return;
+        }
     }
 
     switch (ctx->header.index) {
@@ -1008,6 +1014,12 @@ static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
         if (!page2) {
             /* Page 1 is read-only. */
+            ctx->response_buf[0] = 0x80U;
+            ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
+            ctx->response_len = 2U;
+        }
+        else if ((iolink_device_info_get_access_locks() & IOLINK_LOCK_PARAM) != 0U) {
+            /* Table B.2.4: the Parameter access lock inhibits page-2 writes. */
             ctx->response_buf[0] = 0x80U;
             ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
             ctx->response_len = 2U;
