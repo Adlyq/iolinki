@@ -913,6 +913,11 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
         ctx->frame_index = n;
         ctx->req_len = n;
         ctx->isr_frame_ready = 0U;
+        /* A mailbox frame is received traffic: refresh the inactivity and
+           byte-gap timestamps exactly like the streaming RX path. Without
+           this the 1 s idle supervision resets a healthy ISR link. */
+        ctx->last_activity_ms = iolink_time_get_ms();
+        ctx->last_byte_us = iolink_time_get_us();
         dll_process_complete_frame(ctx);
     }
 #else
