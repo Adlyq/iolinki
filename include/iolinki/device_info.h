@@ -41,8 +41,8 @@ typedef struct
     const char* serial_number;     /**< Serial number string (Index 0x0015). */
     const char* hardware_revision; /**< Hardware revision string (Index 0x0016). */
     const char* firmware_revision; /**< Firmware revision string (Index 0x0017). */
-    const char* product_uri;       /**< ProductURI string (Index 0x001B, conditional on a Profile). */
-    const char* application_tag;   /**< Application tag string (Index 0x0018, optional). */
+    const char* product_uri;     /**< ProductURI string (Index 0x001B, conditional on a Profile). */
+    const char* application_tag; /**< Application tag string (Index 0x0018, optional). */
 
     /* Device IDs (Direct Parameter page 1, V1.1.5 Table B.1) */
     uint16_t vendor_id;              /**< Vendor ID (DPP1 0x07-0x08). */

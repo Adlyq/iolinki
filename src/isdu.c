@@ -501,9 +501,9 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
     }
 
     switch (ctx->header.index) {
-        /* Table B.8: 0x0004-0x000B are reserved. VendorID/DeviceID live in
-           Direct Parameter Page 1 (0x07-0x0B), not in an ISDU index. A read of
-           0x000A/0x000B therefore falls through to the default IDX_NOTAVAIL. */
+            /* Table B.8: 0x0004-0x000B are reserved. VendorID/DeviceID live in
+               Direct Parameter Page 1 (0x07-0x0B), not in an ISDU index. A read of
+               0x000A/0x000B therefore falls through to the default IDX_NOTAVAIL. */
 
         case IOLINK_IDX_PROFILE_CHARACTERISTIC:
             ctx->response_buf[0] = (uint8_t) (info->profile_characteristic >> 8);
@@ -1046,11 +1046,11 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
 
     (void) memset(page, 0, 16);
     /* 0x00 MasterCommand (W) and 0x01 MasterCycleTime default to 0. */
-    page[0x02] = (info != NULL) ? info->min_cycle_time : 0U; /* MinCycleTime */
+    page[0x02] = (info != NULL) ? info->min_cycle_time : 0U;    /* MinCycleTime */
     page[0x03] = direct_param_mseq_capability(m_seq, od_width); /* M-sequenceCapability */
-    page[0x04] = 0x11U;                                      /* RevisionID = v1.1 */
-    page[0x05] = direct_param_encode_pd(pd_in);              /* ProcessDataIn */
-    page[0x06] = direct_param_encode_pd(pd_out);             /* ProcessDataOut */
+    page[0x04] = 0x11U;                                         /* RevisionID = v1.1 */
+    page[0x05] = direct_param_encode_pd(pd_in);                 /* ProcessDataIn */
+    page[0x06] = direct_param_encode_pd(pd_out);                /* ProcessDataOut */
     if (info != NULL) {
         page[0x07] = (uint8_t) (info->vendor_id >> 8);            /* VendorID MSB */
         page[0x08] = (uint8_t) (info->vendor_id & 0xFFU);         /* VendorID LSB */
