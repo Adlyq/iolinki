@@ -1190,6 +1190,17 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
     const uint16_t index = ctx->header.index;
     const bool device_specific = ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
     if (device_specific && (ctx->vendor_service != NULL)) {
+        if ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) &&
+            ((iolink_device_info_get_access_locks() & IOLINK_LOCK_PARAM) != 0U)) {
+            /* B.2.4: the Parameter lock inhibits every read/write Device
+               parameter (reads remain available). */
+            ctx->response_buf[0] = 0x80U;
+            ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
+            ctx->response_len = 2U;
+            ctx->response_idx = 0U;
+            ctx->state = ISDU_STATE_RESPONSE_READY;
+            return;
+        }
 #if IOLINK_ISDU_BUFFER_SIZE > 238U
         size_t length = 235U;
 #else
