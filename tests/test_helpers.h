@@ -43,6 +43,22 @@ int mock_phy_recv_byte(void* user, uint8_t* byte);
 int mock_phy_detect_wakeup(void* user);
 void mock_phy_set_cq_line(void* user, uint8_t state);
 
+/*
+ * Transport warp: feed a master frame into the mock PHY and drive whichever
+ * transport was compiled. Both the streaming (send/recv_byte) and the opt-in
+ * ISR (rx_octet/tx_octet) paths end up calling mock_phy_send() for the reply,
+ * so the same test assertions work in both builds.
+ */
+void mock_phy_feed_byte(uint8_t b);
+void mock_phy_feed_chk(void);
+void mock_phy_feed_error(void);
+void mock_phy_clear_rx(void);
+void mock_phy_clear_tx(void);
+const uint8_t* mock_phy_tx(size_t* len);
+
+/* Drive one complete request/reply cycle on the active transport. */
+void test_io_cycle(iolink_device_ctx_t* ctx);
+
 /* Mock PHY driver API */
 extern const iolink_phy_api_t g_phy_mock;
 

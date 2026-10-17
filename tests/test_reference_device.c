@@ -21,14 +21,13 @@ static void test_reference_device_payload(void** state)
     uint8_t frame[5] = {0x80, IOLINK_MSEQ_TYPE_2, 1, 0, 0};
     frame[1] |= iolink_checksum6(frame, sizeof(frame));
     for (size_t i = 0; i < sizeof(frame); i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 6);
     will_return(mock_phy_send, 6);
-    iolink_device_process(&app.device);
+    test_io_cycle(&app.device);
     assert_int_equal(reference_device_tick(&app, true), 0);
     assert_true(app.led);
     assert_int_equal(app.counter, 1);

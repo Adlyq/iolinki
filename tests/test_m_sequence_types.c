@@ -49,10 +49,9 @@ static void test_m_seq_type_1_1_read_reply_od_first(void** state)
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 5));
 
     for (int i = 0; i < 5; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
 
     /* Resp = OD(1), PD(2), CKS = 4 bytes. The process channel read serves no
        OD octet (0x00), so the reply is 0x00 0xAA 0xBB 0x28 (A.1.6). */
@@ -61,7 +60,7 @@ static void test_m_seq_type_1_1_read_reply_od_first(void** state)
     expect_value(mock_phy_send, len, sizeof(expected));
     will_return(mock_phy_send, 0);
 
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 }
 
 static void test_m_seq_type_1_1_write_reply_no_od(void** state)
@@ -84,10 +83,9 @@ static void test_m_seq_type_1_1_write_reply_no_od(void** state)
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 5));
 
     for (int i = 0; i < 5; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
 
     /* Resp = PD(2), CKS = 3 bytes: 0xAA 0xBB 0x28 (A.1.6). */
     uint8_t expected[] = {0xAA, 0xBB, 0x28};
@@ -95,7 +93,7 @@ static void test_m_seq_type_1_1_write_reply_no_od(void** state)
     expect_value(mock_phy_send, len, sizeof(expected));
     will_return(mock_phy_send, 0);
 
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 }
 
 int main(void)

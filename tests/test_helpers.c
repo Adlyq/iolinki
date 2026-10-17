@@ -32,6 +32,17 @@ uint8_t g_rx_buf[1024];
 static int g_mock_wakeup = 0;
 static uint8_t g_mock_cq_state = 0U;
 static uint32_t g_mock_send_delay_us = 0U;
+
+/* Transport warp: both transports read from g_rxq and converge on mock_phy_send. */
+#define MOCK_RXQ_SIZE 8192U
+static uint8_t g_rxq[MOCK_RXQ_SIZE];
+static size_t g_rxq_head;
+static size_t g_rxq_tail;
+static size_t g_chk_pending;
+static int g_rx_err_pending;
+static uint8_t g_txq[1024];
+static size_t g_txq_len;
+static uint8_t g_tx_active;
 /* Strong deterministic test storage. The library's weak unsupported defaults
  * can otherwise satisfy archive references before the Linux backend is loaded. */
 static uint8_t g_nvm_mock[4096];
@@ -84,11 +95,16 @@ int mock_phy_send(void* user, const uint8_t* data, size_t len)
 int mock_phy_recv_byte(void* user, uint8_t* byte)
 {
     (void) user;
-    int res = (int) mock();
-    if (res > 0) {
-        *byte = (uint8_t) mock();
+    /* Deliver queued octets first, then a pending transport error. */
+    if (g_rxq_tail != g_rxq_head) {
+        *byte = g_rxq[g_rxq_tail++];
+        return 1;
     }
-    return res;
+    if (g_rx_err_pending) {
+        g_rx_err_pending = 0;
+        return -1;
+    }
+    return 0;
 }
 
 int mock_phy_detect_wakeup(void* user)
@@ -105,6 +121,104 @@ void mock_phy_set_cq_line(void* user, uint8_t state)
     g_mock_cq_state = state;
 }
 
+/* ---- Raw-octet ISR transport (RX BYTE / TX BYTE) ----------------------- */
+void mock_phy_feed_byte(uint8_t b)
+{
+    if (g_rxq_head < MOCK_RXQ_SIZE) {
+        g_rxq[g_rxq_head++] = b;
+    }
+}
+void mock_phy_feed_chk(void)
+{
+    g_chk_pending++;
+}
+void mock_phy_feed_error(void)
+{
+    g_rx_err_pending = 1;
+}
+void mock_phy_clear_rx(void)
+{
+    g_rxq_head = 0U;
+    g_rxq_tail = 0U;
+    g_chk_pending = 0U;
+    g_rx_err_pending = 0;
+}
+void mock_phy_clear_tx(void)
+{
+    g_txq_len = 0U;
+}
+const uint8_t* mock_phy_tx(size_t* len)
+{
+    if (len != NULL) {
+        *len = g_txq_len;
+    }
+    return g_txq;
+}
+
+static int mock_rx_octet(void* user, uint8_t* data, uint8_t* status)
+{
+    (void) user;
+    if (g_rxq_tail != g_rxq_head) {
+        *data = g_rxq[g_rxq_tail++];
+        *status = IOLINK_PHY_STATUS_DATA_READY;
+        return 1;
+    }
+    if (g_rx_err_pending) {
+        g_rx_err_pending = 0;
+        *status = 0U;
+        return -1;
+    }
+    if (g_chk_pending != 0U) {
+        g_chk_pending--;
+        *status = IOLINK_PHY_STATUS_CHK;
+        return 0;
+    }
+    *status = 0U;
+    return 0;
+}
+
+static int mock_tx_octet(void* user, uint8_t b)
+{
+    (void) user;
+    if (!g_tx_active) {
+        g_txq_len = 0U; /* start of a new reply */
+        g_tx_active = 1U;
+    }
+    if (g_txq_len < sizeof(g_txq)) {
+        g_txq[g_txq_len++] = b;
+    }
+    return 0;
+}
+
+static void mock_tx_done(void* user)
+{
+    if (!g_tx_active) {
+        /* CHK-path reset, not a reply: nothing to deliver. */
+        return;
+    }
+    g_tx_active = 0U;
+    /* Hand the collected reply to the same expectation streaming uses. */
+    (void) mock_phy_send(user, g_txq, g_txq_len);
+}
+
+static uint8_t mock_int_active(void* user)
+{
+    (void) user;
+    if (g_tx_active) {
+        return 1U;
+    }
+    if (g_rxq_tail != g_rxq_head) {
+        return 1U;
+    }
+    if (g_rx_err_pending) {
+        return 1U;
+    }
+    if (g_chk_pending != 0U) {
+        return 1U;
+    }
+    return 0U;
+}
+
 const iolink_phy_api_t g_phy_mock = {.user = NULL,
                                      .init = mock_phy_init,
                                      .set_mode = mock_phy_set_mode,
@@ -114,7 +228,19 @@ const iolink_phy_api_t g_phy_mock = {.user = NULL,
                                      .detect_wakeup = mock_phy_detect_wakeup,
                                      .set_cq_line = mock_phy_set_cq_line,
                                      .get_voltage_mv = NULL,
-                                     .is_short_circuit = NULL};
+                                     .is_short_circuit = NULL,
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+                                     .rx_frame = NULL,
+#else
+                                     .rx_octet = mock_rx_octet,
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+                                     .tx_frame = NULL,
+#else
+                                     .tx_octet = mock_tx_octet,
+#endif
+                                     .tx_done = mock_tx_done,
+                                     .int_active = mock_int_active};
 
 void setup_mock_phy(void)
 {
@@ -126,6 +252,31 @@ void setup_mock_phy(void)
     g_mock_wakeup = 0;
     g_mock_cq_state = 0U;
     g_mock_send_delay_us = 0U;
+    g_txq_len = 0U;
+    g_tx_active = 0U;
+    mock_phy_clear_rx();
+}
+
+/* Drive both pumps for one request: the ISR pump frames the queued octets (and
+ * drains the reply), then the main pump consumes the mailbox and runs the
+ * protocol (Type-0 replies are sent by the main pump). In the streaming build,
+ * one main-pump pass drains g_rxq directly. */
+void test_io_cycle(iolink_device_ctx_t* ctx)
+{
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    iolink_device_process_isr(ctx);
+    while (ctx->dll.isr_tx_active != 0U) {
+        iolink_device_process_isr(ctx);
+    }
+    /* Drop a leftover frame-end marker (Type-1/2 frames complete by length). */
+    mock_phy_clear_rx();
+    iolink_device_process(ctx);
+    while (ctx->dll.isr_tx_active != 0U) {
+        iolink_device_process_isr(ctx);
+    }
+#else
+    iolink_device_process(ctx);
+#endif
 }
 
 int iolink_test_device_init(iolink_test_device_t* dev, const iolink_config_t* stack,
@@ -155,44 +306,41 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
         return;
     }
 
-    /* STARTUP -> PREOPERATE (via WakeUp -> AWAITING_COMM) */
+    /* STARTUP -> AWAITING_COMM (wake-up via the PHY). Timing enforcement is off,
+     * so no wall-clock T_DWU wait is needed: the pump is event driven. */
     g_mock_wakeup = 1;
-    iolink_device_process(ctx);
+    test_io_cycle(ctx);
 
-    /* Wait for T_DWU (assuming timing might be enforced) */
-    usleep(200); /* > 54us T_DWU */
-
-    /* PREOPERATE -> ESTAB_COM (on MC=0x0F + Correct CK) */
+    /* AWAITING_COMM -> PREOPERATE (transition command MC=0x0F). */
     uint8_t mc = IOLINK_MC_TRANSITION_COMMAND;
     uint8_t ck = test_frame_checksum(mc);
+    mock_phy_feed_byte(mc);
+    mock_phy_feed_byte(ck);
+    mock_phy_feed_chk();
+    test_io_cycle(ctx);
 
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, mc);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, ck);
-    will_return(mock_phy_recv_byte, 0);
-    iolink_device_process(ctx);
-
-    /* ESTAB_COM -> OPERATE (send first valid frame for configured type) */
+    /* PREOPERATE/ESTAB_COM -> OPERATE (first valid frame for the type). */
     iolink_m_seq_type_t type = iolink_device_get_m_seq_type(ctx);
     uint8_t pd_out_len = iolink_device_get_pd_out_len(ctx);
     uint8_t pd_in_len = iolink_device_get_pd_in_len(ctx);
-    /* Table A.10: only TYPE_2_V carries two OD octets (OPERATE code 5). */
-    uint8_t od_len = (type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    uint8_t od_w = ctx->dll.od_width; /* actual OPERATE OD width (1/2/8/32) */
+#else
+    /* Streaming keeps upstream's 1/2-octet OD width. */
+    uint8_t od_w = (type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
+#endif
 
     if (type == IOLINK_M_SEQ_TYPE_0) {
         uint8_t idle_mc = 0x00;
         uint8_t idle_ck = test_frame_checksum(idle_mc);
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, idle_mc);
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, idle_ck);
-        will_return(mock_phy_recv_byte, 0);
+        mock_phy_feed_byte(idle_mc);
+        mock_phy_feed_byte(idle_ck);
+        mock_phy_feed_chk();
 
         expect_any(mock_phy_send, data);
         expect_value(mock_phy_send, len, 1); /* Type-0 write replies CKS only */
         will_return(mock_phy_send, 0);
-        iolink_device_process(ctx);
+        test_io_cycle(ctx);
         return;
     }
 
@@ -200,7 +348,7 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     memset(frame, 0, sizeof(frame));
     /* Figure A.2: master message is MC, CKT, data... with the A.1.6 checksum in
        the CKT octet (byte 1); there is no trailing checksum octet. */
-    uint8_t frame_len = (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + pd_out_len + od_len);
+    uint8_t frame_len = (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + pd_out_len + od_w);
     frame[0] = 0x80;
     frame[1] = ((type == IOLINK_M_SEQ_TYPE_2_1) || (type == IOLINK_M_SEQ_TYPE_2_2) ||
                 (type == IOLINK_M_SEQ_TYPE_2_V))
@@ -209,17 +357,16 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, frame_len));
 
     for (uint8_t i = 0U; i < frame_len; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
 
-    uint8_t resp_len = (uint8_t) (pd_in_len + od_len + 1U);
+    uint8_t resp_len = (uint8_t) (pd_in_len + od_w + 1U);
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, resp_len);
     will_return(mock_phy_send, 0);
 
-    iolink_device_process(ctx);
+    test_io_cycle(ctx);
 }
 
 void iolink_phy_mock_reset(void)
