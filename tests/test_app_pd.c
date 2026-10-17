@@ -47,10 +47,9 @@ static void test_reply_layout_od_first_no_status_octet(void** state)
     iolink_device_pd_input_update(&dev.ctx, input, 2, true);
 
     for (int i = 0; i < 5; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
 
     /* MC 0x80 is a READ M-sequence, so the reply is OD(1), PD-in(2), CKS:
        0x00 0x11 0x22 0x2D. The process channel read serves no OD octet
@@ -59,7 +58,7 @@ static void test_reply_layout_od_first_no_status_octet(void** state)
     expect_memory(mock_phy_send, data, expected, sizeof(expected));
     expect_value(mock_phy_send, len, sizeof(expected));
     will_return(mock_phy_send, 0);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 }
 
 static void test_reply_flags_pd_invalid(void** state)
@@ -80,10 +79,9 @@ static void test_reply_flags_pd_invalid(void** state)
     iolink_device_pd_input_update(&dev.ctx, (const uint8_t*) "\x11\x22", 2, false);
 
     for (int i = 0; i < 5; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
 
     /* Same READ reply layout, with the PD-invalid flag in CKS bit 6:
        0x40 | 0x35 = 0x75. */
@@ -91,7 +89,7 @@ static void test_reply_flags_pd_invalid(void** state)
     expect_memory(mock_phy_send, data, expected, sizeof(expected));
     expect_value(mock_phy_send, len, sizeof(expected));
     will_return(mock_phy_send, 0);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 }
 
 int main(void)

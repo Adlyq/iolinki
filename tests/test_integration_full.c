@@ -46,7 +46,7 @@ static void test_full_stack_lifecycle(void** state)
 
     /* 1. Inject WakeUp (Transitions SIO -> AWAITING_COMM) */
     iolink_phy_mock_set_wakeup(1);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
     usleep(200);
 
     /* Note: We rely on the first byte of STEP 2 (ISDU Read) to transition
@@ -57,17 +57,15 @@ static void test_full_stack_lifecycle(void** state)
     uint8_t mc = 0xBB;
     uint8_t ck = test_frame_checksum(mc);
 
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, mc);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, ck);
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_byte(mc);
+    mock_phy_feed_byte(ck);
+    mock_phy_feed_chk();
 
     /* Device Responds: OD + CK = 2 bytes */
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 2);
     will_return(mock_phy_send, 0);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 
     /*** STEP 3: EVENT TRIGGERING ***/
     iolink_events_ctx_t* evt_ctx = iolink_device_get_events_ctx(&dev.ctx);
@@ -77,21 +75,20 @@ static void test_full_stack_lifecycle(void** state)
     /* Next cycle: Master sends Idle MC=0x00, CK=0x00 */
     uint8_t idle_mc = 0x00;
     uint8_t idle_ck = test_frame_checksum(idle_mc);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, idle_mc);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, idle_ck);
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_byte(idle_mc);
+    mock_phy_feed_byte(idle_ck);
+    mock_phy_feed_chk();
 
     /* Device sends response with Event bit set (Type-0 write: CKS only) */
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 1);
     will_return(mock_phy_send, 0);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 
     assert_true(iolink_events_pending(evt_ctx));
 }
 
+#if !IOLINK_PHY_FEATURE_ISR_PUMP
 static void test_full_stack_timing_enforcement(void** state)
 {
     (void) state;
@@ -113,24 +110,22 @@ static void test_full_stack_timing_enforcement(void** state)
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
 
     for (int i = 0; i < 4; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 3);
     will_return(mock_phy_send, 0);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 
     for (int i = 0; i < 4; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 3);
     will_return(mock_phy_send, 0);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 
     iolink_dll_stats_t stats;
     iolink_device_get_dll_stats(&dev.ctx, &stats);
@@ -138,11 +133,15 @@ static void test_full_stack_timing_enforcement(void** state)
     assert_true(stats.t_cycle_violations > 0U);
 }
 
+#endif /* !IOLINK_PHY_FEATURE_ISR_PUMP */
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_full_stack_lifecycle),
+#if !IOLINK_PHY_FEATURE_ISR_PUMP
         cmocka_unit_test(test_full_stack_timing_enforcement),
+#endif
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
