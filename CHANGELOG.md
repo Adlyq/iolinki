@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   below 18 V, `IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN` (0x5110) for a reading
   above 30 V, and `IOLINK_EVENTCODE_SHORT_CIRCUIT` (0x7710). Callers that
   referenced the removed macros must switch to the `IOLINK_EVENTCODE_*` names.
+- Registering a vendor handler takes ownership of the Preferred Index range
+  `0x0040`-`0x00FE`: requests to `0x0040` go to the handler, shadowing the
+  built-in error-statistics object while it is registered.
 
 ### Fixed
 - EventQualifier INSTANCE now encodes `0x04` (Application, Table A.17) instead of
