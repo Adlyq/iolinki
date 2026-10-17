@@ -537,6 +537,17 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
             str_data = info->firmware_revision;
             break;
 
+        case IOLINK_IDX_PRODUCT_URI:
+            /* Table B.8/B.2.19: optional, conditional on an associated Profile. */
+            str_data = info->product_uri;
+            if (str_data == NULL) {
+                ctx->response_len = 0U;
+                ctx->response_idx = 0U;
+                ctx->state = ISDU_STATE_RESPONSE_READY;
+                return;
+            }
+            break;
+
         case IOLINK_IDX_APPLICATION_TAG:
             if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
                 if (isdu_params_set(ctx, IOLINK_IDX_APPLICATION_TAG, 0U, ctx->buffer,

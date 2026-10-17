@@ -60,6 +60,7 @@ static iolink_device_info_t make_info(void)
     info.serial_number = "SN-0001";
     info.hardware_revision = "HW-1";
     info.firmware_revision = "FW-2";
+    info.product_uri = "https://example.com/device";
     return info;
 }
 
@@ -143,10 +144,11 @@ static void test_error_count_index(void** state)
 static void test_product_uri_index(void** state)
 {
     (void) state;
+    const char* expected = "https://example.com/device";
     uint8_t out[64] = {0};
-    int n = read_object(0x001BU, out, sizeof(out));
-    assert_true(n >= 1);
-    assert_int_not_equal(out[0], 0x80U); /* positive response, not IDX_NOTAVAIL */
+    int n = read_object(IOLINK_IDX_PRODUCT_URI, out, sizeof(out));
+    assert_int_equal(n, (int) strlen(expected));
+    assert_memory_equal(out, expected, strlen(expected));
 }
 
 /* Table B.8 / B.2.23: ProcessDataInput (0x0028) returns the last valid PD input
