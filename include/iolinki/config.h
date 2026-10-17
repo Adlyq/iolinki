@@ -140,11 +140,11 @@
 #endif
 
 /**
- * @brief Select the isolated two-pump ISR transport (src/dll_isr.c).
+ * @brief Select the opt-in two-pump ISR transport.
  *
  * 0 (default): upstream streaming transport in src/dll.c (phy->send/recv_byte).
- * 1: opt-in ISR pump. Build with `-DIOLINK_ISR_PUMP=ON` so CMake selects
- *    src/dll_isr.c and propagates this define to all consumers.
+ * 1: opt-in ISR pump, compiled as a #if block in src/dll.c. Build with
+ *    `-DIOLINK_ISR_PUMP=ON` so CMake propagates this define to all consumers.
  */
 #ifndef IOLINK_PHY_FEATURE_ISR_PUMP
 #define IOLINK_PHY_FEATURE_ISR_PUMP 0
