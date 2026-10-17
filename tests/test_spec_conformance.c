@@ -136,10 +136,20 @@ static void test_vendor_device_id_indices_reserved(void** state)
 {
     (void) state;
 
-    const uint16_t reserved[] = {0x000AU, 0x000BU};
+    const uint16_t reserved[] = {
+        0x0004U, 0x0005U, 0x0006U, 0x0007U, 0x0008U, 0x0009U,
+        0x000AU, 0x000BU, 0x001CU, 0x001DU, 0x001EU, 0x001FU,
+    };
     for (size_t i = 0U; i < (sizeof(reserved) / sizeof(reserved[0])); i++) {
         uint8_t out[8] = {0};
         int n = read_object(reserved[i], out, sizeof(out));
+        assert_int_equal(n, 2);
+        assert_int_equal(out[0], 0x80U);
+        assert_int_equal(out[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+
+        /* C.2.3: a write to a non-existing index is also IDX_NOTAVAIL. */
+        const uint8_t value = 0x5AU;
+        n = write_object(reserved[i], &value, 1U, out, sizeof(out));
         assert_int_equal(n, 2);
         assert_int_equal(out[0], 0x80U);
         assert_int_equal(out[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
@@ -218,9 +228,12 @@ static void test_read_only_identification_rejects_write(void** state)
         IOLINK_IDX_SERIAL_NUMBER,
         IOLINK_IDX_HARDWARE_REVISION,
         IOLINK_IDX_FIRMWARE_REVISION,
+        IOLINK_IDX_PRODUCT_URI,
+        IOLINK_IDX_ERROR_COUNT,
         IOLINK_IDX_DEVICE_STATUS,
         IOLINK_IDX_DETAILED_DEVICE_STATUS,
         IOLINK_IDX_PROCESS_DATA_INPUT,
+        IOLINK_IDX_PROCESS_DATA_OUTPUT,
     };
 
     for (size_t i = 0U; i < (sizeof(read_only) / sizeof(read_only[0])); i++) {
