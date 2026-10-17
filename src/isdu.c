@@ -493,6 +493,25 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
             ctx->state = ISDU_STATE_RESPONSE_READY;
             return;
 
+        case IOLINK_IDX_ERROR_COUNT: {
+            /* Table B.8/B.2.20: 2-octet error count since reset (read-only,
+               optional). Sum the DLL error counters; 0 without a bound DLL. */
+            uint32_t total = 0U;
+            if (ctx->dll_ctx != NULL) {
+                iolink_dll_stats_t stats;
+                iolink_dll_get_stats((const iolink_dll_ctx_t*) ctx->dll_ctx, &stats);
+                uint64_t sum = (uint64_t) stats.crc_errors + (uint64_t) stats.framing_errors +
+                               (uint64_t) stats.timeout_errors + (uint64_t) stats.timing_errors;
+                total = (sum > 0xFFFFU) ? 0xFFFFU : (uint32_t) sum;
+            }
+            ctx->response_buf[0] = (uint8_t) (total >> 8);
+            ctx->response_buf[1] = (uint8_t) (total & 0xFFU);
+            ctx->response_len = 2U;
+            ctx->response_idx = 0U;
+            ctx->state = ISDU_STATE_RESPONSE_READY;
+            return;
+        }
+
         case IOLINK_IDX_VENDOR_NAME:
             str_data = info->vendor_name;
             break;
