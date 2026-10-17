@@ -214,8 +214,11 @@ class VirtualMaster:
         od1 = od[1] if len(od) > 1 else 0
         frame = self.generator.generate_type1(mc, self._type_bits(), pd, od0, od1)
         self.uart.send_bytes(frame)
-        # A multi-type reply is always [PD-in][OD] CKS (A.1.5).
-        reply_len = self.pd_in_len + self.od_len + 1
+        # Figures A.9/A.10/A.13/A.14: a multi-type READ reply is
+        # [OD][PD-in] CKS; a WRITE reply is [PD-in] CKS with no OD.
+        reply_len = self.pd_in_len + 1
+        if read:
+            reply_len += self.od_len
         data = self.uart.recv_bytes(reply_len, timeout_ms=300)
         if not data:
             return None
@@ -442,15 +445,17 @@ class VirtualMaster:
 
             self.uart.send_bytes(frame)
 
-            expected_len = self.pd_in_len + self.od_len + 1
+            # MC 0x00 is a WRITE M-sequence: the reply is [PD-in] CKS with no
+            # OD (Figures A.9/A.10/A.13/A.14).
+            expected_len = self.pd_in_len + 1
             response_data = self.uart.recv_bytes(expected_len, timeout_ms=1500)
 
             if response_data:
                 return DeviceResponse(
-                    response_data, od_len=self.od_len, pd_in_len=self.pd_in_len
+                    response_data, od_len=0, pd_in_len=self.pd_in_len
                 )
             else:
-                return DeviceResponse(b"", od_len=self.od_len, pd_in_len=self.pd_in_len)
+                return DeviceResponse(b"", od_len=0, pd_in_len=self.pd_in_len)
 
     def run_cycle_bad_crc(
         self,
@@ -478,15 +483,15 @@ class VirtualMaster:
 
         self.uart.send_bytes(frame)
 
-        expected_len = self.pd_in_len + self.od_len + 1
+        expected_len = self.pd_in_len + 1
         response_data = self.uart.recv_bytes(expected_len, timeout_ms=100)
 
         if response_data:
             return DeviceResponse(
-                response_data, od_len=self.od_len, pd_in_len=self.pd_in_len
+                response_data, od_len=0, pd_in_len=self.pd_in_len
             )
         else:
-            return DeviceResponse(b"", od_len=self.od_len, pd_in_len=self.pd_in_len)
+            return DeviceResponse(b"", od_len=0, pd_in_len=self.pd_in_len)
 
     def inject_sio_fallback(self, count: int = 3) -> None:
         """

@@ -117,14 +117,17 @@ diag_read = gen.generate_diagnosis_read(0x00)   # Diagnosis read (event memory)
 ```python
 from virtual_master.protocol import DeviceResponse
 
-response = DeviceResponse(data)
+# A READ reply is [OD][PD-in] CKS; a WRITE reply is [PD-in] CKS
+# (Figures A.9/A.10/A.13/A.14).
+response = DeviceResponse(data, od_len=1, pd_in_len=1)
 
 # Check validity
 if response.valid:
     # Access fields
-    status = response.status      # Status byte
-    payload = response.payload    # Payload bytes
-    checksum = response.checksum  # CK byte
+    od = response.od              # First OD octet (0 when the reply has no OD)
+    od2 = response.od2            # Second OD octet for two-octet types, else None
+    pd_in = response.pd           # Process Data Input octets
+    checksum = response.checksum  # CKS octet (Event flag in bit 7)
 
     # Check for event
     if response.has_event():

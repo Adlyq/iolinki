@@ -113,9 +113,9 @@ static void test_isdu_detailed_device_status_read(void** state)
 
     uint8_t detailed_buf[3];
     assert_int_equal(isdu_collect_response(&ctx, detailed_buf, sizeof(detailed_buf)), 3);
-    /* EventQualifier per V1.1.5: MODE=appears(0xC0) | TYPE=error(0x03<<4=0x30)
-       | SOURCE=device(0) | INSTANCE=DL(0x02) = 0xF2 */
-    assert_int_equal(detailed_buf[0], 0xF2);
+    /* EventQualifier per V1.1.5 (Figure A.24/Table A.17): MODE=appears(0xC0)
+       | TYPE=error(0x03<<4=0x30) | SOURCE=device(0) | INSTANCE=Application(0x04) = 0xF4 */
+    assert_int_equal(detailed_buf[0], 0xF4);
     assert_int_equal(detailed_buf[1], 0x18); /* Code High */
     assert_int_equal(detailed_buf[2], 0x01); /* Code Low */
 }

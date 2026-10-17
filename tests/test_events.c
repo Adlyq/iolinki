@@ -79,16 +79,16 @@ static void test_phy_diagnostic_codes(void** state)
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
 
-    iolink_event_trigger(&ctx, IOLINK_EVENT_PHY_VOLTAGE_FAULT, IOLINK_EVENT_TYPE_WARNING);
-    iolink_event_trigger(&ctx, IOLINK_EVENT_PHY_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, IOLINK_EVENT_TYPE_WARNING);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR);
 
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENT_PHY_VOLTAGE_FAULT);
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
 
     assert_true(iolink_events_pop(&ctx, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENT_PHY_SHORT_CIRCUIT);
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_SHORT_CIRCUIT);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_ERROR);
 }
 
@@ -177,13 +177,13 @@ static void test_event_memory_layout(void** state)
     /* Table 58 / Figure A.22: StatusCode type 2, bit 7 set, bits 0-1 active. */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x83U);
 
-    /* Slot 1 at addresses 1,2,3: qualifier 0xF2 (appears|error|device|DL), 0x1801. */
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xF2U);
+    /* Slot 1 at addresses 1,2,3: qualifier 0xF4 (appears|error|device|Application), 0x1801. */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xF4U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x02U), 0x18U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x03U), 0x01U);
 
     /* Slot 2 at addresses 4,5,6: 0x1803. */
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0xF2U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0xF4U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x05U), 0x18U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x06U), 0x03U);
 
@@ -229,7 +229,7 @@ static void test_event_memory_confirm(void** state)
     assert_true(iolink_events_flag(&ctx));
     iolink_events_memory_write(&ctx, 0x01U, 0xAAU);
     assert_true(iolink_events_flag(&ctx));
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xE2U); /* warning qualifier */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xE4U); /* warning qualifier */
 }
 
 int main(void)

@@ -44,7 +44,7 @@ static uint8_t event_qualifier(iolink_event_type_t type)
         default:
             break;
     }
-    q |= 0x02U; /* SOURCE = device, INSTANCE = DL */
+    q |= 0x04U; /* SOURCE = device (bit 3 = 0), INSTANCE = Application (Table A.17) */
     return q;
 }
 
