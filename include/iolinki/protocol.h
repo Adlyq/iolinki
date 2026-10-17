@@ -133,11 +133,11 @@
  * @ingroup iolinki_protocol
  * @{
  */
-#define IOLINK_CMD_PARAM_DOWNLOAD_START 0x05U /**< ParamDownloadStart command. */
-#define IOLINK_CMD_PARAM_DOWNLOAD_END 0x06U   /**< ParamDownloadEnd command. */
-#define IOLINK_CMD_PARAM_UPLOAD_START 0x07U   /**< ParamUploadStart command. */
-#define IOLINK_CMD_PARAM_UPLOAD_END 0x08U     /**< ParamUploadEnd command. */
-#define IOLINK_CMD_PARAM_DOWNLOAD_STORE 0x09U /**< ParamDownloadStore (V1.0/optional). */
+#define IOLINK_CMD_PARAM_DOWNLOAD_START 0x03U /**< ParamDownloadStart (Table B.9). */
+#define IOLINK_CMD_PARAM_DOWNLOAD_END 0x04U   /**< ParamDownloadEnd (Table B.9). */
+#define IOLINK_CMD_PARAM_UPLOAD_START 0x01U   /**< ParamUploadStart (Table B.9). */
+#define IOLINK_CMD_PARAM_UPLOAD_END 0x02U     /**< ParamUploadEnd (Table B.9). */
+#define IOLINK_CMD_PARAM_DOWNLOAD_STORE 0x05U /**< ParamDownloadStore (Table B.9). */
 /** @} */
 
 /**
@@ -149,10 +149,10 @@
 #define IOLINK_CMD_APPLICATION_RESET 0x81U        /**< Application reset command. */
 #define IOLINK_CMD_RESTORE_FACTORY_SETTINGS 0x82U /**< Restore factory settings command. */
 #define IOLINK_CMD_RESTORE_APP_DEFAULTS 0x83U     /**< Restore application defaults command. */
-#define IOLINK_CMD_SET_COMM_MODE 0x84U            /**< Set communication mode command. */
+#define IOLINK_CMD_BACK_TO_BOX 0x83U             /**< Table B.9 name for 0x83 (Back-to-box). */
 #define IOLINK_CMD_PARAM_UPLOAD 0x95U             /**< Parameter upload command. */
 #define IOLINK_CMD_PARAM_DOWNLOAD 0x96U           /**< Parameter download command. */
-#define IOLINK_CMD_PARAM_BREAK 0x97U              /**< Parameter break command. */
+#define IOLINK_CMD_PARAM_BREAK 0x06U              /**< ParamBreak (Table B.9). */
 /** @} */
 
 /**
@@ -177,10 +177,11 @@
 #define IOLINK_ISDU_ERROR_NOT_ACCESSIBLE 0x23U     /**< Object access denied (Table C.1). */
 #define IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL \
     0x35U                                       /**< Command function not available (Table C.1). */
-#define IOLINK_ISDU_ERROR_BUSY 0x30U            /**< Device busy. */
+#define IOLINK_ISDU_ERROR_BUSY 0x30U            /**< Device busy (0x30). */
 #define IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL 0x20U /**< SERV_NOTAVAIL (Table C.1). */
 #define IOLINK_ISDU_ERROR_WRITE_PROTECTED 0x23U /**< Access denied, Table C.1. */
-#define IOLINK_ISDU_ERROR_PARAM_INCONSISTENT 0x40U /**< Parameter set inconsistent. */
+#define IOLINK_ISDU_ERROR_PARAM_SET_INVALID 0x40U   /**< PAR_SETINVALID (Table C.1). */
+#define IOLINK_ISDU_ERROR_PARAM_INCONSISTENT 0x41U  /**< PAR_SETINCONSIST (Table C.1). */
 #define IOLINK_ISDU_ERROR_SEGMENTATION 0x81U       /**< Segmentation error. */
 /** @} */
 

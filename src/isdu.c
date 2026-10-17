@@ -677,11 +677,9 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             isdu_params_factory_reset(ctx);
             break;
 
-        case IOLINK_CMD_SET_COMM_MODE: /* 0x84 */
-            /* Communication mode switching handled by DLL - this is a no-op */
-            break;
+        /* Table B.9: 0x84-0x9F are reserved (no SetCommunicationMode command). */
 
-        /* Standard Data Storage Commands (0x05-0x08) */
+        /* Standard Data Storage Commands (0x01-0x06) */
         case IOLINK_CMD_PARAM_DOWNLOAD_START:
         case IOLINK_CMD_PARAM_DOWNLOAD_END:
         case IOLINK_CMD_PARAM_UPLOAD_START:
