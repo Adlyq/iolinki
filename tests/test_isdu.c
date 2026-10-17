@@ -120,6 +120,40 @@ static void test_isdu_detailed_device_status_read(void** state)
     assert_int_equal(detailed_buf[2], 0x01); /* Code Low */
 }
 
+/* CR443 (Package 2026 Interface D1.1.6-02, B.2.22 Table B.14 p. 270):
+ * each DetailedDeviceStatus record is exactly [EventQualifier][EventCode MSB]
+ * [EventCode LSB]. This pins the raw octet order so a regression to the old
+ * "Octet 2,3: EventCode" wording (V1.1.5) cannot slip in unnoticed. */
+static void test_isdu_detailed_device_status_cr443_octet_order(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_events_ctx_t events;
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_events_init(&events);
+    iolink_isdu_init(&ctx);
+    ctx.event_ctx = &events;
+
+    /* One queued warning: 0x8CA0 (vendor-specific Device range). */
+    iolink_event_trigger(&events, 0x8CA0, IOLINK_EVENT_TYPE_WARNING);
+
+    /* Read DetailedDeviceStatus (Index 0x0025, Table B.14). */
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS, 0x00), 1);
+    iolink_isdu_process(&ctx);
+
+    /* EventQualifier per Figure A.24/Table A.17:
+       MODE=event appears (0xC0) | TYPE=warning (0x02 << 4) | INSTANCE=Application (0x04). */
+    uint8_t record[3];
+    assert_int_equal(isdu_collect_response(&ctx, record, sizeof(record)), 3);
+    assert_int_equal(record[0], 0xE4U); /* Octet 1: EventQualifier */
+    assert_int_equal(record[1], 0x8CU); /* Octet 2: EventCode MSB */
+    assert_int_equal(record[2], 0xA0U); /* Octet 3: EventCode LSB */
+
+    const uint8_t expected[3] = {0xE4U, 0x8CU, 0xA0U};
+    assert_memory_equal(record, expected, sizeof(expected));
+}
+
 static void test_isdu_error_stats_read(void** state)
 {
     (void) state;
@@ -679,6 +713,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_device_status_read, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_detailed_device_status_read, test_setup,
                                         test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_detailed_device_status_cr443_octet_order,
+                                        test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_error_stats_read, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_device_id_three_octets, test_setup,
                                         test_teardown),
