@@ -2,7 +2,7 @@
 
 ## Overview
 
-iolinki includes a comprehensive conformance test suite that validates compliance with the IO-Link V1.1.5 specification. The suite consists of **49 automated test cases** across 7 categories, executed via the Virtual IO-Link Master.
+iolinki includes a comprehensive conformance test suite that validates compliance with the IO-Link V1.1.5 specification. The suite consists of **49 automated test cases** across 7 categories, executed via the Virtual IO-Link Master. It targets Package 2025 (V1.1.5, October 2025), the latest published package; the wire was re-verified against the V1.1.5 figures in v2.2.0. Package 2026 (D1.1.6) is in public review and will be tracked when ratified.
 
 ## Test Coverage Summary
 
