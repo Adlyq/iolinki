@@ -28,7 +28,7 @@ The PHY layer provides hardware abstraction for UART communication.
 
 **Location**: `include/iolinki/phy.h`
 
-**Interface**: copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `void* user` first. `send` returns the number of bytes sent, or negative on error. `recv_byte` returns 1 when a byte was read, 0 when none is waiting, or negative on error. `detect_wakeup`, `set_cq_line`, `get_voltage_mv`, and `is_short_circuit` are optional and may be NULL. `init`, `set_mode`, and `set_baudrate` are required.
+**Interface**: copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `void* user` first. `init`, `set_mode`, and `set_baudrate` are required. The library has a single ISR transport path; `config.h` selects the granularity: `IOLINK_ISR_RX_MODE` / `IOLINK_ISR_TX_MODE` = `BYTE` (default) or `FRAME`. In BYTE mode implement `rx_octet` / `tx_octet` / `tx_done`; in FRAME mode implement `rx_frame` / `tx_frame`. `int_active` gates the ISR pump. `detect_wakeup`, `set_cq_line`, `get_faults`, `get_voltage_mv`, and `is_short_circuit` are optional.
 
 **Implementation Steps**:
 
@@ -39,23 +39,27 @@ The PHY layer provides hardware abstraction for UART communication.
 **Example** (STM32 HAL). `init`, `set_mode`, and `set_baudrate` are still required and must take `void* user` first. Do not invent transceiver register addresses.
 
 ```c
-static int stm32_send(void* user, const uint8_t* data, size_t len)
+/* BYTE transport: an RX ring + TDR writes. Feed the UART IRQ to
+ * iolink_device_process_isr(); report the frame end (gap/IDLE) as CHK. */
+static int stm32_rx_octet(void* user, uint8_t* data, uint8_t* status)
 {
-    UART_HandleTypeDef* uart = user;
-    if (HAL_UART_Transmit(uart, (uint8_t*)data, (uint16_t)len, 10) != HAL_OK) {
-        return -1;
-    }
-    return (int)len;
-}
-
-static int stm32_recv_byte(void* user, uint8_t* byte)
-{
-    UART_HandleTypeDef* uart = user;
-    if (HAL_UART_Receive(uart, byte, 1, 0) != HAL_OK) {
+    uart_bus_t* u = user;
+    if (!ring_pop(&u->rx, data)) {
+        *status = 0U;
         return 0;
     }
+    *status = IOLINK_PHY_STATUS_DATA_READY;
     return 1;
 }
+
+static int stm32_tx_octet(void* user, uint8_t data)
+{
+    uart_bus_t* u = user;
+    u->regs->TDR = data;
+    return 0;
+}
+
+static void stm32_tx_done(void* user) { (void)user; }
 ```
 
 ### 2. Time Utilities (Required)

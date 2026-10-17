@@ -21,12 +21,14 @@ graph TD
 ```
 
 ### 1.1 Physical Layer (PHY) Abstraction
-The `iolink_phy_api_t` (defined in `phy.h`) is the only point of contact with the hardware. It offers two transport profiles, selected by which hooks are implemented:
+The `iolink_phy_api_t` (defined in `phy.h`) is the only point of contact with the hardware. The library has a single transport path — the ISR dispatch pump — and the PHY expresses how it moves data through two compile-time switches (`config.h`):
 
-- **Streaming** (`recv_byte` + `send`): a byte pipe (e.g. a UART); the DLL frames with the `t_byte` inter-octet timer.
-- **Raw-octet** (`rx_octet` / `tx_octet` / `tx_end` / `int_active`): a single-octet transceiver; the **library owns M-sequence framing** and feeds the reply octet by octet. This is used for hardware whose ISR must answer within the reply window.
+- **RX BYTE** (`rx_octet`): a byte pipe; the library frames the M-sequence and the PHY reports the frame end (`CHK`, e.g. a byte-gap timer).
+- **RX FRAME** (`rx_frame`): the PHY delimits and delivers a whole frame zero-copy (e.g. DMA + UART IDLE).
+- **TX BYTE** (`tx_octet` + `tx_done`): the library feeds one reply octet per transceiver request.
+- **TX FRAME** (`tx_frame`): the library hands the whole reply frame (e.g. DMA).
 
-Common optional hooks: mode switching (SIO vs SDCI), baudrate, `detect_wakeup`, `set_cq_line`, `get_faults`. Each can be compiled out (see §4).
+`IOLINK_ISR_RX_MODE` / `IOLINK_ISR_TX_MODE` select BYTE (default) or FRAME. Common optional hooks: mode switching (SIO vs SDCI), baudrate, `detect_wakeup`, `set_cq_line`, `get_faults`. Each can be compiled out (see §4).
 
 ### 1.2 Data Link Layer (DLL)
 The DLL (`dll.c`) implements the IO-Link state machine:
@@ -39,7 +41,7 @@ The DLL (`dll.c`) implements the IO-Link state machine:
 
 The DLL runs as **two pumps**:
 - **main pump** `iolink_device_process()` (called from the main loop): consumes the received request, runs the protocol (ISDU/params/events/vendor), and pre-builds the reply **payload** variants (READ `[OD][PD-in]`, WRITE `[PD-in]`, acyclic READ `[od_resp][PD-in]`) into double buffers.
-- **ISR pump** `iolink_device_process_isr()` (called from the PHY data interrupt): frames the incoming M-sequence, publishes it to a mailbox for the main pump, selects the pre-staged variant for the just-received frame, and transmits it octet by octet — accumulating the checksum while sending (A.1.6 is order-independent and C is GF(2)-linear), so the CKS is emitted last.
+- **ISR pump** `iolink_device_process_isr()` (called from the PHY data interrupt): frames the incoming M-sequence (`rx_octet`) or takes a whole frame (`rx_frame`), publishes it to a mailbox for the main pump, and — for the cyclic process channel of a pre-cached (`TYPE_2_V`) device — transmits the pre-staged reply (octet by octet, or one `tx_frame`). Before answering it validates the request's A.1.6 checksum and M-sequence type; a corrupt or illegal frame is dropped. Non-cyclic channels (ISDU/page/diagnosis) are answered by the main pump with a per-request OD so the response is fresh.
 
 Non-cyclic OPERATE reads reply with the staged OD response, or `0x01` (Busy) until the main pump has answered; the master re-polls the same FlowCTRL (ISDU convention).
 
@@ -68,7 +70,7 @@ The stack is built "test-first". Every layer is verified using CMocka mocks.
 All API functions return error codes (negative integers). Return values must be checked by the caller.
 
 ## 3. Processing Model
-The stack uses a non-blocking, periodic processing model. The user application must call `iolink_device_process()` at a regular interval (typically 1ms) to drive the internal state machines and timers. A PHY that answered via the raw-octet profile additionally wires its data interrupt to `iolink_device_process_isr()`.
+The stack uses a non-blocking, periodic processing model. The user application must call `iolink_device_process()` at a regular interval (typically 1ms) to drive the internal state machines and timers. The PHY data interrupt drives `iolink_device_process_isr()` (the ISR pump).
 
 ## 4. Compile-time Configuration & Trimming
 `config.h` exposes overridable compile-time macros:

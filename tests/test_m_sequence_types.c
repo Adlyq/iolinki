@@ -45,17 +45,16 @@ static void test_m_seq_type_1_1(void** state)
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
 
     for (int i = 0; i < 4; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
 
     /* Resp = PD-in(2), CKS = 3 bytes */
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 3);
     will_return(mock_phy_send, 0);
 
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 }
 
 int main(void)

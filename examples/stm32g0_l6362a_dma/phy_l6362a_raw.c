@@ -1,0 +1,665 @@
+/**
+  ******************************************************************************
+  * @file    phy_l6362a_raw.c
+  * @brief   iolinki raw-octet PHY adapter for the 8110 L6362A transceiver.
+  *
+  * Pin map (main.h):
+  *    EN      PA0   transceiver enable (held high)
+  *    TX      PA2   USART2_TX -> L6362A C/Q input (kept on the USART AF)
+  *    RX      PA3   USART2_RX <- L6362A C/Q output
+  *    TX_EN   PA4   transmit-enable, asserted only while sending
+  *    OL_INT  PA5   overload / wake interrupt (falling edge)
+  *
+  * Raw-octet synthesis (the L6362A has no SPI status register):
+  *    - rx_octet    : pop one octet from the USART2 RX ring (DATA_READY); when
+  *                    the ring is empty and the byte-gap timer has expired,
+  *                    deliver the frame-end indication (CHK).
+  *    - tx_octet    : write one octet to USART2 (first write asserts TX_EN).
+  *    - tx_done     : wait for the last octet, then release TX_EN.
+  *    - int_active  : there is work when a frame-end is pending, a received
+  *                    octet waits, or a transmission is ready for its next
+  *                    octet.
+  *
+  * The library ISR pump (iolink_device_process_isr) is invoked from the USART2
+  * IRQ, the byte-gap timer IRQ and the OL_INT EXTI.
+  ******************************************************************************
+  */
+
+/* Includes ------------------------------------------------------------------*/
+#include "phy_l6362a_raw.h"
+#include "main.h"
+#include "iolinki/time_utils.h"
+#include "iolinki/platform.h"
+
+/* Private defines -----------------------------------------------------------*/
+
+/** TX/RX bounded-wait budget per octet, in microseconds. */
+#define L6362_OCTET_TIMEOUT_US (200ULL)
+
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+/** Received-byte ring size (RX BYTE). */
+#define L6362_RX_RING_SIZE   (512U)
+#else
+/** RX FRAME DMA buffer (circular). >= 2x the max frame so a completed frame is
+  * not overwritten before the main pump copies it. */
+#define L6362_RX_DMA_SIZE    (256U)
+#endif
+
+/* Private variables ---------------------------------------------------------*/
+
+static iolink_baudrate_t s_baudrate;
+static uint32_t          s_baud_hz;
+static uint32_t          s_gap_us; /* frame-end byte-gap time-out (RX BYTE) */
+static iolink_phy_mode_t s_mode;
+
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+static volatile uint8_t  s_rx_ring[L6362_RX_RING_SIZE];
+static volatile uint16_t s_rx_head;
+static volatile uint16_t s_rx_tail;
+static volatile uint8_t  s_frame_end; /* byte-gap expired -> CHK */
+#else
+static uint8_t           s_rx_dma[L6362_RX_DMA_SIZE];
+static uint8_t           s_rx_linear[L6362_RX_DMA_SIZE]; /* only on buffer wrap */
+static volatile uint16_t s_rx_last_index; /**< DMA write index at the last IDLE */
+static volatile uint8_t  s_rx_ready;      /**< a whole frame is waiting */
+static volatile uint8_t  s_rx_err;        /**< USART error during the frame */
+static const uint8_t*    s_rx_frame;      /**< the frame just completed */
+static uint8_t           s_rx_frame_len;
+#endif
+
+static volatile uint8_t s_tx_in_progress;
+static volatile uint8_t s_wake_latched;
+
+static uint32_t s_tx_bytes;
+static uint32_t s_rx_bytes;
+static uint32_t s_rx_chk;
+
+/* Critical section state. */
+static uint32_t s_crit_depth;
+static uint32_t s_crit_primask;
+
+/* Private function prototypes -----------------------------------------------*/
+static int     l6362_init(void* user);
+static void    l6362_set_mode(void* user, iolink_phy_mode_t mode);
+static void    l6362_set_baudrate(void* user, iolink_baudrate_t baudrate);
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+static int     l6362_rx_octet(void* user, uint8_t* data, uint8_t* status);
+#else
+static const uint8_t* l6362_rx_frame(void* user, uint8_t* status, uint8_t* len);
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+static int     l6362_tx_frame(void* user, const uint8_t* data, size_t len);
+#else
+static int     l6362_tx_octet(void* user, uint8_t data);
+static void    l6362_tx_done(void* user);
+#endif
+static uint8_t l6362_int_active(void* user);
+static int     l6362_detect_wakeup(void* user);
+
+/* Private functions ---------------------------------------------------------*/
+
+static void UartPinsAf(void) {
+    GPIO_InitTypeDef gpio = {0};
+
+    gpio.Pin       = UART_TX_Pin | UART_RX_Pin;
+    gpio.Mode      = GPIO_MODE_AF_PP;
+    gpio.Pull      = GPIO_PULLUP;
+    gpio.Speed     = GPIO_SPEED_FREQ_HIGH;
+    gpio.Alternate = IOD_UART_GPIO_AF;
+    HAL_GPIO_Init(UART_TX_GPIO_Port, &gpio);
+}
+
+static void UartConfigure(uint32_t baud) {
+    IOD_UART->CR1 = 0U;
+    UartPinsAf();
+    IOD_UART->BRR = (SYSCLOCK_FREQUENCY + (baud / 2U)) / baud;
+    IOD_UART->CR2 = 0U; /* one stop bit */
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    IOD_UART->CR3 = USART_CR3_EIE | USART_CR3_DMAR;
+#else
+    IOD_UART->CR3 = USART_CR3_EIE;
+#endif
+    IOD_UART->ICR = USART_ICR_PECF | USART_ICR_FECF | USART_ICR_NECF | USART_ICR_ORECF |
+                    USART_ICR_TCCF;
+    IOD_UART->RQR = USART_RQR_RXFRQ;
+    /* 9-bit word (8 data + even parity), TX+RX. */
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    /* RX by DMA: the IDLE interrupt marks the frame end (no per-octet RXNE). */
+    IOD_UART->CR1 = USART_CR1_M0 | USART_CR1_PCE | USART_CR1_TE | USART_CR1_RE |
+                    USART_CR1_IDLEIE | USART_CR1_UE;
+#else
+    IOD_UART->CR1 = USART_CR1_M0 | USART_CR1_PCE | USART_CR1_TE | USART_CR1_RE |
+                    USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE | USART_CR1_UE;
+#endif
+}
+
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+static void RxReset(void) {
+    s_rx_head = 0U;
+    s_rx_tail = 0U;
+}
+
+static void RxPush(uint8_t byte) {
+    uint16_t next = (uint16_t)((s_rx_head + 1U) % L6362_RX_RING_SIZE);
+    if (next != s_rx_tail) {
+        s_rx_ring[s_rx_head] = byte;
+        s_rx_head            = next;
+    }
+}
+
+static int RxPop(uint8_t* byte) {
+    if (s_rx_tail == s_rx_head) {
+        return 0;
+    }
+    *byte     = s_rx_ring[s_rx_tail];
+    s_rx_tail = (uint16_t)((s_rx_tail + 1U) % L6362_RX_RING_SIZE);
+    return 1;
+}
+
+/** Arm (restart) the one-shot byte-gap timer; the next received octet resets
+  *  the window. Only meaningful in SDCI (the frame is delimited by the gap). */
+static void GapTimerRestart(void) {
+    TIM3->CR1 &= ~TIM_CR1_CEN;
+    TIM3->CNT = 0U;
+    TIM3->ARR = (s_gap_us != 0U) ? (s_gap_us - 1U) : 0U;
+    TIM3->SR  = 0U;
+    TIM3->CR1 |= TIM_CR1_CEN;
+}
+#endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
+
+/* Raw-octet PHY API ---------------------------------------------------------*/
+
+static int l6362_init(void* user) {
+    (void)user;
+    HAL_GPIO_WritePin(EN_GPIO_Port, EN_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(TX_EN_GPIO_Port, TX_EN_Pin, GPIO_PIN_RESET);
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+    RxReset();
+    s_frame_end = 0U;
+#else
+    s_rx_ready      = 0U;
+    s_rx_last_index = 0U;
+#endif
+    s_tx_in_progress = 0U;
+    s_wake_latched   = 0U;
+    s_mode           = IOLINK_PHY_MODE_SIO;
+    return 0;
+}
+
+static void l6362_set_mode(void* user, iolink_phy_mode_t mode) {
+    (void)user;
+    s_mode = mode;
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    /* The UART + DMA stay armed in both modes; the IDLE interrupt delimits frames
+     * and also serves as the wake indicator. */
+    if (mode == IOLINK_PHY_MODE_SIO) {
+        /* Fresh baseline on (re)entering SIO so the next wake-up frame is
+         * delimited cleanly and no stale reply/echo state survives a fallback. */
+        s_rx_ready       = 0U;
+        s_rx_last_index  = (uint16_t)(L6362_RX_DMA_SIZE - (DMA1_Channel1->CNDTR & 0xFFFFU));
+        s_tx_in_progress = 0U;
+        HAL_GPIO_WritePin(TX_EN_GPIO_Port, TX_EN_Pin, GPIO_PIN_RESET);
+    }
+    UartConfigure(s_baud_hz);
+#else
+    if (mode == IOLINK_PHY_MODE_SDCI) {
+        s_frame_end = 0U;
+        UartConfigure(s_baud_hz); /* (re)arm the receiver for SDCI */
+        /* A frame may have been buffered while in SIO; arm the byte-gap timer so
+     * it is completed (the next RX would otherwise never be able to close it). */
+        if (s_rx_tail != s_rx_head) {
+            GapTimerRestart();
+        }
+    } else if (mode == IOLINK_PHY_MODE_SIO) {
+        /* Keep the UART listening so the master's wake-up / first octets are
+     * captured; no frame delimiting until SDCI. */
+        TIM3->CR1 &= ~TIM_CR1_CEN;
+        UartConfigure(s_baud_hz);
+    } else {
+        TIM3->CR1 &= ~TIM_CR1_CEN;
+    }
+#endif
+}
+
+static void l6362_set_baudrate(void* user, iolink_baudrate_t baudrate) {
+    (void)user;
+    s_baudrate = baudrate;
+    switch (baudrate) {
+    case IOLINK_BAUDRATE_COM1: s_baud_hz = 4800U;
+        break;
+    case IOLINK_BAUDRATE_COM2: s_baud_hz = 38400U;
+        break;
+    case IOLINK_BAUDRATE_COM3:
+    default: s_baud_hz = 230400U;
+        break;
+    }
+    /* Frame-end time-out ~ 13 bit times (matches the ST single-octet engine). */
+    s_gap_us = (13U * 1000000U) / s_baud_hz;
+    UartConfigure(s_baud_hz);
+}
+
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+static int l6362_rx_octet(void* user, uint8_t* data, uint8_t* status) {
+    (void)user;
+    uint8_t byte;
+
+    /* Deliver pending octets first; the frame-end indication follows once the
+   * ring is drained (so the accumulated frame is complete). */
+    if (RxPop(&byte) != 0) {
+        if (data != NULL) {
+            *data = byte;
+        }
+        if (status != NULL) {
+            *status = IOLINK_PHY_STATUS_DATA_READY;
+        }
+        s_rx_bytes++;
+        return 1;
+    }
+
+    if (s_frame_end != 0U) {
+        s_frame_end = 0U;
+        if (status != NULL) {
+            *status = IOLINK_PHY_STATUS_CHK;
+        }
+        s_rx_chk++;
+        return 0;
+    }
+
+    if (status != NULL) {
+        *status = 0U;
+    }
+    return 0;
+}
+#else
+/** @brief Return the whole frame the DMA just completed (zero-copy). */
+static const uint8_t* l6362_rx_frame(void* user, uint8_t* status, uint8_t* len) {
+    (void)user;
+    if (s_rx_ready == 0U) {
+        if (status != NULL) {
+            *status = 0U;
+        }
+        if (len != NULL) {
+            *len = 0U;
+        }
+        return NULL;
+    }
+    s_rx_ready = 0U;
+    s_rx_bytes += s_rx_frame_len;
+    if (status != NULL) {
+        *status = (s_rx_err != 0U) ? IOLINK_PHY_STATUS_CHK : IOLINK_PHY_STATUS_DATA_READY;
+    }
+    if (len != NULL) {
+        *len = s_rx_frame_len;
+    }
+    return s_rx_frame;
+}
+#endif
+
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+static int l6362_tx_octet(void* user, uint8_t data) {
+    (void)user;
+    uint64_t deadline;
+
+    if (s_tx_in_progress == 0U) {
+        /* Frame start: stop RX DMA capture so the transceiver echo of our own
+         * transmission does not enter the RX buffer (half-duplex: the master is
+         * not sending while the device drives C/Q). */
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+        IOD_UART->CR3 &= ~USART_CR3_DMAR;
+        IOD_UART->RQR = USART_RQR_RXFRQ;
+#endif
+        s_tx_in_progress = 1U;
+    }
+
+    /* Assert the transceiver transmit-enable for the whole frame. */
+    HAL_GPIO_WritePin(TX_EN_GPIO_Port, TX_EN_Pin, GPIO_PIN_SET);
+
+    deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
+    while (((IOD_UART->ISR & USART_ISR_TXE_TXFNF) == 0U) && (iolink_time_get_us() < deadline)) {
+    }
+    IOD_UART->TDR = data;
+    /* Request service again (TC) when this octet is fully shifted out. */
+    IOD_UART->CR1 |= USART_CR1_TCIE;
+    s_tx_bytes++;
+    return 0;
+}
+
+static void l6362_tx_done(void* user) {
+    (void)user;
+    uint64_t deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
+
+    IOD_UART->CR1 &= ~USART_CR1_TCIE;
+    while (((IOD_UART->ISR & USART_ISR_TC) == 0U) && (iolink_time_get_us() < deadline)) {
+    }
+    HAL_GPIO_WritePin(TX_EN_GPIO_Port, TX_EN_Pin, GPIO_PIN_RESET);
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    /* Discard any echo / overrun captured while transmitting, then re-arm RX. */
+    IOD_UART->ICR = USART_ICR_ORECF;
+    IOD_UART->RQR = USART_RQR_RXFRQ;
+    IOD_UART->CR3 |= USART_CR3_DMAR;
+#endif
+    s_tx_in_progress = 0U;
+}
+#else
+/* TX FRAME: hand the whole reply to DMA1 channel 2 (USART2_TX). The transfer
+ * complete interrupt releases TX_EN and re-arms RX capture. */
+static int l6362_tx_frame(void* user, const uint8_t* data, size_t len) {
+    (void)user;
+    if ((data == NULL) || (len == 0U) || (len > 0xFFFFU)) {
+        return -1;
+    }
+    /* Wait for any previous transfer to finish (bounded). */
+    {
+        uint64_t deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
+        while ((s_tx_in_progress != 0U) && (iolink_time_get_us() < deadline)) {
+        }
+    }
+
+    /* Assert TX_EN; stop RX capture to discard the transceiver echo. */
+    HAL_GPIO_WritePin(TX_EN_GPIO_Port, TX_EN_Pin, GPIO_PIN_SET);
+    IOD_UART->CR3 &= ~USART_CR3_DMAR;
+    IOD_UART->RQR = USART_RQR_RXFRQ;
+    s_tx_in_progress = 1U;
+
+    DMA1_Channel2->CCR   = 0U; /* disable while reconfiguring */
+    DMA1_Channel2->CPAR  = (uint32_t)(uintptr_t)&IOD_UART->TDR;
+    DMA1_Channel2->CMAR  = (uint32_t)(uintptr_t)data;
+    DMA1_Channel2->CNDTR = (uint32_t)len;
+    DMA1_Channel2->CCR   = DMA_CCR_MINC | DMA_CCR_DIR | DMA_CCR_TCIE | DMA_CCR_EN;
+    IOD_UART->CR3 |= USART_CR3_DMAT;
+    s_tx_bytes += (uint32_t)len;
+    return 0;
+}
+#endif
+
+static uint8_t l6362_int_active(void* user) {
+    (void)user;
+
+    /* The M-sequence ISR pump only runs in SDCI; in SIO the wake-up path is
+   * driven by detect_wakeup() from the main pump, so claim no service. */
+    if (s_mode != IOLINK_PHY_MODE_SDCI) {
+        return 0U;
+    }
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    if (s_rx_ready != 0U) {
+        return 1U;
+    }
+#else
+    if (s_frame_end != 0U) {
+        return 1U;
+    }
+    if (s_rx_tail != s_rx_head) {
+        return 1U;
+    }
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+    if ((s_tx_in_progress != 0U) &&
+        ((IOD_UART->ISR & (USART_ISR_TXE_TXFNF | USART_ISR_TC)) != 0U)) {
+        return 1U;
+    }
+#endif
+    return 0U;
+}
+
+static int l6362_detect_wakeup(void* user) {
+    (void)user;
+
+    /* The L6362A pass-through delivers the master's wake-up / first octets on
+   * USART2 but does not reliably pulse INT on this board, so UART activity is
+   * the reliable wake indicator; the OL latch is kept as a secondary source. */
+    if (s_wake_latched != 0U) {
+        s_wake_latched = 0U;
+        return 1;
+    }
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    return (s_rx_ready != 0U) ? 1 : 0;
+#else
+    return (s_rx_tail != s_rx_head) ? 1 : 0;
+#endif
+}
+
+/* Platform hooks ------------------------------------------------------------*/
+
+void iolink_critical_enter(void) {
+    uint32_t mask = __get_PRIMASK();
+    __disable_irq();
+    if (s_crit_depth == 0U) {
+        s_crit_primask = mask;
+    }
+    s_crit_depth++;
+}
+
+void iolink_critical_exit(void) {
+    if (s_crit_depth != 0U) {
+        s_crit_depth--;
+        if (s_crit_depth == 0U) {
+            __set_PRIMASK(s_crit_primask);
+        }
+    }
+}
+uint64_t iolink_time_get_us(void)
+{
+  /* Microsecond timestamp derived from the running SysTick (1 ms period,
+   * configured by HAL_Init). The intra-millisecond count is read from
+   * SysTick->VAL, giving ~1 us resolution without a dedicated timer (the
+   * STM32G070 has no TIM2). */
+  uint32_t load = SysTick->LOAD;
+  uint32_t clk_per_us = SystemCoreClock / 1000000U;
+  uint32_t tick0;
+  uint32_t tick1;
+  uint32_t elapsed;
+
+  if (clk_per_us == 0U)
+  {
+    clk_per_us = 1U;
+  }
+
+  /* Re-read until the millisecond tick is stable across the sample. */
+  do
+  {
+    tick0 = HAL_GetTick();
+    elapsed = load - SysTick->VAL;
+    tick1 = HAL_GetTick();
+  } while (tick0 != tick1);
+
+  return ((uint64_t)tick0 * 1000ULL) + (uint64_t)(elapsed / clk_per_us);
+}
+uint32_t iolink_time_get_ms(void) {
+    return (uint32_t)(iolink_time_get_us() / 1000U);
+}
+
+int iolink_nvm_read(uint32_t offset, uint8_t* data, size_t len) {
+    (void)offset;
+    (void)data;
+    (void)len;
+    return -1;
+}
+
+int iolink_nvm_write(uint32_t offset, const uint8_t* data, size_t len) {
+    (void)offset;
+    (void)data;
+    (void)len;
+    return -1;
+}
+
+/* Public functions ----------------------------------------------------------*/
+
+const iolink_phy_api_t* phy_l6362a_raw_get(void) {
+    static const iolink_phy_api_t api = {
+        .user          = NULL,
+        .init          = l6362_init,
+        .set_mode      = l6362_set_mode,
+        .set_baudrate  = l6362_set_baudrate,
+        /* ISR-path PHY: the library owns framing/protocol and calls these. */
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+        .rx_frame      = l6362_rx_frame,
+#else
+        .rx_octet      = l6362_rx_octet,
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+        .tx_frame      = l6362_tx_frame,
+        .tx_done       = NULL,
+#else
+        .tx_octet      = l6362_tx_octet,
+        .tx_done       = l6362_tx_done,
+#endif
+        .int_active    = l6362_int_active,
+        .detect_wakeup = l6362_detect_wakeup,
+        .get_faults    = NULL,
+    };
+    return &api;
+}
+
+uint8_t phy_l6362a_raw_int_line_active(void) {
+    return (HAL_GPIO_ReadPin(OL_INT_GPIO_Port, OL_INT_Pin) != GPIO_PIN_RESET) ? 1U : 0U;
+}
+
+void phy_l6362a_raw_get_counters(uint32_t* tx_bytes, uint32_t* rx_bytes,
+                                 uint32_t* rx_chk) {
+    if (tx_bytes != NULL) { *tx_bytes = s_tx_bytes; }
+    if (rx_bytes != NULL) { *rx_bytes = s_rx_bytes; }
+    if (rx_chk != NULL) { *rx_chk = s_rx_chk; }
+}
+int phy_l6362a_raw_hw_init(void)
+{
+  /* The microsecond timebase is derived from SysTick (no dedicated timer: the
+   * STM32G070 has no TIM2). */
+
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+  /* TIM3: one-shot byte-gap timer (1 us tick), stopped until armed. */
+    __HAL_RCC_TIM3_CLK_ENABLE();
+    TIM3->PSC  = (uint32_t)((SYSCLOCK_FREQUENCY / 1000000U) - 1U);
+    TIM3->ARR  = 0xFFFFU;
+    TIM3->EGR  = TIM_EGR_UG;
+    TIM3->SR   = 0U;
+    TIM3->DIER = TIM_DIER_UIE;
+    TIM3->CR1  = 0U;
+    HAL_NVIC_SetPriority(TIM3_IRQn, 1U, 0U);
+    HAL_NVIC_EnableIRQ(TIM3_IRQn);
+#else
+  /* DMA1 channel 1 <- USART2_RX: circular, one byte per request into s_rx_dma. */
+    __HAL_RCC_DMA1_CLK_ENABLE(); /* DMAMUX1 shares the DMA1 clock gate */
+    DMAMUX1_Channel0->CCR = DMA_REQUEST_USART2_RX;
+    DMA1_Channel1->CPAR   = (uint32_t)(uintptr_t)&IOD_UART->RDR;
+    DMA1_Channel1->CMAR   = (uint32_t)(uintptr_t)s_rx_dma;
+    DMA1_Channel1->CNDTR  = (uint32_t)L6362_RX_DMA_SIZE;
+    DMA1_Channel1->CCR    = DMA_CCR_MINC | DMA_CCR_CIRC | DMA_CCR_EN;
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+  /* DMA1 channel 2 -> USART2_TX, one shot per reply frame. */
+    __HAL_RCC_DMA1_CLK_ENABLE();
+    DMAMUX1_Channel1->CCR = DMA_REQUEST_USART2_TX;
+    DMA1_Channel2->CCR    = 0U;
+    HAL_NVIC_SetPriority(DMA1_Channel2_3_IRQn, 1U, 0U);
+    HAL_NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
+#endif
+
+    s_baudrate = IOLINK_BAUDRATE_COM3;
+    s_baud_hz  = 230400U;
+    s_gap_us   = (13U * 1000000U) / s_baud_hz;
+
+    UartConfigure(s_baud_hz);
+    (void)l6362_init(NULL);
+
+    /* USART2 interrupt priority: same as TIM3 so the ISR pump is never preempted
+   * by the byte-gap handler (they must not nest). */
+    HAL_NVIC_SetPriority(IOD_UART_IRQn, 1U, 0U);
+    HAL_NVIC_EnableIRQ(IOD_UART_IRQn);
+    return 0;
+}
+
+/* Interrupt feeds -----------------------------------------------------------*/
+
+void phy_l6362a_raw_gap_irq(void) {
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+    if ((TIM3->SR & TIM_SR_UIF) != 0U) {
+        TIM3->SR    = (uint32_t)~TIM_SR_UIF;
+        TIM3->CR1   &= ~TIM_CR1_CEN;
+        s_frame_end = 1U;
+    }
+#endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
+}
+
+/** @brief DMA1 channel-2 transfer complete: finish a TX FRAME reply. */
+void phy_l6362a_raw_tx_dma_irq(void) {
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    if ((DMA1->ISR & DMA_ISR_TCIF2) != 0U) {
+        uint64_t deadline;
+        DMA1->IFCR = DMA_IFCR_CTCIF2;
+        DMA1_Channel2->CCR &= ~DMA_CCR_EN;
+        IOD_UART->CR3 &= ~USART_CR3_DMAT;
+        /* Wait for the last octet to leave the shift register. */
+        deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
+        while (((IOD_UART->ISR & USART_ISR_TC) == 0U) && (iolink_time_get_us() < deadline)) {
+        }
+        HAL_GPIO_WritePin(TX_EN_GPIO_Port, TX_EN_Pin, GPIO_PIN_RESET);
+        IOD_UART->ICR = USART_ICR_ORECF;
+        IOD_UART->RQR = USART_RQR_RXFRQ;
+        IOD_UART->CR3 |= USART_CR3_DMAR;
+        s_tx_in_progress = 0U;
+    }
+#endif
+}
+
+void phy_l6362a_raw_rx_irq(void) {
+    uint32_t status = IOD_UART->ISR;
+    uint32_t errors = status & (USART_ISR_PE | USART_ISR_FE | USART_ISR_NE | USART_ISR_ORE);
+
+    if ((status & USART_ISR_TC) != 0U) {
+        IOD_UART->ICR = USART_ICR_TCCF;
+    }
+
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    if ((status & USART_ISR_IDLE) != 0U) {
+        uint16_t cur;
+        uint16_t last;
+        IOD_UART->ICR = USART_ICR_IDLECF;
+        /* The DMA write index = size - CNDTR; the frame is [last, cur). */
+        cur  = (uint16_t)(L6362_RX_DMA_SIZE - (DMA1_Channel1->CNDTR & 0xFFFFU));
+        last = s_rx_last_index;
+        if (cur != last) {
+            s_rx_last_index = cur;
+            if (s_rx_ready == 0U) {
+                if (cur > last) {
+                    s_rx_frame     = &s_rx_dma[last];
+                    s_rx_frame_len = (uint8_t)(cur - last);
+                } else {
+                    /* Wrapped across the buffer end: linearise. */
+                    uint16_t n1 = (uint16_t)(L6362_RX_DMA_SIZE - last);
+                    uint16_t n2 = cur;
+                    uint16_t i;
+                    for (i = 0U; i < n1; i++) {
+                        s_rx_linear[i] = s_rx_dma[last + i];
+                    }
+                    for (i = 0U; i < n2; i++) {
+                        s_rx_linear[n1 + i] = s_rx_dma[i];
+                    }
+                    s_rx_frame     = s_rx_linear;
+                    s_rx_frame_len = (uint8_t)(n1 + n2);
+                }
+                s_rx_err   = (errors != 0U) ? 1U : 0U;
+                s_rx_ready = 1U;
+            }
+            /* else: the previous frame is unread - drop this one. */
+        }
+    }
+#else
+    if ((status & USART_ISR_RXNE_RXFNE) != 0U) {
+        uint8_t byte = (uint8_t)IOD_UART->RDR;
+        if (errors == 0U) {
+            RxPush(byte);
+            if (s_mode == IOLINK_PHY_MODE_SDCI) {
+                GapTimerRestart();
+            }
+        }
+    }
+#endif
+
+    if (errors != 0U) {
+        IOD_UART->ICR = USART_ICR_PECF | USART_ICR_FECF | USART_ICR_NECF | USART_ICR_ORECF;
+    }
+}
+
+void phy_l6362a_raw_ol_irq(void) {
+    s_wake_latched = 1U;
+}

@@ -73,24 +73,22 @@ static void test_t_cycle_violation(void** state)
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 3));
 
     for (int i = 0; i < 3; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 2);
     will_return(mock_phy_send, 0);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 
     for (int i = 0; i < 3; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 2);
     will_return(mock_phy_send, 0);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 
     iolink_dll_stats_t stats;
     iolink_device_get_dll_stats(&dev.ctx, &stats);
@@ -115,10 +113,9 @@ static void test_t_ren_violation(void** state)
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 3));
 
     for (int i = 0; i < 3; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
 
     /* Mock a slow response */
     expect_any(mock_phy_send, data);
@@ -129,7 +126,7 @@ static void test_t_ren_violation(void** state)
        But DLL calls send() immediately after data collect.
        To trigger t_ren violation, we'd need device processing to take long.
     */
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 
     /* No violation expected in normal run.
        Testing timing enforcement is hard with real system clock in unit tests.
@@ -150,12 +147,10 @@ static void test_t_pd_delay(void** state)
     /* Send a valid Type 0 frame before t_pd expires; expect no response */
     uint8_t mc = 0x00;
     uint8_t ck = test_frame_checksum(mc);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, mc);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, ck);
-    will_return(mock_phy_recv_byte, 0);
-    iolink_device_process(&dev.ctx);
+    mock_phy_feed_byte(mc);
+    mock_phy_feed_byte(ck);
+    mock_phy_feed_chk();
+    test_io_cycle(&dev.ctx);
 
     iolink_dll_stats_t stats;
     iolink_device_get_dll_stats(&dev.ctx, &stats);
@@ -167,31 +162,27 @@ static void test_t_pd_delay(void** state)
 
     /* Trigger WakeUp to get out of STARTUP */
     iolink_phy_mock_set_wakeup(1);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
     iolink_phy_mock_set_wakeup(0);
 
     /* Move to PREOPERATE state (AWAITING_COMM handles first byte) */
     uint8_t mc_comm = 0x00;
     uint8_t ck_comm = test_frame_checksum(mc_comm);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, mc_comm);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, ck_comm);
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_byte(mc_comm);
+    mock_phy_feed_byte(ck_comm);
+    mock_phy_feed_chk();
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 1); /* Type-0 write replies CKS only */
     will_return(mock_phy_send, 0);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 
     /* In PREOPERATE, send Transition Command (0x0F) - no response expected */
     uint8_t trans_mc = 0x0F;
     uint8_t trans_ck = test_frame_checksum(trans_mc);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, trans_mc);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, trans_ck);
-    will_return(mock_phy_recv_byte, 0);
-    iolink_device_process(&dev.ctx);
+    mock_phy_feed_byte(trans_mc);
+    mock_phy_feed_byte(trans_ck);
+    mock_phy_feed_chk();
+    test_io_cycle(&dev.ctx);
 }
 
 static void test_timing_constants(void** state)
@@ -229,46 +220,6 @@ static void test_t_ren_single_value_for_every_baudrate(void** state)
     assert_int_equal(dev.ctx.dll.t_ren_limit_us, 1234U);
 }
 
-static void test_t_byte_violation(void** state)
-{
-    (void) state;
-    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .pd_in_len = 1, .pd_out_len = 1};
-
-    setup_mock_phy();
-    will_return(mock_phy_init, 0);
-    iolink_test_device_t dev;
-    iolink_test_device_init(&dev, &config, NULL);
-    move_to_operate_ctx(&dev.ctx);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
-
-    /* Mock a slow byte reception (t_byte violation). TYPE_1_1 read request is
-       MC + CKT + PD(1) = 3 bytes; send 2 and then time out. */
-    uint8_t frame[3] = {0x80, IOLINK_MSEQ_TYPE_1, 0x00};
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 3));
-
-    /* Byte 1 (Control) */
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, frame[0]);
-
-    /* Byte 2 (Data 1) -> Success */
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, frame[1]);
-
-    /* Byte 3 -> Timeout */
-    will_return(mock_phy_recv_byte, 0);
-    iolink_device_process(&dev.ctx);
-
-    /* Now wait for t_byte_limit and call process again to trigger silence detection */
-    usleep(5000); /* COM2 t_byte limit is ~416us, 5ms is plenty */
-    will_return(mock_phy_recv_byte, 0);
-    iolink_device_process(&dev.ctx);
-
-    iolink_dll_stats_t stats;
-    iolink_device_get_dll_stats(&dev.ctx, &stats);
-    /* Should have 1 timing error (t_byte) */
-    assert_true(stats.t_byte_violations > 0U);
-}
-
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -277,7 +228,6 @@ int main(void)
         cmocka_unit_test(test_t_cycle_violation),
         cmocka_unit_test(test_t_ren_violation),
         cmocka_unit_test(test_t_pd_delay),
-        cmocka_unit_test(test_t_byte_violation),
         cmocka_unit_test(test_timing_constants),
         cmocka_unit_test(test_t_ren_single_value_for_every_baudrate),
     };

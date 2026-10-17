@@ -45,21 +45,6 @@ static void mock_set_baudrate(void* user, iolink_baudrate_t baudrate)
     (void) baudrate;
 }
 
-static int mock_send(void* user, const uint8_t* data, size_t len)
-{
-    (void) user;
-    (void) data;
-    (void) len;
-    return (int) len;
-}
-
-static int mock_recv_byte(void* user, uint8_t* byte)
-{
-    (void) user;
-    (void) byte;
-    return 0; /* No data */
-}
-
 static int mock_get_voltage_mv(void* user)
 {
     (void) user;
@@ -75,8 +60,6 @@ static bool mock_is_short_circuit(void* user)
 static const iolink_phy_api_t mock_phy = {.init = mock_init,
                                           .set_mode = mock_set_mode,
                                           .set_baudrate = mock_set_baudrate,
-                                          .send = mock_send,
-                                          .recv_byte = mock_recv_byte,
                                           .detect_wakeup = NULL,
                                           .set_cq_line = NULL,
                                           .get_voltage_mv = mock_get_voltage_mv,
@@ -86,8 +69,6 @@ static const iolink_phy_api_t mock_phy = {.init = mock_init,
 static const iolink_phy_api_t mock_phy_no_diag = {.init = mock_init,
                                                   .set_mode = mock_set_mode,
                                                   .set_baudrate = mock_set_baudrate,
-                                                  .send = mock_send,
-                                                  .recv_byte = mock_recv_byte,
                                                   .detect_wakeup = NULL,
                                                   .set_cq_line = NULL,
                                                   .get_voltage_mv = NULL,
@@ -105,8 +86,6 @@ static uint8_t mock_get_faults(void* user)
 static const iolink_phy_api_t mock_phy_faults = {.init = mock_init,
                                                  .set_mode = mock_set_mode,
                                                  .set_baudrate = mock_set_baudrate,
-                                                 .send = mock_send,
-                                                 .recv_byte = mock_recv_byte,
                                                  .detect_wakeup = NULL,
                                                  .set_cq_line = NULL,
                                                  .get_faults = mock_get_faults};

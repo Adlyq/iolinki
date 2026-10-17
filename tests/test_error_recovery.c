@@ -38,16 +38,13 @@ static void test_crc_error_recovery(void** state)
     /* 2. Simulate 3 CRC errors. TYPE_1_1 has OD width 0, so a READ request is
        MC + CKT + PD(1) = 3 bytes; the bad checksum is carried in the CKT. */
     for (int r = 0; r < 3; r++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, 0x80); /* MC */
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, 0x00); /* CKT (bad checksum) */
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, 0x00); /* PD */
-        will_return(mock_phy_recv_byte, 0);    /* End frame */
+        mock_phy_feed_byte(0x80); /* MC */
+        mock_phy_feed_byte(0x00); /* CKT (bad checksum) */
+        mock_phy_feed_byte(0x00); /* PD */
+        mock_phy_feed_chk();    /* End frame */
 
         /* One call to process the whole available frame */
-        iolink_device_process(&dev.ctx);
+        test_io_cycle(&dev.ctx);
     }
 
     /* 3. Check if error was detected (Event 0x5000 triggered after 3 retries) */
@@ -64,12 +61,12 @@ static void test_communication_timeout(void** state)
 
     /* Trigger wakeup to move from SIO to SDCI */
     iolink_phy_mock_set_wakeup(1);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
     iolink_phy_mock_set_wakeup(0);
 
     /* Ensure no data available in SDCI mode */
-    will_return(mock_phy_recv_byte, 0);
-    iolink_device_process(&dev.ctx);
+    mock_phy_feed_chk();
+    test_io_cycle(&dev.ctx);
 }
 
 int main(void)

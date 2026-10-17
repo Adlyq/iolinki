@@ -62,17 +62,16 @@ static void test_reply_layout_no_status_octet(void** state)
     iolink_device_pd_input_update(&dev.ctx, input, 2, true);
 
     for (int i = 0; i < 4; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
 
     /* 1 OD + 2 PD-in + CKS = 4 octets (Figure A.14), PD valid so
        CKS bit 6 is clear. */
     expect_check(mock_phy_send, data, check_reply_flags, (void*) (uintptr_t) 0U);
     expect_value(mock_phy_send, len, 4);
     will_return(mock_phy_send, 0);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 }
 
 static void test_reply_flags_pd_invalid(void** state)
@@ -93,15 +92,14 @@ static void test_reply_flags_pd_invalid(void** state)
     iolink_device_pd_input_update(&dev.ctx, (const uint8_t*) "\x11\x22", 2, false);
 
     for (int i = 0; i < 4; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
 
     expect_check(mock_phy_send, data, check_reply_flags, (void*) (uintptr_t) 1U);
     expect_value(mock_phy_send, len, 4);
     will_return(mock_phy_send, 0);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 }
 
 int main(void)

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-18
+
+### Changed (breaking)
+- Removed the main-context streaming transport (`send` / `recv_byte`). The
+  library now has a single transport path: the ISR dispatch pump, with the
+  compile-time switches `IOLINK_ISR_RX_MODE` and `IOLINK_ISR_TX_MODE`
+  (`BYTE` default, or `FRAME` for DMA/whole-frame PHYs).
+- `tx_end` renamed to `tx_done`; added the whole-frame `rx_frame` / `tx_frame`
+  hooks.
+- Dropped the generic, TIOL112, virtual and Zephyr-UART PHY drivers and the
+  host-only examples; the L6362A driver was ported to the ISR contract.
+
+### Fixed
+- The ISR pump now validates the request's A.1.6 checksum and M-sequence type
+  before the eager reply (a corrupt/illegal frame is dropped).
+- Multi-octet frames are detected from the CKT type bits, not the length (a
+  short Type-2 READ is only 3 octets).
+- Only the cyclic process channel is answered eagerly; ISDU/page/diagnosis are
+  answered by the main pump with a fresh OD.
+
 ## [2.1.1] - 2026-10-02
 
 ### Fixed

@@ -70,9 +70,6 @@
 #ifndef IOLINK_FEATURE_LEGACY_PARAMS
 #define IOLINK_FEATURE_LEGACY_PARAMS 0
 #endif
-#ifndef IOLINK_PHY_FEATURE_STREAMING
-#define IOLINK_PHY_FEATURE_STREAMING 0
-#endif
 #ifndef IOLINK_PHY_FEATURE_WAKEUP
 #define IOLINK_PHY_FEATURE_WAKEUP 0
 #endif
@@ -104,10 +101,6 @@
 #ifndef IOLINK_FEATURE_LEGACY_PARAMS
 #define IOLINK_FEATURE_LEGACY_PARAMS 1
 #endif
-/** @brief PHY streaming transport (send + recv_byte). */
-#ifndef IOLINK_PHY_FEATURE_STREAMING
-#define IOLINK_PHY_FEATURE_STREAMING 1
-#endif
 /** @brief PHY wake-up detection (detect_wakeup). */
 #ifndef IOLINK_PHY_FEATURE_WAKEUP
 #define IOLINK_PHY_FEATURE_WAKEUP 1
@@ -119,6 +112,31 @@
 /** @brief PHY legacy diagnostics (get_voltage_mv + is_short_circuit). */
 #ifndef IOLINK_PHY_FEATURE_LEGACY_DIAG
 #define IOLINK_PHY_FEATURE_LEGACY_DIAG 1
+#endif
+
+/* -------------------------------------------------------------------------
+ * ISR transport granularity (the library has a single transport path: the
+ * ISR dispatch pump. These two switches select how the PHY moves data on
+ * that path; the other transport (streaming send/recv_byte) was removed.)
+ *
+ *   RX BYTE  : phy->rx_octet()  - library frames octet by octet
+ *   RX FRAME : phy->rx_frame()  - PHY delivers a whole frame (zero-copy)
+ *   TX BYTE  : phy->tx_octet()+phy->tx_done() - library feeds octet by octet
+ *   TX FRAME : phy->tx_frame()  - library hands a whole reply frame
+ *
+ * Defaults are BYTE/BYTE (single-octet transceivers, e.g. the L6364). A PHY
+ * with whole-frame DMA sets the matching macro to FRAME in the build.
+ * ------------------------------------------------------------------------- */
+#define IOLINK_ISR_RX_BYTE  0
+#define IOLINK_ISR_RX_FRAME 1
+#define IOLINK_ISR_TX_BYTE  0
+#define IOLINK_ISR_TX_FRAME 1
+
+#ifndef IOLINK_ISR_RX_MODE
+#define IOLINK_ISR_RX_MODE IOLINK_ISR_RX_BYTE
+#endif
+#ifndef IOLINK_ISR_TX_MODE
+#define IOLINK_ISR_TX_MODE IOLINK_ISR_TX_BYTE
 #endif
 
 /* -------------------------------------------------------------------------
