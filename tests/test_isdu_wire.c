@@ -74,6 +74,30 @@ static void wire_device_info_init(void)
     iolink_device_info_init(&info);
 }
 
+/* A 63-character VendorName, served through ExtLength (>15 data octets). */
+static uint8_t g_long_name[64];
+
+static void wire_long_vendor_init(void)
+{
+    for (uint8_t i = 0U; i < 64U; i++) {
+        g_long_name[i] = (uint8_t) (0x40U + i);
+    }
+    g_long_name[63] = 0U; /* NUL-terminate so strlen() sees 63 characters */
+
+    iolink_device_info_t info;
+    (void) memset(&info, 0, sizeof(info));
+    info.vendor_name = (const char*) g_long_name;
+    info.vendor_text = "v";
+    info.product_name = "p";
+    info.product_id = "i";
+    info.product_text = "t";
+    info.serial_number = "s";
+    info.hardware_revision = "h";
+    info.firmware_revision = "f";
+    iolink_device_info_init(&info);
+    iolink_params_init();
+}
+
 /* Feed a full request as consecutive 1-octet messages: START then COUNT 1..0. */
 static void wire_write_request(iolink_isdu_ctx_t* ctx, const uint8_t* data, size_t len)
 {
@@ -180,8 +204,10 @@ static void test_isdu_wire_write_figure_a20(void** state)
     assert_memory_equal(resp, expected, sizeof(expected));
 }
 
-/* 16-bit read of VendorName 0x0010 with FlowCTRL COUNT wrap past 15. */
-static void test_isdu_wire_16bit_count_wrap(void** state)
+/* 16-bit index read of VendorName 0x0010 (I-Service 0xB, Length 5). The
+ * request is short, so this does not exercise the COUNT wrap; see the dedicated
+ * write/read wrap tests. */
+static void test_isdu_wire_16bit_index_read(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
@@ -189,8 +215,7 @@ static void test_isdu_wire_16bit_count_wrap(void** state)
     iolink_params_init();
     iolink_isdu_init(&ctx);
 
-    /* 16-bit Index + Subindex read (I-Service 0xB, Length 5): B5 00 10 00 A5.
-       Send each octet as its own message, wrapping COUNT 15 -> 0. */
+    /* 16-bit Index + Subindex read (I-Service 0xB, Length 5): B5 00 10 00 A5. */
     const uint8_t req[5] = {0xB5U, 0x00U, 0x10U, 0x00U, 0xA5U};
     assert_int_equal(chkpdu(req, 5U), 0U);
     uint8_t fc = IOLINK_FLOWCTRL_START;
@@ -208,6 +233,52 @@ static void test_isdu_wire_16bit_count_wrap(void** state)
     assert_int_equal(resp[1], 0x12U);
     assert_int_equal(resp[2], 0x34U);
     assert_int_equal(resp[3], 0xF2U);
+}
+
+/* A request longer than 16 octets wraps FlowCTRL COUNT 15 -> 0. The wrap octet
+ * must continue the request, not be rejected as a structure violation. */
+static void test_isdu_wire_write_count_wrap(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    wire_device_info_init();
+    iolink_params_init();
+    iolink_isdu_init(&ctx);
+
+    /* 16-bit ApplicationTag write with 11 data octets: 17 octets total, so the
+       final octet (CHKPDU) is carried by COUNT 0 right after COUNT 15. */
+    uint8_t req[17];
+    req[0] = 0x31U; /* Write, 16-bit index, ExtLength follows. */
+    req[1] = (uint8_t) sizeof(req);
+    req[2] = 0x00U;
+    req[3] = (uint8_t) (IOLINK_IDX_APPLICATION_TAG & 0xFFU);
+    req[4] = 0x00U; /* Subindex 0. */
+    for (size_t i = 0U; i < 11U; i++) {
+        req[5U + i] = (uint8_t) ('A' + i);
+    }
+    req[16] = chkpdu(req, 16U);
+    assert_int_equal(chkpdu(req, sizeof(req)), 0U);
+
+    uint8_t fc = IOLINK_FLOWCTRL_START;
+    for (size_t i = 0U; i < sizeof(req); i++) {
+        iolink_isdu_od_write(&ctx, fc, &req[i], 1U);
+        fc =
+            (fc == IOLINK_FLOWCTRL_START) ? 1U : (uint8_t) ((fc + 1U) & IOLINK_FLOWCTRL_COUNT_MASK);
+    }
+    /* COUNT 0 was accepted after COUNT 15 (a rejected wrap would leave 15). */
+    assert_int_equal(ctx.last_flowctrl, 0U);
+    iolink_isdu_process(&ctx);
+
+    uint8_t resp[4];
+    size_t n = wire_read_response(&ctx, resp, sizeof(resp));
+    assert_int_equal(n, 2U);
+    assert_int_equal(resp[0], 0x52U); /* Write Response (+) */
+    assert_int_equal(resp[1], chkpdu(resp, 1U));
+
+    uint8_t readback[16];
+    assert_int_equal(iolink_params_get(IOLINK_IDX_APPLICATION_TAG, 0U, readback, sizeof(readback)),
+                     11);
+    assert_memory_equal(readback, &req[5], 11U);
 }
 
 /* Repeated FlowCTRL repeats the previous message: its payload is ignored. */
@@ -366,23 +437,7 @@ static void test_isdu_wire_extlength_read(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    static uint8_t big[64];
-    static iolink_device_info_t info;
-    for (uint8_t i = 0U; i < 64U; i++) {
-        big[i] = (uint8_t) (0x40U + i);
-    }
-    big[63] = 0U; /* NUL-terminate so strlen() sees 63 characters */
-    (void) memset(&info, 0, sizeof(info));
-    info.vendor_name = (const char*) big;
-    info.vendor_text = "v";
-    info.product_name = "p";
-    info.product_id = "i";
-    info.product_text = "t";
-    info.serial_number = "s";
-    info.hardware_revision = "h";
-    info.firmware_revision = "f";
-    iolink_device_info_init(&info);
-    iolink_params_init();
+    wire_long_vendor_init();
     iolink_isdu_init(&ctx);
 
     /* 8-bit read of Index 0x10: 0x93 0x10 0x83. */
@@ -395,7 +450,44 @@ static void test_isdu_wire_extlength_read(void** state)
     assert_int_equal(n, 66U);
     assert_int_equal(resp[0], 0xD1U);
     assert_int_equal(resp[1], 0x42U);
-    assert_memory_equal(&resp[2], big, 63U);
+    assert_memory_equal(&resp[2], g_long_name, 63U);
+    assert_int_equal(resp[65], chkpdu(resp, 65U));
+}
+
+/* A >16-octet response is read across the COUNT 15 -> 0 wrap. */
+static void test_isdu_wire_read_count_wrap(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    wire_long_vendor_init();
+    iolink_isdu_init(&ctx);
+
+    /* 63-octet VendorName -> 66-octet response. */
+    const uint8_t req[3] = {0x93U, 0x10U, 0x83U};
+    wire_write_request(&ctx, req, sizeof(req));
+
+    uint8_t resp[128];
+    uint8_t octet = 0U;
+    size_t n = 0U;
+    unsigned wraps = 0U;
+
+    iolink_isdu_od_read(&ctx, IOLINK_FLOWCTRL_START, &octet, 1U);
+    resp[n++] = octet;
+    uint8_t prev = IOLINK_FLOWCTRL_START;
+    uint8_t fc = 1U;
+    while (n < 66U) {
+        if ((prev == 15U) && (fc == 0U)) {
+            wraps++;
+        }
+        iolink_isdu_od_read(&ctx, fc, &octet, 1U);
+        resp[n++] = octet;
+        prev = fc;
+        fc = (uint8_t) ((fc + 1U) & IOLINK_FLOWCTRL_COUNT_MASK);
+    }
+    assert_true(wraps >= 1U);
+    assert_int_equal(resp[0], 0xD1U);
+    assert_int_equal(resp[1], 0x42U);
+    assert_memory_equal(&resp[2], g_long_name, 63U);
     assert_int_equal(resp[65], chkpdu(resp, 65U));
 }
 
@@ -404,7 +496,7 @@ int main(void)
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_isdu_wire_read_figure_a20, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_write_figure_a20, test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_isdu_wire_16bit_count_wrap, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_wire_16bit_index_read, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_repeated_flowctrl, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_flowctrl_error, test_setup, test_teardown),
@@ -414,6 +506,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_wire_unknown_index, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_busy_polling, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_abort, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_wire_write_count_wrap, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_wire_read_count_wrap, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_extlength_read, test_setup, test_teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
