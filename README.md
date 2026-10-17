@@ -35,8 +35,11 @@ The companion master stack is [iolinki-master](https://github.com/w1ne/iolinki-m
 ## Quick Start
 
 For a runnable counter/button/LED software example, see
-[examples/reference_device](examples/reference_device/README.md). For practical
-evaluation questions and integration status, see [docs/FAQ.md](docs/FAQ.md) and
+[examples/reference_device](examples/reference_device/README.md). For a
+board-specific ISR two-pump PHY reference (STM32G0 + L6362A), see
+[examples/stm32g0_l6362a_raw](examples/stm32g0_l6362a_raw/README.md). For
+practical evaluation questions and integration status, see
+[docs/FAQ.md](docs/FAQ.md) and
 [the portable TIOL112 driver](docs/hardware/TIOL112.md). Physical board ports and
 commercial-master validation are separate from the host simulation.
 
