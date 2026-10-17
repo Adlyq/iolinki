@@ -114,13 +114,13 @@ This roadmap outlines the development path for `iolinki`, enabling a fully compl
     - [x] 0x000E-0x000F: Reserved for Common Profile
     - [x] 0x0010-0x0017: VendorName..FirmwareRevision
     - [x] 0x0018-0x001A: ApplicationSpecificTag, FunctionTag, LocationTag
-    - [ ] 0x001B: ProductURI (V1.1.4+, conditional on a Profile)
+    - [x] 0x001B: ProductURI (V1.1.4+, conditional on a Profile)
     - [x] 0x001C-0x001F: Reserved (RevisionID is DPP1 0x04)
-    - [ ] 0x0020: ErrorCount (UIntegerT16, optional)
+    - [x] 0x0020: ErrorCount (UIntegerT16, optional)
     - [x] 0x0024: DeviceStatus
     - [x] 0x0025: DetailedDeviceStatus
-    - [ ] 0x0028: ProcessDataInput (must return the last valid PD input data)
-    - [ ] 0x0029: ProcessDataOutput (last valid PD output data)
+    - [x] 0x0028: ProcessDataInput (must return the last valid PD input data)
+    - [x] 0x0029: ProcessDataOutput (last valid PD output data)
     - [ ] 0x0030: Offset-Time (RecordT, optional)
 
 ### 2.3 Advanced V1.1 Features

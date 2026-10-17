@@ -18,7 +18,7 @@ ctest -R test_dll
 # Opt-in two-pump / ISR transport (same src/dll.c, #if-guarded)
 cmake -B build_isr -DIOLINK_ISR_PUMP=ON && cmake --build build_isr
 # The test suite is transport-agnostic via the warp in tests/test_helpers.c:
-(cd build_isr && ctest -E test_spec_conformance)
+(cd build_isr && ctest)
 
 # Quality gate (strict -Werror build, cppcheck, clang-format, MISRA, Doxygen)
 ./check_quality.sh
@@ -29,11 +29,10 @@ cmake -B build_isr -DIOLINK_ISR_PUMP=ON && cmake --build build_isr
 - Platform switch is **`IOLINK_PLATFORM`** (`LINUX` default, `BAREMETAL`).
 - Tests are **silently skipped** when CMocka is absent (`tests/CMakeLists.txt`);
   install `libcmocka-dev`.
-- `tests/test_spec_conformance.c` intentionally fails: it tracks 8 known stack
-  gaps (reserved VendorID/DeviceID indices, ErrorCount, ProductURI,
-  ProcessDataInput/Output semantics, read-only write rejection, parameter-lock
-  enforcement, string fixedLength). Keep it red until those are fixed; run the
-  rest with `ctest -E test_spec_conformance`.
+- `tests/test_spec_conformance.c` pins the mandatory ISDU conformance behaviour
+  (reserved indices, ErrorCount, ProductURI, ProcessDataInput/Output, read-only
+  WRITE rejection, Parameter lock, string fixedLength). The full suite is green
+  in both transports.
 - The two-pump path is **opt-in**: default `src/dll.c` is upstream's streaming
   transport (`phy->send/recv_byte`). `-DIOLINK_ISR_PUMP=ON` selects
   the ISR blocks in `src/dll.c` and the hooks in `phy.h`/`dll.h`. Keep changes to
