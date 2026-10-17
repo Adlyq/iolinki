@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The ISR pump now also answers ISDU writes (ACK `[PD-in]CKS`) and ISDU
+  FlowCTRL-IDLE reads (No Service `0x00`) eagerly from the pre-staged RAM
+  reply. The main pump refreshes the staged OD and stays silent for those
+  frames; ISDU START/COUNT reads still go through the main pump because they
+  need the segment index.
+- The A.1.6 request checksum is accumulated per received octet in the BYTE
+  path, so the frame-end gate no longer rescans the frame in the ISR.
+- FRAME (DMA) TX starts the transfer before computing the reply CKS and writes
+  the checksum into the source buffer while the payload is shifted out, moving
+  the checksum loop off the `t_A` critical path.
+- The STM32G0 L6362A DMA example delimits RX frames with the USART receiver
+  timeout (RTO, 1 bit) instead of IDLE and raises the USART IRQ above the
+  TX-DMA IRQ, bringing `t_A` within the IEC 61131-9 10-bit limit.
+
 ## [3.0.0] - 2026-10-18
 
 ### Changed (breaking)

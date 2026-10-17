@@ -113,20 +113,28 @@ static void UartConfigure(uint32_t baud) {
     IOD_UART->CR1 = 0U;
     UartPinsAf();
     IOD_UART->BRR = (SYSCLOCK_FREQUENCY + (baud / 2U)) / baud;
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    /* RX by DMA: the receiver-timeout (RTO) interrupt delimits the frame. RTO
+     * counts in bit times after the last stop bit; 1 bit (~4.3 us at 230.4k)
+     * keeps t_A within 10 bit times, unlike IDLE (~11 bit times). */
+    IOD_UART->RTOR = 1U;
+    IOD_UART->CR2  = USART_CR2_RTOEN; /* one stop bit + receiver timeout */
+#else
     IOD_UART->CR2 = 0U; /* one stop bit */
+#endif
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     IOD_UART->CR3 = USART_CR3_EIE | USART_CR3_DMAR;
 #else
     IOD_UART->CR3 = USART_CR3_EIE;
 #endif
     IOD_UART->ICR = USART_ICR_PECF | USART_ICR_FECF | USART_ICR_NECF | USART_ICR_ORECF |
-                    USART_ICR_TCCF;
+                    USART_ICR_TCCF | USART_ICR_RTOCF;
     IOD_UART->RQR = USART_RQR_RXFRQ;
     /* 9-bit word (8 data + even parity), TX+RX. */
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
-    /* RX by DMA: the IDLE interrupt marks the frame end (no per-octet RXNE). */
+    /* RX by DMA: RTOF delimits the frame (no per-octet RXNE, no IDLE wait). */
     IOD_UART->CR1 = USART_CR1_M0 | USART_CR1_PCE | USART_CR1_TE | USART_CR1_RE |
-                    USART_CR1_IDLEIE | USART_CR1_UE;
+                    USART_CR1_RTOIE | USART_CR1_UE;
 #else
     IOD_UART->CR1 = USART_CR1_M0 | USART_CR1_PCE | USART_CR1_TE | USART_CR1_RE |
                     USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE | USART_CR1_UE;
@@ -550,7 +558,7 @@ int phy_l6362a_raw_hw_init(void)
     __HAL_RCC_DMA1_CLK_ENABLE();
     DMAMUX1_Channel1->CCR = DMA_REQUEST_USART2_TX;
     DMA1_Channel2->CCR    = 0U;
-    HAL_NVIC_SetPriority(DMA1_Channel2_3_IRQn, 1U, 0U);
+    HAL_NVIC_SetPriority(DMA1_Channel2_3_IRQn, 2U, 0U);
     HAL_NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
 #endif
 
@@ -563,7 +571,7 @@ int phy_l6362a_raw_hw_init(void)
 
     /* USART2 interrupt priority: same as TIM3 so the ISR pump is never preempted
    * by the byte-gap handler (they must not nest). */
-    HAL_NVIC_SetPriority(IOD_UART_IRQn, 1U, 0U);
+    HAL_NVIC_SetPriority(IOD_UART_IRQn, 0U, 0U);
     HAL_NVIC_EnableIRQ(IOD_UART_IRQn);
     return 0;
 }
@@ -610,10 +618,10 @@ void phy_l6362a_raw_rx_irq(void) {
     }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
-    if ((status & USART_ISR_IDLE) != 0U) {
+    if ((status & USART_ISR_RTOF) != 0U) {
         uint16_t cur;
         uint16_t last;
-        IOD_UART->ICR = USART_ICR_IDLECF;
+        IOD_UART->ICR = USART_ICR_RTOCF;
         /* The DMA write index = size - CNDTR; the frame is [last, cur). */
         cur  = (uint16_t)(L6362_RX_DMA_SIZE - (DMA1_Channel1->CNDTR & 0xFFFFU));
         last = s_rx_last_index;

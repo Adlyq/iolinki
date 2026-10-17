@@ -157,6 +157,7 @@ typedef struct
      * the SPI electrical access). */
     uint8_t isr_rx_buf[IOLINK_M_SEQ_MAX_LEN];    /**< RX octets accumulated */
     uint8_t isr_rx_cnt;                          /**< Octets accumulated this frame */
+    uint8_t isr_rx_acc;                          /**< A.1.6 checksum accumulated per octet */
     uint8_t isr_rx_expect;                       /**< Expected length (0 = unknown) */
     uint8_t isr_frame_buf[IOLINK_M_SEQ_MAX_LEN]; /**< Mailbox storage (RX BYTE) */
     volatile const uint8_t* isr_frame_ptr;       /**< Mailbox: frame pointer
@@ -164,6 +165,9 @@ typedef struct
                                                        RX FRAME: PHY-owned buffer) */
     volatile uint8_t isr_frame_len;              /**< Mailbox length */
     volatile uint8_t isr_frame_ready;            /**< Mailbox ready flag */
+    volatile uint8_t isr_eager_replied;          /**< 1 if the ISR already sent the
+                                                      reply for the published frame;
+                                                      the main pump must stay silent */
     /* Reply transmission, fed one octet per data request. */
     uint8_t isr_tx_payload[IOLINK_M_SEQ_MAX_LEN];/**< Staged reply octets */
     volatile uint8_t isr_tx_len;                 /**< Payload octets held */
