@@ -84,7 +84,7 @@ response = master.run_cycle(
     pd_out=bytes([0x11, 0x22]),
     od_req=0x00
 )
-print(f"PD_In: {response.payload.hex()}")
+print(f"PD_In: {response.pd.hex()}")
 
 # Read ISDU (Vendor ID)
 vendor_id = master.read_isdu(0x000A)
@@ -109,9 +109,14 @@ print(f"OD Length: {master.od_len} bytes")
 master.run_startup_sequence()
 master.go_to_operate()
 
-# Run cycle - response includes 2-byte OD
+# Run cycle - a cyclic WRITE reply is [PD-in] CKS with no OD
 response = master.run_cycle(pd_out=bytes([0x33]))
-print(f"OD: 0x{response.od:02X}, OD2: 0x{response.od2:02X}")
+print(f"PD_In: {response.pd.hex()}")
+
+# OD octets only ride READ replies (for example ISDU polling); od2 is None
+# when the reply carries fewer than two OD octets (Figures A.9/A.10/A.13/A.14).
+if response.od2 is not None:
+    print(f"OD: 0x{response.od:02X}, OD2: 0x{response.od2:02X}")
 ```
 
 ## Supported M-Sequence Types
