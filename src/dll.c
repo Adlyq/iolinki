@@ -82,6 +82,7 @@ static uint8_t dll_expected_type_bits(const iolink_dll_ctx_t* ctx)
  * the CKT octet (A.1.6), so there is no trailing checksum octet. A Type-0
  * message carries no PD and a single OD octet written only on a write access.
  */
+#if !IOLINK_PHY_FEATURE_ISR_PUMP
 static uint8_t dll_expected_req_len(const iolink_dll_ctx_t* ctx, uint8_t type_bits)
 {
     if (type_bits == IOLINK_MSEQ_TYPE_0) {
@@ -89,6 +90,7 @@ static uint8_t dll_expected_req_len(const iolink_dll_ctx_t* ctx, uint8_t type_bi
     }
     return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + ctx->pd_out_len_current + ctx->od_len);
 }
+#endif
 
 #if IOLINK_PHY_FEATURE_ISR_PUMP
 static void dll_isr_tx_step(iolink_dll_ctx_t* ctx);
@@ -441,18 +443,31 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
         memcpy(ctx->pd_out, &ctx->frame_buf[pd_offset], ctx->pd_out_len_current);
     }
 
-    uint8_t od_in[2] = {0, 0};
-    uint8_t od_out[2] = {0, 0};
-    memcpy(od_in, &ctx->frame_buf[od_offset], ctx->od_len);
+    const bool write = ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U);
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    const uint8_t od_w = ctx->od_width; /* 1/2/8/32 from the opt-in patch */
+#else
+    const uint8_t od_w = ctx->od_len; /* upstream streaming width (1/2) */
+#endif
+    const uint8_t req_od = write ? od_w : 0U;
+    const uint8_t resp_od = write ? 0U : od_w;
 
-    if (!dll_dispatch_od(ctx, ctx->frame_buf[0], od_in, ctx->od_len, od_out)) {
-        for (uint16_t i = 0; i < ctx->od_len; i++) {
+    uint8_t od_in[IOLINK_OD_MAX_SIZE];
+    uint8_t od_out[IOLINK_OD_MAX_SIZE];
+    (void) memset(od_in, 0, sizeof(od_in));
+    (void) memset(od_out, 0, sizeof(od_out));
+    if (req_od > 0U) {
+        memcpy(od_in, &ctx->frame_buf[od_offset], req_od);
+    }
+
+    const uint8_t dispatch_od = write ? req_od : resp_od;
+    if (!dll_dispatch_od(ctx, ctx->frame_buf[0], od_in, dispatch_od, od_out)) {
+        for (uint16_t i = 0; i < dispatch_od; i++) {
             od_out[i] = 0U;
         }
     }
 
 #if IOLINK_PHY_FEATURE_ISR_PUMP
-    const bool write_access = ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U);
     if (ctx->cyclic_reply_precached &&
         ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PROCESS)) {
         /* The ISR pump already transmitted the pre-staged cyclic reply for the
@@ -465,8 +480,8 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
     if (ctx->isr_eager_replied != 0U) {
         /* The ISR answered this frame (write ACK / FlowCTRL-IDLE read); refresh
          * the staged OD for the next poll and do not send a second reply. */
-        if (!write_access && (ctx->od_len > 0U)) {
-            for (uint8_t i = 0U; i < ctx->od_len; i++) {
+        if (!write && (resp_od > 0U)) {
+            for (uint8_t i = 0U; i < resp_od; i++) {
                 ctx->last_od_resp[i] = od_out[i];
             }
             iolink_dll_prepare_cyclic_reply(ctx);
@@ -482,13 +497,12 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
        OD and is [PD-in octets] CKS. CKS carries the Event flag (bit 7), the
        PD-validity flag (bit 6, 1 = invalid) and the 6-bit message checksum
        (bits 0-5); there is no leading status octet (A.1.5). */
-    const bool read = ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) != 0U);
 
-    uint8_t resp[IOLINK_PD_IN_MAX_SIZE + 5];
+    uint8_t resp[IOLINK_PD_IN_MAX_SIZE + IOLINK_OD_MAX_SIZE + 1];
     uint16_t pos = 0U;
-    if (read && (ctx->od_len > 0U)) {
-        memcpy(&resp[pos], od_out, ctx->od_len);
-        pos += ctx->od_len;
+    if (!write && (resp_od > 0U)) {
+        memcpy(&resp[pos], od_out, resp_od);
+        pos += resp_od;
     }
     if (ctx->pd_in_len_current > 0U) {
         memcpy(&resp[pos], ctx->pd_in, ctx->pd_in_len_current);
@@ -1177,17 +1191,10 @@ static uint8_t dll_compute_req_len(const iolink_dll_ctx_t* ctx, uint8_t mc_byte)
     bool transition_cmd = (ctx->state == IOLINK_DLL_STATE_ESTAB_COM) &&
                           (mc_byte == IOLINK_MC_TRANSITION_COMMAND);
     if (!transition_cmd && (type_bits != IOLINK_MSEQ_TYPE_0)) {
-        const uint8_t od_req = ((mc_byte & IOLINK_MC_RW_MASK) == 0U) ? ctx->od_len : 0U;
+        const uint8_t od_req = ((mc_byte & IOLINK_MC_RW_MASK) == 0U) ? ctx->od_width : 0U;
         return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + ctx->pd_out_len_current + od_req);
     }
     return 2U;
-}
-
-/* Derive the expected request length for the M-sequence whose first octet
- * (the MC byte) is now in ctx->frame_buf[0]. */
-static void dll_rx_begin(iolink_dll_ctx_t* ctx)
-{
-    ctx->req_len = dll_compute_req_len(ctx, ctx->frame_buf[0]);
 }
 
 uint8_t iolink_dll_expected_req_len(const iolink_dll_ctx_t* ctx, uint8_t mc)
@@ -1236,6 +1243,7 @@ static bool dll_isr_type_ok(const iolink_dll_ctx_t* ctx, const uint8_t* frame)
     return rx_type == exp_type;
 }
 
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
 /* Validate the request checksum by rescanning the frame (used by the FRAME path,
  * where the PHY hands over a whole buffer). */
 static bool dll_isr_reply_allowed(const iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len)
@@ -1254,7 +1262,9 @@ static bool dll_isr_reply_allowed(const iolink_dll_ctx_t* ctx, const uint8_t* fr
     }
     return (iolink_checksum6_from_acc(acc) == expected) && dll_isr_type_ok(ctx, frame);
 }
+#endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME */
 
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
 /* Validate the request checksum from the accumulator built per received octet
  * (BYTE path): no second pass over the frame in the ISR. */
 static bool dll_isr_reply_allowed_acc(const iolink_dll_ctx_t* ctx, const uint8_t* frame,
@@ -1266,6 +1276,7 @@ static bool dll_isr_reply_allowed_acc(const iolink_dll_ctx_t* ctx, const uint8_t
     const uint8_t expected = (uint8_t) (frame[1] & 0x3FU);
     return (iolink_checksum6_from_acc(acc) == expected) && dll_isr_type_ok(ctx, frame);
 }
+#endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
 
 /* Copy the accumulated RX octets into the mailbox for the main pump. Called from
  * the ISR; drops the frame (returns false) if the previous one has not been
