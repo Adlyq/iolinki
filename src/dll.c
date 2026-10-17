@@ -445,12 +445,21 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
     if (ctx->phy->get_voltage_mv != NULL) {
         int voltage = ctx->phy->get_voltage_mv(ctx->phy->user);
         /* A negative reading means "measurement unavailable", not a fault
-           (phy_generic's template hook returns -1). */
-        if ((voltage >= 0) && ((voltage < 18000) || (voltage > 30000))) {
-            ctx->voltage_faults++;
-            /* Table D.1 device code 0x5111 "Primary supply voltage underrun". */
-            iolink_event_trigger(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN,
-                                 IOLINK_EVENT_TYPE_WARNING);
+           (phy_generic's template hook returns -1). 18 V to 30 V inclusive is
+           the valid range; Table D.1 codes 0x5111/0x5110 report under/overrun. */
+        if (voltage >= 0) {
+            if (voltage < 18000) {
+                ctx->voltage_faults++;
+                /* Table D.1 device code 0x5111 "Primary supply voltage underrun". */
+                iolink_event_trigger(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN,
+                                     IOLINK_EVENT_TYPE_WARNING);
+            }
+            else if (voltage > 30000) {
+                ctx->voltage_faults++;
+                /* Table D.1 device code 0x5110 "Primary supply voltage overrun". */
+                iolink_event_trigger(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN,
+                                     IOLINK_EVENT_TYPE_WARNING);
+            }
         }
     }
 

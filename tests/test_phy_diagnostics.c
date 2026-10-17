@@ -146,11 +146,36 @@ static void test_voltage_monitoring_high(void** state)
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.voltage_faults, 1);
 
-    /* Event should be triggered with the standardized supply-voltage code. */
+    /* Event should be triggered with the Table D.1 device code
+       "Primary supply voltage overrun" (0x5110). */
     assert_true(iolink_events_pending(&ctx.events));
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx.events, &ev));
-    assert_int_equal(ev.code, 0x5111U);
+    assert_int_equal(ev.code, 0x5110U);
+    assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
+}
+
+static void test_voltage_monitoring_boundaries(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t ctx;
+    iolink_dll_stats_t stats;
+
+    /* 18 V and 30 V are the inclusive limits: inside the range is OK. */
+    mock_voltage_mv = 18000;
+    mock_short_circuit = false;
+    iolink_dll_init(&ctx, &mock_phy);
+    iolink_dll_process(&ctx);
+    iolink_dll_get_stats(&ctx, &stats);
+    assert_int_equal(stats.voltage_faults, 0);
+    assert_false(iolink_events_pending(&ctx.events));
+
+    mock_voltage_mv = 30000;
+    iolink_dll_init(&ctx, &mock_phy);
+    iolink_dll_process(&ctx);
+    iolink_dll_get_stats(&ctx, &stats);
+    assert_int_equal(stats.voltage_faults, 0);
+    assert_false(iolink_events_pending(&ctx.events));
 }
 
 static void test_voltage_measurement_unavailable(void** state)
@@ -292,6 +317,7 @@ int main(void)
         cmocka_unit_test(test_voltage_monitoring_normal),
         cmocka_unit_test(test_voltage_monitoring_low),
         cmocka_unit_test(test_voltage_monitoring_high),
+        cmocka_unit_test(test_voltage_monitoring_boundaries),
         cmocka_unit_test(test_voltage_measurement_unavailable),
         cmocka_unit_test(test_generic_phy_negative_voltage_is_not_a_fault),
         cmocka_unit_test(test_voltage_monitoring_multiple_cycles),

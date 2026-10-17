@@ -12,9 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `IOLINK_EVENT_PHY_SHORT_CIRCUIT` (0x1806) macros are removed. Those values are
   Table D.2 Master/Port codes ("Overtemperature", "Short circuit at L+"), not
   Device codes. `dll_poll_diagnostics()` now reports the standardized Table D.1
-  Device codes `IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN` (0x5111) and
-  `IOLINK_EVENTCODE_SHORT_CIRCUIT` (0x7710). Callers that referenced the removed
-  macros must switch to the `IOLINK_EVENTCODE_*` names.
+  Device codes `IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN` (0x5111) for a reading
+  below 18 V, `IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN` (0x5110) for a reading
+  above 30 V, and `IOLINK_EVENTCODE_SHORT_CIRCUIT` (0x7710). Callers that
+  referenced the removed macros must switch to the `IOLINK_EVENTCODE_*` names.
 
 ### Fixed
 - EventQualifier INSTANCE now encodes `0x04` (Application, Table A.17) instead of
