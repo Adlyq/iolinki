@@ -97,48 +97,31 @@ This roadmap outlines the development path for `iolinki`, enabling a fully compl
     - [ ] **Flow Control**: Busy/Retry mechanisms.
     - [x] **16-bit Index Support**: Support full 16-bit index.
     - [ ] **Write Verification**: Readback after write.
-- [ ] **Mandatory ISDU Indices**:
-    - [x] 0x0000: Direct Parameter Page 1 (read, packed identification/communication page)
-    - [x] 0x0001: Direct Parameter Page 2 (read/write, device-specific)
-    - [x] 0x0002: System Command
-        - [x] Subcommand 0x80: Device Reset (dispatched via iolink_set_reset_handler)
-        - [x] Subcommand 0x81: Application Reset (dispatched via iolink_set_reset_handler)
-        - [x] Subcommand 0x82: Restore Factory Settings
-        - [x] Subcommand 0x83: Restore Application Defaults
-        - [ ] Subcommand 0x84: Set Communication Mode (handled by DLL; no-op here)
-        - [x] Subcommand 0x95: Parameter Upload to Master
-        - [x] Subcommand 0x96: Parameter Download from Master
-        - [x] Subcommand 0x97: Parameter Break
-    - [ ] 0x0003: Master Command (optional)
-    - [ ] 0x0004: Master Cycle Time
-    - [ ] 0x0005: Min Cycle Time
-    - [ ] 0x0006: M-sequence Capability
-    - [ ] 0x0007: Revision ID
-    - [ ] 0x0008: Process Data In
-    - [ ] 0x0009: Process Data Out
-    - [x] 0x000A: Vendor ID (16-bit)
-    - [x] 0x000B: Device ID (32-bit)
-    - [x] 0x000C: Device Access Locks (Parameterization, DS, UI, Communication)
-    - [x] 0x000D: Profile Characteristic (16-bit)
-    - [ ] 0x000E: PDIn Descriptor
-    - [ ] 0x000F: PDOut Descriptor
-    - [x] 0x0010: Vendor Name
-    - [x] 0x0011: Vendor Text
-    - [x] 0x0012: Product Name
-    - [x] 0x0013: Product ID
-    - [x] 0x0014: Product Text
-    - [x] 0x0015: Serial Number
-    - [x] 0x0016: Hardware Revision
-    - [x] 0x0017: Firmware Revision
-    - [x] 0x0018: Application-specific Tag
-    - [x] 0x0019: Function Tag
-    - [x] 0x001A: Location Tag
-    - [x] 0x001B: Device Status
-    - [x] 0x001C: Detailed Device Status
-    - [x] 0x001D: Process Data Input Descriptor
-    - [ ] 0x001E: Process Data Output Descriptor
-    - [x] 0x0024: Min Cycle Time
-    - [ ] 0x0025-0x0028: Alternate Identification (Vendor/Product Name/Text)
+- [ ] **Mandatory ISDU Indices** (authoritative mapping: IO-Link V1.1.5 Table B.8):
+    - [x] 0x0000: Direct Parameter Page 1
+    - [x] 0x0001: Direct Parameter Page 2
+    - [x] 0x0002: SystemCommand
+        - [x] 0x01-0x06: ParamUpload/Download Start/End/Store, ParamBreak
+        - [x] 0x80: Device Reset
+        - [x] 0x81: Application Reset
+        - [x] 0x82: Restore Factory Settings
+        - [x] 0x83: Back-to-box
+        - [x] 0x07-0x3F / 0x84-0x9F: Reserved (rejected with FUNC_NOTAVAIL)
+    - [x] 0x0003: DataStorageIndex
+    - [x] 0x0004-0x000B: Reserved (VendorID/DeviceID are DPP1 fields, not ISDU indices)
+    - [x] 0x000C: DeviceAccessLocks
+    - [x] 0x000D: ProfileCharacteristic (contains FunctionID)
+    - [x] 0x000E-0x000F: Reserved for Common Profile
+    - [x] 0x0010-0x0017: VendorName..FirmwareRevision
+    - [x] 0x0018-0x001A: ApplicationSpecificTag, FunctionTag, LocationTag
+    - [ ] 0x001B: ProductURI (V1.1.4+, conditional on a Profile)
+    - [x] 0x001C-0x001F: Reserved (RevisionID is DPP1 0x04)
+    - [ ] 0x0020: ErrorCount (UIntegerT16, optional)
+    - [x] 0x0024: DeviceStatus
+    - [x] 0x0025: DetailedDeviceStatus
+    - [ ] 0x0028: ProcessDataInput (must return the last valid PD input data)
+    - [ ] 0x0029: ProcessDataOutput (last valid PD output data)
+    - [ ] 0x0030: Offset-Time (RecordT, optional)
 
 ### 2.3 Advanced V1.1 Features
 - [x] **Data Storage (DS)**:

@@ -10,6 +10,13 @@ The companion master stack is [iolinki-master](https://github.com/w1ne/iolinki-m
 - **[INSTALL](../INSTALL.md)** - Installation instructions
 - **[VISION](VISION.md)** - Project vision and goals
 
+## Conformance & testing
+
+- **[SPEC_CONFORMANCE](SPEC_CONFORMANCE.md)** - **start here:** V1.1.5 table ->
+  implementation -> test matrix plus the known-gap backlog.
+- **[Testing Guide](TESTING.md)** - Unit tests, integration tests, Virtual Master.
+- **[CONFORMANCE](CONFORMANCE.md)** - Virtual-Master conformance suites.
+
 ## Development
 
 - **[ROADMAP](ROADMAP.md)** - Development roadmap and V1.1.5 compliance checklist
@@ -29,9 +36,19 @@ The companion master stack is [iolinki-master](https://github.com/w1ne/iolinki-m
 - **[Virtual Master](../tools/virtual_master/README.md)** - Python Virtual IO-Link Master
   - [Services](../tools/virtual_master/SERVICES.md) - Supported services and API
 
-## Specification
+## Specification (source of truth)
 
-- **[IO-Link Interface Spec V1.1.5](IOL-Interface-Spec_10002_V1.1.5_Oct2025/)** - Official specification
+- **[IO-Link Interface Spec V1.1.5](IOL-Interface-Spec_10002_V1.1.5_Oct2025/)** -
+  **authoritative**. When code, comments or docs disagree with this PDF, the PDF
+  wins.
+- **[superpowers/](superpowers/)** - historical plans/specs; not maintained.
+
+## Transport note
+
+The default DLL transport is upstream's streaming path (`phy->send/recv_byte`,
+`src/dll.c`). The two-pump / ISR transport is opt-in:
+`cmake -DIOLINK_ISR_PUMP=ON` (enables the `#if` ISR block in `src/dll.c`). See
+[SPEC_CONFORMANCE](SPEC_CONFORMANCE.md).
 
 ## API Documentation (Doxygen)
 
