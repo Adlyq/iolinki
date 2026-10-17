@@ -211,19 +211,26 @@ static void test_parameter_lock_blocks_tag_write(void** state)
 {
     (void) state;
 
+    /* Establish a known value before enabling the lock. */
+    const uint8_t original[] = {'X', 'Y', 'Z'};
+    uint8_t out[8] = {0};
+    int n = write_object(IOLINK_IDX_APPLICATION_TAG, original, sizeof(original), out, sizeof(out));
+    assert_int_equal(n, 0);
+
     iolink_device_info_set_access_locks(IOLINK_LOCK_PARAM);
 
-    uint8_t out[8] = {0};
-    const uint8_t tag[] = {'X', 'Y', 'Z'};
-    int n = write_object(IOLINK_IDX_APPLICATION_TAG, tag, sizeof(tag), out, sizeof(out));
+    const uint8_t overwrite[] = {'A', 'B', 'C'};
+    n = write_object(IOLINK_IDX_APPLICATION_TAG, overwrite, sizeof(overwrite), out, sizeof(out));
     assert_int_equal(n, 2);
     assert_int_equal(out[0], 0x80U);
     assert_int_equal(out[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 
-    /* Reads remain available while only the parameter lock is set. */
+    /* B.2.4: Read access is not affected and the locked write did not change
+     * the stored value. */
     uint8_t readback[16] = {0};
     n = read_object(IOLINK_IDX_APPLICATION_TAG, readback, sizeof(readback));
-    assert_true(n >= 0);
+    assert_int_equal(n, (int) sizeof(original));
+    assert_memory_equal(readback, original, sizeof(original));
 }
 
 /* B.2.8-B.2.15: identification strings are truncated to their fixedLength
