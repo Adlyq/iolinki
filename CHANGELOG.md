@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-17
+
 ### Changed
+- **BREAKING wire change: OPERATE M-sequence reply layout corrected.** The
+  reply to a READ M-sequence is `[OD][PD-in] CKS` and the reply to a WRITE
+  M-sequence is `[PD-in] CKS` with no OD octet, matching Figures
+  A.9/A.10/A.13/A.14. `iolink_frame_decode_operate_response`, the Python
+  virtual master and the reference example follow the same layout. Device and
+  `iolinki-master` 1.1.0 must be upgraded together for the multi-octet OPERATE
+  M-sequence types, because a mixed old/new pairing frames replies with the
+  wrong layout and produces checksum errors.
 - **BREAKING:** the mislabelled `IOLINK_EVENT_PHY_VOLTAGE_FAULT` (0x1805) and
   `IOLINK_EVENT_PHY_SHORT_CIRCUIT` (0x1806) macros are removed. Those values are
   Table D.2 Master/Port codes ("Overtemperature", "Short circuit at L+"), not
@@ -16,19 +26,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   below 18 V, `IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN` (0x5110) for a reading
   above 30 V, and `IOLINK_EVENTCODE_SHORT_CIRCUIT` (0x7710). Callers that
   referenced the removed macros must switch to the `IOLINK_EVENTCODE_*` names.
+- The public GPLv3 grant is no longer limited: the evaluation, non-commercial
+  and 90-day conditions are dropped from `LICENSE`. The commercial license
+  remains the alternative for proprietary products. The 12-month support
+  period is removed from the public evidence bundle and security documents.
 - Registering a vendor handler takes ownership of the Preferred Index range
   `0x0040`-`0x00FE`: requests to `0x0040` go to the handler, shadowing the
   built-in error-statistics object while it is registered.
 
+### Added
+- `tools/bench_run.py`, a one-command physical bench runner: it builds and
+  flashes the firmware, captures the master's serial output, stores the raw
+  capture with its SHA-256 and records the result; it records nothing for an
+  empty capture or a dirty checkout.
+- `tools/evidence_bundle.py`, a per-firmware-hash evidence bundle with the gap
+  list the caller cannot drop.
+
 ### Fixed
-- **OPERATE M-sequence reply layout.** Replies now match Figures
-  A.9/A.10/A.13/A.14: the reply to a READ M-sequence is `[OD][PD-in] CKS` and
-  the reply to a WRITE M-sequence is `[PD-in] CKS` with no OD octet.
-  `iolink_frame_decode_operate_response`, the Python virtual master and the
-  reference example follow the same layout. Wire change for the multi-octet
-  OPERATE M-sequence types: device and master must be upgraded together,
-  because a mixed old/new pairing frames replies with the wrong layout and
-  produces checksum errors.
 - EventQualifier INSTANCE now encodes `0x04` (Application, Table A.17) instead of
   the reserved `0x02` in both the Table 58 event memory and the
   DetailedDeviceStatus (Index 0x0025) builder; an error-class device event is
@@ -42,6 +56,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Extended Index range from `0x0100`; unsupported vendor indices keep answering
   `0x11` (Service not available). The built-in error-statistics object at
   `0x0040` remains the fallback when no vendor handler is registered.
+- The bench record tooling accepts the gateway line the master prints and
+  rejects a pass whose line names a different vendor or device.
+
+### Validation scope
+- Host suites pass: 36/36 CMocka tests, the Python virtual-master suites, and
+  the corrected wire layout is exercised against `iolinki-master` in the
+  cross-repo test. Physical-master re-validation of the corrected reply layout
+  remains separate pending work.
 
 ## [2.1.1] - 2026-10-02
 

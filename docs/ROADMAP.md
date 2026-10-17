@@ -273,3 +273,29 @@ This roadmap outlines the development path for `iolinki`, enabling a fully compl
 - [ ] **Consulting Packages**: Define "Integration Support" and "Custom Sensor Development" service offerings.
 - [ ] **Training Material**: Create "Zero to IO-Link" workshop content.
 - [ ] **Showcases**: Publish case studies of the stack running on diverse hardware (STM32, NXP, Nordic, Espressif).
+
+## Release Retrospective
+
+### v3.0.0 — 2026-10-17
+
+Completed in this release (see CHANGELOG for the authoritative list):
+
+- OPERATE M-sequence reply layout corrected to Figures A.9/A.10/A.13/A.14:
+  READ replies are `[OD][PD-in] CKS`, WRITE replies are `[PD-in] CKS`, with
+  `iolinki-master` 1.1.0 in lockstep.
+- EventQualifier INSTANCE corrected to `0x04` (Application, Table A.17) in the
+  event memory and the DetailedDeviceStatus builder.
+- Device fault events use Table D.1 codes (`0x5110`, `0x5111`, `0x7710`) instead
+  of the mislabelled Master/Port codes `0x1805`/`0x1806`; negative PHY voltage
+  readings are "measurement unavailable" instead of a fault.
+- Preferred Indices `0x0040`-`0x00FE` route to the vendor service (B.2.27).
+- GPLv3 grant unrestricted; physical bench runner and evidence bundle added.
+
+Follow-ups split out of this work:
+
+- Decide the operating-baudrate source for recovery; five sites still hard-code
+  COM1 in `src/dll.c` (Figure 31 allows one supported rate, but no clause names
+  the recovery rate) — maintainer decision needed before changing behavior.
+- Remaining legacy event macros in `include/iolinki/events.h` (`APP_TEMP_*`,
+  `HW_*`) still carry non-standard or reserved values; audit in a later task.
+- Physical-master re-validation of the corrected reply layout.
