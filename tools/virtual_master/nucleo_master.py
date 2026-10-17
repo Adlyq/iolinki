@@ -74,7 +74,7 @@ def main():
                 if response.valid:
                      # Simulate some meaningful output occasionally
                      if i % 10 == 0:
-                         print(f"  Cycle {i}: PD_In={response.payload.hex()}")
+                         print(f"  Cycle {i}: PD_In={response.pd.hex()}")
                 else:
                      print(f"  Cycle {i}: No response")
 

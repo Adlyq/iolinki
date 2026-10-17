@@ -96,13 +96,13 @@ def test_type1_communication():
                 print(f"   ❌ No valid response in cycle {i + 1}")
                 return 1
 
-            if prev_expected and response.payload == prev_expected:
+            if prev_expected and response.pd == prev_expected:
                 print(
-                    f"   ✅ Received PD_IN={response.payload.hex()} (matches previous cycle + 1)"
+                    f"   ✅ Received PD_IN={response.pd.hex()} (matches previous cycle + 1)"
                 )
             elif prev_expected:
                 print(
-                    f"   ⚠️ Data mismatch! Expected {prev_expected.hex()}, got {response.payload.hex()}"
+                    f"   ⚠️ Data mismatch! Expected {prev_expected.hex()}, got {response.pd.hex()}"
                 )
 
             prev_expected = bytes([(b + 1) & 0xFF for b in out_val])

@@ -40,7 +40,7 @@ def test_type_1_1():
 
         if resp.valid:
             print(
-                f"Cycle {i + 1}: PD_Out={pd_out.hex()}, PD_In={resp.payload.hex()}, OD=0x{resp.od:02X}"
+                f"Cycle {i + 1}: PD_Out={pd_out.hex()}, PD_In={resp.pd.hex()}"
             )
         else:
             print(f"❌ Cycle {i + 1} failed")
@@ -107,9 +107,8 @@ def test_type_2_1():
         resp = master.run_cycle(pd_out=pd_out, od_req=0x00)
 
         if resp.valid:
-            od2_str = f", OD2=0x{resp.od2:02X}" if resp.od2 is not None else ""
             print(
-                f"Cycle {i + 1}: PD_Out={pd_out.hex()}, PD_In={resp.payload.hex()}, OD=0x{resp.od:02X}{od2_str}"
+                f"Cycle {i + 1}: PD_Out={pd_out.hex()}, PD_In={resp.pd.hex()}"
             )
         else:
             print(f"❌ Cycle {i + 1} failed")

@@ -77,7 +77,7 @@ def test_sio_mode_switching():
             resp = master.run_cycle(pd_out=bytes([0x11, 0x22]))
             if resp.valid:
                 print(
-                    f"  Cycle {i + 1}: PD_In={resp.payload.hex()}, Mode={master.phy_mode}"
+                    f"  Cycle {i + 1}: PD_In={resp.pd.hex()}, Mode={master.phy_mode}"
                 )
             else:
                 print(f"  ❌ Cycle {i + 1} failed")
@@ -96,7 +96,7 @@ def test_sio_mode_switching():
             resp = master.run_cycle(pd_out=bytes([0x33, 0x44]))
             if resp.valid:
                 print(
-                    f"  Cycle {i + 1}: PD_In={resp.payload.hex()}, Mode={master.phy_mode}"
+                    f"  Cycle {i + 1}: PD_In={resp.pd.hex()}, Mode={master.phy_mode}"
                 )
             else:
                 print(f"  ❌ Cycle {i + 1} failed")
@@ -115,7 +115,7 @@ def test_sio_mode_switching():
             resp = master.run_cycle(pd_out=bytes([0x55, 0x66]))
             if resp.valid:
                 print(
-                    f"  Cycle {i + 1}: PD_In={resp.payload.hex()}, Mode={master.phy_mode}"
+                    f"  Cycle {i + 1}: PD_In={resp.pd.hex()}, Mode={master.phy_mode}"
                 )
             else:
                 print(f"  ❌ Cycle {i + 1} failed")

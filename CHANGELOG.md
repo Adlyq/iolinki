@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   built-in error-statistics object while it is registered.
 
 ### Fixed
+- **OPERATE M-sequence reply layout.** Replies now match Figures
+  A.9/A.10/A.13/A.14: the reply to a READ M-sequence is `[OD][PD-in] CKS` and
+  the reply to a WRITE M-sequence is `[PD-in] CKS` with no OD octet.
+  `iolink_frame_decode_operate_response`, the Python virtual master and the
+  reference example follow the same layout. Wire change for the multi-octet
+  OPERATE M-sequence types: device and master must be upgraded together,
+  because a mixed old/new pairing frames replies with the wrong layout and
+  produces checksum errors.
 - EventQualifier INSTANCE now encodes `0x04` (Application, Table A.17) instead of
   the reserved `0x02` in both the Table 58 event memory and the
   DetailedDeviceStatus (Index 0x0025) builder; an error-class device event is

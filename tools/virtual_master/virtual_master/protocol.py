@@ -237,11 +237,12 @@ class MSequenceGenerator:
 
 
 class DeviceResponse:
-    """Parse a Device reply: [PD-in octets][OD octets] CKS (A.1.5).
+    """Parse a Device reply (Figures A.9/A.10/A.13/A.14).
 
-    There is no leading status octet: the Event flag (bit 7) and the PD
-    validity flag (bit 6, 1 = invalid) live in the trailing CKS octet together
-    with the 6-bit message checksum.
+    A READ reply is [OD octets][PD-in octets] CKS; a WRITE reply carries no OD
+    and is [PD-in octets] CKS. There is no leading status octet: the Event flag
+    (bit 7) and the PD validity flag (bit 6, 1 = invalid) live in the trailing
+    CKS octet together with the 6-bit message checksum (A.1.5).
     """
 
     def __init__(self, data: bytes, od_len: int = 1, pd_in_len: int = 0):
@@ -264,16 +265,16 @@ class DeviceResponse:
         self.checksum = data[-1]
         body = data[:-1]
 
-        expected = pd_in_len + od_len
-        if len(body) > expected and od_len > 0:
+        expected = od_len + pd_in_len
+        if len(body) > expected:
             print(f"[DEBUG] Resp raw={data.hex()} expected body={expected}")
 
-        self.pd = body[:pd_in_len]
-        self.payload = body[pd_in_len:]
-        if len(body) >= (pd_in_len + 1):
-            self.od = body[pd_in_len]
-            if od_len >= 2 and len(body) >= (pd_in_len + 2):
-                self.od2 = body[pd_in_len + 1]
+        self.payload = body[:od_len]
+        self.pd = body[od_len : od_len + pd_in_len]
+        if len(self.payload) >= 1:
+            self.od = self.payload[0]
+            if od_len >= 2 and len(self.payload) >= 2:
+                self.od2 = self.payload[1]
 
         frame = bytearray(data)
         frame[-1] &= M_SEQUENCE_TYPE_MASK  # checksum bits zeroed, flags kept
