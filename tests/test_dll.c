@@ -857,6 +857,78 @@ static void test_dll_master_cycle_time_stored(void** state)
     assert_int_equal(dev.ctx.dll.master_cycle_time, 0x29U);
 }
 
+/* A corrupt request checksum must never be answered. For a pre-cached
+ * (TYPE_2_V) device the process channel is answered eagerly from the ISR, so
+ * the checksum/type gate must drop the frame there (no transmit at all). */
+static void test_dll_bad_cks_process_no_reply(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+                              .od_width = 1,
+                              .pd_in_len = 1,
+                              .pd_out_len = 1};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    move_to_operate_ctx(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    mock_phy_clear_tx();
+
+    /* Process-channel READ with a deliberately corrupted CKT checksum. */
+    uint8_t frame[3] = {0x80U, IOLINK_MSEQ_TYPE_2, 0x00U};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 3));
+    frame[1] = (uint8_t) (frame[1] ^ 0x01U); /* corrupt the checksum bits */
+    for (int i = 0; i < 3; i++) {
+        mock_phy_feed_byte(frame[i]);
+    }
+    mock_phy_feed_chk();
+    test_io_cycle(&dev.ctx);
+
+    size_t len = 0U;
+    (void) mock_phy_tx(&len);
+    assert_int_equal(len, 0U); /* must not answer a corrupt frame */
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+}
+
+/* Same guarantee for a non-cyclic channel (answered by the main pump): a bad
+ * checksum is rejected there and no reply is transmitted. */
+static void test_dll_bad_cks_acyclic_no_reply(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+                              .od_width = 1,
+                              .pd_in_len = 1,
+                              .pd_out_len = 1};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    move_to_operate_ctx(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    mock_phy_clear_tx();
+
+    /* Acyclic ISDU READ with a deliberately corrupted CKT checksum. */
+    uint8_t frame[3] = {
+        (uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START),
+        IOLINK_MSEQ_TYPE_2, 0x00U};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 3));
+    frame[1] = (uint8_t) (frame[1] ^ 0x01U);
+    for (int i = 0; i < 3; i++) {
+        mock_phy_feed_byte(frame[i]);
+    }
+    mock_phy_feed_chk();
+    test_io_cycle(&dev.ctx);
+
+    size_t len = 0U;
+    (void) mock_phy_tx(&len);
+    assert_int_equal(len, 0U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -878,6 +950,10 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_dll_operate_isdu_write_dispatched, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_operate_cyclic_idle_od_zero, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_bad_cks_process_no_reply, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_bad_cks_acyclic_no_reply, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_master_cycle_time_stored, test_setup,
                                         test_teardown),
