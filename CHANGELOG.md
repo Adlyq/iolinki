@@ -13,7 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the reply to a WRITE M-sequence is `[PD-in] CKS` with no OD octet.
   `iolink_frame_decode_operate_response`, the Python virtual master and the
   reference example follow the same layout. Wire change for the multi-octet
-  OPERATE M-sequence types.
+  OPERATE M-sequence types: device and master must be upgraded together,
+  because a mixed old/new pairing frames replies with the wrong layout and
+  produces checksum errors.
 
 ## [2.1.1] - 2026-10-02
 
