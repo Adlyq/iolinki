@@ -657,6 +657,25 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
             return;
         }
 
+        case IOLINK_IDX_PROCESS_DATA_OUTPUT: {
+            /* Table B.8/B.2.24: return the last valid process output data. */
+            uint8_t len = 0U;
+            if (ctx->dll_ctx != NULL) {
+                const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
+                len = dll->pd_out_len_current;
+                if (len > sizeof(dll->pd_out)) {
+                    len = (uint8_t) sizeof(dll->pd_out);
+                }
+                if (len > 0U) {
+                    (void) memcpy(ctx->response_buf, dll->pd_out, len);
+                }
+            }
+            ctx->response_len = len;
+            ctx->response_idx = 0U;
+            ctx->state = ISDU_STATE_RESPONSE_READY;
+            return;
+        }
+
         case IOLINK_IDX_DEVICE_STATUS:
             ctx->response_buf[0] =
                 iolink_events_get_highest_severity((iolink_events_ctx_t*) ctx->event_ctx);
