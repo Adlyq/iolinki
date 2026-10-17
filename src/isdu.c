@@ -455,23 +455,9 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
     }
 
     switch (ctx->header.index) {
-        case IOLINK_IDX_VENDOR_ID:
-            ctx->response_buf[0] = (uint8_t) (info->vendor_id >> 8);
-            ctx->response_buf[1] = (uint8_t) (info->vendor_id & 0xFF);
-            ctx->response_len = 2U;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
-            return;
-
-        case IOLINK_IDX_DEVICE_ID:
-            /* Table B.8/7.3.5: DeviceID is 3 octets (MSO first). */
-            ctx->response_buf[0] = (uint8_t) ((info->device_id >> 16) & 0xFFU);
-            ctx->response_buf[1] = (uint8_t) ((info->device_id >> 8) & 0xFFU);
-            ctx->response_buf[2] = (uint8_t) (info->device_id & 0xFFU);
-            ctx->response_len = 3U;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
-            return;
+        /* Table B.8: 0x0004-0x000B are reserved. VendorID/DeviceID live in
+           Direct Parameter Page 1 (0x07-0x0B), not in an ISDU index. A read of
+           0x000A/0x000B therefore falls through to the default IDX_NOTAVAIL. */
 
         case IOLINK_IDX_PROFILE_CHARACTERISTIC:
             ctx->response_buf[0] = (uint8_t) (info->profile_characteristic >> 8);

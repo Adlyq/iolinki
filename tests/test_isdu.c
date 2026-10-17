@@ -558,36 +558,6 @@ static void test_isdu_direct_parameters_page2(void** state)
     assert_int_equal(one_rb[0], 0x5A);
 }
 
-static void test_isdu_device_id_three_octets(void** state)
-{
-    (void) state;
-    iolink_isdu_ctx_t ctx;
-    iolink_device_info_t info;
-    (void) memset(&info, 0, sizeof(info));
-    info.vendor_name = "v";
-    info.vendor_text = "v";
-    info.product_name = "p";
-    info.product_id = "i";
-    info.product_text = "t";
-    info.serial_number = "s";
-    info.hardware_revision = "h";
-    info.firmware_revision = "f";
-    info.device_id = 0x010203U;
-    iolink_device_info_init(&info);
-    iolink_params_init();
-    iolink_isdu_init(&ctx);
-
-    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DEVICE_ID, 0x00), 1);
-    iolink_isdu_process(&ctx);
-
-    uint8_t data[4];
-    int len = isdu_collect_response(&ctx, data, sizeof(data));
-    assert_int_equal(len, 3);
-    assert_int_equal(data[0], 0x01);
-    assert_int_equal(data[1], 0x02);
-    assert_int_equal(data[2], 0x03);
-}
-
 static void test_isdu_reserved_indices_negative(void** state)
 {
     (void) state;
@@ -680,8 +650,6 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_detailed_device_status_read, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_error_stats_read, test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_isdu_device_id_three_octets, test_setup,
-                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_reserved_indices_negative, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_mseq_capability_codes, test_setup, test_teardown),
