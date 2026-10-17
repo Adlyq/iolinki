@@ -114,7 +114,7 @@ static void test_vendor_device_id_indices_reserved(void** state)
         int n = read_object(reserved[i], out, sizeof(out));
         assert_int_equal(n, 2);
         assert_int_equal(out[0], 0x80U);
-        assert_int_equal(out[1], IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL);
+        assert_int_equal(out[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
     }
 }
 
