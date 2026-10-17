@@ -159,7 +159,8 @@ static void test_isdu_wire_read_figure_a20(void** state)
     assert_memory_equal(resp, expected, sizeof(expected));
 }
 
-/* Figure A.20: write Index 0x10 Subindex 0x01 data 0x12 0x34 -> 52 52. */
+/* Figure A.20 / Table C.1: a WRITE to the read-only VendorName (0x10) is
+ * refused with 0x80 0x23. */
 static void test_isdu_wire_write_figure_a20(void** state)
 {
     (void) state;
@@ -172,11 +173,11 @@ static void test_isdu_wire_write_figure_a20(void** state)
     assert_int_equal(chkpdu(req, 6U), 0U);
     wire_write_request(&ctx, req, sizeof(req));
 
-    uint8_t resp[2];
+    const uint8_t expected[4] = {0x44U, 0x80U, IOLINK_ISDU_ERROR_WRITE_PROTECTED, 0xE7U};
+    uint8_t resp[4];
     size_t n = wire_read_response(&ctx, resp, sizeof(resp));
-    assert_int_equal(n, 2U);
-    assert_int_equal(resp[0], 0x52U);
-    assert_int_equal(resp[1], 0x52U);
+    assert_int_equal(n, sizeof(expected));
+    assert_memory_equal(resp, expected, sizeof(expected));
 }
 
 /* 16-bit read of VendorName 0x0010 with FlowCTRL COUNT wrap past 15. */

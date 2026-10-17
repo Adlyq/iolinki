@@ -460,23 +460,43 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
         return;
     }
 
-    /* Table C.1: only the identification tags are writable in this handler;
-       every other object here (profile, strings, status, process data) is
-       read-only, so a WRITE is access denied. */
+    /* Table C.1: the identification tags are writable here. A known read-only
+       object rejects a WRITE with access denied; an unknown/reserved index
+       falls through to the default IDX_NOTAVAIL response. */
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
         const uint16_t index = ctx->header.index;
         const bool writable_tag = (index == IOLINK_IDX_APPLICATION_TAG) ||
                                   (index == IOLINK_IDX_FUNCTION_TAG) ||
                                   (index == IOLINK_IDX_LOCATION_TAG);
-        if (!writable_tag) {
-            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
-            return;
+        if (writable_tag) {
+            /* Table B.2.4: with the Parameter (write) access lock set, every
+               read/write parameter except DeviceAccessLocks is write-protected. */
+            if ((iolink_device_info_get_access_locks() & IOLINK_LOCK_PARAM) != 0U) {
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+                return;
+            }
         }
-        /* Table B.2.4: with the Parameter (write) access lock set, every
-           read/write parameter except DeviceAccessLocks is write-protected. */
-        if ((iolink_device_info_get_access_locks() & IOLINK_LOCK_PARAM) != 0U) {
-            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
-            return;
+        else {
+            switch (index) {
+                case IOLINK_IDX_PROFILE_CHARACTERISTIC:
+                case IOLINK_IDX_VENDOR_NAME:
+                case IOLINK_IDX_VENDOR_TEXT:
+                case IOLINK_IDX_PRODUCT_NAME:
+                case IOLINK_IDX_PRODUCT_ID:
+                case IOLINK_IDX_PRODUCT_TEXT:
+                case IOLINK_IDX_SERIAL_NUMBER:
+                case IOLINK_IDX_HARDWARE_REVISION:
+                case IOLINK_IDX_FIRMWARE_REVISION:
+                case IOLINK_IDX_PRODUCT_URI:
+                case IOLINK_IDX_ERROR_COUNT:
+                case IOLINK_IDX_DEVICE_STATUS:
+                case IOLINK_IDX_PROCESS_DATA_INPUT:
+                case IOLINK_IDX_PROCESS_DATA_OUTPUT:
+                    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+                    return;
+                default:
+                    break; /* unknown index: IDX_NOTAVAIL below */
+            }
         }
     }
 
