@@ -578,7 +578,7 @@ static void test_isdu_reserved_indices_negative(void** state)
     assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
     assert_int_equal(byte, 0x80);
     assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
-    assert_int_equal(byte, IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL);
+    assert_int_equal(byte, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
 }
 
 static void test_isdu_system_command_read_only_write(void** state)

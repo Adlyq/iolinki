@@ -172,7 +172,9 @@
  * @{
  */
 #define IOLINK_ISDU_ERROR_NONE 0x00U               /**< No error. */
-#define IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL 0x11U  /**< Requested service not available. */
+#define IOLINK_ISDU_ERROR_IDX_NOT_AVAIL 0x11U      /**< Index not available (Table C.1, C.2.3). */
+#define IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL \
+    0x11U /**< @deprecated Misnamed alias of IDX_NOT_AVAIL (0x20 is SERV_NOTAVAIL). */
 #define IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL 0x12U /**< Requested subindex not available. */
 #define IOLINK_ISDU_ERROR_NOT_ACCESSIBLE 0x23U     /**< Object access denied (Table C.1). */
 #define IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL \

@@ -131,7 +131,8 @@ static void test_isdu_error_values(void** state)
 {
     (void) state;
     assert_int_equal(IOLINK_ISDU_ERROR_NONE, 0x00U);
-    assert_int_equal(IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL, 0x11U);      /* IDX_NOTAVAIL */
+    assert_int_equal(IOLINK_ISDU_ERROR_IDX_NOT_AVAIL, 0x11U);         /* IDX_NOTAVAIL */
+    assert_int_equal(IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL, 0x11U);      /* legacy alias */
     assert_int_equal(IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL, 0x12U);     /* SUBIDX_NOTAVAIL */
     assert_int_equal(IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL, 0x20U); /* SERV_NOTAVAIL */
     assert_int_equal(IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL, 0x35U);     /* FUNC_NOTAVAIL */

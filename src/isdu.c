@@ -708,8 +708,8 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
                handle_standard_commands() via handle_detailed_device_status(). */
 
         default:
-            ctx->response_buf[0] = 0x80U; /* Error: Service not available */
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+            ctx->response_buf[0] = 0x80U; /* Error: Index not available (C.2.3) */
+            ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
             ctx->response_len = 2U;
             ctx->response_idx = 0U;
             ctx->state = ISDU_STATE_RESPONSE_READY;
