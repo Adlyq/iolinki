@@ -406,20 +406,24 @@ static void test_isdu_pdin_descriptor_read(void** state)
     iolink_params_init();
     iolink_isdu_init(&ctx);
 
-    /* Wire a DLL context with a configured PD-in length of 3 so the descriptor
-       reflects the real runtime length rather than a hardcoded constant. */
+    /* Wire a DLL context with a configured PD-in length of 3. */
     assert_int_equal(iolink_dll_set_pd_length(&dll, 3, 0), 0);
+    dll.pd_in[0] = 0x11U;
+    dll.pd_in[1] = 0x22U;
+    dll.pd_in[2] = 0x33U;
     ctx.dll_ctx = &dll;
 
-    /* Read Process Data Input descriptor (Index 0x0028) */
+    /* Table B.8/B.2.23: a read returns the last valid PD-in data (3 octets). */
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00), 1);
-
     iolink_isdu_process(&ctx);
 
-    /* Verify response reports the configured PD-in length */
     uint8_t byte;
-    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
-    assert_int_equal(byte, 3);
+    const uint8_t expected[3] = {0x11U, 0x22U, 0x33U};
+    for (size_t i = 0U; i < sizeof(expected); i++) {
+        assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+        assert_int_equal(byte, expected[i]);
+    }
+    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 0);
 
     /* Test write protection */
     iolink_isdu_init(&ctx);
