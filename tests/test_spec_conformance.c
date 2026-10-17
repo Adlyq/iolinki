@@ -125,8 +125,8 @@ static void test_vendor_device_id_indices_reserved(void** state)
     (void) state;
 
     const uint16_t reserved[] = {
-        0x0004U, 0x0005U, 0x0006U, 0x0007U, 0x0008U, 0x0009U, 0x000AU, 0x000BU,
-        0x001CU, 0x001DU, 0x001EU, 0x001FU,
+        0x0004U, 0x0005U, 0x0006U, 0x0007U, 0x0008U, 0x0009U,
+        0x000AU, 0x000BU, 0x001CU, 0x001DU, 0x001EU, 0x001FU,
     };
     for (size_t i = 0U; i < (sizeof(reserved) / sizeof(reserved[0])); i++) {
         uint8_t out[8] = {0};
