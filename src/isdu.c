@@ -638,30 +638,24 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
             }
             break;
 
-        case IOLINK_IDX_PROCESS_DATA_INPUT:
-            /* Read-only: Returns PD Input descriptor (1 byte: PD length) */
-            if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
-                ctx->response_buf[0] = 0x80U;
-                ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
-                ctx->response_len = 2U;
-                ctx->response_idx = 0U;
-                ctx->state = ISDU_STATE_RESPONSE_READY;
-                return;
-            }
-            /* Return the actual configured PD Input length (1 byte). */
-            {
-                uint8_t pd_in = 0U;
-                uint8_t pd_out = 0U;
-                if (ctx->dll_ctx != NULL) {
-                    iolink_dll_get_pd_length((const iolink_dll_ctx_t*) ctx->dll_ctx, &pd_in,
-                                             &pd_out);
+        case IOLINK_IDX_PROCESS_DATA_INPUT: {
+            /* Table B.8/B.2.23: return the last valid process input data. */
+            uint8_t len = 0U;
+            if (ctx->dll_ctx != NULL) {
+                const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
+                len = dll->pd_in_len_current;
+                if (len > sizeof(dll->pd_in)) {
+                    len = (uint8_t) sizeof(dll->pd_in);
                 }
-                ctx->response_buf[0] = pd_in;
+                if (len > 0U) {
+                    (void) memcpy(ctx->response_buf, dll->pd_in, len);
+                }
             }
-            ctx->response_len = 1U;
+            ctx->response_len = len;
             ctx->response_idx = 0U;
             ctx->state = ISDU_STATE_RESPONSE_READY;
             return;
+        }
 
         case IOLINK_IDX_DEVICE_STATUS:
             ctx->response_buf[0] =
