@@ -65,8 +65,13 @@
 #define IOLINK_FLOWCTRL_COUNT_MASK 0x0FU /**< COUNT M-sequence counter mask. */
 
 /** @brief MasterCommand value written to Direct Parameter page address 0x00 (Table B.2). */
-#define IOLINK_CMD_FALLBACK 0x5AU       /**< Transition to SIO (T_FBD, Table 43). */
-#define IOLINK_CMD_DEVICE_OPERATE 0x99U /**< Switch to OPERATE. */
+#define IOLINK_CMD_FALLBACK 0x5AU             /**< Transition to SIO (T_FBD, Table 43). */
+#define IOLINK_CMD_MASTER_IDENT 0x95U         /**< MasterIdent: master revision > 1.0. */
+#define IOLINK_CMD_DEVICE_IDENT 0x96U         /**< DeviceIdent: check DPP for changed entries. */
+#define IOLINK_CMD_DEVICE_STARTUP 0x97U       /**< DeviceStartup: -> STARTUP. */
+#define IOLINK_CMD_PROCESS_DATA_OPERATE 0x98U /**< ProcessDataOutputOperate: PD valid. */
+#define IOLINK_CMD_DEVICE_OPERATE 0x99U       /**< DeviceOperate: PD invalid, -> OPERATE. */
+#define IOLINK_CMD_DEVICE_PREOPERATE 0x9AU    /**< DevicePreoperate: -> PREOPERATE. */
 /** @} */
 
 /**
@@ -98,8 +103,8 @@
 #define IOLINK_IDX_DIRECT_PARAMETERS_2 0x0001U    /**< Direct Parameter page 2. */
 #define IOLINK_IDX_SYSTEM_COMMAND 0x0002U         /**< System Command index. */
 #define IOLINK_IDX_DATA_STORAGE 0x0003U           /**< Data Storage object (parameter image). */
-#define IOLINK_IDX_VENDOR_ID 0x000AU              /**< Vendor ID index. */
-#define IOLINK_IDX_DEVICE_ID 0x000BU              /**< Device ID index. */
+#define IOLINK_IDX_VENDOR_ID 0x000AU /**< Legacy/non-standard; VendorID is DPP1 0x07-0x08. */
+#define IOLINK_IDX_DEVICE_ID 0x000BU /**< Legacy/non-standard; DeviceID is DPP1 0x09-0x0B. */
 #define IOLINK_IDX_DEVICE_ACCESS_LOCKS 0x000CU    /**< Device Access Locks index. */
 #define IOLINK_IDX_PROFILE_CHARACTERISTIC 0x000DU /**< Profile characteristic index. */
 #define IOLINK_IDX_VENDOR_NAME 0x0010U            /**< Vendor name index. */
@@ -113,10 +118,13 @@
 #define IOLINK_IDX_APPLICATION_TAG 0x0018U        /**< Application tag index. */
 #define IOLINK_IDX_FUNCTION_TAG 0x0019U           /**< Function tag index. */
 #define IOLINK_IDX_LOCATION_TAG 0x001AU           /**< Location tag index. */
+#define IOLINK_IDX_PRODUCT_URI 0x001BU            /**< ProductURI (V1.1.4+; conditional on a Profile). */
 #define IOLINK_IDX_ERROR_COUNT 0x0020U            /**< ErrorCount index (2 octets). */
 #define IOLINK_IDX_DEVICE_STATUS 0x0024U          /**< DeviceStatus index (1 octet). */
 #define IOLINK_IDX_DETAILED_DEVICE_STATUS 0x0025U /**< DetailedDeviceStatus index (Table B.8). */
-#define IOLINK_IDX_PROCESS_DATA_INPUT 0x0028U     /**< ProcessDataInput descriptor index. */
+#define IOLINK_IDX_PROCESS_DATA_INPUT 0x0028U     /**< ProcessDataInput (last valid PD input data). */
+#define IOLINK_IDX_PROCESS_DATA_OUTPUT 0x0029U    /**< ProcessDataOutput (last valid PD-out). */
+#define IOLINK_IDX_OFFSET_TIME 0x0030U            /**< Offset-Time (RecordT, optional). */
 #define IOLINK_IDX_ERROR_STATS 0x0040U /**< Vendor-specific error statistics (0x0040+). */
 /** @} */
 
@@ -170,6 +178,7 @@
 #define IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL \
     0x35U                                       /**< Command function not available (Table C.1). */
 #define IOLINK_ISDU_ERROR_BUSY 0x30U            /**< Device busy. */
+#define IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL 0x20U /**< SERV_NOTAVAIL (Table C.1). */
 #define IOLINK_ISDU_ERROR_WRITE_PROTECTED 0x23U /**< Access denied, Table C.1. */
 #define IOLINK_ISDU_ERROR_PARAM_INCONSISTENT 0x40U /**< Parameter set inconsistent. */
 #define IOLINK_ISDU_ERROR_SEGMENTATION 0x81U       /**< Segmentation error. */
