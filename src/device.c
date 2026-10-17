@@ -74,6 +74,17 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.pd_out_len_current = ctx->dll.pd_out_len;
     ctx->dll.pd_in_len_max = ctx->dll.pd_in_len;
     ctx->dll.pd_out_len_max = ctx->dll.pd_out_len;
+
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* Two-pump transport: the ISR frames requests and transmits the pre-staged
+     * cyclic reply, so the DLL needs the OD width and whether the bound PHY can
+     * send a staged reply from ISR context. */
+    /* Commit 1 keeps upstream's OD width (1/2 octets); the TYPE_1_V/TYPE_2_V
+     * 8/32-octet extension is a separate, drop-able patch. */
+    ctx->dll.od_width = ctx->dll.od_len;
+    ctx->dll.cyclic_reply_precached =
+        (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && dll_phy_has_tx(&ctx->dll);
+#endif
 }
 
 size_t iolink_device_ctx_size(void)
@@ -179,8 +190,26 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
         iolink_critical_exit();
     }
 
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* Rebuild the pre-staged cyclic reply variants (double buffered) so the ISR
+     * can answer the next cyclic frame without the main loop in the path. */
+    if (ctx->dll.cyclic_reply_precached) {
+        iolink_dll_prepare_cyclic_reply(&ctx->dll);
+    }
+#endif
+
     return 0;
 }
+
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+void iolink_device_process_isr(iolink_device_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    iolink_dll_process_isr(&ctx->dll);
+}
+#endif
 
 int iolink_device_pd_output_read(iolink_device_ctx_t* ctx, uint8_t* data, size_t len)
 {
