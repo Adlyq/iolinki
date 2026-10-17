@@ -440,18 +440,38 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_o
 }
 
 /** @brief Serve the mandatory identification/status indices (vendor, product, tags, etc.). */
+/** @brief Terminate the ISDU service with a two-octet negative response. */
+static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error)
+{
+    ctx->response_buf[0] = 0x80U;
+    ctx->response_buf[1] = error;
+    ctx->response_len = 2U;
+    ctx->response_idx = 0U;
+    ctx->state = ISDU_STATE_RESPONSE_READY;
+}
+
 static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
 {
     const iolink_device_info_t* info = iolink_device_info_get();
     const char* str_data = NULL;
 
     if (info == NULL) {
-        ctx->response_buf[0] = 0x80U;
-        ctx->response_buf[1] = 0x11U;
-        ctx->response_len = 2U;
-        ctx->response_idx = 0U;
-        ctx->state = ISDU_STATE_RESPONSE_READY;
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL);
         return;
+    }
+
+    /* Table C.1: only the identification tags are writable in this handler;
+       every other object here (profile, strings, status, process data) is
+       read-only, so a WRITE is access denied. */
+    if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
+        const uint16_t index = ctx->header.index;
+        const bool writable_tag = (index == IOLINK_IDX_APPLICATION_TAG) ||
+                                  (index == IOLINK_IDX_FUNCTION_TAG) ||
+                                  (index == IOLINK_IDX_LOCATION_TAG);
+        if (!writable_tag) {
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+            return;
+        }
     }
 
     switch (ctx->header.index) {
@@ -770,14 +790,14 @@ static void handle_access_locks(iolink_isdu_ctx_t* ctx)
 static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
 {
     if (ctx->header.type != IOLINK_ISDU_SERVICE_TYPE_READ) {
-        ctx->response_buf[0] = 0x80U;
-        ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
-        ctx->response_len = 2U;
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
         return;
     }
 
     if (ctx->event_ctx == NULL) {
         ctx->response_len = 0U;
+        ctx->response_idx = 0U;
+        ctx->state = ISDU_STATE_RESPONSE_READY;
         return;
     }
 
