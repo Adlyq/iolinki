@@ -43,17 +43,17 @@ typedef struct
     const char* firmware_revision; /**< Firmware revision string (Index 0x0017). */
     const char* application_tag;   /**< Application tag string (Index 0x0018, optional). */
 
-    /* Device IDs (Mandatory Indices) */
-    uint16_t vendor_id;              /**< Vendor ID (Index 0x000A). */
-    uint32_t device_id;              /**< Device ID (Index 0x000B). */
-    uint16_t function_id;            /**< Function ID (Index 0x001C). */
+    /* Device IDs (Direct Parameter page 1, V1.1.5 Table B.1) */
+    uint16_t vendor_id;              /**< Vendor ID (DPP1 0x07-0x08). */
+    uint32_t device_id;              /**< Device ID (DPP1 0x09-0x0B, 24-bit). */
+    uint16_t function_id;            /**< Function ID (subfield of ProfileCharacteristic 0x000D). */
     uint16_t profile_characteristic; /**< Profile characteristic (Index 0x000D). */
 
     /* System Info */
-    uint8_t min_cycle_time;          /**< Minimum cycle time in 100us units (Index 0x0024). */
-    uint16_t revision_id;            /**< Revision ID (Index 0x001E). */
-    uint8_t device_status;           /**< Device status (Index 0x001B). */
-    uint16_t detailed_device_status; /**< Detailed device status (Index 0x001C, optional). */
+    uint8_t min_cycle_time;          /**< Minimum cycle time (DPP1 0x02, Table B.3). */
+    uint16_t revision_id;            /**< Revision ID (DPP1 0x04; 0x0111 = protocol v1.1). */
+    uint8_t device_status;           /**< Device status (Index 0x0024). */
+    uint16_t detailed_device_status; /**< Detailed device status (Index 0x0025, optional). */
 
     /* Access Control */
     uint16_t access_locks; /**< Device access locks bitmask (Index 0x000C). */
