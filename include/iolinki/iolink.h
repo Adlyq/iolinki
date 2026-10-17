@@ -40,6 +40,73 @@ typedef enum
 } iolink_m_seq_type_t;
 
 /**
+ * @brief Decode a Table B.3 cycle-time octet into microseconds.
+ * @param value Cycle-time octet (time base in bits 7:6, multiplier in 5:0).
+ * @return Cycle time in microseconds; 0 for the reserved time base.
+ */
+static inline uint32_t iolink_cycle_time_to_us(uint8_t value)
+{
+    switch (value >> 6) {
+        case 0U:
+            return (uint32_t) (value & 0x3FU) * 100U;
+        case 1U:
+            return 6400U + (uint32_t) (value & 0x3FU) * 400U;
+        case 2U:
+            return 32000U + (uint32_t) (value & 0x3FU) * 1600U;
+        default:
+            return 0U;
+    }
+}
+
+/**
+ * @brief Default OD octet count m for an M-sequence type (Table A.10).
+ * @param m_seq_type M-sequence type value.
+ * @return Default OD width in bytes.
+ */
+static inline uint8_t iolink_mseq_default_od_width(uint8_t m_seq_type)
+{
+    switch (m_seq_type) {
+        case IOLINK_M_SEQ_TYPE_1_1:
+            return 0U;
+        case IOLINK_M_SEQ_TYPE_1_2:
+            return 2U;
+        case IOLINK_M_SEQ_TYPE_1_V:
+            return 8U;
+        default:
+            return 1U;
+    }
+}
+
+/**
+ * @brief OPERATE M-sequence code (Table A.10) for a type and OD width.
+ * @param m_seq_type M-sequence type value.
+ * @param od_width OD octet count m.
+ * @return OPERATE code 0..7.
+ */
+static inline uint8_t iolink_mseq_operate_code(uint8_t m_seq_type, uint8_t od_width)
+{
+    switch (m_seq_type) {
+        case IOLINK_M_SEQ_TYPE_1_2:
+            return 1U;
+        case IOLINK_M_SEQ_TYPE_1_V:
+            return (od_width >= 32U) ? 7U : 6U;
+        case IOLINK_M_SEQ_TYPE_2_V:
+            switch (od_width) {
+                case 2U:
+                    return 5U;
+                case 8U:
+                    return 6U;
+                case 32U:
+                    return 7U;
+                default:
+                    return 4U;
+            }
+        default:
+            return 0U;
+    }
+}
+
+/**
  * @brief IO-Link stack configuration
  *
  * Holds parameters required to initialize the stack behavior.
@@ -51,6 +118,7 @@ typedef struct
     uint8_t pd_in_len;              /**< Process Data Input length (Device to Master) in bytes */
     uint8_t pd_out_len;             /**< Process Data Output length (Master to Device) in bytes */
     uint32_t t_pd_us;               /**< Power-on delay (t_pd) in microseconds */
+    uint8_t od_width;               /**< OD octets (Table A.10); 0 = derive from m_seq_type */
 } iolink_config_t;
 
 /**
