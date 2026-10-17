@@ -81,14 +81,12 @@ int mock_phy_send(void* user, const uint8_t* data, size_t len)
     return (int) mock();
 }
 
+/* Legacy symbol retained for source compatibility; the ISR path uses rx_octet. */
 int mock_phy_recv_byte(void* user, uint8_t* byte)
 {
     (void) user;
-    int res = (int) mock();
-    if (res > 0) {
-        *byte = (uint8_t) mock();
-    }
-    return res;
+    (void) byte;
+    return 0;
 }
 
 int mock_phy_detect_wakeup(void* user)
@@ -105,16 +103,138 @@ void mock_phy_set_cq_line(void* user, uint8_t state)
     g_mock_cq_state = state;
 }
 
+/* ---- Raw-octet ISR transport (RX BYTE / TX BYTE) ----------------------- */
+#define MOCK_RXQ_SIZE 8192U
+static uint8_t g_rxq[MOCK_RXQ_SIZE];
+static size_t g_rxq_head;
+static size_t g_rxq_tail;
+static size_t g_chk_pending;
+static int g_rx_err_pending;
+static uint8_t g_txq[1024];
+static size_t g_txq_len;
+static uint8_t g_tx_active;
+
+void mock_phy_feed_byte(uint8_t b)
+{
+    if (g_rxq_head < MOCK_RXQ_SIZE) {
+        g_rxq[g_rxq_head++] = b;
+    }
+}
+void mock_phy_feed_chk(void)
+{
+    g_chk_pending++;
+}
+void mock_phy_feed_error(void)
+{
+    g_rx_err_pending = 1;
+}
+void mock_phy_clear_rx(void)
+{
+    g_rxq_head = 0U;
+    g_rxq_tail = 0U;
+    g_chk_pending = 0U;
+    g_rx_err_pending = 0;
+}
+void mock_phy_clear_tx(void)
+{
+    g_txq_len = 0U;
+}
+const uint8_t* mock_phy_tx(size_t* len)
+{
+    if (len != NULL) {
+        *len = g_txq_len;
+    }
+    return g_txq;
+}
+
+static int mock_rx_octet(void* user, uint8_t* data, uint8_t* status)
+{
+    (void) user;
+    if (g_rx_err_pending) {
+        g_rx_err_pending = 0;
+        *status = 0U;
+        return -1;
+    }
+    if (g_rxq_tail != g_rxq_head) {
+        *data = g_rxq[g_rxq_tail++];
+        *status = IOLINK_PHY_STATUS_DATA_READY;
+        return 1;
+    }
+    if (g_chk_pending != 0U) {
+        g_chk_pending--;
+        *status = IOLINK_PHY_STATUS_CHK;
+        return 0;
+    }
+    *status = 0U;
+    return 0;
+}
+
+static int mock_tx_octet(void* user, uint8_t b)
+{
+    (void) user;
+    if (!g_tx_active) {
+        g_txq_len = 0U; /* start of a new reply */
+        g_tx_active = 1U;
+    }
+    if (g_txq_len < sizeof(g_txq)) {
+        g_txq[g_txq_len++] = b;
+    }
+    return 0;
+}
+
+static void mock_tx_done(void* user)
+{
+    if (!g_tx_active) {
+        /* CHK-path reset, not a reply: nothing to deliver. */
+        return;
+    }
+    g_tx_active = 0U;
+    /* Hand the whole collected reply to the legacy expectation. */
+    (void) mock_phy_send(user, g_txq, g_txq_len);
+}
+
+static uint8_t mock_int_active(void* user)
+{
+    (void) user;
+    if (g_tx_active) {
+        return 1U;
+    }
+    if (g_rxq_tail != g_rxq_head) {
+        return 1U;
+    }
+    if (g_chk_pending != 0U) {
+        return 1U;
+    }
+    return 0U;
+}
+
 const iolink_phy_api_t g_phy_mock = {.user = NULL,
                                      .init = mock_phy_init,
                                      .set_mode = mock_phy_set_mode,
                                      .set_baudrate = mock_phy_set_baudrate,
-                                     .send = mock_phy_send,
-                                     .recv_byte = mock_phy_recv_byte,
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+                                     .rx_frame = NULL,
+#else
+                                     .rx_octet = mock_rx_octet,
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+                                     .tx_frame = NULL,
+#else
+                                     .tx_octet = mock_tx_octet,
+#endif
+                                     .tx_done = mock_tx_done,
+                                     .int_active = mock_int_active,
+#if IOLINK_PHY_FEATURE_WAKEUP
                                      .detect_wakeup = mock_phy_detect_wakeup,
+#endif
+#if IOLINK_PHY_FEATURE_SIO_CQ
                                      .set_cq_line = mock_phy_set_cq_line,
+#endif
+#if IOLINK_PHY_FEATURE_LEGACY_DIAG
                                      .get_voltage_mv = NULL,
-                                     .is_short_circuit = NULL};
+                                     .is_short_circuit = NULL,
+#endif
+};
 
 void setup_mock_phy(void)
 {
@@ -126,6 +246,26 @@ void setup_mock_phy(void)
     g_mock_wakeup = 0;
     g_mock_cq_state = 0U;
     g_mock_send_delay_us = 0U;
+    g_txq_len = 0U;
+    g_tx_active = 0U;
+    mock_phy_clear_rx();
+}
+
+/* Drive both pumps for one request: the ISR pump frames the queued octets (and
+ * drains the reply), then the main pump consumes the mailbox and runs the
+ * protocol (Type-0 replies are sent by the main pump). */
+void test_io_cycle(iolink_device_ctx_t* ctx)
+{
+    iolink_device_process_isr(ctx);
+    while (ctx->dll.isr_tx_active != 0U) {
+        iolink_device_process_isr(ctx);
+    }
+    /* Drop a leftover frame-end marker (Type-1/2 frames complete by length). */
+    mock_phy_clear_rx();
+    iolink_device_process(ctx);
+    while (ctx->dll.isr_tx_active != 0U) {
+        iolink_device_process_isr(ctx);
+    }
 }
 
 int iolink_test_device_init(iolink_test_device_t* dev, const iolink_config_t* stack,
@@ -155,43 +295,46 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
         return;
     }
 
-    /* STARTUP -> PREOPERATE (via WakeUp -> AWAITING_COMM) */
+    /* STARTUP -> AWAITING_COMM (wake-up via the PHY) */
     g_mock_wakeup = 1;
     iolink_device_process(ctx);
 
     /* Wait for T_DWU (assuming timing might be enforced) */
     usleep(200); /* > 54us T_DWU */
 
-    /* PREOPERATE -> ESTAB_COM (on MC=0x0F + Correct CK) */
+    /* AWAITING_COMM -> PREOPERATE -> ESTAB_COM (MC=0x0F + correct CK) */
     uint8_t mc = IOLINK_MC_TRANSITION_COMMAND;
     uint8_t ck = test_frame_checksum(mc);
+    mock_phy_feed_byte(mc);
+    mock_phy_feed_byte(ck);
+    mock_phy_feed_chk();
+    test_io_cycle(ctx); /* transition command: no device response */
 
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, mc);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, ck);
-    will_return(mock_phy_recv_byte, 0);
-    iolink_device_process(ctx);
-
-    /* ESTAB_COM -> OPERATE (send first valid frame for configured type) */
+    /* ESTAB_COM -> OPERATE (first valid frame for the configured type) */
     iolink_m_seq_type_t type = iolink_device_get_m_seq_type(ctx);
     uint8_t pd_out_len = iolink_device_get_pd_out_len(ctx);
     uint8_t pd_in_len = iolink_device_get_pd_in_len(ctx);
     uint8_t od_width = ctx->dll.od_width;
 
+    /* Populate the pre-cached cyclic reply variants (TYPE_2_V). The real
+     * application refreshes these every main-loop iteration. */
+    {
+        uint8_t pdi[IOLINK_PD_IN_MAX_SIZE];
+        memset(pdi, 0, sizeof(pdi));
+        (void) iolink_device_pd_input_update(ctx, pdi, pd_in_len, true);
+    }
+
     if (type == IOLINK_M_SEQ_TYPE_0) {
         uint8_t idle_mc = 0x00;
         uint8_t idle_ck = test_frame_checksum(idle_mc);
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, idle_mc);
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, idle_ck);
-        will_return(mock_phy_recv_byte, 0);
+        mock_phy_feed_byte(idle_mc);
+        mock_phy_feed_byte(idle_ck);
+        mock_phy_feed_chk();
 
         expect_any(mock_phy_send, data);
         expect_value(mock_phy_send, len, 1); /* Type-0 write replies CKS only */
         will_return(mock_phy_send, 0);
-        iolink_device_process(ctx);
+        test_io_cycle(ctx);
         return;
     }
 
@@ -209,10 +352,9 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, frame_len));
 
     for (uint8_t i = 0U; i < frame_len; i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
 
     /* Device reply (Figure A.14): [OD][PD-in]CKS. */
     uint8_t resp_len = (uint8_t) (od_width + pd_in_len + 1U);
@@ -220,7 +362,7 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     expect_value(mock_phy_send, len, resp_len);
     will_return(mock_phy_send, 0);
 
-    iolink_device_process(ctx);
+    test_io_cycle(ctx);
 }
 
 void iolink_phy_mock_reset(void)

@@ -73,38 +73,43 @@ Process IO-Link stack logic. Must be called periodically (e.g., every 1ms).
 
 Copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `void* user` first. `init`, `set_mode`, and `set_baudrate` are required.
 
-There are two transport profiles:
+The library has a single transport path (the ISR pump); `config.h` selects how the PHY moves data:
 
-- **Streaming** — implement `send` (returns bytes sent, or a negative error) and `recv_byte` (returns 1 when a byte was read, 0 when none is waiting, negative on error). The DLL frames the M-sequence using the `t_byte` timer.
-- **Raw-octet** — implement `rx_octet` / `tx_octet` / `tx_end` / `int_active` instead. The library owns framing; connect the transceiver data interrupt to `iolink_device_process_isr()`. `rx_octet` returns 1 when an octet was read (with a normalized status in `IOLINK_PHY_STATUS_*`), 0 when none is pending. `tx_octet` writes one reply octet (the first starts the frame); `tx_end` terminates it.
+- **RX BYTE** — `rx_octet` returns 1 when an octet was read (status in `IOLINK_PHY_STATUS_*`), 0 when none is pending; report the frame end with `IOLINK_PHY_STATUS_CHK`.
+- **RX FRAME** — `rx_frame` returns a whole received frame (zero-copy pointer) and its length/status.
+- **TX BYTE** — `tx_octet` writes one reply octet per request; `tx_done` ends the frame.
+- **TX FRAME** — `tx_frame` hands the whole reply frame to the PHY.
+
+`IOLINK_ISR_RX_MODE` / `IOLINK_ISR_TX_MODE` select BYTE (default) or FRAME. Connect the transceiver data interrupt to `iolink_device_process_isr()`.
 
 Optional (may be NULL): `detect_wakeup`, `set_cq_line`, `get_faults`, `get_voltage_mv`, `is_short_circuit`.
 
 `IOLINK_BAUDRATE_COM1`, `COM2`, and `COM3` are 0, 1, and 2. They select 4.8, 38.4, and 230.4 kbit/s. They are not the baud number itself.
 
 ```c
-/* Streaming profile */
-static int my_phy_send(void* user, const uint8_t* data, size_t len) {
-    (void)user;
-    (void)data;
-    return (int)len;
+/* RX BYTE / TX BYTE hooks */
+static int my_phy_rx_octet(void* user, uint8_t* data, uint8_t* status) {
+    (void)user; (void)data; (void)status;
+    return 0; /* 1 = octet read, 0 = none pending */
 }
 
-static int my_phy_recv_byte(void* user, uint8_t* byte) {
-    (void)user;
-    (void)byte;
+static int my_phy_tx_octet(void* user, uint8_t data) {
+    (void)user; (void)data;
     return 0;
 }
+
+static void my_phy_tx_done(void* user) { (void)user; }
 ```
 
 ### Feature trimming
 
 `iolink_phy_api_t` members and whole subsystems can be compiled out via `config.h`
 (`IOLINK_PHY_FEATURE_*` / `IOLINK_FEATURE_*`, default all `1`). A build may set
-`IOLINK_MINIMAL_PROFILE` to drop the trimmed set (streaming transport, wake-up
-detection, manual C/Q, legacy diagnostics, data storage, system commands,
-legacy params). The library computes the reply checksum with
-`iolink_checksum6_from_acc()` while transmitting (raw-octet profile).
+`IOLINK_MINIMAL_PROFILE` to drop the trimmed set (wake-up detection, manual C/Q,
+legacy diagnostics, data storage, system commands, legacy params). The ISR
+transport granularity is selected separately by `IOLINK_ISR_RX_MODE` /
+`IOLINK_ISR_TX_MODE`; the reply checksum is folded with
+`iolink_checksum6_from_acc()` while transmitting.
 
 ## Application Layer API
 

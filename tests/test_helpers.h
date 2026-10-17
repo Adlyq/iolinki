@@ -53,6 +53,15 @@ void iolink_phy_mock_set_wakeup(int detected);
 uint8_t iolink_phy_mock_get_cq_state(void);
 void iolink_phy_mock_set_send_delay_us(uint32_t delay_us);
 
+/* Raw-octet ISR transport helpers */
+void mock_phy_feed_byte(uint8_t b);
+void mock_phy_feed_chk(void);
+void mock_phy_feed_error(void);
+void mock_phy_clear_rx(void);
+void mock_phy_clear_tx(void);
+const uint8_t* mock_phy_tx(size_t* len);
+void test_io_cycle(iolink_device_ctx_t* ctx);
+
 typedef struct
 {
     iolink_device_ctx_t ctx;

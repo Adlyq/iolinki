@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 # Version 2.1.1
-project(iolinki VERSION 2.1.1 LANGUAGES C)
+project(iolinki VERSION 3.0.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
@@ -18,10 +18,7 @@ endif()
 include_directories(include)
 
 add_library(iolinki STATIC
-    src/phy_generic.c
-    src/phy_tiol112.c
     src/phy_l6362a.c
-    src/phy_virtual.c
     src/crc.c
     # src/frame.c REMOVED: unused dead code that encoded the pre-Figure-A.14
     # reply layout ([PD-in][OD]CKS) contradicting dll.c; use dll.c instead.
@@ -51,24 +48,11 @@ elseif(IOLINK_PLATFORM STREQUAL "BAREMETAL")
 endif()
 # Note: Zephyr builds don't use this CMakeLists.txt directly for sources if integrated via module.yml
 
-# Examples
-add_subdirectory(examples/simple_device)
-if(IOLINK_PLATFORM STREQUAL "LINUX")
-    add_subdirectory(examples/host_demo)
-elseif(IOLINK_PLATFORM STREQUAL "BAREMETAL")
-    add_subdirectory(examples/bare_metal_app)
-endif()
-
 # Testing
 option(BUILD_TESTING "Build unit tests" ON)
 if(BUILD_TESTING)
     enable_testing()
     add_subdirectory(tests)
-endif()
-
-if(IOLINK_PLATFORM STREQUAL "LINUX")
-    add_subdirectory(examples/reference_device)
-    add_subdirectory(examples/switching_sensor)
 endif()
 
 # Documentation
@@ -87,19 +71,4 @@ if(IOLINK_ENABLE_DOCS)
     endif()
 endif()
 
-# IODD Generation
-find_package(Python3)
-if(Python3_FOUND)
-    add_custom_target(iodd
-        COMMAND ${Python3_EXECUTABLE} tools/iodd_gen.py examples/simple_device/simple_device.json
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Generating IODD XML for simple_device"
-        VERBATIM
-    )
-endif()
 
-if(BUILD_TESTING AND Python3_FOUND)
-    add_test(NAME release_test_stats COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/test_release_test_stats.py)
-    add_test(NAME iar_project_paths COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/test_check_iar_project.py)
-    add_test(NAME iodd_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/test_iodd_cli.py)
-endif()

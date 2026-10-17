@@ -45,13 +45,11 @@ static void test_sio_fallback_on_repeated_errors(void** state)
         /* Send frame with bad CRC */
         uint8_t bad_frame[2] = {0x95, 0xFF}; /* Invalid CRC */
 
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, bad_frame[0]);
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, bad_frame[1]);
-        will_return(mock_phy_recv_byte, 0);
+        mock_phy_feed_byte(bad_frame[0]);
+        mock_phy_feed_byte(bad_frame[1]);
+        mock_phy_feed_chk();
 
-        iolink_device_process(&dev.ctx);
+        test_io_cycle(&dev.ctx);
     }
 
     /* After 3 fallbacks, should be in SIO mode */
@@ -74,12 +72,10 @@ static void test_sio_recovery_on_stable_communication(void** state)
     /* Trigger SIO fallback by injecting errors (3 is the threshold) */
     for (int i = 0; i < 3; i++) {
         uint8_t bad_frame[2] = {0x95, 0xFF};
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, bad_frame[0]);
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, bad_frame[1]);
-        will_return(mock_phy_recv_byte, 0);
-        iolink_device_process(&dev.ctx);
+        mock_phy_feed_byte(bad_frame[0]);
+        mock_phy_feed_byte(bad_frame[1]);
+        mock_phy_feed_chk();
+        test_io_cycle(&dev.ctx);
     }
 
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
@@ -88,34 +84,30 @@ static void test_sio_recovery_on_stable_communication(void** state)
 
     /* 1. WakeUp (SIO -> AWAITING_COMM) */
     iolink_phy_mock_set_wakeup(1);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
     usleep(200);
 
     /* 2. Transition (AWAITING_COMM handles first byte) */
     uint8_t mc = 0x0F;
     uint8_t ck = test_frame_checksum(mc);
 
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, mc);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, ck);
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_byte(mc);
+    mock_phy_feed_byte(ck);
+    mock_phy_feed_chk();
 
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 
     /* 3. Send valid OPERATE frame */
     uint8_t idle_mc = 0x00;
     uint8_t idle_ck = test_frame_checksum(idle_mc);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, idle_mc);
-    will_return(mock_phy_recv_byte, 1);
-    will_return(mock_phy_recv_byte, idle_ck);
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_byte(idle_mc);
+    mock_phy_feed_byte(idle_ck);
+    mock_phy_feed_chk();
 
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 1); /* Type-0 write replies CKS only */
     will_return(mock_phy_send, 0);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 
     /* Should recover back to SDCI */
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
@@ -133,13 +125,13 @@ static void test_t_dsio_returns_to_sio_without_message(void** state)
 
     /* A wake-up is seen: the device leaves SIO and waits for a message. */
     iolink_phy_mock_set_wakeup(1);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
     iolink_phy_mock_set_wakeup(0);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 
     /* No valid message arrives within T_DSIO (Table 47 T10): back to SIO. */
     usleep((IOLINK_T_DSIO_MS + 50U) * 1000U);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
 }
@@ -162,19 +154,18 @@ static void test_fallback_command_switches_to_sio_after_t_fbd(void** state)
     uint8_t frame[3] = {0x20U, 0x00U, IOLINK_CMD_FALLBACK};
     frame[1] = iolink_checksum6(frame, 3U);
     for (size_t i = 0U; i < sizeof(frame); i++) {
-        will_return(mock_phy_recv_byte, 1);
-        will_return(mock_phy_recv_byte, frame[i]);
+        mock_phy_feed_byte(frame[i]);
     }
-    will_return(mock_phy_recv_byte, 0);
+    mock_phy_feed_chk();
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 1); /* Type-0 write replies CKS only */
     will_return(mock_phy_send, 0);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
 
     /* Still in SDCI until T_FBD has elapsed (device waits 3 MasterCycleTimes). */
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
     usleep(10U * 1000U);
-    iolink_device_process(&dev.ctx);
+    test_io_cycle(&dev.ctx);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
 }
 

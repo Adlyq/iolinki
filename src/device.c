@@ -89,8 +89,7 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
      * frame end; then dll_handle_operate_type1_2 must not send it again. A
      * streaming PHY keeps sending the reply itself. */
     ctx->dll.cyclic_reply_precached =
-        (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && dll_phy_is_raw_octet(&ctx->dll) &&
-        (ctx->dll.phy->tx_octet != NULL);
+        (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && dll_phy_has_tx(&ctx->dll);
 
     ctx->dll.pd_in_len_current = ctx->dll.pd_in_len;
     ctx->dll.pd_out_len_current = ctx->dll.pd_out_len;

@@ -158,7 +158,10 @@ typedef struct
     uint8_t isr_rx_buf[IOLINK_M_SEQ_MAX_LEN];    /**< RX octets accumulated */
     uint8_t isr_rx_cnt;                          /**< Octets accumulated this frame */
     uint8_t isr_rx_expect;                       /**< Expected length (0 = unknown) */
-    volatile uint8_t isr_frame_buf[IOLINK_M_SEQ_MAX_LEN]; /**< Mailbox: request */
+    uint8_t isr_frame_buf[IOLINK_M_SEQ_MAX_LEN]; /**< Mailbox storage (RX BYTE) */
+    volatile const uint8_t* isr_frame_ptr;       /**< Mailbox: frame pointer
+                                                      (RX BYTE: isr_frame_buf;
+                                                       RX FRAME: PHY-owned buffer) */
     volatile uint8_t isr_frame_len;              /**< Mailbox length */
     volatile uint8_t isr_frame_ready;            /**< Mailbox ready flag */
     /* Reply transmission, fed one octet per data request. */
@@ -247,25 +250,28 @@ typedef struct
 /**
  * @brief PHY transport capability helpers.
  *
- * The bound PHY's transport profile is expressed by which hooks it implements
- * (a NULL hook means the capability is absent):
- *  - raw-octet  : rx_octet present (the library frames; single-octet transceiver)
- *  - streaming  : recv_byte present (byte pipe; the DLL frames with t_byte)
- *  - wake-up    : detect_wakeup present (the PHY can observe the C/Q wake-up)
- * These keep the profile checks in one place instead of scattering NULL tests.
+ * The library has a single transport path (the ISR dispatch pump). The bound
+ * PHY expresses how it moves data through the two ISR-mode compile switches:
+ *  - RX      : rx_octet (byte) or rx_frame (whole frame)      [IOLINK_ISR_RX_MODE]
+ *  - TX      : tx_octet + tx_done (byte) or tx_frame (whole)  [IOLINK_ISR_TX_MODE]
+ *  - wake-up : detect_wakeup present (the PHY can observe the C/Q wake-up)
+ * These keep the capability checks in one place instead of scattering NULL tests.
  */
-static inline bool dll_phy_is_raw_octet(const iolink_dll_ctx_t* ctx)
+static inline bool dll_phy_has_rx(const iolink_dll_ctx_t* ctx)
 {
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    return (ctx->phy != NULL) && (ctx->phy->rx_frame != NULL);
+#else
     return (ctx->phy != NULL) && (ctx->phy->rx_octet != NULL);
+#endif
 }
 
-static inline bool dll_phy_is_streaming(const iolink_dll_ctx_t* ctx)
+static inline bool dll_phy_has_tx(const iolink_dll_ctx_t* ctx)
 {
-#if IOLINK_PHY_FEATURE_STREAMING
-    return (ctx->phy != NULL) && (ctx->phy->recv_byte != NULL);
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    return (ctx->phy != NULL) && (ctx->phy->tx_frame != NULL);
 #else
-    (void) ctx;
-    return false;
+    return (ctx->phy != NULL) && (ctx->phy->tx_octet != NULL);
 #endif
 }
 
@@ -362,7 +368,8 @@ void iolink_dll_prepare_cyclic_reply(iolink_dll_ctx_t* ctx);
  * iolink_dll_expected_req_len()), publishes the complete request to the mailbox
  * consumed by iolink_dll_process(), selects the pre-built reply variant from the
  * request (iolink_dll_reply_variant()) and feeds the reply octets via
- * phy->tx_octet()/tx_end(). It never runs protocol logic (ISDU / params /
+ * phy->tx_octet()/tx_done() (TX BYTE) or phy->tx_frame() (TX FRAME). It never
+ * runs protocol logic (ISDU / params /
  * events / vendor); those stay in the main pump.
  *
  * Safe to call with no data pending; returns immediately when the INT line is

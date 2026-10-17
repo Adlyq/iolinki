@@ -105,58 +105,72 @@ typedef struct
      */
     void (*set_baudrate)(void* user, iolink_baudrate_t baudrate);
 
-#if IOLINK_PHY_FEATURE_STREAMING
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     /**
-     * @brief Send a buffer of data over the line
-     * @param data Pointer to source buffer
-     * @param len Number of bytes to transmit
-     * @return Number of bytes actually sent, or negative on error
+     * @brief Read one whole received frame (RX FRAME mode).
+     *
+     * The PHY owns the frame; the returned pointer is valid until the next
+     * rx_frame() call (zero-copy: the library reads it directly and does not
+     * copy it in the ISR). The PHY delimits the frame electrically (e.g. USART
+     * IDLE) and reports the octet count in @p len and a PHY status octet
+     * (IOLINK_PHY_STATUS_*) in @p status.
+     * @return Pointer to the frame, or NULL when no complete frame is ready.
      */
-    int (*send)(void* user, const uint8_t* data, size_t len);
-#endif
-
+    const uint8_t* (*rx_frame)(void* user, uint8_t* status, uint8_t* len);
+#else
     /**
-     * @brief Read one received octet and its transceiver status (raw-octet PHY).
+     * @brief Read one received octet and its transceiver status (RX BYTE mode).
      *
      * For a single-octet transceiver (e.g. a single-octet SPI transceiver)
      * the library owns M-sequence framing: it pulls received octets here and
-     * feeds reply octets through tx_octet()/tx_end(). @p status is a PHY status
-     * octet (see IOLINK_PHY_STATUS_*). Optional: NULL for a streaming PHY that
-     * uses recv_byte()/send().
+     * feeds reply octets through tx_octet()/tx_done(). @p status is a PHY status
+     * octet (see IOLINK_PHY_STATUS_*).
      * @return 1 if an octet was read into @p data, 0 if none was pending,
      *         negative on transport error.
      */
     int (*rx_octet)(void* user, uint8_t* data, uint8_t* status);
+#endif
 
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     /**
-     * @brief Write one reply octet (raw-octet PHY).
+     * @brief Send one whole reply frame (TX FRAME mode).
+     *
+     * The library hands the complete reply (payload + already-appended CKS) for
+     * the PHY to transmit in one operation (e.g. a DMA transfer). The PHY
+     * signals completion through the data/TC interrupt; tx_done() releases the
+     * line. @p data must stay valid until completion.
+     * @return 0 on success, negative on error.
+     */
+    int (*tx_frame)(void* user, const uint8_t* data, size_t len);
+#else
+    /**
+     * @brief Write one reply octet (TX BYTE mode).
      *
      * The library feeds the reply octet by octet as the transceiver requests it
      * (writing the first octet starts the frame); it accumulates the message
-     * checksum while sending and emits the final CKS octet before tx_end(). The
-     * SPI arbitration with the data interrupt is the PHY's responsibility.
+     * checksum while sending and emits the final CKS octet before tx_done(). The
+     * transceiver arbitration with the data interrupt is the PHY's responsibility.
      * @return Normalized PHY status octet for the access (IOLINK_PHY_STATUS_*).
      */
     int (*tx_octet)(void* user, uint8_t data);
+#endif
 
-    /** @brief Terminate the current device transmission (write the frame end). */
-    void (*tx_end)(void* user);
+    /**
+     * @brief End / complete the current device transmission.
+     *
+     * TX BYTE mode: called by the library after the last octet (transmit the
+     * frame end / release the line). TX FRAME mode: the PHY calls it once the
+     * transfer completes. Formerly named tx_end().
+     */
+    void (*tx_done)(void* user);
 
     /**
      * @brief Current level of the transceiver data-interrupt line.
      * @return 1 while asserted, 0 otherwise. Used to gate the ISR pump and to
-     *         drain a back-to-back burst.
+     *         drain a back-to-back burst; in FRAME mode it also reports a
+     *         complete RX frame / TX-ready.
      */
     uint8_t (*int_active)(void* user);
-
-#if IOLINK_PHY_FEATURE_STREAMING
-    /**
-     * @brief Non-blocking receive for a single byte
-     * @param byte Pointer to store received byte
-     * @return 1 if byte available and read, 0 if nothing received, negative on error
-     */
-    int (*recv_byte)(void* user, uint8_t* byte);
-#endif
 
     /* Optional Diagnostic/Support Functions (can be NULL) */
 
