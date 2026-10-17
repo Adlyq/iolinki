@@ -164,6 +164,30 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
 void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_out, uint8_t od_len);
 
 /**
+ * @brief Snapshot the current read-response for the two-pump ISR transport.
+ *
+ * The ISR answers ISDU reads from pre-staged data so no read round-trips
+ * through the main loop (t_A must stay within 10 bit times). The main pump
+ * calls this when the requested service changes state:
+ *
+ * - service executing -> *busy = true, returns 0 (the ISR answers Busy 0x01);
+ * - response ready     -> *busy = false, copies resp_buf[0..resp_total) into
+ *                         @p dst (up to @p dst_size) and returns its length;
+ * - idle               -> *busy = false, returns 0 (the ISR answers NoService).
+ *
+ * Read-only and ISR-safe (the caller must make the copy atomic with respect to
+ * the data interrupt).
+ *
+ * @param ctx ISDU context
+ * @param busy [out] true while the application response is still executing
+ * @param dst [out] Buffer receiving the framed response octets
+ * @param dst_size Capacity of @p dst
+ * @return uint8_t Number of response octets copied (0 when none/Busy)
+ */
+uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* busy, uint8_t* dst,
+                                      size_t dst_size);
+
+/**
  * @brief Get the next octet of the application-level ISDU response payload.
  *
  * The wire framing (I-Service/Length/CHKPDU) is applied by the transport; this

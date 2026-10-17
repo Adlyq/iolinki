@@ -94,6 +94,7 @@ static uint8_t dll_expected_req_len(const iolink_dll_ctx_t* ctx, uint8_t type_bi
 
 #if IOLINK_PHY_FEATURE_ISR_PUMP
 static void dll_isr_tx_step(iolink_dll_ctx_t* ctx);
+static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx);
 #endif
 
 /**
@@ -114,42 +115,55 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
     if (len > sizeof(ctx->isr_tx_payload)) {
         return;
     }
-#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-    if (ctx->phy->tx_frame == NULL) {
-        return;
-    }
+    /* Stage the reply (verbatim: the octets already carry the CKS) and let the
+     * ISR report it. The TX hooks are never driven from this (main) context. */
     if (ctx->lock != NULL) {
         ctx->lock(ctx->lock_user);
     }
     (void) memcpy(ctx->isr_tx_payload, data, len);
     ctx->isr_tx_len = (uint8_t) len;
-    (void) ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload, len);
-    if (ctx->unlock != NULL) {
-        ctx->unlock(ctx->lock_user);
+    ctx->isr_tx_has_cks = 0U;
+    ctx->isr_tx_pending = 1U; /* publish last */
+
+    if (ctx->phy->request_service != NULL) {
+        /* Ask the PHY to run the data-interrupt pump now. Kept inside the
+         * critical section so the pend cannot race a natural data interrupt. */
+        ctx->phy->request_service(ctx->phy->user);
+        if (ctx->unlock != NULL) {
+            ctx->unlock(ctx->lock_user);
+        }
+        return;
+    }
+
+#if !IOLINK_PHY_FEATURE_ISR_TX_ONLY
+    /* Legacy fallback for PHYs without a service hook (streaming/host tests). */
+    ctx->isr_tx_pending = 0U;
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    if (ctx->phy->tx_frame != NULL) {
+        (void) ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload, len);
     }
 #else
-    if (ctx->phy->tx_octet == NULL) {
-        return;
-    }
-    if (ctx->lock != NULL) {
-        ctx->lock(ctx->lock_user);
-    }
-    if (ctx->isr_tx_active != 0U) {
-        if (ctx->phy->tx_done != NULL) {
-            ctx->phy->tx_done(ctx->phy->user);
+    if (ctx->phy->tx_octet != NULL) {
+        if (ctx->isr_tx_active != 0U) {
+            if (ctx->phy->tx_done != NULL) {
+                ctx->phy->tx_done(ctx->phy->user);
+            }
+            ctx->isr_tx_active = 0U;
         }
-        ctx->isr_tx_active = 0U;
+        ctx->isr_tx_idx = 0U;
+        ctx->isr_tx_active = 1U;
+        dll_isr_tx_step(ctx);
     }
-    (void) memcpy(ctx->isr_tx_payload, data, len);
-    ctx->isr_tx_len = (uint8_t) len;
-    ctx->isr_tx_idx = 0U;
-    ctx->isr_tx_has_cks = 0U; /* verbatim: the bytes carry the CKS */
-    ctx->isr_tx_active = 1U;
-    dll_isr_tx_step(ctx);
+#endif
+#else
+    /* ISR-only PHY without request_service(): the reply cannot be transmitted.
+     * Count it so a misconfiguration is observable instead of silent. */
+    ctx->isr_tx_pending = 0U;
+    ctx->isr_tx_dropped++;
+#endif /* !IOLINK_PHY_FEATURE_ISR_TX_ONLY */
     if (ctx->unlock != NULL) {
         ctx->unlock(ctx->lock_user);
     }
-#endif
 #else
     (void) ctx->phy->send(ctx->phy->user, data, len);
 #endif
@@ -445,6 +459,22 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
 
     const bool write = ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U);
 #if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* An OPERATE ISDU read is answered by the ISR from the response snapshot;
+     * the main pump must not advance the ISDU segment index again. Only an
+     * IDLE/ABORT read needs the transport reset (and the snapshot refresh). */
+    if (ctx->cyclic_reply_precached &&
+        ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_ISDU) && !write) {
+        const uint8_t flowctrl = (uint8_t) (ctx->frame_buf[0] & IOLINK_MC_ADDR_MASK);
+        if ((flowctrl == IOLINK_FLOWCTRL_IDLE) || (flowctrl == IOLINK_FLOWCTRL_IDLE2) ||
+            (flowctrl == IOLINK_FLOWCTRL_ABORT)) {
+            uint8_t dummy = 0U;
+            iolink_isdu_od_read(&ctx->isdu, flowctrl, &dummy, 0U); /* reset only */
+            dll_isdu_sync_snapshot(ctx);
+        }
+        ctx->isr_eager_replied = 0U;
+        ctx->last_response_us = iolink_time_get_us();
+        return;
+    }
     const uint8_t od_w = ctx->od_width; /* 1/2/8/32 from the opt-in patch */
 #else
     const uint8_t od_w = ctx->od_len; /* upstream streaming width (1/2) */
@@ -478,14 +508,8 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
         return;
     }
     if (ctx->isr_eager_replied != 0U) {
-        /* The ISR answered this frame (write ACK / FlowCTRL-IDLE read); refresh
-         * the staged OD for the next poll and do not send a second reply. */
-        if (!write && (resp_od > 0U)) {
-            for (uint8_t i = 0U; i < resp_od; i++) {
-                ctx->last_od_resp[i] = od_out[i];
-            }
-            iolink_dll_prepare_cyclic_reply(ctx);
-        }
+        /* The ISR already acknowledged this ISDU write; do not send a second
+         * reply. ISDU reads are handled before dll_dispatch_od(). */
         ctx->isr_eager_replied = 0U;
         ctx->last_response_us = iolink_time_get_us();
         return;
@@ -643,6 +667,30 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
  * Shared by the streaming RX loop and the ISR-pump mailbox: both assemble a
  * complete M-sequence first, then run this exact validation + dispatch.
  */
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+/** @brief Pre-stage the framed ISDU response for the ISR read pump. */
+static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    bool busy = false;
+    if (ctx->lock != NULL) {
+        ctx->lock(ctx->lock_user);
+    }
+    const uint8_t n = iolink_isdu_snapshot_response(&ctx->isdu, &busy, ctx->isr_isdu_resp,
+                                                    sizeof(ctx->isr_isdu_resp));
+    ctx->isr_isdu_busy = busy ? 1U : 0U;
+    ctx->isr_isdu_len = n;
+    /* Do not rewind isr_isdu_idx here: the ISR advances it across COUNT reads
+     * and only a START read restarts the response. Resetting it on every main
+     * loop pass would replay the first segment of a multi-segment read. */
+    if (ctx->unlock != NULL) {
+        ctx->unlock(ctx->lock_user);
+    }
+}
+#endif
+
 static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
 {
     uint64_t now_us_proc = iolink_time_get_us();
@@ -794,6 +842,11 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
         dll_enter_fallback(ctx);
     }
     ctx->frame_index = 0U;
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* Reflect any ISDU state change (e.g. a completed write request) for the
+     * ISR read pump before the next master frame. */
+    dll_isdu_sync_snapshot(ctx);
+#endif
 }
 
 void iolink_dll_process(iolink_dll_ctx_t* ctx)
@@ -804,6 +857,10 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
 
     /* Process acyclic ISDU state machine */
     iolink_isdu_process(&ctx->isdu);
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* The service may have completed here: refresh the ISR response snapshot. */
+    dll_isdu_sync_snapshot(ctx);
+#endif
 
     dll_poll_diagnostics(ctx);
 
@@ -1136,8 +1193,10 @@ static void dll_build_variant(iolink_dll_ctx_t* ctx, iolink_reply_variant_t vari
         }
     }
     else if (variant == IOLINK_REPLY_ACYCLIC_READ) {
+        /* The ISR overwrites these OD octets from the ISDU snapshot at frame
+         * end (Busy / No Service / response octets); leave a zero placeholder. */
         for (uint8_t i = 0U; i < ctx->od_width; i++) {
-            out[pos++] = ctx->last_od_resp[i];
+            out[pos++] = 0x00U;
         }
     }
     if (ctx->pd_in_len_current > 0U) {
@@ -1329,6 +1388,41 @@ static void dll_isr_tx_step(iolink_dll_ctx_t* ctx)
 }
 #endif /* IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE */
 
+/* Fill the OD octets of an ISDU read reply from the response snapshot. */
+static void dll_isr_isdu_od(iolink_dll_ctx_t* ctx, uint8_t flowctrl, uint8_t* od,
+                            uint8_t od_width)
+{
+    if (od_width == 0U) {
+        return;
+    }
+    for (uint8_t i = 0U; i < od_width; i++) {
+        od[i] = 0x00U;
+    }
+    if (flowctrl == IOLINK_FLOWCTRL_START) {
+        if (ctx->isr_isdu_busy != 0U) {
+            od[0] = 0x01U; /* Busy */
+            return;
+        }
+        if (ctx->isr_isdu_len == 0U) {
+            od[0] = 0x00U; /* No Service */
+            return;
+        }
+        ctx->isr_isdu_idx = 0U; /* START restarts the response */
+    }
+    else if (flowctrl >= IOLINK_FLOWCTRL_IDLE) {
+        od[0] = 0x00U; /* IDLE / IDLE2 / ABORT / reserved: No Service */
+        return;
+    }
+    /* START (ready) or COUNT: copy the next od_width octets. */
+    uint8_t idx = ctx->isr_isdu_idx;
+    const uint8_t len = ctx->isr_isdu_len;
+    uint8_t n = 0U;
+    while ((n < od_width) && (idx < len)) {
+        od[n++] = ctx->isr_isdu_resp[idx++];
+    }
+    ctx->isr_isdu_idx = idx;
+}
+
 /* Select the pre-staged OPERATE reply payload matching the just-framed request
  * and start transmitting it from the ISR. TX BYTE: the CKS is computed while the
  * octets are sent (one per transceiver request). TX FRAME: the payload and its
@@ -1346,13 +1440,12 @@ static void dll_isr_start_reply(iolink_dll_ctx_t* ctx)
     const uint8_t len = ctx->cyclic_stage_len[slot][active];
     const uint8_t flags = ctx->cyclic_stage_flags[slot][active];
 
-    /* FlowCTRL IDLE has no ISDU service: answer No Service (0x00) instead of the
-     * staged Busy (0x01) that a real START read returns while it executes. */
-    const bool idle_od_zero =
-        ((first & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_ISDU) &&
-        ((first & IOLINK_MC_RW_MASK) != 0U) &&
-        ((first & IOLINK_MC_ADDR_MASK) == IOLINK_FLOWCTRL_IDLE) && (ctx->od_width > 0U) &&
-        (len > 0U);
+    /* ISDU reads are answered from the pre-staged response snapshot; the ISR
+     * owns the response segment index (START/COUNT/IDLE/ABORT). The staged OD
+     * placeholder is overwritten below. */
+    const bool isdu_read = ((first & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_ISDU) &&
+                           ((first & IOLINK_MC_RW_MASK) != 0U);
+    const uint8_t flowctrl = (uint8_t) (first & IOLINK_MC_ADDR_MASK);
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     /* Zero-copy: hand the pre-staged slot to the DMA directly instead of copying
@@ -1361,8 +1454,8 @@ static void dll_isr_start_reply(iolink_dll_ctx_t* ctx)
      * starts (the transfer is long done by then). */
     {
         uint8_t* base = ctx->cyclic_stage[slot][active];
-        if (idle_od_zero) {
-            base[0] = 0x00U;
+        if (isdu_read) {
+            dll_isr_isdu_od(ctx, flowctrl, base, ctx->od_width);
         }
         ctx->isr_tx_busy    = 0U; /* the previous transfer is long done */
         ctx->isr_tx_variant = (uint8_t) slot;
@@ -1390,8 +1483,8 @@ static void dll_isr_start_reply(iolink_dll_ctx_t* ctx)
     for (uint8_t i = 0U; i < len; i++) {
         ctx->isr_tx_payload[i] = ctx->cyclic_stage[slot][active][i];
     }
-    if (idle_od_zero) {
-        ctx->isr_tx_payload[0] = 0x00U;
+    if (isdu_read) {
+        dll_isr_isdu_od(ctx, flowctrl, ctx->isr_tx_payload, ctx->od_width);
     }
     ctx->isr_tx_len = len;
     ctx->isr_tx_flags = flags;
@@ -1406,6 +1499,30 @@ static void dll_isr_start_reply(iolink_dll_ctx_t* ctx)
 void iolink_dll_process_isr(iolink_dll_ctx_t* ctx)
 {
     if ((ctx == NULL) || !dll_phy_has_rx(ctx) || (ctx->phy->int_active == NULL)) {
+        return;
+    }
+
+    /* A main-context handler staged a verbatim reply; transmit it now. Checked
+     * before the int_active gate: a software-requested service has no
+     * transceiver RX/TX activity of its own to report. */
+    if (ctx->isr_tx_pending != 0U) {
+        ctx->isr_tx_pending = 0U;
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+        if (ctx->phy->tx_frame != NULL) {
+            (void) ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload, ctx->isr_tx_len);
+        }
+#else
+        if (ctx->isr_tx_active != 0U) {
+            if (ctx->phy->tx_done != NULL) {
+                ctx->phy->tx_done(ctx->phy->user);
+            }
+            ctx->isr_tx_active = 0U;
+        }
+        ctx->isr_tx_idx = 0U;
+        ctx->isr_tx_has_cks = 0U;
+        ctx->isr_tx_active = 1U;
+        dll_isr_tx_step(ctx);
+#endif
         return;
     }
 
@@ -1443,20 +1560,18 @@ void iolink_dll_process_isr(iolink_dll_ctx_t* ctx)
                 const uint8_t ch = (uint8_t) (f[0] & IOLINK_MC_COMM_CHANNEL_MASK);
                 const bool isdu = (ch == IOLINK_MC_CHANNEL_ISDU);
                 const bool isdu_write = isdu && ((f[0] & IOLINK_MC_RW_MASK) == 0U);
-                /* An ISDU read is answered from the ISR only for FlowCTRL IDLE
-                 * (the staged OD is the constant "no service" 0x00). A START/
-                 * COUNT read needs the segment index and stays on the main pump. */
-                const bool isdu_idle_read =
-                    isdu && ((f[0] & IOLINK_MC_RW_MASK) != 0U) &&
-                    ((f[0] & IOLINK_MC_ADDR_MASK) == IOLINK_FLOWCTRL_IDLE);
+                /* Every ISDU read is answered from the ISR, which owns the
+                 * response segment index and serves it from the snapshot the
+                 * main pump refreshes when the service completes. This keeps
+                 * t_A within 10 bit times (no main-loop round-trip). */
+                const bool isdu_read = isdu && ((f[0] & IOLINK_MC_RW_MASK) != 0U);
                 /* A pre-cached (TYPE_2_V) reply is answered from the ISR for the
-                 * process channel, an ISDU write ACK and an ISDU FlowCTRL-IDLE
-                 * read. Other types/channels are answered by the main pump after
-                 * its own validation. An eager reply is never sent to a corrupt
-                 * or illegal frame. */
-                const bool eager =
-                    type12 && (ctx->cyclic_reply_precached != 0U) &&
-                    ((ch == IOLINK_MC_CHANNEL_PROCESS) || isdu_write || isdu_idle_read);
+                 * process channel, an ISDU write ACK and any ISDU read. Other
+                 * types/channels are answered by the main pump after its own
+                 * validation. An eager reply is never sent to a corrupt or
+                 * illegal frame. */
+                const bool eager = type12 && (ctx->cyclic_reply_precached != 0U) &&
+                                   ((ch == IOLINK_MC_CHANNEL_PROCESS) || isdu_write || isdu_read);
                 ctx->isr_eager_replied = 0U;
                 if (eager && !dll_isr_reply_allowed(ctx, f, len)) {
                     break;
@@ -1534,12 +1649,9 @@ void iolink_dll_process_isr(iolink_dll_ctx_t* ctx)
             const bool isdu = (ch == IOLINK_MC_CHANNEL_ISDU);
             const bool isdu_write =
                 isdu && ((ctx->isr_rx_buf[0] & IOLINK_MC_RW_MASK) == 0U);
-            const bool isdu_idle_read =
-                isdu && ((ctx->isr_rx_buf[0] & IOLINK_MC_RW_MASK) != 0U) &&
-                ((ctx->isr_rx_buf[0] & IOLINK_MC_ADDR_MASK) == IOLINK_FLOWCTRL_IDLE);
-            const bool eager =
-                (ctx->cyclic_reply_precached != 0U) &&
-                ((ch == IOLINK_MC_CHANNEL_PROCESS) || isdu_write || isdu_idle_read);
+            const bool isdu_read = isdu && ((ctx->isr_rx_buf[0] & IOLINK_MC_RW_MASK) != 0U);
+            const bool eager = (ctx->cyclic_reply_precached != 0U) &&
+                               ((ch == IOLINK_MC_CHANNEL_PROCESS) || isdu_write || isdu_read);
             ctx->isr_eager_replied = 0U;
             const bool allowed =
                 !eager || dll_isr_reply_allowed_acc(ctx, ctx->isr_rx_buf, ctx->isr_rx_expect,

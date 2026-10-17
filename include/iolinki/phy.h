@@ -189,6 +189,17 @@ typedef struct
      */
     uint8_t (*int_active)(void* user);
 
+    /**
+     * @brief Ask the PHY to run the data-interrupt pump now (optional).
+     *
+     * The ISR two-pump transport transmits replies from interrupt context. When
+     * a main-context handler has staged a reply, the library calls this hook so
+     * the PHY requests its data interrupt (e.g. pends the USART IRQ) and the
+     * actual TX hooks are only ever invoked from the ISR. NULL keeps the legacy
+     * direct-send behaviour (the library sends from the caller).
+     */
+    void (*request_service)(void* user);
+
     /* Optional Diagnostic/Support Functions (can be NULL) */
 
 #if IOLINK_PHY_FEATURE_WAKEUP

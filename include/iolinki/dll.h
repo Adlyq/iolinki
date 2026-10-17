@@ -114,7 +114,8 @@ typedef struct
      * copies the active slot at frame end and appends the computed CKS. Slots:
      *   0 = CYCLIC_READ   [0x00 x od_width][PD-in]
      *   1 = CYCLIC_WRITE  [PD-in]
-     *   2 = ACYCLIC_READ  [last_od_resp][PD-in]   (Busy until the response is ready)
+     *   2 = ACYCLIC_READ  [0x00 x od_width][PD-in] (OD overwritten by the ISR
+     *                                                from the ISDU snapshot)
      * Flags (Event / PD-invalid) for the CKS octet are staged per slot. */
     uint8_t cyclic_stage[IOLINK_REPLY_VARIANT_COUNT][2][IOLINK_M_SEQ_MAX_LEN];
     uint8_t cyclic_stage_len[IOLINK_REPLY_VARIANT_COUNT][2];
@@ -125,9 +126,14 @@ typedef struct
     volatile uint8_t isr_tx_busy;
     uint8_t isr_tx_variant;
     uint8_t isr_tx_buffer;
-    /* Last OPERATE acyclic OD response octets (main pump writes, prepares the
-     * ACYCLIC_READ payload with them). Initialised to Busy (0x01). */
-    uint8_t last_od_resp[IOLINK_OD_MAX_SIZE];
+    /* ISR-owned ISDU read-response snapshot (two-pump transport). When the
+     * requested service changes state the main pump copies the whole framed
+     * resp_buf here; the ISR answers START/COUNT reads from it and advances
+     * isr_isdu_idx, so no read round-trips through the main loop (t_A holds). */
+    uint8_t isr_isdu_resp[IOLINK_ISDU_BUFFER_SIZE];
+    volatile uint8_t isr_isdu_len;  /**< Framed response length (0 = none) */
+    volatile uint8_t isr_isdu_idx;  /**< Next response octet (ISR advances) */
+    volatile uint8_t isr_isdu_busy; /**< 1 = service executing -> answer Busy 0x01 */
 
     /* Raw-octet ISR pump state (owned by the library, driven from the PHY data
      * interrupt). Only these fields are touched from ISR context; the reply
@@ -154,6 +160,12 @@ typedef struct
     volatile uint8_t isr_tx_acc;                 /**< Running checksum accumulator */
     volatile uint8_t isr_tx_has_cks;             /**< 1 = append computed CKS */
     volatile uint8_t isr_tx_active;              /**< 1 while draining */
+    volatile uint8_t isr_tx_pending;             /**< 1 = a main-context handler
+                                                      staged a verbatim reply;
+                                                      the ISR must transmit it */
+    volatile uint8_t isr_tx_dropped;             /**< Replies dropped because an
+                                                      ISR-only PHY lacks
+                                                      request_service() */
     bool pd_valid;              /**< Current PD_In validity status */
     uint8_t master_cycle_time;  /**< DPP1 0x01, the cycle-time octet written by the
                                      Master (Table B.1/B.3); 0 = not yet written */
