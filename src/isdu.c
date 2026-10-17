@@ -672,8 +672,14 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
             return;
     }
 
-    if (str_data) {
+    if (str_data != NULL) {
+        /* Table B.2.8-B.2.15: StringT fixedLength caps the response: 64 octets
+           for the identification strings, 16 for SerialNumber. */
+        size_t limit = (ctx->header.index == IOLINK_IDX_SERIAL_NUMBER) ? 16U : 64U;
         size_t len_sz = strlen(str_data);
+        if (len_sz > limit) {
+            len_sz = limit;
+        }
         if (len_sz > sizeof(ctx->response_buf)) {
             len_sz = sizeof(ctx->response_buf);
         }
