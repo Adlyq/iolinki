@@ -481,9 +481,9 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
     }
 
     switch (ctx->header.index) {
-        /* Table B.8: 0x0004-0x000B are reserved. VendorID/DeviceID live in
-           Direct Parameter Page 1 (0x07-0x0B), not in an ISDU index. A read of
-           0x000A/0x000B therefore falls through to the default IDX_NOTAVAIL. */
+            /* Table B.8: 0x0004-0x000B are reserved. VendorID/DeviceID live in
+               Direct Parameter Page 1 (0x07-0x0B), not in an ISDU index. A read of
+               0x000A/0x000B therefore falls through to the default IDX_NOTAVAIL. */
 
         case IOLINK_IDX_PROFILE_CHARACTERISTIC:
             ctx->response_buf[0] = (uint8_t) (info->profile_characteristic >> 8);
@@ -535,6 +535,17 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
             break;
         case IOLINK_IDX_FIRMWARE_REVISION:
             str_data = info->firmware_revision;
+            break;
+
+        case IOLINK_IDX_PRODUCT_URI:
+            /* Table B.8/B.2.19: optional, conditional on an associated Profile. */
+            str_data = info->product_uri;
+            if (str_data == NULL) {
+                ctx->response_len = 0U;
+                ctx->response_idx = 0U;
+                ctx->state = ISDU_STATE_RESPONSE_READY;
+                return;
+            }
             break;
 
         case IOLINK_IDX_APPLICATION_TAG:
@@ -673,9 +684,15 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
     }
 
     if (str_data != NULL) {
-        /* Table B.2.8-B.2.15: StringT fixedLength caps the response: 64 octets
-           for the identification strings, 16 for SerialNumber. */
-        size_t limit = (ctx->header.index == IOLINK_IDX_SERIAL_NUMBER) ? 16U : 64U;
+        /* Table B.8/B.2.8-B.2.19: per-object StringT fixedLength caps the
+           response. ProductURI allows up to 100 octets; SerialNumber 16. */
+        size_t limit = 64U;
+        if (ctx->header.index == IOLINK_IDX_SERIAL_NUMBER) {
+            limit = 16U;
+        }
+        else if (ctx->header.index == IOLINK_IDX_PRODUCT_URI) {
+            limit = 100U;
+        }
         size_t len_sz = strlen(str_data);
         if (len_sz > limit) {
             len_sz = limit;
@@ -1002,11 +1019,11 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
 
     (void) memset(page, 0, 16);
     /* 0x00 MasterCommand (W) and 0x01 MasterCycleTime default to 0. */
-    page[0x02] = (info != NULL) ? info->min_cycle_time : 0U; /* MinCycleTime */
+    page[0x02] = (info != NULL) ? info->min_cycle_time : 0U;    /* MinCycleTime */
     page[0x03] = direct_param_mseq_capability(m_seq, od_width); /* M-sequenceCapability */
-    page[0x04] = 0x11U;                                      /* RevisionID = v1.1 */
-    page[0x05] = direct_param_encode_pd(pd_in);              /* ProcessDataIn */
-    page[0x06] = direct_param_encode_pd(pd_out);             /* ProcessDataOut */
+    page[0x04] = 0x11U;                                         /* RevisionID = v1.1 */
+    page[0x05] = direct_param_encode_pd(pd_in);                 /* ProcessDataIn */
+    page[0x06] = direct_param_encode_pd(pd_out);                /* ProcessDataOut */
     if (info != NULL) {
         page[0x07] = (uint8_t) (info->vendor_id >> 8);            /* VendorID MSB */
         page[0x08] = (uint8_t) (info->vendor_id & 0xFFU);         /* VendorID LSB */
