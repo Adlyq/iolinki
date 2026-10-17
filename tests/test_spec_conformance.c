@@ -291,30 +291,48 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
     assert_int_equal(n, 0);
 }
 
-/* B.2.8-B.2.15: identification strings are truncated to their fixedLength
- * (64 octets, SerialNumber 16 octets). */
+/* B.2.8-B.2.19: strings are truncated to their object fixedLength
+ * (64 octets, SerialNumber 16, ProductURI up to 100, tags 32). */
 static void test_identification_string_length_limits(void** state)
 {
     (void) state;
 
     static char long_name[81];
     static char long_serial[21];
+    static char long_uri[121];
+    uint8_t long_tag[40];
     (void) memset(long_name, 'A', sizeof(long_name) - 1U);
     long_name[sizeof(long_name) - 1U] = '\0';
     (void) memset(long_serial, 'B', sizeof(long_serial) - 1U);
     long_serial[sizeof(long_serial) - 1U] = '\0';
+    (void) memset(long_uri, 'U', sizeof(long_uri) - 1U);
+    long_uri[sizeof(long_uri) - 1U] = '\0';
+    (void) memset(long_tag, 'T', sizeof(long_tag));
 
     iolink_device_info_t info = make_info();
     info.vendor_name = long_name;
     info.serial_number = long_serial;
+    info.product_uri = long_uri;
     iolink_device_info_init(&info);
 
-    uint8_t out[128] = {0};
+    uint8_t out[160] = {0};
     int n = read_object(IOLINK_IDX_VENDOR_NAME, out, sizeof(out));
     assert_int_equal(n, 64);
 
     n = read_object(IOLINK_IDX_SERIAL_NUMBER, out, sizeof(out));
     assert_int_equal(n, 16);
+
+    /* B.2.19 / Table B.8: ProductURI allows up to 100 octets. */
+    n = read_object(IOLINK_IDX_PRODUCT_URI, out, sizeof(out));
+    assert_int_equal(n, 100);
+
+    /* B.2.16-B.2.18 / Table B.8: tags are capped at 32 octets. */
+    uint8_t tag_resp[8] = {0};
+    n = write_object(IOLINK_IDX_FUNCTION_TAG, long_tag, (uint8_t) sizeof(long_tag), tag_resp,
+                     sizeof(tag_resp));
+    assert_int_equal(n, 0);
+    n = read_object(IOLINK_IDX_FUNCTION_TAG, out, sizeof(out));
+    assert_int_equal(n, 32);
 }
 
 int main(void)
