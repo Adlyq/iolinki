@@ -25,6 +25,132 @@
  */
 
 /* -------------------------------------------------------------------------
+ * PHY / line-state configuration
+ * ------------------------------------------------------------------------- */
+
+/**
+ * @brief Whether the bound PHY owns the C/Q line state (wake-up / SIO<->SDCI).
+ *
+ * When non-zero the DLL skips the electrical wake-up handshake and runs in SDCI
+ * (the PHY is contractually an already-established SDCI link). When zero (the
+ * default) the DLL infers this at run time from the PHY: a PHY without a
+ * wake-up detector (detect_wakeup == NULL) is treated as owning the line state.
+ *
+ * Override to 1 in the build system for a PHY such as the L6364 that manages the
+ * SIO/wake-up handshake itself.
+ * Default: 0 (keep the run-time inference).
+ */
+#ifndef IOLINK_PHY_OWNS_LINE_STATE
+#define IOLINK_PHY_OWNS_LINE_STATE 0
+#endif
+
+/* -------------------------------------------------------------------------
+ * Feature trimming (compile-time)
+ *
+ * Each macro is 1 (compiled in, the default full stack) or 0 (removed). The
+ * project build overrides the unused ones to 0 for a smaller image. Trimmed
+ * code that is actually used results in a compile error, which is the intended
+ * guard. See Docs/裁剪与配置.md.
+ *
+ * IOLINK_MINIMAL_PROFILE is a convenience switch that defaults the trimmed
+ * features below off; an explicit -D always wins (guarded with #ifndef).
+ * It does not affect IOLINK_FEATURE_EVENTS (kept by this project).
+ * ------------------------------------------------------------------------- */
+
+#ifdef IOLINK_MINIMAL_PROFILE
+#ifndef IOLINK_FEATURE_DATA_STORAGE
+#define IOLINK_FEATURE_DATA_STORAGE 0
+#endif
+#ifndef IOLINK_FEATURE_SYSTEM_COMMAND
+#define IOLINK_FEATURE_SYSTEM_COMMAND 0
+#endif
+#ifndef IOLINK_FEATURE_MASTER_IDENT
+#define IOLINK_FEATURE_MASTER_IDENT 0
+#endif
+#ifndef IOLINK_FEATURE_LEGACY_PARAMS
+#define IOLINK_FEATURE_LEGACY_PARAMS 0
+#endif
+#ifndef IOLINK_PHY_FEATURE_WAKEUP
+#define IOLINK_PHY_FEATURE_WAKEUP 0
+#endif
+#ifndef IOLINK_PHY_FEATURE_SIO_CQ
+#define IOLINK_PHY_FEATURE_SIO_CQ 0
+#endif
+#ifndef IOLINK_PHY_FEATURE_LEGACY_DIAG
+#define IOLINK_PHY_FEATURE_LEGACY_DIAG 0
+#endif
+#endif /* IOLINK_MINIMAL_PROFILE */
+
+/** @brief Data Storage subsystem (data_storage.c, ISDU DS service, ds ctx). */
+#ifndef IOLINK_FEATURE_DATA_STORAGE
+#define IOLINK_FEATURE_DATA_STORAGE 1
+#endif
+/** @brief ISDU SystemCommand handling (0x01-0x06, 0x80-0x83). */
+#ifndef IOLINK_FEATURE_SYSTEM_COMMAND
+#define IOLINK_FEATURE_SYSTEM_COMMAND 1
+#endif
+/** @brief MasterCommand ident subset (0x95/0x96). */
+#ifndef IOLINK_FEATURE_MASTER_IDENT
+#define IOLINK_FEATURE_MASTER_IDENT 1
+#endif
+/** @brief Diagnostic Events engine + DDS + CKS event flag + fault polling. */
+#ifndef IOLINK_FEATURE_EVENTS
+#define IOLINK_FEATURE_EVENTS 1
+#endif
+/** @brief Legacy global params API + g_legacy_* globals (ctx API preferred). */
+#ifndef IOLINK_FEATURE_LEGACY_PARAMS
+#define IOLINK_FEATURE_LEGACY_PARAMS 1
+#endif
+/** @brief PHY wake-up detection (detect_wakeup). */
+#ifndef IOLINK_PHY_FEATURE_WAKEUP
+#define IOLINK_PHY_FEATURE_WAKEUP 1
+#endif
+/** @brief PHY manual C/Q push-pull (set_cq_line). */
+#ifndef IOLINK_PHY_FEATURE_SIO_CQ
+#define IOLINK_PHY_FEATURE_SIO_CQ 1
+#endif
+/** @brief PHY legacy diagnostics (get_voltage_mv + is_short_circuit). */
+#ifndef IOLINK_PHY_FEATURE_LEGACY_DIAG
+#define IOLINK_PHY_FEATURE_LEGACY_DIAG 1
+#endif
+
+/* -------------------------------------------------------------------------
+ * ISR transport granularity (the library has a single transport path: the
+ * ISR dispatch pump. These two switches select how the PHY moves data on
+ * that path; the other transport (streaming send/recv_byte) was removed.)
+ *
+ *   RX BYTE  : phy->rx_octet()  - library frames octet by octet
+ *   RX FRAME : phy->rx_frame()  - PHY delivers a whole frame (zero-copy)
+ *   TX BYTE  : phy->tx_octet()+phy->tx_done() - library feeds octet by octet
+ *   TX FRAME : phy->tx_frame()  - library hands a whole reply frame
+ *
+ * Defaults are BYTE/BYTE (single-octet transceivers, e.g. the L6364). A PHY
+ * with whole-frame DMA sets the matching macro to FRAME in the build.
+ * ------------------------------------------------------------------------- */
+#define IOLINK_ISR_RX_BYTE  0
+#define IOLINK_ISR_RX_FRAME 1
+#define IOLINK_ISR_TX_BYTE  0
+#define IOLINK_ISR_TX_FRAME 1
+
+#ifndef IOLINK_ISR_RX_MODE
+#define IOLINK_ISR_RX_MODE IOLINK_ISR_RX_BYTE
+#endif
+#ifndef IOLINK_ISR_TX_MODE
+#define IOLINK_ISR_TX_MODE IOLINK_ISR_TX_BYTE
+#endif
+
+/**
+ * @brief Select the opt-in two-pump ISR transport.
+ *
+ * 0 (default): upstream streaming transport in src/dll.c (phy->send/recv_byte).
+ * 1: opt-in ISR pump, compiled as a #if block in src/dll.c. Build with
+ *    `-DIOLINK_ISR_PUMP=ON` so CMake propagates this define to all consumers.
+ */
+#ifndef IOLINK_PHY_FEATURE_ISR_PUMP
+#define IOLINK_PHY_FEATURE_ISR_PUMP 0
+#endif
+
+/* -------------------------------------------------------------------------
  * ISDU Configuration
  * ------------------------------------------------------------------------- */
 
@@ -48,6 +174,17 @@
  */
 #ifndef IOLINK_EVENT_QUEUE_SIZE
 #define IOLINK_EVENT_QUEUE_SIZE 4U
+#endif
+
+/**
+ * @brief Minimum delay between an "Event appears" and its "Event disappears".
+ *
+ * The event dispatcher must not issue a disappearance within this window
+ * (A.6.4 / Annex A dispatch rules); a condition that clears sooner is held until
+ * the window has elapsed. Default: 50 ms
+ */
+#ifndef IOLINK_EVENT_MIN_APPEAR_MS
+#define IOLINK_EVENT_MIN_APPEAR_MS 50U
 #endif
 
 /* -------------------------------------------------------------------------
@@ -105,6 +242,18 @@
 #endif
 
 /**
+ * @brief OPERATE supervision window in milliseconds.
+ *
+ * If no checksum/type-valid frame arrives for this long while the DLL is in
+ * OPERATE, the master is considered gone: the device returns to STARTUP/SIO and
+ * refreshes the PHY, so a subsequent master restart (WURQ) is handled cleanly
+ * instead of leaving the device stuck showing "connected".
+ */
+#ifndef IOLINK_OPERATE_TIMEOUT_MS
+#define IOLINK_OPERATE_TIMEOUT_MS 200U
+#endif
+
+/**
  * @brief Fallback to SIO after a failed wake-up without a valid message (T_DSIO).
  *
  * Spec Table 47 T10: 60..300 ms, default 300 ms.
@@ -118,12 +267,13 @@
  * ------------------------------------------------------------------------- */
 
 /**
- * @brief Maximum On-Request Data size in bytes.
- * Type 1: 1 byte, Type 2: 2 bytes, Type 2_V extended: 4 bytes.
- * Default: 4 bytes (supports all types including extended Type 2_V)
+ * @brief Maximum On-Request Data width m in bytes (Table A.10).
+ * TYPE_1_V/TYPE_2_V allow 1/2/8/32 octets; default the buffer to the spec
+ * maximum so any configured od_width fits.
+ * Default: 32 bytes.
  */
 #ifndef IOLINK_OD_MAX_SIZE
-#define IOLINK_OD_MAX_SIZE 4U
+#define IOLINK_OD_MAX_SIZE 32U
 #endif
 
 /**

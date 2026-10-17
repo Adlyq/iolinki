@@ -33,18 +33,8 @@
  *   D1_6 = D3_8 xor D2_8
  *   D0_6 = D1_8 xor D0_8
  */
-uint8_t iolink_checksum6(const uint8_t* octets, size_t len)
+uint8_t iolink_checksum6_from_acc(uint8_t ck8)
 {
-    uint8_t ck8 = 0x52U; /* A.1.6 seed value */
-
-    if (!iolink_buf_is_valid(octets, len)) {
-        return 0U;
-    }
-
-    for (size_t i = 0U; i < len; i++) {
-        ck8 ^= octets[i];
-    }
-
     const uint8_t b0 = (uint8_t) (ck8 & 0x01U);
     const uint8_t b1 = (uint8_t) ((ck8 >> 1U) & 0x01U);
     const uint8_t b2 = (uint8_t) ((ck8 >> 2U) & 0x01U);
@@ -63,4 +53,19 @@ uint8_t iolink_checksum6(const uint8_t* octets, size_t len)
     ck6 |= (uint8_t) (b1 ^ b0);
 
     return ck6;
+}
+
+uint8_t iolink_checksum6(const uint8_t* octets, size_t len)
+{
+    uint8_t ck8 = 0x52U; /* A.1.6 seed value */
+
+    if (!iolink_buf_is_valid(octets, len)) {
+        return 0U;
+    }
+
+    for (size_t i = 0U; i < len; i++) {
+        ck8 ^= octets[i];
+    }
+
+    return iolink_checksum6_from_acc(ck8);
 }

@@ -17,6 +17,11 @@ endif()
 # Include directories
 include_directories(include)
 
+# Opt-in two-pump / ISR transport. Default OFF keeps the upstream streaming
+# transport (phy->send/recv_byte). ON enables the ISR path compiled into
+# src/dll.c behind IOLINK_PHY_FEATURE_ISR_PUMP.
+option(IOLINK_ISR_PUMP "Build the opt-in ISR two-pump transport" OFF)
+
 add_library(iolinki STATIC
     src/phy_generic.c
     src/phy_tiol112.c
@@ -33,6 +38,10 @@ add_library(iolinki STATIC
     src/device_info.c
     src/device.c
 )
+
+if(IOLINK_ISR_PUMP)
+    target_compile_definitions(iolinki PUBLIC IOLINK_PHY_FEATURE_ISR_PUMP=1)
+endif()
 
 # Platform Selection
 set(IOLINK_PLATFORM "LINUX" CACHE STRING "Target platform: LINUX, BAREMETAL (Zephyr builds use module.yml)")

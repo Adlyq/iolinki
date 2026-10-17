@@ -39,6 +39,16 @@
  */
 uint8_t iolink_checksum6(const uint8_t* octets, size_t len);
 
+/**
+ * @brief Compress an already XOR-accumulated A.1.6 seed into the 6-bit checksum.
+ *
+ * Streaming counterpart of iolink_checksum6(): the caller XORs each octet into
+ * an accumulator seeded with 0x52 (used by the ISR receive path).
+ * @param acc Accumulated checksum state (seed 0x52 XOR all message octets).
+ * @return uint8_t 6-bit compressed checksum (0x00-0x3F).
+ */
+uint8_t iolink_checksum6_from_acc(uint8_t acc);
+
 /** @} */ /* end of iolinki_crc */
 
 #endif  // IOLINK_CRC_H

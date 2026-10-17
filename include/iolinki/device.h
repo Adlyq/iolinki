@@ -116,6 +116,17 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
  */
 void iolink_device_process(iolink_device_ctx_t* ctx);
 
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+/**
+ * @brief ISR-side pump for the opt-in two-pump transport.
+ *
+ * Called from the PHY data interrupt: frames the incoming M-sequence and feeds
+ * the reply octets, publishing completed requests to a mailbox consumed by
+ * iolink_device_process(). Runs no protocol logic.
+ */
+void iolink_device_process_isr(iolink_device_ctx_t* ctx);
+#endif
+
 /**
  * @brief Update the input process data (Device -> Master).
  * @param ctx    Device context.
