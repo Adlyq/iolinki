@@ -150,6 +150,17 @@
 #define IOLINK_PHY_FEATURE_ISR_PUMP 0
 #endif
 
+/**
+ * @brief Require the PHY request_service() hook for ISR-pump replies.
+ *
+ * 0 (default): a PHY without the hook keeps the legacy direct send from the
+ * calling context (streaming/host tests). 1: no fallback; every reply is
+ * reported from the ISR, so the board must provide request_service().
+ */
+#ifndef IOLINK_PHY_FEATURE_ISR_TX_ONLY
+#define IOLINK_PHY_FEATURE_ISR_TX_ONLY 0
+#endif
+
 /* -------------------------------------------------------------------------
  * ISDU Configuration
  * ------------------------------------------------------------------------- */

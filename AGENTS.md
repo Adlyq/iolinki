@@ -47,7 +47,11 @@ cmake -B build_isr -DIOLINK_ISR_PUMP=ON && cmake --build build_isr
 - **Opt-in transport** (`IOLINK_PHY_FEATURE_ISR_PUMP`): the ISR frames requests
   and transmits pre-staged cyclic replies (`src/dll.c`, `#if`,
   `iolink_device_process_isr()`), for low-latency t_A replies on single-octet
-  transceivers.
+  transceivers. Main-context replies are staged and reported through the
+  optional `phy->request_service()` hook (the TX hooks then run only in the
+  ISR); `IOLINK_PHY_FEATURE_ISR_TX_ONLY` removes the direct-send fallback. ISDU
+  reads are served by the ISR from a framed-response snapshot (`isr_isdu_*`)
+  that the main pump refreshes when the service completes.
 - **No dynamic memory**, context-based (no globals), `<stdint.h>` types,
   negative-int error codes. MISRA C:2012 subset.
 - Compile-time trimming in `include/iolinki/config.h`

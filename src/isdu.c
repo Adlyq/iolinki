@@ -1308,3 +1308,36 @@ int iolink_isdu_get_response_byte(iolink_isdu_ctx_t* ctx, uint8_t* byte)
     *byte = ctx->response_buf[ctx->response_idx++];
     return 1;
 }
+
+uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* busy, uint8_t* dst,
+                                      size_t dst_size)
+{
+    if (busy != NULL) {
+        *busy = false;
+    }
+    if (ctx == NULL) {
+        return 0U;
+    }
+    if (ctx->state == ISDU_STATE_SERVICE_EXECUTE) {
+        if (busy != NULL) {
+            *busy = true;
+        }
+        return 0U;
+    }
+    if ((ctx->state != ISDU_STATE_RESPONSE_READY) || (dst == NULL) || (dst_size == 0U)) {
+        return 0U;
+    }
+    size_t n = ctx->resp_total;
+    if (n > dst_size) {
+        n = dst_size;
+    }
+    /* isr_isdu_len is a uint8_t; the spec caps framed responses at 241 octets,
+       so this clamp is defensive only. */
+    if (n > 255U) {
+        n = 255U;
+    }
+    if (n > 0U) {
+        (void) memcpy(dst, ctx->resp_buf, n);
+    }
+    return (uint8_t) n;
+}

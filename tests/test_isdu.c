@@ -646,6 +646,44 @@ static void test_isdu_spec_index_constants(void** state)
     assert_int_equal(IOLINK_IDX_ERROR_STATS, 0x0040U);
 }
 
+/* C3/ISR: the main pump snapshots the framed response for the ISR read pump. */
+static void test_isdu_snapshot_response(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_isdu_init(&ctx);
+
+    uint8_t out[8] = {0xAAU};
+    bool busy = true;
+
+    /* Idle: no service, not busy, nothing copied. */
+    assert_int_equal(iolink_isdu_snapshot_response(&ctx, &busy, out, sizeof(out)), 0U);
+    assert_false(busy);
+
+    /* Service executing: busy, nothing copied. */
+    ctx.state = ISDU_STATE_SERVICE_EXECUTE;
+    assert_int_equal(iolink_isdu_snapshot_response(&ctx, &busy, out, sizeof(out)), 0U);
+    assert_true(busy);
+
+    /* Response ready: the whole framed response is copied. */
+    ctx.state = ISDU_STATE_RESPONSE_READY;
+    const uint8_t resp[4] = {0xD4U, 0x12U, 0x34U, 0xF2U};
+    (void) memcpy(ctx.resp_buf, resp, sizeof(resp));
+    ctx.resp_total = sizeof(resp);
+    assert_int_equal(iolink_isdu_snapshot_response(&ctx, &busy, out, sizeof(out)),
+                     (int) sizeof(resp));
+    assert_false(busy);
+    assert_memory_equal(out, resp, sizeof(resp));
+
+    /* The destination capacity bounds the copy. */
+    (void) memset(out, 0, sizeof(out));
+    assert_int_equal(iolink_isdu_snapshot_response(&ctx, &busy, out, 2U), 2);
+    assert_memory_equal(out, resp, 2U);
+
+    /* NULL-safe. */
+    assert_int_equal(iolink_isdu_snapshot_response(NULL, NULL, NULL, 0U), 0U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -679,6 +717,7 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_data_storage_round_trip, test_setup,
                                         test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_snapshot_response, test_setup, test_teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

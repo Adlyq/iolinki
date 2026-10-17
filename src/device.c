@@ -115,6 +115,12 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     iolink_device_info_ctx_init(&ctx->device_info, config->device_info);
     iolink_params_ctx_init(&ctx->params, &ctx->device_info);
     iolink_dll_init(&ctx->dll, &config->phy);
+    /* Main-context reply staging vs the data-interrupt pump needs the
+     * application lock; without it dll_send() and the ISDU snapshot copy would
+     * not be atomic with respect to the ISR. */
+    ctx->dll.lock = config->lock;
+    ctx->dll.unlock = config->unlock;
+    ctx->dll.lock_user = config->user;
     ctx->dll.isdu.direct_param_page2 = ctx->direct_param_page2;
     ctx->dll.isdu.params_ctx = &ctx->params;
     ctx->dll.isdu.vendor_service = config->vendor_service;

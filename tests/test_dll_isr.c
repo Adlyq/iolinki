@@ -118,14 +118,14 @@ static void test_prepare_cyclic_reply_layout(void** state)
     dll.pd_valid = true;
     dll.pd_in[0] = 0xAAU;
     dll.pd_in[1] = 0xBBU;
-    dll.last_od_resp[0] = 0x42U;
-    dll.last_od_resp[1] = 0x43U;
 
     iolink_dll_prepare_cyclic_reply(&dll);
 
     const uint8_t cyclic_read[] = {0x00U, 0x00U, 0xAAU, 0xBBU};
     const uint8_t cyclic_write[] = {0xAAU, 0xBBU};
-    const uint8_t acyclic_read[] = {0x42U, 0x43U, 0xAAU, 0xBBU};
+    /* The ACYCLIC_READ OD is a zero placeholder; the ISR fills it from the
+     * ISDU response snapshot at frame end. */
+    const uint8_t acyclic_read[] = {0x00U, 0x00U, 0xAAU, 0xBBU};
 
     uint8_t slot = dll.cyclic_stage_active[0];
     assert_int_equal(dll.cyclic_stage_len[0][slot], sizeof(cyclic_read));
