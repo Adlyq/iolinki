@@ -66,7 +66,21 @@ previously missing:
   keeps `0x80 0x11`.
 - DeviceAccessLocks bit 0 blocks parameter writes (tags and DPP2), not reads or
   Data Storage downloads.
-- Identification strings are clamped to their fixedLength (64 / SerialNumber 16).
+- Identification strings are clamped to their object fixedLength (64, SerialNumber 16,
+  ProductURI up to 100, tags 32).
+
+## Deferred / known limitations
+
+- **ErrorCount reset semantics** (B.2.20): the stack sums the DLL communication
+  counters (`crc`, `framing`, `timeout`, `timing`), which are cleared on DLL
+  initialization (power-on). A Device Reset (`0x80`) only raises
+  `reset_pending`; the application owns re-initialization, so the "since reset"
+  part depends on the application. B.2.20 explicitly allows vendor/device
+  specific usage.
+- **`IOLINK_ISDU_ERROR_BUSY` (0x30)**: this legacy symbol is used for busy
+  responses in the Data Storage handler, but Table C.1 defines `0x30` as
+  `PAR_VALOUTOFRNG`. Kept for wire compatibility; tracked as a separate
+  cleanup outside the ISDU conformance batch.
 
 ## Deliberate divergences from upstream (PDF wins)
 
