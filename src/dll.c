@@ -178,6 +178,7 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
             }
             ctx->isr_tx_active = 0U;
         }
+        ctx->isr_tx_base = ctx->isr_tx_payload[slot];
         ctx->isr_tx_slot = slot;
         ctx->isr_tx_idx = 0U;
         ctx->isr_tx_active = 1U;
@@ -566,7 +567,8 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
         pos += resp_od;
     }
     if (ctx->pd_in_len_current > 0U) {
-        memcpy(&resp[pos], ctx->pd_in, ctx->pd_in_len_current);
+        memcpy(&resp[pos], &ctx->pd_in[ctx->pd_in_active][ctx->od_width],
+               ctx->pd_in_len_current);
         pos += ctx->pd_in_len_current;
     }
 
@@ -1389,7 +1391,7 @@ static bool dll_publish_isr_frame(iolink_dll_ctx_t* ctx, uint8_t len)
 static void dll_isr_tx_step(iolink_dll_ctx_t* ctx)
 {
     if (ctx->isr_tx_idx < ctx->isr_tx_len) {
-        const uint8_t b = ctx->isr_tx_payload[ctx->isr_tx_slot][ctx->isr_tx_idx];
+        const uint8_t b = ctx->isr_tx_base[ctx->isr_tx_idx];
         (void) ctx->phy->tx_octet(ctx->phy->user, b);
         if (ctx->isr_tx_has_cks != 0U) {
             ctx->isr_tx_acc = (uint8_t) (ctx->isr_tx_acc ^ b);
@@ -1511,6 +1513,10 @@ static void dll_isr_send_staged(iolink_dll_ctx_t* ctx, uint8_t slot, uint8_t len
         ctx->phy->response_timer_stop(ctx->phy->user); /* reply starts -> stop t_A */
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    /* Short reply: the DMA reads the CKS as soon as the first octet moves to
+     * the shift register (the TDR empties immediately at frame start), so the
+     * CKS must be in the buffer BEFORE tx_frame(). Only the long PD reply has
+     * enough distance (>= 28 octets) to compute it after the DMA start. */
     uint8_t* payload = ctx->isr_tx_payload[slot];
     uint8_t acc = 0x52U;
     for (uint8_t i = 0U; i < len; i++) {
@@ -1524,6 +1530,7 @@ static void dll_isr_send_staged(iolink_dll_ctx_t* ctx, uint8_t slot, uint8_t len
         (void) ctx->phy->tx_frame(ctx->phy->user, payload, ctx->isr_tx_len);
     }
 #else
+    ctx->isr_tx_base = ctx->isr_tx_payload[slot];
     ctx->isr_tx_slot = slot;
     ctx->isr_tx_len = len;
     ctx->isr_tx_flags = flags;
@@ -1713,25 +1720,23 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
     const uint8_t ch = (uint8_t) (first & IOLINK_MC_COMM_CHANNEL_MASK);
     const uint8_t flowctrl = (uint8_t) (first & IOLINK_MC_ADDR_MASK);
 
-    /* Build the reply directly from the shared single-writer state:
-     *   READ  : [OD x od_width][PD-in]CKS
-     *   WRITE : [PD-in]CKS
-     * The ISDU OD octets come straight from the framed ctx->isdu.resp_buf
-     * (the ISR owns the FlowCTRL segment index). */
-    const uint8_t slot = dll_isr_tx_alloc(ctx);
-    uint8_t* out = ctx->isr_tx_payload[slot];
-    uint8_t len = 0U;
+    /* Zero-copy reply: the PD-in already lives in the active reply buffer
+     * (the main fills the inactive copy and publishes it atomically).
+     * Layout: [OD x od_width][PD-in][CKS]. Capture the index once so a swap
+     * during the transfer cannot affect this reply. */
+    const uint8_t captured = ctx->pd_in_active;
+    uint8_t* buf = ctx->pd_in[captured];
     if (read) {
         if (ch == IOLINK_MC_CHANNEL_ISDU) {
             uint8_t od[IOLINK_OD_MAX_SIZE];
             dll_isr_isdu_od(ctx, flowctrl, od, ctx->od_width);
             for (uint8_t i = 0U; i < ctx->od_width; i++) {
-                out[len++] = od[i];
+                buf[i] = od[i];
             }
         }
         else if (ch == IOLINK_MC_CHANNEL_PROCESS) {
             for (uint8_t i = 0U; i < ctx->od_width; i++) {
-                out[len++] = 0x00U;
+                buf[i] = 0x00U;
             }
         }
         else {
@@ -1742,41 +1747,64 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
         return false;
     }
 
-    const uint16_t total = (uint16_t) len + (uint16_t) ctx->pd_in_len_current + 1U;
-    if (total > (uint16_t) sizeof(ctx->isr_tx_payload[0])) {
+    /* READ: [OD][PD-in]CKS from buf. WRITE: [PD-in]CKS from buf+od_width (the
+     * PD-in is always stored after the configured OD header). */
+    const uint8_t* base = read ? buf : (buf + ctx->od_width);
+    const uint16_t total =
+        (uint16_t) ctx->od_width + (uint16_t) ctx->pd_in_len_current + 1U;
+    const uint16_t out_len =
+        read ? total : (uint16_t) (total - (uint16_t) ctx->od_width);
+    if (out_len > (uint16_t) IOLINK_PD_REPLY_MAX) {
         return false;
     }
     const uint8_t flags = dll_isr_status_flags(ctx);
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-    /* First-octet priority: start the DMA as soon as the OD (the first reply
-     * octet) is ready, then fill PD-in and the CKS while the UART sends byte 0
-     * (one octet takes ~43 us at COM3, far longer than the fill). The CPU stays
-     * ahead of the DMA, so the buffer may be completed after tx_frame(). */
-    ctx->isr_tx_len = (uint8_t) total;
+    ctx->isr_tx_len = (uint8_t) out_len;
     ctx->isr_tx_active = 0U;
     if (ctx->phy->response_timer_stop != NULL) {
         ctx->phy->response_timer_stop(ctx->phy->user);
     }
-    if (ctx->phy->tx_frame != NULL) {
-        (void) ctx->phy->tx_frame(ctx->phy->user, out, total);
-    }
-    for (uint8_t i = 0U; i < ctx->pd_in_len_current; i++) {
-        out[len++] = ctx->pd_in[i];
-    }
-    {
-        uint8_t acc = 0x52U;
-        for (uint8_t i = 0U; i < (uint8_t) (total - 1U); i++) {
-            acc = (uint8_t) (acc ^ out[i]);
+    /* The DMA reads the CKS almost immediately for a 1-2 octet reply (the TDR
+     * empties at frame start). It is only safe to compute the CKS after
+     * tx_frame() when at least two octets precede it (out_len >= 3): then the
+     * DMA must shift the first octet (one full octet time, baud-scaled) before
+     * it reads the checksum. */
+    if (out_len >= 3U) {
+        if (ctx->phy->tx_frame != NULL) {
+            (void) ctx->phy->tx_frame(ctx->phy->user, base, out_len);
         }
-        out[total - 1U] =
+        uint8_t acc = 0x52U;
+        for (uint16_t i = 0U; i < (uint16_t) (out_len - 1U); i++) {
+            acc = (uint8_t) (acc ^ base[i]);
+        }
+        ((uint8_t*) base)[out_len - 1U] =
             (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
+    }
+    else {
+        /* Short reply: fill the CKS before starting the DMA. */
+        uint8_t acc = 0x52U;
+        for (uint16_t i = 0U; i < (uint16_t) (out_len - 1U); i++) {
+            acc = (uint8_t) (acc ^ base[i]);
+        }
+        ((uint8_t*) base)[out_len - 1U] =
+            (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
+        if (ctx->phy->tx_frame != NULL) {
+            (void) ctx->phy->tx_frame(ctx->phy->user, base, out_len);
+        }
     }
     return true;
 #else
-    for (uint8_t i = 0U; i < ctx->pd_in_len_current; i++) {
-        out[len++] = ctx->pd_in[i];
+    ctx->isr_tx_base = base;
+    ctx->isr_tx_len = (uint8_t) (out_len - 1U);
+    ctx->isr_tx_flags = flags;
+    ctx->isr_tx_idx = 0U;
+    ctx->isr_tx_acc = 0x52U;
+    ctx->isr_tx_has_cks = 1U;
+    ctx->isr_tx_active = 1U;
+    if (ctx->phy->response_timer_stop != NULL) {
+        ctx->phy->response_timer_stop(ctx->phy->user);
     }
-    dll_isr_send_staged(ctx, slot, len, flags);
+    dll_isr_tx_step(ctx);
     return true;
 #endif
 }
@@ -1808,6 +1836,7 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
             }
             ctx->isr_tx_active = 0U;
         }
+        ctx->isr_tx_base = ctx->isr_tx_payload[ctx->isr_tx_pending_slot];
         ctx->isr_tx_slot = ctx->isr_tx_pending_slot;
         ctx->isr_tx_idx = 0U;
         ctx->isr_tx_has_cks = 0U;

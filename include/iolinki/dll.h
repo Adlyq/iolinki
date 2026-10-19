@@ -71,6 +71,10 @@ typedef enum
 /** Largest M-sequence the library frames (request or reply), in octets. */
 #define IOLINK_M_SEQ_MAX_LEN (IOLINK_PD_OUT_MAX_SIZE + IOLINK_OD_MAX_SIZE + 2U)
 
+/* PD reply send buffer: [OD][PD-in][CKS]. Sized for the runtime PD-in length
+ * plus the OD header and the trailing checksum. */
+#define IOLINK_PD_REPLY_MAX (IOLINK_OD_MAX_SIZE + IOLINK_PD_IN_MAX_SIZE + 1U)
+
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
 #include "iolinki/data_storage.h"
@@ -153,6 +157,10 @@ typedef struct
      * keep the in-flight TX-FRAME DMA buffer stable while the next reply is
      * prepared (the PHY serialises the transfers). */
     uint8_t isr_tx_payload[2][IOLINK_M_SEQ_MAX_LEN];
+    const uint8_t* isr_tx_base;                  /**< Active reply source:
+                                                      pd_in[active] for the long
+                                                      PD reply, isr_tx_payload
+                                                      for short/main replies */
     volatile uint8_t isr_tx_slot;                /**< Slot being transmitted */
     volatile uint8_t isr_tx_next;                /**< Next slot to fill */
     volatile uint8_t isr_tx_pending_slot;        /**< Slot of a staged main reply */
@@ -205,8 +213,11 @@ typedef struct
     uint64_t dsio_deadline_ms;     /**< Deadline to fall back to SIO without a valid message */
     uint64_t fallback_deadline_ms; /**< Deadline to complete a FALLBACK MasterCommand */
 
-    /* Process Data Buffers */
-    uint8_t pd_in[IOLINK_PD_IN_MAX_SIZE];   /**< Input PD buffer (Device -> Master) */
+    /* Process Data Buffers. The PD-in buffer doubles as the reply send buffer:
+     * layout [OD][PD-in][CKS]. The main fills the inactive copy and swaps
+     * atomically; the ISR streams the active copy (zero-copy). */
+    uint8_t pd_in[2][IOLINK_PD_REPLY_MAX];  /**< [OD][PD-in][CKS] reply buffers */
+    volatile uint8_t pd_in_active;          /**< Active PD reply buffer index */
     uint8_t pd_out[IOLINK_PD_OUT_MAX_SIZE]; /**< Output PD buffer (Master -> Device) */
 
     /* Error Counters & Statistics */

@@ -69,7 +69,8 @@ static void test_device_pd_input_bounds(void** state)
     const uint8_t pd[2] = {0x11U, 0x22U};
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), true), 0);
     assert_int_equal(dev.ctx.dll.pd_in_len_current, 2U);
-    assert_memory_equal(dev.ctx.dll.pd_in, pd, sizeof(pd));
+    assert_memory_equal(&dev.ctx.dll.pd_in[dev.ctx.dll.pd_in_active][dev.ctx.dll.od_width], pd,
+                        sizeof(pd));
 }
 
 static void test_device_pd_valid_flag(void** state)

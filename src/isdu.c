@@ -682,12 +682,13 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
             uint8_t len = 0U;
             if (ctx->dll_ctx != NULL) {
                 const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
+                const uint8_t* pdi = &dll->pd_in[dll->pd_in_active][dll->od_width];
                 len = dll->pd_in_len_current;
-                if (len > sizeof(dll->pd_in)) {
-                    len = (uint8_t) sizeof(dll->pd_in);
+                if (len > IOLINK_PD_IN_MAX_SIZE) {
+                    len = (uint8_t) IOLINK_PD_IN_MAX_SIZE;
                 }
                 if (len > 0U) {
-                    (void) memcpy(ctx->response_buf, dll->pd_in, len);
+                    (void) memcpy(ctx->response_buf, pdi, len);
                 }
             }
             ctx->response_len = len;

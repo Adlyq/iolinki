@@ -38,7 +38,7 @@ static void test_config_defaults(void** state)
 
     /* Verify DLL Process Data buffers */
     iolink_dll_ctx_t dll;
-    assert_true(sizeof(dll.pd_in) == IOLINK_PD_IN_MAX_SIZE);
+    assert_true(sizeof(dll.pd_in[0]) == IOLINK_PD_REPLY_MAX);
     assert_true(sizeof(dll.pd_out) == IOLINK_PD_OUT_MAX_SIZE);
 }
 

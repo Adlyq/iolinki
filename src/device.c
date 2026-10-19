@@ -197,7 +197,12 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
             ctx->config->app_callbacks->on_pd_output(ctx->dll.pd_out, ctx->dll.pd_out_len_current);
         }
         if (ctx->config->app_callbacks->on_pd_input != NULL) {
-            ctx->config->app_callbacks->on_pd_input(ctx->dll.pd_in, ctx->dll.pd_in_len_current);
+            /* Fill the inactive reply buffer, then publish it atomically so the
+             * ISR never streams a torn PD-in. */
+            const uint8_t inactive = (uint8_t) (ctx->dll.pd_in_active ^ 1U);
+            ctx->config->app_callbacks->on_pd_input(
+                &ctx->dll.pd_in[inactive][ctx->dll.od_width], ctx->dll.pd_in_len_current);
+            ctx->dll.pd_in_active = inactive;
         }
     }
 }
@@ -205,7 +210,7 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
 int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data, size_t len,
                                   bool valid)
 {
-    if ((ctx == NULL) || (data == NULL) || (len > sizeof(ctx->dll.pd_in))) {
+    if ((ctx == NULL) || (data == NULL) || (len > IOLINK_PD_IN_MAX_SIZE)) {
         return -1;
     }
 
@@ -216,10 +221,14 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
         iolink_critical_enter();
     }
 
-    (void) memcpy(ctx->dll.pd_in, data, len);
+    /* PD-in lives after the OD header in the reply buffer; fill the inactive
+     * copy and publish it with an atomic index swap. */
+    const uint8_t inactive = (uint8_t) (ctx->dll.pd_in_active ^ 1U);
+    (void) memcpy(&ctx->dll.pd_in[inactive][ctx->dll.od_width], data, len);
     ctx->dll.pd_in_len = (uint8_t) len;
     ctx->dll.pd_in_len_current = (uint8_t) len;
     ctx->dll.pd_valid = valid;
+    ctx->dll.pd_in_active = inactive;
 
     if ((ctx->config != NULL) && (ctx->config->unlock != NULL)) {
         ctx->config->unlock(ctx->config->user);
