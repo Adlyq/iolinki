@@ -57,7 +57,7 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.m_seq_type = (uint8_t) ctx->stack_config.m_seq_type;
     ctx->dll.pd_in_len = ctx->stack_config.pd_in_len;
     ctx->dll.pd_out_len = ctx->stack_config.pd_out_len;
-    ctx->dll.min_cycle_time_us = (uint32_t) ctx->stack_config.min_cycle_time * 100U;
+    ctx->dll.min_cycle_time_app_us = (uint32_t) ctx->stack_config.min_cycle_time * 100U;
     ctx->dll.t_pd_delay_us = ctx->stack_config.t_pd_us;
     if (ctx->dll.t_pd_delay_us > 0U) {
         ctx->dll.t_pd_deadline_us = iolink_time_get_us() + (uint64_t) ctx->dll.t_pd_delay_us;
@@ -88,6 +88,10 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.cyclic_reply_precached =
         (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && dll_phy_has_tx(&ctx->dll);
 #endif
+
+    /* The advertised/served minimum cycle time is derived from the actual
+     * M-sequence (PD/OD lengths and baud), clamped by the app floor. */
+    ctx->dll.min_cycle_time_us = (uint32_t) iolink_dll_compute_min_cycle_time(&ctx->dll) * 100U;
 }
 
 size_t iolink_device_ctx_size(void)

@@ -491,6 +491,30 @@ static void test_dll_receive_error_discards_partial_frame(void** state)
     assert_int_equal(dev.ctx.dll.frame_index, 0);
 }
 
+static void test_min_cycle_time_from_m_sequence(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t dll;
+    (void) memset(&dll, 0, sizeof(dll));
+
+    /* 28-byte PD in/out, 1 OD, COM3: the worst-case write M-sequence is
+     * (29*14 + 31*12 + 6) us ~= 3.40 ms -> 35 (0.1 ms units). */
+    dll.od_width = 1U;
+    dll.pd_in_len_current = 28U;
+    dll.pd_out_len_current = 28U;
+    dll.baudrate = IOLINK_BAUDRATE_COM3;
+    assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 35U);
+
+    /* The application floor wins when it is higher (5.0 ms). */
+    dll.min_cycle_time_app_us = 5000U;
+    assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 50U);
+
+    /* COM1 needs far more time for the same frame. */
+    dll.min_cycle_time_app_us = 0U;
+    dll.baudrate = IOLINK_BAUDRATE_COM1;
+    assert_true(iolink_dll_compute_min_cycle_time(&dll) > 35U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -509,6 +533,7 @@ int main(void)
                                         test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_type0_write_is_three_octets_with_two_octet_od,
                                         test_setup, test_teardown),
+        cmocka_unit_test(test_min_cycle_time_from_m_sequence),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

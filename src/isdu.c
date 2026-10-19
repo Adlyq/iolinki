@@ -1092,7 +1092,9 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
 
     (void) memset(page, 0, 16);
     /* 0x00 MasterCommand (W) and 0x01 MasterCycleTime default to 0. */
-    page[0x02] = (info != NULL) ? info->min_cycle_time : 0U;    /* MinCycleTime */
+    page[0x02] = (ctx->dll_ctx != NULL)
+                     ? iolink_dll_compute_min_cycle_time((const iolink_dll_ctx_t*) ctx->dll_ctx)
+                     : ((info != NULL) ? info->min_cycle_time : 0U); /* MinCycleTime */
     page[0x03] = direct_param_mseq_capability(m_seq, od_width); /* M-sequenceCapability */
     page[0x04] = 0x11U;                                         /* RevisionID = v1.1 */
     page[0x05] = direct_param_encode_pd(pd_in);                 /* ProcessDataIn */

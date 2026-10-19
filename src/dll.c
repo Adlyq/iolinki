@@ -212,6 +212,24 @@ static uint32_t dll_get_t_ren_limit_us(const iolink_dll_ctx_t* ctx)
     return IOLINK_T_REN_US;
 }
 
+/** @brief Return the active baudrate in Hz. */
+static uint32_t dll_get_baud_hz(const iolink_dll_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return 38400U;
+    }
+    switch (ctx->baudrate) {
+        case IOLINK_BAUDRATE_COM1:
+            return 4800U;
+        case IOLINK_BAUDRATE_COM2:
+            return 38400U;
+        case IOLINK_BAUDRATE_COM3:
+            return 230400U;
+        default:
+            return 38400U;
+    }
+}
+
 /** @brief Return the inter-byte timeout (16 bit-times) in us for the active baudrate. */
 static uint32_t dll_get_t_byte_limit_us(const iolink_dll_ctx_t* ctx)
 {
@@ -1165,6 +1183,33 @@ iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_ctx_t* ctx)
     return (ctx != NULL) ? ctx->baudrate : IOLINK_BAUDRATE_COM2;
 }
 
+/** @brief Compute the device MinCycleTime from the M-sequence timing (Table B.3).
+ *
+ * Uses the ST ministry formula: mseq_us = (reply_octets*14 + request_octets*12
+ * + 6) * 1e6 / baud. The worst case of a PD write and a PD/ISDU read is taken,
+ * rounded up to 0.1 ms units, and clamped to the application floor. */
+uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return 0U;
+    }
+    const uint32_t baud = dll_get_baud_hz(ctx);
+    const uint32_t pdi = ctx->pd_in_len_current;
+    const uint32_t pdo = ctx->pd_out_len_current;
+    const uint32_t od = ctx->od_width;
+    const uint32_t t_write =
+        ((pdi + 1U) * 14U + (2U + pdo + od) * 12U + 6U) * 1000000U / baud;
+    const uint32_t t_read =
+        ((od + pdi + 1U) * 14U + (2U + od) * 12U + 6U) * 1000000U / baud;
+    const uint32_t t = (t_write > t_read) ? t_write : t_read;
+    uint32_t units = (t + 99U) / 100U; /* ceil to 0.1 ms */
+    const uint32_t app_units = (ctx->min_cycle_time_app_us + 99U) / 100U;
+    if (units < app_units) {
+        units = app_units;
+    }
+    return (units > 255U) ? 255U : (uint8_t) units;
+}
+
 int iolink_dll_set_baudrate(iolink_dll_ctx_t* ctx, iolink_baudrate_t baudrate)
 {
     if (ctx == NULL) return -1;
@@ -1172,6 +1217,7 @@ int iolink_dll_set_baudrate(iolink_dll_ctx_t* ctx, iolink_baudrate_t baudrate)
     if (ctx->phy->set_baudrate != NULL) ctx->phy->set_baudrate(ctx->phy->user, baudrate);
     ctx->t_ren_limit_us = dll_get_t_ren_limit_us(ctx);
     ctx->t_byte_limit_us = dll_get_t_byte_limit_us(ctx);
+    ctx->min_cycle_time_us = (uint32_t) iolink_dll_compute_min_cycle_time(ctx) * 100U;
     return 0;
 }
 

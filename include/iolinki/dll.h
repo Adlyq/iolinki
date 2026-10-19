@@ -180,6 +180,7 @@ typedef struct
     uint8_t master_cycle_time;  /**< DPP1 0x01, the cycle-time octet written by the
                                      Master (Table B.1/B.3); 0 = not yet written */
     uint32_t min_cycle_time_us; /**< Minimum cycle time in microseconds */
+    uint32_t min_cycle_time_app_us; /**< Application floor for the cycle time */
     bool enforce_timing;        /**< Enable timing checks (t_ren / t_cycle) */
     uint32_t t_ren_limit_us;    /**< Current t_ren limit in microseconds */
     bool t_ren_override;        /**< Use overridden t_ren limit if true */
@@ -466,6 +467,9 @@ int iolink_dll_set_baudrate(iolink_dll_ctx_t* ctx, iolink_baudrate_t baudrate);
  * @return iolink_baudrate_t Current baudrate
  */
 iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_ctx_t* ctx);
+
+/** Compute the device MinCycleTime (0.1 ms units) from the M-sequence timing. */
+uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_ctx_t* ctx);
 
 /**
  * @brief Get DLL statistics
