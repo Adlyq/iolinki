@@ -107,62 +107,15 @@ static void test_reply_variant_selection(void** state)
     assert_int_equal(iolink_dll_reply_variant(NULL, 0x80U), IOLINK_REPLY_NONE);
 }
 
-/* Pre-staged OPERATE payloads: [OD][PD-in] for READ, [PD-in] for WRITE. */
-static void test_prepare_cyclic_reply_layout(void** state)
+/* The old pre-staged double buffer is gone: replies are generated directly
+ * from the shared state by the ISR. The public helper stays as a safe no-op. */
+static void test_prepare_cyclic_reply_is_noop(void** state)
 {
     (void) state;
     iolink_dll_ctx_t dll;
     init_dll(&dll, IOLINK_M_SEQ_TYPE_2_V, 2U, 2U, 2U);
-    dll.state = IOLINK_DLL_STATE_OPERATE;
     dll.cyclic_reply_precached = true;
-    dll.pd_valid = true;
-    dll.pd_in[0] = 0xAAU;
-    dll.pd_in[1] = 0xBBU;
-
     iolink_dll_prepare_cyclic_reply(&dll);
-
-    const uint8_t cyclic_read[] = {0x00U, 0x00U, 0xAAU, 0xBBU};
-    const uint8_t cyclic_write[] = {0xAAU, 0xBBU};
-    /* The ACYCLIC_READ OD is a zero placeholder; the ISR fills it from the
-     * ISDU response snapshot at frame end. */
-    const uint8_t acyclic_read[] = {0x00U, 0x00U, 0xAAU, 0xBBU};
-
-    uint8_t slot = dll.cyclic_stage_active[0];
-    assert_int_equal(dll.cyclic_stage_len[0][slot], sizeof(cyclic_read));
-    assert_memory_equal(dll.cyclic_stage[0][slot], cyclic_read, sizeof(cyclic_read));
-    assert_int_equal(dll.cyclic_stage_flags[0][slot], 0x00U);
-
-    slot = dll.cyclic_stage_active[1];
-    assert_int_equal(dll.cyclic_stage_len[1][slot], sizeof(cyclic_write));
-    assert_memory_equal(dll.cyclic_stage[1][slot], cyclic_write, sizeof(cyclic_write));
-
-    slot = dll.cyclic_stage_active[2];
-    assert_int_equal(dll.cyclic_stage_len[2][slot], sizeof(acyclic_read));
-    assert_memory_equal(dll.cyclic_stage[2][slot], acyclic_read, sizeof(acyclic_read));
-
-    /* Event flag (CKS bit 7) and PD-invalid flag (bit 6) are staged per slot. */
-    iolink_event_trigger(&dll.events, IOLINK_EVENT_COMM_CRC, IOLINK_EVENT_TYPE_ERROR);
-    dll.pd_valid = false;
-    iolink_dll_prepare_cyclic_reply(&dll);
-
-    for (uint8_t i = 0U; i < IOLINK_REPLY_VARIANT_COUNT; i++) {
-        slot = dll.cyclic_stage_active[i];
-        assert_int_equal(dll.cyclic_stage_flags[i][slot], 0xC0U);
-    }
-}
-
-/* A PHY whose reply is not pre-cached must not stage anything. */
-static void test_prepare_cyclic_reply_not_precached(void** state)
-{
-    (void) state;
-    iolink_dll_ctx_t dll;
-    init_dll(&dll, IOLINK_M_SEQ_TYPE_1_2, 2U, 2U, 2U);
-    dll.cyclic_reply_precached = false;
-
-    iolink_dll_prepare_cyclic_reply(&dll);
-    assert_int_equal(dll.cyclic_stage_active[0], 0U);
-    assert_int_equal(dll.cyclic_stage_len[0][0], 0U);
-
     iolink_dll_prepare_cyclic_reply(NULL); /* NULL-safe */
 }
 
@@ -172,8 +125,7 @@ int main(void)
         cmocka_unit_test(test_expected_req_len_type0),
         cmocka_unit_test(test_expected_req_len_operate),
         cmocka_unit_test(test_reply_variant_selection),
-        cmocka_unit_test(test_prepare_cyclic_reply_layout),
-        cmocka_unit_test(test_prepare_cyclic_reply_not_precached),
+        cmocka_unit_test(test_prepare_cyclic_reply_is_noop),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

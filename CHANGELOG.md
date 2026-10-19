@@ -22,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FlowCTRL.
 
 ### Changed
+- ISR_PUMP: generate OPERATE replies directly from the shared `pd_in` /
+  `isdu.resp_buf` state and remove the pre-staged cyclic double buffer,
+  the ISDU response snapshot and their metadata. The main pump only keeps
+  the ISDU Busy/length view in sync.
+- ISR_PUMP: an eager frame that fails CRC/type validation is now published
+  to the main pump (counted in `isr_eager_rejects`) so the existing fallback
+  accounting still runs; the transition command is not answered by the
+  data fast path.
 - ISR_PUMP: Type-0 state transitions (startup probe, transition command,
   DeviceOperate 0x99 and Fallback 0x5A) are handled in the ISR; `state_cb` is
   deferred to the main service window so application callbacks never run in

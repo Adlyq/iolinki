@@ -325,8 +325,11 @@ static int test_eager_reject(void)
     if (dll.isr_eager_rejects != 1U) {
         return 1;
     }
-    if ((tx_n != 0U) || (dll.isr_frame_ready != 0U)) {
-        return 2;
+    if (tx_n != 0U) {
+        return 2; /* no eager reply for a corrupt frame */
+    }
+    if (dll.isr_frame_ready != 1U) {
+        return 3; /* published so the main pump can validate/fall back */
     }
     return 0;
 }

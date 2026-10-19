@@ -104,33 +104,11 @@ typedef struct
                                      bit (Figure A.14): a WRITE request carries OD
                                      after PD-out, a READ reply carries OD before PD-in,
                                      and the opposite direction carries none. */
-    bool cyclic_reply_precached;/**< Bound PHY is a raw-octet transactional PHY:
-                                     the library ISR pump frames the M-sequence and
-                                     transmits the pre-built cyclic variant at frame
-                                     end, so dll_handle_operate_type1_2 must not
-                                     send it again. */
-    /* Pre-staged OPERATE reply PAYLOADS (no CKS), each double buffered: the main
-     * pump writes the inactive slot and swaps cyclic_stage_active[]; the ISR pump
-     * copies the active slot at frame end and appends the computed CKS. Slots:
-     *   0 = CYCLIC_READ   [0x00 x od_width][PD-in]
-     *   1 = CYCLIC_WRITE  [PD-in]
-     *   2 = ACYCLIC_READ  [0x00 x od_width][PD-in] (OD overwritten by the ISR
-     *                                                from the ISDU snapshot)
-     * Flags (Event / PD-invalid) for the CKS octet are staged per slot. */
-    uint8_t cyclic_stage[IOLINK_REPLY_VARIANT_COUNT][2][IOLINK_M_SEQ_MAX_LEN];
-    uint8_t cyclic_stage_len[IOLINK_REPLY_VARIANT_COUNT][2];
-    uint8_t cyclic_stage_flags[IOLINK_REPLY_VARIANT_COUNT][2];
-    volatile uint8_t cyclic_stage_active[IOLINK_REPLY_VARIANT_COUNT];
-    /* TX zero-copy (FRAME): the DMA transmits the active stage slot directly.
-     * The main pump must not rewrite the octets the DMA is still shifting out. */
-    volatile uint8_t isr_tx_busy;
-    uint8_t isr_tx_variant;
-    uint8_t isr_tx_buffer;
-    /* ISR-owned ISDU read-response snapshot (two-pump transport). When the
-     * requested service changes state the main pump copies the whole framed
-     * resp_buf here; the ISR answers START/COUNT reads from it and advances
-     * isr_isdu_idx, so no read round-trips through the main loop (t_A holds). */
-    uint8_t isr_isdu_resp[IOLINK_ISDU_BUFFER_SIZE + 3U];
+    bool cyclic_reply_precached;/**< Legacy flag (kept for source compatibility):
+                                     replies are now generated directly from the
+                                     shared state by the ISR pump. */
+    /* ISR ISDU read view: the ISR reads ctx->isdu.resp_buf directly and owns the
+     * FlowCTRL segment index; the main pump only refreshes the Busy/length view. */
     volatile uint8_t isr_isdu_len;  /**< Framed response length (0 = none) */
     volatile uint8_t isr_isdu_idx;  /**< Next response octet (ISR advances) */
     volatile uint8_t isr_isdu_busy; /**< 1 = service executing -> answer Busy 0x01 */
