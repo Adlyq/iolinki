@@ -157,7 +157,26 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
         return;
     }
 
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* ST-style time partition: when the platform provides the Timer B tick
+     * hook, the main service window only runs after a tick authorises it. */
+    if ((ctx->dll.phy != NULL) && (ctx->dll.phy->stack_timer_start != NULL) &&
+        (iolink_dll_can_run_user_code(&ctx->dll) == 0U)) {
+        return;
+    }
+#endif
+
     iolink_dll_process(&ctx->dll);
+
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* State callbacks triggered from the data ISR are deferred to this window. */
+    if (ctx->dll.state_cb_pending != 0U) {
+        ctx->dll.state_cb_pending = 0U;
+        if (ctx->dll.state_cb != NULL) {
+            ctx->dll.state_cb(ctx->dll.state_cb_user, ctx->dll.pending_state);
+        }
+    }
+#endif
 
     if (ctx->dll.isdu.reset_pending) {
         ctx->dll.isdu.reset_pending = false;

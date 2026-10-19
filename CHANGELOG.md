@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- ISR_PUMP: Timer A/B hook wiring (`response_timer_start/stop`,
+  `stack_timer_start`) plus `iolink_dll_on_rx_timeout()`,
+  `iolink_dll_on_stack_tick()` and `iolink_dll_can_run_user_code()`.
+  With a `stack_timer_start` hook installed, `iolink_device_process()` only
+  runs after a Timer B tick authorises the main service window.
+- ISR_PUMP: `isr_mailbox_drops` / `isr_eager_rejects` counters so mailbox
+  back-pressure and eager validation failures are no longer silent.
+- ISR_PUMP: optional PHY timer hooks (`response_timer_start/stop`,
+  `stack_timer_start/stop`) for the upcoming ST-style Timer A/B interlock.
+- `test_isr_observability`: mailbox drop / eager reject / ISDU-write-in-ISR
+  coverage; `test_isr_isdu_snapshot` now covers repeated and out-of-order
+  FlowCTRL.
+
+### Changed
+- ISR_PUMP: Type-0 state transitions (startup probe, transition command,
+  DeviceOperate 0x99 and Fallback 0x5A) are handled in the ISR; `state_cb` is
+  deferred to the main service window so application callbacks never run in
+  the data ISR.
+- ISR_PUMP: Type-0 data frames in PREOPERATE/OPERATE (ISDU/page/process reads
+  and ISDU writes) are answered directly from the ISR, including the CKS-only
+  write reply. The startup probe, page writes (MasterCommand/DeviceOperate/
+  Fallback) and diagnosis event memory still run in the main pump.
+- ISR_PUMP: ISDU write requests are validated (A.1.6/type) and buffered by the
+  ISR (collection, FlowCTRL, CHKPDU) before execution by the main window; the
+  main pump skips the already-buffered octets via `isdu_isr_consumed`. This
+  removes the "ACK before the request is buffered" window, the mailbox
+  back-pressure loss for ISDU writes, and rejects corrupt writes before they
+  reach the transport.
+- ISR_PUMP: the ISR ISDU read path now enforces FlowCTRL START/COUNT,
+  repeats the previous segment on a repeated COUNT, and answers No Service on
+  out-of-order COUNTs.
+
+### Fixed
+- ISR_PUMP: `isr_eager_replied` is snapshotted into `frame_eager` when the
+  mailbox is consumed, removing the cross-frame race on the eager flag.
+- ISR_PUMP RX FRAME: validate the request length, do not call `rx_frame()`
+  while the mailbox still holds the zero-copy pointer, and fill the TX CKS
+  before handing the buffer to `tx_frame()`.
+
 ## [3.0.0] - 2026-10-17
 
 ### Changed
