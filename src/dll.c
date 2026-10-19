@@ -1335,13 +1335,12 @@ static bool dll_isr_reply_allowed(const iolink_dll_ctx_t* ctx, const uint8_t* fr
         return false;
     }
     const uint8_t expected = (uint8_t) (frame[1] & 0x3FU);
-    uint8_t acc = 0x52U; /* A.1.6 seed */
-    for (uint8_t i = 0U; i < len; i++) {
-        uint8_t b = frame[i];
-        if (i == 1U) {
-            b = (uint8_t) (b & IOLINK_MSEQ_TYPE_MASK);
-        }
-        acc = (uint8_t) (acc ^ b);
+    /* A.1.6 seed; octet 1 (CKT) is masked to its type bits. Handle it outside
+     * the loop so the remaining octets run a tight XOR loop. */
+    uint8_t acc = (uint8_t) (0x52U ^ frame[0]);
+    acc = (uint8_t) (acc ^ (frame[1] & IOLINK_MSEQ_TYPE_MASK));
+    for (uint8_t i = 2U; i < len; i++) {
+        acc = (uint8_t) (acc ^ frame[i]);
     }
     return (iolink_checksum6_from_acc(acc) == expected) && dll_isr_type_ok(ctx, frame);
 }
@@ -1891,19 +1890,20 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
                 ctx->framing_errors++;
                 break;
             }
+            const bool allowed = dll_isr_reply_allowed(ctx, f, len);
             {
                 const bool isdu_write =
                     (((f[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_ISDU) &&
                      ((f[0] & IOLINK_MC_RW_MASK) == 0U));
                 if (isdu_write) {
-                    if (!dll_isr_reply_allowed(ctx, f, len)) {
+                    if (!allowed) {
                         ctx->isr_eager_rejects++;
                         break;
                     }
                     dll_isr_consume_isdu_write(ctx, f, len);
                 }
             }
-            if (dll_isr_reply_allowed(ctx, f, len) && dll_isr_handle_type0(ctx, f, len)) {
+            if (allowed && dll_isr_handle_type0(ctx, f, len)) {
                 break;
             }
             {
@@ -1925,7 +1925,7 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
                                    ((ch == IOLINK_MC_CHANNEL_PROCESS) || isdu_write || isdu_read);
                 ctx->isr_eager_replied = 0U;
                 bool eager_ok = eager;
-                if (eager && !dll_isr_reply_allowed(ctx, f, len)) {
+                if (eager && !allowed) {
                     ctx->isr_eager_rejects++;
                     eager_ok = false; /* main pump validates/falls back */
                 }
