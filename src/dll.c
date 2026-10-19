@@ -930,6 +930,11 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
         return;
     }
     else {
+        /* Checksum failure. The ST 6362 library maps this to rc=2 (re-listen,
+         * no mode change). This device additionally counts it toward the local
+         * SIO fallback: three consecutive bad frames return the link to SIO at
+         * COM1. That is a deliberate local recovery policy, not the ST rc=3
+         * protocol-error demotion, and the spec does not forbid it. */
         ctx->crc_errors++;
         ctx->framing_errors++;
         dll_enter_fallback(ctx);
