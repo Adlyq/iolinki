@@ -10,6 +10,8 @@
 #define IOLINK_H
 
 #include <stdint.h>
+#include <stdbool.h>
+#include "iolinki/phy.h"
 
 /**
  * @file iolink.h
@@ -119,6 +121,8 @@ typedef struct
     uint8_t pd_out_len;             /**< Process Data Output length (Master to Device) in bytes */
     uint32_t t_pd_us;               /**< Power-on delay (t_pd) in microseconds */
     uint8_t od_width;               /**< OD octets (Table A.10); 0 = derive from m_seq_type */
+    iolink_baudrate_t baudrate;     /**< Operating COM when baudrate_set is true */
+    bool baudrate_set;              /**< Apply baudrate at init; false keeps the COM2 default */
 } iolink_config_t;
 
 /**

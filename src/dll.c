@@ -673,6 +673,7 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     ctx->phy = phy;
     ctx->enforce_timing = (IOLINK_TIMING_ENFORCE_DEFAULT != 0U);
     ctx->sio_fallback_threshold = 3U;
+    ctx->operating_baudrate = IOLINK_BAUDRATE_UNSET;
 
     /* Table A.10: TYPE_2_1/TYPE_2_2 carry one On-request Data octet; TYPE_2_V is
        the two-octet variant (OPERATE M-sequence code 5). */
@@ -943,11 +944,24 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
 #endif
 }
 
+/** Re-assert the configured operating COM after a recovery drop to COM1. */
+static void dll_restore_operating_baudrate(iolink_dll_ctx_t* ctx)
+{
+    if ((ctx->operating_baudrate != IOLINK_BAUDRATE_UNSET) &&
+        (ctx->baudrate != ctx->operating_baudrate)) {
+        (void) iolink_dll_set_baudrate(ctx, ctx->operating_baudrate);
+    }
+}
+
 void iolink_dll_process(iolink_dll_ctx_t* ctx)
 {
     if ((ctx == NULL) || (ctx->phy == NULL)) {
         return;
     }
+
+    /* Restore the operating COM before the SIO/power-on early returns: a
+     * recovery drop to COM1 must not leave the UART on the wrong baudrate. */
+    dll_restore_operating_baudrate(ctx);
 
     /* Process acyclic ISDU state machine. In the two-pump transport the ISR
      * buffers ISDU write octets; the critical section keeps the execute step
@@ -1166,6 +1180,9 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
         }
     }
 #endif /* IOLINK_PHY_FEATURE_ISR_PUMP */
+
+    /* Undo a same-call recovery drop to COM1 (SDCI path reaches here). */
+    dll_restore_operating_baudrate(ctx);
 }
 
 iolink_dll_state_t iolink_dll_get_state(const iolink_dll_ctx_t* ctx)
@@ -1219,6 +1236,18 @@ int iolink_dll_set_baudrate(iolink_dll_ctx_t* ctx, iolink_baudrate_t baudrate)
     ctx->t_byte_limit_us = dll_get_t_byte_limit_us(ctx);
     ctx->min_cycle_time_us = (uint32_t) iolink_dll_compute_min_cycle_time(ctx) * 100U;
     return 0;
+}
+
+int iolink_dll_set_operating_baudrate(iolink_dll_ctx_t* ctx, iolink_baudrate_t baudrate)
+{
+    if (ctx == NULL) {
+        return -1;
+    }
+    if ((uint8_t) baudrate > (uint8_t) IOLINK_BAUDRATE_COM3) {
+        return -1;
+    }
+    ctx->operating_baudrate = baudrate;
+    return iolink_dll_set_baudrate(ctx, baudrate);
 }
 
 int iolink_dll_set_pd_length(iolink_dll_ctx_t* ctx, uint8_t pd_in_len, uint8_t pd_out_len)

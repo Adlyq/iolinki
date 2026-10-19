@@ -197,7 +197,7 @@ typedef struct
 
     /* Baudrate Support */
     iolink_baudrate_t baudrate; /**< Negotiated baudrate (COM1-COM3) */
-    iolink_baudrate_t operating_baudrate; /**< Device operating COM (fixed; re-asserted on recovery) */
+    iolink_baudrate_t operating_baudrate; /**< Operating COM; IOLINK_BAUDRATE_UNSET if not configured */
 
     /* Unified Frame Assembly: a master request is MC + CKT + PD-out + OD, so
        size it from the compile-time maxima (was a fixed 48, too small once the
@@ -459,6 +459,22 @@ iolink_phy_mode_t iolink_dll_get_phy_mode(const iolink_dll_ctx_t* ctx);
  * @return int 0 on success
  */
 int iolink_dll_set_baudrate(iolink_dll_ctx_t* ctx, iolink_baudrate_t baudrate);
+
+/** Sentinel for "no operating COM configured" (recovery keeps COM1). */
+#define IOLINK_BAUDRATE_UNSET ((iolink_baudrate_t) 0xFF)
+
+/**
+ * @brief Set the device's operating COM and apply it now
+ *
+ * The operating COM is re-asserted by iolink_dll_process() after a recovery
+ * drop to COM1 (idle/fallback), matching a device configured for a fixed SDCI
+ * baudrate. Pass IOLINK_BAUDRATE_UNSET to stop re-asserting it.
+ *
+ * @param ctx DLL context
+ * @param baudrate Operating baudrate (COM1..COM3)
+ * @return int 0 on success, -1 on invalid arguments
+ */
+int iolink_dll_set_operating_baudrate(iolink_dll_ctx_t* ctx, iolink_baudrate_t baudrate);
 
 /**
  * @brief Get current negotiated baudrate

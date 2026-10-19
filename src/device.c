@@ -89,6 +89,12 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
         (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && dll_phy_has_tx(&ctx->dll);
 #endif
 
+    /* Adopt the configured operating COM (and its timing limits) before the
+     * minimum cycle time is derived from the baudrate. */
+    if (ctx->stack_config.baudrate_set) {
+        (void) iolink_dll_set_operating_baudrate(&ctx->dll, ctx->stack_config.baudrate);
+    }
+
     /* The advertised/served minimum cycle time is derived from the actual
      * M-sequence (PD/OD lengths and baud), clamped by the app floor. */
     ctx->dll.min_cycle_time_us = (uint32_t) iolink_dll_compute_min_cycle_time(&ctx->dll) * 100U;

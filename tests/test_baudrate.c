@@ -78,11 +78,81 @@ static void test_baudrate_switch(void** state)
     assert_int_equal(iolink_dll_get_baudrate(&ctx), IOLINK_BAUDRATE_COM3);
 }
 
+static void test_operating_baudrate_reassert(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t ctx;
+
+    expect_any(mock_set_baudrate, baudrate);
+    iolink_dll_init(&ctx, &mock_phy);
+
+    expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM3);
+    assert_int_equal(iolink_dll_set_operating_baudrate(&ctx, IOLINK_BAUDRATE_COM3), 0);
+    assert_int_equal(iolink_dll_get_baudrate(&ctx), IOLINK_BAUDRATE_COM3);
+
+    /* A recovery drop to COM1 is undone by the operating COM on the next main
+     * pump pass. */
+    expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM1);
+    assert_int_equal(iolink_dll_set_baudrate(&ctx, IOLINK_BAUDRATE_COM1), 0);
+    expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM3);
+    iolink_dll_process(&ctx);
+    assert_int_equal(iolink_dll_get_baudrate(&ctx), IOLINK_BAUDRATE_COM3);
+}
+
+static void test_operating_baudrate_unset(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t ctx;
+
+    expect_any(mock_set_baudrate, baudrate);
+    iolink_dll_init(&ctx, &mock_phy);
+
+    /* No operating COM configured: a COM1 drop is left alone (legacy). */
+    expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM1);
+    assert_int_equal(iolink_dll_set_baudrate(&ctx, IOLINK_BAUDRATE_COM1), 0);
+    iolink_dll_process(&ctx);
+    assert_int_equal(iolink_dll_get_baudrate(&ctx), IOLINK_BAUDRATE_COM1);
+}
+
+static void test_baudrate_recomputes_limits(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t ctx;
+
+    expect_any(mock_set_baudrate, baudrate);
+    iolink_dll_init(&ctx, &mock_phy);
+    ctx.pd_in_len_current = 28U;
+    ctx.pd_out_len_current = 28U;
+    ctx.od_width = 1U;
+
+    expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM3);
+    assert_int_equal(iolink_dll_set_baudrate(&ctx, IOLINK_BAUDRATE_COM3), 0);
+    assert_int_equal(ctx.t_byte_limit_us, 16U * 4U);
+    assert_int_equal(ctx.t_ren_limit_us, IOLINK_T_REN_US);
+    assert_int_equal(ctx.min_cycle_time_us, 3500U);
+
+    expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM2);
+    assert_int_equal(iolink_dll_set_baudrate(&ctx, IOLINK_BAUDRATE_COM2), 0);
+    assert_int_equal(ctx.t_byte_limit_us, 16U * 26U);
+    assert_int_equal(ctx.t_ren_limit_us, IOLINK_T_REN_US);
+    assert_int_equal(ctx.min_cycle_time_us, 20500U);
+
+    expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM1);
+    assert_int_equal(iolink_dll_set_baudrate(&ctx, IOLINK_BAUDRATE_COM1), 0);
+    assert_int_equal(ctx.t_byte_limit_us, 16U * 208U);
+    assert_int_equal(ctx.t_ren_limit_us, IOLINK_T_REN_US);
+    /* COM1 needs ~163 ms, clamped to the 0.1 ms octet's 255-unit maximum. */
+    assert_int_equal(ctx.min_cycle_time_us, 25500U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_baudrate_init),
         cmocka_unit_test(test_baudrate_switch),
+        cmocka_unit_test(test_operating_baudrate_reassert),
+        cmocka_unit_test(test_operating_baudrate_unset),
+        cmocka_unit_test(test_baudrate_recomputes_limits),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

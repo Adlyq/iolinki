@@ -172,6 +172,24 @@ static void test_device_set_pd_length_variable(void** state)
     assert_int_equal(iolink_device_set_pd_length(&var.ctx, 5U, 5U), -1);
 }
 
+static void test_device_config_baudrate(void** state)
+{
+    (void) state;
+    iolink_config_t config = {0};
+    config.m_seq_type = IOLINK_M_SEQ_TYPE_1_2;
+    config.pd_in_len = 2U;
+    config.pd_out_len = 2U;
+    config.baudrate = IOLINK_BAUDRATE_COM1;
+    config.baudrate_set = true;
+
+    iolink_test_device_t dev;
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM1);
+    assert_int_equal(dev.ctx.dll.operating_baudrate, IOLINK_BAUDRATE_COM1);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -181,6 +199,7 @@ int main(void)
         cmocka_unit_test(test_device_pd_output_read),
         cmocka_unit_test(test_device_reset_handler),
         cmocka_unit_test(test_device_introspection),
+        cmocka_unit_test(test_device_config_baudrate),
         cmocka_unit_test(test_device_set_pd_length_fixed),
         cmocka_unit_test(test_device_set_pd_length_variable),
     };
