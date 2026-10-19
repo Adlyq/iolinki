@@ -50,6 +50,51 @@ wrong transport fails at compile time. When `IOLINK_PHY_FEATURE_ISR_TX_ONLY` is
 set, the application must provide `request_service`; check it at init and fail
 early (the 8110 application calls `Error_Handler()` if it is `NULL`).
 
+### Verified 8110 configuration
+
+The 8-channel 8110 board is a Type 2_V device with 28-byte PD in/out and a
+one-octet OD. Its trimmed configuration is:
+
+```c
+/* Capacity: M_SEQ_MAX_LEN = 28 + 1 + 2 = 31 */
+#define IOLINK_PD_IN_MAX_SIZE  28
+#define IOLINK_PD_OUT_MAX_SIZE 28
+#define IOLINK_OD_MAX_SIZE     1
+#define IOLINK_ISDU_BUFFER_SIZE 64   /* strings are 64 octets; no ProductURI/DS */
+
+/* Feature profile: no Data Storage, no SystemCommand, no events/diagnostics */
+#define IOLINK_MINIMAL_PROFILE 1
+#define IOLINK_FEATURE_EVENTS 0
+#define IOLINK_PHY_FEATURE_WAKEUP 1
+#define IOLINK_PHY_FEATURE_LEGACY_DIAG 0
+#define IOLINK_PHY_FEATURE_ISR_PUMP 1
+#define IOLINK_PHY_FEATURE_ISR_TX_ONLY 1
+#define IOLINK_ISR_RX_MODE IOLINK_ISR_RX_FRAME
+#define IOLINK_ISR_TX_MODE IOLINK_ISR_TX_FRAME
+```
+
+The raw ISDU transport buffers carry fixed headroom (`req_buf +6`,
+`resp_buf +3`, ISR snapshot `+3`), so `IOLINK_ISDU_BUFFER_SIZE = 64` still
+serves a 64-octet identification string (67-octet framed response).
+
+Measured with the board CMake build (Debug, 31 KiB flash / 8 KiB RAM target):
+
+| Step | text | bss |
+| --- | ---: | ---: |
+| Synced upstream baseline | 31348 | 8984 |
+| + compile-time feature removal (events/diag off) | 29948 | 8936 |
+| + 28/1/64 sizing and RX-FRAME buffer guards | 29652 | **7568** |
+
+Hardware check: after flashing, RTT reports `[STATE] 4` (OPERATE) and 28-byte
+`[PDO]` traffic.
+
+Disabled features fail the build: their public declarations are compiled out, so
+calling e.g. `iolink_ds_init`, `iolink_events_flag` or `iolink_params_get`
+produces an implicit-declaration error (or an undefined reference if the
+compiler only warns). Wire-visible objects that cannot be removed at compile
+time answer a negative response instead: `0x0003` (Data Storage) and `0x0025`
+(DetailedDeviceStatus) return `0x80 0x11` when disabled.
+
 ## CubeMX / board dependencies
 
 The file expects the generated `main.h` to provide:
