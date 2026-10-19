@@ -21,34 +21,54 @@ below is the contract.
 `IOLINK_FEATURE_MASTER_IDENT` was removed: the MasterCommand ident subset was
 never implemented, so the switch had no effect.
 
-## IOLINK_MINIMAL_PROFILE
+## CMake options
 
-Defining `IOLINK_MINIMAL_PROFILE` selects the trimmed defaults (only when the
-individual macro is not already defined):
+Every switch is a cache option (default `ON`). Only the trimmed features are
+propagated as `=0`; the rest keep the `config.h` defaults.
 
-- `IOLINK_FEATURE_DATA_STORAGE = 0`
-- `IOLINK_FEATURE_SYSTEM_COMMAND = 0`
-- `IOLINK_FEATURE_LEGACY_PARAMS = 0`
-- `IOLINK_PHY_FEATURE_WAKEUP = 0`
-- `IOLINK_PHY_FEATURE_SIO_CQ = 0`
-- `IOLINK_PHY_FEATURE_LEGACY_DIAG = 0`
+| Option | Effect |
+| --- | --- |
+| `-DIOLINK_MINIMAL_PROFILE=ON` | Bundle: Data Storage, SystemCommand, LegacyParams and the three PHY hooks off; **events kept** |
+| `-DIOLINK_TINY_PROFILE=ON` | Bundle: MINIMAL + `IOLINK_FEATURE_EVENTS=OFF` |
+| `-DIOLINK_FEATURE_DATA_STORAGE=OFF` | Individual override |
+| `-DIOLINK_FEATURE_SYSTEM_COMMAND=OFF` | Individual override |
+| `-DIOLINK_FEATURE_LEGACY_PARAMS=OFF` | Individual override |
+| `-DIOLINK_FEATURE_EVENTS=OFF` | Individual override |
+| `-DIOLINK_PHY_FEATURE_WAKEUP=OFF` | Individual override |
+| `-DIOLINK_PHY_FEATURE_SIO_CQ=OFF` | Individual override |
+| `-DIOLINK_PHY_FEATURE_LEGACY_DIAG=OFF` | Individual override |
 
-`IOLINK_FEATURE_EVENTS` is intentionally **not** part of the profile (events are
-kept by default); define it explicitly to remove the event engine as well.
+Profiles are bundles: when one is selected it overrides the individual feature
+options. Use the individual options for fine-grained control without a profile.
+The full unit suite exercises the untrimmed stack and is skipped for trimmed
+builds; verify a trimmed configuration by building the `iolinki` target.
 
-CMake:
+## Profiles
+
+`IOLINK_MINIMAL_PROFILE` selects the trimmed defaults while **keeping the event
+engine** (diagnosis/audit behavior). `IOLINK_TINY_PROFILE` additionally removes
+the event engine:
 
 ```bash
+# Trimmed, still reports events
 cmake -B build_min -DIOLINK_MINIMAL_PROFILE=ON -DBUILD_TESTING=OFF
 cmake --build build_min --target iolinki
+
+# Smallest profile (no event engine)
+cmake -B build_tiny -DIOLINK_TINY_PROFILE=ON -DBUILD_TESTING=OFF
+cmake --build build_tiny --target iolinki
 ```
 
-Individual features can be overridden in the same build:
+Individual overrides work without a profile:
 
 ```bash
-cmake -B build_min -DIOLINK_MINIMAL_PROFILE=ON \
-  -DCMAKE_C_FLAGS="-DIOLINK_FEATURE_EVENTS=0" -DBUILD_TESTING=OFF
+cmake -B build_no_events -DIOLINK_FEATURE_EVENTS=OFF -DBUILD_TESTING=OFF
+cmake --build build_no_events --target iolinki
 ```
+
+The `config.h` `IOLINK_MINIMAL_PROFILE` block remains for non-CMake builds
+(Keil/IAR) and for `tests/test_config_trim.c`, which checks the macro defaults
+in isolation.
 
 ## Capacity overrides
 

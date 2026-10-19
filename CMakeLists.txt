@@ -21,7 +21,31 @@ include_directories(include)
 # transport (phy->send/recv_byte). ON enables the ISR path compiled into
 # src/dll.c behind IOLINK_PHY_FEATURE_ISR_PUMP.
 option(IOLINK_ISR_PUMP "Build the opt-in ISR two-pump transport" OFF)
-option(IOLINK_MINIMAL_PROFILE "Compile the trimmed feature profile" OFF)
+
+# Feature trimming. The profiles are bundles: when selected they override the
+# individual feature options below. Use the individual options for fine-grained
+# control without a profile. All default to the full stack.
+option(IOLINK_MINIMAL_PROFILE "Compile the trimmed feature profile (keeps events)" OFF)
+option(IOLINK_TINY_PROFILE "Compile the tiny feature profile (MINIMAL + no events)" OFF)
+option(IOLINK_FEATURE_DATA_STORAGE "Compile Data Storage" ON)
+option(IOLINK_FEATURE_SYSTEM_COMMAND "Compile SystemCommand handling" ON)
+option(IOLINK_FEATURE_LEGACY_PARAMS "Compile the legacy global params API" ON)
+option(IOLINK_FEATURE_EVENTS "Compile the diagnostic event engine" ON)
+option(IOLINK_PHY_FEATURE_WAKEUP "Compile PHY wake-up detection" ON)
+option(IOLINK_PHY_FEATURE_SIO_CQ "Compile PHY manual C/Q control" ON)
+option(IOLINK_PHY_FEATURE_LEGACY_DIAG "Compile PHY legacy diagnostics" ON)
+
+if(IOLINK_MINIMAL_PROFILE OR IOLINK_TINY_PROFILE)
+    set(IOLINK_FEATURE_DATA_STORAGE OFF)
+    set(IOLINK_FEATURE_SYSTEM_COMMAND OFF)
+    set(IOLINK_FEATURE_LEGACY_PARAMS OFF)
+    set(IOLINK_PHY_FEATURE_WAKEUP OFF)
+    set(IOLINK_PHY_FEATURE_SIO_CQ OFF)
+    set(IOLINK_PHY_FEATURE_LEGACY_DIAG OFF)
+endif()
+if(IOLINK_TINY_PROFILE)
+    set(IOLINK_FEATURE_EVENTS OFF)
+endif()
 
 add_library(iolinki STATIC
     src/phy_generic.c
@@ -43,9 +67,19 @@ add_library(iolinki STATIC
 if(IOLINK_ISR_PUMP)
     target_compile_definitions(iolinki PUBLIC IOLINK_PHY_FEATURE_ISR_PUMP=1)
 endif()
-if(IOLINK_MINIMAL_PROFILE)
-    target_compile_definitions(iolinki PUBLIC IOLINK_MINIMAL_PROFILE=1)
-endif()
+# Only trimmed features are defined; the rest keep the config.h defaults.
+foreach(_iolink_feature
+    IOLINK_FEATURE_DATA_STORAGE
+    IOLINK_FEATURE_SYSTEM_COMMAND
+    IOLINK_FEATURE_LEGACY_PARAMS
+    IOLINK_FEATURE_EVENTS
+    IOLINK_PHY_FEATURE_WAKEUP
+    IOLINK_PHY_FEATURE_SIO_CQ
+    IOLINK_PHY_FEATURE_LEGACY_DIAG)
+    if(NOT ${_iolink_feature})
+        target_compile_definitions(iolinki PUBLIC ${_iolink_feature}=0)
+    endif()
+endforeach()
 
 # Platform Selection
 set(IOLINK_PLATFORM "LINUX" CACHE STRING "Target platform: LINUX, BAREMETAL (Zephyr builds use module.yml)")

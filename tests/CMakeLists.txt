@@ -1,3 +1,14 @@
+# The full suite exercises the untrimmed stack. Skip it for a trimmed build;
+# build the library target (or configure with -DBUILD_TESTING=OFF) instead.
+if(IOLINK_MINIMAL_PROFILE OR IOLINK_TINY_PROFILE OR
+   NOT IOLINK_FEATURE_DATA_STORAGE OR NOT IOLINK_FEATURE_SYSTEM_COMMAND OR
+   NOT IOLINK_FEATURE_LEGACY_PARAMS OR NOT IOLINK_FEATURE_EVENTS OR
+   NOT IOLINK_PHY_FEATURE_WAKEUP OR NOT IOLINK_PHY_FEATURE_SIO_CQ OR
+   NOT IOLINK_PHY_FEATURE_LEGACY_DIAG)
+    message(STATUS "Feature-trimmed build: skipping the unit suite")
+    return()
+endif()
+
 find_package(PkgConfig QUIET)
 add_executable(test_switching_sensor test_switching_sensor.c ../examples/switching_sensor/switching_sensor.c)
 target_include_directories(test_switching_sensor PRIVATE ../examples/switching_sensor)
