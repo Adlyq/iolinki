@@ -13,6 +13,22 @@
 #include "iolinki/time_utils.h"
 #include "iolinki/utils.h"
 #include <string.h>
+
+/* The event engine is internal to the DLL/ISDU. When it is compiled out, the
+ * helpers below collapse to constants so no disabled interface is referenced. */
+#if IOLINK_FEATURE_EVENTS
+#define DLL_EVENTS_INIT(ctx) iolink_events_init(ctx)
+#define DLL_EVENT_TRIGGER(ctx, code, type) iolink_event_trigger((ctx), (code), (type))
+#define DLL_EVENTS_FLAG(ctx) iolink_events_flag(ctx)
+#define DLL_EVENTS_MEMORY_READ(ctx, addr) iolink_events_memory_read((ctx), (addr))
+#define DLL_EVENTS_MEMORY_WRITE(ctx, addr, value) iolink_events_memory_write((ctx), (addr), (value))
+#else
+#define DLL_EVENTS_INIT(ctx) ((void) 0)
+#define DLL_EVENT_TRIGGER(ctx, code, type) ((void) 0)
+#define DLL_EVENTS_FLAG(ctx) false
+#define DLL_EVENTS_MEMORY_READ(ctx, addr) 0U
+#define DLL_EVENTS_MEMORY_WRITE(ctx, addr, value) ((void) 0)
+#endif
 #include <stdio.h>
 
 /**
@@ -261,7 +277,7 @@ static void dll_enter_fallback(iolink_dll_ctx_t* ctx)
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
         ctx->fallback_count = 0U;
         ctx->frame_index = 0U;
-        iolink_event_trigger(&ctx->events, IOLINK_EVENT_CODE_COMM_ERR_FRAMING,
+        DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_CODE_COMM_ERR_FRAMING,
                              IOLINK_EVENT_TYPE_WARNING);
     }
     else if (ctx->state != IOLINK_DLL_STATE_OPERATE && ctx->state != IOLINK_DLL_STATE_ESTAB_COM) {
@@ -366,11 +382,11 @@ static bool dll_dispatch_od(iolink_dll_ctx_t* ctx, uint8_t mc, const uint8_t* od
         const uint8_t addr = (uint8_t) (mc & IOLINK_MC_ADDR_MASK);
         if ((mc & IOLINK_MC_RW_MASK) != 0U) {
             for (uint8_t i = 0U; i < od_len; i++) {
-                od_out[i] = iolink_events_memory_read(&ctx->events, (uint8_t) (addr + i));
+                od_out[i] = DLL_EVENTS_MEMORY_READ(&ctx->events, (uint8_t) (addr + i));
             }
         }
         else if (od_len > 0U) {
-            iolink_events_memory_write(&ctx->events, addr, od_in[0]);
+            DLL_EVENTS_MEMORY_WRITE(&ctx->events, addr, od_in[0]);
         }
         return true;
     }
@@ -402,7 +418,7 @@ static void dll_handle_operate_type0(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t 
 
     uint8_t resp[2];
     uint8_t ck_flags = 0x00U;
-    if (iolink_events_flag(&ctx->events)) {
+    if (DLL_EVENTS_FLAG(&ctx->events)) {
         ck_flags |= 0x80U;
     }
     if (!ctx->pd_valid) {
@@ -435,7 +451,7 @@ static void dll_handle_type0_od_write(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t
 
     uint8_t resp[1];
     resp[0] = 0x00U;
-    if (iolink_events_flag(&ctx->events)) {
+    if (DLL_EVENTS_FLAG(&ctx->events)) {
         resp[0] |= 0x80U;
     }
     if (!ctx->pd_valid) {
@@ -534,7 +550,7 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
     }
 
     uint8_t cks = 0x00U;
-    if (iolink_events_flag(&ctx->events)) {
+    if (DLL_EVENTS_FLAG(&ctx->events)) {
         cks |= 0x80U;
     }
     if (!ctx->pd_valid) {
@@ -559,7 +575,7 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
             if ((limit > 0U) && (ctx->response_time_us > limit)) {
                 ctx->timing_errors++;
                 ctx->t_ren_violations++;
-                iolink_event_trigger(&ctx->events, IOLINK_EVENT_COMM_TIMING,
+                DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING,
                                      IOLINK_EVENT_TYPE_WARNING);
             }
         }
@@ -584,13 +600,13 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
             if (voltage < 18000) {
                 ctx->voltage_faults++;
                 /* Table D.1 device code 0x5111 "Primary supply voltage underrun". */
-                iolink_event_trigger(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN,
+                DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN,
                                      IOLINK_EVENT_TYPE_WARNING);
             }
             else if (voltage > 30000) {
                 ctx->voltage_faults++;
                 /* Table D.1 device code 0x5110 "Primary supply voltage overrun". */
-                iolink_event_trigger(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN,
+                DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN,
                                      IOLINK_EVENT_TYPE_WARNING);
             }
         }
@@ -600,7 +616,7 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
         if (ctx->phy->is_short_circuit(ctx->phy->user)) {
             ctx->short_circuits++;
             /* Table D.1 device code 0x7710 "Short circuit". */
-            iolink_event_trigger(&ctx->events, IOLINK_EVENTCODE_SHORT_CIRCUIT,
+            DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_SHORT_CIRCUIT,
                                  IOLINK_EVENT_TYPE_ERROR);
         }
     }
@@ -632,12 +648,16 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
         ctx->phy->set_baudrate(ctx->phy->user, IOLINK_BAUDRATE_COM2);
     }
 
-    iolink_events_init(&ctx->events);
+    DLL_EVENTS_INIT(&ctx->events);
     iolink_isdu_init(&ctx->isdu);
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_init(&ctx->ds, NULL);
 #endif
+#if IOLINK_FEATURE_EVENTS
     ctx->isdu.event_ctx = &ctx->events;
+#else
+    ctx->isdu.event_ctx = NULL;
+#endif
     ctx->isdu.dll_ctx = ctx;
 #if IOLINK_FEATURE_DATA_STORAGE
     ctx->isdu.ds_ctx = &ctx->ds;
@@ -707,7 +727,7 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
         if (now_us_proc - ctx->last_cycle_start_us < (uint64_t) ctx->min_cycle_time_us) {
             ctx->timing_errors++;
             ctx->t_cycle_violations++;
-            iolink_event_trigger(&ctx->events, IOLINK_EVENT_COMM_TIMING,
+            DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING,
                                  IOLINK_EVENT_TYPE_WARNING);
         }
     }
@@ -780,7 +800,7 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
 
                 uint8_t resp[1];
                 uint8_t cks = 0x00U;
-                if (iolink_events_flag(&ctx->events)) {
+                if (DLL_EVENTS_FLAG(&ctx->events)) {
                     cks |= 0x80U;
                 }
                 if (!ctx->pd_valid) {
@@ -838,7 +858,7 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
     else if (crc_ok && !type_ok) {
         /* Illegal M-sequence type: report it and go to STARTUP (T11). */
         ctx->framing_errors++;
-        iolink_event_trigger(&ctx->events, IOLINK_EVENT_CODE_COMM_ERR_GENERAL,
+        DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_CODE_COMM_ERR_GENERAL,
                              IOLINK_EVENT_TYPE_ERROR);
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
         ctx->frame_index = 0U;
@@ -921,7 +941,7 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
         if (dll_drain_rx(ctx)) {
             ctx->timing_errors++;
             ctx->t_pd_violations++;
-            iolink_event_trigger(&ctx->events, IOLINK_EVENT_COMM_TIMING, IOLINK_EVENT_TYPE_WARNING);
+            DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING, IOLINK_EVENT_TYPE_WARNING);
         }
         return;
     }
@@ -952,7 +972,7 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
                 ctx->timing_errors++;
                 ctx->t_byte_violations++;
                 ctx->framing_errors++;
-                iolink_event_trigger(&ctx->events, IOLINK_EVENT_COMM_TIMING,
+                DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING,
                                      IOLINK_EVENT_TYPE_WARNING);
                 ctx->frame_index = 0U;
                 dll_enter_fallback(ctx);
@@ -1006,7 +1026,7 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
                     ctx->timing_errors++;
                     ctx->t_byte_violations++;
                     ctx->framing_errors++;
-                    iolink_event_trigger(&ctx->events, IOLINK_EVENT_COMM_TIMING,
+                    DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING,
                                          IOLINK_EVENT_TYPE_WARNING);
                     ctx->frame_index = 0U;
                 }
@@ -1213,7 +1233,7 @@ static void dll_build_variant(iolink_dll_ctx_t* ctx, iolink_reply_variant_t vari
     }
 
     uint8_t flags = 0x00U;
-    if (iolink_events_flag(&ctx->events)) {
+    if (DLL_EVENTS_FLAG(&ctx->events)) {
         flags |= 0x80U;
     }
     if (!ctx->pd_valid) {
@@ -1350,6 +1370,7 @@ static bool dll_isr_reply_allowed_acc(const iolink_dll_ctx_t* ctx, const uint8_t
 }
 #endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
 
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
 /* Copy the accumulated RX octets into the mailbox for the main pump. Called from
  * the ISR; drops the frame (returns false) if the previous one has not been
  * consumed yet. */
@@ -1366,6 +1387,7 @@ static bool dll_publish_isr_frame(iolink_dll_ctx_t* ctx, uint8_t len)
     ctx->isr_frame_ready = 1U;                 /* publish last */
     return true;
 }
+#endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 /* Send one step of the active reply: the next payload octet, then the computed
@@ -1562,7 +1584,7 @@ void iolink_dll_process_isr(iolink_dll_ctx_t* ctx)
                 break;
             }
             (void) st;
-            if ((len >= 2U) && (len <= sizeof(ctx->isr_frame_buf)) &&
+            if ((len >= 2U) && (len <= IOLINK_M_SEQ_MAX_LEN) &&
                 (ctx->isr_frame_ready == 0U)) {
                 const bool type12 = ((f[1] & IOLINK_MSEQ_TYPE_MASK) != IOLINK_MSEQ_TYPE_0);
                 const uint8_t ch = (uint8_t) (f[0] & IOLINK_MC_COMM_CHANNEL_MASK);

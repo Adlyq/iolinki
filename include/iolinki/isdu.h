@@ -82,9 +82,9 @@ typedef struct
     size_t response_len;                           /**< Total bytes in response buffer */
 
     /* Spec ISDU transport (C3, Table 52) */
-    uint8_t req_buf[IOLINK_ISDU_BUFFER_SIZE];  /**< Raw ISDU request octets (incl. CHKPDU) */
-    uint8_t resp_buf[IOLINK_ISDU_BUFFER_SIZE]; /**< Raw ISDU response octets (incl. CHKPDU) */
-    size_t req_idx;                            /**< Octets collected in req_buf */
+    uint8_t req_buf[IOLINK_ISDU_BUFFER_SIZE + 6U];  /**< Raw ISDU request octets (incl. CHKPDU) */
+    uint8_t resp_buf[IOLINK_ISDU_BUFFER_SIZE + 3U]; /**< Raw ISDU response octets (incl. CHKPDU) */
+    size_t req_idx;                                 /**< Octets collected in req_buf */
     size_t req_total;      /**< Expected total ISDU length from Length/ExtLength */
     size_t resp_idx;       /**< Octets already emitted from resp_buf */
     size_t resp_total;     /**< Total octets in resp_buf */

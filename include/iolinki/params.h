@@ -9,6 +9,8 @@
 #ifndef IOLINK_PARAMS_H
 #define IOLINK_PARAMS_H
 
+#include "iolinki/config.h"
+
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -84,6 +86,7 @@ void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx);
  *
  * Compatibility wrapper around the context API.
  */
+#if IOLINK_FEATURE_LEGACY_PARAMS
 void iolink_params_init(void);
 
 /**
@@ -117,6 +120,7 @@ int iolink_params_set(uint16_t index, uint8_t subindex, const uint8_t* data, siz
  * This legacy void API cannot report unavailable or failed storage.
  */
 void iolink_params_factory_reset(void);
+#endif /* IOLINK_FEATURE_LEGACY_PARAMS */
 
 /** @} */ /* end of iolinki_params */
 

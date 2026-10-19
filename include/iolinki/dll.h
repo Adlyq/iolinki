@@ -130,7 +130,7 @@ typedef struct
      * requested service changes state the main pump copies the whole framed
      * resp_buf here; the ISR answers START/COUNT reads from it and advances
      * isr_isdu_idx, so no read round-trips through the main loop (t_A holds). */
-    uint8_t isr_isdu_resp[IOLINK_ISDU_BUFFER_SIZE];
+    uint8_t isr_isdu_resp[IOLINK_ISDU_BUFFER_SIZE + 3U];
     volatile uint8_t isr_isdu_len;  /**< Framed response length (0 = none) */
     volatile uint8_t isr_isdu_idx;  /**< Next response octet (ISR advances) */
     volatile uint8_t isr_isdu_busy; /**< 1 = service executing -> answer Busy 0x01 */
@@ -139,11 +139,13 @@ typedef struct
      * interrupt). Only these fields are touched from ISR context; the reply
      * staging buffer + octet feed are owned by the library (the PHY only does
      * the SPI electrical access). */
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
     uint8_t isr_rx_buf[IOLINK_M_SEQ_MAX_LEN];    /**< RX octets accumulated */
     uint8_t isr_rx_cnt;                          /**< Octets accumulated this frame */
     uint8_t isr_rx_acc;                          /**< A.1.6 checksum accumulated per octet */
     uint8_t isr_rx_expect;                       /**< Expected length (0 = unknown) */
     uint8_t isr_frame_buf[IOLINK_M_SEQ_MAX_LEN]; /**< Mailbox storage (RX BYTE) */
+#endif
     volatile const uint8_t* isr_frame_ptr;       /**< Mailbox: frame pointer
                                                       (RX BYTE: isr_frame_buf;
                                                        RX FRAME: PHY-owned buffer) */
@@ -230,7 +232,9 @@ typedef struct
     uint32_t response_time_us; /**< Measured stack response time (t2) */
 
     /* Sub-modules */
+#if IOLINK_FEATURE_EVENTS
     iolink_events_ctx_t events; /**< Diagnostic Events engine */
+#endif
     iolink_isdu_ctx_t isdu;     /**< ISDU Service engine */
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_ctx_t ds;         /**< Data Storage engine */

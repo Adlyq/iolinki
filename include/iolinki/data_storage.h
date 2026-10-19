@@ -9,6 +9,8 @@
 #ifndef IOLINK_DATA_STORAGE_H
 #define IOLINK_DATA_STORAGE_H
 
+#include "iolinki/config.h"
+
 #include "iolinki/protocol.h"
 #include "iolinki/params.h"
 #include <stdint.h>
@@ -111,6 +113,7 @@ typedef struct
  * @param ctx DS context to initialize
  * @param storage Optional storage implementation hooks (can be NULL for RAM-only)
  */
+#if IOLINK_FEATURE_DATA_STORAGE
 void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_ds_storage_api_t* storage);
 
 /**
@@ -225,6 +228,7 @@ const uint8_t* iolink_ds_get_image(iolink_ds_ctx_t* ctx, size_t* out_len);
  * @return true if checksum(image) == current_checksum, false otherwise.
  */
 bool iolink_ds_verify(const iolink_ds_ctx_t* ctx);
+#endif /* IOLINK_FEATURE_DATA_STORAGE */
 
 /** @} */ /* end of iolinki_data_storage */
 

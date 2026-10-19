@@ -265,11 +265,12 @@ void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx, iolink_reset_hand
     }
 }
 
+#if IOLINK_FEATURE_EVENTS
 iolink_events_ctx_t* iolink_device_get_events_ctx(iolink_device_ctx_t* ctx)
 {
     return (ctx != NULL) ? &ctx->dll.events : NULL;
 }
-
+#endif
 #if IOLINK_FEATURE_DATA_STORAGE
 iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx)
 {

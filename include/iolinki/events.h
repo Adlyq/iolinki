@@ -132,6 +132,7 @@ typedef struct
  *
  * @param ctx Event context to initialize
  */
+#if IOLINK_FEATURE_EVENTS
 void iolink_events_init(iolink_events_ctx_t* ctx);
 
 /**
@@ -246,6 +247,7 @@ uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_even
  * @return iolink_event_type_t Spec EventType
  */
 iolink_event_type_t iolink_event_classify(uint16_t code);
+#endif /* IOLINK_FEATURE_EVENTS */
 
 /** @} */ /* end of iolinki_events */
 

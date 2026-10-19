@@ -9,6 +9,8 @@
 #ifndef IOLINK_DEVICE_H
 #define IOLINK_DEVICE_H
 
+#include "iolinki/config.h"
+
 #include "iolinki/application.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/device_info.h"
@@ -159,14 +161,18 @@ void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx, iolink_reset_hand
  * @param ctx Device context.
  * @return Pointer to the device's events context.
  */
+#if IOLINK_FEATURE_EVENTS
 iolink_events_ctx_t* iolink_device_get_events_ctx(iolink_device_ctx_t* ctx);
+#endif
 
 /**
  * @brief Get the data-storage context.
  * @param ctx Device context.
  * @return Pointer to the device's data-storage context.
  */
+#if IOLINK_FEATURE_DATA_STORAGE
 iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx);
+#endif
 
 /**
  * @brief Get the current DLL state.

@@ -716,8 +716,12 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
         }
 
         case IOLINK_IDX_DEVICE_STATUS:
+#if IOLINK_FEATURE_EVENTS
             ctx->response_buf[0] =
                 iolink_events_get_highest_severity((iolink_events_ctx_t*) ctx->event_ctx);
+#else
+            ctx->response_buf[0] = 0U;
+#endif
             ctx->response_len = 1U;
             ctx->response_idx = 0U;
             ctx->state = ISDU_STATE_RESPONSE_READY;
@@ -899,6 +903,7 @@ static void handle_access_locks(iolink_isdu_ctx_t* ctx)
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
 
+#if IOLINK_FEATURE_EVENTS
 /** @brief Serve DetailedDeviceStatus: encode up to 8 queued events as qualifier+code triplets. */
 static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
 {
@@ -955,6 +960,8 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
     ctx->state = ISDU_STATE_RESPONSE_READY;
     iolink_critical_exit();
 }
+
+#endif /* IOLINK_FEATURE_EVENTS */
 
 /** @brief Append a 32-bit value to a buffer in big-endian order, advancing the index. */
 static void isdu_write_u32_be(uint8_t* buf, size_t* idx, uint32_t value)
@@ -1303,9 +1310,11 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
     else if (ctx->header.index == IOLINK_IDX_DEVICE_ACCESS_LOCKS) {
         handle_access_locks(ctx);
     }
+#if IOLINK_FEATURE_EVENTS
     else if (ctx->header.index == IOLINK_IDX_DETAILED_DEVICE_STATUS) {
         handle_detailed_device_status(ctx);
     }
+#endif
     else if (ctx->header.index == IOLINK_IDX_ERROR_STATS) {
         handle_error_stats(ctx);
         ctx->response_idx = 0U;
