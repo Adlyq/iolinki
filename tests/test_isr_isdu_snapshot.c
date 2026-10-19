@@ -181,6 +181,22 @@ static int test_eager_isdu_snapshot(void)
         return 5;
     }
 
+    /* A repeated COUNT repeats the previous segment (same two octets). */
+    make_frame(0xE1U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
+    tx_n = 0U;
+    exchange(&dll, frame, sizeof(frame), 0U);
+    if ((tx_n != 3U) || (tx_q[0] != 0x34U) || (tx_q[1] != 0xF2U)) {
+        return 8;
+    }
+
+    /* An out-of-order COUNT is a segmentation error -> No Service (0x00). */
+    make_frame(0xE3U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
+    tx_n = 0U;
+    exchange(&dll, frame, sizeof(frame), 0U);
+    if ((tx_n < 1U) || (tx_q[0] != 0x00U)) {
+        return 9;
+    }
+
     /* Busy START. */
     dll.isr_isdu_busy = 1U;
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
@@ -226,7 +242,9 @@ static int test_request_service_staging(void)
     dll.last_activity_ms = iolink_time_get_ms();
 
     uint8_t frame[2];
-    make_frame(0x80U, IOLINK_MSEQ_TYPE_0, frame, sizeof(frame)); /* Type-0 READ */
+    /* Diagnosis READ is not handled by the ISR Type-0 fast path (event memory
+     * stays in main context), so it exercises request_service staging. */
+    make_frame(0xC0U, IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));
     tx_n = 0U;
     request_calls = 0U;
     feed(frame, sizeof(frame), 1U);

@@ -134,6 +134,8 @@ typedef struct
     volatile uint8_t isr_isdu_len;  /**< Framed response length (0 = none) */
     volatile uint8_t isr_isdu_idx;  /**< Next response octet (ISR advances) */
     volatile uint8_t isr_isdu_busy; /**< 1 = service executing -> answer Busy 0x01 */
+    volatile uint8_t isr_isdu_last_flowctrl; /**< Last accepted FlowCTRL (0xFF=none) */
+    volatile uint8_t isr_isdu_seg_idx;       /**< Offset of the last served segment */
 
     /* Raw-octet ISR pump state (owned by the library, driven from the PHY data
      * interrupt). Only these fields are touched from ISR context; the reply
@@ -154,6 +156,21 @@ typedef struct
     volatile uint8_t isr_eager_replied;          /**< 1 if the ISR already sent the
                                                       reply for the published frame;
                                                       the main pump must stay silent */
+    volatile uint8_t frame_eager;                /**< Main-context snapshot of
+                                                      isr_eager_replied for the frame
+                                                      currently being processed
+                                                      (avoids cross-frame races). */
+    uint32_t isr_mailbox_drops;                  /**< Frames dropped because the
+                                                      single mailbox slot was busy */
+    uint32_t isr_eager_rejects;                  /**< Frames the eager path refused
+                                                      (bad checksum/type) */
+    volatile uint8_t isdu_isr_consumed;          /**< ISR already buffered this
+                                                      ISDU write request */
+    volatile uint8_t stack_tick_pending;         /**< Timer B tick authorised a
+                                                      main-context service window */
+    volatile uint8_t in_isr;                     /**< ISR is running the pump */
+    volatile uint8_t state_cb_pending;           /**< State callback deferred to main */
+    iolink_dll_state_t pending_state;            /**< Deferred state value */
     /* Reply transmission, fed one octet per data request. */
     uint8_t isr_tx_payload[IOLINK_M_SEQ_MAX_LEN];/**< Staged reply octets */
     volatile uint8_t isr_tx_len;                 /**< Payload octets held */
@@ -386,6 +403,15 @@ void iolink_dll_prepare_cyclic_reply(iolink_dll_ctx_t* ctx);
  * @param ctx DLL context
  */
 void iolink_dll_process_isr(iolink_dll_ctx_t* ctx);
+
+/** @brief Timer A (t_A one-shot) expired without a reply. */
+void iolink_dll_on_rx_timeout(iolink_dll_ctx_t* ctx);
+
+/** @brief Timer B tick: authorise one main-context service window. */
+void iolink_dll_on_stack_tick(iolink_dll_ctx_t* ctx);
+
+/** @brief Consume the Timer B authorisation (1 = user code may run). */
+uint8_t iolink_dll_can_run_user_code(iolink_dll_ctx_t* ctx);
 
 /**
  * @brief Set current PD lengths for variable types (1_V, 2_V)

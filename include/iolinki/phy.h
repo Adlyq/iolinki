@@ -189,6 +189,17 @@ typedef struct
      */
     uint8_t (*int_active)(void* user);
 
+    /* --- Optional stack timers (ISR_PUMP alignment with ST) ----------------
+     * response_timer_* implement the t_A one-shot (13 bit times): start on a
+     * valid request octet (also stopping the cycle tick) and stop when the
+     * reply starts or on timeout. stack_timer_* drive the periodic tick that
+     * authorises the main-context service window. Both are optional; when
+     * NULL the library keeps its legacy software-timestamp behaviour. */
+    void (*response_timer_start)(void* user);
+    void (*response_timer_stop)(void* user);
+    void (*stack_timer_start)(void* user);
+    void (*stack_timer_stop)(void* user);
+
     /**
      * @brief Ask the PHY to run the data-interrupt pump now (optional).
      *
