@@ -242,9 +242,9 @@ static int test_request_service_staging(void)
     dll.last_activity_ms = iolink_time_get_ms();
 
     uint8_t frame[2];
-    /* Diagnosis READ is not handled by the ISR Type-0 fast path (event memory
-     * stays in main context), so it exercises request_service staging. */
-    make_frame(0xC0U, IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));
+    /* A Type-0 process WRITE is not served by the ISR fast path, so it is
+     * staged in main context and reported through request_service. */
+    make_frame(0x00U, IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));
     tx_n = 0U;
     request_calls = 0U;
     feed(frame, sizeof(frame), 1U);
@@ -254,16 +254,56 @@ static int test_request_service_staging(void)
         return 10;
     }
     drain_tx(&dll);
-    if (tx_n < 2U) {
-        return 11; /* Type-0 READ reply: OD + CKS */
+    if (tx_n < 1U) {
+        return 11; /* Type-0 WRITE reply: CKS only */
     }
 
+    return 0;
+}
+
+/* The diagnosis READ is served from the ISR fast path (event memory), so the
+ * reply must not go through request_service / the main pump. */
+static int test_type0_diagnosis_read_isr(void)
+{
+    iolink_dll_ctx_t dll;
+    const iolink_phy_api_t phy = {
+        .user = &dll,
+        .rx_octet = rx_octet,
+        .tx_octet = tx_octet,
+        .tx_done = tx_done,
+        .int_active = int_active,
+        .request_service = request_service,
+    };
+
+    iolink_dll_init(&dll, &phy);
+    dll.state = IOLINK_DLL_STATE_PREOPERATE;
+    dll.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    dll.pd_out_len_current = 0U;
+    dll.pd_in_len_current = 0U;
+    now_us = 1000000U;
+    dll.last_activity_ms = iolink_time_get_ms();
+
+    uint8_t frame[2];
+    make_frame(0xC0U, IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));
+    tx_n = 0U;
+    request_calls = 0U;
+    exchange(&dll, frame, sizeof(frame), 1U);
+    if (request_calls != 0U) {
+        return 12;
+    }
+    if (tx_n != 2U) {
+        return 13; /* Type-0 READ reply: OD + CKS */
+    }
     return 0;
 }
 
 int main(void)
 {
     int rc = test_eager_isdu_snapshot();
+    if (rc != 0) {
+        return rc;
+    }
+    rc = test_type0_diagnosis_read_isr();
     if (rc != 0) {
         return rc;
     }

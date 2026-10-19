@@ -1666,8 +1666,11 @@ static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, ui
         else if (ch == IOLINK_MC_CHANNEL_PROCESS) {
             od = 0U;
         }
+        else if (ch == IOLINK_MC_CHANNEL_DIAGNOSIS) {
+            od = DLL_EVENTS_MEMORY_READ(&ctx->events, addr);
+        }
         else {
-            return false; /* diagnosis memory: main context */
+            return false;
         }
         dll_isr_send_payload(ctx, &od, 1U, dll_isr_status_flags(ctx));
         ctx->last_activity_ms = iolink_time_get_ms();
@@ -1784,11 +1787,23 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
                 buf[i] = 0x00U;
             }
         }
+        else if (ch == IOLINK_MC_CHANNEL_PAGE) {
+            for (uint8_t i = 0U; i < ctx->od_width; i++) {
+                buf[i] = iolink_isdu_direct_param_page1_octet(&ctx->isdu,
+                                                              (uint8_t) (flowctrl + i));
+            }
+        }
+        else if (ch == IOLINK_MC_CHANNEL_DIAGNOSIS) {
+            for (uint8_t i = 0U; i < ctx->od_width; i++) {
+                buf[i] = DLL_EVENTS_MEMORY_READ(&ctx->events, (uint8_t) (flowctrl + i));
+            }
+        }
         else {
             return false;
         }
     }
-    else if ((ch != IOLINK_MC_CHANNEL_ISDU) && (ch != IOLINK_MC_CHANNEL_PROCESS)) {
+    else if ((ch != IOLINK_MC_CHANNEL_ISDU) && (ch != IOLINK_MC_CHANNEL_PROCESS) &&
+             (ch != IOLINK_MC_CHANNEL_PAGE) && (ch != IOLINK_MC_CHANNEL_DIAGNOSIS)) {
         return false;
     }
 
@@ -1968,7 +1983,10 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
                  * validation. An eager reply is never sent to a corrupt or
                  * illegal frame. */
                 const bool eager = type12 && dll_phy_has_tx(ctx) &&
-                                   ((ch == IOLINK_MC_CHANNEL_PROCESS) || isdu_write || isdu_read);
+                                   ((ch == IOLINK_MC_CHANNEL_PROCESS) ||
+                                    (ch == IOLINK_MC_CHANNEL_PAGE) ||
+                                    (ch == IOLINK_MC_CHANNEL_DIAGNOSIS) || isdu_write ||
+                                    isdu_read);
                 ctx->isr_eager_replied = 0U;
                 bool eager_ok = eager;
                 if (eager && !allowed) {
@@ -2132,7 +2150,9 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
             /* Type-1/2 only: a Type-0 frame the fast path did not handle
              * (startup/transition/parameter writes) belongs to the main pump. */
             const bool eager = !type0 && dll_phy_has_tx(ctx) &&
-                               ((ch == IOLINK_MC_CHANNEL_PROCESS) || isdu_write || isdu_read);
+                               ((ch == IOLINK_MC_CHANNEL_PROCESS) ||
+                                (ch == IOLINK_MC_CHANNEL_PAGE) ||
+                                (ch == IOLINK_MC_CHANNEL_DIAGNOSIS) || isdu_write || isdu_read);
             ctx->isr_eager_replied = 0U;
             const bool allowed =
                 !eager || dll_isr_reply_allowed_acc(ctx, ctx->isr_rx_buf, ctx->isr_rx_expect,
