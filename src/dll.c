@@ -1939,9 +1939,6 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
                 break;
             }
             (void) st;
-            if (ctx->phy->response_timer_start != NULL) {
-                ctx->phy->response_timer_start(ctx->phy->user);
-            }
             if ((len < 2U) || (len > IOLINK_M_SEQ_MAX_LEN)) {
                 ctx->framing_errors++;
                 break;
@@ -1952,6 +1949,11 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
                 break;
             }
             const bool allowed = dll_isr_reply_allowed(ctx, f, len);
+            if (allowed && (ctx->phy->response_timer_start != NULL)) {
+                /* Arm the t_A watchdog only for a request that will be answered:
+                 * rejected or spurious frames must not count as t_A timeouts. */
+                ctx->phy->response_timer_start(ctx->phy->user);
+            }
             {
                 const bool isdu_write =
                     (((f[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_ISDU) &&
