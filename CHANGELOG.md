@@ -49,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   out-of-order COUNTs.
 
 ### Fixed
+- ISR_PUMP: keep two TX payload slots so a TX-FRAME DMA keeps reading its
+  buffer while the next reply is prepared; the single buffer could be
+  overwritten by a back-to-back reply.
 - ISR_PUMP: `isr_eager_replied` is snapshotted into `frame_eager` when the
   mailbox is consumed, removing the cross-frame race on the eager flag.
 - ISR_PUMP RX FRAME: validate the request length, do not call `rx_frame()`

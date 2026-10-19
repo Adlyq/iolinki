@@ -149,8 +149,13 @@ typedef struct
     volatile uint8_t in_isr;                     /**< ISR is running the pump */
     volatile uint8_t state_cb_pending;           /**< State callback deferred to main */
     iolink_dll_state_t pending_state;            /**< Deferred state value */
-    /* Reply transmission, fed one octet per data request. */
-    uint8_t isr_tx_payload[IOLINK_M_SEQ_MAX_LEN];/**< Staged reply octets */
+    /* Reply transmission, fed one octet per data request. Two payload slots
+     * keep the in-flight TX-FRAME DMA buffer stable while the next reply is
+     * prepared (the PHY serialises the transfers). */
+    uint8_t isr_tx_payload[2][IOLINK_M_SEQ_MAX_LEN];
+    volatile uint8_t isr_tx_slot;                /**< Slot being transmitted */
+    volatile uint8_t isr_tx_next;                /**< Next slot to fill */
+    volatile uint8_t isr_tx_pending_slot;        /**< Slot of a staged main reply */
     volatile uint8_t isr_tx_len;                 /**< Payload octets held */
     volatile uint8_t isr_tx_idx;                 /**< Next octet index */
     volatile uint8_t isr_tx_flags;               /**< CKS status flags */

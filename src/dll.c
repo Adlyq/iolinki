@@ -137,7 +137,7 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
         return;
     }
 #if IOLINK_PHY_FEATURE_ISR_PUMP
-    if (len > sizeof(ctx->isr_tx_payload)) {
+    if (len > sizeof(ctx->isr_tx_payload[0])) {
         return;
     }
     /* Stage the reply (verbatim: the octets already carry the CKS) and let the
@@ -145,7 +145,10 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
     if (ctx->lock != NULL) {
         ctx->lock(ctx->lock_user);
     }
-    (void) memcpy(ctx->isr_tx_payload, data, len);
+    const uint8_t slot = ctx->isr_tx_next;
+    ctx->isr_tx_next ^= 1U;
+    (void) memcpy(ctx->isr_tx_payload[slot], data, len);
+    ctx->isr_tx_pending_slot = slot;
     ctx->isr_tx_len = (uint8_t) len;
     ctx->isr_tx_has_cks = 0U;
     ctx->isr_tx_pending = 1U; /* publish last */
@@ -165,7 +168,7 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
     ctx->isr_tx_pending = 0U;
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     if (ctx->phy->tx_frame != NULL) {
-        (void) ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload, len);
+        (void) ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload[slot], len);
     }
 #else
     if (ctx->phy->tx_octet != NULL) {
@@ -175,6 +178,7 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
             }
             ctx->isr_tx_active = 0U;
         }
+        ctx->isr_tx_slot = slot;
         ctx->isr_tx_idx = 0U;
         ctx->isr_tx_active = 1U;
         dll_isr_tx_step(ctx);
@@ -1367,7 +1371,7 @@ static bool dll_publish_isr_frame(iolink_dll_ctx_t* ctx, uint8_t len)
 static void dll_isr_tx_step(iolink_dll_ctx_t* ctx)
 {
     if (ctx->isr_tx_idx < ctx->isr_tx_len) {
-        const uint8_t b = ctx->isr_tx_payload[ctx->isr_tx_idx];
+        const uint8_t b = ctx->isr_tx_payload[ctx->isr_tx_slot][ctx->isr_tx_idx];
         (void) ctx->phy->tx_octet(ctx->phy->user, b);
         if (ctx->isr_tx_has_cks != 0U) {
             ctx->isr_tx_acc = (uint8_t) (ctx->isr_tx_acc ^ b);
@@ -1476,24 +1480,33 @@ static uint8_t dll_isr_status_flags(const iolink_dll_ctx_t* ctx)
  * a TX FRAME transfer. */
 /* Transmit a reply whose payload is already staged in ctx->isr_tx_payload.
  * Appends the A.1.6 CKS (flags | checksum6(acc ^ flags)) in the same buffer. */
-static void dll_isr_send_staged(iolink_dll_ctx_t* ctx, uint8_t len, uint8_t flags)
+static uint8_t dll_isr_tx_alloc(iolink_dll_ctx_t* ctx)
+{
+    const uint8_t slot = ctx->isr_tx_next;
+    ctx->isr_tx_next ^= 1U;
+    return slot;
+}
+
+static void dll_isr_send_staged(iolink_dll_ctx_t* ctx, uint8_t slot, uint8_t len, uint8_t flags)
 {
     if (ctx->phy->response_timer_stop != NULL) {
         ctx->phy->response_timer_stop(ctx->phy->user); /* reply starts -> stop t_A */
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    uint8_t* payload = ctx->isr_tx_payload[slot];
     uint8_t acc = 0x52U;
     for (uint8_t i = 0U; i < len; i++) {
-        acc = (uint8_t) (acc ^ ctx->isr_tx_payload[i]);
+        acc = (uint8_t) (acc ^ payload[i]);
     }
-    ctx->isr_tx_payload[len] =
+    payload[len] =
         (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
     ctx->isr_tx_len = (uint8_t) (len + 1U);
     ctx->isr_tx_active = 0U;
     if (ctx->phy->tx_frame != NULL) {
-        (void) ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload, ctx->isr_tx_len);
+        (void) ctx->phy->tx_frame(ctx->phy->user, payload, ctx->isr_tx_len);
     }
 #else
+    ctx->isr_tx_slot = slot;
     ctx->isr_tx_len = len;
     ctx->isr_tx_flags = flags;
     ctx->isr_tx_idx = 0U;
@@ -1507,12 +1520,13 @@ static void dll_isr_send_staged(iolink_dll_ctx_t* ctx, uint8_t len, uint8_t flag
 static void dll_isr_send_payload(iolink_dll_ctx_t* ctx, const uint8_t* payload, uint8_t len,
                                  uint8_t flags)
 {
+    const uint8_t slot = dll_isr_tx_alloc(ctx);
     if (payload != NULL) {
         for (uint8_t i = 0U; i < len; i++) {
-            ctx->isr_tx_payload[i] = payload[i];
+            ctx->isr_tx_payload[slot][i] = payload[i];
         }
     }
-    dll_isr_send_staged(ctx, len, flags);
+    dll_isr_send_staged(ctx, slot, len, flags);
 }
 
 /* Phase 3 fast path: answer Type-0 frames that do not change the DLL state.
@@ -1686,18 +1700,20 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
      *   WRITE : [PD-in]CKS
      * The ISDU OD octets come straight from the framed ctx->isdu.resp_buf
      * (the ISR owns the FlowCTRL segment index). */
+    const uint8_t slot = dll_isr_tx_alloc(ctx);
+    uint8_t* out = ctx->isr_tx_payload[slot];
     uint8_t len = 0U;
     if (read) {
         if (ch == IOLINK_MC_CHANNEL_ISDU) {
             uint8_t od[IOLINK_OD_MAX_SIZE];
             dll_isr_isdu_od(ctx, flowctrl, od, ctx->od_width);
             for (uint8_t i = 0U; i < ctx->od_width; i++) {
-                ctx->isr_tx_payload[len++] = od[i];
+                out[len++] = od[i];
             }
         }
         else if (ch == IOLINK_MC_CHANNEL_PROCESS) {
             for (uint8_t i = 0U; i < ctx->od_width; i++) {
-                ctx->isr_tx_payload[len++] = 0x00U;
+                out[len++] = 0x00U;
             }
         }
         else {
@@ -1709,14 +1725,14 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
     }
 
     if (((uint16_t) len + (uint16_t) ctx->pd_in_len_current + 1U) >
-        (uint16_t) sizeof(ctx->isr_tx_payload)) {
+        (uint16_t) sizeof(ctx->isr_tx_payload[0])) {
         return false;
     }
     for (uint8_t i = 0U; i < ctx->pd_in_len_current; i++) {
-        ctx->isr_tx_payload[len++] = ctx->pd_in[i];
+        out[len++] = ctx->pd_in[i];
     }
 
-    dll_isr_send_staged(ctx, len, dll_isr_status_flags(ctx));
+    dll_isr_send_staged(ctx, slot, len, dll_isr_status_flags(ctx));
     return true;
 }
 
@@ -1736,7 +1752,9 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
         }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
         if (ctx->phy->tx_frame != NULL) {
-            (void) ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload, ctx->isr_tx_len);
+            (void) ctx->phy->tx_frame(ctx->phy->user,
+                                      ctx->isr_tx_payload[ctx->isr_tx_pending_slot],
+                                      ctx->isr_tx_len);
         }
 #else
         if (ctx->isr_tx_active != 0U) {
@@ -1745,6 +1763,7 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
             }
             ctx->isr_tx_active = 0U;
         }
+        ctx->isr_tx_slot = ctx->isr_tx_pending_slot;
         ctx->isr_tx_idx = 0U;
         ctx->isr_tx_has_cks = 0U;
         ctx->isr_tx_active = 1U;
