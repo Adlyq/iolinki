@@ -766,6 +766,15 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
     }
     ctx->last_cycle_start_us = now_us_proc;
 
+    /* A one-octet "frame" is not an M-sequence: it is the wake-up byte the
+     * transceiver forwards in SIO (or line noise). Ignore it instead of
+     * failing the checksum, which would read the absent second octet and
+     * drive a spurious fallback. */
+    if (ctx->req_len < IOLINK_M_SEQ_HEADER_LEN) {
+        ctx->frame_index = 0U;
+        return;
+    }
+
     /* A.1.6/Figure A.2: the master message carries the checksum in the
        CKT octet (the second octet); its bits 0-5 are zeroed before the
        A.1.6 checksum is computed over every message octet. The CKT is
@@ -1186,6 +1195,15 @@ int iolink_dll_set_sio_mode(iolink_dll_ctx_t* ctx)
     if (ctx == NULL) return -1;
     if (ctx->phy->set_mode != NULL) ctx->phy->set_mode(ctx->phy->user, IOLINK_PHY_MODE_SIO);
     ctx->phy_mode = IOLINK_PHY_MODE_SIO;
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* The SIO transition aborts any in-flight reply in the PHY; drop the
+     * matching ISR TX state so a stale active index cannot leak into the next
+     * SDCI session (int_active() is false in SIO, so nothing would finish it). */
+    ctx->isr_tx_pending = 0U;
+    ctx->isr_tx_active = 0U;
+    ctx->isr_tx_has_cks = 0U;
+    ctx->isr_tx_idx = 0U;
+#endif
     return 0;
 }
 
@@ -1724,16 +1742,43 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
         return false;
     }
 
-    if (((uint16_t) len + (uint16_t) ctx->pd_in_len_current + 1U) >
-        (uint16_t) sizeof(ctx->isr_tx_payload[0])) {
+    const uint16_t total = (uint16_t) len + (uint16_t) ctx->pd_in_len_current + 1U;
+    if (total > (uint16_t) sizeof(ctx->isr_tx_payload[0])) {
         return false;
+    }
+    const uint8_t flags = dll_isr_status_flags(ctx);
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    /* First-octet priority: start the DMA as soon as the OD (the first reply
+     * octet) is ready, then fill PD-in and the CKS while the UART sends byte 0
+     * (one octet takes ~43 us at COM3, far longer than the fill). The CPU stays
+     * ahead of the DMA, so the buffer may be completed after tx_frame(). */
+    ctx->isr_tx_len = (uint8_t) total;
+    ctx->isr_tx_active = 0U;
+    if (ctx->phy->response_timer_stop != NULL) {
+        ctx->phy->response_timer_stop(ctx->phy->user);
+    }
+    if (ctx->phy->tx_frame != NULL) {
+        (void) ctx->phy->tx_frame(ctx->phy->user, out, total);
     }
     for (uint8_t i = 0U; i < ctx->pd_in_len_current; i++) {
         out[len++] = ctx->pd_in[i];
     }
-
-    dll_isr_send_staged(ctx, slot, len, dll_isr_status_flags(ctx));
+    {
+        uint8_t acc = 0x52U;
+        for (uint8_t i = 0U; i < (uint8_t) (total - 1U); i++) {
+            acc = (uint8_t) (acc ^ out[i]);
+        }
+        out[total - 1U] =
+            (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
+    }
     return true;
+#else
+    for (uint8_t i = 0U; i < ctx->pd_in_len_current; i++) {
+        out[len++] = ctx->pd_in[i];
+    }
+    dll_isr_send_staged(ctx, slot, len, flags);
+    return true;
+#endif
 }
 
 static void dll_isr_process(iolink_dll_ctx_t* ctx)
@@ -1872,9 +1917,24 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
         int ok = ctx->phy->rx_octet(ctx->phy->user, &data, &st);
 
         if ((st & IOLINK_PHY_STATUS_CHK) != 0U) {
-            /* Frame-end time-out / receive error: Type-0 frames have no length in
-             * the header, so this delimits them. Publish whatever was accumulated
-             * and reset the transceiver's receive engine (as the ST engine does). */
+            /* The gap/CHK is a timeout (Timer A), not the normal frame end.
+             * A frame that did not reach its known length is truncated or
+             * lost: drop it instead of feeding a partial M-sequence to the
+             * stack. Completed frames already reset isr_rx_cnt. */
+            const bool incomplete_ms = (ctx->isr_rx_expect != 0U) &&
+                                       (ctx->isr_rx_cnt >= IOLINK_M_SEQ_HEADER_LEN) &&
+                                       (ctx->isr_rx_cnt < ctx->isr_rx_expect);
+            if ((ctx->isr_rx_cnt < IOLINK_M_SEQ_HEADER_LEN) || incomplete_ms) {
+                if (incomplete_ms) {
+                    ctx->framing_errors++;
+                }
+                ctx->isr_rx_cnt = 0U;
+                ctx->isr_rx_expect = 0U;
+                if ((ctx->isr_tx_active == 0U) && (ctx->phy->tx_done != NULL)) {
+                    ctx->phy->tx_done(ctx->phy->user);
+                }
+                break;
+            }
             bool drop = false;
             if (ctx->isr_rx_cnt != 0U) {
                 const bool isdu_write =
@@ -1944,13 +2004,22 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
          * for the multi-octet (Type-1/2) types. A Type-0 request (2..3 octets) is
          * left to the CHK frame-end indication above, matching the byte engine. */
         if (ctx->isr_rx_cnt == 2U) {
-            /* The CKT type bits (not the length) identify a multi-octet
-             * M-sequence; a short Type-2 READ is only 3 octets, so a length
-             * heuristic cannot distinguish it from a Type-0 frame. */
-            const bool multi =
-                ((ctx->isr_rx_buf[1] & IOLINK_MSEQ_TYPE_MASK) != IOLINK_MSEQ_TYPE_0);
-            ctx->isr_rx_expect =
-                multi ? iolink_dll_expected_req_len(ctx, (uint8_t) ctx->isr_rx_buf[0]) : 0U;
+            /* The CKT type bits identify the M-sequence type. Type-0 has no
+             * length field but its size is fixed by MC/CKT (read 2, OD write
+             * 3); the 13 Tbit gap is only a timeout, never the normal end. */
+            const uint8_t mc = (uint8_t) ctx->isr_rx_buf[0];
+            const uint8_t ckt = (uint8_t) ctx->isr_rx_buf[1];
+            if ((ckt & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0) {
+                const bool wr = ((mc & IOLINK_MC_RW_MASK) == 0U);
+                const uint8_t ch = (uint8_t) (mc & IOLINK_MC_COMM_CHANNEL_MASK);
+                ctx->isr_rx_expect =
+                    (wr && ((ch == IOLINK_MC_CHANNEL_PAGE) ||
+                            (ch == IOLINK_MC_CHANNEL_DIAGNOSIS) ||
+                            (ch == IOLINK_MC_CHANNEL_ISDU))) ? 3U : 2U;
+            }
+            else {
+                ctx->isr_rx_expect = iolink_dll_expected_req_len(ctx, mc);
+            }
         }
 
         if ((ctx->isr_rx_expect != 0U) && (ctx->isr_rx_cnt >= ctx->isr_rx_expect)) {
@@ -1972,7 +2041,22 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
                     break;
                 }
             }
-            const bool eager = dll_phy_has_tx(ctx) &&
+            /* Type-0 fast path: reply from the ISR as soon as the known length
+             * is complete (no 13 Tbit gap wait). Gate on the received CKT type
+             * so Type-1/2 frames pay nothing extra. */
+            const bool type0 =
+                ((ctx->isr_rx_buf[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0);
+            if (type0 &&
+                dll_isr_reply_allowed_acc(ctx, ctx->isr_rx_buf, ctx->isr_rx_expect,
+                                          ctx->isr_rx_acc) &&
+                dll_isr_handle_type0(ctx, ctx->isr_rx_buf, ctx->isr_rx_expect)) {
+                ctx->isr_rx_cnt = 0U;
+                ctx->isr_rx_expect = 0U;
+                break;
+            }
+            /* Type-1/2 only: a Type-0 frame the fast path did not handle
+             * (startup/transition/parameter writes) belongs to the main pump. */
+            const bool eager = !type0 && dll_phy_has_tx(ctx) &&
                                ((ch == IOLINK_MC_CHANNEL_PROCESS) || isdu_write || isdu_read);
             ctx->isr_eager_replied = 0U;
             const bool allowed =
@@ -1981,16 +2065,22 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
             if (eager && !allowed) {
                 ctx->isr_eager_rejects++;
             }
-            /* Publish even when the eager validation failed: the main pump owns
-             * the error/fallback accounting for an invalid frame. */
-            const bool published = dll_publish_isr_frame(ctx, ctx->isr_rx_expect);
-            ctx->isr_rx_cnt = 0U;
-            ctx->isr_rx_expect = 0U;
-            if (allowed && published && eager) {
+            /* Start the eager reply BEFORE the mailbox copy: the first reply
+             * octet must not wait for the 30-byte publish, and a full mailbox
+             * must not suppress the reply. The reply payload is built
+             * synchronously from isr_rx_buf (header) and pd_in. */
+            if (allowed && eager) {
+                ctx->isr_frame_ptr = ctx->isr_rx_buf;
+                ctx->isr_frame_len = ctx->isr_rx_expect;
                 if (dll_isr_start_reply(ctx)) {
                     ctx->isr_eager_replied = 1U;
                 }
             }
+            /* Publish even when the eager validation failed: the main pump owns
+             * the error/fallback accounting for an invalid frame. */
+            (void) dll_publish_isr_frame(ctx, ctx->isr_rx_expect);
+            ctx->isr_rx_cnt = 0U;
+            ctx->isr_rx_expect = 0U;
             break;   /* frame done; the reply drains on later interrupts */
         }
 #endif

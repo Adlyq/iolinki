@@ -299,11 +299,16 @@ static int test_mailbox_drop(void)
     dll.isr_frame_ready = 1U; /* previous frame not consumed yet */
     feed(frame, sizeof(frame));
     iolink_dll_process_isr(&dll);
+    while (dll.isr_tx_active != 0U) {
+        iolink_dll_process_isr(&dll);
+    }
 
     if (dll.isr_mailbox_drops != 1U) {
         return 1;
     }
-    if (tx_n != 0U) {
+    /* The eager reply no longer depends on the mailbox: a full mailbox only
+     * drops the main-pump copy, it must not suppress the reply. */
+    if (tx_n != 2U) {
         return 2;
     }
     return 0;
