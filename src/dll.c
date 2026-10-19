@@ -574,6 +574,7 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
         return;
     }
 
+#if IOLINK_PHY_FEATURE_LEGACY_DIAG
     if (ctx->phy->get_voltage_mv != NULL) {
         int voltage = ctx->phy->get_voltage_mv(ctx->phy->user);
         /* A negative reading means "measurement unavailable", not a fault
@@ -603,6 +604,7 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
                                  IOLINK_EVENT_TYPE_ERROR);
         }
     }
+#endif /* IOLINK_PHY_FEATURE_LEGACY_DIAG */
 }
 
 void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
@@ -632,10 +634,16 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
 
     iolink_events_init(&ctx->events);
     iolink_isdu_init(&ctx->isdu);
+#if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_init(&ctx->ds, NULL);
+#endif
     ctx->isdu.event_ctx = &ctx->events;
     ctx->isdu.dll_ctx = ctx;
+#if IOLINK_FEATURE_DATA_STORAGE
     ctx->isdu.ds_ctx = &ctx->ds;
+#else
+    ctx->isdu.ds_ctx = NULL;
+#endif
 
     ctx->t_ren_limit_us = dll_get_t_ren_limit_us(ctx);
     ctx->t_byte_limit_us = dll_get_t_byte_limit_us(ctx);
@@ -654,7 +662,7 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
      *    contract, an already-established SDCI link, so start in SDCI and accept
      *    M-sequences immediately.
      */
-    if (ctx->phy->detect_wakeup != NULL) {
+    if (dll_phy_has_wakeup(ctx)) {
         iolink_dll_set_sio_mode(ctx);
     }
     else {
@@ -919,8 +927,8 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
     }
 
     if (ctx->phy_mode == IOLINK_PHY_MODE_SIO) {
-        if ((ctx->frame_index == 0U) && (ctx->phy->detect_wakeup != NULL)) {
-            if (ctx->phy->detect_wakeup(ctx->phy->user) > 0) {
+        if ((ctx->frame_index == 0U) && dll_phy_has_wakeup(ctx)) {
+            if (dll_phy_detect_wakeup(ctx) > 0) {
                 ctx->wakeup_seen = true;
                 dll_set_state(ctx, IOLINK_DLL_STATE_AWAITING_COMM);
                 ctx->wakeup_deadline_us = iolink_time_get_us() + IOLINK_T_WU_US;

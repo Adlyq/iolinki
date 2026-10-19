@@ -21,6 +21,7 @@ include_directories(include)
 # transport (phy->send/recv_byte). ON enables the ISR path compiled into
 # src/dll.c behind IOLINK_PHY_FEATURE_ISR_PUMP.
 option(IOLINK_ISR_PUMP "Build the opt-in ISR two-pump transport" OFF)
+option(IOLINK_MINIMAL_PROFILE "Compile the trimmed feature profile" OFF)
 
 add_library(iolinki STATIC
     src/phy_generic.c
@@ -41,6 +42,9 @@ add_library(iolinki STATIC
 
 if(IOLINK_ISR_PUMP)
     target_compile_definitions(iolinki PUBLIC IOLINK_PHY_FEATURE_ISR_PUMP=1)
+endif()
+if(IOLINK_MINIMAL_PROFILE)
+    target_compile_definitions(iolinki PUBLIC IOLINK_MINIMAL_PROFILE=1)
 endif()
 
 # Platform Selection

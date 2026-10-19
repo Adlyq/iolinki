@@ -232,7 +232,9 @@ typedef struct
     /* Sub-modules */
     iolink_events_ctx_t events; /**< Diagnostic Events engine */
     iolink_isdu_ctx_t isdu;     /**< ISDU Service engine */
+#if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_ctx_t ds;         /**< Data Storage engine */
+#endif
 
     iolink_dll_state_cb_t state_cb; /**< Optional state-change hook (set by core) */
     void* state_cb_user;            /**< User pointer passed to state_cb */
@@ -273,6 +275,18 @@ static inline bool dll_phy_has_wakeup(const iolink_dll_ctx_t* ctx)
 #else
     (void) ctx;
     return false;
+#endif
+}
+
+static inline int dll_phy_detect_wakeup(iolink_dll_ctx_t* ctx)
+{
+#if IOLINK_PHY_FEATURE_WAKEUP
+    return ((ctx->phy != NULL) && (ctx->phy->detect_wakeup != NULL))
+               ? ctx->phy->detect_wakeup(ctx->phy->user)
+               : 0;
+#else
+    (void) ctx;
+    return 0;
 #endif
 }
 

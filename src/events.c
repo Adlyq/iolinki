@@ -20,6 +20,8 @@
 #include "iolinki/utils.h"
 #include <string.h>
 
+#if IOLINK_FEATURE_EVENTS
+
 void iolink_events_init(iolink_events_ctx_t* ctx)
 {
     if (!iolink_ctx_zero(ctx, sizeof(iolink_events_ctx_t))) {
@@ -299,3 +301,84 @@ iolink_event_type_t iolink_event_classify(uint16_t code)
             return IOLINK_EVENT_TYPE_ERROR;
     }
 }
+
+#else /* !IOLINK_FEATURE_EVENTS */
+
+/* Feature compiled out: keep the API linkable but inert. The queue struct and
+ * the call sites remain; only the event logic and classification are removed. */
+
+void iolink_events_init(iolink_events_ctx_t* ctx)
+{
+    if (ctx != NULL) {
+        (void) memset(ctx, 0, sizeof(*ctx));
+    }
+}
+
+void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type)
+{
+    (void) ctx;
+    (void) code;
+    (void) type;
+}
+
+bool iolink_events_flag(const iolink_events_ctx_t* ctx)
+{
+    (void) ctx;
+    return false;
+}
+
+uint8_t iolink_events_memory_read(iolink_events_ctx_t* ctx, uint8_t addr)
+{
+    (void) ctx;
+    (void) addr;
+    return 0U;
+}
+
+void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t value)
+{
+    (void) ctx;
+    (void) addr;
+    (void) value;
+}
+
+bool iolink_events_pending(const iolink_events_ctx_t* ctx)
+{
+    (void) ctx;
+    return false;
+}
+
+bool iolink_events_pop(iolink_events_ctx_t* ctx, iolink_event_t* event)
+{
+    (void) ctx;
+    (void) event;
+    return false;
+}
+
+bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event)
+{
+    (void) ctx;
+    (void) event;
+    return false;
+}
+
+uint8_t iolink_events_get_highest_severity(iolink_events_ctx_t* ctx)
+{
+    (void) ctx;
+    return 0U;
+}
+
+uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_events, uint8_t max)
+{
+    (void) ctx;
+    (void) out_events;
+    (void) max;
+    return 0U;
+}
+
+iolink_event_type_t iolink_event_classify(uint16_t code)
+{
+    (void) code;
+    return IOLINK_EVENT_TYPE_ERROR;
+}
+
+#endif /* IOLINK_FEATURE_EVENTS */

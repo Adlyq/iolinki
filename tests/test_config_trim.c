@@ -36,7 +36,6 @@ static void test_minimal_profile_disables_features(void** state)
 
     assert_int_equal(IOLINK_FEATURE_DATA_STORAGE, 0);
     assert_int_equal(IOLINK_FEATURE_SYSTEM_COMMAND, 0);
-    assert_int_equal(IOLINK_FEATURE_MASTER_IDENT, 0);
     assert_int_equal(IOLINK_FEATURE_LEGACY_PARAMS, 0);
     assert_int_equal(IOLINK_PHY_FEATURE_WAKEUP, 0);
     assert_int_equal(IOLINK_PHY_FEATURE_SIO_CQ, 0);

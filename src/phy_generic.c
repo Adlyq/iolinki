@@ -60,6 +60,7 @@ static int generic_recv_byte(void* user, uint8_t* byte)
     return 0;
 }
 
+#if IOLINK_PHY_FEATURE_WAKEUP
 /** @brief Template hook to detect the 80us wake-up pulse on the C/Q line. */
 static int generic_detect_wakeup(void* user)
 {
@@ -67,7 +68,9 @@ static int generic_detect_wakeup(void* user)
     /* Template: detect 80us wake-up pulse on C/Q line. */
     return 0;
 }
+#endif
 
+#if IOLINK_PHY_FEATURE_SIO_CQ
 /** @brief Template hook to drive the C/Q line high/low in SIO mode. */
 static void generic_set_cq_line(void* user, uint8_t state)
 {
@@ -75,7 +78,9 @@ static void generic_set_cq_line(void* user, uint8_t state)
     (void) state;
     /* Template: drive C/Q line high/low in SIO mode. */
 }
+#endif
 
+#if IOLINK_PHY_FEATURE_LEGACY_DIAG
 /** @brief Template hook to read supply voltage in mV (negative if unavailable). */
 static int generic_get_voltage_mv(void* user)
 {
@@ -91,16 +96,24 @@ static bool generic_is_short_circuit(void* user)
     /* Template: return true if fault detected. */
     return false;
 }
+#endif
 
 static const iolink_phy_api_t g_phy_generic = {.init = generic_init,
                                                .set_mode = generic_set_mode,
                                                .set_baudrate = generic_set_baudrate,
                                                .send = generic_send,
                                                .recv_byte = generic_recv_byte,
+#if IOLINK_PHY_FEATURE_WAKEUP
                                                .detect_wakeup = generic_detect_wakeup,
+#endif
+#if IOLINK_PHY_FEATURE_SIO_CQ
                                                .set_cq_line = generic_set_cq_line,
+#endif
+#if IOLINK_PHY_FEATURE_LEGACY_DIAG
                                                .get_voltage_mv = generic_get_voltage_mv,
-                                               .is_short_circuit = generic_is_short_circuit};
+                                               .is_short_circuit = generic_is_short_circuit
+#endif
+};
 
 const iolink_phy_api_t* iolink_phy_generic_get(void)
 {

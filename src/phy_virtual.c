@@ -121,6 +121,7 @@ static int virtual_recv_byte(void* user, uint8_t* byte)
     return (n > 0) ? 1 : 0;
 }
 
+#if IOLINK_PHY_FEATURE_WAKEUP
 /** @brief Scan buffered input for a 0x55 wake-up marker byte. */
 static int virtual_detect_wakeup(void* user)
 {
@@ -139,13 +140,18 @@ static int virtual_detect_wakeup(void* user)
     }
     return 0;
 }
+#endif
 
 static const iolink_phy_api_t g_phy_virtual = {.init = virtual_init,
                                                .set_mode = virtual_set_mode,
                                                .set_baudrate = virtual_set_baudrate,
                                                .send = virtual_send,
-                                               .recv_byte = virtual_recv_byte,
-                                               .detect_wakeup = virtual_detect_wakeup};
+                                               .recv_byte = virtual_recv_byte
+#if IOLINK_PHY_FEATURE_WAKEUP
+                                               ,
+                                               .detect_wakeup = virtual_detect_wakeup
+#endif
+};
 
 const iolink_phy_api_t* iolink_phy_virtual_get(void)
 {

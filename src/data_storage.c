@@ -18,10 +18,13 @@
  *   [Index(2, big-endian)][Subindex(1)][Length(1)][Data(Length)]
  */
 
+#include "iolinki/config.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/params.h"
 #include "iolinki/utils.h"
 #include <string.h>
+
+#if IOLINK_FEATURE_DATA_STORAGE
 
 /* Parameters included in the Data Storage set (V1.1.5 device identification
    parameters that are writable and therefore worth backing up). */
@@ -353,3 +356,5 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
 
     return 0;
 }
+
+#endif /* IOLINK_FEATURE_DATA_STORAGE */

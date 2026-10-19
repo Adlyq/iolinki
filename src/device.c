@@ -127,11 +127,15 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     ctx->dll.isdu.vendor_user = config->user;
     ctx->dll.state_cb = device_state_cb;
     ctx->dll.state_cb_user = ctx;
+#if IOLINK_FEATURE_DATA_STORAGE
     if (config->ds_storage != NULL) {
         iolink_ds_init(&ctx->dll.ds, config->ds_storage);
         ctx->dll.isdu.ds_ctx = &ctx->dll.ds;
     }
     iolink_ds_bind_params(&ctx->dll.ds, &ctx->params);
+#else
+    ctx->dll.isdu.ds_ctx = NULL;
+#endif
     device_apply_stack_config(ctx);
 #if IOLINK_PHY_FEATURE_ISR_PUMP
     /* Seed the pre-staged cyclic variants so the first ISR reply is complete. */
@@ -266,10 +270,12 @@ iolink_events_ctx_t* iolink_device_get_events_ctx(iolink_device_ctx_t* ctx)
     return (ctx != NULL) ? &ctx->dll.events : NULL;
 }
 
+#if IOLINK_FEATURE_DATA_STORAGE
 iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx)
 {
     return (ctx != NULL) ? &ctx->dll.ds : NULL;
 }
+#endif
 
 iolink_dll_state_t iolink_device_get_state(const iolink_device_ctx_t* ctx)
 {

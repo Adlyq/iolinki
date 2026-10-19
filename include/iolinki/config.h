@@ -50,7 +50,7 @@
  * Each macro is 1 (compiled in, the default full stack) or 0 (removed). The
  * project build overrides the unused ones to 0 for a smaller image. Trimmed
  * code that is actually used results in a compile error, which is the intended
- * guard. See Docs/裁剪与配置.md.
+ * guard. See docs/feature-trimming.md.
  *
  * IOLINK_MINIMAL_PROFILE is a convenience switch that defaults the trimmed
  * features below off; an explicit -D always wins (guarded with #ifndef).
@@ -63,9 +63,6 @@
 #endif
 #ifndef IOLINK_FEATURE_SYSTEM_COMMAND
 #define IOLINK_FEATURE_SYSTEM_COMMAND 0
-#endif
-#ifndef IOLINK_FEATURE_MASTER_IDENT
-#define IOLINK_FEATURE_MASTER_IDENT 0
 #endif
 #ifndef IOLINK_FEATURE_LEGACY_PARAMS
 #define IOLINK_FEATURE_LEGACY_PARAMS 0
@@ -89,10 +86,6 @@
 #ifndef IOLINK_FEATURE_SYSTEM_COMMAND
 #define IOLINK_FEATURE_SYSTEM_COMMAND 1
 #endif
-/** @brief MasterCommand ident subset (0x95/0x96). */
-#ifndef IOLINK_FEATURE_MASTER_IDENT
-#define IOLINK_FEATURE_MASTER_IDENT 1
-#endif
 /** @brief Diagnostic Events engine + DDS + CKS event flag + fault polling. */
 #ifndef IOLINK_FEATURE_EVENTS
 #define IOLINK_FEATURE_EVENTS 1
@@ -115,9 +108,9 @@
 #endif
 
 /* -------------------------------------------------------------------------
- * ISR transport granularity (the library has a single transport path: the
- * ISR dispatch pump. These two switches select how the PHY moves data on
- * that path; the other transport (streaming send/recv_byte) was removed.)
+ * ISR transport granularity (only used when IOLINK_PHY_FEATURE_ISR_PUMP is 1;
+ * the default upstream transport streams octets via phy->send/recv_byte).
+ * These two switches select how the PHY moves data on the ISR path:
  *
  *   RX BYTE  : phy->rx_octet()  - library frames octet by octet
  *   RX FRAME : phy->rx_frame()  - PHY delivers a whole frame (zero-copy)
