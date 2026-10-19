@@ -1997,8 +1997,10 @@ void iolink_dll_on_rx_timeout(iolink_dll_ctx_t* ctx)
     }
 #if IOLINK_PHY_FEATURE_ISR_PUMP
     ctx->timeout_errors++;
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
     ctx->isr_rx_cnt = 0U;
     ctx->isr_rx_expect = 0U;
+#endif
     if ((ctx->phy != NULL) && (ctx->phy->response_timer_stop != NULL)) {
         ctx->phy->response_timer_stop(ctx->phy->user);
     }
