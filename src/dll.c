@@ -432,14 +432,12 @@ static bool dll_dispatch_od(iolink_dll_ctx_t* ctx, uint8_t mc, const uint8_t* od
         }
         else {
 #if IOLINK_PHY_FEATURE_ISR_PUMP
-            if (ctx->isdu_isr_consumed != 0U) {
-                ctx->isdu_isr_consumed = 0U; /* already buffered by the ISR */
-            }
-            else
+            /* The ISR stages every valid ISDU write and the main pump drains it
+             * at the top of iolink_dll_process(); never apply it twice here. */
+            ctx->isdu_isr_consumed = 0U;
+#else
+            iolink_isdu_od_write(&ctx->isdu, flowctrl, od_in, od_len);
 #endif
-            {
-                iolink_isdu_od_write(&ctx->isdu, flowctrl, od_in, od_len);
-            }
         }
         return true;
     }
@@ -747,19 +745,40 @@ static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
     if (ctx == NULL) {
         return;
     }
-    /* The ISR reads the framed response directly from ctx->isdu.resp_buf; keep
-     * only the lightweight Busy/length view in sync. Shared single-writer: the
-     * main pump is inside a critical section while this runs. */
+    /* Single-writer handoff: ctx->isdu is owned by the main pump; the ISR reads
+     * only this snapshot. The short critical section makes the multi-octet
+     * response copy and the Busy/length/index bookkeeping atomic for the reader,
+     * without holding interrupts off across the ISDU execute step. */
+    iolink_critical_enter();
     const bool busy = (ctx->isdu.state == ISDU_STATE_SERVICE_EXECUTE) ||
                       (ctx->isdu.state == ISDU_STATE_BUSY);
     uint8_t n = 0U;
     if (ctx->isdu.state == ISDU_STATE_RESPONSE_READY) {
         n = (ctx->isdu.resp_total > 255U) ? 255U : (uint8_t) ctx->isdu.resp_total;
+        if (n > sizeof(ctx->isr_isdu_resp_buf)) {
+            n = (uint8_t) sizeof(ctx->isr_isdu_resp_buf);
+        }
+    }
+    else {
+        /* A new request/response cycle invalidates the "already copied" flag;
+         * the next RESPONSE_READY must refresh the snapshot even if it has the
+         * same length as the previous response. */
+        ctx->isr_isdu_resp_valid = 0U;
     }
     const uint8_t next_busy = busy ? 1U : 0U;
-    const bool changed = (ctx->isr_isdu_len != n) || (ctx->isr_isdu_busy != next_busy);
-    ctx->isr_isdu_busy = next_busy;
-    ctx->isr_isdu_len = n;
+    const bool new_resp =
+        (ctx->isdu.state == ISDU_STATE_RESPONSE_READY) && (ctx->isr_isdu_resp_valid == 0U);
+    const bool changed =
+        new_resp || (ctx->isr_isdu_len != n) || (ctx->isr_isdu_busy != next_busy);
+    if (new_resp) {
+        /* Copy once per response: re-copying the (up to 256 octet) buffer every
+         * main-loop pass would hold the interrupt gate for a few microseconds
+         * on each pass, disturbing the per-octet reply feed. */
+        if (n > 0U) {
+            (void) memcpy(ctx->isr_isdu_resp_buf, ctx->isdu.resp_buf, n);
+        }
+        ctx->isr_isdu_resp_valid = 1U;
+    }
     if (changed) {
         /* A new response (or Busy transition) invalidates the FlowCTRL sequence;
          * the Master must restart with START. */
@@ -767,6 +786,9 @@ static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
         ctx->isr_isdu_seg_idx = 0U;
         ctx->isr_isdu_last_flowctrl = 0xFFU;
     }
+    ctx->isr_isdu_busy = next_busy;
+    ctx->isr_isdu_len = n;
+    iolink_critical_exit();
     /* Do not rewind isr_isdu_idx here: the ISR advances it across COUNT reads
      * and only a START read restarts the response. Resetting it on every main
      * loop pass would replay the first segment of a multi-segment read. */
@@ -969,16 +991,44 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
     dll_restore_operating_baudrate(ctx);
 
     /* Process acyclic ISDU state machine. In the two-pump transport the ISR
-     * buffers ISDU write octets; the critical section keeps the execute step
-     * from being preempted mid-update (ST's IRQ-off main window). */
+     * only stages ISDU write octets; the main pump owns the transport and the
+     * response buffer. Drain the staged write under a short critical section,
+     * then run the (possibly slow) execute step with interrupts enabled. */
 #if IOLINK_PHY_FEATURE_ISR_PUMP
-    iolink_critical_enter();
+    {
+        uint8_t staged_fc = 0U;
+        uint8_t staged_len = 0U;
+        uint8_t staged_od[IOLINK_OD_MAX_SIZE];
+        bool drained = false;
+
+        iolink_critical_enter();
+        if (ctx->isr_od_staged != 0U) {
+            staged_fc = ctx->isr_od_stage_flowctrl;
+            staged_len = ctx->isr_od_stage_len;
+            if (staged_len > sizeof(staged_od)) {
+                staged_len = (uint8_t) sizeof(staged_od);
+            }
+            for (uint8_t i = 0U; i < staged_len; i++) {
+                staged_od[i] = ctx->isr_od_stage[i];
+            }
+            ctx->isr_od_staged = 0U;
+            ctx->isdu_isr_consumed = 0U;
+            /* New request activity: force the next RESPONSE_READY to refresh
+             * the ISR response snapshot (even for a same-length response). */
+            ctx->isr_isdu_resp_valid = 0U;
+            drained = true;
+        }
+        iolink_critical_exit();
+
+        if (drained) {
+            iolink_isdu_od_write(&ctx->isdu, staged_fc, staged_od, staged_len);
+        }
+    }
 #endif
     iolink_isdu_process(&ctx->isdu);
 #if IOLINK_PHY_FEATURE_ISR_PUMP
     /* The service may have completed here: refresh the ISR response snapshot. */
     dll_isdu_sync_snapshot(ctx);
-    iolink_critical_exit();
 #endif
 
     dll_poll_diagnostics(ctx);
@@ -1081,8 +1131,10 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
     /* The ISR pump assembles one complete request and publishes it to the
      * mailbox; run the shared validation/dispatch here in the main context. */
     if (ctx->isr_frame_ready != 0U) {
-        /* Serialize the consume/dispatch against the ISR: the ISR buffers ISDU
-         * writes and may publish the next frame once the slot is released. */
+        /* Consume the mailbox with a short handoff critical section only: copy
+         * the frame, snapshot the eager flag and release the slot. The frame
+         * dispatch runs unlocked afterwards; ctx->isdu / ctx->events are either
+         * main-owned or take their own short critical section. */
         iolink_critical_enter();
         uint8_t n = ctx->isr_frame_len;
         if (n > sizeof(ctx->frame_buf)) {
@@ -1097,13 +1149,13 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
         ctx->frame_eager = ctx->isr_eager_replied;
         ctx->isr_eager_replied = 0U;
         ctx->isr_frame_ready = 0U;
+        iolink_critical_exit();
         /* A mailbox frame is received traffic: refresh the inactivity and
            byte-gap timestamps exactly like the streaming RX path. Without
            this the 1 s idle supervision resets a healthy ISR link. */
         ctx->last_activity_ms = iolink_time_get_ms();
         ctx->last_byte_us = iolink_time_get_us();
         dll_process_complete_frame(ctx);
-        iolink_critical_exit();
     }
 #else
     uint8_t byte;
@@ -1553,7 +1605,7 @@ static void dll_isr_isdu_od(iolink_dll_ctx_t* ctx, uint8_t flowctrl, uint8_t* od
     const uint8_t len = ctx->isr_isdu_len;
     uint8_t n = 0U;
     while ((n < od_width) && (idx < len)) {
-        od[n++] = ctx->isdu.resp_buf[idx++];
+        od[n++] = ctx->isr_isdu_resp_buf[idx++];
     }
     if (!repeat) {
         ctx->isr_isdu_seg_idx = ctx->isr_isdu_idx;
@@ -1784,8 +1836,23 @@ static void dll_isr_consume_isdu_write(iolink_dll_ctx_t* ctx, const uint8_t* fra
     if (((uint16_t) od_off + (uint16_t) od_n) > (uint16_t) len) {
         return;
     }
-    iolink_isdu_od_write(&ctx->isdu, (uint8_t) (frame[0] & IOLINK_MC_ADDR_MASK),
-                         &frame[od_off], od_n);
+    /* Stage the write for the main pump instead of touching ctx->isdu from the
+     * ISR: ctx->isdu then has a single writer (the main pump), so the ISDU state
+     * machine no longer needs to run with interrupts disabled. A second segment
+     * arriving before the drain would overwrite the slot (counted); IO-Link
+     * segments are master-paced with at least one cycle time between them. */
+    if (ctx->isr_od_staged != 0U) {
+        ctx->isr_od_overruns++;
+    }
+    if (od_n > sizeof(ctx->isr_od_stage)) {
+        od_n = (uint8_t) sizeof(ctx->isr_od_stage);
+    }
+    ctx->isr_od_stage_flowctrl = (uint8_t) (frame[0] & IOLINK_MC_ADDR_MASK);
+    ctx->isr_od_stage_len = od_n;
+    for (uint8_t i = 0U; i < od_n; i++) {
+        ctx->isr_od_stage[i] = frame[od_off + i];
+    }
+    ctx->isr_od_staged = 1U;
     ctx->isdu_isr_consumed = 1U;
 }
 

@@ -148,6 +148,18 @@ typedef struct
                                                       (bad checksum/type) */
     volatile uint8_t isdu_isr_consumed;          /**< ISR already buffered this
                                                       ISDU write request */
+    /* ISR-side ISDU staging + response snapshot (single-writer model). The ISR
+     * stages write OD octets and reads only the response snapshot; the main
+     * pump owns ctx->isdu and refreshes the snapshot under the short critical
+     * section. This keeps iolink_isdu_process() out of the IRQ-off window. */
+    uint8_t isr_od_stage_flowctrl;               /**< Staged write FlowCTRL */
+    uint8_t isr_od_stage_len;                    /**< Staged write OD octets */
+    uint8_t isr_od_stage[IOLINK_OD_MAX_SIZE];    /**< Staged write OD payload */
+    volatile uint8_t isr_od_staged;              /**< 1 = a write is staged */
+    uint32_t isr_od_overruns;                    /**< Staged writes overwritten */
+    uint8_t isr_isdu_resp_buf[IOLINK_ISDU_BUFFER_SIZE]; /**< ISDU response snapshot */
+    uint8_t isr_isdu_resp_valid;                 /**< Snapshot already copied for
+                                                      the current response */
     volatile uint8_t stack_tick_pending;         /**< Timer B tick authorised a
                                                       main-context service window */
     volatile uint8_t in_isr;                     /**< ISR is running the pump */
