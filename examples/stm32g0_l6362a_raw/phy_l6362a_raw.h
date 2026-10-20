@@ -34,6 +34,11 @@ extern "C" {
 const iolink_phy_api_t *phy_l6362a_raw_get(void);
 
 /**
+  * @brief  Select the COM the PHY brings up at (call before hw_init).
+  */
+void phy_l6362a_raw_set_initial_baudrate(iolink_baudrate_t baudrate);
+
+/**
   * @brief  One-time hardware bring-up: TIM3 (byte-gap
   *         timer), USART2 and the transceiver enable. Call before
   *         iolink_device_init().

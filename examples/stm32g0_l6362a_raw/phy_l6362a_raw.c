@@ -67,6 +67,7 @@ _Static_assert(IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME, "8110 board uses TX FR
 
 static iolink_baudrate_t s_baudrate;
 static uint32_t          s_baud_hz;
+static iolink_baudrate_t s_initial_baudrate = IOLINK_BAUDRATE_COM3;
 static uint32_t          s_gap_us; /* frame-end byte-gap time-out (RX BYTE) */
 static iolink_phy_mode_t s_mode;
 
@@ -86,11 +87,15 @@ static uint8_t           s_rx_frame_len;
 #endif
 
 static volatile uint8_t s_tx_in_progress;
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+static volatile uint8_t s_tx_tc_seen; /**< TC observed since the last octet write */
+#endif
 static volatile uint8_t s_wake_latched;
 
 static uint32_t s_tx_bytes;
 static uint32_t s_rx_bytes;
 static uint32_t s_rx_chk;
+
 
 /* Critical section state. */
 static uint32_t s_crit_depth;
@@ -114,6 +119,9 @@ static void    l6362_tx_done(void* user);
 static uint8_t l6362_int_active(void* user);
 static void    l6362_request_service(void* user);
 static int     l6362_detect_wakeup(void* user);
+static void    phy_rx_set(bool on);
+static bool    phy_txen_get(void);
+static void    phy_txen_set(bool on);
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -208,6 +216,9 @@ static int l6362_init(void* user) {
     s_rx_last_index = 0U;
 #endif
     s_tx_in_progress = 0U;
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+    s_tx_tc_seen     = 0U;
+#endif
     s_wake_latched   = 0U;
     s_mode           = IOLINK_PHY_MODE_SIO;
     return 0;
@@ -224,8 +235,7 @@ static void l6362_set_mode(void* user, iolink_phy_mode_t mode) {
          * delimited cleanly and no stale reply/echo state survives a fallback. */
         s_rx_ready       = 0U;
         s_rx_last_index  = (uint16_t)(L6362_RX_DMA_SIZE - (DMA1_Channel1->CNDTR & 0xFFFFU));
-        s_tx_in_progress = 0U;
-        HAL_GPIO_WritePin(TX_EN_GPIO_Port, TX_EN_Pin, GPIO_PIN_RESET);
+        phy_txen_set(false);
     }
     UartConfigure(s_baud_hz);
 #else
@@ -239,8 +249,13 @@ static void l6362_set_mode(void* user, iolink_phy_mode_t mode) {
         }
     } else if (mode == IOLINK_PHY_MODE_SIO) {
         /* Keep the UART listening so the master's wake-up / first octets are
-     * captured; no frame delimiting until SDCI. */
+         * captured; no frame delimiting until SDCI. */
         TIM3->CR1 &= ~TIM_CR1_CEN;
+        /* int_active() claims no service in SIO, so an in-flight BYTE reply
+         * can never finish: abort it and release TX_EN instead of holding the
+         * line high forever. */
+        IOD_UART->CR1 &= ~(USART_CR1_TCIE | USART_CR1_TXEIE_TXFNFIE);
+        phy_txen_set(false);
         UartConfigure(s_baud_hz);
     } else {
         TIM3->CR1 &= ~TIM_CR1_CEN;
@@ -327,60 +342,112 @@ static const uint8_t* l6362_rx_frame(void* user, uint8_t* status, uint8_t* len) 
 static void TxSuppressEcho(void) {
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     IOD_UART->CR3 &= ~USART_CR3_DMAR;
+#else
+    /* BYTE RX has no DMA gate: mask the RX interrupt so the transceiver's echo
+     * of our own transmission never enters the ring or restarts the gap timer. */
+    IOD_UART->CR1 &= ~USART_CR1_RXNEIE_RXFNEIE;
+#endif
     IOD_UART->RQR = USART_RQR_RXFRQ;
+}
+
+/** Discard any echo/overrun and re-arm RX capture after a reply. */
+static void TxRestoreRx(void) {
+    IOD_UART->ICR = USART_ICR_ORECF;
+    IOD_UART->RQR = USART_RQR_RXFRQ;
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    IOD_UART->CR3 |= USART_CR3_DMAR;
+#else
+    /* Drop any echo octets that slipped into the ring; the master cannot have
+     * sent a new frame while we were driving C/Q. */
+    RxReset();
+    s_frame_end = 0U;
+    IOD_UART->CR1 |= USART_CR1_RXNEIE_RXFNEIE;
 #endif
 }
 
-/** Discard any echo/overrun and re-arm RX capture after a reply (FRAME RX). */
-static void TxRestoreRx(void) {
-#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
-    IOD_UART->ICR = USART_ICR_ORECF;
-    IOD_UART->RQR = USART_RQR_RXFRQ;
-    IOD_UART->CR3 |= USART_CR3_DMAR;
-#endif
+/* RX capture gate (setter): FRAME gates the DMA request, BYTE gates the RX
+ * interrupt. Never call TxSuppressEcho/TxRestoreRx directly. */
+static void phy_rx_set(bool on) {
+    if (on) {
+        TxRestoreRx();
+    } else {
+        TxSuppressEcho();
+    }
+}
+
+/* TX state (getter). */
+static bool phy_txen_get(void) {
+    return (s_tx_in_progress != 0U);
+}
+
+/* Coupled TX_EN <-> RX gate: the single place that drives TX_EN. Asserting it
+ * disables RX capture (no transceiver echo); releasing it re-arms RX. */
+static void phy_txen_set(bool on) {
+    if (on) {
+        phy_rx_set(false);
+        HAL_GPIO_WritePin(TX_EN_GPIO_Port, TX_EN_Pin, GPIO_PIN_SET);
+        s_tx_in_progress = 1U;
+    } else {
+        HAL_GPIO_WritePin(TX_EN_GPIO_Port, TX_EN_Pin, GPIO_PIN_RESET);
+        phy_rx_set(true);
+        s_tx_in_progress = 0U;
+    }
 }
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 static int l6362_tx_octet(void* user, uint8_t data) {
     (void)user;
     L6362_TX_ASSERT_ISR();
-    uint64_t deadline;
 
     if (s_tx_in_progress == 0U) {
-        /* Frame start: stop RX capture so the transceiver echo of our own
-         * transmission does not enter the RX buffer (half-duplex: the master is
-         * not sending while the device drives C/Q). */
-        TxSuppressEcho();
-        s_tx_in_progress = 1U;
+        /* Frame start: assert TX_EN and stop RX capture together. */
+        s_tx_tc_seen = 0U;
+        IOD_UART->ICR = USART_ICR_TCCF; /* drop a stale TC from the last frame */
+        IOD_UART->CR1 &= ~USART_CR1_TXEIE_TXFNFIE;
+        phy_txen_set(true);
     }
 
-    /* Assert the transceiver transmit-enable for the whole frame. */
-    HAL_GPIO_WritePin(TX_EN_GPIO_Port, TX_EN_Pin, GPIO_PIN_SET);
-
-    deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
-    while (((IOD_UART->ISR & USART_ISR_TXE_TXFNF) == 0U) && (iolink_time_get_us() < deadline)) {
+    /* Common case: TXE is already set, write immediately. Only pay for
+     * iolink_time_get_us() (SysTick + HAL_GetTick + division) when TDR is
+     * still full; it must not sit between TX_EN and the first start bit
+     * (it cost ~5 us in BYTE TX; FRAME does not call it on this path). */
+    if ((IOD_UART->ISR & USART_ISR_TXE_TXFNF) == 0U) {
+        const uint64_t deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
+        while (((IOD_UART->ISR & USART_ISR_TXE_TXFNF) == 0U) &&
+               (iolink_time_get_us() < deadline)) {
+        }
     }
     IOD_UART->TDR = data;
-    /* Request service again (TC) when this octet is fully shifted out. */
-    IOD_UART->CR1 |= USART_CR1_TCIE;
+    /* Forget the previous octet's TC: from here on s_tx_tc_seen must describe
+     * THIS octet only. A non-TC interrupt (RTOF/EXTI/TIM3) may pump the DLL and
+     * reach tx_done() before this octet has left the shift register; a stale
+     * flag would drop TX_EN mid-octet. */
+    s_tx_tc_seen = 0U;
+    IOD_UART->ICR = USART_ICR_TCCF;
+    /* Feed the NEXT octet as soon as TDR is empty (TXE): the UART then chains
+     * octets back-to-back with no inter-octet gap. Waiting for TC per octet
+     * instead made the gap equal to the ISR latency and jittery (10 us median,
+     * 40-50 us outliers at COM3). TC is awaited only by tx_done() for the last
+     * octet, because TX_EN must not drop while it is still shifting. */
+    IOD_UART->CR1 |= USART_CR1_TXEIE_TXFNFIE;
     s_tx_bytes++;
     return 0;
 }
 
 static void l6362_tx_done(void* user) {
     (void)user;
-    uint64_t deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
+    const uint64_t deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
 
-    /* Wait for the last octet to leave the shift register before releasing
-     * TX_EN (the RX/TX IRQ entry clears TC, so this normally expires; SysTick
-     * runs above the USART IRQ in BYTE mode, so the deadline advances). */
-    IOD_UART->CR1 &= ~USART_CR1_TCIE;
-    while (((IOD_UART->ISR & USART_ISR_TC) == 0U) && (iolink_time_get_us() < deadline)) {
+    IOD_UART->CR1 &= ~(USART_CR1_TCIE | USART_CR1_TXEIE_TXFNFIE);
+    /* Wait until the last octet has left the shift register: either the TC IRQ
+     * already observed it (s_tx_tc_seen) or TC is still pending (poll). The
+     * per-octet clear in tx_octet makes the flag unambiguous. */
+    while ((s_tx_tc_seen == 0U) && ((IOD_UART->ISR & USART_ISR_TC) == 0U) &&
+           (iolink_time_get_us() < deadline)) {
     }
-    HAL_GPIO_WritePin(TX_EN_GPIO_Port, TX_EN_Pin, GPIO_PIN_RESET);
-    /* Discard any echo / overrun captured while transmitting, then re-arm RX. */
-    TxRestoreRx();
-    s_tx_in_progress = 0U;
+    s_tx_tc_seen = 0U;
+    IOD_UART->ICR = USART_ICR_TCCF; /* no stale TC for the next frame */
+    phy_txen_set(false);
 }
 #else
 /* TX FRAME: hand the whole reply to DMA1 channel 2 (USART2_TX). The transfer
@@ -394,14 +461,12 @@ static int l6362_tx_frame(void* user, const uint8_t* data, size_t len) {
     /* Wait for any previous transfer to finish (bounded). */
     {
         uint64_t deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
-        while ((s_tx_in_progress != 0U) && (iolink_time_get_us() < deadline)) {
+        while (phy_txen_get() && (iolink_time_get_us() < deadline)) {
         }
     }
 
-    /* Assert TX_EN; stop RX capture to discard the transceiver echo. */
-    HAL_GPIO_WritePin(TX_EN_GPIO_Port, TX_EN_Pin, GPIO_PIN_SET);
-    TxSuppressEcho();
-    s_tx_in_progress = 1U;
+    /* Disable RX capture and drive C/Q together: no echo may slip in. */
+    phy_txen_set(true);
 
     DMA1_Channel2->CCR   = 0U; /* disable while reconfiguring */
     DMA1_Channel2->CPAR  = (uint32_t)(uintptr_t)&IOD_UART->TDR;
@@ -418,6 +483,23 @@ static int l6362_tx_frame(void* user, const uint8_t* data, size_t len) {
 static void l6362_request_service(void* user) {
     (void)user;
     NVIC_SetPendingIRQ(IOD_UART_IRQn);
+}
+
+/* Timer A hook: 13 Tbit one-shot (the BYTE byte-gap watchdog). */
+static void l6362_response_timer_start(void* user) {
+    (void)user;
+    TIM3->CR1 &= ~TIM_CR1_CEN;
+    TIM3->CNT = 0U;
+    TIM3->ARR = (s_gap_us != 0U) ? (s_gap_us - 1U) : 0U;
+    TIM3->SR  = 0U;
+    TIM3->CR1 |= TIM_CR1_CEN;
+}
+
+/** Stop Timer A when the reply starts (t_A window closed). */
+static void l6362_response_timer_stop(void* user) {
+    (void)user;
+    TIM3->CR1 &= ~TIM_CR1_CEN;
+    TIM3->SR  = 0U;
 }
 
 static uint8_t l6362_int_active(void* user) {
@@ -441,7 +523,7 @@ static uint8_t l6362_int_active(void* user) {
     }
 #endif
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
-    if ((s_tx_in_progress != 0U) &&
+    if (phy_txen_get() &&
         ((IOD_UART->ISR & (USART_ISR_TXE_TXFNF | USART_ISR_TC)) != 0U)) {
         return 1U;
     }
@@ -553,6 +635,10 @@ const iolink_phy_api_t* phy_l6362a_raw_get(void) {
 #endif
         .int_active       = l6362_int_active,
         .request_service  = l6362_request_service,
+        /* Timer A: 13 Tbit one-shot t_A watchdog (both transports; the BYTE
+         * gap uses the same TIM3, the FRAME path gets the t_A deadline). */
+        .response_timer_start = l6362_response_timer_start,
+        .response_timer_stop  = l6362_response_timer_stop,
         .detect_wakeup    = l6362_detect_wakeup,
         .get_faults    = NULL,
     };
@@ -569,13 +655,17 @@ void phy_l6362a_raw_get_counters(uint32_t* tx_bytes, uint32_t* rx_bytes,
     if (rx_bytes != NULL) { *rx_bytes = s_rx_bytes; }
     if (rx_chk != NULL) { *rx_chk = s_rx_chk; }
 }
+void phy_l6362a_raw_set_initial_baudrate(iolink_baudrate_t baudrate) {
+    s_initial_baudrate = baudrate;
+}
+
 int phy_l6362a_raw_hw_init(void)
 {
   /* The microsecond timebase is derived from SysTick (no dedicated timer: the
    * STM32G070 has no TIM2). */
 
-#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
-  /* TIM3: one-shot byte-gap timer (1 us tick), stopped until armed. */
+  /* TIM3: Timer A (13 Tbit one-shot); in BYTE RX it is also the byte gap.
+   * Priority 1: below USART2 in FRAME mode, equal in BYTE mode (no nesting). */
     __HAL_RCC_TIM3_CLK_ENABLE();
     TIM3->PSC  = (uint32_t)((SYSCLOCK_FREQUENCY / 1000000U) - 1U);
     TIM3->ARR  = 0xFFFFU;
@@ -583,11 +673,9 @@ int phy_l6362a_raw_hw_init(void)
     TIM3->SR   = 0U;
     TIM3->DIER = TIM_DIER_UIE;
     TIM3->CR1  = 0U;
-    /* Same priority as USART2: the byte-gap handler must not be preempted by the
-     * RXNE handler (the ISR pump is not re-entrant). */
     HAL_NVIC_SetPriority(TIM3_IRQn, 1U, 0U);
     HAL_NVIC_EnableIRQ(TIM3_IRQn);
-#else
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
   /* DMA1 channel 1 <- USART2_RX: circular, one byte per request into s_rx_dma. */
     __HAL_RCC_DMA1_CLK_ENABLE(); /* DMAMUX1 shares the DMA1 clock gate */
     DMAMUX1_Channel0->CCR = DMA_REQUEST_USART2_RX;
@@ -605,11 +693,9 @@ int phy_l6362a_raw_hw_init(void)
     HAL_NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
 #endif
 
-    s_baudrate = IOLINK_BAUDRATE_COM3;
-    s_baud_hz  = 230400U;
-    s_gap_us   = (13U * 1000000U) / s_baud_hz;
-
-    UartConfigure(s_baud_hz);
+    /* Board bring-up baudrate: the application selects the operating COM via
+     * phy_l6362a_raw_set_initial_baudrate() before this call. */
+    l6362_set_baudrate(NULL, s_initial_baudrate);
     (void)l6362_init(NULL);
 
     /* USART2 interrupt priority: same as TIM3 so the ISR pump is never preempted
@@ -626,13 +712,13 @@ int phy_l6362a_raw_hw_init(void)
 /* Interrupt feeds -----------------------------------------------------------*/
 
 void phy_l6362a_raw_gap_irq(void) {
-#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
     if ((TIM3->SR & TIM_SR_UIF) != 0U) {
-        TIM3->SR    = (uint32_t)~TIM_SR_UIF;
-        TIM3->CR1   &= ~TIM_CR1_CEN;
+        TIM3->SR  = (uint32_t)~TIM_SR_UIF;
+        TIM3->CR1 &= ~TIM_CR1_CEN; /* one-shot: stop after the update */
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
         s_frame_end = 1U;
+#endif
     }
-#endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
 }
 
 /** @brief DMA1 channel-2 transfer complete: finish a TX FRAME reply. */
@@ -647,9 +733,7 @@ void phy_l6362a_raw_tx_dma_irq(void) {
         deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
         while (((IOD_UART->ISR & USART_ISR_TC) == 0U) && (iolink_time_get_us() < deadline)) {
         }
-        HAL_GPIO_WritePin(TX_EN_GPIO_Port, TX_EN_Pin, GPIO_PIN_RESET);
-        TxRestoreRx();
-        s_tx_in_progress = 0U;
+        phy_txen_set(false);
     }
 #endif
 }
@@ -660,6 +744,9 @@ void phy_l6362a_raw_rx_irq(void) {
 
     if ((status & USART_ISR_TC) != 0U) {
         IOD_UART->ICR = USART_ICR_TCCF;
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+        s_tx_tc_seen = 1U; /* the octet has left the shift register */
+#endif
     }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
@@ -699,7 +786,12 @@ void phy_l6362a_raw_rx_irq(void) {
 #else
     if ((status & USART_ISR_RXNE_RXFNE) != 0U) {
         uint8_t byte = (uint8_t)IOD_UART->RDR;
-        if (errors == 0U) {
+        /* While our own reply is on the line the transceiver echoes it back on
+         * RX. Masking RXNEIE is not enough: this handler still runs for the
+         * per-octet TC interrupt, so drain the echo octet here without pushing
+         * it (otherwise the all-zero PD-in reply is parsed as the next master
+         * frame and trips the CRC/fallback path). */
+        if (!phy_txen_get() && (errors == 0U)) {
             RxPush(byte);
             if (s_mode == IOLINK_PHY_MODE_SDCI) {
                 GapTimerRestart();
