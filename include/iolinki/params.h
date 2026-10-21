@@ -15,6 +15,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "iolinki/device_info.h"
+#include "iolinki/storage.h"
 
 /**
  * @file params.h
@@ -39,6 +40,7 @@ typedef struct
     bool function_tag_valid;               /**< True if the function tag has been set. */
     bool location_tag_valid;               /**< True if the location tag has been set. */
     iolink_device_info_ctx_t* device_info; /**< Associated device-info context. */
+    const iolink_storage_api_t* storage;   /**< Persistent backend (may be NULL). */
 } iolink_params_ctx_t;
 
 /**
@@ -47,6 +49,13 @@ typedef struct
  * @param device_info  Device-info context to bind (must remain valid).
  */
 void iolink_params_ctx_init(iolink_params_ctx_t* ctx, iolink_device_info_ctx_t* device_info);
+
+/**
+ * @brief Bind the persistent storage backend to a parameter context.
+ * @param ctx     Parameter manager context.
+ * @param storage Unified storage backend (NULL disables persistence).
+ */
+void iolink_params_bind_storage(iolink_params_ctx_t* ctx, const iolink_storage_api_t* storage);
 
 /**
  * @brief Retrieve a parameter value from a context by its IO-Link address.
@@ -72,7 +81,7 @@ int iolink_params_ctx_get(const iolink_params_ctx_t* ctx, uint16_t index, uint8_
  * @return 0 on success, or negative IO-Link ErrorCode.
  */
 int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                          const uint8_t* data, size_t len, bool persist);
+                          const uint8_t* data, size_t len, iolink_persist_t persist);
 
 /**
  * @brief Reset all parameters in a context to factory defaults.
@@ -111,7 +120,7 @@ int iolink_params_get(uint16_t index, uint8_t subindex, uint8_t* buffer, size_t 
  * @return int 0 on success, or negative IO-Link ErrorCode (e.g. 0x80XX)
  */
 int iolink_params_set(uint16_t index, uint8_t subindex, const uint8_t* data, size_t len,
-                      bool persist);
+                      iolink_persist_t persist);
 
 /**
  * @brief Reset all parameters to factory defaults

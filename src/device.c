@@ -262,9 +262,11 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     ctx->dll.isdu.vendor_user = config->user;
     ctx->dll.state_cb = device_state_cb;
     ctx->dll.state_cb_user = ctx;
+    /* One backend serves the standard parameters and the Data Storage image. */
+    iolink_params_bind_storage(&ctx->params, config->storage);
 #if IOLINK_FEATURE_DATA_STORAGE
-    if (config->ds_storage != NULL) {
-        iolink_ds_init(&ctx->dll.ds, config->ds_storage);
+    if (config->storage != NULL) {
+        iolink_ds_init(&ctx->dll.ds, config->storage);
         ctx->dll.isdu.ds_ctx = &ctx->dll.ds;
     }
     iolink_ds_bind_params(&ctx->dll.ds, &ctx->params);

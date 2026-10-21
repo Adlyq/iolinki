@@ -47,8 +47,8 @@ static void test_ds_storage_integration(void** state)
     uint8_t write_data[] = {0x11, 0x22, 0x33, 0x44};
     uint8_t read_buf[4] = {0};
 
-    assert_int_equal(ds.storage->write(0, write_data, 4), 0);
-    assert_int_equal(ds.storage->read(0, read_buf, 4), 0);
+    assert_int_equal(ds.storage->write(ds.storage->user, 0, write_data, 4), 0);
+    assert_int_equal(ds.storage->read(ds.storage->user, 0, read_buf, 4), 0);
     assert_memory_equal(read_buf, write_data, 4);
 }
 

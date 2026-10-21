@@ -26,6 +26,65 @@
 
 #if IOLINK_FEATURE_DATA_STORAGE
 
+/** @brief Persist DS_UPLOAD_FLAG into the flag region (10.4.2). */
+static void ds_storage_save_flag(iolink_ds_ctx_t* ctx, uint8_t flag)
+{
+    if ((ctx != NULL) && (ctx->storage != NULL) && (ctx->storage->write != NULL)) {
+        uint8_t value = (flag != 0U) ? 1U : 0U;
+        (void) ctx->storage->write(ctx->storage->user, IOLINK_STORAGE_FLAG_BASE, &value, 1U);
+    }
+}
+
+static void ds_storage_load_flag(iolink_ds_ctx_t* ctx)
+{
+    if ((ctx != NULL) && (ctx->storage != NULL) && (ctx->storage->read != NULL)) {
+        uint8_t value = 0U;
+        if (ctx->storage->read(ctx->storage->user, IOLINK_STORAGE_FLAG_BASE, &value, 1U) == 0) {
+            ctx->ds_upload_flag = (value != 0U);
+        }
+    }
+}
+
+/** @brief Persist the DS image (length header + payload) into the DS region. */
+static void ds_storage_save_image(iolink_ds_ctx_t* ctx)
+{
+    if ((ctx == NULL) || (ctx->storage == NULL) || (ctx->storage->write == NULL)) {
+        return;
+    }
+    uint8_t header[IOLINK_STORAGE_DS_LEN_SIZE];
+    header[0] = (uint8_t) (ctx->image_len >> 8);
+    header[1] = (uint8_t) (ctx->image_len & 0xFFU);
+    (void) ctx->storage->write(ctx->storage->user, IOLINK_STORAGE_DS_BASE, header,
+                               sizeof(header));
+    if (ctx->image_len > 0U) {
+        (void) ctx->storage->write(ctx->storage->user,
+                                   IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_LEN_SIZE,
+                                   ctx->image, ctx->image_len);
+    }
+}
+
+static void ds_storage_load_image(iolink_ds_ctx_t* ctx)
+{
+    if ((ctx == NULL) || (ctx->storage == NULL) || (ctx->storage->read == NULL)) {
+        return;
+    }
+    uint8_t header[IOLINK_STORAGE_DS_LEN_SIZE];
+    if (ctx->storage->read(ctx->storage->user, IOLINK_STORAGE_DS_BASE, header, sizeof(header)) !=
+        0) {
+        return;
+    }
+    size_t len = ((size_t) header[0] << 8) | (size_t) header[1];
+    if ((len == 0U) || (len > IOLINK_DS_IMAGE_MAX)) {
+        return;
+    }
+    if (ctx->storage->read(ctx->storage->user,
+                           IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_LEN_SIZE, ctx->image,
+                           len) == 0) {
+        ctx->image_len = len;
+        ctx->current_checksum = iolink_ds_calc_checksum(ctx->image, len);
+    }
+}
+
 /* Parameters included in the Data Storage set by default (V1.1.5 device
    identification parameters that are writable and therefore worth backing up).
    The application replaces or extends this via iolink_ds_bind_param_access(). */
@@ -38,7 +97,7 @@ static const iolink_ds_param_desc_t k_default_ds_params[] = {
 #define DS_PARAM_COUNT (sizeof(k_default_ds_params) / sizeof(k_default_ds_params[0]))
 #define DS_RECORD_HEADER 4U /* index(2) + subindex(1) + length(1) */
 
-void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_ds_storage_api_t* storage)
+void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage)
 {
     if (!iolink_ctx_zero(ctx, sizeof(iolink_ds_ctx_t))) {
         return;
@@ -49,6 +108,8 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_ds_storage_api_t* storage
        legacy params context (or a caller-bound accessor). */
     ctx->params = k_default_ds_params;
     ctx->param_count = DS_PARAM_COUNT;
+    ds_storage_load_image(ctx);
+    ds_storage_load_flag(ctx);
 }
 
 void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx)
@@ -220,6 +281,7 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
     if (iolink_ds_build_image(ctx) < 0) {
         return -1;
     }
+    ds_storage_save_image(ctx);
     return 0;
 }
 
@@ -553,6 +615,9 @@ void iolink_ds_request_upload(iolink_ds_ctx_t* ctx)
 {
     if (ctx != NULL) {
         ctx->ds_upload_flag = true;
+        ds_storage_save_flag(ctx, 1U);
+        (void) iolink_ds_build_image(ctx);
+        ds_storage_save_image(ctx);
     }
 }
 
@@ -560,6 +625,7 @@ void iolink_ds_clear_upload(iolink_ds_ctx_t* ctx)
 {
     if (ctx != NULL) {
         ctx->ds_upload_flag = false;
+        ds_storage_save_flag(ctx, 0U);
     }
 }
 

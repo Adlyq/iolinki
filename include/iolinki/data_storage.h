@@ -10,6 +10,7 @@
 #define IOLINK_DATA_STORAGE_H
 
 #include "iolinki/config.h"
+#include "iolinki/storage.h"
 
 #include "iolinki/protocol.h"
 #include "iolinki/params.h"
@@ -55,41 +56,6 @@ typedef enum
     IOLINK_DS_STATE_DOWNLOADING = 4U,  /**< Parameter download in progress */
     IOLINK_DS_STATE_LOCKED = 5U        /**< DS operation disabled/locked */
 } iolink_ds_state_t;
-
-/**
- * @brief Storage Abstraction Layer (SAL)
- *
- * Hardware-independent interface for persisting Data Storage parameters
- * to Non-Volatile Memory (NVM) such as Flash or EEPROM.
- */
-typedef struct
-{
-    /**
-     * @brief Read data from NVM
-     * @param addr Destination-relative address
-     * @param buf Source buffer
-     * @param len Number of bytes to read
-     * @return 0 on success, negative on hardware error
-     */
-    int (*read)(uint32_t addr, uint8_t* buf, size_t len);
-
-    /**
-     * @brief Write data to NVM
-     * @param addr Destination-relative address
-     * @param buf Source buffer
-     * @param len Number of bytes to write
-     * @return 0 on success, negative on hardware error
-     */
-    int (*write)(uint32_t addr, const uint8_t* buf, size_t len);
-
-    /**
-     * @brief Erase a range of NVM (if required by hardware)
-     * @param addr Starting address
-     * @param len Range length
-     * @return 0 on success, negative on hardware error
-     */
-    int (*erase)(uint32_t addr, size_t len);
-} iolink_ds_storage_api_t;
 
 /**
  * @brief One Data-Storage-backed parameter (index + subindex).
@@ -140,7 +106,7 @@ typedef int (*iolink_ds_param_write_fn)(void* user, uint16_t index, uint8_t subi
 typedef struct
 {
     iolink_ds_state_t state;                /**< Current DS state machine position */
-    const iolink_ds_storage_api_t* storage; /**< Bound storage implementation API */
+    const iolink_storage_api_t* storage; /**< Bound storage implementation API */
     iolink_params_ctx_t* params_ctx;        /**< Legacy device-local writable parameter context */
     void* param_user;                       /**< Opaque user pointer for the param callbacks */
     iolink_ds_param_read_fn read_param;     /**< Unified parameter read accessor */
@@ -161,7 +127,7 @@ typedef struct
  * @param storage Optional storage implementation hooks (can be NULL for RAM-only)
  */
 #if IOLINK_FEATURE_DATA_STORAGE
-void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_ds_storage_api_t* storage);
+void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage);
 
 /**
  * @brief Bind the writable parameter context used as the DS parameter source.

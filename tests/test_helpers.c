@@ -393,25 +393,27 @@ void iolink_phy_mock_set_send_delay_us(uint32_t delay_us)
 
 /* Mock Storage for Data Storage (DS) testing */
 #include "iolinki/data_storage.h"
-#define DS_MOCK_SIZE 128
+#define DS_MOCK_SIZE ((size_t) IOLINK_STORAGE_TOTAL_SIZE)
 static uint8_t g_ds_mock_buf[DS_MOCK_SIZE];
 
-int ds_mock_read(uint32_t addr, uint8_t* buf, size_t len)
+int ds_mock_read(void* user, uint32_t addr, uint8_t* buf, size_t len)
 {
+    (void) user;
     if (addr + len > DS_MOCK_SIZE) return -1;
     memcpy(buf, &g_ds_mock_buf[addr], len);
     return 0;
 }
 
-int ds_mock_write(uint32_t addr, const uint8_t* buf, size_t len)
+int ds_mock_write(void* user, uint32_t addr, const uint8_t* buf, size_t len)
 {
+    (void) user;
     if (addr + len > DS_MOCK_SIZE) return -1;
     memcpy(&g_ds_mock_buf[addr], buf, len);
     return 0;
 }
 
-const iolink_ds_storage_api_t g_ds_storage_mock = {
-    .read = ds_mock_read, .write = ds_mock_write, .erase = NULL};
+const iolink_storage_api_t g_ds_storage_mock = {
+    .user = NULL, .read = ds_mock_read, .write = ds_mock_write, .erase = NULL};
 
 void iolink_ds_mock_reset(void)
 {

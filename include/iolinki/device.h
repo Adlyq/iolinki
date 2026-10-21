@@ -65,8 +65,8 @@ typedef struct
     const iolink_app_callbacks_t*
         app_callbacks; /**< Application lifecycle/PD callbacks (may be NULL). */
     const iolink_device_info_t* device_info; /**< Static device identification data. */
-    const iolink_ds_storage_api_t*
-        ds_storage;                   /**< Data-storage persistence backend (may be NULL). */
+    const iolink_storage_api_t*
+        storage; /**< Unified NVM backend for params, DS image and flags (may be NULL). */
     iolink_device_time_us_fn time_us; /**< Microsecond timestamp source. */
     iolink_device_lock_fn lock;       /**< Lock callback (may be NULL). */
     iolink_device_unlock_fn unlock;   /**< Unlock callback (may be NULL). */

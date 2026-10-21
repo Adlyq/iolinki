@@ -44,7 +44,11 @@ void iolink_critical_enter(void);
 void iolink_critical_exit(void);
 
 /**
- * @brief Read data from non-volatile memory (NVM).
+ * @brief Legacy platform NVM helper (not used by the stack).
+ *
+ * The stack persists data through iolink_device_config_t::storage
+ * (see storage.h). These helpers remain for platform/test harnesses only.
+ *
  * @param offset Offset in NVM
  * @param data Buffer to read into
  * @param len Length to read

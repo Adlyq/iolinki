@@ -167,6 +167,17 @@
 #define IOLINK_ISDU_BUFFER_SIZE 256U
 #endif
 
+/**
+ * @brief Maximum size of the serialized Data Storage parameter image.
+ *
+ * Must hold every DS-backed parameter record. Each record is laid out as
+ * [Index(2, big-endian)][Subindex(1)][Length(1)][Data(Length)]. This is also
+ * the size of the DS region in the persistent storage layout (storage.h).
+ */
+#ifndef IOLINK_DS_IMAGE_MAX
+#define IOLINK_DS_IMAGE_MAX 256U
+#endif
+
 /* -------------------------------------------------------------------------
  * Events Configuration
  * ------------------------------------------------------------------------- */

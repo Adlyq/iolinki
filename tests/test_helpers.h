@@ -81,7 +81,7 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx);
 
 /* Mock Storage for Data Storage (DS) testing */
 #include "iolinki/data_storage.h"
-extern const iolink_ds_storage_api_t g_ds_storage_mock;
+extern const iolink_storage_api_t g_ds_storage_mock;
 void iolink_ds_mock_reset(void);
 uint8_t* iolink_ds_mock_get_buf(void);
 

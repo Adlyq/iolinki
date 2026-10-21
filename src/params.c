@@ -24,17 +24,6 @@
 #include "iolinki/utils.h"
 #include <string.h>
 
-#define PARAMS_NVM_MAGIC 0x494F4C31U /* "IOL1" */
-
-typedef struct
-{
-    uint32_t magic;
-    char application_tag[33];
-    char function_tag[33];
-    char location_tag[33];
-    /* Future: user parameters, etc. */
-} iolink_params_nvm_t;
-
 #if IOLINK_FEATURE_LEGACY_PARAMS
 static iolink_device_info_ctx_t g_legacy_device_info_ctx;
 static iolink_params_ctx_t g_legacy_params_ctx;
@@ -81,8 +70,12 @@ static int params_ctx_write_nvm(const iolink_params_ctx_t* ctx)
 {
     iolink_params_nvm_t nvm;
 
+    if ((ctx == NULL) || (ctx->storage == NULL) || (ctx->storage->write == NULL)) {
+        return 0; /* No backend: RAM-only device, the write is accepted. */
+    }
     (void) memset(&nvm, 0, sizeof(nvm));
-    nvm.magic = PARAMS_NVM_MAGIC;
+    nvm.magic = IOLINK_STORAGE_MAGIC;
+    nvm.version = IOLINK_STORAGE_VERSION;
     if (ctx->application_tag_valid) {
         (void) memcpy(nvm.application_tag, ctx->application_tag, sizeof(nvm.application_tag));
     }
@@ -92,36 +85,13 @@ static int params_ctx_write_nvm(const iolink_params_ctx_t* ctx)
     if (ctx->location_tag_valid) {
         (void) memcpy(nvm.location_tag, ctx->location_tag, sizeof(nvm.location_tag));
     }
-    return iolink_nvm_write(0U, (const uint8_t*) &nvm, sizeof(nvm));
+    return ctx->storage->write(ctx->storage->user, IOLINK_STORAGE_PARAMS_BASE,
+                               (const uint8_t*) &nvm, sizeof(nvm));
 }
 
-void iolink_params_ctx_init(iolink_params_ctx_t* ctx, iolink_device_info_ctx_t* device_info)
+static void params_ctx_apply_defaults(iolink_params_ctx_t* ctx)
 {
-    iolink_params_nvm_t nvm;
-
-    if (ctx == NULL) {
-        return;
-    }
-
-    (void) memset(ctx, 0, sizeof(*ctx));
-    ctx->device_info = device_info;
-
-    if ((iolink_nvm_read(0U, (uint8_t*) &nvm, sizeof(nvm)) == 0) &&
-        (nvm.magic == PARAMS_NVM_MAGIC)) {
-        copy_tag(ctx->application_tag, &ctx->application_tag_valid,
-                 (const uint8_t*) nvm.application_tag, bounded_tag_len(nvm.application_tag));
-        copy_tag(ctx->function_tag, &ctx->function_tag_valid, (const uint8_t*) nvm.function_tag,
-                 bounded_tag_len(nvm.function_tag));
-        copy_tag(ctx->location_tag, &ctx->location_tag_valid, (const uint8_t*) nvm.location_tag,
-                 bounded_tag_len(nvm.location_tag));
-        if (ctx->device_info != NULL) {
-            (void) iolink_device_info_ctx_set_application_tag(
-                ctx->device_info, ctx->application_tag, (uint8_t) strlen(ctx->application_tag));
-        }
-        return;
-    }
-
-    if (ctx->device_info != NULL) {
+    if ((ctx != NULL) && (ctx->device_info != NULL)) {
         const iolink_device_info_t* info = iolink_device_info_ctx_get(ctx->device_info);
         if ((info != NULL) && (info->application_tag != NULL)) {
             copy_tag(ctx->application_tag, &ctx->application_tag_valid,
@@ -129,6 +99,49 @@ void iolink_params_ctx_init(iolink_params_ctx_t* ctx, iolink_device_info_ctx_t* 
                      bounded_tag_len(info->application_tag));
         }
     }
+}
+
+static void params_ctx_load(iolink_params_ctx_t* ctx)
+{
+    iolink_params_nvm_t nvm;
+
+    if ((ctx == NULL) || (ctx->storage == NULL) || (ctx->storage->read == NULL)) {
+        return;
+    }
+    if ((ctx->storage->read(ctx->storage->user, IOLINK_STORAGE_PARAMS_BASE, (uint8_t*) &nvm,
+                            sizeof(nvm)) != 0) ||
+        (nvm.magic != IOLINK_STORAGE_MAGIC) || (nvm.version != IOLINK_STORAGE_VERSION)) {
+        return;
+    }
+    copy_tag(ctx->application_tag, &ctx->application_tag_valid,
+             (const uint8_t*) nvm.application_tag, bounded_tag_len(nvm.application_tag));
+    copy_tag(ctx->function_tag, &ctx->function_tag_valid,
+             (const uint8_t*) nvm.function_tag, bounded_tag_len(nvm.function_tag));
+    copy_tag(ctx->location_tag, &ctx->location_tag_valid,
+             (const uint8_t*) nvm.location_tag, bounded_tag_len(nvm.location_tag));
+    if (ctx->device_info != NULL) {
+        (void) iolink_device_info_ctx_set_application_tag(
+            ctx->device_info, ctx->application_tag, (uint8_t) strlen(ctx->application_tag));
+    }
+}
+
+void iolink_params_ctx_init(iolink_params_ctx_t* ctx, iolink_device_info_ctx_t* device_info)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    (void) memset(ctx, 0, sizeof(*ctx));
+    ctx->device_info = device_info;
+    params_ctx_apply_defaults(ctx);
+}
+
+void iolink_params_bind_storage(iolink_params_ctx_t* ctx, const iolink_storage_api_t* storage)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    ctx->storage = storage;
+    params_ctx_load(ctx);
 }
 
 int iolink_params_ctx_get(const iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
@@ -160,7 +173,7 @@ int iolink_params_ctx_get(const iolink_params_ctx_t* ctx, uint16_t index, uint8_
 }
 
 int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                          const uint8_t* data, size_t len, bool persist)
+                          const uint8_t* data, size_t len, iolink_persist_t persist)
 {
     if ((ctx == NULL) || !iolink_buf_is_valid(data, len)) {
         return -1;
@@ -182,7 +195,7 @@ int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index, uint8_t subi
         return -1;
     }
     /* A rejected persistent write must not appear accepted in RAM/readback. */
-    if (persist && params_ctx_write_nvm(&candidate) != 0) {
+    if ((persist != IOLINK_PERSIST_NONE) && (params_ctx_write_nvm(&candidate) != 0)) {
         return -1;
     }
     if ((index == IOLINK_IDX_APPLICATION_TAG) && candidate.device_info != NULL) {
@@ -243,7 +256,7 @@ int iolink_params_get(uint16_t index, uint8_t subindex, uint8_t* buffer, size_t 
 }
 
 int iolink_params_set(uint16_t index, uint8_t subindex, const uint8_t* data, size_t len,
-                      bool persist)
+                      iolink_persist_t persist)
 {
     int res = iolink_params_ctx_set(legacy_params_ctx(), index, subindex, data, len, persist);
     if ((res == 0) && (index == IOLINK_IDX_APPLICATION_TAG) && (subindex == 0U)) {
