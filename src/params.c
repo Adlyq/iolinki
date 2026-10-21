@@ -85,6 +85,8 @@ static int params_ctx_write_nvm(const iolink_params_ctx_t* ctx)
     if (ctx->location_tag_valid) {
         (void) memcpy(nvm.location_tag, ctx->location_tag, sizeof(nvm.location_tag));
     }
+    nvm.checksum =
+        iolink_storage_checksum((const uint8_t*) &nvm, offsetof(iolink_params_nvm_t, checksum));
     return ctx->storage->write(ctx->storage->user, IOLINK_STORAGE_PARAMS_BASE,
                                (const uint8_t*) &nvm, sizeof(nvm));
 }
@@ -110,8 +112,10 @@ static void params_ctx_load(iolink_params_ctx_t* ctx)
     }
     if ((ctx->storage->read(ctx->storage->user, IOLINK_STORAGE_PARAMS_BASE, (uint8_t*) &nvm,
                             sizeof(nvm)) != 0) ||
-        (nvm.magic != IOLINK_STORAGE_MAGIC) || (nvm.version != IOLINK_STORAGE_VERSION)) {
-        return;
+        (nvm.magic != IOLINK_STORAGE_MAGIC) || (nvm.version != IOLINK_STORAGE_VERSION) ||
+        (nvm.checksum != iolink_storage_checksum((const uint8_t*) &nvm,
+                                                 offsetof(iolink_params_nvm_t, checksum)))) {
+        return; /* Uninitialised, different layout or corrupt. */
     }
     copy_tag(ctx->application_tag, &ctx->application_tag_valid,
              (const uint8_t*) nvm.application_tag, bounded_tag_len(nvm.application_tag));

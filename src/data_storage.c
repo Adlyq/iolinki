@@ -53,6 +53,7 @@ static void ds_storage_save_image(iolink_ds_ctx_t* ctx)
         return;
     }
     uint8_t header[IOLINK_STORAGE_DS_HDR_SIZE];
+    const uint32_t checksum = iolink_storage_checksum(ctx->image, ctx->image_len);
     header[0] = (uint8_t) (IOLINK_STORAGE_MAGIC >> 24);
     header[1] = (uint8_t) (IOLINK_STORAGE_MAGIC >> 16);
     header[2] = (uint8_t) (IOLINK_STORAGE_MAGIC >> 8);
@@ -61,6 +62,10 @@ static void ds_storage_save_image(iolink_ds_ctx_t* ctx)
     header[5] = (uint8_t) (IOLINK_STORAGE_VERSION >> 8);
     header[6] = (uint8_t) (ctx->image_len >> 8);
     header[7] = (uint8_t) (ctx->image_len & 0xFFU);
+    header[8] = (uint8_t) (checksum >> 24);
+    header[9] = (uint8_t) (checksum >> 16);
+    header[10] = (uint8_t) (checksum >> 8);
+    header[11] = (uint8_t) checksum;
     (void) ctx->storage->write(ctx->storage->user, IOLINK_STORAGE_DS_BASE, header,
                                sizeof(header));
     if (ctx->image_len > 0U) {
@@ -84,6 +89,8 @@ static void ds_storage_load_image(iolink_ds_ctx_t* ctx)
                            ((uint32_t) header[2] << 8) | (uint32_t) header[3];
     const uint16_t version = (uint16_t) (((uint16_t) header[5] << 8) | (uint16_t) header[4]);
     const size_t len = ((size_t) header[6] << 8) | (size_t) header[7];
+    const uint32_t checksum = ((uint32_t) header[8] << 24) | ((uint32_t) header[9] << 16) |
+                              ((uint32_t) header[10] << 8) | (uint32_t) header[11];
     if ((magic != IOLINK_STORAGE_MAGIC) || (version != (uint16_t) IOLINK_STORAGE_VERSION)) {
         return; /* Uninitialised or a different layout. */
     }
@@ -93,6 +100,9 @@ static void ds_storage_load_image(iolink_ds_ctx_t* ctx)
     if (ctx->storage->read(ctx->storage->user,
                            IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_HDR_SIZE, ctx->image,
                            len) == 0) {
+        if (checksum != iolink_storage_checksum(ctx->image, len)) {
+            return; /* Corrupt (bit flip / torn write). */
+        }
         ctx->image_len = len;
         ctx->current_checksum = iolink_ds_calc_checksum(ctx->image, len);
     }

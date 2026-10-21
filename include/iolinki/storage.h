@@ -66,6 +66,26 @@ typedef struct
 #define IOLINK_STORAGE_MAGIC 0x494F4C32UL /* "IOL2": layout carries a version */
 #define IOLINK_STORAGE_VERSION 1U         /* bump on record-layout change */
 
+/**
+ * @brief Fletcher-32 checksum for a persistent record.
+ *
+ * Detects bit flips and torn writes that magic/version cannot see. Sums are
+ * reduced modulo 65535 so the result fits a uint32_t.
+ */
+static inline uint32_t iolink_storage_checksum(const uint8_t* data, size_t len)
+{
+    uint32_t sum1 = 0U;
+    uint32_t sum2 = 0U;
+    if (data == NULL) {
+        return 0U;
+    }
+    for (size_t i = 0U; i < len; ++i) {
+        sum1 = (sum1 + (uint32_t) data[i]) % 65535U;
+        sum2 = (sum2 + sum1) % 65535U;
+    }
+    return (sum2 << 16U) | sum1;
+}
+
 /** @brief Persistent parameter record (three identification tags). */
 typedef struct
 {
@@ -75,6 +95,7 @@ typedef struct
     char application_tag[33]; /**< ApplicationSpecificTag, NUL-terminated. */
     char function_tag[33];    /**< FunctionTag, NUL-terminated. */
     char location_tag[33];    /**< LocationTag, NUL-terminated. */
+    uint32_t checksum;        /**< Fletcher-32 over the preceding fields. */
 } iolink_params_nvm_t;
 
 #define IOLINK_STORAGE_ALIGN4(x) (((x) + 3U) & ~3U)
@@ -82,8 +103,8 @@ typedef struct
 #define IOLINK_STORAGE_PARAMS_BASE 0U
 #define IOLINK_STORAGE_PARAMS_SIZE IOLINK_STORAGE_ALIGN4((uint32_t) sizeof(iolink_params_nvm_t))
 #define IOLINK_STORAGE_DS_BASE IOLINK_STORAGE_PARAMS_SIZE
-/** DS header: magic(4) + version(2) + image length(2), then the image. */
-#define IOLINK_STORAGE_DS_HDR_SIZE 8U
+/** DS header: magic(4) + version(2) + length(2) + checksum(4), then the image. */
+#define IOLINK_STORAGE_DS_HDR_SIZE 12U
 #define IOLINK_STORAGE_DS_SIZE (IOLINK_STORAGE_DS_HDR_SIZE + (uint32_t) IOLINK_DS_IMAGE_MAX)
 #define IOLINK_STORAGE_FLAG_BASE (IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_SIZE)
 #define IOLINK_STORAGE_FLAG_SIZE 4U

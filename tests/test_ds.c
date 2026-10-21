@@ -398,6 +398,30 @@ static void test_ds_download_end_error_classification(void** state)
     assert_int_equal(iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -4);
 }
 
+/* A corrupt DS image (bit flip / torn write) must be discarded on load. */
+static void test_ds_image_checksum_rejects_corruption(void** state)
+{
+    (void) state;
+    iolink_ds_ctx_t ds;
+
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_ds_mock_reset();
+    iolink_ds_init(&ds, &g_ds_storage_mock);
+
+    /* Persist a valid image via a parameter change request. */
+    iolink_ds_request_upload(&ds);
+    assert_true(ds.image_len > 0U);
+
+    /* Flip one byte of the stored image. */
+    uint8_t* buf = iolink_ds_mock_get_buf();
+    buf[IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_HDR_SIZE] ^= 0xFFU;
+
+    /* Reload: the checksum mismatch must discard the image. */
+    iolink_ds_init(&ds, &g_ds_storage_mock);
+    assert_int_equal(ds.image_len, 0U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -410,6 +434,7 @@ int main(void)
         cmocka_unit_test(test_ds_bound_params_restore_device_context_only),
         cmocka_unit_test(test_ds_apply_rejects_truncated),
         cmocka_unit_test(test_ds_vendor_param_set_round_trip),
+        cmocka_unit_test(test_ds_image_checksum_rejects_corruption),
         cmocka_unit_test(test_ds_download_end_error_classification),
         cmocka_unit_test(test_ds_download_recovery),
     };
