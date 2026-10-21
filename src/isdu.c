@@ -770,6 +770,22 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
 }
 
 /** @brief Execute a SystemCommand (reset, factory restore, data-storage commands). */
+
+/** @brief Raise the DS_UPLOAD_REQ event (10.4.2) when a command changed the
+ * Data Storage parameter set locally on the Device. */
+static void isdu_trigger_ds_upload_req(iolink_isdu_ctx_t* ctx)
+{
+#if IOLINK_FEATURE_EVENTS
+    if (ctx->event_ctx != NULL) {
+        iolink_event_trigger((iolink_events_ctx_t*) ctx->event_ctx,
+                             IOLINK_EVENTCODE_DS_UPLOAD_REQUEST,
+                             IOLINK_EVENT_TYPE_NOTIFICATION);
+    }
+#else
+    (void) ctx;
+#endif
+}
+
 static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
 #if !IOLINK_FEATURE_SYSTEM_COMMAND
@@ -788,18 +804,22 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             break;
 
         case IOLINK_CMD_APPLICATION_RESET: /* 0x81 */
-            /* Set application reset flag */
+            /* Set application reset flag; the parameter set will change, so the
+               Master must be prompted to re-upload via DS_UPLOAD_REQ (10.4.2). */
             ctx->app_reset_pending = true;
+            isdu_trigger_ds_upload_req(ctx);
             break;
 
         case IOLINK_CMD_RESTORE_FACTORY_SETTINGS: /* 0x82 */
             /* Reset all parameters to factory defaults */
             isdu_params_factory_reset(ctx);
+            isdu_trigger_ds_upload_req(ctx);
             break;
 
         case IOLINK_CMD_RESTORE_APP_DEFAULTS: /* 0x83 */
             /* Reset application-specific parameters (currently same as factory) */
             isdu_params_factory_reset(ctx);
+            isdu_trigger_ds_upload_req(ctx);
             break;
 
             /* Table B.9: 0x84-0x9F are reserved (no SetCommunicationMode command). */

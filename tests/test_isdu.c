@@ -229,6 +229,28 @@ static void test_system_cmd_application_reset(void** state)
     assert_int_equal(isdu_collect_response(&ctx, resp_buf, sizeof(resp_buf)), 0); /* No data */
 }
 
+/* Application Reset changes the parameter set, so the device must raise the
+ * DS_UPLOAD_REQ event (spec 10.4.2). */
+static void test_system_cmd_app_reset_raises_ds_upload_req(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_events_ctx_t events;
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_events_init(&events);
+    iolink_isdu_init(&ctx);
+    ctx.event_ctx = &events;
+
+    uint8_t cmd_data[] = {IOLINK_CMD_APPLICATION_RESET};
+    assert_int_equal(isdu_send_write_request(&ctx, 0x0002, 0x00, cmd_data, 1), 1);
+    iolink_isdu_process(&ctx);
+
+    iolink_event_t ev;
+    assert_true(iolink_events_pop(&events, &ev));
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST);
+}
+
 static void test_system_cmd_factory_restore(void** state)
 {
     (void) state;
@@ -738,6 +760,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_system_cmd_device_reset, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_system_cmd_application_reset, test_setup,
                                         test_teardown),
+        cmocka_unit_test_setup_teardown(test_system_cmd_app_reset_raises_ds_upload_req,
+                                        test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_system_cmd_factory_restore, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_system_cmd_param_upload, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_system_cmd_param_download, test_setup, test_teardown),
