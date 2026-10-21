@@ -77,6 +77,8 @@
 /**
  * @defgroup iolinki_protocol_isdu_ctrl ISDU Control Byte Bits
  * @ingroup iolinki_protocol
+ * @brief @deprecated Legacy ISDU control-octet scheme; the V1.1.5 8/16-bit
+ * index form is selected by the I-Service nibble (Table A.12) instead.
  * @{
  */
 #define IOLINK_ISDU_CTRL_START 0x80U    /**< Start-of-transfer flag. */

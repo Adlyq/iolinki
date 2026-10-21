@@ -347,7 +347,7 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
             }
             break;
 
-        case IOLINK_CMD_PARAM_BREAK: /* 0x97 / Standard Break */
+        case IOLINK_CMD_PARAM_BREAK: /* 0x06 / ParamBreak (Table B.9) */
             return iolink_ds_abort(ctx);
 
         default:

@@ -855,7 +855,9 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             }
             break;
 
-        /* Legacy/Custom DS Commands (0x95-0x97) - Mapped to standard flows if possible */
+        /* Legacy/Custom DS Commands (0x95-0x97) - Mapped to standard flows if
+           possible. Table B.9 marks 0x84-0x9F reserved; accepted for legacy
+           master compatibility. */
         case IOLINK_CMD_PARAM_UPLOAD: /* 0x95 -> 0x07 Start Upload */
             if (ctx->ds_ctx != NULL) {
                 /* Legacy mapped to Upload Start */
@@ -883,7 +885,7 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             }
             break;
 
-        case IOLINK_CMD_PARAM_BREAK: /* 0x97 */
+        case IOLINK_CMD_PARAM_BREAK: /* 0x06 */
             /* Abort current Data Storage operation */
             if (ctx->ds_ctx != NULL) {
                 (void) iolink_ds_abort((iolink_ds_ctx_t*) ctx->ds_ctx);
