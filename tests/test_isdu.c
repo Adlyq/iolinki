@@ -912,6 +912,45 @@ static void test_isdu_dpp1_system_command(void** state)
     assert_int_equal(ctx.response_len, 0U);
 }
 
+/* Table B.14: DetailedDeviceStatus is an ArrayT of 3-octet entries. */
+static void test_isdu_dds_subindices(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_events_ctx_t events;
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_events_init(&events);
+    iolink_isdu_init(&ctx);
+    ctx.event_ctx = &events;
+
+    iolink_event_trigger(&events, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&events, 0x2000U, IOLINK_EVENT_TYPE_WARNING);
+
+    uint8_t r[16];
+
+    /* sub 0: both active entries (6 octets). */
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS, 0U), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 6);
+
+    /* sub 1: first entry (3 octets). */
+    iolink_isdu_init(&ctx);
+    ctx.event_ctx = &events;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS, 1U), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 3);
+
+    /* sub 3: out of range -> SUBINDEX_NOT_AVAIL. */
+    iolink_isdu_init(&ctx);
+    ctx.event_ctx = &events;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS, 3U), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
+    assert_int_equal(r[0], 0x80U);
+    assert_int_equal(r[1], IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -954,6 +993,7 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_ds_command_sequence, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_subindexed_objects, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_dpp1_system_command, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_dds_subindices, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_snapshot_response, test_setup, test_teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
