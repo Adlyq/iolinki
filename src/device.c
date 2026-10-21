@@ -246,16 +246,23 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
 #endif
 
     if ((ctx->config != NULL) && (ctx->config->app_callbacks != NULL)) {
-        const bool lost = ctx->dll.master_lost;
-        if (lost != ctx->master_lost_last) {
-            ctx->master_lost_last = lost;
-            if (lost) {
-                if (ctx->config->app_callbacks->on_master_lost != NULL) {
-                    ctx->config->app_callbacks->on_master_lost();
+        if (ctx->dll.state != IOLINK_DLL_STATE_OPERATE) {
+            /* Startup/preoperate pauses are not loss events. Suppress the edge
+             * and forget any stale state when leaving OPERATE. */
+            ctx->master_lost_last = false;
+        }
+        else {
+            const bool lost = ctx->dll.master_lost;
+            if (lost != ctx->master_lost_last) {
+                ctx->master_lost_last = lost;
+                if (lost) {
+                    if (ctx->config->app_callbacks->on_master_lost != NULL) {
+                        ctx->config->app_callbacks->on_master_lost();
+                    }
                 }
-            }
-            else if (ctx->config->app_callbacks->on_master_online != NULL) {
-                ctx->config->app_callbacks->on_master_online();
+                else if (ctx->config->app_callbacks->on_master_online != NULL) {
+                    ctx->config->app_callbacks->on_master_online();
+                }
             }
         }
     }

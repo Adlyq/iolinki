@@ -88,16 +88,25 @@ static void test_master_lost_after_n_cycles(void** state)
     iolink_test_device_t dev;
     init_device(&dev, 3U, &cbs);
 
-    g_now_ms = 5U; /* 2 complete 2 ms cycles -> not lost yet (N=3) */
+    /* Startup/preoperate gaps must not raise master-lost. */
+    g_now_ms = 1000U;
     iolink_device_process(&dev.ctx);
     assert_false(iolink_device_master_lost(&dev.ctx));
     assert_int_equal(lost_calls, 0);
 
-    g_now_ms = 6U; /* 3 cycles -> lost */
+    move_to_operate_ctx(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    g_now_ms = 1005U; /* 2 complete 2 ms cycles -> not lost yet (N=3) */
+    iolink_device_process(&dev.ctx);
+    assert_false(iolink_device_master_lost(&dev.ctx));
+    assert_int_equal(lost_calls, 0);
+
+    g_now_ms = 1006U; /* 3 cycles -> lost */
     iolink_device_process(&dev.ctx);
     assert_true(iolink_device_master_lost(&dev.ctx));
     assert_int_equal(lost_calls, 1);
-    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_STARTUP);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 
     /* A frame-end activity clears the counter (ST StartCallbackTimer). */
     dev.ctx.dll.isr_master_activity = 1U;
@@ -107,7 +116,7 @@ static void test_master_lost_after_n_cycles(void** state)
 
     /* Still online while activity keeps arriving. */
     dev.ctx.dll.isr_master_activity = 1U;
-    g_now_ms = 7U;
+    g_now_ms = 1007U;
     iolink_device_process(&dev.ctx);
     assert_false(iolink_device_master_lost(&dev.ctx));
 }
@@ -117,6 +126,7 @@ static void test_master_lost_uses_master_cycle_time(void** state)
     (void) state;
     iolink_test_device_t dev;
     init_device(&dev, 3U, NULL);
+    move_to_operate_ctx(&dev.ctx);
 
     /* DPP1 0x01 = 10 -> 10 * 100 us = 1 ms (not the 2 ms MinCycleTime). */
     dev.ctx.dll.master_cycle_time = 10U;
@@ -130,6 +140,7 @@ static void test_master_lost_disabled(void** state)
     (void) state;
     iolink_test_device_t dev;
     init_device(&dev, 0U, NULL);
+    move_to_operate_ctx(&dev.ctx);
 
     g_now_ms = 1000U;
     iolink_device_process(&dev.ctx);

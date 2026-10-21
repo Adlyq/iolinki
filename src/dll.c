@@ -55,6 +55,13 @@ static void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
 {
     if (ctx->state != new_state) {
         ctx->state = new_state;
+        if (new_state == IOLINK_DLL_STATE_OPERATE) {
+            /* Master-loss supervision is meaningful only inside OPERATE; the
+             * startup sequence may legitimately pause for several cycles. */
+            ctx->master_last_activity_ms = iolink_time_get_ms();
+            ctx->master_lost_count = 0U;
+            ctx->master_lost = false;
+        }
         if (ctx->state_cb != NULL) {
 #if IOLINK_PHY_FEATURE_ISR_PUMP
             if (ctx->in_isr != 0U) {
@@ -1220,7 +1227,7 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
         dll_master_activity(ctx);
     }
 
-    if (ctx->master_lost_cycles != 0U) {
+    if ((ctx->state == IOLINK_DLL_STATE_OPERATE) && (ctx->master_lost_cycles != 0U)) {
         uint32_t cycle_ms = (dll_master_cycle_us(ctx) + 999U) / 1000U;
         if (cycle_ms == 0U) {
             cycle_ms = 1U;
