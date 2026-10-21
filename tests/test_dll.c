@@ -111,7 +111,7 @@ static void test_dll_preoperate_to_operate(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 }
 
-static void test_dll_fallback_on_crc_errors(void** state)
+static void test_dll_crc_error_keeps_operate(void** state)
 {
     (void) state;
     iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .pd_in_len = 1, .pd_out_len = 1};
@@ -147,8 +147,10 @@ static void test_dll_fallback_on_crc_errors(void** state)
     will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+    const uint32_t baud_before = iolink_device_get_baudrate(&dev.ctx);
 
-    /* Inject CRC errors to trigger fallback */
+    /* Inject CRC errors: ST rc=2 means discard the frame and re-listen. The
+       DL mode and baudrate must not change (no SIO fallback). */
     for (int r = 0; r < 3; r++) {
         uint8_t bad_frame[5] = {0x80, 0x00, 0x00, 0x00, 0xFF};
         for (int i = 0; i < 5; i++) {
@@ -158,14 +160,14 @@ static void test_dll_fallback_on_crc_errors(void** state)
         test_io_cycle(&dev.ctx);
     }
 
-    /* Ensure there is exactly one mock value for the final process cycle check */
-    /* mock_phy_feed_chk(); // Removed: in SIO mode we don't call recv_byte */
-
-    /* Next process call applies fallback */
     test_io_cycle(&dev.ctx);
 
-    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_STARTUP);
-    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM1);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), baud_before);
+
+    iolink_dll_stats_t stats;
+    iolink_device_get_dll_stats(&dev.ctx, &stats);
+    assert_int_not_equal(stats.crc_errors, 0);
 }
 
 static void test_dll_reject_transition_in_operate(void** state)
@@ -522,7 +524,7 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_wakeup_to_preoperate, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_preoperate_to_operate, test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_dll_fallback_on_crc_errors, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_crc_error_keeps_operate, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_reject_transition_in_operate, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_illegal_mseq_type, test_setup, test_teardown),

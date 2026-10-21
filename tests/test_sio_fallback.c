@@ -21,7 +21,7 @@
 #include "iolinki/crc.h"
 #include "test_helpers.h"
 
-static void test_sio_fallback_on_repeated_errors(void** state)
+static void test_crc_errors_do_not_enter_sio(void** state)
 {
     (void) state;
 
@@ -40,9 +40,8 @@ static void test_sio_fallback_on_repeated_errors(void** state)
     /* Verify we're in SDCI mode */
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 
-    /* Inject CRC errors to trigger fallback threshold (3 is the stack's threshold) */
+    /* Inject CRC errors: ST rc=2 drops each frame and stays in SDCI. */
     for (int i = 0; i < 3; i++) {
-        /* Send frame with bad CRC */
         uint8_t bad_frame[2] = {0x95, 0xFF}; /* Invalid CRC */
 
         mock_phy_feed_byte(bad_frame[0]);
@@ -52,11 +51,11 @@ static void test_sio_fallback_on_repeated_errors(void** state)
         test_io_cycle(&dev.ctx);
     }
 
-    /* After 3 fallbacks, should be in SIO mode */
-    assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
+    /* No SIO fallback: the DL mode is untouched by CRC errors. */
+    assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 }
 
-static void test_sio_recovery_on_stable_communication(void** state)
+static void test_valid_frame_after_crc_errors(void** state)
 {
     (void) state;
 
@@ -69,7 +68,7 @@ static void test_sio_recovery_on_stable_communication(void** state)
     /* Move to OPERATE */
     move_to_operate_ctx(&dev.ctx);
 
-    /* Trigger SIO fallback by injecting errors (3 is the threshold) */
+    /* CRC errors are dropped in place; the link stays in SDCI. */
     for (int i = 0; i < 3; i++) {
         uint8_t bad_frame[2] = {0x95, 0xFF};
         mock_phy_feed_byte(bad_frame[0]);
@@ -78,26 +77,9 @@ static void test_sio_recovery_on_stable_communication(void** state)
         test_io_cycle(&dev.ctx);
     }
 
-    assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
+    assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 
-    /* Now send valid frames to recover */
-
-    /* 1. WakeUp (SIO -> AWAITING_COMM) */
-    iolink_phy_mock_set_wakeup(1);
-    test_io_cycle(&dev.ctx);
-    usleep(200);
-
-    /* 2. Transition (AWAITING_COMM handles first byte) */
-    uint8_t mc = 0x0F;
-    uint8_t ck = test_frame_checksum(mc);
-
-    mock_phy_feed_byte(mc);
-    mock_phy_feed_byte(ck);
-    mock_phy_feed_chk();
-
-    test_io_cycle(&dev.ctx);
-
-    /* 3. Send valid OPERATE frame */
+    /* A valid frame is still served on the same link. */
     uint8_t idle_mc = 0x00;
     uint8_t idle_ck = test_frame_checksum(idle_mc);
     mock_phy_feed_byte(idle_mc);
@@ -109,7 +91,7 @@ static void test_sio_recovery_on_stable_communication(void** state)
     will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
 
-    /* Should recover back to SDCI */
+    /* Still SDCI: no SIO fallback happened. */
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 }
 
@@ -172,8 +154,8 @@ static void test_fallback_command_switches_to_sio_after_t_fbd(void** state)
 int main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test(test_sio_fallback_on_repeated_errors),
-        cmocka_unit_test(test_sio_recovery_on_stable_communication),
+        cmocka_unit_test(test_crc_errors_do_not_enter_sio),
+        cmocka_unit_test(test_valid_frame_after_crc_errors),
         cmocka_unit_test(test_t_dsio_returns_to_sio_without_message),
         cmocka_unit_test(test_fallback_command_switches_to_sio_after_t_fbd),
     };

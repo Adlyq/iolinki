@@ -87,6 +87,34 @@ static uint8_t dll_mseq_type_bits(uint8_t m_seq_type)
 }
 
 /**
+ * @brief Is this request's CKT type legal in the current DLL state?
+ *
+ * STARTUP/PREOPERATE use Type-0. OPERATE/ESTAB_COM use the configured
+ * M-sequence type, with one exception: ST/Table 47 allow a Type-0 Direct
+ * Parameter page access (the startup probe, MasterCommand page writes such as
+ * DevicePreoperate 0x9A/DeviceOperate 0x99/PDOperate 0x98, and DPP parameter
+ * writes) while the link is already in OPERATE. The master uses those
+ * periodically, so treating them as an illegal type would flap the link down
+ * to STARTUP every time the master re-sends its page-write sequence.
+ */
+static bool dll_type_allowed(const iolink_dll_ctx_t* ctx, const uint8_t* frame)
+{
+    const uint8_t rx_type = (uint8_t) (frame[1] & IOLINK_MSEQ_TYPE_MASK);
+    const uint8_t ch = (uint8_t) (frame[0] & IOLINK_MC_COMM_CHANNEL_MASK);
+    uint8_t exp_type = IOLINK_MSEQ_TYPE_0;
+
+    if ((ctx->state == IOLINK_DLL_STATE_OPERATE) ||
+        ((ctx->state == IOLINK_DLL_STATE_ESTAB_COM) &&
+         (frame[0] != IOLINK_MC_TRANSITION_COMMAND))) {
+        if ((ch == IOLINK_MC_CHANNEL_PAGE) && (rx_type == IOLINK_MSEQ_TYPE_0)) {
+            return true;
+        }
+        exp_type = dll_mseq_type_bits(ctx->m_seq_type);
+    }
+    return rx_type == exp_type;
+}
+
+/**
  * @brief Return the CKT type bits the device expects for the current state.
  *
  * In STARTUP and PREOPERATE every message is Type 0 (Table A.3, CKT bits 00);
@@ -290,30 +318,21 @@ static bool dll_drain_rx(iolink_dll_ctx_t* ctx)
 #endif
 }
 
-/** @brief Handle a communication failure: count retries and revert toward SIO/STARTUP. */
-static void dll_enter_fallback(iolink_dll_ctx_t* ctx)
+/** @brief ST rc=3: a protocol error drops the frame and demotes to STARTUP.
+ *
+ * The ST 6362 library only returns to SIO for the Fallback MasterCommand
+ * (T8/T9) or a T_DSIO wake-up timeout (T10). Framing/CRC errors never leave
+ * the current mode on their own. */
+static void dll_protocol_error_to_startup(iolink_dll_ctx_t* ctx)
 {
     if (ctx == NULL) {
         return;
     }
 
-    ctx->fallback_count++;
+    ctx->fallback_count = 0U;
     ctx->total_retries++;
-
-    if (ctx->fallback_count >= ctx->sio_fallback_threshold) {
-        /* Communication could not be sustained: enter FALLBACK, revert the PHY
-           to SIO at COM1, then settle back to STARTUP to await a new wake-up. */
-        dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
-        iolink_dll_set_sio_mode(ctx);
-        iolink_dll_set_baudrate(ctx, IOLINK_BAUDRATE_COM1);
-        dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
-        ctx->fallback_count = 0U;
-        ctx->frame_index = 0U;
-        DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_CODE_COMM_ERR_FRAMING,
-                             IOLINK_EVENT_TYPE_WARNING);
-    }
-    else if (ctx->state != IOLINK_DLL_STATE_OPERATE && ctx->state != IOLINK_DLL_STATE_ESTAB_COM) {
-        iolink_dll_set_baudrate(ctx, IOLINK_BAUDRATE_COM1);
+    ctx->frame_index = 0U;
+    if (ctx->state != IOLINK_DLL_STATE_STARTUP) {
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
     }
 }
@@ -348,6 +367,73 @@ static void dll_handle_fallback_command(iolink_dll_ctx_t* ctx)
     uint8_t resp[1];
     resp[0] = 0x00U;
     resp[0] = iolink_checksum6(resp, 1U);
+    dll_send(ctx, resp, 1);
+    ctx->last_response_us = iolink_time_get_us();
+}
+
+/**
+ * @brief Apply a MasterCommand (Table B.2) to the DL state, ST-style.
+ *
+ * Returns false for FALLBACK (0x5A), which needs the T_FBD deadline and is
+ * handled by dll_handle_fallback_command(). Every other command is acked with
+ * a CKS-only reply by the caller.
+ */
+static bool dll_apply_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
+{
+    switch (cmd) {
+        case IOLINK_CMD_FALLBACK:
+            return false;
+        case IOLINK_CMD_DEVICE_STARTUP:
+            dll_protocol_error_to_startup(ctx);
+            return true;
+        case IOLINK_CMD_DEVICE_PREOPERATE:
+            ctx->fallback_deadline_ms = 0U;
+            dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
+            return true;
+        case IOLINK_CMD_PROCESS_DATA_OPERATE:
+            ctx->fallback_deadline_ms = 0U;
+            ctx->pd_valid = true;
+            dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
+            return true;
+        case IOLINK_CMD_DEVICE_OPERATE:
+            ctx->fallback_deadline_ms = 0U;
+            ctx->pd_valid = false;
+            /* DeviceOperate from PREOPERATE establishes communication
+               (ESTAB_COM); the following PDOperate 0x98 moves to OPERATE.
+               In OPERATE/ESTAB it is just an idempotent acknowledgement. */
+            if (ctx->state == IOLINK_DLL_STATE_PREOPERATE) {
+                dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
+            }
+            else {
+                dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
+            }
+            return true;
+        case IOLINK_CMD_MASTER_IDENT:
+        case IOLINK_CMD_DEVICE_IDENT:
+        default:
+            return true;
+    }
+}
+
+/** @brief Main-context MasterCommand page write: apply the state and send CKS. */
+static void dll_handle_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
+{
+    if (cmd == IOLINK_CMD_FALLBACK) {
+        dll_handle_fallback_command(ctx);
+        return;
+    }
+
+    (void) dll_apply_master_command(ctx, cmd);
+
+    uint8_t resp[1];
+    resp[0] = 0x00U;
+    if (DLL_EVENTS_FLAG(&ctx->events)) {
+        resp[0] |= 0x80U;
+    }
+    if (!ctx->pd_valid) {
+        resp[0] |= 0x40U;
+    }
+    resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));
     dll_send(ctx, resp, 1);
     ctx->last_response_us = iolink_time_get_us();
 }
@@ -832,14 +918,7 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
        force. STARTUP and PREOPERATE are Type-0 only; in OPERATE the
        configured type is expected. An illegal type is an illegal
        M-sequence: report it and return to STARTUP (Table 47 T8/T11). */
-    uint8_t rx_type = (uint8_t) (ctx->frame_buf[1] & IOLINK_MSEQ_TYPE_MASK);
-    uint8_t exp_type = IOLINK_MSEQ_TYPE_0;
-    if ((ctx->state == IOLINK_DLL_STATE_OPERATE) ||
-        ((ctx->state == IOLINK_DLL_STATE_ESTAB_COM) &&
-         (ctx->frame_buf[0] != IOLINK_MC_TRANSITION_COMMAND))) {
-        exp_type = dll_mseq_type_bits(ctx->m_seq_type);
-    }
-    bool type_ok = (rx_type == exp_type);
+    bool type_ok = dll_type_allowed(ctx, ctx->frame_buf);
 
     if (crc_ok && type_ok) {
         bool was_establishing = (ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) ||
@@ -874,27 +953,13 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
                 dll_handle_fallback_command(ctx);
             }
             else if ((ctx->req_len == 3U) && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
-                     ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == 0x20U) &&
-                     ((mc & IOLINK_MC_ADDR_MASK) == 0x00U) &&
-                     (ctx->frame_buf[2] == IOLINK_CMD_DEVICE_OPERATE)) {
-                /* Spec DeviceOperate: page-channel Type-0 WRITE of
-                   MasterCommand 0x99 to Direct Parameter address 0x00.
-                   Figure A.5: a Type-0 write reply is the CKS only. */
-                dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
-                ctx->fallback_count = 0U;
-
-                uint8_t resp[1];
-                uint8_t cks = 0x00U;
-                if (DLL_EVENTS_FLAG(&ctx->events)) {
-                    cks |= 0x80U;
-                }
-                if (!ctx->pd_valid) {
-                    cks |= 0x40U;
-                }
-                resp[0] = cks;
-                resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));
-                dll_send(ctx, resp, 1);
-                ctx->last_response_us = iolink_time_get_us();
+                     ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE) &&
+                     ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
+                /* Page-channel Type-0 WRITE of a MasterCommand (Table B.2):
+                   0x97 DeviceStartup, 0x98 PDOperate, 0x99 DeviceOperate,
+                   0x9A DevicePreoperate, 0x95/0x96 ident, 0x5A Fallback.
+                   ST applies the mode change and answers with CKS only. */
+                dll_handle_master_command(ctx, ctx->frame_buf[2]);
             }
             else if (ctx->req_len == 3U) {
                 /* Any other 3-octet Type-0 OD write in PREOPERATE is
@@ -906,15 +971,28 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
             }
         }
         else if (ctx->state == IOLINK_DLL_STATE_ESTAB_COM) {
-            if (ctx->frame_buf[0] == IOLINK_MC_TRANSITION_COMMAND) {
-                dll_handle_preoperate(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
+            const uint8_t mc = ctx->frame_buf[0];
+            const bool type0 =
+                ((ctx->frame_buf[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0);
+            const bool page_write = type0 && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
+                                    ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE);
+            if (mc == IOLINK_MC_TRANSITION_COMMAND) {
+                dll_handle_preoperate(ctx, mc, ctx->frame_buf[1]);
+            }
+            else if (page_write && ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
+                /* MasterCommand before the first cyclic frame: apply it
+                   instead of mistaking a Type-0 page write for Type-2 PD. */
+                dll_handle_master_command(ctx, ctx->frame_buf[2]);
             }
             else {
                 /* The first valid non-transition frame establishes
                    communication and moves to OPERATE, Type 0 included. */
                 dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
-                if (ctx->req_len == 2U) {
-                    dll_handle_operate_type0(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
+                if (page_write) {
+                    dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
+                }
+                else if (ctx->req_len == 2U) {
+                    dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
                 }
                 else {
                     dll_handle_operate_type1_2(ctx);
@@ -924,16 +1002,33 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
         else if (ctx->state == IOLINK_DLL_STATE_OPERATE) {
             /* Transitions are forbidden; every communication channel is
                valid in OPERATE (page/diagnosis/ISDU/process). */
+            const uint8_t mc = ctx->frame_buf[0];
+            const bool type0 =
+                ((ctx->frame_buf[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0);
+            const bool page_write = type0 && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
+                                    ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE);
             if ((ctx->req_len == 3U) && (dll_is_fallback_command(ctx))) {
                 /* Table B.2/43, Table 47 T9: OPERATE -> SIO after T_FBD. */
                 dll_handle_fallback_command(ctx);
             }
-            else if (ctx->frame_buf[0] == IOLINK_MC_TRANSITION_COMMAND) {
+            else if (mc == IOLINK_MC_TRANSITION_COMMAND) {
+                /* Transition command is illegal in OPERATE. Report it but keep
+                   the DL mode: the master never sends it in a healthy link, and
+                   ST rc=2/rc=3 recovery here would only add churn. */
                 ctx->framing_errors++;
-                dll_enter_fallback(ctx);
             }
             else if (ctx->req_len == 2U) {
-                dll_handle_operate_type0(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
+                dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
+            }
+            else if (page_write && ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
+                /* MasterCommand page write in OPERATE (0x9A/0x98/0x99/...).
+                   ST handles these in every DL mode and only changes the
+                   state, never treats them as an illegal M-sequence. */
+                dll_handle_master_command(ctx, ctx->frame_buf[2]);
+            }
+            else if (page_write) {
+                /* DPP parameter write (e.g. MasterCycleTime): CKS-only ack. */
+                dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
             }
             else {
                 dll_handle_operate_type1_2(ctx);
@@ -952,14 +1047,23 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
         return;
     }
     else {
-        /* Checksum failure. The ST 6362 library maps this to rc=2 (re-listen,
-         * no mode change). This device additionally counts it toward the local
-         * SIO fallback: three consecutive bad frames return the link to SIO at
-         * COM1. That is a deliberate local recovery policy, not the ST rc=3
-         * protocol-error demotion, and the spec does not forbid it. */
+        /* Checksum failure: ST rc=2 means "discard this frame and go back to
+         * listening"; the DLL mode is left untouched. Do not demote to SIO
+         * here: a single truncated/collided frame (e.g. the master starting
+         * its next M-sequence while our reply is still on C/Q) must not take
+         * the link down. SIO is reserved for the Fallback MasterCommand and
+         * the T_DSIO wake-up timeout. */
         ctx->crc_errors++;
         ctx->framing_errors++;
-        dll_enter_fallback(ctx);
+        ctx->total_retries++;
+        /* Keep the diagnostic event (ST has no counter, but the application
+           uses it for the event flag) without changing the DL mode. */
+        ctx->fallback_count++;
+        if (ctx->fallback_count >= ctx->sio_fallback_threshold) {
+            ctx->fallback_count = 0U;
+            DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_CODE_COMM_ERR_FRAMING,
+                                 IOLINK_EVENT_TYPE_WARNING);
+        }
     }
     ctx->frame_index = 0U;
     ctx->frame_eager = 0U;
@@ -1036,14 +1140,11 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
     uint32_t now_ms = iolink_time_get_ms();
     uint64_t now_ms64 = iolink_time_get_us() / 1000U;
     if ((ctx->last_activity_ms != 0U) && (now_ms - ctx->last_activity_ms > 1000U)) {
-        ctx->last_activity_ms = 0U; /* Prevent repeated resets */
-        ctx->timeout_errors++;      /* Link went idle past the inactivity window */
-        if (ctx->phy_mode != IOLINK_PHY_MODE_SIO) {
-            iolink_dll_set_baudrate(ctx, IOLINK_BAUDRATE_COM1);
-            iolink_dll_set_sio_mode(ctx);
-        }
-        dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
-        ctx->frame_index = 0U;
+        /* ST keeps the master-lost condition informational: it does not leave
+         * the current DL mode on an idle link. Just count it and restart the
+         * window so a late master can resume on the existing mode/baudrate. */
+        ctx->timeout_errors++;
+        ctx->last_activity_ms = now_ms;
     }
 
     /* Table 47 T10: a wake-up without a valid message within T_DSIO returns the
@@ -1115,8 +1216,9 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
                 ctx->framing_errors++;
                 DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING,
                                      IOLINK_EVENT_TYPE_WARNING);
+                /* ST Timer A timeout: abort the current frame and re-listen;
+                   the DL mode is not changed. */
                 ctx->frame_index = 0U;
-                dll_enter_fallback(ctx);
             }
         }
     }
@@ -1448,14 +1550,7 @@ iolink_reply_variant_t iolink_dll_reply_variant(const iolink_dll_ctx_t* ctx, uin
  * done) expect the configured type. */
 static bool dll_isr_type_ok(const iolink_dll_ctx_t* ctx, const uint8_t* frame)
 {
-    const uint8_t rx_type = (uint8_t) (frame[1] & IOLINK_MSEQ_TYPE_MASK);
-    uint8_t exp_type = IOLINK_MSEQ_TYPE_0;
-    if ((ctx->state == IOLINK_DLL_STATE_OPERATE) ||
-        ((ctx->state == IOLINK_DLL_STATE_ESTAB_COM) &&
-         (frame[0] != IOLINK_MC_TRANSITION_COMMAND))) {
-        exp_type = dll_mseq_type_bits(ctx->m_seq_type);
-    }
-    return rx_type == exp_type;
+    return dll_type_allowed(ctx, frame);
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
@@ -1764,17 +1859,13 @@ static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, ui
         return true;
     }
 
-    /* DeviceOperate / Fallback MasterCommands (page WRITE addr 0, Type-0). */
-    if ((ctx->state == IOLINK_DLL_STATE_PREOPERATE) && (len == 3U) &&
+    /* MasterCommand page WRITE addr 0 (Type-0): apply the ST/Table B.2 state
+     * change and answer CKS only. The master re-sends this sequence in OPERATE
+     * (0x95/0x9A/MasterCycleTime/0x99/0x98), so it must not be mistaken for an
+     * illegal M-sequence type. */
+    if (((ctx->state == IOLINK_DLL_STATE_PREOPERATE) ||
+         (ctx->state == IOLINK_DLL_STATE_OPERATE)) && (len == 3U) &&
         (ch == IOLINK_MC_CHANNEL_PAGE) && (addr == 0U)) {
-        if (frame[2] == IOLINK_CMD_DEVICE_OPERATE) {
-            dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
-            ctx->fallback_count = 0U;
-            dll_isr_send_payload(ctx, NULL, 0U, dll_isr_status_flags(ctx));
-            ctx->last_activity_ms = iolink_time_get_ms();
-            ctx->last_byte_us = iolink_time_get_us();
-            return true;
-        }
         if (frame[2] == IOLINK_CMD_FALLBACK) {
             uint32_t t_fbd_ms = 500U;
             if (ctx->min_cycle_time_us > 0U) {
@@ -1785,6 +1876,12 @@ static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, ui
             }
             ctx->fallback_deadline_ms = iolink_time_get_us() / 1000U + t_fbd_ms;
             dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
+            dll_isr_send_payload(ctx, NULL, 0U, dll_isr_status_flags(ctx));
+            ctx->last_activity_ms = iolink_time_get_ms();
+            ctx->last_byte_us = iolink_time_get_us();
+            return true;
+        }
+        if (dll_apply_master_command(ctx, frame[2])) {
             dll_isr_send_payload(ctx, NULL, 0U, dll_isr_status_flags(ctx));
             ctx->last_activity_ms = iolink_time_get_ms();
             ctx->last_byte_us = iolink_time_get_us();
