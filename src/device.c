@@ -291,11 +291,27 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
              * ISR never streams a torn PD-in. The callback return value is the
              * PD valid flag; the pre-cached cyclic reply must be rebuilt. */
             const uint8_t inactive = (uint8_t) (ctx->dll.pd_in_active ^ 1U);
+            /* Fill the inactive buffer outside the critical section: the ISR
+             * keeps streaming the active copy meanwhile. */
             const bool valid = ctx->config->app_callbacks->on_pd_input(
                 &ctx->dll.pd_in[inactive][ctx->dll.od_width], ctx->dll.pd_in_len_current);
+
+            if ((ctx->config != NULL) && (ctx->config->lock != NULL)) {
+                ctx->config->lock(ctx->config->user);
+            }
+            else {
+                iolink_critical_enter();
+            }
             ctx->dll.pd_in_len = ctx->dll.pd_in_len_current;
             ctx->dll.pd_valid = valid;
             ctx->dll.pd_in_active = inactive;
+            if ((ctx->config != NULL) && (ctx->config->unlock != NULL)) {
+                ctx->config->unlock(ctx->config->user);
+            }
+            else {
+                iolink_critical_exit();
+            }
+
 #if IOLINK_PHY_FEATURE_ISR_PUMP
             if (ctx->dll.cyclic_reply_precached) {
                 iolink_dll_prepare_cyclic_reply(&ctx->dll);
