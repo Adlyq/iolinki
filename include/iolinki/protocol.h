@@ -209,16 +209,6 @@
 /** @} */
 
 /**
- * @defgroup iolinki_protocol_event_codes Standard IO-Link Event Codes (0x1XXX-0x8XXX)
- * @ingroup iolinki_protocol
- * @{
- */
-#define IOLINK_EVENT_CODE_COMM_ERR_GENERAL 0x1800U /**< General communication error. */
-#define IOLINK_EVENT_CODE_COMM_ERR_FRAMING 0x1801U /**< Framing communication error. */
-#define IOLINK_EVENT_CODE_COMM_ERR_CRC 0x1803U     /**< CRC communication error. */
-/** @} */
-
-/**
  * @defgroup iolinki_protocol_od On-Request Data (OD) Constants
  * @ingroup iolinki_protocol
  * @{

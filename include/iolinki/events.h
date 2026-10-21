@@ -50,17 +50,6 @@ typedef enum
 #define IOLINK_EVENT_COMM_FRAMING 0x1803U /**< Framing error in communication */
 #define IOLINK_EVENT_COMM_TIMING 0x1804U  /**< Timing violation in communication */
 
-/* Application Layer Events (0x5XXX) */
-#define IOLINK_EVENT_APP_TEMP_UNDERFLOW 0x5110U /**< Temperature below operating range */
-#define IOLINK_EVENT_APP_TEMP_OVERFLOW 0x5120U  /**< Temperature above operating range */
-#define IOLINK_EVENT_APP_TEMP_SHOCK 0x5130U     /**< Rapid temperature change */
-
-/* Hardware/Device Events (0x6XXX) */
-#define IOLINK_EVENT_HW_GENERAL_FAULT 0x6000U  /**< General hardware fault */
-#define IOLINK_EVENT_HW_MEMORY_FAULT 0x6310U   /**< Memory error detected */
-#define IOLINK_EVENT_HW_SENSOR_FAULT 0x6320U   /**< Sensor element fault */
-#define IOLINK_EVENT_HW_ACTUATOR_FAULT 0x6330U /**< Actuator element fault */
-
 /*
  * Standardized IO-Link EventCodes for Devices, per V1.1.5 Annex D, Table D.1.
  * The trailing comment gives the spec EventType. Vendor-specific Device events

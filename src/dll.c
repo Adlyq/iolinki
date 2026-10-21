@@ -1112,7 +1112,7 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
             (ctx->state == IOLINK_DLL_STATE_ESTAB_COM)) {
             return;
         }
-        DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_CODE_COMM_ERR_GENERAL,
+        DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_FRAMING,
                              IOLINK_EVENT_TYPE_ERROR);
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
         return;
@@ -1132,7 +1132,7 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
         ctx->fallback_count++;
         if (ctx->fallback_count >= ctx->sio_fallback_threshold) {
             ctx->fallback_count = 0U;
-            DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_CODE_COMM_ERR_FRAMING,
+            DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_CRC,
                                  IOLINK_EVENT_TYPE_WARNING);
         }
     }
