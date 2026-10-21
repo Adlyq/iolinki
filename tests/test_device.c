@@ -317,24 +317,24 @@ static void test_device_config_baudrate(void** state)
     assert_int_equal(dev.ctx.dll.operating_baudrate, IOLINK_BAUDRATE_COM1);
 }
 
-/* Table A.10: OD width defaults to the type's native width when config leaves
- * od_width = 0 (TYPE_1_V -> 8). The DLL only stores od_width under the ISR
- * transport, so assert it conditionally; the config validation (which accepts
- * the derived 8) runs in both transports. */
+/* Table A.10: TYPE_1_2 defaults to 2 OD octets (code 1) when config leaves
+ * od_width = 0. The DLL only stores od_width under the ISR transport, so assert
+ * it conditionally; the config validation (which accepts the derived 2) runs in
+ * both transports. */
 static void test_device_od_width_default(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
     iolink_config_t config = {0};
 
-    config.m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
+    config.m_seq_type = IOLINK_M_SEQ_TYPE_1_2;
     config.pd_in_len = 0U;
     config.pd_out_len = 0U;
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
 #if IOLINK_PHY_FEATURE_ISR_PUMP
-    assert_int_equal(dev.ctx.dll.od_width, 8U);
+    assert_int_equal(dev.ctx.dll.od_width, 2U);
 #endif
 }
 

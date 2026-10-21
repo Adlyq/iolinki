@@ -57,16 +57,15 @@ static void device_state_cb(void* user, iolink_dll_state_t state)
 
 /** @brief Default OD octet count for an M-sequence type (Table A.10).
  *
- * TYPE_1_2 carries 2 OD octets, TYPE_1_V carries 8, TYPE_2_V defaults to 2;
- * everything else defaults to 1. (TYPE_1_1 has no OD octet; it keeps a
- * placeholder width of 1.) */
+ * TYPE_1_2 carries 2 OD octets (code 1) and TYPE_2_V defaults to 2 OD octets
+ * (code 5); everything else defaults to 1. (TYPE_1_V's 8/32-octet OD is set
+ * explicitly via config.od_width; the default keeps the 1-octet layout the
+ * upstream streaming transport uses.) */
 static uint8_t device_default_od_width(uint8_t m_seq_type)
 {
     switch (m_seq_type) {
         case IOLINK_M_SEQ_TYPE_1_2:
             return 2U;
-        case IOLINK_M_SEQ_TYPE_1_V:
-            return 8U;
         case IOLINK_M_SEQ_TYPE_2_V:
             return 2U;
         default:
