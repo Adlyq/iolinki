@@ -102,10 +102,31 @@ typedef struct
 size_t iolink_device_ctx_size(void);
 
 /**
+ * @brief Result codes returned by iolink_device_init().
+ *
+ * Negative values identify a rejected configuration. A negative value returned
+ * by the PHY init callback is propagated unchanged and may fall outside this
+ * enumeration.
+ */
+typedef enum
+{
+    IOLINK_DEVICE_INIT_OK = 0,               /**< Initialization succeeded */
+    IOLINK_DEVICE_INIT_ERR_NULL = -1,        /**< ctx or config is NULL */
+    IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE = -2,   /**< m_seq_type is not a valid type */
+    IOLINK_DEVICE_INIT_ERR_PD_IN_LEN = -3,   /**< pd_in_len exceeds the buffer */
+    IOLINK_DEVICE_INIT_ERR_PD_OUT_LEN = -4,  /**< pd_out_len exceeds the buffer */
+    IOLINK_DEVICE_INIT_ERR_OD_WIDTH = -5,    /**< od_width is not 1/2/8/32 */
+    IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6, /**< od_width exceeds IOLINK_OD_MAX_SIZE */
+    IOLINK_DEVICE_INIT_ERR_BAUDRATE = -7,    /**< baudrate_set with an invalid COM */
+    IOLINK_DEVICE_INIT_ERR_LOCK_PAIR = -8,   /**< only one of lock/unlock supplied */
+} iolink_device_init_result_t;
+
+/**
  * @brief Initialize a device context from a configuration.
  * @param ctx     Device context to initialize.
  * @param config  Configuration to apply (must remain valid for the ctx lifetime).
- * @return 0 on success, negative on error.
+ * @return 0 on success, a negative ::iolink_device_init_result_t for an invalid
+ *         configuration, or the negative error returned by the PHY init callback.
  */
 int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config);
 

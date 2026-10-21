@@ -105,10 +105,61 @@ size_t iolink_device_ctx_size(void)
     return sizeof(iolink_device_ctx_t);
 }
 
+/** @brief Validate the stack configuration before touching the context or PHY. */
+static int device_config_validate(const iolink_device_config_t* config)
+{
+    const iolink_config_t* stack;
+    uint8_t od;
+
+    if (config == NULL) {
+        return IOLINK_DEVICE_INIT_ERR_NULL;
+    }
+    stack = &config->stack;
+
+    if ((uint32_t) stack->m_seq_type > (uint32_t) IOLINK_M_SEQ_TYPE_2_V) {
+        return IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE;
+    }
+    if ((uint32_t) stack->pd_in_len > (uint32_t) IOLINK_PD_IN_MAX_SIZE) {
+        return IOLINK_DEVICE_INIT_ERR_PD_IN_LEN;
+    }
+    if ((uint32_t) stack->pd_out_len > (uint32_t) IOLINK_PD_OUT_MAX_SIZE) {
+        return IOLINK_DEVICE_INIT_ERR_PD_OUT_LEN;
+    }
+
+    /* Table A.10 OD widths; 0 derives from the M-sequence type. */
+    od = stack->od_width;
+    if (od == 0U) {
+        od = (stack->m_seq_type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
+    }
+    if ((uint32_t) od > (uint32_t) IOLINK_OD_MAX_SIZE) {
+        return IOLINK_DEVICE_INIT_ERR_OD_CAPACITY;
+    }
+    if ((od != 1U) && (od != 2U) && (od != 8U) && (od != 32U)) {
+        return IOLINK_DEVICE_INIT_ERR_OD_WIDTH;
+    }
+
+    if (stack->baudrate_set && ((uint32_t) stack->baudrate > (uint32_t) IOLINK_BAUDRATE_COM3)) {
+        return IOLINK_DEVICE_INIT_ERR_BAUDRATE;
+    }
+
+    if ((config->lock == NULL) != (config->unlock == NULL)) {
+        return IOLINK_DEVICE_INIT_ERR_LOCK_PAIR;
+    }
+
+    return IOLINK_DEVICE_INIT_OK;
+}
+
 int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config)
 {
+    int err;
+
     if ((ctx == NULL) || (config == NULL)) {
-        return -1;
+        return IOLINK_DEVICE_INIT_ERR_NULL;
+    }
+
+    err = device_config_validate(config);
+    if (err != IOLINK_DEVICE_INIT_OK) {
+        return err;
     }
 
     (void) memset(ctx, 0, sizeof(*ctx));
@@ -210,8 +261,8 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
             /* Fill the inactive reply buffer, then publish it atomically so the
              * ISR never streams a torn PD-in. */
             const uint8_t inactive = (uint8_t) (ctx->dll.pd_in_active ^ 1U);
-            ctx->config->app_callbacks->on_pd_input(
-                &ctx->dll.pd_in[inactive][ctx->dll.od_width], ctx->dll.pd_in_len_current);
+            ctx->config->app_callbacks->on_pd_input(&ctx->dll.pd_in[inactive][ctx->dll.od_width],
+                                                    ctx->dll.pd_in_len_current);
             ctx->dll.pd_in_active = inactive;
         }
     }

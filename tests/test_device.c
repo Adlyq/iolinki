@@ -31,6 +31,28 @@ static void device_reset_handler(iolink_reset_type_t type)
     g_last_reset = type;
 }
 
+static void device_lock(void* user)
+{
+    (void) user;
+}
+
+static void device_unlock(void* user)
+{
+    (void) user;
+}
+
+static iolink_device_config_t make_device_config(void)
+{
+    iolink_device_config_t config;
+
+    (void) memset(&config, 0, sizeof(config));
+    config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    config.stack.pd_in_len = 2U;
+    config.stack.pd_out_len = 2U;
+    config.stack.od_width = 1U;
+    return config;
+}
+
 static void init_device(iolink_test_device_t* dev, iolink_m_seq_type_t type, uint8_t pd_in,
                         uint8_t pd_out)
 {
@@ -51,8 +73,113 @@ static void test_device_init_rejects_null(void** state)
     iolink_device_config_t config;
     (void) memset(&config, 0, sizeof(config));
 
-    assert_int_not_equal(iolink_device_init(NULL, &config), 0);
-    assert_int_not_equal(iolink_device_init(&ctx, NULL), 0);
+    assert_int_equal(iolink_device_init(NULL, &config), IOLINK_DEVICE_INIT_ERR_NULL);
+    assert_int_equal(iolink_device_init(&ctx, NULL), IOLINK_DEVICE_INIT_ERR_NULL);
+}
+
+static void test_device_init_rejects_invalid_config(void** state)
+{
+    (void) state;
+    iolink_device_ctx_t ctx;
+    iolink_device_config_t config;
+
+    (void) memset(&ctx, 0, sizeof(ctx));
+
+    config = make_device_config();
+    config.stack.m_seq_type = (iolink_m_seq_type_t) 7;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE);
+
+    config = make_device_config();
+    config.stack.pd_in_len = IOLINK_PD_IN_MAX_SIZE + 1U;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_PD_IN_LEN);
+
+    config = make_device_config();
+    config.stack.pd_out_len = IOLINK_PD_OUT_MAX_SIZE + 1U;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_PD_OUT_LEN);
+
+    config = make_device_config();
+    config.stack.od_width = 3U;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_OD_WIDTH);
+
+    config = make_device_config();
+    config.stack.od_width = IOLINK_OD_MAX_SIZE + 1U;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_OD_CAPACITY);
+
+    config = make_device_config();
+    config.stack.baudrate_set = true;
+    config.stack.baudrate = (iolink_baudrate_t) 3;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_BAUDRATE);
+
+    config = make_device_config();
+    config.lock = device_lock;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_LOCK_PAIR);
+
+    config = make_device_config();
+    config.unlock = device_unlock;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_LOCK_PAIR);
+}
+
+static void test_device_init_validates_config_not_context(void** state)
+{
+    (void) state;
+    iolink_device_ctx_t ctx;
+    iolink_device_config_t config = make_device_config();
+
+    /* Values in the uninitialized context must not be validated: only the
+     * caller-supplied configuration is authoritative. */
+    (void) memset(&ctx, 0, sizeof(ctx));
+    ctx.stack_config.m_seq_type = (iolink_m_seq_type_t) 7;
+    ctx.stack_config.pd_in_len = IOLINK_PD_IN_MAX_SIZE + 1U;
+    ctx.stack_config.pd_out_len = IOLINK_PD_OUT_MAX_SIZE + 1U;
+    ctx.stack_config.od_width = 3U;
+
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
+}
+
+static void test_device_init_accepts_valid_config(void** state)
+{
+    (void) state;
+    iolink_test_device_t dev;
+    iolink_config_t stack = {0};
+
+    setup_mock_phy();
+
+    /* Upper PD boundary for Type 2_V, with the application's 1-octet OD. */
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    stack.pd_in_len = IOLINK_PD_IN_MAX_SIZE;
+    stack.pd_out_len = IOLINK_PD_OUT_MAX_SIZE;
+    stack.od_width = 1U;
+
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_test_device_init(&dev, &stack, NULL), IOLINK_DEVICE_INIT_OK);
+    assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), IOLINK_PD_IN_MAX_SIZE);
+    assert_int_equal(iolink_device_get_pd_out_len(&dev.ctx), IOLINK_PD_OUT_MAX_SIZE);
+
+#if (IOLINK_PD_IN_MAX_SIZE >= 28U) && (IOLINK_PD_OUT_MAX_SIZE >= 2U)
+    /* Asymmetric PD sizes must be accepted independently. */
+    stack = (iolink_config_t){0};
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    stack.pd_in_len = 28U;
+    stack.pd_out_len = 2U;
+    stack.od_width = 1U;
+
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_test_device_init(&dev, &stack, NULL), IOLINK_DEVICE_INIT_OK);
+    assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 28U);
+    assert_int_equal(iolink_device_get_pd_out_len(&dev.ctx), 2U);
+#endif
+
+    /* baudrate is ignored unless baudrate_set requests it. */
+    stack = (iolink_config_t){0};
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    stack.pd_in_len = 2U;
+    stack.pd_out_len = 2U;
+    stack.od_width = 1U;
+    stack.baudrate_set = false;
+    stack.baudrate = (iolink_baudrate_t) 3;
+
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_test_device_init(&dev, &stack, NULL), IOLINK_DEVICE_INIT_OK);
 }
 
 static void test_device_pd_input_bounds(void** state)
@@ -194,6 +321,9 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_device_init_rejects_null),
+        cmocka_unit_test(test_device_init_rejects_invalid_config),
+        cmocka_unit_test(test_device_init_validates_config_not_context),
+        cmocka_unit_test(test_device_init_accepts_valid_config),
         cmocka_unit_test(test_device_pd_input_bounds),
         cmocka_unit_test(test_device_pd_valid_flag),
         cmocka_unit_test(test_device_pd_output_read),

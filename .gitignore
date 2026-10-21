@@ -8,6 +8,8 @@ build_debug/
 build_release/
 build_bare/
 build_baremetal/
+build_isr/
+build_stream/
 *.o
 *.a
 *.so

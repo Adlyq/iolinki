@@ -278,11 +278,22 @@ static int test_type0_isdu_write_fast_path(void)
     if (tx_n != 1U) {
         return 1; /* CKS only */
     }
-    if (dll.isdu.req_idx != 1U) {
-        return 2; /* ISR buffered the write octet */
+    /* 14d63cb: the ISR only stages the write; ctx->isdu stays main-owned. */
+    if (dll.isdu.req_idx != 0U) {
+        return 2;
+    }
+    if ((dll.isr_od_staged != 1U) || (dll.isr_od_stage_len != 1U) ||
+        (dll.isr_od_stage[0] != 0x14U) || (dll.isr_od_stage_flowctrl != IOLINK_FLOWCTRL_START)) {
+        return 3;
     }
     if (dll.isdu_isr_consumed != 0U) {
-        return 3; /* consumed by ISR, not left for main */
+        return 4; /* already ACKed by the Type-0 fast path */
+    }
+
+    /* Main window drains the staged octet into the ISDU transport. */
+    iolink_dll_process(&dll);
+    if ((dll.isr_od_staged != 0U) || (dll.isdu.req_idx != 1U) || (dll.isdu.req_buf[0] != 0x14U)) {
+        return 5;
     }
     return 0;
 }
@@ -374,8 +385,8 @@ static int test_isdu_write_bad_crc_not_consumed(void)
     init_ctx(&dll);
 
     uint8_t frame[3];
-    make_isdu_write((uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START), 0x14U,
-                    frame, sizeof(frame));
+    make_isdu_write((uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START), 0x14U, frame,
+                    sizeof(frame));
     frame[1] ^= 0x01U; /* corrupt the CKT checksum */
 
     feed(frame, sizeof(frame));

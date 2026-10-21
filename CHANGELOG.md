@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `test_pd_variable`: byte-exact Type 1_V/Type 2_V round-trips at both PD
+  length bounds (1 and 32 octets, including asymmetric PDin/PDout widths such
+  as the 28-in/2-out product configuration) and independent rejection one
+  octet past either configured maximum.
 - ISR_PUMP: Timer A/B hook wiring (`response_timer_start/stop`,
   `stack_timer_start`) plus `iolink_dll_on_rx_timeout()`,
   `iolink_dll_on_stack_tick()` and `iolink_dll_can_run_user_code()`.
@@ -22,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FlowCTRL.
 
 ### Changed
+- `iolink_device_init()` validates `config->stack` before touching the context
+  or PHY: M-sequence type, PD lengths against the compile-time buffers, OD
+  width/capacity, `baudrate_set` COM value and the `lock`/`unlock` pairing.
+  Invalid configurations now return distinct `IOLINK_DEVICE_INIT_ERR_*` codes.
 - ISR_PUMP: generate OPERATE replies directly from the shared `pd_in` /
   `isdu.resp_buf` state and remove the pre-staged cyclic double buffer,
   the ISDU response snapshot and their metadata. The main pump only keeps
@@ -49,6 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   out-of-order COUNTs.
 
 ### Fixed
+- `test_isr_observability`: the Type-0 ISDU write fast-path test now checks
+  the ISR staging contract (`isr_od_stage`) and the main-pump drain instead of
+  the pre-staging direct `isdu.req_idx` update.
 - ISR_PUMP: keep two TX payload slots so a TX-FRAME DMA keeps reading its
   buffer while the next reply is prepared; the single buffer could be
   overwritten by a back-to-back reply.
