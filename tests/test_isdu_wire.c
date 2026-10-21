@@ -432,6 +432,24 @@ static void test_isdu_wire_abort(void** state)
     assert_int_equal(octet, 0x00U);
 }
 
+/* ABORT on the WRITE channel also rejects the request data and returns the
+ * transport to Idle (Table 52 is direction-independent). */
+static void test_isdu_wire_write_abort(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    wire_device_info_init();
+    iolink_params_init();
+    iolink_isdu_init(&ctx);
+
+    iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_START, (const uint8_t[]){0x93U}, 1U);
+    iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_ABORT, (const uint8_t[]){0x00U}, 1U);
+
+    uint8_t octet = 0xAAU;
+    iolink_isdu_od_read(&ctx, IOLINK_FLOWCTRL_START, &octet, 1U);
+    assert_int_equal(octet, 0x00U);
+}
+
 /* ExtLength read of a 63-octet string: D1 42 <63 data> <CHKPDU> (Figure A.19 ex. 3: n = data+3). */
 static void test_isdu_wire_extlength_read(void** state)
 {
@@ -506,6 +524,7 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_wire_unknown_index, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_busy_polling, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_abort, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_wire_write_abort, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_write_count_wrap, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_read_count_wrap, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_extlength_read, test_setup, test_teardown),

@@ -318,8 +318,13 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
         return;
     }
 
-    /* Tables 52/54: IDLE/IDLE2/ABORT and reserved values 0x12..0x1F are not
-       writes; they are handled by the read path. */
+    /* Table 52: ABORT (0x1F) rejects the request data and resets the transport
+       to Idle regardless of direction. IDLE/IDLE2 and the reserved values
+       0x13..0x1E are not writes; they are handled by the read path. */
+    if (flowctrl == IOLINK_FLOWCTRL_ABORT) {
+        isdu_transport_reset(ctx);
+        return;
+    }
     if (flowctrl >= IOLINK_FLOWCTRL_IDLE) {
         return;
     }
