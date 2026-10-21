@@ -1233,9 +1233,10 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
     }
 
     if ((ctx->last_activity_ms != 0U) && (now_ms - ctx->last_activity_ms > 1000U)) {
-        /* ST keeps the master-lost condition informational: it does not leave
-         * the current DL mode on an idle link. Just count it and restart the
-         * window so a late master can resume on the existing mode/baudrate. */
+        /* Idle-link diagnostic counter: this is not the ST-style master-lost
+         * hint (computed above from completed frames/RX timeouts). It does not
+         * leave the current DL mode; a late master can resume on the existing
+         * mode/baudrate. */
         ctx->timeout_errors++;
         ctx->last_activity_ms = now_ms;
     }
