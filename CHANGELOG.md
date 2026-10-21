@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `test_isr_observability`: mailbox drop / eager reject / ISDU-write-in-ISR
   coverage; `test_isr_isdu_snapshot` now covers repeated and out-of-order
   FlowCTRL.
+- Data Storage: bindable parameter set (`iolink_ds_param_desc_t`) with
+  vendor-parameter support via a unified read/write accessor; DataStorageIndex
+  subindices 01-05 (DS_Command, State_Property, Data_Storage_Size,
+  Parameter_Checksum, Index_List); Fletcher-32 `Parameter_Checksum`;
+  block-parameter download buffering with atomic commit and `ParamDownloadEnd`
+  `0x8041` rollback; `ParamDownloadStore` (0x05); Back-to-box (0x83)
+  communication stop after 3 MasterCycles.
 
 ### Changed
 - `iolink_device_init()` validates `config->stack` before touching the context
@@ -55,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ISR_PUMP: the ISR ISDU read path now enforces FlowCTRL START/COUNT,
   repeats the previous segment on a repeated COUNT, and answers No Service on
   out-of-order COUNTs.
+- DPP1 `MinCycleTime` (0x02) is encoded per Table B.3 (time base | multiplier)
+  and clamped to the 0.4 ms minimum.
+- `0x83` is treated as Back-to-box (restore delivery values + stop
+  communication), not "restore application defaults".
 
 ### Fixed
 - ISR_PUMP: three PD-in reply buffers plus an ISR-published captured index, so
@@ -78,6 +89,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ISR_PUMP RX FRAME: validate the request length, do not call `rx_frame()`
   while the mailbox still holds the zero-copy pointer, and fill the TX CKS
   before handing the buffer to `tx_frame()`.
+- ISDU: busy answers use `SERV_NOTAVAIL` 0x20 instead of 0x30
+  (`PAR_VALOUTOFRNG`); a write-channel FlowCTRL `0x1F` (ABORT) resets the
+  transport; the remaining Table C.1 additional codes are defined.
+- Events: DeviceStatus maps Error → 4 (Failure) and Notifications no longer
+  raise it; DetailedDeviceStatus excludes Notifications (B.2.22); a StatusCode
+  confirmation acknowledges only the slots presented while frozen.
+- Removed conflicting `APP_*`/`HW_*` event-code duplicates and the stale
+  0x18xx `COMM_ERR_*` aliases (0x1800-0x18FF is vendor-specific, Table D.1).
+- Device: TYPE_1_2 defaults to a 2-octet OD width, matching the advertised
+  M-sequence capability code 1.
+- Data Storage: raise DS_UPLOAD_REQ/DS_UPLOAD_FLAG on parameter-changing
+  SystemCommands (Application Reset, restore commands, ParamDownloadStore).
 
 ## [2.2.0] - 2026-10-17
 
