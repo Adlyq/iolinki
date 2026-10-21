@@ -161,6 +161,20 @@ int iolink_ds_build_image(iolink_ds_ctx_t* ctx)
     return (int) pos;
 }
 
+/** @brief True when the index/subindex belongs to the configured DS set. */
+static bool ds_param_known(const iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex)
+{
+    if (ctx == NULL) {
+        return false;
+    }
+    for (size_t i = 0U; i < ctx->param_count; ++i) {
+        if ((ctx->params[i].index == index) && (ctx->params[i].subindex == subindex)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
 {
     if ((ctx == NULL) || !iolink_buf_is_valid(data, len) || (len > IOLINK_DS_IMAGE_MAX)) {
@@ -182,13 +196,19 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
     }
 
     /* Apply each record. Unknown indices are skipped (a replacement device may
-       not implement every backed-up parameter) rather than failing the restore. */
+       not implement every backed-up parameter) rather than failing the restore.
+       A *known* parameter that rejects the value makes the set inconsistent. */
     pos = 0U;
     while (pos < len) {
         uint16_t index = (uint16_t) (((uint16_t) data[pos] << 8) | (uint16_t) data[pos + 1U]);
         uint8_t subindex = data[pos + 2U];
         size_t rlen = (size_t) data[pos + 3U];
-        (void) ds_params_set(ctx, index, subindex, &data[pos + DS_RECORD_HEADER], rlen, true);
+        if (ds_param_known(ctx, index, subindex)) {
+            if (ds_params_set(ctx, index, subindex, &data[pos + DS_RECORD_HEADER], rlen, true) !=
+                0) {
+                return -2; /* Known parameter rejected the value */
+            }
+        }
         pos += DS_RECORD_HEADER + rlen;
     }
 
@@ -378,8 +398,11 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
                     rc = iolink_ds_apply_image(ctx, ctx->image, ctx->image_len);
                 }
                 ctx->state = IOLINK_DS_STATE_IDLE;
-                if (rc != 0) {
-                    return -4; /* Inconsistent parameter set (0x8041) */
+                if (rc == -1) {
+                    return -5; /* PAR_SETINVALID (0x8040): malformed image */
+                }
+                if (rc == -2) {
+                    return -4; /* PAR_SETINCONSIST (0x8041): parameter rejected */
                 }
             }
             break;

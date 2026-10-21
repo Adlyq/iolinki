@@ -861,6 +861,49 @@ static void test_isdu_snapshot_response(void** state)
     assert_int_equal(iolink_isdu_snapshot_response(NULL, NULL, NULL, 0U), 0U);
 }
 
+/* B.2.4: DeviceAccessLocks is only accessible via subindex 0; B.2.5:
+ * ProfileCharacteristic is an ArrayT exposing one element. */
+static void test_isdu_subindexed_objects(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_isdu_init(&ctx);
+
+    uint8_t r[8];
+
+    /* 0x000C subindex 1 -> SUBINDEX_NOT_AVAIL. */
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 1U), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
+    assert_int_equal(r[0], 0x80U);
+    assert_int_equal(r[1], IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+
+    /* 0x000D with no profile configured is unavailable (IDX_NOTAVAIL); the
+       subindex bounds only matter once a ProfileCharacteristic is present. */
+    iolink_isdu_init(&ctx);
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROFILE_CHARACTERISTIC, 2U), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
+    assert_int_equal(r[0], 0x80U);
+    assert_int_equal(r[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+}
+
+/* 7.3.5.3: a DPP1 SystemCommand executes without staging an ISDU response. */
+static void test_isdu_dpp1_system_command(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_isdu_init(&ctx);
+
+    iolink_isdu_execute_system_command(&ctx, IOLINK_CMD_APPLICATION_RESET);
+    assert_true(ctx.app_reset_pending);
+    assert_int_equal(ctx.response_len, 0U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -901,6 +944,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_data_storage_subindices, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_ds_command_sequence, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_subindexed_objects, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_dpp1_system_command, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_snapshot_response, test_setup, test_teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);

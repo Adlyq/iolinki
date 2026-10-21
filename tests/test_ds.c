@@ -350,6 +350,54 @@ static void test_ds_download_recovery(void** state)
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOAD_REQ);
 }
 
+static int ds_rejecting_write(void* user, uint16_t index, uint8_t subindex,
+                              const uint8_t* data, size_t len, bool persist)
+{
+    (void) user;
+    (void) index;
+    (void) subindex;
+    (void) data;
+    (void) len;
+    (void) persist;
+    return -1;
+}
+
+static int ds_zero_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out, size_t cap)
+{
+    (void) user;
+    (void) index;
+    (void) subindex;
+    (void) out;
+    (void) cap;
+    return 0;
+}
+
+/* ParamDownloadEnd distinguishes a malformed image (PAR_SETINVALID 0x8040) from
+ * a known parameter the device rejected (PAR_SETINCONSIST 0x8041). */
+static void test_ds_download_end_error_classification(void** state)
+{
+    (void) state;
+    iolink_ds_ctx_t ds;
+
+    /* Malformed staged image -> -1 -> PAR_SETINVALID. */
+    iolink_ds_init(&ds, NULL);
+    ds.state = IOLINK_DS_STATE_DOWNLOADING;
+    uint8_t bad[] = {0x00U, 0x18U, 0x00U, 0x05U, 0xAAU}; /* claims 5 bytes, has 1 */
+    (void) memcpy(ds.image, bad, sizeof(bad));
+    ds.image_len = sizeof(bad);
+    assert_int_equal(iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -5);
+
+    /* Known parameter rejected -> -2 -> PAR_SETINCONSIST. */
+    iolink_ds_init(&ds, NULL);
+    static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U}};
+    iolink_ds_bind_param_access(&ds, ds_zero_read, ds_rejecting_write, NULL, set, 1U);
+    ds.state = IOLINK_DS_STATE_DOWNLOADING;
+    uint8_t img[] = {0x00U, 0x18U, 0x00U, 0x03U, 'A', 'B', 'C'};
+    (void) memcpy(ds.image, img, sizeof(img));
+    ds.image_len = sizeof(img);
+    assert_int_equal(iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -4);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -362,6 +410,7 @@ int main(void)
         cmocka_unit_test(test_ds_bound_params_restore_device_context_only),
         cmocka_unit_test(test_ds_apply_rejects_truncated),
         cmocka_unit_test(test_ds_vendor_param_set_round_trip),
+        cmocka_unit_test(test_ds_download_end_error_classification),
         cmocka_unit_test(test_ds_download_recovery),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);

@@ -131,6 +131,18 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx);
 void iolink_isdu_process(iolink_isdu_ctx_t* ctx);
 
 /**
+ * @brief Execute a SystemCommand supplied through Direct Parameter page 1 (0x0F).
+ *
+ * 7.3.5.3: the DPP1 SystemCommand is an optional alternative for Devices without
+ * ISDU support and provides no positive or negative response. The command is
+ * executed and any staged ISDU response is discarded.
+ *
+ * @param ctx ISDU context
+ * @param cmd SystemCommand octet (Table B.9)
+ */
+void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd);
+
+/**
  * @brief Feed one On-request Data message received on the ISDU channel (C3).
  *
  * The M-sequence control octet carries FlowCTRL in its address bits

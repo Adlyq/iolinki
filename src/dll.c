@@ -497,6 +497,11 @@ static bool dll_dispatch_od(iolink_dll_ctx_t* ctx, uint8_t mc, const uint8_t* od
             ((mc & IOLINK_MC_ADDR_MASK) == 0x01U)) {
             ctx->master_cycle_time = od_in[0];
         }
+        if (((mc & IOLINK_MC_RW_MASK) == 0U) && (od_len > 0U) &&
+            ((mc & IOLINK_MC_ADDR_MASK) == 0x0FU)) {
+            /* 7.3.5.3: SystemCommand via Direct Parameter page 1 (no response). */
+            iolink_isdu_execute_system_command(&ctx->isdu, od_in[0]);
+        }
         if (((mc & IOLINK_MC_RW_MASK) != 0U) && (od_len > 0U)) {
             od_out[0] = iolink_isdu_direct_param_page1_octet(&ctx->isdu,
                                                              (uint8_t) (mc & IOLINK_MC_ADDR_MASK));

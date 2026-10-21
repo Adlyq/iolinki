@@ -538,6 +538,16 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
                0x000A/0x000B therefore falls through to the default IDX_NOTAVAIL. */
 
         case IOLINK_IDX_PROFILE_CHARACTERISTIC:
+            /* B.2.5: ArrayT of UIntegerT16, conditional on the profile. This
+               stack exposes a single element (subindex 0/1). */
+            if (info->profile_characteristic == 0U) {
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+                return;
+            }
+            if (ctx->header.subindex > 1U) {
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+                return;
+            }
             ctx->response_buf[0] = (uint8_t) (info->profile_characteristic >> 8);
             ctx->response_buf[1] = (uint8_t) (info->profile_characteristic & 0xFF);
             ctx->response_len = 2U;
@@ -871,6 +881,10 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                         ctx->response_buf[1] =
                             IOLINK_ISDU_ERROR_PARAM_INCONSISTENT; /* 0x41, Table C.1 */
                     }
+                    else if (ret == -5) {
+                        ctx->response_buf[1] =
+                            IOLINK_ISDU_ERROR_PARAM_SET_INVALID; /* 0x40, Table C.1 */
+                    }
                     else {
                         ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
                     }
@@ -941,9 +955,26 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 #endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
 }
 
+void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    handle_system_command(ctx, cmd);
+    /* The SystemCommand on Direct Parameter page 1 provides no positive or
+       negative response (7.3.5.3); discard whatever the ISDU handler staged. */
+    isdu_transport_reset(ctx);
+}
+
 /** @brief Read or write the DeviceAccessLocks parameter (index 0x000C). */
 static void handle_access_locks(iolink_isdu_ctx_t* ctx)
 {
+    /* B.2.4: access to DeviceAccessLocks is only permitted via Subindex 0. */
+    if (ctx->header.subindex != 0U) {
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+        return;
+    }
+
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_READ) {
         uint16_t locks = iolink_device_info_get_access_locks();
         ctx->response_buf[0] = (uint8_t) (locks >> 8);
@@ -1273,9 +1304,11 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
         if (sub == 0U) {
             /* Legacy whole-image restore (kept for wire compatibility). */
-            if (iolink_ds_apply_image(ds, ctx->buffer, ctx->buffer_idx) != 0) {
+            const int rc = iolink_ds_apply_image(ds, ctx->buffer, ctx->buffer_idx);
+            if (rc != 0) {
                 ctx->response_buf[0] = 0x80U;
-                ctx->response_buf[1] = IOLINK_ISDU_ERROR_PARAM_INCONSISTENT;
+                ctx->response_buf[1] = (rc == -1) ? IOLINK_ISDU_ERROR_PARAM_SET_INVALID
+                                                  : IOLINK_ISDU_ERROR_PARAM_INCONSISTENT;
                 ctx->response_len = 2U;
             }
             else {
@@ -1302,6 +1335,12 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
                     }
                     else if (ret == -2) {
                         ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
+                    }
+                    else if (ret == -4) {
+                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_PARAM_INCONSISTENT;
+                    }
+                    else if (ret == -5) {
+                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_PARAM_SET_INVALID;
                     }
                     else {
                         ctx->response_buf[1] = IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL;
