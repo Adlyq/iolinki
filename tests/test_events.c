@@ -232,6 +232,30 @@ static void test_event_memory_confirm(void** state)
     assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xE4U); /* warning qualifier */
 }
 
+/* Confirmation acknowledges only the slots that were actually presented; events
+ * queued while frozen survive for the next readout. */
+static void test_event_memory_confirm_only_presented(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    iolink_events_init(&ctx);
+
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
+    /* Freeze a 2-slot snapshot via the first read. */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x83U);
+
+    /* A third event arrives while frozen: queued but not yet presented. */
+    iolink_event_trigger(&ctx, 0x3000U, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(ctx.count, 3U);
+
+    /* Confirm: only the 2 presented slots are acknowledged; the third survives. */
+    iolink_events_memory_write(&ctx, 0x00U, 0x00U);
+    assert_int_equal(ctx.count, 1U);
+    assert_true(iolink_events_flag(&ctx));
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U); /* 1 slot */
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -240,6 +264,7 @@ int main(void)
         cmocka_unit_test(test_event_peek),          cmocka_unit_test(test_event_helpers),
         cmocka_unit_test(test_event_classify),      cmocka_unit_test(test_event_memory_layout),
         cmocka_unit_test(test_event_memory_frozen), cmocka_unit_test(test_event_memory_confirm),
+        cmocka_unit_test(test_event_memory_confirm_only_presented),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

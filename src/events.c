@@ -53,8 +53,8 @@ static uint8_t event_qualifier(iolink_event_type_t type)
 /** @brief Rebuild the Table 58 event memory from the oldest queued events.
  *
  * Up to six slots are populated; the StatusCode carries a bit per active slot.
- * The caller holds the critical section. */
-static void event_memory_rebuild(iolink_events_ctx_t* ctx)
+ * The caller holds the critical section. Returns the number of slots written. */
+static uint8_t event_memory_rebuild(iolink_events_ctx_t* ctx)
 {
     (void) memset(ctx->memory, 0, sizeof(ctx->memory));
     uint8_t slots = ctx->count;
@@ -75,6 +75,7 @@ static void event_memory_rebuild(iolink_events_ctx_t* ctx)
         active |= (uint8_t) (1U << i);
     }
     ctx->memory[0] = (uint8_t) (0x80U | active);
+    return slots;
 }
 
 void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type)
@@ -96,11 +97,10 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
     ctx->tail = (uint8_t) ((ctx->tail + 1U) % IOLINK_EVENT_QUEUE_SIZE);
     ctx->count++;
 
-    /* Table 60 T2/T3: write the memory, then set the Event flag. The memory is
-       frozen on the first master read so a readout is consistent; events queued
-       after that stay invisible until the StatusCode write confirmation. */
+    /* Table 60 T2: while the memory is not yet frozen, new events accumulate in
+       the memory image. The flag is raised so the master learns to read it. */
     if (!ctx->frozen) {
-        event_memory_rebuild(ctx);
+        (void) event_memory_rebuild(ctx);
     }
     ctx->flag = true;
 
@@ -118,9 +118,10 @@ uint8_t iolink_events_memory_read(iolink_events_ctx_t* ctx, uint8_t addr)
         return 0U;
     }
     iolink_critical_enter();
-    /* First readout freezes the memory until the StatusCode confirmation. */
+    /* Table 60 T3: the first readout freezes the memory snapshot (and records
+       how many slots were presented) until the StatusCode confirmation. */
     if (!ctx->frozen && (ctx->count > 0U)) {
-        event_memory_rebuild(ctx);
+        ctx->frozen_slots = event_memory_rebuild(ctx);
         ctx->frozen = true;
     }
     const uint8_t value = ctx->memory[addr];
@@ -136,18 +137,28 @@ void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t 
     }
 
     iolink_critical_enter();
-    /* Table 60 T5: confirmation releases the memory and clears the flag; any
-       events queued while frozen become visible on the next readout. */
+    /* Table 60 T5: confirmation releases the memory and clears the flag. Only
+       the slots actually presented (frozen_slots) are acknowledged; events
+       queued while frozen are rebuilt below and become visible again. */
     ctx->frozen = false;
     ctx->flag = false;
-    uint8_t acked = ctx->count;
-    if (acked > 6U) {
-        acked = 6U;
+    uint8_t acked = ctx->frozen_slots;
+    if (acked == 0U) {
+        /* No frozen snapshot was taken (the master confirmed without reading):
+           acknowledge whatever is currently presented (bounded by the 6 slots). */
+        acked = ctx->count;
+        if (acked > 6U) {
+            acked = 6U;
+        }
+    }
+    if (acked > ctx->count) {
+        acked = ctx->count;
     }
     ctx->head = (uint8_t) ((ctx->head + acked) % IOLINK_EVENT_QUEUE_SIZE);
     ctx->count = (uint8_t) (ctx->count - acked);
+    ctx->frozen_slots = 0U;
     if (ctx->count > 0U) {
-        event_memory_rebuild(ctx);
+        ctx->frozen_slots = event_memory_rebuild(ctx);
         ctx->frozen = true;
         ctx->flag = true;
     }

@@ -123,6 +123,7 @@ typedef struct
     uint8_t memory[19]; /**< Event memory image (0x00-0x12) */
     bool frozen;        /**< Memory frozen while the Event flag is set (Table 60) */
     bool flag;          /**< Event flag (CKS bit 7) */
+    uint8_t frozen_slots; /**< Number of memory slots populated when the memory was frozen. */
 } iolink_events_ctx_t;
 
 /**
