@@ -169,23 +169,22 @@ static void test_event_memory_layout(void** state)
 
     assert_false(iolink_events_flag(&ctx));
 
-    /* Two error events (Queue slots 1 and 2). */
+    /* One error event: the memory freezes as the flag is raised (Table 60 T3). */
     iolink_event_trigger(&ctx, 0x1801U, IOLINK_EVENT_TYPE_ERROR);
-    iolink_event_trigger(&ctx, 0x1803U, IOLINK_EVENT_TYPE_ERROR);
     assert_true(iolink_events_flag(&ctx));
 
-    /* Table 58 / Figure A.22: StatusCode type 2, bit 7 set, bits 0-1 active. */
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x83U);
+    /* Table 58 / Figure A.22: StatusCode type 2, bit 7 set, bit 0 active. */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
 
     /* Slot 1 at addresses 1,2,3: qualifier 0xF4 (appears|error|device|Application), 0x1801. */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xF4U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x02U), 0x18U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x03U), 0x01U);
 
-    /* Slot 2 at addresses 4,5,6: 0x1803. */
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0xF4U);
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x05U), 0x18U);
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x06U), 0x03U);
+    /* A second event while frozen is queued but not visible. */
+    iolink_event_trigger(&ctx, 0x1803U, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0x00U);
 
     /* Reserved / out of range reads return 0. */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x13U), 0x00U);
@@ -198,13 +197,13 @@ static void test_event_memory_frozen(void** state)
     iolink_events_init(&ctx);
 
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
-    iolink_event_trigger(&ctx, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x83U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
 
-    /* A third event while the flag is set is queued but not visible. */
+    /* Further events while frozen are queued but not visible. */
+    iolink_event_trigger(&ctx, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
     iolink_event_trigger(&ctx, 0x3000U, IOLINK_EVENT_TYPE_ERROR);
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x83U);
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x07U), 0x00U); /* slot 3 unused */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0x00U); /* slot 2 unused */
     assert_int_equal(ctx.count, 3U);                                 /* still queued */
 }
 
@@ -218,7 +217,13 @@ static void test_event_memory_confirm(void** state)
     iolink_event_trigger(&ctx, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
     assert_true(iolink_events_flag(&ctx));
 
-    /* Table 60 T5: a write to StatusCode clears the flag and releases memory. */
+    /* Table 60 T5: confirmation releases the presented slot; the event queued
+       while frozen is re-frozen afterwards. */
+    iolink_events_memory_write(&ctx, 0x00U, 0x00U);
+    assert_true(iolink_events_flag(&ctx));
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
+
+    /* Confirming again clears the queue. */
     iolink_events_memory_write(&ctx, 0x00U, 0x00U);
     assert_false(iolink_events_flag(&ctx));
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x00U);
@@ -241,19 +246,19 @@ static void test_event_memory_confirm_only_presented(void** state)
     iolink_events_init(&ctx);
 
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
-    iolink_event_trigger(&ctx, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
-    /* Freeze a 2-slot snapshot via the first read. */
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x83U);
+    /* The first event freezes a 1-slot snapshot. */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
 
-    /* A third event arrives while frozen: queued but not yet presented. */
+    /* Further events arrive while frozen: queued but not yet presented. */
+    iolink_event_trigger(&ctx, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
     iolink_event_trigger(&ctx, 0x3000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(ctx.count, 3U);
 
-    /* Confirm: only the 2 presented slots are acknowledged; the third survives. */
+    /* Confirm: only the presented slot is acknowledged; the other two survive. */
     iolink_events_memory_write(&ctx, 0x00U, 0x00U);
-    assert_int_equal(ctx.count, 1U);
+    assert_int_equal(ctx.count, 2U);
     assert_true(iolink_events_flag(&ctx));
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U); /* 1 slot */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x83U); /* 2 slots */
 }
 
 int main(void)
