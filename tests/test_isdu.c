@@ -539,6 +539,68 @@ static void test_isdu_data_storage_round_trip(void** state)
     assert_memory_equal(buf, app, strlen(app));
 }
 
+/* Table B.10: the DataStorageIndex subindices 02-05 are read-only accessors. */
+static void test_isdu_data_storage_subindices(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_ds_ctx_t ds;
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_isdu_init(&ctx);
+    iolink_ds_init(&ds, NULL);
+    ctx.ds_ctx = &ds;
+
+    assert_true(iolink_ds_build_image(&ds) >= 0);
+    uint8_t r[64];
+
+    /* sub 02 State_Property: 1 octet, Inactive + no upload flag. */
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x02), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 1);
+    assert_int_equal(r[0], 0x00U);
+
+    /* sub 03 Data_Storage_Size: 4-octet big-endian == image length. */
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x03), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 4);
+    assert_int_equal((uint32_t) ((uint32_t) r[0] << 24) | ((uint32_t) r[1] << 16) |
+                         ((uint32_t) r[2] << 8) | r[3],
+                     (uint32_t) ds.image_len);
+
+    /* sub 04 Parameter_Checksum: 4-octet big-endian == current_checksum. */
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x04), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 4);
+    assert_int_equal((uint32_t) ((uint32_t) r[0] << 24) | ((uint32_t) r[1] << 16) |
+                         ((uint32_t) r[2] << 8) | r[3],
+                     ds.current_checksum);
+
+    /* sub 05 Index_List: 3 entries (0x0018/0x0019/0x001A, sub 0) + 0x0000 marker. */
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x05), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 11);
+    static const uint8_t expect_list[] = {0x00U, 0x18U, 0x00U, 0x00U, 0x19U, 0x00U,
+                                          0x00U, 0x1AU, 0x00U, 0x00U, 0x00U};
+    assert_memory_equal(r, expect_list, sizeof(expect_list));
+
+    /* sub 02-05 reject a WRITE as read-only (0x8023). */
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    uint8_t w[2] = {0x00U, 0x00U};
+    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x02, w, 2U), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
+    assert_int_equal(r[0], 0x80U);
+    assert_int_equal(r[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+}
+
 static void test_isdu_direct_parameters_page1(void** state)
 {
     (void) state;
@@ -777,6 +839,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_direct_parameters_page2, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_data_storage_round_trip, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_data_storage_subindices, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_snapshot_response, test_setup, test_teardown),
     };

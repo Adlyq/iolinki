@@ -149,6 +149,7 @@ typedef struct
     size_t param_count;                     /**< Number of entries in @ref params */
     uint32_t current_checksum;              /**< Last calculated local parameter checksum */
     uint32_t master_checksum;               /**< Most recent checksum verified by Master */
+    bool ds_upload_flag;                    /**< DS_UPLOAD_REQ pending (State_Property bit 7) */
     uint8_t image[IOLINK_DS_IMAGE_MAX];     /**< Serialized parameter image (DS_Data 0x0003) */
     size_t image_len;                       /**< Valid bytes in @ref image */
 } iolink_ds_ctx_t;
@@ -295,6 +296,69 @@ const uint8_t* iolink_ds_get_image(iolink_ds_ctx_t* ctx, size_t* out_len);
  * @return true if checksum(image) == current_checksum, false otherwise.
  */
 bool iolink_ds_verify(const iolink_ds_ctx_t* ctx);
+
+/**
+ * @brief Read the State_Property octet (Table B.10 subindex 02).
+ *
+ * Bits 1-2 encode the DS state (Inactive/Upload/Download/locked); bit 7 is the
+ * DS_UPLOAD_FLAG (a Data Storage upload request is pending).
+ *
+ * @param ctx DS context
+ * @return uint8_t State_Property value.
+ */
+uint8_t iolink_ds_state_property(const iolink_ds_ctx_t* ctx);
+
+/**
+ * @brief Read the Data_Storage_Size value (Table B.10 subindex 03).
+ *
+ * @param ctx DS context
+ * @return uint32_t Number of octets required to store the parameter set.
+ */
+uint32_t iolink_ds_size(const iolink_ds_ctx_t* ctx);
+
+/**
+ * @brief Read the Parameter_Checksum value (Table B.10 subindex 04).
+ *
+ * @param ctx DS context
+ * @return uint32_t Current parameter-set checksum (Fletcher-32).
+ */
+uint32_t iolink_ds_checksum(const iolink_ds_ctx_t* ctx);
+
+/**
+ * @brief Number of entries in the DS parameter descriptor set.
+ *
+ * @param ctx DS context
+ * @return size_t Descriptor count.
+ */
+size_t iolink_ds_param_count(const iolink_ds_ctx_t* ctx);
+
+/**
+ * @brief Copy descriptor @p i into @p out.
+ *
+ * @param ctx DS context
+ * @param i   Descriptor index
+ * @param out [out] Receives the descriptor (index + subindex)
+ * @return true when @p i is in range, false otherwise.
+ */
+bool iolink_ds_param_at(const iolink_ds_ctx_t* ctx, size_t i, iolink_ds_param_desc_t* out);
+
+/**
+ * @brief Raise a Data Storage upload request (sets DS_UPLOAD_FLAG, 10.4.2).
+ *
+ * Called when the parameter set changed locally (teach-in, Application Reset,
+ * ParamDownloadStore). The master observes bit 7 of State_Property and/or the
+ * DS_UPLOAD_REQ event; the flag is cleared at the end of the upload/download.
+ *
+ * @param ctx DS context
+ */
+void iolink_ds_request_upload(iolink_ds_ctx_t* ctx);
+
+/**
+ * @brief Clear the pending Data Storage upload request (DS_UPLOAD_FLAG = false).
+ *
+ * @param ctx DS context
+ */
+void iolink_ds_clear_upload(iolink_ds_ctx_t* ctx);
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
 /** @} */ /* end of iolinki_data_storage */

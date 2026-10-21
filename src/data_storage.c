@@ -389,4 +389,80 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
     return 0;
 }
 
+uint8_t iolink_ds_state_property(const iolink_ds_ctx_t* ctx)
+{
+    uint8_t property = 0U;
+
+    if (ctx == NULL) {
+        return 0U;
+    }
+    switch (ctx->state) {
+        case IOLINK_DS_STATE_UPLOAD_REQ:
+        case IOLINK_DS_STATE_UPLOADING:
+            property = 0x02U; /* 0b01 Upload */
+            break;
+        case IOLINK_DS_STATE_DOWNLOAD_REQ:
+        case IOLINK_DS_STATE_DOWNLOADING:
+            property = 0x04U; /* 0b10 Download */
+            break;
+        case IOLINK_DS_STATE_LOCKED:
+            property = 0x06U; /* 0b11 Data Storage locked */
+            break;
+        default:
+            property = 0x00U; /* 0b00 Inactive */
+            break;
+    }
+    if (ctx->ds_upload_flag) {
+        property |= 0x80U; /* DS_UPLOAD_FLAG */
+    }
+    return property;
+}
+
+uint32_t iolink_ds_size(const iolink_ds_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return 0U;
+    }
+    return (uint32_t) ctx->image_len;
+}
+
+uint32_t iolink_ds_checksum(const iolink_ds_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return 0U;
+    }
+    return ctx->current_checksum;
+}
+
+size_t iolink_ds_param_count(const iolink_ds_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return 0U;
+    }
+    return ctx->param_count;
+}
+
+bool iolink_ds_param_at(const iolink_ds_ctx_t* ctx, size_t i, iolink_ds_param_desc_t* out)
+{
+    if ((ctx == NULL) || (out == NULL) || (i >= ctx->param_count)) {
+        return false;
+    }
+    *out = ctx->params[i];
+    return true;
+}
+
+void iolink_ds_request_upload(iolink_ds_ctx_t* ctx)
+{
+    if (ctx != NULL) {
+        ctx->ds_upload_flag = true;
+    }
+}
+
+void iolink_ds_clear_upload(iolink_ds_ctx_t* ctx)
+{
+    if (ctx != NULL) {
+        ctx->ds_upload_flag = false;
+    }
+}
+
 #endif /* IOLINK_FEATURE_DATA_STORAGE */

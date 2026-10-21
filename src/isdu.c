@@ -1229,6 +1229,8 @@ static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
 static void handle_data_storage(iolink_isdu_ctx_t* ctx)
 {
     iolink_ds_ctx_t* ds = (iolink_ds_ctx_t*) ctx->ds_ctx;
+    const uint8_t sub = ctx->header.subindex;
+
     if (ds == NULL) {
         ctx->response_buf[0] = 0x80U;
         ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
@@ -1239,28 +1241,96 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
     }
 
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
-        /* Restore: apply the parameter image provided by the Master. */
-        if (iolink_ds_apply_image(ds, ctx->buffer, ctx->buffer_idx) != 0) {
+        if (sub == 0U) {
+            /* Legacy whole-image restore (kept for wire compatibility). */
+            if (iolink_ds_apply_image(ds, ctx->buffer, ctx->buffer_idx) != 0) {
+                ctx->response_buf[0] = 0x80U;
+                ctx->response_buf[1] = IOLINK_ISDU_ERROR_PARAM_INCONSISTENT;
+                ctx->response_len = 2U;
+            }
+            else {
+                ctx->response_len = 0U; /* Write acknowledged */
+            }
+        }
+        else if (sub == 1U) {
+            /* DS_Command (Table B.10 subindex 01) is handled by the DS state
+               machine (see the DS_Command handler). */
             ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_PARAM_INCONSISTENT;
+            ctx->response_buf[1] = IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL;
             ctx->response_len = 2U;
         }
         else {
-            ctx->response_len = 0U; /* Write acknowledged */
+            /* Table B.10: subindices 02-05 are read-only. */
+            ctx->response_buf[0] = 0x80U;
+            ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
+            ctx->response_len = 2U;
         }
     }
     else {
-        /* Backup: return the serialized parameter image. */
-        size_t len = 0U;
-        const uint8_t* img = iolink_ds_get_image(ds, &len);
-        if ((img == NULL) || (len > IOLINK_ISDU_BUFFER_SIZE)) {
-            ctx->response_len = 0U;
-        }
-        else {
-            if (len > 0U) {
-                (void) memcpy(ctx->response_buf, img, len);
+        switch (sub) {
+            case 0U: {
+                /* Legacy whole-image backup read. */
+                size_t len = 0U;
+                const uint8_t* img = iolink_ds_get_image(ds, &len);
+                if ((img == NULL) || (len > IOLINK_ISDU_BUFFER_SIZE)) {
+                    ctx->response_len = 0U;
+                }
+                else {
+                    if (len > 0U) {
+                        (void) memcpy(ctx->response_buf, img, len);
+                    }
+                    ctx->response_len = len;
+                }
+                break;
             }
-            ctx->response_len = len;
+            case 1U:
+                /* DS_Command read returns unspecified values (Table B.10). */
+                ctx->response_len = 0U;
+                break;
+            case 2U:
+                ctx->response_buf[0] = iolink_ds_state_property(ds);
+                ctx->response_len = 1U;
+                break;
+            case 3U: {
+                size_t idx = 0U;
+                isdu_write_u32_be(ctx->response_buf, &idx, iolink_ds_size(ds));
+                ctx->response_len = (uint8_t) idx;
+                break;
+            }
+            case 4U: {
+                size_t idx = 0U;
+                isdu_write_u32_be(ctx->response_buf, &idx, iolink_ds_checksum(ds));
+                ctx->response_len = (uint8_t) idx;
+                break;
+            }
+            case 5U: {
+                /* Index_List (Table B.11): [index(2) subindex(1)]*n + 0x0000. */
+                size_t pos = 0U;
+                const size_t n = iolink_ds_param_count(ds);
+                for (size_t i = 0U; i < n; i++) {
+                    iolink_ds_param_desc_t d;
+                    if (!iolink_ds_param_at(ds, i, &d)) {
+                        break;
+                    }
+                    if ((pos + 3U) > IOLINK_ISDU_BUFFER_SIZE) {
+                        break;
+                    }
+                    ctx->response_buf[pos++] = (uint8_t) (d.index >> 8);
+                    ctx->response_buf[pos++] = (uint8_t) (d.index & 0xFFU);
+                    ctx->response_buf[pos++] = d.subindex;
+                }
+                if ((pos + 2U) <= IOLINK_ISDU_BUFFER_SIZE) {
+                    ctx->response_buf[pos++] = 0x00U; /* Termination marker */
+                    ctx->response_buf[pos++] = 0x00U;
+                }
+                ctx->response_len = (uint8_t) pos;
+                break;
+            }
+            default:
+                ctx->response_buf[0] = 0x80U;
+                ctx->response_buf[1] = IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL;
+                ctx->response_len = 2U;
+                break;
         }
     }
     ctx->response_idx = 0U;
