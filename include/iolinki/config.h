@@ -191,6 +191,17 @@
 #define IOLINK_EVENT_MIN_APPEAR_MS 50U
 #endif
 
+/**
+ * @brief Minimum interval between two reports of the same EventCode/qualifier.
+ *
+ * A.6.4: the Event Dispatcher shall not invoke the AL_Event service with the
+ * same EventCode and EventQualifier more often than once per second.
+ * Default: 1000 ms
+ */
+#ifndef IOLINK_EVENT_MIN_REPEAT_MS
+#define IOLINK_EVENT_MIN_REPEAT_MS 1000U
+#endif
+
 /* -------------------------------------------------------------------------
  * Process Data Configuration
  * ------------------------------------------------------------------------- */

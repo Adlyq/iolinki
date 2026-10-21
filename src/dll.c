@@ -62,6 +62,13 @@ static void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
             ctx->master_lost_count = 0U;
             ctx->master_lost = false;
         }
+        if (new_state == IOLINK_DLL_STATE_STARTUP) {
+            /* A.6.4: queued events are discarded when communication is
+               interrupted or cancelled. */
+#if IOLINK_FEATURE_EVENTS
+            iolink_events_reset(&ctx->events);
+#endif
+        }
         if (ctx->state_cb != NULL) {
 #if IOLINK_PHY_FEATURE_ISR_PUMP
             if (ctx->in_isr != 0U) {

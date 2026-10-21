@@ -17,6 +17,7 @@
 
 #include "iolinki/events.h"
 #include "iolinki/platform.h"
+#include "iolinki/time_utils.h"
 #include "iolinki/utils.h"
 #include <string.h>
 
@@ -29,10 +30,21 @@ void iolink_events_init(iolink_events_ctx_t* ctx)
     }
 }
 
-/** @brief EventQualifier for an event type (A.6.4, Figure A.24). */
-static uint8_t event_qualifier(iolink_event_type_t type)
+/** @brief EventQualifier for an event type and MODE (A.6.4, Figure A.24). */
+static uint8_t event_qualifier(iolink_event_type_t type, iolink_event_mode_t mode)
 {
-    uint8_t q = 0xC0U; /* MODE = event appears */
+    uint8_t q;
+    switch (mode) {
+        case IOLINK_EVENT_MODE_DISAPPEARS:
+            q = 0x80U; /* MODE = event disappears (0b10) */
+            break;
+        case IOLINK_EVENT_MODE_SINGLE_SHOT:
+            q = 0x40U; /* MODE = event single shot (0b01) */
+            break;
+        default:
+            q = 0xC0U; /* MODE = event appears (0b11) */
+            break;
+    }
     switch (type) {
         case IOLINK_EVENT_TYPE_NOTIFICATION:
             q |= (0x01U << 4);
@@ -62,9 +74,8 @@ static uint8_t event_memory_rebuild(iolink_events_ctx_t* ctx)
         slots = 6U;
     }
     for (uint8_t i = 0U; i < slots; i++) {
-        uint8_t idx = (uint8_t) ((ctx->head + i) % IOLINK_EVENT_QUEUE_SIZE);
-        const iolink_event_t* ev = &ctx->queue[idx];
-        ctx->memory[1U + i * 3U] = event_qualifier(ev->type);
+        const iolink_event_t* ev = &ctx->queue[i];
+        ctx->memory[1U + i * 3U] = event_qualifier(ev->type, ev->mode);
         ctx->memory[2U + i * 3U] = (uint8_t) (ev->code >> 8);
         ctx->memory[3U + i * 3U] = (uint8_t) (ev->code & 0xFFU);
     }
@@ -78,6 +89,72 @@ static uint8_t event_memory_rebuild(iolink_events_ctx_t* ctx)
     return slots;
 }
 
+/** @brief Insert an event into the severity-ordered queue (Errors first). */
+static void event_queue_insert(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type,
+                               iolink_event_mode_t mode)
+{
+    uint8_t pos = 0U;
+    while ((pos < ctx->count) && (ctx->queue[pos].type >= type)) {
+        pos++;
+    }
+    if (ctx->count >= IOLINK_EVENT_QUEUE_SIZE) {
+        if (pos >= IOLINK_EVENT_QUEUE_SIZE) {
+            return; /* Queue holds more severe events: drop the new one. */
+        }
+        ctx->count = (uint8_t) (IOLINK_EVENT_QUEUE_SIZE - 1U);
+    }
+    for (uint8_t i = ctx->count; i > pos; i--) {
+        ctx->queue[i] = ctx->queue[i - 1U];
+    }
+    ctx->queue[pos].code = code;
+    ctx->queue[pos].type = type;
+    ctx->queue[pos].mode = mode;
+    ctx->count++;
+}
+
+static iolink_event_pending_t* pending_find(iolink_events_ctx_t* ctx, uint16_t code)
+{
+    for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
+        if (ctx->pending[i].active && (ctx->pending[i].code == code)) {
+            return &ctx->pending[i];
+        }
+    }
+    return NULL;
+}
+
+static iolink_event_pending_t* pending_alloc(iolink_events_ctx_t* ctx)
+{
+    for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
+        if (!ctx->pending[i].active) {
+            return &ctx->pending[i];
+        }
+    }
+    return NULL;
+}
+
+/** @brief A.6.4: the same EventCode is not reported more than once per second. */
+static bool event_recently_sent(const iolink_events_ctx_t* ctx, uint16_t code, uint32_t now)
+{
+    for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
+        const iolink_event_pending_t* p = &ctx->pending[i];
+        if ((p->code == code) && (p->last_tx_ms != 0U) &&
+            ((now - p->last_tx_ms) < IOLINK_EVENT_MIN_REPEAT_MS)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** @brief Freeze the memory and raise the flag (Table 60 T3). */
+static void event_publish(iolink_events_ctx_t* ctx)
+{
+    if (!ctx->frozen && (ctx->count > 0U)) {
+        ctx->frozen_slots = event_memory_rebuild(ctx);
+        ctx->frozen = true;
+    }
+    ctx->flag = true;
+}
+
 void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type)
 {
     if (ctx == NULL) {
@@ -86,26 +163,94 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
 
     iolink_critical_enter();
 
-    if (ctx->count >= IOLINK_EVENT_QUEUE_SIZE) {
-        /* Drop oldest (inline to avoid recursive lock) */
-        ctx->head = (uint8_t) ((ctx->head + 1U) % IOLINK_EVENT_QUEUE_SIZE);
-        ctx->count--;
+    const uint32_t now = iolink_time_get_ms();
+    if (event_recently_sent(ctx, code, now)) {
+        iolink_critical_exit();
+        return; /* A.6.4: no more than one report per second per EventCode. */
     }
 
-    ctx->queue[ctx->tail].code = code;
-    ctx->queue[ctx->tail].type = type;
-    ctx->tail = (uint8_t) ((ctx->tail + 1U) % IOLINK_EVENT_QUEUE_SIZE);
-    ctx->count++;
-
-    /* Table 60 T3: freeze the memory as soon as the Event flag is raised.
-       Events queued afterwards stay invisible until the StatusCode
-       confirmation releases the memory (T5). */
-    if (!ctx->frozen) {
-        ctx->frozen_slots = event_memory_rebuild(ctx);
-        ctx->frozen = true;
+    if (type == IOLINK_EVENT_TYPE_NOTIFICATION) {
+        /* Notifications are single-shot: report once, no lifecycle tracking. */
+        event_queue_insert(ctx, code, type, IOLINK_EVENT_MODE_SINGLE_SHOT);
     }
-    ctx->flag = true;
+    else {
+        iolink_event_pending_t* p = pending_find(ctx, code);
+        if (p == NULL) {
+            p = pending_alloc(ctx);
+        }
+        if ((p != NULL) && !p->active) {
+            p->code = code;
+            p->type = type;
+            p->appear_ms = now;
+            p->last_tx_ms = now;
+            p->clear_pending = false;
+            p->active = true;
+            ctx->pending_count++;
+            event_queue_insert(ctx, code, type, IOLINK_EVENT_MODE_APPEARS);
+        }
+        /* An already-active code may not appear again until it disappears. */
+    }
 
+    event_publish(ctx);
+    iolink_critical_exit();
+}
+
+void iolink_event_clear(iolink_events_ctx_t* ctx, uint16_t code)
+{
+    if (ctx == NULL) {
+        return;
+    }
+
+    iolink_critical_enter();
+    iolink_event_pending_t* p = pending_find(ctx, code);
+    if (p != NULL) {
+        p->clear_pending = true; /* emitted by iolink_events_process() */
+    }
+    iolink_critical_exit();
+}
+
+void iolink_events_process(iolink_events_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+
+    iolink_critical_enter();
+    const uint32_t now = iolink_time_get_ms();
+    for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
+        iolink_event_pending_t* p = &ctx->pending[i];
+        if (!p->active || !p->clear_pending) {
+            continue;
+        }
+        if ((now - p->appear_ms) < IOLINK_EVENT_MIN_APPEAR_MS) {
+            continue; /* Still within the minimum appearance window. */
+        }
+        p->clear_pending = false;
+        p->active = false;
+        p->last_tx_ms = now;
+        if (ctx->pending_count > 0U) {
+            ctx->pending_count--;
+        }
+        event_queue_insert(ctx, p->code, p->type, IOLINK_EVENT_MODE_DISAPPEARS);
+        event_publish(ctx);
+    }
+    iolink_critical_exit();
+}
+
+void iolink_events_reset(iolink_events_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+
+    iolink_critical_enter();
+    ctx->count = 0U;
+    ctx->pending_count = 0U;
+    (void) memset(ctx->pending, 0, sizeof(ctx->pending));
+    (void) memset(ctx->memory, 0, sizeof(ctx->memory));
+    ctx->frozen = false;
+    ctx->flag = false;
+    ctx->frozen_slots = 0U;
     iolink_critical_exit();
 }
 
@@ -152,7 +297,11 @@ void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t 
     if (acked > ctx->count) {
         acked = ctx->count;
     }
-    ctx->head = (uint8_t) ((ctx->head + acked) % IOLINK_EVENT_QUEUE_SIZE);
+    if (acked > 0U) {
+        for (uint8_t i = acked; i < ctx->count; i++) {
+            ctx->queue[i - acked] = ctx->queue[i];
+        }
+    }
     ctx->count = (uint8_t) (ctx->count - acked);
     ctx->frozen_slots = 0U;
     if (ctx->count > 0U) {
@@ -182,8 +331,10 @@ bool iolink_events_pop(iolink_events_ctx_t* ctx, iolink_event_t* event)
     iolink_critical_enter();
 
     if (ctx->count > 0U) {
-        *event = ctx->queue[ctx->head];
-        ctx->head = (uint8_t) ((ctx->head + 1U) % IOLINK_EVENT_QUEUE_SIZE);
+        *event = ctx->queue[0];
+        for (uint8_t i = 1U; i < ctx->count; i++) {
+            ctx->queue[i - 1U] = ctx->queue[i];
+        }
         ctx->count--;
         ret = true;
     }
@@ -203,7 +354,7 @@ bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event)
 
     bool ret = false;
     if (ctx->count > 0U) {
-        *event = ctx->queue[ctx->head];
+        *event = ctx->queue[0];
         ret = true;
     }
 
@@ -262,8 +413,7 @@ uint8_t iolink_events_get_highest_severity(iolink_events_ctx_t* ctx)
     uint8_t worst_prio = 5U; /* OK priority */
     iolink_critical_enter();
     for (uint8_t i = 0U; i < ctx->count; i++) {
-        uint8_t idx = (uint8_t) ((ctx->head + i) % IOLINK_EVENT_QUEUE_SIZE);
-        const iolink_event_t* ev = &ctx->queue[idx];
+        const iolink_event_t* ev = &ctx->queue[i];
         const uint8_t status = event_type_device_status(ev->code, ev->type);
         const uint8_t prio = device_status_priority(status);
         if (prio < worst_prio) {
@@ -288,8 +438,7 @@ uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_even
     uint8_t to_copy = (count < max_count) ? count : max_count;
 
     for (uint8_t i = 0U; i < to_copy; i++) {
-        uint8_t idx = (uint8_t) ((ctx->head + i) % IOLINK_EVENT_QUEUE_SIZE);
-        out_events[i] = ctx->queue[idx];
+        out_events[i] = ctx->queue[i];
         copied++;
     }
     iolink_critical_exit();

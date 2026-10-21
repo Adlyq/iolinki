@@ -16,6 +16,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include <stdint.h>
+#include <unistd.h>
 
 #include "iolinki/events.h"
 
@@ -83,13 +84,14 @@ static void test_phy_diagnostic_codes(void** state)
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR);
 
     iolink_event_t ev;
-    assert_true(iolink_events_pop(&ctx, &ev));
-    assert_int_equal(ev.code, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN);
-    assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
-
+    /* A.6.4: Errors are prioritized over Warnings. */
     assert_true(iolink_events_pop(&ctx, &ev));
     assert_int_equal(ev.code, IOLINK_EVENTCODE_SHORT_CIRCUIT);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_ERROR);
+
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN);
+    assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
 }
 
 static void test_event_peek(void** state)
@@ -133,9 +135,10 @@ static void test_event_helpers(void** state)
     iolink_event_t events[8];
     uint8_t count = iolink_events_get_all(&ctx, events, 8);
     assert_int_equal(count, 3);
-    assert_int_equal(events[0].code, 0x1001);
-    assert_int_equal(events[1].code, 0x1002);
-    assert_int_equal(events[2].code, 0x1003);
+    /* Severity order: Error(0x1002) > Warning(0x1003) > Notification(0x1001). */
+    assert_int_equal(events[0].code, 0x1002);
+    assert_int_equal(events[1].code, 0x1003);
+    assert_int_equal(events[2].code, 0x1001);
 
     /* Test get_all with limit */
     count = iolink_events_get_all(&ctx, events, 2);
@@ -261,6 +264,85 @@ static void test_event_memory_confirm_only_presented(void** state)
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x83U); /* 2 slots */
 }
 
+/* A.6.4: an Error/Warning appears once and disappears only after the 50 ms
+ * minimum appearance window. */
+static void test_event_appears_disappears(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    iolink_events_init(&ctx);
+
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_clear(&ctx, 0x1000U);
+
+    /* Within the window the disappearance stays deferred. */
+    iolink_events_process(&ctx);
+    iolink_event_t ev;
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.code, 0x1000U);
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
+    assert_false(iolink_events_pop(&ctx, &ev));
+
+    usleep(60000U); /* > IOLINK_EVENT_MIN_APPEAR_MS */
+    iolink_events_process(&ctx);
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.code, 0x1000U);
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
+}
+
+/* The same EventCode may not appear twice while it is active; clearing an
+ * unknown code is ignored. */
+static void test_event_lifecycle_no_repeat(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    iolink_events_init(&ctx);
+
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_WARNING);
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_WARNING);
+    assert_int_equal(ctx.count, 1U);
+
+    iolink_event_clear(&ctx, 0x2000U); /* not active: ignored */
+    assert_int_equal(ctx.count, 1U);
+}
+
+/* A.6.4: no more than one report per second for the same EventCode. */
+static void test_event_recently_sent(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    iolink_events_init(&ctx);
+    iolink_event_t ev;
+
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_clear(&ctx, 0x1000U);
+    usleep(60000U);
+    iolink_events_process(&ctx);
+    (void) iolink_events_pop(&ctx, &ev); /* appears */
+    (void) iolink_events_pop(&ctx, &ev); /* disappears */
+
+    /* Re-appearing within one second is suppressed. */
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(ctx.count, 0U);
+}
+
+/* A.6.4: queued events are discarded when communication is interrupted. */
+static void test_events_reset_clears(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    iolink_events_init(&ctx);
+
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    assert_true(iolink_events_flag(&ctx));
+
+    iolink_events_reset(&ctx);
+    assert_int_equal(ctx.count, 0U);
+    assert_int_equal(ctx.pending_count, 0U);
+    assert_false(iolink_events_flag(&ctx));
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x00U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -270,6 +352,10 @@ int main(void)
         cmocka_unit_test(test_event_classify),      cmocka_unit_test(test_event_memory_layout),
         cmocka_unit_test(test_event_memory_frozen), cmocka_unit_test(test_event_memory_confirm),
         cmocka_unit_test(test_event_memory_confirm_only_presented),
+        cmocka_unit_test(test_event_appears_disappears),
+        cmocka_unit_test(test_event_lifecycle_no_repeat),
+        cmocka_unit_test(test_event_recently_sent),
+        cmocka_unit_test(test_events_reset_clears),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
