@@ -106,21 +106,22 @@ static int ds_params_set(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
     return iolink_params_set(index, subindex, data, len, persist);
 }
 
-uint16_t iolink_ds_calc_checksum(const uint8_t* data, size_t len)
+uint32_t iolink_ds_calc_checksum(const uint8_t* data, size_t len)
 {
-    /* Fletcher-16 over the serialized image. The Master treats the DS blob and
-       its checksum opaquely (DS is device-specific), so a stable device-local
-       checksum is all that is required for consistency comparison. */
-    uint16_t sum1 = 0U;
-    uint16_t sum2 = 0U;
+    /* Fletcher-32 over the serialized image (Table B.10 Parameter_Checksum is
+       UIntegerT32). The Master treats the DS blob and its checksum opaquely (DS
+       is device-specific), so a stable device-local checksum is all that is
+       required for consistency comparison. */
+    uint32_t sum1 = 0U;
+    uint32_t sum2 = 0U;
     if (!iolink_buf_is_valid(data, len)) {
         return 0U;
     }
     for (size_t i = 0U; i < len; ++i) {
-        sum1 = (uint16_t) ((sum1 + (uint16_t) data[i]) % 255U);
-        sum2 = (uint16_t) ((sum2 + sum1) % 255U);
+        sum1 = (sum1 + (uint32_t) data[i]) % 65535U;
+        sum2 = (sum2 + sum1) % 65535U;
     }
-    return (uint16_t) ((sum2 << 8U) | sum1);
+    return (sum2 << 16U) | sum1;
 }
 
 int iolink_ds_build_image(iolink_ds_ctx_t* ctx)
@@ -226,7 +227,7 @@ const uint8_t* iolink_ds_get_image(iolink_ds_ctx_t* ctx, size_t* out_len)
     return ctx->image;
 }
 
-void iolink_ds_check(iolink_ds_ctx_t* ctx, uint16_t master_checksum)
+void iolink_ds_check(iolink_ds_ctx_t* ctx, uint32_t master_checksum)
 {
     if (ctx == NULL) {
         return;

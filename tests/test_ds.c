@@ -28,12 +28,12 @@ static void test_ds_checksum(void** state)
 {
     (void) state;
     uint8_t data[] = {0x01, 0x02, 0x03, 0x04};
-    uint16_t cs1 = iolink_ds_calc_checksum(data, sizeof(data));
-    uint16_t cs2 = iolink_ds_calc_checksum(data, sizeof(data));
+    uint32_t cs1 = iolink_ds_calc_checksum(data, sizeof(data));
+    uint32_t cs2 = iolink_ds_calc_checksum(data, sizeof(data));
     assert_int_equal(cs1, cs2);
 
     data[0] = 0xAA;
-    uint16_t cs3 = iolink_ds_calc_checksum(data, sizeof(data));
+    uint32_t cs3 = iolink_ds_calc_checksum(data, sizeof(data));
     assert_int_not_equal(cs1, cs3);
 }
 
@@ -141,7 +141,7 @@ static void test_ds_param_round_trip(void** state)
     assert_int_equal((int) backup_len, n);
     uint8_t backup[IOLINK_DS_IMAGE_MAX];
     memcpy(backup, img, backup_len);
-    uint16_t backup_cs = ds.current_checksum;
+    uint32_t backup_cs = ds.current_checksum;
     assert_int_not_equal(backup_cs, 0);
 
     /* Wipe the device parameters. */
@@ -331,7 +331,7 @@ static void test_ds_download_recovery(void** state)
     img[p++] = 0x00;
     img[p++] = 0x01;
     img[p++] = 0xAB;
-    uint16_t downloaded_cs = iolink_ds_calc_checksum(img, p);
+    uint32_t downloaded_cs = iolink_ds_calc_checksum(img, p);
 
     assert_int_equal(iolink_ds_apply_image(&ds, img, p), 0);
 

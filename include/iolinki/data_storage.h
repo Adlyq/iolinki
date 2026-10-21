@@ -147,8 +147,8 @@ typedef struct
     iolink_ds_param_write_fn write_param;   /**< Unified parameter write accessor */
     const iolink_ds_param_desc_t* params;   /**< DS parameter descriptor array */
     size_t param_count;                     /**< Number of entries in @ref params */
-    uint16_t current_checksum;              /**< Last calculated local parameter checksum */
-    uint16_t master_checksum;               /**< Most recent checksum verified by Master */
+    uint32_t current_checksum;              /**< Last calculated local parameter checksum */
+    uint32_t master_checksum;               /**< Most recent checksum verified by Master */
     uint8_t image[IOLINK_DS_IMAGE_MAX];     /**< Serialized parameter image (DS_Data 0x0003) */
     size_t image_len;                       /**< Valid bytes in @ref image */
 } iolink_ds_ctx_t;
@@ -190,15 +190,17 @@ void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx, iolink_ds_param_read_fn r
                                  const iolink_ds_param_desc_t* params, size_t count);
 
 /**
- * @brief Calculate a standard 16-bit checksum for a parameter block
+ * @brief Calculate a standard 32-bit checksum (Fletcher-32) for a parameter block
  *
  * Used during DS compare operations to detect parity between Master and Device.
+ * Table B.10 requires the Parameter_Checksum to be UIntegerT32; 10.4.8 permits a
+ * revision indication such as a CRC or checksum signature.
  *
  * @param data Pointer to the parameter data structure
  * @param len Length of the data in bytes
- * @return uint16_t Calculated CCITT-style or parity checksum
+ * @return uint32_t Fletcher-32 checksum (0x00000000-0xFFFFFFFE)
  */
-uint16_t iolink_ds_calc_checksum(const uint8_t* data, size_t len);
+uint32_t iolink_ds_calc_checksum(const uint8_t* data, size_t len);
 
 /**
  * @brief Process Data Storage engine logic
@@ -215,9 +217,9 @@ void iolink_ds_process(iolink_ds_ctx_t* ctx);
  * typically triggered by the ISDU engine upon Master comparison requests.
  *
  * @param ctx DS context
- * @param master_checksum The 16-bit checksum provided by the IO-Link Master
+ * @param master_checksum The 32-bit checksum provided by the IO-Link Master
  */
-void iolink_ds_check(iolink_ds_ctx_t* ctx, uint16_t master_checksum);
+void iolink_ds_check(iolink_ds_ctx_t* ctx, uint32_t master_checksum);
 
 /**
  * @brief Start parameter upload to Master (System Command 0x95)
