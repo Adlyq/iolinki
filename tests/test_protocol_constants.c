@@ -135,9 +135,19 @@ static void test_isdu_error_values(void** state)
     assert_int_equal(IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL, 0x11U);      /* legacy alias */
     assert_int_equal(IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL, 0x12U);     /* SUBIDX_NOTAVAIL */
     assert_int_equal(IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL, 0x20U); /* SERV_NOTAVAIL */
+    assert_int_equal(IOLINK_ISDU_ERROR_BUSY, 0x20U);                   /* deprecated: DS busy */
+    assert_int_equal(IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_LOCAL_CTRL, 0x21U); /* SERV_NOTAVAIL_LOCCTRL */
+    assert_int_equal(IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_DEV_CTRL, 0x22U);   /* SERV_NOTAVAIL_DEVCTRL */
+    assert_int_equal(IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG, 0x30U);     /* PAR_VALOUTOFRNG */
+    assert_int_equal(IOLINK_ISDU_ERROR_PAR_VAL_GT_LIM, 0x31U);         /* PAR_VALGTLIM */
+    assert_int_equal(IOLINK_ISDU_ERROR_PAR_VAL_LT_LIM, 0x32U);         /* PAR_VALLTLIM */
+    assert_int_equal(IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN, 0x33U);         /* VAL_LENOVRRUN */
+    assert_int_equal(IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN, 0x34U);         /* VAL_LENUNDRUN */
     assert_int_equal(IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL, 0x35U);     /* FUNC_NOTAVAIL */
+    assert_int_equal(IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL, 0x36U);  /* FUNC_UNAVAILTEMP */
     assert_int_equal(IOLINK_ISDU_ERROR_PARAM_SET_INVALID, 0x40U);      /* PAR_SETINVALID */
     assert_int_equal(IOLINK_ISDU_ERROR_PARAM_INCONSISTENT, 0x41U);     /* PAR_SETINCONSIST */
+    assert_int_equal(IOLINK_ISDU_ERROR_APP_DEV_NOT_READY, 0x82U);      /* APP_DEVNOTRDY */
 
     /* Table C.1 defines a single "index not accessible" code; the two symbolic
      * aliases used by the stack must stay numerically identical. */

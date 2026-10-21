@@ -176,15 +176,28 @@
 #define IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL \
     0x11U /**< @deprecated Misnamed alias of IDX_NOT_AVAIL (0x20 is SERV_NOTAVAIL). */
 #define IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL 0x12U /**< Requested subindex not available. */
+#define IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL 0x20U /**< Service temporarily unavailable (Table C.1). */
+#define IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_LOCAL_CTRL \
+    0x21U /**< Service unavailable - local control (Table C.1). */
+#define IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_DEV_CTRL \
+    0x22U /**< Service unavailable - device control (Table C.1). */
 #define IOLINK_ISDU_ERROR_NOT_ACCESSIBLE 0x23U     /**< Object access denied (Table C.1). */
+#define IOLINK_ISDU_ERROR_WRITE_PROTECTED 0x23U /**< Access denied, Table C.1. */
+#define IOLINK_ISDU_ERROR_BUSY 0x20U \
+    /**< @deprecated Device busy; the spec maps this to SERV_NOTAVAIL (0x20). */
+#define IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG 0x30U /**< Parameter value out of range (Table C.1). */
+#define IOLINK_ISDU_ERROR_PAR_VAL_GT_LIM 0x31U     /**< Parameter value above limit (Table C.1). */
+#define IOLINK_ISDU_ERROR_PAR_VAL_LT_LIM 0x32U     /**< Parameter value below limit (Table C.1). */
+#define IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN 0x33U     /**< Value length overrun (Table C.1). */
+#define IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN 0x34U     /**< Value length underrun (Table C.1). */
 #define IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL \
     0x35U                                       /**< Command function not available (Table C.1). */
-#define IOLINK_ISDU_ERROR_BUSY 0x30U            /**< Device busy (0x30). */
-#define IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL 0x20U /**< SERV_NOTAVAIL (Table C.1). */
-#define IOLINK_ISDU_ERROR_WRITE_PROTECTED 0x23U /**< Access denied, Table C.1. */
+#define IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL \
+    0x36U /**< Function temporarily unavailable (Table C.1). */
 #define IOLINK_ISDU_ERROR_PARAM_SET_INVALID 0x40U   /**< PAR_SETINVALID (Table C.1). */
 #define IOLINK_ISDU_ERROR_PARAM_INCONSISTENT 0x41U  /**< PAR_SETINCONSIST (Table C.1). */
-#define IOLINK_ISDU_ERROR_SEGMENTATION 0x81U       /**< Segmentation error. */
+#define IOLINK_ISDU_ERROR_SEGMENTATION 0x81U       /**< Segmentation error (internal). */
+#define IOLINK_ISDU_ERROR_APP_DEV_NOT_READY 0x82U  /**< Application/device not ready (Table C.1). */
 /** @} */
 
 /**

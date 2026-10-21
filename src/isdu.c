@@ -812,7 +812,8 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                 if (ret != 0) {
                     ctx->response_buf[0] = 0x80U;
                     if (ret == -1) {
-                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_BUSY; /* 0x30 */
+                        ctx->response_buf[1] =
+                            IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL; /* 0x20, Table C.1 */
                     }
                     else if (ret == -2) {
                         ctx->response_buf[1] =
@@ -835,7 +836,7 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                 /* Legacy mapped to Upload Start */
                 if (iolink_ds_start_upload((iolink_ds_ctx_t*) ctx->ds_ctx) != 0) {
                     ctx->response_buf[0] = 0x80U;
-                    ctx->response_buf[1] = IOLINK_ISDU_ERROR_BUSY;
+                    ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL;
                     ctx->response_len = 2U;
                     ctx->response_idx = 0U;
                     ctx->state = ISDU_STATE_RESPONSE_READY;
@@ -848,7 +849,7 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             if (ctx->ds_ctx != NULL) {
                 if (iolink_ds_start_download((iolink_ds_ctx_t*) ctx->ds_ctx) != 0) {
                     ctx->response_buf[0] = 0x80U;
-                    ctx->response_buf[1] = IOLINK_ISDU_ERROR_BUSY;
+                    ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL;
                     ctx->response_len = 2U;
                     ctx->response_idx = 0U;
                     ctx->state = ISDU_STATE_RESPONSE_READY;
