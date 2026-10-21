@@ -1505,6 +1505,9 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_ctx_t* ctx)
     if (units < app_units) {
         units = app_units;
     }
+    if (units < 4U) {
+        units = 4U; /* Table B.3 minimum is 0.4 ms. */
+    }
     return (units > 255U) ? 255U : (uint8_t) units;
 }
 
