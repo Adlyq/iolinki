@@ -257,6 +257,21 @@ int iolink_ds_abort(iolink_ds_ctx_t* ctx);
 int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_locks);
 
 /**
+ * @brief Handle a DataStorageIndex DS_Command (Table B.10 subindex 01).
+ *
+ * DS_Command uses a different encoding from the legacy SystemCommand Param*
+ * set: 0x01 UploadStart, 0x02 UploadEnd, 0x03 DownloadStart, 0x04 DownloadEnd,
+ * 0x05 DS_Break (0x06-0xFF reserved). It drives the same state machine and
+ * clears the DS_UPLOAD_FLAG at the end of an upload/download sequence.
+ *
+ * @param ctx DS context
+ * @param command DS_Command octet
+ * @param access_locks Current Access Lock state (Index 0x000C)
+ * @return int 0: Success, -1: Busy, -2: Access Denied, -3: Unknown/reserved
+ */
+int iolink_ds_handle_ds_command(iolink_ds_ctx_t* ctx, uint8_t command, uint16_t access_locks);
+
+/**
  * @brief Serialize the device's DS-backed parameters into the image buffer.
  *
  * Reads every parameter in the DS set from the parameter manager and packs it

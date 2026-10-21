@@ -389,6 +389,46 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
     return 0;
 }
 
+int iolink_ds_handle_ds_command(iolink_ds_ctx_t* ctx, uint8_t command, uint16_t access_locks)
+{
+    uint8_t param_cmd;
+
+    if (ctx == NULL) {
+        return -1;
+    }
+
+    /* Map the Table B.10 DS_Command encoding to the legacy Param* encoding that
+       iolink_ds_handle_command() understands (DS_Command 0x05 = DS_Break). */
+    switch (command) {
+        case 0x01U: /* DS_UploadStart */
+            param_cmd = IOLINK_CMD_PARAM_UPLOAD_START;
+            break;
+        case 0x02U: /* DS_UploadEnd */
+            param_cmd = IOLINK_CMD_PARAM_UPLOAD_END;
+            break;
+        case 0x03U: /* DS_DownloadStart */
+            param_cmd = IOLINK_CMD_PARAM_DOWNLOAD_START;
+            break;
+        case 0x04U: /* DS_DownloadEnd */
+            param_cmd = IOLINK_CMD_PARAM_DOWNLOAD_END;
+            break;
+        case 0x05U: /* DS_Break */
+            param_cmd = IOLINK_CMD_PARAM_BREAK;
+            break;
+        default:
+            return -3; /* Reserved */
+    }
+
+    int ret = iolink_ds_handle_command(ctx, param_cmd, access_locks);
+
+    /* The DS_UPLOAD_FLAG is reset at the end of each upload/download sequence
+       (Table B.10). */
+    if ((ret == 0) && ((command == 0x02U) || (command == 0x04U))) {
+        ctx->ds_upload_flag = false;
+    }
+    return ret;
+}
+
 uint8_t iolink_ds_state_property(const iolink_ds_ctx_t* ctx)
 {
     uint8_t property = 0U;

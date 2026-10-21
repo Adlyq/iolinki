@@ -601,6 +601,64 @@ static void test_isdu_data_storage_subindices(void** state)
     assert_int_equal(r[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 }
 
+/* Table B.10 subindex 01: the DS_Command octet drives the DS state machine. */
+static void test_isdu_ds_command_sequence(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_ds_ctx_t ds;
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_isdu_init(&ctx);
+    iolink_ds_init(&ds, NULL);
+    ctx.ds_ctx = &ds;
+
+    uint8_t r[4];
+    uint8_t cmd[1] = {0x00U};
+
+    /* DS_UploadStart (0x01) -> upload state; the upload flag is observable. */
+    iolink_ds_request_upload(&ds);
+    assert_int_equal(iolink_ds_state_property(&ds) & 0x80U, 0x80U);
+    cmd[0] = 0x01U;
+    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x01, cmd, 1U), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 0);
+    assert_int_equal(ds.state, IOLINK_DS_STATE_UPLOAD_REQ);
+
+    /* DS_UploadEnd (0x02) -> idle and clears the upload flag. */
+    ds.state = IOLINK_DS_STATE_UPLOADING;
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    cmd[0] = 0x02U;
+    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x01, cmd, 1U), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 0);
+    assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
+    assert_int_equal(iolink_ds_state_property(&ds) & 0x80U, 0x00U);
+
+    /* DS_DownloadStart (0x03) under the DS lock -> access denied (0x8023). */
+    iolink_device_info_set_access_locks(IOLINK_LOCK_DS);
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    cmd[0] = 0x03U;
+    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x01, cmd, 1U), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
+    assert_int_equal(r[0], 0x80U);
+    assert_int_equal(r[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+
+    /* DS_Break (0x05) resets the download to idle. */
+    iolink_device_info_set_access_locks(0U);
+    ds.state = IOLINK_DS_STATE_DOWNLOADING;
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    cmd[0] = 0x05U;
+    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x01, cmd, 1U), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 0);
+    assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
+}
+
 static void test_isdu_direct_parameters_page1(void** state)
 {
     (void) state;
@@ -842,6 +900,7 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_data_storage_subindices, test_setup,
                                         test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_ds_command_sequence, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_snapshot_response, test_setup, test_teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);

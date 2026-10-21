@@ -1253,11 +1253,32 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
             }
         }
         else if (sub == 1U) {
-            /* DS_Command (Table B.10 subindex 01) is handled by the DS state
-               machine (see the DS_Command handler). */
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL;
-            ctx->response_len = 2U;
+            /* DS_Command (Table B.10 subindex 01). */
+            if (ctx->buffer_idx == 0U) {
+                ctx->response_buf[0] = 0x80U;
+                ctx->response_buf[1] = IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN;
+                ctx->response_len = 2U;
+            }
+            else {
+                const uint16_t locks = iolink_device_info_get_access_locks();
+                const int ret = iolink_ds_handle_ds_command(ds, ctx->buffer[0], locks);
+                if (ret == 0) {
+                    ctx->response_len = 0U;
+                }
+                else {
+                    ctx->response_buf[0] = 0x80U;
+                    if (ret == -1) {
+                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL;
+                    }
+                    else if (ret == -2) {
+                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
+                    }
+                    else {
+                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL;
+                    }
+                    ctx->response_len = 2U;
+                }
+            }
         }
         else {
             /* Table B.10: subindices 02-05 are read-only. */
