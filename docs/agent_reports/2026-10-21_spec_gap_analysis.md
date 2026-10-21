@@ -265,3 +265,30 @@ Application Reset / ParamDownloadStore 时产生该事件。
 - **Table B.13**:DeviceStatus 0=OK,1=Maintenance,2=Out-of-Spec,3=Functional-Check,4=Failure → §2.6 依据。
 - **Table B.10**:DataStorageIndex 子索引 01 DS_Command / 02 State_Property / 03 Size(UInt32) / 04 Checksum(UInt32) / 05 Index_List → §2.8 依据。
 - **Table B.9**:0x01 UploadStart / 0x02 UploadEnd / 0x03 DownloadStart / 0x04 DownloadEnd / 0x05 DownloadStore / 0x06 Break;0x84–0x9F Reserved → §2.9 依据。
+
+---
+
+## 8. 修复状态（后续更新）
+
+> 本报告为初始分析。以下项目已在后续提交中修复；未列出的仍按第 6 节优先级处理。
+
+### 已修复
+
+- §2.3 MinCycleTime B.3 编码 + 0.4 ms 下限。
+- §2.4 MseqCap（ISR 版由 `od_width` 推导；TYPE_1_2 默认 2 OD）。
+- §2.5 ISDU 错误码（busy → 0x20、补齐 Table C.1、写通道 ABORT）。
+- §2.6 DeviceStatus/DDS（B.13 映射、过滤 Notification）。
+- §2.7 事件确认只确认已展示槽位；内存改为 EventFlag 置位时冻结（Table 60 T3）。
+- §2.8 DS 子索引 01-05、Fletcher-32、Index_List、State_Property。
+- §2.9 PM/SystemCommand（块参数缓冲 + 原子提交、`ParamDownloadStore` 0x05、0x83 Back-to-box）。
+- §2.10 写通道 ABORT。
+- §4 常量冲突（`APP_*`/`HW_*` 重复、0x18xx 旧别名）。
+- 额外：0x000C/0x000D 子索引、DPP1 0x0F SystemCommand、DS 下载错误分类（0x8040/0x8041）、事件 appears/disappears 生命周期、统一 NVM 后端（callback-only、固定布局、magic/version、Fletcher-32）、DS 参数访问改进（`set_param_desc`/`max_len`）。
+
+### 仍未修复
+
+- 流式传输的帧格式/读请求（§2.1/§2.2，仅流式版；ISR 版已按类型区分读/写）。
+- TYPE_1_2/1_V 的“无 PD”语义（ISR 帧布局仍假设 PDout；当前 2_V 不受影响）。
+- MasterIdent/DeviceIdent（0x95/0x96）未做 ident 校验（规范为可选特性）。
+- 与 ST 对比的差异化能力：SIO 驱动模式（NPN/PNP）、transparent UART、事件 NVM 备份、传感器读取周期调度。
+- t_A 注释已确认为笔误（13 bit 是 byte-gap，不是 t_A 上限；规范 1–10 bit）。

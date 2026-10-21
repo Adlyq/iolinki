@@ -27,4 +27,4 @@ Do not edit manually. Reports live in `docs/agent_reports/`.
 - `legacy_reports.md`
 - `task_11.md`
 - `task_4.md`
-- `2026-10-21_spec_gap_analysis.md` (规范差距/正确性/一致性分析, 参照 V1.1.5 PDF + ST mini-stack + 睿思行远 18 篇)
+- `2026-10-21_spec_gap_analysis.md` (规范差距/正确性/一致性分析 + 后续修复状态, 参照 V1.1.5 PDF + ST mini-stack + 睿思行远 18 篇)

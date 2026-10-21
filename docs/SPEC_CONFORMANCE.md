@@ -30,14 +30,14 @@ suite (including `test_spec_conformance`) is green: `ctest --output-on-failure`.
 | 0x0002 | SystemCommand (0x01-0x06, 0x80-0x83; 0x84-0x9F reserved) | PASS | `test_system_commands`, `test_isdu`, `test_isdu_wire` |
 | 0x0003 | DataStorageIndex — sub 01 DS_Command, 02 State_Property, 03 Size (UInt32), 04 Parameter_Checksum (UInt32), 05 Index_List; sub 0 whole-image (legacy) | PASS | `test_ds`, `test_isdu`, `test_system_commands` |
 | 0x0004-0x000B | Reserved (VendorID/DeviceID are DPP1) | PASS | `test_vendor_device_id_indices_reserved` |
-| 0x000C | DeviceAccessLocks | PASS | `test_ident_indices`, `test_ds`, `test_spec_conformance` |
-| 0x000D | ProfileCharacteristic (contains FunctionID) | PASS | `test_ident_indices` |
+| 0x000C | DeviceAccessLocks (RecordT; only subindex 0 is accessible, B.2.4) | PASS | `test_ident_indices`, `test_ds`, `test_spec_conformance`, `test_isdu` |
+| 0x000D | ProfileCharacteristic (ArrayT of UIntegerT16, profile-conditional; subindex 0/1) | PASS | `test_ident_indices`, `test_isdu` |
 | 0x0010-0x0017 | Identification strings | PASS | `test_ident_indices`, `test_spec_conformance` |
 | 0x0018-0x001A | Application/Function/Location tags (optional / profile-conditional; default DS set) | PASS | `test_isdu`, `test_system_commands` |
 | 0x001B | ProductURI (conditional) | PASS | `test_product_uri_index` |
 | 0x0020 | ErrorCount (optional) | PASS | `test_error_count_index` |
 | 0x0024 | DeviceStatus (Table B.13: 0..4) | PASS | `test_isdu`, `test_events` |
-| 0x0025 | DetailedDeviceStatus (Error/Warning only, B.2.22) | PASS | `test_isdu` |
+| 0x0025 | DetailedDeviceStatus (ArrayT of 3-octet entries, subindex 0..n; Error/Warning only, B.2.22) | PASS | `test_isdu` |
 | 0x0028 | ProcessDataInput (last valid PD-in) | PASS | `test_process_data_input_returns_pd`, `test_isdu` |
 | 0x0029 | ProcessDataOutput (last valid PD-out) | PASS | `test_process_data_output_returns_pd` |
 | read-only objects reject WRITE (0x80 0x23) | PASS | `test_read_only_identification_rejects_write`, `test_isdu_wire` |
@@ -47,8 +47,14 @@ suite (including `test_spec_conformance`) is green: `ctest --output-on-failure`.
 | Area | Status | Test |
 |---|---|---|
 | Event queue, qualifier, classify (Annex D), memory | PASS | `test_events` |
+| Event appears/disappears lifecycle (A.6.4: pairing, 50 ms window, 1 s repeat limit, severity order, clear on comm loss) | PASS | `test_events` |
+| Event memory frozen when the EventFlag is raised (Table 60 T3) | PASS | `test_events` |
+| DPP1 0x0F SystemCommand (executed, no response, 7.3.5.3) | PASS | `test_isdu` |
 | DeviceStatus mapping (B.13) + DetailedDeviceStatus filtering/order (B.2.22) | PASS | `test_isdu`, `test_events` |
 | DS parameter serialization/apply, Fletcher-32 checksum, locks, recovery | PASS | `test_ds`, `test_system_commands` |
+| DS block-download error classification (0x8040 malformed vs 0x8041 rejected parameter) | PASS | `test_ds` |
+| Unified NVM backend (callback-only), fixed region layout, magic/version, record checksum | PASS | `test_ds`, `test_params_persistence` |
+| DS parameter access: default params+vendor_service, `set_param_desc`, `max_len` | PASS | `test_ds` |
 | DS bindable parameter set incl. vendor parameters (0x0040+/0x0100+) | PASS | `test_ds` |
 | DS Index_List / Size / State_Property (incl. DS_UPLOAD_FLAG) / Checksum subindices | PASS | `test_isdu` |
 | DS_Command (0x0003 sub 01) upload/download/break sequence | PASS | `test_isdu` |
@@ -92,13 +98,13 @@ previously missing:
   `reset_pending`; the application owns re-initialization, so the "since reset"
   part depends on the application. B.2.20 explicitly allows vendor/device
   specific usage.
-- **DS_UPLOAD_FLAG persistence** (B.2.10): the flag is held in RAM and exposed
-  through State_Property bit 7; storing it in non-volatile memory is left to the
-  application's DS storage backend.
+- **DS_UPLOAD_FLAG persistence** (B.2.10): the flag is persisted through the
+  unified NVM backend (flag region) and restored on init, in addition to being
+  exposed through State_Property bit 7.
 - **DS parameter set defaults to the three tags.** `ApplicationSpecificTag`
   (0x0018, optional), `FunctionTag` (0x0019) and `LocationTag` (0x001A) are the
   profile-conditional tags. Applications that do not want Data Storage can bind
-  an empty descriptor set via `iolink_ds_bind_param_access()`, which makes
+  an empty descriptor set via `iolink_ds_set_param_desc()` / `iolink_ds_bind_param_access()`, which makes
   Index_List report the 0x0000 terminator (10.4.5).
 
 ## Deliberate divergences from upstream (PDF wins)

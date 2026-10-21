@@ -31,6 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   block-parameter download buffering with atomic commit and `ParamDownloadEnd`
   `0x8041` rollback; `ParamDownloadStore` (0x05); Back-to-box (0x83)
   communication stop after 3 MasterCycles.
+- Unified NVM backend (`iolink_storage_api_t`, callback-only, with a `user`
+  pointer) replacing the separate `iolink_nvm_*`/`ds_storage` entry points; a
+  fixed compile-time region layout (`IOLINK_STORAGE_TOTAL_SIZE`) with
+  magic/version and a Fletcher-32 record checksum.
+- Event appears/disappears lifecycle for Error/Warning (A.6.4): 50 ms minimum
+  appearance window, 1 s per-code repeat limit, severity-ordered queue and a
+  queue reset when communication is lost.
+- `iolink_ds_set_param_desc()` for replacing only the DS index list, and
+  `iolink_ds_param_desc_t::max_len` to bound a record's value.
+- `docs/STORAGE.md` describing the storage backend and DS parameter access.
 
 ### Changed
 - `iolink_device_init()` validates `config->stack` before touching the context
@@ -66,6 +76,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and clamped to the 0.4 ms minimum.
 - `0x83` is treated as Back-to-box (restore delivery values + stop
   communication), not "restore application defaults".
+- Event memory is frozen when the EventFlag is raised (Table 60 T3), not on the
+  first master read.
+- DetailedDeviceStatus is served per subindex (0 = whole list, i = i-th active
+  entry) and drops disappeared events.
+- `iolink_ds_bind_param_access()` keeps the bound accessors/user when only the
+  descriptor set is changed.
 
 ### Fixed
 - ISR_PUMP: three PD-in reply buffers plus an ISR-published captured index, so
@@ -101,6 +117,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   M-sequence capability code 1.
 - Data Storage: raise DS_UPLOAD_REQ/DS_UPLOAD_FLAG on parameter-changing
   SystemCommands (Application Reset, restore commands, ParamDownloadStore).
+- ISDU: single-element objects reject a non-zero subindex; 0x000C only accepts
+  subindex 0; 0x000D is a single-element ArrayT.
+- DPP1 0x0F SystemCommand is executed without an ISDU response (7.3.5.3).
+- Data Storage: ParamDownloadEnd distinguishes a malformed image
+  (`PAR_SETINVALID`, 0x8040) from a rejected known parameter
+  (`PAR_SETINCONSIST`, 0x8041).
 
 ## [2.2.0] - 2026-10-17
 
