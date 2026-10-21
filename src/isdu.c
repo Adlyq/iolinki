@@ -783,6 +783,12 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
  * Data Storage parameter set locally on the Device. */
 static void isdu_trigger_ds_upload_req(iolink_isdu_ctx_t* ctx)
 {
+#if IOLINK_FEATURE_DATA_STORAGE
+    /* 10.4.2: raise DS_UPLOAD_FLAG in State_Property as well as the event. */
+    if (ctx->ds_ctx != NULL) {
+        iolink_ds_request_upload((iolink_ds_ctx_t*) ctx->ds_ctx);
+    }
+#endif
 #if IOLINK_FEATURE_EVENTS
     if (ctx->event_ctx != NULL) {
         iolink_event_trigger((iolink_events_ctx_t*) ctx->event_ctx,
@@ -874,7 +880,6 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                     return;
                 }
                 if (store) {
-                    iolink_ds_request_upload(ds);
                     isdu_trigger_ds_upload_req(ctx);
                 }
             }
