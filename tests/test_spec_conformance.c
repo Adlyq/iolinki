@@ -173,6 +173,7 @@ static void test_process_data_input_returns_pd(void** state)
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
     dll.pd_in_len_current = 2U;
+    dll.pd_in_len = 2U;
     dll.pd_in[0][dll.od_width + 0U] = 0x11U;
     dll.pd_in[0][dll.od_width + 1U] = 0x22U;
 

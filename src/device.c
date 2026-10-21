@@ -218,6 +218,19 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     return 0;
 }
 
+/** Pick a PD-in buffer the ISR is not streaming and that is not active. */
+static uint8_t device_pd_in_free_index(const iolink_dll_ctx_t* dll)
+{
+    const uint8_t active = dll->pd_in_active;
+    const uint8_t captured = dll->pd_in_captured;
+    for (uint8_t i = 0U; i < IOLINK_PD_IN_BUFFERS; i++) {
+        if ((i != active) && (i != captured)) {
+            return i;
+        }
+    }
+    return (uint8_t) (active ^ 1U); /* unreachable with 3 buffers */
+}
+
 void iolink_device_process(iolink_device_ctx_t* ctx)
 {
     if (ctx == NULL) {
@@ -287,12 +300,12 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
         }
 #if IOLINK_APP_PD_INPUT_CALLBACK
         if (ctx->config->app_callbacks->on_pd_input != NULL) {
-            /* Fill the inactive reply buffer, then publish it atomically so the
-             * ISR never streams a torn PD-in. The callback return value is the
-             * PD valid flag; the pre-cached cyclic reply must be rebuilt. */
-            const uint8_t inactive = (uint8_t) (ctx->dll.pd_in_active ^ 1U);
-            /* Fill the inactive buffer outside the critical section: the ISR
-             * keeps streaming the active copy meanwhile. */
+            /* Fill a buffer the ISR is not streaming, then publish it atomically
+             * so the ISR never streams a torn PD-in. The callback return value
+             * is the PD valid flag; the pre-cached cyclic reply must be rebuilt. */
+            const uint8_t inactive = device_pd_in_free_index(&ctx->dll);
+            /* Fill the free buffer outside the critical section: the ISR keeps
+             * streaming the captured copy meanwhile. */
             const bool valid = ctx->config->app_callbacks->on_pd_input(
                 &ctx->dll.pd_in[inactive][ctx->dll.od_width], ctx->dll.pd_in_len_current);
 
@@ -345,9 +358,9 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
         iolink_critical_enter();
     }
 
-    /* PD-in lives after the OD header in the reply buffer; fill the inactive
-     * copy and publish it with an atomic index swap. */
-    const uint8_t inactive = (uint8_t) (ctx->dll.pd_in_active ^ 1U);
+    /* PD-in lives after the OD header in the reply buffer; fill a buffer the
+     * ISR is not streaming and publish it with an atomic index swap. */
+    const uint8_t inactive = device_pd_in_free_index(&ctx->dll);
     (void) memcpy(&ctx->dll.pd_in[inactive][ctx->dll.od_width], data, len);
     ctx->dll.pd_in_len = (uint8_t) len;
     ctx->dll.pd_in_len_current = (uint8_t) len;

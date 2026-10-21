@@ -74,6 +74,8 @@ typedef enum
 /* PD reply send buffer: [OD][PD-in][CKS]. Sized for the runtime PD-in length
  * plus the OD header and the trailing checksum. */
 #define IOLINK_PD_REPLY_MAX (IOLINK_OD_MAX_SIZE + IOLINK_PD_IN_MAX_SIZE + 1U)
+/** PD-in reply buffers: active, being filled, and held by the ISR. */
+#define IOLINK_PD_IN_BUFFERS 3U
 
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
@@ -86,7 +88,7 @@ typedef enum
  */
 typedef struct
 {
-    iolink_dll_state_t state;    /**< Current DLL state */
+    volatile iolink_dll_state_t state;    /**< Current DLL state */
     const iolink_phy_api_t* phy; /**< Bound PHY API implementation */
     /* Optional application critical-section hooks. Used by dll_send() to start a
      * main-context (Type-0) transmission atomically with respect to the data
@@ -94,12 +96,12 @@ typedef struct
     void (*lock)(void* user);
     void (*unlock)(void* user);
     void* lock_user;
-    uint32_t last_activity_ms;   /**< Timestamp of last received byte */
+    volatile uint32_t last_activity_ms;   /**< Timestamp of last received byte */
     uint32_t last_valid_frame_ms;/**< Timestamp of the last checksum/type-valid frame */
-    uint32_t master_last_activity_ms; /**< Timestamp of the last frame end / RX timeout */
+    volatile uint32_t master_last_activity_ms; /**< Timestamp of the last frame end / RX timeout */
     uint8_t master_lost_cycles;  /**< Missed master cycles before master_lost; 0 = disabled */
-    uint8_t master_lost_count;   /**< Missed cycles, saturated at 0xFF */
-    bool master_lost;            /**< Master communication lost (application hint) */
+    volatile uint8_t master_lost_count;   /**< Missed cycles, saturated at 0xFF */
+    volatile bool master_lost;            /**< Master communication lost (application hint) */
     volatile uint8_t isr_master_activity; /**< ISR saw a frame end; main clears it */
     bool wakeup_seen;            /**< Wake-up detected (if PHY supports it) */
 
@@ -133,11 +135,12 @@ typedef struct
     uint8_t isr_rx_cnt;                          /**< Octets accumulated this frame */
     uint8_t isr_rx_acc;                          /**< A.1.6 checksum accumulated per octet */
     uint8_t isr_rx_expect;                       /**< Expected length (0 = unknown) */
-    uint8_t isr_frame_buf[IOLINK_M_SEQ_MAX_LEN]; /**< Mailbox storage (RX BYTE) */
 #endif
+    uint8_t isr_frame_buf[IOLINK_M_SEQ_MAX_LEN]; /**< Mailbox storage (RX BYTE) /
+                                                      stable copy (RX FRAME) */
     volatile const uint8_t* isr_frame_ptr;       /**< Mailbox: frame pointer
                                                       (RX BYTE: isr_frame_buf;
-                                                       RX FRAME: PHY-owned buffer) */
+                                                       RX FRAME: isr_frame_buf) */
     volatile uint8_t isr_frame_len;              /**< Mailbox length */
     volatile uint8_t isr_frame_ready;            /**< Mailbox ready flag */
     volatile uint8_t isr_eager_replied;          /**< 1 if the ISR already sent the
@@ -169,7 +172,7 @@ typedef struct
                                                       main-context service window */
     volatile uint8_t in_isr;                     /**< ISR is running the pump */
     volatile uint8_t state_cb_pending;           /**< State callback deferred to main */
-    iolink_dll_state_t pending_state;            /**< Deferred state value */
+    volatile iolink_dll_state_t pending_state;   /**< Deferred state value */
     /* Reply transmission, fed one octet per data request. Two payload slots
      * keep the in-flight TX-FRAME DMA buffer stable while the next reply is
      * prepared (the PHY serialises the transfers). */
@@ -232,10 +235,13 @@ typedef struct
     uint64_t fallback_deadline_ms; /**< Deadline to complete a FALLBACK MasterCommand */
 
     /* Process Data Buffers. The PD-in buffer doubles as the reply send buffer:
-     * layout [OD][PD-in][CKS]. The main fills the inactive copy and swaps
-     * atomically; the ISR streams the active copy (zero-copy). */
-    uint8_t pd_in[2][IOLINK_PD_REPLY_MAX];  /**< [OD][PD-in][CKS] reply buffers */
+     * layout [OD][PD-in][CKS]. The main fills a buffer that is neither active
+     * nor held by the ISR, then swaps it in atomically; the ISR captures the
+     * active copy at reply start and streams it (zero-copy). Three buffers let
+     * the main publish at any rate without touching the in-flight copy. */
+    uint8_t pd_in[IOLINK_PD_IN_BUFFERS][IOLINK_PD_REPLY_MAX]; /**< [OD][PD-in][CKS] reply buffers */
     volatile uint8_t pd_in_active;          /**< Active PD reply buffer index */
+    volatile uint8_t pd_in_captured;        /**< Buffer the ISR is streaming (0xFF = none) */
     uint8_t pd_out[IOLINK_PD_OUT_MAX_SIZE]; /**< Output PD buffer (Master -> Device) */
 
     /* Error Counters & Statistics */
@@ -253,7 +259,7 @@ typedef struct
     uint32_t voltage_faults;        /**< Cumulative voltage fault count */
     uint32_t overtemp_faults;       /**< Cumulative over-temperature fault count */
     uint32_t short_circuits;        /**< Cumulative short circuit count */
-    uint8_t fallback_count;         /**< Consecutive fallback count for SIO transition */
+    volatile uint8_t fallback_count; /**< Consecutive fallback count for SIO transition */
     uint8_t sio_fallback_threshold; /**< Fallback threshold to enter SIO mode (default 3) */
 
     /* Timing Statistics */

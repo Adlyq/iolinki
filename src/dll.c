@@ -679,10 +679,10 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
         memcpy(&resp[pos], od_out, resp_od);
         pos += resp_od;
     }
-    if (ctx->pd_in_len_current > 0U) {
+    if (ctx->pd_in_len > 0U) {
         memcpy(&resp[pos], &ctx->pd_in[ctx->pd_in_active][ctx->od_width],
-               ctx->pd_in_len_current);
-        pos += ctx->pd_in_len_current;
+               ctx->pd_in_len);
+        pos += ctx->pd_in_len;
     }
 
     uint8_t cks = 0x00U;
@@ -786,6 +786,7 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     ctx->pd_in_len_max = ctx->pd_in_len;
     ctx->pd_out_len_max = ctx->pd_out_len;
     ctx->pd_valid = true;
+    ctx->pd_in_captured = 0xFFU; /* no reply in flight */
 
     ctx->baudrate = IOLINK_BAUDRATE_COM2;
     if (ctx->phy->set_baudrate != NULL) {
@@ -1160,6 +1161,16 @@ static void dll_restore_operating_baudrate(iolink_dll_ctx_t* ctx)
     }
 }
 
+/** Read a 64-bit value shared with the data ISR without tearing its halves. */
+static uint64_t dll_read_u64(const uint64_t* value)
+{
+    uint64_t snapshot;
+    iolink_critical_enter();
+    snapshot = *value;
+    iolink_critical_exit();
+    return snapshot;
+}
+
 void iolink_dll_process(iolink_dll_ctx_t* ctx)
 {
     if ((ctx == NULL) || (ctx->phy == NULL)) {
@@ -1256,10 +1267,11 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
 
     /* Table 47 T10: a wake-up without a valid message within T_DSIO returns the
        device to SIO. Only applies while still waiting for the first message. */
-    if ((ctx->phy_mode != IOLINK_PHY_MODE_SIO) && (ctx->dsio_deadline_ms != 0U) &&
+    const uint64_t dsio_deadline = dll_read_u64(&ctx->dsio_deadline_ms);
+    if ((ctx->phy_mode != IOLINK_PHY_MODE_SIO) && (dsio_deadline != 0U) &&
         ((ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) ||
          (ctx->state == IOLINK_DLL_STATE_STARTUP))) {
-        if (now_ms64 > ctx->dsio_deadline_ms) {
+        if (now_ms64 > dsio_deadline) {
             ctx->dsio_deadline_ms = 0U;
             ctx->wakeup_seen = false;
             ctx->timeout_errors++;
@@ -1273,11 +1285,12 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
     /* Table 47 T8/T9 + Table 43: after a FALLBACK MasterCommand the device
        switches to SIO after T_FBD (3 MasterCycleTimes, at most 500 ms) at the
        latest. The reply was already sent when the command was handled. */
-    if ((ctx->fallback_deadline_ms != 0U) &&
+    const uint64_t fallback_deadline = dll_read_u64(&ctx->fallback_deadline_ms);
+    if ((fallback_deadline != 0U) &&
         ((ctx->state == IOLINK_DLL_STATE_FALLBACK) || (ctx->state == IOLINK_DLL_STATE_OPERATE) ||
          (ctx->state == IOLINK_DLL_STATE_ESTAB_COM) ||
          (ctx->state == IOLINK_DLL_STATE_PREOPERATE))) {
-        if (now_ms64 >= ctx->fallback_deadline_ms) {
+        if (now_ms64 >= fallback_deadline) {
             ctx->fallback_deadline_ms = 0U;
             iolink_dll_set_baudrate(ctx, IOLINK_BAUDRATE_COM1);
             iolink_dll_set_sio_mode(ctx);
@@ -1316,9 +1329,10 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
     }
 
     if ((ctx->frame_index > 0U) && (ctx->enforce_timing) && (ctx->t_byte_limit_us > 0U)) {
-        if (ctx->last_byte_us != 0U) {
+        const uint64_t last_byte_us = dll_read_u64(&ctx->last_byte_us);
+        if (last_byte_us != 0U) {
             uint64_t now_us = iolink_time_get_us();
-            if (now_us - ctx->last_byte_us > (uint64_t) ctx->t_byte_limit_us) {
+            if (now_us - last_byte_us > (uint64_t) ctx->t_byte_limit_us) {
                 ctx->timing_errors++;
                 ctx->t_byte_violations++;
                 ctx->framing_errors++;
@@ -1508,6 +1522,7 @@ int iolink_dll_set_baudrate(iolink_dll_ctx_t* ctx, iolink_baudrate_t baudrate)
         ctx->isr_tx_active = 0U;
         ctx->isr_tx_has_cks = 0U;
         ctx->isr_tx_idx = 0U;
+        ctx->pd_in_captured = 0xFFU;
     }
     ctx->t_ren_limit_us = dll_get_t_ren_limit_us(ctx);
     ctx->t_byte_limit_us = dll_get_t_byte_limit_us(ctx);
@@ -1532,8 +1547,12 @@ int iolink_dll_set_pd_length(iolink_dll_ctx_t* ctx, uint8_t pd_in_len, uint8_t p
     if ((ctx == NULL) || (pd_in_len > IOLINK_PD_IN_MAX_SIZE) ||
         (pd_out_len > IOLINK_PD_OUT_MAX_SIZE))
         return -1;
+    /* The data ISR reads pd_out_len_current to frame a request; publish the
+     * PD-in/PD-out pair atomically so it cannot observe a half update. */
+    iolink_critical_enter();
     ctx->pd_in_len_current = pd_in_len;
     ctx->pd_out_len_current = pd_out_len;
+    iolink_critical_exit();
     return 0;
 }
 
@@ -1557,6 +1576,7 @@ int iolink_dll_set_sio_mode(iolink_dll_ctx_t* ctx)
     ctx->isr_tx_active = 0U;
     ctx->isr_tx_has_cks = 0U;
     ctx->isr_tx_idx = 0U;
+    ctx->pd_in_captured = 0xFFU;
 #endif
     return 0;
 }
@@ -2087,9 +2107,9 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
     const uint8_t flowctrl = (uint8_t) (first & IOLINK_MC_ADDR_MASK);
 
     /* Zero-copy reply: the PD-in already lives in the active reply buffer
-     * (the main fills the inactive copy and publishes it atomically).
-     * Layout: [OD x od_width][PD-in][CKS]. Capture the index once so a swap
-     * during the transfer cannot affect this reply. */
+     * (the main fills a free copy and publishes it atomically).
+     * Layout: [OD x od_width][PD-in][CKS]. Capture the index once, so the main
+     * pump never targets this buffer until the next reply. */
     const uint8_t captured = ctx->pd_in_active;
     uint8_t* buf = ctx->pd_in[captured];
     if (read) {
@@ -2129,12 +2149,14 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
      * PD-in is always stored after the configured OD header). */
     const uint8_t* base = read ? buf : (buf + ctx->od_width);
     const uint16_t total =
-        (uint16_t) ctx->od_width + (uint16_t) ctx->pd_in_len_current + 1U;
+        (uint16_t) ctx->od_width + (uint16_t) ctx->pd_in_len + 1U;
     const uint16_t out_len =
         read ? total : (uint16_t) (total - (uint16_t) ctx->od_width);
     if (out_len > (uint16_t) IOLINK_PD_REPLY_MAX) {
         return false;
     }
+    /* Publish the captured buffer only once the reply is known to be valid. */
+    ctx->pd_in_captured = captured;
     const uint8_t flags = dll_isr_status_flags(ctx);
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     ctx->isr_tx_len = (uint8_t) out_len;
@@ -2314,13 +2336,18 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
                     eager_ok = false; /* main pump validates/falls back */
                 }
                 ctx->isr_frame_len = len;
-                ctx->isr_frame_ptr = f;    /* publish pointer (zero-copy) */
+                ctx->isr_frame_ptr = f;    /* PHY buffer, valid during this ISR */
                 ctx->isr_frame_ready = 1U; /* publish last */
                 if (eager_ok) {
                     if (dll_isr_start_reply(ctx)) {
                         ctx->isr_eager_replied = 1U;
                     }
                 }
+                /* Stabilise the frame for the main pump after the reply window
+                 * has closed: the PHY's RX DMA ring may wrap while the main
+                 * copies, and the eager reply must not pay for this in t_A. */
+                (void) memcpy(ctx->isr_frame_buf, f, len);
+                ctx->isr_frame_ptr = ctx->isr_frame_buf;
             }
             break;
         }

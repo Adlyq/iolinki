@@ -57,6 +57,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   out-of-order COUNTs.
 
 ### Fixed
+- ISR_PUMP: three PD-in reply buffers plus an ISR-published captured index, so
+  the main pump can publish at any rate without overwriting the copy the ISR is
+  streaming; replies use the published `pd_in_len` instead of the configured
+  `pd_in_len_current`.
+- ISR_PUMP: `state`, master-loss fields and timestamps are `volatile`; 64-bit
+  deadlines are snapshotted under the critical section and
+  `iolink_dll_set_pd_length()` publishes its pair atomically.
+- ISR_PUMP RX FRAME: copy each completed frame into the mailbox buffer after the
+  eager reply starts, so a main-loop stall longer than the DMA ring can no longer
+  tear the frame the main pump copies (the copy is outside t_A).
 - `test_isr_observability`: the Type-0 ISDU write fast-path test now checks
   the ISR staging contract (`isr_od_stage`) and the main-pump drain instead of
   the pre-staging direct `isdu.req_idx` update.

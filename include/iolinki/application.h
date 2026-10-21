@@ -19,7 +19,7 @@
  * @brief Select the PD-input path.
  *
  * 0: the application calls iolink_device_pd_input_update() from its main loop.
- * 1: the DLL calls on_pd_input() each OPERATE cycle to fill the inactive PD-in
+ * 1: the DLL calls on_pd_input() each OPERATE cycle to fill a free PD-in
  *    buffer; iolink_device_pd_input_update() is disabled to prevent mixing.
  */
 #ifndef IOLINK_APP_PD_INPUT_CALLBACK
@@ -44,7 +44,7 @@
  * corresponding state. The PD callbacks fire on
  * every processed OPERATE cycle. @ref on_pd_output reports the output Process
  * Data received from the Master (Master -> Device). When
- * IOLINK_APP_PD_INPUT_CALLBACK is 1, @ref on_pd_input fills the inactive PD-in
+ * IOLINK_APP_PD_INPUT_CALLBACK is 1, @ref on_pd_input fills a free PD-in
  * buffer (Device -> Master) and its return value becomes the PD valid flag.
  */
 typedef struct

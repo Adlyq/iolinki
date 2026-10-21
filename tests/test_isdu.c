@@ -408,6 +408,7 @@ static void test_isdu_pdin_descriptor_read(void** state)
 
     /* Wire a DLL context with a configured PD-in length of 3. */
     assert_int_equal(iolink_dll_set_pd_length(&dll, 3, 0), 0);
+    dll.pd_in_len = 3U; /* published PD-in snapshot length */
     dll.pd_in[0][dll.od_width + 0U] = 0x11U;
     dll.pd_in[0][dll.od_width + 1U] = 0x22U;
     dll.pd_in[0][dll.od_width + 2U] = 0x33U;
