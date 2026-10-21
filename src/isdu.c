@@ -838,9 +838,15 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
         case IOLINK_CMD_PARAM_DOWNLOAD_END:
         case IOLINK_CMD_PARAM_UPLOAD_START:
         case IOLINK_CMD_PARAM_UPLOAD_END:
+        case IOLINK_CMD_PARAM_DOWNLOAD_STORE:
             if (ctx->ds_ctx != NULL) {
+                iolink_ds_ctx_t* ds = (iolink_ds_ctx_t*) ctx->ds_ctx;
                 uint16_t locks = iolink_device_info_get_access_locks();
-                int ret = iolink_ds_handle_command((iolink_ds_ctx_t*) ctx->ds_ctx, cmd, locks);
+                /* ParamDownloadStore finalizes like DownloadEnd and additionally
+                   raises DS_UPLOAD_REQ (10.4.2). */
+                const bool store = (cmd == IOLINK_CMD_PARAM_DOWNLOAD_STORE);
+                const uint8_t ds_cmd = store ? IOLINK_CMD_PARAM_DOWNLOAD_END : cmd;
+                int ret = iolink_ds_handle_command(ds, ds_cmd, locks);
 
                 if (ret != 0) {
                     ctx->response_buf[0] = 0x80U;
@@ -863,6 +869,10 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                     ctx->response_idx = 0U;
                     ctx->state = ISDU_STATE_RESPONSE_READY;
                     return;
+                }
+                if (store) {
+                    iolink_ds_request_upload(ds);
+                    isdu_trigger_ds_upload_req(ctx);
                 }
             }
             break;

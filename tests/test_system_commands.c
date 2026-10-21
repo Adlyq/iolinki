@@ -23,6 +23,7 @@
 #include "iolinki/isdu.h"
 #include "iolinki/params.h"
 #include "iolinki/data_storage.h"
+#include "iolinki/events.h"
 #include "iolinki/protocol.h"
 #include "iolinki/device_info.h"
 #include "test_helpers.h"
@@ -247,6 +248,53 @@ static void test_block_param_download_break(void** state)
     assert_memory_equal(buf, "OLD", 3);
 }
 
+/* ParamDownloadStore finalizes the download and raises DS_UPLOAD_REQ (10.4.2). */
+static void test_param_download_store_raises_ds_upload_req(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_ds_ctx_t ds;
+    iolink_events_ctx_t events;
+    iolink_ds_init(&ds, NULL);
+    iolink_events_init(&events);
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    ctx.event_ctx = &events;
+
+    assert_int_equal(
+        iolink_params_set(IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "OLD", 3U, true), 0);
+
+    assert_int_equal(send_system_command(&ctx, IOLINK_CMD_PARAM_DOWNLOAD_START), 1);
+    iolink_isdu_process(&ctx);
+    uint8_t resp[2];
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    ctx.event_ctx = &events;
+    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U,
+                                             (const uint8_t*) "NEW", 3U),
+                     1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    ctx.event_ctx = &events;
+    assert_int_equal(send_system_command(&ctx, IOLINK_CMD_PARAM_DOWNLOAD_STORE), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+
+    uint8_t buf[8];
+    assert_int_equal(iolink_params_get(IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf)), 3);
+    assert_memory_equal(buf, "NEW", 3);
+
+    iolink_event_t ev;
+    assert_true(iolink_events_pop(&events, &ev));
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST);
+    assert_int_equal(iolink_ds_state_property(&ds) & 0x80U, 0x80U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -261,6 +309,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_block_param_download_buffered, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_block_param_download_break, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_param_download_store_raises_ds_upload_req,
+                                        test_setup, test_teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
