@@ -55,6 +55,25 @@ static void device_state_cb(void* user, iolink_dll_state_t state)
     }
 }
 
+/** @brief Default OD octet count for an M-sequence type (Table A.10).
+ *
+ * TYPE_1_2 carries 2 OD octets, TYPE_1_V carries 8, TYPE_2_V defaults to 2;
+ * everything else defaults to 1. (TYPE_1_1 has no OD octet; it keeps a
+ * placeholder width of 1.) */
+static uint8_t device_default_od_width(uint8_t m_seq_type)
+{
+    switch (m_seq_type) {
+        case IOLINK_M_SEQ_TYPE_1_2:
+            return 2U;
+        case IOLINK_M_SEQ_TYPE_1_V:
+            return 8U;
+        case IOLINK_M_SEQ_TYPE_2_V:
+            return 2U;
+        default:
+            return 1U;
+    }
+}
+
 /** @brief Copy the user stack configuration into the DLL context and derive lengths/timing. */
 static void device_apply_stack_config(iolink_device_ctx_t* ctx)
 {
@@ -88,7 +107,7 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
      * (drop that extension when upstream gains native support). */
     ctx->dll.od_width = ctx->stack_config.od_width;
     if (ctx->dll.od_width == 0U) {
-        ctx->dll.od_width = ctx->dll.od_len;
+        ctx->dll.od_width = device_default_od_width((uint8_t) ctx->dll.m_seq_type);
     }
     ctx->dll.cyclic_reply_precached =
         (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && dll_phy_has_tx(&ctx->dll);
@@ -134,7 +153,7 @@ static int device_config_validate(const iolink_device_config_t* config)
     /* Table A.10 OD widths; 0 derives from the M-sequence type. */
     od = stack->od_width;
     if (od == 0U) {
-        od = (stack->m_seq_type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
+        od = device_default_od_width((uint8_t) stack->m_seq_type);
     }
     if ((uint32_t) od > (uint32_t) IOLINK_OD_MAX_SIZE) {
         return IOLINK_DEVICE_INIT_ERR_OD_CAPACITY;
