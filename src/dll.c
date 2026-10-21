@@ -1214,6 +1214,12 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
     uint32_t now_ms = iolink_time_get_ms();
     uint64_t now_ms64 = iolink_time_get_us() / 1000U;
 
+    if (ctx->isr_master_activity != 0U) {
+        /* A frame may have completed in the ISR after the early check above. */
+        ctx->isr_master_activity = 0U;
+        dll_master_activity(ctx);
+    }
+
     if (ctx->master_lost_cycles != 0U) {
         uint32_t cycle_ms = (dll_master_cycle_us(ctx) + 999U) / 1000U;
         if (cycle_ms == 0U) {
