@@ -285,20 +285,39 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
         if (ctx->config->app_callbacks->on_pd_output != NULL) {
             ctx->config->app_callbacks->on_pd_output(ctx->dll.pd_out, ctx->dll.pd_out_len_current);
         }
+#if IOLINK_APP_PD_INPUT_CALLBACK
         if (ctx->config->app_callbacks->on_pd_input != NULL) {
             /* Fill the inactive reply buffer, then publish it atomically so the
-             * ISR never streams a torn PD-in. */
+             * ISR never streams a torn PD-in. The callback return value is the
+             * PD valid flag; the pre-cached cyclic reply must be rebuilt. */
             const uint8_t inactive = (uint8_t) (ctx->dll.pd_in_active ^ 1U);
-            ctx->config->app_callbacks->on_pd_input(&ctx->dll.pd_in[inactive][ctx->dll.od_width],
-                                                    ctx->dll.pd_in_len_current);
+            const bool valid = ctx->config->app_callbacks->on_pd_input(
+                &ctx->dll.pd_in[inactive][ctx->dll.od_width], ctx->dll.pd_in_len_current);
+            ctx->dll.pd_in_len = ctx->dll.pd_in_len_current;
+            ctx->dll.pd_valid = valid;
             ctx->dll.pd_in_active = inactive;
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+            if (ctx->dll.cyclic_reply_precached) {
+                iolink_dll_prepare_cyclic_reply(&ctx->dll);
+            }
+#endif
         }
+#endif
     }
 }
 
 int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data, size_t len,
                                   bool valid)
 {
+#if IOLINK_APP_PD_INPUT_CALLBACK
+    /* The callback path is selected; mixing both paths would publish PD-in
+     * twice per cycle and race the pre-cached cyclic reply. */
+    (void) ctx;
+    (void) data;
+    (void) len;
+    (void) valid;
+    return -1;
+#else
     if ((ctx == NULL) || (data == NULL) || (len > IOLINK_PD_IN_MAX_SIZE)) {
         return -1;
     }
@@ -335,6 +354,7 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
 #endif
 
     return 0;
+#endif /* IOLINK_APP_PD_INPUT_CALLBACK */
 }
 
 #if IOLINK_PHY_FEATURE_ISR_PUMP

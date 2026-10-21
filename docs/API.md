@@ -98,7 +98,7 @@ typedef struct {
     void (*on_startup)(void);
     void (*on_preoperate)(void);
     void (*on_operate)(void);
-    void (*on_pd_input)(const uint8_t *data, uint8_t len);
+    bool (*on_pd_input)(uint8_t *data, uint8_t len); /* fill PD-in; false = invalid */
     void (*on_pd_output)(uint8_t *data, uint8_t len);
 } iolink_app_callbacks_t;
 ```
@@ -115,8 +115,11 @@ static void on_operate(void) {
     printf("Device entered OPERATE state\n");
 }
 
-static void on_pd_input(const uint8_t *data, uint8_t len) {
-    // Process input data from Master
+static bool on_pd_input(uint8_t *data, uint8_t len) {
+    // Fill the input process data (Device -> Master)
+    (void)data;
+    (void)len;
+    return true;
 }
 
 const iolink_app_callbacks_t app_callbacks = {
