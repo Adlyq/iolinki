@@ -26,21 +26,17 @@
 
 #if IOLINK_FEATURE_DATA_STORAGE
 
-/* Parameters included in the Data Storage set (V1.1.5 device identification
-   parameters that are writable and therefore worth backing up). */
-static const struct
-{
-    uint16_t index;
-    uint8_t subindex;
-} k_ds_params[] = {
+/* Parameters included in the Data Storage set by default (V1.1.5 device
+   identification parameters that are writable and therefore worth backing up).
+   The application replaces or extends this via iolink_ds_bind_param_access(). */
+static const iolink_ds_param_desc_t k_default_ds_params[] = {
     {IOLINK_IDX_APPLICATION_TAG, 0U},
     {IOLINK_IDX_FUNCTION_TAG, 0U},
     {IOLINK_IDX_LOCATION_TAG, 0U},
 };
 
-#define DS_PARAM_COUNT (sizeof(k_ds_params) / sizeof(k_ds_params[0]))
+#define DS_PARAM_COUNT (sizeof(k_default_ds_params) / sizeof(k_default_ds_params[0]))
 #define DS_RECORD_HEADER 4U /* index(2) + subindex(1) + length(1) */
-#define DS_PARAM_VALUE_MAX 64U
 
 void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_ds_storage_api_t* storage)
 {
@@ -49,6 +45,10 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_ds_storage_api_t* storage
     }
     ctx->storage = storage;
     ctx->state = IOLINK_DS_STATE_IDLE;
+    /* Default parameter set: the three standard tags, served through the
+       legacy params context (or a caller-bound accessor). */
+    ctx->params = k_default_ds_params;
+    ctx->param_count = DS_PARAM_COUNT;
 }
 
 void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx)
@@ -58,20 +58,48 @@ void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx
     }
 }
 
-/** @brief Read a parameter via the bound params context, or the legacy global set. */
+void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx, iolink_ds_param_read_fn read,
+                                 iolink_ds_param_write_fn write, void* user,
+                                 const iolink_ds_param_desc_t* params, size_t count)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    if (read != NULL) {
+        ctx->read_param = read;
+    }
+    if (write != NULL) {
+        ctx->write_param = write;
+    }
+    ctx->param_user = user;
+    if ((params != NULL) && (count > 0U)) {
+        ctx->params = params;
+        ctx->param_count = count;
+    }
+}
+
+/** @brief Read a parameter via the bound accessor, the params context, or the
+ * legacy global set. */
 static int ds_params_get(const iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
                          uint8_t* buffer, size_t max_len)
 {
+    if ((ctx != NULL) && (ctx->read_param != NULL)) {
+        return ctx->read_param(ctx->param_user, index, subindex, buffer, max_len);
+    }
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
         return iolink_params_ctx_get(ctx->params_ctx, index, subindex, buffer, max_len);
     }
     return iolink_params_get(index, subindex, buffer, max_len);
 }
 
-/** @brief Write a parameter via the bound params context, or the legacy global set. */
+/** @brief Write a parameter via the bound accessor, the params context, or the
+ * legacy global set. */
 static int ds_params_set(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
                          const uint8_t* data, size_t len, bool persist)
 {
+    if ((ctx != NULL) && (ctx->write_param != NULL)) {
+        return ctx->write_param(ctx->param_user, index, subindex, data, len, persist);
+    }
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
         return iolink_params_ctx_set(ctx->params_ctx, index, subindex, data, len, persist);
     }
@@ -102,25 +130,28 @@ int iolink_ds_build_image(iolink_ds_ctx_t* ctx)
     }
 
     size_t pos = 0U;
-    for (size_t i = 0U; i < DS_PARAM_COUNT; ++i) {
-        uint8_t value[DS_PARAM_VALUE_MAX];
-        int n =
-            ds_params_get(ctx, k_ds_params[i].index, k_ds_params[i].subindex, value, sizeof(value));
+    for (size_t i = 0U; i < ctx->param_count; ++i) {
+        const uint16_t index = ctx->params[i].index;
+        const uint8_t subindex = ctx->params[i].subindex;
+
+        if ((pos + DS_RECORD_HEADER) > IOLINK_DS_IMAGE_MAX) {
+            return -1; /* Image does not fit */
+        }
+        /* Read directly into the image tail so a single parameter may use up to
+           the whole remaining image (no fixed per-parameter cap). */
+        const size_t cap = (size_t) IOLINK_DS_IMAGE_MAX - pos - DS_RECORD_HEADER;
+        int n = ds_params_get(ctx, index, subindex, &ctx->image[pos + DS_RECORD_HEADER], cap);
         if (n < 0) {
             n = 0; /* Parameter not present -> empty record */
         }
-
-        if ((pos + DS_RECORD_HEADER + (size_t) n) > IOLINK_DS_IMAGE_MAX) {
-            return -1; /* Image does not fit */
+        else if ((size_t) n > cap) {
+            n = (int) cap;
         }
 
-        ctx->image[pos] = (uint8_t) (k_ds_params[i].index >> 8);
-        ctx->image[pos + 1U] = (uint8_t) (k_ds_params[i].index & 0xFFU);
-        ctx->image[pos + 2U] = k_ds_params[i].subindex;
+        ctx->image[pos] = (uint8_t) (index >> 8);
+        ctx->image[pos + 1U] = (uint8_t) (index & 0xFFU);
+        ctx->image[pos + 2U] = subindex;
         ctx->image[pos + 3U] = (uint8_t) n;
-        if (n > 0) {
-            (void) memcpy(&ctx->image[pos + DS_RECORD_HEADER], value, (size_t) n);
-        }
         pos += DS_RECORD_HEADER + (size_t) n;
     }
 

@@ -55,6 +55,57 @@ static void device_state_cb(void* user, iolink_dll_state_t state)
     }
 }
 
+#if IOLINK_FEATURE_DATA_STORAGE
+/** @brief Unified DS parameter read: standard tags via the params context,
+ * everything else via the vendor service. */
+static int device_ds_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out, size_t cap)
+{
+    iolink_device_ctx_t* ctx = (iolink_device_ctx_t*) user;
+    int n;
+
+    if ((ctx == NULL) || (out == NULL)) {
+        return -1;
+    }
+    n = iolink_params_ctx_get(&ctx->params, index, subindex, out, cap);
+    if (n >= 0) {
+        return n;
+    }
+    if ((ctx->config != NULL) && (ctx->config->vendor_service != NULL)) {
+        size_t outlen = cap;
+        uint8_t err = ctx->config->vendor_service(ctx->config->user, index, subindex, false, NULL,
+                                                  0U, out, &outlen);
+        if (err == 0U) {
+            return (int) outlen;
+        }
+    }
+    return -1;
+}
+
+/** @brief Unified DS parameter write: standard tags via the params context,
+ * everything else via the vendor service. */
+static int device_ds_write(void* user, uint16_t index, uint8_t subindex, const uint8_t* data,
+                           size_t len, bool persist)
+{
+    iolink_device_ctx_t* ctx = (iolink_device_ctx_t*) user;
+
+    if (ctx == NULL) {
+        return -1;
+    }
+    if (iolink_params_ctx_set(&ctx->params, index, subindex, data, len, persist) == 0) {
+        return 0;
+    }
+    if ((ctx->config != NULL) && (ctx->config->vendor_service != NULL)) {
+        size_t outlen = 0U;
+        uint8_t err = ctx->config->vendor_service(ctx->config->user, index, subindex, true, data,
+                                                  len, NULL, &outlen);
+        if (err == 0U) {
+            return 0;
+        }
+    }
+    return -1;
+}
+#endif /* IOLINK_FEATURE_DATA_STORAGE */
+
 /** @brief Default OD octet count for an M-sequence type (Table A.10).
  *
  * TYPE_1_2 carries 2 OD octets (code 1) and TYPE_2_V defaults to 2 OD octets
@@ -217,6 +268,10 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
         ctx->dll.isdu.ds_ctx = &ctx->dll.ds;
     }
     iolink_ds_bind_params(&ctx->dll.ds, &ctx->params);
+    /* Route DS parameter access through the device: standard tags via the
+       params context, everything else (vendor 0x0040+/0x0100+) via the vendor
+       service. The default descriptor set (three tags) is kept. */
+    iolink_ds_bind_param_access(&ctx->dll.ds, device_ds_read, device_ds_write, ctx, NULL, 0U);
 #else
     ctx->dll.isdu.ds_ctx = NULL;
 #endif

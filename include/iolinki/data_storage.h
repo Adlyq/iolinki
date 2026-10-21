@@ -92,6 +92,47 @@ typedef struct
 } iolink_ds_storage_api_t;
 
 /**
+ * @brief One Data-Storage-backed parameter (index + subindex).
+ *
+ * The DS parameter set is described by an array of these descriptors. The
+ * default set is the three writable identification tags; the application may
+ * replace or extend it (e.g. with vendor parameters 0x0040+ / 0x0100+).
+ */
+typedef struct
+{
+    uint16_t index;    /**< Parameter index. */
+    uint8_t subindex;  /**< Parameter subindex. */
+} iolink_ds_param_desc_t;
+
+/**
+ * @brief Read a single DS parameter into a buffer.
+ *
+ * @param user     Opaque parameter-access user pointer.
+ * @param index    Parameter index.
+ * @param subindex Parameter subindex.
+ * @param out      Buffer receiving the parameter value.
+ * @param cap      Capacity of @p out in bytes.
+ * @return int Number of bytes read (>= 0), or negative when the parameter is
+ *         unavailable/rejected.
+ */
+typedef int (*iolink_ds_param_read_fn)(void* user, uint16_t index, uint8_t subindex,
+                                       uint8_t* out, size_t cap);
+
+/**
+ * @brief Write a single DS parameter.
+ *
+ * @param user     Opaque parameter-access user pointer.
+ * @param index    Parameter index.
+ * @param subindex Parameter subindex.
+ * @param data     Parameter value bytes.
+ * @param len      Length of @p data in bytes.
+ * @param persist  Whether the write must be committed to non-volatile memory.
+ * @return int 0 on success, negative when the parameter is rejected.
+ */
+typedef int (*iolink_ds_param_write_fn)(void* user, uint16_t index, uint8_t subindex,
+                                        const uint8_t* data, size_t len, bool persist);
+
+/**
  * @brief Data Storage Engine Context
  *
  * Tracks the state and checksums for the DS synchronization process.
@@ -100,7 +141,12 @@ typedef struct
 {
     iolink_ds_state_t state;                /**< Current DS state machine position */
     const iolink_ds_storage_api_t* storage; /**< Bound storage implementation API */
-    iolink_params_ctx_t* params_ctx;        /**< Device-local writable parameter context */
+    iolink_params_ctx_t* params_ctx;        /**< Legacy device-local writable parameter context */
+    void* param_user;                       /**< Opaque user pointer for the param callbacks */
+    iolink_ds_param_read_fn read_param;     /**< Unified parameter read accessor */
+    iolink_ds_param_write_fn write_param;   /**< Unified parameter write accessor */
+    const iolink_ds_param_desc_t* params;   /**< DS parameter descriptor array */
+    size_t param_count;                     /**< Number of entries in @ref params */
     uint16_t current_checksum;              /**< Last calculated local parameter checksum */
     uint16_t master_checksum;               /**< Most recent checksum verified by Master */
     uint8_t image[IOLINK_DS_IMAGE_MAX];     /**< Serialized parameter image (DS_Data 0x0003) */
@@ -123,6 +169,25 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_ds_storage_api_t* storage
  * @param params_ctx Device-local parameter manager context to serialize/restore
  */
 void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx);
+
+/**
+ * @brief Bind a unified parameter accessor and an explicit parameter descriptor set.
+ *
+ * Replaces the default tag-only set with a caller-provided descriptor array
+ * and routes every DS read/write through @p read / @p write. This is how vendor
+ * parameters (0x0040+ / 0x0100+) are added to the Data Storage set. When @p params
+ * is NULL (or @p count is 0) the descriptor set is left unchanged.
+ *
+ * @param ctx    DS context
+ * @param read   Parameter read accessor (may be NULL to keep the current one)
+ * @param write  Parameter write accessor (may be NULL to keep the current one)
+ * @param user   Opaque pointer passed back to the accessors
+ * @param params Descriptor array (may be NULL)
+ * @param count  Number of descriptors in @p params
+ */
+void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx, iolink_ds_param_read_fn read,
+                                 iolink_ds_param_write_fn write, void* user,
+                                 const iolink_ds_param_desc_t* params, size_t count);
 
 /**
  * @brief Calculate a standard 16-bit checksum for a parameter block

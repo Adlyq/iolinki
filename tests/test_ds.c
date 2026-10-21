@@ -225,6 +225,90 @@ static void test_ds_apply_rejects_truncated(void** state)
     assert_int_equal(iolink_ds_apply_image(&ds, bad, sizeof(bad)), -1);
 }
 
+/* A vendor parameter (0x0050) backed by a static buffer, exercised through a
+ * bound accessor to prove vendor parameters can join the DS set. */
+#define VENDOR_PARAM_IDX 0x0050U
+static uint8_t g_vendor_param[8];
+static size_t g_vendor_param_len;
+
+static int vendor_ds_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out, size_t cap)
+{
+    (void) user;
+    if ((index == IOLINK_IDX_APPLICATION_TAG) && (subindex == 0U)) {
+        return iolink_params_get(index, subindex, out, cap);
+    }
+    if ((index == VENDOR_PARAM_IDX) && (subindex == 0U)) {
+        if (g_vendor_param_len > cap) {
+            return -1;
+        }
+        (void) memcpy(out, g_vendor_param, g_vendor_param_len);
+        return (int) g_vendor_param_len;
+    }
+    return -1;
+}
+
+static int vendor_ds_write(void* user, uint16_t index, uint8_t subindex, const uint8_t* data,
+                           size_t len, bool persist)
+{
+    (void) user;
+    (void) persist;
+    if ((index == IOLINK_IDX_APPLICATION_TAG) && (subindex == 0U)) {
+        return iolink_params_set(index, subindex, data, len, true);
+    }
+    if ((index == VENDOR_PARAM_IDX) && (subindex == 0U)) {
+        if (len > sizeof(g_vendor_param)) {
+            return -1;
+        }
+        (void) memcpy(g_vendor_param, data, len);
+        g_vendor_param_len = len;
+        return 0;
+    }
+    return -1;
+}
+
+static void test_ds_vendor_param_set_round_trip(void** state)
+{
+    (void) state;
+    iolink_ds_ctx_t ds;
+    static const iolink_ds_param_desc_t set[] = {
+        {IOLINK_IDX_APPLICATION_TAG, 0U},
+        {VENDOR_PARAM_IDX, 0U},
+    };
+    static const uint8_t vend[] = {0xDEU, 0xADU, 0xBEU, 0xEFU};
+
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_ds_init(&ds, NULL);
+    iolink_ds_bind_param_access(&ds, vendor_ds_read, vendor_ds_write, NULL, set,
+                                sizeof(set) / sizeof(set[0]));
+
+    assert_int_equal(
+        iolink_params_set(IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "TAG", 3U, true), 0);
+    g_vendor_param_len = sizeof(vend);
+    (void) memcpy(g_vendor_param, vend, sizeof(vend));
+
+    /* Upload: the image must now contain the standard tag AND the vendor record. */
+    assert_true(iolink_ds_build_image(&ds) > 0);
+    size_t len = 0U;
+    const uint8_t* img = iolink_ds_get_image(&ds, &len);
+    assert_non_null(img);
+    uint8_t backup[IOLINK_DS_IMAGE_MAX];
+    assert_true(len <= sizeof(backup));
+    (void) memcpy(backup, img, len);
+
+    /* Wipe both sources and restore from the image. */
+    g_vendor_param_len = 0U;
+    (void) memset(g_vendor_param, 0, sizeof(g_vendor_param));
+    iolink_params_factory_reset();
+    assert_int_equal(iolink_ds_apply_image(&ds, backup, len), 0);
+
+    assert_int_equal(g_vendor_param_len, sizeof(vend));
+    assert_memory_equal(g_vendor_param, vend, sizeof(vend));
+    uint8_t tag[8] = {0U};
+    assert_int_equal(iolink_params_get(IOLINK_IDX_APPLICATION_TAG, 0U, tag, sizeof(tag)), 3);
+    assert_memory_equal(tag, "TAG", 3U);
+}
+
 static void test_ds_download_recovery(void** state)
 {
     (void) state;
@@ -278,6 +362,7 @@ int main(void)
         cmocka_unit_test(test_ds_param_round_trip),
         cmocka_unit_test(test_ds_bound_params_restore_device_context_only),
         cmocka_unit_test(test_ds_apply_rejects_truncated),
+        cmocka_unit_test(test_ds_vendor_param_set_round_trip),
         cmocka_unit_test(test_ds_download_recovery),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
