@@ -30,6 +30,10 @@ static void device_state_cb(void* user, iolink_dll_state_t state)
         return;
     }
 
+    if (ctx->config->app_callbacks->on_state_change != NULL) {
+        ctx->config->app_callbacks->on_state_change(state);
+    }
+
     switch (state) {
         case IOLINK_DLL_STATE_STARTUP:
             if (ctx->config->app_callbacks->on_startup != NULL) {
@@ -58,6 +62,7 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.pd_in_len = ctx->stack_config.pd_in_len;
     ctx->dll.pd_out_len = ctx->stack_config.pd_out_len;
     ctx->dll.min_cycle_time_app_us = (uint32_t) ctx->stack_config.min_cycle_time * 100U;
+    ctx->dll.master_lost_cycles = ctx->stack_config.master_lost_cycles;
     ctx->dll.t_pd_delay_us = ctx->stack_config.t_pd_us;
     if (ctx->dll.t_pd_delay_us > 0U) {
         ctx->dll.t_pd_deadline_us = iolink_time_get_us() + (uint64_t) ctx->dll.t_pd_delay_us;
@@ -198,6 +203,7 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     ctx->dll.isdu.ds_ctx = NULL;
 #endif
     device_apply_stack_config(ctx);
+    ctx->master_lost_last = ctx->dll.master_lost;
 #if IOLINK_PHY_FEATURE_ISR_PUMP
     /* Seed the pre-staged cyclic variants so the first ISR reply is complete. */
     if (ctx->dll.cyclic_reply_precached) {
@@ -238,6 +244,21 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
         }
     }
 #endif
+
+    if ((ctx->config != NULL) && (ctx->config->app_callbacks != NULL)) {
+        const bool lost = ctx->dll.master_lost;
+        if (lost != ctx->master_lost_last) {
+            ctx->master_lost_last = lost;
+            if (lost) {
+                if (ctx->config->app_callbacks->on_master_lost != NULL) {
+                    ctx->config->app_callbacks->on_master_lost();
+                }
+            }
+            else if (ctx->config->app_callbacks->on_master_online != NULL) {
+                ctx->config->app_callbacks->on_master_online();
+            }
+        }
+    }
 
     if (ctx->dll.isdu.reset_pending) {
         ctx->dll.isdu.reset_pending = false;
@@ -366,6 +387,11 @@ iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx)
     return (ctx != NULL) ? &ctx->dll.ds : NULL;
 }
 #endif
+
+bool iolink_device_master_lost(const iolink_device_ctx_t* ctx)
+{
+    return (ctx != NULL) && ctx->dll.master_lost;
+}
 
 iolink_dll_state_t iolink_device_get_state(const iolink_device_ctx_t* ctx)
 {

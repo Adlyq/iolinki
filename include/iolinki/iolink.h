@@ -123,6 +123,7 @@ typedef struct
     uint8_t od_width;               /**< OD octets (Table A.10); 0 = derive from m_seq_type */
     iolink_baudrate_t baudrate;     /**< Operating COM when baudrate_set is true */
     bool baudrate_set;              /**< Apply baudrate at init; false keeps the COM2 default */
+    uint8_t master_lost_cycles;     /**< Missed master cycles before master_lost; 0 = disabled */
 } iolink_config_t;
 
 /**

@@ -486,6 +486,10 @@ static bool dll_dispatch_od(iolink_dll_ctx_t* ctx, uint8_t mc, const uint8_t* od
            octet at the address; unimplemented addresses return 0, writes are
            ignored (A.1.2). MasterCommand at address 0 is handled by the
            PREOPERATE branch. */
+        if (((mc & IOLINK_MC_RW_MASK) == 0U) && (od_len > 0U) &&
+            ((mc & IOLINK_MC_ADDR_MASK) == 0x01U)) {
+            ctx->master_cycle_time = od_in[0];
+        }
         if (((mc & IOLINK_MC_RW_MASK) != 0U) && (od_len > 0U)) {
             od_out[0] = iolink_isdu_direct_param_page1_octet(&ctx->isdu,
                                                              (uint8_t) (mc & IOLINK_MC_ADDR_MASK));
@@ -758,6 +762,10 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     ctx->enforce_timing = (IOLINK_TIMING_ENFORCE_DEFAULT != 0U);
     ctx->sio_fallback_threshold = 3U;
     ctx->operating_baudrate = IOLINK_BAUDRATE_UNSET;
+    ctx->master_last_activity_ms = iolink_time_get_ms();
+    ctx->master_lost_cycles = 0U;
+    ctx->master_lost_count = 0U;
+    ctx->master_lost = false;
 
     /* Table A.10: TYPE_2_1/TYPE_2_2 carry one On-request Data octet; TYPE_2_V is
        the two-octet variant (OPERATE M-sequence code 5). */
@@ -881,6 +889,45 @@ static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
 }
 #endif
 
+/** @brief Decode a DPP1 MasterCycleTime/MinCycleTime octet to 100 us ticks (ST Table B.3). */
+static uint16_t dll_decode_cycle_time_ticks(uint8_t value)
+{
+    if (value <= 3U) {
+        return 0U;
+    }
+    if (value < 0x40U) {
+        return (uint16_t) value;
+    }
+    if ((value & 0xC0U) == 0x40U) {
+        return (uint16_t) (((uint16_t) (value & 0x3FU) * 4U) + 0x40U);
+    }
+    if ((value & 0xC0U) == 0x80U) {
+        return (uint16_t) (((uint16_t) (value & 0x3FU) * 0x10U) + 0x140U);
+    }
+    return 0U;
+}
+
+/** @brief Master polling period in microseconds (DPP1 MasterCycleTime, else MinCycleTime). */
+static uint32_t dll_master_cycle_us(const iolink_dll_ctx_t* ctx)
+{
+    uint16_t ticks = dll_decode_cycle_time_ticks(ctx->master_cycle_time);
+    if (ticks == 0U) {
+        ticks = (uint16_t) ((ctx->min_cycle_time_us + 99U) / 100U);
+    }
+    if (ticks == 0U) {
+        ticks = 20U; /* 2 ms fallback */
+    }
+    return (uint32_t) ticks * 100U;
+}
+
+/** @brief ST-style master activity: frame end / RX timeout restarts the counter. */
+static void dll_master_activity(iolink_dll_ctx_t* ctx)
+{
+    ctx->master_last_activity_ms = iolink_time_get_ms();
+    ctx->master_lost_count = 0U;
+    ctx->master_lost = false;
+}
+
 static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
 {
     uint64_t now_us_proc = iolink_time_get_us();
@@ -904,6 +951,10 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
         return;
     }
 
+    /* ST restarts its callback timer at frame end; a completed frame (even a
+       bad one) proves the link is still being driven. */
+    dll_master_activity(ctx);
+
     /* A.1.6/Figure A.2: the master message carries the checksum in the
        CKT octet (the second octet); its bits 0-5 are zeroed before the
        A.1.6 checksum is computed over every message octet. The CKT is
@@ -921,6 +972,7 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
     bool type_ok = dll_type_allowed(ctx, ctx->frame_buf);
 
     if (crc_ok && type_ok) {
+        ctx->last_valid_frame_ms = iolink_time_get_ms();
         bool was_establishing = (ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) ||
                                 (ctx->state == IOLINK_DLL_STATE_STARTUP);
         if (was_establishing) {
@@ -1107,6 +1159,11 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
         return;
     }
 
+    if (ctx->isr_master_activity != 0U) {
+        ctx->isr_master_activity = 0U;
+        dll_master_activity(ctx);
+    }
+
     /* Restore the operating COM before the SIO/power-on early returns: a
      * recovery drop to COM1 must not leave the UART on the wrong baudrate. */
     dll_restore_operating_baudrate(ctx);
@@ -1156,6 +1213,25 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
 
     uint32_t now_ms = iolink_time_get_ms();
     uint64_t now_ms64 = iolink_time_get_us() / 1000U;
+
+    if (ctx->master_lost_cycles != 0U) {
+        uint32_t cycle_ms = (dll_master_cycle_us(ctx) + 999U) / 1000U;
+        if (cycle_ms == 0U) {
+            cycle_ms = 1U;
+        }
+        uint32_t elapsed = now_ms - ctx->master_last_activity_ms;
+        uint32_t missed = elapsed / cycle_ms;
+        if (missed > 0xFFU) {
+            missed = 0xFFU;
+        }
+        ctx->master_lost_count = (uint8_t) missed;
+        ctx->master_lost = (ctx->master_lost_count >= ctx->master_lost_cycles);
+    }
+    else {
+        ctx->master_lost_count = 0U;
+        ctx->master_lost = false;
+    }
+
     if ((ctx->last_activity_ms != 0U) && (now_ms - ctx->last_activity_ms > 1000U)) {
         /* ST keeps the master-lost condition informational: it does not leave
          * the current DL mode on an idle link. Just count it and restart the
@@ -1219,6 +1295,7 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
                    Reset the inactivity timer so a re-wake after a prior exchange
                    is not immediately killed by the stale activity timestamp. */
                 ctx->last_activity_ms = iolink_time_get_ms();
+                dll_master_activity(ctx); /* ST StackOnWakeUp restarts Timer B */
             }
         }
         return;
@@ -1819,6 +1896,8 @@ static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, ui
     if ((frame[1] & IOLINK_MSEQ_TYPE_MASK) != IOLINK_MSEQ_TYPE_0) {
         return false;
     }
+
+    ctx->isr_master_activity = 1U;
 
     const bool read = ((frame[0] & IOLINK_MC_RW_MASK) != 0U);
     const uint8_t ch = (uint8_t) (frame[0] & IOLINK_MC_COMM_CHANNEL_MASK);
@@ -2427,6 +2506,7 @@ void iolink_dll_on_rx_timeout(iolink_dll_ctx_t* ctx)
         return;
     }
 #if IOLINK_PHY_FEATURE_ISR_PUMP
+    ctx->isr_master_activity = 1U;
     ctx->timeout_errors++;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
     ctx->isr_rx_cnt = 0U;

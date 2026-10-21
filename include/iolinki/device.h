@@ -92,6 +92,7 @@ typedef struct
     iolink_params_ctx_t params;           /**< Parameter manager context. */
     const iolink_device_config_t* config; /**< Pointer to the supplied configuration. */
     iolink_reset_handler_t reset_handler; /**< Application reset handler (may be NULL). */
+    bool master_lost_last;                /**< Previous master-lost state (callback edge) */
     uint8_t direct_param_page2[16];       /**< Direct Parameter Page 2 storage. */
 } iolink_device_ctx_t;
 
@@ -201,6 +202,14 @@ iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx);
  * @return Current data link layer state.
  */
 iolink_dll_state_t iolink_device_get_state(const iolink_device_ctx_t* ctx);
+
+/**
+ * @brief Whether the master has been silent for the configured number of cycles.
+ * @param ctx Device context.
+ * @return true while the master is considered lost (application hint; the DLL
+ *         state and baudrate are not changed).
+ */
+bool iolink_device_master_lost(const iolink_device_ctx_t* ctx);
 
 /**
  * @brief Get the current PHY communication mode.

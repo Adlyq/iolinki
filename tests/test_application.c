@@ -59,6 +59,7 @@ static int g_cb_startup;
 static int g_cb_preoperate;
 static int g_cb_operate;
 static int g_cb_pd_output;
+static int g_cb_state;
 
 static void cb_startup(void)
 {
@@ -78,6 +79,11 @@ static void cb_pd_output(uint8_t* data, uint8_t len)
     (void) len;
     g_cb_pd_output++;
 }
+static void cb_state_change(iolink_dll_state_t state)
+{
+    (void) state;
+    g_cb_state++;
+}
 
 static void test_app_callbacks_lifecycle(void** state)
 {
@@ -88,12 +94,14 @@ static void test_app_callbacks_lifecycle(void** state)
     g_cb_preoperate = 0;
     g_cb_operate = 0;
     g_cb_pd_output = 0;
+    g_cb_state = 0;
 
     static const iolink_app_callbacks_t cbs = {
         .on_startup = cb_startup,
         .on_preoperate = cb_preoperate,
         .on_operate = cb_operate,
         .on_pd_output = cb_pd_output,
+        .on_state_change = cb_state_change,
     };
 
     setup_mock_phy();
@@ -104,6 +112,7 @@ static void test_app_callbacks_lifecycle(void** state)
     assert_true(g_cb_startup >= 1);
 
     move_to_operate_ctx(&dev.ctx);
+    assert_true(g_cb_state >= 1);
 
     /* PREOPERATE is traversed during the handshake; the state-change hook fires
        even though the transition is transient. */

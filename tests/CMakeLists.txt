@@ -88,6 +88,7 @@ if(CMOCKA_FOUND)
     add_iolink_test(test_phy_tiol112 test_phy_tiol112.c)
     add_iolink_test(test_app_pd test_app_pd.c)
     add_iolink_test(test_sio_fallback test_sio_fallback.c)
+    add_iolink_test(test_master_lost test_master_lost.c)
 
     # Specification-table and identification coverage (IO-Link V1.1.5)
     add_iolink_test(test_protocol_tables test_protocol_tables.c)

@@ -96,6 +96,11 @@ typedef struct
     void* lock_user;
     uint32_t last_activity_ms;   /**< Timestamp of last received byte */
     uint32_t last_valid_frame_ms;/**< Timestamp of the last checksum/type-valid frame */
+    uint32_t master_last_activity_ms; /**< Timestamp of the last frame end / RX timeout */
+    uint8_t master_lost_cycles;  /**< Missed master cycles before master_lost; 0 = disabled */
+    uint8_t master_lost_count;   /**< Missed cycles, saturated at 0xFF */
+    bool master_lost;            /**< Master communication lost (application hint) */
+    volatile uint8_t isr_master_activity; /**< ISR saw a frame end; main clears it */
     bool wakeup_seen;            /**< Wake-up detected (if PHY supports it) */
 
     /* Configuration */

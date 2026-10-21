@@ -13,6 +13,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "iolinki/dll.h"
+
 /**
  * @file application.h
  * @brief IO-Link Application Layer API for Process Data
@@ -40,6 +42,9 @@ typedef struct
     void (*on_operate)(void);                              /**< Entered OPERATE */
     void (*on_pd_input)(const uint8_t* data, uint8_t len); /**< Input PD published */
     void (*on_pd_output)(uint8_t* data, uint8_t len);      /**< Output PD received */
+    void (*on_state_change)(iolink_dll_state_t state);     /**< Any DLL state change */
+    void (*on_master_lost)(void);                          /**< Master communication lost */
+    void (*on_master_online)(void);                        /**< Master communication resumed */
 } iolink_app_callbacks_t;
 
 /** @} */ /* end of iolinki_application */
