@@ -68,6 +68,7 @@ typedef struct
 {
     uint16_t index;    /**< Parameter index. */
     uint8_t subindex;  /**< Parameter subindex. */
+    uint8_t max_len;   /**< Upper bound for the value length (0 = unbounded). */
 } iolink_ds_param_desc_t;
 
 /**
@@ -145,16 +146,37 @@ void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx
  * parameters (0x0040+ / 0x0100+) are added to the Data Storage set. When @p params
  * is NULL (or @p count is 0) the descriptor set is left unchanged.
  *
+ * The device already binds a default accessor pair that serves standard
+ * parameters through the params context and everything else through
+ * vendor_service. An application that only needs a different DS index list
+ * should call iolink_ds_set_param_desc() instead of replacing the accessors.
+ *
  * @param ctx    DS context
  * @param read   Parameter read accessor (may be NULL to keep the current one)
  * @param write  Parameter write accessor (may be NULL to keep the current one)
- * @param user   Opaque pointer passed back to the accessors
+ * @param user   Opaque pointer passed back to the accessors. Only updated when
+ *               @p read or @p write is non-NULL, so passing NULL accessors keeps
+ *               the existing user pointer.
  * @param params Descriptor array (may be NULL)
  * @param count  Number of descriptors in @p params
  */
 void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx, iolink_ds_param_read_fn read,
                                  iolink_ds_param_write_fn write, void* user,
                                  const iolink_ds_param_desc_t* params, size_t count);
+
+/**
+ * @brief Replace only the Data Storage parameter descriptor set.
+ *
+ * The current read/write accessors and their user pointer are kept. Applications
+ * that already serve their parameters through the params context or
+ * vendor_service only need to provide the index list here.
+ *
+ * @param ctx    DS context
+ * @param params Descriptor array (must remain valid for the lifetime of the DS)
+ * @param count  Number of descriptors in @p params
+ */
+void iolink_ds_set_param_desc(iolink_ds_ctx_t* ctx, const iolink_ds_param_desc_t* params,
+                              size_t count);
 
 /**
  * @brief Calculate a standard 32-bit checksum (Fletcher-32) for a parameter block

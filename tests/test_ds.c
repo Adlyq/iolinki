@@ -422,6 +422,81 @@ static void test_ds_image_checksum_rejects_corruption(void** state)
     assert_int_equal(ds.image_len, 0U);
 }
 
+static int ds_param_read_mock(void* user, uint16_t index, uint8_t subindex, uint8_t* out,
+                              size_t cap)
+{
+    static const uint8_t value[] = "ABCDEFGH";
+    (void) user;
+    (void) index;
+    (void) subindex;
+    size_t n = (sizeof(value) - 1U < cap) ? sizeof(value) - 1U : cap;
+    (void) memcpy(out, value, n);
+    return (int) n;
+}
+
+static int ds_param_write_mock(void* user, uint16_t index, uint8_t subindex,
+                               const uint8_t* data, size_t len, bool persist)
+{
+    (void) user;
+    (void) index;
+    (void) subindex;
+    (void) data;
+    (void) len;
+    (void) persist;
+    return 0;
+}
+
+/* Passing NULL accessors must keep the device-bound accessors and user pointer. */
+static void test_ds_bind_null_keeps_accessors(void** state)
+{
+    (void) state;
+    iolink_ds_ctx_t ds;
+    int marker = 0;
+    iolink_ds_init(&ds, NULL);
+    iolink_ds_bind_param_access(&ds, ds_param_read_mock, ds_param_write_mock, &marker, NULL, 0U);
+    assert_ptr_equal(ds.param_user, &marker);
+
+    static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U, 0U}};
+    iolink_ds_bind_param_access(&ds, NULL, NULL, NULL, set, 1U);
+    assert_ptr_equal(ds.param_user, &marker);
+    assert_ptr_equal(ds.read_param, ds_param_read_mock);
+    assert_ptr_equal(ds.write_param, ds_param_write_mock);
+    assert_int_equal(ds.param_count, 1U);
+}
+
+/* set_param_desc only replaces the descriptor set. */
+static void test_ds_set_param_desc_keeps_accessors(void** state)
+{
+    (void) state;
+    iolink_ds_ctx_t ds;
+    int marker = 0;
+    iolink_ds_init(&ds, NULL);
+    iolink_ds_bind_param_access(&ds, ds_param_read_mock, ds_param_write_mock, &marker, NULL, 0U);
+
+    static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U, 0U}};
+    iolink_ds_set_param_desc(&ds, set, 1U);
+    assert_ptr_equal(ds.param_user, &marker);
+    assert_ptr_equal(ds.read_param, ds_param_read_mock);
+    assert_int_equal(ds.param_count, 1U);
+}
+
+/* A descriptor max_len bounds the value stored in the image. */
+static void test_ds_desc_max_len_bounds_value(void** state)
+{
+    (void) state;
+    iolink_ds_ctx_t ds;
+    iolink_ds_init(&ds, NULL);
+    static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U, 4U}};
+    iolink_ds_bind_param_access(&ds, ds_param_read_mock, ds_param_write_mock, NULL, set, 1U);
+
+    assert_true(iolink_ds_build_image(&ds) > 0);
+    size_t len = 0U;
+    const uint8_t* img = iolink_ds_get_image(&ds, &len);
+    assert_non_null(img);
+    assert_int_equal(img[3], 4U); /* length byte capped to max_len */
+    assert_memory_equal(&img[4], "ABCD", 4U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -435,6 +510,9 @@ int main(void)
         cmocka_unit_test(test_ds_apply_rejects_truncated),
         cmocka_unit_test(test_ds_vendor_param_set_round_trip),
         cmocka_unit_test(test_ds_image_checksum_rejects_corruption),
+        cmocka_unit_test(test_ds_bind_null_keeps_accessors),
+        cmocka_unit_test(test_ds_set_param_desc_keeps_accessors),
+        cmocka_unit_test(test_ds_desc_max_len_bounds_value),
         cmocka_unit_test(test_ds_download_end_error_classification),
         cmocka_unit_test(test_ds_download_recovery),
     };
