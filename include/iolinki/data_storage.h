@@ -272,6 +272,31 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
 int iolink_ds_handle_ds_command(iolink_ds_ctx_t* ctx, uint8_t command, uint16_t access_locks);
 
 /**
+ * @brief Whether a block parameter download is currently buffering writes.
+ *
+ * @param ctx DS context
+ * @return true while in the download-buffering state.
+ */
+bool iolink_ds_downloading(const iolink_ds_ctx_t* ctx);
+
+/**
+ * @brief Stage a parameter write into the download buffer (10.3.2).
+ *
+ * During a block download (after ParamDownloadStart and before
+ * ParamDownloadEnd) parameter writes are buffered into the image rather than
+ * applied immediately; ParamDownloadEnd commits them atomically.
+ *
+ * @param ctx      DS context
+ * @param index    Parameter index
+ * @param subindex Parameter subindex
+ * @param data     Parameter value bytes
+ * @param len      Length of @p data in bytes
+ * @return int 0 on success, negative when not downloading or the buffer is full.
+ */
+int iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
+                          const uint8_t* data, size_t len);
+
+/**
  * @brief Serialize the device's DS-backed parameters into the image buffer.
  *
  * Reads every parameter in the DS set from the parameter manager and packs it

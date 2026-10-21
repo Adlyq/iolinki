@@ -361,21 +361,26 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
             break;
 
         case IOLINK_CMD_PARAM_DOWNLOAD_START: /* 0x03 */
-            /* Master wants to write parameters (Download) */
+            /* Master wants to write parameters (Download): buffer the writes
+               until ParamDownloadEnd commits them atomically (10.3.2). */
             if (ctx->state != IOLINK_DS_STATE_IDLE) {
                 return -1; /* Busy */
             }
             ctx->image_len = 0U; /* Clear any prior staged image */
-            ctx->state = IOLINK_DS_STATE_DOWNLOAD_REQ;
+            ctx->state = IOLINK_DS_STATE_DOWNLOADING;
             break;
 
         case IOLINK_CMD_PARAM_DOWNLOAD_END: /* 0x04 */
-            /* Commit the parameter image staged via DS_Data (0x0003). */
+            /* Commit the buffered parameter image atomically. */
             if (ctx->state == IOLINK_DS_STATE_DOWNLOADING) {
+                int rc = 0;
                 if (ctx->image_len > 0U) {
-                    (void) iolink_ds_apply_image(ctx, ctx->image, ctx->image_len);
+                    rc = iolink_ds_apply_image(ctx, ctx->image, ctx->image_len);
                 }
                 ctx->state = IOLINK_DS_STATE_IDLE;
+                if (rc != 0) {
+                    return -4; /* Inconsistent parameter set (0x8041) */
+                }
             }
             break;
 
@@ -427,6 +432,36 @@ int iolink_ds_handle_ds_command(iolink_ds_ctx_t* ctx, uint8_t command, uint16_t 
         ctx->ds_upload_flag = false;
     }
     return ret;
+}
+
+bool iolink_ds_downloading(const iolink_ds_ctx_t* ctx)
+{
+    return (ctx != NULL) && (ctx->state == IOLINK_DS_STATE_DOWNLOADING);
+}
+
+int iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
+                          const uint8_t* data, size_t len)
+{
+    if (!iolink_ds_downloading(ctx)) {
+        return -1;
+    }
+    if ((len > 0U) && !iolink_buf_is_valid(data, len)) {
+        return -1;
+    }
+    if ((ctx->image_len + DS_RECORD_HEADER + len) > IOLINK_DS_IMAGE_MAX) {
+        return -1; /* Buffer full */
+    }
+
+    const size_t pos = ctx->image_len;
+    ctx->image[pos] = (uint8_t) (index >> 8);
+    ctx->image[pos + 1U] = (uint8_t) (index & 0xFFU);
+    ctx->image[pos + 2U] = subindex;
+    ctx->image[pos + 3U] = (uint8_t) len;
+    if (len > 0U) {
+        (void) memcpy(&ctx->image[pos + DS_RECORD_HEADER], data, len);
+    }
+    ctx->image_len = pos + DS_RECORD_HEADER + len;
+    return 0;
 }
 
 uint8_t iolink_ds_state_property(const iolink_ds_ctx_t* ctx)

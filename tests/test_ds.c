@@ -103,10 +103,9 @@ static void test_ds_commands_unlocked(void** state)
     /* 1. Download Start (Write) unlocked */
     int ret = iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0);
     assert_int_equal(ret, 0);
-    assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOAD_REQ);
+    assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOADING);
 
     /* 2. End Download */
-    ds.state = IOLINK_DS_STATE_DOWNLOADING;
     ret = iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0);
     assert_int_equal(ret, 0);
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);

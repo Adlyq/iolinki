@@ -161,7 +161,90 @@ static void test_param_lock_does_not_block_ds_download(void** state)
 
     uint8_t resp[2];
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
-    assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOAD_REQ);
+    assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOADING);
+}
+
+/* 10.3.2: parameter writes during a block download are buffered and only
+ * committed atomically by ParamDownloadEnd. */
+static void test_block_param_download_buffered(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_ds_ctx_t ds;
+    iolink_ds_init(&ds, NULL);
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+
+    assert_int_equal(
+        iolink_params_set(IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "OLD", 3U, true), 0);
+
+    assert_int_equal(send_system_command(&ctx, IOLINK_CMD_PARAM_DOWNLOAD_START), 1);
+    iolink_isdu_process(&ctx);
+    uint8_t resp[2];
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+    assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOADING);
+
+    /* A tag write is staged, not applied. */
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U,
+                                             (const uint8_t*) "NEW", 3U),
+                     1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+
+    uint8_t buf[8];
+    assert_int_equal(iolink_params_get(IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf)), 3);
+    assert_memory_equal(buf, "OLD", 3);
+
+    /* ParamDownloadEnd commits the buffered write. */
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    assert_int_equal(send_system_command(&ctx, IOLINK_CMD_PARAM_DOWNLOAD_END), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+    assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
+
+    assert_int_equal(iolink_params_get(IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf)), 3);
+    assert_memory_equal(buf, "NEW", 3);
+}
+
+/* ParamBreak cancels a block download without applying any buffered writes. */
+static void test_block_param_download_break(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_ds_ctx_t ds;
+    iolink_ds_init(&ds, NULL);
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+
+    assert_int_equal(
+        iolink_params_set(IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "OLD", 3U, true), 0);
+
+    assert_int_equal(send_system_command(&ctx, IOLINK_CMD_PARAM_DOWNLOAD_START), 1);
+    iolink_isdu_process(&ctx);
+    uint8_t resp[2];
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U,
+                                             (const uint8_t*) "NEW", 3U),
+                     1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    assert_int_equal(send_system_command(&ctx, IOLINK_CMD_PARAM_BREAK), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+    assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
+
+    uint8_t buf[8];
+    assert_int_equal(iolink_params_get(IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf)), 3);
+    assert_memory_equal(buf, "OLD", 3);
 }
 
 int main(void)
@@ -175,6 +258,9 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_ds_command_busy, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_param_lock_does_not_block_ds_download, test_setup,
                                         test_teardown),
+        cmocka_unit_test_setup_teardown(test_block_param_download_buffered, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_block_param_download_break, test_setup, test_teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

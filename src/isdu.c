@@ -81,6 +81,14 @@ static int isdu_params_get(const iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t
 static int isdu_params_set(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex,
                            const uint8_t* data, size_t len, bool persist)
 {
+#if IOLINK_FEATURE_DATA_STORAGE
+    /* During a block download the write is buffered for an atomic commit on
+       ParamDownloadEnd (10.3.2) rather than applied immediately. */
+    if ((ctx != NULL) && (ctx->ds_ctx != NULL) &&
+        iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx)) {
+        return iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, index, subindex, data, len);
+    }
+#endif
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
         return iolink_params_ctx_set(ctx->params_ctx, index, subindex, data, len, persist);
     }
@@ -843,6 +851,10 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                     else if (ret == -2) {
                         ctx->response_buf[1] =
                             IOLINK_ISDU_ERROR_WRITE_PROTECTED; /* 0x23, Table C.1 */
+                    }
+                    else if (ret == -4) {
+                        ctx->response_buf[1] =
+                            IOLINK_ISDU_ERROR_PARAM_INCONSISTENT; /* 0x41, Table C.1 */
                     }
                     else {
                         ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
