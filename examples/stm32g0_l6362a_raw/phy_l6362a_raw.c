@@ -265,19 +265,34 @@ static void l6362_set_mode(void* user, iolink_phy_mode_t mode) {
 
 static void l6362_set_baudrate(void* user, iolink_baudrate_t baudrate) {
     (void)user;
-    s_baudrate = baudrate;
+    uint32_t new_hz;
     switch (baudrate) {
-    case IOLINK_BAUDRATE_COM1: s_baud_hz = 4800U;
+    case IOLINK_BAUDRATE_COM1: new_hz = 4800U;
         break;
-    case IOLINK_BAUDRATE_COM2: s_baud_hz = 38400U;
+    case IOLINK_BAUDRATE_COM2: new_hz = 38400U;
         break;
     case IOLINK_BAUDRATE_COM3:
-    default: s_baud_hz = 230400U;
+    default: new_hz = 230400U;
         break;
     }
+
+    /* Changing the UART while a BYTE reply is in flight would clear TXEIE/TCIE
+     * (UartConfigure writes CR1=0) and leave TX_EN asserted with no interrupt
+     * left to drive the remaining octets. Abort the reply first; the DLL
+     * abandons its matching ISR TX state. */
+    iolink_critical_enter();
+    if ((new_hz != s_baud_hz) && (s_tx_in_progress != 0U)) {
+        IOD_UART->CR1 &= ~(USART_CR1_TCIE | USART_CR1_TXEIE_TXFNFIE);
+        IOD_UART->ICR = USART_ICR_TCCF;
+        phy_txen_set(false);
+        s_tx_tc_seen = 0U;
+    }
+    s_baudrate = baudrate;
+    s_baud_hz = new_hz;
     /* Frame-end time-out ~ 13 bit times (matches the ST single-octet engine). */
     s_gap_us = (13U * 1000000U) / s_baud_hz;
     UartConfigure(s_baud_hz);
+    iolink_critical_exit();
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE

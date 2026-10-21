@@ -228,8 +228,10 @@ static void move_type0_to_operate(iolink_device_ctx_t* ctx)
     test_io_cycle(ctx);
 }
 
-/* C5/Table 47 T11: a CKT type that does not match the configured M-sequence
-   type in OPERATE is an illegal M-sequence and returns the device to STARTUP. */
+/* ST rc=2: a CKT type that does not match the configured M-sequence type in
+   OPERATE is dropped and the link re-listens. A misaligned/overlapped PD byte
+   stream has exactly this shape, so demoting to STARTUP here would flap the
+   link on every collision. */
 static void test_dll_illegal_mseq_type(void** state)
 {
     (void) state;
@@ -251,7 +253,7 @@ static void test_dll_illegal_mseq_type(void** state)
     mock_phy_feed_chk();
     test_io_cycle(&dev.ctx);
 
-    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_STARTUP);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
     iolink_dll_stats_t stats;
     iolink_device_get_dll_stats(&dev.ctx, &stats);
     assert_int_not_equal(stats.framing_errors, 0);

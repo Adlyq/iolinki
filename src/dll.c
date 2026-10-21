@@ -1036,14 +1036,25 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
         }
     }
     else if (crc_ok && !type_ok) {
-        /* Illegal M-sequence type: report it and go to STARTUP (T11). */
+        /* CRC-correct frame with the wrong CKT type. In OPERATE/ESTAB this is
+         * almost always a misaligned/overlapped PD byte stream: the master
+         * starts its next request while our reply is still on C/Q, so the
+         * first octets are lost and the remainder is framed as a bogus
+         * M-sequence. ST rc=2 drops it and re-listens; demoting to STARTUP on
+         * every such collision makes the link flap. Keep the T11/T12 demotion
+         * only outside OPERATE/ESTAB (where the frame is an actual protocol
+         * error, not a framing artifact). */
         ctx->frame_eager = 0U;
         ctx->isdu_isr_consumed = 0U;
         ctx->framing_errors++;
+        ctx->frame_index = 0U;
+        if ((ctx->state == IOLINK_DLL_STATE_OPERATE) ||
+            (ctx->state == IOLINK_DLL_STATE_ESTAB_COM)) {
+            return;
+        }
         DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_CODE_COMM_ERR_GENERAL,
                              IOLINK_EVENT_TYPE_ERROR);
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
-        ctx->frame_index = 0U;
         return;
     }
     else {
@@ -1078,6 +1089,12 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
 /** Re-assert the configured operating COM after a recovery drop to COM1. */
 static void dll_restore_operating_baudrate(iolink_dll_ctx_t* ctx)
 {
+    /* Do not reconfigure the UART in the middle of a reply: wait for the
+     * in-flight frame (or the staged main reply) to drain. The next main-loop
+     * pass retries once isr_tx_active/isr_tx_pending are clear. */
+    if ((ctx->isr_tx_active != 0U) || (ctx->isr_tx_pending != 0U)) {
+        return;
+    }
     if ((ctx->operating_baudrate != IOLINK_BAUDRATE_UNSET) &&
         (ctx->baudrate != ctx->operating_baudrate)) {
         (void) iolink_dll_set_baudrate(ctx, ctx->operating_baudrate);
@@ -1389,8 +1406,18 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_ctx_t* ctx)
 int iolink_dll_set_baudrate(iolink_dll_ctx_t* ctx, iolink_baudrate_t baudrate)
 {
     if (ctx == NULL) return -1;
+    const bool changing = (ctx->baudrate != baudrate);
     ctx->baudrate = baudrate;
     if (ctx->phy->set_baudrate != NULL) ctx->phy->set_baudrate(ctx->phy->user, baudrate);
+    if (changing) {
+        /* The PHY aborts an in-flight reply when the UART is reconfigured;
+         * drop the matching ISR TX state so it cannot resume the stale frame
+         * on the next request. */
+        ctx->isr_tx_pending = 0U;
+        ctx->isr_tx_active = 0U;
+        ctx->isr_tx_has_cks = 0U;
+        ctx->isr_tx_idx = 0U;
+    }
     ctx->t_ren_limit_us = dll_get_t_ren_limit_us(ctx);
     ctx->t_byte_limit_us = dll_get_t_byte_limit_us(ctx);
     ctx->min_cycle_time_us = (uint32_t) iolink_dll_compute_min_cycle_time(ctx) * 100U;
