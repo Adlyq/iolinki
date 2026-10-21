@@ -519,6 +519,67 @@ static void test_min_cycle_time_from_m_sequence(void** state)
     assert_true(iolink_dll_compute_min_cycle_time(&dll) > 35U);
 }
 
+/* Back-to-box (10.7.5): after ~3 master cycles the DLL stops communicating.
+ * Streams a reply through mock_phy_send, so exercise the streaming transport. */
+#if !IOLINK_PHY_FEATURE_ISR_PUMP
+static void test_dll_back_to_box_disables_comm(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .pd_in_len = 1, .pd_out_len = 1};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, true);
+
+    iolink_phy_mock_set_wakeup(1);
+    test_io_cycle(&dev.ctx);
+    usleep(200);
+
+    uint8_t trans_mc = IOLINK_MC_TRANSITION_COMMAND;
+    mock_phy_feed_byte(trans_mc);
+    mock_phy_feed_byte(test_frame_checksum(trans_mc));
+    mock_phy_feed_chk();
+    test_io_cycle(&dev.ctx);
+
+    uint8_t frame[4] = {0x80, IOLINK_MSEQ_TYPE_1, 0x00, 0x00};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
+    for (int i = 0; i < 4; i++) {
+        mock_phy_feed_byte(frame[i]);
+    }
+    mock_phy_feed_chk();
+    expect_any(mock_phy_send, data);
+    expect_any(mock_phy_send, len);
+    will_return(mock_phy_send, 0);
+    test_io_cycle(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    iolink_dll_request_back_to_box(&dev.ctx.dll);
+
+    /* The device keeps serving frames for the 3-cycle grace period. */
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 4; j++) {
+            mock_phy_feed_byte(frame[j]);
+        }
+        mock_phy_feed_chk();
+        expect_any(mock_phy_send, data);
+        expect_any(mock_phy_send, len);
+        will_return(mock_phy_send, 0);
+        test_io_cycle(&dev.ctx);
+        assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+    }
+
+    /* The next frame flips the device into the communication-disabled state. */
+    for (int j = 0; j < 4; j++) {
+        mock_phy_feed_byte(frame[j]);
+    }
+    mock_phy_feed_chk();
+    test_io_cycle(&dev.ctx);
+    assert_false(dev.ctx.dll.back_to_box_pending);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_COMM_DISABLED);
+}
+#endif /* !IOLINK_PHY_FEATURE_ISR_PUMP */
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -538,6 +599,10 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_dll_type0_write_is_three_octets_with_two_octet_od,
                                         test_setup, test_teardown),
         cmocka_unit_test(test_min_cycle_time_from_m_sequence),
+#if !IOLINK_PHY_FEATURE_ISR_PUMP
+        cmocka_unit_test_setup_teardown(test_dll_back_to_box_disables_comm, test_setup,
+                                        test_teardown),
+#endif
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

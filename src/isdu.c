@@ -824,10 +824,13 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             isdu_trigger_ds_upload_req(ctx);
             break;
 
-        case IOLINK_CMD_RESTORE_APP_DEFAULTS: /* 0x83 */
-            /* Reset application-specific parameters (currently same as factory) */
+        case IOLINK_CMD_RESTORE_APP_DEFAULTS: /* 0x83 Back-to-box */
+            /* Restore the delivery values, then stop and disable communication
+               after the response (10.7.5). */
             isdu_params_factory_reset(ctx);
-            isdu_trigger_ds_upload_req(ctx);
+            if (ctx->dll_ctx != NULL) {
+                iolink_dll_request_back_to_box((iolink_dll_ctx_t*) ctx->dll_ctx);
+            }
             break;
 
             /* Table B.9: 0x84-0x9F are reserved (no SetCommunicationMode command). */

@@ -35,7 +35,8 @@ typedef enum
     IOLINK_DLL_STATE_PREOPERATE = 2U,    /**< Handling ISDU (Type 0) */
     IOLINK_DLL_STATE_ESTAB_COM = 3U,     /**< Establish communication (transition to OPERATE) */
     IOLINK_DLL_STATE_OPERATE = 4U,       /**< Cyclic data exchange active */
-    IOLINK_DLL_STATE_FALLBACK = 5U       /**< Error recovery / fallback */
+    IOLINK_DLL_STATE_FALLBACK = 5U,      /**< Error recovery / fallback */
+    IOLINK_DLL_STATE_COMM_DISABLED = 6U  /**< Back-to-box: communication stopped until reset */
 } iolink_dll_state_t;
 
 /**
@@ -104,6 +105,8 @@ typedef struct
     volatile bool master_lost;            /**< Master communication lost (application hint) */
     volatile uint8_t isr_master_activity; /**< ISR saw a frame end; main clears it */
     bool wakeup_seen;            /**< Wake-up detected (if PHY supports it) */
+    volatile bool back_to_box_pending; /**< Back-to-box requested; counting down frames */
+    volatile uint8_t back_to_box_cycles; /**< Frames seen since Back-to-box was requested */
 
     /* Configuration */
     uint8_t m_seq_type;         /**< Supported M-sequence type */
@@ -473,6 +476,18 @@ int iolink_dll_set_sdci_mode(iolink_dll_ctx_t* ctx);
  * @return iolink_phy_mode_t Current mode
  */
 iolink_phy_mode_t iolink_dll_get_phy_mode(const iolink_dll_ctx_t* ctx);
+
+/**
+ * @brief Request the Back-to-box sequence (10.7.5).
+ *
+ * The ISDU handler calls this after successfully answering the 0x83
+ * SystemCommand. The DLL keeps serving frames for at least 3 MasterCycles,
+ * then stops and disables communication (COMM_DISABLED) and the PHY output
+ * driver until the next power-on.
+ *
+ * @param ctx DLL context
+ */
+void iolink_dll_request_back_to_box(iolink_dll_ctx_t* ctx);
 
 /**
  * @brief Set the communication baudrate

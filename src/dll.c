@@ -934,10 +934,43 @@ static void dll_master_activity(iolink_dll_ctx_t* ctx)
     ctx->master_last_activity_ms = iolink_time_get_ms();
     ctx->master_lost_count = 0U;
     ctx->master_lost = false;
+
+    /* 10.7.5: count the frames served after Back-to-box so the device keeps
+       answering for at least 3 MasterCycles before it stops (see
+       dll_process_complete_frame, which performs the actual stop). */
+    if (ctx->back_to_box_pending) {
+        ctx->back_to_box_cycles++;
+    }
+}
+
+void iolink_dll_request_back_to_box(iolink_dll_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    ctx->back_to_box_pending = true;
+    ctx->back_to_box_cycles = 0U;
 }
 
 static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
 {
+    if (ctx->back_to_box_pending && (ctx->back_to_box_cycles >= 3U)) {
+        /* 10.7.5: after at least 3 MasterCycles the device stops and disables
+           communication and the output driver until the next power-on. */
+        ctx->back_to_box_pending = false;
+        dll_set_state(ctx, IOLINK_DLL_STATE_COMM_DISABLED);
+        if ((ctx->phy != NULL) && (ctx->phy->set_mode != NULL)) {
+            ctx->phy->set_mode(ctx->phy->user, IOLINK_PHY_MODE_INACTIVE);
+        }
+        ctx->frame_index = 0U;
+        return;
+    }
+    if (ctx->state == IOLINK_DLL_STATE_COMM_DISABLED) {
+        /* Communication stopped until the next power-on (10.7.5). */
+        ctx->frame_index = 0U;
+        return;
+    }
+
     uint64_t now_us_proc = iolink_time_get_us();
     if ((ctx->enforce_timing) && (ctx->min_cycle_time_us > 0U) &&
         (ctx->last_cycle_start_us != 0U)) {
