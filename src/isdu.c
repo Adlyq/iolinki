@@ -532,6 +532,15 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
         }
     }
 
+    /* B.2.5: 0x000D is an ArrayT; every other object handled here is a
+       single-element parameter that only exposes subindex 0. Read-only WRITEs
+       were already answered above with WRITE_PROTECTED. */
+    if ((ctx->header.subindex != 0U) &&
+        (ctx->header.index != IOLINK_IDX_PROFILE_CHARACTERISTIC)) {
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+        return;
+    }
+
     switch (ctx->header.index) {
             /* Table B.8: 0x0004-0x000B are reserved. VendorID/DeviceID live in
                Direct Parameter Page 1 (0x07-0x0B), not in an ISDU index. A read of

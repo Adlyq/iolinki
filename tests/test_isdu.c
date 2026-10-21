@@ -888,6 +888,14 @@ static void test_isdu_subindexed_objects(void** state)
     assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
     assert_int_equal(r[0], 0x80U);
     assert_int_equal(r[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+
+    /* A single-element object rejects any subindex != 0. */
+    iolink_isdu_init(&ctx);
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_VENDOR_NAME, 1U), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
+    assert_int_equal(r[0], 0x80U);
+    assert_int_equal(r[1], IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
 }
 
 /* 7.3.5.3: a DPP1 SystemCommand executes without staging an ISDU response. */
