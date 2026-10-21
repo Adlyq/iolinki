@@ -259,7 +259,7 @@ This roadmap outlines the development path for `iolinki`, enabling a fully compl
 
 ## Release Retrospective
 
-### v3.0.0 — 2026-10-17
+### v2.2.0 — 2026-10-17
 
 Completed in this release (see CHANGELOG for the authoritative list):
 

@@ -79,10 +79,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   while the mailbox still holds the zero-copy pointer, and fill the TX CKS
   before handing the buffer to `tx_frame()`.
 
-## [3.0.0] - 2026-10-17
+## [2.2.0] - 2026-10-17
 
 ### Changed
-- **BREAKING wire change: OPERATE M-sequence reply layout corrected.** The
+- **OPERATE M-sequence reply layout corrected (wire change).** The
   reply to a READ M-sequence is `[OD][PD-in] CKS` and the reply to a WRITE
   M-sequence is `[PD-in] CKS` with no OD octet, matching Figures
   A.9/A.10/A.13/A.14. `iolink_frame_decode_operate_response`, the Python
@@ -90,7 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `iolinki-master` 1.1.0 must be upgraded together for the multi-octet OPERATE
   M-sequence types, because a mixed old/new pairing frames replies with the
   wrong layout and produces checksum errors.
-- **BREAKING:** the mislabelled `IOLINK_EVENT_PHY_VOLTAGE_FAULT` (0x1805) and
+- **API change:** the mislabelled `IOLINK_EVENT_PHY_VOLTAGE_FAULT` (0x1805) and
   `IOLINK_EVENT_PHY_SHORT_CIRCUIT` (0x1806) macros are removed. Those values are
   Table D.2 Master/Port codes ("Overtemperature", "Short circuit at L+"), not
   Device codes. `dll_poll_diagnostics()` now reports the standardized Table D.1
