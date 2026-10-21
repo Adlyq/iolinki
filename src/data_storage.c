@@ -40,25 +40,32 @@ static void ds_storage_load_flag(iolink_ds_ctx_t* ctx)
     if ((ctx != NULL) && (ctx->storage != NULL) && (ctx->storage->read != NULL)) {
         uint8_t value = 0U;
         if (ctx->storage->read(ctx->storage->user, IOLINK_STORAGE_FLAG_BASE, &value, 1U) == 0) {
-            ctx->ds_upload_flag = (value != 0U);
+            /* Only an explicit 1 requests an upload; erased (0xFF) means "none". */
+            ctx->ds_upload_flag = (value == 1U);
         }
     }
 }
 
-/** @brief Persist the DS image (length header + payload) into the DS region. */
+/** @brief Persist the DS image (magic + version + length + payload). */
 static void ds_storage_save_image(iolink_ds_ctx_t* ctx)
 {
     if ((ctx == NULL) || (ctx->storage == NULL) || (ctx->storage->write == NULL)) {
         return;
     }
-    uint8_t header[IOLINK_STORAGE_DS_LEN_SIZE];
-    header[0] = (uint8_t) (ctx->image_len >> 8);
-    header[1] = (uint8_t) (ctx->image_len & 0xFFU);
+    uint8_t header[IOLINK_STORAGE_DS_HDR_SIZE];
+    header[0] = (uint8_t) (IOLINK_STORAGE_MAGIC >> 24);
+    header[1] = (uint8_t) (IOLINK_STORAGE_MAGIC >> 16);
+    header[2] = (uint8_t) (IOLINK_STORAGE_MAGIC >> 8);
+    header[3] = (uint8_t) IOLINK_STORAGE_MAGIC;
+    header[4] = (uint8_t) (IOLINK_STORAGE_VERSION & 0xFFU);
+    header[5] = (uint8_t) (IOLINK_STORAGE_VERSION >> 8);
+    header[6] = (uint8_t) (ctx->image_len >> 8);
+    header[7] = (uint8_t) (ctx->image_len & 0xFFU);
     (void) ctx->storage->write(ctx->storage->user, IOLINK_STORAGE_DS_BASE, header,
                                sizeof(header));
     if (ctx->image_len > 0U) {
         (void) ctx->storage->write(ctx->storage->user,
-                                   IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_LEN_SIZE,
+                                   IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_HDR_SIZE,
                                    ctx->image, ctx->image_len);
     }
 }
@@ -68,17 +75,23 @@ static void ds_storage_load_image(iolink_ds_ctx_t* ctx)
     if ((ctx == NULL) || (ctx->storage == NULL) || (ctx->storage->read == NULL)) {
         return;
     }
-    uint8_t header[IOLINK_STORAGE_DS_LEN_SIZE];
+    uint8_t header[IOLINK_STORAGE_DS_HDR_SIZE];
     if (ctx->storage->read(ctx->storage->user, IOLINK_STORAGE_DS_BASE, header, sizeof(header)) !=
         0) {
         return;
     }
-    size_t len = ((size_t) header[0] << 8) | (size_t) header[1];
+    const uint32_t magic = ((uint32_t) header[0] << 24) | ((uint32_t) header[1] << 16) |
+                           ((uint32_t) header[2] << 8) | (uint32_t) header[3];
+    const uint16_t version = (uint16_t) (((uint16_t) header[5] << 8) | (uint16_t) header[4]);
+    const size_t len = ((size_t) header[6] << 8) | (size_t) header[7];
+    if ((magic != IOLINK_STORAGE_MAGIC) || (version != (uint16_t) IOLINK_STORAGE_VERSION)) {
+        return; /* Uninitialised or a different layout. */
+    }
     if ((len == 0U) || (len > IOLINK_DS_IMAGE_MAX)) {
         return;
     }
     if (ctx->storage->read(ctx->storage->user,
-                           IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_LEN_SIZE, ctx->image,
+                           IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_HDR_SIZE, ctx->image,
                            len) == 0) {
         ctx->image_len = len;
         ctx->current_checksum = iolink_ds_calc_checksum(ctx->image, len);

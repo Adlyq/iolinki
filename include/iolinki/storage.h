@@ -53,10 +53,18 @@ typedef struct
  * The layout is fixed at compile time so an application can size its NVM area
  * with a static assertion:
  *     _Static_assert(sizeof(nvm_region) >= IOLINK_STORAGE_TOTAL_SIZE, "...");
+ *
+ * Versioning rules:
+ *  - IOLINK_STORAGE_MAGIC identifies a region written by this stack. A change
+ *    of the record layout (fields, order, sizes) MUST change the magic so an
+ *    old image cannot be misinterpreted by the new field positions.
+ *  - IOLINK_STORAGE_VERSION identifies the layout within one magic and must be
+ *    bumped on any layout change that keeps the magic. A mismatch discards the
+ *    record (no migration callback yet).
  */
 
-#define IOLINK_STORAGE_MAGIC 0x494F4C31UL /* "IOL1" */
-#define IOLINK_STORAGE_VERSION 2U
+#define IOLINK_STORAGE_MAGIC 0x494F4C32UL /* "IOL2": layout carries a version */
+#define IOLINK_STORAGE_VERSION 1U         /* bump on record-layout change */
 
 /** @brief Persistent parameter record (three identification tags). */
 typedef struct
@@ -74,8 +82,9 @@ typedef struct
 #define IOLINK_STORAGE_PARAMS_BASE 0U
 #define IOLINK_STORAGE_PARAMS_SIZE IOLINK_STORAGE_ALIGN4((uint32_t) sizeof(iolink_params_nvm_t))
 #define IOLINK_STORAGE_DS_BASE IOLINK_STORAGE_PARAMS_SIZE
-#define IOLINK_STORAGE_DS_LEN_SIZE 2U
-#define IOLINK_STORAGE_DS_SIZE (IOLINK_STORAGE_DS_LEN_SIZE + (uint32_t) IOLINK_DS_IMAGE_MAX)
+/** DS header: magic(4) + version(2) + image length(2), then the image. */
+#define IOLINK_STORAGE_DS_HDR_SIZE 8U
+#define IOLINK_STORAGE_DS_SIZE (IOLINK_STORAGE_DS_HDR_SIZE + (uint32_t) IOLINK_DS_IMAGE_MAX)
 #define IOLINK_STORAGE_FLAG_BASE (IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_SIZE)
 #define IOLINK_STORAGE_FLAG_SIZE 4U
 #define IOLINK_STORAGE_TOTAL_SIZE \
