@@ -931,10 +931,17 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
     uint8_t count = event_ctx->count;
     if (count > 8U) count = 8U; /* Limit to 8 events in response */
 
+    uint8_t written = 0U;
     for (uint8_t i = 0U; i < count; i++) {
         /* Calculate index in FIFO */
         uint8_t idx = (uint8_t) ((event_ctx->head + i) % IOLINK_EVENT_QUEUE_SIZE);
         const iolink_event_t* ev = &event_ctx->queue[idx];
+
+        /* B.2.22: only "Error" or "Warning" with MODE "Event appears" are
+           listed; Notifications are excluded. */
+        if (ev->type == IOLINK_EVENT_TYPE_NOTIFICATION) {
+            continue;
+        }
 
         /* EventQualifier byte per IO-Link V1.1.5 (Figure A.24):
          *   MODE     (bits 7-6): 11 = event appears
@@ -944,9 +951,6 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
          */
         uint8_t qualifier = 0xC0U; /* MODE = event appears */
         switch (ev->type) {
-            case IOLINK_EVENT_TYPE_NOTIFICATION:
-                qualifier |= (0x01U << 4);
-                break;
             case IOLINK_EVENT_TYPE_WARNING:
                 qualifier |= (0x02U << 4);
                 break;
@@ -958,11 +962,12 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
         }
         qualifier |= 0x04U; /* INSTANCE = Application */
 
-        ctx->response_buf[i * 3U] = qualifier;
-        ctx->response_buf[i * 3U + 1U] = (uint8_t) (ev->code >> 8);
-        ctx->response_buf[i * 3U + 2U] = (uint8_t) (ev->code & 0xFF);
+        ctx->response_buf[written * 3U] = qualifier;
+        ctx->response_buf[written * 3U + 1U] = (uint8_t) (ev->code >> 8);
+        ctx->response_buf[written * 3U + 2U] = (uint8_t) (ev->code & 0xFF);
+        written++;
     }
-    ctx->response_len = (uint8_t) (count * 3U);
+    ctx->response_len = (uint8_t) (written * 3U);
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
     iolink_critical_exit();

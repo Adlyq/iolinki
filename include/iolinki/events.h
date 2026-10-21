@@ -208,10 +208,13 @@ bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event);
 /**
  * @brief Get the highest severity level currently in the event queue
  *
- * Maps to IO-Link Device Status (0=OK, 1=Maintenance, 2=Out of Spec, 3=Failure)
+ * Maps to IO-Link Device Status per Table B.13 (0=OK, 1=Maintenance,
+ * 2=Out of Spec, 3=Functional-Check, 4=Failure). The lowest priority value
+ * dominates: Failure (4) beats Functional-Check (3), which beats Maintenance
+ * (1) and Out of Spec (2).
  *
  * @param ctx Event context
- * @return uint8_t Highest severity level (0-3)
+ * @return uint8_t Highest severity level (0-4)
  */
 uint8_t iolink_events_get_highest_severity(iolink_events_ctx_t* ctx);
 

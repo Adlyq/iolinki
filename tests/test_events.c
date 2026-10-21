@@ -121,13 +121,13 @@ static void test_event_helpers(void** state)
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 0); /* OK */
 
     iolink_event_trigger(&ctx, 0x1001, IOLINK_EVENT_TYPE_NOTIFICATION);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 1); /* Maintenance */
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0); /* Still OK */
 
     iolink_event_trigger(&ctx, 0x1002, IOLINK_EVENT_TYPE_ERROR);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 3); /* Failure */
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4); /* Failure */
 
     iolink_event_trigger(&ctx, 0x1003, IOLINK_EVENT_TYPE_WARNING);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 3); /* Still Failure */
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4); /* Still Failure */
 
     /* Test get_all */
     iolink_event_t events[8];

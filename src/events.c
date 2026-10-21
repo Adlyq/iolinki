@@ -213,40 +213,68 @@ bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event)
     return ret;
 }
 
+/** @brief DeviceStatus priority per Table B.13 (lowest value dominates). */
+static uint8_t device_status_priority(uint8_t status)
+{
+    switch (status) {
+        case 4U: /* Failure */
+            return 1U;
+        case 3U: /* Functional-Check */
+            return 2U;
+        case 1U: /* Maintenance-Required */
+            return 3U;
+        case 2U: /* Out-of-Specification */
+            return 4U;
+        default: /* 0 = OK */
+            return 5U;
+    }
+}
+
+/** @brief Map an event to its DeviceStatus value (Table B.13), from its
+ * EventType and, for the codes whose preferred value differs, its EventCode. */
+static uint8_t event_type_device_status(uint16_t code, iolink_event_type_t type)
+{
+    switch (code) {
+        case IOLINK_EVENTCODE_SIMULATION_ACTIVE:
+            return 3U; /* Functional-Check (Table D.1 preferred value) */
+        case IOLINK_EVENTCODE_MAINTENANCE_CLEANING:
+        case IOLINK_EVENTCODE_MAINTENANCE_REFILL:
+        case IOLINK_EVENTCODE_MAINTENANCE_WEAR:
+            return 1U; /* Maintenance-Required (Table D.1 preferred value) */
+        default:
+            break;
+    }
+    switch (type) {
+        case IOLINK_EVENT_TYPE_NOTIFICATION:
+            return 0U; /* OK */
+        case IOLINK_EVENT_TYPE_WARNING:
+            return 2U; /* Out-of-Specification */
+        default:
+            return 4U; /* Failure */
+    }
+}
+
 uint8_t iolink_events_get_highest_severity(iolink_events_ctx_t* ctx)
 {
     if ((ctx == NULL) || (ctx->count == 0U)) {
         return 0U; /* OK */
     }
 
-    uint8_t highest_msp = 0U;
+    uint8_t worst = 0U;      /* OK */
+    uint8_t worst_prio = 5U; /* OK priority */
     iolink_critical_enter();
     for (uint8_t i = 0U; i < ctx->count; i++) {
         uint8_t idx = (uint8_t) ((ctx->head + i) % IOLINK_EVENT_QUEUE_SIZE);
-        iolink_event_type_t type = ctx->queue[idx].type;
-
-        uint8_t severity = 0U;
-        switch (type) {
-            case IOLINK_EVENT_TYPE_NOTIFICATION:
-                severity = 1U;
-                break; /* Maintenance */
-            case IOLINK_EVENT_TYPE_WARNING:
-                severity = 2U;
-                break; /* Out of Spec */
-            case IOLINK_EVENT_TYPE_ERROR:
-                severity = 3U;
-                break; /* Failure */
-            default:
-                severity = 0U;
-                break;
-        }
-
-        if (severity > highest_msp) {
-            highest_msp = severity;
+        const iolink_event_t* ev = &ctx->queue[idx];
+        const uint8_t status = event_type_device_status(ev->code, ev->type);
+        const uint8_t prio = device_status_priority(status);
+        if (prio < worst_prio) {
+            worst_prio = prio;
+            worst = status;
         }
     }
     iolink_critical_exit();
-    return highest_msp;
+    return worst;
 }
 
 uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_events,
