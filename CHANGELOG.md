@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (ISR transport concurrency)
+- `dll_send()` now falls back to the platform critical section when the
+  application configured no lock, so main-context reply staging
+  (`isr_tx_next`/payload slot/`isr_tx_len`) is atomic against the data ISR.
+  Previously an unlocked device could pick the same payload slot from both
+  contexts.
+- The data ISR records master activity for every validated received frame
+  (not only the Type-0 fast path), so a busy main window no longer measures
+  the master-loss window from the last main-pump run. This refresh is
+  timestamp-only; the Back-to-box cycle count still advances exactly once per
+  served request (regression test added).
+- Deferred state callbacks use an ordered queue instead of a single slot: two
+  ISR transitions before the next main window no longer lose the earlier one,
+  and the queue keeps ISR and main-context transitions in order.
+- `iolink_dll_process_isr()` defers a nested invocation (pump bound to several
+  vectors on boards without BASEPRI) and re-runs once at the outer level,
+  preventing double allocation of the reply slot and DMA teardown.
+- `phy_l6362a_raw`: `tx_frame()` refuses a reply while the previous DMA is
+  still enabled (returns a negative error) instead of reconfiguring the DMA
+  mid-transfer; a hardware-completed transfer is finished inline. The eager
+  path abandons its pre-send and lets the main pump own the frame, and the
+  staging paths count the drop in `isr_tx_dropped`.
+- `phy_l6362a_raw`: a frame that completes while interrupts are masked in
+  `set_mode()`/`set_baudrate()` is published there, because `UartConfigure()`
+  clears RTOCF before the deferred vector runs.
+- Docs: the L6362A example requires the ISR pump in the USART2 vector only;
+  the other feeds call `phy_l6362a_raw_request_pump()`.
+- ISR_PUMP: removed the unused `state_cb_pending` field from
+  `iolink_dll_ctx_t`; all state transitions now go through the ordered queue
+  drained by `iolink_dll_flush_state_callbacks()` (source/ABI change for code
+  that touched the field directly).
+
+### Added (ISR transport concurrency)
+- `test_isr_atomicity`: platform-critical fallback for unlocked staging,
+  deferred nested pump, ordered state queue and busy-PHY reply handling.
+- `test_phy_l6362a_raw`: TX busy refusal / pending hardware completion / TC
+  timeout, plus a hardware-faithful mock that clears RTOCF in the critical
+  section and delivers RX bytes before the vector.
+
 ### Changed (BREAKING, ISR transport)
 - **M-sequence fixed types now follow Annex A byte-for-byte** (Figures A.7-A.13):
   TYPE_1_2 (2 OD, no PD), TYPE_1_V (8/32 OD, no PD), TYPE_2_1 (1 PD-in),

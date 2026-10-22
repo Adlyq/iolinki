@@ -57,21 +57,21 @@
   (`IOLINK_PHY_FEATURE_ISR_PUMP`) 下强制要求 lock。平台弱默认至少对 ISR 泵构建
   `#error`。
 
-#### A2 🟠 master-lost 监督对 ISR 应答流量"失明", 慢速主窗口产生虚假翻转
+#### A2 🟡 master-lost 监督时间戳滞后于 ISR 应答流量
 
-- 位置: `src/dll.c:1241-1257` (计算) vs `dll.c:1357-1382` (mailbox 消费);
-  `isr_master_activity` 仅在两处置位: Type-0 快速路径 `dll.c:1934` 与 RX timeout `dll.c:2550`。
-- 事实 1: **Type-1/2 周期帧从不置 `isr_master_activity`** —— 稳态 OPERATE 流量完全依赖主泵
-  消费 mailbox 后在 `dll_process_complete_frame` (line 964) 刷新时间戳。
-- 事实 2: `master_lost` 计算 (line 1241) 在 mailbox 消费 (line 1357) **之前**执行。
-- 事实 3: 主窗口被阻塞时, eager 路径仍从 ISR 应答进程通道帧(链路存活), 但 mailbox 单槽
-  溢出, 后续帧被丢弃 (`isr_mailbox_drops++`), 活动时间戳不前进。
-- 后果: 一次超过 `master_lost_cycles × 周期` 的主窗口阻塞(典型: 慢速 vendor ISDU 服务,
-  如 NVM 写 50-100ms, 或应用 `on_pd_output` 回调阻塞), 会产生 **一次虚假的
-  lost→online 翻转**: `on_master_lost` 误回调 + mailbox 丢帧计数增长。若应用在
-  `on_master_lost` 中执行复位/降级动作, 后果超出诊断层面。
-- 建议: ISR 泵对**每个**合法接收帧置 `isr_master_activity = 1`(不只 Type-0 快速路径);
-  或把 master-lost 计算移到 mailbox 消费之后。
+- 位置: `src/dll.c` (`isr_master_activity` 置位点; master-lost 计算在 mailbox 消费之前)。
+- 事实 1: **Type-1/2 周期帧不置 `isr_master_activity`** —— 监督时间戳只能由主泵消费
+  mailbox 后的 `dll_process_complete_frame` 刷新。
+- 事实 2: `master_lost` 计算在 mailbox 消费之前执行, 因此一次长主窗口(慢 ISDU 服务)会在
+  该次 `iolink_dll_process()` 内把 `master_lost` 瞬时置位; 随后同一调用内的 mailbox 消费
+  触发 `dll_master_activity()` 又把它清零。
+- 后果(修正): 该瞬时置位在**同一主上下文的同一次调用内**被清除, 应用回调
+  (`on_master_lost`/`on_master_online`) 与 `iolink_device_master_lost()` 都看不到翻转,
+  因此**不会产生虚假回调**(初版审计对可见性的判断过于悲观)。真实影响是:
+  监督时间戳不反映 ISR 已应答的帧, 语义上依赖"主泵恰好消费了 mailbox"这一副作用;
+  一旦将来改为"先算后消费"顺序或允许非主上下文读取, 虚假丢失会立刻可见。
+- 建议(已实施): ISR 对**每个**合法接收帧置 `isr_master_activity = 1`, 使监督时间戳
+  在帧完成时刻即真实。
 
 #### A3 🟠 `state_cb_pending`/`pending_state` 单槽位可被覆盖
 
@@ -209,7 +209,7 @@
 
 | 工况 | 触发发现 | 表现 |
 | --- | --- | --- |
-| 稳态 OPERATE + 慢速 vendor ISDU 服务 (NVM 写 50-100ms, `iolink_isdu_process` 阻塞主窗口) | A2 | 主站周期帧由 ISR eager 应答(链路存活), 但 mailbox 丢帧计数增长, 服务结束后一次虚假 `on_master_lost`→`on_master_online` 翻转 |
+| 稳态 OPERATE + 慢速 vendor ISDU 服务 (NVM 写 50-100ms, `iolink_isdu_process` 阻塞主窗口) | A2 | 主站周期帧由 ISR eager 应答(链路存活), mailbox 丢帧计数增长; 监督时间戳滞后, 但虚假丢失在同一调用内被 mailbox 消费清除, 应用不可见 |
 | 主站建立通信连发 (探测→PREOPERATE→转换→首帧) 与主窗口阻塞重叠 | A3 | `on_preoperate`/中间状态回调可能丢失 |
 | FALLBACK MasterCommand / 波特率恢复 COM1→COM3 时恰有回复在途 | A4 + B2 | 回复被 DMA 中止截断, 主站 CRC 重试自愈, t_REN 统计失真 |
 | SIO 重入期间主站唤醒帧 (RTOR=1bit 窗口) | B3 | 唤醒帧丢失一次, 主站 T_DWU 重发自愈; 测试断言强于硬件行为 |
@@ -233,3 +233,27 @@ T_DWU 重发) 能自愈**。真正的风险点在于诊断与回调正确性 (A2
 5. **P3** A4: FRAME TX 在途状态对 DLL 可见 (守卫询问 PHY), 修正注释。
 6. **P3** 测试增强: mock 增加优先级/嵌套模型 (或至少文档化局限); `injected_rx_irq` 建模
    ICR 清除语义; 补 B2 超时路径与 OL-IRQ 交错用例。
+
+---
+
+## 5. 修正实施记录 (2026-10-21)
+
+| 发现 | 状态 | 落地内容 | 回归测试 |
+| --- | --- | --- | --- |
+| A1 `dll_send` 无锁兜底 | ✅ 已修 | `dll_send_lock/unlock()`: 无 app lock 时使用 `iolink_critical_enter/exit`; `platform.h` 明确 ISR 泵构建必须提供真实临界区 | `test_isr_atomicity::test_reply_staging_uses_platform_critical` |
+| A2 监督时间戳 | ✅ 已修 | ISR 对每个合法接收帧置 `isr_master_activity`（FRAME + BYTE 两条路径） | `test_master_lost::test_isr_frame_counts_as_master_activity` |
+| A3 单槽延迟回调 | ✅ 已修 | `IOLINK_PENDING_STATES` 有序环形队列 + `iolink_dll_flush_state_callbacks()`; 主路径先排空队列再回调 | `test_isr_atomicity::test_deferred_states_are_not_overwritten` |
+| A4 FRAME TX 守卫 | 📝 已记录 | 修正注释: TX FRAME 在途传输由 PHY 拥有, 变更中止后由主站重试; 未引入 `phy.h` 钩子 | — |
+| A5 保护域/RTOS | 📝 已记录 | `platform.h`: 单主上下文约束 + RTOS 必须由 lock 覆盖线程 | — |
+| B1 泵可重入 | ✅ 已修 | 库内 `isr_reentry_pending` 延迟重入守卫（外层重跑一次）; 示例/README 要求泵只在 USART2 向量运行, 其他 feed 调 `phy_l6362a_raw_request_pump()` | `test_isr_atomicity::test_nested_pump_is_deferred` |
+| B2 busy TX 拆除在途 DMA | ✅ 已修 | `tx_frame`: DMA EN 仍置位时返回 -1（不触碰寄存器）; 硬件已完成但 ISR 未运行则内联 `TxFrameComplete()`; DLL 检查返回值: eager 路径放弃预发送并交主泵, staging 路径计入 `isr_tx_dropped` | `test_phy_l6362a_raw::test_tx_frame_busy_is_refused` / `..._completes_pending_hardware`; `test_isr_atomicity::test_busy_tx_frame_keeps_frame_for_main` |
+| B3 临界区吞 RTOF | ✅ 已修 | `RxPublishFrame()` 在 `set_mode`/`set_baudrate` 的临界区内补发布; `RxPublishFrame` 与 RTOF 共用 | `test_phy_l6362a_raw::test_isr_rx_during_set_mode` / `..._deferred_by_baudrate`（mock 现在真实清除 RTOCF、且在触发点投递字节） |
+| B4/B5/B6 | 📝 观察 | busy 判定改用 DMA 硬件 EN（不依赖时钟）；TC 等待仍用 `iolink_time_get_us`，但 TC 由硬件保证到达（冻结时钟下是"等硬件"而非死循环），TC 超时路径已用自动推进时钟测试 | `test_tx_dma_irq_tc_timeout_releases_line` |
+| C1 mock 无优先级模型 | ⏳ 未做 | 以 B1 库内守卫 + 单上下文接线替代; 完整优先级/嵌套模型仍可选 | — |
+| C3 覆盖缺口 | ✅ 已修 | 新增 TX busy / 待完成 / TC 超时 / OL-IRQ 于模式切换期间到达 | `test_phy_l6362a_raw`（新增 4 个用例） |
+| CR-1 Back-to-box 重复计数 | ✅ 已修 | ISR 活动刷新改为"仅时间戳"; 每帧服务的计数只发生一次（ISR 应答的 Type-0 / 主泵完成的帧），新增 ISR 模式回归用例 | `test_dll::test_dll_isr_back_to_box_counts_each_frame_once` |
+| CR-2 状态回调顺序 | ✅ 已修 | 主上下文的状态写入+入队置于短临界区；入队顺序=迁移顺序；flush 使用快照批次 | `test_isr_atomicity::test_deferred_states_are_not_overwritten` |
+
+验证: `build`（streaming, 46/46）与 `build_isr`（BYTE/BYTE, 51/51）全绿;
+`check_quality.sh` 严格编译 + cppcheck + Doxygen 通过（MISRA 仅报告, clang-format 版本不匹配跳过）。
+FRAME 分支通过 `-DIOLINK_ISR_RX_MODE/…TX_MODE` 的 `-fsyntax-only` 编译检查。

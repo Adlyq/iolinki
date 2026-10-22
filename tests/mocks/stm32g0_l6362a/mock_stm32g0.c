@@ -19,6 +19,8 @@ SCB_Type mock_scb;
 GPIO_TypeDef mock_gpio_a;
 
 uint32_t mock_tick_ms;
+uint32_t mock_tick_auto_advance;
+static uint32_t s_tick_calls;
 uint32_t mock_primask;
 GPIO_PinState mock_en_level = GPIO_PIN_RESET;
 GPIO_PinState mock_txen_level = GPIO_PIN_RESET;
@@ -32,6 +34,7 @@ IRQn_Type mock_last_pending_irq;
 uint32_t mock_error_handler_calls;
 
 static mock_irq_fn s_irq_handler[MOCK_IRQ_KIND_COUNT];
+static mock_irq_fn s_inject_prepare;
 static uint32_t s_irq_pending;
 static mock_trigger_t s_inject_trigger;
 static mock_irq_t s_inject_irq;
@@ -58,6 +61,9 @@ static void run_injection_trigger(mock_trigger_t trigger)
     const mock_irq_t irq = s_inject_irq;
     s_inject_trigger = MOCK_TRIGGER_NONE;
     s_inject_irq = MOCK_IRQ_NONE;
+    if (s_inject_prepare != NULL) {
+        s_inject_prepare();
+    }
     mock_request_irq(irq);
 }
 
@@ -66,6 +72,11 @@ void mock_set_irq_handler(mock_irq_t irq, mock_irq_fn fn)
     if ((irq > MOCK_IRQ_NONE) && (irq < MOCK_IRQ_KIND_COUNT)) {
         s_irq_handler[irq] = fn;
     }
+}
+
+void mock_set_inject_prepare(mock_irq_fn fn)
+{
+    s_inject_prepare = fn;
 }
 
 void mock_inject_irq(mock_trigger_t trigger, mock_irq_t irq)
@@ -101,6 +112,7 @@ void mock_stm32g0_reset(void)
     memset(mock_nvic_priority, 0, sizeof(mock_nvic_priority));
     memset(mock_nvic_enabled, 0, sizeof(mock_nvic_enabled));
     memset(s_irq_handler, 0, sizeof(s_irq_handler));
+    s_inject_prepare = NULL;
     s_irq_pending = 0U;
     s_inject_trigger = MOCK_TRIGGER_NONE;
     s_inject_irq = MOCK_IRQ_NONE;
@@ -109,6 +121,8 @@ void mock_stm32g0_reset(void)
     mock_systick.VAL = mock_systick.LOAD;
 
     mock_tick_ms = 0U;
+    mock_tick_auto_advance = 0U;
+    s_tick_calls = 0U;
     mock_primask = 0U;
     mock_en_level = GPIO_PIN_RESET;
     mock_txen_level = GPIO_PIN_RESET;
@@ -169,6 +183,14 @@ void NVIC_SetPendingIRQ(IRQn_Type irq)
 
 uint32_t HAL_GetTick(void)
 {
+    if (mock_tick_auto_advance != 0U) {
+        /* Leave the two reads inside one iolink_time_get_us() sample coherent
+         * (they compare equal) but let each successive sample observe a later
+         * millisecond, so a driver's bounded wait can actually expire. */
+        const uint32_t value = mock_tick_ms + (s_tick_calls / 2U);
+        s_tick_calls++;
+        return value;
+    }
     return mock_tick_ms;
 }
 

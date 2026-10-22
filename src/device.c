@@ -396,13 +396,9 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
     iolink_dll_process(&ctx->dll);
 
 #if IOLINK_PHY_FEATURE_ISR_PUMP
-    /* State callbacks triggered from the data ISR are deferred to this window. */
-    if (ctx->dll.state_cb_pending != 0U) {
-        ctx->dll.state_cb_pending = 0U;
-        if (ctx->dll.state_cb != NULL) {
-            ctx->dll.state_cb(ctx->dll.state_cb_user, ctx->dll.pending_state);
-        }
-    }
+    /* State callbacks triggered from the data ISR are deferred to this window,
+     * in transition order (a burst of frames cannot overwrite an earlier one). */
+    iolink_dll_flush_state_callbacks(&ctx->dll);
 #endif
 
     if ((ctx->config != NULL) && (ctx->config->app_callbacks != NULL)) {

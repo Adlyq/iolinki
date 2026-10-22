@@ -43,8 +43,10 @@ typedef enum
  * @brief Optional hook invoked when the DLL state machine changes state.
  *
  * Fired from within iolink_dll_process() at the actual transition, so no
- * transient state is missed. Used by the core to drive application lifecycle
- * callbacks.
+ * transient state is missed. A transition seen by the data ISR is queued and
+ * delivered from the next main-context pump pass (in transition order), so the
+ * callback never runs in interrupt context. Used by the core to drive
+ * application lifecycle callbacks.
  */
 typedef void (*iolink_dll_state_cb_t)(void* user, iolink_dll_state_t state);
 
@@ -77,6 +79,8 @@ typedef enum
 #define IOLINK_PD_REPLY_MAX (IOLINK_OD_MAX_SIZE + IOLINK_PD_IN_MAX_SIZE + 1U)
 /** PD-in reply buffers: active, being filled, and held by the ISR. */
 #define IOLINK_PD_IN_BUFFERS 3U
+/** Deferred state-transition queue depth (ISR pump -> main callbacks). */
+#define IOLINK_PENDING_STATES 4U
 
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
@@ -174,8 +178,12 @@ typedef struct
     volatile uint8_t stack_tick_pending;         /**< Timer B tick authorised a
                                                       main-context service window */
     volatile uint8_t in_isr;                     /**< ISR is running the pump */
-    volatile uint8_t state_cb_pending;           /**< State callback deferred to main */
-    volatile iolink_dll_state_t pending_state;   /**< Deferred state value */
+    volatile uint8_t isr_reentry_pending;        /**< A preempting pump invocation
+                                                      was deferred to the outer one */
+    volatile iolink_dll_state_t pending_states[IOLINK_PENDING_STATES]; /**< Deferred
+                                                      transitions, in order */
+    volatile uint8_t pending_state_head;         /**< Deferred queue write index */
+    volatile uint8_t pending_state_tail;         /**< Deferred queue read index */
     /* Reply transmission, fed one octet per data request. Two payload slots
      * keep the in-flight TX-FRAME DMA buffer stable while the next reply is
      * prepared (the PHY serialises the transfers). */
@@ -424,6 +432,17 @@ void iolink_dll_prepare_cyclic_reply(iolink_dll_ctx_t* ctx);
  * @param ctx DLL context
  */
 void iolink_dll_process_isr(iolink_dll_ctx_t* ctx);
+
+/**
+ * @brief Deliver state-change callbacks deferred from the data ISR, in order.
+ *
+ * A transition seen by iolink_dll_process_isr() cannot call the application
+ * callback in interrupt context, so it is queued. The main pump drains the
+ * queue here; a burst of back-to-back frames therefore cannot overwrite an
+ * earlier transition. Safe to call when the queue is empty.
+ * @param ctx DLL context
+ */
+void iolink_dll_flush_state_callbacks(iolink_dll_ctx_t* ctx);
 
 /** @brief Timer A (t_A one-shot) expired without a reply. */
 void iolink_dll_on_rx_timeout(iolink_dll_ctx_t* ctx);

@@ -59,6 +59,18 @@ void phy_l6362a_raw_gap_irq(void);       /**< TIM3 byte-gap time-out (RX BYTE) *
 void phy_l6362a_raw_tx_dma_irq(void);    /**< DMA1 ch2 complete (TX FRAME) */
 void phy_l6362a_raw_ol_irq(void);        /**< OL_INT EXTI (wake latch) */
 
+/**
+  * @brief  Request the data-interrupt pump from a non-USART interrupt.
+  *
+  * The library ISR pump must run in exactly one interrupt context. Wire the
+  * USART2 handler to call phy_l6362a_raw_rx_irq() followed by
+  * iolink_device_process_isr(); every other feed (TIM3/DMA/EXTI) calls its
+  * phy_l6362a_raw_*_irq() and then this helper instead of the pump. On
+  * Cortex-M0+ there is no BASEPRI, so a lower-priority pump would otherwise be
+  * re-entered by the (higher-priority) USART2 vector.
+  */
+void phy_l6362a_raw_request_pump(void);
+
 /* iolinki platform hooks (override the weak defaults in platform.c) */
 void     iolink_critical_enter(void);
 void     iolink_critical_exit(void);

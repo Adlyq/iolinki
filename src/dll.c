@@ -45,6 +45,21 @@
 
 #define DLL_LOG(...)
 
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+/** @brief Queue one state transition for the main-context callbacks. */
+static void dll_queue_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t state)
+{
+    const uint8_t next = (uint8_t) ((ctx->pending_state_head + 1U) % IOLINK_PENDING_STATES);
+    if (next == ctx->pending_state_tail) {
+        /* Queue full: drop the oldest so the newest transition is never lost. */
+        ctx->pending_state_tail =
+            (uint8_t) ((ctx->pending_state_tail + 1U) % IOLINK_PENDING_STATES);
+    }
+    ctx->pending_states[ctx->pending_state_head] = state;
+    ctx->pending_state_head = next;
+}
+#endif
+
 /**
  * @brief Centralised state transition.
  *
@@ -53,34 +68,70 @@
  */
 static void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
 {
-    if (ctx->state != new_state) {
-        ctx->state = new_state;
-        if (new_state == IOLINK_DLL_STATE_OPERATE) {
-            /* Master-loss supervision is meaningful only inside OPERATE; the
-             * startup sequence may legitimately pause for several cycles. */
-            ctx->master_last_activity_ms = iolink_time_get_ms();
-            ctx->master_lost_count = 0U;
-            ctx->master_lost = false;
-        }
-        if (new_state == IOLINK_DLL_STATE_STARTUP) {
-            /* A.6.4: queued events are discarded when communication is
-               interrupted or cancelled. */
-#if IOLINK_FEATURE_EVENTS
-            iolink_events_reset(&ctx->events);
-#endif
-        }
-        if (ctx->state_cb != NULL) {
+    if (ctx->state == new_state) {
+        return;
+    }
 #if IOLINK_PHY_FEATURE_ISR_PUMP
-            if (ctx->in_isr != 0U) {
-                /* Application callbacks must not run in the data ISR. */
-                ctx->pending_state = new_state;
-                ctx->state_cb_pending = 1U;
-                return;
-            }
+    const bool defer = (ctx->in_isr != 0U);
+    if (!defer) {
+        /* Main context: make the transition and its queue entry atomic with
+         * respect to the data ISR, so callbacks are delivered in order. */
+        iolink_critical_enter();
+    }
 #endif
-            ctx->state_cb(ctx->state_cb_user, new_state);
+    ctx->state = new_state;
+    if (new_state == IOLINK_DLL_STATE_OPERATE) {
+        /* Master-loss supervision is meaningful only inside OPERATE; the
+         * startup sequence may legitimately pause for several cycles. */
+        ctx->master_last_activity_ms = iolink_time_get_ms();
+        ctx->master_lost_count = 0U;
+        ctx->master_lost = false;
+    }
+    if (new_state == IOLINK_DLL_STATE_STARTUP) {
+        /* A.6.4: queued events are discarded when communication is
+           interrupted or cancelled. */
+#if IOLINK_FEATURE_EVENTS
+        iolink_events_reset(&ctx->events);
+#endif
+    }
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* Every transition goes through the ordered queue. Application callbacks
+     * must not run in the data ISR, and a burst of back-to-back frames must not
+     * overwrite an earlier transition. */
+    if (ctx->state_cb != NULL) {
+        dll_queue_state(ctx, new_state);
+    }
+    if (!defer) {
+        iolink_critical_exit();
+        iolink_dll_flush_state_callbacks(ctx);
+    }
+#else
+    if (ctx->state_cb != NULL) {
+        ctx->state_cb(ctx->state_cb_user, new_state);
+    }
+#endif
+}
+
+void iolink_dll_flush_state_callbacks(iolink_dll_ctx_t* ctx)
+{
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    if (ctx == NULL) {
+        return;
+    }
+    /* Snapshot the write index: a transition queued by the data ISR while the
+     * callbacks run belongs after this batch and is delivered on the next pass. */
+    const uint8_t end = ctx->pending_state_head;
+    while (ctx->pending_state_tail != end) {
+        const iolink_dll_state_t state = ctx->pending_states[ctx->pending_state_tail];
+        ctx->pending_state_tail =
+            (uint8_t) ((ctx->pending_state_tail + 1U) % IOLINK_PENDING_STATES);
+        if (ctx->state_cb != NULL) {
+            ctx->state_cb(ctx->state_cb_user, state);
         }
     }
+#else
+    (void) ctx;
+#endif
 }
 
 /** @brief Return the CKT M-sequence type bits (A.1.3, Table A.3) for a configured type. */
@@ -163,8 +214,44 @@ static uint8_t dll_expected_req_len(const iolink_dll_ctx_t* ctx, uint8_t type_bi
 #endif
 
 #if IOLINK_PHY_FEATURE_ISR_PUMP
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 static void dll_isr_tx_step(iolink_dll_ctx_t* ctx);
+#endif
 static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx);
+#endif
+
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+/** @brief Serialise main-context reply staging against the data interrupt.
+ *
+ * The application lock is preferred (it also covers RTOS threads). When none is
+ * configured, fall back to the platform critical section; a bare-metal port must
+ * therefore provide a real implementation (the library default is a no-op). */
+static bool dll_has_app_lock(const iolink_dll_ctx_t* ctx)
+{
+    /* Both hooks must be present; a lone lock would enter the application lock
+     * but leave the platform critical section instead (unbalanced pair). */
+    return (ctx->lock != NULL) && (ctx->unlock != NULL);
+}
+
+static void dll_send_lock(iolink_dll_ctx_t* ctx)
+{
+    if (dll_has_app_lock(ctx)) {
+        ctx->lock(ctx->lock_user);
+    }
+    else {
+        iolink_critical_enter();
+    }
+}
+
+static void dll_send_unlock(iolink_dll_ctx_t* ctx)
+{
+    if (dll_has_app_lock(ctx)) {
+        ctx->unlock(ctx->lock_user);
+    }
+    else {
+        iolink_critical_exit();
+    }
+}
 #endif
 
 /**
@@ -187,9 +274,7 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
     }
     /* Stage the reply (verbatim: the octets already carry the CKS) and let the
      * ISR report it. The TX hooks are never driven from this (main) context. */
-    if (ctx->lock != NULL) {
-        ctx->lock(ctx->lock_user);
-    }
+    dll_send_lock(ctx);
     const uint8_t slot = ctx->isr_tx_next;
     ctx->isr_tx_next ^= 1U;
     (void) memcpy(ctx->isr_tx_payload[slot], data, len);
@@ -202,9 +287,7 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
         /* Ask the PHY to run the data-interrupt pump now. Kept inside the
          * critical section so the pend cannot race a natural data interrupt. */
         ctx->phy->request_service(ctx->phy->user);
-        if (ctx->unlock != NULL) {
-            ctx->unlock(ctx->lock_user);
-        }
+        dll_send_unlock(ctx);
         return;
     }
 
@@ -213,7 +296,9 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
     ctx->isr_tx_pending = 0U;
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     if (ctx->phy->tx_frame != NULL) {
-        (void) ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload[slot], len);
+        if (ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload[slot], len) != 0) {
+            ctx->isr_tx_dropped++;
+        }
     }
 #else
     if (ctx->phy->tx_octet != NULL) {
@@ -236,9 +321,7 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
     ctx->isr_tx_pending = 0U;
     ctx->isr_tx_dropped++;
 #endif /* !IOLINK_PHY_FEATURE_ISR_TX_ONLY */
-    if (ctx->unlock != NULL) {
-        ctx->unlock(ctx->lock_user);
-    }
+    dll_send_unlock(ctx);
 #else
     (void) ctx->phy->send(ctx->phy->user, data, len);
 #endif
@@ -940,16 +1023,27 @@ static uint32_t dll_master_cycle_us(const iolink_dll_ctx_t* ctx)
     return (uint32_t) ticks * 100U;
 }
 
-/** @brief ST-style master activity: frame end / RX timeout restarts the counter. */
-static void dll_master_activity(iolink_dll_ctx_t* ctx)
+/** @brief Refresh the master-activity timestamp.
+ *
+ * Used when the data ISR sees a frame but the Back-to-box cycle count must
+ * still be advanced exactly once, by whoever actually served the request. */
+static void dll_master_activity_ts(iolink_dll_ctx_t* ctx)
 {
     ctx->master_last_activity_ms = iolink_time_get_ms();
     ctx->master_lost_count = 0U;
     ctx->master_lost = false;
+}
+
+/** @brief ST-style master activity: frame end / RX timeout restarts the counter. */
+static void dll_master_activity(iolink_dll_ctx_t* ctx)
+{
+    dll_master_activity_ts(ctx);
 
     /* 10.7.5: count the frames served after Back-to-box so the device keeps
        answering for at least 3 MasterCycles before it stops (see
-       dll_process_complete_frame, which performs the actual stop). */
+       dll_process_complete_frame, which performs the actual stop). Counted
+       exactly once per served cycle: from the ISR for a request it answers
+       itself, otherwise from dll_process_complete_frame. */
     if (ctx->back_to_box_pending) {
         ctx->back_to_box_cycles++;
     }
@@ -1208,8 +1302,10 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
 static void dll_restore_operating_baudrate(iolink_dll_ctx_t* ctx)
 {
     /* Do not reconfigure the UART in the middle of a reply: wait for the
-     * in-flight frame (or the staged main reply) to drain. The next main-loop
-     * pass retries once isr_tx_active/isr_tx_pending are clear. */
+     * staged main reply (isr_tx_pending) or the TX BYTE octet feed
+     * (isr_tx_active) to drain. TX FRAME transfers are owned by the PHY and are
+     * not visible here: should the baudrate change while one is on the wire, the
+     * PHY aborts it in its critical section and the master retries the request. */
     if ((ctx->isr_tx_active != 0U) || (ctx->isr_tx_pending != 0U)) {
         return;
     }
@@ -1237,7 +1333,10 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
 
     if (ctx->isr_master_activity != 0U) {
         ctx->isr_master_activity = 0U;
-        dll_master_activity(ctx);
+        /* Timestamp only: the Back-to-box cycle count is advanced exactly once
+         * per served request (here for an ISR-answered frame, or in
+         * dll_process_complete_frame for a main-answered one). */
+        dll_master_activity_ts(ctx);
     }
 
     /* Restore the operating COM before the SIO/power-on early returns: a
@@ -1287,14 +1386,16 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
 
     dll_poll_diagnostics(ctx);
 
-    uint32_t now_ms = iolink_time_get_ms();
-    uint64_t now_ms64 = iolink_time_get_us() / 1000U;
-
     if (ctx->isr_master_activity != 0U) {
         /* A frame may have completed in the ISR after the early check above. */
         ctx->isr_master_activity = 0U;
-        dll_master_activity(ctx);
+        dll_master_activity_ts(ctx);
     }
+
+    /* Sampled after the late activity refresh so the elapsed-time subtraction
+     * below cannot see a timestamp newer than now_ms. */
+    uint32_t now_ms = iolink_time_get_ms();
+    uint64_t now_ms64 = iolink_time_get_us() / 1000U;
 
     if ((ctx->state == IOLINK_DLL_STATE_OPERATE) && (ctx->master_lost_cycles != 0U)) {
         uint32_t cycle_ms = (dll_master_cycle_us(ctx) + 999U) / 1000U;
@@ -1996,8 +2097,6 @@ static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, ui
         return false;
     }
 
-    ctx->isr_master_activity = 1U;
-
     const bool read = ((frame[0] & IOLINK_MC_RW_MASK) != 0U);
     const uint8_t ch = (uint8_t) (frame[0] & IOLINK_MC_COMM_CHANNEL_MASK);
     const uint8_t addr = (uint8_t) (frame[0] & IOLINK_MC_ADDR_MASK);
@@ -2233,10 +2332,16 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
      * empties at frame start). It is only safe to compute the CKS after
      * tx_frame() when at least two octets precede it (out_len >= 3): then the
      * DMA must shift the first octet (one full octet time, baud-scaled) before
-     * it reads the checksum. */
+     * it reads the checksum. A busy PHY (previous reply still on the wire)
+     * rejects the transfer instead of tearing it down; the main pump then owns
+     * the frame. */
     if (out_len >= 3U) {
+        int tx_rc = -1;
         if (ctx->phy->tx_frame != NULL) {
-            (void) ctx->phy->tx_frame(ctx->phy->user, base, out_len);
+            tx_rc = ctx->phy->tx_frame(ctx->phy->user, base, out_len);
+        }
+        if (tx_rc != 0) {
+            return false;
         }
         uint8_t acc = 0x52U;
         for (uint16_t i = 0U; i < (uint16_t) (out_len - 1U); i++) {
@@ -2253,8 +2358,9 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
         }
         ((uint8_t*) base)[out_len - 1U] =
             (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
-        if (ctx->phy->tx_frame != NULL) {
-            (void) ctx->phy->tx_frame(ctx->phy->user, base, out_len);
+        if ((ctx->phy->tx_frame == NULL) ||
+            (ctx->phy->tx_frame(ctx->phy->user, base, out_len) != 0)) {
+            return false;
         }
     }
     return true;
@@ -2290,9 +2396,11 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
         }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
         if (ctx->phy->tx_frame != NULL) {
-            (void) ctx->phy->tx_frame(ctx->phy->user,
-                                      ctx->isr_tx_payload[ctx->isr_tx_pending_slot],
-                                      ctx->isr_tx_len);
+            if (ctx->phy->tx_frame(ctx->phy->user,
+                                   ctx->isr_tx_payload[ctx->isr_tx_pending_slot],
+                                   ctx->isr_tx_len) != 0) {
+                ctx->isr_tx_dropped++;
+            }
         }
 #else
         if (ctx->isr_tx_active != 0U) {
@@ -2354,6 +2462,13 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
                 break;
             }
             const bool allowed = dll_isr_reply_allowed(ctx, f, len);
+            if (allowed) {
+                /* A validated frame proves the master is polling. The main pump
+                 * may be busy (e.g. a slow ISDU service) and cannot consume the
+                 * mailbox in time; without this the master-lost supervision
+                 * would count a busy main window as a loss. */
+                ctx->isr_master_activity = 1U;
+            }
             if (allowed && (ctx->phy->response_timer_start != NULL)) {
                 /* Arm the t_A watchdog only for a request that will be answered:
                  * rejected or spurious frames must not count as t_A timeouts. */
@@ -2372,6 +2487,7 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
                 }
             }
             if (allowed && dll_isr_handle_type0(ctx, f, len)) {
+                dll_master_activity(ctx); /* served this cycle from the ISR */
                 break;
             }
             {
@@ -2441,6 +2557,10 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
                 break;
             }
             if (ctx->isr_rx_cnt != 0U) {
+                /* A completed frame proves the master is polling; see the RX
+                 * FRAME branch above (long main windows must not be counted as
+                 * a lost master). */
+                ctx->isr_master_activity = 1U;
                 bool drop = false;
                 const bool isdu_write =
                     (((ctx->isr_rx_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_ISDU) &&
@@ -2462,6 +2582,9 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
                     if (dll_isr_reply_allowed_acc(ctx, ctx->isr_rx_buf, ctx->isr_rx_cnt,
                                                   ctx->isr_rx_acc)) {
                         handled = dll_isr_handle_type0(ctx, ctx->isr_rx_buf, ctx->isr_rx_cnt);
+                        if (handled) {
+                            dll_master_activity(ctx); /* served from the ISR */
+                        }
                     }
                     if (!handled) {
                         dll_publish_isr_frame(ctx, ctx->isr_rx_cnt);
@@ -2528,6 +2651,10 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
         }
 
         if ((ctx->isr_rx_expect != 0U) && (ctx->isr_rx_cnt >= ctx->isr_rx_expect)) {
+            /* A length-complete M-sequence proves the master is polling; the
+             * main pump may not consume the mailbox before its supervision
+             * window elapses (see the RX FRAME branch). */
+            ctx->isr_master_activity = 1U;
             const uint8_t ch =
                 (uint8_t) (ctx->isr_rx_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK);
             const bool isdu = (ch == IOLINK_MC_CHANNEL_ISDU);
@@ -2555,6 +2682,7 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
                 dll_isr_reply_allowed_acc(ctx, ctx->isr_rx_buf, ctx->isr_rx_expect,
                                           ctx->isr_rx_acc) &&
                 dll_isr_handle_type0(ctx, ctx->isr_rx_buf, ctx->isr_rx_expect)) {
+                dll_master_activity(ctx); /* served this cycle from the ISR */
                 ctx->isr_rx_cnt = 0U;
                 ctx->isr_rx_expect = 0U;
                 break;
@@ -2599,8 +2727,20 @@ void iolink_dll_process_isr(iolink_dll_ctx_t* ctx)
     if (ctx == NULL) {
         return;
     }
+    if (ctx->in_isr != 0U) {
+        /* A higher-priority interrupt invoked the pump while a lower-priority
+         * one is already running it (the pump is bound to several vectors on
+         * boards without BASEPRI). The pump state has a single writer, so
+         * nesting would corrupt the reply staging and the mailbox: defer and
+         * let the outer invocation run once more before it returns. */
+        ctx->isr_reentry_pending = 1U;
+        return;
+    }
     ctx->in_isr = 1U;
-    dll_isr_process(ctx);
+    do {
+        ctx->isr_reentry_pending = 0U;
+        dll_isr_process(ctx);
+    } while (ctx->isr_reentry_pending != 0U);
     ctx->in_isr = 0U;
 }
 

@@ -225,6 +225,7 @@ void mock_set_primask(uint32_t value);
 
 /* Test-visible mock state --------------------------------------------------- */
 extern uint32_t mock_tick_ms;
+extern uint32_t mock_tick_auto_advance;
 extern uint32_t mock_primask;
 extern GPIO_PinState mock_en_level;
 extern GPIO_PinState mock_txen_level;
@@ -268,6 +269,9 @@ typedef void (*mock_irq_fn)(void);
 void mock_set_irq_handler(mock_irq_t irq, mock_irq_fn fn);
 void mock_inject_irq(mock_trigger_t trigger, mock_irq_t irq);
 void mock_request_irq(mock_irq_t irq);
+/* Optional action run at the trigger point, before the IRQ is pended (models
+ * data that physically arrived before the interrupt was taken). */
+void mock_set_inject_prepare(mock_irq_fn fn);
 
 void mock_stm32g0_reset(void);
 

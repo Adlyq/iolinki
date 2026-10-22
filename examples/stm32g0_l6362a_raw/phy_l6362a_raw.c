@@ -122,6 +122,12 @@ static int     l6362_detect_wakeup(void* user);
 static void    phy_rx_set(bool on);
 static bool    phy_txen_get(void);
 static void    phy_txen_set(bool on);
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+static void    RxPublishFrame(bool err);
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+static void    TxFrameComplete(void);
+#endif
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -167,6 +173,46 @@ static void UartConfigure(uint32_t baud) {
                     USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE | USART_CR1_UE;
 #endif
 }
+
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+/** Publish the DMA octets received since the previous frame end.
+ *
+ * Called from the RTOF vector and from the mode/baudrate setters. The setters
+ * run inside a PRIMASK critical section and UartConfigure() clears RTOCF, so a
+ * frame that completed while interrupts were masked would otherwise be lost when
+ * the deferred RTOF vector finds the flag already clear. */
+static void RxPublishFrame(bool err) {
+    uint16_t cur = (uint16_t)(L6362_RX_DMA_SIZE - (DMA1_Channel1->CNDTR & 0xFFFFU));
+    uint16_t last = s_rx_last_index;
+
+    if (cur == last) {
+        return;
+    }
+    s_rx_last_index = cur;
+    if (s_rx_ready != 0U) {
+        return; /* previous frame unread: drop this one */
+    }
+    if (cur > last) {
+        s_rx_frame     = &s_rx_dma[last];
+        s_rx_frame_len = (uint8_t)(cur - last);
+    } else {
+        /* Wrapped across the buffer end: linearise. */
+        uint16_t n1 = (uint16_t)(L6362_RX_DMA_SIZE - last);
+        uint16_t n2 = cur;
+        uint16_t i;
+        for (i = 0U; i < n1; i++) {
+            s_rx_linear[i] = s_rx_dma[last + i];
+        }
+        for (i = 0U; i < n2; i++) {
+            s_rx_linear[n1 + i] = s_rx_dma[i];
+        }
+        s_rx_frame     = s_rx_linear;
+        s_rx_frame_len = (uint8_t)(n1 + n2);
+    }
+    s_rx_err   = (err) ? 1U : 0U;
+    s_rx_ready = 1U;
+}
+#endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME */
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
 static void RxReset(void) {
@@ -249,6 +295,10 @@ static void l6362_set_mode(void* user, iolink_phy_mode_t mode) {
         phy_txen_set(false);
     }
     UartConfigure(s_baud_hz);
+    /* UartConfigure() cleared RTOCF inside this critical section. Publish a
+     * frame that completed meanwhile so the deferred RTOF vector (which now
+     * finds no flag) cannot make the wake indication disappear. */
+    RxPublishFrame(false);
 #else
     if (mode == IOLINK_PHY_MODE_SDCI) {
         s_frame_end = 0U;
@@ -312,6 +362,13 @@ static void l6362_set_baudrate(void* user, iolink_baudrate_t baudrate) {
     /* Frame-end time-out ~ 13 bit times (matches the ST single-octet engine). */
     s_gap_us = (13U * 1000000U) / s_baud_hz;
     UartConfigure(s_baud_hz);
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    /* Same as in set_mode(): UartConfigure() cleared RTOCF, so a frame that
+     * completed inside the critical section must be published here. A frame
+     * captured at the previous baudrate is still handed to the DLL, which
+     * validates it (CRC) and discards it if it does not decode. */
+    RxPublishFrame(false);
+#endif
     iolink_critical_exit();
 }
 
@@ -487,17 +544,39 @@ static void l6362_tx_done(void* user) {
 #else
 /* TX FRAME: hand the whole reply to DMA1 channel 2 (USART2_TX). The transfer
  * complete interrupt releases TX_EN and re-arms RX capture. */
+/** Finish a FRAME reply once its DMA transfer has ended.
+ *
+ * The non-circular DMA clears CCR.EN in hardware at the end of the transfer,
+ * even when its completion interrupt is still pending behind a higher-priority
+ * ISR. Clearing the flag here makes a later completion vector a no-op. */
+static void TxFrameComplete(void) {
+    uint64_t deadline;
+
+    DMA1->IFCR = DMA_IFCR_CTCIF2;
+    DMA1_Channel2->CCR &= ~DMA_CCR_EN;
+    IOD_UART->CR3 &= ~USART_CR3_DMAT;
+    /* Wait for the last octet to leave the shift register. */
+    deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
+    while (((IOD_UART->ISR & USART_ISR_TC) == 0U) && (iolink_time_get_us() < deadline)) {
+    }
+    phy_txen_set(false);
+}
+
 static int l6362_tx_frame(void* user, const uint8_t* data, size_t len) {
     (void)user;
     L6362_TX_ASSERT_ISR();
     if ((data == NULL) || (len == 0U) || (len > 0xFFFFU)) {
         return -1;
     }
-    /* Wait for any previous transfer to finish (bounded). */
-    {
-        uint64_t deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
-        while (phy_txen_get() && (iolink_time_get_us() < deadline)) {
+    /* A previous reply must be finished before the DMA is reprogrammed. If its
+     * completion interrupt is pending behind this (higher-priority) ISR, the
+     * hardware has already cleared EN: finish it here. If EN is still set, the
+     * reply is on the wire - refuse the new one instead of tearing it down. */
+    if (phy_txen_get()) {
+        if ((DMA1_Channel2->CCR & DMA_CCR_EN) != 0U) {
+            return -1;
         }
+        TxFrameComplete();
     }
 
     /* Disable RX capture and drive C/Q together: no echo may slip in. */
@@ -517,7 +596,7 @@ static int l6362_tx_frame(void* user, const uint8_t* data, size_t len) {
 /** @brief Poke the USART2 interrupt so the ISR pump sends a staged reply. */
 static void l6362_request_service(void* user) {
     (void)user;
-    NVIC_SetPendingIRQ(IOD_UART_IRQn);
+    phy_l6362a_raw_request_pump();
 }
 
 /* Timer A hook: 13 Tbit one-shot (the BYTE byte-gap watchdog). */
@@ -680,6 +759,10 @@ const iolink_phy_api_t* phy_l6362a_raw_get(void) {
     return &api;
 }
 
+void phy_l6362a_raw_request_pump(void) {
+    NVIC_SetPendingIRQ(IOD_UART_IRQn);
+}
+
 uint8_t phy_l6362a_raw_int_line_active(void) {
     return (HAL_GPIO_ReadPin(OL_INT_GPIO_Port, OL_INT_Pin) != GPIO_PIN_RESET) ? 1U : 0U;
 }
@@ -760,15 +843,7 @@ void phy_l6362a_raw_gap_irq(void) {
 void phy_l6362a_raw_tx_dma_irq(void) {
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     if ((DMA1->ISR & DMA_ISR_TCIF2) != 0U) {
-        uint64_t deadline;
-        DMA1->IFCR = DMA_IFCR_CTCIF2;
-        DMA1_Channel2->CCR &= ~DMA_CCR_EN;
-        IOD_UART->CR3 &= ~USART_CR3_DMAT;
-        /* Wait for the last octet to leave the shift register. */
-        deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
-        while (((IOD_UART->ISR & USART_ISR_TC) == 0U) && (iolink_time_get_us() < deadline)) {
-        }
-        phy_txen_set(false);
+        TxFrameComplete();
     }
 #endif
 }
@@ -786,37 +861,8 @@ void phy_l6362a_raw_rx_irq(void) {
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     if ((status & USART_ISR_RTOF) != 0U) {
-        uint16_t cur;
-        uint16_t last;
         IOD_UART->ICR = USART_ICR_RTOCF;
-        /* The DMA write index = size - CNDTR; the frame is [last, cur). */
-        cur  = (uint16_t)(L6362_RX_DMA_SIZE - (DMA1_Channel1->CNDTR & 0xFFFFU));
-        last = s_rx_last_index;
-        if (cur != last) {
-            s_rx_last_index = cur;
-            if (s_rx_ready == 0U) {
-                if (cur > last) {
-                    s_rx_frame     = &s_rx_dma[last];
-                    s_rx_frame_len = (uint8_t)(cur - last);
-                } else {
-                    /* Wrapped across the buffer end: linearise. */
-                    uint16_t n1 = (uint16_t)(L6362_RX_DMA_SIZE - last);
-                    uint16_t n2 = cur;
-                    uint16_t i;
-                    for (i = 0U; i < n1; i++) {
-                        s_rx_linear[i] = s_rx_dma[last + i];
-                    }
-                    for (i = 0U; i < n2; i++) {
-                        s_rx_linear[n1 + i] = s_rx_dma[i];
-                    }
-                    s_rx_frame     = s_rx_linear;
-                    s_rx_frame_len = (uint8_t)(n1 + n2);
-                }
-                s_rx_err   = (errors != 0U) ? 1U : 0U;
-                s_rx_ready = 1U;
-            }
-            /* else: the previous frame is unread - drop this one. */
-        }
+        RxPublishFrame(errors != 0U);
     }
 #else
     if ((status & USART_ISR_RXNE_RXFNE) != 0U) {

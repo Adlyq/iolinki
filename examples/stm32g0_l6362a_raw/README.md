@@ -106,19 +106,38 @@ The file expects the generated `main.h` to provide:
 - `IOD_UART`, `IOD_UART_IRQn`, `HAL_*`, `DMA1_Channel1/2`, `TIM3`;
 - `Error_Handler()` (used by the TX ISR-context guard).
 
-Wire the interrupt feeds from the CubeMX handlers:
+Wire the interrupt feeds from the CubeMX handlers. **The library pump runs in
+exactly one interrupt context** (USART2); every other feed only updates the PHY
+state and then pends the USART2 IRQ so the pump runs there:
 
 ```c
-void USART2_IRQHandler(void) { phy_l6362a_raw_rx_irq(); }
-void TIM3_IRQHandler(void)   { phy_l6362a_raw_gap_irq(); }
-void DMA1_Channel2_IRQHandler(void) { phy_l6362a_raw_tx_dma_irq(); }
-void EXTI4_15_IRQHandler(void)      { phy_l6362a_raw_ol_irq(); }
+void USART2_IRQHandler(void)        { phy_l6362a_raw_rx_irq();
+                                      iolink_device_process_isr(&g_dev); }
+void TIM3_IRQHandler(void)          { phy_l6362a_raw_gap_irq();
+                                      phy_l6362a_raw_request_pump(); }
+void DMA1_Channel2_IRQHandler(void) { phy_l6362a_raw_tx_dma_irq();
+                                      phy_l6362a_raw_request_pump(); }
+void EXTI4_15_IRQHandler(void)      { phy_l6362a_raw_ol_irq();
+                                      phy_l6362a_raw_request_pump(); }
 ```
 
-The application main loop only calls `iolink_device_process()`; the PHY IRQ
-handlers call `iolink_device_process_isr()`. `L6362_TX_ASSERT_ISR()` (checks
-`SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk`) catches a regression that drives the TX
-hooks from the main loop.
+The USART2 vector must be the **highest priority among the pump feeds** (0 on
+the 8110 board; TIM3 1, DMA 2). Cortex-M0+ has no BASEPRI, so if the pump were
+also called from a lower-priority vector, the USART2 vector could re-enter it and
+corrupt the reply staging. The library also defers a nested pump invocation (`isr_reentry_pending`)
+as a second line of defence, but that re-runs the work at the lower priority and
+can delay t_A, so the single-context wiring above is the contract.
+
+The microsecond timebase is derived from SysTick. With USART2 at priority 0 the
+SysTick interrupt cannot advance `HAL_GetTick()` inside that ISR, so the
+TX-complete wait is really bounded by the USART `TC` flag (which the hardware
+always raises); `L6362_OCTET_TIMEOUT_US` is only a last-resort guard. If you need
+a hard time bound in interrupt context, give SysTick a higher priority than
+USART2 (it never calls the pump, so it does not violate the single-context rule).
+
+The application main loop only calls `iolink_device_process()`.
+`L6362_TX_ASSERT_ISR()` (checks `SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk`) catches a
+regression that drives the TX hooks from the main loop.
 
 ## Integration
 
@@ -128,4 +147,7 @@ hooks from the main loop.
    `config.phy.request_service != NULL` when `ISR_TX_ONLY` is enabled.
 4. Route the four interrupt feeds above from your IRQ handlers.
 5. Keep `iolink_device_process()` in the main loop and
-   `iolink_device_process_isr()` in the USART/TIM/DMA/EXTI handlers.
+   `iolink_device_process_isr()` in the USART2 handler only; the other handlers
+   call `phy_l6362a_raw_request_pump()`.
+6. Provide a real `iolink_critical_enter/exit` (this file does) or set
+   `config.lock/unlock`: the library default critical section is a no-op.

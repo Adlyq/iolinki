@@ -35,6 +35,23 @@ extern "C" {
  *
  * This function must prevent context switches or ISRs that could
  * corrupt shared data structures (Events, ISDU).
+ *
+ * The library default (src/platform.c) is a no-op. That is only safe for the
+ * default streaming transport in a single-context bare-metal loop. A build with
+ * IOLINK_PHY_FEATURE_ISR_PUMP enabled MUST provide a real implementation
+ * (e.g. PRIMASK/BASEPRI on Cortex-M) or configure the application lock pair in
+ * iolink_device_config_t: the ISR pump shares the mailbox, the ISDU response
+ * snapshot and the reply staging buffer with the main pump.
+ *
+ * The implementation must be nesting-safe: the library may enter the critical
+ * section while already inside one (e.g. a DLL state transition that resets the
+ * event queue). A PRIMASK save/restore port must therefore keep a nesting depth
+ * (the STM32G0 raw-PHY example does).
+ *
+ * The stack is designed for one main-context caller; with an RTOS, the
+ * configured lock must also cover every thread that enters iolink_dll_process()
+ * / iolink_device_process(), because disabling interrupts does not serialise
+ * threads.
  */
 void iolink_critical_enter(void);
 

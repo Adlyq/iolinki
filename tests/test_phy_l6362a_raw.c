@@ -21,6 +21,10 @@
 
 static const iolink_phy_api_t* s_phy;
 
+/* Model the hardware flag clear: UartConfigure() writes ICR=RTOCF inside the
+ * critical section, so a deferred RTOF vector finds the flag already gone. */
+static bool s_model_icr_clear;
+
 static uint32_t expected_brr(uint32_t baud)
 {
     return (SYSCLOCK_FREQUENCY + (baud / 2U)) / baud;
@@ -29,6 +33,7 @@ static uint32_t expected_brr(uint32_t baud)
 static void boot(iolink_baudrate_t baudrate)
 {
     mock_stm32g0_reset();
+    s_model_icr_clear = false;
     phy_l6362a_raw_set_initial_baudrate(baudrate);
     assert(phy_l6362a_raw_hw_init() == 0);
     s_phy = phy_l6362a_raw_get();
@@ -75,12 +80,22 @@ static uint32_t s_irq_cr1;
 static uint32_t s_irq_cr3;
 static const uint8_t s_injected_rx[] = {0x5AU, 0xA5U, 0x3CU};
 
-static void injected_rx_irq(void)
+/* Data that arrived before the interrupt was taken: on hardware the DMA writes
+ * the octets into the ring as they are received, and RTOF pends afterwards. */
+static void inject_rx_bytes(void)
 {
     const uint32_t start = TEST_RX_DMA_SIZE - (DMA1_Channel1->CNDTR & 0xFFFFU);
-    s_irq_cr1 = IOD_UART->CR1;
     rx_deliver(start, s_injected_rx, sizeof(s_injected_rx));
-    IOD_UART->ISR = USART_ISR_RTOF;
+}
+
+static void injected_rx_irq(void)
+{
+    s_irq_cr1 = IOD_UART->CR1;
+    if (s_model_icr_clear) {
+        IOD_UART->ISR &= ~USART_ISR_RTOF;
+    } else {
+        IOD_UART->ISR |= USART_ISR_RTOF;
+    }
     phy_l6362a_raw_rx_irq();
     s_irq_deliveries++;
 }
@@ -357,6 +372,76 @@ static void test_tx_frame_and_completion(void)
     assert(s_phy->int_active(NULL) == 0U);
 }
 
+static void test_tx_frame_busy_is_refused(void)
+{
+    const uint8_t first[] = {0x11U, 0x22U, 0x33U};
+    const uint8_t second[] = {0x44U, 0x55U};
+
+    boot(IOLINK_BAUDRATE_COM3);
+    s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
+    SCB->ICSR = SCB_ICSR_VECTACTIVE_Msk;
+
+    assert(s_phy->tx_frame(NULL, first, sizeof(first)) == 0);
+    assert(mock_txen_level == GPIO_PIN_SET);
+    assert((DMA1_Channel2->CCR & DMA_CCR_EN) != 0U);
+
+    /* While the DMA is still enabled the reply is on the wire: the new frame
+     * must be refused, never silently tear the running transfer down. */
+    assert(s_phy->tx_frame(NULL, second, sizeof(second)) == -1);
+    assert(DMA1_Channel2->CMAR == (uint32_t) (uintptr_t) first);
+    assert(DMA1_Channel2->CNDTR == sizeof(first));
+    assert(mock_txen_level == GPIO_PIN_SET);
+    assert((DMA1_Channel2->CCR & DMA_CCR_EN) != 0U);
+}
+
+static void test_tx_frame_completes_pending_hardware(void)
+{
+    const uint8_t first[] = {0x11U, 0x22U, 0x33U};
+    const uint8_t second[] = {0x44U, 0x55U};
+
+    boot(IOLINK_BAUDRATE_COM3);
+    s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
+    SCB->ICSR = SCB_ICSR_VECTACTIVE_Msk;
+
+    assert(s_phy->tx_frame(NULL, first, sizeof(first)) == 0);
+
+    /* Hardware finished the transfer (non-circular DMA clears EN) but the
+     * completion IRQ is still pending behind this higher-priority ISR. The next
+     * frame must finish the pending reply (wait for TC, release TX_EN) and then
+     * start cleanly instead of stacking on top of it. */
+    DMA1_Channel2->CCR &= ~DMA_CCR_EN;
+    IOD_UART->ISR = USART_ISR_TC;
+    assert(s_phy->tx_frame(NULL, second, sizeof(second)) == 0);
+    assert(mock_txen_level == GPIO_PIN_SET);
+    assert(DMA1_Channel2->CMAR == (uint32_t) (uintptr_t) second);
+    assert(DMA1_Channel2->CNDTR == sizeof(second));
+    assert((DMA1_Channel2->CCR & DMA_CCR_EN) != 0U);
+}
+
+static void test_tx_dma_irq_tc_timeout_releases_line(void)
+{
+    const uint8_t reply[] = {0x10U, 0x20U};
+
+    boot(IOLINK_BAUDRATE_COM3);
+    s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
+    SCB->ICSR = SCB_ICSR_VECTACTIVE_Msk;
+    assert(s_phy->tx_frame(NULL, reply, sizeof(reply)) == 0);
+
+    /* Model a stuck UART: the DMA transfer completes (TCIF) but TC never sets.
+     * The bounded wait must expire on the (auto-advancing) mock clock and still
+     * release TX_EN / re-arm RX, never spin forever in interrupt context. */
+    mock_tick_auto_advance = 1U;
+    DMA1->ISR = DMA_ISR_TCIF2;
+    IOD_UART->ISR = 0U;
+    phy_l6362a_raw_tx_dma_irq();
+
+    assert((DMA1->IFCR & DMA_IFCR_CTCIF2) != 0U);
+    assert((DMA1_Channel2->CCR & DMA_CCR_EN) == 0U);
+    assert((IOD_UART->CR3 & USART_CR3_DMAT) == 0U);
+    assert((IOD_UART->CR3 & USART_CR3_DMAR) != 0U);
+    assert(mock_txen_level == GPIO_PIN_RESET);
+}
+
 static void test_tx_frame_requires_isr_context(void)
 {
     const uint8_t reply[] = {0x01U};
@@ -478,13 +563,18 @@ static void test_isr_rx_during_set_mode(void)
     assert((DMA1_Channel2->CCR & DMA_CCR_EN) != 0U);
 
     s_irq_deliveries = 0U;
+    s_model_icr_clear = true;
     mock_set_irq_handler(MOCK_IRQ_RX, injected_rx_irq);
+    mock_set_inject_prepare(inject_rx_bytes);
     mock_inject_irq(MOCK_TRIGGER_GPIO_INIT, MOCK_IRQ_RX);
 
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SIO);
     assert(s_irq_deliveries == 1U);
     /* Deferred until after UartConfigure(): the vector saw the re-armed UART. */
     assert(s_irq_cr1 == expected_cr1());
+    /* UartConfigure() cleared RTOCF, so the vector itself could no longer
+     * publish the frame; the setter must have done it. */
+    assert((IOD_UART->ISR & USART_ISR_RTOF) == 0U);
 
     /* The SIO transition aborted the in-flight FRAME reply. */
     assert(mock_txen_level == GPIO_PIN_RESET);
@@ -560,7 +650,9 @@ static void test_isr_rx_deferred_by_baudrate(void)
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
 
     s_irq_deliveries = 0U;
+    s_model_icr_clear = true;
     mock_set_irq_handler(MOCK_IRQ_RX, injected_rx_irq);
+    mock_set_inject_prepare(inject_rx_bytes);
     mock_inject_irq(MOCK_TRIGGER_GPIO_INIT, MOCK_IRQ_RX);
 
     s_phy->set_baudrate(NULL, IOLINK_BAUDRATE_COM1);
@@ -568,12 +660,38 @@ static void test_isr_rx_deferred_by_baudrate(void)
     assert(s_irq_deliveries == 1U);
     assert(s_irq_cr1 == expected_cr1());
     assert(IOD_UART->BRR == expected_brr(4800U));
+    /* The flag was cleared by UartConfigure(); the setter published the frame. */
+    assert((IOD_UART->ISR & USART_ISR_RTOF) == 0U);
     assert(s_phy->int_active(NULL) == 1U);
     frame = s_phy->rx_frame(NULL, &status, &len);
     assert(frame != NULL);
     assert(len == sizeof(s_injected_rx));
     assert(status == IOLINK_PHY_STATUS_DATA_READY);
     assert(memcmp(frame, s_injected_rx, sizeof(s_injected_rx)) == 0);
+}
+
+static void injected_ol_irq(void)
+{
+    phy_l6362a_raw_ol_irq();
+    s_irq_deliveries++;
+}
+
+/* The OL latch is written from the EXTI vector while the main context is inside
+ * a mode transition; it must survive the transition and be consumed once. */
+static void test_ol_irq_during_mode_change(void)
+{
+    boot(IOLINK_BAUDRATE_COM3);
+    s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
+
+    s_irq_deliveries = 0U;
+    mock_set_irq_handler(MOCK_IRQ_OL, injected_ol_irq);
+    mock_inject_irq(MOCK_TRIGGER_GPIO_INIT, MOCK_IRQ_OL);
+
+    s_phy->set_mode(NULL, IOLINK_PHY_MODE_SIO);
+
+    assert(s_irq_deliveries == 1U);
+    assert(s_phy->detect_wakeup(NULL) == 1);
+    assert(s_phy->detect_wakeup(NULL) == 0);
 }
 
 static void test_platform_hooks(void)
@@ -624,12 +742,16 @@ int main(void)
     test_rx_frame();
     test_rx_frame_wraps();
     test_tx_frame_and_completion();
+    test_tx_frame_busy_is_refused();
+    test_tx_frame_completes_pending_hardware();
+    test_tx_dma_irq_tc_timeout_releases_line();
     test_tx_frame_requires_isr_context();
     test_baudrate_change_aborts_tx();
     test_mode_wakeup_and_irq_feeds();
     test_isr_rx_during_set_mode();
     test_isr_tx_complete_deferred_by_baudrate();
     test_isr_rx_deferred_by_baudrate();
+    test_ol_irq_during_mode_change();
     test_platform_hooks();
     return 0;
 }

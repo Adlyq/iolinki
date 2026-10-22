@@ -579,6 +579,55 @@ static void test_dll_back_to_box_disables_comm(void** state)
     assert_false(dev.ctx.dll.back_to_box_pending);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_COMM_DISABLED);
 }
+#else
+/* ISR transport: every served frame must advance the Back-to-box count exactly
+ * once (the data ISR also records master activity, but that is a timestamp-only
+ * refresh). A double count stops the device one MasterCycle too early. */
+static void test_dll_isr_back_to_box_counts_each_frame_once(void** state)
+{
+    (void) state;
+    iolink_config_t config = {
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_1,
+        .pd_in_len = 1U,
+        .pd_out_len = 0U,
+    };
+    uint8_t frame[3] = {0x00U, IOLINK_MSEQ_TYPE_2, 0x00U};
+    iolink_test_device_t dev;
+
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
+    move_to_operate_ctx(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
+    iolink_dll_request_back_to_box(&dev.ctx.dll);
+
+    /* Three served MasterCycles keep the device answering. */
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            mock_phy_feed_byte(frame[j]);
+        }
+        mock_phy_feed_chk();
+        expect_any(mock_phy_send, data);
+        expect_any(mock_phy_send, len);
+        will_return(mock_phy_send, 0);
+        test_io_cycle(&dev.ctx);
+        assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+    }
+
+    /* The next frame flips the device into the communication-disabled state. */
+    for (int j = 0; j < 3; j++) {
+        mock_phy_feed_byte(frame[j]);
+    }
+    mock_phy_feed_chk();
+    expect_any(mock_phy_send, data);
+    expect_any(mock_phy_send, len);
+    will_return(mock_phy_send, 0);
+    test_io_cycle(&dev.ctx);
+    assert_false(dev.ctx.dll.back_to_box_pending);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_COMM_DISABLED);
+}
 #endif /* !IOLINK_PHY_FEATURE_ISR_PUMP */
 
 int main(void)
@@ -603,6 +652,9 @@ int main(void)
 #if !IOLINK_PHY_FEATURE_ISR_PUMP
         cmocka_unit_test_setup_teardown(test_dll_back_to_box_disables_comm, test_setup,
                                         test_teardown),
+#else
+        cmocka_unit_test_setup_teardown(test_dll_isr_back_to_box_counts_each_frame_once,
+                                        test_setup, test_teardown),
 #endif
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
