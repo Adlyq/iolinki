@@ -25,7 +25,13 @@
 /**
  * @brief Get the virtual PHY provider
  *
- * This PHY communicates with a virtual IO-Link Master over a network socket.
+ * This PHY communicates with a virtual IO-Link Master over a pseudo-terminal.
+ * It implements the streaming hooks (`send`/`recv_byte`) and, when built with
+ * `IOLINK_PHY_FEATURE_ISR_PUMP` and the BYTE ISR granularity, the ISR hooks
+ * (`rx_octet`/`tx_octet`/`tx_done`/`int_active`/`request_service`).
+ * ISR FRAME mode is intentionally not implemented: a PTY is a byte stream with
+ * no frame boundaries. `int_active()` only claims service in SDCI so the pump
+ * never consumes the SIO wake-up byte.
  *
  * @return const iolink_phy_api_t*
  */
