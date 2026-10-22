@@ -25,6 +25,25 @@ add_test(NAME test_deadline_rollover COMMAND test_deadline_rollover)
 add_executable(test_phy_l6362a test_phy_l6362a.c)
 target_link_libraries(test_phy_l6362a iolinki)
 add_test(NAME test_phy_l6362a COMMAND test_phy_l6362a)
+# Board-level raw-octet PHY example (STM32G0 + L6362A) against a host mock of
+# the CubeMX/HAL surface. Compiled in its real ISR-pump FRAME/FRAME mode.
+add_executable(test_phy_l6362a_raw
+    test_phy_l6362a_raw.c
+    ../examples/stm32g0_l6362a_raw/phy_l6362a_raw.c
+    mocks/stm32g0_l6362a/mock_stm32g0.c)
+target_include_directories(test_phy_l6362a_raw PRIVATE
+    mocks/stm32g0_l6362a
+    ../examples/stm32g0_l6362a_raw)
+target_compile_definitions(test_phy_l6362a_raw PRIVATE
+    IOLINK_PHY_FEATURE_ISR_PUMP=1
+    IOLINK_PHY_FEATURE_ISR_TX_ONLY=1
+    IOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME
+    IOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME)
+# The board example uses C11 _Static_assert for its transport contract.
+set_target_properties(test_phy_l6362a_raw PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED ON)
+add_test(NAME test_phy_l6362a_raw COMMAND test_phy_l6362a_raw)
 add_executable(test_esp32_tx_guard ../examples/esp32_l6362a/test_tx_guard.c ../examples/esp32_l6362a/main/tx_guard.c ../examples/esp32_l6362a/main/rx_guard.c)
 target_include_directories(test_esp32_tx_guard PRIVATE ../examples/esp32_l6362a/main)
 add_test(NAME test_esp32_tx_guard COMMAND test_esp32_tx_guard)

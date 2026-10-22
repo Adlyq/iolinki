@@ -1,9 +1,11 @@
 # STM32G0 + L6362A raw-octet PHY (reference)
 
 Reference raw-octet PHY adapter for the ST L6362A transceiver on an STM32G0.
-It is copied from the 8110 8-channel board project and is **not built by the
-default CMake**; use it as a starting point and adapt the pins, USART/DMA
-instances and IRQ names to your board.
+It is copied from the 8110 8-channel board project and is **not built as
+firmware by the default CMake**; use it as a starting point and adapt the pins,
+USART/DMA instances and IRQ names to your board. The source itself is compiled
+on the host by `tests/test_phy_l6362a_raw.c` through the CubeMX/HAL mock under
+`tests/mocks/stm32g0_l6362a/`.
 
 The L6362A is a byte-stream UART transceiver with no SPI status register, so this
 adapter synthesizes the ISR-path contract:

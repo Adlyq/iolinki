@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   two-pump ISR transport over a PTY. ISR FRAME mode remains unimplemented.
 - `host_demo`: pumps `iolink_device_process_isr()` when built with
   `IOLINK_ISR_PUMP`, enabling end-to-end fixed-type tests against the ISR build.
+- `test_phy_l6362a_raw`: host-side coverage for the STM32G0 + L6362A raw
+  PHY example using a mock CubeMX/HAL surface; exercises RX FRAME (normal,
+  dropped, error and wrap), TX FRAME (ISR contract, completion and
+  mode/baud-change abort), IRQ feeds, platform hooks and deterministic
+  ISR/main interleaving (RX during `set_mode`, deferred RX/TX vectors during
+  a baud-rate change).
 - `test_pd_variable`: byte-exact Type 1_V/Type 2_V round-trips at both PD
   length bounds (1 and 32 octets, including asymmetric PDin/PDout widths such
   as the 28-in/2-out product configuration) and independent rejection one
