@@ -17,9 +17,11 @@ echo "=========================================="
 
 # Test configurations: M_SEQ_TYPE PD_IN_LEN PD_OUT_LEN
 CONFIGS=(
-    "0 0 0"      # Type 0 - ISDU only
-    "12 2 2"     # Type 1_2 - PD + ISDU, 1-byte OD
-    "22 1 1"     # Type 2_2 - PD + ISDU, 2-byte OD
+    "0 0 0"      # TYPE_0 - ISDU only
+    "2 0 0"      # TYPE_1_2 - 2 OD octets, no PD
+    "3 0 0"      # TYPE_1_V - 8 OD octets, no PD
+    "5 2 0"      # TYPE_2_2 - 2 PD-in, 1 OD
+    "6 2 2"      # TYPE_2_V - variable PD, 2 OD
 )
 
 TOTAL_PASSED=0

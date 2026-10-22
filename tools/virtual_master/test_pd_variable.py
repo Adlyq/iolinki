@@ -12,9 +12,12 @@ import time
 import sys
 import unittest
 from virtual_master.master import VirtualMaster
+from virtual_master.protocol import MSequenceType
 
 
 class TestVariablePD(unittest.TestCase):
+    """TYPE_2_V is the only M-sequence with variable Process Data (A.14)."""
+
     def setUp(self):
         self.master = VirtualMaster()
         self.device_tty = self.master.get_device_tty()
@@ -26,81 +29,68 @@ class TestVariablePD(unittest.TestCase):
     def tearDown(self):
         self.master.close()
 
-    def test_type1_v_pd4(self):
-        """Test Type 1_V with 4-byte PD."""
-        print("\n[TEST] Type 1_V with PD Len 4")
+    def _run_2v_case(self, pd_len):
         process = subprocess.Popen(
-            [self.env["IOLINK_DEVICE_PATH"], self.device_tty, "3", "4"],
+            [
+                self.env["IOLINK_DEVICE_PATH"],
+                self.device_tty,
+                str(int(MSequenceType.TYPE_2_V)),
+                str(pd_len),
+            ],
             stdout=sys.stdout,
             stderr=sys.stderr,
             env=self.env,
         )
         try:
             time.sleep(1)
+            self.master.m_seq_type = MSequenceType.TYPE_2_V
+            self.master.set_pd_length(pd_len, pd_len)
             self.assertTrue(self.master.run_startup_sequence())
-            self.master.m_seq_type = 3  # 1_V
-            self.master.pd_out_len = 4
-            self.master.pd_in_len = 4
             self.master.go_to_operate()
 
-            test_data = b"\x10\x20\x30\x40"
+            test_data = bytes((0x10 + i) & 0xFF for i in range(pd_len))
+            expected = bytes((0x11 + i) & 0xFF for i in range(pd_len))
+            resp = None
             for _ in range(3):
                 resp = self.master.run_cycle(pd_out=test_data)
 
             self.assertIsNotNone(resp)
             self.assertTrue(resp.valid)
-            self.assertEqual(resp.pd, b"\x11\x21\x31\x41")
-            print("   ✅ PD 4-byte exchange successful")
-
-        finally:
-            process.terminate()
-
-    def test_type1_v_pd32(self):
-        """Test Type 1_V with 32-byte PD (maximum)."""
-        print("\n[TEST] Type 1_V with PD Len 32")
-        process = subprocess.Popen(
-            [self.env["IOLINK_DEVICE_PATH"], self.device_tty, "3", "32"],
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-            env=self.env,
-        )
-        try:
-            time.sleep(1)
-            self.assertTrue(self.master.run_startup_sequence())
-            self.master.m_seq_type = 3
-            self.master.pd_out_len = 32
-            self.master.pd_in_len = 32
-            self.master.go_to_operate()
-
-            test_data = bytes(range(32))
-            for _ in range(3):
-                resp = self.master.run_cycle(pd_out=test_data)
-
-            self.assertIsNotNone(resp)
-            self.assertTrue(resp.valid)
-            expected = bytes([(x + 1) & 0xFF for x in range(32)])
             self.assertEqual(resp.pd, expected)
-            print("   ✅ PD 32-byte exchange successful")
-
+            print(f"   ✅ PD {pd_len}-byte exchange successful")
         finally:
             process.terminate()
+
+    def test_type2_v_pd4(self):
+        """Test Type 2_V with 4-byte PD."""
+        print("\n[TEST] Type 2_V with PD Len 4")
+        self._run_2v_case(4)
+
+    def test_type2_v_pd32(self):
+        """Test Type 2_V with 32-byte PD (maximum)."""
+        print("\n[TEST] Type 2_V with PD Len 32")
+        self._run_2v_case(32)
 
     def test_persistence_application_tag(self):
         """Test if Application Tag persists across reboots (simulated)."""
         print("\n[TEST] Application Tag Persistence")
 
         process = subprocess.Popen(
-            [self.env["IOLINK_DEVICE_PATH"], self.device_tty, "1", "2"],
+            [
+                self.env["IOLINK_DEVICE_PATH"],
+                self.device_tty,
+                str(int(MSequenceType.TYPE_2_V)),
+                "2",
+            ],
             stdout=sys.stdout,
             stderr=sys.stderr,
             env=self.env,
         )
         try:
             time.sleep(1)
+            self.master.m_seq_type = MSequenceType.TYPE_2_V
+            self.master.set_pd_length(2, 2)
             self.master.run_startup_sequence()
-            self.master.m_seq_type = 2  # 1_2
-            self.master.pd_out_len = 2
-            self.master.pd_in_len = 2
             self.master.go_to_operate()
 
             new_tag = "PersistTest"
@@ -111,20 +101,25 @@ class TestVariablePD(unittest.TestCase):
             process.wait()
 
             process = subprocess.Popen(
-                [self.env["IOLINK_DEVICE_PATH"], self.device_tty, "1", "2"],
+                [
+                    self.env["IOLINK_DEVICE_PATH"],
+                    self.device_tty,
+                    str(int(MSequenceType.TYPE_2_V)),
+                    "2",
+                ],
                 stdout=sys.stdout,
                 stderr=sys.stderr,
                 env=self.env,
             )
             time.sleep(1)
+            self.master.m_seq_type = MSequenceType.TYPE_2_V
+            self.master.set_pd_length(2, 2)
             self.master.run_startup_sequence()
             self.master.go_to_operate()
 
             read_tag = self.master.read_isdu(0x0018, 0)
             print(f"   🔍 Tag after reboot: {read_tag}")
-
             self.assertIsNotNone(read_tag)
-
         finally:
             process.terminate()
 

@@ -53,9 +53,9 @@ def test_sio_mode_switching():
     """Test SIO mode switching"""
     print("\n=== Test: SIO Mode Switching ===")
 
-    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_1_2, pd_in_len=2, pd_out_len=2)
+    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_2_V, pd_in_len=2, pd_out_len=2)
 
-    process = launch_device(master, 1, 2)
+    process = launch_device(master, int(MSequenceType.TYPE_2_V), 2)
 
     try:
         time.sleep(0.5)
@@ -131,9 +131,9 @@ def test_sio_mode_restrictions():
     """Test that SIO mode can only be set in OPERATE state"""
     print("\n=== Test: SIO Mode Restrictions ===")
 
-    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_1_2, pd_in_len=2, pd_out_len=2)
+    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_2_V, pd_in_len=2, pd_out_len=2)
 
-    process = launch_device(master, 1, 2)
+    process = launch_device(master, int(MSequenceType.TYPE_2_V), 2)
 
     try:
         time.sleep(0.5)

@@ -48,14 +48,14 @@ class TestPerformanceConformance(unittest.TestCase):
         print("\n[TEST] Sustained PD Exchange (100 cycles)")
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"],
+            [self.demo_bin, self.device_tty, "6", "2"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
         time.sleep(0.5)
 
         self.master.run_startup_sequence()
-        self.master.m_seq_type = 2
+        self.master.m_seq_type = 6
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
         self.master.go_to_operate()
@@ -129,14 +129,14 @@ class TestPerformanceConformance(unittest.TestCase):
         print("\n[TEST] Mixed PD and ISDU Load")
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"],
+            [self.demo_bin, self.device_tty, "6", "2"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
         time.sleep(0.5)
 
         self.master.run_startup_sequence()
-        self.master.m_seq_type = 2
+        self.master.m_seq_type = 6
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
         self.master.go_to_operate()
@@ -177,14 +177,14 @@ class TestPerformanceConformance(unittest.TestCase):
 
         for i in range(5):
             self.process = subprocess.Popen(
-                [self.demo_bin, self.device_tty, "1", "2"],
+                [self.demo_bin, self.device_tty, "6", "2"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
             time.sleep(0.3)
 
             if self.master.run_startup_sequence():
-                self.master.m_seq_type = 2
+                self.master.m_seq_type = 6
                 self.master.pd_out_len = 2
                 self.master.pd_in_len = 2
                 self.master.go_to_operate()
@@ -215,14 +215,14 @@ class TestPerformanceConformance(unittest.TestCase):
         print("\n[TEST] Long-Duration Stability (15 seconds)")
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"],
+            [self.demo_bin, self.device_tty, "6", "2"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
         time.sleep(0.5)
 
         self.master.run_startup_sequence()
-        self.master.m_seq_type = 2
+        self.master.m_seq_type = 6
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
         self.master.go_to_operate()

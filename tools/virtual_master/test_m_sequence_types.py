@@ -8,193 +8,104 @@ See LICENSE for details.
 """
 
 """
-Test M-sequence types 1_1, 1_2, 2_1, 2_2 with the Virtual Master.
+End-to-end check of the fixed Annex A M-sequence types against the Device.
+
+TYPE_1_1 is legacy interleave and is rejected by a V1.1.5 Device, so it is not
+exercised here. Run against the ISR build for spec-conformant framing:
+
+    IOLINK_DEVICE_PATH=build_isr/examples/host_demo/host_demo \
+        python3 tools/virtual_master/test_m_sequence_types.py
 """
 
+import os
+import subprocess
 import sys
 import time
+
 from virtual_master import VirtualMaster, MSequenceType
 
 
-def test_type_1_1():
-    """Test Type 1_1: PD only, 1-byte OD"""
-    print("\n=== Testing M-Sequence Type 1_1 (PD only, 1-byte OD) ===")
+def _launch(master, m_type, pd_len=2):
+    device_path = os.environ.get(
+        "IOLINK_DEVICE_PATH", "build_isr/examples/host_demo/host_demo"
+    )
+    return subprocess.Popen(
+        [device_path, master.get_device_tty(), str(int(m_type)), str(pd_len)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=os.environ.copy(),
+    )
 
-    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_1_1, pd_in_len=2, pd_out_len=2)
 
-    print(f"Device TTY: {master.get_device_tty()}")
-    print("Waiting for device connection...")
-    time.sleep(2)
-
-    if not master.run_startup_sequence():
-        print("❌ Startup failed")
-        return False
-
-    master.go_to_operate()
-    time.sleep(0.1)
-
-    print("\nRunning cycles...")
-    for i in range(5):
-        pd_out = bytes([0x11 + i, 0x22 + i])
-        resp = master.run_cycle(pd_out=pd_out, od_req=0x00)
-
-        if resp.valid:
-            print(
-                f"Cycle {i + 1}: PD_Out={pd_out.hex()}, PD_In={resp.pd.hex()}"
-            )
-        else:
-            print(f"❌ Cycle {i + 1} failed")
+def _run_case(m_type, pd_out):
+    master = VirtualMaster(m_seq_type=m_type)
+    proc = _launch(master, m_type)
+    try:
+        time.sleep(0.8)
+        if not master.run_startup_sequence():
+            print(f"❌ Type {m_type.name}: startup failed")
             return False
+        master.go_to_operate()
+        time.sleep(0.1)
 
-    master.close()
-    print("✅ Type 1_1 test passed")
-    return True
-
-
-def test_type_1_2():
-    """Test Type 1_2: PD + ISDU, 1-byte OD"""
-    print("\n=== Testing M-Sequence Type 1_2 (PD + ISDU, 1-byte OD) ===")
-
-    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_1_2, pd_in_len=1, pd_out_len=1)
-
-    print(f"Device TTY: {master.get_device_tty()}")
-    print("Waiting for device connection...")
-    time.sleep(2)
-
-    if not master.run_startup_sequence():
-        print("❌ Startup failed")
-        return False
-
-    master.go_to_operate()
-    time.sleep(0.1)
-
-    print("\nReading ISDU Index 0x000A (Vendor ID)...")
-    vendor_id_data = master.read_isdu(0x000A)
-
-    if vendor_id_data:
-        vendor_id = (vendor_id_data[0] << 8) | vendor_id_data[1]
-        print(f"✅ Vendor ID: 0x{vendor_id:04X}")
-    else:
-        print("❌ ISDU read failed")
-        return False
-
-    master.close()
-    print("✅ Type 1_2 test passed")
-    return True
-
-
-def test_type_2_1():
-    """Test Type 2_1: PD only, 1-byte OD"""
-    print("\n=== Testing M-Sequence Type 2_1 (PD only, 1-byte OD) ===")
-
-    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_2_1, pd_in_len=1, pd_out_len=1)
-
-    print(f"Device TTY: {master.get_device_tty()}")
-    print(f"OD Length: {master.od_len} bytes")
-    print("Waiting for device connection...")
-    time.sleep(2)
-
-    if not master.run_startup_sequence():
-        print("❌ Startup failed")
-        return False
-
-    master.go_to_operate()
-    time.sleep(0.1)
-
-    print("\nRunning cycles...")
-    for i in range(5):
-        pd_out = bytes([0x33 + i])
-        resp = master.run_cycle(pd_out=pd_out, od_req=0x00)
-
-        if resp.valid:
-            print(
-                f"Cycle {i + 1}: PD_Out={pd_out.hex()}, PD_In={resp.pd.hex()}"
-            )
+        # The Device publishes PD-in for the NEXT cycle: run two identical
+        # cycles and inspect the second (PD-in reflects the first PD-out).
+        master.run_cycle(pd_out=pd_out)
+        resp = master.run_cycle(pd_out=pd_out)
+        if int(master.pd_in_len) == 0:
+            expected_pd = b""
+        elif int(master.pd_out_len) > 0:
+            # The demo echoes PD-out + 1 into PD-in.
+            expected_pd = bytes((b + 1) & 0xFF for b in pd_out)
         else:
-            print(f"❌ Cycle {i + 1} failed")
-            return False
-
-    master.close()
-    print("✅ Type 2_1 test passed")
-    return True
-
-
-def test_type_2_2():
-    """Test Type 2_2: PD + ISDU, 1-byte OD"""
-    print("\n=== Testing M-Sequence Type 2_2 (PD + ISDU, 1-byte OD) ===")
-
-    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_2_2, pd_in_len=2, pd_out_len=2)
-
-    print(f"Device TTY: {master.get_device_tty()}")
-    print(f"OD Length: {master.od_len} bytes")
-    print("Waiting for device connection...")
-    time.sleep(2)
-
-    if not master.run_startup_sequence():
-        print("❌ Startup failed")
-        return False
-
-    master.go_to_operate()
-    time.sleep(0.1)
-
-    print("\nReading ISDU Index 0x000B (Device ID)...")
-    device_id_data = master.read_isdu(0x000B)
-
-    if device_id_data and len(device_id_data) >= 4:
-        device_id = (
-            (device_id_data[0] << 24)
-            | (device_id_data[1] << 16)
-            | (device_id_data[2] << 8)
-            | device_id_data[3]
+            # PD-in exists but the type has no PD-out to echo.
+            expected_pd = bytes(int(master.pd_in_len))
+        ok = resp.valid and resp.pd == expected_pd
+        print(
+            f"{'✅' if ok else '❌'} Type {m_type.name}: "
+            f"pd_out={pd_out.hex()} pd_in={resp.pd.hex()} "
+            f"(od={master.od_len}, pd_in_len={master.pd_in_len})"
         )
-        print(f"✅ Device ID: 0x{device_id:08X}")
-    else:
-        print("❌ ISDU read failed")
-        return False
+        return ok
+    finally:
+        proc.terminate()
+        proc.wait()
+        master.close()
 
-    master.close()
-    print("✅ Type 2_2 test passed")
-    return True
+
+def test_fixed_types():
+    cases = [
+        # (type, PD-out sent in the WRITE request)
+        (MSequenceType.TYPE_1_2, b""),
+        (MSequenceType.TYPE_1_V, b""),
+        (MSequenceType.TYPE_2_1, b""),
+        (MSequenceType.TYPE_2_2, b""),
+        (MSequenceType.TYPE_2_3, b"\x10"),
+        (MSequenceType.TYPE_2_4, b"\x10\x20"),
+        (MSequenceType.TYPE_2_5, b"\x10"),
+    ]
+    results = [(t.name, _run_case(t, pd)) for t, pd in cases]
+    failed = [name for name, ok in results if not ok]
+    print(f"\n{'✅ All fixed types passed' if not failed else '❌ Failed: ' + ', '.join(failed)}")
+    return not failed
+
+
+def test_type_1_1_rejected():
+    try:
+        VirtualMaster(m_seq_type=MSequenceType.TYPE_1_1)
+    except ValueError:
+        print("✅ TYPE_1_1 rejected by the Master")
+        return True
+    print("❌ TYPE_1_1 was accepted")
+    return False
 
 
 def main():
-    """Run all M-sequence type tests"""
     print("=" * 60)
-    print("M-Sequence Types Test Suite")
+    print("Fixed M-Sequence Types Test Suite (ISR build)")
     print("=" * 60)
-
-    tests = [
-        ("Type 1_1", test_type_1_1),
-        ("Type 1_2", test_type_1_2),
-        ("Type 2_1", test_type_2_1),
-        ("Type 2_2", test_type_2_2),
-    ]
-
-    results = {}
-    for name, test_func in tests:
-        try:
-            results[name] = test_func()
-        except Exception as e:
-            print(f"\n❌ {name} test crashed: {e}")
-            results[name] = False
-
-        time.sleep(1)  # Pause between tests
-
-    print("\n" + "=" * 60)
-    print("Test Summary")
-    print("=" * 60)
-    for name, passed in results.items():
-        status = "✅ PASS" if passed else "❌ FAIL"
-        print(f"{name}: {status}")
-
-    all_passed = all(results.values())
-    print("\n" + ("=" * 60))
-    if all_passed:
-        print("✅ All tests passed!")
-        return 0
-    else:
-        print("❌ Some tests failed")
-        return 1
+    ok = test_fixed_types() and test_type_1_1_rejected()
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

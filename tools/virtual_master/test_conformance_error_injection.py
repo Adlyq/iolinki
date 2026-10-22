@@ -39,7 +39,7 @@ class TestErrorInjectionConformance(unittest.TestCase):
     def test_01_communication_loss_recovery(self):
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"],
+            [self.demo_bin, self.device_tty, "6", "2"],
             stdout=sys.stdout,
             stderr=sys.stderr,
         )
@@ -47,7 +47,7 @@ class TestErrorInjectionConformance(unittest.TestCase):
 
         # Enter OPERATE state
         self.master.run_startup_sequence()
-        self.master.m_seq_type = 2
+        self.master.m_seq_type = 6
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
         self.master.go_to_operate()
@@ -139,7 +139,7 @@ class TestErrorInjectionConformance(unittest.TestCase):
         print("\n[TEST] Maximum ISDU Size Handling")
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"],
+            [self.demo_bin, self.device_tty, "6", "2"],
             stdout=sys.stdout,
             stderr=sys.stderr,
         )
@@ -147,7 +147,7 @@ class TestErrorInjectionConformance(unittest.TestCase):
 
         self.master.run_startup_sequence()
         # Transition to OPERATE via DeviceOperate (MC=0x20, OD=0x99)
-        self.master.m_seq_type = 2
+        self.master.m_seq_type = 6
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
         self.master.go_to_operate()
@@ -211,14 +211,14 @@ class TestErrorInjectionConformance(unittest.TestCase):
         print("\n[TEST] CRC Error Handling")
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"],
+            [self.demo_bin, self.device_tty, "6", "2"],
             stdout=sys.stdout,
             stderr=sys.stderr,
         )
         time.sleep(0.5)
 
         self.master.run_startup_sequence()
-        self.master.m_seq_type = 2
+        self.master.m_seq_type = 6
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
         self.master.go_to_operate()
@@ -247,7 +247,7 @@ class TestErrorInjectionConformance(unittest.TestCase):
         print("\n[TEST] CRC Error Fallback & Recovery")
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"],
+            [self.demo_bin, self.device_tty, "6", "2"],
             stdout=sys.stdout,
             stderr=sys.stderr,
         )
@@ -255,7 +255,7 @@ class TestErrorInjectionConformance(unittest.TestCase):
 
         # Step 1: Establish OPERATE state
         self.master.run_startup_sequence()
-        self.master.m_seq_type = 2
+        self.master.m_seq_type = 6
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
         self.master.go_to_operate()

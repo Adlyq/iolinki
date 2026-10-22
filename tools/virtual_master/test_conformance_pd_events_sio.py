@@ -52,7 +52,7 @@ def test_pd_toggle_bit():
     print("=" * 60)
 
     # Use Type 1_2 for PD testing
-    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_1_2, pd_in_len=2, pd_out_len=2)
+    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_2_V, pd_in_len=2, pd_out_len=2)
     device_bin = os.environ.get(
         "IOLINK_DEVICE_PATH", "./build/examples/host_demo/host_demo"
     )
@@ -60,7 +60,7 @@ def test_pd_toggle_bit():
 
     print(f"Starting device: {device_bin} {device_tty} 1 2")
     process = subprocess.Popen(
-        [device_bin, device_tty, "1", "2"],
+        [device_bin, device_tty, "6", "2"],
         stdout=sys.stdout,
         stderr=sys.stderr,
         preexec_fn=os.setsid,

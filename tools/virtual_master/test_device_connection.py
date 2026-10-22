@@ -81,7 +81,7 @@ def test_type_1_2_connection():
     """Test connection with Type 1_2 (PD + ISDU)"""
     print("\n=== Test 2: Type 1_2 Connection (PD + ISDU, 1-byte OD) ===")
 
-    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_1_2, pd_in_len=2, pd_out_len=2)
+    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_2_V, pd_in_len=2, pd_out_len=2)
     device_tty = master.get_device_tty()
     print(f"Device TTY: {device_tty}")
     print(f"OD Length: {master.od_len} byte(s)")
@@ -92,7 +92,9 @@ def test_type_1_2_connection():
         return False
 
     device_proc = subprocess.Popen(
-        [str(device_bin), device_tty], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        [str(device_bin), device_tty, str(int(master.m_seq_type)), str(master.pd_out_len)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
 
     time.sleep(1)
@@ -140,7 +142,7 @@ def test_type_2_2_connection():
     """Test connection with Type 2_2 (PD + ISDU, 1-byte OD)"""
     print("\n=== Test 3: Type 2_2 Connection (PD + ISDU, 1-byte OD) ===")
 
-    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_2_2, pd_in_len=1, pd_out_len=1)
+    master = VirtualMaster(m_seq_type=MSequenceType.TYPE_2_1, pd_in_len=1, pd_out_len=0)
     device_tty = master.get_device_tty()
     print(f"Device TTY: {device_tty}")
     print(f"OD Length: {master.od_len} byte(s)")
@@ -151,7 +153,9 @@ def test_type_2_2_connection():
         return False
 
     device_proc = subprocess.Popen(
-        [str(device_bin), device_tty], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        [str(device_bin), device_tty, str(int(master.m_seq_type)), str(master.pd_out_len)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
 
     time.sleep(1)

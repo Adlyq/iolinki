@@ -45,12 +45,38 @@ class VirtualMaster:
 
     @m_seq_type.setter
     def m_seq_type(self, value: int) -> None:
-        self._m_seq_type = value
         from .protocol import MSequenceType
 
+        value = int(value)
+        if value < int(MSequenceType.TYPE_0) or value > int(MSequenceType.TYPE_2_5):
+            raise ValueError(f"invalid M-sequence type {value}")
+        if MSequenceType.is_legacy_interleave(value):
+            raise ValueError("TYPE_1_1 is legacy interleave and not supported")
+        self._m_seq_type = value
         self.od_len = MSequenceType.get_od_len(value)
         if hasattr(self, "generator"):
+            self.generator.m_seq_type = value
             self.generator.od_len = self.od_len
+
+    @property
+    def pd_in_len(self) -> int:
+        return self._pd_in_len
+
+    @pd_in_len.setter
+    def pd_in_len(self, value: int) -> None:
+        self._pd_in_len = int(value)
+
+    @property
+    def pd_out_len(self) -> int:
+        return self._pd_out_len
+
+    @pd_out_len.setter
+    def pd_out_len(self, value: int) -> None:
+        self._pd_out_len = int(value)
+        # Keep the frame generator in sync even when a test assigns the field
+        # directly (the historical API exposed plain attributes).
+        if hasattr(self, "generator"):
+            self.generator.pd_out_len = int(value)
 
     def __init__(
         self,
@@ -69,11 +95,13 @@ class VirtualMaster:
             pd_out_len: Process Data Output length (bytes)
         """
         self.uart = uart or VirtualUART()
+        self.generator = MSequenceGenerator(od_len=1, m_seq_type=0, pd_out_len=0)
         self.m_seq_type = m_seq_type
-        self.pd_in_len = pd_in_len
-        self.pd_out_len = pd_out_len
+        self._set_pd_lens(pd_in_len, pd_out_len)
 
-        self.generator = MSequenceGenerator(od_len=self.od_len)
+        # 16-bit error code of the last negative ISDU response (0x80xx), or None.
+        self.last_isdu_error: Optional[int] = None
+
         self.state = MasterState.STARTUP
         self.cycle_time_ms = 10  # Default cycle time
         self.phy_mode = "SDCI"  # Default PHY mode
@@ -83,27 +111,56 @@ class VirtualMaster:
         """Get the TTY path for connecting the Device."""
         return self.uart.get_device_tty()
 
-    def set_pd_length(self, pd_in_len: int, pd_out_len: int) -> None:
-        """
-        Change PD lengths for variable types (1_V, 2_V).
+    def _set_pd_lens(self, pd_in_len: int, pd_out_len: int) -> None:
+        """Adopt the Annex A PD layout for the configured type.
 
-        Args:
-            pd_in_len: New PD Input length (2-32 bytes)
-            pd_out_len: New PD Output length (2-32 bytes)
-
-        Raises:
-            ValueError: If not a variable type or invalid length
+        Fixed types have an immutable (PD-in, PD-out) pair; a caller-supplied
+        mismatch is coerced to the spec values so the Master always emits a
+        conformant frame. TYPE_2_V keeps the caller's variable lengths.
         """
         from .protocol import MSequenceType
 
-        if self.m_seq_type not in (MSequenceType.TYPE_1_V, MSequenceType.TYPE_2_V):
-            raise ValueError("PD length change only supported for Type 1_V and 2_V")
+        if self.m_seq_type == int(MSequenceType.TYPE_0):
+            spec_in, spec_out = 0, 0
+        else:
+            spec_in, spec_out = MSequenceType.get_pd_lens(self.m_seq_type)
 
-        if not (2 <= pd_in_len <= 32) or not (2 <= pd_out_len <= 32):
-            raise ValueError("PD length must be 2-32 bytes")
+        if spec_in is None:
+            if not (0 <= pd_in_len <= 32) or not (0 <= pd_out_len <= 32):
+                raise ValueError("PD length must be 0-32 bytes")
+            self.pd_in_len = pd_in_len
+            self.pd_out_len = pd_out_len
+        else:
+            assert spec_in is not None and spec_out is not None
+            if (pd_in_len, pd_out_len) != (spec_in, spec_out):
+                print(
+                    f"[Master] Type {self.m_seq_type} fixes PD=({spec_in},{spec_out}); "
+                    f"ignoring ({pd_in_len},{pd_out_len})"
+                )
+            self.pd_in_len = int(spec_in)
+            self.pd_out_len = int(spec_out)
+
+        if hasattr(self, "generator"):
+            self.generator.pd_out_len = int(self.pd_out_len)
+
+    def set_pd_length(self, pd_in_len: int, pd_out_len: int) -> None:
+        """
+        Change PD lengths for the only variable-PD type (TYPE_2_V).
+
+        Raises:
+            ValueError: If not TYPE_2_V or the length is outside 0-32 bytes.
+        """
+        from .protocol import MSequenceType
+
+        if not MSequenceType.is_variable_pd(self.m_seq_type):
+            raise ValueError("PD length change only supported for Type 2_V")
+
+        if not (0 <= pd_in_len <= 32) or not (0 <= pd_out_len <= 32):
+            raise ValueError("PD length must be 0-32 bytes")
 
         self.pd_in_len = pd_in_len
         self.pd_out_len = pd_out_len
+        self.generator.pd_out_len = pd_out_len
         print(f"[Master] PD length changed: PD_In={pd_in_len}, PD_Out={pd_out_len}")
 
     def set_sio_mode(self) -> bool:
@@ -183,11 +240,9 @@ class VirtualMaster:
 
     def _type_bits(self) -> int:
         """CKT type bits for the configured M-sequence type (A.1.2)."""
-        if self.m_seq_type >= MSequenceType.TYPE_2_1:
-            return 0x80
-        if self.m_seq_type >= MSequenceType.TYPE_1_1:
-            return 0x40
-        return 0x00
+        from .protocol import MSequenceType
+
+        return MSequenceType.ckt_bits(self.m_seq_type)
 
     def _isdu_od_exchange(
         self, read: bool, flowctrl: int, od: bytes = b""
@@ -210,9 +265,8 @@ class VirtualMaster:
             return DeviceResponse(data, od_len=self.od_len, pd_in_len=0)
 
         pd = bytes([0] * self.pd_out_len)
-        od0 = od[0] if len(od) > 0 else 0
-        od1 = od[1] if len(od) > 1 else 0
-        frame = self.generator.generate_type1(mc, self._type_bits(), pd, od0, od1)
+        od_bytes = bytes(od).ljust(self.od_len, b"\x00")[: self.od_len]
+        frame = self.generator.build_request(mc, pd, od_bytes)
         self.uart.send_bytes(frame)
         # Figures A.9/A.10/A.13/A.14: a multi-type READ reply is
         # [OD][PD-in] CKS; a WRITE reply is [PD-in] CKS with no OD.
@@ -256,10 +310,14 @@ class VirtualMaster:
                 continue
 
             chunk = resp.payload
-            if not octets and chunk and chunk[0] == 0x01:
+            # 0x00 = No Service (the ISR snapshot is not populated yet) and
+            # 0x01 = Busy while the service executes. Both mean "retry with
+            # START", not a response: the Device's ISDU read is served from a
+            # snapshot the main pump refreshes one cycle later.
+            if not octets and chunk and chunk[0] in (0x00, 0x01):
                 busy_retries += 1
                 if busy_retries > 100:
-                    print("[Master] ISDU stayed Busy")
+                    print("[Master] ISDU response not ready (timeout)")
                     return None
                 time.sleep(0.001)
                 continue
@@ -282,6 +340,7 @@ class VirtualMaster:
 
     def read_isdu(self, index: int, subindex: int = 0) -> Optional[bytes]:
         """Read an ISDU parameter over the spec ISDU channel (C3)."""
+        self.last_isdu_error = None
         print(
             f"[Master] ISDU Read request: Index=0x{index:04X}, Subindex=0x{subindex:02X}"
         )
@@ -296,6 +355,8 @@ class VirtualMaster:
 
         service = framed[0] >> 4
         if service == 0xC:
+            if len(framed) >= 3:
+                self.last_isdu_error = (framed[1] << 8) | framed[2]
             print(
                 f"[Master] ISDU negative response: "
                 f"code=0x{framed[1]:02X} add=0x{framed[2]:02X}"
@@ -315,6 +376,15 @@ class VirtualMaster:
 
         print(f"[Master] ISDU Read complete: {data.hex()}")
         return bytes(data)
+
+    def read_isdu_ex(self, index: int, subindex: int = 0):
+        """Read an ISDU parameter and return ``(data, 16-bit error code)``.
+
+        ``data`` is None when the Device answers negatively; ``error`` is then the
+        full 0x80xx code (e.g. 0x8011 IDX_NOTAVAIL), otherwise None.
+        """
+        data = self.read_isdu(index, subindex)
+        return data, self.last_isdu_error
 
     def _diagnosis_read(self, addr: int, timeout_ms: int = 300) -> Optional[int]:
         """Read one diagnosis-channel memory octet (Type-0 READ, Table 58)."""
@@ -415,7 +485,7 @@ class VirtualMaster:
 
     def run_cycle(
         self,
-        pd_out: bytes = None,
+        pd_out: Optional[bytes] = None,
         od_req: int = 0,
         od_req2: int = 0x00,
         ckt: int = 0x00,
@@ -439,9 +509,9 @@ class VirtualMaster:
             if len(pd_out) != self.pd_out_len:
                 pd_out = pd_out[: self.pd_out_len].ljust(self.pd_out_len, b"\x00")
 
-            frame = self.generator.generate_type1(
-                0x00, (ckt & 0x3F) | self._type_bits(), pd_out, od_req, od_req2
-            )
+            od_bytes = bytes([od_req & 0xFF, od_req2 & 0xFF])
+            od_bytes = od_bytes.ljust(self.od_len, b"\x00")[: self.od_len]
+            frame = self.generator.build_request(0x00, pd_out, od_bytes)
 
             self.uart.send_bytes(frame)
 
@@ -459,7 +529,7 @@ class VirtualMaster:
 
     def run_cycle_bad_crc(
         self,
-        pd_out: bytes = None,
+        pd_out: Optional[bytes] = None,
         od_req: int = 0,
         od_req2: int = 0x00,
         ckt: int = 0x00,
@@ -473,15 +543,13 @@ class VirtualMaster:
         if pd_out is None:
             pd_out = bytes([0] * self.pd_out_len)
 
-        frame = bytearray(
-            self.generator.generate_type1(
-                0x00, (ckt & 0x3F) | self._type_bits(), pd_out, od_req, od_req2
-            )
-        )
+        od_bytes = bytes([od_req & 0xFF, od_req2 & 0xFF])
+        od_bytes = od_bytes.ljust(self.od_len, b"\x00")[: self.od_len]
+        frame = bytearray(self.generator.build_request(0x00, pd_out, od_bytes))
 
         frame[1] ^= 0x3F  # Corrupt the A.1.6 checksum in the CKT octet
 
-        self.uart.send_bytes(frame)
+        self.uart.send_bytes(bytes(frame))
 
         expected_len = self.pd_in_len + 1
         response_data = self.uart.recv_bytes(expected_len, timeout_ms=100)

@@ -19,22 +19,97 @@ IO-Link protocol implementation - M-sequence generation and parsing.
 
 
 class MSequenceType(IntEnum):
-    """M-sequence types as defined in IO-Link specification."""
+    """M-sequence types (Annex A, Table A.10).
 
-    TYPE_0 = 0  # On-request data only
-    TYPE_1_1 = 1  # PD only, 1-byte OD
-    TYPE_1_2 = 2  # PD + ISDU, 1-byte OD
-    TYPE_1_V = 3  # Variable PD, 1-byte OD
-    TYPE_2_1 = 4  # PD only, 1-byte OD (Table A.10)
-    TYPE_2_2 = 5  # PD + ISDU, 1-byte OD
-    TYPE_2_V = 6  # Variable PD, 2-byte OD (OPERATE code 5)
+    The numeric values match the C ``iolink_m_seq_type_t`` enum so the same
+    value can be passed to the Device binary.
+    """
+
+    TYPE_0 = 0  # 1 OD octet, no PD
+    TYPE_1_1 = 1  # Legacy interleave only; not implemented by V1.1.5 Devices
+    TYPE_1_2 = 2  # 2 OD octets, no PD (Figure A.7)
+    TYPE_1_V = 3  # 8/32 OD octets, no PD (Figure A.8)
+    TYPE_2_1 = 4  # 1 PD-in + 1 OD, no PD-out (Figure A.9)
+    TYPE_2_2 = 5  # 2 PD-in + 1 OD, no PD-out (Figure A.10)
+    TYPE_2_V = 6  # Variable PD + 1/2/8/32 OD (Figure A.14)
+    TYPE_2_3 = 7  # 1 PD-out + 1 OD, no PD-in (Figure A.11)
+    TYPE_2_4 = 8  # 2 PD-out + 1 OD, no PD-in (Figure A.12)
+    TYPE_2_5 = 9  # 1 PD-in + 1 PD-out + 1 OD (Figure A.13)
 
     @staticmethod
-    def get_od_len(m_type: int) -> int:
-        """Get OD length for M-sequence type (Table A.10)."""
+    def get_od_len(m_type: int, od_width: int = 0) -> int:
+        """Default OD octet count for a type (0 means "derive").
+
+        TYPE_1_V is 8 by default (32 is the other legal value); TYPE_2_V keeps
+        its 2-octet default. Fixed types return their only legal width.
+        """
+        if od_width > 0:
+            return od_width
+        if m_type == MSequenceType.TYPE_1_2:
+            return 2
+        if m_type == MSequenceType.TYPE_1_V:
+            return 8
         if m_type == MSequenceType.TYPE_2_V:
             return 2
-        return 1  # Type 0, 1_x, 2_1, 2_2
+        if m_type == MSequenceType.TYPE_1_1:
+            return 0
+        return 1
+
+    @staticmethod
+    def get_pd_lens(m_type: int):
+        """Return (pd_in_len, pd_out_len) for a fixed type, else (None, None)."""
+        fixed = {
+            int(MSequenceType.TYPE_1_2): (0, 0),
+            int(MSequenceType.TYPE_1_V): (0, 0),
+            int(MSequenceType.TYPE_2_1): (1, 0),
+            int(MSequenceType.TYPE_2_2): (2, 0),
+            int(MSequenceType.TYPE_2_3): (0, 1),
+            int(MSequenceType.TYPE_2_4): (0, 2),
+            int(MSequenceType.TYPE_2_5): (1, 1),
+        }
+        return fixed.get(int(m_type), (None, None))
+
+    @staticmethod
+    def is_variable_pd(m_type: int) -> bool:
+        """Only TYPE_2_V carries variable Process Data."""
+        return m_type == MSequenceType.TYPE_2_V
+
+    @staticmethod
+    def is_legacy_interleave(m_type: int) -> bool:
+        """TYPE_1_1 forces legacy interleave; V1.1.5 Devices reject it."""
+        return m_type == MSequenceType.TYPE_1_1
+
+    @staticmethod
+    def ckt_bits(m_type: int) -> int:
+        """CKT M-sequence type bits (A.1.3, Table A.3)."""
+        if m_type in (MSequenceType.TYPE_1_1, MSequenceType.TYPE_1_2, MSequenceType.TYPE_1_V):
+            return 0x40
+        if m_type in (
+            MSequenceType.TYPE_2_1,
+            MSequenceType.TYPE_2_2,
+            MSequenceType.TYPE_2_3,
+            MSequenceType.TYPE_2_4,
+            MSequenceType.TYPE_2_5,
+            MSequenceType.TYPE_2_V,
+        ):
+            return 0x80
+        return 0x00
+
+    @staticmethod
+    def read_request_has_pd_out(m_type: int) -> bool:
+        """Types whose READ request carries PD-out (Figures A.11-A.14)."""
+        return m_type in (
+            MSequenceType.TYPE_1_1,
+            MSequenceType.TYPE_2_3,
+            MSequenceType.TYPE_2_4,
+            MSequenceType.TYPE_2_5,
+            MSequenceType.TYPE_2_V,
+        )
+
+    @staticmethod
+    def write_request_has_od(m_type: int) -> bool:
+        """Every type except legacy TYPE_1_1 puts OD in the WRITE request."""
+        return m_type != MSequenceType.TYPE_1_1
 
 
 class MasterCommand:
@@ -93,15 +168,41 @@ def isdu_chkpdu(octets: bytes) -> int:
 class MSequenceGenerator:
     """Generate IO-Link M-sequences (Master frames)."""
 
-    def __init__(self, od_len: int = 1):
+    def __init__(self, od_len: int = 1, m_seq_type: int = 0, pd_out_len: int = 0):
         """
         Initialize generator.
 
         Args:
-            od_len: OD length in bytes (1 or 2)
+            od_len: OD length in bytes (0/1/2/8/32)
+            m_seq_type: M-sequence type (Selects the Annex A request layout)
+            pd_out_len: Number of PD-out bytes carried in a request
         """
         self.sequence_type = MSequenceType.TYPE_0
+        self.m_seq_type = int(m_seq_type)
         self.od_len = od_len
+        self.pd_out_len = pd_out_len
+
+    def build_request(self, mc: int, pd: bytes = b"", od: bytes = b"") -> bytes:
+        """Build a spec-conformant TYPE_1_x/TYPE_2_x request (A.6-A.14).
+
+        - A READ request is MC + CKT, plus PD-out only for the types whose
+          read message carries it (TYPE_2_3/2_4/2_5/2_V; legacy TYPE_1_1).
+        - A WRITE request is MC + CKT + PD-out + OD, except TYPE_1_1 (no OD).
+        """
+        m_type = self.m_seq_type
+        type_bits = MSequenceType.ckt_bits(m_type)
+        read = bool(mc & 0x80)
+        body = bytearray([mc, type_bits])
+
+        if (not read) or MSequenceType.read_request_has_pd_out(m_type):
+            body += bytes(pd[: self.pd_out_len])
+
+        if (not read) and MSequenceType.write_request_has_od(m_type):
+            od_padded = bytes(od[: self.od_len]).ljust(self.od_len, b"\x00")
+            body += od_padded
+
+        ckt_value = type_bits | checksum6(bytes(body))
+        return bytes([body[0], ckt_value]) + bytes(body[2:])
 
     def generate_type0(self, mc: int, ckt: int = 0x00) -> bytes:
         """
@@ -196,27 +297,16 @@ class MSequenceGenerator:
     def generate_type1(
         self, mc: int, ckt: int, pd: bytes, od: int, od2: int = 0x00
     ) -> bytes:
-        """
-        Generate Type 1/2 M-sequence: MC + CKT + PD + OD(1 or 2 bytes), with the
-        A.1.6 checksum in the CKT octet.
+        """Backward-compatible wrapper around :meth:`build_request`.
 
-        Args:
-            mc: Master Command byte
-            ckt: Command/Key/Type byte
-            pd: Process Data bytes
-            od: On-request Data byte (first byte)
-            od2: Second OD byte (only for TYPE_2_V)
-
-        Returns:
-            Frame bytes
+        The ``ckt`` argument is ignored: the type bits come from
+        ``self.m_seq_type`` so the frame layout cannot drift from the type.
         """
-        type_bits = ckt & M_SEQUENCE_TYPE_MASK
-        if self.od_len == 2:
-            body = bytes([mc, type_bits]) + pd + bytes([od, od2])
-        else:
-            body = bytes([mc, type_bits]) + pd + bytes([od])
-        ckt_value = type_bits | checksum6(body)
-        return bytes([mc, ckt_value]) + body[2:]
+        del ckt
+        od_bytes = bytes([od & 0xFF])
+        if self.od_len >= 2:
+            od_bytes += bytes([od2 & 0xFF])
+        return self.build_request(mc, pd, od_bytes)
 
     def generate_diagnosis_read(self, addr: int) -> bytes:
         """Generate a Type-0 READ on the diagnosis channel (7.3.8, Table 58).

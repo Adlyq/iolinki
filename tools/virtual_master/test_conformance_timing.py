@@ -48,14 +48,14 @@ class TestTimingConformance(unittest.TestCase):
         print("\n[TEST] Cycle Time Measurement")
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"],
+            [self.demo_bin, self.device_tty, "6", "2"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
         time.sleep(0.5)
 
         self.master.run_startup_sequence()
-        self.master.m_seq_type = 2
+        self.master.m_seq_type = 6
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
         self.master.go_to_operate()
@@ -146,14 +146,14 @@ class TestTimingConformance(unittest.TestCase):
         print("\n[TEST] PD Exchange Timing Consistency")
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"],
+            [self.demo_bin, self.device_tty, "6", "2"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
         time.sleep(0.5)
 
         self.master.run_startup_sequence()
-        self.master.m_seq_type = 2
+        self.master.m_seq_type = 6
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
         self.master.go_to_operate()

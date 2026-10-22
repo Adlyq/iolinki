@@ -79,7 +79,7 @@ class TestStateMachineConformance(unittest.TestCase):
         print("\n[TEST] PREOPERATE → OPERATE Transition")
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"],
+            [self.demo_bin, self.device_tty, "6", "2"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -87,7 +87,7 @@ class TestStateMachineConformance(unittest.TestCase):
 
         self.assertTrue(self.master.run_startup_sequence())
 
-        self.master.m_seq_type = 2  # Type 1_2
+        self.master.m_seq_type = 6  # Type 2_V
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
         self.master.go_to_operate()
@@ -114,12 +114,12 @@ class TestStateMachineConformance(unittest.TestCase):
         print("\n[TEST] OPERATE State Persistence")
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"], stdout=None, stderr=None
+            [self.demo_bin, self.device_tty, "6", "2"], stdout=None, stderr=None
         )
         time.sleep(0.5)
 
         self.master.run_startup_sequence()
-        self.master.m_seq_type = 2
+        self.master.m_seq_type = 6
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
         self.master.go_to_operate()
@@ -155,7 +155,8 @@ class TestStateMachineConformance(unittest.TestCase):
         )
         time.sleep(0.5)
 
-        self.master.run_startup_sequence()
+        self.assertTrue(self.master.run_startup_sequence(), "Startup should succeed")
+        time.sleep(0.05)
 
         response = self.master.read_isdu(index=0x0010, subindex=0x00)
         self.assertIsNotNone(response, "Device must support communication")
@@ -175,7 +176,7 @@ class TestStateMachineConformance(unittest.TestCase):
         print("\n[TEST] Invalid State Transition Rejection")
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"],
+            [self.demo_bin, self.device_tty, "6", "2"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -183,7 +184,7 @@ class TestStateMachineConformance(unittest.TestCase):
 
         self.master.run_startup_sequence()
 
-        self.master.m_seq_type = 2
+        self.master.m_seq_type = 6
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
 
@@ -203,14 +204,14 @@ class TestStateMachineConformance(unittest.TestCase):
         print("\n[TEST] ISDU Access During OPERATE")
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"],
+            [self.demo_bin, self.device_tty, "6", "2"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
         time.sleep(0.5)
 
         self.master.run_startup_sequence()
-        self.master.m_seq_type = 2
+        self.master.m_seq_type = 6
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
         self.master.go_to_operate()
@@ -241,7 +242,7 @@ class TestStateMachineConformance(unittest.TestCase):
         print("\n[TEST] ESTAB_COM → OPERATE Transition")
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "1", "2"],
+            [self.demo_bin, self.device_tty, "6", "2"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -250,7 +251,7 @@ class TestStateMachineConformance(unittest.TestCase):
         self.assertTrue(self.master.run_startup_sequence(), "Startup should succeed")
         print("[INFO] Device in PREOPERATE state")
 
-        self.master.m_seq_type = 2  # Type 1_2
+        self.master.m_seq_type = 6  # Type 2_V
         self.master.pd_out_len = 2
         self.master.pd_in_len = 2
 
