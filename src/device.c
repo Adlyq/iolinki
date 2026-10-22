@@ -108,15 +108,17 @@ static int device_ds_write(void* user, uint16_t index, uint8_t subindex, const u
 
 /** @brief Default OD octet count for an M-sequence type (Table A.10).
  *
- * TYPE_1_2 carries 2 OD octets (code 1) and TYPE_2_V defaults to 2 OD octets
- * (code 5); everything else defaults to 1. (TYPE_1_V's 8/32-octet OD is set
- * explicitly via config.od_width; the default keeps the 1-octet layout the
- * upstream streaming transport uses.) */
+ * TYPE_1_2 carries 2 OD octets (code 1), TYPE_1_V 8 octets (code 6) and
+ * TYPE_2_V defaults to 2 OD octets (code 5); everything else defaults to 1.
+ * TYPE_1_1 keeps 1 here only so the upstream streaming transport's legacy
+ * validation is unchanged; the ISR transport rejects TYPE_1_1 outright. */
 static uint8_t device_default_od_width(uint8_t m_seq_type)
 {
     switch (m_seq_type) {
         case IOLINK_M_SEQ_TYPE_1_2:
             return 2U;
+        case IOLINK_M_SEQ_TYPE_1_V:
+            return 8U;
         case IOLINK_M_SEQ_TYPE_2_V:
             return 2U;
         default:
@@ -159,6 +161,9 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     if (ctx->dll.od_width == 0U) {
         ctx->dll.od_width = device_default_od_width((uint8_t) ctx->dll.m_seq_type);
     }
+    /* The ISR transport uses od_width (0/1/2/8/32) throughout; keep od_len in
+     * sync so no streaming-only 1/2 assumption leaks into this build. */
+    ctx->dll.od_len = ctx->dll.od_width;
     ctx->dll.cyclic_reply_precached =
         (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && dll_phy_has_tx(&ctx->dll);
 #endif
@@ -179,6 +184,64 @@ size_t iolink_device_ctx_size(void)
     return sizeof(iolink_device_ctx_t);
 }
 
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+/** @brief Enforce the fixed per-type PD/OD layout of Annex A (ISR transport).
+ *
+ * Figures A.7-A.13 define a fixed number of PD and OD octets per M-sequence
+ * type. A device that advertises one of these types must use exactly that
+ * layout, otherwise the master and device disagree about the frame length.
+ * TYPE_1_1 is legacy interleave only and shall not be implemented by a
+ * V1.1.5 device (Table A.10 NOTE 3), so it is rejected. TYPE_0 and the
+ * variable TYPE_2_V keep the existing range checks.
+ */
+static int device_validate_fixed_mseq(const iolink_config_t* stack, uint8_t od)
+{
+    switch (stack->m_seq_type) {
+        case IOLINK_M_SEQ_TYPE_1_1:
+            return IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE;
+        case IOLINK_M_SEQ_TYPE_1_2:
+            if ((stack->pd_in_len == 0U) && (stack->pd_out_len == 0U) && (od == 2U)) {
+                return IOLINK_DEVICE_INIT_OK;
+            }
+            break;
+        case IOLINK_M_SEQ_TYPE_1_V:
+            if ((stack->pd_in_len == 0U) && (stack->pd_out_len == 0U) &&
+                ((od == 8U) || (od == 32U))) {
+                return IOLINK_DEVICE_INIT_OK;
+            }
+            break;
+        case IOLINK_M_SEQ_TYPE_2_1:
+            if ((stack->pd_in_len == 1U) && (stack->pd_out_len == 0U) && (od == 1U)) {
+                return IOLINK_DEVICE_INIT_OK;
+            }
+            break;
+        case IOLINK_M_SEQ_TYPE_2_2:
+            if ((stack->pd_in_len == 2U) && (stack->pd_out_len == 0U) && (od == 1U)) {
+                return IOLINK_DEVICE_INIT_OK;
+            }
+            break;
+        case IOLINK_M_SEQ_TYPE_2_3:
+            if ((stack->pd_in_len == 0U) && (stack->pd_out_len == 1U) && (od == 1U)) {
+                return IOLINK_DEVICE_INIT_OK;
+            }
+            break;
+        case IOLINK_M_SEQ_TYPE_2_4:
+            if ((stack->pd_in_len == 0U) && (stack->pd_out_len == 2U) && (od == 1U)) {
+                return IOLINK_DEVICE_INIT_OK;
+            }
+            break;
+        case IOLINK_M_SEQ_TYPE_2_5:
+            if ((stack->pd_in_len == 1U) && (stack->pd_out_len == 1U) && (od == 1U)) {
+                return IOLINK_DEVICE_INIT_OK;
+            }
+            break;
+        default:
+            return IOLINK_DEVICE_INIT_OK; /* TYPE_0 and the variable TYPE_2_V */
+    }
+    return IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT;
+}
+#endif /* IOLINK_PHY_FEATURE_ISR_PUMP */
+
 /** @brief Validate the stack configuration before touching the context or PHY. */
 static int device_config_validate(const iolink_device_config_t* config)
 {
@@ -190,7 +253,7 @@ static int device_config_validate(const iolink_device_config_t* config)
     }
     stack = &config->stack;
 
-    if ((uint32_t) stack->m_seq_type > (uint32_t) IOLINK_M_SEQ_TYPE_2_V) {
+    if ((uint32_t) stack->m_seq_type > (uint32_t) IOLINK_M_SEQ_TYPE_MAX) {
         return IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE;
     }
     if ((uint32_t) stack->pd_in_len > (uint32_t) IOLINK_PD_IN_MAX_SIZE) {
@@ -211,6 +274,15 @@ static int device_config_validate(const iolink_device_config_t* config)
     if ((od != 1U) && (od != 2U) && (od != 8U) && (od != 32U)) {
         return IOLINK_DEVICE_INIT_ERR_OD_WIDTH;
     }
+
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    {
+        const int layout_err = device_validate_fixed_mseq(stack, od);
+        if (layout_err != IOLINK_DEVICE_INIT_OK) {
+            return layout_err;
+        }
+    }
+#endif
 
     if (stack->baudrate_set && ((uint32_t) stack->baudrate > (uint32_t) IOLINK_BAUDRATE_COM3)) {
         return IOLINK_DEVICE_INIT_ERR_BAUDRATE;
@@ -241,7 +313,7 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     ctx->config = config;
 
     if (config->phy.init != NULL) {
-        int err = config->phy.init(config->phy.user);
+        err = config->phy.init(config->phy.user);
         if (err != 0) {
             return err;
         }
@@ -384,7 +456,7 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
             const bool valid = ctx->config->app_callbacks->on_pd_input(
                 &ctx->dll.pd_in[inactive][ctx->dll.od_width], ctx->dll.pd_in_len_current);
 
-            if ((ctx->config != NULL) && (ctx->config->lock != NULL)) {
+            if (ctx->config->lock != NULL) {
                 ctx->config->lock(ctx->config->user);
             }
             else {
@@ -393,7 +465,7 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
             ctx->dll.pd_in_len = ctx->dll.pd_in_len_current;
             ctx->dll.pd_valid = valid;
             ctx->dll.pd_in_active = inactive;
-            if ((ctx->config != NULL) && (ctx->config->unlock != NULL)) {
+            if (ctx->config->unlock != NULL) {
                 ctx->config->unlock(ctx->config->user);
             }
             else {
@@ -425,6 +497,22 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     if ((ctx == NULL) || (data == NULL) || (len > IOLINK_PD_IN_MAX_SIZE)) {
         return -1;
     }
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* Annex A fixed types have an immutable PD-in length. TYPE_2_V may vary
+     * within the configured maximum; both cases must not silently change the
+     * reply length away from the advertised layout. */
+    if (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) {
+        if (len > ctx->dll.pd_in_len_max) {
+            return -1;
+        }
+    }
+    else if ((ctx->dll.m_seq_type != IOLINK_M_SEQ_TYPE_0) &&
+             (len != ctx->dll.pd_in_len_max)) {
+        /* Fixed Annex A type: the PD-in width is immutable. TYPE_0 carries no
+         * PD at all, so a generic update is harmless and stays permissive. */
+        return -1;
+    }
+#endif
 
     if ((ctx->config != NULL) && (ctx->config->lock != NULL)) {
         ctx->config->lock(ctx->config->user);
@@ -592,10 +680,17 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx, uint8_t pd_in_len, uin
     if (ctx == NULL) {
         return -1;
     }
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    /* Fixed Annex A types have an immutable PD layout; only TYPE_2_V varies. */
+    if (ctx->dll.m_seq_type != IOLINK_M_SEQ_TYPE_2_V) {
+        return -2;
+    }
+#else
     if ((ctx->dll.m_seq_type != IOLINK_M_SEQ_TYPE_1_V) &&
         (ctx->dll.m_seq_type != IOLINK_M_SEQ_TYPE_2_V)) {
         return -2;
     }
+#endif
     if ((pd_in_len > ctx->dll.pd_in_len_max) || (pd_out_len > ctx->dll.pd_out_len_max)) {
         return -1;
     }

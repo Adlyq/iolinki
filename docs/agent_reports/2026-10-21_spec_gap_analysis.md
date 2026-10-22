@@ -285,10 +285,14 @@ Application Reset / ParamDownloadStore 时产生该事件。
 - §4 常量冲突（`APP_*`/`HW_*` 重复、0x18xx 旧别名）。
 - 额外：0x000C/0x000D 子索引、DPP1 0x0F SystemCommand、DS 下载错误分类（0x8040/0x8041）、事件 appears/disappears 生命周期、统一 NVM 后端（callback-only、固定布局、magic/version、Fletcher-32）、DS 参数访问改进（`set_param_desc`/`max_len`）。
 
+- §2.1/§2.2 ISR 版：固定类型按 Figure A.7–A.13 收帧/回包；**2 字节 READ 被误判为 Type-0** 的 dispatch bug 已修复（改用 CKT 类型位，而非 `req_len`）。
+- §2.1 ISR 版：TYPE_1_1 在 init 拒绝（legacy interleave，Table A.10 NOTE 3）；新增 TYPE_2_3/2_4/2_5 并支持。
+- §2.1 ISR 版：TYPE_1_2 默认 2 OD、TYPE_1_V 固定 8/32 OD 且无 PD；固定类型的 PD/OD 长度在 `iolink_device_init()` 强制校验（`IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT`）。
+- Python 虚拟主站改为合规 oracle：按类型生成请求，新增 `test_mseq_layout.py` 在无硬件环境下锁定 Annex A 帧布局。
+
 ### 仍未修复
 
-- 流式传输的帧格式/读请求（§2.1/§2.2，仅流式版；ISR 版已按类型区分读/写）。
-- TYPE_1_2/1_V 的“无 PD”语义（ISR 帧布局仍假设 PDout；当前 2_V 不受影响）。
+- 流式传输的帧格式/读请求（§2.1/§2.2，仅流式版；按约定交上游维护，ISR 版已完成）。
 - MasterIdent/DeviceIdent（0x95/0x96）未做 ident 校验（规范为可选特性）。
 - 与 ST 对比的差异化能力：SIO 驱动模式（NPN/PNP）、transparent UART、事件 NVM 备份、传感器读取周期调度。
 - t_A 注释已确认为笔误（13 bit 是 byte-gap，不是 t_A 上限；规范 1–10 bit）。

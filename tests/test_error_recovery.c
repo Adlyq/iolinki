@@ -26,7 +26,7 @@
 static void test_crc_error_recovery(void** state)
 {
     (void) state;
-    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .pd_in_len = 1, .pd_out_len = 1};
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 1, .pd_out_len = 1};
 
     setup_mock_phy();
     will_return(mock_phy_init, 0);
@@ -38,11 +38,11 @@ static void test_crc_error_recovery(void** state)
     /* 2. Simulate 3 CRC errors (Type 1_1 with 1-byte PD: MC, CKT, PD(1), OD(1), CK = 5 bytes) */
     for (int r = 0; r < 3; r++) {
         /* Provide the whole frame in the mock queue */
-        mock_phy_feed_byte(0x80); /* MC */
-        mock_phy_feed_byte(0x00); /* CKT */
-        mock_phy_feed_byte(0x00); /* PD */
-        mock_phy_feed_byte(0x00); /* OD */
-        mock_phy_feed_byte(0xFF); /* Bad CRC */
+        mock_phy_feed_byte(0x00); /* MC (write) */
+        mock_phy_feed_byte(IOLINK_MSEQ_TYPE_2); /* CKT with a bad checksum */
+        mock_phy_feed_byte(0x00); /* PD-out */
+        mock_phy_feed_byte(0x00); /* OD0 */
+        mock_phy_feed_byte(0x00); /* OD1 */
         mock_phy_feed_chk();    /* End frame */
 
         /* One call to process the whole available frame */

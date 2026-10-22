@@ -93,6 +93,9 @@ static uint8_t dll_mseq_type_bits(uint8_t m_seq_type)
             return IOLINK_MSEQ_TYPE_1;
         case IOLINK_M_SEQ_TYPE_2_1:
         case IOLINK_M_SEQ_TYPE_2_2:
+        case IOLINK_M_SEQ_TYPE_2_3:
+        case IOLINK_M_SEQ_TYPE_2_4:
+        case IOLINK_M_SEQ_TYPE_2_5:
         case IOLINK_M_SEQ_TYPE_2_V:
             return IOLINK_MSEQ_TYPE_2;
         default:
@@ -869,9 +872,6 @@ static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
     uint8_t n = 0U;
     if (ctx->isdu.state == ISDU_STATE_RESPONSE_READY) {
         n = (ctx->isdu.resp_total > 255U) ? 255U : (uint8_t) ctx->isdu.resp_total;
-        if (n > sizeof(ctx->isr_isdu_resp_buf)) {
-            n = (uint8_t) sizeof(ctx->isr_isdu_resp_buf);
-        }
     }
     else {
         /* A new request/response cycle invalidates the "already copied" flag;
@@ -1096,10 +1096,17 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
                 if (page_write) {
                     dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
                 }
-                else if (ctx->req_len == 2U) {
+                else if (type0 && (ctx->req_len == 2U)) {
                     dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
                 }
+                else if (type0) {
+                    /* Type-0 OD write (ISDU/diagnosis): one OD octet at 2. */
+                    dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
+                }
                 else {
+                    /* A fixed TYPE_1_x/TYPE_2_x READ is only MC + CKT (req_len
+                       == 2), so req_len cannot distinguish it from Type-0: the
+                       CKT type bits are authoritative. */
                     dll_handle_operate_type1_2(ctx);
                 }
             }
@@ -1122,7 +1129,7 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
                    ST rc=2/rc=3 recovery here would only add churn. */
                 ctx->framing_errors++;
             }
-            else if (ctx->req_len == 2U) {
+            else if (type0 && (ctx->req_len == 2U)) {
                 dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
             }
             else if (page_write && ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
@@ -1135,7 +1142,13 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
                 /* DPP parameter write (e.g. MasterCycleTime): CKS-only ack. */
                 dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
             }
+            else if (type0) {
+                /* Type-0 OD write on ISDU/diagnosis: CKS-only ack. */
+                dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
+            }
             else {
+                /* Fixed TYPE_1_x/TYPE_2_x READ may be only MC + CKT (req_len
+                   == 2); disambiguate by the CKT type bits, not the length. */
                 dll_handle_operate_type1_2(ctx);
             }
         }
@@ -1540,10 +1553,14 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_ctx_t* ctx)
     const uint32_t pdi = ctx->pd_in_len_current;
     const uint32_t pdo = ctx->pd_out_len_current;
     const uint32_t od = ctx->od_width;
+    /* Write request: MC+CKT + PD-out + OD; reply: PD-in + CKS.
+     * Read request: MC+CKT + PD-out (no OD); reply: OD + PD-in + CKS.
+     * This holds for every Annex A type: the fixed types simply have 0 octets
+     * in the fields they do not carry (see A.6-A.13). */
     const uint32_t t_write =
         ((pdi + 1U) * 14U + (2U + pdo + od) * 12U + 6U) * 1000000U / baud;
     const uint32_t t_read =
-        ((od + pdi + 1U) * 14U + (2U + od) * 12U + 6U) * 1000000U / baud;
+        ((od + pdi + 1U) * 14U + (2U + pdo) * 12U + 6U) * 1000000U / baud;
     const uint32_t t = (t_write > t_read) ? t_write : t_read;
     uint32_t units = (t + 99U) / 100U; /* ceil to 0.1 ms */
     const uint32_t app_units = (ctx->min_cycle_time_app_us + 99U) / 100U;
@@ -2423,8 +2440,8 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
                 }
                 break;
             }
-            bool drop = false;
             if (ctx->isr_rx_cnt != 0U) {
+                bool drop = false;
                 const bool isdu_write =
                     (((ctx->isr_rx_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_ISDU) &&
                      ((ctx->isr_rx_buf[0] & IOLINK_MC_RW_MASK) == 0U));

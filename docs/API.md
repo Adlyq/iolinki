@@ -30,11 +30,20 @@ typedef struct {
 ```
 
 **M-Sequence Types**:
-- `IOLINK_M_SEQ_TYPE_0`: On-request data only.
-- `IOLINK_M_SEQ_TYPE_1_1`: PD (fixed) + OD (1 byte).
-- `IOLINK_M_SEQ_TYPE_1_2`: PD (fixed) + OD (1 byte) + ISDU.
-- `IOLINK_M_SEQ_TYPE_2_1`: PD (fixed) + OD (2 bytes).
-- `IOLINK_M_SEQ_TYPE_2_2`: PD (fixed) + OD (2 bytes) + ISDU.
+- `IOLINK_M_SEQ_TYPE_0`: 1 OD octet, no PD.
+- `IOLINK_M_SEQ_TYPE_1_1`: 2 PD octets, no OD (legacy interleave; rejected by
+  a V1.1.5 Device, Table A.10 NOTE 3).
+- `IOLINK_M_SEQ_TYPE_1_2`: 2 OD octets, no PD (Figure A.7).
+- `IOLINK_M_SEQ_TYPE_1_V`: 8 or 32 OD octets, no PD (Figure A.8).
+- `IOLINK_M_SEQ_TYPE_2_1`: 1 PD-in + 1 OD, no PD-out (Figure A.9).
+- `IOLINK_M_SEQ_TYPE_2_2`: 2 PD-in + 1 OD, no PD-out (Figure A.10).
+- `IOLINK_M_SEQ_TYPE_2_3`: 1 PD-out + 1 OD, no PD-in (Figure A.11).
+- `IOLINK_M_SEQ_TYPE_2_4`: 2 PD-out + 1 OD, no PD-in (Figure A.12).
+- `IOLINK_M_SEQ_TYPE_2_5`: 1 PD-in + 1 PD-out + 1 OD (Figure A.13).
+- `IOLINK_M_SEQ_TYPE_2_V`: variable PD (0..32) + 1/2/8/32 OD (Figure A.14).
+
+The fixed PD/OD layout is enforced at `iolink_device_init()` in the ISR build;
+a mismatch returns `IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT`.
 
 **Example**:
 ```c

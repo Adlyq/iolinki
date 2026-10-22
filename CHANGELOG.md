@@ -7,7 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (BREAKING, ISR transport)
+- **M-sequence fixed types now follow Annex A byte-for-byte** (Figures A.7-A.13):
+  TYPE_1_2 (2 OD, no PD), TYPE_1_V (8/32 OD, no PD), TYPE_2_1 (1 PD-in),
+  TYPE_2_2 (2 PD-in), TYPE_2_3 (1 PD-out), TYPE_2_4 (2 PD-out) and TYPE_2_5
+  (1 PD-in + 1 PD-out). Added `IOLINK_M_SEQ_TYPE_2_3/2_4/2_5`.
+- **TYPE_1_1 is rejected at init** in the ISR build
+  (`IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE`): it forces legacy interleave, which a
+  V1.1.5 Device shall not implement (Table A.10 NOTE 3).
+- **Fixed-type PD/OD lengths are validated** at `iolink_device_init()`; a
+  mismatch returns the new `IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT`. Only TYPE_2_V
+  accepts `iolink_device_set_pd_length()` in the ISR build.
+- **2-octet fixed-type READ requests** were misrouted to the Type-0 handler;
+  dispatch now uses the CKT type bits instead of `req_len`.
+- `iolink_dll_compute_min_cycle_time()` now uses the actual READ request width
+  (`MC+CKT+PD-out`, no OD) instead of assuming an OD octet.
+- `virtual_master` is now a spec-conformant oracle (per-type request layouts,
+  canonical `MSequenceType` values, TYPE_1_1 rejection) and
+  `examples/host_demo` accepts the C enum values.
+
 ### Added
+- `phy_virtual`: ISR BYTE hooks (`rx_octet`/`tx_octet`/`tx_done`/`int_active`/
+  `request_service`) plus SDCI-gated `int_active`, so `host_demo` can drive the
+  two-pump ISR transport over a PTY. ISR FRAME mode remains unimplemented.
+- `host_demo`: pumps `iolink_device_process_isr()` when built with
+  `IOLINK_ISR_PUMP`, enabling end-to-end fixed-type tests against the ISR build.
 - `test_pd_variable`: byte-exact Type 1_V/Type 2_V round-trips at both PD
   length bounds (1 and 32 octets, including asymmetric PDin/PDout widths such
   as the 28-in/2-out product configuration) and independent rejection one

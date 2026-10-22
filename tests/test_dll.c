@@ -73,7 +73,7 @@ static void test_dll_wakeup_to_preoperate(void** state)
 static void test_dll_preoperate_to_operate(void** state)
 {
     (void) state;
-    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .pd_in_len = 1, .pd_out_len = 1};
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 2, .pd_out_len = 1};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -95,10 +95,11 @@ static void test_dll_preoperate_to_operate(void** state)
     test_io_cycle(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_ESTAB_COM);
 
-    /* ESTAB_COM -> OPERATE on first valid frame */
-    uint8_t frame[4] = {0x80, IOLINK_MSEQ_TYPE_1, 0x00, 0x00};
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
-    for (int i = 0; i < 4; i++) {
+    /* ESTAB_COM -> OPERATE on first valid frame (WRITE 2_V: MC, CKT,
+       PD-out(1), OD(2); reply PD-in(2) + CKS). */
+    uint8_t frame[5] = {0x00, IOLINK_MSEQ_TYPE_2, 0x00, 0x00, 0x00};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 5));
+    for (int i = 0; i < 5; i++) {
         mock_phy_feed_byte(frame[i]);
     }
     mock_phy_feed_chk();
@@ -114,7 +115,7 @@ static void test_dll_preoperate_to_operate(void** state)
 static void test_dll_crc_error_keeps_operate(void** state)
 {
     (void) state;
-    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .pd_in_len = 1, .pd_out_len = 1};
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 2, .pd_out_len = 1};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -135,10 +136,10 @@ static void test_dll_crc_error_keeps_operate(void** state)
     /* No response for Transition Command */
     test_io_cycle(&dev.ctx);
 
-    /* ESTAB_COM -> OPERATE */
-    uint8_t ok_frame[4] = {0x80, IOLINK_MSEQ_TYPE_1, 0x00, 0x00};
-    ok_frame[1] = (uint8_t) (ok_frame[1] | iolink_checksum6(ok_frame, 4));
-    for (int i = 0; i < 4; i++) {
+    /* ESTAB_COM -> OPERATE (WRITE 2_V: MC, CKT, PD-out(1), OD(2)). */
+    uint8_t ok_frame[5] = {0x00, IOLINK_MSEQ_TYPE_2, 0x00, 0x00, 0x00};
+    ok_frame[1] = (uint8_t) (ok_frame[1] | iolink_checksum6(ok_frame, 5));
+    for (int i = 0; i < 5; i++) {
         mock_phy_feed_byte(ok_frame[i]);
     }
     mock_phy_feed_chk();
@@ -152,7 +153,7 @@ static void test_dll_crc_error_keeps_operate(void** state)
     /* Inject CRC errors: ST rc=2 means discard the frame and re-listen. The
        DL mode and baudrate must not change (no SIO fallback). */
     for (int r = 0; r < 3; r++) {
-        uint8_t bad_frame[5] = {0x80, 0x00, 0x00, 0x00, 0xFF};
+        uint8_t bad_frame[5] = {0x00, IOLINK_MSEQ_TYPE_2, 0x00, 0x00, 0x00};
         for (int i = 0; i < 5; i++) {
             mock_phy_feed_byte(bad_frame[i]);
         }
@@ -173,7 +174,7 @@ static void test_dll_crc_error_keeps_operate(void** state)
 static void test_dll_reject_transition_in_operate(void** state)
 {
     (void) state;
-    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .pd_in_len = 1, .pd_out_len = 1};
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 1, .pd_out_len = 1};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -182,13 +183,13 @@ static void test_dll_reject_transition_in_operate(void** state)
     move_to_operate_ctx(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 
-    /* Master sends 0x0F (Transition) while in OPERATE
-     * Type 1_1 frame for pd_out_len=1 is 5 bytes: MC, CKT, PD, OD, CK */
+    /* Master sends 0x0F (Transition) while in OPERATE. The 2_V WRITE frame is
+       MC, CKT, PD-out(1), OD(2). */
     uint8_t mc = IOLINK_MC_TRANSITION_COMMAND;
-    uint8_t frame[4] = {mc, IOLINK_MSEQ_TYPE_1, 0x00, 0x00};
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
+    uint8_t frame[5] = {mc, IOLINK_MSEQ_TYPE_2, 0x00, 0x00, 0x00};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 5));
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         mock_phy_feed_byte(frame[i]);
     }
     mock_phy_feed_chk();
@@ -385,7 +386,7 @@ static void test_dll_event_flag_in_cks(void** state)
 static void test_dll_preoperate_type0_od_write_ignores_operate_widths(void** state)
 {
     (void) state;
-    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_1_2, .pd_in_len = 2, .pd_out_len = 2};
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_1_2, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;

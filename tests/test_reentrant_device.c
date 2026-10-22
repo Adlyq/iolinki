@@ -31,7 +31,7 @@ static void test_device_context_api_initializes_two_configs(void** state)
         .phy = phy,
         .stack =
             {
-                .m_seq_type = IOLINK_M_SEQ_TYPE_1_1,
+                .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
                 .min_cycle_time = 10U,
                 .pd_in_len = 1U,
                 .pd_out_len = 0U,
@@ -42,7 +42,7 @@ static void test_device_context_api_initializes_two_configs(void** state)
         .phy = phy,
         .stack =
             {
-                .m_seq_type = IOLINK_M_SEQ_TYPE_2_1,
+                .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
                 .min_cycle_time = 10U,
                 .pd_in_len = 2U,
                 .pd_out_len = 2U,

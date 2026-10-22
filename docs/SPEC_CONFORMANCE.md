@@ -17,7 +17,9 @@ suite (including `test_spec_conformance`) is green: `ctest --output-on-failure`.
 |---|---|---|---|
 | Streaming transport (`send`/`recv_byte`), default | PASS | `src/dll.c`, `src/frame.c` | `test_dll`, `test_frame` |
 | Opt-in two-pump ISR transport (`-DIOLINK_ISR_PUMP=ON`) | PASS | `src/dll.c` (`#if` block) | `test_dll_isr` + the full protocol suite via the test warp |
-| M-sequence Types 0/1_1/1_2/1_V/2_1/2_2/2_V | PASS | `src/dll.c`, `src/frame.c` | `test_m_sequence_types`, `test_dll` |
+| M-sequence fixed types 0/1_2/1_V/2_1/2_2/2_3/2_4/2_5 (ISR) | PASS | `src/device.c`, `src/dll.c` | `test_m_sequence_types`, `virtual_master/tests/test_mseq_layout.py` |
+| TYPE_1_1 (legacy interleave) rejected by V1.1.5 Device | PASS | `src/device.c` | `test_m_sequence_types` |
+| TYPE_2_V (variable PD/OD) | PASS | `src/dll.c`, `src/frame.c` | `test_pd_variable`, `test_dll` |
 | OD width / OPERATE codes 0-7 (Table A.10) | PASS | `include/iolinki/iolink.h` | `test_protocol_tables` |
 | Checksum A.1.6 (incl. streaming accumulator) | PASS | `src/crc.c` | `test_crc`, `test_crc_vectors` |
 | Protocol constants (A.1/A.3/A.12/B.2/B.9/C.1/D.1) | PASS | `include/iolinki/protocol.h` | `test_protocol_constants` |

@@ -347,13 +347,30 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     uint8_t frame[64];
     memset(frame, 0, sizeof(frame));
     /* Figure A.2: master message is MC, CKT, data... with the A.1.6 checksum in
-       the CKT octet (byte 1); there is no trailing checksum octet. */
+       the CKT octet (byte 1); there is no trailing checksum octet.
+       Use a WRITE M-sequence: its request layout (MC, CKT, PD-out, OD) and
+       reply (PD-in, CKS) are identical on both transports, unlike a READ
+       request whose OD presence differs. */
     uint8_t frame_len = (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + pd_out_len + od_w);
-    frame[0] = 0x80;
-    frame[1] = ((type == IOLINK_M_SEQ_TYPE_2_1) || (type == IOLINK_M_SEQ_TYPE_2_2) ||
-                (type == IOLINK_M_SEQ_TYPE_2_V))
-                   ? IOLINK_MSEQ_TYPE_2
-                   : IOLINK_MSEQ_TYPE_1;
+    frame[0] = 0x00;
+    switch (type) {
+        case IOLINK_M_SEQ_TYPE_1_1:
+        case IOLINK_M_SEQ_TYPE_1_2:
+        case IOLINK_M_SEQ_TYPE_1_V:
+            frame[1] = IOLINK_MSEQ_TYPE_1;
+            break;
+        case IOLINK_M_SEQ_TYPE_2_1:
+        case IOLINK_M_SEQ_TYPE_2_2:
+        case IOLINK_M_SEQ_TYPE_2_3:
+        case IOLINK_M_SEQ_TYPE_2_4:
+        case IOLINK_M_SEQ_TYPE_2_5:
+        case IOLINK_M_SEQ_TYPE_2_V:
+            frame[1] = IOLINK_MSEQ_TYPE_2;
+            break;
+        default:
+            frame[1] = IOLINK_MSEQ_TYPE_0;
+            break;
+    }
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, frame_len));
 
     for (uint8_t i = 0U; i < frame_len; i++) {
@@ -361,7 +378,8 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     }
     mock_phy_feed_chk();
 
-    uint8_t resp_len = (uint8_t) (pd_in_len + od_w + 1U);
+    /* A WRITE reply carries only the PD-in plus CKS. */
+    uint8_t resp_len = (uint8_t) (pd_in_len + 1U);
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, resp_len);
     will_return(mock_phy_send, 0);

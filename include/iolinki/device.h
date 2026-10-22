@@ -120,6 +120,7 @@ typedef enum
     IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6, /**< od_width exceeds IOLINK_OD_MAX_SIZE */
     IOLINK_DEVICE_INIT_ERR_BAUDRATE = -7,    /**< baudrate_set with an invalid COM */
     IOLINK_DEVICE_INIT_ERR_LOCK_PAIR = -8,   /**< only one of lock/unlock supplied */
+    IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -9,  /**< PD/OD lengths incompatible with the M-sequence type */
 } iolink_device_init_result_t;
 
 /**
@@ -178,21 +179,21 @@ int iolink_device_pd_output_read(iolink_device_ctx_t* ctx, uint8_t* data, size_t
  */
 void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx, iolink_reset_handler_t handler);
 
+#if IOLINK_FEATURE_EVENTS
 /**
  * @brief Get the event handling context.
  * @param ctx Device context.
  * @return Pointer to the device's events context.
  */
-#if IOLINK_FEATURE_EVENTS
 iolink_events_ctx_t* iolink_device_get_events_ctx(iolink_device_ctx_t* ctx);
 #endif
 
+#if IOLINK_FEATURE_DATA_STORAGE
 /**
  * @brief Get the data-storage context.
  * @param ctx Device context.
  * @return Pointer to the device's data-storage context.
  */
-#if IOLINK_FEATURE_DATA_STORAGE
 iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx);
 #endif
 

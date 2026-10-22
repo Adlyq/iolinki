@@ -27,7 +27,7 @@ static void test_pd_input_output(void** state)
 {
     (void) state;
 
-    iolink_config_t config = {.pd_in_len = 2, .pd_out_len = 2, .m_seq_type = IOLINK_M_SEQ_TYPE_2_2};
+    iolink_config_t config = {.pd_in_len = 2, .pd_out_len = 0, .m_seq_type = IOLINK_M_SEQ_TYPE_2_2};
     iolink_test_device_t dev;
 
     setup_mock_phy();
@@ -41,13 +41,19 @@ static void test_pd_input_output(void** state)
     uint8_t input[2] = {0x11, 0x22};
     iolink_device_pd_input_update(&dev.ctx, input, 2, true);
 
-    /* 2. Simulate Master Frame (Type 2_2: MC, CKT, PD_OUT(2), OD(1)) -> 5 bytes.
-       Table A.10: TYPE_2_2 carries one OD octet. The CKT carries the Type-2 bits
-       (A.1.3). */
-    uint8_t frame[5] = {0x80, IOLINK_MSEQ_TYPE_2, 0x00, 0x00, 0x00};
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 5));
+    /* 2. Simulate Master Frame (Type 2_2 READ: MC, CKT [+ OD on the legacy
+       streaming transport, which counts an OD octet in every request]).
+       Table A.10: TYPE_2_2 carries one OD octet and no PD-out (A.10). */
+#if IOLINK_PHY_FEATURE_ISR_PUMP
+    uint8_t frame[2] = {0x80, IOLINK_MSEQ_TYPE_2};
+    const int frame_len = 2;
+#else
+    uint8_t frame[3] = {0x80, IOLINK_MSEQ_TYPE_2, 0x00};
+    const int frame_len = 3;
+#endif
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, (size_t) frame_len));
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < frame_len; i++) {
         mock_phy_feed_byte(frame[i]);
     }
     mock_phy_feed_chk();

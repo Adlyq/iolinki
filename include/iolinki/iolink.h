@@ -32,14 +32,20 @@
  */
 typedef enum
 {
-    IOLINK_M_SEQ_TYPE_0 = 0U,   /**< M-Sequence Type 0: On-request data (ISDU) only */
-    IOLINK_M_SEQ_TYPE_1_1 = 1U, /**< M-Sequence Type 1_1: PD (fixed) + OD (1 byte) */
-    IOLINK_M_SEQ_TYPE_1_2 = 2U, /**< M-Sequence Type 1_2: PD (fixed) + OD (1 byte) + ISDU */
-    IOLINK_M_SEQ_TYPE_1_V = 3U, /**< M-Sequence Type 1_V: PD (variable) + OD (1 byte) */
-    IOLINK_M_SEQ_TYPE_2_1 = 4U, /**< M-Sequence Type 2_1: PD (fixed) + OD (1 byte) */
-    IOLINK_M_SEQ_TYPE_2_2 = 5U, /**< M-Sequence Type 2_2: PD (fixed) + OD (1 byte) + ISDU */
-    IOLINK_M_SEQ_TYPE_2_V = 6U, /**< M-Sequence Type 2_V: PD (variable) + OD (2 bytes) + ISDU */
+    IOLINK_M_SEQ_TYPE_0 = 0U,   /**< Type 0: 1 OD octet, no PD. */
+    IOLINK_M_SEQ_TYPE_1_1 = 1U, /**< Type 1_1: 2 PD octets, no OD (legacy interleave only). */
+    IOLINK_M_SEQ_TYPE_1_2 = 2U, /**< Type 1_2: 2 OD octets, no PD (A.7). */
+    IOLINK_M_SEQ_TYPE_1_V = 3U, /**< Type 1_V: 8 or 32 OD octets, no PD (A.8). */
+    IOLINK_M_SEQ_TYPE_2_1 = 4U, /**< Type 2_1: 1 PD-in + 1 OD, no PD-out (A.9). */
+    IOLINK_M_SEQ_TYPE_2_2 = 5U, /**< Type 2_2: 2 PD-in + 1 OD, no PD-out (A.10). */
+    IOLINK_M_SEQ_TYPE_2_3 = 7U, /**< Type 2_3: 1 PD-out + 1 OD, no PD-in (A.11). */
+    IOLINK_M_SEQ_TYPE_2_4 = 8U, /**< Type 2_4: 2 PD-out + 1 OD, no PD-in (A.12). */
+    IOLINK_M_SEQ_TYPE_2_5 = 9U, /**< Type 2_5: 1 PD-in + 1 PD-out + 1 OD (A.13). */
+    IOLINK_M_SEQ_TYPE_2_V = 6U, /**< Type 2_V: 0..32 PD in/out + 1/2/8/32 OD (A.14). */
 } iolink_m_seq_type_t;
+
+/** @brief Highest valid ::iolink_m_seq_type_t value (used for range checks). */
+#define IOLINK_M_SEQ_TYPE_MAX IOLINK_M_SEQ_TYPE_2_5
 
 /**
  * @brief Decode a Table B.3 cycle-time octet into microseconds.

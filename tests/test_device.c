@@ -86,7 +86,7 @@ static void test_device_init_rejects_invalid_config(void** state)
     (void) memset(&ctx, 0, sizeof(ctx));
 
     config = make_device_config();
-    config.stack.m_seq_type = (iolink_m_seq_type_t) 7;
+    config.stack.m_seq_type = (iolink_m_seq_type_t) 10; /* > IOLINK_M_SEQ_TYPE_MAX */
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE);
 
     config = make_device_config();
@@ -186,7 +186,7 @@ static void test_device_pd_input_bounds(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
-    init_device(&dev, IOLINK_M_SEQ_TYPE_1_2, 2U, 2U);
+    init_device(&dev, IOLINK_M_SEQ_TYPE_2_2, 2U, 0U);
 
     const uint8_t data[IOLINK_PD_IN_MAX_SIZE + 1U] = {0};
 
@@ -204,7 +204,7 @@ static void test_device_pd_valid_flag(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
-    init_device(&dev, IOLINK_M_SEQ_TYPE_1_2, 2U, 2U);
+    init_device(&dev, IOLINK_M_SEQ_TYPE_2_2, 2U, 0U);
 
     const uint8_t pd[2] = {0xAAU, 0xBBU};
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), false), 0);
@@ -218,7 +218,7 @@ static void test_device_pd_output_read(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
-    init_device(&dev, IOLINK_M_SEQ_TYPE_1_2, 2U, 3U);
+    init_device(&dev, IOLINK_M_SEQ_TYPE_2_V, 2U, 3U);
 
     dev.ctx.dll.pd_out[0] = 0x01U;
     dev.ctx.dll.pd_out[1] = 0x02U;
@@ -261,10 +261,10 @@ static void test_device_introspection(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
-    init_device(&dev, IOLINK_M_SEQ_TYPE_1_2, 2U, 3U);
+    init_device(&dev, IOLINK_M_SEQ_TYPE_2_V, 2U, 3U);
 
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_STARTUP);
-    assert_int_equal(iolink_device_get_m_seq_type(&dev.ctx), IOLINK_M_SEQ_TYPE_1_2);
+    assert_int_equal(iolink_device_get_m_seq_type(&dev.ctx), IOLINK_M_SEQ_TYPE_2_V);
     assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM2);
     assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 2U);
     assert_int_equal(iolink_device_get_pd_out_len(&dev.ctx), 3U);
@@ -281,7 +281,7 @@ static void test_device_set_pd_length_fixed(void** state)
 {
     (void) state;
     iolink_test_device_t fixed;
-    init_device(&fixed, IOLINK_M_SEQ_TYPE_1_2, 2U, 2U);
+    init_device(&fixed, IOLINK_M_SEQ_TYPE_1_2, 0U, 0U);
     /* Only the variable types accept a runtime length change (Table A.10). */
     assert_int_equal(iolink_device_set_pd_length(&fixed.ctx, 1U, 1U), -2);
     assert_int_equal(iolink_device_set_pd_length(NULL, 1U, 1U), -1);
@@ -303,7 +303,7 @@ static void test_device_config_baudrate(void** state)
 {
     (void) state;
     iolink_config_t config = {0};
-    config.m_seq_type = IOLINK_M_SEQ_TYPE_1_2;
+    config.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     config.pd_in_len = 2U;
     config.pd_out_len = 2U;
     config.baudrate = IOLINK_BAUDRATE_COM1;
