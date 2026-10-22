@@ -270,8 +270,8 @@ static void test_ds_vendor_param_set_round_trip(void** state)
     (void) state;
     iolink_ds_ctx_t ds;
     static const iolink_ds_param_desc_t set[] = {
-        {IOLINK_IDX_APPLICATION_TAG, 0U},
-        {VENDOR_PARAM_IDX, 0U},
+        {IOLINK_IDX_APPLICATION_TAG, 0U, 0U},
+        {VENDOR_PARAM_IDX, 0U, 0U},
     };
     static const uint8_t vend[] = {0xDEU, 0xADU, 0xBEU, 0xEFU};
 
@@ -389,7 +389,7 @@ static void test_ds_download_end_error_classification(void** state)
 
     /* Known parameter rejected -> -2 -> PAR_SETINCONSIST. */
     iolink_ds_init(&ds, NULL);
-    static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U}};
+    static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U, 0U}};
     iolink_ds_bind_param_access(&ds, ds_zero_read, ds_rejecting_write, NULL, set, 1U);
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
     uint8_t img[] = {0x00U, 0x18U, 0x00U, 0x03U, 'A', 'B', 'C'};

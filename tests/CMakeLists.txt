@@ -52,6 +52,10 @@ endif()
 if(CMOCKA_FOUND)
     message(STATUS "CMocka found: ${CMOCKA_LIBRARIES}")
     include_directories(${CMOCKA_INCLUDE_DIRS})
+    # cmocka >= 2.0 marks the legacy type-generic macros (check_expected,
+    # expect_value, ...) deprecated. The suite still supports older cmocka, so
+    # keep the portable macros and silence the warning in the test targets only.
+    add_compile_options(-Wno-deprecated-declarations)
 
     macro(add_iolink_test name source)
         add_executable(${name} ${source} test_helpers.c)
