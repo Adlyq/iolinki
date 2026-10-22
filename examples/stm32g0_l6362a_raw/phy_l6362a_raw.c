@@ -226,6 +226,9 @@ static int l6362_init(void* user) {
 
 static void l6362_set_mode(void* user, iolink_phy_mode_t mode) {
     (void)user;
+    /* The mode transition reconfigures the UART and resets RX/TX state. Keep the
+     * ISR feeds out until the new baseline is complete, like set_baudrate(). */
+    iolink_critical_enter();
     s_mode = mode;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     /* The UART + DMA stay armed in both modes; the IDLE interrupt delimits frames
@@ -235,6 +238,14 @@ static void l6362_set_mode(void* user, iolink_phy_mode_t mode) {
          * delimited cleanly and no stale reply/echo state survives a fallback. */
         s_rx_ready       = 0U;
         s_rx_last_index  = (uint16_t)(L6362_RX_DMA_SIZE - (DMA1_Channel1->CNDTR & 0xFFFFU));
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+        /* int_active() claims no service in SIO: an in-flight FRAME reply
+         * would never finish, so stop its DMA before releasing TX_EN. */
+        DMA1_Channel2->CCR &= ~DMA_CCR_EN;
+        IOD_UART->CR3 &= ~USART_CR3_DMAT;
+        IOD_UART->ICR = USART_ICR_TCCF;
+        DMA1->IFCR = DMA_IFCR_CTCIF2;
+#endif
         phy_txen_set(false);
     }
     UartConfigure(s_baud_hz);
@@ -261,6 +272,7 @@ static void l6362_set_mode(void* user, iolink_phy_mode_t mode) {
         TIM3->CR1 &= ~TIM_CR1_CEN;
     }
 #endif
+    iolink_critical_exit();
 }
 
 static void l6362_set_baudrate(void* user, iolink_baudrate_t baudrate) {
@@ -282,10 +294,18 @@ static void l6362_set_baudrate(void* user, iolink_baudrate_t baudrate) {
      * abandons its matching ISR TX state. */
     iolink_critical_enter();
     if ((new_hz != s_baud_hz) && (s_tx_in_progress != 0U)) {
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
         IOD_UART->CR1 &= ~(USART_CR1_TCIE | USART_CR1_TXEIE_TXFNFIE);
         IOD_UART->ICR = USART_ICR_TCCF;
-        phy_txen_set(false);
         s_tx_tc_seen = 0U;
+#else
+        /* FRAME TX: stop the DMA before the UART is reconfigured. */
+        DMA1_Channel2->CCR &= ~DMA_CCR_EN;
+        IOD_UART->CR3 &= ~USART_CR3_DMAT;
+        IOD_UART->ICR = USART_ICR_TCCF;
+        DMA1->IFCR = DMA_IFCR_CTCIF2;
+#endif
+        phy_txen_set(false);
     }
     s_baudrate = baudrate;
     s_baud_hz = new_hz;
