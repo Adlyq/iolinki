@@ -118,7 +118,9 @@ static void    l6362_tx_done(void* user);
 #endif
 static uint8_t l6362_int_active(void* user);
 static void    l6362_request_service(void* user);
+#if IOLINK_PHY_FEATURE_WAKEUP
 static int     l6362_detect_wakeup(void* user);
+#endif
 static void    phy_rx_set(bool on);
 static bool    phy_txen_get(void);
 static void    phy_txen_set(bool on);
@@ -645,6 +647,7 @@ static uint8_t l6362_int_active(void* user) {
     return 0U;
 }
 
+#if IOLINK_PHY_FEATURE_WAKEUP
 static int l6362_detect_wakeup(void* user) {
     (void)user;
 
@@ -661,6 +664,7 @@ static int l6362_detect_wakeup(void* user) {
     return (s_rx_tail != s_rx_head) ? 1 : 0;
 #endif
 }
+#endif
 
 /* Platform hooks ------------------------------------------------------------*/
 
@@ -753,7 +757,9 @@ const iolink_phy_api_t* phy_l6362a_raw_get(void) {
          * gap uses the same TIM3, the FRAME path gets the t_A deadline). */
         .response_timer_start = l6362_response_timer_start,
         .response_timer_stop  = l6362_response_timer_stop,
+#if IOLINK_PHY_FEATURE_WAKEUP
         .detect_wakeup    = l6362_detect_wakeup,
+#endif
         .get_faults    = NULL,
     };
     return &api;
