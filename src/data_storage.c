@@ -187,7 +187,15 @@ static int ds_params_get(const iolink_ds_ctx_t* ctx, uint16_t index, uint8_t sub
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
         return iolink_params_ctx_get(ctx->params_ctx, index, subindex, buffer, max_len);
     }
+#if IOLINK_FEATURE_LEGACY_PARAMS
     return iolink_params_get(index, subindex, buffer, max_len);
+#else
+    (void) index;
+    (void) subindex;
+    (void) buffer;
+    (void) max_len;
+    return -1;
+#endif
 }
 
 /** @brief Write a parameter via the bound accessor, the params context, or the
@@ -201,7 +209,16 @@ static int ds_params_set(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
         return iolink_params_ctx_set(ctx->params_ctx, index, subindex, data, len, persist);
     }
+#if IOLINK_FEATURE_LEGACY_PARAMS
     return iolink_params_set(index, subindex, data, len, persist);
+#else
+    (void) index;
+    (void) subindex;
+    (void) data;
+    (void) len;
+    (void) persist;
+    return -1;
+#endif
 }
 
 uint32_t iolink_ds_calc_checksum(const uint8_t* data, size_t len)
