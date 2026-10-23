@@ -151,6 +151,52 @@ static void test_fallback_command_switches_to_sio_after_t_fbd(void** state)
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
 }
 
+static void test_fallback_command_ignored_without_wakeup(void** state)
+{
+    (void) state;
+
+    iolink_config_t config = {
+        .pd_in_len = 0, .pd_out_len = 0, .m_seq_type = IOLINK_M_SEQ_TYPE_0, .min_cycle_time = 10U};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+
+    /* Same PHY, but without the wake-up detector: the DLL starts in SDCI and
+     * has no way back from SIO. */
+    iolink_test_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    dev.cfg.phy = g_phy_mock;
+    dev.cfg.phy.detect_wakeup = NULL;
+    dev.cfg.stack = config;
+    assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), 0);
+
+    assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
+    move_to_operate_ctx(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+    assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
+
+    /* Page-channel Type-0 write of MasterCommand FALLBACK (0x5A, Table B.2). */
+    uint8_t frame[3] = {0x20U, 0x00U, IOLINK_CMD_FALLBACK};
+    frame[1] = iolink_checksum6(frame, 3U);
+    for (size_t i = 0U; i < sizeof(frame); i++) {
+        mock_phy_feed_byte(frame[i]);
+    }
+    mock_phy_feed_chk();
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 1); /* Type-0 write replies CKS only */
+    will_return(mock_phy_send, 0);
+    test_io_cycle(&dev.ctx);
+
+    /* Unsupported without wake-up: acked, but the DL mode/state are unchanged. */
+    assert_int_equal(dev.ctx.dll.fallback_deadline_ms, 0U);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+    assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
+
+    usleep(10U * 1000U);
+    test_io_cycle(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+    assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -158,6 +204,7 @@ int main(void)
         cmocka_unit_test(test_valid_frame_after_crc_errors),
         cmocka_unit_test(test_t_dsio_returns_to_sio_without_message),
         cmocka_unit_test(test_fallback_command_switches_to_sio_after_t_fbd),
+        cmocka_unit_test(test_fallback_command_ignored_without_wakeup),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

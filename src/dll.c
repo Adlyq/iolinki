@@ -454,15 +454,20 @@ static bool dll_is_fallback_command(const iolink_dll_ctx_t* ctx)
  * iolink_dll_process(); the reply is a Type-0 write CKS-only response. */
 static void dll_handle_fallback_command(iolink_dll_ctx_t* ctx)
 {
-    uint32_t t_fbd_ms = 500U;
-    if (ctx->min_cycle_time_us > 0U) {
-        t_fbd_ms = (3U * ctx->min_cycle_time_us) / 1000U;
-        if (t_fbd_ms > 500U) {
-            t_fbd_ms = 500U;
+    /* Without a wake-up detector the PHY cannot leave SIO again, so the
+     * FALLBACK transition is not supported: ack the Type-0 write without
+     * changing the DL mode. */
+    if (dll_phy_has_wakeup(ctx)) {
+        uint32_t t_fbd_ms = 500U;
+        if (ctx->min_cycle_time_us > 0U) {
+            t_fbd_ms = (3U * ctx->min_cycle_time_us) / 1000U;
+            if (t_fbd_ms > 500U) {
+                t_fbd_ms = 500U;
+            }
         }
+        ctx->fallback_deadline_ms = iolink_time_get_us() / 1000U + t_fbd_ms;
+        dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
     }
-    ctx->fallback_deadline_ms = iolink_time_get_us() / 1000U + t_fbd_ms;
-    dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
 
     uint8_t resp[1];
     resp[0] = 0x00U;
@@ -2171,15 +2176,19 @@ static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, ui
          (ctx->state == IOLINK_DLL_STATE_OPERATE)) && (len == 3U) &&
         (ch == IOLINK_MC_CHANNEL_PAGE) && (addr == 0U)) {
         if (frame[2] == IOLINK_CMD_FALLBACK) {
-            uint32_t t_fbd_ms = 500U;
-            if (ctx->min_cycle_time_us > 0U) {
-                t_fbd_ms = (3U * ctx->min_cycle_time_us) / 1000U;
-                if (t_fbd_ms > 500U) {
-                    t_fbd_ms = 500U;
+            /* A PHY without wake-up detection cannot return from SIO, so the
+             * unsupported transition is acked without changing the DL mode. */
+            if (dll_phy_has_wakeup(ctx)) {
+                uint32_t t_fbd_ms = 500U;
+                if (ctx->min_cycle_time_us > 0U) {
+                    t_fbd_ms = (3U * ctx->min_cycle_time_us) / 1000U;
+                    if (t_fbd_ms > 500U) {
+                        t_fbd_ms = 500U;
+                    }
                 }
+                ctx->fallback_deadline_ms = iolink_time_get_us() / 1000U + t_fbd_ms;
+                dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
             }
-            ctx->fallback_deadline_ms = iolink_time_get_us() / 1000U + t_fbd_ms;
-            dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
             dll_isr_send_payload(ctx, NULL, 0U, dll_isr_status_flags(ctx));
             ctx->last_activity_ms = iolink_time_get_ms();
             ctx->last_byte_us = iolink_time_get_us();

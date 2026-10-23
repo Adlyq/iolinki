@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (feature trimming)
+- `IOLINK_PHY_FEATURE_WAKEUP=0`: a Fallback MasterCommand is acknowledged but
+  no longer switches the DLL to SIO. Without `detect_wakeup` the device could
+  not leave SIO again, so the unsupported transition is ignored. Regression
+  coverage added to `test_sio_fallback`.
+
 ### Fixed (ISR transport concurrency)
 - `dll_send()` now falls back to the platform critical section when the
   application configured no lock, so main-context reply staging

@@ -14,7 +14,7 @@ below is the contract.
 | `IOLINK_FEATURE_SYSTEM_COMMAND` | 1 | `handle_system_command()` is compiled to reject every command with `FUNC_NOTAVAIL` |
 | `IOLINK_FEATURE_LEGACY_PARAMS` | 1 | the process-wide `g_legacy_*` parameter set and the context-less `iolink_params_*` API are removed; the ISDU fallback returns an error |
 | `IOLINK_FEATURE_EVENTS` | 1 | `src/events.c` is replaced by inert stubs (no queue, no classification); DetailedDeviceStatus reports no events |
-| `IOLINK_PHY_FEATURE_WAKEUP` | 1 | `detect_wakeup` is removed from the PHY vtable; the DLL treats the PHY as owning the line state (starts in SDCI). Once such a build enters SIO (e.g. after a Fallback MasterCommand or an application request), it cannot detect the next wake-up and stays in SIO until a reset |
+| `IOLINK_PHY_FEATURE_WAKEUP` | 1 | `detect_wakeup` is removed from the PHY vtable; the DLL treats the PHY as owning the line state (starts in SDCI). A Fallback MasterCommand is acknowledged but does not switch to SIO, since the build cannot detect the next wake-up. An application that requests SIO directly still cannot leave it until a reset |
 | `IOLINK_PHY_FEATURE_SIO_CQ` | 1 | `set_cq_line` is removed from the PHY vtable |
 | `IOLINK_PHY_FEATURE_LEGACY_DIAG` | 1 | `get_voltage_mv` / `is_short_circuit` and the DLL diagnostic polling are removed |
 
