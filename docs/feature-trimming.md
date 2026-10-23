@@ -14,7 +14,7 @@ below is the contract.
 | `IOLINK_FEATURE_SYSTEM_COMMAND` | 1 | `handle_system_command()` is compiled to reject every command with `FUNC_NOTAVAIL` |
 | `IOLINK_FEATURE_LEGACY_PARAMS` | 1 | the process-wide `g_legacy_*` parameter set and the context-less `iolink_params_*` API are removed; the ISDU fallback returns an error |
 | `IOLINK_FEATURE_EVENTS` | 1 | `src/events.c` is replaced by inert stubs (no queue, no classification); DetailedDeviceStatus reports no events |
-| `IOLINK_PHY_FEATURE_WAKEUP` | 1 | `detect_wakeup` is removed from the PHY vtable; the DLL treats the PHY as owning the line state (starts in SDCI) |
+| `IOLINK_PHY_FEATURE_WAKEUP` | 1 | `detect_wakeup` is removed from the PHY vtable; the DLL treats the PHY as owning the line state (starts in SDCI). Once such a build enters SIO (e.g. after a Fallback MasterCommand or an application request), it cannot detect the next wake-up and stays in SIO until a reset |
 | `IOLINK_PHY_FEATURE_SIO_CQ` | 1 | `set_cq_line` is removed from the PHY vtable |
 | `IOLINK_PHY_FEATURE_LEGACY_DIAG` | 1 | `get_voltage_mv` / `is_short_circuit` and the DLL diagnostic polling are removed |
 
@@ -87,9 +87,18 @@ also lowers that RAM cost.
 
 ## Caveats
 
-- Trimming SystemCommand or Data Storage makes the device non-conformant to the
-  corresponding mandatory/optional IO-Link objects. The library answers a
-  negative response rather than silently accepting the request.
+- `DataStorageIndex` (index `0x0003`) is mandatory (Table B.8). Trimming Data
+  Storage removes it, so the device is non-conformant. To stay conformant
+  without DS-backed parameters, keep the object and publish an empty
+  `Index_List` (see `iolink_ds_bind_param_access()` with an empty descriptor
+  set); the library still answers a negative response instead of silently
+  accepting the request.
+- `SystemCommand` (index `0x0002`) is conditional (Table B.8, B.2.2). Trimming
+  it is conformant only when no conveyed functionality requires it: block
+  parameterization needs `0x01`-`0x06` (all or none), and a non-empty DS
+  `Index_List` requires `0x05` (ParamDownloadStore). `Device reset` and
+  `Restore factory settings` are optional and `Application reset` is highly
+  recommended (H), not mandatory.
 - `IOLINK_PHY_FEATURE_*` must match the PHY implementation you compile: a PHY
   that still initializes a removed vtable field does not build.
 - The minimal profile is verified by building the `iolinki` target with
