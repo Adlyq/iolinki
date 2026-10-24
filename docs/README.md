@@ -57,7 +57,6 @@ while the main loop runs the protocol logic. See
 | Platform | Status |
 |----------|--------|
 | **Linux** | ✅ Verified |
-| **Zephyr** | ✅ Verified (Native Sim) |
 | **Bare Metal** | ✅ Verified (Build) |
 | **Code Quality** | ✅ Pass (MISRA/Cppcheck) |
 

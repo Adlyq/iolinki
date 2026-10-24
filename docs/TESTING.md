@@ -36,13 +36,6 @@ docker build -t iolinki-test .
 docker run --rm iolinki-test
 ```
 
-### 4. Zephyr Integration Test
-Included automatically in the Docker environment.
-To run locally, you need the Zephyr SDK and `west` installed.
-```bash
-./tests/test_zephyr.sh
-```
-
 ## ✅ Continuous Integration (CI)
 
 > [!IMPORTANT]
@@ -55,7 +48,6 @@ The CI pipeline (via Docker) enforces:
 3.  **Integration Tests**:
     - `test_type1.py`: Basic protocol logic (Process Data, CRC).
     - `test_automated_mandatory.py`: Verification of all mandatory ISDU indices (0x0010-0x0018, etc.).
-4.  **Zephyr Simulation**: Verifies the stack runs on Zephyr `native_sim` (if SDK available).
 
 ## 📊 Code Standards
 

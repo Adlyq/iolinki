@@ -40,8 +40,7 @@ if command -v cppcheck &> /dev/null; then
     #                We'll use --enable=warning,style,performance,portability for now.
 
     # Suppress findings that depend on the compile-time feature set (cppcheck
-    # analyses one configuration, e.g. ISR_PUMP off) and skip the Zephyr glue,
-    # which needs the Zephyr build macros to parse.
+    # analyses one configuration at a time).
     if cppcheck --enable=warning,style,performance,portability \
              --error-exitcode=1 \
              --suppress=missingIncludeSystem \
@@ -49,7 +48,6 @@ if command -v cppcheck &> /dev/null; then
              --suppress=knownConditionTrueFalse \
              --inline-suppr \
              --quiet \
-             -i src/platform/zephyr \
              -I include \
              src/ examples/; then
         echo "   ✅ Static Analysis Passed"
@@ -88,8 +86,7 @@ if command -v cppcheck &> /dev/null; then
                      --suppress=knownConditionTrueFalse \
                      --inline-suppr \
                      --quiet \
-                     -i src/platform/zephyr \
-                     -I include \
+                             -I include \
                      src/ examples/
             echo "   ✅ MISRA Check Passed (enforced)"
         else
@@ -100,8 +97,7 @@ if command -v cppcheck &> /dev/null; then
                      --suppress=knownConditionTrueFalse \
                      --inline-suppr \
                      --quiet \
-                     -i src/platform/zephyr \
-                     -I include \
+                             -I include \
                      src/ examples/ || true
             echo "   ⚠️ MISRA report generated (non-enforcing; set IOLINKI_MISRA_ENFORCE=1 to fail)"
         fi

@@ -39,10 +39,6 @@ Automated pipelines run on every push to `main` or `develop`.
 2. **Test**: Run all unit tests via `ctest`.
 3. **Example Build**: Verify example projects compile.
 
-### Zephyr Build (Planned)
-- Build verification on `native_sim` target.
-- Cross-compile verification for ARM targets.
-
 ## 4. Release Process
 
 ### Automated Release (Main-only)
@@ -50,7 +46,7 @@ Automated pipelines run on every push to `main` or `develop`.
 Official releases are triggered ONLY from the `main` branch.
 
 Both `main` and `develop` are protected: the required checks are the *real* CI
-jobs (`docker-validation`, `zephyr-validation`, `sbom-tools`) with no admin
+jobs (`docker-validation`, `sbom-tools`) with no admin
 bypass. Because a freshly created merge commit has no check results, release
 promotion works by **fast-forwarding `main` to a develop SHA whose checks are
 already green** — never by merging with a new commit. This keeps `main` an

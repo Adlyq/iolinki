@@ -214,8 +214,7 @@ python3 test_m_sequence_types.py
 # Established-COM UART link (a plain UART behind a transceiver front-end):
 python3 nucleo_master.py /dev/ttyACM0 --no-wakeup
 
-# Board whose USB-serial resets on control-line toggles (e.g. ESP32-C3
-# native USB-Serial-JTAG): also hold DTR/RTS low.
+# Board whose USB-serial resets on control-line toggles: also hold DTR/RTS low.
 python3 nucleo_master.py /dev/ttyACM0 --no-wakeup --hold-lines
 ```
 

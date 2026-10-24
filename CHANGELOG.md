@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed (Zephyr / ESP32 support)
+- Dropped the Zephyr module (`zephyr/`), the Zephyr/ESP-IDF examples and
+  samples, the Zephyr UART PHY, the Zephyr test harness/Dockerfiles, the
+  `west.yml` manifest and the related docs. The fork targets bare-metal and
+  Linux only. The Zephyr-specific `zephyr-validation` CI stage was removed.
+
 ### Removed (streaming transport)
 - The upstream streaming transport (`phy->send()`/`phy->recv_byte()`, the
   `#if IOLINK_PHY_FEATURE_ISR_PUMP` dual-path in `src/dll.c`, and

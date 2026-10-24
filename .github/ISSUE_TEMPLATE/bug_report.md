@@ -23,7 +23,7 @@ A clear and concise description of what you expected to happen.
 If applicable, verify with `check_quality.sh` and attach logs.
 
 **Environment (please complete the following information):**
- - Platform: [e.g. Linux Host, Zephyr native_sim, STM32]
+ - Platform: [e.g. Linux Host, STM32]
  - Compiler: [e.g. GCC 11.4]
  - Version: [e.g. v0.1.0]
 

@@ -36,7 +36,7 @@ def main():
         "--hold-lines",
         action="store_true",
         help="Hold DTR/RTS low. Required for boards whose USB-serial resets on "
-        "control-line changes (e.g. the ESP32-C3 native USB-Serial-JTAG).",
+        "control-line changes.",
     )
     args = parser.parse_args()
 

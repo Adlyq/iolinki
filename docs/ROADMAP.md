@@ -23,7 +23,6 @@ This roadmap outlines the development path for `iolinki`, enabling a fully compl
 ### 1.1 Project Bootstrapping
 - [x] Directory structure and build system (CMake)
 - [x] CI/CD pipeline groundwork (Linting, Doxygen)
-- [x] Zephyr module structure definition
 - [x] Test framework setup (CMocka)
 
 ### 1.2 Physical Layer (PHY) Abstraction
@@ -182,7 +181,6 @@ This roadmap outlines the development path for `iolinki`, enabling a fully compl
 
 **Goal:** Enable deployment across diverse hardware and RTOS environments.
 
-- [x] **Zephyr RTOS Integration**: Module structure, Kconfig, example app.
 - [x] **Bare Metal Support**: Platform abstraction for no-OS environments.
 - [x] **Linux Host Simulation**: POSIX-based testing environment.
 - [x] **Docker Test Environment**: Automated testing with CMocka and Virtual Master.

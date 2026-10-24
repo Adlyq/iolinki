@@ -23,7 +23,6 @@ it is a development checklist, not a conformance or interoperability claim.
 | Sensor configuration | `examples/switching_sensor`: measurement, validity, switching state, threshold, hysteresis, inversion and teach | Callback/parameter tests and IODD-to-C payload checks |
 | Device description | Three example JSON/XML descriptors; `tools/iodd_cli.py` generate/validate/inspect/pack | CRC, semantic-subset, official external XSD, drift and packaging tests |
 | Bare-metal MCU/PHY | STM32G0B1RE/TIOL112 GCC and native IAR project | GCC build; IAR archive paths checked after extraction |
-| Other build environments | ESP32-C3/L6362A ESP-IDF and STM32U5/TIOL112 Zephyr | Target firmware build jobs |
 | Repeatable firmware execution | `validation/labwired` pinned G0/C3 engine recipes | PR and release jobs execute the freshly built ELFs in both engine modes |
 | Reviewable release | Source/examples, standalone IAR project, firmware, IODD packages, recipes and logs | Release workflow retains commit identifiers, JUnit results and SHA-256 checksums |
 

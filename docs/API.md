@@ -297,8 +297,7 @@ uint32_t iolink_time_get_ms(void);
 uint64_t iolink_time_get_us(void);
 ```
 
-Implement these in `src/platform/<platform>/time_utils.c` (or the Zephyr
-module). Critical sections are `iolink_critical_enter()` /
+Implement these in `src/platform/<platform>/time_utils.c`. Critical sections are `iolink_critical_enter()` /
 `iolink_critical_exit()` from `include/iolinki/platform.h`.
 
 ## Build configuration

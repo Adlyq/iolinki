@@ -43,9 +43,6 @@ set_target_properties(test_phy_l6362a_raw PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED ON)
 add_test(NAME test_phy_l6362a_raw COMMAND test_phy_l6362a_raw)
-add_executable(test_esp32_tx_guard ../examples/esp32_l6362a/test_tx_guard.c ../examples/esp32_l6362a/main/tx_guard.c ../examples/esp32_l6362a/main/rx_guard.c)
-target_include_directories(test_esp32_tx_guard PRIVATE ../examples/esp32_l6362a/main)
-add_test(NAME test_esp32_tx_guard COMMAND test_esp32_tx_guard)
 if(IOLINK_PLATFORM STREQUAL "LINUX")
     add_executable(test_linux_nvm test_linux_nvm.c)
     target_link_libraries(test_linux_nvm iolinki)

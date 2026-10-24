@@ -7,7 +7,7 @@
  */
 
 /* cfmakeraw() is a BSD/GNU extension; request it before any libc header so the
-   declaration is visible under strict libc configurations (e.g. Zephyr native_sim). */
+   declaration is visible under strict libc configurations. */
 #ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE 1
 #endif

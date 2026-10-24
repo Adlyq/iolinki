@@ -73,7 +73,7 @@ foreach(_iolink_feature
 endforeach()
 
 # Platform Selection
-set(IOLINK_PLATFORM "LINUX" CACHE STRING "Target platform: LINUX, BAREMETAL (Zephyr builds use module.yml)")
+set(IOLINK_PLATFORM "LINUX" CACHE STRING "Target platform: LINUX, BAREMETAL")
 
 if(IOLINK_PLATFORM STREQUAL "LINUX")
     target_compile_definitions(iolinki PRIVATE IOLINK_HAVE_PLATFORM_NVM=1)
@@ -86,7 +86,6 @@ elseif(IOLINK_PLATFORM STREQUAL "BAREMETAL")
     target_sources(iolinki PRIVATE src/platform/baremetal/time_utils.c src/platform_stubs.c)
     message(STATUS "Building for Bare Metal (Stub)")
 endif()
-# Note: Zephyr builds don't use this CMakeLists.txt directly for sources if integrated via module.yml
 
 # Examples
 add_subdirectory(examples/simple_device)

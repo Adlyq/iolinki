@@ -275,7 +275,7 @@ class TestErrorInjectionConformance(unittest.TestCase):
 
             # Device should now be in FALLBACK state, transitioning to STARTUP with COM1
             print("[INFO] Bad CRC frames sent, device should enter FALLBACK → STARTUP")
-            time.sleep(15.0)  # Allow fallback state transition (>1s Zephyr)
+            time.sleep(15.0)  # Allow the fallback state transition (>1s)
         else:
             print("[SKIP] Bad CRC injection not supported, simulating with delay")
             time.sleep(0.3)

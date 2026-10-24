@@ -17,7 +17,7 @@ fi
 echo "✅ Environment checks passed"
 
 # 1. Linux Host Build & Test
-echo -e "\n[1/3] 🐧 Testing Linux Host Target..."
+echo -e "\n[1/2] 🐧 Testing Linux Host Target..."
 rm -rf build_linux
 mkdir build_linux
 cd build_linux
@@ -109,7 +109,7 @@ fi
 cd ..
 
 # 2. Bare Metal Build Verification
-echo -e "\n[2/3] ⚙️  Verifying Bare Metal Build..."
+echo -e "\n[2/2] ⚙️  Verifying Bare Metal Build..."
 rm -rf build_baremetal
 mkdir build_baremetal
 cd build_baremetal
@@ -120,20 +120,6 @@ cmake .. -DCMAKE_BUILD_TYPE=Debug -DPLATFORM=BARE_METAL
 make iolinki -j"$(nproc)"
 echo "   ✅ Bare Metal Library Build Successful"
 cd ..
-
-# 3. Zephyr Build Verification (Simulation)
-echo -e "\n[3/3] 🪁 Checking Zephyr Compatibility..."
-if command -v west &> /dev/null; then
-    chmod +x tests/test_zephyr.sh
-    if ./tests/test_zephyr.sh; then
-        echo "   ✅ Zephyr Tests Passed"
-    else
-        echo "   ⚠️ Zephyr Tests Failed/Skipped (Environment issue)"
-        # We don't exit 1 here to avoid breaking workflow on systems without full Zephyr SDK
-    fi
-else
-    echo "   ⚠️ West not found, skipping Zephyr build."
-fi
 
 # 4. Cleanup
 echo -e "\n============================================"

@@ -7,78 +7,6 @@ on:
     branches: [ main, develop ]
 
 jobs:
-  esp32-example:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install pinned PlatformIO Core
-        run: python -m pip install platformio==6.1.19
-      - name: Cache ESP-IDF and toolchain packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.platformio
-          key: ${{ runner.os }}-pio-6.1.19-espressif32-6.10.0-idf-5.4.0
-      - name: Test UART stop-bit ordering, timeout latch and receive overflow
-        run: |
-          cc -std=c11 -Wall -Wextra -Werror examples/esp32_l6362a/test_tx_guard.c examples/esp32_l6362a/main/tx_guard.c examples/esp32_l6362a/main/rx_guard.c -o /tmp/esp32-uart-test
-          /tmp/esp32-uart-test
-      - name: Build native ESP-IDF ESP32-C3 firmware
-        run: platformio run -d examples/esp32_l6362a -e esp32c3
-      - name: Archive ESP32-C3 firmware and memory map
-        uses: actions/upload-artifact@v4
-        with:
-          name: esp32c3-l6362a-espidf
-          if-no-files-found: error
-          include-hidden-files: true
-          path: |
-            examples/esp32_l6362a/.pio/build/esp32c3/firmware.elf
-            examples/esp32_l6362a/.pio/build/esp32c3/iolinki_esp32c3_l6362a.map
-            examples/esp32_l6362a/.pio/build/esp32c3/firmware.bin
-            examples/esp32_l6362a/.pio/build/esp32c3/bootloader.bin
-            examples/esp32_l6362a/.pio/build/esp32c3/partitions.bin
-  stm32u5-example:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Get pinned Zephyr
-        uses: actions/checkout@v4
-        with:
-          repository: zephyrproject-rtos/zephyr
-          ref: c66235fb7346bbe3dbedd1dd76ec5a37a8e8262b
-          path: vendor/zephyr
-      - name: Install target toolchain and west
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi device-tree-compiler ninja-build
-          python3 -m venv /tmp/west-env
-          /tmp/west-env/bin/pip install west
-          /tmp/west-env/bin/pip install -r vendor/zephyr/scripts/requirements.txt
-      - name: Fetch pinned modules
-        working-directory: vendor
-        run: |
-          /tmp/west-env/bin/west init -l zephyr
-          /tmp/west-env/bin/west update cmsis hal_stm32
-      - name: Test receive queue, wake latch and timer wrap
-        run: |
-          cc -std=c99 -Wall -Wextra -Werror samples/stm32u5_tiol112/tests/test_adapter.c -o /tmp/u5-adapter-test
-          /tmp/u5-adapter-test
-      - name: Build STM32U5 firmware
-        working-directory: vendor
-        env:
-          ZEPHYR_TOOLCHAIN_VARIANT: gnuarmemb
-          GNUARMEMB_TOOLCHAIN_PATH: /usr
-        run: /tmp/west-env/bin/west build -b nucleo_u575zi_q ../samples/stm32u5_tiol112 -d ../build-u5
-      - name: Archive U5 firmware
-        uses: actions/upload-artifact@v4
-        with:
-          name: stm32u5-tiol112-zephyr
-          path: |
-            build-u5/zephyr/zephyr.elf
-            build-u5/zephyr/zephyr.hex
-            build-u5/zephyr/zephyr.map
   stm32g0-example:
     runs-on: ubuntu-latest
     steps:
@@ -116,7 +44,7 @@ jobs:
             examples/stm32g0_tiol112/build/reference-device.map
 
   # Required gate: code quality, unit tests, and virtual-master conformance.
-  # Lightweight (no multi-GB Zephyr image), so it is fast and reliable.
+  # Lightweight, so it is fast and reliable.
   docker-validation:
     runs-on: ubuntu-latest
     steps:
@@ -135,67 +63,6 @@ jobs:
           chmod +x run_all_tests_docker.sh
           ./run_all_tests_docker.sh host
 
-  # Non-blocking: the Zephyr simulation build uses a ~10GB image and can exhaust
-  # a free runner. It is intentionally NOT a required check and is allowed to
-  # fail without blocking merges; the Zephyr module build is also verified
-  # locally (tools/build_zephyr_docker.sh).
-  zephyr-validation:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - name: Free up disk space
-        run: |
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/.ghcup
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf /usr/local/lib/node_modules
-          sudo rm -rf /usr/lib/google-cloud-sdk
-          sudo rm -rf /usr/local/share/powershell
-          sudo rm -rf /opt/pipx
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          sudo apt-get clean
-          sudo rm -rf /var/lib/apt/lists/*
-          df -h
-
-      - uses: actions/checkout@v4
-
-      - name: Fix Permissions and Cleanup
-        run: |
-          sudo chmod -R 777 .
-          sudo rm -rf build build_docker build_bare build_quality
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Cache Zephyr Base Image
-        id: cache-zephyr
-        uses: actions/cache@v4
-        with:
-          path: zephyr-base-image.tar
-          key: ${{ runner.os }}-zephyr-base-main-sdk1
-
-      - name: Load Zephyr Base Image
-        if: steps.cache-zephyr.outputs.cache-hit == 'true'
-        run: |
-          docker load -i zephyr-base-image.tar
-          # Free ~10GB immediately: the loaded image lives in Docker now, so the
-          # tar is no longer needed and would otherwise exhaust the runner disk.
-          rm -f zephyr-base-image.tar
-          df -h
-
-      - name: Run Zephyr Tests in Docker
-        run: |
-          chmod +x run_all_tests_docker.sh
-          ./run_all_tests_docker.sh zephyr
-
-      - name: Save Zephyr Base Image for Cache
-        if: steps.cache-zephyr.outputs.cache-hit != 'true'
-        continue-on-error: true
-        run: |
-          docker save iolinki-zephyr-base > zephyr-base-image.tar
-
   sbom-tools:
     runs-on: ubuntu-latest
     steps:
@@ -208,5 +75,5 @@ jobs:
           python3 tools/test_bench_run.py
 
   # Branch protection on develop requires the REAL jobs directly:
-  # docker-validation, zephyr-validation, sbom-tools. Do not reintroduce
-  # echo-only proxy jobs — they let a red job hide behind a green run.
+  # docker-validation, sbom-tools. Do not reintroduce echo-only proxy jobs —
+  # they let a red job hide behind a green run.

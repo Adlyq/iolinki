@@ -27,7 +27,7 @@ physical transceiver implementation.
 
 The core is C99 and can be added as sources to a native IDE project. There is no
 verified EWARM board project yet. Use `include/` as the include path and the core
-source list in `zephyr/CMakeLists.txt`, replacing Zephyr time/platform code with
+source list in `CMakeLists.txt`, replacing the Linux time/platform code with
 your own. Exclude `phy_virtual.c`, Linux sources and `platform_stubs.c` from a
 physical target. If supplying strong platform hooks, exclude `platform.c` too;
 this avoids relying on compiler-specific weak-symbol behavior.
@@ -44,13 +44,6 @@ match the actual MCU. A successful GCC build is not evidence of IAR compatibilit
 Yes: [the portable transceiver driver](hardware/TIOL112.md) handles EN, SIO, baud
 selection, wake-up consumption and NFAULT through explicit MCU callbacks. A
 particular MCU still needs UART/GPIO/timer/NVM integration and physical testing.
-
-## What about ESP32 and STEVAL-IOD003V1?
-
-The board uses L6362A, not TIOL112. The TIOL112 control driver must not be assumed
-compatible with it. The ESP32/L6362A implementation remains planned; verify power,
-pin mapping and timing against the ST schematic before using it. A working UART
-loopback is not a working IO-Link device.
 
 ## Have the examples been physically validated or certified?
 

@@ -51,7 +51,7 @@ The stack is designed to be shallow. The deepest call path typically occurs duri
 
 ### RTOS Stack Guidelines
 
-When using an RTOS (e.g., FreeRTOS, Zephyr), `iolink_process` typically runs in its own thread.
+When using an RTOS (e.g., FreeRTOS), `iolink_device_process` typically runs in its own thread.
 
 - **Stack Size**: 1024 bytes recommended (allow overhead for context switching and platform API calls).
 - **Critical Sections**: The stack uses `iolink_critical_enter/exit`. These should map to fast IRQ-disable routines to minimize latency.

@@ -2,7 +2,7 @@
 
 ## What a port includes
 
-A port is an `iolink_phy_api_t` plus the application that owns the stack context. The host demo and the Zephyr samples for `nucleo_l476rg` and `nucleo_f103rb` are the builds this repository exercises. An IAR EWARM build for STM32G0B1RE plus TI TIOL112 is not verified here. Firmware update and secure boot stay in the device.
+A port is an `iolink_phy_api_t` plus the application that owns the stack context. The host demo is the build this repository exercises. An IAR EWARM build for STM32G0B1RE plus TI TIOL112 is not verified here. Firmware update and secure boot stay in the device.
 
 ## Overview
 
@@ -196,29 +196,6 @@ int main(void) {
 }
 ```
 
-### Zephyr RTOS
-
-```c
-#include <zephyr/kernel.h>
-#include "iolinki/device.h"
-
-static iolink_device_ctx_t g_ctx;
-static const iolink_device_config_t g_cfg = {.phy = g_phy_zephyr};
-
-void iolink_thread(void) {
-    if (iolink_device_init(&g_ctx, &g_cfg) != 0) {
-        return;
-    }
-
-    while (1) {
-        iolink_device_process(&g_ctx);
-        k_sleep(K_MSEC(1));
-    }
-}
-
-K_THREAD_DEFINE(iolink_tid, 1024, iolink_thread, NULL, NULL, NULL, 5, 0, 0);
-```
-
 ### Bare Metal
 
 ```c
@@ -278,7 +255,6 @@ The stack can be tuned via `include/iolinki/config.h`. Override the defaults by 
 - **STM32**: F0, F1, F4, L4, G0 series
 - **NXP**: LPC, Kinetis, i.MX RT series
 - **Nordic**: nRF52, nRF53 series
-- **Espressif**: ESP32, ESP32-C3
 - **Microchip**: SAM, PIC32 series
 
 ## Debugging
@@ -315,7 +291,6 @@ Currently uses `printf()`. Replace with platform-specific logging:
 
 See `src/platform/` for reference implementations:
 - `linux/` - POSIX-based (development)
-- `zephyr/` - Zephyr RTOS
 - `baremetal/` - No-OS example
 
 ## Contributing Ports
