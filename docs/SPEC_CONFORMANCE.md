@@ -41,7 +41,7 @@ suite (including `test_spec_conformance`) is green: `ctest --output-on-failure`.
 | 0x0025 | DetailedDeviceStatus (ArrayT of 3-octet entries, subindex 0..n; Error/Warning only, B.2.22) | PASS | `test_isdu` |
 | 0x0028 | ProcessDataInput (last valid PD-in) | PASS | `test_process_data_input_returns_pd`, `test_isdu` |
 | 0x0029 | ProcessDataOutput (last valid PD-out) | PASS | `test_process_data_output_returns_pd` |
-| read-only objects reject WRITE (0x80 0x23) | PASS | `test_read_only_identification_rejects_write`, `test_isdu_wire` |
+| — | read-only objects reject WRITE (0x80 0x23) | PASS | `test_read_only_identification_rejects_write`, `test_isdu_wire` |
 
 ## Events, Data Storage, Timing, Locks
 
