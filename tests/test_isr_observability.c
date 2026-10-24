@@ -89,6 +89,15 @@ static void timer_b_start(void* user)
     timer_b_starts++;
 }
 
+/* The DLL only arms the FALLBACK transition when the PHY can report a wake-up
+ * (dll_phy_has_wakeup()); provide the hook so the fast-path Fallback command
+ * exercises the full transition + deadline path. */
+static int mock_detect_wakeup(void* user)
+{
+    (void) user;
+    return 0;
+}
+
 static uint8_t int_active(void* user)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) user;
@@ -133,7 +142,9 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     g_phy.response_timer_start = timer_a_start;
     g_phy.response_timer_stop = timer_a_stop;
     g_phy.stack_timer_start = timer_b_start;
+    g_phy.detect_wakeup = mock_detect_wakeup;
     iolink_dll_init(dll, &g_phy);
+    dll->phy_mode = IOLINK_PHY_MODE_SDCI;
     dll->state = IOLINK_DLL_STATE_OPERATE;
     dll->m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     dll->od_width = 1U;
@@ -190,7 +201,9 @@ static void init_type0_ctx(iolink_dll_ctx_t* dll)
     g_phy.response_timer_start = timer_a_start;
     g_phy.response_timer_stop = timer_a_stop;
     g_phy.stack_timer_start = timer_b_start;
+    g_phy.detect_wakeup = mock_detect_wakeup;
     iolink_dll_init(dll, &g_phy);
+    dll->phy_mode = IOLINK_PHY_MODE_SDCI;
     dll->state = IOLINK_DLL_STATE_PREOPERATE;
     dll->m_seq_type = IOLINK_M_SEQ_TYPE_0;
     dll->od_width = 1U;
