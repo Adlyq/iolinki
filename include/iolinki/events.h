@@ -34,13 +34,22 @@ typedef enum
     IOLINK_EVENT_TYPE_ERROR = 2U         /**< Critical failure, operation might be degraded */
 } iolink_event_type_t;
 
-/** @brief Event transmission mode, coded per Table A.20 (bits 6-7). */
+/**
+ * @brief Event transmission mode, coded per Table A.20 (bits 6-7 of the
+ * EventQualifier, A.6.4 / Figure A.24).
+ *
+ * Error and Warning events use the appears/disappears pair; Notification
+ * events are reported once (single shot).
+ */
 typedef enum
 {
-    IOLINK_EVENT_MODE_SINGLE_SHOT = 1U, /**< Event single shot */
-    IOLINK_EVENT_MODE_DISAPPEARS = 2U,  /**< Event disappears */
-    IOLINK_EVENT_MODE_APPEARS = 3U      /**< Event appears */
+    IOLINK_EVENT_MODE_SINGLE_SHOT = 1U, /**< Event single shot (0b01). */
+    IOLINK_EVENT_MODE_DISAPPEARS = 2U,  /**< Event disappears (0b10). */
+    IOLINK_EVENT_MODE_APPEARS = 3U      /**< Event appears (0b11). */
 } iolink_event_mode_t;
+
+/** Number of slots in the Table 58 event memory (Figure A.22). */
+#define IOLINK_EVENT_MEMORY_SLOTS 6U
 
 /*
  * Device vendor-specific communication events.
@@ -57,17 +66,6 @@ typedef enum
 #define IOLINK_EVENT_COMM_TIMEOUT 0x1802U /**< Timeout in communication */
 #define IOLINK_EVENT_COMM_FRAMING 0x1803U /**< Framing error in communication */
 #define IOLINK_EVENT_COMM_TIMING 0x1804U  /**< Timing violation in communication */
-
-/* Application Layer Events (0x5XXX) */
-#define IOLINK_EVENT_APP_TEMP_UNDERFLOW 0x5110U /**< Temperature below operating range */
-#define IOLINK_EVENT_APP_TEMP_OVERFLOW 0x5120U  /**< Temperature above operating range */
-#define IOLINK_EVENT_APP_TEMP_SHOCK 0x5130U     /**< Rapid temperature change */
-
-/* Hardware/Device Events (0x6XXX) */
-#define IOLINK_EVENT_HW_GENERAL_FAULT 0x6000U  /**< General hardware fault */
-#define IOLINK_EVENT_HW_MEMORY_FAULT 0x6310U   /**< Memory error detected */
-#define IOLINK_EVENT_HW_SENSOR_FAULT 0x6320U   /**< Sensor element fault */
-#define IOLINK_EVENT_HW_ACTUATOR_FAULT 0x6330U /**< Actuator element fault */
 
 /*
  * Standardized IO-Link EventCodes for Devices, per V1.1.5 Annex D, Table D.1.
@@ -112,26 +110,57 @@ typedef struct
 {
     uint16_t code;            /**< 16-bit IO-Link EventCode (per spec or device-specific) */
     iolink_event_type_t type; /**< Severity level */
-    iolink_event_mode_t mode; /**< Event mode on the diagnosis channel */
+    iolink_event_mode_t mode; /**< appears / disappears / single shot */
 } iolink_event_t;
+
+/**
+ * @brief Lifecycle tracking for one Error/Warning EventCode (A.6.4, 10.10.2).
+ *
+ * Implements the appears/disappears pairing: a code may only appear once until
+ * its disappearance has been reported, and a disappearance is not issued
+ * within IOLINK_EVENT_MIN_APPEAR_MS of the appearance. A slot outlives the
+ * event condition while the same EventCode/EventQualifier is inside the
+ * IOLINK_EVENT_MIN_REPEAT_MS "not more than once per second" window (10.10.2),
+ * so the next transition is deferred by iolink_events_process(), never
+ * dropped.
+ */
+typedef struct
+{
+    uint16_t code;               /**< EventCode */
+    iolink_event_type_t type;    /**< Severity */
+    uint32_t last_appears_ms;    /**< Time the last "event appears" was queued */
+    uint32_t last_disappears_ms; /**< Time the last "event disappears" was queued */
+    bool appears_valid;          /**< last_appears_ms was set for this slot */
+    bool disappears_valid;       /**< last_disappears_ms was set for this slot */
+    bool present;                /**< Event condition is currently asserted */
+    bool reported;               /**< "appears" is queued for the current period */
+    bool active;                 /**< Slot allocated (live event or repeat cooldown) */
+} iolink_event_pending_t;
 
 /**
  * @brief Events Engine Context
  *
- * Manages the internal FIFO queue of pending events and the Table 58 event
- * memory exposed on the diagnosis communication channel.
+ * Manages the internal queue (ordered by severity) of pending events and the
+ * Table 58 event memory exposed on the diagnosis communication channel.
  */
 typedef struct
 {
-    iolink_event_t queue[IOLINK_EVENT_QUEUE_SIZE]; /**< Event FIFO buffer */
-    uint8_t head;                                  /**< Queue head index */
-    uint8_t tail;                                  /**< Queue tail index */
+    iolink_event_t queue[IOLINK_EVENT_QUEUE_SIZE]; /**< Severity-ordered event buffer */
+    uint32_t queue_id[IOLINK_EVENT_QUEUE_SIZE];    /**< Insertion id of each queue entry */
     uint8_t count;                                 /**< Number of events currently in queue */
+    uint32_t next_id;                              /**< Next queue id (0 is never used) */
+
+    iolink_event_pending_t pending[IOLINK_EVENT_PENDING_MAX]; /**< Lifecycle slots */
+    uint8_t pending_count;                                    /**< Slots with an asserted event */
+    uint32_t dropped_count; /**< Events lost because the queue or pending[] was full */
 
     /* Table 58 event memory: StatusCode(1) + 6 slots * (Qualifier, CodeMSB, CodeLSB). */
-    uint8_t memory[19]; /**< Event memory image (0x00-0x12) */
-    bool frozen;        /**< Memory frozen while the Event flag is set (Table 60) */
-    bool flag;          /**< Event flag (CKS bit 7) */
+    uint8_t memory[19];   /**< Event memory image (0x00-0x12) */
+    bool frozen;          /**< Memory frozen while the Event flag is set (Table 60) */
+    bool flag;            /**< Event flag (CKS bit 7) */
+    uint8_t frozen_slots; /**< Number of slots populated when the memory was frozen */
+    /** Insertion ids of the queue entries presented in the frozen memory. */
+    uint32_t frozen_ids[IOLINK_EVENT_MEMORY_SLOTS];
 } iolink_events_ctx_t;
 
 /**
@@ -146,8 +175,19 @@ void iolink_events_init(iolink_events_ctx_t* ctx);
 /**
  * @brief Trigger a new diagnostic event
  *
- * Adds an event to the internal queue. If the queue is full, the newest event
- * is typically dropped or the oldest overwritten (depending on implementation).
+ * Error and Warning events are queued once as "event appears" and stay active
+ * until iolink_event_clear() is called; Notifications are queued as a single
+ * shot. A repeated trigger of an already asserted EventCode is disregarded
+ * (10.10.2: one root cause leads to one Error or Warning). A trigger that
+ * arrives less than IOLINK_EVENT_MIN_REPEAT_MS after the previous "appears" of
+ * the same code is not queued immediately: iolink_events_process() queues it
+ * as soon as the interval has elapsed.
+ *
+ * The internal queue holds IOLINK_EVENT_QUEUE_SIZE entries. When it is full the
+ * least severe entry is overwritten; only events that are already of lower
+ * severity than every queued entry are discarded. When all
+ * IOLINK_EVENT_PENDING_MAX lifecycle slots are in use the new Error/Warning is
+ * dropped. Both loss paths increment iolink_events_get_dropped_count().
  *
  * @param ctx Event context
  * @param code 16-bit IO-Link EventCode
@@ -156,22 +196,75 @@ void iolink_events_init(iolink_events_ctx_t* ctx);
 void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type);
 
 /**
- * @brief Convert queued Error/Warning events to Event Disappears (Table 101).
+ * @brief Report that a previously triggered Error/Warning event disappeared.
  *
- * Implements the "Clear" action of Restore factory settings: every queued
- * Error/Warning keeps its EventCode and is re-issued with MODE "event
- * disappears", so the Master can withdraw it from its diagnosis cache.
- * Notification entries are discarded. The event memory is rebuilt, the Event
- * flag stays set while entries remain, and the caller still has to reset the
- * ErrorCount counters.
+ * A.6.4: clearing a code that is not currently asserted is ignored, and the
+ * "event disappears" is deferred until IOLINK_EVENT_MIN_APPEAR_MS has elapsed
+ * since the appearance and IOLINK_EVENT_MIN_REPEAT_MS since the previous
+ * "event disappears" of the same code (10.10.2). The deferred disappearance is
+ * queued by iolink_events_process(). If the appearance has not been queued yet
+ * (the code was re-triggered within IOLINK_EVENT_MIN_REPEAT_MS), nothing is
+ * queued: the Master never saw the event, so no withdrawal is required.
  *
- * Limitation: only events still present in the queue can be withdrawn. An
- * Error/Warning that the Master already acknowledged while the fault condition
- * remains active is not re-announced with MODE "disappears".
+ * @param ctx Event context
+ * @param code EventCode that disappeared
+ */
+void iolink_event_clear(iolink_events_ctx_t* ctx, uint16_t code);
+
+/**
+ * @brief Service the deferred A.6.4 lifecycle transitions.
+ *
+ * Emits deferred "event appears" and "event disappears" (each respecting the
+ * IOLINK_EVENT_MIN_REPEAT_MS spacing; a disappearance also respects
+ * IOLINK_EVENT_MIN_APPEAR_MS) and releases lifecycle slots once their repeat
+ * cooldown has elapsed. The device stack
+ * calls this from iolink_dll_process(), so applications that run the DLL state
+ * machine do not need to call it themselves. An application that drives the
+ * event engine without iolink_dll_process() must call this periodically
+ * (for example every 1 ms to 10 ms), otherwise disappearances are never
+ * reported.
+ *
+ * @param ctx Event context
+ */
+void iolink_events_process(iolink_events_ctx_t* ctx);
+
+/**
+ * @brief Withdraw every active Error/Warning (Table 101 "Clear").
+ *
+ * Implements the diagnosis part of Restore factory settings: every asserted
+ * Error/Warning is released and reported with MODE "event disappears" so the
+ * Master can clear its diagnosis, and queued Notifications are discarded. The
+ * disappearances follow the A.6.4/10.10.2 spacing and are therefore queued by
+ * iolink_events_process(). The caller still has to reset the ErrorCount
+ * counters.
  *
  * @param ctx Event context
  */
 void iolink_events_clear_diagnosis(iolink_events_ctx_t* ctx);
+
+/**
+ * @brief Discard all queued events and reset the lifecycle tracking.
+ *
+ * A.6.4: events in the queue are discarded when communication is interrupted
+ * or cancelled. Also clears the event memory and flag.
+ *
+ * @param ctx Event context
+ */
+void iolink_events_reset(iolink_events_ctx_t* ctx);
+
+/**
+ * @brief Number of events lost because the queue or pending[] was full.
+ *
+ * The lifecycle table holds IOLINK_EVENT_PENDING_MAX simultaneously active
+ * events and the queue holds IOLINK_EVENT_QUEUE_SIZE entries. A device that
+ * reports more events than that loses the surplus; this counter makes the loss
+ * observable and lets the application size the tables or raise a diagnostic of
+ * its own.
+ *
+ * @param ctx Event context
+ * @return uint32_t Number of dropped events since init/reset
+ */
+uint32_t iolink_events_get_dropped_count(const iolink_events_ctx_t* ctx);
 
 /**
  * @brief Check if any events are pending for Master retrieval
@@ -210,8 +303,11 @@ uint8_t iolink_events_memory_read(iolink_events_ctx_t* ctx, uint8_t addr);
  *
  * A write to address 0 (StatusCode) confirms the event readout: the Event flag
  * is cleared and the memory is released/marked invalid and rebuilt from any
- * events that remain queued (Table 60 T5). Writes to other addresses are
- * ignored.
+ * events that remain queued (Table 60 T5). The confirmation acknowledges
+ * exactly the queue entries that were presented in the frozen memory, not the
+ * first N entries of the current queue, so an event that became more severe
+ * while the memory was frozen cannot be acknowledged unseen. Writes to other
+ * addresses are ignored.
  *
  * @param ctx Event context
  * @param addr Event memory address
@@ -242,11 +338,12 @@ bool iolink_events_pop(iolink_events_ctx_t* ctx, iolink_event_t* event);
 bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event);
 
 /**
- * @brief Get the highest DeviceStatus implied by the queued events
+ * @brief Get the highest severity level currently in the event queue
  *
- * Maps to IO-Link Device Status (Table B.13): 0 = OK, 1 = Maintenance Required,
- * 2 = Out-of-Specification, 3 = Functional Check, 4 = Failure. Notifications do
- * not change DeviceStatus; a queued "event disappears" is ignored.
+ * Maps to IO-Link Device Status per Table B.13 (0=OK, 1=Maintenance,
+ * 2=Out of Spec, 3=Functional-Check, 4=Failure). The lowest priority value
+ * dominates: Failure (4) beats Functional-Check (3), which beats Maintenance
+ * (1) and Out of Spec (2).
  *
  * @param ctx Event context
  * @return uint8_t Highest severity level (0-4)

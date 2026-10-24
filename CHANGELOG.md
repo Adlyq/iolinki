@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **A.6.4 event lifecycle.** Error and Warning events now follow the
+  appears/disappears pair (Figure A.24): the same EventCode may not appear again
+  before its disappearance has been reported, a disappearance is not issued
+  less than 50 ms after the appearance, and the same EventCode/EventQualifier is
+  not reported more than once per second. A re-trigger inside that second is
+  deferred by `iolink_events_process()` rather than dropped. Notifications stay
+  single shot. New public API: `iolink_event_clear()`,
+  `iolink_events_process()`, `iolink_events_reset()`,
+  `iolink_events_get_dropped_count()` and `iolink_event_classify()`;
+  `iolink_event_t` gained a `mode` field.
+- `IOLINK_EVENT_MIN_APPEAR_MS` (50 ms), `IOLINK_EVENT_MIN_REPEAT_MS` (1 s) and
+  `IOLINK_EVENT_PENDING_MAX` (8) configuration macros.
+- Events lost because the queue or the `IOLINK_EVENT_PENDING_MAX` lifecycle
+  table is full are counted by `iolink_events_get_dropped_count()`, so the loss
+  is observable instead of silent.
+
 ### Changed
 - DetailedDeviceStatus (0x0025) follows Table B.14: subindex access is not
   supported and only subindex 0 returns the complete ArrayT. Restore factory
@@ -109,6 +126,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   underrun, `0x80 0x33` overrun), reserved bits 4-15 are not stored, and the
   NVM record layout is published as `IOLINK_NVM_*` macros so a port can size
   its region (`IOLINK_NVM_MIN_SIZE`).
+- **Event lifecycle and diagnosis memory (A.6.4/10.10.2, Table 60 T3).**
+  Error and Warning events use the appears/disappears pair, spaced by the 1 s
+  rule of 10.10.2; Notifications stay single shot. The Table 58 diagnosis
+  memory is frozen when the Event flag is raised instead of on the first
+  readout, so a readout is always one consistent snapshot, and a StatusCode
+  write acknowledges exactly the entries that were presented (tracked by
+  internal insertion ids). `iolink_dll_process()` now services
+  `iolink_events_process()`, so applications no longer have to call it to get
+  disappearances. DeviceStatus (0x0024) is derived from the active conditions
+  per Table B.13 (0 OK, 1 Maintenance-Required, 2 Out-of-Specification,
+  3 Functional-Check, 4 Failure), and DetailedDeviceStatus (0x0025) lists the
+  active appears set through subindex 0 only (B.2.22 does not support subindex
+  access). Queued events and the lifecycle state are discarded on STARTUP.
 
 ### Fixed
 - Every reset command discards an active Block Parameter transfer (Table 101
@@ -142,10 +172,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   interoperable.
 
 ### Known limitations
-- `iolink_events_clear_diagnosis()` can only withdraw events still held in the
-  event queue; an Error/Warning that the Master already acknowledged while its
-  fault remains active is not re-announced with MODE "disappears". Tracking
-  announced-but-active events is part of the event-lifecycle work.
 - Data Storage images cannot be rolled back across an NVM write failure; the
   parameter manager has no transactional commit. The failure is reported to the
   Master (`0x80 0x41`) and the DS checksum is rebuilt from the actual
@@ -157,6 +183,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   does not by itself raise DS_UPLOAD_REQ; the upload is requested by
   ParamDownloadStore and by Application reset (0x81). The Data Storage upload
   state is not retained in non-volatile memory across a power cycle.
+- An application that drives the event engine without `iolink_dll_process()`
+  must call `iolink_events_process()` periodically, otherwise the deferred
+  appears/disappears transitions and the 1 s spacing are never serviced.
+
+### Removed
+- The non-standard `IOLINK_EVENT_APP_TEMP_*` and `IOLINK_EVENT_HW_*` macros.
+  Use the standardized `IOLINK_EVENTCODE_*` values (Annex D, Table D.1) instead;
+  `IOLINK_EVENTCODE_TEMPERATURE_OVERRUN`/`_UNDERRUN`, `_HARDWARE_FAULT`,
+  `_NVM_LOSS`, `_COMPONENT_MALFUNCTION` and `_PARAMETER_ERROR` cover the same
+  conditions with the spec-defined EventCodes.
 
 ## [2.2.0] - 2026-10-17
 

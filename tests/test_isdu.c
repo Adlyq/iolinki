@@ -92,7 +92,7 @@ static void test_isdu_device_status_read(void** state)
     iolink_isdu_process(&ctx);
 
     assert_int_equal(isdu_collect_response(&ctx, status_buf, sizeof(status_buf)), 1);
-    assert_int_equal(status_buf[0], 4); /* Failure */
+    assert_int_equal(status_buf[0], 4); /* Failure (Table B.13) */
 }
 
 static void test_isdu_detailed_device_status_read(void** state)
@@ -317,12 +317,19 @@ static void test_system_cmd_resets_diagnostics(void** state)
         assert_int_equal(dll.framing_errors, 0U);
         assert_int_equal(dll.timing_errors, 0U);
         if (cmd == IOLINK_CMD_RESTORE_FACTORY_SETTINGS) {
+            /* Table 101 "Clear": the asserted event keeps its published
+               appearance and gains the withdraw pair, and DeviceStatus is
+               cleared by the reset. */
             iolink_event_t event;
-            assert_int_equal(dll.events.count, 1U);
+            assert_int_equal(dll.events.count, 2U);
             assert_true(iolink_events_flag(&dll.events));
-            assert_true(iolink_events_peek(&dll.events, &event));
+            assert_true(iolink_events_pop(&dll.events, &event));
+            assert_int_equal(event.code, 0x1000U);
+            assert_int_equal(event.mode, IOLINK_EVENT_MODE_APPEARS);
+            assert_true(iolink_events_pop(&dll.events, &event));
+            assert_int_equal(event.code, 0x1000U);
             assert_int_equal(event.mode, IOLINK_EVENT_MODE_DISAPPEARS);
-            assert_int_equal(iolink_events_memory_read(&dll.events, 1U) & 0xC0U, 0x80U);
+            assert_int_equal(iolink_events_get_highest_severity(&dll.events), 0U);
         }
         else {
             assert_int_equal(dll.events.count, 0U);
