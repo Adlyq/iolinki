@@ -57,27 +57,6 @@ static void set_baudrate(void* user, iolink_baudrate_t baud)
     }
 }
 
-static int send_data(void* user, const uint8_t* data, size_t len)
-{
-    iolink_tiol112_ctx_t* d = user;
-    if ((d->mode != IOLINK_PHY_MODE_SDCI) || (d->error != 0) || (data == NULL) || (len == 0U) ||
-        (len > INT_MAX))
-        return -1;
-    d->io.set_enable(d->io.user, true);
-    int result = d->io.uart_send_complete(d->io.user, data, len);
-    /* EN low is the receive state, including partial-write and timeout paths. */
-    d->io.set_enable(d->io.user, false);
-    return result;
-}
-
-static int receive_data(void* user, uint8_t* byte)
-{
-    iolink_tiol112_ctx_t* d = user;
-    if ((d->error != 0) || (byte == NULL)) return -1;
-    if (d->mode != IOLINK_PHY_MODE_SDCI) return 0;
-    return d->io.uart_recv(d->io.user, byte);
-}
-
 #if IOLINK_PHY_FEATURE_WAKEUP
 static int detect_wakeup(void* user)
 {
@@ -119,8 +98,6 @@ int iolink_phy_tiol112_init(iolink_tiol112_ctx_t* d, const iolink_tiol112_io_t* 
     d->phy.init = initialize;
     d->phy.set_mode = set_mode;
     d->phy.set_baudrate = set_baudrate;
-    d->phy.send = send_data;
-    d->phy.recv_byte = receive_data;
 #if IOLINK_PHY_FEATURE_WAKEUP
     d->phy.detect_wakeup = detect_wakeup;
 #endif

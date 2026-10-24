@@ -81,17 +81,12 @@ int main(void)
     assert(iolink_phy_l6362a_fault(&d) == -1);
     p->set_baudrate(p->user, IOLINK_BAUDRATE_COM3);
     assert(baud == 230400);
-    uint8_t b = 1;
-    assert(p->send(p->user, &b, 1) == 1 && !en);
-    tx_result = -1;
-    assert(p->send(p->user, &b, 1) == -1 && !en);
-    assert(p->recv_byte(p->user, &b) == 1 && b == 0xa5);
     ol = false;
     assert(iolink_phy_l6362a_overload(&d) == 1);
     assert(p->detect_wakeup(p->user) == 1);
     config_result = -1;
     p->set_mode(p->user, IOLINK_PHY_MODE_SDCI);
-    assert(!en && p->send(p->user, &b, 1) == -1);
+    assert(!en);
     p->set_mode(p->user, IOLINK_PHY_MODE_INACTIVE);
     assert(!en);
     assert(iolink_phy_l6362a_init(NULL, &io) == -1);

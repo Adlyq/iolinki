@@ -333,9 +333,7 @@ static void test_device_od_width_default(void** state)
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     assert_int_equal(dev.ctx.dll.od_width, 2U);
-#endif
 }
 
 int main(void)

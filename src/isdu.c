@@ -535,8 +535,7 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
     /* B.2.5: 0x000D is an ArrayT; every other object handled here is a
        single-element parameter that only exposes subindex 0. Read-only WRITEs
        were already answered above with WRITE_PROTECTED. */
-    if ((ctx->header.subindex != 0U) &&
-        (ctx->header.index != IOLINK_IDX_PROFILE_CHARACTERISTIC)) {
+    if ((ctx->header.subindex != 0U) && (ctx->header.index != IOLINK_IDX_PROFILE_CHARACTERISTIC)) {
         isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
         return;
     }
@@ -811,8 +810,7 @@ static void isdu_trigger_ds_upload_req(iolink_isdu_ctx_t* ctx)
 #if IOLINK_FEATURE_EVENTS
     if (ctx->event_ctx != NULL) {
         iolink_event_trigger((iolink_events_ctx_t*) ctx->event_ctx,
-                             IOLINK_EVENTCODE_DS_UPLOAD_REQUEST,
-                             IOLINK_EVENT_TYPE_NOTIFICATION);
+                             IOLINK_EVENTCODE_DS_UPLOAD_REQUEST, IOLINK_EVENT_TYPE_NOTIFICATION);
     }
 #else
     (void) ctx;
@@ -1147,30 +1145,11 @@ static uint8_t direct_param_encode_pd(uint8_t octets)
 static uint8_t direct_param_mseq_capability(uint8_t m_seq_type, uint8_t od_width)
 {
     uint8_t cap = 0x01U; /* ISDU supported */
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     /* Table A.10 OPERATE code follows the actual OD width (1/2/8/32). */
     if (od_width == 0U) {
         od_width = iolink_mseq_default_od_width(m_seq_type);
     }
     const uint8_t operate_code = iolink_mseq_operate_code(m_seq_type, od_width);
-#else
-    (void) od_width;
-    uint8_t operate_code;
-    switch (m_seq_type) {
-        case IOLINK_M_SEQ_TYPE_1_2:
-            operate_code = 1U; /* 2 OD octets, no PD */
-            break;
-        case IOLINK_M_SEQ_TYPE_1_V:
-            operate_code = 6U; /* 8 OD octets, no PD */
-            break;
-        case IOLINK_M_SEQ_TYPE_2_V:
-            operate_code = 5U; /* OD 2, variable PD */
-            break;
-        default:
-            operate_code = 0U; /* Type 0 / Type 2_x with 1 OD octet */
-            break;
-    }
-#endif
     cap |= (uint8_t) ((operate_code & 0x07U) << 1);
     /* PREOPERATE M-sequence in this stack is TYPE_0 (code 0) -> bits 4-5 = 0. */
     return cap;

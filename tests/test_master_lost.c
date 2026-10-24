@@ -147,7 +147,6 @@ static void test_master_lost_disabled(void** state)
     assert_false(iolink_device_master_lost(&dev.ctx));
 }
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
 /* A frame answered by the data ISR while the main pump is busy proves the
  * master is polling: a long main window must not be counted as a loss. */
 static void test_isr_frame_counts_as_master_activity(void** state)
@@ -197,7 +196,6 @@ static void test_isr_frame_counts_as_master_activity(void** state)
     assert_int_equal(lost_calls, 0);
     assert_int_equal(online_calls, 0);
 }
-#endif
 
 int main(void)
 {
@@ -206,10 +204,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_master_lost_uses_master_cycle_time, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_master_lost_disabled, test_setup, test_teardown),
-#if IOLINK_PHY_FEATURE_ISR_PUMP
         cmocka_unit_test_setup_teardown(test_isr_frame_counts_as_master_activity, test_setup,
                                         test_teardown),
-#endif
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

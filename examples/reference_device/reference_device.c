@@ -19,7 +19,7 @@ static const iolink_device_info_t identity = {
 
 int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy)
 {
-    if ((app == NULL) || (phy == NULL) || (phy->send == NULL) || (phy->recv_byte == NULL)) {
+    if ((app == NULL) || (phy == NULL)) {
         return -1;
     }
     memset(app, 0, sizeof(*app));

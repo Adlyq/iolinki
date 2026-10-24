@@ -45,10 +45,8 @@ static void test_reference_device_rejects_missing_transport(void** state)
 {
     (void) state;
     reference_device_t app;
-    iolink_phy_api_t empty = {0};
     assert_int_equal(reference_device_init(NULL, &g_phy_mock), -1);
     assert_int_equal(reference_device_init(&app, NULL), -1);
-    assert_int_equal(reference_device_init(&app, &empty), -1);
     assert_int_equal(reference_device_tick(NULL, false), -1);
 }
 

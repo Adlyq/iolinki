@@ -108,8 +108,7 @@
 #endif
 
 /* -------------------------------------------------------------------------
- * ISR transport granularity (only used when IOLINK_PHY_FEATURE_ISR_PUMP is 1;
- * the default upstream transport streams octets via phy->send/recv_byte).
+ * ISR transport granularity.
  * These two switches select how the PHY moves data on the ISR path:
  *
  *   RX BYTE  : phy->rx_octet()  - library frames octet by octet
@@ -120,9 +119,9 @@
  * Defaults are BYTE/BYTE (single-octet transceivers, e.g. the L6364). A PHY
  * with whole-frame DMA sets the matching macro to FRAME in the build.
  * ------------------------------------------------------------------------- */
-#define IOLINK_ISR_RX_BYTE  0
+#define IOLINK_ISR_RX_BYTE 0
 #define IOLINK_ISR_RX_FRAME 1
-#define IOLINK_ISR_TX_BYTE  0
+#define IOLINK_ISR_TX_BYTE 0
 #define IOLINK_ISR_TX_FRAME 1
 
 #ifndef IOLINK_ISR_RX_MODE
@@ -133,22 +132,11 @@
 #endif
 
 /**
- * @brief Select the opt-in two-pump ISR transport.
- *
- * 0 (default): upstream streaming transport in src/dll.c (phy->send/recv_byte).
- * 1: opt-in ISR pump, compiled as a conditional-compilation block in src/dll.c. Build with
- *    `-DIOLINK_ISR_PUMP=ON` so CMake propagates this define to all consumers.
- */
-#ifndef IOLINK_PHY_FEATURE_ISR_PUMP
-#define IOLINK_PHY_FEATURE_ISR_PUMP 0
-#endif
-
-/**
  * @brief Require the PHY request_service() hook for ISR-pump replies.
  *
  * 0 (default): a PHY without the hook keeps the legacy direct send from the
- * calling context (streaming/host tests). 1: no fallback; every reply is
- * reported from the ISR, so the board must provide request_service().
+ * calling context (host tests). 1: no fallback; every reply is reported from
+ * the ISR, so the board must provide request_service().
  */
 #ifndef IOLINK_PHY_FEATURE_ISR_TX_ONLY
 #define IOLINK_PHY_FEATURE_ISR_TX_ONLY 0

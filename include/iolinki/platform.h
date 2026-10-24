@@ -38,7 +38,7 @@ extern "C" {
  *
  * The library default (src/platform.c) is a no-op. That is only safe for the
  * default streaming transport in a single-context bare-metal loop. A build with
- * IOLINK_PHY_FEATURE_ISR_PUMP enabled MUST provide a real implementation
+ * the ISR two-pump transport MUST provide a real implementation
  * (e.g. PRIMASK/BASEPRI on Cortex-M) or configure the application lock pair in
  * iolink_device_config_t: the ISR pump shares the mailbox, the ISDU response
  * snapshot and the reply staging buffer with the main pump.

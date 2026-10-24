@@ -14,9 +14,7 @@
  */
 static const iolink_phy_api_t g_hw_phy = {.init = NULL, /* No hardware yet */
                                           .set_mode = NULL,
-                                          .set_baudrate = NULL,
-                                          .send = NULL,
-                                          .recv_byte = NULL};
+                                          .set_baudrate = NULL};
 
 int main(void)
 {

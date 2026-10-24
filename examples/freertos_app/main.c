@@ -36,12 +36,7 @@ void iolink_critical_exit(void)
 }
 
 /* Mock PHY */
-const iolink_phy_api_t g_phy_freertos = {
-    .init = NULL,
-    .set_baudrate = NULL,
-    .send = NULL,      // Implement actual UART send
-    .recv_byte = NULL  // Implement actual UART recv
-};
+const iolink_phy_api_t g_phy_freertos = {.init = NULL, .set_baudrate = NULL};
 
 static iolink_device_ctx_t g_device_ctx;
 static iolink_device_config_t g_device_config = {

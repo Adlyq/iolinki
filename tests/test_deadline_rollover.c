@@ -19,15 +19,9 @@ static int wake(void* user)
     wake_pending = 0;
     return result;
 }
-static int receive(void* user, uint8_t* byte)
-{
-    (void) user;
-    (void) byte;
-    return 0;
-}
 int main(void)
 {
-    const iolink_phy_api_t phy = {.detect_wakeup = wake, .recv_byte = receive};
+    const iolink_phy_api_t phy = {.detect_wakeup = wake};
     iolink_dll_ctx_t ctx;
     iolink_dll_init(&ctx, &phy);
     now = ((uint64_t) UINT32_MAX - 100U) * 1000U;

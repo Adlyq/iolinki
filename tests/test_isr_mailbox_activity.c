@@ -7,7 +7,7 @@
  * last_activity_ms/last_byte_us, so the 1 s inactivity supervision reset a
  * healthy ESTAB_COM link to STARTUP on every timeout tick.
  *
- * Only built in the IOLINK_ISR_PUMP configuration.
+ * ISR two-pump mailbox-activity checks.
  */
 
 #include <stdint.h>
@@ -28,13 +28,6 @@ uint64_t iolink_time_get_us(void)
     return now_us;
 }
 
-static int receive(void* user, uint8_t* byte)
-{
-    (void) user;
-    (void) byte;
-    return 0;
-}
-
 /* A valid Type-0 request: MC + CKT carrying the A.1.6 checksum. */
 static void make_type0_frame(uint8_t mc, uint8_t frame[2])
 {
@@ -45,7 +38,7 @@ static void make_type0_frame(uint8_t mc, uint8_t frame[2])
 
 int main(void)
 {
-    const iolink_phy_api_t phy = {.recv_byte = receive};
+    const iolink_phy_api_t phy = {0};
     iolink_dll_ctx_t ctx;
     iolink_dll_init(&ctx, &phy);
 

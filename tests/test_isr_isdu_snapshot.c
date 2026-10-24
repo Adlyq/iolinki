@@ -9,7 +9,7 @@
  * - A main-context reply is staged and reported through request_service();
  *   the TX hooks are only invoked from the ISR.
  *
- * Only built in the IOLINK_ISR_PUMP configuration.
+ * ISR ISDU-response snapshot checks.
  */
 
 #include <stdint.h>

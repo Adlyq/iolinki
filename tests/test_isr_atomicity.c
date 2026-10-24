@@ -26,8 +26,6 @@
 #include "iolinki/platform.h"
 #include "iolinki/protocol.h"
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
-
 static iolink_dll_ctx_t s_ctx;
 
 /* Platform critical-section observation (overrides the weak no-op default). */
@@ -268,9 +266,8 @@ static void test_reply_staging_uses_platform_critical(void** state)
     (void) state;
     /* Type-0 ISDU read with FlowCTRL IDLE: the ISR fast path leaves it to the
      * main pump, which answers it through dll_send(). */
-    uint8_t frame[2] = {(uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU |
-                                   IOLINK_FLOWCTRL_IDLE),
-                        0x00U};
+    uint8_t frame[2] = {
+        (uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_IDLE), 0x00U};
 
     reset_ctx();
     make_frame(frame, sizeof(frame));
@@ -427,12 +424,3 @@ int main(void)
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
-
-#else /* !IOLINK_PHY_FEATURE_ISR_PUMP */
-
-int main(void)
-{
-    return 0;
-}
-
-#endif /* IOLINK_PHY_FEATURE_ISR_PUMP */

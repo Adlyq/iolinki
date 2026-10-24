@@ -31,15 +31,13 @@
 #include <errno.h>
 #include <string.h>
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP &&                                                       \
-    ((IOLINK_ISR_RX_MODE != IOLINK_ISR_RX_BYTE) || (IOLINK_ISR_TX_MODE != IOLINK_ISR_TX_BYTE))
+#if (IOLINK_ISR_RX_MODE != IOLINK_ISR_RX_BYTE) || (IOLINK_ISR_TX_MODE != IOLINK_ISR_TX_BYTE)
 #error "phy_virtual implements the ISR BYTE hooks only (FRAME mode is not supported)"
 #endif
 
 static int g_fd = -1;
 static const char* g_port_path = NULL;
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
 /* Largest M-sequence the stack can transmit (see IOLINK_M_SEQ_MAX_LEN). */
 #define VIRTUAL_TX_MAX (IOLINK_PD_OUT_MAX_SIZE + IOLINK_OD_MAX_SIZE + 2U)
 
@@ -47,7 +45,6 @@ static iolink_phy_mode_t g_mode = IOLINK_PHY_MODE_INACTIVE;
 static uint8_t g_tx_buf[VIRTUAL_TX_MAX];
 static uint8_t g_tx_len = 0U;
 static uint8_t g_tx_active = 0U;
-#endif
 
 void iolink_phy_virtual_set_port(const char* port)
 {
@@ -93,11 +90,9 @@ static int virtual_init(void* user)
     else {
         printf("[PHY-VIRTUAL] Initialized non-TTY connection to %s (fd=%d)\n", g_port_path, g_fd);
     }
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     g_mode = IOLINK_PHY_MODE_INACTIVE;
     g_tx_len = 0U;
     g_tx_active = 0U;
-#endif
     return 0;
 }
 
@@ -105,12 +100,10 @@ static int virtual_init(void* user)
 static void virtual_set_mode(void* user, iolink_phy_mode_t mode)
 {
     (void) user;
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     /* int_active() only claims service in SDCI, mirroring a real transceiver:
      * in SIO the wake-up path belongs to detect_wakeup() so the pump must not
      * consume the 0x55 marker as a data octet. */
     g_mode = mode;
-#endif
     printf("[PHY-VIRTUAL] Mode set to: %d\n", (int) mode);
 }
 
@@ -121,34 +114,6 @@ static void virtual_set_baudrate(void* user, iolink_baudrate_t baudrate)
     printf("[PHY-VIRTUAL] Baudrate set to: %d\n", (int) baudrate);
 }
 
-/** @brief Write a buffer to the backing file descriptor. */
-static int virtual_send(void* user, const uint8_t* data, size_t len)
-{
-    (void) user;
-
-    if ((g_fd < 0) || (data == NULL)) {
-        return -1;
-    }
-    if (len == 0U) {
-        return 0;
-    }
-    return (int) write(g_fd, data, len);
-}
-
-/** @brief Non-blocking read of a single byte from the backing file descriptor. */
-static int virtual_recv_byte(void* user, uint8_t* byte)
-{
-    (void) user;
-
-    if ((g_fd < 0) || (byte == NULL)) {
-        return 0;
-    }
-
-    ssize_t n = read(g_fd, byte, 1);
-    return (n > 0) ? 1 : 0;
-}
-
-#if IOLINK_PHY_FEATURE_ISR_PUMP
 /** @brief Read one received octet for the ISR framing engine (non-blocking). */
 static int virtual_rx_octet(void* user, uint8_t* data, uint8_t* status)
 {
@@ -238,7 +203,6 @@ static void virtual_request_service(void* user)
 {
     (void) user;
 }
-#endif /* IOLINK_PHY_FEATURE_ISR_PUMP */
 
 #if IOLINK_PHY_FEATURE_WAKEUP
 /** @brief Scan buffered input for a 0x55 wake-up marker byte. */
@@ -261,20 +225,17 @@ static int virtual_detect_wakeup(void* user)
 }
 #endif
 
-static const iolink_phy_api_t g_phy_virtual = {.init = virtual_init,
-                                               .set_mode = virtual_set_mode,
-                                               .set_baudrate = virtual_set_baudrate,
-                                               .send = virtual_send,
-                                               .recv_byte = virtual_recv_byte,
-#if IOLINK_PHY_FEATURE_ISR_PUMP
-                                               .rx_octet = virtual_rx_octet,
-                                               .tx_octet = virtual_tx_octet,
-                                               .tx_done = virtual_tx_done,
-                                               .int_active = virtual_int_active,
-                                               .request_service = virtual_request_service,
-#endif
+static const iolink_phy_api_t g_phy_virtual = {
+    .init = virtual_init,
+    .set_mode = virtual_set_mode,
+    .set_baudrate = virtual_set_baudrate,
+    .rx_octet = virtual_rx_octet,
+    .tx_octet = virtual_tx_octet,
+    .tx_done = virtual_tx_done,
+    .int_active = virtual_int_active,
+    .request_service = virtual_request_service,
 #if IOLINK_PHY_FEATURE_WAKEUP
-                                               .detect_wakeup = virtual_detect_wakeup,
+    .detect_wakeup = virtual_detect_wakeup,
 #endif
 };
 

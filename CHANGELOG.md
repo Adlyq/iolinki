@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed (streaming transport)
+- The upstream streaming transport (`phy->send()`/`phy->recv_byte()`, the
+  `#if IOLINK_PHY_FEATURE_ISR_PUMP` dual-path in `src/dll.c`, and
+  `src/frame.c`) has been removed. The ISR two-pump transport is now the only
+  transport: `iolink_device_process_isr()` frames requests and transmits
+  replies, and `phy->send`/`phy->recv_byte` are gone from `iolink_phy_api_t`.
+  `-DIOLINK_ISR_PUMP=ON` and the streaming-only host demos were dropped.
+
 ### Fixed (feature trimming)
 - `IOLINK_PHY_FEATURE_WAKEUP=0`: a Fallback MasterCommand is acknowledged but
   no longer switches the DLL to SIO. Without `detect_wakeup` the device could

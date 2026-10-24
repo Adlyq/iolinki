@@ -17,11 +17,6 @@ endif()
 # Include directories
 include_directories(include)
 
-# Opt-in two-pump / ISR transport. Default OFF keeps the upstream streaming
-# transport (phy->send/recv_byte). ON enables the ISR path compiled into
-# src/dll.c behind IOLINK_PHY_FEATURE_ISR_PUMP.
-option(IOLINK_ISR_PUMP "Build the opt-in ISR two-pump transport" OFF)
-
 # Feature trimming. The profiles are bundles: when selected they override the
 # individual feature options below. Use the individual options for fine-grained
 # control without a profile. All default to the full stack.
@@ -53,7 +48,6 @@ add_library(iolinki STATIC
     src/phy_l6362a.c
     src/phy_virtual.c
     src/crc.c
-    src/frame.c
     src/dll.c
     src/isdu.c
     src/events.c
@@ -64,9 +58,6 @@ add_library(iolinki STATIC
     src/device.c
 )
 
-if(IOLINK_ISR_PUMP)
-    target_compile_definitions(iolinki PUBLIC IOLINK_PHY_FEATURE_ISR_PUMP=1)
-endif()
 # Only trimmed features are defined; the rest keep the config.h defaults.
 foreach(_iolink_feature
     IOLINK_FEATURE_DATA_STORAGE

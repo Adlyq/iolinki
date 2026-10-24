@@ -88,60 +88,10 @@ static void test_full_stack_lifecycle(void** state)
     assert_true(iolink_events_pending(evt_ctx));
 }
 
-#if !IOLINK_PHY_FEATURE_ISR_PUMP
-static void test_full_stack_timing_enforcement(void** state)
-{
-    (void) state;
-    iolink_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .pd_in_len = 1, .pd_out_len = 1, .min_cycle_time = 50};
-
-    setup_mock_phy();
-    will_return(mock_phy_init, 0);
-    iolink_test_device_t dev;
-    iolink_test_device_init(&dev, &config, NULL);
-
-    move_to_operate_ctx(&dev.ctx);
-
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
-    iolink_device_set_t_ren_limit_us(&dev.ctx, 100);
-    iolink_phy_mock_set_send_delay_us(500);
-
-    uint8_t frame[4] = {0x80, IOLINK_MSEQ_TYPE_1, 0x00, 0x00};
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 4));
-
-    for (int i = 0; i < 4; i++) {
-        mock_phy_feed_byte(frame[i]);
-    }
-    mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 3);
-    will_return(mock_phy_send, 0);
-    test_io_cycle(&dev.ctx);
-
-    for (int i = 0; i < 4; i++) {
-        mock_phy_feed_byte(frame[i]);
-    }
-    mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 3);
-    will_return(mock_phy_send, 0);
-    test_io_cycle(&dev.ctx);
-
-    iolink_dll_stats_t stats;
-    iolink_device_get_dll_stats(&dev.ctx, &stats);
-    assert_true(stats.t_ren_violations > 0U);
-    assert_true(stats.t_cycle_violations > 0U);
-}
-
-#endif /* !IOLINK_PHY_FEATURE_ISR_PUMP */
-
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_full_stack_lifecycle),
-#if !IOLINK_PHY_FEATURE_ISR_PUMP
-        cmocka_unit_test(test_full_stack_timing_enforcement),
-#endif
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

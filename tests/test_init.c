@@ -36,25 +36,9 @@ static void local_mock_phy_set_baudrate(void* user, iolink_baudrate_t baudrate)
     (void) user;
     (void) baudrate;
 }
-static int local_mock_phy_send(void* user, const uint8_t* data, size_t len)
-{
-    (void) user;
-    (void) data;
-    (void) len;
-    return 0;
-}
-static int local_mock_phy_recv_byte(void* user, uint8_t* byte)
-{
-    (void) user;
-    (void) byte;
-    return 0;
-}
-
 static const iolink_phy_api_t local_phy_mock = {.init = local_mock_phy_init,
                                                 .set_mode = local_mock_phy_set_mode,
-                                                .set_baudrate = local_mock_phy_set_baudrate,
-                                                .send = local_mock_phy_send,
-                                                .recv_byte = local_mock_phy_recv_byte};
+                                                .set_baudrate = local_mock_phy_set_baudrate};
 
 static iolink_device_config_t make_device_config(void)
 {

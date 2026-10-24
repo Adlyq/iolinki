@@ -120,7 +120,8 @@ typedef enum
     IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6, /**< od_width exceeds IOLINK_OD_MAX_SIZE */
     IOLINK_DEVICE_INIT_ERR_BAUDRATE = -7,    /**< baudrate_set with an invalid COM */
     IOLINK_DEVICE_INIT_ERR_LOCK_PAIR = -8,   /**< only one of lock/unlock supplied */
-    IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -9,  /**< PD/OD lengths incompatible with the M-sequence type */
+    IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT =
+        -9, /**< PD/OD lengths incompatible with the M-sequence type */
 } iolink_device_init_result_t;
 
 /**
@@ -141,16 +142,14 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
  */
 void iolink_device_process(iolink_device_ctx_t* ctx);
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
 /**
- * @brief ISR-side pump for the opt-in two-pump transport.
+ * @brief ISR-side pump for the two-pump transport.
  *
  * Called from the PHY data interrupt: frames the incoming M-sequence and feeds
  * the reply octets, publishing completed requests to a mailbox consumed by
  * iolink_device_process(). Runs no protocol logic.
  */
 void iolink_device_process_isr(iolink_device_ctx_t* ctx);
-#endif
 
 /**
  * @brief Update the input process data (Device -> Master).

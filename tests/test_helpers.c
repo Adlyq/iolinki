@@ -92,21 +92,6 @@ int mock_phy_send(void* user, const uint8_t* data, size_t len)
     return (int) mock();
 }
 
-int mock_phy_recv_byte(void* user, uint8_t* byte)
-{
-    (void) user;
-    /* Deliver queued octets first, then a pending transport error. */
-    if (g_rxq_tail != g_rxq_head) {
-        *byte = g_rxq[g_rxq_tail++];
-        return 1;
-    }
-    if (g_rx_err_pending) {
-        g_rx_err_pending = 0;
-        return -1;
-    }
-    return 0;
-}
-
 int mock_phy_detect_wakeup(void* user)
 {
     (void) user;
@@ -223,8 +208,6 @@ const iolink_phy_api_t g_phy_mock = {.user = NULL,
                                      .init = mock_phy_init,
                                      .set_mode = mock_phy_set_mode,
                                      .set_baudrate = mock_phy_set_baudrate,
-                                     .send = mock_phy_send,
-                                     .recv_byte = mock_phy_recv_byte,
                                      .detect_wakeup = mock_phy_detect_wakeup,
                                      .set_cq_line = mock_phy_set_cq_line,
                                      .get_voltage_mv = NULL,
@@ -263,7 +246,6 @@ void setup_mock_phy(void)
  * one main-pump pass drains g_rxq directly. */
 void test_io_cycle(iolink_device_ctx_t* ctx)
 {
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     iolink_device_process_isr(ctx);
     while (ctx->dll.isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
@@ -274,9 +256,6 @@ void test_io_cycle(iolink_device_ctx_t* ctx)
     while (ctx->dll.isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
     }
-#else
-    iolink_device_process(ctx);
-#endif
 }
 
 int iolink_test_device_init(iolink_test_device_t* dev, const iolink_config_t* stack,
@@ -323,12 +302,7 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     iolink_m_seq_type_t type = iolink_device_get_m_seq_type(ctx);
     uint8_t pd_out_len = iolink_device_get_pd_out_len(ctx);
     uint8_t pd_in_len = iolink_device_get_pd_in_len(ctx);
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     uint8_t od_w = ctx->dll.od_width; /* actual OPERATE OD width (1/2/8/32) */
-#else
-    /* Streaming keeps upstream's 1/2-octet OD width. */
-    uint8_t od_w = (type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
-#endif
 
     if (type == IOLINK_M_SEQ_TYPE_0) {
         uint8_t idle_mc = 0x00;

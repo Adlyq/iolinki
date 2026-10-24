@@ -44,13 +44,8 @@ static void test_pd_input_output(void** state)
     /* 2. Simulate Master Frame (Type 2_2 READ: MC, CKT [+ OD on the legacy
        streaming transport, which counts an OD octet in every request]).
        Table A.10: TYPE_2_2 carries one OD octet and no PD-out (A.10). */
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     uint8_t frame[2] = {0x80, IOLINK_MSEQ_TYPE_2};
     const int frame_len = 2;
-#else
-    uint8_t frame[3] = {0x80, IOLINK_MSEQ_TYPE_2, 0x00};
-    const int frame_len = 3;
-#endif
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, (size_t) frame_len));
 
     for (int i = 0; i < frame_len; i++) {

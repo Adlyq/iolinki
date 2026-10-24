@@ -52,13 +52,12 @@ typedef enum
  * A PHY reports the physical condition; the device decides how it is reported
  * on the wire (see iolink_dll_fault_map_t in dll.h).
  */
-#define IOLINK_PHY_FAULT_UNDERVOLTAGE  (1U << 0) /**< L+ supply below tolerance */
-#define IOLINK_PHY_FAULT_OVERTEMP      (1U << 1) /**< Transceiver over-temperature */
+#define IOLINK_PHY_FAULT_UNDERVOLTAGE (1U << 0)  /**< L+ supply below tolerance */
+#define IOLINK_PHY_FAULT_OVERTEMP (1U << 1)      /**< Transceiver over-temperature */
 #define IOLINK_PHY_FAULT_SHORT_CIRCUIT (1U << 2) /**< C/Q (or L+) short circuit */
 /** All defined physical fault flags. */
-#define IOLINK_PHY_FAULT_ALL                                                             \
-    (IOLINK_PHY_FAULT_UNDERVOLTAGE | IOLINK_PHY_FAULT_OVERTEMP |                         \
-     IOLINK_PHY_FAULT_SHORT_CIRCUIT)
+#define IOLINK_PHY_FAULT_ALL \
+    (IOLINK_PHY_FAULT_UNDERVOLTAGE | IOLINK_PHY_FAULT_OVERTEMP | IOLINK_PHY_FAULT_SHORT_CIRCUIT)
 
 /**
  * @brief Normalized status bits returned by the raw-octet hooks
@@ -70,7 +69,7 @@ typedef enum
  * "data + check" condition raised at the end of a master frame (octet-count
  * time-out) or on a receive error.
  */
-#define IOLINK_PHY_STATUS_CHK        (1U << 0) /**< Frame-end time-out / receive error */
+#define IOLINK_PHY_STATUS_CHK (1U << 0)        /**< Frame-end time-out / receive error */
 #define IOLINK_PHY_STATUS_DATA_READY (1U << 1) /**< A received octet is available */
 
 /** Valid L+ window for the legacy iolink_phy_api_t.get_voltage_mv() hook, in mV. */
@@ -104,23 +103,6 @@ typedef struct
      * @param baudrate Target COMx speed
      */
     void (*set_baudrate)(void* user, iolink_baudrate_t baudrate);
-
-    /* --- Streaming transport (upstream-compatible default) -----------------
-     * Used when IOLINK_PHY_FEATURE_ISR_PUMP == 0: the main pump calls
-     * send()/recv_byte() directly. PHY drivers written against the upstream
-     * contract keep working unchanged. */
-
-    /**
-     * @brief Send a buffer of data over the line.
-     * @return Number of bytes actually sent, or negative on error.
-     */
-    int (*send)(void* user, const uint8_t* data, size_t len);
-
-    /**
-     * @brief Non-blocking receive of a single byte.
-     * @return 1 if a byte was read, 0 if none pending, negative on error.
-     */
-    int (*recv_byte)(void* user, uint8_t* byte);
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     /**

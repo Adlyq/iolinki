@@ -164,50 +164,10 @@ static void uart_phy_set_baudrate(void* user, iolink_baudrate_t baudrate)
     }
 }
 
-/** @brief Transmit a buffer via polled uart_poll_out(). */
-static int uart_phy_send(void* user, const uint8_t* data, size_t len)
-{
-    (void) user;
-
-    if (g_uart_dev == NULL) {
-        return -1;
-    }
-
-    for (size_t i = 0; i < len; i++) {
-        uart_poll_out(g_uart_dev, data[i]);
-    }
-    return (int) len;
-}
-
-/** @brief Receive one byte from the RX ring buffer, falling back to a polled read. */
-static int uart_phy_recv_byte(void* user, uint8_t* byte)
-{
-    (void) user;
-
-    if (g_uart_dev == NULL) {
-        return -1;
-    }
-
-    /* Prefer the interrupt-fed ring buffer; fall back to polled reads. */
-    if (ring_buf_get(&g_rx_rb, byte, 1) == 1) {
-        return 1;
-    }
-
-    unsigned char c;
-    if (uart_poll_in(g_uart_dev, &c) == 0) {
-        *byte = (uint8_t) c;
-        return 1;
-    }
-
-    return 0;
-}
-
 static const iolink_phy_api_t g_phy_uart = {
     .init = uart_phy_init,
     .set_mode = uart_phy_set_mode,
     .set_baudrate = uart_phy_set_baudrate,
-    .send = uart_phy_send,
-    .recv_byte = uart_phy_recv_byte,
     /*
      * detect_wakeup / set_cq_line / get_voltage_mv / is_short_circuit are left
      * NULL: a plain UART cannot observe or drive the C/Q wake-up pulse, and L+

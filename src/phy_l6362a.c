@@ -55,23 +55,6 @@ static void speed(void* u, iolink_baudrate_t b)
         d->error = d->io.uart_configure(d->io.user, d->baud);
     }
 }
-static int send_data(void* u, const uint8_t* bytes, size_t n)
-{
-    iolink_l6362a_ctx_t* d = u;
-    if (!d->initialized || d->mode != IOLINK_PHY_MODE_SDCI || d->error || !bytes || !n ||
-        n > INT_MAX)
-        return -1;
-    enable(d, true);
-    int r = d->io.uart_send_complete(d->io.user, bytes, n);
-    enable(d, false);
-    return r;
-}
-static int receive(void* u, uint8_t* b)
-{
-    iolink_l6362a_ctx_t* d = u;
-    if (!d->initialized || d->error || !b) return -1;
-    return d->mode == IOLINK_PHY_MODE_SDCI ? d->io.uart_recv(d->io.user, b) : 0;
-}
 #if IOLINK_PHY_FEATURE_WAKEUP
 static int wake(void* u)
 {
@@ -105,8 +88,6 @@ int iolink_phy_l6362a_init(iolink_l6362a_ctx_t* d, const iolink_l6362a_io_t* io)
     d->phy.init = initialize;
     d->phy.set_mode = mode;
     d->phy.set_baudrate = speed;
-    d->phy.send = send_data;
-    d->phy.recv_byte = receive;
 #if IOLINK_PHY_FEATURE_WAKEUP
     d->phy.detect_wakeup = wake;
 #endif

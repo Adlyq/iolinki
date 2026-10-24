@@ -10,7 +10,7 @@
  *  - every consumed frame starts exactly one reply;
  *  - the millisecond timestamp wrap does not reset a healthy link.
  *
- * Only built in the IOLINK_ISR_PUMP configuration.
+ * ISR two-pump transport stability checks.
  */
 
 #include <stdint.h>

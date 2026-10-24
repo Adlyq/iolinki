@@ -40,13 +40,8 @@ static void test_reply_layout_od_first_no_status_octet(void** state)
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
     move_to_operate_ctx(&dev.ctx);
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     uint8_t frame[2] = {0x80, IOLINK_MSEQ_TYPE_2};
     const int frame_len = 2;
-#else
-    uint8_t frame[3] = {0x80, IOLINK_MSEQ_TYPE_2, 0x00};
-    const int frame_len = 3;
-#endif
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, (size_t) frame_len));
 
     uint8_t input[2] = {0x11, 0x22};
@@ -78,13 +73,8 @@ static void test_reply_flags_pd_invalid(void** state)
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
     move_to_operate_ctx(&dev.ctx);
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     uint8_t frame[2] = {0x80, IOLINK_MSEQ_TYPE_2};
     const int frame_len = 2;
-#else
-    uint8_t frame[3] = {0x80, IOLINK_MSEQ_TYPE_2, 0x00};
-    const int frame_len = 3;
-#endif
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, (size_t) frame_len));
 
     /* Mark the input Process Data as invalid; CKS bit 6 must be set. */

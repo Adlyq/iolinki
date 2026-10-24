@@ -12,7 +12,6 @@
 #include "iolinki/device.h"
 #include "iolinki/phy_virtual.h"
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
 /** @brief Run the ISR pump and drain any reply it is transmitting. */
 static void pump_isr(iolink_device_ctx_t* ctx)
 {
@@ -21,7 +20,6 @@ static void pump_isr(iolink_device_ctx_t* ctx)
         iolink_device_process_isr(ctx);
     }
 }
-#endif
 
 int main(int argc, char* argv[])
 {
@@ -92,8 +90,7 @@ int main(int argc, char* argv[])
             return -1;
     }
     printf("Config: M-sequence type %d, PD-in=%u, PD-out=%u, OD=%u\n", type,
-           (unsigned) config.pd_in_len, (unsigned) config.pd_out_len,
-           (unsigned) config.od_width);
+           (unsigned) config.pd_in_len, (unsigned) config.pd_out_len, (unsigned) config.od_width);
 
     printf("\n");
 
@@ -116,14 +113,10 @@ int main(int argc, char* argv[])
     /* Simulate periodic processing and PD exchange */
 
     while (1) {
-#if IOLINK_PHY_FEATURE_ISR_PUMP
         pump_isr(&ctx);
-#endif
         iolink_device_process(&ctx);
-#if IOLINK_PHY_FEATURE_ISR_PUMP
         /* Send a reply staged by a main-context handler (request_service). */
         pump_isr(&ctx);
-#endif
 
         /* Check for output data (Master -> Device) */
         uint8_t pd_buffer[32];

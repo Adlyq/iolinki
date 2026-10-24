@@ -151,7 +151,6 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.pd_in_len_max = ctx->dll.pd_in_len;
     ctx->dll.pd_out_len_max = ctx->dll.pd_out_len;
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     /* Two-pump transport: the ISR frames requests and transmits the pre-staged
      * cyclic reply, so the DLL needs the OD width and whether the bound PHY can
      * send a staged reply from ISR context. The OD width defaults to upstream's
@@ -166,7 +165,6 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.od_len = ctx->dll.od_width;
     ctx->dll.cyclic_reply_precached =
         (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && dll_phy_has_tx(&ctx->dll);
-#endif
 
     /* Adopt the configured operating COM (and its timing limits) before the
      * minimum cycle time is derived from the baudrate. */
@@ -184,7 +182,6 @@ size_t iolink_device_ctx_size(void)
     return sizeof(iolink_device_ctx_t);
 }
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
 /** @brief Enforce the fixed per-type PD/OD layout of Annex A (ISR transport).
  *
  * Figures A.7-A.13 define a fixed number of PD and OD octets per M-sequence
@@ -240,7 +237,6 @@ static int device_validate_fixed_mseq(const iolink_config_t* stack, uint8_t od)
     }
     return IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT;
 }
-#endif /* IOLINK_PHY_FEATURE_ISR_PUMP */
 
 /** @brief Validate the stack configuration before touching the context or PHY. */
 static int device_config_validate(const iolink_device_config_t* config)
@@ -275,14 +271,12 @@ static int device_config_validate(const iolink_device_config_t* config)
         return IOLINK_DEVICE_INIT_ERR_OD_WIDTH;
     }
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     {
         const int layout_err = device_validate_fixed_mseq(stack, od);
         if (layout_err != IOLINK_DEVICE_INIT_OK) {
             return layout_err;
         }
     }
-#endif
 
     if (stack->baudrate_set && ((uint32_t) stack->baudrate > (uint32_t) IOLINK_BAUDRATE_COM3)) {
         return IOLINK_DEVICE_INIT_ERR_BAUDRATE;
@@ -351,12 +345,10 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
 #endif
     device_apply_stack_config(ctx);
     ctx->master_lost_last = ctx->dll.master_lost;
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     /* Seed the pre-staged cyclic variants so the first ISR reply is complete. */
     if (ctx->dll.cyclic_reply_precached) {
         iolink_dll_prepare_cyclic_reply(&ctx->dll);
     }
-#endif
 
     if ((config->app_callbacks != NULL) && (config->app_callbacks->on_startup != NULL)) {
         config->app_callbacks->on_startup();
@@ -384,22 +376,18 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
         return;
     }
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     /* ST-style time partition: when the platform provides the Timer B tick
      * hook, the main service window only runs after a tick authorises it. */
     if ((ctx->dll.phy != NULL) && (ctx->dll.phy->stack_timer_start != NULL) &&
         (iolink_dll_can_run_user_code(&ctx->dll) == 0U)) {
         return;
     }
-#endif
 
     iolink_dll_process(&ctx->dll);
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     /* State callbacks triggered from the data ISR are deferred to this window,
      * in transition order (a burst of frames cannot overwrite an earlier one). */
     iolink_dll_flush_state_callbacks(&ctx->dll);
-#endif
 
     if ((ctx->config != NULL) && (ctx->config->app_callbacks != NULL)) {
         if (ctx->dll.state != IOLINK_DLL_STATE_OPERATE) {
@@ -468,11 +456,9 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
                 iolink_critical_exit();
             }
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
             if (ctx->dll.cyclic_reply_precached) {
                 iolink_dll_prepare_cyclic_reply(&ctx->dll);
             }
-#endif
         }
 #endif
     }
@@ -493,7 +479,6 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     if ((ctx == NULL) || (data == NULL) || (len > IOLINK_PD_IN_MAX_SIZE)) {
         return -1;
     }
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     /* Annex A fixed types have an immutable PD-in length. TYPE_2_V may vary
      * within the configured maximum; both cases must not silently change the
      * reply length away from the advertised layout. */
@@ -502,13 +487,11 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
             return -1;
         }
     }
-    else if ((ctx->dll.m_seq_type != IOLINK_M_SEQ_TYPE_0) &&
-             (len != ctx->dll.pd_in_len_max)) {
+    else if ((ctx->dll.m_seq_type != IOLINK_M_SEQ_TYPE_0) && (len != ctx->dll.pd_in_len_max)) {
         /* Fixed Annex A type: the PD-in width is immutable. TYPE_0 carries no
          * PD at all, so a generic update is harmless and stays permissive. */
         return -1;
     }
-#endif
 
     if ((ctx->config != NULL) && (ctx->config->lock != NULL)) {
         ctx->config->lock(ctx->config->user);
@@ -533,19 +516,16 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
         iolink_critical_exit();
     }
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     /* Rebuild the pre-staged cyclic reply variants (double buffered) so the ISR
      * can answer the next cyclic frame without the main loop in the path. */
     if (ctx->dll.cyclic_reply_precached) {
         iolink_dll_prepare_cyclic_reply(&ctx->dll);
     }
-#endif
 
     return 0;
 #endif /* IOLINK_APP_PD_INPUT_CALLBACK */
 }
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
 void iolink_device_process_isr(iolink_device_ctx_t* ctx)
 {
     if (ctx == NULL) {
@@ -553,7 +533,6 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx)
     }
     iolink_dll_process_isr(&ctx->dll);
 }
-#endif
 
 int iolink_device_pd_output_read(iolink_device_ctx_t* ctx, uint8_t* data, size_t len)
 {
@@ -676,17 +655,10 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx, uint8_t pd_in_len, uin
     if (ctx == NULL) {
         return -1;
     }
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     /* Fixed Annex A types have an immutable PD layout; only TYPE_2_V varies. */
     if (ctx->dll.m_seq_type != IOLINK_M_SEQ_TYPE_2_V) {
         return -2;
     }
-#else
-    if ((ctx->dll.m_seq_type != IOLINK_M_SEQ_TYPE_1_V) &&
-        (ctx->dll.m_seq_type != IOLINK_M_SEQ_TYPE_2_V)) {
-        return -2;
-    }
-#endif
     if ((pd_in_len > ctx->dll.pd_in_len_max) || (pd_out_len > ctx->dll.pd_out_len_max)) {
         return -1;
     }

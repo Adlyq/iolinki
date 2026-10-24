@@ -9,16 +9,11 @@ comments or docs disagree with it, the PDF wins.
 ## Commands
 
 ```bash
-# Default build (upstream streaming transport) + unit tests
+# Default build (ISR two-pump transport) + unit tests
 cmake -B build && cmake --build build && (cd build && ctest --output-on-failure)
 
 # One test
 ctest -R test_dll
-
-# Opt-in two-pump / ISR transport (same src/dll.c, #if-guarded)
-cmake -B build_isr -DIOLINK_ISR_PUMP=ON && cmake --build build_isr
-# The test suite is transport-agnostic via the warp in tests/test_helpers.c:
-(cd build_isr && ctest)
 
 # Quality gate (strict -Werror build, cppcheck, clang-format, MISRA, Doxygen)
 ./check_quality.sh
@@ -31,21 +26,18 @@ cmake -B build_isr -DIOLINK_ISR_PUMP=ON && cmake --build build_isr
   install `libcmocka-dev`.
 - `tests/test_spec_conformance.c` pins the mandatory ISDU conformance behaviour
   (reserved indices, ErrorCount, ProductURI, ProcessDataInput/Output, read-only
-  WRITE rejection, Parameter lock, string fixedLength). The full suite is green
-  in both transports.
-- The two-pump path is **opt-in**: default `src/dll.c` is upstream's streaming
-  transport (`phy->send/recv_byte`). `-DIOLINK_ISR_PUMP=ON` selects
-  the ISR blocks in `src/dll.c` and the hooks in `phy.h`/`dll.h`. Keep changes to
-  `src/dll.c`/`src/frame.c` minimal so upstream merges stay clean.
+  WRITE rejection, Parameter lock, string fixedLength).
+- The stack uses a single ISR two-pump transport: the data interrupt frames
+  requests and transmits replies (`src/dll.c`, `iolink_device_process_isr()`),
+  while the main loop runs the protocol logic. `src/frame.c` and the upstream
+  streaming transport (`phy->send`/`phy->recv_byte`) were removed.
 
 ## Architecture
 
 - Layered: Application (`include/iolinki/application.h`) -> DLL (`dll.c`) ->
   PHY vtable (`include/iolinki/phy.h`).
-- **Default transport**: streaming. The main pump calls `phy->recv_byte()` /
-  `phy->send()`; `src/frame.c` encodes/decodes bounded M-sequences.
-- **Opt-in transport** (`IOLINK_PHY_FEATURE_ISR_PUMP`): the ISR frames requests
-  and transmits pre-staged cyclic replies (`src/dll.c`, `#if`,
+- **Transport** (`IOLINK_PHY_FEATURE_ISR_PUMP` removed; always on): the ISR
+  frames requests and transmits pre-staged cyclic replies (`src/dll.c`,
   `iolink_device_process_isr()`), for low-latency t_A replies on single-octet
   transceivers. Main-context replies are staged and reported through the
   optional `phy->request_service()` hook (the TX hooks then run only in the
@@ -80,5 +72,4 @@ cmake -B build_isr -DIOLINK_ISR_PUMP=ON && cmake --build build_isr
 
 - `origin` is the personal fork, `upstream` is `w1ne/iolinki`. This branch is
   converged onto `upstream/develop` so that upstream changes merge cleanly: new
-  work should be additive (prefer new files / `#if IOLINK_PHY_FEATURE_ISR_PUMP`
-  blocks over rewriting upstream files).
+  work should be additive (prefer new files over rewriting upstream files).

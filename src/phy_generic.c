@@ -41,25 +41,6 @@ static void generic_set_baudrate(void* user, iolink_baudrate_t baudrate)
     /* Template: configure UART speed for COM1/2/3. */
 }
 
-/** @brief Template hook to transmit data over the C/Q line. */
-static int generic_send(void* user, const uint8_t* data, size_t len)
-{
-    (void) user;
-    (void) data;
-    (void) len;
-    /* Template: transmit data over C/Q line. */
-    return -1;
-}
-
-/** @brief Template hook for non-blocking single-byte receive. */
-static int generic_recv_byte(void* user, uint8_t* byte)
-{
-    (void) user;
-    (void) byte;
-    /* Template: non-blocking receive. */
-    return 0;
-}
-
 #if IOLINK_PHY_FEATURE_WAKEUP
 /** @brief Template hook to detect the 80us wake-up pulse on the C/Q line. */
 static int generic_detect_wakeup(void* user)
@@ -101,8 +82,6 @@ static bool generic_is_short_circuit(void* user)
 static const iolink_phy_api_t g_phy_generic = {.init = generic_init,
                                                .set_mode = generic_set_mode,
                                                .set_baudrate = generic_set_baudrate,
-                                               .send = generic_send,
-                                               .recv_byte = generic_recv_byte,
 #if IOLINK_PHY_FEATURE_WAKEUP
                                                .detect_wakeup = generic_detect_wakeup,
 #endif

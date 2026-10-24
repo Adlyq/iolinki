@@ -6,7 +6,7 @@
  *  - an eager frame that fails checksum/type validation is counted;
  *  - a valid eager frame still produces a reply.
  *
- * Only built in the IOLINK_ISR_PUMP configuration.
+ * ISR two-pump transport observability.
  */
 
 #include <stdint.h>

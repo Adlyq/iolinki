@@ -85,12 +85,6 @@ static void test_driver_modes_and_turnaround(void** state)
     assert_false(board.enabled);
     phy->set_baudrate(phy->user, IOLINK_BAUDRATE_COM3);
     assert_int_equal(board.baud, 230400);
-    uint8_t data = 0x55;
-    assert_int_equal(phy->send(phy->user, &data, 1), 1);
-    assert_false(board.enabled);
-    board.result = -2;
-    assert_int_equal(phy->send(phy->user, &data, 1), -2);
-    assert_false(board.enabled);
     board.wake = true;
     assert_int_equal(phy->detect_wakeup(phy->user), 1);
     assert_int_equal(phy->detect_wakeup(phy->user), 0);
@@ -99,17 +93,14 @@ static void test_driver_modes_and_turnaround(void** state)
     board.fault_high = false;
     assert_int_equal(iolink_phy_tiol112_fault(&driver), 1);
     phy->set_mode(phy->user, IOLINK_PHY_MODE_INACTIVE);
-    assert_int_equal(phy->send(phy->user, &data, 1), -1);
     board.init_result = -3;
     assert_int_equal(phy->init(phy->user), -3);
     phy->set_mode(phy->user, IOLINK_PHY_MODE_SDCI);
-    assert_int_equal(phy->send(phy->user, &data, 1), -1);
     assert_false(board.enabled);
     board.init_result = 0;
     assert_int_equal(phy->init(phy->user), 0);
     board.config_result = -4;
     phy->set_mode(phy->user, IOLINK_PHY_MODE_SDCI);
-    assert_int_equal(phy->send(phy->user, &data, 1), -1);
     assert_false(board.enabled);
 }
 

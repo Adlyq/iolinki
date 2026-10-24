@@ -32,7 +32,7 @@ int main(void)
     LOG_INF("Starting IO-Link Zephyr Demo");
 
 #ifdef CONFIG_IOLINK_PHY_VIRTUAL
-    const char *port = NULL;
+    const char* port = NULL;
 
     port = getenv("IOLINK_PORT");
     if (port) {
@@ -53,13 +53,13 @@ int main(void)
     config.pd_in_len = 2;  /* Default */
     config.pd_out_len = 2; /* Default */
 
-    const char *m_seq_env = getenv("IOLINK_M_SEQ_TYPE");
+    const char* m_seq_env = getenv("IOLINK_M_SEQ_TYPE");
     if (m_seq_env) {
         config.m_seq_type = (iolink_m_seq_type_t) atoi(m_seq_env);
         LOG_INF("Configured M-Sequence Type: %d", config.m_seq_type);
     }
 
-    const char *pd_len_env = getenv("IOLINK_PD_LEN");
+    const char* pd_len_env = getenv("IOLINK_PD_LEN");
     if (pd_len_env) {
         int len = atoi(pd_len_env);
         config.pd_in_len = (uint8_t) len;
@@ -68,10 +68,10 @@ int main(void)
     }
 
     /* Initialize PHY */
-    const iolink_phy_api_t *phy_api = NULL;
+    const iolink_phy_api_t* phy_api = NULL;
 
 #ifdef CONFIG_IOLINK_PHY_UART
-    const struct device *uart_dev = DEVICE_DT_GET(DT_ALIAS(iolink_uart));
+    const struct device* uart_dev = DEVICE_DT_GET(DT_ALIAS(iolink_uart));
     if (!device_is_ready(uart_dev)) {
         LOG_ERR("UART device not ready");
         return -1;
@@ -87,23 +87,6 @@ int main(void)
     LOG_INF("Using Virtual PHY");
 #endif
 
-#ifdef CONFIG_IOLINK_DEMO_MASTER
-    LOG_INF("Running as DEMO MASTER");
-
-    while (1) {
-        /* Send Master Command: Read Direct Parameter 1 (Index 0) */
-        /* Send Master Command: Read Direct Parameter 1 (Index 0) */
-        /* MC = 0x80, CKT = 0x00, CK = 0x24 */
-        uint8_t frame[] = {0x80, 0x24};
-        phy_api->send(phy_api->user, frame, 2);
-
-        uint8_t rx;
-        while (phy_api->recv_byte(phy_api->user, &rx) > 0) {
-            LOG_INF("Master RX: 0x%02X", rx);
-        }
-
-        k_msleep(2000);
-    }
 #else
     iolink_device_ctx_t ctx;
     iolink_device_config_t dev_config = {.phy = *phy_api, .stack = config};

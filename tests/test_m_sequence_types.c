@@ -28,8 +28,6 @@
 #include "iolinki/crc.h"
 #include "test_helpers.h"
 
-#if IOLINK_PHY_FEATURE_ISR_PUMP
-
 typedef struct
 {
     iolink_m_seq_type_t type;
@@ -41,14 +39,10 @@ typedef struct
 /* Figures A.7 (1_2), A.8 (1_V), A.9 (2_1), A.10 (2_2), A.11 (2_3),
  * A.12 (2_4) and A.13 (2_5). */
 static const fixed_case_t g_cases[] = {
-    {IOLINK_M_SEQ_TYPE_1_2, 2U, 0U, 0U},
-    {IOLINK_M_SEQ_TYPE_1_V, 8U, 0U, 0U},
-    {IOLINK_M_SEQ_TYPE_1_V, 32U, 0U, 0U},
-    {IOLINK_M_SEQ_TYPE_2_1, 1U, 1U, 0U},
-    {IOLINK_M_SEQ_TYPE_2_2, 1U, 2U, 0U},
-    {IOLINK_M_SEQ_TYPE_2_3, 1U, 0U, 1U},
-    {IOLINK_M_SEQ_TYPE_2_4, 1U, 0U, 2U},
-    {IOLINK_M_SEQ_TYPE_2_5, 1U, 1U, 1U},
+    {IOLINK_M_SEQ_TYPE_1_2, 2U, 0U, 0U},  {IOLINK_M_SEQ_TYPE_1_V, 8U, 0U, 0U},
+    {IOLINK_M_SEQ_TYPE_1_V, 32U, 0U, 0U}, {IOLINK_M_SEQ_TYPE_2_1, 1U, 1U, 0U},
+    {IOLINK_M_SEQ_TYPE_2_2, 1U, 2U, 0U},  {IOLINK_M_SEQ_TYPE_2_3, 1U, 0U, 1U},
+    {IOLINK_M_SEQ_TYPE_2_4, 1U, 0U, 2U},  {IOLINK_M_SEQ_TYPE_2_5, 1U, 1U, 1U},
 };
 
 static uint8_t case_type_bits(iolink_m_seq_type_t type)
@@ -75,10 +69,8 @@ static void feed_request(uint8_t* frame, size_t len, uint8_t type_bits)
 
 static void run_fixed_case(const fixed_case_t* c)
 {
-    iolink_config_t config = {.m_seq_type = c->type,
-                              .pd_in_len = c->pd_in,
-                              .pd_out_len = c->pd_out,
-                              .od_width = c->od};
+    iolink_config_t config = {
+        .m_seq_type = c->type, .pd_in_len = c->pd_in, .pd_out_len = c->pd_out, .od_width = c->od};
     iolink_test_device_t dev;
     const uint8_t type_bits = case_type_bits(c->type);
     uint8_t pd_in[IOLINK_PD_IN_MAX_SIZE] = {0};
@@ -171,39 +163,26 @@ static void test_fixed_layout_mismatch_rejected(void** state)
 
     /* TYPE_2_2 needs PD-in=2 and PD-out=0. */
     {
-        iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_2,
-                                  .pd_in_len = 2,
-                                  .pd_out_len = 2};
+        iolink_config_t config = {
+            .m_seq_type = IOLINK_M_SEQ_TYPE_2_2, .pd_in_len = 2, .pd_out_len = 2};
         assert_int_equal(iolink_test_device_init(&dev, &config, NULL),
                          IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT);
     }
     /* TYPE_1_V is OD-only (8/32), not a variable-PD type. */
     {
-        iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_1_V,
-                                  .pd_in_len = 8,
-                                  .pd_out_len = 8};
+        iolink_config_t config = {
+            .m_seq_type = IOLINK_M_SEQ_TYPE_1_V, .pd_in_len = 8, .pd_out_len = 8};
         assert_int_equal(iolink_test_device_init(&dev, &config, NULL),
                          IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT);
     }
 }
 
-#else /* !IOLINK_PHY_FEATURE_ISR_PUMP */
-
-/* The legacy streaming transport keeps upstream's generic layout and is
- * intentionally not exercised here. */
-
-#endif
-
 int main(void)
 {
-#if IOLINK_PHY_FEATURE_ISR_PUMP
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_fixed_types_byte_exact),
         cmocka_unit_test(test_type_1_1_rejected),
         cmocka_unit_test(test_fixed_layout_mismatch_rejected),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
-#else
-    return 0;
-#endif
 }
