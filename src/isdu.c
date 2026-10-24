@@ -590,6 +590,7 @@ static bool isdu_object_lookup(uint16_t index, isdu_object_desc_t* desc)
         case IOLINK_IDX_ERROR_COUNT:
         case IOLINK_IDX_DEVICE_STATUS:
         case IOLINK_IDX_PROCESS_DATA_INPUT:
+        case IOLINK_IDX_PROCESS_DATA_OUTPUT:
             desc->max_subindex = 0U;
             desc->dynamic_array = false;
             return true;
@@ -643,6 +644,14 @@ static isdu_request_check_t isdu_validate_request(const iolink_isdu_ctx_t* ctx)
             /* Vendor error statistics are a single-element object. */
             return (subindex == 0U) ? ISDU_REQUEST_VALID : ISDU_REQUEST_SUBINDEX_NOT_AVAIL;
         }
+        return ISDU_REQUEST_INDEX_NOT_AVAIL;
+    }
+
+    /* B.2.5/Table B.8: ProfileCharacteristic is conditional on the associated
+       Profile. Without an implemented Profile the index does not exist, so
+       C.2.3 applies to every service and subindex, not only to reads. */
+    if ((index == IOLINK_IDX_PROFILE_CHARACTERISTIC) &&
+        (isdu_device_info(ctx)->profile_characteristic == 0U)) {
         return ISDU_REQUEST_INDEX_NOT_AVAIL;
     }
 
@@ -711,6 +720,8 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
                 case IOLINK_IDX_FIRMWARE_REVISION:
                 case IOLINK_IDX_ERROR_COUNT:
                 case IOLINK_IDX_DEVICE_STATUS:
+                case IOLINK_IDX_PROCESS_DATA_INPUT:
+                case IOLINK_IDX_PROCESS_DATA_OUTPUT:
                     ctx->response_buf[0] = 0x80U;
                     ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
                     ctx->response_len = 2U;
@@ -729,6 +740,12 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
                Direct Parameter Page 1 (0x07-0x0B), not in an ISDU index. */
 
         case IOLINK_IDX_PROFILE_CHARACTERISTIC:
+            /* B.2.5/Table B.8: read-only ArrayT of UIntegerT16 holding the
+               ProfileIdentifiers, conditional on the associated Profile. This
+               stack exposes a single element, so subindex 0 (whole array) and
+               subindex 1 (first element) carry the same two octets; the range
+               is enforced by isdu_validate_request() (C.2.4) and a missing
+               Profile is answered with IDX_NOTAVAIL there (C.2.3). */
             ctx->response_buf[0] = (uint8_t) (info->profile_characteristic >> 8);
             ctx->response_buf[1] = (uint8_t) (info->profile_characteristic & 0xFF);
             ctx->response_len = 2U;
@@ -875,29 +892,36 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
             break;
 
         case IOLINK_IDX_PROCESS_DATA_INPUT:
-            /* Read-only: Returns PD Input descriptor (1 byte: PD length) */
-            if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
-                ctx->response_buf[0] = 0x80U;
-                ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
-                ctx->response_len = 2U;
-                ctx->response_idx = 0U;
-                ctx->state = ISDU_STATE_RESPONSE_READY;
-                return;
-            }
-            /* Return the actual configured PD Input length (1 byte). */
-            {
-                uint8_t pd_in = 0U;
-                uint8_t pd_out = 0U;
-                if (ctx->dll_ctx != NULL) {
-                    iolink_dll_get_pd_length((const iolink_dll_ctx_t*) ctx->dll_ctx, &pd_in,
-                                             &pd_out);
+        case IOLINK_IDX_PROCESS_DATA_OUTPUT: {
+            /* Table B.8/B.2.23/B.2.24: read-only data object carrying the
+               Process Data of the PDin/PDout channel, with the length and
+               structure of that channel. The last Process Data snapshot is
+               served as-is: its validity is signalled by the CKS PD-status bit
+               (A.1.5), and neither B.2.23 nor B.2.24 defines a different
+               answer while the PD status is invalid or before the first PD
+               cycle. The reference ST stack serves the buffer, which is also
+               the fallback taken here; a device without PD answers with an
+               empty positive response. */
+            const bool input = (ctx->header.index == IOLINK_IDX_PROCESS_DATA_INPUT);
+            uint8_t len = 0U;
+
+            if (ctx->dll_ctx != NULL) {
+                const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
+                const uint8_t* src = input ? dll->pd_in : dll->pd_out;
+                const size_t cap = input ? sizeof(dll->pd_in) : sizeof(dll->pd_out);
+                len = input ? dll->pd_in_len_current : dll->pd_out_len_current;
+                if ((size_t) len > cap) {
+                    len = (uint8_t) cap;
                 }
-                ctx->response_buf[0] = pd_in;
+                if (len > 0U) {
+                    (void) memcpy(ctx->response_buf, src, len);
+                }
             }
-            ctx->response_len = 1U;
+            ctx->response_len = len;
             ctx->response_idx = 0U;
             ctx->state = ISDU_STATE_RESPONSE_READY;
             return;
+        }
 
         case IOLINK_IDX_DEVICE_STATUS:
             ctx->response_buf[0] =

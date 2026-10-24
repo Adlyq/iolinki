@@ -683,7 +683,7 @@ static void test_isdu_location_tag_read_write(void** state)
     assert_memory_equal(readback, test_tag, tag_len);
 }
 
-static void test_isdu_pdin_descriptor_read(void** state)
+static void test_isdu_process_data_read(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
@@ -692,34 +692,341 @@ static void test_isdu_pdin_descriptor_read(void** state)
     iolink_params_init();
     iolink_isdu_init(&ctx);
 
-    /* Wire a DLL context with a configured PD-in length of 3 so the descriptor
-       reflects the real runtime length rather than a hardcoded constant. */
-    assert_int_equal(iolink_dll_set_pd_length(&dll, 3, 0), 0);
+    /* Wire a DLL context holding PDin of 3 octets and PDout of 1 octet. */
+    assert_int_equal(iolink_dll_set_pd_length(&dll, 3, 1), 0);
+    dll.pd_in[0] = 0xAAU;
+    dll.pd_in[1] = 0xBBU;
+    dll.pd_in[2] = 0xCCU;
+    /* The PD status flag is reported through the CKS bit (A.1.5) and does not
+       gate 0x0028; the buffer is served either way (see the invalid-PD test). */
+    dll.pd_valid = true;
+    dll.pd_out[0] = 0x11U;
     ctx.dll_ctx = &dll;
 
-    /* Read Process Data Input descriptor (Index 0x0028) */
+    /* Read ProcessDataInput (Index 0x0028): Process Data of the PDin channel. */
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00), 1);
-
     iolink_isdu_process(&ctx);
 
-    /* Verify response reports the configured PD-in length */
-    uint8_t byte;
-    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
-    assert_int_equal(byte, 3);
+    assert_int_equal(ctx.response_len, 3);
+    uint8_t pdi[3];
+    assert_int_equal(isdu_collect_response(&ctx, pdi, sizeof(pdi)), 3);
+    assert_int_equal(pdi[0], 0xAA);
+    assert_int_equal(pdi[1], 0xBB);
+    assert_int_equal(pdi[2], 0xCC);
 
-    /* Test write protection */
-    iolink_isdu_init(&ctx);
+    /* Read ProcessDataOutput (Index 0x0029): regression for the pre-dispatch
+       index validation, which must not answer IDX_NOTAVAIL for 0x0029. */
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_OUTPUT, 0x00), 1);
+    iolink_isdu_process(&ctx);
+
+    assert_int_equal(ctx.response_len, 1);
+    uint8_t pdo[1];
+    assert_int_equal(isdu_collect_response(&ctx, pdo, sizeof(pdo)), 1);
+    assert_int_equal(pdo[0], 0x11);
+
+    /* Both objects are read-only and single-element: a WRITE is access-denied
+       and a non-zero subindex is not available. */
+    const uint16_t read_only[] = {IOLINK_IDX_PROCESS_DATA_INPUT, IOLINK_IDX_PROCESS_DATA_OUTPUT};
     uint8_t cmd_data[] = {0x05};
-    assert_int_equal(
-        isdu_send_write_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00, cmd_data, 1), 1);
+    uint8_t byte;
+    for (size_t i = 0U; i < (sizeof(read_only) / sizeof(read_only[0])); i++) {
+        print_message("read-only Process Data index 0x%04X\n", read_only[i]);
+        iolink_isdu_init(&ctx);
+        ctx.dll_ctx = &dll;
+        assert_int_equal(isdu_send_write_request(&ctx, read_only[i], 0x00, cmd_data, 1), 1);
+        iolink_isdu_process(&ctx);
+        assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+        assert_int_equal(byte, 0x80);
+        assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+        assert_int_equal(byte, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 
+        iolink_isdu_init(&ctx);
+        ctx.dll_ctx = &dll;
+        assert_int_equal(isdu_send_read_request(&ctx, read_only[i], 0x01), 1);
+        iolink_isdu_process(&ctx);
+        assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+        assert_int_equal(byte, 0x80);
+        assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+        assert_int_equal(byte, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+    }
+}
+
+/* B.2.23 does not define the answer while the PD status is invalid. The stack
+ * follows the reference ST implementation, which keeps serving the Process
+ * Data buffer; the validity itself is carried by the CKS PD-status bit
+ * (A.1.5, Table A.5). */
+static void test_isdu_pdin_invalid_serves_process_data(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_dll_ctx_t dll = {0};
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_isdu_init(&ctx);
+
+    assert_int_equal(iolink_dll_set_pd_length(&dll, 2, 1), 0);
+    dll.pd_in[0] = 0xDEU;
+    dll.pd_in[1] = 0xADU;
+    dll.pd_valid = false;
+    ctx.dll_ctx = &dll;
+
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00), 1);
     iolink_isdu_process(&ctx);
 
-    /* Verify write-protected error: {0x80, AdditionalCode}. */
+    uint8_t data[2];
+    assert_int_equal(ctx.response_len, 2);
+    assert_int_equal(isdu_collect_response(&ctx, data, sizeof(data)), 2);
+    assert_int_equal(data[0], 0xDE);
+    assert_int_equal(data[1], 0xAD);
+}
+
+/* B.2.24 is silent before the first PDout cycle; following the reference ST
+ * implementation the configured-length PDout buffer is served, not an error. */
+static void test_isdu_pdout_before_first_frame_serves_buffer(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_dll_ctx_t dll = {0};
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_isdu_init(&ctx);
+
+    assert_int_equal(iolink_dll_set_pd_length(&dll, 0, 2), 0);
+    ctx.dll_ctx = &dll;
+
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_OUTPUT, 0x00), 1);
+    iolink_isdu_process(&ctx);
+
+    uint8_t data[2] = {0xFFU, 0xFFU};
+    assert_int_equal(ctx.response_len, 2);
+    assert_int_equal(isdu_collect_response(&ctx, data, sizeof(data)), 2);
+    assert_int_equal(data[0], 0U);
+    assert_int_equal(data[1], 0U);
+}
+
+static void test_isdu_zero_length_process_data_read(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_dll_ctx_t dll = {0};
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_isdu_init(&ctx);
+
+    /* A device without PD in or out answers with an empty positive response,
+       not with an error. */
+    assert_int_equal(iolink_dll_set_pd_length(&dll, 0, 0), 0);
+    dll.pd_valid = true;
+    ctx.dll_ctx = &dll;
+
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00), 1);
+    iolink_isdu_process(&ctx);
+
+    const uint8_t guard = 0xFFU;
+    uint8_t buf[1] = {guard};
+    assert_int_equal(ctx.response_len, 0);
+    assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 0);
+    assert_int_equal(buf[0], guard);
+
+    iolink_isdu_init(&ctx);
+    ctx.dll_ctx = &dll;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_OUTPUT, 0x00), 1);
+    iolink_isdu_process(&ctx);
+
+    assert_int_equal(ctx.response_len, 0);
+    assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 0);
+    assert_int_equal(buf[0], guard);
+
+    /* Without a bound DLL the objects answer with an empty positive response. */
+    iolink_isdu_init(&ctx);
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(ctx.response_len, 0);
+    assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 0);
+
+    iolink_isdu_init(&ctx);
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_OUTPUT, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(ctx.response_len, 0);
+    assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 0);
+}
+
+/* Device path: 0x0028 serves exactly the snapshot published with
+ * iolink_device_pd_input_update(), and a runtime length change is reflected by
+ * the next read (B.2.23: length and structure of the PDin channel). 0x0029
+ * serves the zero-initialised PDout buffer until the first PDout frame. */
+static void test_isdu_process_data_device_api(void** state)
+{
+    (void) state;
+    iolink_test_device_t dev;
+
+    (void) memset(&dev, 0, sizeof(dev));
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    dev.cfg.phy = g_phy_mock;
+    dev.cfg.stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    dev.cfg.stack.pd_in_len = 3U;
+    dev.cfg.stack.pd_out_len = 2U;
+    assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), 0);
+
+    iolink_isdu_ctx_t* isdu = &dev.ctx.dll.isdu;
+
+    const uint8_t in3[3] = {0x01U, 0x02U, 0x03U};
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, in3, sizeof(in3), true), 0);
+    assert_int_equal(isdu_send_read_request(isdu, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00), 1);
+    iolink_isdu_process(isdu);
+
+    assert_int_equal(isdu->response_len, 3);
+    uint8_t pdi[3];
+    assert_int_equal(isdu_collect_response(isdu, pdi, sizeof(pdi)), 3);
+    assert_memory_equal(pdi, in3, sizeof(in3));
+
+    assert_int_equal(isdu_send_read_request(isdu, IOLINK_IDX_PROCESS_DATA_OUTPUT, 0x00), 1);
+    iolink_isdu_process(isdu);
+
+    assert_int_equal(isdu->response_len, 2);
+    uint8_t pdo[2] = {0xFFU, 0xFFU};
+    assert_int_equal(isdu_collect_response(isdu, pdo, sizeof(pdo)), 2);
+    assert_int_equal(pdo[0], 0U);
+    assert_int_equal(pdo[1], 0U);
+
+    /* A shorter runtime length is served immediately; an update marked invalid
+       still publishes the snapshot (B.2.23 is silent, ST reference behaviour). */
+    const uint8_t in2[2] = {0x11U, 0x22U};
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, in2, sizeof(in2), false), 0);
+    assert_int_equal(isdu_send_read_request(isdu, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00), 1);
+    iolink_isdu_process(isdu);
+
+    uint8_t pdi2[2];
+    assert_int_equal(isdu_collect_response(isdu, pdi2, sizeof(pdi2)), 2);
+    assert_memory_equal(pdi2, in2, sizeof(in2));
+}
+
+/* B.2.24: the served value is the PDout of the process data channel. Feed a
+ * write M-sequence and verify that the DLL stores its PDout octets and that
+ * 0x0029 returns them (covers the frame -> pd_out -> ISDU path). */
+static void test_isdu_process_data_output_from_frame(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .pd_in_len = 2, .pd_out_len = 2};
+    iolink_test_device_t dev;
+
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
+    move_to_operate_ctx(&dev.ctx);
+
+    /* Write M-sequence: MC, CKT, PDout (0x11 0x22), OD. */
+    uint8_t frame[] = {0x00, IOLINK_MSEQ_TYPE_1, 0x11, 0x22, 0x00};
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 5));
+
+    for (int i = 0; i < 5; i++) {
+        will_return(mock_phy_recv_byte, 1);
+        will_return(mock_phy_recv_byte, frame[i]);
+    }
+    will_return(mock_phy_recv_byte, 0);
+
+    /* Reply to a write M-sequence: PD-in (2 octets) + CKS. */
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 3);
+    will_return(mock_phy_send, 0);
+
+    iolink_device_process(&dev.ctx);
+
+    iolink_isdu_ctx_t* isdu = &dev.ctx.dll.isdu;
+    assert_int_equal(isdu_send_read_request(isdu, IOLINK_IDX_PROCESS_DATA_OUTPUT, 0x00), 1);
+    iolink_isdu_process(isdu);
+
+    assert_int_equal(isdu->response_len, 2);
+    uint8_t pdo[2] = {0U, 0U};
+    assert_int_equal(isdu_collect_response(isdu, pdo, sizeof(pdo)), 2);
+    assert_int_equal(pdo[0], 0x11U);
+    assert_int_equal(pdo[1], 0x22U);
+}
+
+static void test_isdu_profile_characteristic_arrayt(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_device_info_t with_profile;
+    iolink_device_info_t no_profile;
+    iolink_device_info_ctx_t with_ctx;
+    iolink_device_info_ctx_t no_ctx;
+    const uint8_t pid_write[2] = {0x12U, 0x34U};
+    uint8_t byte;
+
+    /* Bind the identities to the ISDU context instead of mutating the legacy
+       singleton, so the sub-cases stay independent of their execution order. */
+    (void) memset(&with_profile, 0, sizeof(with_profile));
+    with_profile.profile_characteristic = 0x1234U;
+    (void) memset(&no_profile, 0, sizeof(no_profile));
+    iolink_device_info_ctx_init(&with_ctx, &with_profile);
+    iolink_device_info_ctx_init(&no_ctx, &no_profile);
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+
+    /* B.2.5: ArrayT of UIntegerT16; subindex 0 returns the single element. */
+    iolink_isdu_init(&ctx);
+    ctx.device_info = &with_ctx;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROFILE_CHARACTERISTIC, 0x00), 1);
+    iolink_isdu_process(&ctx);
+
+    uint8_t buf[2];
+    assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 2);
+    assert_int_equal(buf[0], 0x12);
+    assert_int_equal(buf[1], 0x34);
+
+    /* Subindex > 1 is out of range for a single-element array. */
+    iolink_isdu_init(&ctx);
+    ctx.device_info = &with_ctx;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROFILE_CHARACTERISTIC, 0x02), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+    assert_int_equal(byte, 0x80);
+    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+    assert_int_equal(byte, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+
+    /* The object is read-only: a WRITE is access-denied (C.2.8). */
+    iolink_isdu_init(&ctx);
+    ctx.device_info = &with_ctx;
+    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_PROFILE_CHARACTERISTIC, 0x01,
+                                             pid_write, sizeof(pid_write)),
+                     1);
+    iolink_isdu_process(&ctx);
     assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
     assert_int_equal(byte, 0x80);
     assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
     assert_int_equal(byte, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+
+    /* A device without a profile does not expose the conditional parameter
+       (C.2.3: the object does not exist), for reads, writes and any subindex. */
+    iolink_isdu_init(&ctx);
+    ctx.device_info = &no_ctx;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROFILE_CHARACTERISTIC, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+    assert_int_equal(byte, 0x80);
+    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+    assert_int_equal(byte, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+
+    iolink_isdu_init(&ctx);
+    ctx.device_info = &no_ctx;
+    assert_int_equal(
+        isdu_send_write_request(&ctx, IOLINK_IDX_PROFILE_CHARACTERISTIC, 0x00, pid_write, 2), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+    assert_int_equal(byte, 0x80);
+    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+    assert_int_equal(byte, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+
+    iolink_isdu_init(&ctx);
+    ctx.device_info = &no_ctx;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROFILE_CHARACTERISTIC, 0x02), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+    assert_int_equal(byte, 0x80);
+    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+    assert_int_equal(byte, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
 }
 
 static void test_isdu_data_storage_round_trip(void** state)
@@ -991,21 +1298,32 @@ static void test_isdu_data_storage_subindex_not_available(void** state)
     assert_int_equal(byte, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
 }
 
-/* B.2.5: ProfileCharacteristic is an ArrayT with one element in this stack. */
+/* B.2.5/Table F.17: ProfileCharacteristic is an ArrayT with one element in
+ * this stack; subindex 1 carries the same two octets as subindex 0. */
 static void test_isdu_profile_characteristic_subindex(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
+    iolink_device_info_t info;
+    iolink_device_info_ctx_t info_ctx;
+
+    (void) memset(&info, 0, sizeof(info));
+    info.profile_characteristic = 0x1234U;
+    iolink_device_info_ctx_init(&info_ctx, &info);
     iolink_device_info_init(NULL);
     iolink_params_init();
     iolink_isdu_init(&ctx);
+    ctx.device_info = &info_ctx;
 
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROFILE_CHARACTERISTIC, 0x01U), 1);
     iolink_isdu_process(&ctx);
-    uint8_t element[2];
+    uint8_t element[2] = {0xFFU, 0xFFU};
     assert_int_equal(isdu_collect_response(&ctx, element, sizeof(element)), 2);
+    assert_int_equal(element[0], 0x12);
+    assert_int_equal(element[1], 0x34);
 
     iolink_isdu_init(&ctx);
+    ctx.device_info = &info_ctx;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROFILE_CHARACTERISTIC, 0x02U), 1);
     iolink_isdu_process(&ctx);
     uint8_t byte;
@@ -2114,7 +2432,19 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_location_tag_read_write, test_setup,
                                         test_teardown),
-        cmocka_unit_test_setup_teardown(test_isdu_pdin_descriptor_read, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_process_data_read, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_pdin_invalid_serves_process_data, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_pdout_before_first_frame_serves_buffer,
+                                        test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_zero_length_process_data_read, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_process_data_device_api, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_process_data_output_from_frame, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_profile_characteristic_arrayt, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_direct_parameters_page1, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_direct_parameters_page2, test_setup,

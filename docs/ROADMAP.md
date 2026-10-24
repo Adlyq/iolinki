@@ -115,7 +115,7 @@ This roadmap outlines the development path for `iolinki`, enabling a fully compl
     - [x] 0x0020: ErrorCount (2 octets)
     - [x] 0x0024: DeviceStatus (1 octet)
     - [x] 0x0025: DetailedDeviceStatus (Table B.14, subindex 0 only)
-    - [x] 0x0028: ProcessDataInput descriptor
+    - [x] 0x0028/0x0029: ProcessDataInput/ProcessDataOutput (B.2.23/B.2.24)
     - [x] 0x0040-0x00FE Preferred and 0x0100+ Extended indices reach the vendor
       callback when one is registered
 

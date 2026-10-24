@@ -23,6 +23,11 @@ from virtual_master.master import VirtualMaster
 class TestISDUConformance(unittest.TestCase):
     """IO-Link V1.1.5 ISDU Protocol Conformance Tests"""
 
+    # The demo is started as: <tty> <m_seq_type> <pd_len>. m_seq_type 0 means
+    # OD-only, so the device carries no Process Data; test_14 relies on it.
+    DEMO_M_SEQ_TYPE = "0"
+    DEMO_PD_LEN = "0"
+
     def setUp(self):
         self.master = VirtualMaster()
         self.device_tty = self.master.get_device_tty()
@@ -31,7 +36,7 @@ class TestISDUConformance(unittest.TestCase):
         )
 
         self.process = subprocess.Popen(
-            [self.demo_bin, self.device_tty, "0", "0"],
+            [self.demo_bin, self.device_tty, self.DEMO_M_SEQ_TYPE, self.DEMO_PD_LEN],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -160,17 +165,21 @@ class TestISDUConformance(unittest.TestCase):
         print(f"[PASS] Device Access Locks: 0x{locks:04X}")
 
     def test_11_profile_characteristic_0x000D(self):
-        """Test mandatory index 0x000D: Profile Characteristic"""
+        """Test conditional index 0x000D: Profile Characteristic"""
         print("\n[TEST] ISDU Index 0x000D: Profile Characteristic")
 
-        response = self.master.read_isdu(index=0x000D, subindex=0x00)
-        self.assertIsNotNone(response, "Profile Characteristic must be readable")
-        self.assertGreaterEqual(
-            len(response), 2, "Profile Characteristic should be at least 2 bytes"
+        # B.2.5: ProfileCharacteristic is conditional on the associated Profile.
+        # The reference device implements no profile (profile_characteristic is
+        # 0), so the object is unavailable and the answer is 0x80 0x11. The
+        # readable ArrayT path is covered by the C unit tests (tests/test_isdu.c).
+        response, error = self.master.read_isdu_ex(index=0x000D, subindex=0x00)
+        self.assertIsNone(
+            response,
+            "Profile Characteristic must be unavailable for a device without a profile",
         )
+        self.assertEqual(error, 0x8011, "no profile -> IDX_NOTAVAIL (0x8011)")
 
-        profile_id = int.from_bytes(response[:2], byteorder="big")
-        print(f"[PASS] Profile Characteristic: 0x{profile_id:04X}")
+        print("[PASS] Profile Characteristic: 0x8011 (no profile implemented)")
 
     def test_12_device_status_0x0024(self):
         """Test optional index 0x0024: DeviceStatus (Table B.8, 1 octet)"""
@@ -191,6 +200,25 @@ class TestISDUConformance(unittest.TestCase):
         response = self.master.read_isdu(index=0xFFFF, subindex=0x00)
 
         print(f"[PASS] Invalid index handled gracefully: response={response}")
+
+    def test_14_process_data_0x0028_0x0029(self):
+        """Test optional indices 0x0028/0x0029: ProcessDataInput/Output"""
+        print("\n[TEST] ISDU Indices 0x0028/0x0029: Process Data")
+
+        # B.2.23/B.2.24: both objects carry the Process Data of the PDin/PDout
+        # channel. This reference device runs without PD (DEMO_PD_LEN is "0"),
+        # so the objects exist and answer with an empty positive response
+        # instead of IDX_NOTAVAIL, with the configured PD length (0) as size.
+        expected_len = int(self.DEMO_PD_LEN)
+        for index in (0x0028, 0x0029):
+            response, error = self.master.read_isdu_ex(index=index, subindex=0x00)
+            self.assertIsNone(error, f"0x{index:04X} must be readable without PD")
+            self.assertEqual(
+                len(response),
+                expected_len,
+                f"0x{index:04X} must serve the configured PD length",
+            )
+            print(f"[PASS] 0x{index:04X}: {expected_len} octets (no PD configured)")
 
 
 if __name__ == "__main__":
