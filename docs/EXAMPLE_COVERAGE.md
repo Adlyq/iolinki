@@ -19,8 +19,8 @@ it is a development checklist, not a conformance or interoperability claim.
 
 | Integration task | Included implementation | Verification |
 | --- | --- | --- |
-| Process input/output | Counter/button input and LED output in `examples/reference_device` | Executable host demo and payload tests |
-| Sensor configuration | `examples/switching_sensor`: measurement, validity, switching state, threshold, hysteresis, inversion and teach | Executable ISDU demo, callback/parameter tests and IODD-to-C payload checks |
+| Process input/output | Counter/button input and LED output in `examples/reference_device` | Payload tests (`test_reference_device`) |
+| Sensor configuration | `examples/switching_sensor`: measurement, validity, switching state, threshold, hysteresis, inversion and teach | Callback/parameter tests and IODD-to-C payload checks |
 | Device description | Three example JSON/XML descriptors; `tools/iodd_cli.py` generate/validate/inspect/pack | CRC, semantic-subset, official external XSD, drift and packaging tests |
 | Bare-metal MCU/PHY | STM32G0B1RE/TIOL112 GCC and native IAR project | GCC build; IAR archive paths checked after extraction |
 | Other build environments | ESP32-C3/L6362A ESP-IDF and STM32U5/TIOL112 Zephyr | Target firmware build jobs |

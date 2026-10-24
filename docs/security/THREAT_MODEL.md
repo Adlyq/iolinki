@@ -24,7 +24,7 @@ belongs in [§5 Gaps](#5-gaps-and-integrator-duties), not here.
                                   ▼
   PHY drivers          src/phy_generic.c, src/phy_virtual.c
     │ bytes
-  Framing + checksum   src/frame.c, src/crc.c
+  Framing + checksum   src/dll.c, src/crc.c
     │ validated frames
   DLL state machine    src/dll.c            (mode/state legality)
     │ on-request data / process data
@@ -85,11 +85,12 @@ or hostile traffic is *rejected safely* rather than corrupting the device.
   assessment note to that effect belongs in the device's user documentation
   (paraphrasing the contextual mapping of CR 3.1 in 10.512 §7.4.2).
 - Stack guarantees (CR 3.1, CR 3.5 — 10.512 §7.4.2, §7.4.5):
-  - Every received OPERATE frame is verified against CRC6 before use:
-    `src/frame.c:71` (`checksum_ok` computed via `iolink_crc6`, `src/crc.c`).
-  - Frame decode enforces exact expected length and PD/OD bounds; NULL and
-    size violations are rejected before any parsing: `src/frame.c:61-62`
-    (decode), `src/frame.c:30-34` (encode).
+  - Every received OPERATE frame is verified against the A.1.6 checksum before
+    use: `src/dll.c:1052` (`crc_ok` computed via `iolink_checksum6`,
+    `src/crc.c:58`).
+  - Frame assembly enforces exact expected length and PD/OD bounds; NULL and
+    size violations are rejected before any parsing: `src/dll.c:1001`
+    (`dll_process_complete_frame`), `src/dll.c:154` (`dll_type_allowed`).
   - ISDU payloads land in fixed-size buffers (`IOLINK_ISDU_BUFFER_SIZE`,
     `include/iolinki/isdu.h:71-74`); reads are clamped to buffer size
     (`src/isdu.c:446-447`, `src/isdu.c:327,351,374`); segmented transfers
@@ -153,9 +154,9 @@ users, not a network device.
 | CR 2.8 auditable events (§7.3.5) | Security-relevant conditions are reported as protocol events with standard EventCodes (V1.1.5 Annex D constants) | `include/iolinki/events.h:34+`, `iolink_event_classify` `src/events.c:149` |
 | CR 2.9 audit storage (§7.3.6) | Events queue until transmitted/acknowledged; bounded storage | `src/events.c`, `tests/test_events.c` |
 | CR 2.10 audit failure response (§7.3.7) | Queue overflow behavior is defined (oldest overwritten), never a crash | `src/events.c` |
-| CR 3.1 communication integrity (§7.4.2) | CRC6/checksum verified on every OPERATE frame; unintentional corruption detected | `src/frame.c:71`, `src/crc.c`, `tests/test_crc.c`, `tests/test_frame.c` |
+| CR 3.1 communication integrity (§7.4.2) | CRC6/checksum verified on every OPERATE frame; unintentional corruption detected | `src/dll.c`, `src/crc.c`, `tests/test_crc.c`, `tests/test_dll.c` |
 | CR 3.4 software/information integrity (§7.4.4) | Data Storage image checksummed (Fletcher-16), consistency-compared, recovered on mismatch | `src/data_storage.c:74,121,157`, `tests/test_ds.c` |
-| CR 3.5 input validation (§7.4.5) | Length, bounds, and sequence legality of every received frame and ISDU enforced before use | `src/frame.c:30-34,61-62`, `src/isdu.c:66-68,132,446-447`, `tests/test_isdu*.c` |
+| CR 3.5 input validation (§7.4.5) | Length, bounds, and sequence legality of every received frame and ISDU enforced before use | `src/dll.c:1001,1052,154`, `src/isdu.c:66-68,132,446-447`, `tests/test_isdu*.c` |
 | CR 3.6 deterministic output (§7.4.6) | Communication loss is an observable DLL state for actuator safe-state policies | `include/iolinki/dll.h:32,114-115`, `tests/test_sio_fallback.c` |
 | CR 3.7 error handling (§7.4.7) | Errors answered with protocol-defined codes only; no internal-state leakage | `src/isdu.c` error paths |
 | CR 4.1/4.3 confidentiality, cryptography (§7.5) | Stack processes no confidential data and uses no cryptography; nothing to claim, nothing misused | — (see Gaps for device-level duties) |
@@ -191,8 +192,8 @@ Stated plainly, because a threat model that hides gaps is marketing:
 The claims above are regression-checked by the existing test suite (cmocka via
 CMake/CTest, run in Docker in CI — see `run_all_tests_docker.sh`):
 
-- Frame/CRC validation: `tests/test_frame.c`, `tests/test_crc.c`,
-  `tests/test_crc_manual.c`
+- Frame/CRC validation: `tests/test_dll.c`, `tests/test_dll_isr.c`,
+  `tests/test_crc.c`, `tests/test_crc_manual.c`
 - ISDU parsing, segmentation, flow control: `tests/test_isdu.c`,
   `tests/test_isdu_segmented.c`, `tests/test_isdu_flow_control.c`
 - Data Storage checksum/recovery/locks: `tests/test_ds.c`

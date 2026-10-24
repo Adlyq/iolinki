@@ -71,8 +71,8 @@ so they apply consistently to the library and the application.
 
 The M-sequence choice sets the integer symbol `CONFIG_IOLINK_M_SEQ_DEFAULT_TYPE`
 (matching `iolink_m_seq_type_t`); the sample reads it into
-`iolink_config_t.m_seq_type`. Applications may still override the value at
-runtime when calling `iolink_init()`.
+`iolink_config_t.m_seq_type`. Applications may still override the value when
+calling `iolink_device_init()`.
 
 ## Devicetree contract for the UART PHY
 
@@ -99,18 +99,19 @@ Call `iolink_phy_uart_init_default()` to bind to that node, or
 
 ### PHY porting note
 
-The UART PHY uses Zephyr's interrupt-driven UART API: an ISR drains the RX FIFO
-into a ring buffer, `recv_byte()` pops from that buffer (falling back to polled
-reads), and `send()` uses `uart_poll_out()`.
+The UART PHY currently provides only the configuration hooks (`init`,
+`set_mode`, `set_baudrate`). The RX FIFO ISR and ring buffer are present but are
+not yet wired to the ISR transport hooks (`rx_octet`/`tx_octet` or
+`rx_frame`/`tx_frame`).
 
 A plain UART **cannot** observe or generate the IO-Link wake-up pulse on the C/Q
 line, and it does not switch SIO/SDCI line modes — those belong to the IO-Link
 transceiver front-end (e.g. MAX14827A, L6362A). Therefore this PHY targets links
 where COM mode is already established by such a transceiver, and the optional
 `detect_wakeup` / `set_cq_line` / `get_voltage_mv` / `is_short_circuit` vtable
-entries are left `NULL`. To support full wake-up and SIO behaviour, implement a
-transceiver-specific PHY against the same `iolink_phy_api_t` vtable
-(`include/iolinki/phy.h`).
+entries are left `NULL`. To support full wake-up, SIO behaviour and the ISR
+transport, implement a transceiver-specific PHY against the same
+`iolink_phy_api_t` vtable (`include/iolinki/phy.h`).
 
 ## Building the sample
 

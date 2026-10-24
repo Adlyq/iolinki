@@ -38,9 +38,9 @@ The DLL (`dll.c`) implements the IO-Link state machine:
 
 ### 1.3 Application Layer (AL)
 The AL (`application.h`) provides the interface for the user application to interact with the stack without knowing protocol details.
-- **Process Data API**: Acyclic and cyclic data access (`iolink_pd_input_update` / `iolink_pd_output_read`).
-- **Lifecycle & PD callbacks**: Optional `iolink_app_register()` hooks (`on_startup`/`on_preoperate`/`on_operate`, PD in/out).
-- **ISDU**: Indexed Service Data Unit for parameters, identification, and Data Storage (`isdu.c`, implemented).
+- **Process Data API**: Cyclic data access (`iolink_device_pd_input_update` / `iolink_device_pd_output_read`).
+- **Lifecycle & PD callbacks**: Optional `iolink_app_callbacks_t` hooks (`on_startup`/`on_preoperate`/`on_operate`, PD in/out) supplied via `iolink_device_config_t.app_callbacks`.
+- **ISDU**: Indexed Service Data Unit for parameters, identification, and Data Storage (`isdu.c`, implemented). Device-specific indices are routed to `iolink_device_config_t.vendor_service`.
 
 ## 2. Design Principles & MISRA Compliance
 
@@ -61,4 +61,4 @@ The stack is built "test-first". Every layer is verified using CMocka mocks.
 All API functions return error codes (negative integers). Return values must be checked by the caller.
 
 ## 3. Processing Model
-The stack uses a non-blocking, periodic processing model. The user application must call `iolink_process()` at a regular interval (typically 1ms) to drive the internal state machines and timers.
+The stack uses a non-blocking, periodic processing model. The user application must call `iolink_device_process(ctx)` at a regular interval (typically 1ms) to drive the internal state machines and timers, while `iolink_device_process_isr(ctx)` is called from the PHY data interrupt.

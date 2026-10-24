@@ -19,9 +19,9 @@ The stack supports multiple M-Sequence types defined in the IO-Link V1.1.5 speci
 | **Type 2_5** | PD-in + PD-out + OD (Fig A.13) | 1 | 1 | 1 | Supported |
 | **Type 2_V** | Variable PD and OD (Fig A.14) | 0..32 | 0..32 | 1/2/8/32 | Supported |
 
-> The fixed-type layouts are implemented by the **opt-in ISR transport**
-> (`-DIOLINK_ISR_PUMP=ON`). The default streaming transport retains upstream's
-> generic `MC|CKT|PD-out|OD` layout and is left to upstream.
+> The fixed-type layouts are implemented by the two-pump transport; the
+> `MC|CKT|PD-out|OD` request and `[OD][PD-in]CKS` reply shapes below follow the
+> Annex A layouts exactly.
 
 ### 1.1 Message checksum (A.1.6)
 
@@ -42,7 +42,7 @@ in OPERATE for On-request Data access.
 A Type-0 request on the page, diagnosis or ISDU communication channel carries
 one OD octet on a write. FlowCTRL for ISDU lives in `MC & 0x1F`.
 
-### 1.3 Fixed Type 1_x / 2_x layouts (ISR transport)
+### 1.3 Fixed Type 1_x / 2_x layouts
 
 Every fixed type has its own request/reply shape; the variable TYPE_2_V is the
 only type that is not in this table (see Figure A.14).
@@ -57,7 +57,7 @@ only type that is not in this table (see Figure A.14).
 | 2_4 | `MC CKT PD0 PD1` | `MC CKT PD0 PD1 OD` | `OD CKS` | `CKS` |
 | 2_5 | `MC CKT PD` | `MC CKT PD OD` | `OD PD CKS` | `PD CKS` |
 
-Fixed PD/OD lengths are enforced at `iolink_device_init()` (ISR build); a
+Fixed PD/OD lengths are enforced at `iolink_device_init()`; a
 mismatched configuration is rejected with
 `IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT`. TYPE_1_1 is rejected with
 `IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE` because it forces legacy interleave, which a
@@ -87,14 +87,20 @@ To ensure synchronization and robust parsing in software simulation, the Master-
 - **Event Queue**: 4 entries (default `IOLINK_EVENT_QUEUE_SIZE`).
 
 ### 3.2 Dynamic Configuration
-The stack is configured during `iolink_init()` via the `iolink_config_t` structure:
+The stack is configured during `iolink_device_init()` via the `iolink_config_t`
+structure (`include/iolinki/iolink.h`):
 
 ```c
 typedef struct {
     iolink_m_seq_type_t m_seq_type; /**< Type 0/1_2/1_V/2_1..2_5/2_V */
-    uint8_t min_cycle_time;         /**< Encoded per spec */
+    uint8_t min_cycle_time;         /**< Minimum cycle time in 0.1 ms units */
     uint8_t pd_in_len;              /**< 0-32 bytes (fixed by the type) */
     uint8_t pd_out_len;             /**< 0-32 bytes (fixed by the type) */
     uint8_t od_width;               /**< OD octets; 0 = type default */
+    uint32_t t_pd_us;               /**< Power-on delay (t_pd) in microseconds */
+    /* ... baudrate / baudrate_set / master_lost_cycles ... */
 } iolink_config_t;
 ```
+
+`min_cycle_time` is stored raw in 0.1 ms units and encoded per Table B.3 only
+when Direct Parameter Page 1 is built (`iolink_cycle_time_encode()`).

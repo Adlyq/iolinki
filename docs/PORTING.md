@@ -28,7 +28,7 @@ The PHY layer provides hardware abstraction for UART communication.
 
 **Location**: `include/iolinki/phy.h`
 
-**Interface**: copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `void* user` first. `send` returns the number of bytes sent, or negative on error. `recv_byte` returns 1 when a byte was read, 0 when none is waiting, or negative on error. `detect_wakeup`, `set_cq_line`, `get_voltage_mv`, and `is_short_circuit` are optional and may be NULL. `init`, `set_mode`, and `set_baudrate` are required.
+**Interface**: copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `void* user` first. The transport hooks depend on the configured granularity: `rx_octet`/`tx_octet` in BYTE mode or `rx_frame`/`tx_frame` in FRAME mode, plus `tx_done` and `int_active`. `detect_wakeup`, `set_cq_line`, `get_voltage_mv`, and `is_short_circuit` are optional and may be NULL. `init`, `set_mode`, and `set_baudrate` are required.
 
 **Implementation Steps**:
 
@@ -36,25 +36,26 @@ The PHY layer provides hardware abstraction for UART communication.
 2. Implement all required PHY functions
 3. Export PHY API structure
 
-**Example** (STM32 HAL). `init`, `set_mode`, and `set_baudrate` are still required and must take `void* user` first. Do not invent transceiver register addresses.
+**Example** (STM32 HAL, BYTE mode). `init`, `set_mode`, and `set_baudrate` are still required and must take `void* user` first. Do not invent transceiver register addresses.
 
 ```c
-static int stm32_send(void* user, const uint8_t* data, size_t len)
+static int stm32_rx_octet(void* user, uint8_t* data, uint8_t* status)
 {
     UART_HandleTypeDef* uart = user;
-    if (HAL_UART_Transmit(uart, (uint8_t*)data, (uint16_t)len, 10) != HAL_OK) {
-        return -1;
-    }
-    return (int)len;
-}
-
-static int stm32_recv_byte(void* user, uint8_t* byte)
-{
-    UART_HandleTypeDef* uart = user;
-    if (HAL_UART_Receive(uart, byte, 1, 0) != HAL_OK) {
+    *status = 0U;
+    if (HAL_UART_Receive(uart, data, 1, 0) != HAL_OK) {
         return 0;
     }
     return 1;
+}
+
+static int stm32_tx_octet(void* user, uint8_t data)
+{
+    UART_HandleTypeDef* uart = user;
+    if (HAL_UART_Transmit(uart, &data, 1, 10) != HAL_OK) {
+        return -1;
+    }
+    return 0;
 }
 ```
 
@@ -173,13 +174,18 @@ target_link_libraries(my_app PRIVATE iolinki)
 ```c
 #include "FreeRTOS.h"
 #include "task.h"
-#include "iolinki/iolink.h"
+#include "iolinki/device.h"
+
+static iolink_device_ctx_t g_ctx;
+static const iolink_device_config_t g_cfg = {.phy = g_phy_stm32};
 
 void iolink_task(void *pvParameters) {
-    iolink_init(&g_phy_stm32);
+    if (iolink_device_init(&g_ctx, &g_cfg) != 0) {
+        /* handle init error */
+    }
 
     while (1) {
-        iolink_process();
+        iolink_device_process(&g_ctx);
         vTaskDelay(pdMS_TO_TICKS(1));  // 1ms cycle
     }
 }
@@ -194,13 +200,18 @@ int main(void) {
 
 ```c
 #include <zephyr/kernel.h>
-#include "iolinki/iolink.h"
+#include "iolinki/device.h"
+
+static iolink_device_ctx_t g_ctx;
+static const iolink_device_config_t g_cfg = {.phy = g_phy_zephyr};
 
 void iolink_thread(void) {
-    iolink_init(&g_phy_zephyr);
+    if (iolink_device_init(&g_ctx, &g_cfg) != 0) {
+        return;
+    }
 
     while (1) {
-        iolink_process();
+        iolink_device_process(&g_ctx);
         k_sleep(K_MSEC(1));
     }
 }
@@ -211,23 +222,28 @@ K_THREAD_DEFINE(iolink_tid, 1024, iolink_thread, NULL, NULL, NULL, 5, 0, 0);
 ### Bare Metal
 
 ```c
-#include "iolinki/iolink.h"
+#include "iolinki/device.h"
+
+static iolink_device_ctx_t g_ctx;
+static const iolink_device_config_t g_cfg = {.phy = g_phy_baremetal};
 
 int main(void) {
     // Initialize SysTick for 1ms interrupt
     SysTick_Config(SystemCoreClock / 1000);
 
-    iolink_init(&g_phy_baremetal);
+    if (iolink_device_init(&g_ctx, &g_cfg) != 0) {
+        /* handle init error */
+    }
 
     while (1) {
-        iolink_process();
+        iolink_device_process(&g_ctx);
         __WFI();  // Wait for interrupt
     }
 }
 
 void SysTick_Handler(void) {
     g_tick_ms++;
-    // Could call iolink_process() here instead
+    // Could call iolink_device_process(&g_ctx) here instead
 }
 ```
 
@@ -285,7 +301,7 @@ Currently uses `printf()`. Replace with platform-specific logging:
 1. **No communication**: Check UART baudrate and pin configuration
 2. **CRC errors**: Verify byte order and timing
 3. **Stack overflow**: Increase task stack size
-4. **Timing issues**: Ensure `iolink_process()` called every 1ms
+4. **Timing issues**: Ensure `iolink_device_process(ctx)` is called every 1ms
 
 ## Testing on New Platform
 

@@ -8,15 +8,14 @@ Profile. It shares the released stack's per-device vendor ISDU callback.
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --parallel 4
-./build/examples/switching_sensor/switching_sensor_demo
 ctest --test-dir build --output-on-failure
 ```
 
-The executable initializes the actual device stack and publishes three input
-bytes, queues an event on a rising switching output, writes teach through the
-ISDU OD transport and verifies threshold readback. Its input scenes and PHY are
-host fixtures; MCU UART/24 V line execution belongs to the separate hardware
-references and LabWired recipes.
+The `test_switching_sensor` unit test initializes the actual device stack and
+publishes three input bytes, queues an event on a rising switching output, writes
+teach through the ISDU OD transport and verifies threshold readback. Its input
+scenes and PHY are host fixtures; MCU UART/24 V line execution belongs to the
+separate hardware references and LabWired recipes.
 
 | Direction | Layout |
 |---|---|
