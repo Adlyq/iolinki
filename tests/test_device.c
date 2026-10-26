@@ -18,8 +18,10 @@
 #include <cmocka.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "iolinki/device.h"
+#include "iolinki/events.h"
 #include "test_helpers.h"
 
 static int g_reset_count;
@@ -317,6 +319,61 @@ static void test_device_config_baudrate(void** state)
     assert_int_equal(dev.ctx.dll.operating_baudrate, IOLINK_BAUDRATE_COM1);
 }
 
+/* The DS image/checksum is established at init when a storage backend is bound
+ * and no persisted image exists, so Data_Storage_Size (0x0003/3) and
+ * Parameter_Checksum (0x0003/4) are valid before the first upload. */
+static void test_device_init_builds_ds_image(void** state)
+{
+    (void) state;
+    iolink_test_device_t dev;
+    iolink_config_t stack = {0};
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    stack.pd_in_len = 2U;
+    stack.pd_out_len = 2U;
+    stack.od_width = 1U;
+
+    iolink_ds_mock_reset();
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+
+    (void) memset(&dev, 0, sizeof(dev));
+    dev.cfg.phy = g_phy_mock;
+    dev.cfg.stack = stack;
+    dev.cfg.storage = &g_ds_storage_mock;
+    assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), IOLINK_DEVICE_INIT_OK);
+
+    iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&dev.ctx);
+    assert_non_null(ds);
+    assert_true(ds->image_len > 0U);
+}
+
+/* iolink_device_process() services the event state machine while the ISDU
+ * transport is idle, without the application calling iolink_events_process(). */
+static void test_device_process_pumps_events(void** state)
+{
+    (void) state;
+    iolink_test_device_t dev;
+    init_device(&dev, IOLINK_M_SEQ_TYPE_0, 0U, 0U);
+
+    iolink_events_ctx_t* evt = iolink_device_get_events_ctx(&dev.ctx);
+    iolink_event_trigger(evt, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_clear(evt, 0x1000U);
+
+    /* Within the 50 ms minimum appearance window the disappearance stays
+       deferred; the pump only emits the "appears" entry. */
+    iolink_device_process(&dev.ctx);
+    iolink_event_t ev;
+    assert_true(iolink_events_pop(evt, &ev));
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
+    assert_false(iolink_events_pop(evt, &ev));
+
+    /* After the window the pump emits the disappearance on its own. */
+    usleep(60000U);
+    iolink_device_process(&dev.ctx);
+    assert_true(iolink_events_pop(evt, &ev));
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
+}
+
 /* Table A.10: TYPE_1_2 defaults to 2 OD octets (code 1) when config leaves
  * od_width = 0. The DLL only stores od_width under the ISR transport, so assert
  * it conditionally; the config validation (which accepts the derived 2) runs in
@@ -352,6 +409,8 @@ int main(void)
         cmocka_unit_test(test_device_od_width_default),
         cmocka_unit_test(test_device_set_pd_length_fixed),
         cmocka_unit_test(test_device_set_pd_length_variable),
+        cmocka_unit_test(test_device_init_builds_ds_image),
+        cmocka_unit_test(test_device_process_pumps_events),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
