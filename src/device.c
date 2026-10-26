@@ -340,6 +340,12 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
        params context, everything else (vendor 0x0040+/0x0100+) via the vendor
        service. The default descriptor set (three tags) is kept. */
     iolink_ds_bind_param_access(&ctx->dll.ds, device_ds_read, device_ds_write, ctx, NULL, 0U);
+    /* Establish the DS image/checksum at boot when no persisted image exists,
+       so Data_Storage_Size and Parameter_Checksum are valid before the first
+       upload. */
+    if (ctx->dll.ds.image_len == 0U) {
+        (void) iolink_ds_build_image(&ctx->dll.ds);
+    }
 #else
     ctx->dll.isdu.ds_ctx = NULL;
 #endif
