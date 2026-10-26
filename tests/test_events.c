@@ -343,6 +343,52 @@ static void test_events_reset_clears(void** state)
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x00U);
 }
 
+static void test_event_flag_invariant(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    iolink_events_init(&ctx);
+
+    /* Empty queue: no flag. */
+    assert_false(iolink_events_flag(&ctx));
+
+    /* Draining the queue through pop() must clear the flag even though the
+       event memory was never acknowledged. */
+    iolink_event_trigger(&ctx, 0x1001U, IOLINK_EVENT_TYPE_NOTIFICATION);
+    assert_true(iolink_events_flag(&ctx));
+    iolink_event_t ev;
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ctx.count, 0U);
+    assert_false(iolink_events_flag(&ctx));
+
+    /* Acknowledging the last Error through the event memory also clears it. */
+    iolink_event_trigger(&ctx, 0x1002U, IOLINK_EVENT_TYPE_ERROR);
+    assert_true(iolink_events_flag(&ctx));
+    iolink_events_memory_write(&ctx, 0x00U, 0x00U);
+    assert_int_equal(ctx.count, 0U);
+    assert_false(iolink_events_flag(&ctx));
+}
+
+static void test_notification_dedup(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    iolink_events_init(&ctx);
+
+    /* A retrying Master must not turn repeated requests into an event storm:
+       the same unacknowledged notification is queued only once. */
+    iolink_event_trigger(&ctx, 0xFF91U, IOLINK_EVENT_TYPE_NOTIFICATION);
+    iolink_event_trigger(&ctx, 0xFF91U, IOLINK_EVENT_TYPE_NOTIFICATION);
+    iolink_event_trigger(&ctx, 0xFF91U, IOLINK_EVENT_TYPE_NOTIFICATION);
+    assert_int_equal(ctx.count, 1U);
+
+    iolink_event_t ev;
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.code, 0xFF91U);
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_SINGLE_SHOT);
+    assert_false(iolink_events_pop(&ctx, &ev));
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -356,6 +402,8 @@ int main(void)
         cmocka_unit_test(test_event_lifecycle_no_repeat),
         cmocka_unit_test(test_event_recently_sent),
         cmocka_unit_test(test_events_reset_clears),
+        cmocka_unit_test(test_event_flag_invariant),
+        cmocka_unit_test(test_notification_dedup),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

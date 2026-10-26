@@ -385,6 +385,34 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
 
     iolink_dll_process(&ctx->dll);
 
+    /* Service the event and Data Storage state machines from the main loop.
+     * They mutate shared ISDU/event state, so only run them while the ISDU
+     * transport is idle: this keeps the Event flag and the DS state from
+     * changing in the middle of an ISDU response. */
+    if (ctx->dll.isdu.state == ISDU_STATE_IDLE) {
+#if IOLINK_FEATURE_DATA_STORAGE
+        if (ctx->dll.ds.state != IOLINK_DS_STATE_IDLE) {
+            iolink_ds_process(&ctx->dll.ds);
+        }
+#endif
+#if IOLINK_FEATURE_EVENTS
+        if ((ctx->dll.events.count > 0U) || (ctx->dll.events.pending_count > 0U)) {
+            iolink_events_process(&ctx->dll.events);
+        }
+#endif
+#if IOLINK_FEATURE_DATA_STORAGE && IOLINK_FEATURE_EVENTS
+        /* DS_UPLOAD_REQ is a notification. Publish it only after the DS-command
+         * ISDU response has been read (ISDU idle), so the Master does not see
+         * the Event flag inside that response and interleave a diagnosis read
+         * with the ongoing ISDU transfer. */
+        if (ctx->dll.ds.upload_event_pending) {
+            ctx->dll.ds.upload_event_pending = false;
+            iolink_event_trigger(&ctx->dll.events, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST,
+                                 IOLINK_EVENT_TYPE_NOTIFICATION);
+        }
+#endif
+    }
+
     /* State callbacks triggered from the data ISR are deferred to this window,
      * in transition order (a burst of frames cannot overwrite an earlier one). */
     iolink_dll_flush_state_callbacks(&ctx->dll);

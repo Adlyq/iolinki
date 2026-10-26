@@ -117,6 +117,7 @@ typedef struct
     uint32_t current_checksum;              /**< Last calculated local parameter checksum */
     uint32_t master_checksum;               /**< Most recent checksum verified by Master */
     bool ds_upload_flag;                    /**< DS_UPLOAD_REQ pending (State_Property bit 7) */
+    bool upload_event_pending;              /**< DS_UPLOAD_REQ notification deferred until ISDU idle */
     uint8_t image[IOLINK_DS_IMAGE_MAX];     /**< Serialized parameter image (DS_Data 0x0003) */
     size_t image_len;                       /**< Valid bytes in @ref image */
 } iolink_ds_ctx_t;
@@ -195,6 +196,8 @@ uint32_t iolink_ds_calc_checksum(const uint8_t* data, size_t len);
  * @brief Process Data Storage engine logic
  *
  * Handles state transitions and background synchronization tasks.
+ * iolink_device_process() calls this each cycle while the ISDU transport is
+ * idle; call it yourself only when you drive the DS context directly.
  *
  * @param ctx DS context to process
  */

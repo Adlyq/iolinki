@@ -675,6 +675,9 @@ void iolink_ds_request_upload(iolink_ds_ctx_t* ctx)
         ds_storage_save_flag(ctx, 1U);
         (void) iolink_ds_build_image(ctx);
         ds_storage_save_image(ctx);
+        /* The notification is published by the device pump once the ISDU
+           transport is idle (10.4.2), not inside the command response. */
+        ctx->upload_event_pending = true;
     }
 }
 

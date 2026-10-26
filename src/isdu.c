@@ -802,9 +802,14 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
 static void isdu_trigger_ds_upload_req(iolink_isdu_ctx_t* ctx)
 {
 #if IOLINK_FEATURE_DATA_STORAGE
-    /* 10.4.2: raise DS_UPLOAD_FLAG in State_Property as well as the event. */
     if (ctx->ds_ctx != NULL) {
+        /* 10.4.2: raise DS_UPLOAD_FLAG (State_Property bit 7) immediately. The
+           corresponding notification is published by the device pump once the
+           current ISDU response has been fully read, so the Event flag cannot
+           appear inside the DS-command response and make the Master interleave
+           a diagnosis read with the ISDU transfer. */
         iolink_ds_request_upload((iolink_ds_ctx_t*) ctx->ds_ctx);
+        return;
     }
 #endif
 #if IOLINK_FEATURE_EVENTS
@@ -1374,6 +1379,14 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
                 break;
             }
             case 4U: {
+                /* Table B.10: Parameter_Checksum reflects the current parameter
+                   set. A direct (non-download) parameter write does not rebuild
+                   the DS image, so refresh it before reporting the checksum;
+                   otherwise the value read before ParamDownloadStore differs
+                   from the value after it. */
+                if (!iolink_ds_downloading(ds)) {
+                    (void) iolink_ds_build_image(ds);
+                }
                 size_t idx = 0U;
                 isdu_write_u32_be(ctx->response_buf, &idx, iolink_ds_checksum(ds));
                 ctx->response_len = (uint8_t) idx;

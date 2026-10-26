@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (events / Data Storage)
+- Events: the Event flag now satisfies `flag == (count > 0)` at every setter
+  (publish, event-memory acknowledge, pop), so a Master can no longer see a flag
+  with an empty queue and loop on read/acknowledge.
+- Notifications: the same unacknowledged EventCode is queued only once, so a
+  retrying Master cannot turn repeated requests into an event storm.
+- `iolink_device_process()` now services `iolink_events_process()` and
+  `iolink_ds_process()` while the ISDU transport is idle, so the DS/event state
+  machines advance without the application having to pump them.
+- The DS_UPLOAD_REQ notification is published only after the DS-command ISDU
+  response has been read (ISDU idle), instead of inside the response, so the
+  Master no longer interleaves a diagnosis read with the ISDU transfer.
+- Parameter_Checksum (0x0003/4) is rebuilt on read when not downloading, so a
+  direct parameter write is reflected before and after ParamDownloadStore.
+
 ### Removed (Zephyr / ESP32 support)
 - Dropped the Zephyr module (`zephyr/`), the Zephyr/ESP-IDF examples and
   samples, the Zephyr UART PHY, the Zephyr test harness/Dockerfiles, the

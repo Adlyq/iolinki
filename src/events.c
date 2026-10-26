@@ -145,14 +145,29 @@ static bool event_recently_sent(const iolink_events_ctx_t* ctx, uint16_t code, u
     return false;
 }
 
-/** @brief Freeze the memory and raise the flag (Table 60 T3). */
+/** @brief Freeze the memory and raise the flag (Table 60 T3).
+ *
+ * The flag must never be set while the queue is empty: a set flag tells the
+ * Master to read the diagnosis channel, and an empty queue there produces a
+ * read/acknowledge loop. */
 static void event_publish(iolink_events_ctx_t* ctx)
 {
     if (!ctx->frozen && (ctx->count > 0U)) {
         ctx->frozen_slots = event_memory_rebuild(ctx);
         ctx->frozen = true;
     }
-    ctx->flag = true;
+    ctx->flag = (ctx->count > 0U);
+}
+
+/** @brief Whether @p code is already queued (any MODE). */
+static bool event_code_queued(const iolink_events_ctx_t* ctx, uint16_t code)
+{
+    for (uint8_t i = 0U; i < ctx->count; i++) {
+        if (ctx->queue[i].code == code) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type)
@@ -170,8 +185,12 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
     }
 
     if (type == IOLINK_EVENT_TYPE_NOTIFICATION) {
-        /* Notifications are single-shot: report once, no lifecycle tracking. */
-        event_queue_insert(ctx, code, type, IOLINK_EVENT_MODE_SINGLE_SHOT);
+        /* Notifications are single-shot. Do not queue the same code again while
+           the previous instance is still unacknowledged: a retrying Master must
+           not turn repeated requests into an event storm. */
+        if (!event_code_queued(ctx, code)) {
+            event_queue_insert(ctx, code, type, IOLINK_EVENT_MODE_SINGLE_SHOT);
+        }
     }
     else {
         iolink_event_pending_t* p = pending_find(ctx, code);
@@ -256,7 +275,9 @@ void iolink_events_reset(iolink_events_ctx_t* ctx)
 
 bool iolink_events_flag(const iolink_events_ctx_t* ctx)
 {
-    return ((ctx != NULL) && ctx->flag);
+    /* Never advertise an Event flag with an empty queue. The setters keep
+       flag == (count > 0); this guard also covers a concurrent ISR read. */
+    return ((ctx != NULL) && ctx->flag && (ctx->count > 0U));
 }
 
 uint8_t iolink_events_memory_read(iolink_events_ctx_t* ctx, uint8_t addr)
@@ -311,6 +332,7 @@ void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t 
     }
     else {
         (void) memset(ctx->memory, 0, sizeof(ctx->memory));
+        ctx->flag = false;
     }
     iolink_critical_exit();
 }
@@ -336,6 +358,14 @@ bool iolink_events_pop(iolink_events_ctx_t* ctx, iolink_event_t* event)
             ctx->queue[i - 1U] = ctx->queue[i];
         }
         ctx->count--;
+        if (ctx->count == 0U) {
+            /* Keep flag == (count > 0) even when an application drains the
+               queue through pop() instead of acknowledging the event memory. */
+            ctx->flag = false;
+            ctx->frozen = false;
+            ctx->frozen_slots = 0U;
+            (void) memset(ctx->memory, 0, sizeof(ctx->memory));
+        }
         ret = true;
     }
 

@@ -187,10 +187,12 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
 void iolink_event_clear(iolink_events_ctx_t* ctx, uint16_t code);
 
 /**
- * @brief Service deferred disappearances (call periodically from the main loop).
+ * @brief Service deferred disappearances.
  *
  * Emits the "Event disappears" for any pending code whose 50 ms minimum
- * appearance window has elapsed.
+ * appearance window has elapsed. iolink_device_process() calls this each cycle
+ * while the ISDU transport is idle; call it yourself only when you drive the
+ * event context directly (e.g. unit tests).
  *
  * @param ctx Event context
  */

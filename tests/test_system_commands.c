@@ -289,10 +289,59 @@ static void test_param_download_store_raises_ds_upload_req(void** state)
     assert_int_equal(iolink_params_get(IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf)), 3);
     assert_memory_equal(buf, "NEW", 3);
 
+    /* The DS_UPLOAD_REQ notification is deferred until the ISDU transport is
+       idle (the device pump publishes it), so the flag cannot appear inside the
+       store response. The DS_UPLOAD_FLAG is already set, the queue is not. */
+    assert_true(ds.upload_event_pending);
+    assert_false(iolink_events_pending(&events));
+    assert_int_equal(iolink_ds_state_property(&ds) & 0x80U, 0x80U);
+
+    /* Simulate the device pump: publish the deferred notification. */
+    ds.upload_event_pending = false;
+    iolink_event_trigger(&events, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST,
+                         IOLINK_EVENT_TYPE_NOTIFICATION);
+
     iolink_event_t ev;
     assert_true(iolink_events_pop(&events, &ev));
     assert_int_equal(ev.code, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST);
-    assert_int_equal(iolink_ds_state_property(&ds) & 0x80U, 0x80U);
+}
+
+/* Table B.10: Parameter_Checksum reflects the current parameter set. A direct
+ * parameter write must already be visible in the checksum, and ParamDownloadStore
+ * must not change it (conformance 0078). */
+static void test_ds_checksum_stable_across_store(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_ds_ctx_t ds;
+    iolink_ds_init(&ds, NULL);
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+
+    assert_int_equal(
+        iolink_params_set(IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "DS-SET2", 7U, false),
+        0);
+
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 4U), 1);
+    iolink_isdu_process(&ctx);
+    uint8_t cks0[4];
+    assert_int_equal(isdu_collect_response(&ctx, cks0, sizeof(cks0)), 4);
+
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    assert_int_equal(send_system_command(&ctx, IOLINK_CMD_PARAM_DOWNLOAD_STORE), 1);
+    iolink_isdu_process(&ctx);
+    uint8_t dummy[2];
+    (void) isdu_collect_response(&ctx, dummy, sizeof(dummy));
+
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 4U), 1);
+    iolink_isdu_process(&ctx);
+    uint8_t cks1[4];
+    assert_int_equal(isdu_collect_response(&ctx, cks1, sizeof(cks1)), 4);
+
+    assert_memory_equal(cks0, cks1, sizeof(cks0));
 }
 
 int main(void)
@@ -311,6 +360,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_block_param_download_break, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_param_download_store_raises_ds_upload_req,
                                         test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_ds_checksum_stable_across_store, test_setup,
+                                        test_teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

@@ -214,12 +214,13 @@ iolink_events_ctx_t* iolink_device_get_events_ctx(iolink_device_ctx_t* ctx);
 
 void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type);
 void iolink_event_clear(iolink_events_ctx_t* ctx, uint16_t code);
-void iolink_events_process(iolink_events_ctx_t* ctx);   /* call periodically */
+void iolink_events_process(iolink_events_ctx_t* ctx);   /* driven by iolink_device_process */
 bool iolink_events_pending(const iolink_events_ctx_t* ctx);
 ```
 
-`iolink_events_process()` (not called by the stack) emits deferred
-"Event disappears" entries; see `events.h`.
+`iolink_device_process()` calls `iolink_events_process()` each cycle while the
+ISDU transport is idle, emitting deferred "Event disappears" entries. Call it
+yourself only if you drive the event context directly; see `events.h`.
 
 **Event types**:
 
@@ -245,7 +246,7 @@ iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx);
 
 void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage);
 void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx);
-void iolink_ds_process(iolink_ds_ctx_t* ctx);                  /* call periodically */
+void iolink_ds_process(iolink_ds_ctx_t* ctx);                  /* driven by iolink_device_process */
 void iolink_ds_check(iolink_ds_ctx_t* ctx, uint32_t master_checksum);
 int  iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_locks);
 int  iolink_ds_build_image(iolink_ds_ctx_t* ctx);
