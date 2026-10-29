@@ -1281,7 +1281,7 @@ static void dll_dispatch_estab_com(iolink_dll_ctx_t* ctx)
 }
 
 /** @brief OPERATE dispatch: every channel is valid, transitions are forbidden. */
-static void dll_dispatch_operate(iolink_dll_ctx_t* ctx)
+static bool dll_dispatch_operate(iolink_dll_ctx_t* ctx)
 {
     const uint8_t mc = ctx->frame_buf[0];
     const bool type0 = ((ctx->frame_buf[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0);
@@ -1309,7 +1309,7 @@ static void dll_dispatch_operate(iolink_dll_ctx_t* ctx)
             ctx->framing_errors++;
             ctx->frame_index = 0U;
             dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
-            return;
+            return false; /* the reset path skips the common tail cleanup */
         }
 #endif
         dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
@@ -1333,6 +1333,7 @@ static void dll_dispatch_operate(iolink_dll_ctx_t* ctx)
            disambiguate by the CKT type bits, not the length. */
         dll_handle_operate_type1_2(ctx);
     }
+    return true;
 }
 
 /**
@@ -1363,7 +1364,7 @@ static bool dll_handle_valid_frame(iolink_dll_ctx_t* ctx)
         dll_dispatch_estab_com(ctx);
     }
     else if (ctx->state == IOLINK_DLL_STATE_OPERATE) {
-        dll_dispatch_operate(ctx);
+        return dll_dispatch_operate(ctx);
     }
     return true;
 }
