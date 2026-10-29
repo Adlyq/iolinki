@@ -1524,6 +1524,98 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
 
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
+#if IOLINK_FEATURE_DATA_STORAGE
+/**
+ * @brief 10.6.11 / SDCI_TC_0325/0326: parameter writes are locked during an
+ * active Block Upload, and parameter reads during an active Block Download.
+ * SystemCommand and DataStorageIndex remain accessible.
+ *
+ * @return true when a negative response was produced.
+ */
+static bool isdu_reject_ds_access(iolink_isdu_ctx_t* ctx)
+{
+    const uint16_t index = ctx->header.index;
+    if ((ctx->ds_ctx == NULL) || (index == IOLINK_IDX_SYSTEM_COMMAND) ||
+        (index == IOLINK_IDX_DATA_STORAGE) || (index == IOLINK_IDX_DIRECT_PARAMETERS_1) ||
+        (index == IOLINK_IDX_DIRECT_PARAMETERS_2)) {
+        return false;
+    }
+    const iolink_ds_ctx_t* ds = (const iolink_ds_ctx_t*) ctx->ds_ctx;
+    const bool blocked = ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) &&
+                          (ds->state == IOLINK_DS_STATE_UPLOADING)) ||
+                         ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_READ) &&
+                          (ds->state == IOLINK_DS_STATE_DOWNLOADING));
+    if (!blocked) {
+        return false;
+    }
+    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_DEV_CTRL);
+    return true;
+}
+#endif /* IOLINK_FEATURE_DATA_STORAGE */
+
+/** @brief Serve a device-specific (vendor) index through the application hook. */
+static void isdu_handle_vendor_index(iolink_isdu_ctx_t* ctx)
+{
+    if ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) &&
+        ((isdu_access_locks(ctx) & IOLINK_LOCK_PARAM) != 0U)) {
+        /* B.2.4: the Parameter lock inhibits every read/write Device parameter
+           (reads remain available). */
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+        return;
+    }
+#if IOLINK_FEATURE_DATA_STORAGE
+    if ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) && (ctx->ds_ctx != NULL) &&
+        iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx)) {
+        const int ret = iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, ctx->header.index,
+                                              ctx->header.subindex, ctx->buffer, ctx->buffer_idx);
+        if (ret == 0) {
+            ctx->response_len = 0U;
+            ctx->response_idx = 0U;
+            ctx->state = ISDU_STATE_RESPONSE_READY;
+        }
+        else {
+            isdu_respond_param_error(ctx, ret);
+        }
+        return;
+    }
+#endif
+#if IOLINK_ISDU_BUFFER_SIZE > 238U
+    size_t length = 235U;
+#else
+    size_t length = sizeof(ctx->resp_buf) - 3U;
+#endif
+    const size_t capacity = length;
+    const uint8_t error =
+        ctx->vendor_service(ctx->vendor_user, ctx->header.index, ctx->header.subindex,
+                            ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE, ctx->buffer,
+                            ctx->buffer_idx, ctx->response_buf, &length);
+    if ((length > capacity) || (error != 0U)) {
+        isdu_respond_error(ctx, (length > capacity) ? IOLINK_ISDU_ERROR_IDX_NOT_AVAIL : error);
+        return;
+    }
+    ctx->vendor_positive = true;
+    ctx->response_len = (uint8_t) length;
+    ctx->response_idx = 0U;
+    ctx->state = ISDU_STATE_RESPONSE_READY;
+}
+
+/** @brief SystemCommand index: write-only command octet. */
+static void isdu_handle_system_command_index(iolink_isdu_ctx_t* ctx)
+{
+    if (ctx->header.type != IOLINK_ISDU_SERVICE_TYPE_WRITE) {
+        /* SystemCommand (Table B.8) is write-only; a read is answered with
+           IDX_NOT_ACCESSIBLE (Table C.1). Events are read through the
+           Diagnosis-channel event memory (Table 58). */
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_NOT_ACCESSIBLE);
+        return;
+    }
+    if (ctx->buffer_idx == 0U) {
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+        return;
+    }
+    handle_system_command(ctx, ctx->buffer[0]);
+}
+
 /** @brief Dispatch an executed ISDU request to the handler for its index. */
 static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
 {
@@ -1533,109 +1625,35 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
        service. 0x00FF itself is reserved. */
     const uint16_t index = ctx->header.index;
 #if IOLINK_FEATURE_DATA_STORAGE
-    /* 10.6.11 / SDCI_TC_0325/0326: parameter writes are locked during an
-       active Block Upload, and parameter reads during an active Block
-       Download. SystemCommand and DataStorageIndex remain accessible. */
-    if ((ctx->ds_ctx != NULL) && (index != IOLINK_IDX_SYSTEM_COMMAND) &&
-        (index != IOLINK_IDX_DATA_STORAGE) && (index != IOLINK_IDX_DIRECT_PARAMETERS_1) &&
-        (index != IOLINK_IDX_DIRECT_PARAMETERS_2)) {
-        const iolink_ds_ctx_t* ds = (const iolink_ds_ctx_t*) ctx->ds_ctx;
-        const bool blocked = ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) &&
-                              (ds->state == IOLINK_DS_STATE_UPLOADING)) ||
-                             ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_READ) &&
-                              (ds->state == IOLINK_DS_STATE_DOWNLOADING));
-        if (blocked) {
-            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_DEV_CTRL);
-            return;
-        }
+    if (isdu_reject_ds_access(ctx)) {
+        return;
     }
 #endif
     const bool device_specific = ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
     if (device_specific && (ctx->vendor_service != NULL)) {
-        if ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) &&
-            ((isdu_access_locks(ctx) & IOLINK_LOCK_PARAM) != 0U)) {
-            /* B.2.4: the Parameter lock inhibits every read/write Device
-               parameter (reads remain available). */
-            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
-            return;
-        }
-#if IOLINK_FEATURE_DATA_STORAGE
-        if ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) && (ctx->ds_ctx != NULL) &&
-            iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx)) {
-            const int ret =
-                iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, ctx->header.index,
-                                      ctx->header.subindex, ctx->buffer, ctx->buffer_idx);
-            if (ret == 0) {
-                ctx->response_len = 0U;
-                ctx->response_idx = 0U;
-                ctx->state = ISDU_STATE_RESPONSE_READY;
-            }
-            else {
-                isdu_respond_param_error(ctx, ret);
-            }
-            return;
-        }
-#endif
-#if IOLINK_ISDU_BUFFER_SIZE > 238U
-        size_t length = 235U;
-#else
-        size_t length = sizeof(ctx->resp_buf) - 3U;
-#endif
-        const size_t capacity = length;
-        uint8_t error =
-            ctx->vendor_service(ctx->vendor_user, ctx->header.index, ctx->header.subindex,
-                                ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE, ctx->buffer,
-                                ctx->buffer_idx, ctx->response_buf, &length);
-        if (length > capacity) {
-            error = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-        }
-        if (error != 0U) {
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = error;
-            length = 2U;
-        }
-        else {
-            ctx->vendor_positive = true;
-        }
-        ctx->response_len = length;
-        ctx->response_idx = 0U;
-        ctx->state = ISDU_STATE_RESPONSE_READY;
+        isdu_handle_vendor_index(ctx);
     }
-    else if (ctx->header.index == IOLINK_IDX_SYSTEM_COMMAND) {
-        if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
-            /* Mandatory System Commands */
-            if (ctx->buffer_idx > 0U) {
-                handle_system_command(ctx, ctx->buffer[0]);
-            }
-            else {
-                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
-            }
-        }
-        else {
-            /* SystemCommand (Table B.8) is write-only; a read is answered with
-               IDX_NOT_ACCESSIBLE (Table C.1). Events are read through the
-               Diagnosis-channel event memory (Table 58). */
-            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_NOT_ACCESSIBLE);
-        }
+    else if (index == IOLINK_IDX_SYSTEM_COMMAND) {
+        isdu_handle_system_command_index(ctx);
     }
-    else if ((ctx->header.index == IOLINK_IDX_DIRECT_PARAMETERS_1) ||
-             (ctx->header.index == IOLINK_IDX_DIRECT_PARAMETERS_2)) {
+    else if ((index == IOLINK_IDX_DIRECT_PARAMETERS_1) ||
+             (index == IOLINK_IDX_DIRECT_PARAMETERS_2)) {
         handle_direct_parameters(ctx);
     }
 #if IOLINK_FEATURE_DATA_STORAGE
-    else if (ctx->header.index == IOLINK_IDX_DATA_STORAGE) {
+    else if (index == IOLINK_IDX_DATA_STORAGE) {
         handle_data_storage(ctx);
     }
 #endif
-    else if (ctx->header.index == IOLINK_IDX_DEVICE_ACCESS_LOCKS) {
+    else if (index == IOLINK_IDX_DEVICE_ACCESS_LOCKS) {
         handle_access_locks(ctx);
     }
 #if IOLINK_FEATURE_EVENTS
-    else if (ctx->header.index == IOLINK_IDX_DETAILED_DEVICE_STATUS) {
+    else if (index == IOLINK_IDX_DETAILED_DEVICE_STATUS) {
         handle_detailed_device_status(ctx);
     }
 #endif
-    else if (ctx->header.index == IOLINK_IDX_ERROR_STATS) {
+    else if (index == IOLINK_IDX_ERROR_STATS) {
         handle_error_stats(ctx);
         ctx->response_idx = 0U;
         ctx->state = ISDU_STATE_RESPONSE_READY;
