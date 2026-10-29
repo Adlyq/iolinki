@@ -2161,6 +2161,119 @@ static void dll_isr_send_payload(iolink_dll_ctx_t* ctx, const uint8_t* payload, 
  * PREOPERATE/OPERATE only; ISDU reads/writes, page reads and process reads.
  * Page/diagnosis writes (MasterCommand/Event handling) and the startup probe
  * still go through the main state machine. */
+/** @brief A frame was served by the ISR: refresh the activity timestamps. */
+static void dll_isr_note_activity(iolink_dll_ctx_t* ctx)
+{
+    ctx->last_activity_ms = iolink_time_get_ms();
+    ctx->last_byte_us = iolink_time_get_us();
+}
+
+/** @brief Type-0 startup probe (T1): page READ while waiting for the first message. */
+static bool dll_isr_type0_startup_probe(iolink_dll_ctx_t* ctx, bool read, uint8_t ch, uint8_t addr,
+                                        uint8_t len)
+{
+    if (!read || (ch != IOLINK_MC_CHANNEL_PAGE) || (len != 2U)) {
+        return false;
+    }
+    dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
+    ctx->dsio_deadline_ms = 0U;
+    const uint8_t od = iolink_isdu_direct_param_page1_octet(&ctx->isdu, addr);
+    dll_isr_send_payload(ctx, &od, 1U, dll_isr_status_flags(ctx));
+    dll_isr_note_activity(ctx);
+    return true;
+}
+
+/** @brief Transition command (PREOPERATE -> ESTAB_COM): no response per spec. */
+static bool dll_isr_type0_transition(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len)
+{
+    if ((ctx->state == IOLINK_DLL_STATE_PREOPERATE) && (len == 2U) &&
+        (frame[0] == IOLINK_MC_TRANSITION_COMMAND)) {
+        dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
+        ctx->fallback_count = 0U;
+        if (ctx->phy->stack_timer_start != NULL) {
+            ctx->phy->stack_timer_start(ctx->phy->user);
+        }
+        dll_isr_note_activity(ctx);
+        return true;
+    }
+    return false;
+}
+
+/** @brief Type-0 READ: answer page/ISDU/process/diagnosis from the ISR. */
+static bool dll_isr_type0_read(iolink_dll_ctx_t* ctx, uint8_t ch, uint8_t addr)
+{
+#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
+    /* Tables 57/67 (SDCI_TC_0038/0049): a TYPE_0 page read while OPERATE is
+       active is a reset request. Consume it without a reply and return to
+       STARTUP; the next read is served as the startup probe. */
+    if ((ctx->state == IOLINK_DLL_STATE_OPERATE) && (ch == IOLINK_MC_CHANNEL_PAGE) &&
+        (ctx->m_seq_type != IOLINK_M_SEQ_TYPE_0)) {
+        ctx->framing_errors++;
+        dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
+        dll_isr_note_activity(ctx);
+        return true;
+    }
+#endif
+    uint8_t od = 0U;
+    if (ch == IOLINK_MC_CHANNEL_PAGE) {
+        od = iolink_isdu_direct_param_page1_octet(&ctx->isdu, addr);
+    }
+    else if (ch == IOLINK_MC_CHANNEL_ISDU) {
+        /* IDLE/ABORT reset the ISDU transport in the main window; leave those
+         * to the main pump. */
+        if (addr >= IOLINK_FLOWCTRL_IDLE) {
+            return false;
+        }
+        dll_isr_isdu_od(ctx, addr, &od, 1U);
+    }
+    else if (ch == IOLINK_MC_CHANNEL_PROCESS) {
+        od = 0U;
+    }
+    else if (ch == IOLINK_MC_CHANNEL_DIAGNOSIS) {
+        od = DLL_EVENTS_MEMORY_READ(&ctx->events, addr);
+    }
+    else {
+        return false;
+    }
+    dll_isr_send_payload(ctx, &od, 1U, dll_isr_status_flags(ctx));
+    dll_isr_note_activity(ctx);
+    return true;
+}
+
+/** @brief Type-0 page WRITE addr 0: Fallback and MasterCommand, CKS-only ack. */
+static bool dll_isr_type0_master_command(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len,
+                                         uint8_t ch, uint8_t addr)
+{
+    if (((ctx->state != IOLINK_DLL_STATE_PREOPERATE) && (ctx->state != IOLINK_DLL_STATE_OPERATE)) ||
+        (len != 3U) || (ch != IOLINK_MC_CHANNEL_PAGE) || (addr != 0U)) {
+        return false;
+    }
+    if (frame[2] == IOLINK_CMD_FALLBACK) {
+        /* A PHY without wake-up detection cannot return from SIO, so the
+         * unsupported transition is acked without changing the DL mode. */
+        if (dll_phy_has_wakeup(ctx)) {
+            uint32_t t_fbd_ms = 500U;
+            if (ctx->min_cycle_time_us > 0U) {
+                t_fbd_ms = (3U * ctx->min_cycle_time_us) / 1000U;
+                if (t_fbd_ms > 500U) {
+                    t_fbd_ms = 500U;
+                }
+            }
+            ctx->fallback_deadline_ms = iolink_time_get_us() / 1000U + t_fbd_ms;
+            dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
+        }
+        dll_isr_send_payload(ctx, NULL, 0U, dll_isr_status_flags(ctx));
+        dll_isr_note_activity(ctx);
+        return true;
+    }
+    if (dll_apply_master_command(ctx, frame[2])) {
+        dll_isr_send_payload(ctx, NULL, 0U, dll_isr_status_flags(ctx));
+        dll_isr_note_activity(ctx);
+        return true;
+    }
+    return false;
+}
+
 static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len)
 {
     if ((frame == NULL) || (len < 2U) || !dll_phy_has_tx(ctx)) {
@@ -2176,118 +2289,27 @@ static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, ui
     const bool was_establishing =
         (ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) || (ctx->state == IOLINK_DLL_STATE_STARTUP);
 
-    /* Startup probe: Type-0 page READ while waiting for the first message.
-     * T1: transition to PREOPERATE and return the requested DPP1 octet. */
     if (was_establishing) {
-        if (!read || (ch != IOLINK_MC_CHANNEL_PAGE) || (len != 2U)) {
-            return false;
-        }
-        dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
-        ctx->dsio_deadline_ms = 0U;
-        const uint8_t od = iolink_isdu_direct_param_page1_octet(&ctx->isdu, addr);
-        dll_isr_send_payload(ctx, &od, 1U, dll_isr_status_flags(ctx));
-        ctx->last_activity_ms = iolink_time_get_ms();
-        ctx->last_byte_us = iolink_time_get_us();
-        return true;
+        return dll_isr_type0_startup_probe(ctx, read, ch, addr, len);
     }
-
     if ((ctx->state != IOLINK_DLL_STATE_PREOPERATE) && (ctx->state != IOLINK_DLL_STATE_OPERATE)) {
         return false;
     }
-
-    /* Transition command (PREOPERATE -> ESTAB_COM): no response per spec. */
-    if ((ctx->state == IOLINK_DLL_STATE_PREOPERATE) && (len == 2U) &&
-        (frame[0] == IOLINK_MC_TRANSITION_COMMAND)) {
-        dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
-        ctx->fallback_count = 0U;
-        if (ctx->phy->stack_timer_start != NULL) {
-            ctx->phy->stack_timer_start(ctx->phy->user);
-        }
-        ctx->last_activity_ms = iolink_time_get_ms();
-        ctx->last_byte_us = iolink_time_get_us();
+    if (dll_isr_type0_transition(ctx, frame, len)) {
         return true;
     }
-
     if (read) {
-#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
-        /* Tables 57/67 (SDCI_TC_0038/0049): a TYPE_0 page read while OPERATE
-           is active is a reset request. Consume it without a reply and return
-           to STARTUP; the next read is served as the startup probe. */
-        if ((ctx->state == IOLINK_DLL_STATE_OPERATE) && (ch == IOLINK_MC_CHANNEL_PAGE) &&
-            (ctx->m_seq_type != IOLINK_M_SEQ_TYPE_0)) {
-            ctx->framing_errors++;
-            dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
-            ctx->last_activity_ms = iolink_time_get_ms();
-            ctx->last_byte_us = iolink_time_get_us();
-            return true;
-        }
-#endif
-        uint8_t od = 0U;
-        if (ch == IOLINK_MC_CHANNEL_PAGE) {
-            od = iolink_isdu_direct_param_page1_octet(&ctx->isdu, addr);
-        }
-        else if (ch == IOLINK_MC_CHANNEL_ISDU) {
-            /* IDLE/ABORT reset the ISDU transport in the main window; leave
-             * those to the main pump. */
-            if (addr >= IOLINK_FLOWCTRL_IDLE) {
-                return false;
-            }
-            dll_isr_isdu_od(ctx, addr, &od, 1U);
-        }
-        else if (ch == IOLINK_MC_CHANNEL_PROCESS) {
-            od = 0U;
-        }
-        else if (ch == IOLINK_MC_CHANNEL_DIAGNOSIS) {
-            od = DLL_EVENTS_MEMORY_READ(&ctx->events, addr);
-        }
-        else {
-            return false;
-        }
-        dll_isr_send_payload(ctx, &od, 1U, dll_isr_status_flags(ctx));
-        ctx->last_activity_ms = iolink_time_get_ms();
-        ctx->last_byte_us = iolink_time_get_us();
-        return true;
+        return dll_isr_type0_read(ctx, ch, addr);
     }
-
-    /* MasterCommand page WRITE addr 0 (Type-0): apply the ST/Table B.2 state
-     * change and answer CKS only. The master re-sends this sequence in OPERATE
-     * (0x95/0x9A/MasterCycleTime/0x99/0x98), so it must not be mistaken for an
-     * illegal M-sequence type. */
-    if (((ctx->state == IOLINK_DLL_STATE_PREOPERATE) || (ctx->state == IOLINK_DLL_STATE_OPERATE)) &&
-        (len == 3U) && (ch == IOLINK_MC_CHANNEL_PAGE) && (addr == 0U)) {
-        if (frame[2] == IOLINK_CMD_FALLBACK) {
-            /* A PHY without wake-up detection cannot return from SIO, so the
-             * unsupported transition is acked without changing the DL mode. */
-            if (dll_phy_has_wakeup(ctx)) {
-                uint32_t t_fbd_ms = 500U;
-                if (ctx->min_cycle_time_us > 0U) {
-                    t_fbd_ms = (3U * ctx->min_cycle_time_us) / 1000U;
-                    if (t_fbd_ms > 500U) {
-                        t_fbd_ms = 500U;
-                    }
-                }
-                ctx->fallback_deadline_ms = iolink_time_get_us() / 1000U + t_fbd_ms;
-                dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
-            }
-            dll_isr_send_payload(ctx, NULL, 0U, dll_isr_status_flags(ctx));
-            ctx->last_activity_ms = iolink_time_get_ms();
-            ctx->last_byte_us = iolink_time_get_us();
-            return true;
-        }
-        if (dll_apply_master_command(ctx, frame[2])) {
-            dll_isr_send_payload(ctx, NULL, 0U, dll_isr_status_flags(ctx));
-            ctx->last_activity_ms = iolink_time_get_ms();
-            ctx->last_byte_us = iolink_time_get_us();
-            return true;
-        }
+    if (dll_isr_type0_master_command(ctx, frame, len, ch, addr)) {
+        return true;
     }
 
     /* ISDU write: the ISR already buffered the request octet(s). */
     if ((ch == IOLINK_MC_CHANNEL_ISDU) && (ctx->isdu_isr_consumed != 0U)) {
         ctx->isdu_isr_consumed = 0U; /* the frame is not published to main */
         dll_isr_send_payload(ctx, NULL, 0U, dll_isr_status_flags(ctx));
-        ctx->last_activity_ms = iolink_time_get_ms();
-        ctx->last_byte_us = iolink_time_get_us();
+        dll_isr_note_activity(ctx);
         return true;
     }
     return false;
