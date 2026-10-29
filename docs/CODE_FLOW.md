@@ -157,7 +157,7 @@ flowchart LR
     PA -->|device_info| DI
 ```
 
-关键绑定发生在 `iolink_device_init()`（`src/device.c:298`）：
+关键绑定发生在 `iolink_device_init()`：
 
 - `dll.isdu.params_ctx = &ctx->params`、`dll.isdu.ds_ctx = &ctx->dll.ds`、`dll.isdu.dll_ctx = &ctx->dll`；
 - `dll.isdu.direct_param_page2 = ctx->direct_param_page2`；
@@ -208,9 +208,9 @@ flowchart TD
 
 要点：
 
-- 初始化校验在 `device_config_validate()`（`src/device.c:246`）完成；本路径还会在 `device_validate_fixed_mseq()`（`src/device.c:197`）拒绝 `TYPE_1_1` 和与 Annex A 固定布局不一致的 PD/OD 长度。
+- 初始化校验在 `device_config_validate()` 完成；本路径还会在 `device_validate_fixed_mseq()` 拒绝 `TYPE_1_1` 和与 Annex A 固定布局不一致的 PD/OD 长度。
 - `dll_init()` 默认 COM2；若 `stack.baudrate_set`，`device_apply_stack_config()` 会通过 `iolink_dll_set_operating_baudrate()` 再设置工作 COM。
-- `on_startup()` 在初始化末尾显式调用一次（`src/device.c:361`）；`dll_init()` 内部进入 STARTUP 时因为状态初值已是 0，`dll_set_state()` 不会重复触发。
+- `on_startup()` 在 `iolink_device_init()` 末尾显式调用一次；`dll_init()` 内部进入 STARTUP 时因为状态初值已是 0，`dll_set_state()` 不会重复触发。
 - `IOLINK_APP_PD_INPUT_CALLBACK=1` 时，PD-in 由 `on_pd_input()` 填充，`iolink_device_pd_input_update()` 返回 `-1`，两者不能混用。
 
 ---
@@ -559,7 +559,7 @@ flowchart TD
 
 ### 8.1 参数持久化
 
-参数记录布局（`include/iolinki/storage.h:89`）：
+参数记录布局（`include/iolinki/storage.h`）：
 
 ```text
 PARAMS 区域:
@@ -582,7 +582,7 @@ FLAG 区域:
 
 ### 8.2 Data Storage 镜像
 
-记录格式（`src/data_storage.c:242`）：
+记录格式（`iolink_ds_calc_checksum()`）：
 
 ```text
 [Index(2, big-endian)][Subindex(1)][Length(1)][Data(Length)] ...
@@ -592,7 +592,7 @@ FLAG 区域:
 - `iolink_ds_apply_image()`：先完整校验记录结构，再逐条应用；未知索引跳过，已知参数被拒绝则返回 `-2`；最后重新 build 镜像，保证镜像与设备真实参数一致。
 - 默认 DS 参数集是 `ApplicationTag/FunctionTag/LocationTag`，应用可用 `iolink_ds_bind_param_access()` / `iolink_ds_set_param_desc()` 扩展。
 
-DS 状态机（`src/data_storage.c:391`）：
+DS 状态机（`iolink_ds_check()`）：
 
 ```mermaid
 stateDiagram-v2
@@ -681,7 +681,7 @@ sequenceDiagram
     DEV->>APP: on_pd_input（启用回调时，OPERATE 每周期）
 ```
 
-具体顺序（`src/device.c:381`）：
+具体顺序（`iolink_device_process()`）：
 
 1. Timer B 授权检查；没有授权直接返回。
 2. `iolink_dll_process()`：
@@ -792,7 +792,7 @@ stateDiagram-v2
 补充：
 
 - 首个有效帧把 STARTUP/AWAITING_COMM 迁到 PREOPERATE 后，如果该帧本身就是 transition command（`MC=0x0F`），同一次 `dll_process_complete_frame()` 会继续调用 `dll_handle_preoperate()`，因此可以一帧内连续进入 ESTAB_COM。
-- `master_lost` 只在 OPERATE 且 `master_lost_cycles != 0` 时计算，超过阈值只置提示位并触发 `on_master_lost`，**不改变状态和波特率**（`dll_update_master_lost()`，`include/iolinki/device.h:207`）。
+- `master_lost` 只在 OPERATE 且 `master_lost_cycles != 0` 时计算，超过阈值只置提示位并触发 `on_master_lost`，**不改变状态和波特率**（`dll_update_master_lost()`，`iolink_device_master_lost()`）。
 - CRC 错误不会单独导致 STARTUP；类型非法在 OPERATE/ESTAB 只计数并丢帧，避免链路抖动。
 - `COMM_DISABLED` 会把 PHY 置为 `INACTIVE`，之后主循环不再处理帧，直到重新上电。
 - 无 `detect_wakeup` 的 PHY 在初始化时直接进入 SDCI，因此不会出现 AWAITING_COMM/T_DSIO 路径。
@@ -854,7 +854,7 @@ flowchart LR
 
 实际的缓冲关系：
 
-- `pd_in[IOLINK_PD_IN_BUFFERS=3][IOLINK_PD_REPLY_MAX]`：布局为 `[OD...][PD-in...][CKS]`，主循环填一个既不是 `active` 也不是 `captured` 的缓冲区，再原子切换 `pd_in_active`；ISR 在应答开始时捕获 `pd_in_active`，零拷贝发送。`device_pd_in_free_index()` 在 `src/device.c:369`。
+- `pd_in[IOLINK_PD_IN_BUFFERS=3][IOLINK_PD_REPLY_MAX]`：布局为 `[OD...][PD-in...][CKS]`，主循环填一个既不是 `active` 也不是 `captured` 的缓冲区，再原子切换 `pd_in_active`；ISR 在应答开始时捕获 `pd_in_active`，零拷贝发送。`device_pd_in_free_index()` 负责选空闲缓冲。
 - `pd_out[IOLINK_PD_OUT_MAX_SIZE]`：Type-1/2 帧处理时从 `frame_buf` 复制最新 PD-out；应用通过 `iolink_device_pd_output_read()` 读取。
 - `isr_tx_payload[2]`：主上下文暂存的应答；`isr_tx_pending_slot`/`isr_tx_pending` 交给 ISR 发送。
 - `isr_frame_buf` + `isr_frame_ready`：单槽邮箱。RX BYTE 先复制到 `isr_rx_buf` 再发布；RX FRAME 先发布 PHY 指针做 eager 应答，再复制到稳定副本。
@@ -875,16 +875,23 @@ flowchart LR
 
 | 函数 | 上下文 | 说明 |
 | :--- | :--- | :--- |
-| `iolink_dll_process_isr()`、`iolink_dll_on_rx_timeout()`、`iolink_dll_on_stack_tick()` | ISR-only | 数据中断入口 |
-| `dll_isr_*()` | ISR-only | 双泵快路径、TYPE-0 应答、ISDU 快照读 |
+| `iolink_dll_process_isr()` | ISR-only | 数据中断入口 |
+| `iolink_dll_on_rx_timeout()` | ISR-only | Timer A 超时入口 |
+| `iolink_dll_on_stack_tick()` | ISR-only | Timer B tick 入口 |
+| `dll_isr_*()`（`dll_isr_start_staged_tx()` 除外） | ISR-only | 双泵快路径、TYPE-0 应答、ISDU 快照读 |
+| `dll_isr_start_staged_tx()` | 双上下文 | 主路径由 `dll_send()` 在直发回退时调用；ISR 路径由 `dll_isr_tx_pending()` 调用 |
 | `dll_publish_isr_frame()`、`dll_mc_is_isdu_write()` | ISR-only | 邮箱发布与 ISDU 写判定 |
-| `dll_set_state()` | 双上下文 | ISR 内 `in_isr` 只入队，不执行回调/临界区 |
+| `dll_set_state()` | 双上下文 | ISR 内不 flush 回调；迁入 STARTUP 时仍会调用 `iolink_events_reset()`（含临界区与 memset） |
 | `dll_master_activity()` | 双上下文 | ISR 在帧结束时刷新活动时间戳 |
 | `dll_pd_status_flags()`、`dll_apply_master_command()`、`dll_type_allowed()` | 双上下文 | 只读 ctx 或状态迁移 |
 | `dll_process_complete_frame()`、`dll_consume_isr_mailbox()`、`dll_check_*()`、`dll_update_master_lost()` | 主上下文 | 主泵调度与定时监督 |
-| `dll_send()` → `dll_isr_start_staged_tx()` | 主 → ISR 缝合点 | 主泵暂存应答，ISR 负责发送 |
+| `dll_send()` | 主上下文 | 主泵暂存应答，ISR 负责发送 |
 
-禁止在 ISR 分区调用：`iolink_isdu_process()`、事件引擎、`iolink_dll_flush_state_callbacks()`、应用回调（`state_cb`、`vendor_service` 等）。
+ISR 还允许调用以下只读/时序 helper：`iolink_dll_expected_req_len()`、`iolink_checksum6_from_acc()`、`iolink_isdu_direct_param_page1_octet()`、`iolink_time_get_ms()`、`iolink_time_get_us()`、`iolink_events_flag()`、`iolink_events_memory_read()`。
+
+禁止在 ISR 分区调用：`iolink_isdu_process()`、事件写路径（`iolink_event_trigger()`、`iolink_events_process()`、`iolink_event_clear()`）、`iolink_dll_flush_state_callbacks()`、应用回调（`state_cb`、`vendor_service` 等）。
+
+例外：`dll_set_state(STARTUP)` 会在 ISR 内调用 `iolink_events_reset()`。该函数自带临界区，是当前 ISR 路径唯一的事件写操作；修改事件层时不要移除其重入保护。
 
 ---
 
@@ -920,9 +927,9 @@ flowchart LR
 
 | 主题 | 入口 |
 | :--- | :--- |
-| 设备初始化/主循环 | `src/device.c:298`、`src/device.c:381` |
-| 应用状态回调 | `src/device.c:25` |
-| PD 更新/读取 | `src/device.c:481`、`src/device.c:558` |
+| 设备初始化/主循环 | `iolink_device_init()`、`iolink_device_process()` |
+| 应用状态回调 | `device_state_cb()` |
+| PD 更新/读取 | `device_run_app_callbacks()`、`iolink_device_pd_output_read()` |
 | DLL 初始化/主处理 | `iolink_dll_init()`、`iolink_dll_process()` |
 | 状态迁移 | `dll_set_state()` |
 | 完整帧校验/分流 | `dll_process_complete_frame()` |
@@ -937,9 +944,9 @@ flowchart LR
 | ISDU 执行/组帧 | `isdu_execute_request()`、`isdu_decode_service()`、`isdu_frame_response()` |
 | ISDU 索引分发 | `handle_standard_commands()` |
 | SystemCommand | `handle_system_command()` |
-| Data Storage 服务 | `handle_data_storage()`、`src/data_storage.c:242`、`src/data_storage.c:296` |
-| 参数持久化 | `src/params.c:179`、`src/params.c:106` |
-| 事件 | `src/events.c:158`、`src/events.c:212`、`src/events.c:262` |
-| 校验 | `src/crc.c:58` |
-| 存储布局 | `include/iolinki/storage.h:103` |
+| Data Storage 服务 | `handle_data_storage()`、`iolink_ds_build_image()`、`iolink_ds_apply_image()` |
+| 参数持久化 | `iolink_params_ctx_set()`、`params_ctx_load()` |
+| 事件 | `iolink_event_trigger()`、`iolink_events_process()`、`iolink_events_reset()` |
+| 校验 | `iolink_checksum6()` |
+| 存储布局 | `include/iolinki/storage.h` |
 | 编译期开关 | `include/iolinki/config.h` |
