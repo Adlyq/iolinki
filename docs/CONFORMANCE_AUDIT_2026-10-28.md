@@ -479,3 +479,8 @@ After this audit, the following production changes and tests were added:
 The per-case status in `tests/conformance_audit.csv` is updated accordingly.
 All in-scope cases are closed; the only remaining validation is external HIL,
 physical-layer, reset/power/timing and product-IODD work.
+The Test Spec 1.1.5 delta was rechecked: the new Device cases
+`0306/0309/0321-0330/0373-0378` are present in the matrix. `0306` and `0323`
+are profile-conditional, `0329/0377` are external HIL, and the remaining cases
+have direct library/reference evidence. `0321/0322/0327` additionally drove the
+`DSIdle_2` / `ParamDownloadStore` fix in `src/data_storage.c` and `src/isdu.c`.

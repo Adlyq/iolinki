@@ -1,0 +1,388 @@
+序号,来源,测试项ID,测试项名称,规范表号/依据,所属域,单测可实现性,缺口/说明
+1,test-spec-c1,SDCI_TC_0001,TCM_PHYL_INTF_ISM,Table 7,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+2,test-spec-c1,SDCI_TC_0002,TCM_PHYL_INTF_ISIRM,Table 8,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+3,test-spec-c1,SDCI_TC_0003,TCM_PHYL_INTF_ILLM,Table 9,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+4,test-spec-c1,SDCI_TC_0004,TCM_PHYL_INTF_VRESHIGH,Table 10,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+5,test-spec-c1,SDCI_TC_0005,TCM_PHYL_INTF_VRESLOW,Table 11,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+6,test-spec-c1,SDCI_TC_0006,TCM_PHYL_INTF_VTHHM,Table 12,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+7,test-spec-c1,SDCI_TC_0007,TCM_PHYL_INTF_VTHLM,Table 13,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+8,test-spec-c1,SDCI_TC_0008,TCM_PHYL_INTF_VHYSM,Table 14,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+9,test-spec-c1,SDCI_TC_0011,TCD_PHYL_INTF_ISD,Table 17,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+10,test-spec-c1,SDCI_TC_0012,TCD_PHYL_INTF_ISIRD,Table 18,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+11,test-spec-c1,SDCI_TC_0013,TCD_PHYL_INTF_VRESHIGH,Table 20,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+12,test-spec-c1,SDCI_TC_0014,TCD_PHYL_INTF_VRESLOW,Table 21,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+13,test-spec-c1,SDCI_TC_0015,TCD_PHYL_INTF_IQQD,Table 22,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+14,test-spec-c1,SDCI_TC_0016,TCD_PHYL_INTF_VTHHD,Table 23,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+15,test-spec-c1,SDCI_TC_0017,TCD_PHYL_INTF_VTHLD,Table 24,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+16,test-spec-c1,SDCI_TC_0018,TCD_PHYL_INTF_VHYSD,Table 25,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+17,test-spec-c1,SDCI_TC_0021,TCM_PHYL_INTF_IQWUH,Table 28,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+18,test-spec-c1,SDCI_TC_0022,TCM_PHYL_INTF_TWUH,Table 29,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+19,test-spec-c1,SDCI_TC_0023,TCM_PHYL_INTF_IQWUL,Table 30,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+20,test-spec-c1,SDCI_TC_0024,TCM_PHYL_INTF_TWUL,Table 31,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+21,test-spec-c1,SDCI_TC_0025,TCD_PHYL_INTF_TWUH,Table 32,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+22,test-spec-c1,SDCI_TC_0026,TCD_PHYL_INTF_TWUL,Table 33,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+23,test-spec-c1,SDCI_TC_0027,TCD_PHYL_INTF_TRENHIGH,Table 34,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+24,test-spec-c1,SDCI_TC_0028,TCD_PHYL_INTF_TRENLOW,Table 35,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+25,test-spec-c1,SDCI_TC_0029,TCD_PHYL_INTF_TRDL,Table 36,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+26,test-spec-c1,SDCI_TC_0030,TCM_PHYL_INTF_BITEYEMAXLOAD,Table 39,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+27,test-spec-c1,SDCI_TC_0031,TCM_PHYL_INTF_BITEYEMINLOAD,Table 41,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+28,test-spec-c1,SDCI_TC_0032,TCM_PHYL_INTF_UARTEYEMAXLOAD,Table 43,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+29,test-spec-c1,SDCI_TC_0033,TCM_PHYL_INTF_UARTEYEMINLOAD,Table 45,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+30,test-spec-c1,SDCI_TC_0034,TCD_DLPC_STUP_CYCTIME,Table 52,Device,可单测，已覆盖,DPP1/CycTime logic verified; real 100 TBIT/10 s timing is external HIL.
+31,test-spec-c1,SDCI_TC_0035,TCD_DLPC_STUP_STUPOPER1,Table 53,Device,可单测，已覆盖,Both MasterCycleTime values and the legacy OPERATE-type ISDU idle are covered in tests/test_dll.c.
+32,test-spec-c1,SDCI_TC_0036,TCD_DLPC_STUP_STUPOPER2,Table 55,Device,可单测，已覆盖,STARTUP receives an OPERATE-type request; no response and state stays STARTUP.
+33,test-spec-c1,SDCI_TC_0037,TCD_DLPC_OPER_OPERSTUP1,Table 56,Device,可单测，已覆盖,"0x97 -> STARTUP, OPERATE-type idle dropped, TYPE_0 probe answered. Uses a directly-seeded OPERATE state rather than a full handshake."
+34,test-spec-c1,SDCI_TC_0038,TCD_DLPC_OPER_OPERSTAR2,Table 57,Device,可单测，已覆盖,Production now returns STARTUP with no reply for a TYPE_0 page read in OPERATE. Test uses a TYPE_0-established link with m_seq_type switched for the check; full non-TYPE_0 establishment still open.
+35,test-spec-c1,SDCI_TC_0039,TCD_DLPC_PROP_READDPP1,Table 58,Device,可单测，已覆盖,"No saved PDIn/PDOut/M-sequence check, no no-PD assertion, only one DPP1 octet. Oracle is tautological."
+36,test-spec-c1,SDCI_TC_0040,TCD_DLPC_PROP_WRITEDPP1,Table 59,Device,可单测，已覆盖,"No read-back/mirror, no write-length check, no no-OR-data assertion."
+37,test-spec-c1,SDCI_TC_0041,TCD_DLPC_PROP_SHORTMESSAGE,Table 60,Device,可单测，已覆盖,PREOPERATE drops a one-octet-short DPP1 write and accepts the complete write.
+38,test-spec-c1,SDCI_TC_0043,TCD_DLPC_PROP_SIMRESET,Table 61,Device,不适用（条件不满足/已删除）,"Current reference profile/device does not satisfy the case precondition (V1.0 legacy support, TYPE_0 PREOPERATE exception, PDInvalid-flag event, OffsetTime, revision override, alternate DID, no-DS marker)."
+39,test-spec-c1,SDCI_TC_0044,TCD_DLPC_PROP_MSEQFAULT,Table 62,Device,可单测，已覆盖,Table 62 case a and case c are covered in tests/test_dll.c.
+40,test-spec-c1,SDCI_TC_0045,TCD_DLPC_OPER_READ,Table 64,Device,可单测，已覆盖,Only one DPP1 octet; oracle is the same production function; no PD/no-OR-data checks.
+41,test-spec-c1,SDCI_TC_0046,TCD_DLPC_OPER_WRITE,Table 65,Device,可单测，已覆盖,"DPP1 read/write accepted in OPERATE; state was seeded directly, so the 0x99/0x98 transition is covered by 0045."
+42,test-spec-c1,SDCI_TC_0047,TCD_DLPC_OPER_NEGWRITE,Table 66,Device,可单测，已覆盖,Short DPP1 write is not answered and the complete write is accepted; state seeded directly.
+43,test-spec-c1,SDCI_TC_0049,TCD_DLPC_OPER_SIMRESET,Table 67,Device,可单测，已覆盖,Same reset path as 0038. Full non-TYPE_0 establishment still open.
+44,test-spec-c1,SDCI_TC_0052,TCD_DLPC_ISDU_AVAILMSEQCAP,Table 71,Device,可单测，已覆盖,Not a DPP1 M-sequence read; PREOPERATE/OPERATE not established; page-read fast-path oracle is tautological.
+45,test-spec-c1,SDCI_TC_0053,TCD_DLIC_ISDU_IDLEBUSYCHECK,Table 72,Device,可单测，已覆盖,Strong: all reserved FlowCTRL values and exact No Service byte.
+46,test-spec-c1,SDCI_TC_0054,TCD_DLIC_ISDU_READINDEX8,Table 73,Device,可单测，已覆盖,"Synthetic vendor name {0x12,0x34} or default 'iolinki'; no IODD content oracle and no M-sequence/DLL read path."
+47,test-spec-c1,SDCI_TC_0055,TCD_DLIC_ISDU_READ8EXTLENGTH,Table 74,Device,可单测，已覆盖,No M-sequence COUNT/busy check; no Config3 from IODD.
+48,test-spec-c1,SDCI_TC_0056,TCD_DLIC_ISDU_WRITE8,Table 75,Device,可单测，已覆盖,Covers the write+readback idea but not the specified Config1.
+49,test-spec-c1,SDCI_TC_0057,TCD_DLIC_ISDU_READ8RESERVED,Table 76,Device,可单测，已覆盖,"Spec is an 8-bit request on 0xFF; test uses 16-bit 0x00FF, so 8-bit decoding is not exercised."
+50,test-spec-c1,SDCI_TC_0058,TCD_DLIC_ISDU_READ8NOSUBINDEX,Table 77,Device,可单测，已覆盖,Exact error code.
+51,test-spec-c1,SDCI_TC_0059,TCD_DLIC_ISDU_READ16,Table 78,Device,可单测，已覆盖,Byte-exact 16-bit read; no Config2/IODD but exercises the specified addressing.
+52,test-spec-c1,SDCI_TC_0060,TCD_DLIC_ISDU_WRITE16,Table 79,Device,可单测，已覆盖,Strong: wrap plus write response plus readback.
+53,test-spec-c1,SDCI_TC_0061,TCD_DLIC_ISDU_READ16RESERVED,Table 80,Device,可单测，已覆盖,Exact reserved index and error.
+54,test-spec-c1,SDCI_TC_0062,TCD_DLIC_ISDU_READ16NOSUBINDEX,Table 81,Device,可单测，已覆盖,Exact both branches.
+55,test-spec-c1,SDCI_TC_0063,TCD_DLIC_ISDU_WRITE8LENOVERRUN,Table 82,Device,可单测，已覆盖,0x8033 plus Config1 value preservation in tests/test_conformance_untested.c.
+56,test-spec-c1,SDCI_TC_0064,TCD_DLIC_ISDU_WRITE8WRONGLEN,Table 83,Device,可单测，已覆盖,0x8034 plus Config1 value preservation in tests/test_conformance_untested.c.
+57,test-spec-c1,SDCI_TC_0065,TCD_DLIC_ISDU_WRITE8WRONGCHECKSUM,Table 84,Device,可单测，已覆盖,Exact No Service response asserted; known-gap skip removed.
+58,test-spec-c1,SDCI_TC_0066,TCD_DLIC_ISDU_WRITE8ROINDEX,Table 85,Device,可单测，已覆盖,Byte-exact 0x8023.
+59,test-spec-c1,SDCI_TC_0067,TCD_DLIC_ISDU_ABORTREADREQ,Table 86,Device,可单测，已覆盖,Exact No Service after abort.
+60,test-spec-c1,SDCI_TC_0068,TCD_DLIC_ISDU_ABORTREADRESP,Table 87,Device,可单测，已覆盖,Strong abort-after-first-segment at the transport layer.
+61,test-spec-c1,SDCI_TC_0069,TCD_DLIC_EVNT_OPERSINGLEEVENT,Table 89,Device,可单测，已覆盖,Wire-level two-event diagnosis memory and acknowledgement.
+62,test-spec-c1,SDCI_TC_0070,TCD_DLIC_EVNT_PROPSINGLEEVENT,Table 90,Device,可单测，已覆盖,Wire-level event flow on the reference device.
+63,test-spec-c1,SDCI_TC_0071,TCD_DLIC_EVNT_OPEREVENTCLEAR,Table 91,Device,可单测，已覆盖,Wire-level event flow on the reference device.
+64,test-spec-c1,SDCI_TC_0072,TCD_DLIC_EVNT_OPERCOMMINTERRUPT,Table 92,Device,可单测，已覆盖,Wire-level event flow on the reference device.
+65,test-spec-c1,SDCI_TC_0073,TCD_DLIC_EVNT_OPERPOWERINTERRUPT,Table 93,Device,可单测，已覆盖,Wire-level event flow on the reference device.
+66,test-spec-c1,SDCI_TC_0074,TCD_DLIC_EVNT_OPERAPPEARDISAPPEAR,Table 94,Device,可单测，已覆盖,Wire-level appear/disappear qualifier transition after clear.
+67,test-spec-c1,SDCI_TC_0075,TCD_DLIC_EVNT_OPERMULTEVENT,Table 95,Device,可单测，已覆盖,"Multiple queued events, frozen-memory acknowledgement and remaining-event rebuild."
+68,test-spec-c1,SDCI_TC_0076,TCD_DLIC_EVNT_OPERSHORTEVENT,Table 96,Device,可单测，已覆盖,Wire-level event flow on the reference device.
+69,test-spec-c1,SDCI_TC_0077,TCD_APPS_DSUP_NOFLAG,Table 98,DS,可单测，已覆盖,"No complete upload via Index List, no checksum/size consistency checks."
+70,test-spec-c1,SDCI_TC_0078,TCD_APPS_DSUP_VIADOWNLOADSTORE,Table 99,DS,可单测，已覆盖,"No upload of set 2, no Parameter_Checksum change check, no event timing."
+71,test-spec-c1,SDCI_TC_0079,TCD_APPS_DSUP_VIADOWNLOADSTORENOWRITE,Table 100,DS,可单测，已覆盖,No no-write / 1 s timeout / DS flag clearing sequence.
+72,test-spec-c1,SDCI_TC_0080,TCD_APPS_DSUP_VIALOCALCHANGE,Table 101,DS,可单测，已覆盖,"No local parameter change (teach-in/panel), no upload; only the hook."
+73,test-spec-c1,SDCI_TC_0081,TCD_APPS_DSUP_PARABREAKABORT,Table 102,DS,可单测，已覆盖,Upload aborts after start and while uploading; full three-block/full-upload sequence not covered.
+74,test-spec-c1,SDCI_TC_0082,TCD_APPS_DSDN_PARAMODIFICATION,Table 104,DS,可单测，已覆盖,Download after a direct modification applies set2; full restore of set1 via Master state machine not covered.
+75,test-spec-c1,SDCI_TC_0083,TCD_APPS_DSDN_FACTORYRESET,Table 105,DS,可单测，已覆盖,Factory reset followed by DS download and flag checks verified on the reference device.
+76,test-spec-c1,SDCI_TC_0084,TCD_APPS_DSDN_PARABREAKABORT,Table 106,DS,可单测，已覆盖,Only one abort point; no DS_UPLOAD_FLAG/checksum or post-break DownloadEnd 0x8036.
+77,test-spec-c1,SDCI_TC_0085,TCD_DLIC_COMP_STARTUP,Table 110,Device,不适用（条件不满足/已删除）,"Current reference profile/device does not satisfy the case precondition (V1.0 legacy support, TYPE_0 PREOPERATE exception, PDInvalid-flag event, OffsetTime, revision override, alternate DID, no-DS marker)."
+78,test-spec-c1,SDCI_TC_0086,TCD_DLIC_COMP_TYPE1INTERLEAVE,Table 111,Device,不适用（条件不满足/已删除）,"Current reference profile/device does not satisfy the case precondition (V1.0 legacy support, TYPE_0 PREOPERATE exception, PDInvalid-flag event, OffsetTime, revision override, alternate DID, no-DS marker)."
+79,test-spec-c1,SDCI_TC_0087,TCD_DLIC_COMP_PDINVALIDEVENT,Table 112,Device,不适用（条件不满足/已删除）,"Current reference profile/device does not satisfy the case precondition (V1.0 legacy support, TYPE_0 PREOPERATE exception, PDInvalid-flag event, OffsetTime, revision override, alternate DID, no-DS marker)."
+80,test-spec-c1,SDCI_TC_0089,TCD_DLPC_STDP_MASTERCYCLETIME,Table 113,Device,可单测，已覆盖,Production now copies master_cycle_time into DPP1 0x01. Test sets the DLL field directly; master-write path still open.
+81,test-spec-c1,SDCI_TC_0090,TCD_DLPC_STDP_MINCYCLETIME,Table 114,Device,可单测，已覆盖,"No DPP1.MinCycleTime read and no IODD minCycleTime comparison, which is the actual pass criterion."
+82,test-spec-c1,SDCI_TC_0091,TCD_DLPC_STDP_MSEQCAPABILITY,Table 115,Device,可单测，已覆盖,Pass criterion includes equality with IODD mSequenceCapability and bits6/7=0.
+83,test-spec-c1,SDCI_TC_0092,TCD_DLPC_STDP_REVISIONID,Table 116,Device,可单测，已覆盖,Validated against the synthetic test IODD/profile; this is not a product IODD.
+84,test-spec-c1,SDCI_TC_0093,TCD_DLPC_STDP_PDIN,Table 117,Device,可单测，已覆盖,Validated against the synthetic test IODD/profile; this is not a product IODD.
+85,test-spec-c1,SDCI_TC_0094,TCD_DLPC_STDP_PDOUT,Table 118,Device,可单测，已覆盖,Validated against the synthetic test IODD/profile; this is not a product IODD.
+86,test-spec-c1,SDCI_TC_0095,TCD_DLPC_STDP_VENDORID,Table 119,Device,可单测，已覆盖,No IODD VendorID or assigned VendorID table check; fixture uses 0xFFFF default elsewhere.
+87,test-spec-c1,SDCI_TC_0096,TCD_DLPC_STDP_DEVICEID,Table 120,Device,可单测，已覆盖,No IODD DeviceID check; no >0 assertion (fixture is 0x010203).
+88,test-spec-c1,SDCI_TC_0097,TCD_DLPC_STDP_FUNCTIONID,Table 121,Device,可单测，已覆盖,OPERATE precondition and DPP1 FunctionID zero check in tests/test_dll.c.
+89,test-spec-c1,SDCI_TC_0101,TCD_DLPC_STDP_WRITERESPAR,Table 122,Device,可单测，已覆盖,Strong: exhaustive byte range and communication/event checks.
+90,test-spec-c1,SDCI_TC_0104,TCD_DLIC_DEFP_SYSCMDRES,Table 124,Device,可单测，已覆盖,"Exhaustive SystemCommand range check; 0x84-0x9F, including old 0x95/0x96 aliases, are reserved."
+91,test-spec-c1,SDCI_TC_0107,TCD_DLIC_DEFP_DSINDEX,Table 125,DS,可单测，已覆盖,"Production now returns the concatenated 12+3n record on sub0; test checks length, header size/checksum and Index_List tail."
+92,test-spec-c1,SDCI_TC_0108,TCD_DLIC_DEFP_DSRECORD,Table 126,DS,可单测，已覆盖,Production now returns 1 byte on sub1; test checks sub1..5 lengths/values.
+93,test-spec-c1,SDCI_TC_0109,TCD_DLIC_DEFP_ACCESSLOCKSVAL,Table 128,Device,可单测，已覆盖,Missing the spec's second half (write 0x0000 and read back) and the bit0/1 warning.
+94,test-spec-c1,SDCI_TC_0110,TCD_DLIC_DEFP_ACCESSLOCKSINVAL,Table 129,Device,可单测，已覆盖,Production rejects reserved AccessLocks bits with 0x8030; test loops bits 4..15 and checks zero readback.
+95,test-spec-c1,SDCI_TC_0111,TCD_DLIC_DEFP_PROFILCHARAC,Table 130,Device,可单测，已覆盖,Exact error for the no-profile configuration.
+96,test-spec-c1,SDCI_TC_0112,TCD_DLIC_DEFP_PDINDESC,Table 131,Device,可单测，已覆盖,Exact error.
+97,test-spec-c1,SDCI_TC_0113,TCD_DLIC_DEFP_PDOUTDESC,Table 132,Device,可单测，已覆盖,Exact error.
+98,test-spec-c1,SDCI_TC_0114,TCD_DLIC_DEFP_VENDORNAM,Table 133,Device,可单测，已覆盖,Validated against the synthetic test IODD/profile; this is not a product IODD.
+99,test-spec-c1,SDCI_TC_0115,TCD_DLIC_DEFP_VENDORTEXT,Table 134,Device,可单测，已覆盖,Validated against the synthetic test IODD/profile; this is not a product IODD.
+100,test-spec-c1,SDCI_TC_0116,TCD_DLIC_DEFP_PRODUCTNAM,Table 135,Device,可单测，已覆盖,Validated against the synthetic test IODD/profile; this is not a product IODD.
+101,test-spec-c1,SDCI_TC_0117,TCD_DLIC_DEFP_PRODUCTID,Table 136,Device,可单测，已覆盖,Validated against the synthetic test IODD/profile; this is not a product IODD.
+102,test-spec-c1,SDCI_TC_0118,TCD_DLIC_DEFP_PRODUCTTEXT,Table 137,Device,可单测，已覆盖,Validated against the synthetic test IODD/profile; this is not a product IODD.
+103,test-spec-c1,SDCI_TC_0119,TCD_DLIC_DEFP_SERNUM,Table 138,Device,可单测，已覆盖,Validated against the synthetic test IODD/profile; this is not a product IODD.
+104,test-spec-c1,SDCI_TC_0120,TCD_DLIC_DEFP_HARDREV,Table 139,Device,可单测，已覆盖,Validated against the synthetic test IODD/profile; this is not a product IODD.
+105,test-spec-c1,SDCI_TC_0121,TCD_DLIC_DEFP_FIRMREV,Table 140,Device,可单测，已覆盖,Validated against the synthetic test IODD/profile; this is not a product IODD.
+106,test-spec-c1,SDCI_TC_0122,TCD_DLIC_DEFP_TAGVALID,Table 141,Device,可单测，已覆盖,Fixed-length tag write/read and power-cycle read-back in tests/test_conformance_untested.c.
+107,test-spec-c1,SDCI_TC_0123,TCD_DLIC_DEFP_TAGINVALID,Table 142,Device,可单测，已覆盖,Overlong tag returns 0x8033 and preserves the previous value.
+108,test-spec-c1,SDCI_TC_0124,TCD_DLIC_DEFP_ERRCOUNT,Table 143,Device,可单测，已覆盖,"Error stimulus, +1 increment and reset-to-zero are covered."
+109,test-spec-c1,SDCI_TC_0128,TCD_DLIC_DEFP_DEVSTAT,Table 144,Device,可单测，已覆盖,OPERATE precondition plus length/value assertions.
+110,test-spec-c1,SDCI_TC_0129,TCD_DLIC_DEFP_DETAILDEVSTAT,Table 146 – Detailed Device Status – complete object,Device,可单测，已覆盖,No 64-record/max-length bound check and no empty-object case.
+111,test-spec-c1,SDCI_TC_0130,TCD_DLIC_DEFP_DETAILDEVSTATINACTIVE,Table C.1 (no reference listed),Device,不适用（条件不满足/已删除）,Removed from the V1.1.5 device case list; no test expected.
+112,test-spec-c1,SDCI_TC_0131,TCD_DLIC_DEFP_DETAILDEVSTATACTIVE,Table 147,Device,可单测，已覆盖,Active-event DDS comparison across a re-init is covered.
+113,test-spec-c1,SDCI_TC_0132,TCD_DLIC_DEFP_PDIN,Table 148,Device,可单测，已覆盖,No comparison with DPP1 0x05 length or unused-bit check.
+114,test-spec-c1,SDCI_TC_0133,TCD_DLIC_DEFP_PDOUT,Table 149,Device,可单测，已覆盖,No DPP1 0x06 length comparison or unused-bit check.
+115,test-spec-c1,SDCI_TC_0134,TCD_DLIC_DEFP_OFFTIMEVALID,Table 150,Device,不适用（条件不满足/已删除）,"Current reference profile/device does not satisfy the case precondition (V1.0 legacy support, TYPE_0 PREOPERATE exception, PDInvalid-flag event, OffsetTime, revision override, alternate DID, no-DS marker)."
+116,test-spec-c1,SDCI_TC_0136,TCD_DLIC_DEFP_PROFILEPARREAD,Table 151,Device,可单测，已覆盖,Exhaustive range and exact error.
+117,test-spec-c1,SDCI_TC_0137,TCD_DLIC_DEFP_PROFILEPARWRITE,Table 152,Device,可单测，已覆盖,Exhaustive range and exact error.
+118,test-spec-c1,SDCI_TC_0140,TCD_DLIC_DEFP_WRITETOREADONLY,Table 153,Device,可单测，已覆盖,Broad list and exact error.
+119,test-spec-c1,SDCI_TC_0141,TCD_DLIC_DEFP_WRITETOOSHORT,Table 154,Device,可单测，已覆盖,Validated against the synthetic test IODD/profile; this is not a product IODD.
+120,test-spec-c1,SDCI_TC_0142,TCD_DLIC_DEFP_WRITETOOLONG,Table 155,Device,可单测，已覆盖,Validated against the synthetic test IODD/profile; this is not a product IODD.
+121,test-spec-c1,SDCI_TC_0143,TCD_DSBP_APPL_BPDOWNLOAD,Table 156,DS,可单测，已覆盖,"One tag, not the IODD Config4 block; no checksum/DS flag."
+122,test-spec-c1,SDCI_TC_0144,TCD_DSBP_APPL_BPBREAKCMD,Table 157,DS,可单测，已覆盖,"Does not check the 0x8036 after a following ParamDownloadEnd, nor checksum."
+123,test-spec-c1,SDCI_TC_0145,TCD_DSBP_APPL_BPBREAKRESET,Table 158,DS,可单测，已覆盖,"Reset during block download, rollback and post-reset DownloadEnd 0x8036 are covered."
+124,test-spec-c1,SDCI_TC_0146,TCD_DSBP_APPL_BPBREAKILLPARAM,Table 159,DS,可单测，已覆盖,Download with an illegal Config1 length returns 0x8033 and DownloadEnd returns 0x8041; old value retained.
+125,test-spec-c1,SDCI_TC_0147,TCD_DSBP_APPL_BPBREAK2DOWNLOADS,Table 160,DS,可单测，已覆盖,Second DownloadStart restarts without error; full parameter-set verification not covered.
+126,test-spec-c1,SDCI_TC_0148,TCD_DSBP_APPL_BPBREAKLOCALLOCK,Table 161,DS,不可测,缺乏物理条件（产品/应用夹具及本地 UI 环境不足）。
+127,test-spec-c1,SDCI_TC_0149,TCD_IODD_PARV_IDENT,Table 169,IODD,不可测,Requires the associated product IODD in machine-readable form; the synthetic test IODD is not the product oracle.
+128,test-spec-c1,SDCI_TC_0150,TCD_IODD_PARV_COMPROFILE,Table 170,IODD,不可测,Requires the associated product IODD in machine-readable form; the synthetic test IODD is not the product oracle.
+129,test-spec-c1,SDCI_TC_0151,TCD_IODD_PARV_READVERIFY,Table 171,IODD,不可测,Requires the associated product IODD in machine-readable form; the synthetic test IODD is not the product oracle.
+130,test-spec-c1,SDCI_TC_0152,TCD_IODD_PARV_WRITEVERIFY,Table 172,IODD,不可测,Requires the associated product IODD in machine-readable form; the synthetic test IODD is not the product oracle.
+131,test-spec-c1,SDCI_TC_0155,TCD_IODD_PARV_FACTORYSETTINGS,Table 177,IODD,可单测，覆盖不足,DeviceStatus/defaults/IDs/tags are covered; DS_UPLOAD_FLAG=0 per Table 177 is a known production gap (test skip).
+132,test-spec-c1,SDCI_TC_0156,TCD_IODD_PARV_ACCESSLOCK,Table 174,IODD,可单测，已覆盖,No write-0x0000 unlock followed by a successful parameter write.
+133,test-spec-c1,SDCI_TC_0157,TCD_IODD_PARV_INDEXCONSISTENT,Table 173,IODD,不可测,Requires the associated product IODD in machine-readable form; the synthetic test IODD is not the product oracle.
+134,test-spec-c1,SDCI_TC_0158,TCM_PHYL_TIME_TDMT,Table 181,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+135,test-spec-c1,SDCI_TC_0159,TCM_PHYL_TIME_TDWU,Table 182,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+136,test-spec-c1,SDCI_TC_0160,TCM_PHYL_TIME_NUMOFWURQS,Table 183,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+137,test-spec-c1,SDCI_TC_0161,TCM_PHYL_TIME_TSD,Table 184,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+138,test-spec-c1,SDCI_TC_0162,TCM_PHYL_TIME_TINITCYC,Table 185,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+139,test-spec-c1,SDCI_TC_0163,TCM_PHYL_TIME_MASTERCYCLETIME,Table 189,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+140,test-spec-c1,SDCI_TC_0164,TCM_PHYL_TIME_MASTERCYCLETIMEREAL,Table 190,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+141,test-spec-c1,SDCI_TC_0165,TCM_PHYL_TIME_DEVRESPTIMES,Table 191,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+142,test-spec-c1,SDCI_TC_0166,TCM_PHYL_TIME_UARTT2,Table 192,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+143,test-spec-c1,SDCI_TC_0167,TCM_PHYL_TIME_UARTT1,Table 193,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+144,test-spec-c1,SDCI_TC_0168,TCM_DLPD_CYCC_TYPE21BIT8IN,Table 194,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+145,test-spec-c1,SDCI_TC_0169,TCM_DLPD_CYCC_TYPE22BIT16IN,Table 195,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+146,test-spec-c1,SDCI_TC_0170,TCM_DLPD_CYCC_TYPE23BIT8OUT,Table 196,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+147,test-spec-c1,SDCI_TC_0171,TCM_DLPD_CYCC_TYPE24BIT16OUT,Table 197,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+148,test-spec-c1,SDCI_TC_0172,TCM_DLPD_CYCC_TYPE25BIT8INBIT8OUT,Table 198,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+149,test-spec-c1,SDCI_TC_0173,TCM_DLPD_CYCC_TYPE1OCTET32IN,Table 200,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+150,test-spec-c1,SDCI_TC_0176,TCM_DLPD_CYCC_MIRROREDPD,Table 203,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+151,test-spec-c1,SDCI_TC_0177,TCM_DLPD_CYCC_PDINVALID,Table 204,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+152,test-spec-c1,SDCI_TC_0178,TCM_DLPD_CYCC_PDVALID,Table 205,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+153,test-spec-c1,SDCI_TC_0179,TCM_DLOD_CYCC_TYPE2VPDXOD1,Table 206,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+154,test-spec-c1,SDCI_TC_0180,TCM_DLOD_CYCC_TYPE2VPDXOD2,Table 207,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+155,test-spec-c1,SDCI_TC_0181,TCM_DLOD_CYCC_TYPE2VPDXOD8,Table 208,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+156,test-spec-c1,SDCI_TC_0182,TCM_DLOD_CYCC_TYPE2VPDXOD32,Table 209,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+157,test-spec-c1,SDCI_TC_0183,TCM_DLST_CHCK_COMPARAM,Table 211,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+158,test-spec-c1,SDCI_TC_0184,TCM_DLST_CHCK_VIDDID,Table 212,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+159,test-spec-c1,SDCI_TC_0185,TCM_DLST_CHCK_V10VIDDID,Table 213,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+160,test-spec-c1,SDCI_TC_0186,TCM_DLST_CHCK_NONCONFVIDDID,Table 214,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+161,test-spec-c1,SDCI_TC_0187,TCM_DLST_CHCK_CONFVIDDID,Table 215,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+162,test-spec-c1,SDCI_TC_0188,TCM_DLST_CHCK_OVERDIDOK,Table 216,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+163,test-spec-c1,SDCI_TC_0189,TCM_DLST_CHCK_OVERDIDNOK,Table 217,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+164,test-spec-c1,SDCI_TC_0190,TCM_DLST_CHCK_OVERRIDNOK,Table 218,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+165,test-spec-c1,SDCI_TC_0192,TCM_DLST_CHCK_VIDDIDNONCONFIG,Table 219,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+166,test-spec-c1,SDCI_TC_0193,TCM_DLST_CHCK_VIDDIDCONFIG,Table 220,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+167,test-spec-c1,SDCI_TC_0194,TCM_DLST_CHCK_DIDWRONG,Table 221,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+168,test-spec-c1,SDCI_TC_0202,TCM_DLOD_PREP_TYPE0READOD1,Table 223,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+169,test-spec-c1,SDCI_TC_0203,TCM_DLOD_PREP_TYPE12READOD2,Table 224,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+170,test-spec-c1,SDCI_TC_0204,TCM_DLOD_PREP_TYPE1VREADOD8,Table 225,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+171,test-spec-c1,SDCI_TC_0205,TCM_DLOD_PREP_TYPE1VREADOD32,Table 226,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+172,test-spec-c1,SDCI_TC_0206,TCM_DLOD_PREP_TYPE0WRITEOD1,Table 227,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+173,test-spec-c1,SDCI_TC_0207,TCM_DLOD_PREP_TYPE12WRITEOD2,Table 228,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+174,test-spec-c1,SDCI_TC_0208,TCM_DLOD_PREP_TYPE1VWRITEOD8,Table 229,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+175,test-spec-c1,SDCI_TC_0209,TCM_DLOD_PREP_TYPE1VWRITEOD32,Table 230,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+176,test-spec-c1,SDCI_TC_0210,TCM_DLOD_OPER_TYPE0READOD1,Table 233,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+177,test-spec-c1,SDCI_TC_0211,TCM_DLOD_OPER_TYPE0WRITEOD1,Table 234,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+178,test-spec-c1,SDCI_TC_0212,TCM_DLOD_OPER_TYPE12WRITEOD2,Table 235,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+179,test-spec-c1,SDCI_TC_0213,TCM_DLFB_PROP_OK,Table 236,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+180,test-spec-c1,SDCI_TC_0214,TCM_DLFB_PROP_FAILS,Table 237,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+181,test-spec-c1,SDCI_TC_0215,TCM_DLFB_OPER_OK,Table 238,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+182,test-spec-c1,SDCI_TC_0216,TCM_DLFB_OPER_FAILS,Table 239,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+183,test-spec-c1,SDCI_TC_0221,TCM_DLCC_RTRY_MAXWURQSUCCESS,Table C.1 (no reference listed),Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+184,test-spec-c1,SDCI_TC_0222,TCM_DLCC_RTRY_MAXWURQNOSUCCESS,Table 252,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+185,test-spec-c1,SDCI_TC_0223,TCM_ALIC_AERR_WRITEREJECT,Table 253,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+186,test-spec-c1,SDCI_TC_0224,TCM_ALIC_AERR_WRITEINDEXUNSUPPORTED,Table 254,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+187,test-spec-c1,SDCI_TC_0225,TCM_ALIC_AERR_WRITESUBINDEXNOTSUPPORTED,Table 255,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+188,test-spec-c1,SDCI_TC_0226,TCM_ALIC_AERR_WRITETEMPUNAV,Table 256,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+189,test-spec-c1,SDCI_TC_0227,TCM_ALIC_AERR_WRITEINDEXTEMPANAVLC,Table 257,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+190,test-spec-c1,SDCI_TC_0228,TCM_ALIC_AERR_WRITEINDEXTEMPANAVDC,Table 258,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+191,test-spec-c1,SDCI_TC_0229,TCM_ALIC_AERR_WRITEINDEXRO,Table 259,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+192,test-spec-c1,SDCI_TC_0230,TCM_ALIC_AERR_WRITEINVALIDLEN,Table 260,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+193,test-spec-c1,SDCI_TC_0231,TCM_ALIC_AERR_WRITEPARAMOUTOFRNG,Table 261,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+194,test-spec-c1,SDCI_TC_0232,TCM_ALIC_AERR_WRITEPARAMABOVELIMIT,Table 262,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+195,test-spec-c1,SDCI_TC_0233,TCM_ALIC_AERR_WRITEPARAMBELOWLIMIT,Table 263,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+196,test-spec-c1,SDCI_TC_0234,TCM_ALIC_AERR_WRITEPARAMINVALID,Table 264,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+197,test-spec-c1,SDCI_TC_0235,TCM_ALIC_AERR_WRITEDEVICEAPPFAULT,Table 265,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+198,test-spec-c1,SDCI_TC_0237,TCM_ALIC_AERR_WRITERESERVEDINDEX,Table 266,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+199,test-spec-c1,SDCI_TC_0238,TCM_ALIC_AERR_WRITERESERVEDINDEXNOISDU,Table 267,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+200,test-spec-c1,SDCI_TC_0239,TCM_ALIC_DERR_WRITENOBUSY,Table 268,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+201,test-spec-c1,SDCI_TC_0240,TCM_ALIC_DERR_WRITEAFTERBUSYTIMEOUT,Table 269,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+202,test-spec-c1,SDCI_TC_0241,TCM_ALIC_DERR_ILLSERVICECODE,Table 270,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+203,test-spec-c1,SDCI_TC_0242,TCM_ALIC_DERR_WRONGCHECKSUM,Table 271,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+204,test-spec-c1,SDCI_TC_0243,TCM_ALIC_DERR_READNODATA,Table 273,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+205,test-spec-c1,SDCI_TC_0244,TCM_ALIC_DERR_WRITERESERVEDDL,Table 272,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+206,test-spec-c1,SDCI_TC_0245,TCM_ALIC_LIMT_WRITEMINDATALENGTH,Table 274,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+207,test-spec-c1,SDCI_TC_0246,TCM_ALIC_LIMT_WRITEMAXDATALENGTH,Table 275,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+208,test-spec-c1,SDCI_TC_0248,TCM_ALIC_LIMT_READMAXDATALENGTH,Table 276,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+209,test-spec-c1,SDCI_TC_0249,TCM_ALIC_LIMT_WRITEINDEX8NOSUBINDEX,Table 277,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+210,test-spec-c1,SDCI_TC_0250,TCM_ALIC_LIMT_WRITEINDEX8SUBINDEX8,Table 278,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+211,test-spec-c1,SDCI_TC_0251,TCM_ALIC_LIMT_WRITEINDEX16SUBINDEX8,Table 279,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+212,test-spec-c1,SDCI_TC_0252,TCM_ALIC_LIMT_IMMEDIATERESPNOBUSY,Table 280,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+213,test-spec-c1,SDCI_TC_0253,TCM_ALIC_LIMT_IMMEDIATERESPWITHBUSY,Table 281,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+214,test-spec-c1,SDCI_TC_0254,TCM_ALIC_LIMT_WRITEMAXSERVICELEN15,Table 282,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+215,test-spec-c1,SDCI_TC_0255,TCM_ALIC_LIMT_WRITEMINSERVICEEXTLEN17,Table 283,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+216,test-spec-c1,SDCI_TC_0256,TCM_ALIC_EVNT_NODETAILSNOTIFY,Table 284,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+217,test-spec-c1,SDCI_TC_0261,TCM_ALIC_EVNT_WITHDETAILSSINGLEEVENT,Table 285,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+218,test-spec-c1,SDCI_TC_0262,TCM_ALIC_EVNT_WITHDETAILSDOUBLEEVENT,Table 286,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+219,test-spec-c1,SDCI_TC_0263,TCM_ALIC_EVNT_WITHDETAILSSIXEVENTS,Table 288,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+220,test-spec-c1,SDCI_TC_0264,TCM_ALIC_EVNT_WRITEISDUWITHEVENT,Table 289,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+221,test-spec-c1,SDCI_TC_0265,TCM_ALIC_EVNT_READISDUWITHEVENT,Table 290,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+222,test-spec-c1,SDCI_TC_0266,TCM_ALIC_EVNT_WRITEISDUWITHEVENTDETAILS,Table 291,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+223,test-spec-c1,SDCI_TC_0267,TCM_ALIC_EVNT_READISDUWITHEVENTDETAILS,Table 292,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+224,test-spec-c1,SDCI_TC_0280,TCM_ALIC_STOR_DSLOCKED,Table 316,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+225,test-spec-c1,SDCI_TC_0285,TCM_LGCY_MANY_DETECTANDCONNECT,Table 317,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+226,test-spec-c1,SDCI_TC_0286,TCM_LGCY_MANY_DETECTANDINTERLEAVE,Table 318,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+227,test-spec-c1,SDCI_TC_0287,TCM_LGCY_MANY_EVENTACK,Table 319,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+228,test-spec-c1,SDCI_TC_0288,TCM_LGCY_MANY_IDLEAFTERISDU,Table 210,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+229,test-spec-c1,SDCI_TC_0289,TCM_LGCY_MANY_EVENTINTERRUPTSISDU,Table 320,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+230,test-spec-c1,SDCI_TC_0290,TCM_LGCY_MANY_PDINVALIDEVENT,Table 321,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+231,test-spec-c1,SDCI_TC_0294,TCD_PHYL_INTF_BITEYEMAXLOAD,Table 40,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+232,test-spec-c1,SDCI_TC_0295,TCD_PHYL_INTF_BITEYEMINLOAD,Table 42,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+233,test-spec-c1,SDCI_TC_0296,TCD_PHYL_INTF_UARTEYEMAXLOAD,Table 44,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+234,test-spec-c1,SDCI_TC_0297,TCD_PHYL_INTF_UARTEYEMINLOAD,Table 46,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+235,test-spec-c1,SDCI_TC_0298,TCM_DLPD_CYCC_TYPE26BIT16INBIT16OUT,Table 199,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+236,test-spec-c1,SDCI_TC_0299,TCM_PHYL_INTF_VOLTRANGECQ,Table 15,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+237,test-spec-c1,SDCI_TC_0300,TCD_PHYL_INTF_VOLTRANGECQ,Table 26,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+238,test-spec-c1,SDCI_TC_0301,TCD_PHYL_INTF_TDELAYTOSIO,Table 37,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+239,test-spec-c1,SDCI_TC_0302,TCD_PHYL_INTF_TTOFALLBACK,Table 38,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+240,test-spec-c1,SDCI_TC_0303,TCM_PHYL_INTF_UARTTRANSDELAY,Table 47,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+241,test-spec-c1,SDCI_TC_0304,TCD_PHYL_INTF_UARTTRANSDELAY,Table 48,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+242,test-spec-c1,SDCI_TC_0305,TCD_PHYL_INTF_RESPONSETIME,Table 49,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+243,test-spec-c1,SDCI_TC_0306,TCD_DLPC_CHCK_OVERRIDOK,Table 54,Device,不适用（条件不满足/已删除）,"Current reference profile/device does not satisfy the case precondition (V1.0 legacy support, TYPE_0 PREOPERATE exception, PDInvalid-flag event, OffsetTime, revision override, alternate DID, no-DS marker)."
+244,test-spec-c1,SDCI_TC_0307,TCM_DLST_CHCK_OVERRIDOK,Table 222,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+245,test-spec-c1,SDCI_TC_0308,TCD_DLIC_EVNTOPER_SINGLENOTIFICATION,Table 287,Device,不可测,缺乏物理条件（产品/应用夹具及本地 UI 环境不足）。
+246,test-spec-c1,SDCI_TC_0309,TCD_DLIC_ISDU_ELEMENT_RETRY,Table 88,Device,可单测，已覆盖,Strong transport-level coverage; not Config3/IODD.
+247,test-spec-c1,SDCI_TC_0310,TCM_PHYL_INTF_MRGI,Table 16,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+248,test-spec-c1,SDCI_TC_0311,TCD_PHYL_INTF_DRGI,Table 27,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+249,test-spec-c1,SDCI_TC_0312,TCD_DLPC_OPER_OUTINVALID,Table 68,Device,不可测,缺乏物理条件（产品/应用夹具及本地 UI 环境不足）。
+250,test-spec-c1,SDCI_TC_0313,TCD_DLPC_OPER_CONNECTIONLOSS,Table 69,Device,不可测,缺乏物理条件（产品/应用夹具及本地 UI 环境不足）。
+251,test-spec-c1,SDCI_TC_0314,TCD_DLPC_DID_OVERWRITE_COMP,Table 179,Device,不适用（条件不满足/已删除）,"Current reference profile/device does not satisfy the case precondition (V1.0 legacy support, TYPE_0 PREOPERATE exception, PDInvalid-flag event, OffsetTime, revision override, alternate DID, no-DS marker)."
+252,test-spec-c1,SDCI_TC_0315,TCD_DLPC_DID_OVERRIDE_INCOMP,Table 180,Device,可单测，已覆盖,Incompatible DPP1 DeviceID writes are ignored; configured DID survives a restart. No additional DeviceID override is enabled.
+253,test-spec-c1,SDCI_TC_0316,TCD_IODD_PARV_DEVICERESET,Table 175,IODD,可单测，已覆盖,Device-reset startup/DID/RID/parameter/status sequence is covered.
+254,test-spec-c1,SDCI_TC_0317,TCD_IODD_PARV_APPLRESET,Table 176,IODD,可单测，已覆盖,"Application-reset no-startup, ID/tag preservation and DS_UPLOAD_REQ flag are covered."
+255,test-spec-c1,SDCI_TC_0318,TCD_IODD_PARV_BACKTOBOX,Table 178,IODD,可单测，覆盖不足,Back-to-box defaults/startup/IDs are covered; DS_UPLOAD_FLAG=0 per Table 178 is a known production gap (test skip).
+256,test-spec-c1,SDCI_TC_0319,TCD_PHYL_INTF_TRANSMISSIONERRORS,Table 50,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+257,test-spec-c1,SDCI_TC_0320,TCD_PHYL_INTF_DOCISD,Table 18,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+258,test-spec-c1,SDCI_TC_0321,TCD_DSBP_APPL_DSSINGLEPARAM,Table 107,DS,可单测，已覆盖,1.1.5 Table 107 negative and positive halves are both covered.
+259,test-spec-c1,SDCI_TC_0322,TCD_DS_APP_IDLEFLAGCLEAR,Table 108,DS,可单测，已覆盖,1.1.5 DSIdle_2 transition T11 verified without forcing UploadStart/DownloadStart.
+260,test-spec-c1,SDCI_TC_0323,TCD_DLIC_DEFP_DSRECORDMARKER,Table 127,DS,不适用（条件不满足/已删除）,"Current reference profile/device does not satisfy the case precondition (V1.0 legacy support, TYPE_0 PREOPERATE exception, PDInvalid-flag event, OffsetTime, revision override, alternate DID, no-DS marker)."
+261,test-spec-c1,SDCI_TC_0324,TCD_DSBP_APPL_UNEXPECTEDINIDLE,Table 162,DS,可单测，已覆盖,1.1.5 Table 162 Idle branch verified.
+262,test-spec-c1,SDCI_TC_0325,TCD_DSBP_APPL_WRITEINUPLOAD,Table 163,DS,可单测，已覆盖,1.1.5 Table 163 sequence verified.
+263,test-spec-c1,SDCI_TC_0326,TCD_DSBP_APPL_READINDOWNLOAD,Table 164,DS,可单测，已覆盖,1.1.5 Table 164 sequence verified.
+264,test-spec-c1,SDCI_TC_0327,TCD_DSBP_APPL_UNEXPINUPLOAD,Table 165,DS,可单测，已覆盖,1.1.5 Table 165 including the dataStorage=true branch is covered.
+265,test-spec-c1,SDCI_TC_0328,TCD_DSBP_APPL_SWITCHSTATES,Table 166,DS,可单测，已覆盖,1.1.5 Table 166 full sequence is covered.
+266,test-spec-c1,SDCI_TC_0329,TCD_DSBP_APPL_UPBREAKRESET,Table 167,DS,可单测，已覆盖,"0x8022 during upload, reset abort and successful later write are covered."
+267,test-spec-c1,SDCI_TC_0330,TCD_DSBP_APPL_DNENDBYUPLOAD,Table 168,DS,可单测，已覆盖,1.1.5 Table 168 full sequence is covered.
+268,test-spec-c1,SDCI_TC_0331,TCM_PHYL_TIME_TINITCYC_PREOP_2,Table 186,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+269,test-spec-c1,SDCI_TC_0332,TCM_PHYL_TIME_TINITCYC_PREOP_8,Table 187,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+270,test-spec-c1,SDCI_TC_0333,TCM_PHYL_TIME_TINITCYC_PREOP_32,Table 188,physical layer,不可测,缺乏物理条件（物理/电气层测试环境不足）。
+271,test-spec-c1,SDCI_TC_0334,TCM_DLPD_CYCC_TYPE2VOD1IN0OUT32OCTET,Table 201,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+272,test-spec-c1,SDCI_TC_0335,TCM_DLPD_CYCC_TYPE2VOD1IN32OUT0OCTET,Table 202,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+273,test-spec-c1,SDCI_TC_0336,TCM_DLPD_CYCC_TYPE1V_OD8BIT0INBIT0OUT,Table 231,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+274,test-spec-c1,SDCI_TC_0337,TCM_DLPD_CYCC_TYPE1V_OD32BIT0INBIT0OUT,Table 232,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+275,test-spec-c1,SDCI_TC_0338,TCM_DLCC_RTRY_CKSINCORR2STRTUP,Table 240,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+276,test-spec-c1,SDCI_TC_0339,TCM_DLCC_RTRY_CKSINCORR2PREOP,Table 241,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+277,test-spec-c1,SDCI_TC_0340,TCM_DLCC_RTRY_CKSINCORR2OPERATE,Table 242,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+278,test-spec-c1,SDCI_TC_0341,TCM_DLCC_RTRY_CKSINCORR3STRUP&RESTOP,Table 243,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+279,test-spec-c1,SDCI_TC_0342,TCM_DLCC_RTRY_CKSINCORR3PREOP&RESTOP,Table 244,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+280,test-spec-c1,SDCI_TC_0343,TCM_DLCC_RTRY_CKSINCORR3OPER&RESTOP,Table 245,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+281,test-spec-c1,SDCI_TC_0344,TCM_DLCC_RTRY_MISSREP2STRTUP,Table 246,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+282,test-spec-c1,SDCI_TC_0345,TCM_DLCC_RTRY_MISSREP2PREOP,Table 247,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+283,test-spec-c1,SDCI_TC_0346,TCM_DLCC_RTRY_MISSREP2OPER,Table 248,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+284,test-spec-c1,SDCI_TC_0347,TCM_DLCC_RTRY_REPMISS3STRTUP&RESTOP,Table 249,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+285,test-spec-c1,SDCI_TC_0348,TCM_DLCC_RTRY_REPMISS3PREOP&RESTOP,Table 250,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+286,test-spec-c1,SDCI_TC_0349,TCM_DLCC_RTRY_REPMISS3OPER&RESTOP,Table 251,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+287,test-spec-c1,SDCI_TC_0350,TCM_ALIC_EVNT_NODEV,Table 293,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+288,test-spec-c1,SDCI_TC_0351,TCM_ALIC_EVNT_PREOPERATE,Table 294,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+289,test-spec-c1,SDCI_TC_0352,TCM_ALIC_EVNT_PORT_DIAG,Table 295,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+290,test-spec-c1,SDCI_TC_0353,TCM_ALIC_EVNT_INVALID_CYCLE_TIME,Table 296,Master,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+291,test-spec-c1,SDCI_TC_0354,TCM_ALIC_STOR_DELETEDSAFTERRECONF,Table 297,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+292,test-spec-c1,SDCI_TC_0355,TCM_ALIC_STOR_MAXSIZELIMITS,Table 298,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+293,test-spec-c1,SDCI_TC_0356,TCM_ALIC_STOR_DSFROMPARAMSERV,Table 299,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+294,test-spec-c1,SDCI_TC_0357,TCM_ALIC_STOR_INCONSDSFROMPARSERV,Table 300,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+295,test-spec-c1,SDCI_TC_0358,TCM_ALIC_STOR_DSTOIMPROPPORTCONF,Table 301,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+296,test-spec-c1,SDCI_TC_0359,TCM_ALIC_STOR_UPLOADREQEVENTOPERBACKREST,Table 302,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+297,test-spec-c1,SDCI_TC_0360,TCM_ALIC_STOR_UPLOADREQEVENTOPERREST,Table 303,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+298,test-spec-c1,SDCI_TC_0361,TCM_ALIC_STOR_UPLOADREQEVENTOPERBACKRESTINACT,Table 304,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+299,test-spec-c1,SDCI_TC_0362,TCM_ALIC_STOR_STARTUPEMPTDSDEACTIV,Table 305,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+300,test-spec-c1,SDCI_TC_0363,TCM_ALIC_STOR_STRTUPEMPTYDSDSACTIV,Table 306,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+301,test-spec-c1,SDCI_TC_0364,TCM_ALIC_STOR_STRTUPDEVREPLACEDSDOWN,Table 307,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+302,test-spec-c1,SDCI_TC_0365,TCM_ALIC_STOR_STRTUPDEVREPLACENODSDOWN,Table 308,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+303,test-spec-c1,SDCI_TC_0366,TCM_ALIC_STOR_STRTUPDEVREPLACEDSUPFLAG,Table 309,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+304,test-spec-c1,SDCI_TC_0367,TCM_ALIC_STOR_STRTUPDEVREPLACEDSFLAGNOUPLOAD,Table 310,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+305,test-spec-c1,SDCI_TC_0368,TCM_ALIC_STOR_DSINDLISTCORRUPT,Table 311,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+306,test-spec-c1,SDCI_TC_0369,TCM_ALIC_STOR_DSDOWNLOADFAULT,Table 312,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+307,test-spec-c1,SDCI_TC_0370,TCM_ALIC_STOR_DSUPLOADFAULT,Table 313,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+308,test-spec-c1,SDCI_TC_0371,TCM_ALIC_STOR_INCOMPDEVICE&DS,Table 314,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+309,test-spec-c1,SDCI_TC_0372,TCM_ALIC_STOR_POWEROFFONNONVOLATILEDS,Table 315,DS,不适用（主站侧）,Annex C.1 TCM 主站测试，不属于本 Device 库。
+310,test-spec-c1,SDCI_TC_0373,TCD_DLIC_DEFP_EVENTDEVSTAT,Table 319,Device,可单测，已覆盖,1.1.5 Table 97 interconnection is covered on the reference device.
+311,test-spec-c1,SDCI_TC_0374,TCD_DS_APP_UPLOAD_FLAG_NON_VOLATILE,Table 321,DS,可单测，已覆盖,1.1.5 non-volatile flag is covered with a storage-backed power-cycle model; real power/startup timing is external.
+312,test-spec-c1,SDCI_TC_0375,TCD_DLPC_STDP_MINCYCLETIME_VALID,Table 322,Device,可单测，已覆盖,1.1.5 Table 123 validity check is covered.
+313,test-spec-c1,SDCI_TC_0376,TCD_DLPC_OPER_PDVALIDITYINDICATION,Table 318,Device,可单测，已覆盖,1.1.5 PDOut-only status behavior is covered.
+314,test-spec-c1,SDCI_TC_0377,TCD_DLPC_PROP_RECOVERY_TIME,Table 317,Device,不可测,缺乏物理条件（真实时序/恢复时间测量环境不足）。
+315,test-spec-c1,SDCI_TC_0378,TCD_APPS_DSUP_INDEXLIST,Table 320,DS,可单测，已覆盖,"Does not follow a non-zero chain, but this DUT terminates, so the case is satisfied."
+316,hil-audit,SDCI_TC_0052,check_0052,spec_checks.py:170-173 reads DPP1 0x03 and asserts bit0=1 | Matches Table 71 evaluation.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+317,hil-audit,SDCI_TC_0053,check_0053,"spec_checks.py:176-180 sends FlowCtrl 0x11-0x1F and asserts 15 zero responses | Assumes 0x00 == 'No Service'; does not model per-request busy, but evaluation matches.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+318,hil-audit,SDCI_TC_0054,check_0054,"spec_checks.py:183-184 -> assert_ok() at 25-28 only checks 'OK' and len<=64 | No payload/name, checksum, or I-Service assertion.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+319,hil-audit,SDCI_TC_0055,check_0055,spec_checks.py:187-190 hardcodes index 0x00E4 and asserts len==200 only | CSV category blocked-tool; not executed. No wire-level ExtLength/checksum check.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+320,hil-audit,SDCI_TC_0057,check_0057,spec_checks.py:193-194 asserts only that the response contains 'ERR' | 0x8011 is not asserted.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+321,hil-audit,SDCI_TC_0058,check_0058,spec_checks.py:197-198 asserts only 'ERR' | 0x8012 is not asserted.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+322,hil-audit,SDCI_TC_0059,check_0059,spec_checks.py:201-203 accepts 'OK' OR 'ERR' for 0x7F32 | Accepts any outcome; no Config2 data/checksum validation.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+323,hil-audit,SDCI_TC_0060,check_0060,"spec_checks.py:206-207 delegates to check_0059, which only reads 0x7F32 | No write, no read-back, no 16-bit Config2 object.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+324,hil-audit,SDCI_TC_0061,check_0061,spec_checks.py:210-212 asserts only 'ERR' for 0x7F32 | 0x8011 is not asserted.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+325,hil-audit,SDCI_TC_0062,check_0062,spec_checks.py:215-218 uses 8-bit VendorName 0x0010 sub0 vs sub2 and XOR of OK status | Wrong index width; no error-code assertion. XOR only approximates the allowed combinations.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+326,hil-audit,SDCI_TC_0063,check_0063,spec_checks.py:221-224 writes 33 bytes to ApplicationSpecificTag 0x0018 and asserts 'ERR' | Wrong object/length (tag max 32); this duplicates 0123; no unchanged-value check.,Device,可单测，已覆盖,0x8033 plus Config1 value preservation in tests/test_conformance_untested.c.
+327,hil-audit,SDCI_TC_0064,check_0064,spec_checks.py:227-228 is a bare pytest.skip() | No implementation; CSV blocked-oracle.,Device,可单测，已覆盖,0x8034 plus Config1 value preservation in tests/test_conformance_untested.c.
+328,hil-audit,SDCI_TC_0066,check_0066,spec_checks.py:231-232 writes 1 byte to 0x0010 and asserts only 'ERR' | 0x8023 is not asserted.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+329,hil-audit,SDCI_TC_0104,check_0104,spec_checks.py:235-238 writes only 0xFF and asserts 'ERR' | 0xFF is vendor-specific; only one value; no 0x8035.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+330,hil-audit,SDCI_TC_0107,check_0107,spec_checks.py:241-243 reads 0x0003 sub0 and asserts only 'OK' | No length or entry-count check.,DS,不可测,缺乏物理条件（HIL 测试环境不足）。
+331,hil-audit,SDCI_TC_0109,check_0109,spec_checks.py:246-256 writes 0x0001 and 0x0000 but never compares read-back | No read-back comparison; no warning for bits 0/1.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+332,hil-audit,SDCI_TC_0110,check_0110,spec_checks.py:259-262 only reads 0x000C and skips if ERR | Never writes an invalid value; cannot detect reserved-bit acceptance.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+333,hil-audit,SDCI_TC_0108,check_0108,spec_checks.py:265-268 loops sub1..5 but asserts only 'OK' or 'ERR' | Tautology: every possible response passes; no length/value checks.,DS,不可测,缺乏物理条件（HIL 测试环境不足）。
+334,hil-audit,SDCI_TC_0111,check_0111,spec_checks.py:271-272 asserts only 'ERR' for 0x000D | 0x8011 is not asserted.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+335,hil-audit,SDCI_TC_0112,check_0112,spec_checks.py:275-276 asserts only 'ERR' for 0x000E | 0x8011 is not asserted.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+336,hil-audit,SDCI_TC_0113,check_0113,spec_checks.py:279-280 asserts only 'ERR' for 0x000F | 0x8011 is not asserted.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+337,hil-audit,SDCI_TC_0122,check_0122,"spec_checks.py:283-304 writes a 15-byte tag, reads it, power-cycles, reads it | 15 < minimum 16; no length assertion; uses vendor NVM-flush hook 0x00E6.",Device,可单测，已覆盖,Fixed-length tag write/read and power-cycle read-back in tests/test_conformance_untested.c.
+338,hil-audit,SDCI_TC_0124,check_0124,"spec_checks.py:307-309 only asserts len=='2' | No error stimulation, increment, or reset check.",Device,可单测，已覆盖,"Error stimulus, +1 increment and reset-to-zero are covered."
+339,hil-audit,SDCI_TC_0134,check_0134,spec_checks.py:312-326 conditionally round-trips 6 combinations | CSV marks n/a (DUT lacks OffsetTime); not executed. Code itself is close if feature existed.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+340,hil-audit,SDCI_TC_0114,check_0114,spec_checks.py:329-330 -> assert_ok() only 'OK' and len<=64 | No UTF8 or content/IODD check.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+341,hil-audit,SDCI_TC_0115,check_0115,spec_checks.py:333-334 -> assert_ok() | No UTF8/content check.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+342,hil-audit,SDCI_TC_0116,check_0116,spec_checks.py:337-338 -> assert_ok() | No UTF8/content check.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+343,hil-audit,SDCI_TC_0117,check_0117,spec_checks.py:341-342 -> assert_ok() | No UTF8/content check.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+344,hil-audit,SDCI_TC_0118,check_0118,spec_checks.py:345-346 -> assert_ok() | No UTF8/content check.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+345,hil-audit,SDCI_TC_0119,check_0119,spec_checks.py:349-350 -> assert_ok(max_len=16) | No UTF8/content check.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+346,hil-audit,SDCI_TC_0120,check_0120,spec_checks.py:353-354 -> assert_ok() | No UTF8/content check.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+347,hil-audit,SDCI_TC_0121,check_0121,spec_checks.py:357-358 -> assert_ok() | No UTF8/content check.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+348,hil-audit,SDCI_TC_0123,check_0123,spec_checks.py:361-363 writes 33 bytes and asserts only 'ERR' | No 0x8033 and no before/after comparison.,Device,可单测，已覆盖,Overlong tag returns 0x8033 and preserves the previous value.
+349,hil-audit,SDCI_TC_0128,check_0128,spec_checks.py:366-368 asserts len=='1' only | Value range not checked.,Device,可单测，已覆盖,OPERATE precondition plus length/value assertions.
+350,hil-audit,SDCI_TC_0129,check_0129,spec_checks.py:371-376 treats 'ERR isdu_read empty' as pass and checks len%3==0 only | Empty DDS is not a valid pass; no upper bound.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+351,hil-audit,SDCI_TC_0156,check_0156,"spec_checks.py:379-388 writes 0x0001, writes tag, asserts only 'ERR', unlocks | 0x8023 not asserted; only one hard-coded parameter; lock write success not verified.",IODD,不可测,缺乏物理条件（HIL 测试环境不足）。
+352,hil-audit,SDCI_TC_0155,check_0155,"spec_checks.py:416-417 -> _system_command(0x82) at 391-413 only waits for OPERATE | CSV marks n/a; library implements 0x82, so n/a is unproven. If run, it checks nothing.",IODD,可单测，覆盖不足,DeviceStatus/defaults/IDs/tags are covered; DS_UPLOAD_FLAG=0 per Table 177 is a known production gap (test skip).
+353,hil-audit,SDCI_TC_0316,check_0316,spec_checks.py:420-421 -> _system_command(0x80) only waits for OPERATE | CSV n/a despite library 0x80 support; no restart/parameter checks.,IODD,可单测，已覆盖,Device-reset startup/DID/RID/parameter/status sequence is covered.
+354,hil-audit,SDCI_TC_0317,check_0317,spec_checks.py:424-425 -> _system_command(0x81) only waits for OPERATE | CSV n/a despite library 0x81 support; does not check the required no-startup.,IODD,可单测，已覆盖,"Application-reset no-startup, ID/tag preservation and DS_UPLOAD_REQ flag are covered."
+355,hil-audit,SDCI_TC_0318,check_0318,spec_checks.py:428-429 -> _system_command(0x83) only waits for OPERATE | CSV n/a despite library 0x83 support; no power cycle or default comparison.,IODD,可单测，覆盖不足,Back-to-box defaults/startup/IDs are covered; DS_UPLOAD_FLAG=0 per Table 178 is a known production gap (test skip).
+356,hil-audit,SDCI_TC_0136,check_0136,spec_checks.py:596-599 asserts only 'ERR' for each index | 0x8011 is not asserted.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+357,hil-audit,SDCI_TC_0137,check_0137,spec_checks.py:602-605 asserts only 'ERR' for each index | 0x8011 is not asserted.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+358,hil-audit,SDCI_TC_0132,check_0132,spec_checks.py:608-609 only asserts 'OK' | No length/content/DPP1 comparison.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+359,hil-audit,SDCI_TC_0133,check_0133,spec_checks.py:612-613 asserts len=='2' only | No DPP1 comparison or unused-bit check.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+360,hil-audit,SDCI_TC_0140,check_0140,spec_checks.py:616-617 writes 1 byte to 0x0010 and asserts only 'ERR' | Only one parameter; 0x8023 not asserted.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+361,hil-audit,SDCI_TC_0157,check_0157,spec_checks.py:620-625 uses VendorName 0x0010 sub0 OK / sub1 ERR | Not a complex parameter; no write or consistency comparison between sub0 and sub-n.,IODD,不可测,缺乏物理条件（HIL 测试环境不足）。
+362,hil-audit,SDCI_TC_0077,check_0077,"spec_checks.py:723-740 checks UploadStart/End flag and checksum equality | No DS State_Property transitions, no DS size check, no per-step state checks.",DS,不可测,缺乏物理条件（HIL 测试环境不足）。
+363,hil-audit,SDCI_TC_0078,check_0078,spec_checks.py:747-759 checks flag and checksum change only | Event DS_UPLOAD_REQ and DS state are not checked.,DS,不可测,缺乏物理条件（HIL 测试环境不足）。
+364,hil-audit,SDCI_TC_0065,check_0065,spec_checks.py:773-781 corrupts CHKPDU to 0xFF and checks (response[0]>>4)==0 | Only the high nibble is checked; low nibble/length are not. Report: got 0xC4 -> fail.,Device,可单测，已覆盖,Exact No Service response asserted; known-gap skip removed.
+365,hil-audit,SDCI_TC_0067,check_0067,"spec_checks.py:784-790 sends first byte, ABORT, IDLE; expects two zero responses | Does not send a legal first ISDU request/segment; expects two responses rather than one No Service.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+366,hil-audit,SDCI_TC_0068,check_0068,spec_checks.py:793-800 expects first response nonzero and abort/idle zero | Checks the pre-abort data segment as a required nonzero response; No Service only implied by zeros.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+367,hil-audit,SDCI_TC_0079,check_0079,"spec_checks.py:762-770 checks flag before/after store and clear after UploadEnd | No DS_UPLOAD_REQ event check, no DS state, no checksum.",DS,不可测,缺乏物理条件（HIL 测试环境不足）。
+368,hil-audit,SDCI_TC_0089,check_0089,spec_checks.py:803-809 compares link-state cycbyte with DPP1 0x01 | Does not explicitly set communication; DUT currently returns 0 (report fail). Comparison itself is correct.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+369,hil-audit,SDCI_TC_0097,check_0097,spec_checks.py:812-817 reads DPP1 0x0C/0x0D and asserts combined FunctionID==0 | Matches Table 121; addresses confirmed by interface spec Table B.1.,Device,可单测，已覆盖,OPERATE precondition and DPP1 FunctionID zero check in tests/test_dll.c.
+370,hil-audit,SDCI_TC_0101,check_0101,"spec_checks.py:820-834 writes 0x0E 0x00..0xFF with page_set status==0, checks no events and mode_state=4 | Matches the no-communication-error criterion; event check is stricter.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+371,hil-audit,SDCI_TC_0309,check_0309,"spec_checks.py:837-873 raw ExtLength read with repeats of first/middle/last segments, checks 0xD1, ExtLength, repeated bytes, checksum and data | Covers the specified retry steps and evaluation criteria.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+372,hil-audit,SDCI_TC_0321,check_0321,spec_checks.py:876-884 checks flag before/after store but not the event timeout | DS_UPLOAD_REQ timeout and DS state not checked.,DS,不可测,缺乏物理条件（HIL 测试环境不足）。
+373,hil-audit,SDCI_TC_0322,check_0322,"spec_checks.py:887-896 performs Store/UploadEnd/Store/DownloadEnd and asserts flag 1/0/1/0 | Flag sequence matches, but DSIdle_2 precondition is not established/verified.",DS,不可测,缺乏物理条件（HIL 测试环境不足）。
+374,hil-audit,SDCI_TC_0374,check_0374,"spec_checks.py:899-923 flushes NVM, power-cycles, asserts flag survives, then clears | No event check, no PREOPERATE/startup check, waits for OPERATE instead.",DS,不可测,缺乏物理条件（HIL 测试环境不足）。
+375,hil-audit,SDCI_TC_0080,check_0080,"spec_checks.py:628-651 uses vendor hook 0x00E9, checks flag set, does backup upload and tag compare | No DS_UPLOAD_REQ event check; local-change is a vendor hook, not a real local UI/teach-in.",DS,不可测,缺乏物理条件（HIL 测试环境不足）。
+376,hil-audit,SDCI_TC_0378,check_0378,spec_checks.py:926-940 parses the first list and stops at the first 0x0000 marker | Does not follow chained Index_List; EUT precondition PREOPERATE not enforced.,DS,不可测,缺乏物理条件（HIL 测试环境不足）。
+377,hil-audit,SDCI_TC_0323,check_0323,spec_checks.py:943-944 unconditionally skips with 'DUT DS is enabled; no-DS case is N/A' | Wrong rationale: 0323 is the termination-marker case for DS devices and is applicable.,DS,不可测,缺乏物理条件（HIL 测试环境不足）。
+378,hil-audit,SDCI_TC_0069,check_0069,"spec_checks.py:507-542 injects 0x8C00 then 0x8C01 and only compares qualifiers | No StatusCode sequence, no EventB/clear/idle evaluation.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+379,hil-audit,SDCI_TC_0070,check_0070,spec_checks.py:544-545 -> _event_check (432-458) runs after ensure_operate; no PREOPERATE | Wrong mode; only 'inject one event and see it'.,Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+380,hil-audit,SDCI_TC_0071,check_0071,"spec_checks.py:548-549 -> _event_check(0x8C00, type 2) | No clear/disappear/StatusCode sequence.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+381,hil-audit,SDCI_TC_0072,check_0072,"spec_checks.py:552-553 -> _event_check(0x8C00, type 1) | No communication interruption or reset; only injection/read.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+382,hil-audit,SDCI_TC_0073,check_0073,"spec_checks.py:556-557 -> _event_check(0x8C00, type 1) | No power interruption; no disappear-mode check.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+383,hil-audit,SDCI_TC_0074,check_0074,"spec_checks.py:560-561 -> _event_check(0x8C00, type 2) | No EventA_Disappear or appear/disappear qualifier checks.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+384,hil-audit,SDCI_TC_0075,check_0075,"spec_checks.py:564-565 -> _event_check(0x8C00, type 2) | Only one event is injected; no multiple/ordering checks.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+385,hil-audit,SDCI_TC_0076,check_0076,"spec_checks.py:568-569 -> _event_check(0x8C00, type 0) | No short appear+disappear sequence or timing check.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。
+386,hil-audit,SDCI_TC_0131,check_0131,"spec_checks.py:572-585 injects event, acks, reads 0x0025 and asserts code present | No power cycle or full parse; only one active-event check.",Device,可单测，已覆盖,Active-event DDS comparison across a re-init is covered.
+387,hil-audit,SDCI_TC_0373,check_0373,"spec_checks.py:588-593 injects and acks, then reads 0x0024 and asserts only 'OK' | No value, DDS, or disappear/restore check.",Device,不可测,缺乏物理条件（HIL 测试环境不足）。

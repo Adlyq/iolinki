@@ -914,8 +914,27 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                 /* ParamDownloadStore finalizes like DownloadEnd and additionally
                    raises DS_UPLOAD_REQ (10.4.2). */
                 const bool store = (cmd == IOLINK_CMD_PARAM_DOWNLOAD_STORE);
-                const uint8_t ds_cmd = store ? IOLINK_CMD_PARAM_DOWNLOAD_END : cmd;
-                int ret = iolink_ds_handle_command(ds, ds_cmd, locks);
+                int ret = 0;
+                if (store) {
+                    /* 0321/0322/0327: ParamDownloadStore is valid in DSIdle_2.
+                       Finalize an active download, abort an active upload, and
+                       always request the following upload. */
+                    if ((locks & IOLINK_LOCK_DS) != 0U) {
+                        ret = -2;
+                    }
+                    else if ((ds->state == IOLINK_DS_STATE_DOWNLOADING) ||
+                        (ds->state == IOLINK_DS_STATE_DOWNLOAD_REQ)) {
+                        ret = iolink_ds_handle_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_END,
+                                                       locks);
+                    }
+                    else if ((ds->state == IOLINK_DS_STATE_UPLOADING) ||
+                             (ds->state == IOLINK_DS_STATE_UPLOAD_REQ)) {
+                        (void) iolink_ds_abort(ds);
+                    }
+                }
+                else {
+                    ret = iolink_ds_handle_command(ds, cmd, locks);
+                }
 
                 if (ret != 0) {
                     ctx->response_buf[0] = 0x80U;

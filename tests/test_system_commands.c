@@ -906,6 +906,8 @@ static void test_0321_single_write_no_upload(void** state)
     f.ds.upload_event_pending = false;
     uint8_t resp[2] = {0U};
 
+    /* a/b/c: a single parameter write changes the checksum but must not
+       request Data Storage or set DS_UPLOAD_FLAG. */
     assert_int_equal(ds_block_write(&f, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "ONE",
                                     3U, resp, sizeof(resp)),
                      0);
@@ -915,11 +917,7 @@ static void test_0321_single_write_no_upload(void** state)
     assert_false(f.ds.upload_event_pending);
     assert_int_equal(f.ds.state, IOLINK_DS_STATE_IDLE);
 
-    /* The positive control: ParamDownloadStore raises it. */
-    assert_int_equal(ds_block_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_START, resp, sizeof(resp)), 0);
-    assert_int_equal(ds_block_write(&f, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "TWO",
-                                    3U, resp, sizeof(resp)),
-                     0);
+    /* d/e/f/g: ParamDownloadStore in DSIdle_2 raises the request and flag. */
     assert_int_equal(ds_block_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_STORE, resp, sizeof(resp)), 0);
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0x80U);
     assert_true(f.ds.upload_event_pending);
@@ -937,28 +935,20 @@ static void test_0322_upload_flag_four_step(void** state)
     iolink_ds_clear_upload(&f.ds);
     uint8_t resp[2] = {0U};
 
-    /* a/b: ParamDownloadStore -> flag 1. */
-    assert_int_equal(ds_block_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_START, resp, sizeof(resp)), 0);
-    ds_block_write_tags(&f, "A2", "B2", "C2");
+    /* a/b: ParamDownloadStore -> DSIdle_2 with flag 1. */
     assert_int_equal(ds_block_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_STORE, resp, sizeof(resp)), 0);
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0x80U);
 
-    /* c/d: DS_UploadEnd -> flag 0 (UploadStart first reaches the upload state). */
-    assert_int_equal(ds_block_ds_command(&f, 0x01U, resp, sizeof(resp)), 0);
-    iolink_ds_process(&f.ds);
+    /* c/d: DS_UploadEnd while in DSIdle_2 -> flag 0. */
     assert_int_equal(ds_block_ds_command(&f, 0x02U, resp, sizeof(resp)), 0);
     assert_int_equal(f.ds.state, IOLINK_DS_STATE_IDLE);
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
 
     /* e/f: another ParamDownloadStore -> flag 1. */
-    assert_int_equal(ds_block_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_START, resp, sizeof(resp)), 0);
-    ds_block_write_tags(&f, "A3", "B3", "C3");
     assert_int_equal(ds_block_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_STORE, resp, sizeof(resp)), 0);
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0x80U);
 
-    /* g/h: DS_DownloadEnd -> flag 0. */
-    assert_int_equal(ds_block_ds_command(&f, 0x03U, resp, sizeof(resp)), 0);
-    assert_int_equal(f.ds.state, IOLINK_DS_STATE_DOWNLOADING);
+    /* g/h: DS_DownloadEnd while in DSIdle_2 -> flag 0. */
     assert_int_equal(ds_block_ds_command(&f, 0x04U, resp, sizeof(resp)), 0);
     assert_int_equal(f.ds.state, IOLINK_DS_STATE_IDLE);
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
@@ -1002,6 +992,17 @@ static void test_0327_unexpected_in_upload(void** state)
                                     resp, sizeof(resp)),
                      0);
     ds_block_assert_tag(&f, IOLINK_IDX_APPLICATION_TAG, "Z");
+
+    /* g/h/i/j: dataStorage=true. ParamDownloadStore aborts an active upload,
+       raises DS_UPLOAD_REQ and sets DS_UPLOAD_FLAG; DS_UploadEnd clears it. */
+    assert_int_equal(ds_block_command(&f, IOLINK_CMD_PARAM_UPLOAD_START, resp, sizeof(resp)), 0);
+    iolink_ds_process(&f.ds);
+    assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOADING);
+    assert_int_equal(ds_block_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_STORE, resp, sizeof(resp)), 0);
+    assert_true(f.ds.upload_event_pending);
+    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0x80U);
+    assert_int_equal(ds_block_ds_command(&f, 0x02U, resp, sizeof(resp)), 0);
+    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
 }
 
 /* 0328: switching Upload -> Download -> Upload interrupts each active action

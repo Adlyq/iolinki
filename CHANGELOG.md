@@ -32,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ISDU: parameter writes are locked (`0x8022`) during an active Upload and
   parameter reads during an active Download, while SystemCommand and
   DataStorageIndex stay accessible.
+- Test Spec 1.1.5: `ParamDownloadStore` is now valid from `DSIdle_2` and
+  during Upload, and `DS_UploadEnd`/`DS_DownloadEnd` clear `DS_UPLOAD_FLAG`
+  directly in `DSIdle_2` (SDCI_TC_0321/0322/0327).
 
 ### Added (conformance reference integration)
 - `examples/conformance_device`: selectable full/config/PDOut-only/minimal
@@ -90,6 +93,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/HIL_AUDIT_2026-10-28.md`, `tests/hil_audit.csv` and
   `docs/HIL_CORRECTION_GUIDE_2026-10-28.md`.
 - Unit conformance annotations and the full 142-case traceability matrix.
+
+### Added (remaining Test Spec cases)
+- `tests/test_conformance_untested.c` covers the cases that were still marked
+  untested: SDCI_TC_0063/0064 (Config1 length errors preserve the value),
+  0122/0123 (ApplicationSpecificTag write/read, overlong rejection and
+  persistence), 0124 (ErrorCount increment/reset), 0128 (DeviceStatus in
+  OPERATE), 0131 (active-event DetailedDeviceStatus after restart), 0145/0329
+  (block Download/Upload interrupted by reset) and the IODD reset sequences
+  0155/0316/0317/0318. SDCI_TC_0035/0044/0097/0065 are extended in the existing
+  DLL/ISDU wire tests.
+- Table 177/178 `DS_UPLOAD_FLAG = 0` after factory restore/back-to-box still
+  differs from the current production behaviour; those two unit tests record
+  the gap with `skip_known_gap()`.
 
 ### Fixed (events / Data Storage)
 - Events: the Event flag now satisfies `flag == (count > 0)` at every setter

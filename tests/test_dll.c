@@ -127,6 +127,17 @@ static void feed_master_command(uint8_t cmd)
     feed_type0_page_write(0x00U, cmd);
 }
 
+/* An ISDU idle read (READ | ISDU channel | FlowCTRL idle) tagged with a
+ * non-Type-0 M-sequence type. A V1.1 Device that is still in STARTUP must not
+ * answer a legacy OPERATE M-sequence. */
+static void feed_isdu_idle_with_type(uint8_t type_bits)
+{
+    uint8_t frame[2] = {
+        (uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_IDLE), 0x00U};
+    frame[1] = (uint8_t) (type_bits | iolink_checksum6(frame, sizeof(frame)));
+    feed_frame_bytes(frame, sizeof(frame));
+}
+
 static void deliver_expect_type0_ack(iolink_device_ctx_t* ctx)
 {
     expect_any(mock_phy_send, data);
@@ -851,11 +862,34 @@ static void test_dll_startup_0x99_rejected(void** state)
     assert_true((iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_AWAITING_COMM) ||
                 (iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_STARTUP));
 
-    /* DeviceOperate 0x99 from STARTUP: no response, no state change. */
-    feed_master_command(IOLINK_CMD_DEVICE_OPERATE);
-    deliver_expect_no_reply(&dev.ctx);
-    assert_true((iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_AWAITING_COMM) ||
-                (iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_STARTUP));
+    /* Steps b-h: the legacy STARTUP->OPERATE attempt is repeated with both
+       MasterCycleTime values. In each pass a V1.1 Device rejects DeviceOperate
+       0x99 and a legacy OPERATE-type ISDU idle request from STARTUP, then
+       returns to STARTUP for the next value. */
+    const uint8_t cycle_times[2] = {k_dpp1_type21_com2[0x02], 0xBFU};
+    for (size_t i = 0U; i < (sizeof(cycle_times) / sizeof(cycle_times[0])); i++) {
+        feed_master_command(IOLINK_CMD_DEVICE_OPERATE);
+        deliver_expect_no_reply(&dev.ctx);
+        assert_true((iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_AWAITING_COMM) ||
+                    (iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_STARTUP));
+
+        feed_isdu_idle_with_type(IOLINK_MSEQ_TYPE_2);
+        deliver_expect_no_reply(&dev.ctx);
+        assert_true((iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_AWAITING_COMM) ||
+                    (iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_STARTUP));
+
+        /* Applying MasterCycleTime is a valid Type-0 page write. */
+        feed_type0_page_write(0x01U, cycle_times[i]);
+        deliver_expect_type0_ack(&dev.ctx);
+        assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
+        feed_type0_page_read(0x01U);
+        assert_int_equal(deliver_type0_read(&dev.ctx), cycle_times[i]);
+
+        /* Step g: return to STARTUP before the next MasterCycleTime value. */
+        feed_master_command(IOLINK_CMD_DEVICE_STARTUP);
+        deliver_expect_type0_ack(&dev.ctx);
+        assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_STARTUP);
+    }
 
     /* The legal Type-0 startup probe answers DPP1 and enters PREOPERATE. */
     feed_type0_page_read(0x02U);
@@ -1081,12 +1115,40 @@ static void test_dll_preoperate_truncated_write(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
 }
 
-/* Test Spec 0044: an OPERATE M-sequence type in PREOPERATE is not answered and
- * returns the Device to STARTUP; the following TYPE_0 read is answered. */
+/* Read one DPP1 octet with an explicit CKT/OD M-sequence type in PREOPERATE.
+ * Returns true when the Device answered; the answer is stored in *value. */
+static bool preoperate_read_with_type(iolink_device_ctx_t* ctx, uint8_t type_bits, uint8_t addr,
+                                      bool expect_reply, uint8_t* value)
+{
+    uint8_t frame[2] = {(uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | addr), type_bits};
+    frame[1] = (uint8_t) (type_bits | iolink_checksum6(frame, sizeof(frame)));
+    feed_frame_bytes(frame, sizeof(frame));
+
+    if (expect_reply) {
+        expect_any(mock_phy_send, data);
+        expect_value(mock_phy_send, len, 2);
+        will_return(mock_phy_send, 0);
+    }
+    mock_phy_clear_tx();
+    deliver_frame_to_dll(ctx);
+    size_t tx_len = 0U;
+    const uint8_t* tx = mock_phy_tx(&tx_len);
+    if (tx_len == 0U) {
+        return false;
+    }
+    assert_int_equal(tx_len, 2U);
+    *value = tx[0];
+    return true;
+}
+
 static void test_dll_preoperate_illegal_operate_type(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0044");
     (void) state;
+
+    /* Case a: PREOPERATE = TYPE_0 and != OPERATE (TYPE_2_1). A read with the
+       OPERATE M-sequence type is unanswered and forces STARTUP; the same read
+       with the PREOPERATE and STARTUP types (both TYPE_0) is answered. */
     iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
@@ -1096,20 +1158,60 @@ static void test_dll_preoperate_illegal_operate_type(void** state)
     dev.ctx.dll.state = IOLINK_DLL_STATE_PREOPERATE;
     dev.ctx.dll.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
 
-    uint8_t illegal[2] = {0x00U, IOLINK_MSEQ_TYPE_2};
-    illegal[1] = (uint8_t) (IOLINK_MSEQ_TYPE_2 | iolink_checksum6(illegal, sizeof(illegal)));
-    feed_frame_bytes(illegal, sizeof(illegal));
-    deliver_frame_to_dll(&dev.ctx);
+    uint8_t value = 0U;
+    assert_false(preoperate_read_with_type(&dev.ctx, IOLINK_MSEQ_TYPE_2, 0x02U, false, &value));
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_STARTUP);
 
-    uint8_t probe[2] = {(uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), 0x00U};
-    probe[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | iolink_checksum6(probe, sizeof(probe)));
-    feed_frame_bytes(probe, sizeof(probe));
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2);
-    will_return(mock_phy_send, 0);
-    deliver_frame_to_dll(&dev.ctx);
+    /* c) PREOPERATE M-sequence type (TYPE_0): answered, returns to PREOPERATE. */
+    assert_true(preoperate_read_with_type(&dev.ctx, IOLINK_MSEQ_TYPE_0, 0x02U, true, &value));
+    assert_int_equal(value, k_dpp1_type0_com2[0x02]);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
+
+    /* d) STARTUP M-sequence type (TYPE_0): answered. */
+    assert_true(preoperate_read_with_type(&dev.ctx, IOLINK_MSEQ_TYPE_0, 0x02U, true, &value));
+    assert_int_equal(value, k_dpp1_type0_com2[0x02]);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
+}
+
+/* Table 62 case c: PREOPERATE = TYPE_0 = OPERATE. All three reads are
+ * answered with the DPP1 MinCycleTime value. */
+static void test_dll_preoperate_type0_same_type(void** state)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0044");
+    (void) state;
+    iolink_config_t type0 = {.m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev0;
+    iolink_test_device_init(&dev0, &type0, NULL);
+    iolink_device_set_timing_enforcement(&dev0.ctx, false);
+    dev0.ctx.dll.state = IOLINK_DLL_STATE_PREOPERATE;
+
+    uint8_t value = 0U;
+    for (int pass = 0; pass < 3; pass++) {
+        assert_true(preoperate_read_with_type(&dev0.ctx, IOLINK_MSEQ_TYPE_0, 0x02U, true, &value));
+        assert_int_equal(value, k_dpp1_type0_com2[0x02]);
+        assert_int_equal(iolink_device_get_state(&dev0.ctx), IOLINK_DLL_STATE_PREOPERATE);
+    }
+}
+
+/* Test Spec 0097: in OPERATE the reserved DPP1 FunctionID octets are zero. */
+static void test_dll_function_id_zero_in_operate(void** state)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0097");
+    (void) state;
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, NULL, NULL);
+    establish_operate_type0(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    feed_type0_page_read(0x0CU);
+    assert_int_equal(deliver_type0_read(&dev.ctx), 0x00U);
+    feed_type0_page_read(0x0DU);
+    assert_int_equal(deliver_type0_read(&dev.ctx), 0x00U);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 }
 
 /* Test Spec 0046: from a full 0x9A/0x99/0x98 transition, read DPP1, mirror the
@@ -1516,6 +1618,10 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_dll_preoperate_truncated_write, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_preoperate_illegal_operate_type, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_preoperate_type0_same_type, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_function_id_zero_in_operate, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_operate_dpp1_read_write, test_setup,
                                         test_teardown),

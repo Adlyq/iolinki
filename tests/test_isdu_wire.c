@@ -331,9 +331,7 @@ static void test_isdu_wire_flowctrl_error(void** state)
 }
 
 /* Test Spec 10032 V1.1.4 Table 84 (SDCI_TC_0065): a request with an incorrect
- * CHKPDU is discarded and the next Read response is I-Service 0 ("No Service").
- * The current production path still frames 0xC4; keep this as a known gap until
- * the agreed production fix lands. */
+ * CHKPDU is discarded and the next Read response is I-Service 0 ("No Service"). */
 static void test_isdu_wire_chkpdu_corrupt(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0065");
@@ -348,10 +346,6 @@ static void test_isdu_wire_chkpdu_corrupt(void** state)
 
     uint8_t resp[8];
     size_t n = wire_read_response(&ctx, resp, sizeof(resp));
-    if ((n == 4U) && (resp[0] == 0xC4U)) {
-        print_message("[known-gap] SDCI_TC_0065 expects No Service, got 0xC4");
-        skip();
-    }
     assert_int_equal(n, 1U);
     assert_int_equal(resp[0], 0x00U);
 }

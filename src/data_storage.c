@@ -499,9 +499,15 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
             break;
 
         case IOLINK_CMD_PARAM_UPLOAD_END: /* 0x02 */
-            /* 0324: an ending command in Idle is unexpected. 0330: an upload
-               end during a download discards the staged download values. */
+            /* 0324: an ending command in Idle is unexpected. 0322: DSIdle_2
+               is Idle with DS_UPLOAD_FLAG set; ending there clears the flag.
+               0330: an upload end during a download discards the staged
+               download values. */
             if (ctx->state == IOLINK_DS_STATE_IDLE) {
+                if (ctx->ds_upload_flag) {
+                    ds_clear_upload_flag(ctx);
+                    break;
+                }
                 return -6;
             }
             if ((ctx->state == IOLINK_DS_STATE_DOWNLOADING) ||
@@ -525,8 +531,13 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
             break;
 
         case IOLINK_CMD_PARAM_DOWNLOAD_END: /* 0x04 */
-            /* 0324: an ending command in Idle is unexpected. */
+            /* 0324: an ending command in Idle is unexpected. 0322: ending in
+               DSIdle_2 (Idle with DS_UPLOAD_FLAG set) only clears the flag. */
             if (ctx->state == IOLINK_DS_STATE_IDLE) {
+                if (ctx->ds_upload_flag) {
+                    ds_clear_upload_flag(ctx);
+                    break;
+                }
                 return -6;
             }
             if (ctx->state == IOLINK_DS_STATE_DOWNLOADING) {

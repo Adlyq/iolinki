@@ -129,12 +129,19 @@ if(CMOCKA_FOUND)
     add_iolink_test(test_spec_conformance test_spec_conformance.c)
     # New Test Spec cases and known-gap xfails, annotated with SDCI_TC_xxxx IDs.
     add_iolink_test(test_conformance_gaps test_conformance_gaps.c)
+    add_iolink_test(test_conformance_untested test_conformance_untested.c)
     if(IOLINK_PLATFORM STREQUAL "LINUX")
         target_sources(test_conformance_gaps PRIVATE
             ../examples/conformance_device/conformance_device.c
             ../examples/conformance_device/conformance_profiles.c
             ../examples/conformance_device/conformance_storage.c)
         target_include_directories(test_conformance_gaps PRIVATE
+            ../examples/conformance_device)
+        target_sources(test_conformance_untested PRIVATE
+            ../examples/conformance_device/conformance_device.c
+            ../examples/conformance_device/conformance_profiles.c
+            ../examples/conformance_device/conformance_storage.c)
+        target_include_directories(test_conformance_untested PRIVATE
             ../examples/conformance_device)
     endif()
     # ISR-pump transport internals
