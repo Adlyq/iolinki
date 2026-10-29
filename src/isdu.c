@@ -891,13 +891,10 @@ static uint8_t isdu_ds_result_error(int ret, uint8_t fallback)
 }
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
-static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
+#if IOLINK_FEATURE_SYSTEM_COMMAND
+/** @brief 0x80-0x83: device/application reset, factory restore, back-to-box. */
+static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
-#if !IOLINK_FEATURE_SYSTEM_COMMAND
-    (void) cmd;
-    /* SystemCommand support is compiled out. */
-    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
-#else
     switch (cmd) {
         case IOLINK_CMD_DEVICE_RESET: /* 0x80 */
             /* Set reset flag for application to handle */
@@ -930,66 +927,101 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             }
             break;
 
+        default:
+            break; /* the dispatcher routes only the four commands here */
+    }
+}
+
+#if IOLINK_FEATURE_DATA_STORAGE
+/**
+ * @brief 0x01-0x06 Data Storage commands.
+ *
+ * @return true when an error response was already produced.
+ */
+static bool isdu_system_ds(iolink_isdu_ctx_t* ctx, uint8_t cmd)
+{
+    if (ctx->ds_ctx == NULL) {
+        return false; /* nothing to do: success (empty response) */
+    }
+    iolink_ds_ctx_t* ds = (iolink_ds_ctx_t*) ctx->ds_ctx;
+
+    if (cmd == IOLINK_CMD_PARAM_BREAK) { /* 0x06 */
+        /* In Idle there is nothing to abort, so this is an unexpected command
+           (0324). */
+        if (ds->state == IOLINK_DS_STATE_IDLE) {
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL);
+            return true;
+        }
+        (void) iolink_ds_abort(ds);
+        return false;
+    }
+
+    const uint16_t locks = isdu_access_locks(ctx);
+    /* ParamDownloadStore finalizes like DownloadEnd and additionally raises
+       DS_UPLOAD_REQ (10.4.2). */
+    const bool store = (cmd == IOLINK_CMD_PARAM_DOWNLOAD_STORE);
+    int ret = 0;
+    if (store) {
+        /* 0321/0322/0327: ParamDownloadStore is valid in DSIdle_2. Finalize an
+           active download, abort an active upload, and always request the
+           following upload. */
+        if ((locks & IOLINK_LOCK_DS) != 0U) {
+            ret = -2;
+        }
+        else if ((ds->state == IOLINK_DS_STATE_DOWNLOADING) ||
+                 (ds->state == IOLINK_DS_STATE_DOWNLOAD_REQ)) {
+            ret = iolink_ds_handle_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_END, locks);
+        }
+        else if ((ds->state == IOLINK_DS_STATE_UPLOADING) ||
+                 (ds->state == IOLINK_DS_STATE_UPLOAD_REQ)) {
+            (void) iolink_ds_abort(ds);
+        }
+    }
+    else {
+        ret = iolink_ds_handle_command(ds, cmd, locks);
+    }
+
+    if (ret != 0) {
+        isdu_respond_error(ctx, isdu_ds_result_error(ret, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL));
+        return true;
+    }
+    if (store) {
+        isdu_trigger_ds_upload_req(ctx);
+    }
+    return false;
+}
+#endif /* IOLINK_FEATURE_DATA_STORAGE */
+#endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
+
+static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
+{
+#if !IOLINK_FEATURE_SYSTEM_COMMAND
+    (void) cmd;
+    /* SystemCommand support is compiled out. */
+    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
+#else
+    switch (cmd) {
+        case IOLINK_CMD_DEVICE_RESET:             /* 0x80 */
+        case IOLINK_CMD_APPLICATION_RESET:        /* 0x81 */
+        case IOLINK_CMD_RESTORE_FACTORY_SETTINGS: /* 0x82 */
+        case IOLINK_CMD_BACK_TO_BOX:              /* 0x83 */
+            isdu_system_reset(ctx, cmd);
+            break;
+
             /* Table B.9: 0x84-0x9F are reserved (no SetCommunicationMode command). */
 
 #if IOLINK_FEATURE_DATA_STORAGE
-        /* Standard Data Storage Commands (0x01-0x06) */
+        /* Standard Data Storage Commands (0x01-0x06). */
         case IOLINK_CMD_PARAM_DOWNLOAD_START:
         case IOLINK_CMD_PARAM_DOWNLOAD_END:
         case IOLINK_CMD_PARAM_UPLOAD_START:
         case IOLINK_CMD_PARAM_UPLOAD_END:
         case IOLINK_CMD_PARAM_DOWNLOAD_STORE:
-            if (ctx->ds_ctx != NULL) {
-                iolink_ds_ctx_t* ds = (iolink_ds_ctx_t*) ctx->ds_ctx;
-                uint16_t locks = isdu_access_locks(ctx);
-                /* ParamDownloadStore finalizes like DownloadEnd and additionally
-                   raises DS_UPLOAD_REQ (10.4.2). */
-                const bool store = (cmd == IOLINK_CMD_PARAM_DOWNLOAD_STORE);
-                int ret = 0;
-                if (store) {
-                    /* 0321/0322/0327: ParamDownloadStore is valid in DSIdle_2.
-                       Finalize an active download, abort an active upload, and
-                       always request the following upload. */
-                    if ((locks & IOLINK_LOCK_DS) != 0U) {
-                        ret = -2;
-                    }
-                    else if ((ds->state == IOLINK_DS_STATE_DOWNLOADING) ||
-                             (ds->state == IOLINK_DS_STATE_DOWNLOAD_REQ)) {
-                        ret = iolink_ds_handle_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_END, locks);
-                    }
-                    else if ((ds->state == IOLINK_DS_STATE_UPLOADING) ||
-                             (ds->state == IOLINK_DS_STATE_UPLOAD_REQ)) {
-                        (void) iolink_ds_abort(ds);
-                    }
-                }
-                else {
-                    ret = iolink_ds_handle_command(ds, cmd, locks);
-                }
-
-                if (ret != 0) {
-                    isdu_respond_error(ctx,
-                                       isdu_ds_result_error(ret, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL));
-                    return;
-                }
-                if (store) {
-                    isdu_trigger_ds_upload_req(ctx);
-                }
-            }
-            break;
-
         case IOLINK_CMD_PARAM_BREAK: /* 0x06 */
-            /* Abort current Data Storage operation. In Idle there is nothing
-               to abort, so this is an unexpected command (0324). */
-            if (ctx->ds_ctx != NULL) {
-                iolink_ds_ctx_t* ds = (iolink_ds_ctx_t*) ctx->ds_ctx;
-                if (ds->state == IOLINK_DS_STATE_IDLE) {
-                    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL);
-                    return;
-                }
-                (void) iolink_ds_abort(ds);
+            if (isdu_system_ds(ctx, cmd)) {
+                return;
             }
             break;
-
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
         default:
@@ -1340,6 +1372,123 @@ static size_t isdu_append_ds_index_list(iolink_ds_ctx_t* ds, uint8_t* buf, size_
     return pos;
 }
 
+/** @brief DS write subindex 0: legacy image restore, or read-only reject. */
+static void isdu_ds_write_sub0(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
+{
+#if IOLINK_DS_LEGACY_IMAGE_SUB0
+    /* Legacy whole-image restore (kept for wire compatibility). */
+    const int rc = iolink_ds_apply_image(ds, ctx->buffer, ctx->buffer_idx);
+    if (rc != 0) {
+        isdu_respond_error(ctx, (rc == -1) ? IOLINK_ISDU_ERROR_PARAM_SET_INVALID
+                                           : IOLINK_ISDU_ERROR_PARAM_INCONSISTENT);
+    }
+    else {
+        ctx->response_len = 0U; /* Write acknowledged */
+    }
+#else
+    (void) ds;
+    /* Table B.10: the whole record is read-only; only DS_Command (subindex 1)
+       is writable. */
+    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+#endif
+}
+
+/** @brief DS write subindex 1: DS_Command. */
+static void isdu_ds_write_command(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
+{
+    if (ctx->buffer_idx == 0U) {
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN);
+        return;
+    }
+    const uint16_t locks = isdu_access_locks(ctx);
+    const int ret = iolink_ds_handle_ds_command(ds, ctx->buffer[0], locks);
+    if (ret == 0) {
+        ctx->response_len = 0U;
+    }
+    else {
+        isdu_respond_error(ctx, isdu_ds_result_error(ret, IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL));
+    }
+}
+
+/** @brief DS read subindex 0: concatenated record (or legacy image). */
+static void isdu_ds_read_record(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
+{
+#if IOLINK_DS_LEGACY_IMAGE_SUB0
+    /* Legacy whole-image backup read. */
+    size_t len = 0U;
+    const uint8_t* img = iolink_ds_get_image(ds, &len);
+    if ((img == NULL) || (len > IOLINK_ISDU_BUFFER_SIZE)) {
+        ctx->response_len = 0U;
+    }
+    else {
+        if (len > 0U) {
+            (void) memcpy(ctx->response_buf, img, len);
+        }
+        ctx->response_len = len;
+    }
+#else
+    /* Table B.10/B.11 (SDCI_TC_0107): sub0 is the concatenated record:
+       DS_Command, State_Property, Data_Storage_Size, Parameter_Checksum and
+       Index_List. */
+    if (!iolink_ds_downloading(ds)) {
+        (void) iolink_ds_build_image(ds);
+    }
+    size_t pos = 0U;
+    ctx->response_buf[pos++] = 0x00U; /* DS_Command read: unspecified */
+    ctx->response_buf[pos++] = iolink_ds_state_property(ds);
+    isdu_write_u32_be(ctx->response_buf, &pos, iolink_ds_size(ds));
+    isdu_write_u32_be(ctx->response_buf, &pos, iolink_ds_checksum(ds));
+    pos = isdu_append_ds_index_list(ds, ctx->response_buf, pos);
+    ctx->response_len = (uint8_t) pos;
+#endif
+}
+
+/** @brief DS read subindices 1-5. */
+static void isdu_ds_read_subindex(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds, uint8_t sub)
+{
+    switch (sub) {
+        case 1U:
+            /* DS_Command read returns unspecified values (Table B.10). Test Spec
+               0108 requires one octet with a value in 0..5. */
+            ctx->response_buf[0] = 0x00U;
+            ctx->response_len = 1U;
+            break;
+        case 2U:
+            ctx->response_buf[0] = iolink_ds_state_property(ds);
+            ctx->response_len = 1U;
+            break;
+        case 3U: {
+            size_t idx = 0U;
+            isdu_write_u32_be(ctx->response_buf, &idx, iolink_ds_size(ds));
+            ctx->response_len = (uint8_t) idx;
+            break;
+        }
+        case 4U: {
+            /* Table B.10: Parameter_Checksum reflects the current parameter set.
+               A direct (non-download) parameter write does not rebuild the DS
+               image, so refresh it before reporting the checksum; otherwise the
+               value read before ParamDownloadStore differs from the value after
+               it. */
+            if (!iolink_ds_downloading(ds)) {
+                (void) iolink_ds_build_image(ds);
+            }
+            size_t idx = 0U;
+            isdu_write_u32_be(ctx->response_buf, &idx, iolink_ds_checksum(ds));
+            ctx->response_len = (uint8_t) idx;
+            break;
+        }
+        case 5U: {
+            /* Index_List (Table B.11): [index(2) subindex(1)]*n + 0x0000. */
+            const size_t pos = isdu_append_ds_index_list(ds, ctx->response_buf, 0U);
+            ctx->response_len = (uint8_t) pos;
+            break;
+        }
+        default:
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+            break;
+    }
+}
+
 static void handle_data_storage(iolink_isdu_ctx_t* ctx)
 {
     iolink_ds_ctx_t* ds = (iolink_ds_ctx_t*) ctx->ds_ctx;
@@ -1352,121 +1501,27 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
 
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
         if (sub == 0U) {
-#if IOLINK_DS_LEGACY_IMAGE_SUB0
-            /* Legacy whole-image restore (kept for wire compatibility). */
-            const int rc = iolink_ds_apply_image(ds, ctx->buffer, ctx->buffer_idx);
-            if (rc != 0) {
-                isdu_respond_error(ctx, (rc == -1) ? IOLINK_ISDU_ERROR_PARAM_SET_INVALID
-                                                   : IOLINK_ISDU_ERROR_PARAM_INCONSISTENT);
-            }
-            else {
-                ctx->response_len = 0U; /* Write acknowledged */
-            }
-#else
-            /* Table B.10: the whole record is read-only; only DS_Command
-               (subindex 1) is writable. */
-            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
-#endif
+            isdu_ds_write_sub0(ctx, ds);
         }
         else if (sub == 1U) {
-            /* DS_Command (Table B.10 subindex 01). */
-            if (ctx->buffer_idx == 0U) {
-                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN);
-            }
-            else {
-                const uint16_t locks = isdu_access_locks(ctx);
-                const int ret = iolink_ds_handle_ds_command(ds, ctx->buffer[0], locks);
-                if (ret == 0) {
-                    ctx->response_len = 0U;
-                }
-                else {
-                    isdu_respond_error(
-                        ctx, isdu_ds_result_error(ret, IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL));
-                }
-            }
+            isdu_ds_write_command(ctx, ds);
         }
         else {
             /* Table B.10: subindices 02-05 are read-only. */
             isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
         }
     }
-    else {
-        switch (sub) {
-            case 0U: {
-#if IOLINK_DS_LEGACY_IMAGE_SUB0
-                /* Legacy whole-image backup read. */
-                size_t len = 0U;
-                const uint8_t* img = iolink_ds_get_image(ds, &len);
-                if ((img == NULL) || (len > IOLINK_ISDU_BUFFER_SIZE)) {
-                    ctx->response_len = 0U;
-                }
-                else {
-                    if (len > 0U) {
-                        (void) memcpy(ctx->response_buf, img, len);
-                    }
-                    ctx->response_len = len;
-                }
-#else
-                /* Table B.10/B.11 (SDCI_TC_0107): sub0 is the concatenated
-                   record: DS_Command, State_Property, Data_Storage_Size,
-                   Parameter_Checksum and Index_List. */
-                if (!iolink_ds_downloading(ds)) {
-                    (void) iolink_ds_build_image(ds);
-                }
-                size_t pos = 0U;
-                ctx->response_buf[pos++] = 0x00U; /* DS_Command read: unspecified */
-                ctx->response_buf[pos++] = iolink_ds_state_property(ds);
-                isdu_write_u32_be(ctx->response_buf, &pos, iolink_ds_size(ds));
-                isdu_write_u32_be(ctx->response_buf, &pos, iolink_ds_checksum(ds));
-                pos = isdu_append_ds_index_list(ds, ctx->response_buf, pos);
-                ctx->response_len = (uint8_t) pos;
-#endif
-                break;
-            }
-            case 1U:
-                /* DS_Command read returns unspecified values (Table B.10).
-                   Test Spec 0108 requires one octet with a value in 0..5. */
-                ctx->response_buf[0] = 0x00U;
-                ctx->response_len = 1U;
-                break;
-            case 2U:
-                ctx->response_buf[0] = iolink_ds_state_property(ds);
-                ctx->response_len = 1U;
-                break;
-            case 3U: {
-                size_t idx = 0U;
-                isdu_write_u32_be(ctx->response_buf, &idx, iolink_ds_size(ds));
-                ctx->response_len = (uint8_t) idx;
-                break;
-            }
-            case 4U: {
-                /* Table B.10: Parameter_Checksum reflects the current parameter
-                   set. A direct (non-download) parameter write does not rebuild
-                   the DS image, so refresh it before reporting the checksum;
-                   otherwise the value read before ParamDownloadStore differs
-                   from the value after it. */
-                if (!iolink_ds_downloading(ds)) {
-                    (void) iolink_ds_build_image(ds);
-                }
-                size_t idx = 0U;
-                isdu_write_u32_be(ctx->response_buf, &idx, iolink_ds_checksum(ds));
-                ctx->response_len = (uint8_t) idx;
-                break;
-            }
-            case 5U: {
-                /* Index_List (Table B.11): [index(2) subindex(1)]*n + 0x0000. */
-                const size_t pos = isdu_append_ds_index_list(ds, ctx->response_buf, 0U);
-                ctx->response_len = (uint8_t) pos;
-                break;
-            }
-            default:
-                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
-                break;
-        }
+    else if (sub == 0U) {
+        isdu_ds_read_record(ctx, ds);
     }
+    else {
+        isdu_ds_read_subindex(ctx, ds, sub);
+    }
+
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
+
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
 /** @brief Dispatch an executed ISDU request to the handler for its index. */
