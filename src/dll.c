@@ -2321,12 +2321,9 @@ static bool dll_isr_wants_eager(const iolink_dll_ctx_t* ctx, const uint8_t* f)
  * starts the reply before the mailbox copy so the first reply octet never waits
  * for the publish and a full mailbox cannot suppress it; RX FRAME publishes the
  * zero-copy pointer first and stabilises the mailbox after the reply window.
- *
- * @p allow_eager is false for a frame terminated by the CHK/gap indication,
- * which is never answered from the ISR.
  */
 static inline void dll_isr_complete_frame(iolink_dll_ctx_t* ctx, const uint8_t* f, uint8_t len,
-                                          bool allowed, bool allow_eager)
+                                          bool allowed)
 {
     if (dll_mc_is_isdu_write(f)) {
         /* Buffer only a valid request: a corrupt ISDU write must not reach the
@@ -2341,14 +2338,6 @@ static inline void dll_isr_complete_frame(iolink_dll_ctx_t* ctx, const uint8_t* 
         dll_master_activity(ctx); /* served this cycle from the ISR */
         return;
     }
-#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
-    if (!allow_eager) {
-        (void) dll_publish_isr_frame(ctx, f, len);
-        return;
-    }
-#else
-    (void) allow_eager;
-#endif
 
     const bool eager = dll_isr_wants_eager(ctx, f);
     ctx->isr_eager_replied = 0U;
@@ -2433,7 +2422,7 @@ static void dll_isr_drain_rx_frame(iolink_dll_ctx_t* ctx)
             ctx->phy->response_timer_start(ctx->phy->user);
         }
     }
-    dll_isr_complete_frame(ctx, f, len, allowed, true);
+    dll_isr_complete_frame(ctx, f, len, allowed);
 }
 #endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME */
 
@@ -2448,39 +2437,23 @@ static void dll_isr_rx_byte_reset(iolink_dll_ctx_t* ctx)
 /**
  * @brief RX BYTE: handle the CHK/gap frame end (Timer A) for the current buffer.
  *
- * The gap is a timeout, not the normal frame end. A frame that did not reach
- * its known length is truncated or lost and is dropped instead of feeding a
- * partial M-sequence to the stack. A length-complete M-sequence never ends here:
- * the byte engine consumes it as soon as its expected length arrives. The
- * completed-frame tail below is a defensive fallback for a PHY that reports the
- * gap together with the final octet.
+ * The gap is a timeout, not the normal frame end. It can only close a short
+ * M-sequence (fewer than the two header octets) or a truncated one: the byte
+ * engine consumes a frame as soon as its expected length arrives, so a
+ * length-complete frame never ends here. Both cases are discarded; only a real
+ * truncation is counted as a framing error.
  */
 static void dll_isr_rx_byte_gap(iolink_dll_ctx_t* ctx)
 {
     const bool incomplete_ms = (ctx->isr_rx_expect != 0U) &&
                                (ctx->isr_rx_cnt >= IOLINK_M_SEQ_HEADER_LEN) &&
                                (ctx->isr_rx_cnt < ctx->isr_rx_expect);
-    if ((ctx->isr_rx_cnt < IOLINK_M_SEQ_HEADER_LEN) || incomplete_ms) {
-        if (incomplete_ms) {
-            ctx->framing_errors++;
-        }
-        dll_isr_rx_byte_reset(ctx);
-        if ((ctx->isr_tx_active == 0U) && (ctx->phy->tx_done != NULL)) {
-            ctx->phy->tx_done(ctx->phy->user);
-        }
-        return;
-    }
-    if (ctx->isr_rx_cnt != 0U) {
-        /* A completed frame proves the master is polling; see the RX FRAME
-         * branch (long main windows must not be counted as a lost master). */
-        ctx->isr_master_activity = 1U;
-        const bool allowed =
-            dll_isr_reply_allowed_acc(ctx, ctx->isr_rx_buf, ctx->isr_rx_cnt, ctx->isr_rx_acc);
-        dll_isr_complete_frame(ctx, ctx->isr_rx_buf, ctx->isr_rx_cnt, allowed, false);
+    if (incomplete_ms) {
+        ctx->framing_errors++;
     }
     dll_isr_rx_byte_reset(ctx);
-    /* Release the transceiver's receive engine unless the Type-0 fast path
-     * already started a reply (the TX drain calls tx_done). */
+    /* Release the transceiver's receive engine unless a reply is in flight
+     * (the TX drain calls tx_done). */
     if ((ctx->isr_tx_active == 0U) && (ctx->phy->tx_done != NULL)) {
         ctx->phy->tx_done(ctx->phy->user);
     }
@@ -2543,7 +2516,7 @@ static void dll_isr_rx_byte_complete(iolink_dll_ctx_t* ctx)
     ctx->isr_master_activity = 1U;
     const bool allowed =
         dll_isr_reply_allowed_acc(ctx, ctx->isr_rx_buf, ctx->isr_rx_expect, ctx->isr_rx_acc);
-    dll_isr_complete_frame(ctx, ctx->isr_rx_buf, ctx->isr_rx_expect, allowed, true);
+    dll_isr_complete_frame(ctx, ctx->isr_rx_buf, ctx->isr_rx_expect, allowed);
     dll_isr_rx_byte_reset(ctx);
 }
 
