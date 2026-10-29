@@ -215,7 +215,7 @@ void iolink_ds_process(iolink_ds_ctx_t* ctx);
 void iolink_ds_check(iolink_ds_ctx_t* ctx, uint32_t master_checksum);
 
 /**
- * @brief Start parameter upload to Master (System Command 0x95)
+ * @brief Start parameter upload to Master (ParamUploadStart, 0x01)
  *
  * @param ctx DS context
  * @return int 0 on success, negative if DS not initialized
@@ -223,7 +223,7 @@ void iolink_ds_check(iolink_ds_ctx_t* ctx, uint32_t master_checksum);
 int iolink_ds_start_upload(iolink_ds_ctx_t* ctx);
 
 /**
- * @brief Start parameter download from Master (System Command 0x96)
+ * @brief Start parameter download from Master (ParamDownloadStart, 0x03)
  *
  * @param ctx DS context
  * @return int 0 on success, negative if DS not initialized

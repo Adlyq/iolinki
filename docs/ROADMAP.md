@@ -191,15 +191,15 @@ This roadmap outlines the development path for `iolinki`, enabling a fully compl
 **Goal:** Close all gaps identified in compliance analysis to achieve certification readiness.
 
 ### 5.1 Mandatory Commands (High Priority)
-- [ ] Complete System Command handlers (0x0002 remaining: 0x80-0x84, 0x95-0x97)
-- [ ] Complete remaining mandatory ID indices (0x0019, 0x001A, 0x001C-0x001E)
+- [x] Complete System Command handlers (0x0002: 0x80-0x83; 0x84-0x9F reserved and rejected)
+- [x] Complete remaining mandatory ID indices (0x0019, 0x001A, 0x001C-0x001E)
 - [x] Implement Device Access Locks (Index 0x000C)
 
 ### 5.2 Protocol Completion (High Priority)
 - [x] Implement M-sequence Type 1_x (8-bit OD variants)
 - [x] Implement M-sequence Type 2_x (ISDU + PD combined)
 - [x] Implement On-Request Data (OD) mechanism
-- [ ] Implement SIO Mode switching logic
+- [x] Implement SIO Mode switching logic
 - [x] Implement Wake-up pulse handling
 
 ### 5.3 Robustness & Standards (Medium Priority)

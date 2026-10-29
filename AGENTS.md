@@ -54,8 +54,8 @@ ctest -R test_dll
 - Table B.8: `0x0004-0x000B` and `0x001C-0x001F` are reserved. VendorID/DeviceID
   live in DPP1 (`0x07-0x0B`); FunctionID is a ProfileCharacteristic subfield;
   RevisionID is DPP1 `0x04`.
-- `IOLINK_IDX_VENDOR_ID`/`DEVICE_ID` are legacy non-standard constants pending
-  removal.
+- VendorID/DeviceID live only in DPP1; no `IOLINK_IDX_VENDOR_ID`/`DEVICE_ID`
+  constants are exposed.
 - SystemCommand `Param*` codes are Table B.9 `0x01-0x06`; `0x84` is reserved.
   These were corrected locally even though upstream still uses older values.
 

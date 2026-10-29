@@ -542,7 +542,7 @@ flowchart TD
 | `0x03/0x04` ParamDownloadStart/End | DS 下载；下载期间 Tag 写入先暂存，End 时原子应用 |
 | `0x05` ParamDownloadStore | 映射为 DownloadEnd，并触发 DS_UPLOAD_REQ |
 | `0x06` ParamBreak | 中止 DS |
-| `0x95/0x96` | 旧版上传/下载启动兼容映射 |
+| `0x84-0x9F` | 保留值（含旧 `0x95/0x96`），返回 `0x8035` |
 | 其他 | `0x8035` Function not available |
 
 `0x80/0x81` 不会自动重启设备；reset handler 由应用通过 `iolink_device_set_reset_handler()` 注册并决定动作。

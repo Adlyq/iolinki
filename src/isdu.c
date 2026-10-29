@@ -147,7 +147,7 @@ static uint16_t isdu_access_locks(const iolink_isdu_ctx_t* ctx)
 /** @brief Map a parameter-manager error to an ISDU negative response. */
 static void isdu_respond_param_error(iolink_isdu_ctx_t* ctx, int ret)
 {
-    uint8_t error = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+    uint8_t error = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
     if (ret == -2) {
         error = IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN;
     }
@@ -238,7 +238,7 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
     }
     else {
         ctx->response_buf[0] = 0x80U;
-        ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+        ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
         ctx->response_len = 2U;
         ctx->state = ISDU_STATE_RESPONSE_READY;
         return;
@@ -256,7 +256,7 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
     if (two_index) {
         if ((pos + 1U) >= payload_end) {
             ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+            ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
             ctx->response_len = 2U;
             ctx->state = ISDU_STATE_RESPONSE_READY;
             return;
@@ -268,7 +268,7 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
     else {
         if (pos >= payload_end) {
             ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+            ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
             ctx->response_len = 2U;
             ctx->state = ISDU_STATE_RESPONSE_READY;
             return;
@@ -388,7 +388,7 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
         /* COUNT (0x00..0x0F): must follow a START. A repeated FlowCTRL repeats
            the previous message and its payload is ignored (7.3.6.2). */
         if (!ctx->flowctrl_seen || (ctx->state == ISDU_STATE_IDLE)) {
-            ctx->error_code = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+            ctx->error_code = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
             isdu_transport_reset(ctx);
             return;
         }
@@ -436,7 +436,7 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
                request invalid. Discard it, return to Idle and answer the next
                Read request with I-Service 0 ("No Service"). Do not synthesize a
                negative ISDU response for the malformed request. */
-            ctx->error_code = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+            ctx->error_code = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
             isdu_transport_reset(ctx);
             return;
         }
@@ -527,7 +527,7 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
     const char* str_data = NULL;
 
     if (info == NULL) {
-        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL);
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
         return;
     }
 
@@ -698,7 +698,7 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
                 /* Persistent storage rejected the service: terminate with a
                  * negative response instead of leaving the master polling Busy. */
                 ctx->response_buf[0] = 0x80U;
-                ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+                ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
                 ctx->response_len = 2U;
                 ctx->response_idx = 0U;
                 ctx->state = ISDU_STATE_RESPONSE_READY;
@@ -728,7 +728,7 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
                 /* Persistent storage rejected the service: terminate with a
                  * negative response instead of leaving the master polling Busy. */
                 ctx->response_buf[0] = 0x80U;
-                ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+                ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
                 ctx->response_len = 2U;
                 ctx->response_idx = 0U;
                 ctx->state = ISDU_STATE_RESPONSE_READY;
@@ -890,7 +890,7 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             isdu_trigger_ds_upload_req(ctx);
             break;
 
-        case IOLINK_CMD_RESTORE_APP_DEFAULTS: /* 0x83 Back-to-box */
+        case IOLINK_CMD_BACK_TO_BOX: /* 0x83 */
             /* Restore the delivery values, then stop and disable communication
                after the response (10.7.5). */
             isdu_params_factory_reset(ctx);
@@ -940,7 +940,7 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                             IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL; /* 0x36, Table C.1 */
                     }
                     else {
-                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
                     }
                     ctx->response_len = 2U;
                     ctx->response_idx = 0U;
@@ -949,36 +949,6 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                 }
                 if (store) {
                     isdu_trigger_ds_upload_req(ctx);
-                }
-            }
-            break;
-
-        /* Legacy/Custom DS Commands (0x95-0x97) - Mapped to standard flows if
-           possible. Table B.9 marks 0x84-0x9F reserved; accepted for legacy
-           master compatibility. */
-        case IOLINK_CMD_PARAM_UPLOAD: /* 0x95 -> 0x07 Start Upload */
-            if (ctx->ds_ctx != NULL) {
-                /* Legacy mapped to Upload Start */
-                if (iolink_ds_start_upload((iolink_ds_ctx_t*) ctx->ds_ctx) != 0) {
-                    ctx->response_buf[0] = 0x80U;
-                    ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL;
-                    ctx->response_len = 2U;
-                    ctx->response_idx = 0U;
-                    ctx->state = ISDU_STATE_RESPONSE_READY;
-                    return;
-                }
-            }
-            break;
-
-        case IOLINK_CMD_PARAM_DOWNLOAD: /* 0x96 -> 0x05 Start Download */
-            if (ctx->ds_ctx != NULL) {
-                if (iolink_ds_start_download((iolink_ds_ctx_t*) ctx->ds_ctx) != 0) {
-                    ctx->response_buf[0] = 0x80U;
-                    ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL;
-                    ctx->response_len = 2U;
-                    ctx->response_idx = 0U;
-                    ctx->state = ISDU_STATE_RESPONSE_READY;
-                    return;
                 }
             }
             break;
@@ -1159,7 +1129,7 @@ static void handle_error_stats(iolink_isdu_ctx_t* ctx)
 
     if (ctx->dll_ctx == NULL) {
         ctx->response_buf[0] = 0x80U;
-        ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+        ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
         ctx->response_len = 2U;
         return;
     }
@@ -1377,7 +1347,7 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
 
     if (ds == NULL) {
         ctx->response_buf[0] = 0x80U;
-        ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+        ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
         ctx->response_len = 2U;
         ctx->response_idx = 0U;
         ctx->state = ISDU_STATE_RESPONSE_READY;
@@ -1603,7 +1573,7 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
                                 ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE, ctx->buffer,
                                 ctx->buffer_idx, ctx->response_buf, &length);
         if (length > capacity) {
-            error = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+            error = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
         }
         if (error != 0U) {
             ctx->response_buf[0] = 0x80U;
@@ -1625,7 +1595,7 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
             }
             else {
                 ctx->response_buf[0] = 0x80U;
-                ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL;
+                ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
                 ctx->response_len = 2U;
                 ctx->response_idx = 0U;
                 ctx->state = ISDU_STATE_RESPONSE_READY;

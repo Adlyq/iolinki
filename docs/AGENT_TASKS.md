@@ -168,7 +168,7 @@ Acceptance:
 ## Task 11: System Command Handlers (0x0002 Remaining)
 Status: done by antigravity (2026-02-04)
 Scope:
-- Implement remaining System Command subcommands: `0x80`–`0x84`, `0x95`–`0x97`.
+- Implement System Command subcommands: `0x80`–`0x83`; `0x84`–`0x9F` stay reserved.
 - Ensure commands route through the ISDU framework and update device state safely.
 - Add/extend tests for each subcommand and verify Virtual Master behavior.
 Primary files:

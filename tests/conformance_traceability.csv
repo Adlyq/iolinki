@@ -32,7 +32,7 @@ SDCI_TC_0080,tests/test_conformance_gaps.c,test_0080_local_change_requests_uploa
 SDCI_TC_0089,tests/test_conformance_gaps.c,test_0089_master_cycle_time_readback,direct,Production now copies master_cycle_time into DPP1 0x01. Test sets the DLL field directly; master-write path still open.,library-core,full,none
 SDCI_TC_0097,tests/test_conformance_gaps.c,test_0097_function_id_zero,direct,Value check is correct; OPERATE precondition not established.,library-core,full,none
 SDCI_TC_0101,tests/test_conformance_gaps.c,test_0101_reserved_dpp1_write,direct,Strong: exhaustive byte range and communication/event checks.,library-core,full,none
-SDCI_TC_0104,tests/test_system_commands.c,test_reserved_commands_rejected; test_isdu_wire_unsupported_system_command,direct,"Does not enumerate the capability-dependent ranges (0x00-0x06,0x40-0x7F,0xA0-0xFF).",library-core,full,none
+SDCI_TC_0104,tests/test_conformance_gaps.c,test_0104_system_command_ranges; test_reserved_commands_rejected,direct,"Exhaustive SystemCommand range check; 0x84-0x9F, including old 0x95/0x96 aliases, are reserved.",library-core,full,none
 SDCI_TC_0107,tests/test_isdu.c,test_isdu_data_storage_subindices,direct,"Production now returns the concatenated 12+3n record on sub0; test checks length, header size/checksum and Index_List tail.",library-core,full,none
 SDCI_TC_0108,tests/test_isdu.c,test_isdu_data_storage_subindices,direct,Production now returns 1 byte on sub1; test checks sub1..5 lengths/values.,library-core,full,none
 SDCI_TC_0109,tests/test_ident_indices.c,test_device_access_locks_round_trip,direct,Missing the spec's second half (write 0x0000 and read back) and the bit0/1 warning.,library-core,full,none

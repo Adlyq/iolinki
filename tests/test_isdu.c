@@ -278,8 +278,7 @@ static void test_system_cmd_factory_restore(void** state)
 
     iolink_isdu_process(&ctx);
 
-    /* Verify success response */
-    /* Verify success response (empty) */
+    /* Verify success response (empty). */
     uint8_t resp_buf[1];
     assert_int_equal(isdu_collect_response(&ctx, resp_buf, sizeof(resp_buf)), 0); /* No data */
 
@@ -289,56 +288,33 @@ static void test_system_cmd_factory_restore(void** state)
     assert_int_equal(len, 0); /* Should be empty after factory reset */
 }
 
-static void test_system_cmd_param_upload(void** state)
+static void test_system_cmd_reserved_ds_commands(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0104");
     (void) state;
-    iolink_isdu_ctx_t ctx;
-    iolink_ds_ctx_t ds;
-    iolink_device_info_init(NULL);
-    iolink_params_init();
-    iolink_ds_init(&ds, NULL);
-    iolink_isdu_init(&ctx);
-    ctx.ds_ctx = &ds;
+    const uint8_t reserved[] = {0x95U, 0x96U};
 
-    /* Write 0x95 to Index 0x0002 */
-    uint8_t cmd_data[] = {IOLINK_CMD_PARAM_UPLOAD};
-    assert_int_equal(isdu_send_write_request(&ctx, 0x0002, 0x00, cmd_data, 1), 1);
+    for (uint8_t i = 0U; i < 2U; i++) {
+        iolink_isdu_ctx_t ctx;
+        iolink_ds_ctx_t ds;
+        iolink_device_info_init(NULL);
+        iolink_params_init();
+        iolink_ds_init(&ds, NULL);
+        iolink_isdu_init(&ctx);
+        ctx.ds_ctx = &ds;
 
-    iolink_isdu_process(&ctx);
+        uint8_t cmd_data[] = {reserved[i]};
+        assert_int_equal(isdu_send_write_request(&ctx, 0x0002, 0x00, cmd_data, 1), 1);
+        iolink_isdu_process(&ctx);
 
-    /* Verify DS state changed to upload */
-    assert_int_equal(ds.state, IOLINK_DS_STATE_UPLOAD_REQ);
-
-    /* Verify success response */
-    /* Verify success response (empty) */
-    uint8_t resp_buf[1];
-    assert_int_equal(isdu_collect_response(&ctx, resp_buf, sizeof(resp_buf)), 0); /* No data */
-}
-
-static void test_system_cmd_param_download(void** state)
-{
-    (void) state;
-    iolink_isdu_ctx_t ctx;
-    iolink_ds_ctx_t ds;
-    iolink_device_info_init(NULL);
-    iolink_params_init();
-    iolink_ds_init(&ds, NULL);
-    iolink_isdu_init(&ctx);
-    ctx.ds_ctx = &ds;
-
-    /* Write 0x96 to Index 0x0002 */
-    uint8_t cmd_data[] = {IOLINK_CMD_PARAM_DOWNLOAD};
-    assert_int_equal(isdu_send_write_request(&ctx, 0x0002, 0x00, cmd_data, 1), 1);
-
-    iolink_isdu_process(&ctx);
-
-    /* Verify DS state changed to download */
-    assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOAD_REQ);
-
-    /* Verify success response */
-    /* Verify success response (empty) */
-    uint8_t resp_buf[1];
-    assert_int_equal(isdu_collect_response(&ctx, resp_buf, sizeof(resp_buf)), 0); /* No data */
+        /* Table B.9: 0x84-0x9F are reserved SystemCommand values. */
+        assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
+        uint8_t byte;
+        assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+        assert_int_equal(byte, 0x80U);
+        assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+        assert_int_equal(byte, 0x35U);
+    }
 }
 
 static void test_system_cmd_param_break(void** state)
@@ -355,7 +331,7 @@ static void test_system_cmd_param_break(void** state)
     /* Set DS to uploading state first */
     ds.state = IOLINK_DS_STATE_UPLOADING;
 
-    /* Write 0x97 to Index 0x0002 */
+    /* Write 0x06 (ParamBreak) to Index 0x0002. */
     uint8_t cmd_data[] = {IOLINK_CMD_PARAM_BREAK};
     assert_int_equal(isdu_send_write_request(&ctx, 0x0002, 0x00, cmd_data, 1), 1);
 
@@ -364,8 +340,7 @@ static void test_system_cmd_param_break(void** state)
     /* Verify DS state was aborted to idle */
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
 
-    /* Verify success response */
-    /* Verify success response (empty) */
+    /* Verify success response (empty). */
     uint8_t resp_buf[1];
     assert_int_equal(isdu_collect_response(&ctx, resp_buf, sizeof(resp_buf)), 0); /* No data */
 }
@@ -1186,8 +1161,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_system_cmd_app_reset_raises_ds_upload_req,
                                         test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_system_cmd_factory_restore, test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_system_cmd_param_upload, test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_system_cmd_param_download, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_system_cmd_reserved_ds_commands, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_system_cmd_param_break, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_system_cmd_invalid, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_function_tag_read_write, test_setup,

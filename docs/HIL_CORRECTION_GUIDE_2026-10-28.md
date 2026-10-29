@@ -13,6 +13,10 @@ Sources:
 
 ---
 
+> **Scope:** this is an external HIL-project artifact. It is retained
+> for HIL maintainers; it is not part of the iolinki library completion
+> criteria and must not be used to reopen in-scope library gaps.
+
 ## 1. Why this guide exists
 
 The current HIL run reports 62 passes, but only 5 of the 72 implemented checks

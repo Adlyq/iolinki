@@ -13,9 +13,10 @@ The companion master stack is [iolinki-master](https://github.com/w1ne/iolinki-m
 ## Conformance & testing
 
 - **[SPEC_CONFORMANCE](SPEC_CONFORMANCE.md)** - **start here:** V1.1.5 table ->
-  implementation -> test matrix plus the known-gap backlog.
+  implementation -> test matrix plus external residuals.
+- **[Conformance Audit](CONFORMANCE_AUDIT_2026-10-28.md)** - 142-case audit,
+  final scope split and evidence status.
 - **[Testing Guide](TESTING.md)** - Unit tests, integration tests, Virtual Master.
-- **[CONFORMANCE](CONFORMANCE.md)** - Virtual-Master conformance suites.
 
 ## Development
 

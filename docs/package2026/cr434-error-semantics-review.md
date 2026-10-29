@@ -10,6 +10,11 @@ Scope: CR434 — the ErrorTypes `SERV_NOTAVAIL` (0x20), `SERV_NOTAVAIL_LOCCTRL` 
 used for permanently unavailable functions. Review of the device stack error-code usage only;
 no wire change was made.
 
+> **Follow-up (2026-10-29):** the deprecated names reviewed below
+> (`IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL`, `IOLINK_ISDU_ERROR_BUSY`) have been
+> removed from the public header. The wire values and the CR434 conclusion are
+> unchanged; see `CHANGELOG.md` and `include/iolinki/protocol.h`.
+
 ## 1. The reviewed spec text
 
 D1.1.6-02, **C.2.5, p. 273**:

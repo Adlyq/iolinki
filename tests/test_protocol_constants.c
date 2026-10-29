@@ -70,9 +70,6 @@ static void test_isdu_service_ids(void** state)
     (void) state;
     assert_int_equal(IOLINK_ISDU_SERVICE_READ, 0x0BU);
     assert_int_equal(IOLINK_ISDU_SERVICE_WRITE, 0x03U);
-    assert_int_equal(IOLINK_ISDU_CTRL_START, 0x80U);
-    assert_int_equal(IOLINK_ISDU_CTRL_LAST, 0x40U);
-    assert_int_equal(IOLINK_ISDU_CTRL_SEQ_MASK, 0x3FU);
 }
 
 /* Table B.8: mandatory object indices. */
@@ -83,11 +80,8 @@ static void test_isdu_index_values(void** state)
     assert_int_equal(IOLINK_IDX_DIRECT_PARAMETERS_2, 0x0001U);
     assert_int_equal(IOLINK_IDX_SYSTEM_COMMAND, 0x0002U);
     assert_int_equal(IOLINK_IDX_DATA_STORAGE, 0x0003U);
-    /* Table B.8: 0x0004-0x000B are reserved. The legacy IOLINK_IDX_VENDOR_ID
-     * (0x000A) / IOLINK_IDX_DEVICE_ID (0x000B) constants are NOT standard
-     * indices; VendorID/DeviceID live in Direct Parameter Page 1. */
-    assert_int_equal(IOLINK_IDX_VENDOR_ID, 0x000AU);
-    assert_int_equal(IOLINK_IDX_DEVICE_ID, 0x000BU);
+    /* Table B.8: 0x0004-0x000B are reserved; VendorID/DeviceID live in
+     * Direct Parameter Page 1, and no ISDU index constants are exposed. */
     assert_int_equal(IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0x000CU);
     assert_int_equal(IOLINK_IDX_PROFILE_CHARACTERISTIC, 0x000DU);
     assert_int_equal(IOLINK_IDX_VENDOR_NAME, 0x0010U);
@@ -132,10 +126,8 @@ static void test_isdu_error_values(void** state)
     (void) state;
     assert_int_equal(IOLINK_ISDU_ERROR_NONE, 0x00U);
     assert_int_equal(IOLINK_ISDU_ERROR_IDX_NOT_AVAIL, 0x11U);          /* IDX_NOTAVAIL */
-    assert_int_equal(IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL, 0x11U);      /* legacy alias */
     assert_int_equal(IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL, 0x12U);     /* SUBIDX_NOTAVAIL */
     assert_int_equal(IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL, 0x20U); /* SERV_NOTAVAIL */
-    assert_int_equal(IOLINK_ISDU_ERROR_BUSY, 0x20U);                   /* deprecated: DS busy */
     assert_int_equal(IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_LOCAL_CTRL, 0x21U); /* SERV_NOTAVAIL_LOCCTRL */
     assert_int_equal(IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_DEV_CTRL, 0x22U);   /* SERV_NOTAVAIL_DEVCTRL */
     assert_int_equal(IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG, 0x30U);     /* PAR_VALOUTOFRNG */

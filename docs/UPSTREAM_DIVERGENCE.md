@@ -35,7 +35,7 @@
 | 9 | fixedLength 截断 | B.2.8–B.2.19（64 / Serial 16 / URI 100 / Tag 32） | 我们 |
 | 10 | `ProfileCharacteristic` ArrayT | Table B.8 `ArrayT of UIntegerT16` + B.2.5 条件 | 我们（PR#3） |
 | 11 | SystemCommand 码 | Table B.9（`0x01-0x06`；`0x84-0x9F Reserved`；`0x83 Back-to-box`） | 我们 |
-| 12 | `0x95/0x96/0x97` 是 MasterCommand | Table B.2（MasterIdent/DeviceIdent/DeviceStartup） | 我们 |
+| 12 | `0x95/0x96/0x97` 是 MasterCommand，不是 SystemCommand | Table B.2（MasterIdent/DeviceIdent/DeviceStartup）+ Table B.9 | 我们 |
 | 13 | DeviceStatus 0–4 + 优先级 | Table B.13（4=Failure prio 1 … 0=OK prio 5） | 我们 |
 | 14 | DDS 语义（仅 appears 的 Error/Warning） | B.2.22 | 我们 |
 | 15 | Event memory 冻结时机 | 7.2.1.17 `DL_EventTrigger … freezes the Event memory` | 我们 |
@@ -68,9 +68,9 @@
 | :--- | :--- | :--- | :---: |
 | Param* 码（Table B.9） | 旧值：DownloadStart..UploadEnd 落在 `0x05-0x08` | `0x01/0x02` Upload、`0x03/0x04` Download、`0x05` Store、`0x06` Break（`protocol.h:138-157`） | `PR#1` |
 | `0x84` | `protocol.h:144` 仍为 `SET_COMM_MODE 0x84`，当 no-op | 标记 `0x84-0x9F` 保留（`isdu.c:861`） | `PR#1` |
-| `0x95/0x96/0x97` | 当 legacy DS 命令 | 当 MasterCommand（MasterIdent/DeviceIdent/DeviceStartup，`protocol.h:69-71`） | `PR#1` |
+| `0x95/0x96/0x97` | 当 legacy DS 命令 | SystemCommand `0x95/0x96` 按保留值拒绝；MasterCommand 仍为 MasterIdent/DeviceIdent/DeviceStartup | `PR#1` |
 | 未知命令 → `0x8035` | develop 已含（`protocol.h:170`） | 一致 | 无分歧 |
-| `0x11` 命名 | `SERVICE_NOT_AVAIL` | `9b73737` 别名 `IDX_NOTAVAIL` | `PR#1`（可选，别名） |
+| `0x11` 命名 | `SERVICE_NOT_AVAIL` | 统一为 `IDX_NOTAVAIL`；旧别名已删除 | `PR#1` |
 
 ## 3. Events（`src/events.c`）
 

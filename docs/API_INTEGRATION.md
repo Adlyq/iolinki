@@ -355,8 +355,8 @@ iolink_event_type_t iolink_event_classify(uint16_t code);
 
 `0x0004-0x000B` 和 `0x001C-0x001F` 为保留区间，`0x00FF` 也为保留值
 （不会路由到 vendor service）。VendorID/DeviceID **不是** ISDU 对象；
-它们位于 DPP1 的 `0x07-0x0B` 字节。旧版常量
-`IOLINK_IDX_VENDOR_ID`/`IOLINK_IDX_DEVICE_ID` 不符合标准，计划移除。
+它们位于 DPP1 的 `0x07-0x0B` 字节；库不再暴露旧版
+`IOLINK_IDX_VENDOR_ID`/`IOLINK_IDX_DEVICE_ID` 常量。
 
 字符串应答按对象限制长度（通常为 64 字节，SerialNumber 为 16，ProductURI 为 100）。
 未知索引返回 `0x80 0x11`（索引不可用）；对已知只读对象的写请求返回
@@ -376,7 +376,7 @@ uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex,
 - 注册后，`0x0040-0x00FE` 以及 `>= 0x0100` 会调用该回调。它拦截整个范围，
   包括 `0x0040`（只有在未注册 vendor service 时，内置的错误统计对象才可达）。
 - 进入时，`*output_length` 是输出容量。成功时应把它设置为实际写入的字节数。
-  如果上报长度大于容量，服务会以 `IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL` 拒绝。
+  如果上报长度大于容量，服务会以 `IOLINK_ISDU_ERROR_IDX_NOT_AVAIL`（0x8011）拒绝。
 - 成功返回 0；失败返回 `IOLINK_ISDU_ERROR_*` 附加错误码。非零返回会产生
   `0x80 <code>`。
 - 写操作中，`input`/`length` 是收到的负载。读操作中 `length` 为 0；

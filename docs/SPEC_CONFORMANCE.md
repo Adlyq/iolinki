@@ -8,8 +8,12 @@ proves it**, ordered by the bundled specification.
 > PDF wins.
 
 Status: **PASS** (implemented + tested), **PARTIAL** (subset covered), **N/A**
-(conditional on a profile). All previously tracked gaps are closed, so the full
-suite (including `test_spec_conformance`) is green: `ctest --output-on-failure`.
+(conditional on a profile). All in-scope gaps are closed; the full suite
+(including `test_spec_conformance`) is green: `ctest --output-on-failure`.
+
+Final audit disposition is **111 direct / 19 n/a / 12 out-of-scope**. The
+out-of-scope set is physical/HIL or product-IODD work and is tracked in
+`CONFORMANCE_AUDIT_2026-10-28.md` and `tests/conformance_audit.csv`.
 
 ## Transport
 
@@ -28,7 +32,7 @@ suite (including `test_spec_conformance`) is green: `ctest --output-on-failure`.
 | Index | Object | Status | Test |
 |---|---|---|---|
 | 0x0000/0x0001 | Direct Parameter pages 1/2 | PASS | `test_dll`, `test_isdu` |
-| 0x0002 | SystemCommand (0x01-0x06, 0x80-0x83; 0x84-0x9F reserved) | PASS | `test_system_commands`, `test_isdu`, `test_isdu_wire` |
+| 0x0002 | SystemCommand (0x01-0x06, 0x80-0x83; 0x84-0x9F reserved and rejected) | PASS | `test_system_commands`, `test_isdu`, `test_isdu_wire` |
 | 0x0003 | DataStorageIndex — sub 01 DS_Command, 02 State_Property, 03 Size (UInt32), 04 Parameter_Checksum (UInt32), 05 Index_List; sub 0 whole-image (legacy) | PASS | `test_ds`, `test_isdu`, `test_system_commands` |
 | 0x0004-0x000B | Reserved (VendorID/DeviceID are DPP1) | PASS | `test_vendor_device_id_indices_reserved` |
 | 0x000C | DeviceAccessLocks (RecordT; only subindex 0 is accessible, B.2.4) | PASS | `test_ident_indices`, `test_ds`, `test_spec_conformance`, `test_isdu` |
@@ -123,10 +127,9 @@ previously missing:
 - Event codes: 0x1800-0x18FF are vendor-specific (Table D.1); the conflicting
   `APP_*`/`HW_*` duplicates and the stale `COMM_ERR_*` 0x18xx aliases are gone.
   `IOLINK_EVENT_COMM_*` is the single vendor communication-event set.
-- ISDU "busy" answers use `SERV_NOTAVAIL` 0x20, not 0x30 (`PAR_VALOUTOFRNG`);
-  `IOLINK_ISDU_ERROR_BUSY` is a deprecated alias of 0x20.
+- ISDU "busy" answers use `SERV_NOTAVAIL` 0x20, not 0x30 (`PAR_VALOUTOFRNG`).
 
 ## Related
 
-- `FRAMES.md` (A.1/A.3/A.10), `TESTING.md`, `CONFORMANCE.md` (virtual master),
+- `FRAMES.md` (A.1/A.3/A.10), `TESTING.md`, `CONFORMANCE_AUDIT_2026-10-28.md`,
   `security/THREAT_MODEL.md`, `ROADMAP.md`.

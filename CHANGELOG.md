@@ -76,6 +76,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scope` and `profile` columns separate library, reference-integration,
   physical-HIL, IODD-oracle and product-integration work.
 
+### Changed (documentation)
+- Removed the stale undated `docs/CONFORMANCE.md`; its material overlapped with
+  `README.md`, `docs/TESTING.md` and `docs/SPEC_CONFORMANCE.md`, while its
+  49-test/100% claims no longer matched the audit.
+- Reconciled `CONFORMANCE_AUDIT_2026-10-28.md`, `SPEC_CONFORMANCE.md`,
+  `ROADMAP.md` and the README with the final 111 direct / 19 n/a /
+  12 out-of-scope disposition.
+- Marked the HIL audit and correction guide as external HIL-project artifacts.
+
 ### Added (conformance audit)
 - `docs/CONFORMANCE_AUDIT_2026-10-28.md`, `tests/conformance_audit.csv`,
   `docs/HIL_AUDIT_2026-10-28.md`, `tests/hil_audit.csv` and
@@ -96,6 +105,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Master no longer interleaves a diagnosis read with the ISDU transfer.
 - Parameter_Checksum (0x0003/4) is rebuilt on read when not downloading, so a
   direct parameter write is reflected before and after ParamDownloadStore.
+
+### Removed (legacy API and constants)
+- Removed non-standard `IOLINK_IDX_VENDOR_ID` / `IOLINK_IDX_DEVICE_ID`;
+  VendorID/DeviceID are only DPP1 fields.
+- Removed the unused `IOLINK_ISDU_CTRL_*` control-octet constants.
+- Removed `IOLINK_CMD_RESTORE_APP_DEFAULTS` (use `IOLINK_CMD_BACK_TO_BOX`).
+- Removed `IOLINK_CMD_PARAM_UPLOAD` / `IOLINK_CMD_PARAM_DOWNLOAD` (0x95/0x96)
+  and their legacy SystemCommand mapping; those values are reserved and now
+  return `0x8035`.
+- Removed deprecated ISDU error aliases `IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL`
+  and `IOLINK_ISDU_ERROR_BUSY`.
+- Fixed the protocol header's spec version from V1.1.2 to V1.1.5.
 
 ### Removed (Zephyr / ESP32 support)
 - Dropped the Zephyr module (`zephyr/`), the Zephyr/ESP-IDF examples and

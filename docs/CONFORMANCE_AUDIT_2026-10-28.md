@@ -60,45 +60,41 @@ For each of the 142 cases I derived, independently from the Test Spec text:
 5. Whether power-cycle/communication-interruption/NVM requirements are met or
    only simulated by a context re-init.
 
-Status vocabulary:
+### Final disposition (authoritative)
 
-| Status | Meaning |
-|---|---|
-| `direct` | A unit test exercises the specified scenario with a meaningful, independent assertion on the required outcome. |
-| `partial` | A test exists and touches the right area, but misses a required precondition, sequence step, layer, or oracle. |
-| `gap` | No unit test exercises the specified scenario. |
-| `known-gap` | A test exists but is deliberately skipped because the DUT is known non-conformant or a required fixture object is absent. |
-| `conflict` | The executed behaviour (and/or the test's assertion) contradicts the Test Spec. |
-| `n/a` | The case is not applicable to this DUT configuration or was removed by V1.1.4. |
-| `HIL-only` | The case requires physical-layer measurement or an actuator/fault fixture that a host unit test cannot provide. |
-| `IODD-oracle` | The case requires a machine-readable IODD/reference value that the unit suite does not load. |
-
-### Summary counts
+`tests/conformance_audit.csv` is the authoritative per-case state after the
+scope split:
 
 | Status | Count |
 |---|---:|
-| direct | 20 |
-| partial | 53 |
-| gap | 29 |
-| known-gap | 5 |
-| conflict | 1 |
-| n/a | 18 |
-| HIL-only | 5 |
-| IODD-oracle | 11 |
+| direct | 111 |
+| n/a | 19 |
+| out-of-scope | 12 |
 | **Total** | **142** |
 
-Additional coverage facts:
+There are no in-scope `partial`, `gap`, `known-gap` or `conflict` rows. The 12
+out-of-scope rows are physical/HIL or product-IODD responsibilities and carry a
+`residual` reason (`external-physical`, `external-power`, `external-reset`,
+`external-timing` or `external-product-iodd`).
 
-- 84 of 142 cases have at least one associated unit-test file (including
-  mislabeled and partial ones); 58 have none.
-- Only 20 of 142 are judged `direct`; 73 are `direct`+`partial`.
-- The HIL project has 72 `CHECKS` entries, but several of those checks are
-  weaker than the Test Spec (see §7.3): e.g. 0107 only asserts `OK`, 0108 only
-  asserts `OK` or `ERR`, and 0110 only reads the object.
+Current status vocabulary: `direct`, `n/a`, `out-of-scope`. The earlier audit
+labels (`partial`, `gap`, `known-gap`, `conflict`, `HIL-only`, `IODD-oracle`)
+are retained only in the historical sections below.
+
+### Initial baseline (historical)
+
+The first pass over the unchanged tree produced 20 direct / 53 partial / 29 gap
+/ 5 known-gap / 1 conflict / 18 n/a / 5 HIL-only / 11 IODD-oracle. Those counts
+describe the starting point, not the current state. The HIL project has 72
+`CHECKS` entries; several are weaker than the Test Spec (see §7.3).
+
+> Sections 3-7 preserve the initial audit findings for chronology. They are
+> **historical**; use `tests/conformance_audit.csv` for the final per-case
+> status.
 
 ---
 
-## 3. State-transition audit (0034–0052, 0089–0104)
+## 3. Initial state-transition findings (0034–0052, 0089–0104)
 
 This is the highest-risk area: several tests assert the right state name while
 bypassing the state-specific frame layout, and two production behaviours
@@ -465,14 +461,15 @@ After this audit, the following production changes and tests were added:
 - `0148` is classified `product-integration` / `n/a` for the library; local UI
   locking belongs to the product application.
 - Synthetic IODD oracle added: `0063/0064/0123/0141/0142/0092/0093/0094`,
-  `0114-0121`, `0149-0152` are now direct; `0157` is partial. The oracle is a
-  test profile, not a product IODD.
+  `0114-0121`, `0149-0152` are now direct. `0157` was later moved to
+  `out-of-scope` as product-IODD work; the oracle is a test profile, not a
+  product IODD.
 - Per-device identity/access-lock handling now uses the bound `device_info`
   context instead of the legacy global identity.
 - Event wire-level checks now cover `0069-0076`; the frozen-memory
   acknowledgement bug (removing a reordered queue head) is fixed.
-- Parallel hardening result: 104 direct / 8 partial / 19 n/a / 11 HIL-only.
-  Remaining partials: `0034/0083/0155/0157/0316/0317/0318/0322`.
+- Intermediate parallel-hardening checkpoint: 104 direct / 8 partial / 19 n/a /
+  11 HIL-only. The eight partials were subsequently closed or reclassified.
 - Final project scope separates external work: 111 direct / 19 n/a /
   12 out-of-scope. External items are HIL, physical-layer and product-IODD
   responsibilities; `residual` records the reason. No in-scope partials remain.
@@ -480,5 +477,5 @@ After this audit, the following production changes and tests were added:
   in CTest.
 
 The per-case status in `tests/conformance_audit.csv` is updated accordingly.
-The remaining gaps are still listed there; this section does not claim full
-conformance.
+All in-scope cases are closed; the only remaining validation is external HIL,
+physical-layer, reset/power/timing and product-IODD work.

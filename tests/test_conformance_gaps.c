@@ -687,18 +687,17 @@ static void test_0104_system_command_ranges(void** state)
             implemented = true;
         }
 #if IOLINK_FEATURE_DATA_STORAGE
-        /* Block parameterization + Data Storage commands (0x01-0x06) and the
-           legacy 0x95/0x96 aliases are handled when DS is compiled in. 0x97 is
-           not an alias (ParamBreak is 0x06), so it stays reserved. */
-        if (((value >= 0x01U) && (value <= 0x06U)) ||
-            (value == 0x95U) || (value == 0x96U)) {
+        /* Block parameterization + Data Storage commands (0x01-0x06) are
+           handled when DS is compiled in. 0x84-0x9F stay reserved, including
+           0x95/0x96 (the legacy aliases were removed). */
+        if ((value >= 0x01U) && (value <= 0x06U)) {
             implemented = true;
         }
 #endif
 #endif
         if (!implemented) {
-            /* 0x00, 0x07-0x3F, 0x40-0x7F, 0x84-0x94, 0x98-0x9F and 0xA0-0xFF
-               shall be answered with FUNC_NOTAVAIL (0x35). */
+            /* 0x00, 0x07-0x3F, 0x40-0x7F, 0x84-0x9F and 0xA0-0xFF shall be
+               answered with FUNC_NOTAVAIL (0x35). */
             assert_int_equal(n, 2);
             assert_int_equal(response[0], 0x80U);
             assert_int_equal(response[1], IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
