@@ -190,51 +190,42 @@ size_t iolink_device_ctx_size(void)
  * V1.1.5 device (Table A.10 NOTE 3), so it is rejected. TYPE_0 and the
  * variable TYPE_2_V keep the existing range checks.
  */
+/** @brief One fixed Annex A layout: PD in/out and the accepted OD width(s). */
+typedef struct
+{
+    uint8_t mseq;
+    uint8_t pd_in;
+    uint8_t pd_out;
+    uint8_t od;
+    uint8_t od_alt; /* second accepted OD width, 0 when none */
+} device_fixed_layout_t;
+
+static const device_fixed_layout_t g_fixed_layouts[] = {
+    {IOLINK_M_SEQ_TYPE_1_2, 0U, 0U, 2U, 0U}, {IOLINK_M_SEQ_TYPE_1_V, 0U, 0U, 8U, 32U},
+    {IOLINK_M_SEQ_TYPE_2_1, 1U, 0U, 1U, 0U}, {IOLINK_M_SEQ_TYPE_2_2, 2U, 0U, 1U, 0U},
+    {IOLINK_M_SEQ_TYPE_2_3, 0U, 1U, 1U, 0U}, {IOLINK_M_SEQ_TYPE_2_4, 0U, 2U, 1U, 0U},
+    {IOLINK_M_SEQ_TYPE_2_5, 1U, 1U, 1U, 0U},
+};
+
 static int device_validate_fixed_mseq(const iolink_config_t* stack, uint8_t od)
 {
-    switch (stack->m_seq_type) {
-        case IOLINK_M_SEQ_TYPE_1_1:
-            return IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE;
-        case IOLINK_M_SEQ_TYPE_1_2:
-            if ((stack->pd_in_len == 0U) && (stack->pd_out_len == 0U) && (od == 2U)) {
-                return IOLINK_DEVICE_INIT_OK;
-            }
-            break;
-        case IOLINK_M_SEQ_TYPE_1_V:
-            if ((stack->pd_in_len == 0U) && (stack->pd_out_len == 0U) &&
-                ((od == 8U) || (od == 32U))) {
-                return IOLINK_DEVICE_INIT_OK;
-            }
-            break;
-        case IOLINK_M_SEQ_TYPE_2_1:
-            if ((stack->pd_in_len == 1U) && (stack->pd_out_len == 0U) && (od == 1U)) {
-                return IOLINK_DEVICE_INIT_OK;
-            }
-            break;
-        case IOLINK_M_SEQ_TYPE_2_2:
-            if ((stack->pd_in_len == 2U) && (stack->pd_out_len == 0U) && (od == 1U)) {
-                return IOLINK_DEVICE_INIT_OK;
-            }
-            break;
-        case IOLINK_M_SEQ_TYPE_2_3:
-            if ((stack->pd_in_len == 0U) && (stack->pd_out_len == 1U) && (od == 1U)) {
-                return IOLINK_DEVICE_INIT_OK;
-            }
-            break;
-        case IOLINK_M_SEQ_TYPE_2_4:
-            if ((stack->pd_in_len == 0U) && (stack->pd_out_len == 2U) && (od == 1U)) {
-                return IOLINK_DEVICE_INIT_OK;
-            }
-            break;
-        case IOLINK_M_SEQ_TYPE_2_5:
-            if ((stack->pd_in_len == 1U) && (stack->pd_out_len == 1U) && (od == 1U)) {
-                return IOLINK_DEVICE_INIT_OK;
-            }
-            break;
-        default:
-            return IOLINK_DEVICE_INIT_OK; /* TYPE_0 and the variable TYPE_2_V */
+    /* TYPE_1_1 is legacy interleave only and shall not be implemented by a
+     * V1.1.5 device (Table A.10 NOTE 3). */
+    if (stack->m_seq_type == IOLINK_M_SEQ_TYPE_1_1) {
+        return IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE;
     }
-    return IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT;
+    for (size_t i = 0U; i < sizeof(g_fixed_layouts) / sizeof(g_fixed_layouts[0]); i++) {
+        const device_fixed_layout_t* layout = &g_fixed_layouts[i];
+        if ((uint32_t) stack->m_seq_type != (uint32_t) layout->mseq) {
+            continue;
+        }
+        const bool od_ok = (od == layout->od) || ((layout->od_alt != 0U) && (od == layout->od_alt));
+        if ((stack->pd_in_len == layout->pd_in) && (stack->pd_out_len == layout->pd_out) && od_ok) {
+            return IOLINK_DEVICE_INIT_OK;
+        }
+        return IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT;
+    }
+    return IOLINK_DEVICE_INIT_OK; /* TYPE_0 and the variable TYPE_2_V */
 }
 
 /** @brief Validate the stack configuration before touching the context or PHY. */
