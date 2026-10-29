@@ -673,51 +673,121 @@ static void dll_handle_type0_od_write(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t
 }
 
 /** @brief Process a Type-1/Type-2 OPERATE frame (PD+OD) and build the response, enforcing t_REN. */
-static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
+/**
+ * @brief Handle an eager ISDU read that only needs the transport reset.
+ *
+ * An OPERATE ISDU read is answered by the ISR from the response snapshot; the
+ * main pump must not advance the ISDU segment index again. Only an IDLE/ABORT
+ * read needs the transport reset (and the snapshot refresh).
+ *
+ * @return true when the frame was fully handled.
+ */
+static bool dll_handle_eager_isdu_read(iolink_dll_ctx_t* ctx, bool write)
 {
-    /* Type-1/2 master message: MC | CKT | PD | OD; the checksum is in CKT. */
-    uint16_t pd_offset = IOLINK_M_SEQ_HEADER_LEN;
-    uint16_t od_offset = (uint16_t) (pd_offset + ctx->pd_out_len_current);
-
-    if (ctx->pd_out_len_current > 0U) {
-        memcpy(ctx->pd_out, &ctx->frame_buf[pd_offset], ctx->pd_out_len_current);
+    if (!ctx->frame_eager ||
+        ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) != IOLINK_MC_CHANNEL_ISDU) || write) {
+        return false;
     }
-
-    const bool write = ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U);
-    /* An OPERATE ISDU read is answered by the ISR from the response snapshot;
-     * the main pump must not advance the ISDU segment index again. Only an
-     * IDLE/ABORT read needs the transport reset (and the snapshot refresh). */
-    if (ctx->frame_eager &&
-        ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_ISDU) && !write) {
-        const uint8_t flowctrl = (uint8_t) (ctx->frame_buf[0] & IOLINK_MC_ADDR_MASK);
-        if ((flowctrl == IOLINK_FLOWCTRL_IDLE) || (flowctrl == IOLINK_FLOWCTRL_IDLE2) ||
-            (flowctrl == IOLINK_FLOWCTRL_ABORT)) {
-            uint8_t dummy = 0U;
-            iolink_isdu_od_read(&ctx->isdu, flowctrl, &dummy, 0U); /* reset only */
-            dll_isdu_sync_snapshot(ctx);
-        }
-        ctx->frame_eager = 0U;
-        ctx->last_response_us = iolink_time_get_us();
-        return;
+    const uint8_t flowctrl = (uint8_t) (ctx->frame_buf[0] & IOLINK_MC_ADDR_MASK);
+    if ((flowctrl == IOLINK_FLOWCTRL_IDLE) || (flowctrl == IOLINK_FLOWCTRL_IDLE2) ||
+        (flowctrl == IOLINK_FLOWCTRL_ABORT)) {
+        uint8_t dummy = 0U;
+        iolink_isdu_od_read(&ctx->isdu, flowctrl, &dummy, 0U); /* reset only */
+        dll_isdu_sync_snapshot(ctx);
     }
+    ctx->frame_eager = 0U;
+    ctx->last_response_us = iolink_time_get_us();
+    return true;
+}
+
+/** @brief Dispatch the request OD; zero the reply OD when the channel refuses it. */
+static void dll_dispatch_od_reply(iolink_dll_ctx_t* ctx, bool write, uint16_t od_offset,
+                                  uint8_t* od_out)
+{
     const uint8_t od_w = ctx->od_width; /* 1/2/8/32 from the opt-in patch */
     const uint8_t req_od = write ? od_w : 0U;
-    const uint8_t resp_od = write ? 0U : od_w;
 
     uint8_t od_in[IOLINK_OD_MAX_SIZE];
-    uint8_t od_out[IOLINK_OD_MAX_SIZE];
     (void) memset(od_in, 0, sizeof(od_in));
-    (void) memset(od_out, 0, sizeof(od_out));
+    (void) memset(od_out, 0, IOLINK_OD_MAX_SIZE);
     if (req_od > 0U) {
-        memcpy(od_in, &ctx->frame_buf[od_offset], req_od);
+        (void) memcpy(od_in, &ctx->frame_buf[od_offset], req_od);
     }
 
-    const uint8_t dispatch_od = write ? req_od : resp_od;
+    const uint8_t dispatch_od = write ? req_od : od_w;
     if (!dll_dispatch_od(ctx, ctx->frame_buf[0], od_in, dispatch_od, od_out)) {
         for (uint16_t i = 0; i < dispatch_od; i++) {
             od_out[i] = 0U;
         }
     }
+}
+
+/** @brief Build and transmit the [OD][PD-in]CKS reply for a Type-1/2 frame. */
+static void dll_send_od_reply(iolink_dll_ctx_t* ctx, bool write, const uint8_t* od_out)
+{
+    const uint8_t resp_od = write ? 0U : ctx->od_width;
+
+    /* Figures A.9/A.10/A.13/A.14: the reply to a READ M-sequence is
+       [OD octets][PD-in octets] CKS; the reply to a WRITE M-sequence carries no
+       OD and is [PD-in octets] CKS. CKS carries the Event flag (bit 7), the
+       PD-validity flag (bit 6, 1 = invalid) and the 6-bit message checksum
+       (bits 0-5); there is no leading status octet (A.1.5). */
+    uint8_t resp[IOLINK_PD_IN_MAX_SIZE + IOLINK_OD_MAX_SIZE + 1];
+    uint16_t pos = 0U;
+    if (!write && (resp_od > 0U)) {
+        (void) memcpy(&resp[pos], od_out, resp_od);
+        pos += resp_od;
+    }
+    if (ctx->pd_in_len > 0U) {
+        (void) memcpy(&resp[pos], &ctx->pd_in[ctx->pd_in_active][ctx->od_width], ctx->pd_in_len);
+        pos += ctx->pd_in_len;
+    }
+
+    uint8_t cks = 0x00U;
+    if (DLL_EVENTS_FLAG(&ctx->events)) {
+        cks |= 0x80U;
+    }
+    cks |= dll_pd_status_flags(ctx);
+    resp[pos] = cks;
+    resp[pos] = (uint8_t) (resp[pos] | iolink_checksum6(resp, pos + 1U));
+    pos++;
+
+    if (dll_phy_has_tx(ctx)) {
+        dll_send(ctx, resp, pos);
+        ctx->fallback_count = 0U;
+        const uint32_t end_tx_us = (uint32_t) iolink_time_get_us();
+        ctx->response_time_us = end_tx_us - (uint32_t) ctx->last_cycle_start_us;
+
+        if (ctx->enforce_timing) {
+            const uint32_t limit = dll_get_t_ren_limit_us(ctx);
+            if ((limit > 0U) && (ctx->response_time_us > limit)) {
+                ctx->timing_errors++;
+                ctx->t_ren_violations++;
+                DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING,
+                                  IOLINK_EVENT_TYPE_WARNING);
+            }
+        }
+    }
+    ctx->last_response_us = iolink_time_get_us();
+}
+
+static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
+{
+    /* Type-1/2 master message: MC | CKT | PD | OD; the checksum is in CKT. */
+    const uint16_t pd_offset = IOLINK_M_SEQ_HEADER_LEN;
+    const uint16_t od_offset = (uint16_t) (pd_offset + ctx->pd_out_len_current);
+
+    if (ctx->pd_out_len_current > 0U) {
+        (void) memcpy(ctx->pd_out, &ctx->frame_buf[pd_offset], ctx->pd_out_len_current);
+    }
+
+    const bool write = ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U);
+    if (dll_handle_eager_isdu_read(ctx, write)) {
+        return;
+    }
+
+    uint8_t od_out[IOLINK_OD_MAX_SIZE];
+    dll_dispatch_od_reply(ctx, write, od_offset, od_out);
 
     if (ctx->frame_eager &&
         ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PROCESS)) {
@@ -736,49 +806,7 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
         return;
     }
 
-    /* Figures A.9/A.10/A.13/A.14: the reply to a READ M-sequence is
-       [OD octets][PD-in octets] CKS; the reply to a WRITE M-sequence carries no
-       OD and is [PD-in octets] CKS. CKS carries the Event flag (bit 7), the
-       PD-validity flag (bit 6, 1 = invalid) and the 6-bit message checksum
-       (bits 0-5); there is no leading status octet (A.1.5). */
-
-    uint8_t resp[IOLINK_PD_IN_MAX_SIZE + IOLINK_OD_MAX_SIZE + 1];
-    uint16_t pos = 0U;
-    if (!write && (resp_od > 0U)) {
-        memcpy(&resp[pos], od_out, resp_od);
-        pos += resp_od;
-    }
-    if (ctx->pd_in_len > 0U) {
-        memcpy(&resp[pos], &ctx->pd_in[ctx->pd_in_active][ctx->od_width], ctx->pd_in_len);
-        pos += ctx->pd_in_len;
-    }
-
-    uint8_t cks = 0x00U;
-    if (DLL_EVENTS_FLAG(&ctx->events)) {
-        cks |= 0x80U;
-    }
-    cks |= dll_pd_status_flags(ctx);
-    resp[pos] = cks;
-    resp[pos] = (uint8_t) (resp[pos] | iolink_checksum6(resp, pos + 1U));
-    pos++;
-
-    if (dll_phy_has_tx(ctx)) {
-        dll_send(ctx, resp, pos);
-        ctx->fallback_count = 0U;
-        uint32_t end_tx_us = (uint32_t) iolink_time_get_us();
-        ctx->response_time_us = end_tx_us - (uint32_t) ctx->last_cycle_start_us;
-
-        if (ctx->enforce_timing) {
-            uint32_t limit = dll_get_t_ren_limit_us(ctx);
-            if ((limit > 0U) && (ctx->response_time_us > limit)) {
-                ctx->timing_errors++;
-                ctx->t_ren_violations++;
-                DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING,
-                                  IOLINK_EVENT_TYPE_WARNING);
-            }
-        }
-    }
-    ctx->last_response_us = iolink_time_get_us();
+    dll_send_od_reply(ctx, write, od_out);
 }
 
 /** @brief Poll PHY voltage and short-circuit status and raise events on faults. */
