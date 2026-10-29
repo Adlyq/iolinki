@@ -212,6 +212,9 @@
       <name>$PROJ_DIR$\..\..\..\src\dll.c</name>
     </file>
     <file>
+      <name>$PROJ_DIR$\..\..\..\src\dll_isr.c</name>
+    </file>
+    <file>
       <name>$PROJ_DIR$\..\..\..\src\isdu.c</name>
     </file>
     <file>

@@ -14,7 +14,7 @@ flags=(-mcpu=cortex-m0plus -mthumb -std=c99 -Os -g3 -Wall -Wextra -Werror
 sources=("$example_dir/main.c" "$example_dir/board.c" "$example_dir/rx_queue.c" "$example_dir/gcc_runtime.c"
          "$repo_dir/examples/reference_device/reference_device.c"
          "$STM32_CMSIS_ROOT/Source/Templates/system_stm32g0xx.c")
-for source in phy_tiol112 crc dll isdu events params data_storage device_info device; do
+for source in phy_tiol112 crc dll dll_isr isdu events params data_storage device_info device; do
     sources+=("$repo_dir/src/$source.c")
 done
 objects=()
