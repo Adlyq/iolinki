@@ -187,6 +187,31 @@ static void test_process_data_input_returns_pd(void** state)
     assert_int_equal(out[1], 0x22U);
 }
 
+/* B.2.23: a standard 2-octet positive payload starting with 0x80 must not be
+ * mistaken for a negative response; the wire I-Service is the discriminator. */
+static void test_process_data_80xx_is_positive(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t dll;
+    (void) memset(&dll, 0, sizeof(dll));
+    dll.pd_in_len_current = 2U;
+    dll.pd_in_len = 2U;
+    dll.pd_in[0][dll.od_width + 0U] = 0x80U;
+    dll.pd_in[0][dll.od_width + 1U] = 0x42U;
+
+    iolink_isdu_ctx_t ctx;
+    iolink_isdu_init(&ctx);
+    ctx.dll_ctx = &dll;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0U), 1);
+    iolink_isdu_process(&ctx);
+
+    uint8_t wire[8] = {0};
+    iolink_isdu_od_read(&ctx, IOLINK_FLOWCTRL_START, wire, sizeof(wire));
+    assert_int_equal(wire[0], 0xD4U); /* Read Response (+), 2 data octets */
+    assert_int_equal(wire[1], 0x80U);
+    assert_int_equal(wire[2], 0x42U);
+}
+
 /* Figure B.5/Table B.6: decode the DPP1 ProcessDataIn/Out length descriptor. */
 static unsigned pd_descriptor_octets(uint8_t code)
 {
@@ -402,6 +427,7 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_error_count_index, setup, teardown),
         cmocka_unit_test_setup_teardown(test_product_uri_index, setup, teardown),
         cmocka_unit_test_setup_teardown(test_process_data_input_returns_pd, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_process_data_80xx_is_positive, setup, teardown),
         cmocka_unit_test_setup_teardown(test_process_data_output_returns_pd, setup, teardown),
         cmocka_unit_test_setup_teardown(test_read_only_identification_rejects_write, setup,
                                         teardown),

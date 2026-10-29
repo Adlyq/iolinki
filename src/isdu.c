@@ -168,7 +168,7 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx);
 /** @brief Reset the ISDU request transport to Idle. */
 static void isdu_transport_reset(iolink_isdu_ctx_t* ctx)
 {
-    ctx->vendor_positive = false;
+    ctx->response_negative = false;
     ctx->state = ISDU_STATE_IDLE;
     ctx->req_idx = 0U;
     ctx->req_total = 0U;
@@ -298,7 +298,7 @@ static void isdu_copy_payload(iolink_isdu_ctx_t* ctx, const uint8_t* buf, size_t
 
 static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
 {
-    ctx->vendor_positive = false;
+    ctx->response_negative = false;
     const uint8_t* buf = ctx->req_buf;
     const uint8_t service = (uint8_t) (buf[0] >> 4);
     size_t pos = 1U;
@@ -325,8 +325,7 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
 /** @brief Frame the handler result into ctx->resp_buf (positive or negative, A.5/C.1). */
 static void isdu_frame_response(iolink_isdu_ctx_t* ctx)
 {
-    const bool negative =
-        !ctx->vendor_positive && ((ctx->response_len == 2U) && (ctx->response_buf[0] == 0x80U));
+    const bool negative = ctx->response_negative;
     const bool write = (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE);
     size_t pos = 0U;
 
@@ -529,6 +528,7 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_o
 /** @brief Terminate the ISDU service with a two-octet negative response. */
 static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error)
 {
+    ctx->response_negative = true;
     ctx->response_buf[0] = 0x80U;
     ctx->response_buf[1] = error;
     ctx->response_len = 2U;
@@ -1619,7 +1619,6 @@ static void isdu_handle_vendor_index(iolink_isdu_ctx_t* ctx)
         isdu_respond_error(ctx, (length > capacity) ? IOLINK_ISDU_ERROR_IDX_NOT_AVAIL : error);
         return;
     }
-    ctx->vendor_positive = true;
     ctx->response_len = (uint8_t) length;
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
@@ -1645,7 +1644,7 @@ static void isdu_handle_system_command_index(iolink_isdu_ctx_t* ctx)
 /** @brief Dispatch an executed ISDU request to the handler for its index. */
 static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
 {
-    ctx->vendor_positive = false;
+    ctx->response_negative = false;
     /* B.2.27: Preferred Indices 0x0040-0x00FE are device-specific like the
        Extended Index range from 0x0100; both reach the application vendor
        service. 0x00FF itself is reserved. */

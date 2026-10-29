@@ -171,7 +171,7 @@ static void truncated_requests_never_execute(void)
         iolink_isdu_process(&ctx);
         assert(calls == 0);
         assert(ctx.response_len == 2 && ctx.response_buf[0] == 0x80);
-        assert(!ctx.vendor_positive);
+        assert(ctx.response_negative);
     }
 }
 
@@ -205,7 +205,7 @@ int main(void)
     ctx.state = ISDU_STATE_SERVICE_EXECUTE;
     iolink_isdu_process(&ctx);
     assert(ctx.response_len == 2 && ctx.response_buf[0] == 0x80);
-    assert(!ctx.vendor_positive);
+    assert(ctx.response_negative);
     /* A missing callback retains the original unknown-index error. */
     ctx.vendor_service = NULL;
     ctx.state = ISDU_STATE_SERVICE_EXECUTE;
