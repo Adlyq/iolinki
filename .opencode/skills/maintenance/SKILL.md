@@ -104,7 +104,7 @@ cmake -B build && cmake --build build
 (cd build && ctest --output-on-failure)
 
 # quality script (-Werror build + cppcheck; MISRA/format only with the
-# IOLINKI_MISRA_ENFORCE=1 / IOLINKI_FORMAT_ENFORCE=1 env vars)
+# IOLINKI_MISRA_ENFORCE=1 env var)
 ./check_quality.sh
 
 # trimmed profiles only build the library (the unit suite is skipped)

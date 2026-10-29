@@ -40,8 +40,8 @@ ctest --test-dir build -R test_dll
 - The default CMake build sets no `CMAKE_BUILD_TYPE`, so it compiles at the
   toolchain default (effectively `-O0` with GCC) and `static` helpers are not
   inlined: do not assume zero-cost abstraction when judging ISR code size or
-  timing. `check_quality.sh` also uses `Debug`; only `Release` / documented
-  embedded flags (`-Os`, see `examples/stm32g0_tiol112/build.sh`) optimise.
+  timing. `check_quality.sh` builds both `Debug` and `Release`; embedded builds
+  use `-Os` (see `examples/stm32g0_tiol112/build.sh`).
 - `tests/test_spec_conformance.c` pins the mandatory ISDU conformance behaviour
   (reserved indices, ErrorCount, ProductURI, ProcessDataInput/Output, read-only
   WRITE rejection, Parameter lock, string fixedLength).

@@ -27,7 +27,8 @@ Verify code against warnings and static analysis tools.
 Every supported compile-time configuration must build. The matrix covers the
 feature toggles (`IOLINK_FEATURE_*`, `IOLINK_PHY_FEATURE_*`), all four ISR
 granularity combinations, the minimal/tiny profiles, the compatibility switches
-and the bare-metal platform. The BYTE/BYTE configurations also run the unit
+and the bare-metal platform. Configurations marked tests=yes (default and
+release) also run the unit
 suite; the others are build-only because the host tests drive the BYTE-only
 virtual PHY.
 

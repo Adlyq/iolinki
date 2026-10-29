@@ -181,15 +181,6 @@ size_t iolink_device_ctx_size(void)
     return sizeof(iolink_device_ctx_t);
 }
 
-/** @brief Enforce the fixed per-type PD/OD layout of Annex A (ISR transport).
- *
- * Figures A.7-A.13 define a fixed number of PD and OD octets per M-sequence
- * type. A device that advertises one of these types must use exactly that
- * layout, otherwise the master and device disagree about the frame length.
- * TYPE_1_1 is legacy interleave only and shall not be implemented by a
- * V1.1.5 device (Table A.10 NOTE 3), so it is rejected. TYPE_0 and the
- * variable TYPE_2_V keep the existing range checks.
- */
 /** @brief One fixed Annex A layout: PD in/out and the accepted OD width(s). */
 typedef struct
 {
@@ -197,7 +188,7 @@ typedef struct
     uint8_t pd_in;
     uint8_t pd_out;
     uint8_t od;
-    uint8_t od_alt; /* second accepted OD width, 0 when none */
+    uint8_t od_alt; /* second accepted OD width, 0 when none (od is never 0 here) */
 } device_fixed_layout_t;
 
 static const device_fixed_layout_t g_fixed_layouts[] = {
@@ -207,6 +198,15 @@ static const device_fixed_layout_t g_fixed_layouts[] = {
     {IOLINK_M_SEQ_TYPE_2_5, 1U, 1U, 1U, 0U},
 };
 
+/** @brief Enforce the fixed per-type PD/OD layout of Annex A (ISR transport).
+ *
+ * Figures A.7-A.13 define a fixed number of PD and OD octets per M-sequence
+ * type. A device that advertises one of these types must use exactly that
+ * layout, otherwise the master and device disagree about the frame length.
+ * TYPE_1_1 is legacy interleave only and shall not be implemented by a
+ * V1.1.5 device (Table A.10 NOTE 3), so it is rejected. TYPE_0 and the
+ * variable TYPE_2_V keep the existing range checks.
+ */
 static int device_validate_fixed_mseq(const iolink_config_t* stack, uint8_t od)
 {
     /* TYPE_1_1 is legacy interleave only and shall not be implemented by a

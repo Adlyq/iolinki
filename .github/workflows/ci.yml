@@ -109,8 +109,8 @@ jobs:
             test_all.sh check_quality.sh .docker_test_entrypoint.sh
 
   # Delivery gate for compile-time configurations: every feature toggle, ISR
-  # granularity and platform must at least build; the BYTE/BYTE configurations
-  # also run the unit suite.
+  # granularity and platform must at least build; the default and release
+  # configurations also run the unit suite.
   build-matrix:
     runs-on: ubuntu-latest
     steps:

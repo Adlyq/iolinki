@@ -35,7 +35,7 @@ Automated pipelines run on every push to `own_dev` (the maintained branch) and
 ### Quality Gate (runs on all pushes/PRs)
 1. **Code Formatting**: `clang-format` check (enforces `.clang-format` style).
 2. **Static Analysis**: `cppcheck` with all checks enabled.
-3. **MISRA Check**: Enforced in Docker via `cppcheck --addon=misra` (MISRA C:2012 subset). `IOLINKI_MISRA_ENFORCE=1` is set in release Docker runs.
+3. **MISRA Check**: Run in Docker via `cppcheck --addon=misra` (MISRA C:2012 subset). Report-only unless `IOLINKI_MISRA_ENFORCE=1` is set.
 4. **Unit Tests**: All CMocka tests must pass.
 5. **Integration Tests**: Enforced - Virtual IO-Link Master conformance (V1.1.5).
 6. **Release build**: strict `-Werror` build at `-O3` (Debug builds cannot emit

@@ -526,7 +526,6 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_o
     }
 }
 
-/** @brief Serve the mandatory identification/status indices (vendor, product, tags, etc.). */
 /** @brief Terminate the ISDU service with a two-octet negative response. */
 static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error)
 {
@@ -701,8 +700,8 @@ static void isdu_tag_read(iolink_isdu_ctx_t* ctx, uint16_t index)
         ctx->response_idx = 0U;
         ctx->state = ISDU_STATE_RESPONSE_READY;
     }
-    /* On failure leave the state untouched (the master keeps polling Busy),
-       matching the original fall-through. */
+    /* On failure leave the state untouched; the transport reset then drops the
+       request (same as the original fall-through). */
 }
 
 /** @brief Write an Application/Function/Location tag to the parameter set. */
