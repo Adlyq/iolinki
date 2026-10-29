@@ -46,6 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The unit suite compiles with `-UNDEBUG` so `assert()`-based tests keep testing
   in Release instead of becoming no-ops.
 
+### Tests
+- Characterization tests for the byte RX CHK/gap frame end: a short or
+  incomplete M-sequence is discarded and only a real truncation is counted as a
+  framing error; the gap never publishes, answers or runs the eager validation.
+
 ### Fixed (conformance tooling)
 - `tests/conformance_audit.csv` had been overwritten with the 387-row Chinese
   test-spec summary, so `conformance_traceability` failed on the missing

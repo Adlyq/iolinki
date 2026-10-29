@@ -42,6 +42,7 @@ static uint8_t chk_pending;
 static unsigned timer_a_starts;
 static unsigned timer_a_stops;
 static unsigned timer_b_starts;
+static unsigned tx_done_calls;
 
 static int rx_octet(void* user, uint8_t* data, uint8_t* status)
 {
@@ -70,6 +71,7 @@ static int tx_octet(void* user, uint8_t data)
 static void tx_done(void* user)
 {
     (void) user;
+    tx_done_calls++;
 }
 
 static void timer_a_start(void* user)
@@ -715,6 +717,64 @@ static int test_stack_tick_window(void)
     return 0;
 }
 
+/* Characterization of the RX BYTE CHK/gap frame end. Only a short or an
+ * incomplete M-sequence can end on the gap: a length-complete frame is consumed
+ * by the byte engine before the CHK indication. The gap must discard the frame,
+ * count only a real truncation, release the transceiver and never publish or
+ * answer. */
+static int test_byte_gap_incomplete(void)
+{
+    /* Short M-sequence (fewer than the two header octets). */
+    {
+        iolink_dll_ctx_t dll;
+        init_ctx(&dll);
+        tx_done_calls = 0U;
+        const uint8_t one[1] = {IOLINK_MC_CHANNEL_PROCESS};
+        feed_chk(one, sizeof(one));
+        iolink_dll_process_isr(&dll);
+        if (dll.framing_errors != 0U) {
+            return 1; /* a short frame is not a framing error */
+        }
+        if ((dll.isr_rx_cnt != 0U) || (dll.isr_rx_expect != 0U)) {
+            return 2;
+        }
+        if (dll.isr_frame_ready != 0U) {
+            return 3;
+        }
+        if (tx_done_calls != 1U) {
+            return 4;
+        }
+    }
+
+    /* Truncated M-sequence: header complete, known length not reached. */
+    {
+        iolink_dll_ctx_t dll;
+        init_ctx(&dll);
+        tx_done_calls = 0U;
+        uint8_t frame[3];
+        make_isdu_write((uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START), 0x14U, frame,
+                        sizeof(frame));
+        feed_chk(frame, 2U); /* deliver the header, then the CHK gap */
+        iolink_dll_process_isr(&dll);
+        if (dll.framing_errors != 1U) {
+            return 5;
+        }
+        if ((dll.isr_rx_cnt != 0U) || (dll.isr_rx_expect != 0U)) {
+            return 6;
+        }
+        if (dll.isr_frame_ready != 0U) {
+            return 7; /* never published for the main pump */
+        }
+        if (dll.isr_eager_rejects != 0U) {
+            return 8; /* the gap path does not run the eager validation */
+        }
+        if (tx_done_calls != 1U) {
+            return 9;
+        }
+    }
+    return 0;
+}
+
 int main(void)
 {
     int rc = test_mailbox_drop();
@@ -776,6 +836,10 @@ int main(void)
     rc = test_stack_tick_window();
     if (rc != 0) {
         return 110 + rc;
+    }
+    rc = test_byte_gap_incomplete();
+    if (rc != 0) {
+        return 120 + rc;
     }
     return 0;
 }

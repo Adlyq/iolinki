@@ -2450,8 +2450,10 @@ static void dll_isr_rx_byte_reset(iolink_dll_ctx_t* ctx)
  *
  * The gap is a timeout, not the normal frame end. A frame that did not reach
  * its known length is truncated or lost and is dropped instead of feeding a
- * partial M-sequence to the stack. A completed frame is consumed, answered by
- * the Type-0 fast path, or published for the main pump.
+ * partial M-sequence to the stack. A length-complete M-sequence never ends here:
+ * the byte engine consumes it as soon as its expected length arrives. The
+ * completed-frame tail below is a defensive fallback for a PHY that reports the
+ * gap together with the final octet.
  */
 static void dll_isr_rx_byte_gap(iolink_dll_ctx_t* ctx)
 {
