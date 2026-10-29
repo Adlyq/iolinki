@@ -227,6 +227,39 @@ static void dll_send_unlock(iolink_dll_ctx_t* ctx)
 }
 
 /**
+ * @brief Start transmitting a staged reply slot.
+ *
+ * Shared by dll_send()'s direct-send fallback (a PHY without request_service())
+ * and the ISR pending-reply path, so both drive the TX hooks identically.
+ */
+static void dll_isr_start_staged_tx(iolink_dll_ctx_t* ctx, uint8_t slot, uint8_t len)
+{
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    if (ctx->phy->tx_frame != NULL) {
+        if (ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload[slot], len) != 0) {
+            ctx->isr_tx_dropped++;
+        }
+    }
+#else
+    (void) len;
+    if (ctx->phy->tx_octet != NULL) {
+        if (ctx->isr_tx_active != 0U) {
+            if (ctx->phy->tx_done != NULL) {
+                ctx->phy->tx_done(ctx->phy->user);
+            }
+            ctx->isr_tx_active = 0U;
+        }
+        ctx->isr_tx_base = ctx->isr_tx_payload[slot];
+        ctx->isr_tx_slot = slot;
+        ctx->isr_tx_idx = 0U;
+        ctx->isr_tx_has_cks = 0U;
+        ctx->isr_tx_active = 1U;
+        dll_isr_tx_step(ctx);
+    }
+#endif
+}
+
+/**
  * @brief Emit a device reply through the ISR transport.
  *
  * Hand the octets to the raw-octet/frame TX hooks; the ISR feeds them (TX BYTE)
@@ -264,27 +297,7 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
 #if !IOLINK_PHY_FEATURE_ISR_TX_ONLY
     /* Legacy fallback for PHYs without a service hook (streaming/host tests). */
     ctx->isr_tx_pending = 0U;
-#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-    if (ctx->phy->tx_frame != NULL) {
-        if (ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload[slot], len) != 0) {
-            ctx->isr_tx_dropped++;
-        }
-    }
-#else
-    if (ctx->phy->tx_octet != NULL) {
-        if (ctx->isr_tx_active != 0U) {
-            if (ctx->phy->tx_done != NULL) {
-                ctx->phy->tx_done(ctx->phy->user);
-            }
-            ctx->isr_tx_active = 0U;
-        }
-        ctx->isr_tx_base = ctx->isr_tx_payload[slot];
-        ctx->isr_tx_slot = slot;
-        ctx->isr_tx_idx = 0U;
-        ctx->isr_tx_active = 1U;
-        dll_isr_tx_step(ctx);
-    }
-#endif
+    dll_isr_start_staged_tx(ctx, slot, (uint8_t) len);
 #else
     /* ISR-only PHY without request_service(): the reply cannot be transmitted.
      * Count it so a misconfiguration is observable instead of silent. */
@@ -2283,27 +2296,7 @@ static void dll_isr_process(iolink_dll_ctx_t* ctx)
         if (ctx->phy->response_timer_stop != NULL) {
             ctx->phy->response_timer_stop(ctx->phy->user);
         }
-#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-        if (ctx->phy->tx_frame != NULL) {
-            if (ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload[ctx->isr_tx_pending_slot],
-                                   ctx->isr_tx_len) != 0) {
-                ctx->isr_tx_dropped++;
-            }
-        }
-#else
-        if (ctx->isr_tx_active != 0U) {
-            if (ctx->phy->tx_done != NULL) {
-                ctx->phy->tx_done(ctx->phy->user);
-            }
-            ctx->isr_tx_active = 0U;
-        }
-        ctx->isr_tx_base = ctx->isr_tx_payload[ctx->isr_tx_pending_slot];
-        ctx->isr_tx_slot = ctx->isr_tx_pending_slot;
-        ctx->isr_tx_idx = 0U;
-        ctx->isr_tx_has_cks = 0U;
-        ctx->isr_tx_active = 1U;
-        dll_isr_tx_step(ctx);
-#endif
+        dll_isr_start_staged_tx(ctx, ctx->isr_tx_pending_slot, ctx->isr_tx_len);
         return;
     }
 
