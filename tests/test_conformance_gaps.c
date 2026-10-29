@@ -15,6 +15,7 @@
 #include <cmocka.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -28,6 +29,35 @@
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 #include "conformance_test.h"
+#define GAP_NVM_SLOTS 8U
+static char g_gap_nvm[GAP_NVM_SLOTS][64];
+static size_t g_gap_nvm_count;
+
+static void cleanup_gap_nvm(void)
+{
+    for (size_t i = 0U; i < g_gap_nvm_count; i++) {
+        (void) remove(g_gap_nvm[i]);
+    }
+}
+
+/* Unique per process and tag: parallel ctest runs must not share the NVM. */
+static const char* gap_nvm_path(const char* tag)
+{
+    static int registered = 0;
+    if (registered == 0) {
+        (void) atexit(cleanup_gap_nvm);
+        registered = 1;
+    }
+    if (g_gap_nvm_count >= GAP_NVM_SLOTS) {
+        return g_gap_nvm[GAP_NVM_SLOTS - 1U]; /* cannot happen: one path per case */
+    }
+    char* path = g_gap_nvm[g_gap_nvm_count];
+    (void) snprintf(path, sizeof(g_gap_nvm[0]), "/tmp/iolink-gap-%s-%ld.nvm", tag, (long) getpid());
+    (void) remove(path);
+    g_gap_nvm_count++;
+    return path;
+}
+
 #include "conformance_device.h"
 
 static int gap_noop_init(void* user)
@@ -104,7 +134,7 @@ static void test_0063_write_length_overrun(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0063");
 
-    const char* nvm = "/tmp/iolink-gap-0063.nvm";
+    const char* nvm = gap_nvm_path("0063");
     (void) remove(nvm);
     conformance_device_t app;
     assert_int_equal(
@@ -123,7 +153,7 @@ static void test_0064_write_length_underrun(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0064");
 
-    const char* nvm = "/tmp/iolink-gap-0064.nvm";
+    const char* nvm = gap_nvm_path("0064");
     (void) remove(nvm);
     conformance_device_t app;
     assert_int_equal(
@@ -727,7 +757,7 @@ static void test_0054_vendor_name_conformance_identity(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0054");
 
-    const char* nvm = "/tmp/iolink-gap-0054.nvm";
+    const char* nvm = gap_nvm_path("0054");
     (void) remove(nvm);
     conformance_device_t app;
     assert_int_equal(
@@ -776,7 +806,7 @@ static void test_0056_config1_write_readback(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0056");
 
-    const char* nvm = "/tmp/iolink-gap-0056.nvm";
+    const char* nvm = gap_nvm_path("0056");
     (void) remove(nvm);
     conformance_device_t app;
     assert_int_equal(
@@ -888,7 +918,7 @@ static void test_0055_config3_long_read(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0055");
 
-    const char* nvm = "/tmp/iolink-gap-0055.nvm";
+    const char* nvm = gap_nvm_path("0055");
     (void) remove(nvm);
     conformance_device_t app;
     assert_int_equal(

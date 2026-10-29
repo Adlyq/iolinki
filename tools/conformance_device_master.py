@@ -60,7 +60,11 @@ class DeviceLink:
             text=False,
         )
         self.log = bytearray()
-        self._wait_for("conformance device ready")
+        try:
+            self._wait_for("conformance device ready")
+        except Exception:
+            self.close()
+            raise
 
     def _wait_for(self, marker: str, timeout: float = 5.0) -> None:
         deadline = time.monotonic() + timeout

@@ -5,6 +5,7 @@
 #include <cmocka.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -16,7 +17,24 @@
 #include "conformance_test.h"
 #include "test_helpers.h"
 
-static const char* const k_nvm_path = "/tmp/iolink-conformance-device-test.nvm";
+static char g_nvm_path[64];
+
+static void cleanup_nvm_path(void)
+{
+    (void) remove(g_nvm_path);
+}
+
+/* Unique per process so parallel ctest runs in different build trees do not
+   share the persistence file. */
+static const char* nvm_path(void)
+{
+    if (g_nvm_path[0] == '\0') {
+        (void) snprintf(g_nvm_path, sizeof(g_nvm_path), "/tmp/iolink-conformance-device-%ld.nvm",
+                        (long) getpid());
+        (void) atexit(cleanup_nvm_path);
+    }
+    return g_nvm_path;
+}
 
 static int noop_phy_init(void* user)
 {
@@ -45,14 +63,14 @@ static const iolink_phy_api_t k_noop_phy = {
 static int test_setup(void** state)
 {
     (void) state;
-    (void) remove(k_nvm_path);
+    (void) remove(nvm_path());
     return 0;
 }
 
 static int test_teardown(void** state)
 {
     (void) state;
-    (void) remove(k_nvm_path);
+    (void) remove(nvm_path());
     return 0;
 }
 
@@ -86,7 +104,7 @@ static void test_conformance_reset_observation(void** state)
     conformance_device_t app;
     assert_int_equal(
         conformance_device_init(&app, conformance_profile_get(CONFORMANCE_PROFILE_FULL),
-                                &k_noop_phy, k_nvm_path),
+                                &k_noop_phy, nvm_path()),
         0);
 
     const conformance_reset_observation_t* obs = conformance_device_reset_observation(&app);
@@ -126,7 +144,7 @@ static void test_conformance_reset_observation(void** state)
     assert_int_equal(obs->last_reset_reason, CONFORMANCE_RESET_BACK_TO_BOX);
     assert_true(conformance_device_is_default_state(&app));
 
-    assert_int_equal(conformance_device_power_cycle(&app, &k_noop_phy, k_nvm_path), 0);
+    assert_int_equal(conformance_device_power_cycle(&app, &k_noop_phy, nvm_path()), 0);
     assert_int_equal(obs->startup_count, 2U);
     assert_int_equal(obs->last_reset_reason, CONFORMANCE_RESET_POWER_ON);
     assert_int_equal(obs->device_reset_count, 1U);
@@ -143,7 +161,7 @@ static void test_conformance_local_change(void** state)
     conformance_device_t app;
     assert_int_equal(
         conformance_device_init(&app, conformance_profile_get(CONFORMANCE_PROFILE_FULL),
-                                &k_noop_phy, k_nvm_path),
+                                &k_noop_phy, nvm_path()),
         0);
 
     const uint16_t before = app.config2;
@@ -169,7 +187,7 @@ static void test_conformance_event_device_status(void** state)
     conformance_device_t app;
     assert_int_equal(
         conformance_device_init(&app, conformance_profile_get(CONFORMANCE_PROFILE_FULL),
-                                &k_noop_phy, k_nvm_path),
+                                &k_noop_phy, nvm_path()),
         0);
 
     iolink_isdu_ctx_t ctx;
@@ -217,7 +235,7 @@ static void test_conformance_full_profile(void** state)
     conformance_device_t app;
     assert_int_equal(
         conformance_device_init(&app, conformance_profile_get(CONFORMANCE_PROFILE_FULL),
-                                &k_noop_phy, k_nvm_path),
+                                &k_noop_phy, nvm_path()),
         0);
 
     assert_int_equal(iolink_device_get_pd_in_len(&app.device), 3U);
@@ -313,7 +331,7 @@ static void test_conformance_0146_illegal_download(void** state)
     conformance_device_t app;
     assert_int_equal(
         conformance_device_init(&app, conformance_profile_get(CONFORMANCE_PROFILE_FULL),
-                                &k_noop_phy, k_nvm_path),
+                                &k_noop_phy, nvm_path()),
         0);
     iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&app.device);
     assert_non_null(ds);
@@ -376,7 +394,7 @@ static void test_conformance_pdout_only_profile(void** state)
     conformance_device_t app;
     assert_int_equal(
         conformance_device_init(&app, conformance_profile_get(CONFORMANCE_PROFILE_PDOUT_ONLY),
-                                &k_noop_phy, k_nvm_path),
+                                &k_noop_phy, nvm_path()),
         0);
     assert_int_equal(iolink_device_get_pd_in_len(&app.device), 0U);
     assert_int_equal(iolink_device_get_pd_out_len(&app.device), 1U);
@@ -390,7 +408,7 @@ static void test_conformance_minimal_profile(void** state)
     conformance_device_t app;
     assert_int_equal(
         conformance_device_init(&app, conformance_profile_get(CONFORMANCE_PROFILE_MINIMAL),
-                                &k_noop_phy, k_nvm_path),
+                                &k_noop_phy, nvm_path()),
         0);
     assert_int_equal(iolink_device_get_pd_in_len(&app.device), 0U);
     assert_int_equal(iolink_device_get_pd_out_len(&app.device), 0U);
@@ -403,12 +421,12 @@ static void test_conformance_storage_persistence(void** state)
     uint8_t written[2] = {0xABU, 0xCDU};
 
     conformance_file_storage_t first;
-    assert_int_equal(conformance_file_storage_init(&first, k_nvm_path), 0);
+    assert_int_equal(conformance_file_storage_init(&first, nvm_path()), 0);
     assert_int_equal(first.api.write(first.api.user, 0U, written, sizeof(written)), 0);
     conformance_file_storage_close(&first);
 
     conformance_file_storage_t second;
-    assert_int_equal(conformance_file_storage_init(&second, k_nvm_path), 0);
+    assert_int_equal(conformance_file_storage_init(&second, nvm_path()), 0);
     uint8_t readback[2] = {0};
     assert_int_equal(second.api.read(second.api.user, 0U, readback, sizeof(readback)), 0);
     assert_memory_equal(readback, written, sizeof(written));

@@ -37,7 +37,10 @@ def main() -> int:
         return 2
 
     master, slave = pty.openpty()
-    nvm = Path(tempfile.gettempdir()) / "iolink-conformance-smoke.nvm"
+    # Unique per run: a fixed path collides with parallel build trees/jobs.
+    fd, path = tempfile.mkstemp(prefix="iolink-conformance-smoke-", suffix=".nvm")
+    os.close(fd)
+    nvm = Path(path)
     nvm.unlink(missing_ok=True)
     proc = subprocess.Popen(
         [str(binary), "--profile", "full", "--phy", os.ttyname(slave), "--nvm", str(nvm)],

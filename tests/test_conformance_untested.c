@@ -49,6 +49,9 @@ static const char* unique_nvm_path(const char* tag)
         (void) atexit(cleanup_test_nvm);
         registered = 1;
     }
+    if (g_test_nvm_count >= TEST_NVM_SLOTS) {
+        return g_test_nvm[TEST_NVM_SLOTS - 1U]; /* cannot happen: one path per case */
+    }
     char* path = g_test_nvm[g_test_nvm_count];
     (void) snprintf(path, sizeof(g_test_nvm[0]), "/tmp/iolink-untested-%s-%ld.nvm", tag,
                     (long) getpid());
