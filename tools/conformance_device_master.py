@@ -45,7 +45,11 @@ def checksum6(octets: bytes) -> int:
 class DeviceLink:
     def __init__(self, binary: Path, profile: str = "type0"):
         self.master, self.slave = pty.openpty()
-        self.nvm = Path(tempfile.gettempdir()) / "iolink-conformance-master.nvm"
+        # A fixed path collides with other build trees / CI jobs running this
+        # test in parallel. Reserve a unique file and let the device recreate it.
+        fd, path = tempfile.mkstemp(prefix="iolink-conformance-master-", suffix=".nvm")
+        os.close(fd)
+        self.nvm = Path(path)
         self.nvm.unlink(missing_ok=True)
         self.proc = subprocess.Popen(
             [str(binary), "--profile", profile, "--phy", os.ttyname(self.slave),

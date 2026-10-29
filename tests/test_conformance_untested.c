@@ -11,6 +11,8 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -26,6 +28,34 @@
 #include "iolinki/protocol.h"
 #include "conformance_test.h"
 #include "test_helpers.h"
+
+#define TEST_NVM_SLOTS 8U
+static char g_test_nvm[TEST_NVM_SLOTS][64];
+static size_t g_test_nvm_count;
+
+static void cleanup_test_nvm(void)
+{
+    for (size_t i = 0U; i < g_test_nvm_count; i++) {
+        (void) remove(g_test_nvm[i]);
+    }
+}
+
+/* One NVM file per process and tag: parallel ctest runs / build trees must not
+   share the persistence file. */
+static const char* unique_nvm_path(const char* tag)
+{
+    static int registered = 0;
+    if (registered == 0) {
+        (void) atexit(cleanup_test_nvm);
+        registered = 1;
+    }
+    char* path = g_test_nvm[g_test_nvm_count];
+    (void) snprintf(path, sizeof(g_test_nvm[0]), "/tmp/iolink-untested-%s-%ld.nvm", tag,
+                    (long) getpid());
+    (void) remove(path);
+    g_test_nvm_count++;
+    return path;
+}
 
 static int test_setup(void** state)
 {
@@ -119,7 +149,7 @@ static uint16_t device_error_count(iolink_device_ctx_t* device)
 static void test_0063_0064_length_errors_preserve_config1(void** state)
 {
     (void) state;
-    const char* nvm = "/tmp/iolink-untested-0063.nvm";
+    const char* nvm = unique_nvm_path("0063");
     (void) remove(nvm);
 
     conformance_device_t app;
@@ -175,7 +205,7 @@ static void test_0122_application_tag_valid_persists(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0122");
     (void) state;
-    const char* nvm = "/tmp/iolink-untested-0122.nvm";
+    const char* nvm = unique_nvm_path("0122");
     (void) remove(nvm);
 
     setup_mock_phy();
@@ -224,7 +254,7 @@ static void test_0123_application_tag_overlong_preserves_value(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0123");
     (void) state;
-    const char* nvm = "/tmp/iolink-untested-0123.nvm";
+    const char* nvm = unique_nvm_path("0123");
     (void) remove(nvm);
 
     setup_mock_phy();
@@ -532,7 +562,7 @@ static void test_0316_device_reset_sequence(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0316");
     (void) state;
-    const char* nvm = "/tmp/iolink-untested-0316.nvm";
+    const char* nvm = unique_nvm_path("0316");
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     will_return(mock_phy_init, 0);
@@ -586,7 +616,7 @@ static void test_0317_application_reset_sequence(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0317");
     (void) state;
-    const char* nvm = "/tmp/iolink-untested-0317.nvm";
+    const char* nvm = unique_nvm_path("0317");
     conformance_device_t app;
     conformance_open(&app, nvm, &k_noop_phy);
     const conformance_reset_observation_t* obs = conformance_device_reset_observation(&app);
@@ -652,7 +682,7 @@ static void test_0155_factory_settings_sequence(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0155");
     (void) state;
-    const char* nvm = "/tmp/iolink-untested-0155.nvm";
+    const char* nvm = unique_nvm_path("0155");
     conformance_device_t app;
     conformance_open(&app, nvm, &k_noop_phy);
     const conformance_reset_observation_t* obs = conformance_device_reset_observation(&app);
@@ -705,7 +735,7 @@ static void test_0318_back_to_box_sequence(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0318");
     (void) state;
-    const char* nvm = "/tmp/iolink-untested-0318.nvm";
+    const char* nvm = unique_nvm_path("0318");
     conformance_device_t app;
     conformance_open(&app, nvm, &k_noop_phy);
     const conformance_reset_observation_t* obs = conformance_device_reset_observation(&app);
