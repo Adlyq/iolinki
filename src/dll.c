@@ -43,7 +43,27 @@
  * of Type-0/Type-1/Type-2 M-sequences into the ISDU engine.
  */
 
+/* -------------------------------------------------------------------------
+ * File map
+ *
+ *  - State transitions and callbacks: dll_queue_state ... dll_set_state
+ *  - M-sequence typing and transmission: dll_mseq_type_bits ... dll_send
+ *  - Timing, master commands and operate handlers: dll_get_t_ren_limit_us ...
+ *  - Diagnostics polling: dll_poll_diagnostics
+ *  - Lifecycle and ISDU snapshot: iolink_dll_init ...
+ *  - Main pump: dll_frame_drop_if_stopped ... iolink_dll_process
+ *  - Public configuration and query API: iolink_dll_get_state ...
+ *  - ISR two-pump transport: dll_isr_type_ok ... end of file
+ *
+ * The ISR section runs with interrupts disabled; see docs/CODE_FLOW.md for the
+ * main/ISR context contract.
+ * ------------------------------------------------------------------------- */
+
 #define DLL_LOG(...)
+
+/* -------------------------------------------------------------------------
+ * State transitions and callbacks
+ * ------------------------------------------------------------------------- */
 
 /** @brief Queue one state transition for the main-context callbacks. */
 static void dll_queue_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t state)
@@ -119,6 +139,10 @@ void iolink_dll_flush_state_callbacks(iolink_dll_ctx_t* ctx)
         }
     }
 }
+
+/* -------------------------------------------------------------------------
+ * M-sequence typing and transmission
+ * ------------------------------------------------------------------------- */
 
 /** @brief Return the CKT M-sequence type bits (A.1.3, Table A.3) for a configured type. */
 static uint8_t dll_mseq_type_bits(uint8_t m_seq_type)
@@ -306,6 +330,10 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
 #endif /* !IOLINK_PHY_FEATURE_ISR_TX_ONLY */
     dll_send_unlock(ctx);
 }
+
+/* -------------------------------------------------------------------------
+ * Timing, master commands and operate handlers
+ * ------------------------------------------------------------------------- */
 
 /** @brief Return the response-time (t_REN) limit in us (C6/Table 10: 500 us). */
 static uint32_t dll_get_t_ren_limit_us(const iolink_dll_ctx_t* ctx)
@@ -809,6 +837,10 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
     dll_send_od_reply(ctx, write, od_out);
 }
 
+/* -------------------------------------------------------------------------
+ * Diagnostics polling
+ * ------------------------------------------------------------------------- */
+
 /** @brief Poll PHY voltage and short-circuit status and raise events on faults. */
 static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
 {
@@ -848,6 +880,10 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
     }
 #endif /* IOLINK_PHY_FEATURE_LEGACY_DIAG */
 }
+
+/* -------------------------------------------------------------------------
+ * Lifecycle and ISDU snapshot
+ * ------------------------------------------------------------------------- */
 
 void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
 {
@@ -1044,6 +1080,10 @@ void iolink_dll_request_back_to_box(iolink_dll_ctx_t* ctx)
     ctx->back_to_box_pending = true;
     ctx->back_to_box_cycles = 0U;
 }
+
+/* -------------------------------------------------------------------------
+ * Main pump: frame validation, dispatch and timing supervision
+ * ------------------------------------------------------------------------- */
 
 /** @brief Result of the A.1.6 checksum and CKT type validation. */
 typedef enum
@@ -1736,6 +1776,10 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
     dll_restore_operating_baudrate(ctx);
 }
 
+/* -------------------------------------------------------------------------
+ * Public configuration and query API
+ * ------------------------------------------------------------------------- */
+
 iolink_dll_state_t iolink_dll_get_state(const iolink_dll_ctx_t* ctx)
 {
     return (ctx != NULL) ? ctx->state : IOLINK_DLL_STATE_STARTUP;
@@ -1950,11 +1994,20 @@ iolink_reply_variant_t iolink_dll_reply_variant(const iolink_dll_ctx_t* ctx, uin
     return write ? IOLINK_REPLY_CYCLIC_WRITE : IOLINK_REPLY_ACYCLIC_READ;
 }
 
+/* -------------------------------------------------------------------------
+ * ISR two-pump transport
+ *
+ * Everything below runs from the data interrupt. The main pump stages replies
+ * and hands ISDU snapshots over here; application callbacks must never run in
+ * this section.
+ * ------------------------------------------------------------------------- */
+
 /* Conformance gate for the immediate ISR reply: a master request must carry a
  * valid A.1.6 checksum AND a legal M-sequence type for the current state before
  * the device answers it. Mirrors the validation done later by
  * dll_process_rx_frame(); the eager reply must never answer a corrupt/illegal
  * frame that the main pump would have rejected. Read-only and ISR-safe. */
+
 /* Legal M-sequence type for the current state (same rule as the main pump):
  * STARTUP/PREOPERATE are Type-0; OPERATE (and ESTAB_COM once the transition is
  * done) expect the configured type. */
