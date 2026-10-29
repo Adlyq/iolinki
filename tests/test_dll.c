@@ -1642,11 +1642,8 @@ static void test_dll_main_pump_type1_2_reply(void** state)
     uint8_t acc = 0x52U;
     for (size_t i = 0U; i < tx_len; i++) {
         uint8_t b = tx[i];
-        if (i == 1U) {
-            b = (uint8_t) (b & 0x3FU);
-        }
-        else if (i == (tx_len - 1U)) {
-            b = (uint8_t) (b & 0xC0U);
+        if (i == (tx_len - 1U)) {
+            b = (uint8_t) (b & 0xC0U); /* status only: the low 6 bits are the CKS */
         }
         acc = (uint8_t) (acc ^ b);
     }
