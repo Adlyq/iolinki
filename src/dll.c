@@ -1017,7 +1017,21 @@ void iolink_dll_request_back_to_box(iolink_dll_ctx_t* ctx)
     ctx->back_to_box_cycles = 0U;
 }
 
-static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
+/** @brief Result of the A.1.6 checksum and CKT type validation. */
+typedef enum
+{
+    DLL_FRAME_INVALID,    /**< Checksum mismatch: drop, keep the DL mode. */
+    DLL_FRAME_TYPE_ERROR, /**< Valid checksum, illegal M-sequence type. */
+    DLL_FRAME_VALID       /**< Valid request; dispatch by state. */
+} dll_frame_result_t;
+
+/**
+ * @brief Handle the two states that accept no more frames.
+ *
+ * @return true when the frame was dropped (the caller must not run the common
+ *         tail cleanup).
+ */
+static bool dll_frame_drop_if_stopped(iolink_dll_ctx_t* ctx)
 {
     if (ctx->back_to_box_pending && (ctx->back_to_box_cycles >= 3U)) {
         /* 10.7.5: after at least 3 MasterCycles the device stops and disables
@@ -1028,220 +1042,66 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
             ctx->phy->set_mode(ctx->phy->user, IOLINK_PHY_MODE_INACTIVE);
         }
         ctx->frame_index = 0U;
-        return;
+        return true;
     }
     if (ctx->state == IOLINK_DLL_STATE_COMM_DISABLED) {
         /* Communication stopped until the next power-on (10.7.5). */
         ctx->frame_index = 0U;
-        return;
+        return true;
     }
+    return false;
+}
 
-    uint64_t now_us_proc = iolink_time_get_us();
+/** @brief T_CYCLE supervision: count a too-short MasterCycle and restart it. */
+static void dll_check_cycle_time(iolink_dll_ctx_t* ctx)
+{
+    const uint64_t now_us = iolink_time_get_us();
     if ((ctx->enforce_timing) && (ctx->min_cycle_time_us > 0U) &&
-        (ctx->last_cycle_start_us != 0U)) {
-        if (now_us_proc - ctx->last_cycle_start_us < (uint64_t) ctx->min_cycle_time_us) {
-            ctx->timing_errors++;
-            ctx->t_cycle_violations++;
-            DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING, IOLINK_EVENT_TYPE_WARNING);
-        }
+        (ctx->last_cycle_start_us != 0U) &&
+        (now_us - ctx->last_cycle_start_us < (uint64_t) ctx->min_cycle_time_us)) {
+        ctx->timing_errors++;
+        ctx->t_cycle_violations++;
+        DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING, IOLINK_EVENT_TYPE_WARNING);
     }
-    ctx->last_cycle_start_us = now_us_proc;
+    ctx->last_cycle_start_us = now_us;
+}
 
-    /* A one-octet "frame" is not an M-sequence: it is the wake-up byte the
-     * transceiver forwards in SIO (or line noise). Ignore it instead of
-     * failing the checksum, which would read the absent second octet and
-     * drive a spurious fallback. */
-    if (ctx->req_len < IOLINK_M_SEQ_HEADER_LEN) {
-        ctx->frame_index = 0U;
-        return;
-    }
-
-    /* ST restarts its callback timer at frame end; a completed frame (even a
-       bad one) proves the link is still being driven. */
-    dll_master_activity(ctx);
-
-    /* A.1.6/Figure A.2: the master message carries the checksum in the
-       CKT octet (the second octet); its bits 0-5 are zeroed before the
-       A.1.6 checksum is computed over every message octet. The CKT is
-       also where the M-sequence type (bits 6-7) lives. */
+/**
+ * @brief Validate the A.1.6 checksum and the CKT M-sequence type.
+ *
+ * A.1.6/Figure A.2: the checksum lives in the CKT octet (second octet); its
+ * bits 0-5 are zeroed and the type bits (6-7) are kept before the checksum is
+ * computed. C5/Table 47: the type must be legal for the current state.
+ */
+static dll_frame_result_t dll_frame_validate(iolink_dll_ctx_t* ctx)
+{
     uint8_t crc_buf[sizeof(ctx->frame_buf)];
     (void) memcpy(crc_buf, ctx->frame_buf, ctx->req_len);
     const uint8_t expected_ck = (uint8_t) (crc_buf[1] & 0x3FU);
     crc_buf[1] = (uint8_t) (crc_buf[1] & IOLINK_MSEQ_TYPE_MASK);
-    bool crc_ok = (iolink_checksum6(crc_buf, ctx->req_len) == expected_ck);
-
-    /* C5/Table 47: the CKT type bits must match the M-sequence type in
-       force. STARTUP and PREOPERATE are Type-0 only; in OPERATE the
-       configured type is expected. An illegal type is an illegal
-       M-sequence: report it and return to STARTUP (Table 47 T8/T11). */
-    bool type_ok = dll_type_allowed(ctx, ctx->frame_buf);
+    const bool crc_ok = (iolink_checksum6(crc_buf, ctx->req_len) == expected_ck);
+    const bool type_ok = dll_type_allowed(ctx, ctx->frame_buf);
 
     if (crc_ok && type_ok) {
-        ctx->last_valid_frame_ms = iolink_time_get_ms();
-        bool was_establishing = (ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) ||
-                                (ctx->state == IOLINK_DLL_STATE_STARTUP);
-#if !IOLINK_COMPAT_V10_STARTUP_OPERATE
-        /* Table 53 (SDCI_TC_0035): only a V1.0 Device reacts to an OPERATE
-           request received during STARTUP. A V1.1 Device shall not answer it,
-           and shall not advance to PREOPERATE/ESTAB_COM. Keep the legacy
-           shortcut behind IOLINK_COMPAT_V10_STARTUP_OPERATE. */
-        if (was_establishing && (ctx->req_len == 3U) &&
-            ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U) &&
-            ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE) &&
-            ((ctx->frame_buf[0] & IOLINK_MC_ADDR_MASK) == 0x00U) &&
-            ((ctx->frame_buf[2] == IOLINK_CMD_DEVICE_OPERATE) ||
-             (ctx->frame_buf[2] == IOLINK_CMD_PROCESS_DATA_OPERATE))) {
-            ctx->framing_errors++;
-            ctx->frame_index = 0U;
-            return;
-        }
-#endif
-        if (was_establishing) {
-            dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
-            ctx->dsio_deadline_ms = 0U; /* valid message cancels T_DSIO */
-        }
-
-        if (ctx->state == IOLINK_DLL_STATE_PREOPERATE) {
-            uint8_t mc = ctx->frame_buf[0];
-            bool page_read =
-                ((mc & IOLINK_MC_RW_MASK) != 0U) && ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == 0x20U);
-            if (was_establishing && (ctx->req_len == 2U) && page_read) {
-                /* First message after wake-up is the spec startup probe
-                   (transition T1): a Type-0 READ of a Direct Parameter page
-                   octet on the page channel. Answer from the direct-parameter
-                   source rather than feeding the MC into ISDU. Later PREOPERATE
-                   Type-0 frames are ISDU traffic and are not intercepted. */
-                dll_handle_page_channel_read(ctx, mc);
-            }
-            else if (ctx->req_len == 2U) {
-                if (mc == IOLINK_MC_TRANSITION_COMMAND) {
-                    dll_handle_preoperate(ctx, mc, ctx->frame_buf[1]);
-                }
-                else {
-                    dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
-                }
-            }
-            else if ((ctx->req_len == 3U) && dll_is_fallback_command(ctx)) {
-                /* Table B.2/43: FALLBACK MasterCommand 0x5A. */
-                dll_handle_fallback_command(ctx);
-            }
-            else if ((ctx->req_len == 3U) && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
-                     ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE) &&
-                     ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
-                /* Page-channel Type-0 WRITE of a MasterCommand (Table B.2):
-                   0x97 DeviceStartup, 0x98 PDOperate, 0x99 DeviceOperate,
-                   0x9A DevicePreoperate, 0x95/0x96 ident, 0x5A Fallback.
-                   ST applies the mode change and answers with CKS only. */
-                dll_handle_master_command(ctx, ctx->frame_buf[2]);
-            }
-            else if (ctx->req_len == 3U) {
-                /* Any other 3-octet Type-0 OD write in PREOPERATE is
-                   ISDU or diagnosis traffic (7.3.6 allows ISDU before
-                   OPERATE). It is a TYPE_0 frame: one OD octet at
-                   offset 2 and a CKS-only reply (Figure A.5), never the
-                   configured OPERATE PD widths. */
-                dll_handle_type0_od_write(ctx, ctx->frame_buf[0], ctx->frame_buf[2]);
-            }
-        }
-        else if (ctx->state == IOLINK_DLL_STATE_ESTAB_COM) {
-            const uint8_t mc = ctx->frame_buf[0];
-            const bool type0 = ((ctx->frame_buf[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0);
-            const bool page_write = type0 && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
-                                    ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE);
-            if (mc == IOLINK_MC_TRANSITION_COMMAND) {
-                dll_handle_preoperate(ctx, mc, ctx->frame_buf[1]);
-            }
-            else if (page_write && ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
-                /* MasterCommand before the first cyclic frame: apply it
-                   instead of mistaking a Type-0 page write for Type-2 PD. */
-                dll_handle_master_command(ctx, ctx->frame_buf[2]);
-            }
-            else {
-                /* The first valid non-transition frame establishes
-                   communication and moves to OPERATE, Type 0 included. */
-                dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
-                if (page_write) {
-                    dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
-                }
-                else if (type0 && (ctx->req_len == 2U)) {
-                    dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
-                }
-                else if (type0) {
-                    /* Type-0 OD write (ISDU/diagnosis): one OD octet at 2. */
-                    dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
-                }
-                else {
-                    /* A fixed TYPE_1_x/TYPE_2_x READ is only MC + CKT (req_len
-                       == 2), so req_len cannot distinguish it from Type-0: the
-                       CKT type bits are authoritative. */
-                    dll_handle_operate_type1_2(ctx);
-                }
-            }
-        }
-        else if (ctx->state == IOLINK_DLL_STATE_OPERATE) {
-            /* Transitions are forbidden; every communication channel is
-               valid in OPERATE (page/diagnosis/ISDU/process). */
-            const uint8_t mc = ctx->frame_buf[0];
-            const bool type0 = ((ctx->frame_buf[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0);
-            const bool page_write = type0 && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
-                                    ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE);
-            if ((ctx->req_len == 3U) && (dll_is_fallback_command(ctx))) {
-                /* Table B.2/43, Table 47 T9: OPERATE -> SIO after T_FBD. */
-                dll_handle_fallback_command(ctx);
-            }
-            else if (mc == IOLINK_MC_TRANSITION_COMMAND) {
-                /* Transition command is illegal in OPERATE. Report it but keep
-                   the DL mode: the master never sends it in a healthy link, and
-                   ST rc=2/rc=3 recovery here would only add churn. */
-                ctx->framing_errors++;
-            }
-            else if (type0 && (ctx->req_len == 2U)) {
-#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
-                /* Tables 57/67 (SDCI_TC_0038/0049): a TYPE_0 page READ while
-                   OPERATE is active is a reset request. Do not answer it; go
-                   back to STARTUP so the next read is handled as the startup
-                   probe. TYPE_0 page writes keep their normal behaviour. */
-                if (((mc & IOLINK_MC_RW_MASK) != 0U) &&
-                    ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE) &&
-                    (ctx->m_seq_type != IOLINK_M_SEQ_TYPE_0)) {
-                    ctx->framing_errors++;
-                    ctx->frame_index = 0U;
-                    dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
-                    return;
-                }
-#endif
-                dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
-            }
-            else if (page_write && ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
-                /* MasterCommand page write in OPERATE (0x9A/0x98/0x99/...).
-                   ST handles these in every DL mode and only changes the
-                   state, never treats them as an illegal M-sequence. */
-                dll_handle_master_command(ctx, ctx->frame_buf[2]);
-            }
-            else if (page_write) {
-                /* DPP parameter write (e.g. MasterCycleTime): CKS-only ack. */
-                dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
-            }
-            else if (type0) {
-                /* Type-0 OD write on ISDU/diagnosis: CKS-only ack. */
-                dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
-            }
-            else {
-                /* Fixed TYPE_1_x/TYPE_2_x READ may be only MC + CKT (req_len
-                   == 2); disambiguate by the CKT type bits, not the length. */
-                dll_handle_operate_type1_2(ctx);
-            }
-        }
+        return DLL_FRAME_VALID;
     }
-    else if (crc_ok && !type_ok) {
-        /* CRC-correct frame with the wrong CKT type. In OPERATE/ESTAB this is
-         * almost always a misaligned/overlapped PD byte stream: the master
-         * starts its next request while our reply is still on C/Q, so the
-         * first octets are lost and the remainder is framed as a bogus
-         * M-sequence. ST rc=2 drops it and re-listens; demoting to STARTUP on
-         * every such collision makes the link flap. Keep the T11/T12 demotion
-         * only outside OPERATE/ESTAB (where the frame is an actual protocol
-         * error, not a framing artifact). */
+    if (crc_ok) {
+        return DLL_FRAME_TYPE_ERROR;
+    }
+    return DLL_FRAME_INVALID;
+}
+
+/**
+ * @brief Account for an invalid or type-illegal frame.
+ *
+ * A checksum failure keeps the DL mode (ST rc=2 semantics). A valid checksum
+ * with an illegal type is a protocol error outside OPERATE/ESTAB and returns to
+ * STARTUP; inside OPERATE/ESTAB it is treated as a framing artifact from an
+ * overlapping PD stream and only counted.
+ */
+static void dll_handle_frame_error(iolink_dll_ctx_t* ctx, dll_frame_result_t result)
+{
+    if (result == DLL_FRAME_TYPE_ERROR) {
         ctx->frame_eager = 0U;
         ctx->isdu_isr_consumed = 0U;
         ctx->framing_errors++;
@@ -1254,30 +1114,277 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
         return;
     }
-    else {
-        /* Checksum failure: ST rc=2 means "discard this frame and go back to
-         * listening"; the DLL mode is left untouched. Do not demote to SIO
-         * here: a single truncated/collided frame (e.g. the master starting
-         * its next M-sequence while our reply is still on C/Q) must not take
-         * the link down. SIO is reserved for the Fallback MasterCommand and
-         * the T_DSIO wake-up timeout. */
-        ctx->crc_errors++;
+
+    /* Checksum failure: ST rc=2 means "discard this frame and go back to
+     * listening"; the DLL mode is left untouched. Do not demote to SIO here: a
+     * single truncated/collided frame (e.g. the master starting its next
+     * M-sequence while our reply is still on C/Q) must not take the link down.
+     * SIO is reserved for the Fallback MasterCommand and the T_DSIO timeout. */
+    ctx->crc_errors++;
+    ctx->framing_errors++;
+    ctx->total_retries++;
+    /* Keep the diagnostic event (ST has no counter, but the application uses it
+     * for the event flag) without changing the DL mode. */
+    ctx->fallback_count++;
+    if (ctx->fallback_count >= ctx->sio_fallback_threshold) {
+        ctx->fallback_count = 0U;
+        DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_CRC, IOLINK_EVENT_TYPE_WARNING);
+    }
+}
+
+#if !IOLINK_COMPAT_V10_STARTUP_OPERATE
+/**
+ * @brief Reject an OPERATE request received during startup.
+ *
+ * Table 53 (SDCI_TC_0035): only a V1.0 Device reacts to an OPERATE request
+ * received during STARTUP. A V1.1 Device must not answer it and must not
+ * advance to PREOPERATE/ESTAB_COM.
+ *
+ * @return true when the frame was rejected (skip the tail cleanup).
+ */
+static bool dll_reject_startup_operate(iolink_dll_ctx_t* ctx, bool was_establishing)
+{
+    if (was_establishing && (ctx->req_len == 3U) &&
+        ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U) &&
+        ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE) &&
+        ((ctx->frame_buf[0] & IOLINK_MC_ADDR_MASK) == 0x00U) &&
+        ((ctx->frame_buf[2] == IOLINK_CMD_DEVICE_OPERATE) ||
+         (ctx->frame_buf[2] == IOLINK_CMD_PROCESS_DATA_OPERATE))) {
         ctx->framing_errors++;
-        ctx->total_retries++;
-        /* Keep the diagnostic event (ST has no counter, but the application
-           uses it for the event flag) without changing the DL mode. */
-        ctx->fallback_count++;
-        if (ctx->fallback_count >= ctx->sio_fallback_threshold) {
-            ctx->fallback_count = 0U;
-            DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_CRC, IOLINK_EVENT_TYPE_WARNING);
+        ctx->frame_index = 0U;
+        return true;
+    }
+    return false;
+}
+#endif /* !IOLINK_COMPAT_V10_STARTUP_OPERATE */
+
+/**
+ * @brief PREOPERATE: intercept the first message after wake-up.
+ *
+ * Transition T1: a Type-0 READ of a Direct Parameter page octet on the page
+ * channel is the spec startup probe. Answer from the direct-parameter source
+ * rather than feeding the MC into ISDU. Later PREOPERATE Type-0 frames are ISDU
+ * traffic and are not intercepted.
+ */
+static bool dll_handle_startup_probe(iolink_dll_ctx_t* ctx, bool was_establishing, uint8_t mc)
+{
+    const bool page_read =
+        ((mc & IOLINK_MC_RW_MASK) != 0U) && ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == 0x20U);
+    if (was_establishing && (ctx->req_len == 2U) && page_read) {
+        dll_handle_page_channel_read(ctx, mc);
+        return true;
+    }
+    return false;
+}
+
+/** @brief PREOPERATE dispatch: Type-0 only, plus FALLBACK/MasterCommand. */
+static void dll_dispatch_preoperate(iolink_dll_ctx_t* ctx, bool was_establishing)
+{
+    const uint8_t mc = ctx->frame_buf[0];
+    if (dll_handle_startup_probe(ctx, was_establishing, mc)) {
+        return;
+    }
+    if (ctx->req_len == 2U) {
+        if (mc == IOLINK_MC_TRANSITION_COMMAND) {
+            dll_handle_preoperate(ctx, mc, ctx->frame_buf[1]);
+        }
+        else {
+            dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
         }
     }
+    else if ((ctx->req_len == 3U) && dll_is_fallback_command(ctx)) {
+        /* Table B.2/43: FALLBACK MasterCommand 0x5A. */
+        dll_handle_fallback_command(ctx);
+    }
+    else if ((ctx->req_len == 3U) && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
+             ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE) &&
+             ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
+        /* Page-channel Type-0 WRITE of a MasterCommand (Table B.2):
+           0x97 DeviceStartup, 0x98 PDOperate, 0x99 DeviceOperate,
+           0x9A DevicePreoperate, 0x95/0x96 ident, 0x5A Fallback.
+           ST applies the mode change and answers with CKS only. */
+        dll_handle_master_command(ctx, ctx->frame_buf[2]);
+    }
+    else if (ctx->req_len == 3U) {
+        /* Any other 3-octet Type-0 OD write in PREOPERATE is ISDU or diagnosis
+           traffic (7.3.6 allows ISDU before OPERATE). It is a TYPE_0 frame: one
+           OD octet at offset 2 and a CKS-only reply (Figure A.5), never the
+           configured OPERATE PD widths. */
+        dll_handle_type0_od_write(ctx, ctx->frame_buf[0], ctx->frame_buf[2]);
+    }
+}
+
+/** @brief ESTAB_COM dispatch: first valid non-transition frame enters OPERATE. */
+static void dll_dispatch_estab_com(iolink_dll_ctx_t* ctx)
+{
+    const uint8_t mc = ctx->frame_buf[0];
+    const bool type0 = ((ctx->frame_buf[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0);
+    const bool page_write = type0 && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
+                            ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE);
+    if (mc == IOLINK_MC_TRANSITION_COMMAND) {
+        dll_handle_preoperate(ctx, mc, ctx->frame_buf[1]);
+    }
+    else if (page_write && ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
+        /* MasterCommand before the first cyclic frame: apply it instead of
+           mistaking a Type-0 page write for Type-2 PD. */
+        dll_handle_master_command(ctx, ctx->frame_buf[2]);
+    }
+    else {
+        /* The first valid non-transition frame establishes communication and
+           moves to OPERATE, Type 0 included. */
+        dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
+        if (page_write) {
+            dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
+        }
+        else if (type0 && (ctx->req_len == 2U)) {
+            dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
+        }
+        else if (type0) {
+            /* Type-0 OD write (ISDU/diagnosis): one OD octet at 2. */
+            dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
+        }
+        else {
+            /* A fixed TYPE_1_x/TYPE_2_x READ is only MC + CKT (req_len == 2), so
+               req_len cannot distinguish it from Type-0: the CKT type bits are
+               authoritative. */
+            dll_handle_operate_type1_2(ctx);
+        }
+    }
+}
+
+/** @brief OPERATE dispatch: every channel is valid, transitions are forbidden. */
+static void dll_dispatch_operate(iolink_dll_ctx_t* ctx)
+{
+    const uint8_t mc = ctx->frame_buf[0];
+    const bool type0 = ((ctx->frame_buf[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0);
+    const bool page_write = type0 && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
+                            ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE);
+    if ((ctx->req_len == 3U) && (dll_is_fallback_command(ctx))) {
+        /* Table B.2/43, Table 47 T9: OPERATE -> SIO after T_FBD. */
+        dll_handle_fallback_command(ctx);
+    }
+    else if (mc == IOLINK_MC_TRANSITION_COMMAND) {
+        /* Transition command is illegal in OPERATE. Report it but keep the DL
+           mode: the master never sends it in a healthy link, and ST rc=2/rc=3
+           recovery here would only add churn. */
+        ctx->framing_errors++;
+    }
+    else if (type0 && (ctx->req_len == 2U)) {
+#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
+        /* Tables 57/67 (SDCI_TC_0038/0049): a TYPE_0 page READ while OPERATE is
+           active is a reset request. Do not answer it; go back to STARTUP so the
+           next read is handled as the startup probe. TYPE_0 page writes keep
+           their normal behaviour. */
+        if (((mc & IOLINK_MC_RW_MASK) != 0U) &&
+            ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE) &&
+            (ctx->m_seq_type != IOLINK_M_SEQ_TYPE_0)) {
+            ctx->framing_errors++;
+            ctx->frame_index = 0U;
+            dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
+            return;
+        }
+#endif
+        dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
+    }
+    else if (page_write && ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
+        /* MasterCommand page write in OPERATE (0x9A/0x98/0x99/...). ST handles
+           these in every DL mode and only changes the state, never treats them
+           as an illegal M-sequence. */
+        dll_handle_master_command(ctx, ctx->frame_buf[2]);
+    }
+    else if (page_write) {
+        /* DPP parameter write (e.g. MasterCycleTime): CKS-only ack. */
+        dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
+    }
+    else if (type0) {
+        /* Type-0 OD write on ISDU/diagnosis: CKS-only ack. */
+        dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
+    }
+    else {
+        /* Fixed TYPE_1_x/TYPE_2_x READ may be only MC + CKT (req_len == 2);
+           disambiguate by the CKT type bits, not the length. */
+        dll_handle_operate_type1_2(ctx);
+    }
+}
+
+/**
+ * @brief Dispatch a validated frame by DL state.
+ *
+ * @return false when the frame was rejected without state progress and the
+ *         caller must skip the common tail cleanup.
+ */
+static bool dll_handle_valid_frame(iolink_dll_ctx_t* ctx)
+{
+    ctx->last_valid_frame_ms = iolink_time_get_ms();
+    const bool was_establishing =
+        (ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) || (ctx->state == IOLINK_DLL_STATE_STARTUP);
+#if !IOLINK_COMPAT_V10_STARTUP_OPERATE
+    if (dll_reject_startup_operate(ctx, was_establishing)) {
+        return false;
+    }
+#endif
+    if (was_establishing) {
+        dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
+        ctx->dsio_deadline_ms = 0U; /* valid message cancels T_DSIO */
+    }
+
+    if (ctx->state == IOLINK_DLL_STATE_PREOPERATE) {
+        dll_dispatch_preoperate(ctx, was_establishing);
+    }
+    else if (ctx->state == IOLINK_DLL_STATE_ESTAB_COM) {
+        dll_dispatch_estab_com(ctx);
+    }
+    else if (ctx->state == IOLINK_DLL_STATE_OPERATE) {
+        dll_dispatch_operate(ctx);
+    }
+    return true;
+}
+
+/** @brief Clear the per-frame bookkeeping and refresh the ISR ISDU snapshot. */
+static void dll_finish_frame(iolink_dll_ctx_t* ctx)
+{
     ctx->frame_index = 0U;
     ctx->frame_eager = 0U;
     ctx->isdu_isr_consumed = 0U;
     /* Reflect any ISDU state change (e.g. a completed write request) for the
      * ISR read pump before the next master frame. */
     dll_isdu_sync_snapshot(ctx);
+}
+
+static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
+{
+    if (dll_frame_drop_if_stopped(ctx)) {
+        return;
+    }
+    dll_check_cycle_time(ctx);
+
+    /* A one-octet "frame" is not an M-sequence: it is the wake-up byte the
+     * transceiver forwards in SIO (or line noise). Ignore it instead of failing
+     * the checksum, which would read the absent second octet and drive a
+     * spurious fallback. */
+    if (ctx->req_len < IOLINK_M_SEQ_HEADER_LEN) {
+        ctx->frame_index = 0U;
+        return;
+    }
+
+    /* ST restarts its callback timer at frame end; a completed frame (even a
+       bad one) proves the link is still being driven. */
+    dll_master_activity(ctx);
+
+    const dll_frame_result_t result = dll_frame_validate(ctx);
+    if (result == DLL_FRAME_VALID) {
+        if (!dll_handle_valid_frame(ctx)) {
+            return;
+        }
+    }
+    else {
+        dll_handle_frame_error(ctx, result);
+        if (result == DLL_FRAME_TYPE_ERROR) {
+            return; /* the type-error path clears its own bookkeeping */
+        }
+    }
+
+    dll_finish_frame(ctx);
 }
 
 /** Re-assert the configured operating COM after a recovery drop to COM1. */
