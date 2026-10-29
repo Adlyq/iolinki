@@ -523,56 +523,271 @@ static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error)
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
 
+/**
+ * @brief Reject a WRITE to a read-only mandatory object.
+ *
+ * @return true when a negative response was already produced.
+ */
+static bool isdu_check_mandatory_write(iolink_isdu_ctx_t* ctx)
+{
+    if (ctx->header.type != IOLINK_ISDU_SERVICE_TYPE_WRITE) {
+        return false;
+    }
+    const uint16_t index = ctx->header.index;
+    const bool writable_tag = (index == IOLINK_IDX_APPLICATION_TAG) ||
+                              (index == IOLINK_IDX_FUNCTION_TAG) ||
+                              (index == IOLINK_IDX_LOCATION_TAG);
+    if (writable_tag) {
+        /* Table B.2.4: with the Parameter (write) access lock set, every
+           read/write parameter except DeviceAccessLocks is write-protected. */
+        if ((isdu_access_locks(ctx) & IOLINK_LOCK_PARAM) != 0U) {
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+            return true;
+        }
+        return false;
+    }
+
+    switch (index) {
+        case IOLINK_IDX_PROFILE_CHARACTERISTIC:
+        case IOLINK_IDX_VENDOR_NAME:
+        case IOLINK_IDX_VENDOR_TEXT:
+        case IOLINK_IDX_PRODUCT_NAME:
+        case IOLINK_IDX_PRODUCT_ID:
+        case IOLINK_IDX_PRODUCT_TEXT:
+        case IOLINK_IDX_SERIAL_NUMBER:
+        case IOLINK_IDX_HARDWARE_REVISION:
+        case IOLINK_IDX_FIRMWARE_REVISION:
+        case IOLINK_IDX_PRODUCT_URI:
+        case IOLINK_IDX_ERROR_COUNT:
+        case IOLINK_IDX_DEVICE_STATUS:
+        case IOLINK_IDX_PROCESS_DATA_INPUT:
+        case IOLINK_IDX_PROCESS_DATA_OUTPUT:
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+            return true;
+        default:
+            return false; /* unknown index: IDX_NOTAVAIL in the dispatcher */
+    }
+}
+
+/** @brief B.2.5: 0x000D is an ArrayT of UIntegerT16 (single element here). */
+static void isdu_read_profile_characteristic(iolink_isdu_ctx_t* ctx,
+                                             const iolink_device_info_t* info)
+{
+    if (info->profile_characteristic == 0U) {
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+        return;
+    }
+    if (ctx->header.subindex > 1U) {
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+        return;
+    }
+    ctx->response_buf[0] = (uint8_t) (info->profile_characteristic >> 8);
+    ctx->response_buf[1] = (uint8_t) (info->profile_characteristic & 0xFF);
+    ctx->response_len = 2U;
+    ctx->response_idx = 0U;
+    ctx->state = ISDU_STATE_RESPONSE_READY;
+}
+
+/** @brief Table B.8/B.2.20: 2-octet error count since reset. */
+static void isdu_read_error_count(iolink_isdu_ctx_t* ctx)
+{
+    uint32_t total = 0U;
+    if (ctx->dll_ctx != NULL) {
+        iolink_dll_stats_t stats;
+        iolink_dll_get_stats((const iolink_dll_ctx_t*) ctx->dll_ctx, &stats);
+        uint64_t sum = (uint64_t) stats.crc_errors + (uint64_t) stats.framing_errors +
+                       (uint64_t) stats.timeout_errors + (uint64_t) stats.timing_errors;
+        total = (sum > 0xFFFFU) ? 0xFFFFU : (uint32_t) sum;
+    }
+    ctx->response_buf[0] = (uint8_t) (total >> 8);
+    ctx->response_buf[1] = (uint8_t) (total & 0xFFU);
+    ctx->response_len = 2U;
+    ctx->response_idx = 0U;
+    ctx->state = ISDU_STATE_RESPONSE_READY;
+}
+
+/** @brief Map an identification index to its device-info string (NULL if none). */
+static const char* isdu_identification_string(const iolink_device_info_t* info, uint16_t index)
+{
+    switch (index) {
+        case IOLINK_IDX_VENDOR_NAME:
+            return info->vendor_name;
+        case IOLINK_IDX_VENDOR_TEXT:
+            return info->vendor_text;
+        case IOLINK_IDX_PRODUCT_NAME:
+            return info->product_name;
+        case IOLINK_IDX_PRODUCT_ID:
+            return info->product_id;
+        case IOLINK_IDX_PRODUCT_TEXT:
+            return info->product_text;
+        case IOLINK_IDX_SERIAL_NUMBER:
+            return info->serial_number;
+        case IOLINK_IDX_HARDWARE_REVISION:
+            return info->hardware_revision;
+        case IOLINK_IDX_FIRMWARE_REVISION:
+            return info->firmware_revision;
+        case IOLINK_IDX_PRODUCT_URI:
+            return info->product_uri;
+        default:
+            return NULL;
+    }
+}
+
+/**
+ * @brief Read an identification string into the response buffer.
+ *
+ * @return false when the object has no string and no response was produced
+ *         (the transport state is left untouched).
+ */
+static bool isdu_read_identification_string(iolink_isdu_ctx_t* ctx,
+                                            const iolink_device_info_t* info, uint16_t index)
+{
+    const char* str_data = isdu_identification_string(info, index);
+    if (index == IOLINK_IDX_PRODUCT_URI && str_data == NULL) {
+        /* Table B.8/B.2.19: optional, conditional on an associated Profile. */
+        ctx->response_len = 0U;
+        ctx->response_idx = 0U;
+        ctx->state = ISDU_STATE_RESPONSE_READY;
+        return true;
+    }
+    if (str_data == NULL) {
+        return false;
+    }
+
+    /* Table B.8/B.2.8-B.2.19: per-object StringT fixedLength caps the response.
+       ProductURI allows up to 100 octets; SerialNumber 16. */
+    size_t limit = 64U;
+    if (index == IOLINK_IDX_SERIAL_NUMBER) {
+        limit = 16U;
+    }
+    else if (index == IOLINK_IDX_PRODUCT_URI) {
+        limit = 100U;
+    }
+    size_t len_sz = strlen(str_data);
+    if (len_sz > limit) {
+        len_sz = limit;
+    }
+    if (len_sz > sizeof(ctx->response_buf)) {
+        len_sz = sizeof(ctx->response_buf);
+    }
+    (void) memcpy(ctx->response_buf, str_data, len_sz);
+    ctx->response_len = (uint8_t) len_sz;
+    ctx->response_idx = 0U;
+    ctx->state = ISDU_STATE_RESPONSE_READY;
+    return true;
+}
+
+/** @brief Read an Application/Function/Location tag from the parameter set. */
+static void isdu_tag_read(iolink_isdu_ctx_t* ctx, uint16_t index)
+{
+    const int res =
+        isdu_params_get(ctx, index, 0U, ctx->response_buf, (size_t) IOLINK_ISDU_BUFFER_SIZE);
+    if (res >= 0) {
+        ctx->response_len = (uint8_t) res;
+        ctx->response_idx = 0U;
+        ctx->state = ISDU_STATE_RESPONSE_READY;
+    }
+    /* On failure leave the state untouched (the master keeps polling Busy),
+       matching the original fall-through. */
+}
+
+/** @brief Write an Application/Function/Location tag to the parameter set. */
+static void isdu_tag_write(iolink_isdu_ctx_t* ctx, uint16_t index)
+{
+    if (index == IOLINK_IDX_APPLICATION_TAG) {
+        if (ctx->buffer_idx > 32U) {
+            isdu_respond_param_error(ctx, -2);
+            return;
+        }
+        const int ret = isdu_params_set(ctx, index, 0U, ctx->buffer, ctx->buffer_idx, true);
+        if (ret == 0) {
+            ctx->response_len = 0U;
+            ctx->response_idx = 0U;
+            ctx->state = ISDU_STATE_RESPONSE_READY;
+            return;
+        }
+        isdu_respond_param_error(ctx, ret);
+        return;
+    }
+
+    if (isdu_params_set(ctx, index, 0U, ctx->buffer, ctx->buffer_idx, true) == 0) {
+        ctx->response_len = 0U;
+        ctx->response_idx = 0U;
+        ctx->state = ISDU_STATE_RESPONSE_READY;
+        return;
+    }
+    /* Persistent storage rejected the service: terminate with a negative
+       response instead of leaving the master polling Busy. */
+    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+}
+
+/** @brief Serve a read or write of a writable identification tag. */
+static void isdu_tag_service(iolink_isdu_ctx_t* ctx, uint16_t index)
+{
+    if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
+        isdu_tag_write(ctx, index);
+    }
+    else {
+        isdu_tag_read(ctx, index);
+    }
+}
+
+/** @brief Table B.8/B.2.23-B.2.24: last valid process input/output data. */
+static void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
+{
+    uint8_t len = 0U;
+    if (ctx->dll_ctx != NULL) {
+        const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
+        if (input) {
+            const uint8_t* pdi = &dll->pd_in[dll->pd_in_active][dll->od_width];
+            len = dll->pd_in_len;
+            if (len > IOLINK_PD_IN_MAX_SIZE) {
+                len = (uint8_t) IOLINK_PD_IN_MAX_SIZE;
+            }
+            if (len > 0U) {
+                (void) memcpy(ctx->response_buf, pdi, len);
+            }
+        }
+        else {
+            len = dll->pd_out_len_current;
+            if (len > sizeof(dll->pd_out)) {
+                len = (uint8_t) sizeof(dll->pd_out);
+            }
+            if (len > 0U) {
+                (void) memcpy(ctx->response_buf, dll->pd_out, len);
+            }
+        }
+    }
+    ctx->response_len = len;
+    ctx->response_idx = 0U;
+    ctx->state = ISDU_STATE_RESPONSE_READY;
+}
+
+/** @brief Table B.8/B.2.21: DeviceStatus from the event severity. */
+static void isdu_read_device_status(iolink_isdu_ctx_t* ctx)
+{
+#if IOLINK_FEATURE_EVENTS
+    ctx->response_buf[0] =
+        iolink_events_get_highest_severity((iolink_events_ctx_t*) ctx->event_ctx);
+#else
+    ctx->response_buf[0] = 0U;
+#endif
+    ctx->response_len = 1U;
+    ctx->response_idx = 0U;
+    ctx->state = ISDU_STATE_RESPONSE_READY;
+}
+
+/** @brief Serve the mandatory identification/status indices (vendor, product, tags, etc.). */
 static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
 {
     const iolink_device_info_t* info = isdu_info(ctx);
-    const char* str_data = NULL;
-
     if (info == NULL) {
         isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
         return;
     }
-
-    /* Table C.1: the identification tags are writable here. A known read-only
-       object rejects a WRITE with access denied; an unknown/reserved index
-       falls through to the default IDX_NOTAVAIL response. */
-    if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
-        const uint16_t index = ctx->header.index;
-        const bool writable_tag = (index == IOLINK_IDX_APPLICATION_TAG) ||
-                                  (index == IOLINK_IDX_FUNCTION_TAG) ||
-                                  (index == IOLINK_IDX_LOCATION_TAG);
-        if (writable_tag) {
-            /* Table B.2.4: with the Parameter (write) access lock set, every
-               read/write parameter except DeviceAccessLocks is write-protected. */
-            if ((isdu_access_locks(ctx) & IOLINK_LOCK_PARAM) != 0U) {
-                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
-                return;
-            }
-        }
-        else {
-            switch (index) {
-                case IOLINK_IDX_PROFILE_CHARACTERISTIC:
-                case IOLINK_IDX_VENDOR_NAME:
-                case IOLINK_IDX_VENDOR_TEXT:
-                case IOLINK_IDX_PRODUCT_NAME:
-                case IOLINK_IDX_PRODUCT_ID:
-                case IOLINK_IDX_PRODUCT_TEXT:
-                case IOLINK_IDX_SERIAL_NUMBER:
-                case IOLINK_IDX_HARDWARE_REVISION:
-                case IOLINK_IDX_FIRMWARE_REVISION:
-                case IOLINK_IDX_PRODUCT_URI:
-                case IOLINK_IDX_ERROR_COUNT:
-                case IOLINK_IDX_DEVICE_STATUS:
-                case IOLINK_IDX_PROCESS_DATA_INPUT:
-                case IOLINK_IDX_PROCESS_DATA_OUTPUT:
-                    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
-                    return;
-                default:
-                    break; /* unknown index: IDX_NOTAVAIL below */
-            }
-        }
+    if (isdu_check_mandatory_write(ctx)) {
+        return;
     }
-
     /* B.2.5: 0x000D is an ArrayT; every other object handled here is a
        single-element parameter that only exposes subindex 0. Read-only WRITEs
        were already answered above with WRITE_PROTECTED. */
@@ -581,257 +796,50 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
         return;
     }
 
-    switch (ctx->header.index) {
+    const uint16_t index = ctx->header.index;
+    switch (index) {
             /* Table B.8: 0x0004-0x000B are reserved. VendorID/DeviceID live in
                Direct Parameter Page 1 (0x07-0x0B), not in an ISDU index. A read of
                0x000A/0x000B therefore falls through to the default IDX_NOTAVAIL. */
 
         case IOLINK_IDX_PROFILE_CHARACTERISTIC:
-            /* B.2.5: ArrayT of UIntegerT16, conditional on the profile. This
-               stack exposes a single element (subindex 0/1). */
-            if (info->profile_characteristic == 0U) {
-                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
-                return;
-            }
-            if (ctx->header.subindex > 1U) {
-                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
-                return;
-            }
-            ctx->response_buf[0] = (uint8_t) (info->profile_characteristic >> 8);
-            ctx->response_buf[1] = (uint8_t) (info->profile_characteristic & 0xFF);
-            ctx->response_len = 2U;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
+            isdu_read_profile_characteristic(ctx, info);
             return;
-
-        case IOLINK_IDX_ERROR_COUNT: {
-            /* Table B.8/B.2.20: 2-octet error count since reset (read-only,
-               optional). Sum the DLL error counters; 0 without a bound DLL. */
-            uint32_t total = 0U;
-            if (ctx->dll_ctx != NULL) {
-                iolink_dll_stats_t stats;
-                iolink_dll_get_stats((const iolink_dll_ctx_t*) ctx->dll_ctx, &stats);
-                uint64_t sum = (uint64_t) stats.crc_errors + (uint64_t) stats.framing_errors +
-                               (uint64_t) stats.timeout_errors + (uint64_t) stats.timing_errors;
-                total = (sum > 0xFFFFU) ? 0xFFFFU : (uint32_t) sum;
-            }
-            ctx->response_buf[0] = (uint8_t) (total >> 8);
-            ctx->response_buf[1] = (uint8_t) (total & 0xFFU);
-            ctx->response_len = 2U;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
+        case IOLINK_IDX_ERROR_COUNT:
+            isdu_read_error_count(ctx);
             return;
-        }
-
         case IOLINK_IDX_VENDOR_NAME:
-            str_data = info->vendor_name;
-            break;
         case IOLINK_IDX_VENDOR_TEXT:
-            str_data = info->vendor_text;
-            break;
         case IOLINK_IDX_PRODUCT_NAME:
-            str_data = info->product_name;
-            break;
         case IOLINK_IDX_PRODUCT_ID:
-            str_data = info->product_id;
-            break;
         case IOLINK_IDX_PRODUCT_TEXT:
-            str_data = info->product_text;
-            break;
         case IOLINK_IDX_SERIAL_NUMBER:
-            str_data = info->serial_number;
-            break;
         case IOLINK_IDX_HARDWARE_REVISION:
-            str_data = info->hardware_revision;
-            break;
         case IOLINK_IDX_FIRMWARE_REVISION:
-            str_data = info->firmware_revision;
-            break;
-
         case IOLINK_IDX_PRODUCT_URI:
-            /* Table B.8/B.2.19: optional, conditional on an associated Profile. */
-            str_data = info->product_uri;
-            if (str_data == NULL) {
-                ctx->response_len = 0U;
-                ctx->response_idx = 0U;
-                ctx->state = ISDU_STATE_RESPONSE_READY;
-                return;
-            }
-            break;
-
+            (void) isdu_read_identification_string(ctx, info, index);
+            return;
         case IOLINK_IDX_APPLICATION_TAG:
-            if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
-                if (ctx->buffer_idx > 32U) {
-                    isdu_respond_param_error(ctx, -2);
-                    return;
-                }
-                const int ret = isdu_params_set(ctx, IOLINK_IDX_APPLICATION_TAG, 0U, ctx->buffer,
-                                                ctx->buffer_idx, true);
-                if (ret == 0) {
-                    ctx->response_len = 0U;
-                    ctx->response_idx = 0U;
-                    ctx->state = ISDU_STATE_RESPONSE_READY;
-                    return;
-                }
-                isdu_respond_param_error(ctx, ret);
-                return;
-            }
-            else {
-                int res = isdu_params_get(ctx, IOLINK_IDX_APPLICATION_TAG, 0U, ctx->response_buf,
-                                          (size_t) IOLINK_ISDU_BUFFER_SIZE);
-                if (res >= 0) {
-                    ctx->response_len = (uint8_t) res;
-                    ctx->response_idx = 0U;
-                    ctx->state = ISDU_STATE_RESPONSE_READY;
-                    return;
-                }
-            }
-            break;
-
         case IOLINK_IDX_FUNCTION_TAG:
-            if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
-                if (isdu_params_set(ctx, IOLINK_IDX_FUNCTION_TAG, 0U, ctx->buffer, ctx->buffer_idx,
-                                    true) == 0) {
-                    ctx->response_len = 0U;
-                    ctx->response_idx = 0U;
-                    ctx->state = ISDU_STATE_RESPONSE_READY;
-                    return;
-                }
-                /* Persistent storage rejected the service: terminate with a
-                 * negative response instead of leaving the master polling Busy. */
-                ctx->response_buf[0] = 0x80U;
-                ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-                ctx->response_len = 2U;
-                ctx->response_idx = 0U;
-                ctx->state = ISDU_STATE_RESPONSE_READY;
-                return;
-            }
-            else {
-                int res = isdu_params_get(ctx, IOLINK_IDX_FUNCTION_TAG, 0U, ctx->response_buf,
-                                          (size_t) IOLINK_ISDU_BUFFER_SIZE);
-                if (res >= 0) {
-                    ctx->response_len = (uint8_t) res;
-                    ctx->response_idx = 0U;
-                    ctx->state = ISDU_STATE_RESPONSE_READY;
-                    return;
-                }
-            }
-            break;
-
         case IOLINK_IDX_LOCATION_TAG:
-            if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
-                if (isdu_params_set(ctx, IOLINK_IDX_LOCATION_TAG, 0U, ctx->buffer, ctx->buffer_idx,
-                                    true) == 0) {
-                    ctx->response_len = 0U;
-                    ctx->response_idx = 0U;
-                    ctx->state = ISDU_STATE_RESPONSE_READY;
-                    return;
-                }
-                /* Persistent storage rejected the service: terminate with a
-                 * negative response instead of leaving the master polling Busy. */
-                ctx->response_buf[0] = 0x80U;
-                ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-                ctx->response_len = 2U;
-                ctx->response_idx = 0U;
-                ctx->state = ISDU_STATE_RESPONSE_READY;
-                return;
-            }
-            else {
-                int res = isdu_params_get(ctx, IOLINK_IDX_LOCATION_TAG, 0U, ctx->response_buf,
-                                          (size_t) IOLINK_ISDU_BUFFER_SIZE);
-                if (res >= 0) {
-                    ctx->response_len = (uint8_t) res;
-                    ctx->response_idx = 0U;
-                    ctx->state = ISDU_STATE_RESPONSE_READY;
-                    return;
-                }
-            }
-            break;
-
-        case IOLINK_IDX_PROCESS_DATA_INPUT: {
-            /* Table B.8/B.2.23: return the last valid process input data. */
-            uint8_t len = 0U;
-            if (ctx->dll_ctx != NULL) {
-                const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
-                const uint8_t* pdi = &dll->pd_in[dll->pd_in_active][dll->od_width];
-                len = dll->pd_in_len;
-                if (len > IOLINK_PD_IN_MAX_SIZE) {
-                    len = (uint8_t) IOLINK_PD_IN_MAX_SIZE;
-                }
-                if (len > 0U) {
-                    (void) memcpy(ctx->response_buf, pdi, len);
-                }
-            }
-            ctx->response_len = len;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
+            isdu_tag_service(ctx, index);
             return;
-        }
-
-        case IOLINK_IDX_PROCESS_DATA_OUTPUT: {
-            /* Table B.8/B.2.24: return the last valid process output data. */
-            uint8_t len = 0U;
-            if (ctx->dll_ctx != NULL) {
-                const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
-                len = dll->pd_out_len_current;
-                if (len > sizeof(dll->pd_out)) {
-                    len = (uint8_t) sizeof(dll->pd_out);
-                }
-                if (len > 0U) {
-                    (void) memcpy(ctx->response_buf, dll->pd_out, len);
-                }
-            }
-            ctx->response_len = len;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
+        case IOLINK_IDX_PROCESS_DATA_INPUT:
+            isdu_read_process_data(ctx, true);
             return;
-        }
-
+        case IOLINK_IDX_PROCESS_DATA_OUTPUT:
+            isdu_read_process_data(ctx, false);
+            return;
         case IOLINK_IDX_DEVICE_STATUS:
-#if IOLINK_FEATURE_EVENTS
-            ctx->response_buf[0] =
-                iolink_events_get_highest_severity((iolink_events_ctx_t*) ctx->event_ctx);
-#else
-            ctx->response_buf[0] = 0U;
-#endif
-            ctx->response_len = 1U;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
+            isdu_read_device_status(ctx);
             return;
 
             /* IOLINK_IDX_DETAILED_DEVICE_STATUS (0x0025) is handled earlier in
                handle_standard_commands() via handle_detailed_device_status(). */
 
         default:
-            ctx->response_buf[0] = 0x80U; /* Error: Index not available (C.2.3) */
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-            ctx->response_len = 2U;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
             return;
-    }
-
-    if (str_data != NULL) {
-        /* Table B.8/B.2.8-B.2.19: per-object StringT fixedLength caps the
-           response. ProductURI allows up to 100 octets; SerialNumber 16. */
-        size_t limit = 64U;
-        if (ctx->header.index == IOLINK_IDX_SERIAL_NUMBER) {
-            limit = 16U;
-        }
-        else if (ctx->header.index == IOLINK_IDX_PRODUCT_URI) {
-            limit = 100U;
-        }
-        size_t len_sz = strlen(str_data);
-        if (len_sz > limit) {
-            len_sz = limit;
-        }
-        if (len_sz > sizeof(ctx->response_buf)) {
-            len_sz = sizeof(ctx->response_buf);
-        }
-        (void) memcpy(ctx->response_buf, str_data, len_sz);
-        ctx->response_len = (uint8_t) len_sz;
-        ctx->response_idx = 0U;
-        ctx->state = ISDU_STATE_RESPONSE_READY;
     }
 }
 
