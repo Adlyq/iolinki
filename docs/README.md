@@ -49,7 +49,7 @@ The companion master stack is [iolinki-master](https://github.com/w1ne/iolinki-m
 ## Transport note
 
 The stack uses a single ISR two-pump transport: the data interrupt frames
-requests and transmits replies (`src/dll.c`, `iolink_device_process_isr()`),
+requests and transmits replies (`src/dll_isr.c`, `iolink_device_process_isr()`),
 while the main loop runs the protocol logic. See
 [SPEC_CONFORMANCE](SPEC_CONFORMANCE.md).
 

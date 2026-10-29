@@ -86,16 +86,16 @@ or hostile traffic is *rejected safely* rather than corrupting the device.
   (paraphrasing the contextual mapping of CR 3.1 in 10.512 §7.4.2).
 - Stack guarantees (CR 3.1, CR 3.5 — 10.512 §7.4.2, §7.4.5):
   - Every received OPERATE frame is verified against the A.1.6 checksum before
-    use: `src/dll.c:1052` (`crc_ok` computed via `iolink_checksum6`,
-    `src/crc.c:58`).
+    use: `dll_frame_validate()` (`crc_ok` computed via `iolink_checksum6()`).
   - Frame assembly enforces exact expected length and PD/OD bounds; NULL and
-    size violations are rejected before any parsing: `src/dll.c:1001`
-    (`dll_process_complete_frame`), `src/dll.c:154` (`dll_type_allowed`).
+    size violations are rejected before any parsing:
+    `dll_process_complete_frame()`, `dll_type_allowed()`.
   - ISDU payloads land in fixed-size buffers (`IOLINK_ISDU_BUFFER_SIZE`,
     `include/iolinki/isdu.h:71-74`); reads are clamped to buffer size
-    (`src/isdu.c:446-447`, `src/isdu.c:327,351,374`); segmented transfers
-    enforce start/last/sequence-number legality and answer violations with the
-    protocol SEGMENTATION error (`src/isdu.c:66-68,132`).
+    (`iolink_isdu_od_read()`, `isdu_frame_response()`, `isdu_copy_payload()`);
+    segmented transfers enforce start/last/sequence-number legality and answer
+    violations with the protocol SEGMENTATION error (`isdu_decode_service()`,
+    `isdu_parse_index()`, `iolink_isdu_od_write()`).
   - Stored parameterization is integrity-checked: the Data Storage image
     carries a Fletcher-16 checksum (`iolink_ds_calc_checksum`,
     `src/data_storage.c:74`), recomputed on serialization
@@ -128,7 +128,7 @@ or hostile traffic is *rejected safely* rather than corrupting the device.
   processes traffic at the maximum protocol rate):
   - No dynamic memory allocation anywhere in the stack (no `malloc`/`free` in
     `src/` or `include/`); all contexts and buffers are fixed-size and
-    zero-initialized (`iolink_ctx_zero`, `src/isdu.c:39`). Sustained flooding
+    zero-initialized (`iolink_ctx_zero` in `iolink_isdu_init()`). Sustained flooding
     cannot exhaust heap because there is none.
   - Loss of communication is an explicit, observable DLL state: consecutive
     errors drive the FALLBACK state and SIO fallback
@@ -154,9 +154,9 @@ users, not a network device.
 | CR 2.8 auditable events (§7.3.5) | Security-relevant conditions are reported as protocol events with standard EventCodes (V1.1.5 Annex D constants) | `include/iolinki/events.h:34+`, `iolink_event_classify` `src/events.c:149` |
 | CR 2.9 audit storage (§7.3.6) | Events queue until transmitted/acknowledged; bounded storage | `src/events.c`, `tests/test_events.c` |
 | CR 2.10 audit failure response (§7.3.7) | Queue overflow behavior is defined (oldest overwritten), never a crash | `src/events.c` |
-| CR 3.1 communication integrity (§7.4.2) | CRC6/checksum verified on every OPERATE frame; unintentional corruption detected | `src/dll.c`, `src/crc.c`, `tests/test_crc.c`, `tests/test_dll.c` |
+| CR 3.1 communication integrity (§7.4.2) | CRC6/checksum verified on every OPERATE frame; unintentional corruption detected | `src/dll.c`, `src/dll_isr.c`, `src/crc.c`, `tests/test_crc.c`, `tests/test_dll.c` |
 | CR 3.4 software/information integrity (§7.4.4) | Data Storage image checksummed (Fletcher-16), consistency-compared, recovered on mismatch | `src/data_storage.c:74,121,157`, `tests/test_ds.c` |
-| CR 3.5 input validation (§7.4.5) | Length, bounds, and sequence legality of every received frame and ISDU enforced before use | `src/dll.c:1001,1052,154`, `src/isdu.c:66-68,132,446-447`, `tests/test_isdu*.c` |
+| CR 3.5 input validation (§7.4.5) | Length, bounds, and sequence legality of every received frame and ISDU enforced before use | `dll_process_complete_frame()`, `dll_frame_validate()`, `dll_type_allowed()`, `isdu_parse_index()`, `isdu_copy_payload()`, `tests/test_isdu*.c` |
 | CR 3.6 deterministic output (§7.4.6) | Communication loss is an observable DLL state for actuator safe-state policies | `include/iolinki/dll.h:32,114-115`, `tests/test_sio_fallback.c` |
 | CR 3.7 error handling (§7.4.7) | Errors answered with protocol-defined codes only; no internal-state leakage | `src/isdu.c` error paths |
 | CR 4.1/4.3 confidentiality, cryptography (§7.5) | Stack processes no confidential data and uses no cryptography; nothing to claim, nothing misused | — (see Gaps for device-level duties) |

@@ -41,13 +41,17 @@
  * File map
  *
  *  - Transport, parsing and shared helpers: chkpdu ... iolink_isdu_od_read
+ *    (public: iolink_isdu_init, iolink_isdu_od_write, iolink_isdu_od_read)
+ *  - Shared response helpers: isdu_respond_error
  *  - Mandatory indices: isdu_check_mandatory_write ... handle_mandatory_indices
  *  - SystemCommand and Data Storage upload helpers: isdu_clear_ds_upload_req ...
+ *    (public: iolink_isdu_execute_system_command)
  *  - Access locks, detailed status, error stats and direct parameters:
  *    handle_access_locks ... handle_direct_parameters
  *  - Data Storage services: isdu_append_ds_index_list ... isdu_reject_ds_access
  *  - Index routing and standard dispatch: isdu_handle_vendor_index ...
- *  - Public API: iolink_isdu_process ...
+ *  - Tail public API: iolink_isdu_process, iolink_isdu_get_response_byte,
+ *    iolink_isdu_snapshot_response
  * ------------------------------------------------------------------------- */
 
 /* ... includes ... */

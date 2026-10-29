@@ -32,7 +32,7 @@ your own. Exclude `phy_virtual.c`, Linux sources and `platform_stubs.c` from a
 physical target. If supplying strong platform hooks, exclude `platform.c` too;
 this avoids relying on compiler-specific weak-symbol behavior.
 
-The core sources are `device.c`, `crc.c`, `dll.c`, `isdu.c`, `events.c`,
+The core sources are `device.c`, `crc.c`, `dll.c`, `dll_isr.c`, `isdu.c`, `events.c`,
 `data_storage.c`, `params.c`, `device_info.c`; add `phy_tiol112.c` when using the new
 TIOL112 driver. Provide all time/critical-section/NVM symbols declared in
 `include/iolinki/time_utils.h` and `include/iolinki/platform.h`. Ensure all library

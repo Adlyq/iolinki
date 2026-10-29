@@ -12,7 +12,7 @@
  *   - TX FRAME: tx_frame via DMA (transfer complete -> tx_done).
  *
  * The iolinki library owns M-sequence framing, reply selection and the ISR
- * pump (dll.c / device.c); this file contains no frame/checksum knowledge.
+ * pump (dll_isr.c / device.c); this file contains no frame/checksum knowledge.
  ******************************************************************************
  */
 

@@ -50,7 +50,7 @@ target_include_directories(your_firmware PRIVATE path/to/iolinki/include)
 不要在 MCU 固件中使用该配置。自定义目标可只编译需要的源文件：
 
 ```text
-src/device.c src/dll.c src/isdu.c src/events.c src/params.c
+src/device.c src/dll.c src/dll_isr.c src/isdu.c src/events.c src/params.c
 src/data_storage.c src/device_info.c src/crc.c
 src/platform.c                    # or your own critical-section implementation
 src/platform/<target>/time_utils.c

@@ -24,6 +24,8 @@
  * Runs from the data interrupt: request framing, eager replies, the ISDU
  * snapshot read path and the staged TX pump. The main pump and the frame
  * dispatch live in dll.c; application callbacks must never run here.
+ * `iolink_dll_can_run_user_code()` is the one main-context query kept in this
+ * file because it belongs to the same Timer B transport state.
  */
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
@@ -75,9 +77,9 @@ void dll_isr_start_staged_tx(iolink_dll_ctx_t* ctx, uint8_t slot, uint8_t len)
  * valid A.1.6 checksum AND a legal M-sequence type for the current state before
  * the device answers it. Mirrors the validation done later by
  * dll_process_rx_frame(); the eager reply must never answer a corrupt/illegal
- * frame that the main pump would have rejected. Read-only and ISR-safe. */
-
-/* Legal M-sequence type for the current state (same rule as the main pump):
+ * frame that the main pump would have rejected. Read-only and ISR-safe.
+ *
+ * Legal M-sequence type for the current state (same rule as the main pump):
  * STARTUP/PREOPERATE are Type-0; OPERATE (and ESTAB_COM once the transition is
  * done) expect the configured type. */
 static bool dll_isr_type_ok(const iolink_dll_ctx_t* ctx, const uint8_t* frame)

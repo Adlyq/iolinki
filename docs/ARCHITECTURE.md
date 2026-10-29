@@ -36,6 +36,10 @@ The DLL (`dll.c`) implements the IO-Link state machine:
 - **OPERATE**: Cyclic Process Data (PD) exchange.
 - **FALLBACK**: Error recovery toward SIO/STARTUP.
 
+The data-interrupt two-pump transport (request framing, eager replies, ISDU
+snapshot reads, staged TX) lives in `dll_isr.c`; `dll.c` owns the main pump and
+frame dispatch.
+
 ### 1.3 Application Layer (AL)
 The AL (`application.h`) provides the interface for the user application to interact with the stack without knowing protocol details.
 - **Process Data API**: Cyclic data access (`iolink_device_pd_input_update` / `iolink_device_pd_output_read`).

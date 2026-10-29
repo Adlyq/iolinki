@@ -53,7 +53,8 @@ ctest --test-dir build -R test_dll
 ## Architecture
 
 - Layered: Application (`include/iolinki/application.h`) -> DLL
-  (`dll.c`/`dll_isr.c`) -> PHY vtable (`include/iolinki/phy.h`).
+  (`dll.c`/`dll_isr.c`) -> PHY vtable (`include/iolinki/phy.h`). The
+  ISR/main-context boundary is declared in the private `src/dll_internal.h`.
 - **Transport** (`IOLINK_PHY_FEATURE_ISR_PUMP` removed; always on): the ISR
   frames requests and transmits pre-staged cyclic replies (`src/dll_isr.c`,
   `iolink_device_process_isr()`), for low-latency t_A replies on single-octet

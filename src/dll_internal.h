@@ -59,8 +59,10 @@ typedef struct
  * @name Cross-TU DLL declarations
  *
  * dll.c provides the state/timing helpers used by the ISR, and dll_isr.c
- * provides the staged-TX entry used by dll_send(). See docs/CODE_FLOW.md for
- * the main/ISR context contract.
+ * provides the staged-TX entry used by dll_send(). These symbols are private to
+ * the library (not installed) and intentionally keep the dll_ prefix; they are
+ * not part of the public iolink_ API. See docs/CODE_FLOW.md for the main/ISR
+ * context contract.
  * @{
  */
 void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state);
