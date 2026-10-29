@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The unit suite compiles with `-UNDEBUG` so `assert()`-based tests keep testing
   in Release instead of becoming no-ops.
 
+### Fixed (conformance tooling)
+- `tests/conformance_audit.csv` had been overwritten with the 387-row Chinese
+  test-spec summary, so `conformance_traceability` failed on the missing
+  `case_id` column. Restored the 142-row machine-readable audit and moved the
+  summary back to `docs/IO-Link测试项全量汇总_387.csv`.
+
 ### Fixed (Test Spec conformance)
 - DLL: reject the V1.0 STARTUP -> OPERATE shortcut (`0x99`/`0x98`) by default;
   a TYPE_0 page read while OPERATE is active now returns STARTUP without a
