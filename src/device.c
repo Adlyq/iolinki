@@ -375,75 +375,84 @@ static uint8_t device_pd_in_free_index(const iolink_dll_ctx_t* dll)
     return (uint8_t) (active ^ 1U); /* unreachable with 3 buffers */
 }
 
-void iolink_device_process(iolink_device_ctx_t* ctx)
+/**
+ * @brief ST-style time partition: when the platform provides the Timer B tick
+ * hook, the main service window only runs after a tick authorises it.
+ */
+static bool device_service_window_ready(iolink_device_ctx_t* ctx)
 {
-    if (ctx == NULL) {
-        return;
-    }
-
-    /* ST-style time partition: when the platform provides the Timer B tick
-     * hook, the main service window only runs after a tick authorises it. */
     if ((ctx->dll.phy != NULL) && (ctx->dll.phy->stack_timer_start != NULL) &&
         (iolink_dll_can_run_user_code(&ctx->dll) == 0U)) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * @brief Service the event and Data Storage state machines from the main loop.
+ *
+ * They mutate shared ISDU/event state, so only run them while the ISDU transport
+ * is idle: this keeps the Event flag and the DS state from changing in the
+ * middle of an ISDU response.
+ */
+static void device_service_events_and_ds(iolink_device_ctx_t* ctx)
+{
+    if (ctx->dll.isdu.state != ISDU_STATE_IDLE) {
         return;
     }
-
-    iolink_dll_process(&ctx->dll);
-
-    /* Service the event and Data Storage state machines from the main loop.
-     * They mutate shared ISDU/event state, so only run them while the ISDU
-     * transport is idle: this keeps the Event flag and the DS state from
-     * changing in the middle of an ISDU response. */
-    if (ctx->dll.isdu.state == ISDU_STATE_IDLE) {
 #if IOLINK_FEATURE_DATA_STORAGE
-        if (ctx->dll.ds.state != IOLINK_DS_STATE_IDLE) {
-            iolink_ds_process(&ctx->dll.ds);
-        }
+    if (ctx->dll.ds.state != IOLINK_DS_STATE_IDLE) {
+        iolink_ds_process(&ctx->dll.ds);
+    }
 #endif
 #if IOLINK_FEATURE_EVENTS
-        if ((ctx->dll.events.count > 0U) || (ctx->dll.events.pending_count > 0U)) {
-            iolink_events_process(&ctx->dll.events);
-        }
+    if ((ctx->dll.events.count > 0U) || (ctx->dll.events.pending_count > 0U)) {
+        iolink_events_process(&ctx->dll.events);
+    }
 #endif
 #if IOLINK_FEATURE_DATA_STORAGE && IOLINK_FEATURE_EVENTS
-        /* DS_UPLOAD_REQ is a notification. Publish it only after the DS-command
-         * ISDU response has been read (ISDU idle), so the Master does not see
-         * the Event flag inside that response and interleave a diagnosis read
-         * with the ongoing ISDU transfer. */
-        if (ctx->dll.ds.upload_event_pending) {
-            ctx->dll.ds.upload_event_pending = false;
-            iolink_event_trigger(&ctx->dll.events, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST,
-                                 IOLINK_EVENT_TYPE_NOTIFICATION);
-        }
+    /* DS_UPLOAD_REQ is a notification. Publish it only after the DS-command ISDU
+     * response has been read (ISDU idle), so the Master does not see the Event
+     * flag inside that response and interleave a diagnosis read with the
+     * ongoing ISDU transfer. */
+    if (ctx->dll.ds.upload_event_pending) {
+        ctx->dll.ds.upload_event_pending = false;
+        iolink_event_trigger(&ctx->dll.events, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST,
+                             IOLINK_EVENT_TYPE_NOTIFICATION);
+    }
 #endif
+}
+
+/** @brief Report master-lost / master-online edges to the application. */
+static void device_notify_master_lost(iolink_device_ctx_t* ctx)
+{
+    if ((ctx->config == NULL) || (ctx->config->app_callbacks == NULL)) {
+        return;
     }
-
-    /* State callbacks triggered from the data ISR are deferred to this window,
-     * in transition order (a burst of frames cannot overwrite an earlier one). */
-    iolink_dll_flush_state_callbacks(&ctx->dll);
-
-    if ((ctx->config != NULL) && (ctx->config->app_callbacks != NULL)) {
-        if (ctx->dll.state != IOLINK_DLL_STATE_OPERATE) {
-            /* Startup/preoperate pauses are not loss events. Suppress the edge
-             * and forget any stale state when leaving OPERATE. */
-            ctx->master_lost_last = false;
-        }
-        else {
-            const bool lost = ctx->dll.master_lost;
-            if (lost != ctx->master_lost_last) {
-                ctx->master_lost_last = lost;
-                if (lost) {
-                    if (ctx->config->app_callbacks->on_master_lost != NULL) {
-                        ctx->config->app_callbacks->on_master_lost();
-                    }
-                }
-                else if (ctx->config->app_callbacks->on_master_online != NULL) {
-                    ctx->config->app_callbacks->on_master_online();
-                }
-            }
+    if (ctx->dll.state != IOLINK_DLL_STATE_OPERATE) {
+        /* Startup/preoperate pauses are not loss events. Suppress the edge and
+           forget any stale state when leaving OPERATE. */
+        ctx->master_lost_last = false;
+        return;
+    }
+    const bool lost = ctx->dll.master_lost;
+    if (lost == ctx->master_lost_last) {
+        return;
+    }
+    ctx->master_lost_last = lost;
+    if (lost) {
+        if (ctx->config->app_callbacks->on_master_lost != NULL) {
+            ctx->config->app_callbacks->on_master_lost();
         }
     }
+    else if (ctx->config->app_callbacks->on_master_online != NULL) {
+        ctx->config->app_callbacks->on_master_online();
+    }
+}
 
+/** @brief Deliver deferred ISDU reset requests to the application. */
+static void device_dispatch_resets(iolink_device_ctx_t* ctx)
+{
     if (ctx->dll.isdu.reset_pending) {
         ctx->dll.isdu.reset_pending = false;
         if (ctx->reset_handler != NULL) {
@@ -456,45 +465,72 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
             ctx->reset_handler(IOLINK_RESET_APPLICATION);
         }
     }
+}
 
-    if ((ctx->config != NULL) && (ctx->config->app_callbacks != NULL) &&
-        (ctx->dll.state == IOLINK_DLL_STATE_OPERATE)) {
-        if (ctx->config->app_callbacks->on_pd_output != NULL) {
-            ctx->config->app_callbacks->on_pd_output(ctx->dll.pd_out, ctx->dll.pd_out_len_current);
-        }
-#if IOLINK_APP_PD_INPUT_CALLBACK
-        if (ctx->config->app_callbacks->on_pd_input != NULL) {
-            /* Fill a buffer the ISR is not streaming, then publish it atomically
-             * so the ISR never streams a torn PD-in. The callback return value
-             * is the PD valid flag; the pre-cached cyclic reply must be rebuilt. */
-            const uint8_t inactive = device_pd_in_free_index(&ctx->dll);
-            /* Fill the free buffer outside the critical section: the ISR keeps
-             * streaming the captured copy meanwhile. */
-            const bool valid = ctx->config->app_callbacks->on_pd_input(
-                &ctx->dll.pd_in[inactive][ctx->dll.od_width], ctx->dll.pd_in_len_current);
-
-            if (ctx->config->lock != NULL) {
-                ctx->config->lock(ctx->config->user);
-            }
-            else {
-                iolink_critical_enter();
-            }
-            ctx->dll.pd_in_len = ctx->dll.pd_in_len_current;
-            ctx->dll.pd_valid = valid;
-            ctx->dll.pd_in_active = inactive;
-            if (ctx->config->unlock != NULL) {
-                ctx->config->unlock(ctx->config->user);
-            }
-            else {
-                iolink_critical_exit();
-            }
-
-            if (ctx->dll.cyclic_reply_precached) {
-                iolink_dll_prepare_cyclic_reply(&ctx->dll);
-            }
-        }
-#endif
+/** @brief Run the application process-data callbacks while in OPERATE. */
+static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
+{
+    if ((ctx->config == NULL) || (ctx->config->app_callbacks == NULL) ||
+        (ctx->dll.state != IOLINK_DLL_STATE_OPERATE)) {
+        return;
     }
+    if (ctx->config->app_callbacks->on_pd_output != NULL) {
+        ctx->config->app_callbacks->on_pd_output(ctx->dll.pd_out, ctx->dll.pd_out_len_current);
+    }
+#if IOLINK_APP_PD_INPUT_CALLBACK
+    if (ctx->config->app_callbacks->on_pd_input != NULL) {
+        /* Fill a buffer the ISR is not streaming, then publish it atomically so
+         * the ISR never streams a torn PD-in. The callback return value is the
+         * PD valid flag; the pre-cached cyclic reply must be rebuilt. */
+        const uint8_t inactive = device_pd_in_free_index(&ctx->dll);
+        /* Fill the free buffer outside the critical section: the ISR keeps
+         * streaming the captured copy meanwhile. */
+        const bool valid = ctx->config->app_callbacks->on_pd_input(
+            &ctx->dll.pd_in[inactive][ctx->dll.od_width], ctx->dll.pd_in_len_current);
+
+        if (ctx->config->lock != NULL) {
+            ctx->config->lock(ctx->config->user);
+        }
+        else {
+            iolink_critical_enter();
+        }
+        ctx->dll.pd_in_len = ctx->dll.pd_in_len_current;
+        ctx->dll.pd_valid = valid;
+        ctx->dll.pd_in_active = inactive;
+        if (ctx->config->unlock != NULL) {
+            ctx->config->unlock(ctx->config->user);
+        }
+        else {
+            iolink_critical_exit();
+        }
+
+        if (ctx->dll.cyclic_reply_precached) {
+            iolink_dll_prepare_cyclic_reply(&ctx->dll);
+        }
+    }
+#endif
+}
+
+void iolink_device_process(iolink_device_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    if (!device_service_window_ready(ctx)) {
+        return;
+    }
+
+    iolink_dll_process(&ctx->dll);
+
+    device_service_events_and_ds(ctx);
+
+    /* State callbacks triggered from the data ISR are deferred to this window,
+     * in transition order (a burst of frames cannot overwrite an earlier one). */
+    iolink_dll_flush_state_callbacks(&ctx->dll);
+
+    device_notify_master_lost(ctx);
+    device_dispatch_resets(ctx);
+    device_run_app_callbacks(ctx);
 }
 
 int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data, size_t len,
