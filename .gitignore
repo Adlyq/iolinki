@@ -1,6 +1,7 @@
 # Build artifacts
 build/
 build_quality/
+build_quality_release/
 build_docker/
 build_linux/
 build_test/
@@ -9,6 +10,7 @@ build_release/
 build_bare/
 build_baremetal/
 build_isr/
+build_matrix/
 build_stream/
 *.o
 *.a

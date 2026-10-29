@@ -42,8 +42,10 @@ int reference_device_tick(reference_device_t* app, bool button)
     app->input[1] = (uint8_t) app->counter;
     app->input[2] = button ? 1U : 0U;
     if (button && !app->button) {
+#if IOLINK_FEATURE_EVENTS
         iolink_event_trigger(iolink_device_get_events_ctx(&app->device), 0x8CA0,
                              IOLINK_EVENT_TYPE_NOTIFICATION);
+#endif
     }
     app->button = button;
     uint8_t output = 0;

@@ -23,6 +23,26 @@
  */
 
 #include "iolinki/phy_virtual.h"
+
+#if (IOLINK_ISR_RX_MODE != IOLINK_ISR_RX_BYTE) || (IOLINK_ISR_TX_MODE != IOLINK_ISR_TX_BYTE)
+/*
+ * This PHY is a byte stream: it implements the BYTE hooks only and cannot
+ * deliver or accept whole frames. Keep the public symbols so the library and the
+ * host examples still link in a FRAME build, but there is no usable virtual PHY
+ * there. Tests that need a working PHY must stay on the BYTE configuration.
+ */
+void iolink_phy_virtual_set_port(const char* port)
+{
+    (void) port;
+}
+
+const iolink_phy_api_t* iolink_phy_virtual_get(void)
+{
+    return NULL;
+}
+
+#else /* BYTE/BYTE */
+
 #include <stdio.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -30,10 +50,6 @@
 #include <termios.h>
 #include <errno.h>
 #include <string.h>
-
-#if (IOLINK_ISR_RX_MODE != IOLINK_ISR_RX_BYTE) || (IOLINK_ISR_TX_MODE != IOLINK_ISR_TX_BYTE)
-#error "phy_virtual implements the ISR BYTE hooks only (FRAME mode is not supported)"
-#endif
 
 static int g_fd = -1;
 static const char* g_port_path = NULL;
@@ -243,3 +259,5 @@ const iolink_phy_api_t* iolink_phy_virtual_get(void)
 {
     return &g_phy_virtual;
 }
+
+#endif /* BYTE/BYTE */

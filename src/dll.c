@@ -576,6 +576,9 @@ static bool dll_dispatch_od(iolink_dll_ctx_t* ctx, uint8_t mc, const uint8_t* od
            A read returns the memory octet(s) at the address; a write to
            address 0 confirms the event readout and clears the Event flag. */
         const uint8_t addr = (uint8_t) (mc & IOLINK_MC_ADDR_MASK);
+#if !IOLINK_FEATURE_EVENTS
+        (void) addr;
+#endif
         if ((mc & IOLINK_MC_RW_MASK) != 0U) {
             for (uint8_t i = 0U; i < od_len; i++) {
                 od_out[i] = DLL_EVENTS_MEMORY_READ(&ctx->events, (uint8_t) (addr + i));

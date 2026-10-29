@@ -23,7 +23,25 @@ Verify code against warnings and static analysis tools.
 ./check_quality.sh
 ```
 
-### 3. Docker Environment
+### 3. Run the Compile Matrix
+Every supported compile-time configuration must build. The matrix covers the
+feature toggles (`IOLINK_FEATURE_*`, `IOLINK_PHY_FEATURE_*`), all four ISR
+granularity combinations, the minimal/tiny profiles, the compatibility switches
+and the bare-metal platform. The BYTE/BYTE configurations also run the unit
+suite; the others are build-only because the host tests drive the BYTE-only
+virtual PHY.
+
+```bash
+./tools/build_matrix.sh                 # everything (~1-2 min)
+./tools/build_matrix.sh --filter isr_   # one group
+./tools/build_matrix.sh --list          # configuration names
+```
+
+**Delivery rule:** a change that touches any `#if`, a `IOLINK_*` switch, or a
+public header is not ready while `tools/build_matrix.sh` is red. Add a
+configuration to the script when you introduce a new build switch.
+
+### 4. Docker Environment
 To ensure a reproducible environment matching CI, run tests inside Docker.
 
 **Build Image:**

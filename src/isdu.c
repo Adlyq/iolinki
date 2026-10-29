@@ -104,6 +104,7 @@ static int isdu_params_set(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subin
 #endif
 }
 
+#if IOLINK_FEATURE_SYSTEM_COMMAND
 /** @brief Factory-reset the bound parameter context, or the legacy global set. */
 static void isdu_params_factory_reset(iolink_isdu_ctx_t* ctx)
 {
@@ -120,6 +121,7 @@ static void isdu_params_factory_reset(iolink_isdu_ctx_t* ctx)
     }
 #endif
 }
+#endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
 
 /** @brief Device-info context bound to this ISDU context, if any. */
 static iolink_device_info_ctx_t* isdu_info_ctx(iolink_isdu_ctx_t* ctx)
@@ -833,6 +835,7 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
     }
 }
 
+#if IOLINK_FEATURE_SYSTEM_COMMAND
 /** @brief Clear DS_UPLOAD_FLAG when a reset restored the factory set. */
 static void isdu_clear_ds_upload_req(iolink_isdu_ctx_t* ctx)
 {
@@ -869,6 +872,7 @@ static void isdu_trigger_ds_upload_req(iolink_isdu_ctx_t* ctx)
     (void) ctx;
 #endif
 }
+#endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
 
 /** @brief Execute a SystemCommand (reset, factory restore, data-storage commands). */
 static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)

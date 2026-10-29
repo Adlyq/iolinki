@@ -20,6 +20,11 @@ ctest --test-dir build -R test_dll
 # MISRA/format only fail the script with IOLINKI_MISRA_ENFORCE=1 /
 # IOLINKI_FORMAT_ENFORCE=1.
 ./check_quality.sh
+
+# Compile matrix (delivery gate): every feature toggle, ISR granularity and
+# platform must build; BYTE/BYTE configs also run the suite. Required for any
+# change touching IOLINK_* switches or an #if in src/ and include/.
+./tools/build_matrix.sh
 ```
 
 ## Build / platform gotchas

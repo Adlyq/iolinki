@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   conversion).
 - The `upstream-sync` agent skill was replaced by a `maintenance` skill.
 
+### Added (build verification)
+- `tools/build_matrix.sh`: compiles 19 configurations (all ISR byte/frame
+  combinations, minimal/tiny profiles, every feature toggle, compatibility
+  switches, bare-metal) and runs the unit suite for the BYTE/BYTE ones. Wired
+  into CI as the delivery gate for compile-time changes.
+- `src/phy_virtual.c` now compiles in FRAME builds as an unusable stub instead
+  of failing with `#error`, so every ISR granularity can be compiled.
+- Fixed the trimmed/no-events configurations: guarded SystemCommand-only ISDU
+  helpers, the disabled-event macro arguments and the examples that referenced
+  event/DS members unconditionally.
+
 ### Fixed (build and CI)
 - `examples/stm32g0_tiol112/build.sh` no longer references the removed
   `src/frame.c` (the CI firmware job failed on it), and the IAR project dropped

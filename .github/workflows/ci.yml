@@ -93,6 +93,20 @@ jobs:
       - name: Test
         run: ctest --test-dir build_release --output-on-failure
 
+  # Delivery gate for compile-time configurations: every feature toggle, ISR
+  # granularity and platform must at least build; the BYTE/BYTE configurations
+  # also run the unit suite.
+  build-matrix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libcmocka-dev
+      - name: Compile matrix
+        run: ./tools/build_matrix.sh
+
   # Branch protection on develop requires the REAL jobs directly:
   # docker-validation, sbom-tools. Do not reintroduce echo-only proxy jobs —
   # they let a red job hide behind a green run.
