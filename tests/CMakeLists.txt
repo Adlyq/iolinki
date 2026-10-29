@@ -9,6 +9,11 @@ if(IOLINK_MINIMAL_PROFILE OR IOLINK_TINY_PROFILE OR
     return()
 endif()
 
+# Several tests are plain assert()-based. CMake adds -DNDEBUG to Release builds,
+# which would compile every assert() away and turn those tests into no-ops (and
+# trip -Wunused-but-set-variable). Keep assertions active for the suite.
+add_compile_options(-UNDEBUG)
+
 find_package(PkgConfig QUIET)
 add_executable(test_switching_sensor test_switching_sensor.c ../examples/switching_sensor/switching_sensor.c)
 target_include_directories(test_switching_sensor PRIVATE ../examples/switching_sensor)

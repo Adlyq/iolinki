@@ -1,9 +1,9 @@
 name: IODD CLI validation
 on:
   push:
-    branches: [main, develop]
+    branches: [own_dev, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [own_dev, develop]
 permissions:
   contents: read
 jobs:

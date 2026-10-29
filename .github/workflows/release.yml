@@ -5,14 +5,14 @@ on:
     tags:
       - 'v*'
   pull_request:
-    branches: [develop, main]
+    branches: [own_dev, develop]
 
 permissions:
   contents: write
 
 jobs:
   create-release:
-    needs: [esp32-example, stm32g0-example, stm32u5-example, labwired-g0, labwired-c3]
+    needs: [stm32g0-example, labwired-g0]
     runs-on: ubuntu-latest
 
     steps:
@@ -47,7 +47,8 @@ jobs:
             VERSION=${GITHUB_REF#refs/tags/v}
             TAG=${GITHUB_REF#refs/tags/}
           else
-            VERSION=2.1.0-rc.1
+            VERSION=$(sed -n 's/^project(iolinki VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+            [ -n "$VERSION" ] || { echo "cannot read the project version" >&2; exit 1; }
             TAG=verification-only
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -126,12 +127,12 @@ jobs:
           mkdir -p dist
           git archive --format=zip HEAD -o "dist/iolinki-${{ steps.version.outputs.version }}-source.zip"
           tar -czf "dist/iolinki-${{ steps.version.outputs.version }}-firmware.tar.gz" -C firmware-artifacts .
-          git archive --format=zip HEAD CMakeLists.txt LICENSE LICENSE.COMMERCIAL src include examples samples tests tools docs -o "dist/iolinki-${{ steps.version.outputs.version }}-examples.zip"
+          git archive --format=zip HEAD CMakeLists.txt LICENSE LICENSE.COMMERCIAL src include examples tests tools docs -o "dist/iolinki-${{ steps.version.outputs.version }}-examples.zip"
           git archive --format=zip HEAD validation/labwired -o "dist/iolinki-${{ steps.version.outputs.version }}-labwired-recipes.zip"
-          tar -czf "dist/iolinki-${{ steps.version.outputs.version }}-host-demos.tar.gz" -C build examples/reference_device/reference_device_demo examples/switching_sensor/switching_sensor_demo examples/simple_device/simple_device tests/test_init
+          tar -czf "dist/iolinki-${{ steps.version.outputs.version }}-host-demos.tar.gz" -C build examples/host_demo/host_demo examples/simple_device/simple_device tests/test_init
           python3 tools/package_release_iodds.py dist "${{ steps.version.outputs.version }}"
           python3 tools/package_iar.py "dist/iolinki-${{ steps.version.outputs.version }}-stm32g0-tiol112-IAR-project.zip" --device-root .vendor/g0 --core-root .vendor/cmsis/CMSIS/Core
-          printf '%s\n' 'G0_ENGINE=4ff8cbaaa87418ace5e85be45c220b371f8c5b6f' 'C3_ENGINE=d528c78e660530e76164cd99003a1d03e3b861ac' > dist/LABWIRED_COMMITS
+          printf '%s\n' 'G0_ENGINE=4ff8cbaaa87418ace5e85be45c220b371f8c5b6f' > dist/LABWIRED_COMMITS
           cp test-results.xml test_output.log test_stats.json coverage_summary.txt iodd-cli-test.log dist/
           cp iolinki-*.json dist/
           git rev-parse HEAD > dist/SOURCE_COMMIT
@@ -166,81 +167,6 @@ jobs:
           files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # develop is a protected branch (required checks, no admin bypass), so a
-  # direct push of a fresh merge commit is rejected. When main only ever
-  # fast-forwards to green develop SHAs (see RELEASE_STRATEGY.md) develop
-  # already contains main and this job is a no-op. If main diverged anyway,
-  # open a back-merge PR instead of pushing.
-  back-merge-develop:
-    needs: create-release
-    if: ${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Back-merge main into develop (PR if diverged)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git fetch origin develop main
-          if git merge-base --is-ancestor origin/main origin/develop; then
-            echo "develop already contains main — nothing to back-merge"
-          else
-            gh pr create --base develop --head main \
-              --title "Back-merge main into develop after release" \
-              --body "Automated post-release back-merge. If required checks did not start (GITHUB_TOKEN-created PRs do not trigger workflows), close and reopen this PR." \
-              || echo "back-merge PR already exists"
-          fi
-
-  esp32-example:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-    - name: Install pinned PlatformIO Core
-      run: python -m pip install platformio==6.1.19
-    - name: Cache ESP-IDF and toolchain packages
-      uses: actions/cache@v4
-      with:
-        path: ~/.platformio
-        key: ${{ runner.os }}-pio-6.1.19-espressif32-6.10.0-idf-5.4.0
-    - name: Test UART stop-bit ordering, timeout latch and receive overflow
-      run: 'cc -std=c11 -Wall -Wextra -Werror examples/esp32_l6362a/test_tx_guard.c
-        examples/esp32_l6362a/main/tx_guard.c examples/esp32_l6362a/main/rx_guard.c
-        -o /tmp/esp32-uart-test
-
-        /tmp/esp32-uart-test
-
-        '
-    - name: Build native ESP-IDF ESP32-C3 firmware
-      run: platformio run -d examples/esp32_l6362a -e esp32c3
-    - name: Archive ESP32-C3 firmware and memory map
-      uses: actions/upload-artifact@v4
-      with:
-        name: esp32c3-l6362a-espidf
-        if-no-files-found: error
-        include-hidden-files: true
-        path: 'examples/esp32_l6362a/.pio/build/esp32c3/firmware.elf
-
-          examples/esp32_l6362a/.pio/build/esp32c3/iolinki_esp32c3_l6362a.map
-
-          examples/esp32_l6362a/.pio/build/esp32c3/firmware.bin
-
-          examples/esp32_l6362a/.pio/build/esp32c3/bootloader.bin
-
-          examples/esp32_l6362a/.pio/build/esp32c3/partitions.bin
-
-          '
-
   stm32g0-example:
     runs-on: ubuntu-latest
     steps:
@@ -282,63 +208,6 @@ jobs:
           examples/stm32g0_tiol112/build/reference-device.map
 
           '
-
-  stm32u5-example:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Get pinned Zephyr
-      uses: actions/checkout@v4
-      with:
-        repository: zephyrproject-rtos/zephyr
-        ref: c66235fb7346bbe3dbedd1dd76ec5a37a8e8262b
-        path: vendor/zephyr
-    - name: Install target toolchain and west
-      run: 'sudo apt-get update
-
-        sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi device-tree-compiler
-        ninja-build
-
-        python3 -m venv /tmp/west-env
-
-        /tmp/west-env/bin/pip install west
-
-        /tmp/west-env/bin/pip install -r vendor/zephyr/scripts/requirements.txt
-
-        '
-    - name: Fetch pinned modules
-      working-directory: vendor
-      run: '/tmp/west-env/bin/west init -l zephyr
-
-        /tmp/west-env/bin/west update cmsis hal_stm32
-
-        '
-    - name: Test receive queue, wake latch and timer wrap
-      run: 'cc -std=c99 -Wall -Wextra -Werror samples/stm32u5_tiol112/tests/test_adapter.c
-        -o /tmp/u5-adapter-test
-
-        /tmp/u5-adapter-test
-
-        '
-    - name: Build STM32U5 firmware
-      working-directory: vendor
-      env:
-        ZEPHYR_TOOLCHAIN_VARIANT: gnuarmemb
-        GNUARMEMB_TOOLCHAIN_PATH: /usr
-      run: /tmp/west-env/bin/west build -b nucleo_u575zi_q ../samples/stm32u5_tiol112
-        -d ../build-u5
-    - name: Archive U5 firmware
-      uses: actions/upload-artifact@v4
-      with:
-        name: stm32u5-tiol112-zephyr
-        path: 'build-u5/zephyr/zephyr.elf
-
-          build-u5/zephyr/zephyr.hex
-
-          build-u5/zephyr/zephyr.map
-
-          '
-
   labwired-g0:
     needs: stm32g0-example
     runs-on: ubuntu-24.04
@@ -370,37 +239,4 @@ jobs:
         with:
           name: labwired-g0-evidence
           path: labwired-g0.log
-          if-no-files-found: error
-
-  labwired-c3:
-    needs: esp32-example
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: w1ne/labwired-core
-          ref: d528c78e660530e76164cd99003a1d03e3b861ac
-          path: .labwired
-      - uses: actions/download-artifact@v4
-        with:
-          name: esp32c3-l6362a-espidf
-          path: .firmware
-      - uses: dtolnay/rust-toolchain@1.95.0
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: .labwired
-      - name: Execute release firmware in both LabWired modes
-        shell: bash
-        env:
-          LABWIRED_ROOT: ${{ github.workspace }}/.labwired
-          IOLINKI_FIRMWARE: ${{ github.workspace }}/.firmware/firmware.elf
-        run: |
-          set -euo pipefail
-          bash validation/labwired/run.sh c3 2>&1 | tee labwired-c3.log
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: labwired-c3-evidence
-          path: labwired-c3.log
           if-no-files-found: error

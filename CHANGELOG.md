@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   conversion).
 - The `upstream-sync` agent skill was replaced by a `maintenance` skill.
 
+### Fixed (build and CI)
+- `examples/stm32g0_tiol112/build.sh` no longer references the removed
+  `src/frame.c` (the CI firmware job failed on it), and the IAR project dropped
+  the same entry.
+- `test_all.sh` / `.docker_test_entrypoint.sh` use `IOLINK_PLATFORM` (the old
+  `-DPLATFORM=` was ignored, so the "bare metal" step silently built Linux).
+- Release workflow: dropped the deleted ESP32/Zephyr example jobs and the
+  `main`/`develop` back-merge job, removed the non-existent `samples` archive
+  path, packaged only binaries the host build produces, and derives the
+  verification version from `CMakeLists.txt` instead of a hardcoded RC.
+- CI now triggers on `own_dev`, and a new Release (`-O3`, `-Werror`) job plus a
+  Release build in `check_quality.sh` cover optimisation-only warnings.
+- The unit suite compiles with `-UNDEBUG` so `assert()`-based tests keep testing
+  in Release instead of becoming no-ops.
+
 ### Fixed (Test Spec conformance)
 - DLL: reject the V1.0 STARTUP -> OPERATE shortcut (`0x99`/`0x98`) by default;
   a TYPE_0 page read while OPERATE is active now returns STARTUP without a

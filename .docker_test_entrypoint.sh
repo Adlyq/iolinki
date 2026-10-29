@@ -3,7 +3,7 @@ set -e
 
 rm -rf build_docker
 
-cmake -B build_docker -DPLATFORM=LINUX
+cmake -B build_docker -DIOLINK_PLATFORM=LINUX
 cmake --build build_docker
 
 # Run Unit Tests

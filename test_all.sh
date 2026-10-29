@@ -21,8 +21,8 @@ echo -e "\n[1/2] 🐧 Testing Linux Host Target..."
 rm -rf build_linux
 mkdir build_linux
 cd build_linux
-cmake .. -DCMAKE_BUILD_TYPE=Debug -DPLATFORM=LINUX
-make -j"$(nproc)"
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DIOLINK_PLATFORM=LINUX
+cmake --build . --parallel "$(nproc)"
 echo "   ✅ Linux Build Successful"
 
 # Run Integration Tests
@@ -116,8 +116,8 @@ cd build_baremetal
 # Bare metal usually requires cross-compiler, but we can verify source compilation
 # using a generic config or mock toolchain if available.
 # For now, we build the library only to ensure no Linux dependencies leaked.
-cmake .. -DCMAKE_BUILD_TYPE=Debug -DPLATFORM=BARE_METAL
-make iolinki -j"$(nproc)"
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DIOLINK_PLATFORM=BAREMETAL
+cmake --build . --parallel "$(nproc)" --target iolinki
 echo "   ✅ Bare Metal Library Build Successful"
 cd ..
 

@@ -38,6 +38,8 @@ Automated pipelines run on every push to `own_dev` (the maintained branch) and
 3. **MISRA Check**: Enforced in Docker via `cppcheck --addon=misra` (MISRA C:2012 subset). `IOLINKI_MISRA_ENFORCE=1` is set in release Docker runs.
 4. **Unit Tests**: All CMocka tests must pass.
 5. **Integration Tests**: Enforced - Virtual IO-Link Master conformance (V1.1.5).
+6. **Release build**: strict `-Werror` build at `-O3` (Debug builds cannot emit
+   some optimisation-only warnings).
 
 ### Build Stages
 1. **Build**: CMake build for host (Linux).

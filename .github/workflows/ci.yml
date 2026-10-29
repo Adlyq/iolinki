@@ -2,9 +2,9 @@ name: iolinki CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ own_dev, develop ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ own_dev, develop ]
 
 jobs:
   stm32g0-example:
@@ -73,6 +73,25 @@ jobs:
           python3 tools/test_evidence_bundle.py
           python3 tools/test_bench_record.py
           python3 tools/test_bench_run.py
+
+  # Release optimisations expose warnings that Debug (-O0) never emits
+  # (e.g. -Wmaybe-uninitialized). Build and test at -O3 with -Werror.
+  release-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libcmocka-dev
+      - name: Configure Release with strict warnings
+        run: |
+          cmake -B build_release -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_FLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
+      - name: Build
+        run: cmake --build build_release --parallel "$(nproc)"
+      - name: Test
+        run: ctest --test-dir build_release --output-on-failure
 
   # Branch protection on develop requires the REAL jobs directly:
   # docker-validation, sbom-tools. Do not reintroduce echo-only proxy jobs —

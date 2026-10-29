@@ -15,9 +15,10 @@ cmake -B build && cmake --build build && (cd build && ctest --output-on-failure)
 # One test
 ctest --test-dir build -R test_dll
 
-# Quality script: strict -Werror build + cppcheck. MISRA, clang-format and
-# Doxygen run only when installed, and MISRA/format only fail the script with
-# IOLINKI_MISRA_ENFORCE=1 / IOLINKI_FORMAT_ENFORCE=1.
+# Quality script: strict -Werror build at Debug (-O0) and Release (-O3), plus
+# cppcheck. MISRA, clang-format and Doxygen run only when installed, and
+# MISRA/format only fail the script with IOLINKI_MISRA_ENFORCE=1 /
+# IOLINKI_FORMAT_ENFORCE=1.
 ./check_quality.sh
 ```
 

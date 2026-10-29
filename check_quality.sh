@@ -7,7 +7,7 @@ echo "============================================"
 
 # 1. Compiler Warnings (Strict)
 # We rely on CMake to set -Wall -Wextra -Werror via the build system
-echo -e "\n[1/3] 🛡️  Verifying Compilation Warnings..."
+echo -e "\n[1/5] 🛡️  Verifying Compilation Warnings..."
 BUILD_DIR="${IOLINKI_BUILD_DIR:-build_quality}"
 if [ -f "${BUILD_DIR}/CMakeCache.txt" ]; then
     cached_src=$(grep -E '^CMAKE_HOME_DIRECTORY:INTERNAL=' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2-)
@@ -28,6 +28,19 @@ else
     exit 1
 fi
 cd ..
+
+# Debug (-O0) does not emit some -O2/-O3-only diagnostics
+# (e.g. -Wmaybe-uninitialized), so repeat the strict build at -O3.
+RELEASE_DIR="${BUILD_DIR}_release"
+rm -rf "${RELEASE_DIR}"
+cmake -S . -B "${RELEASE_DIR}" -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_FLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
+if cmake --build "${RELEASE_DIR}" --parallel "$(nproc)"; then
+    echo "   ✅ Release (-O3) Compilation Passed"
+else
+    echo "   ❌ Release (-O3) Compilation FAILED"
+    exit 1
+fi
 
 # 2. Static Analysis (Cppcheck)
 echo -e "\n[2/4] 🧹 Running Static Analysis (Cppcheck)..."

@@ -209,9 +209,6 @@
       <name>$PROJ_DIR$\..\..\..\src\crc.c</name>
     </file>
     <file>
-      <name>$PROJ_DIR$\..\..\..\src\frame.c</name>
-    </file>
-    <file>
       <name>$PROJ_DIR$\..\..\..\src\dll.c</name>
     </file>
     <file>
