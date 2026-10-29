@@ -28,6 +28,8 @@
 #include "iolinki/device_info.h"
 #include "test_helpers.h"
 
+#include "conformance_test.h"
+
 static int test_setup(void** state)
 {
     (void) state;
@@ -44,6 +46,7 @@ static int test_teardown(void** state)
 
 static void test_isdu_vendor_name_read(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0114");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_device_info_init(NULL);
@@ -65,6 +68,7 @@ static void test_isdu_vendor_name_read(void** state)
 
 static void test_isdu_device_status_read(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0128");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_events_ctx_t events;
@@ -96,6 +100,7 @@ static void test_isdu_device_status_read(void** state)
 
 static void test_isdu_detailed_device_status_read(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0129");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_events_ctx_t events;
@@ -187,6 +192,7 @@ static void test_isdu_error_stats_read(void** state)
 
 static void test_system_cmd_device_reset(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0316");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_device_info_init(NULL);
@@ -209,6 +215,7 @@ static void test_system_cmd_device_reset(void** state)
 
 static void test_system_cmd_application_reset(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0317");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_device_info_init(NULL);
@@ -233,6 +240,7 @@ static void test_system_cmd_application_reset(void** state)
  * DS_UPLOAD_REQ event (spec 10.4.2). */
 static void test_system_cmd_app_reset_raises_ds_upload_req(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0317");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_events_ctx_t events;
@@ -253,6 +261,7 @@ static void test_system_cmd_app_reset_raises_ds_upload_req(void** state)
 
 static void test_system_cmd_factory_restore(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0155");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_device_info_init(NULL);
@@ -363,6 +372,7 @@ static void test_system_cmd_param_break(void** state)
 
 static void test_system_cmd_invalid(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0104");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_device_info_init(NULL);
@@ -453,8 +463,34 @@ static void test_isdu_location_tag_read_write(void** state)
     assert_memory_equal(readback, test_tag, tag_len);
 }
 
+/* Figure B.5/Table B.6: decode the DPP1 ProcessDataIn/Out length descriptor. */
+static unsigned pd_descriptor_octets(uint8_t code)
+{
+    const unsigned field = (unsigned) (code & 0x1FU);
+    if ((code & 0x80U) != 0U) {
+        return field + 1U; /* BYTE=1: Length is expressed in octets - 1 */
+    }
+    return field / 8U; /* BYTE=0: Length is expressed in bits */
+}
+
+/* Read one octet of Direct Parameter page 1 (address 0x00..0x0F). */
+static uint8_t read_dpp1_octet(iolink_dll_ctx_t* dll, uint8_t addr)
+{
+    iolink_isdu_ctx_t page_ctx;
+    iolink_isdu_init(&page_ctx);
+    page_ctx.dll_ctx = dll;
+    assert_int_equal(isdu_send_read_request(&page_ctx, IOLINK_IDX_DIRECT_PARAMETERS_1,
+                                            (uint8_t) (addr + 1U)),
+                     1);
+    iolink_isdu_process(&page_ctx);
+    uint8_t value = 0U;
+    assert_int_equal(isdu_collect_response(&page_ctx, &value, 1U), 1);
+    return value;
+}
+
 static void test_isdu_pdin_descriptor_read(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0132");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_dll_ctx_t dll = {0};
@@ -482,6 +518,12 @@ static void test_isdu_pdin_descriptor_read(void** state)
     }
     assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 0);
 
+    /* SDCI_TC_0132: the PD length must match DPP1 0x05 and the reserved
+       (bit 5) and unused SIO (bit 6) descriptor bits must be zero. */
+    const uint8_t dpp1_pdin = read_dpp1_octet(&dll, 0x05U);
+    assert_int_equal(dpp1_pdin & 0x60U, 0x00U);
+    assert_int_equal(pd_descriptor_octets(dpp1_pdin), sizeof(expected));
+
     /* Test write protection */
     iolink_isdu_init(&ctx);
     uint8_t cmd_data[] = {0x05};
@@ -500,6 +542,12 @@ static void test_isdu_pdin_descriptor_read(void** state)
 static void test_isdu_data_storage_round_trip(void** state)
 {
     (void) state;
+#if !IOLINK_DS_LEGACY_IMAGE_SUB0
+    /* The V1.1 default is the concatenated DataStorageIndex record on sub0;
+       the legacy whole-image round-trip is only available with the compat
+       switch. */
+    skip();
+#else
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
     iolink_device_info_init(NULL);
@@ -537,11 +585,15 @@ static void test_isdu_data_storage_round_trip(void** state)
     int len = iolink_params_get(IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf));
     assert_int_equal(len, (int) strlen(app));
     assert_memory_equal(buf, app, strlen(app));
+#endif
 }
 
 /* Table B.10: the DataStorageIndex subindices 02-05 are read-only accessors. */
 static void test_isdu_data_storage_subindices(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0107");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0108");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0378");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
@@ -553,6 +605,32 @@ static void test_isdu_data_storage_subindices(void** state)
 
     assert_true(iolink_ds_build_image(&ds) >= 0);
     uint8_t r[64];
+
+    /* sub 01 DS_Command: 1 octet, value 0..5. */
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x01), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 1);
+    assert_true(r[0] <= 5U);
+
+    /* sub 00: concatenated record, length 12 + 3n (n = 3). */
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &ds;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 21);
+    assert_int_equal(r[0], 0x00U); /* DS_Command */
+    assert_int_equal(r[1], 0x00U); /* State_Property */
+    assert_int_equal((uint32_t) ((uint32_t) r[2] << 24) | ((uint32_t) r[3] << 16) |
+                         ((uint32_t) r[4] << 8) | r[5],
+                     (uint32_t) ds.image_len);
+    assert_int_equal((uint32_t) ((uint32_t) r[6] << 24) | ((uint32_t) r[7] << 16) |
+                         ((uint32_t) r[8] << 8) | r[9],
+                     ds.current_checksum);
+    static const uint8_t expect_record_tail[] = {
+        0x00U, 0x18U, 0x00U, 0x00U, 0x19U, 0x00U,
+        0x00U, 0x1AU, 0x00U, 0x00U, 0x00U,
+    };
+    assert_memory_equal(&r[10], expect_record_tail, sizeof(expect_record_tail));
 
     /* sub 02 State_Property: 1 octet, Inactive + no upload flag. */
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x02), 1);
@@ -590,20 +668,28 @@ static void test_isdu_data_storage_subindices(void** state)
                                           0x00U, 0x1AU, 0x00U, 0x00U, 0x00U};
     assert_memory_equal(r, expect_list, sizeof(expect_list));
 
-    /* sub 02-05 reject a WRITE as read-only (0x8023). */
-    iolink_isdu_init(&ctx);
-    ctx.ds_ctx = &ds;
-    uint8_t w[2] = {0x00U, 0x00U};
-    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x02, w, 2U), 1);
-    iolink_isdu_process(&ctx);
-    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
-    assert_int_equal(r[0], 0x80U);
-    assert_int_equal(r[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+    /* sub 00-05 reject a WRITE as read-only (0x8023); only sub1 is writable. */
+    for (uint8_t sub = 0U; sub <= 5U; sub++) {
+        if (sub == 1U) {
+            continue;
+        }
+        iolink_isdu_init(&ctx);
+        ctx.ds_ctx = &ds;
+        uint8_t w[2] = {0x00U, 0x00U};
+        assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, sub, w, 2U), 1);
+        iolink_isdu_process(&ctx);
+        assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
+        assert_int_equal(r[0], 0x80U);
+        assert_int_equal(r[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+    }
 }
 
 /* Table B.10 subindex 01: the DS_Command octet drives the DS state machine. */
 static void test_isdu_ds_command_sequence(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0077");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0321");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0322");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
@@ -661,6 +747,7 @@ static void test_isdu_ds_command_sequence(void** state)
 
 static void test_isdu_direct_parameters_page1(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0052");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_device_info_init(NULL);
@@ -802,6 +889,7 @@ static uint8_t page1_octet3(uint8_t m_seq_type, uint8_t pd_in, uint8_t pd_out)
 
 static void test_isdu_mseq_capability_codes(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0052");
     (void) state;
     iolink_device_info_init(NULL);
     iolink_params_init();
@@ -865,6 +953,8 @@ static void test_isdu_snapshot_response(void** state)
  * ProfileCharacteristic is an ArrayT exposing one element. */
 static void test_isdu_subindexed_objects(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0058");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0111");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_device_info_init(NULL);
@@ -875,6 +965,14 @@ static void test_isdu_subindexed_objects(void** state)
 
     /* 0x000C subindex 1 -> SUBINDEX_NOT_AVAIL. */
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 1U), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
+    assert_int_equal(r[0], 0x80U);
+    assert_int_equal(r[1], IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+
+    /* SDCI_TC_0058: VendorName (0x10) has no Subindex 2. */
+    iolink_isdu_init(&ctx);
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_VENDOR_NAME, 2U), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
     assert_int_equal(r[0], 0x80U);
@@ -912,9 +1010,124 @@ static void test_isdu_dpp1_system_command(void** state)
     assert_int_equal(ctx.response_len, 0U);
 }
 
+/* Read DeviceStatus/DetailedDeviceStatus with a fresh ISDU context bound to the
+ * supplied event engine. */
+static int read_events_index(iolink_events_ctx_t* events, uint16_t index, uint8_t* out,
+                             size_t out_size)
+{
+    iolink_isdu_ctx_t ctx;
+    iolink_isdu_init(&ctx);
+    ctx.event_ctx = events;
+    assert_int_equal(isdu_send_read_request(&ctx, index, 0U), 1);
+    iolink_isdu_process(&ctx);
+    return isdu_collect_response(&ctx, out, out_size);
+}
+
+/* SDCI_TC_0129: DDS is empty (not an error) before any event and is bounded by
+ * 64 records. The stack keeps at most IOLINK_EVENT_PENDING_MAX active records. */
+static void test_isdu_dds_empty_and_max_records(void** state)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0129");
+    (void) state;
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+
+    iolink_events_ctx_t events;
+    iolink_events_init(&events);
+
+    uint8_t records[IOLINK_ISDU_BUFFER_SIZE];
+    int n = read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records,
+                              sizeof(records));
+    assert_int_equal(n, 0); /* Empty object: no records, no negative response. */
+
+    /* Fill every active slot with a distinct Error event. */
+    for (uint16_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
+        iolink_event_trigger(&events, (uint16_t) (0x2000U + i), IOLINK_EVENT_TYPE_ERROR);
+    }
+
+    n = read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records, sizeof(records));
+    assert_true(IOLINK_EVENT_PENDING_MAX <= 64U);
+    assert_int_equal(n, (int) (3U * IOLINK_EVENT_PENDING_MAX));
+    assert_true(n <= (int) (3U * 64U));
+    assert_int_equal(n % 3, 0);
+    for (int i = 0; i < n; i += 3) {
+        assert_int_equal(records[i] & 0xC0U, 0xC0U); /* MODE = event appears */
+    }
+
+    /* One past the last record is SUBINDEX_NOT_AVAIL. */
+    iolink_isdu_ctx_t ctx;
+    iolink_isdu_init(&ctx);
+    ctx.event_ctx = &events;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS,
+                                            (uint8_t) (IOLINK_EVENT_PENDING_MAX + 1U)),
+                     1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, records, sizeof(records)), 2);
+    assert_int_equal(records[0], 0x80U);
+    assert_int_equal(records[1], IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+}
+
+/* SDCI_TC_0373: DeviceStatus and DetailedDeviceStatus reflect an event that
+ * appears after a clean baseline read. */
+static void test_isdu_device_status_follows_event(void** state)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0373");
+    (void) state;
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+
+    iolink_events_ctx_t events;
+    iolink_events_init(&events);
+
+    uint8_t status = 0xFFU;
+    uint8_t records[16] = {0xFFU};
+
+    assert_int_equal(read_events_index(&events, IOLINK_IDX_DEVICE_STATUS, &status, 1U), 1);
+    assert_int_equal(status, 0U); /* OK */
+    assert_int_equal(read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records,
+                                        sizeof(records)),
+                     0);
+
+    /* The reference profile Config7 event code used by the event tests. */
+    iolink_event_trigger(&events, 0x1801U, IOLINK_EVENT_TYPE_ERROR);
+
+    assert_int_equal(read_events_index(&events, IOLINK_IDX_DEVICE_STATUS, &status, 1U), 1);
+    assert_int_equal(status, 4U); /* Failure */
+    assert_int_equal(read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records,
+                                        sizeof(records)),
+                     3);
+    assert_int_equal(records[0], 0xF4U); /* appears | error | instance Application */
+    assert_int_equal((uint16_t) (((uint16_t) records[1] << 8) | records[2]), 0x1801U);
+}
+
+/* SDCI_TC_0057: the reserved index 0xFF is requested with the 8-bit index form
+ * (I-Service 0x9), not as the 16-bit index 0x00FF. */
+static void test_isdu_read_8bit_reserved_index(void** state)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0057");
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_isdu_init(&ctx);
+
+    assert_int_equal(isdu_send_read_request(&ctx, 0x00FFU, 0U), 1);
+    /* Request is 0x93 0xFF 0x6C: the 8-bit index form, not 0xB5 0x00 0xFF. */
+    assert_int_equal(ctx.req_total, 3U);
+    assert_int_equal(ctx.req_buf[0], 0x93U);
+    assert_int_equal(ctx.req_buf[1], 0xFFU);
+
+    iolink_isdu_process(&ctx);
+    uint8_t response[4] = {0};
+    assert_int_equal(isdu_collect_response(&ctx, response, sizeof(response)), 2);
+    assert_int_equal(response[0], 0x80U);
+    assert_int_equal(response[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+}
+
 /* Table B.14: DetailedDeviceStatus is an ArrayT of 3-octet entries. */
 static void test_isdu_dds_subindices(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0129");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_events_ctx_t events;
@@ -994,6 +1207,12 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_subindexed_objects, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_dpp1_system_command, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_dds_subindices, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_dds_empty_and_max_records, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_device_status_follows_event, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_read_8bit_reserved_index, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_snapshot_response, test_setup, test_teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);

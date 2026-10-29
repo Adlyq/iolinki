@@ -83,6 +83,15 @@ if(CMOCKA_FOUND)
     add_iolink_test(test_reference_device test_reference_device.c)
     target_sources(test_reference_device PRIVATE ../examples/reference_device/reference_device.c)
     target_include_directories(test_reference_device PRIVATE ../examples/reference_device)
+    if(IOLINK_PLATFORM STREQUAL "LINUX")
+        add_iolink_test(test_conformance_device test_conformance_device.c)
+        target_sources(test_conformance_device PRIVATE
+            ../examples/conformance_device/conformance_device.c
+            ../examples/conformance_device/conformance_profiles.c
+            ../examples/conformance_device/conformance_storage.c)
+        target_include_directories(test_conformance_device PRIVATE
+            ../examples/conformance_device)
+    endif()
     add_iolink_test(test_crc test_crc.c)
     add_iolink_test(test_dll test_dll.c)
     add_iolink_test(test_pd test_pd.c)
@@ -118,6 +127,16 @@ if(CMOCKA_FOUND)
     add_iolink_test(test_config_trim test_config_trim.c)
     # Spec-conformance assertions for known stack gaps (expected to fail until fixed)
     add_iolink_test(test_spec_conformance test_spec_conformance.c)
+    # New Test Spec cases and known-gap xfails, annotated with SDCI_TC_xxxx IDs.
+    add_iolink_test(test_conformance_gaps test_conformance_gaps.c)
+    if(IOLINK_PLATFORM STREQUAL "LINUX")
+        target_sources(test_conformance_gaps PRIVATE
+            ../examples/conformance_device/conformance_device.c
+            ../examples/conformance_device/conformance_profiles.c
+            ../examples/conformance_device/conformance_storage.c)
+        target_include_directories(test_conformance_gaps PRIVATE
+            ../examples/conformance_device)
+    endif()
     # ISR-pump transport internals
     add_iolink_test(test_dll_isr test_dll_isr.c)
     add_iolink_test(test_isr_atomicity test_isr_atomicity.c)

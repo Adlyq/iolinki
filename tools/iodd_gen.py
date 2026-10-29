@@ -101,6 +101,12 @@ def validate_config(config):
                 if offset + width > bits or positions & occupied:
                     raise ValueError('Process data fields overlap or exceed record size')
                 occupied |= positions
+    features = config.get('features', {})
+    if not isinstance(features, dict) or set(features) - {'blockParameter', 'dataStorage'}:
+        raise ValueError('Invalid features object')
+    for key, value in features.items():
+        if type(value) is not bool:
+            raise ValueError(f'{key} must be a boolean')
     physical = config.get('physical', {})
     if physical.get('bitrate', 'COM2') not in ('COM1', 'COM2', 'COM3'):
         raise ValueError('Invalid bitrate')
@@ -112,7 +118,7 @@ def validate_config(config):
     for name, test in tests.items():
         if not isinstance(test, dict) or set(test) != {'index', 'testValue'}:
             raise ValueError('Test configuration requires index and testValue')
-        integer(test['index'], name + ' index', 0 if name != 'Config2' else 256, 255 if name != 'Config2' else 65535)
+        integer(test['index'], name + ' index', 256 if name == 'Config2' else 0, 65535)
         if not isinstance(test['testValue'], str) or not re.fullmatch(r'0x[0-9A-Fa-f]{2}(?:,0x[0-9A-Fa-f]{2}){0,231}', test['testValue']):
             raise ValueError('testValue requires bounded comma-separated octets')
         count = len(test['testValue'].split(','))
@@ -146,7 +152,11 @@ def generate_bytes(config):
     textref(variant, 'Name', 'T_ProductName', product)
     textref(variant, 'Description', 'T_Description', config.get('description', 'Example application; replace illustrative IDs with assigned production identifiers.'))
     function = element(body, 'DeviceFunction')
-    element(function, 'Features', {'blockParameter': 'false', 'dataStorage': 'false'})
+    features = config.get('features', {})
+    element(function, 'Features', {
+        'blockParameter': str(features.get('blockParameter', False)).lower(),
+        'dataStorage': str(features.get('dataStorage', False)).lower(),
+    })
     variables = element(function, 'VariableCollection')
     # DirectParameters_1 is the mandatory communication-parameter block.
     element(variables, 'StdVariableRef', {'id': 'V_DirectParameters_1'})

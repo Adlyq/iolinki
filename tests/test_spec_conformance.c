@@ -31,6 +31,8 @@
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 
+#include "conformance_test.h"
+
 static iolink_device_info_t make_info(void)
 {
     iolink_device_info_t info;
@@ -169,6 +171,7 @@ static void test_product_uri_index(void** state)
  * data, not a descriptor/length byte. */
 static void test_process_data_input_returns_pd(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0132");
     (void) state;
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
@@ -184,10 +187,36 @@ static void test_process_data_input_returns_pd(void** state)
     assert_int_equal(out[1], 0x22U);
 }
 
+/* Figure B.5/Table B.6: decode the DPP1 ProcessDataIn/Out length descriptor. */
+static unsigned pd_descriptor_octets(uint8_t code)
+{
+    const unsigned field = (unsigned) (code & 0x1FU);
+    if ((code & 0x80U) != 0U) {
+        return field + 1U; /* BYTE=1: Length is expressed in octets - 1 */
+    }
+    return field / 8U; /* BYTE=0: Length is expressed in bits */
+}
+
+/* Read one octet of Direct Parameter page 1 (address 0x00..0x0F). */
+static uint8_t read_dpp1_octet(iolink_dll_ctx_t* dll, uint8_t addr)
+{
+    iolink_isdu_ctx_t ctx;
+    iolink_isdu_init(&ctx);
+    ctx.dll_ctx = dll;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1,
+                                            (uint8_t) (addr + 1U)),
+                     1);
+    iolink_isdu_process(&ctx);
+    uint8_t value = 0U;
+    assert_int_equal(isdu_collect_response(&ctx, &value, 1U), 1);
+    return value;
+}
+
 /* Table B.8 / B.2.24: ProcessDataOutput (0x0029) returns the last valid PD
  * output data written to the device. */
 static void test_process_data_output_returns_pd(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0133");
     (void) state;
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
@@ -200,11 +229,18 @@ static void test_process_data_output_returns_pd(void** state)
     assert_int_equal(n, 2);
     assert_int_equal(out[0], 0xAAU);
     assert_int_equal(out[1], 0xBBU);
+
+    /* SDCI_TC_0133: length matches DPP1 0x06; reserved bit 5 and the unused
+       SIO bit 6 of the descriptor are zero. */
+    const uint8_t dpp1_pdout = read_dpp1_octet(&dll, 0x06U);
+    assert_int_equal(dpp1_pdout & 0x60U, 0x00U);
+    assert_int_equal(pd_descriptor_octets(dpp1_pdout), n);
 }
 
 /* Table C.1: WRITE to a read-only identification object is 0x80 0x23. */
 static void test_read_only_identification_rejects_write(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0140");
     (void) state;
 
     const uint16_t read_only[] = {
@@ -239,6 +275,7 @@ static void test_read_only_identification_rejects_write(void** state)
  * refused (Table C.1 access denied). */
 static void test_parameter_lock_blocks_tag_write(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0156");
     (void) state;
 
     /* Establish a known value before enabling the lock. */
@@ -261,12 +298,27 @@ static void test_parameter_lock_blocks_tag_write(void** state)
     n = read_object(IOLINK_IDX_APPLICATION_TAG, readback, sizeof(readback));
     assert_int_equal(n, (int) sizeof(original));
     assert_memory_equal(readback, original, sizeof(original));
+
+    /* SDCI_TC_0156 step d: writing DeviceAccessLocks = 0x0000 releases the
+       Parameter lock and the same parameter write now succeeds. */
+    const uint8_t unlock[] = {0x00U, 0x00U};
+    n = write_object(IOLINK_IDX_DEVICE_ACCESS_LOCKS, unlock, sizeof(unlock), out, sizeof(out));
+    assert_int_equal(n, 0);
+    assert_int_equal(iolink_device_info_get_access_locks(), 0U);
+
+    n = write_object(IOLINK_IDX_APPLICATION_TAG, overwrite, sizeof(overwrite), out, sizeof(out));
+    assert_int_equal(n, 0);
+    (void) memset(readback, 0, sizeof(readback));
+    n = read_object(IOLINK_IDX_APPLICATION_TAG, readback, sizeof(readback));
+    assert_int_equal(n, (int) sizeof(overwrite));
+    assert_memory_equal(readback, overwrite, sizeof(overwrite));
 }
 
 /* B.2.4: the Parameter lock also inhibits writes to device-specific
  * parameters; reads still reach the vendor service. */
 static void test_parameter_lock_blocks_vendor_write(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0156");
     (void) state;
 
     iolink_device_info_set_access_locks(IOLINK_LOCK_PARAM);
@@ -296,6 +348,14 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
  * (64 octets, SerialNumber 16, ProductURI up to 100, tags 32). */
 static void test_identification_string_length_limits(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0114");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0115");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0116");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0117");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0118");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0119");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0120");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0121");
     (void) state;
 
     static char long_name[81];

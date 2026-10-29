@@ -27,6 +27,8 @@
 #include "iolinki/crc.h"
 #include "test_helpers.h"
 
+#include "conformance_test.h"
+
 static void test_pd_variable_lengths(void** state)
 {
     (void) state;

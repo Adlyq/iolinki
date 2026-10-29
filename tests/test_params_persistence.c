@@ -6,6 +6,8 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include "conformance_test.h"
+
 static int write_result, writes;
 static int mock_read(void* user, uint32_t offset, uint8_t* data, size_t len)
 {

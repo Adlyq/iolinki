@@ -105,6 +105,7 @@ endif()
 if(IOLINK_PLATFORM STREQUAL "LINUX")
     add_subdirectory(examples/reference_device)
     add_subdirectory(examples/switching_sensor)
+    add_subdirectory(examples/conformance_device)
 endif()
 
 # Documentation
@@ -138,4 +139,15 @@ if(BUILD_TESTING AND Python3_FOUND)
     add_test(NAME release_test_stats COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/test_release_test_stats.py)
     add_test(NAME iar_project_paths COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/test_check_iar_project.py)
     add_test(NAME iodd_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/test_iodd_cli.py)
+    if(IOLINK_PLATFORM STREQUAL "LINUX")
+        add_test(NAME conformance_device_smoke
+                 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/test_conformance_device_smoke.py
+                         $<TARGET_FILE:conformance_device>)
+        add_test(NAME conformance_device_master
+                 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/conformance_device_master.py
+                         $<TARGET_FILE:conformance_device>)
+        add_test(NAME conformance_device_iodd_oracle
+                 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/test_conformance_iodd_oracle.py
+                         $<TARGET_FILE:conformance_device>)
+    endif()
 endif()

@@ -26,6 +26,8 @@
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 
+#include "conformance_test.h"
+
 static iolink_device_info_t make_info(void)
 {
     iolink_device_info_t info;
@@ -86,6 +88,7 @@ static void expect_read_string(uint16_t index, const char* expected)
 
 static void test_profile_characteristic_read(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0111");
     (void) state;
     const uint8_t expected[] = {0x00U, 0x01U};
     expect_read_value(IOLINK_IDX_PROFILE_CHARACTERISTIC, expected, sizeof(expected));
@@ -93,6 +96,14 @@ static void test_profile_characteristic_read(void** state)
 
 static void test_identification_strings(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0114");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0115");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0116");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0117");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0118");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0119");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0120");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0121");
     (void) state;
 
     expect_read_string(IOLINK_IDX_VENDOR_NAME, "VendorX");
@@ -107,6 +118,7 @@ static void test_identification_strings(void** state)
 
 static void test_device_access_locks_round_trip(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0109");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
@@ -128,6 +140,49 @@ static void test_device_access_locks_round_trip(void** state)
 
     /* Read-back reflects the new lock word (MSB first). */
     expect_read_value(IOLINK_IDX_DEVICE_ACCESS_LOCKS, locks, sizeof(locks));
+
+    /* Set every implemented lock bit (0..3) and verify the raw word. */
+    const uint8_t all_locks[] = {0x00U, (uint8_t) IOLINK_ACCESS_LOCKS_IMPLEMENTED};
+    iolink_isdu_init(&ctx);
+    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, all_locks,
+                                             sizeof(all_locks)),
+                     1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+    assert_int_equal(iolink_device_info_get_access_locks(), IOLINK_ACCESS_LOCKS_IMPLEMENTED);
+    expect_read_value(IOLINK_IDX_DEVICE_ACCESS_LOCKS, all_locks, sizeof(all_locks));
+
+    /* SDCI_TC_0109 step c/d: writing 0x0000 releases every lock and is read
+       back unchanged. */
+    const uint8_t zero[] = {0x00U, 0x00U};
+    iolink_isdu_init(&ctx);
+    assert_int_equal(
+        isdu_send_write_request(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, zero, sizeof(zero)), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+    assert_int_equal(iolink_device_info_get_access_locks(), 0U);
+    expect_read_value(IOLINK_IDX_DEVICE_ACCESS_LOCKS, zero, sizeof(zero));
+
+    /* Bits 0 (Parameter) and 1 (Data Storage) are implemented. A positive
+       response to a write that sets them is a Test-Spec warning, not a
+       failure; pin the accepted value and then release it again. */
+    const uint8_t param_ds[] = {0x00U, (uint8_t) (IOLINK_LOCK_PARAM | IOLINK_LOCK_DS)};
+    iolink_isdu_init(&ctx);
+    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, param_ds,
+                                             sizeof(param_ds)),
+                     1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+    assert_int_equal(iolink_device_info_get_access_locks(), (IOLINK_LOCK_PARAM | IOLINK_LOCK_DS));
+    expect_read_value(IOLINK_IDX_DEVICE_ACCESS_LOCKS, param_ds, sizeof(param_ds));
+    print_message("[warning] SDCI_TC_0109: positive write with bits 0/1 set\n");
+
+    iolink_isdu_init(&ctx);
+    assert_int_equal(
+        isdu_send_write_request(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, zero, sizeof(zero)), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+    assert_int_equal(iolink_device_info_get_access_locks(), 0U);
 }
 
 int main(void)

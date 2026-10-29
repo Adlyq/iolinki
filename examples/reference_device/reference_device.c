@@ -14,7 +14,7 @@ static const iolink_device_info_t identity = {
     .vendor_id = 1234,
     .device_id = 5678,
     .min_cycle_time = 10,
-    .revision_id = 0x11,
+    .revision_id = 0x0111,
 };
 
 int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy)

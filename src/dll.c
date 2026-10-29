@@ -476,6 +476,17 @@ static bool dll_apply_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
 }
 
 /** @brief Main-context MasterCommand page write: apply the state and send CKS. */
+/* CKS PD-status bit: bit 6 is 0 for "Process Data valid".
+ * A Device with no input PD cannot have invalid input PD, so it always reports
+ * valid; otherwise report the current pd_valid state. */
+static uint8_t dll_pd_status_flags(const iolink_dll_ctx_t* ctx)
+{
+    if ((ctx->pd_in_len_current == 0U) && (ctx->pd_out_len_current > 0U)) {
+        return 0U;
+    }
+    return ctx->pd_valid ? 0U : 0x40U;
+}
+
 static void dll_handle_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
 {
     if (cmd == IOLINK_CMD_FALLBACK) {
@@ -490,9 +501,7 @@ static void dll_handle_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
     if (DLL_EVENTS_FLAG(&ctx->events)) {
         resp[0] |= 0x80U;
     }
-    if (!ctx->pd_valid) {
-        resp[0] |= 0x40U;
-    }
+    resp[0] |= dll_pd_status_flags(ctx);
     resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));
     dll_send(ctx, resp, 1);
     ctx->last_response_us = iolink_time_get_us();
@@ -610,9 +619,7 @@ static void dll_handle_operate_type0(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t 
     if (DLL_EVENTS_FLAG(&ctx->events)) {
         ck_flags |= 0x80U;
     }
-    if (!ctx->pd_valid) {
-        ck_flags |= 0x40U;
-    }
+    ck_flags |= dll_pd_status_flags(ctx);
 
     /* Figure A.5: a Type-0 WRITE is answered by the CKS only, on every
        communication channel; every Type-0 READ is answered by OD followed by
@@ -643,9 +650,7 @@ static void dll_handle_type0_od_write(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t
     if (DLL_EVENTS_FLAG(&ctx->events)) {
         resp[0] |= 0x80U;
     }
-    if (!ctx->pd_valid) {
-        resp[0] |= 0x40U;
-    }
+    resp[0] |= dll_pd_status_flags(ctx);
     resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));
     dll_send(ctx, resp, 1);
     ctx->last_response_us = iolink_time_get_us();
@@ -736,9 +741,7 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
     if (DLL_EVENTS_FLAG(&ctx->events)) {
         cks |= 0x80U;
     }
-    if (!ctx->pd_valid) {
-        cks |= 0x40U;
-    }
+    cks |= dll_pd_status_flags(ctx);
     resp[pos] = cks;
     resp[pos] = (uint8_t) (resp[pos] | iolink_checksum6(resp, pos + 1U));
     pos++;
@@ -1061,6 +1064,22 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
         ctx->last_valid_frame_ms = iolink_time_get_ms();
         bool was_establishing = (ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) ||
                                 (ctx->state == IOLINK_DLL_STATE_STARTUP);
+#if !IOLINK_COMPAT_V10_STARTUP_OPERATE
+        /* Table 53 (SDCI_TC_0035): only a V1.0 Device reacts to an OPERATE
+           request received during STARTUP. A V1.1 Device shall not answer it,
+           and shall not advance to PREOPERATE/ESTAB_COM. Keep the legacy
+           shortcut behind IOLINK_COMPAT_V10_STARTUP_OPERATE. */
+        if (was_establishing && (ctx->req_len == 3U) &&
+            ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U) &&
+            ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE) &&
+            ((ctx->frame_buf[0] & IOLINK_MC_ADDR_MASK) == 0x00U) &&
+            ((ctx->frame_buf[2] == IOLINK_CMD_DEVICE_OPERATE) ||
+             (ctx->frame_buf[2] == IOLINK_CMD_PROCESS_DATA_OPERATE))) {
+            ctx->framing_errors++;
+            ctx->frame_index = 0U;
+            return;
+        }
+#endif
         if (was_establishing) {
             dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
             ctx->dsio_deadline_ms = 0U; /* valid message cancels T_DSIO */
@@ -1161,6 +1180,20 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
                 ctx->framing_errors++;
             }
             else if (type0 && (ctx->req_len == 2U)) {
+#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
+                /* Tables 57/67 (SDCI_TC_0038/0049): a TYPE_0 page READ while
+                   OPERATE is active is a reset request. Do not answer it; go
+                   back to STARTUP so the next read is handled as the startup
+                   probe. TYPE_0 page writes keep their normal behaviour. */
+                if (((mc & IOLINK_MC_RW_MASK) != 0U) &&
+                    ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE) &&
+                    (ctx->m_seq_type != IOLINK_M_SEQ_TYPE_0)) {
+                    ctx->framing_errors++;
+                    ctx->frame_index = 0U;
+                    dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
+                    return;
+                }
+#endif
                 dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
             }
             else if (page_write && ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
@@ -1861,9 +1894,7 @@ static uint8_t dll_isr_status_flags(const iolink_dll_ctx_t* ctx)
     if (DLL_EVENTS_FLAG(&ctx->events)) {
         flags |= 0x80U;
     }
-    if (!ctx->pd_valid) {
-        flags |= 0x40U;
-    }
+    flags |= dll_pd_status_flags(ctx);
     return flags;
 }
 
@@ -1977,6 +2008,19 @@ static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, ui
     }
 
     if (read) {
+#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
+        /* Tables 57/67 (SDCI_TC_0038/0049): a TYPE_0 page read while OPERATE
+           is active is a reset request. Consume it without a reply and return
+           to STARTUP; the next read is served as the startup probe. */
+        if ((ctx->state == IOLINK_DLL_STATE_OPERATE) && (ch == IOLINK_MC_CHANNEL_PAGE) &&
+            (ctx->m_seq_type != IOLINK_M_SEQ_TYPE_0)) {
+            ctx->framing_errors++;
+            dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
+            ctx->last_activity_ms = iolink_time_get_ms();
+            ctx->last_byte_us = iolink_time_get_us();
+            return true;
+        }
+#endif
         uint8_t od = 0U;
         if (ch == IOLINK_MC_CHANNEL_PAGE) {
             od = iolink_isdu_direct_param_page1_octet(&ctx->isdu, addr);

@@ -120,6 +120,7 @@ typedef struct
     bool upload_event_pending;              /**< DS_UPLOAD_REQ notification deferred until ISDU idle */
     uint8_t image[IOLINK_DS_IMAGE_MAX];     /**< Serialized parameter image (DS_Data 0x0003) */
     size_t image_len;                       /**< Valid bytes in @ref image */
+    bool download_invalid;                  /**< A rejected write poisons the active Download */
 } iolink_ds_ctx_t;
 
 /**

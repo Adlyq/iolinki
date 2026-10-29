@@ -23,6 +23,8 @@
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 
+#include "conformance_test.h"
+
 static void init_dll(iolink_dll_ctx_t* dll, iolink_m_seq_type_t type, uint8_t od_width,
                      uint8_t pd_in, uint8_t pd_out)
 {

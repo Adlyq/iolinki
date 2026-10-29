@@ -28,6 +28,8 @@
 #include "iolinki/crc.h"
 #include "test_helpers.h"
 
+#include "conformance_test.h"
+
 typedef struct
 {
     iolink_m_seq_type_t type;

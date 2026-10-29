@@ -27,6 +27,8 @@ The companion master stack is [iolinki-master](https://github.com/w1ne/iolinki-m
 ## Technical Guides
 
 - **[API Reference](API.md)** - Complete API documentation
+- **[API and Integration Guide](API_INTEGRATION.md)** - Integration workflow,
+  configuration lifetimes, ISR/PHY porting and current limitations
 - **[Frame Support](FRAMES.md)** - Supported M-sequences and frame structures
 - **[Testing Guide](TESTING.md)** - Unit tests, integration tests, and Virtual Master
 - **[Platform Porting](PORTING.md)** - How to port to new platforms and RTOSes

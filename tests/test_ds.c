@@ -21,8 +21,12 @@
 #include "iolinki/data_storage.h"
 #include "iolinki/params.h"
 #include "iolinki/device_info.h"
+#include "iolinki/events.h"
+#include "iolinki/isdu.h"
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
+
+#include "conformance_test.h"
 
 static void test_ds_checksum(void** state)
 {
@@ -54,6 +58,7 @@ static void test_ds_storage_integration(void** state)
 
 static void test_ds_state_transitions(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0077");
     (void) state;
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds, NULL);
@@ -62,19 +67,24 @@ static void test_ds_state_transitions(void** state)
     iolink_ds_check(&ds, 0xABCD);
     iolink_ds_process(&ds); /* Req -> Downloading */
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOADING);
-    iolink_ds_process(&ds); /* Downloading -> Idle */
+    iolink_ds_process(&ds); /* remains Downloading until DownloadEnd */
+    assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOADING);
+    assert_int_equal(iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0), 0);
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
 
     /* 2. Trigger Upload (Master has 0x0000 - empty) */
     iolink_ds_check(&ds, 0x0000);
     iolink_ds_process(&ds); /* Req -> Uploading */
     assert_int_equal(ds.state, IOLINK_DS_STATE_UPLOADING);
-    iolink_ds_process(&ds); /* Uploading -> Idle */
+    iolink_ds_process(&ds); /* remains Uploading until UploadEnd */
+    assert_int_equal(ds.state, IOLINK_DS_STATE_UPLOADING);
+    assert_int_equal(iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_UPLOAD_END, 0), 0);
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
 }
 
 static void test_ds_commands_locked(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0156");
     (void) state;
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds, NULL);
@@ -497,6 +507,391 @@ static void test_ds_desc_max_len_bounds_value(void** state)
     assert_memory_equal(&img[4], "ABCD", 4U);
 }
 
+/* ------------------------------------------------------------------------- */
+/* Shared fixture for the Data Storage conformance cases 0077-0081, 0374.    */
+/* ------------------------------------------------------------------------- */
+
+typedef struct
+{
+    iolink_device_info_ctx_t info;
+    iolink_params_ctx_t params;
+    iolink_ds_ctx_t ds;
+    iolink_events_ctx_t events;
+} ds_fixture_t;
+
+static void ds_fixture_init(ds_fixture_t* f, const iolink_storage_api_t* storage)
+{
+    iolink_device_info_ctx_init(&f->info, NULL);
+    iolink_params_ctx_init(&f->params, &f->info);
+    if (storage != NULL) {
+        iolink_params_bind_storage(&f->params, storage);
+    }
+    iolink_ds_init(&f->ds, storage);
+    iolink_ds_bind_params(&f->ds, &f->params);
+    iolink_events_init(&f->events);
+}
+
+static void ds_fixture_set_tags(ds_fixture_t* f, const char* app, const char* fun,
+                                const char* loc)
+{
+    assert_int_equal(iolink_params_ctx_set(&f->params, IOLINK_IDX_APPLICATION_TAG, 0U,
+                                            (const uint8_t*) app, strlen(app), true),
+                     0);
+    assert_int_equal(iolink_params_ctx_set(&f->params, IOLINK_IDX_FUNCTION_TAG, 0U,
+                                            (const uint8_t*) fun, strlen(fun), true),
+                     0);
+    assert_int_equal(iolink_params_ctx_set(&f->params, IOLINK_IDX_LOCATION_TAG, 0U,
+                                            (const uint8_t*) loc, strlen(loc), true),
+                     0);
+}
+
+static int ds_fixture_isdu_read(ds_fixture_t* f, uint16_t index, uint8_t sub, uint8_t* buf,
+                                size_t cap)
+{
+    iolink_isdu_ctx_t ctx;
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &f->ds;
+    ctx.params_ctx = &f->params;
+    ctx.event_ctx = &f->events;
+    assert_int_equal(isdu_send_read_request(&ctx, index, sub), 1);
+    iolink_isdu_process(&ctx);
+    return isdu_collect_response(&ctx, buf, cap);
+}
+
+static int ds_fixture_isdu_write(ds_fixture_t* f, uint16_t index, uint8_t sub,
+                                 const uint8_t* data, uint8_t len, uint8_t* buf, size_t cap)
+{
+    iolink_isdu_ctx_t ctx;
+    iolink_isdu_init(&ctx);
+    ctx.ds_ctx = &f->ds;
+    ctx.params_ctx = &f->params;
+    ctx.event_ctx = &f->events;
+    assert_int_equal(isdu_send_write_request(&ctx, index, sub, data, len), 1);
+    iolink_isdu_process(&ctx);
+    return isdu_collect_response(&ctx, buf, cap);
+}
+
+static int ds_fixture_command(ds_fixture_t* f, uint8_t cmd, uint8_t* buf, size_t cap)
+{
+    return ds_fixture_isdu_write(f, IOLINK_IDX_SYSTEM_COMMAND, 0U, &cmd, 1U, buf, cap);
+}
+
+static int ds_fixture_ds_command(ds_fixture_t* f, uint8_t cmd, uint8_t* buf, size_t cap)
+{
+    return ds_fixture_isdu_write(f, IOLINK_IDX_DATA_STORAGE, 1U, &cmd, 1U, buf, cap);
+}
+
+static uint32_t ds_fixture_read_u32(ds_fixture_t* f, uint8_t sub)
+{
+    uint8_t r[4] = {0U};
+    assert_int_equal(ds_fixture_isdu_read(f, IOLINK_IDX_DATA_STORAGE, sub, r, sizeof(r)), 4);
+    return ((uint32_t) r[0] << 24) | ((uint32_t) r[1] << 16) | ((uint32_t) r[2] << 8) |
+           (uint32_t) r[3];
+}
+
+static void ds_fixture_assert_tag(ds_fixture_t* f, uint16_t index, const char* expected)
+{
+    uint8_t buf[40] = {0U};
+    const size_t expected_len = strlen(expected);
+    assert_int_equal(iolink_params_ctx_get(&f->params, index, 0U, buf, sizeof(buf)),
+                     (int) expected_len);
+    assert_memory_equal(buf, expected, expected_len);
+}
+
+static bool ds_image_find(const uint8_t* img, size_t len, uint16_t index, uint8_t sub,
+                          const uint8_t** value, size_t* value_len)
+{
+    size_t pos = 0U;
+    while ((pos + 4U) <= len) {
+        const uint16_t idx = (uint16_t) (((uint16_t) img[pos] << 8) | (uint16_t) img[pos + 1U]);
+        const uint8_t s = img[pos + 2U];
+        const size_t rlen = (size_t) img[pos + 3U];
+        if ((pos + 4U + rlen) > len) {
+            return false;
+        }
+        if ((idx == index) && (s == sub)) {
+            *value = &img[pos + 4U];
+            *value_len = rlen;
+            return true;
+        }
+        pos += 4U + rlen;
+    }
+    return false;
+}
+
+static void ds_assert_image_record(const uint8_t* img, size_t len, uint16_t index,
+                                   const char* expected)
+{
+    const uint8_t* value = NULL;
+    size_t value_len = 0U;
+    assert_true(ds_image_find(img, len, index, 0U, &value, &value_len));
+    assert_int_equal((int) value_len, (int) strlen(expected));
+    assert_memory_equal(value, expected, strlen(expected));
+}
+
+/* 0077: complete upload through the Data Storage Index (Index_List), checking
+ * size, checksum and the serialized records. */
+static void test_ds_0077_full_upload_via_index_list(void** state)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0077");
+    (void) state;
+    ds_fixture_t f;
+    ds_fixture_init(&f, NULL);
+    ds_fixture_set_tags(&f, "APP1", "FLOW", "TANK");
+    iolink_ds_clear_upload(&f.ds);
+    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
+
+    uint8_t resp[2] = {0U};
+    assert_int_equal(ds_fixture_ds_command(&f, 0x01U, resp, sizeof(resp)), 0);
+    assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOAD_REQ);
+    iolink_ds_process(&f.ds);
+    assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOADING);
+
+    /* Index_List enumerates the complete DS set and the 0x0000 terminator. */
+    uint8_t list[32] = {0U};
+    const int list_len = ds_fixture_isdu_read(&f, IOLINK_IDX_DATA_STORAGE, 5U, list, sizeof(list));
+    assert_int_equal(list_len, 11);
+    static const uint8_t expected_list[] = {0x00U, 0x18U, 0x00U, 0x00U, 0x19U, 0x00U,
+                                            0x00U, 0x1AU, 0x00U, 0x00U, 0x00U};
+    assert_memory_equal(list, expected_list, sizeof(expected_list));
+
+    /* Sub 0 is the concatenated DataStorageIndex record:
+       DS_Command(1) + State_Property(1) + Size(4) + Checksum(4) + Index_List. */
+    uint8_t record[64] = {0U};
+    const int record_len =
+        ds_fixture_isdu_read(&f, IOLINK_IDX_DATA_STORAGE, 0U, record, sizeof(record));
+    assert_int_equal(record_len, 10 + list_len);
+    assert_int_equal(record[0], 0x00U); /* DS_Command read: unspecified */
+    assert_int_equal(record[1], 0x02U); /* State_Property: upload */
+    const uint32_t size = ((uint32_t) record[2] << 24) | ((uint32_t) record[3] << 16) |
+                          ((uint32_t) record[4] << 8) | (uint32_t) record[5];
+    const uint32_t checksum = ((uint32_t) record[6] << 24) | ((uint32_t) record[7] << 16) |
+                              ((uint32_t) record[8] << 8) | (uint32_t) record[9];
+    assert_int_equal(size, f.ds.image_len);
+    assert_int_equal(checksum, iolink_ds_calc_checksum(f.ds.image, f.ds.image_len));
+    assert_memory_equal(&record[10], expected_list, sizeof(expected_list));
+    assert_int_equal(ds_fixture_read_u32(&f, 3U), size);
+    assert_int_equal(ds_fixture_read_u32(&f, 4U), checksum);
+
+    /* Follow every Index_List entry and compare the live value with its record. */
+    for (int i = 0; i < (list_len - 2); i += 3) {
+        const uint16_t index = (uint16_t) (((uint16_t) list[i] << 8) | (uint16_t) list[i + 1]);
+        const uint8_t sub = list[i + 2];
+        uint8_t value[33] = {0U};
+        const int value_len = ds_fixture_isdu_read(&f, index, sub, value, sizeof(value));
+        assert_true(value_len >= 0);
+        const uint8_t* rec = NULL;
+        size_t rec_len = 0U;
+        assert_true(ds_image_find(f.ds.image, f.ds.image_len, index, sub, &rec, &rec_len));
+        assert_int_equal((int) rec_len, value_len);
+        assert_memory_equal(rec, value, (size_t) value_len);
+    }
+    ds_fixture_assert_tag(&f, IOLINK_IDX_APPLICATION_TAG, "APP1");
+
+    const uint32_t checksum_before_end = ds_fixture_read_u32(&f, 4U);
+    assert_int_equal(ds_fixture_ds_command(&f, 0x02U, resp, sizeof(resp)), 0);
+    assert_int_equal(f.ds.state, IOLINK_DS_STATE_IDLE);
+    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
+    assert_int_equal(ds_fixture_read_u32(&f, 4U), checksum_before_end);
+}
+
+/* 0078: set 1 -> set 2 via ParamDownloadStore, then upload set 2 and verify the
+ * Parameter_Checksum changed with it. */
+static void test_ds_0078_upload_set2_after_store(void** state)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0078");
+    (void) state;
+    ds_fixture_t f;
+    ds_fixture_init(&f, NULL);
+    ds_fixture_set_tags(&f, "S1A", "S1B", "S1C");
+    iolink_ds_clear_upload(&f.ds);
+    f.ds.upload_event_pending = false;
+    const uint32_t checksum_set1 = ds_fixture_read_u32(&f, 4U);
+
+    uint8_t resp[2] = {0U};
+    assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_START, resp, sizeof(resp)),
+                     0);
+    assert_int_equal(f.ds.state, IOLINK_DS_STATE_DOWNLOADING);
+    assert_int_equal(ds_fixture_isdu_write(&f, IOLINK_IDX_APPLICATION_TAG, 0U,
+                                           (const uint8_t*) "S2A", 3U, resp, sizeof(resp)),
+                     0);
+    assert_int_equal(ds_fixture_isdu_write(&f, IOLINK_IDX_FUNCTION_TAG, 0U,
+                                           (const uint8_t*) "S2B", 3U, resp, sizeof(resp)),
+                     0);
+    assert_int_equal(ds_fixture_isdu_write(&f, IOLINK_IDX_LOCATION_TAG, 0U,
+                                           (const uint8_t*) "S2C", 3U, resp, sizeof(resp)),
+                     0);
+    /* Block writes are staged; set 1 stays active until the store. */
+    ds_fixture_assert_tag(&f, IOLINK_IDX_APPLICATION_TAG, "S1A");
+    assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_STORE, resp, sizeof(resp)),
+                     0);
+    assert_int_equal(f.ds.state, IOLINK_DS_STATE_IDLE);
+    assert_true(f.ds.upload_event_pending);
+    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0x80U);
+    ds_fixture_assert_tag(&f, IOLINK_IDX_APPLICATION_TAG, "S2A");
+    const uint32_t checksum_set2 = ds_fixture_read_u32(&f, 4U);
+    assert_int_not_equal(checksum_set2, checksum_set1);
+
+    /* Upload set 2 and verify the image now carries it. */
+    assert_int_equal(ds_fixture_ds_command(&f, 0x01U, resp, sizeof(resp)), 0);
+    iolink_ds_process(&f.ds);
+    assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOADING);
+    assert_true(f.ds.image_len > 0U);
+    ds_assert_image_record(f.ds.image, f.ds.image_len, IOLINK_IDX_APPLICATION_TAG, "S2A");
+    ds_assert_image_record(f.ds.image, f.ds.image_len, IOLINK_IDX_FUNCTION_TAG, "S2B");
+    ds_assert_image_record(f.ds.image, f.ds.image_len, IOLINK_IDX_LOCATION_TAG, "S2C");
+    assert_int_equal(ds_fixture_read_u32(&f, 3U), (uint32_t) f.ds.image_len);
+    assert_int_equal(ds_fixture_read_u32(&f, 4U), checksum_set2);
+    assert_int_equal(ds_fixture_ds_command(&f, 0x02U, resp, sizeof(resp)), 0);
+    assert_int_equal(f.ds.state, IOLINK_DS_STATE_IDLE);
+    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
+}
+
+/* 0079: a plain parameter change must not raise DS_UPLOAD_REQ (no-write /
+ * timeout path), while ParamDownloadStore without parameter writes still does. */
+static void test_ds_0079_no_write_store_timeout(void** state)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0079");
+    (void) state;
+    ds_fixture_t f;
+    ds_fixture_init(&f, NULL);
+    ds_fixture_set_tags(&f, "OLD", "OLD", "OLD");
+    iolink_ds_clear_upload(&f.ds);
+    f.ds.upload_event_pending = false;
+
+    /* Set 2 written outside a block download. The DS state must stay idle and
+       no upload notification may be pending (the 1 s timeout elapses). */
+    ds_fixture_set_tags(&f, "NEW", "NEW", "NEW");
+    iolink_ds_process(&f.ds);
+    assert_false(f.ds.upload_event_pending);
+    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
+    assert_int_equal(f.ds.state, IOLINK_DS_STATE_IDLE);
+
+    /* ParamDownloadStart + ParamDownloadStore without writing any parameter. */
+    uint8_t resp[2] = {0U};
+    assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_START, resp, sizeof(resp)),
+                     0);
+    assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_STORE, resp, sizeof(resp)),
+                     0);
+    assert_true(f.ds.upload_event_pending);
+    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0x80U);
+    ds_fixture_assert_tag(&f, IOLINK_IDX_APPLICATION_TAG, "NEW");
+}
+
+/* 0080: a local parameter change (teach-in/menu equivalent) plus the library
+ * hook must request and complete a DS upload of the new set. */
+static void test_ds_0080_local_change_upload(void** state)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0080");
+    (void) state;
+    ds_fixture_t f;
+    ds_fixture_init(&f, NULL);
+    ds_fixture_set_tags(&f, "OLD", "OLD", "OLD");
+    iolink_ds_clear_upload(&f.ds);
+    f.ds.upload_event_pending = false;
+
+    ds_fixture_set_tags(&f, "LOCAL", "TEACH", "PANEL");
+    iolink_ds_request_upload(&f.ds);
+    assert_true(f.ds.upload_event_pending);
+    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0x80U);
+
+    uint8_t resp[2] = {0U};
+    assert_int_equal(ds_fixture_ds_command(&f, 0x01U, resp, sizeof(resp)), 0);
+    iolink_ds_process(&f.ds);
+    assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOADING);
+    assert_true(f.ds.image_len > 0U);
+    ds_assert_image_record(f.ds.image, f.ds.image_len, IOLINK_IDX_APPLICATION_TAG, "LOCAL");
+    ds_assert_image_record(f.ds.image, f.ds.image_len, IOLINK_IDX_FUNCTION_TAG, "TEACH");
+    ds_assert_image_record(f.ds.image, f.ds.image_len, IOLINK_IDX_LOCATION_TAG, "PANEL");
+    assert_int_equal(ds_fixture_read_u32(&f, 4U),
+                     iolink_ds_calc_checksum(f.ds.image, f.ds.image_len));
+    assert_int_equal(ds_fixture_ds_command(&f, 0x02U, resp, sizeof(resp)), 0);
+    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
+}
+
+/* 0081: ParamBreak aborts an upload at three distinct points without applying
+ * data or changing the parameter checksum. */
+static void test_ds_0081_upload_abort_points(void** state)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0081");
+    (void) state;
+    ds_fixture_t f;
+    ds_fixture_init(&f, NULL);
+    ds_fixture_set_tags(&f, "SET1", "SET1", "SET1");
+    iolink_ds_clear_upload(&f.ds);
+    const uint32_t checksum = ds_fixture_read_u32(&f, 4U);
+    uint8_t resp[2] = {0U};
+    uint8_t img[IOLINK_DS_IMAGE_MAX] = {0U};
+
+    for (int point = 0; point < 3; point++) {
+        assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_UPLOAD_START, resp,
+                                            sizeof(resp)),
+                         0);
+        if (point >= 1) {
+            iolink_ds_process(&f.ds);
+            assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOADING);
+        }
+        else {
+            assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOAD_REQ);
+        }
+        if (point == 2) {
+            /* Abort after the upload data has been read once. */
+            assert_true(ds_fixture_isdu_read(&f, IOLINK_IDX_DATA_STORAGE, 0U, img, sizeof(img)) >
+                        0);
+        }
+        assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_BREAK, resp, sizeof(resp)), 0);
+        assert_int_equal(f.ds.state, IOLINK_DS_STATE_IDLE);
+        assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
+        assert_int_equal(ds_fixture_read_u32(&f, 4U), checksum);
+        ds_fixture_assert_tag(&f, IOLINK_IDX_APPLICATION_TAG, "SET1");
+    }
+}
+
+/* 0374: DS_UPLOAD_FLAG is non-volatile; DS_UploadEnd clears and persists it.
+ * A storage-backed re-init models a library-level power cycle. */
+static void test_ds_0374_upload_flag_power_cycle(void** state)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0374");
+    (void) state;
+    iolink_ds_mock_reset();
+
+    ds_fixture_t f;
+    ds_fixture_init(&f, &g_ds_storage_mock);
+    ds_fixture_set_tags(&f, "PC", "PC", "PC");
+    iolink_ds_clear_upload(&f.ds);
+    f.ds.upload_event_pending = false;
+
+    /* ParamDownloadStore after a block download raises and persists the flag. */
+    uint8_t resp[2] = {0U};
+    assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_START, resp, sizeof(resp)),
+                     0);
+    assert_int_equal(ds_fixture_isdu_write(&f, IOLINK_IDX_APPLICATION_TAG, 0U,
+                                           (const uint8_t*) "PC2", 3U, resp, sizeof(resp)),
+                     0);
+    assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_STORE, resp, sizeof(resp)),
+                     0);
+    assert_true(f.ds.upload_event_pending);
+    assert_true(f.ds.ds_upload_flag);
+
+    /* Power cycle: a fresh context reads the flag back from storage. */
+    ds_fixture_init(&f, &g_ds_storage_mock);
+    assert_true(f.ds.ds_upload_flag);
+    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0x80U);
+
+    /* DS_UploadStart/UploadEnd clears and persists the flag. */
+    assert_int_equal(ds_fixture_ds_command(&f, 0x01U, resp, sizeof(resp)), 0);
+    iolink_ds_process(&f.ds);
+    assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOADING);
+    assert_int_equal(ds_fixture_ds_command(&f, 0x02U, resp, sizeof(resp)), 0);
+    assert_false(f.ds.ds_upload_flag);
+    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
+
+    /* Another power cycle still sees the cleared flag. */
+    ds_fixture_init(&f, &g_ds_storage_mock);
+    assert_false(f.ds.ds_upload_flag);
+    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -515,6 +910,12 @@ int main(void)
         cmocka_unit_test(test_ds_desc_max_len_bounds_value),
         cmocka_unit_test(test_ds_download_end_error_classification),
         cmocka_unit_test(test_ds_download_recovery),
+        cmocka_unit_test(test_ds_0077_full_upload_via_index_list),
+        cmocka_unit_test(test_ds_0078_upload_set2_after_store),
+        cmocka_unit_test(test_ds_0079_no_write_store_timeout),
+        cmocka_unit_test(test_ds_0080_local_change_upload),
+        cmocka_unit_test(test_ds_0081_upload_abort_points),
+        cmocka_unit_test(test_ds_0374_upload_flag_power_cycle),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

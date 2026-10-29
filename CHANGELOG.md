@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (Test Spec conformance)
+- DLL: reject the V1.0 STARTUP -> OPERATE shortcut (`0x99`/`0x98`) by default;
+  a TYPE_0 page read while OPERATE is active now returns STARTUP without a
+  reply for non-TYPE_0 devices. Both behaviours are available only through the
+  `IOLINK_COMPAT_*` build switches.
+- ISDU: an invalid CHKPDU discards the request and the next Read returns
+  No Service (`0x00`), matching Test Spec 10032 SDCI_TC_0065.
+- DPP1: `MasterCycleTime` (0x01) now mirrors the value written by the Master;
+  `RevisionID` (0x04) now comes from the configured identity instead of a
+  hardcoded `0x11`.
+- DeviceAccessLocks: reserved bits 4..15 are rejected with `0x8030` and do not
+  change the stored lock value.
+- DataStorageIndex: sub0 now exposes the concatenated `12 + 3n` record and
+  sub1 returns one octet as required by SDCI_TC_0107/0108. The legacy
+  whole-image sub0 payload is available through `IOLINK_DS_LEGACY_IMAGE_SUB0`.
+- DS: `DS_UploadEnd`/`DS_DownloadEnd` clear and persist `DS_UPLOAD_FLAG`.
+- CKS: a Device with output Process Data but no input Process Data now always
+  reports "Process Data valid" (bit 6 = 0), including before `0x98`.
+- DS state machine: unexpected ending commands in Idle return `0x8036`;
+  UploadStart/DownloadStart restart or interrupt the opposite operation instead
+  of reporting Busy; UploadStart/UploadEnd during Download discard the staged
+  parameter values.
+- ISDU: parameter writes are locked (`0x8022`) during an active Upload and
+  parameter reads during an active Download, while SystemCommand and
+  DataStorageIndex stay accessible.
+
+### Added (conformance reference integration)
+- `examples/conformance_device`: selectable full/config/PDOut-only/minimal
+  profiles, Config1/2/3/4 test objects, DS descriptors, file-backed NVM, event
+  injection, PD-valid control and local-change hook.
+- Synthetic `device.xml`/`iodd_expected.json` for the reference profile.
+- `tests/test_conformance_device` profile/parameter/storage tests.
+- `tools/iodd_gen.py`: support the `features.dataStorage` and
+  `features.blockParameter` flags and 16-bit Config1/3 test indices.
+- `tools/conformance_device_master.py`: minimal TYPE_0 master covering startup,
+  DPP1, Config/ISDU, DS Upload/Download and ParameterManager subset end-to-end
+  over a PTY.
+- DS state machine: Uploading/Downloading no longer auto-complete between main
+  loop iterations; they stay active until UploadEnd/DownloadEnd/ParamBreak.
+- Unit test for `0315`: incompatible DeviceID writes are rejected and the
+  configured DID survives a restart.
+- ISDU identification/access-lock handling now uses the Device's bound
+  `device_info` context instead of the legacy global identity, allowing multiple
+  device instances and the conformance reference profile.
+- `tools/test_conformance_iodd_oracle.py`: synthetic IODD oracle checks for
+  identity, DPP1 RevisionID/PD lengths, Config1/2/3/4 and fixed-length errors.
+- `0123/0146` length error chain: ApplicationTag overrun -> `0x8033`, invalid
+  Download parameter -> `0x8033`, DownloadEnd -> `0x8041`.
+- Event memory acknowledgement now removes exactly the events presented in the
+  frozen snapshot, not the first N entries of a possibly reordered queue.
+- Conformance master runner now covers the event flows `0069/0070/0071/0072/
+  0073/0074/0075/0076`, including PREOPERATE, 2 s communication pause, power
+  cycle and short-event disappear.
+- DataStorageIndex sub0 now builds the image before reading Data_Storage_Size,
+  so the first read reports the current size instead of a stale value.
+- Parallel conformance hardening raised the audit to 104 direct, 8 partial,
+  19 n/a and 11 HIL-only; the remaining partials are
+  `0034/0083/0155/0157/0316/0317/0318/0322`.
+- `tests/conformance_audit.csv` and `tests/conformance_traceability.csv`:
+  `scope` and `profile` columns separate library, reference-integration,
+  physical-HIL, IODD-oracle and product-integration work.
+
+### Added (conformance audit)
+- `docs/CONFORMANCE_AUDIT_2026-10-28.md`, `tests/conformance_audit.csv`,
+  `docs/HIL_AUDIT_2026-10-28.md`, `tests/hil_audit.csv` and
+  `docs/HIL_CORRECTION_GUIDE_2026-10-28.md`.
+- Unit conformance annotations and the full 142-case traceability matrix.
+
 ### Fixed (events / Data Storage)
 - Events: the Event flag now satisfies `flag == (count > 0)` at every setter
   (publish, event-memory acknowledge, pop), so a Master can no longer see a flag

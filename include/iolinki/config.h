@@ -143,6 +143,46 @@
 #endif
 
 /* -------------------------------------------------------------------------
+ * Protocol compatibility
+ * ------------------------------------------------------------------------- */
+
+/**
+ * @brief Accept the V1.0 STARTUP -> OPERATE DeviceOperate (0x99) shortcut.
+ *
+ * The V1.1 Test Specification requires a non-V1.0 Device not to accept an
+ * OPERATE request while still in STARTUP. Enable only for a product that must
+ * interoperate with a V1.0 Master.
+ * Default: 0 (V1.1 strict).
+ */
+#ifndef IOLINK_COMPAT_V10_STARTUP_OPERATE
+#define IOLINK_COMPAT_V10_STARTUP_OPERATE 0
+#endif
+
+/**
+ * @brief Answer a TYPE_0 page read while OPERATE is active.
+ *
+ * Table 57/67 require such a read to drop the response and return the Device
+ * to STARTUP. Some legacy Masters repeat TYPE_0 page reads after entering
+ * OPERATE; enable only for those deployments.
+ * Default: 0 (V1.1 strict).
+ */
+#ifndef IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
+#define IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE 0
+#endif
+
+/**
+ * @brief Keep the pre-V1.1 whole-image payload on DataStorageIndex subindex 0.
+ *
+ * V1.1 Table B.10/B.11 require subindex 0 to be the concatenated record
+ * (12 + 3n octets). Enable only for a legacy application that still reads the
+ * old image format.
+ * Default: 0 (V1.1 strict).
+ */
+#ifndef IOLINK_DS_LEGACY_IMAGE_SUB0
+#define IOLINK_DS_LEGACY_IMAGE_SUB0 0
+#endif
+
+/* -------------------------------------------------------------------------
  * ISDU Configuration
  * ------------------------------------------------------------------------- */
 

@@ -150,6 +150,8 @@ typedef struct
     bool frozen;        /**< Memory frozen while the Event flag is set (Table 60) */
     bool flag;          /**< Event flag (CKS bit 7) */
     uint8_t frozen_slots; /**< Number of memory slots populated when the memory was frozen. */
+    iolink_event_t frozen_events[6]; /**< Events actually presented in the frozen memory */
+    uint8_t frozen_count;            /**< Entries valid in ::frozen_events */
 } iolink_events_ctx_t;
 
 /**

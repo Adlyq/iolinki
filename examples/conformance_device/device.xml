@@ -1,0 +1,172 @@
+<?xml version='1.0' encoding='utf-8'?>
+<IODevice xmlns="http://www.io-link.com/IODD/2010/10" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.io-link.com/IODD/2010/10 IODD1.1.xsd">
+  <DocumentInfo copyright="iolinki-project" releaseDate="2026-10-28" version="V1.0" />
+  <ProfileHeader>
+    <ProfileIdentification>IO Device Profile</ProfileIdentification>
+    <ProfileRevision>1.1</ProfileRevision>
+    <ProfileName>Device Profile for IO Devices</ProfileName>
+    <ProfileSource>IO-Link Consortium</ProfileSource>
+    <ProfileClassID>Device</ProfileClassID>
+    <ISO15745Reference>
+      <ISO15745Part>1</ISO15745Part>
+      <ISO15745Edition>1</ISO15745Edition>
+      <ProfileTechnology>IODD</ProfileTechnology>
+    </ISO15745Reference>
+  </ProfileHeader>
+  <ProfileBody>
+    <DeviceIdentity vendorId="1234" deviceId="5680" vendorName="iolinki conformance reference">
+      <VendorText textId="T_VendorText" />
+      <VendorUrl textId="T_VendorUrl" />
+      <DeviceName textId="T_DeviceName" />
+      <DeviceFamily textId="T_DeviceFamily" />
+      <DeviceVariantCollection>
+        <DeviceVariant productId="conformance-full">
+          <Name textId="T_ProductName" />
+          <Description textId="T_Description" />
+        </DeviceVariant>
+      </DeviceVariantCollection>
+    </DeviceIdentity>
+    <DeviceFunction>
+      <Features blockParameter="true" dataStorage="true" />
+      <VariableCollection>
+        <StdVariableRef id="V_DirectParameters_1" />
+        <StdVariableRef id="V_DirectParameters_2" />
+        <StdVariableRef id="V_ProductName" />
+        <StdVariableRef id="V_ApplicationSpecificTag" />
+        <StdVariableRef id="V_ProductID" defaultValue="conformance-full" />
+        <Variable id="V_Config1" index="256" accessRights="rw">
+          <Datatype xsi:type="OctetStringT" fixedLength="64" />
+          <Name textId="T_V_Config1" />
+        </Variable>
+        <Variable id="V_Config2" index="257" accessRights="rw" defaultValue="0">
+          <Datatype xsi:type="UIntegerT" bitLength="16">
+            <ValueRange lowerValue="0" upperValue="65535" />
+          </Datatype>
+          <Name textId="T_V_Config2" />
+        </Variable>
+        <Variable id="V_Config3" index="258" accessRights="rw">
+          <Datatype xsi:type="OctetStringT" fixedLength="200" />
+          <Name textId="T_V_Config3" />
+        </Variable>
+        <Variable id="V_Config4_0" index="272" accessRights="rw">
+          <Datatype xsi:type="OctetStringT" fixedLength="32" />
+          <Name textId="T_V_Config4_0" />
+        </Variable>
+        <Variable id="V_Config4_1" index="273" accessRights="rw">
+          <Datatype xsi:type="OctetStringT" fixedLength="32" />
+          <Name textId="T_V_Config4_1" />
+        </Variable>
+        <Variable id="V_Config4_2" index="274" accessRights="rw">
+          <Datatype xsi:type="OctetStringT" fixedLength="32" />
+          <Name textId="T_V_Config4_2" />
+        </Variable>
+        <Variable id="V_Config4_3" index="275" accessRights="rw">
+          <Datatype xsi:type="OctetStringT" fixedLength="32" />
+          <Name textId="T_V_Config4_3" />
+        </Variable>
+      </VariableCollection>
+      <ProcessDataCollection>
+        <ProcessData id="PD_Conformance">
+          <ProcessDataIn id="PD_IN" bitLength="24">
+            <Datatype xsi:type="RecordT" bitLength="24">
+              <RecordItem subindex="1" bitOffset="8">
+                <SimpleDatatype xsi:type="UIntegerT" bitLength="16" />
+                <Name textId="T_PD_IN_1" />
+              </RecordItem>
+              <RecordItem subindex="2" bitOffset="0">
+                <SimpleDatatype xsi:type="UIntegerT" bitLength="8" />
+                <Name textId="T_PD_IN_2" />
+              </RecordItem>
+            </Datatype>
+            <Name textId="T_PD_IN" />
+          </ProcessDataIn>
+          <ProcessDataOut id="PD_OUT" bitLength="8">
+            <Datatype xsi:type="RecordT" bitLength="8">
+              <RecordItem subindex="1" bitOffset="0">
+                <SimpleDatatype xsi:type="BooleanT" />
+                <Name textId="T_PD_OUT_1" />
+              </RecordItem>
+            </Datatype>
+            <Name textId="T_PD_OUT" />
+          </ProcessDataOut>
+        </ProcessData>
+      </ProcessDataCollection>
+      <UserInterface>
+        <MenuCollection>
+          <Menu id="M_Identification">
+            <Name textId="T_Menu_Identification" />
+            <VariableRef variableId="V_DirectParameters_1" />
+            <VariableRef variableId="V_ApplicationSpecificTag" />
+          </Menu>
+          <Menu id="M_Parameter">
+            <Name textId="T_Menu_Parameter" />
+            <VariableRef variableId="V_Config1" />
+            <VariableRef variableId="V_Config2" />
+            <VariableRef variableId="V_Config3" />
+            <VariableRef variableId="V_Config4_0" />
+            <VariableRef variableId="V_Config4_1" />
+            <VariableRef variableId="V_Config4_2" />
+            <VariableRef variableId="V_Config4_3" />
+          </Menu>
+        </MenuCollection>
+        <ObserverRoleMenuSet>
+          <IdentificationMenu menuId="M_Identification" />
+          <ParameterMenu menuId="M_Parameter" />
+        </ObserverRoleMenuSet>
+        <MaintenanceRoleMenuSet>
+          <IdentificationMenu menuId="M_Identification" />
+          <ParameterMenu menuId="M_Parameter" />
+        </MaintenanceRoleMenuSet>
+        <SpecialistRoleMenuSet>
+          <IdentificationMenu menuId="M_Identification" />
+          <ParameterMenu menuId="M_Parameter" />
+        </SpecialistRoleMenuSet>
+      </UserInterface>
+    </DeviceFunction>
+  </ProfileBody>
+  <CommNetworkProfile xsi:type="IOLinkCommNetworkProfileT" iolinkRevision="V1.1">
+    <TransportLayers>
+      <PhysicalLayer bitrate="COM2" minCycleTime="3000" sioSupported="false" mSequenceCapability="1">
+        <Connection xsi:type="M12-4ConnectionT">
+          <ProductRef productId="conformance-full" />
+          <Wire1 function="L+" />
+          <Wire2 function="NC" />
+          <Wire3 function="L-" />
+          <Wire4 function="C/Q" />
+        </Connection>
+      </PhysicalLayer>
+    </TransportLayers>
+    <Test>
+      <Config1 index="256" testValue="0x49" />
+      <Config2 index="257" testValue="0x00,0x00" />
+      <Config3 index="258" testValue="0x49,0x49,0x49,0x49,0x49,0x49,0x49,0x49,0x49,0x49,0x49,0x49,0x49" />
+    </Test>
+  </CommNetworkProfile>
+  <ExternalTextCollection>
+    <PrimaryLanguage xml:lang="en">
+      <Text id="T_VendorText" value="iolinki conformance reference" />
+      <Text id="T_VendorUrl" value="https://iolinki.com" />
+      <Text id="T_DeviceName" value="Conformance reference device" />
+      <Text id="T_DeviceFamily" value="iolinki reference examples" />
+      <Text id="T_ProductName" value="Conformance reference device" />
+      <Text id="T_Description" value="Example application; replace illustrative IDs with assigned production identifiers." />
+      <Text id="T_V_Config1" value="Config1 fixed 64-octet parameter" />
+      <Text id="T_V_Config2" value="Config2 16-bit parameter" />
+      <Text id="T_V_Config3" value="Config3 variable 200-octet parameter" />
+      <Text id="T_V_Config4_0" value="Config4 block 0" />
+      <Text id="T_V_Config4_1" value="Config4 block 1" />
+      <Text id="T_V_Config4_2" value="Config4 block 2" />
+      <Text id="T_V_Config4_3" value="Config4 block 3" />
+      <Text id="T_PD_IN_1" value="Counter" />
+      <Text id="T_PD_IN_2" value="Button" />
+      <Text id="T_PD_IN" value="Process data in" />
+      <Text id="T_PD_OUT_1" value="LED" />
+      <Text id="T_PD_OUT" value="Process data out" />
+      <Text id="T_Menu_Identification" value="Identification" />
+      <Text id="T_Menu_Parameter" value="Parameter" />
+    </PrimaryLanguage>
+  </ExternalTextCollection>
+  <Stamp crc="84281625">
+    <Checker name="iolinki-iodd-cli" version="V1.0" />
+  </Stamp>
+</IODevice>

@@ -46,6 +46,14 @@ static void ds_storage_load_flag(iolink_ds_ctx_t* ctx)
     }
 }
 
+static void ds_clear_upload_flag(iolink_ds_ctx_t* ctx)
+{
+    if ((ctx != NULL) && ctx->ds_upload_flag) {
+        ctx->ds_upload_flag = false;
+        ds_storage_save_flag(ctx, 0U);
+    }
+}
+
 /** @brief Persist the DS image (magic + version + length + payload). */
 static void ds_storage_save_image(iolink_ds_ctx_t* ctx)
 {
@@ -402,7 +410,8 @@ void iolink_ds_process(iolink_ds_ctx_t* ctx)
             break;
 
         case IOLINK_DS_STATE_UPLOADING:
-            ctx->state = IOLINK_DS_STATE_IDLE;
+            /* Stay in Uploading until UploadEnd, ParamBreak, reset or an
+               interrupting command. Do not auto-complete between frames. */
             break;
 
         case IOLINK_DS_STATE_DOWNLOAD_REQ:
@@ -411,14 +420,7 @@ void iolink_ds_process(iolink_ds_ctx_t* ctx)
             break;
 
         case IOLINK_DS_STATE_DOWNLOADING:
-            /* Commit a staged image if one was written to DS_Data (0x0003). */
-            if (ctx->image_len > 0U) {
-                (void) iolink_ds_apply_image(ctx, ctx->image, ctx->image_len);
-            }
-            else {
-                ctx->current_checksum = ctx->master_checksum;
-            }
-            ctx->state = IOLINK_DS_STATE_IDLE;
+            /* Stay in Downloading until DownloadEnd commits the staged image. */
             break;
 
         default:
@@ -463,8 +465,10 @@ int iolink_ds_abort(iolink_ds_ctx_t* ctx)
         return -1;
     }
 
-    /* Abort any active DS operation */
+    /* Abort any active DS operation. */
     ctx->state = IOLINK_DS_STATE_IDLE;
+    ctx->image_len = 0U;
+    ctx->download_invalid = false;
     return 0;
 }
 
@@ -484,35 +488,55 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
 
     switch (cmd) {
         case IOLINK_CMD_PARAM_UPLOAD_START: /* 0x01 */
-            /* Master wants to read parameters (Upload) */
-            if (ctx->state != IOLINK_DS_STATE_IDLE) {
-                return -1; /* Busy */
+            /* 0327/0328/0330: a new upload aborts an active download and
+               discards its staged values; it also restarts an active upload. */
+            if ((ctx->state == IOLINK_DS_STATE_DOWNLOADING) ||
+                (ctx->state == IOLINK_DS_STATE_DOWNLOAD_REQ)) {
+                ctx->image_len = 0U;
             }
             (void) iolink_ds_build_image(ctx);
             ctx->state = IOLINK_DS_STATE_UPLOAD_REQ;
             break;
 
         case IOLINK_CMD_PARAM_UPLOAD_END: /* 0x02 */
-            /* Finish upload */
-            if (ctx->state == IOLINK_DS_STATE_UPLOADING) {
-                ctx->state = IOLINK_DS_STATE_IDLE;
+            /* 0324: an ending command in Idle is unexpected. 0330: an upload
+               end during a download discards the staged download values. */
+            if (ctx->state == IOLINK_DS_STATE_IDLE) {
+                return -6;
             }
+            if ((ctx->state == IOLINK_DS_STATE_DOWNLOADING) ||
+                (ctx->state == IOLINK_DS_STATE_DOWNLOAD_REQ)) {
+                ctx->image_len = 0U;
+            }
+            ctx->state = IOLINK_DS_STATE_IDLE;
+            ds_clear_upload_flag(ctx);
             break;
 
         case IOLINK_CMD_PARAM_DOWNLOAD_START: /* 0x03 */
-            /* Master wants to write parameters (Download): buffer the writes
-               until ParamDownloadEnd commits them atomically (10.3.2). */
-            if (ctx->state != IOLINK_DS_STATE_IDLE) {
-                return -1; /* Busy */
+            /* 0147/0328: a new download restarts an active download and
+               aborts an active upload. */
+            if ((ctx->state == IOLINK_DS_STATE_UPLOADING) ||
+                (ctx->state == IOLINK_DS_STATE_UPLOAD_REQ)) {
+                /* upload has no staged parameter image to discard */
             }
-            ctx->image_len = 0U; /* Clear any prior staged image */
+            ctx->image_len = 0U;
+            ctx->download_invalid = false;
             ctx->state = IOLINK_DS_STATE_DOWNLOADING;
             break;
 
         case IOLINK_CMD_PARAM_DOWNLOAD_END: /* 0x04 */
-            /* Commit the buffered parameter image atomically. */
+            /* 0324: an ending command in Idle is unexpected. */
+            if (ctx->state == IOLINK_DS_STATE_IDLE) {
+                return -6;
+            }
             if (ctx->state == IOLINK_DS_STATE_DOWNLOADING) {
                 int rc = 0;
+                if (ctx->download_invalid) {
+                    ctx->download_invalid = false;
+                    ctx->image_len = 0U;
+                    ctx->state = IOLINK_DS_STATE_IDLE;
+                    return -4; /* PAR_SETINCONSIST (0x8041) */
+                }
                 if (ctx->image_len > 0U) {
                     rc = iolink_ds_apply_image(ctx, ctx->image, ctx->image_len);
                 }
@@ -523,10 +547,18 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
                 if (rc == -2) {
                     return -4; /* PAR_SETINCONSIST (0x8041): parameter rejected */
                 }
+                ds_clear_upload_flag(ctx);
+            }
+            else {
+                /* An upload was active: discard it and stop. */
+                ctx->state = IOLINK_DS_STATE_IDLE;
             }
             break;
 
         case IOLINK_CMD_PARAM_BREAK: /* 0x06 / ParamBreak (Table B.9) */
+            if (ctx->state == IOLINK_DS_STATE_IDLE) {
+                return -6;
+            }
             return iolink_ds_abort(ctx);
 
         default:
@@ -590,7 +622,27 @@ int iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex
     if ((len > 0U) && !iolink_buf_is_valid(data, len)) {
         return -1;
     }
+    const size_t n = iolink_ds_param_count(ctx);
+    bool found = false;
+    for (size_t i = 0U; i < n; i++) {
+        iolink_ds_param_desc_t d;
+        if (!iolink_ds_param_at(ctx, i, &d)) {
+            break;
+        }
+        if ((d.index == index) && (d.subindex == subindex)) {
+            found = true;
+            if ((d.max_len > 0U) && (len > (size_t) d.max_len)) {
+                ctx->download_invalid = true;
+                return -2; /* VAL_LENOVRRUN */
+            }
+            break;
+        }
+    }
+    if (!found) {
+        return -1;
+    }
     if ((ctx->image_len + DS_RECORD_HEADER + len) > IOLINK_DS_IMAGE_MAX) {
+        ctx->download_invalid = true;
         return -1; /* Buffer full */
     }
 

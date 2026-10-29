@@ -86,6 +86,10 @@ static uint8_t event_memory_rebuild(iolink_events_ctx_t* ctx)
         active |= (uint8_t) (1U << i);
     }
     ctx->memory[0] = (uint8_t) (0x80U | active);
+    ctx->frozen_count = slots;
+    for (uint8_t i = 0U; i < slots; i++) {
+        ctx->frozen_events[i] = ctx->queue[i];
+    }
     return slots;
 }
 
@@ -293,6 +297,19 @@ uint8_t iolink_events_memory_read(iolink_events_ctx_t* ctx, uint8_t addr)
     return value;
 }
 
+static void event_queue_remove(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_mode_t mode)
+{
+    for (uint8_t i = 0U; i < ctx->count; i++) {
+        if ((ctx->queue[i].code == code) && (ctx->queue[i].mode == mode)) {
+            for (uint8_t j = i; (uint8_t) (j + 1U) < ctx->count; j++) {
+                ctx->queue[j] = ctx->queue[j + 1U];
+            }
+            ctx->count--;
+            return;
+        }
+    }
+}
+
 void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t value)
 {
     (void) value;
@@ -306,25 +323,31 @@ void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t 
        queued while frozen are rebuilt below and become visible again. */
     ctx->frozen = false;
     ctx->flag = false;
-    uint8_t acked = ctx->frozen_slots;
-    if (acked == 0U) {
-        /* No frozen snapshot was taken (the master confirmed without reading):
-           acknowledge whatever is currently presented (bounded by the 6 slots). */
-        acked = ctx->count;
+    if (ctx->frozen_slots > 0U) {
+        /* Acknowledge exactly the events that were presented in the frozen
+           memory; higher-severity events queued after the freeze must remain. */
+        const uint8_t acked = (ctx->frozen_count < ctx->frozen_slots) ? ctx->frozen_count
+                                                                     : ctx->frozen_slots;
+        for (uint8_t i = 0U; i < acked; i++) {
+            event_queue_remove(ctx, ctx->frozen_events[i].code, ctx->frozen_events[i].mode);
+        }
+    }
+    else {
+        uint8_t acked = ctx->count;
         if (acked > 6U) {
             acked = 6U;
         }
-    }
-    if (acked > ctx->count) {
-        acked = ctx->count;
-    }
-    if (acked > 0U) {
-        for (uint8_t i = acked; i < ctx->count; i++) {
-            ctx->queue[i - acked] = ctx->queue[i];
+        for (uint8_t i = 0U; i < acked; i++) {
+            if (ctx->count > 0U) {
+                for (uint8_t j = 0U; (uint8_t) (j + 1U) < ctx->count; j++) {
+                    ctx->queue[j] = ctx->queue[j + 1U];
+                }
+                ctx->count--;
+            }
         }
     }
-    ctx->count = (uint8_t) (ctx->count - acked);
     ctx->frozen_slots = 0U;
+    ctx->frozen_count = 0U;
     if (ctx->count > 0U) {
         ctx->frozen_slots = event_memory_rebuild(ctx);
         ctx->frozen = true;

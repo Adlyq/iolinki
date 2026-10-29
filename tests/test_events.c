@@ -20,8 +20,11 @@
 
 #include "iolinki/events.h"
 
+#include "conformance_test.h"
+
 static void test_event_queue_flow(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0069");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
@@ -40,6 +43,7 @@ static void test_event_queue_flow(void** state)
 
 static void test_event_queue_overflow(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0075");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
@@ -60,6 +64,7 @@ static void test_event_queue_overflow(void** state)
 
 static void test_standard_codes(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0069");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
@@ -76,6 +81,7 @@ static void test_standard_codes(void** state)
 
 static void test_phy_diagnostic_codes(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0069");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
@@ -96,6 +102,7 @@ static void test_phy_diagnostic_codes(void** state)
 
 static void test_event_peek(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0069");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
@@ -166,6 +173,7 @@ static void test_event_classify(void** state)
 
 static void test_event_memory_layout(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0069");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
@@ -195,6 +203,7 @@ static void test_event_memory_layout(void** state)
 
 static void test_event_memory_frozen(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0071");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
@@ -212,6 +221,7 @@ static void test_event_memory_frozen(void** state)
 
 static void test_event_memory_confirm(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0071");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
@@ -244,6 +254,7 @@ static void test_event_memory_confirm(void** state)
  * queued while frozen survive for the next readout. */
 static void test_event_memory_confirm_only_presented(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0071");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
@@ -268,6 +279,7 @@ static void test_event_memory_confirm_only_presented(void** state)
  * minimum appearance window. */
 static void test_event_appears_disappears(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0074");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
@@ -294,6 +306,7 @@ static void test_event_appears_disappears(void** state)
  * unknown code is ignored. */
 static void test_event_lifecycle_no_repeat(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0075");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
@@ -309,6 +322,7 @@ static void test_event_lifecycle_no_repeat(void** state)
 /* A.6.4: no more than one report per second for the same EventCode. */
 static void test_event_recently_sent(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0076");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
@@ -345,6 +359,7 @@ static void test_events_reset_clears(void** state)
 
 static void test_event_flag_invariant(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0071");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
@@ -371,6 +386,7 @@ static void test_event_flag_invariant(void** state)
 
 static void test_notification_dedup(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0075");
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);

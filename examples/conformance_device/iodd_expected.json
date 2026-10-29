@@ -1,0 +1,92 @@
+{
+  "profile": "full",
+  "identity": {
+    "vendorId": 1234,
+    "deviceId": 5680,
+    "productId": "conformance-full",
+    "revision": "V1.1",
+    "vendorName": "iolinki conformance reference",
+    "vendorText": "Synthetic test profile; not a product identity",
+    "productName": "Conformance reference device",
+    "productText": "Test fixture for IO-Link Test Specification coverage",
+    "serialNumber": "CONF-0001",
+    "hardwareRevision": "host",
+    "firmwareRevision": "1",
+    "revisionByte": 17,
+    "minCycleTime": 3000,
+    "mSequenceCapability": 1,
+    "assignedVendorIds": [
+      1234
+    ]
+  },
+  "features": {
+    "dataStorage": true,
+    "blockParameter": true
+  },
+  "processData": {
+    "inputBytes": 3,
+    "outputBytes": 1
+  },
+  "parameters": {
+    "0x0018": {
+      "type": "StringT",
+      "maxLength": 32,
+      "access": "rw",
+      "default": ""
+    },
+    "0x0019": {
+      "type": "StringT",
+      "maxLength": 32,
+      "access": "rw",
+      "default": ""
+    },
+    "0x001A": {
+      "type": "StringT",
+      "maxLength": 32,
+      "access": "rw",
+      "default": ""
+    },
+    "0x0100": {
+      "type": "OctetStringT",
+      "fixedLength": 64,
+      "access": "rw",
+      "default": "0x49 repeated 64 times"
+    },
+    "0x0101": {
+      "type": "UIntegerT",
+      "bitLength": 16,
+      "access": "rw",
+      "default": 0
+    },
+    "0x0102": {
+      "type": "OctetStringT",
+      "maxLength": 200,
+      "access": "rw",
+      "default": "0x30..0x37 repeated to 200 bytes"
+    },
+    "0x0110": {
+      "type": "OctetStringT",
+      "fixedLength": 32,
+      "access": "rw",
+      "default": "0x40 repeated 32 times"
+    },
+    "0x0111": {
+      "type": "OctetStringT",
+      "fixedLength": 32,
+      "access": "rw",
+      "default": "0x41 repeated 32 times"
+    },
+    "0x0112": {
+      "type": "OctetStringT",
+      "fixedLength": 32,
+      "access": "rw",
+      "default": "0x42 repeated 32 times"
+    },
+    "0x0113": {
+      "type": "OctetStringT",
+      "fixedLength": 32,
+      "access": "rw",
+      "default": "0x43 repeated 32 times"
+    }
+  }
+}

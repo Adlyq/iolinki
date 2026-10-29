@@ -1,0 +1,127 @@
+{
+  "vendorId": 1234,
+  "vendorName": "iolinki conformance reference",
+  "deviceId": 5680,
+  "productName": "Conformance reference device",
+  "productId": "conformance-full",
+  "releaseDate": "2026-10-28",
+  "version": "V1.0",
+  "output": "examples/conformance_device/device.xml",
+  "features": {
+    "blockParameter": true,
+    "dataStorage": true
+  },
+  "physical": {
+    "bitrate": "COM2",
+    "minCycleTime": 3000,
+    "sioSupported": false,
+    "mSequenceCapability": 1
+  },
+  "variables": [
+    {
+      "id": "V_Config1",
+      "index": 256,
+      "name": "Config1 fixed 64-octet parameter",
+      "accessRights": "rw",
+      "datatype": "OctetStringT",
+      "bitLength": 512
+    },
+    {
+      "id": "V_Config2",
+      "index": 257,
+      "name": "Config2 16-bit parameter",
+      "accessRights": "rw",
+      "datatype": "UIntegerT",
+      "bitLength": 16,
+      "defaultValue": 0,
+      "lowerValue": 0,
+      "upperValue": 65535
+    },
+    {
+      "id": "V_Config3",
+      "index": 258,
+      "name": "Config3 variable 200-octet parameter",
+      "accessRights": "rw",
+      "datatype": "OctetStringT",
+      "bitLength": 1600
+    },
+    {
+      "id": "V_Config4_0",
+      "index": 272,
+      "name": "Config4 block 0",
+      "accessRights": "rw",
+      "datatype": "OctetStringT",
+      "bitLength": 256
+    },
+    {
+      "id": "V_Config4_1",
+      "index": 273,
+      "name": "Config4 block 1",
+      "accessRights": "rw",
+      "datatype": "OctetStringT",
+      "bitLength": 256
+    },
+    {
+      "id": "V_Config4_2",
+      "index": 274,
+      "name": "Config4 block 2",
+      "accessRights": "rw",
+      "datatype": "OctetStringT",
+      "bitLength": 256
+    },
+    {
+      "id": "V_Config4_3",
+      "index": 275,
+      "name": "Config4 block 3",
+      "accessRights": "rw",
+      "datatype": "OctetStringT",
+      "bitLength": 256
+    }
+  ],
+  "processData": [
+    {
+      "id": "PD_Conformance",
+      "in": {
+        "id": "PD_IN",
+        "bitLength": 24,
+        "fields": [
+          {
+            "name": "Counter",
+            "bitOffset": 8,
+            "bitLength": 16
+          },
+          {
+            "name": "Button",
+            "bitOffset": 0,
+            "bitLength": 8
+          }
+        ]
+      },
+      "out": {
+        "id": "PD_OUT",
+        "bitLength": 8,
+        "fields": [
+          {
+            "name": "LED",
+            "bitOffset": 0,
+            "bitLength": 1
+          }
+        ]
+      }
+    }
+  ],
+  "testConfig": {
+    "Config1": {
+      "index": 256,
+      "testValue": "0x49"
+    },
+    "Config2": {
+      "index": 257,
+      "testValue": "0x00,0x00"
+    },
+    "Config3": {
+      "index": 258,
+      "testValue": "0x49,0x49,0x49,0x49,0x49,0x49,0x49,0x49,0x49,0x49,0x49,0x49,0x49"
+    }
+  }
+}

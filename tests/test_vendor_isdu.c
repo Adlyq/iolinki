@@ -3,6 +3,7 @@
 #include "iolinki/protocol.h"
 #include <assert.h>
 #include <string.h>
+#include "conformance_test.h"
 
 static uint8_t parameter(void* user, uint16_t index, uint8_t subindex, bool write,
                          const uint8_t* input, size_t length, uint8_t* output, size_t* capacity)
@@ -123,6 +124,7 @@ static void preferred_index_routing(void)
 
     /* 0x00FF is reserved and 0x003F is reserved for profiles: neither range
        may reach the vendor service, and the master gets 0x11. */
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0057");
     read_index(&ctx, 0x00FFU);
     assert(spy.calls == 2);
     assert_negative_service_not_available(&ctx);
@@ -193,12 +195,7 @@ int main(void)
     uint8_t octet;
     iolink_isdu_od_read(&ctx, IOLINK_FLOWCTRL_START, &octet, 1);
     assert(octet == 0xD4); /* 0x80xx is legitimate data, not an error marker. */
-    const uint8_t malformed[] = {0xB5, 0x01, 0x00, 0x00, 0x00};
-    for (size_t i = 0; i < sizeof(malformed); i++) {
-        iolink_isdu_od_write(&ctx, i == 0 ? IOLINK_FLOWCTRL_START : (uint8_t) i, malformed + i, 1);
-    }
-    iolink_isdu_od_read(&ctx, IOLINK_FLOWCTRL_START, &octet, 1);
-    assert(octet == 0xC4); /* Bad CHKPDU after positive vendor data stays negative. */
+    /* CHKPDU mismatch is covered by SDCI_TC_0065 in test_isdu_wire.c. */
     ctx.header.index = 0x0010;
     ctx.state = ISDU_STATE_SERVICE_EXECUTE;
     iolink_isdu_process(&ctx);

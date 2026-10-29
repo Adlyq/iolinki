@@ -166,6 +166,8 @@
 #define IOLINK_LOCK_DS 0x02U          /**< Bit 1: Data Storage access lock. */
 #define IOLINK_LOCK_LOCAL_PARAM 0x04U /**< Bit 2: Local parameterization lock. */
 #define IOLINK_LOCK_LOCAL_UI 0x08U    /**< Bit 3: Local user interface lock. */
+#define IOLINK_ACCESS_LOCKS_IMPLEMENTED \
+    (IOLINK_LOCK_PARAM | IOLINK_LOCK_DS | IOLINK_LOCK_LOCAL_PARAM | IOLINK_LOCK_LOCAL_UI)
 /** @} */
 
 /**

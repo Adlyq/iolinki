@@ -16,6 +16,7 @@
 #include "iolinki/dll.h"
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
+#include "conformance_test.h"
 
 static uint64_t now_us;
 
@@ -250,9 +251,138 @@ static int test_type0_isdu_read_fast_path(void)
     return 0;
 }
 
+/* SDCI_TC_0053: FlowCTRL 0x11..0x1F must answer "No Service" (0x00). */
+static int test_0053_reserved_flowctrl_no_service(void)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0053");
+    for (uint8_t fc = 0x11U; fc <= 0x1FU; fc++) {
+        iolink_dll_ctx_t dll;
+        init_type0_ctx(&dll);
+        uint8_t frame[2];
+        make_type0((uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_MC_RW_MASK | fc), frame,
+                   sizeof(frame));
+        tx_n = 0U;
+        feed_chk(frame, sizeof(frame));
+        iolink_dll_process_isr(&dll);
+        while (dll.isr_tx_active != 0U) {
+            iolink_dll_process_isr(&dll);
+        }
+        /* Invalid FlowCTRL is deliberately left to the main pump. */
+        iolink_dll_process(&dll);
+        while (dll.isr_tx_active != 0U) {
+            iolink_dll_process_isr(&dll);
+        }
+        if ((tx_n != 2U) || (tx_q[0] != 0x00U)) {
+            return (int) (fc - 0x10U);
+        }
+    }
+    return 0;
+}
+
+/* SDCI_TC_0309: a repeated FlowCTRL must repeat the previous segment and the
+ * next new FlowCTRL must continue where the response left off. */
+static uint8_t type0_isdu_exchange(iolink_dll_ctx_t* dll, uint8_t fc)
+{
+    uint8_t frame[2];
+    make_type0((uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_MC_RW_MASK | fc), frame, sizeof(frame));
+    tx_n = 0U;
+    feed_chk(frame, sizeof(frame));
+    iolink_dll_process_isr(dll);
+    while (dll->isr_tx_active != 0U) {
+        iolink_dll_process_isr(dll);
+    }
+    /* IDLE/ABORT are left to the main pump; valid COUNT/START are already
+       answered by the ISR and do not publish a frame. */
+    iolink_dll_process(dll);
+    while (dll->isr_tx_active != 0U) {
+        iolink_dll_process_isr(dll);
+    }
+    return tx_q[0];
+}
+
+static int test_0309_isdu_segment_repeat(void)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0309");
+    iolink_dll_ctx_t dll;
+    init_type0_ctx(&dll);
+
+    uint8_t response[40];
+    response[0] = 0xD1U;
+    response[1] = (uint8_t) sizeof(response);
+    for (uint8_t i = 2U; i < sizeof(response); i++) {
+        response[i] = (uint8_t) (0x30U + i);
+    }
+    /* Publish a 40-octet framed response through the normal main->ISR snapshot
+       handoff, then exercise the ISR segment repeat logic. */
+    dll.isdu.state = ISDU_STATE_RESPONSE_READY;
+    dll.isdu.resp_total = (uint8_t) sizeof(response);
+    (void) memcpy(dll.isdu.resp_buf, response, sizeof(response));
+    dll.isr_isdu_resp_valid = 0U;
+    iolink_dll_process(&dll);
+    if (dll.isr_isdu_len != (uint8_t) sizeof(response)) {
+        return 6;
+    }
+
+    if (type0_isdu_exchange(&dll, IOLINK_FLOWCTRL_START) != response[0]) {
+        return 1;
+    }
+    if (type0_isdu_exchange(&dll, IOLINK_FLOWCTRL_START) != response[0]) {
+        return 2;
+    }
+
+    for (uint8_t i = 1U; i < sizeof(response); i++) {
+        const uint8_t fc = (uint8_t) (i & IOLINK_FLOWCTRL_COUNT_MASK);
+        if (type0_isdu_exchange(&dll, fc) != response[i]) {
+            return 3;
+        }
+        if ((i == 1U) || (i == 20U) || (i == (sizeof(response) - 1U))) {
+            if (type0_isdu_exchange(&dll, fc) != response[i]) {
+                return 4;
+            }
+        }
+    }
+
+    if (type0_isdu_exchange(&dll, IOLINK_FLOWCTRL_IDLE) != 0x00U) {
+        return 5;
+    }
+    return 0;
+}
+
+/* SDCI_TC_0068: aborting a partially received Read response returns No Service. */
+static int test_0068_aborted_read_response(void)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0068");
+    iolink_dll_ctx_t dll;
+    init_type0_ctx(&dll);
+
+    uint8_t response[16];
+    response[0] = 0xD1U;
+    response[1] = (uint8_t) sizeof(response);
+    for (uint8_t i = 2U; i < sizeof(response); i++) {
+        response[i] = (uint8_t) (0x40U + i);
+    }
+    dll.isdu.state = ISDU_STATE_RESPONSE_READY;
+    dll.isdu.resp_total = (uint8_t) sizeof(response);
+    (void) memcpy(dll.isdu.resp_buf, response, sizeof(response));
+    dll.isr_isdu_resp_valid = 0U;
+    iolink_dll_process(&dll);
+
+    if (type0_isdu_exchange(&dll, IOLINK_FLOWCTRL_START) != response[0]) {
+        return 1;
+    }
+    if (type0_isdu_exchange(&dll, IOLINK_FLOWCTRL_ABORT) != 0x00U) {
+        return 2;
+    }
+    if (type0_isdu_exchange(&dll, IOLINK_FLOWCTRL_IDLE) != 0x00U) {
+        return 3;
+    }
+    return 0;
+}
+
 /* Type-0 page read in PREOPERATE is answered directly by the ISR. */
 static int test_type0_page_read_fast_path(void)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0052");
     iolink_dll_ctx_t dll;
     init_type0_ctx(&dll);
 
@@ -394,6 +524,7 @@ static int test_valid_eager(void)
 /* A corrupt ISDU write must not reach the transport. */
 static int test_isdu_write_bad_crc_not_consumed(void)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0065");
     iolink_dll_ctx_t dll;
     init_ctx(&dll);
 
@@ -609,6 +740,18 @@ int main(void)
     rc = test_type0_isdu_read_fast_path();
     if (rc != 0) {
         return 60 + rc;
+    }
+    rc = test_0053_reserved_flowctrl_no_service();
+    if (rc != 0) {
+        return 62 + rc;
+    }
+    rc = test_0309_isdu_segment_repeat();
+    if (rc != 0) {
+        return 63 + rc;
+    }
+    rc = test_0068_aborted_read_response();
+    if (rc != 0) {
+        return 65 + rc;
     }
     rc = test_type0_page_read_fast_path();
     if (rc != 0) {
