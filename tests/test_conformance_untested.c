@@ -11,7 +11,6 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -96,13 +95,6 @@ static int isdu_write(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex, 
     assert_int_equal(isdu_send_write_request(ctx, index, subindex, data, data_len), 1);
     iolink_isdu_process(ctx);
     return isdu_collect_response(ctx, out, out_len);
-}
-
-static void skip_known_gap(const char* case_id, const char* reason)
-{
-    (void) fprintf(stderr, "[known-gap] %s: %s\n", case_id, reason);
-    (void) fflush(stderr);
-    skip();
 }
 
 /* Read ErrorCount through the ISDU context that is bound to a live device. */
@@ -704,11 +696,7 @@ static void test_0155_factory_settings_sequence(void** state)
     assert_int_equal(isdu_read(&ctx, IOLINK_IDX_DEVICE_STATUS, 0U, &status, 1U), 1);
     assert_int_equal(status, 0U);
 
-    if ((conformance_ds_flag(&app) & 0x80U) != 0U) {
-        skip_known_gap("SDCI_TC_0155",
-                       "Restore factory settings still sets DS_UPLOAD_FLAG; Table 177 "
-                       "requires DS_UPLOAD_FLAG = 0");
-    }
+    assert_int_equal((conformance_ds_flag(&app) & 0x80U), 0U);
     conformance_device_close(&app);
     (void) remove(nvm);
 }
@@ -745,11 +733,7 @@ static void test_0318_back_to_box_sequence(void** state)
     assert_int_equal(app.profile->identity->vendor_id, 1234U);
     assert_int_equal(app.profile->identity->device_id, 5680U);
 
-    if ((conformance_ds_flag(&app) & 0x80U) != 0U) {
-        skip_known_gap("SDCI_TC_0318",
-                       "Back-to-box does not clear DS_UPLOAD_FLAG; Table 178 requires "
-                       "DS_UPLOAD_FLAG = 0");
-    }
+    assert_int_equal((conformance_ds_flag(&app) & 0x80U), 0U);
     conformance_device_close(&app);
     (void) remove(nvm);
 }

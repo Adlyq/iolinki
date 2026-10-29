@@ -60,13 +60,13 @@ SDCI_TC_0134,tests/test_conformance_gaps.c,test_0134_offset_time_conditional,n/a
 SDCI_TC_0136,tests/test_conformance_gaps.c,test_0136_profile_parameters_read_absent,direct,Exhaustive range and exact error.,library-core,full,none
 SDCI_TC_0137,tests/test_conformance_gaps.c,test_0137_profile_parameters_write_absent,direct,Exhaustive range and exact error.,library-core,full,none
 SDCI_TC_0140,tests/test_spec_conformance.c,test_read_only_identification_rejects_write,direct,Broad list and exact error.,library-core,full,none
-SDCI_TC_0155,tests/test_conformance_untested.c,test_0155_factory_settings_sequence,direct,"Full library-level sequence: DeviceStatus, default restore, ID preservation and tag reset. DS_UPLOAD_FLAG=0 remains a known production gap (test skip).",reference-integration,full,external-real-reset
+SDCI_TC_0155,tests/test_conformance_untested.c,test_0155_factory_settings_sequence,direct,ParamDownloadStore sets DS_UPLOAD_FLAG; Restore factory settings clears it without raising DS_UPLOAD_REQ.,reference-integration,full,external-real-reset
 SDCI_TC_0156,tests/test_spec_conformance.c,test_parameter_lock_blocks_tag_write; test_parameter_lock_blocks_vendor_write,direct,No write-0x0000 unlock followed by a successful parameter write.,library-core,full,none
 SDCI_TC_0157,,,out-of-scope,Out of project scope; external HIL/product responsibility.,external-iodd,none,external-product-iodd
 SDCI_TC_0309,tests/test_isr_observability.c,test_0309_isdu_segment_repeat; test_isdu_wire_repeated_flowctrl,direct,Strong transport-level coverage; not Config3/IODD.,library-core,full,none
 SDCI_TC_0316,tests/test_conformance_untested.c,test_0316_device_reset_sequence,direct,"Exactly one reset/startup observation, DID/RID/parameter preservation and DeviceStatus 0 are asserted.",reference-integration,full,external-reset
 SDCI_TC_0317,tests/test_conformance_untested.c,test_0317_application_reset_sequence,direct,"No startup sequence, DID/RID/tag preservation, DS_UPLOAD_REQ event and flag=1, and default parameter restore are asserted.",reference-integration,full,external-reset
-SDCI_TC_0318,tests/test_conformance_untested.c,test_0318_back_to_box_sequence,direct,"Delivery defaults, one startup after power cycle and ID preservation are asserted. DS_UPLOAD_FLAG=0 remains a known production gap (test skip).",reference-integration,full,external-power
+SDCI_TC_0318,tests/test_conformance_untested.c,test_0318_back_to_box_sequence,direct,ParamDownloadStore sets DS_UPLOAD_FLAG; Back-to-box clears it before the restart.,reference-integration,full,external-power
 SDCI_TC_0321,tests/test_system_commands.c,test_0321_single_write_no_upload,direct,1.1.5 Table 107 negative and positive halves are both covered.,library-optional,full,none
 SDCI_TC_0322,tests/test_system_commands.c,test_0322_upload_flag_four_step,direct,1.1.5 DSIdle_2 transition T11 verified without forcing UploadStart/DownloadStart.,library-optional,full,none
 SDCI_TC_0323,tests/test_conformance_gaps.c,test_0323_no_ds_record_marker,n/a,Conditional case; current config has DS enabled.,not-applicable,none,none

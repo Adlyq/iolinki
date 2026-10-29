@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sub1 returns one octet as required by SDCI_TC_0107/0108. The legacy
   whole-image sub0 payload is available through `IOLINK_DS_LEGACY_IMAGE_SUB0`.
 - DS: `DS_UploadEnd`/`DS_DownloadEnd` clear and persist `DS_UPLOAD_FLAG`.
+- DS reset commands: Restore factory settings (0x82) and Back-to-box (0x83)
+  clear and persist `DS_UPLOAD_FLAG = 0` without raising `DS_UPLOAD_REQ`,
+  matching Tables 177/178 (SDCI_TC_0155/0318).
 - CKS: a Device with output Process Data but no input Process Data now always
   reports "Process Data valid" (bit 6 = 0), including before `0x98`.
 - DS state machine: unexpected ending commands in Idle return `0x8036`;
@@ -103,9 +106,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (block Download/Upload interrupted by reset) and the IODD reset sequences
   0155/0316/0317/0318. SDCI_TC_0035/0044/0097/0065 are extended in the existing
   DLL/ISDU wire tests.
-- Table 177/178 `DS_UPLOAD_FLAG = 0` after factory restore/back-to-box still
-  differs from the current production behaviour; those two unit tests record
-  the gap with `skip_known_gap()`.
+- Restore factory settings and Back-to-box now clear `DS_UPLOAD_FLAG`
+  (Tables 177/178) instead of requesting an upload, so SDCI_TC_0155/0318 run
+  without a known-gap skip.
 
 ### Fixed (events / Data Storage)
 - Events: the Event flag now satisfies `flag == (count > 0)` at every setter

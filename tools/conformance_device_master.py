@@ -856,8 +856,11 @@ def run(binary: Path) -> None:
         device_before = ((link.page_read(0x09) << 16) | (link.page_read(0x0A) << 8) |
                          link.page_read(0x0B))
         info_before = parse_resetinfo(link.query("resetinfo", "resetinfo="))
+        write_ok(link, 0x0002, 0, bytes([0x05]), "SDCI_TC_0155")
+        require(ds_flag(link, "SDCI_TC_0155") == 1,
+                "SDCI_TC_0155: precondition DS_UPLOAD_FLAG not set")
+        drain_events(link)
         write_ok(link, 0x0002, 0, bytes([0x82]), "SDCI_TC_0155")
-        wait_for_event(link, 0xFF91)
         info = link.query("factoryreset", "resetinfo=")
         fields = parse_resetinfo(info)
         require(int(fields.get("factory", "0")) == int(info_before.get("factory", "0")) + 1,
@@ -875,12 +878,8 @@ def run(binary: Path) -> None:
         require((((link.page_read(0x09) << 16) | (link.page_read(0x0A) << 8) |
                   link.page_read(0x0B))) == device_before,
                 "SDCI_TC_0155: DeviceID changed")
-        require(ds_flag(link, "SDCI_TC_0155") == 1,
-                "SDCI_TC_0155: factory restore did not set DS_UPLOAD_FLAG")
-        link.ack_event()
-        ds_command(link, 0x01, "SDCI_TC_0155")
-        ds_command(link, 0x02, "SDCI_TC_0155")
-        require(ds_flag(link, "SDCI_TC_0155") == 0, "SDCI_TC_0155: flag not cleared")
+        require(ds_flag(link, "SDCI_TC_0155") == 0,
+                "SDCI_TC_0155: factory restore did not clear DS_UPLOAD_FLAG")
 
         # --- SDCI_TC_0316: device reset preserves parameters and IDs ---
         write_ok(link, 0x0018, 0, b"KEEP", "SDCI_TC_0316")
@@ -940,8 +939,13 @@ def run(binary: Path) -> None:
 
         # --- SDCI_TC_0318: back-to-box restores defaults and restarts ---
         drain_events(link)
+        write_ok(link, 0x0002, 0, bytes([0x03]), "SDCI_TC_0318")
         write_ok(link, 0x0018, 0, b"BOX", "SDCI_TC_0318")
         write_ok(link, 0x0101, 0, b"\x99\xAA", "SDCI_TC_0318")
+        write_ok(link, 0x0002, 0, bytes([0x05]), "SDCI_TC_0318")
+        require(ds_flag(link, "SDCI_TC_0318") == 1,
+                "SDCI_TC_0318: precondition DS_UPLOAD_FLAG not set")
+        drain_events(link)
         info_before = parse_resetinfo(link.query("resetinfo", "resetinfo="))
         write_ok(link, 0x0002, 0, bytes([0x83]), "SDCI_TC_0318")
         time.sleep(0.1)
