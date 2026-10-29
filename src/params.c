@@ -113,19 +113,19 @@ static void params_ctx_load(iolink_params_ctx_t* ctx)
     if ((ctx->storage->read(ctx->storage->user, IOLINK_STORAGE_PARAMS_BASE, (uint8_t*) &nvm,
                             sizeof(nvm)) != 0) ||
         (nvm.magic != IOLINK_STORAGE_MAGIC) || (nvm.version != IOLINK_STORAGE_VERSION) ||
-        (nvm.checksum != iolink_storage_checksum((const uint8_t*) &nvm,
-                                                 offsetof(iolink_params_nvm_t, checksum)))) {
+        (nvm.checksum !=
+         iolink_storage_checksum((const uint8_t*) &nvm, offsetof(iolink_params_nvm_t, checksum)))) {
         return; /* Uninitialised, different layout or corrupt. */
     }
     copy_tag(ctx->application_tag, &ctx->application_tag_valid,
              (const uint8_t*) nvm.application_tag, bounded_tag_len(nvm.application_tag));
-    copy_tag(ctx->function_tag, &ctx->function_tag_valid,
-             (const uint8_t*) nvm.function_tag, bounded_tag_len(nvm.function_tag));
-    copy_tag(ctx->location_tag, &ctx->location_tag_valid,
-             (const uint8_t*) nvm.location_tag, bounded_tag_len(nvm.location_tag));
+    copy_tag(ctx->function_tag, &ctx->function_tag_valid, (const uint8_t*) nvm.function_tag,
+             bounded_tag_len(nvm.function_tag));
+    copy_tag(ctx->location_tag, &ctx->location_tag_valid, (const uint8_t*) nvm.location_tag,
+             bounded_tag_len(nvm.location_tag));
     if (ctx->device_info != NULL) {
-        (void) iolink_device_info_ctx_set_application_tag(
-            ctx->device_info, ctx->application_tag, (uint8_t) strlen(ctx->application_tag));
+        (void) iolink_device_info_ctx_set_application_tag(ctx->device_info, ctx->application_tag,
+                                                          (uint8_t) strlen(ctx->application_tag));
     }
 }
 

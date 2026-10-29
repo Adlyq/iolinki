@@ -188,9 +188,8 @@ static void run_pd_roundtrip(iolink_test_device_t* dev, uint8_t pd_in_len, uint8
 
 static void run_variable_pd_case(uint8_t pd_in_len, uint8_t pd_out_len)
 {
-    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
-                              .pd_in_len = pd_in_len,
-                              .pd_out_len = pd_out_len};
+    iolink_config_t config = {
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = pd_in_len, .pd_out_len = pd_out_len};
     iolink_test_device_t dev;
 
     will_return(mock_phy_init, 0);

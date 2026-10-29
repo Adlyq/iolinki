@@ -75,18 +75,18 @@ static void ds_block_set_tags(ds_block_fixture_t* f, const char* app, const char
                               const char* loc)
 {
     assert_int_equal(iolink_params_ctx_set(&f->params, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                            (const uint8_t*) app, strlen(app), true),
+                                           (const uint8_t*) app, strlen(app), true),
                      0);
     assert_int_equal(iolink_params_ctx_set(&f->params, IOLINK_IDX_FUNCTION_TAG, 0U,
-                                            (const uint8_t*) fun, strlen(fun), true),
+                                           (const uint8_t*) fun, strlen(fun), true),
                      0);
     assert_int_equal(iolink_params_ctx_set(&f->params, IOLINK_IDX_LOCATION_TAG, 0U,
-                                            (const uint8_t*) loc, strlen(loc), true),
+                                           (const uint8_t*) loc, strlen(loc), true),
                      0);
 }
 
-static int ds_block_write(ds_block_fixture_t* f, uint16_t index, uint8_t sub,
-                          const uint8_t* data, uint8_t len, uint8_t* buf, size_t cap)
+static int ds_block_write(ds_block_fixture_t* f, uint16_t index, uint8_t sub, const uint8_t* data,
+                          uint8_t len, uint8_t* buf, size_t cap)
 {
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
@@ -296,9 +296,9 @@ static void test_block_param_download_buffered(void** state)
     /* A tag write is staged, not applied. */
     iolink_isdu_init(&ctx);
     ctx.ds_ctx = &ds;
-    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                             (const uint8_t*) "NEW", 3U),
-                     1);
+    assert_int_equal(
+        isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "NEW", 3U),
+        1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
 
@@ -339,9 +339,9 @@ static void test_block_param_download_break(void** state)
 
     iolink_isdu_init(&ctx);
     ctx.ds_ctx = &ds;
-    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                             (const uint8_t*) "NEW", 3U),
-                     1);
+    assert_int_equal(
+        isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "NEW", 3U),
+        1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
 
@@ -394,9 +394,9 @@ static void test_param_download_store_raises_ds_upload_req(void** state)
     iolink_isdu_init(&ctx);
     ctx.ds_ctx = &ds;
     ctx.event_ctx = &events;
-    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                             (const uint8_t*) "NEW", 3U),
-                     1);
+    assert_int_equal(
+        isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "NEW", 3U),
+        1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
 
@@ -547,9 +547,8 @@ static void test_0325_write_during_upload(void** state)
 
     iolink_isdu_init(&ctx);
     ctx.ds_ctx = &ds;
-    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                             (const uint8_t*) "X", 1U),
-                     1);
+    assert_int_equal(
+        isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "X", 1U), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 2);
     assert_int_equal(resp[0], 0x80U);
@@ -626,9 +625,9 @@ static void test_0147_double_download_start(void** state)
 
     iolink_isdu_init(&ctx);
     ctx.ds_ctx = &ds;
-    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                             (const uint8_t*) "TMP", 3U),
-                     1);
+    assert_int_equal(
+        isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "TMP", 3U),
+        1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
 
@@ -640,9 +639,9 @@ static void test_0147_double_download_start(void** state)
 
     iolink_isdu_init(&ctx);
     ctx.ds_ctx = &ds;
-    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                             (const uint8_t*) "SET2", 4U),
-                     1);
+    assert_int_equal(
+        isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "SET2", 4U),
+        1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
 
@@ -710,9 +709,9 @@ static void test_0330_upload_discards_download(void** state)
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
     iolink_isdu_init(&ctx);
     ctx.ds_ctx = &ds;
-    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                             (const uint8_t*) "SET2", 4U),
-                     1);
+    assert_int_equal(
+        isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "SET2", 4U),
+        1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
 
@@ -730,9 +729,9 @@ static void test_0330_upload_discards_download(void** state)
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
     iolink_isdu_init(&ctx);
     ctx.ds_ctx = &ds;
-    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                             (const uint8_t*) "SET2", 4U),
-                     1);
+    assert_int_equal(
+        isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "SET2", 4U),
+        1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
 
@@ -769,9 +768,9 @@ static void test_0082_download_after_modification(void** state)
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
     iolink_isdu_init(&ctx);
     ctx.ds_ctx = &ds;
-    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                             (const uint8_t*) "SET2", 4U),
-                     1);
+    assert_int_equal(
+        isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "SET2", 4U),
+        1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
 
@@ -811,9 +810,9 @@ static void test_0083_download_after_factory_reset(void** state)
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
     iolink_isdu_init(&ctx);
     ctx.ds_ctx = &ds;
-    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                             (const uint8_t*) "SET1", 4U),
-                     1);
+    assert_int_equal(
+        isdu_send_write_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "SET1", 4U),
+        1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
 
@@ -908,8 +907,8 @@ static void test_0321_single_write_no_upload(void** state)
 
     /* a/b/c: a single parameter write changes the checksum but must not
        request Data Storage or set DS_UPLOAD_FLAG. */
-    assert_int_equal(ds_block_write(&f, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "ONE",
-                                    3U, resp, sizeof(resp)),
+    assert_int_equal(ds_block_write(&f, IOLINK_IDX_APPLICATION_TAG, 0U, (const uint8_t*) "ONE", 3U,
+                                    resp, sizeof(resp)),
                      0);
     iolink_ds_process(&f.ds);
     assert_true(ds_block_checksum(&f) != 0U);
@@ -1101,7 +1100,7 @@ static void test_0082_restore_after_direct_change(void** state)
 
     /* Direct modification outside a block download. */
     assert_int_equal(iolink_params_ctx_set(&f.params, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                            (const uint8_t*) "MOD", 3U, true),
+                                           (const uint8_t*) "MOD", 3U, true),
                      0);
     iolink_ds_process(&f.ds);
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
@@ -1130,9 +1129,8 @@ static void test_0083_restore_after_factory_reset(void** state)
     uint8_t resp[2] = {0U};
     const uint8_t factory_cmd = IOLINK_CMD_RESTORE_FACTORY_SETTINGS;
 
-    assert_int_equal(ds_block_write(&f, IOLINK_IDX_SYSTEM_COMMAND, 0U, &factory_cmd, 1U, resp,
-                                    sizeof(resp)),
-                     0);
+    assert_int_equal(
+        ds_block_write(&f, IOLINK_IDX_SYSTEM_COMMAND, 0U, &factory_cmd, 1U, resp, sizeof(resp)), 0);
     assert_int_equal(f.ds.state, IOLINK_DS_STATE_IDLE);
 
     /* The stored master set is downloaded again. */
@@ -1160,8 +1158,7 @@ static void test_0084_download_abort_points(void** state)
     uint8_t resp[2] = {0U};
 
     for (int point = 0; point < 3; point++) {
-        assert_int_equal(ds_block_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_START, resp,
-                                          sizeof(resp)),
+        assert_int_equal(ds_block_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_START, resp, sizeof(resp)),
                          0);
         assert_int_equal(f.ds.state, IOLINK_DS_STATE_DOWNLOADING);
         if (point == 1) {
@@ -1201,30 +1198,30 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_block_param_download_buffered, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_block_param_download_break, test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_param_download_store_raises_ds_upload_req,
-                                        test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_param_download_store_raises_ds_upload_req, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_ds_checksum_stable_across_store, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_0081_upload_abort_points, test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_0324_unexpected_end_in_idle, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_0324_unexpected_end_in_idle, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_0325_write_during_upload, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_0326_read_during_download, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_0147_double_download_start, test_setup, test_teardown),
-        cmocka_unit_test_setup_teardown(test_0328_switch_upload_download, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_0328_switch_upload_download, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_0330_upload_discards_download, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_0082_download_after_modification, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_0083_download_after_factory_reset, test_setup,
                                         test_teardown),
-        cmocka_unit_test_setup_teardown(test_0143_multi_parameter_block, test_setup,
-                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_0143_multi_parameter_block, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_0147_double_download_start_full, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_0321_single_write_no_upload, test_setup,
                                         test_teardown),
-        cmocka_unit_test_setup_teardown(test_0322_upload_flag_four_step, test_setup,
-                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_0322_upload_flag_four_step, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_0327_unexpected_in_upload, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_0328_switch_states_full, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_0330_upload_discards_download_full, test_setup,

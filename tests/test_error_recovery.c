@@ -38,12 +38,12 @@ static void test_crc_error_recovery(void** state)
     /* 2. Simulate 3 CRC errors (Type 1_1 with 1-byte PD: MC, CKT, PD(1), OD(1), CK = 5 bytes) */
     for (int r = 0; r < 3; r++) {
         /* Provide the whole frame in the mock queue */
-        mock_phy_feed_byte(0x00); /* MC (write) */
+        mock_phy_feed_byte(0x00);               /* MC (write) */
         mock_phy_feed_byte(IOLINK_MSEQ_TYPE_2); /* CKT with a bad checksum */
-        mock_phy_feed_byte(0x00); /* PD-out */
-        mock_phy_feed_byte(0x00); /* OD0 */
-        mock_phy_feed_byte(0x00); /* OD1 */
-        mock_phy_feed_chk();    /* End frame */
+        mock_phy_feed_byte(0x00);               /* PD-out */
+        mock_phy_feed_byte(0x00);               /* OD0 */
+        mock_phy_feed_byte(0x00);               /* OD1 */
+        mock_phy_feed_chk();                    /* End frame */
 
         /* One call to process the whole available frame */
         test_io_cycle(&dev.ctx);

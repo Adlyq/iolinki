@@ -408,11 +408,16 @@ static void test_notification_dedup(void** state)
 int main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test(test_event_queue_flow),    cmocka_unit_test(test_event_queue_overflow),
-        cmocka_unit_test(test_standard_codes),      cmocka_unit_test(test_phy_diagnostic_codes),
-        cmocka_unit_test(test_event_peek),          cmocka_unit_test(test_event_helpers),
-        cmocka_unit_test(test_event_classify),      cmocka_unit_test(test_event_memory_layout),
-        cmocka_unit_test(test_event_memory_frozen), cmocka_unit_test(test_event_memory_confirm),
+        cmocka_unit_test(test_event_queue_flow),
+        cmocka_unit_test(test_event_queue_overflow),
+        cmocka_unit_test(test_standard_codes),
+        cmocka_unit_test(test_phy_diagnostic_codes),
+        cmocka_unit_test(test_event_peek),
+        cmocka_unit_test(test_event_helpers),
+        cmocka_unit_test(test_event_classify),
+        cmocka_unit_test(test_event_memory_layout),
+        cmocka_unit_test(test_event_memory_frozen),
+        cmocka_unit_test(test_event_memory_confirm),
         cmocka_unit_test(test_event_memory_confirm_only_presented),
         cmocka_unit_test(test_event_appears_disappears),
         cmocka_unit_test(test_event_lifecycle_no_repeat),

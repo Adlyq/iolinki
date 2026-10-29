@@ -66,9 +66,9 @@ typedef enum
  */
 typedef struct
 {
-    uint16_t index;    /**< Parameter index. */
-    uint8_t subindex;  /**< Parameter subindex. */
-    uint8_t max_len;   /**< Upper bound for the value length (0 = unbounded). */
+    uint16_t index;   /**< Parameter index. */
+    uint8_t subindex; /**< Parameter subindex. */
+    uint8_t max_len;  /**< Upper bound for the value length (0 = unbounded). */
 } iolink_ds_param_desc_t;
 
 /**
@@ -82,8 +82,8 @@ typedef struct
  * @return int Number of bytes read (>= 0), or negative when the parameter is
  *         unavailable/rejected.
  */
-typedef int (*iolink_ds_param_read_fn)(void* user, uint16_t index, uint8_t subindex,
-                                       uint8_t* out, size_t cap);
+typedef int (*iolink_ds_param_read_fn)(void* user, uint16_t index, uint8_t subindex, uint8_t* out,
+                                       size_t cap);
 
 /**
  * @brief Write a single DS parameter.
@@ -106,21 +106,21 @@ typedef int (*iolink_ds_param_write_fn)(void* user, uint16_t index, uint8_t subi
  */
 typedef struct
 {
-    iolink_ds_state_t state;                /**< Current DS state machine position */
-    const iolink_storage_api_t* storage; /**< Bound storage implementation API */
-    iolink_params_ctx_t* params_ctx;        /**< Legacy device-local writable parameter context */
-    void* param_user;                       /**< Opaque user pointer for the param callbacks */
-    iolink_ds_param_read_fn read_param;     /**< Unified parameter read accessor */
-    iolink_ds_param_write_fn write_param;   /**< Unified parameter write accessor */
-    const iolink_ds_param_desc_t* params;   /**< DS parameter descriptor array */
-    size_t param_count;                     /**< Number of entries in @ref params */
-    uint32_t current_checksum;              /**< Last calculated local parameter checksum */
-    uint32_t master_checksum;               /**< Most recent checksum verified by Master */
-    bool ds_upload_flag;                    /**< DS_UPLOAD_REQ pending (State_Property bit 7) */
-    bool upload_event_pending;              /**< DS_UPLOAD_REQ notification deferred until ISDU idle */
-    uint8_t image[IOLINK_DS_IMAGE_MAX];     /**< Serialized parameter image (DS_Data 0x0003) */
-    size_t image_len;                       /**< Valid bytes in @ref image */
-    bool download_invalid;                  /**< A rejected write poisons the active Download */
+    iolink_ds_state_t state;              /**< Current DS state machine position */
+    const iolink_storage_api_t* storage;  /**< Bound storage implementation API */
+    iolink_params_ctx_t* params_ctx;      /**< Legacy device-local writable parameter context */
+    void* param_user;                     /**< Opaque user pointer for the param callbacks */
+    iolink_ds_param_read_fn read_param;   /**< Unified parameter read accessor */
+    iolink_ds_param_write_fn write_param; /**< Unified parameter write accessor */
+    const iolink_ds_param_desc_t* params; /**< DS parameter descriptor array */
+    size_t param_count;                   /**< Number of entries in @ref params */
+    uint32_t current_checksum;            /**< Last calculated local parameter checksum */
+    uint32_t master_checksum;             /**< Most recent checksum verified by Master */
+    bool ds_upload_flag;                  /**< DS_UPLOAD_REQ pending (State_Property bit 7) */
+    bool upload_event_pending;          /**< DS_UPLOAD_REQ notification deferred until ISDU idle */
+    uint8_t image[IOLINK_DS_IMAGE_MAX]; /**< Serialized parameter image (DS_Data 0x0003) */
+    size_t image_len;                   /**< Valid bytes in @ref image */
+    bool download_invalid;              /**< A rejected write poisons the active Download */
 } iolink_ds_ctx_t;
 
 /**

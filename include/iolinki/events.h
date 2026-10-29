@@ -123,12 +123,12 @@ typedef struct
  */
 typedef struct
 {
-    uint16_t code;              /**< EventCode */
-    iolink_event_type_t type;   /**< Severity */
-    uint32_t appear_ms;         /**< Time the event appeared */
-    uint32_t last_tx_ms;        /**< Last time the same code/mode was queued */
-    bool clear_pending;         /**< Disappearance requested, waiting for the 50 ms window */
-    bool active;                /**< Slot in use */
+    uint16_t code;            /**< EventCode */
+    iolink_event_type_t type; /**< Severity */
+    uint32_t appear_ms;       /**< Time the event appeared */
+    uint32_t last_tx_ms;      /**< Last time the same code/mode was queued */
+    bool clear_pending;       /**< Disappearance requested, waiting for the 50 ms window */
+    bool active;              /**< Slot in use */
 } iolink_event_pending_t;
 
 /**
@@ -146,9 +146,9 @@ typedef struct
     uint8_t pending_count;                                    /**< Used pending slots */
 
     /* Table 58 event memory: StatusCode(1) + 6 slots * (Qualifier, CodeMSB, CodeLSB). */
-    uint8_t memory[19]; /**< Event memory image (0x00-0x12) */
-    bool frozen;        /**< Memory frozen while the Event flag is set (Table 60) */
-    bool flag;          /**< Event flag (CKS bit 7) */
+    uint8_t memory[19];   /**< Event memory image (0x00-0x12) */
+    bool frozen;          /**< Memory frozen while the Event flag is set (Table 60) */
+    bool flag;            /**< Event flag (CKS bit 7) */
     uint8_t frozen_slots; /**< Number of memory slots populated when the memory was frozen. */
     iolink_event_t frozen_events[6]; /**< Events actually presented in the frozen memory */
     uint8_t frozen_count;            /**< Entries valid in ::frozen_events */

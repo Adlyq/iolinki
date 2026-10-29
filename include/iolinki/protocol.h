@@ -106,14 +106,14 @@
 #define IOLINK_IDX_APPLICATION_TAG 0x0018U        /**< Application tag index. */
 #define IOLINK_IDX_FUNCTION_TAG 0x0019U           /**< Function tag index. */
 #define IOLINK_IDX_LOCATION_TAG 0x001AU           /**< Location tag index. */
-#define IOLINK_IDX_PRODUCT_URI 0x001BU            /**< ProductURI (V1.1.4+; conditional on a Profile). */
-#define IOLINK_IDX_ERROR_COUNT 0x0020U            /**< ErrorCount index (2 octets). */
-#define IOLINK_IDX_DEVICE_STATUS 0x0024U          /**< DeviceStatus index (1 octet). */
+#define IOLINK_IDX_PRODUCT_URI 0x001BU   /**< ProductURI (V1.1.4+; conditional on a Profile). */
+#define IOLINK_IDX_ERROR_COUNT 0x0020U   /**< ErrorCount index (2 octets). */
+#define IOLINK_IDX_DEVICE_STATUS 0x0024U /**< DeviceStatus index (1 octet). */
 #define IOLINK_IDX_DETAILED_DEVICE_STATUS 0x0025U /**< DetailedDeviceStatus index (Table B.8). */
-#define IOLINK_IDX_PROCESS_DATA_INPUT 0x0028U     /**< ProcessDataInput (last valid PD input data). */
-#define IOLINK_IDX_PROCESS_DATA_OUTPUT 0x0029U    /**< ProcessDataOutput (last valid PD-out). */
-#define IOLINK_IDX_OFFSET_TIME 0x0030U            /**< Offset-Time (RecordT, optional). */
-#define IOLINK_IDX_ERROR_STATS 0x0040U /**< Vendor-specific error statistics (0x0040+). */
+#define IOLINK_IDX_PROCESS_DATA_INPUT 0x0028U  /**< ProcessDataInput (last valid PD input data). */
+#define IOLINK_IDX_PROCESS_DATA_OUTPUT 0x0029U /**< ProcessDataOutput (last valid PD-out). */
+#define IOLINK_IDX_OFFSET_TIME 0x0030U         /**< Offset-Time (RecordT, optional). */
+#define IOLINK_IDX_ERROR_STATS 0x0040U         /**< Vendor-specific error statistics (0x0040+). */
 /** @} */
 
 /**
@@ -155,26 +155,31 @@
 #define IOLINK_ISDU_ERROR_NONE 0x00U               /**< No error. */
 #define IOLINK_ISDU_ERROR_IDX_NOT_AVAIL 0x11U      /**< Index not available (Table C.1, C.2.3). */
 #define IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL 0x12U /**< Requested subindex not available. */
-#define IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL 0x20U /**< Service temporarily unavailable (Table C.1). */
+#define IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL \
+    0x20U /**< Service temporarily unavailable (Table C.1). */
 #define IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_LOCAL_CTRL \
     0x21U /**< Service unavailable - local control (Table C.1). */
 #define IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_DEV_CTRL \
     0x22U /**< Service unavailable - device control (Table C.1). */
-#define IOLINK_ISDU_ERROR_NOT_ACCESSIBLE 0x23U     /**< Object access denied (Table C.1). */
+#define IOLINK_ISDU_ERROR_NOT_ACCESSIBLE 0x23U  /**< Object access denied (Table C.1). */
 #define IOLINK_ISDU_ERROR_WRITE_PROTECTED 0x23U /**< Access denied, Table C.1. */
-#define IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG 0x30U /**< Parameter value out of range (Table C.1). */
-#define IOLINK_ISDU_ERROR_PAR_VAL_GT_LIM 0x31U     /**< Parameter value above limit (Table C.1). */
-#define IOLINK_ISDU_ERROR_PAR_VAL_LT_LIM 0x32U     /**< Parameter value below limit (Table C.1). */
-#define IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN 0x33U     /**< Value length overrun (Table C.1). */
-#define IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN 0x34U     /**< Value length underrun (Table C.1). */
+#define IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG                                                  \
+    0x30U                                      /**< Parameter value out of range (Table C.1). \
+                                                */
+#define IOLINK_ISDU_ERROR_PAR_VAL_GT_LIM 0x31U /**< Parameter value above limit (Table C.1). */
+#define IOLINK_ISDU_ERROR_PAR_VAL_LT_LIM 0x32U /**< Parameter value below limit (Table C.1). */
+#define IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN 0x33U /**< Value length overrun (Table C.1). */
+#define IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN 0x34U /**< Value length underrun (Table C.1). */
 #define IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL \
-    0x35U                                       /**< Command function not available (Table C.1). */
+    0x35U /**< Command function not available (Table C.1). */
 #define IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL \
     0x36U /**< Function temporarily unavailable (Table C.1). */
-#define IOLINK_ISDU_ERROR_PARAM_SET_INVALID 0x40U   /**< PAR_SETINVALID (Table C.1). */
-#define IOLINK_ISDU_ERROR_PARAM_INCONSISTENT 0x41U  /**< PAR_SETINCONSIST (Table C.1). */
+#define IOLINK_ISDU_ERROR_PARAM_SET_INVALID 0x40U  /**< PAR_SETINVALID (Table C.1). */
+#define IOLINK_ISDU_ERROR_PARAM_INCONSISTENT 0x41U /**< PAR_SETINCONSIST (Table C.1). */
 #define IOLINK_ISDU_ERROR_SEGMENTATION 0x81U       /**< Segmentation error (internal). */
-#define IOLINK_ISDU_ERROR_APP_DEV_NOT_READY 0x82U  /**< Application/device not ready (Table C.1). */
+#define IOLINK_ISDU_ERROR_APP_DEV_NOT_READY              \
+    0x82U /**< Application/device not ready (Table C.1). \
+           */
 /** @} */
 
 /**
@@ -200,11 +205,11 @@
  * @ingroup iolinki_protocol
  * @{
  */
-#define IOLINK_DEVICE_STATUS_OK 0x00U              /**< Device operating properly (Table B.13). */
-#define IOLINK_DEVICE_STATUS_MAINTENANCE 0x01U     /**< Maintenance required (Table B.13). */
-#define IOLINK_DEVICE_STATUS_OUT_OF_SPEC 0x02U     /**< Out of specification (Table B.13). */
+#define IOLINK_DEVICE_STATUS_OK 0x00U               /**< Device operating properly (Table B.13). */
+#define IOLINK_DEVICE_STATUS_MAINTENANCE 0x01U      /**< Maintenance required (Table B.13). */
+#define IOLINK_DEVICE_STATUS_OUT_OF_SPEC 0x02U      /**< Out of specification (Table B.13). */
 #define IOLINK_DEVICE_STATUS_FUNCTIONAL_CHECK 0x03U /**< Functional check (Table B.13). */
-#define IOLINK_DEVICE_STATUS_FAILURE 0x04U         /**< Failure (Table B.13). */
+#define IOLINK_DEVICE_STATUS_FAILURE 0x04U          /**< Failure (Table B.13). */
 /** @} */
 
 #endif /* IOLINK_PROTOCOL_H */

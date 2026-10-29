@@ -26,9 +26,9 @@
 /** @brief Commit policy for persistent writes. */
 typedef enum
 {
-    IOLINK_PERSIST_NONE = 0U,  /**< RAM only. */
-    IOLINK_PERSIST_SYNC = 1U,  /**< Commit before the call returns. */
-    IOLINK_PERSIST_ASYNC = 2U  /**< Queue the commit; the callback owns the buffer copy. */
+    IOLINK_PERSIST_NONE = 0U, /**< RAM only. */
+    IOLINK_PERSIST_SYNC = 1U, /**< Commit before the call returns. */
+    IOLINK_PERSIST_ASYNC = 2U /**< Queue the commit; the callback owns the buffer copy. */
 } iolink_persist_t;
 
 /**
@@ -89,9 +89,9 @@ static inline uint32_t iolink_storage_checksum(const uint8_t* data, size_t len)
 /** @brief Persistent parameter record (three identification tags). */
 typedef struct
 {
-    uint32_t magic;          /**< IOLINK_STORAGE_MAGIC. */
-    uint16_t version;        /**< IOLINK_STORAGE_VERSION. */
-    uint16_t reserved;       /**< Alignment / future use. */
+    uint32_t magic;           /**< IOLINK_STORAGE_MAGIC. */
+    uint16_t version;         /**< IOLINK_STORAGE_VERSION. */
+    uint16_t reserved;        /**< Alignment / future use. */
     char application_tag[33]; /**< ApplicationSpecificTag, NUL-terminated. */
     char function_tag[33];    /**< FunctionTag, NUL-terminated. */
     char location_tag[33];    /**< LocationTag, NUL-terminated. */

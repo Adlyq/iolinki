@@ -474,7 +474,6 @@ static void test_0374_upload_flag_non_volatile(void** state)
     assert_false(third.ds_upload_flag);
 }
 
-
 /* ------------------------------------------------------------------------- */
 
 /* ------------------------------------------------------------------------- */
@@ -653,8 +652,7 @@ static void test_0137_profile_parameters_write_absent(void** state)
 /* SDCI_TC_0104: reserved/capability-dependent SystemCommand codes           */
 /* ------------------------------------------------------------------------- */
 
-static int gap_write_system_command(iolink_ds_ctx_t* ds, uint8_t cmd, uint8_t* out,
-                                    size_t out_len)
+static int gap_write_system_command(iolink_ds_ctx_t* ds, uint8_t cmd, uint8_t* out, size_t out_len)
 {
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
@@ -923,8 +921,8 @@ static void test_0055_config3_long_read(void** state)
         if (fc == 15U) {
             wraps++;
         }
-        fc = (fc == IOLINK_FLOWCTRL_START) ? 1U
-                                           : (uint8_t) ((fc + 1U) & IOLINK_FLOWCTRL_COUNT_MASK);
+        fc =
+            (fc == IOLINK_FLOWCTRL_START) ? 1U : (uint8_t) ((fc + 1U) & IOLINK_FLOWCTRL_COUNT_MASK);
     }
     assert_true(wraps >= 1U);
     assert_memory_equal(&frame[2], app.config3, CONFORMANCE_CONFIG3_MAX);
@@ -1048,8 +1046,7 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_0137_profile_parameters_write_absent, test_setup,
                                         test_teardown),
-        cmocka_unit_test_setup_teardown(test_0104_system_command_ranges, test_setup,
-                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_0104_system_command_ranges, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_0054_vendor_name_conformance_identity, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_0056_config1_write_readback, test_setup,

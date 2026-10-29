@@ -360,8 +360,8 @@ static void test_ds_download_recovery(void** state)
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOAD_REQ);
 }
 
-static int ds_rejecting_write(void* user, uint16_t index, uint8_t subindex,
-                              const uint8_t* data, size_t len, bool persist)
+static int ds_rejecting_write(void* user, uint16_t index, uint8_t subindex, const uint8_t* data,
+                              size_t len, bool persist)
 {
     (void) user;
     (void) index;
@@ -444,8 +444,8 @@ static int ds_param_read_mock(void* user, uint16_t index, uint8_t subindex, uint
     return (int) n;
 }
 
-static int ds_param_write_mock(void* user, uint16_t index, uint8_t subindex,
-                               const uint8_t* data, size_t len, bool persist)
+static int ds_param_write_mock(void* user, uint16_t index, uint8_t subindex, const uint8_t* data,
+                               size_t len, bool persist)
 {
     (void) user;
     (void) index;
@@ -531,17 +531,16 @@ static void ds_fixture_init(ds_fixture_t* f, const iolink_storage_api_t* storage
     iolink_events_init(&f->events);
 }
 
-static void ds_fixture_set_tags(ds_fixture_t* f, const char* app, const char* fun,
-                                const char* loc)
+static void ds_fixture_set_tags(ds_fixture_t* f, const char* app, const char* fun, const char* loc)
 {
     assert_int_equal(iolink_params_ctx_set(&f->params, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                            (const uint8_t*) app, strlen(app), true),
+                                           (const uint8_t*) app, strlen(app), true),
                      0);
     assert_int_equal(iolink_params_ctx_set(&f->params, IOLINK_IDX_FUNCTION_TAG, 0U,
-                                            (const uint8_t*) fun, strlen(fun), true),
+                                           (const uint8_t*) fun, strlen(fun), true),
                      0);
     assert_int_equal(iolink_params_ctx_set(&f->params, IOLINK_IDX_LOCATION_TAG, 0U,
-                                            (const uint8_t*) loc, strlen(loc), true),
+                                           (const uint8_t*) loc, strlen(loc), true),
                      0);
 }
 
@@ -558,8 +557,8 @@ static int ds_fixture_isdu_read(ds_fixture_t* f, uint16_t index, uint8_t sub, ui
     return isdu_collect_response(&ctx, buf, cap);
 }
 
-static int ds_fixture_isdu_write(ds_fixture_t* f, uint16_t index, uint8_t sub,
-                                 const uint8_t* data, uint8_t len, uint8_t* buf, size_t cap)
+static int ds_fixture_isdu_write(ds_fixture_t* f, uint16_t index, uint8_t sub, const uint8_t* data,
+                                 uint8_t len, uint8_t* buf, size_t cap)
 {
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
@@ -715,11 +714,11 @@ static void test_ds_0078_upload_set2_after_store(void** state)
     assert_int_equal(ds_fixture_isdu_write(&f, IOLINK_IDX_APPLICATION_TAG, 0U,
                                            (const uint8_t*) "S2A", 3U, resp, sizeof(resp)),
                      0);
-    assert_int_equal(ds_fixture_isdu_write(&f, IOLINK_IDX_FUNCTION_TAG, 0U,
-                                           (const uint8_t*) "S2B", 3U, resp, sizeof(resp)),
+    assert_int_equal(ds_fixture_isdu_write(&f, IOLINK_IDX_FUNCTION_TAG, 0U, (const uint8_t*) "S2B",
+                                           3U, resp, sizeof(resp)),
                      0);
-    assert_int_equal(ds_fixture_isdu_write(&f, IOLINK_IDX_LOCATION_TAG, 0U,
-                                           (const uint8_t*) "S2C", 3U, resp, sizeof(resp)),
+    assert_int_equal(ds_fixture_isdu_write(&f, IOLINK_IDX_LOCATION_TAG, 0U, (const uint8_t*) "S2C",
+                                           3U, resp, sizeof(resp)),
                      0);
     /* Block writes are staged; set 1 stays active until the store. */
     ds_fixture_assert_tag(&f, IOLINK_IDX_APPLICATION_TAG, "S1A");
@@ -824,8 +823,7 @@ static void test_ds_0081_upload_abort_points(void** state)
     uint8_t img[IOLINK_DS_IMAGE_MAX] = {0U};
 
     for (int point = 0; point < 3; point++) {
-        assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_UPLOAD_START, resp,
-                                            sizeof(resp)),
+        assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_UPLOAD_START, resp, sizeof(resp)),
                          0);
         if (point >= 1) {
             iolink_ds_process(&f.ds);

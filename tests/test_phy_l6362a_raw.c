@@ -93,7 +93,8 @@ static void injected_rx_irq(void)
     s_irq_cr1 = IOD_UART->CR1;
     if (s_model_icr_clear) {
         IOD_UART->ISR &= ~USART_ISR_RTOF;
-    } else {
+    }
+    else {
         IOD_UART->ISR |= USART_ISR_RTOF;
     }
     phy_l6362a_raw_rx_irq();

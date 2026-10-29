@@ -326,8 +326,8 @@ void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t 
     if (ctx->frozen_slots > 0U) {
         /* Acknowledge exactly the events that were presented in the frozen
            memory; higher-severity events queued after the freeze must remain. */
-        const uint8_t acked = (ctx->frozen_count < ctx->frozen_slots) ? ctx->frozen_count
-                                                                     : ctx->frozen_slots;
+        const uint8_t acked =
+            (ctx->frozen_count < ctx->frozen_slots) ? ctx->frozen_count : ctx->frozen_slots;
         for (uint8_t i = 0U; i < acked; i++) {
             event_queue_remove(ctx, ctx->frozen_events[i].code, ctx->frozen_events[i].mode);
         }

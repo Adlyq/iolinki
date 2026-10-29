@@ -454,9 +454,9 @@ static uint8_t read_dpp1_octet(iolink_dll_ctx_t* dll, uint8_t addr)
     iolink_isdu_ctx_t page_ctx;
     iolink_isdu_init(&page_ctx);
     page_ctx.dll_ctx = dll;
-    assert_int_equal(isdu_send_read_request(&page_ctx, IOLINK_IDX_DIRECT_PARAMETERS_1,
-                                            (uint8_t) (addr + 1U)),
-                     1);
+    assert_int_equal(
+        isdu_send_read_request(&page_ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, (uint8_t) (addr + 1U)),
+        1);
     iolink_isdu_process(&page_ctx);
     uint8_t value = 0U;
     assert_int_equal(isdu_collect_response(&page_ctx, &value, 1U), 1);
@@ -602,8 +602,7 @@ static void test_isdu_data_storage_subindices(void** state)
                          ((uint32_t) r[8] << 8) | r[9],
                      ds.current_checksum);
     static const uint8_t expect_record_tail[] = {
-        0x00U, 0x18U, 0x00U, 0x00U, 0x19U, 0x00U,
-        0x00U, 0x1AU, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x18U, 0x00U, 0x00U, 0x19U, 0x00U, 0x00U, 0x1AU, 0x00U, 0x00U, 0x00U,
     };
     assert_memory_equal(&r[10], expect_record_tail, sizeof(expect_record_tail));
 
@@ -1011,8 +1010,7 @@ static void test_isdu_dds_empty_and_max_records(void** state)
     iolink_events_init(&events);
 
     uint8_t records[IOLINK_ISDU_BUFFER_SIZE];
-    int n = read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records,
-                              sizeof(records));
+    int n = read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records, sizeof(records));
     assert_int_equal(n, 0); /* Empty object: no records, no negative response. */
 
     /* Fill every active slot with a distinct Error event. */
@@ -1059,18 +1057,16 @@ static void test_isdu_device_status_follows_event(void** state)
 
     assert_int_equal(read_events_index(&events, IOLINK_IDX_DEVICE_STATUS, &status, 1U), 1);
     assert_int_equal(status, 0U); /* OK */
-    assert_int_equal(read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records,
-                                        sizeof(records)),
-                     0);
+    assert_int_equal(
+        read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records, sizeof(records)), 0);
 
     /* The reference profile Config7 event code used by the event tests. */
     iolink_event_trigger(&events, 0x1801U, IOLINK_EVENT_TYPE_ERROR);
 
     assert_int_equal(read_events_index(&events, IOLINK_IDX_DEVICE_STATUS, &status, 1U), 1);
     assert_int_equal(status, 4U); /* Failure */
-    assert_int_equal(read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records,
-                                        sizeof(records)),
-                     3);
+    assert_int_equal(
+        read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records, sizeof(records)), 3);
     assert_int_equal(records[0], 0xF4U); /* appears | error | instance Application */
     assert_int_equal((uint16_t) (((uint16_t) records[1] << 8) | records[2]), 0x1801U);
 }
@@ -1158,8 +1154,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_system_cmd_device_reset, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_system_cmd_application_reset, test_setup,
                                         test_teardown),
-        cmocka_unit_test_setup_teardown(test_system_cmd_app_reset_raises_ds_upload_req,
-                                        test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_system_cmd_app_reset_raises_ds_upload_req, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_system_cmd_factory_restore, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_system_cmd_reserved_ds_commands, test_setup,
                                         test_teardown),

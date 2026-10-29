@@ -26,10 +26,8 @@ static int mock_write(void* user, uint32_t offset, const uint8_t* data, size_t l
     ++writes;
     return write_result;
 }
-static const iolink_storage_api_t mock_storage = {.user = NULL,
-                                                  .read = mock_read,
-                                                  .write = mock_write,
-                                                  .erase = NULL};
+static const iolink_storage_api_t mock_storage = {
+    .user = NULL, .read = mock_read, .write = mock_write, .erase = NULL};
 int main(void)
 {
     iolink_device_info_ctx_t info;
@@ -44,14 +42,17 @@ int main(void)
         const uint8_t replacement[] = "replacement";
         uint8_t result[32];
         write_result = 0;
-        assert(iolink_params_ctx_set(&params, indices[i], 0, original, 8, IOLINK_PERSIST_SYNC) == 0);
+        assert(iolink_params_ctx_set(&params, indices[i], 0, original, 8, IOLINK_PERSIST_SYNC) ==
+               0);
         int prior_writes = writes;
         write_result = -1;
-        assert(iolink_params_ctx_set(&params, indices[i], 0, replacement, 11, IOLINK_PERSIST_SYNC) == -1);
+        assert(iolink_params_ctx_set(&params, indices[i], 0, replacement, 11,
+                                     IOLINK_PERSIST_SYNC) == -1);
         assert(writes == prior_writes + 1);
         assert(iolink_params_ctx_get(&params, indices[i], 0, result, sizeof(result)) == 8);
         assert(memcmp(result, original, 8) == 0);
-        assert(iolink_params_ctx_set(&params, indices[i], 0, replacement, 11, IOLINK_PERSIST_NONE) == 0);
+        assert(iolink_params_ctx_set(&params, indices[i], 0, replacement, 11,
+                                     IOLINK_PERSIST_NONE) == 0);
         assert(writes == prior_writes + 1);
         assert(iolink_params_ctx_get(&params, indices[i], 0, result, sizeof(result)) == 11);
         assert(memcmp(result, replacement, 11) == 0);

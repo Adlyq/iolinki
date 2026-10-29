@@ -950,9 +950,8 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                         ret = -2;
                     }
                     else if ((ds->state == IOLINK_DS_STATE_DOWNLOADING) ||
-                        (ds->state == IOLINK_DS_STATE_DOWNLOAD_REQ)) {
-                        ret = iolink_ds_handle_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_END,
-                                                       locks);
+                             (ds->state == IOLINK_DS_STATE_DOWNLOAD_REQ)) {
+                        ret = iolink_ds_handle_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_END, locks);
                     }
                     else if ((ds->state == IOLINK_DS_STATE_UPLOADING) ||
                              (ds->state == IOLINK_DS_STATE_UPLOAD_REQ)) {
@@ -1273,8 +1272,8 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
        field stores the full IODD iolinkRevision (0x0111 for V1.1); the low
        octet is the value transmitted in DPP1 0x04. */
     page[0x04] = (uint8_t) (((info != NULL) ? info->revision_id : 0x0111U) & 0xFFU);
-    page[0x05] = direct_param_encode_pd(pd_in);                 /* ProcessDataIn */
-    page[0x06] = direct_param_encode_pd(pd_out);                /* ProcessDataOut */
+    page[0x05] = direct_param_encode_pd(pd_in);  /* ProcessDataIn */
+    page[0x06] = direct_param_encode_pd(pd_out); /* ProcessDataOut */
     if (info != NULL) {
         page[0x07] = (uint8_t) (info->vendor_id >> 8);            /* VendorID MSB */
         page[0x08] = (uint8_t) (info->vendor_id & 0xFFU);         /* VendorID LSB */
@@ -1563,11 +1562,10 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
         (index != IOLINK_IDX_DATA_STORAGE) && (index != IOLINK_IDX_DIRECT_PARAMETERS_1) &&
         (index != IOLINK_IDX_DIRECT_PARAMETERS_2)) {
         const iolink_ds_ctx_t* ds = (const iolink_ds_ctx_t*) ctx->ds_ctx;
-        const bool blocked =
-            ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) &&
-             (ds->state == IOLINK_DS_STATE_UPLOADING)) ||
-            ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_READ) &&
-             (ds->state == IOLINK_DS_STATE_DOWNLOADING));
+        const bool blocked = ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) &&
+                              (ds->state == IOLINK_DS_STATE_UPLOADING)) ||
+                             ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_READ) &&
+                              (ds->state == IOLINK_DS_STATE_DOWNLOADING));
         if (blocked) {
             ctx->response_buf[0] = 0x80U;
             ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_DEV_CTRL;
@@ -1594,9 +1592,9 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
 #if IOLINK_FEATURE_DATA_STORAGE
         if ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) && (ctx->ds_ctx != NULL) &&
             iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx)) {
-            const int ret = iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx,
-                                                  ctx->header.index, ctx->header.subindex,
-                                                  ctx->buffer, ctx->buffer_idx);
+            const int ret =
+                iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, ctx->header.index,
+                                      ctx->header.subindex, ctx->buffer, ctx->buffer_idx);
             if (ret == 0) {
                 ctx->response_len = 0U;
                 ctx->response_idx = 0U;

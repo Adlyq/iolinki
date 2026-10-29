@@ -203,9 +203,8 @@ static uint8_t read_dpp1_octet(iolink_dll_ctx_t* dll, uint8_t addr)
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
     ctx.dll_ctx = dll;
-    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1,
-                                            (uint8_t) (addr + 1U)),
-                     1);
+    assert_int_equal(
+        isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, (uint8_t) (addr + 1U)), 1);
     iolink_isdu_process(&ctx);
     uint8_t value = 0U;
     assert_int_equal(isdu_collect_response(&ctx, &value, 1U), 1);

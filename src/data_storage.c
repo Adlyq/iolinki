@@ -74,12 +74,11 @@ static void ds_storage_save_image(iolink_ds_ctx_t* ctx)
     header[9] = (uint8_t) (checksum >> 16);
     header[10] = (uint8_t) (checksum >> 8);
     header[11] = (uint8_t) checksum;
-    (void) ctx->storage->write(ctx->storage->user, IOLINK_STORAGE_DS_BASE, header,
-                               sizeof(header));
+    (void) ctx->storage->write(ctx->storage->user, IOLINK_STORAGE_DS_BASE, header, sizeof(header));
     if (ctx->image_len > 0U) {
         (void) ctx->storage->write(ctx->storage->user,
-                                   IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_HDR_SIZE,
-                                   ctx->image, ctx->image_len);
+                                   IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_HDR_SIZE, ctx->image,
+                                   ctx->image_len);
     }
 }
 
@@ -105,9 +104,8 @@ static void ds_storage_load_image(iolink_ds_ctx_t* ctx)
     if ((len == 0U) || (len > IOLINK_DS_IMAGE_MAX)) {
         return;
     }
-    if (ctx->storage->read(ctx->storage->user,
-                           IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_HDR_SIZE, ctx->image,
-                           len) == 0) {
+    if (ctx->storage->read(ctx->storage->user, IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_HDR_SIZE,
+                           ctx->image, len) == 0) {
         if (checksum != iolink_storage_checksum(ctx->image, len)) {
             return; /* Corrupt (bit flip / torn write). */
         }
