@@ -146,6 +146,8 @@ static uint16_t isdu_access_locks(const iolink_isdu_ctx_t* ctx)
                               : iolink_device_info_get_access_locks();
 }
 
+static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error);
+
 /** @brief Map a parameter-manager error to an ISDU negative response. */
 static void isdu_respond_param_error(iolink_isdu_ctx_t* ctx, int ret)
 {
@@ -156,11 +158,7 @@ static void isdu_respond_param_error(iolink_isdu_ctx_t* ctx, int ret)
     else if (ret == -3) {
         error = IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN;
     }
-    ctx->response_buf[0] = 0x80U;
-    ctx->response_buf[1] = error;
-    ctx->response_len = 2U;
-    ctx->response_idx = 0U;
-    ctx->state = ISDU_STATE_RESPONSE_READY;
+    isdu_respond_error(ctx, error);
 }
 
 /* handle_standard_commands() is defined below; the transport executes it once a
@@ -229,6 +227,7 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
     const size_t payload_end = total - 1U; /* CHKPDU cannot supply an index/subindex. */
 
     ctx->buffer_idx = 0U;
+    ctx->response_idx = 0U;
     ctx->header.subindex = 0U;
     ctx->header.length = 0U;
 
@@ -239,10 +238,7 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
         ctx->header.type = IOLINK_ISDU_SERVICE_TYPE_READ;
     }
     else {
-        ctx->response_buf[0] = 0x80U;
-        ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-        ctx->response_len = 2U;
-        ctx->state = ISDU_STATE_RESPONSE_READY;
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
         return;
     }
 
@@ -257,10 +253,7 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
 
     if (two_index) {
         if ((pos + 1U) >= payload_end) {
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-            ctx->response_len = 2U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
             return;
         }
         ctx->header.index = (uint16_t) ((uint16_t) buf[pos] << 8);
@@ -269,10 +262,7 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
     }
     else {
         if (pos >= payload_end) {
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-            ctx->response_len = 2U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
             return;
         }
         ctx->header.index = buf[pos++];
@@ -280,10 +270,7 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
 
     if (has_sub) {
         if (pos >= payload_end) {
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL;
-            ctx->response_len = 2U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
             return;
         }
         ctx->header.subindex = buf[pos++];
@@ -883,16 +870,33 @@ static void isdu_trigger_ds_upload_req(iolink_isdu_ctx_t* ctx)
 #endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
 
 /** @brief Execute a SystemCommand (reset, factory restore, data-storage commands). */
+#if IOLINK_FEATURE_DATA_STORAGE
+/** @brief Map an iolink_ds_* return code to an ISDU error (Table C.1). */
+static uint8_t isdu_ds_result_error(int ret, uint8_t fallback)
+{
+    switch (ret) {
+        case -1:
+            return IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL; /* 0x20 */
+        case -2:
+            return IOLINK_ISDU_ERROR_WRITE_PROTECTED; /* 0x23 */
+        case -4:
+            return IOLINK_ISDU_ERROR_PARAM_INCONSISTENT; /* 0x41 */
+        case -5:
+            return IOLINK_ISDU_ERROR_PARAM_SET_INVALID; /* 0x40 */
+        case -6:
+            return IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL; /* 0x36 */
+        default:
+            return fallback;
+    }
+}
+#endif /* IOLINK_FEATURE_DATA_STORAGE */
+
 static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
 #if !IOLINK_FEATURE_SYSTEM_COMMAND
     (void) cmd;
     /* SystemCommand support is compiled out. */
-    ctx->response_buf[0] = 0x80U;
-    ctx->response_buf[1] = IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL;
-    ctx->response_len = 2U;
-    ctx->response_idx = 0U;
-    ctx->state = ISDU_STATE_RESPONSE_READY;
+    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
 #else
     switch (cmd) {
         case IOLINK_CMD_DEVICE_RESET: /* 0x80 */
@@ -963,33 +967,8 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                 }
 
                 if (ret != 0) {
-                    ctx->response_buf[0] = 0x80U;
-                    if (ret == -1) {
-                        ctx->response_buf[1] =
-                            IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL; /* 0x20, Table C.1 */
-                    }
-                    else if (ret == -2) {
-                        ctx->response_buf[1] =
-                            IOLINK_ISDU_ERROR_WRITE_PROTECTED; /* 0x23, Table C.1 */
-                    }
-                    else if (ret == -4) {
-                        ctx->response_buf[1] =
-                            IOLINK_ISDU_ERROR_PARAM_INCONSISTENT; /* 0x41, Table C.1 */
-                    }
-                    else if (ret == -5) {
-                        ctx->response_buf[1] =
-                            IOLINK_ISDU_ERROR_PARAM_SET_INVALID; /* 0x40, Table C.1 */
-                    }
-                    else if (ret == -6) {
-                        ctx->response_buf[1] =
-                            IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL; /* 0x36, Table C.1 */
-                    }
-                    else {
-                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-                    }
-                    ctx->response_len = 2U;
-                    ctx->response_idx = 0U;
-                    ctx->state = ISDU_STATE_RESPONSE_READY;
+                    isdu_respond_error(ctx,
+                                       isdu_ds_result_error(ret, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL));
                     return;
                 }
                 if (store) {
@@ -1004,11 +983,7 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             if (ctx->ds_ctx != NULL) {
                 iolink_ds_ctx_t* ds = (iolink_ds_ctx_t*) ctx->ds_ctx;
                 if (ds->state == IOLINK_DS_STATE_IDLE) {
-                    ctx->response_buf[0] = 0x80U;
-                    ctx->response_buf[1] = IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL;
-                    ctx->response_len = 2U;
-                    ctx->response_idx = 0U;
-                    ctx->state = ISDU_STATE_RESPONSE_READY;
+                    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL);
                     return;
                 }
                 (void) iolink_ds_abort(ds);
@@ -1019,11 +994,7 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 
         default:
             /* Unsupported command value: FUNC_NOTAVAIL (Table C.1 / C.2.14). */
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL;
-            ctx->response_len = 2U;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
             return;
     }
 
@@ -1135,9 +1106,7 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
         ctx->response_len = pos;
     }
     else {
-        ctx->response_buf[0] = 0x80U;
-        ctx->response_buf[1] = IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL;
-        ctx->response_len = 2U;
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
     }
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
@@ -1159,23 +1128,17 @@ static void isdu_write_u32_be(uint8_t* buf, size_t* idx, uint32_t value)
 static void handle_error_stats(iolink_isdu_ctx_t* ctx)
 {
     if (ctx->header.type != IOLINK_ISDU_SERVICE_TYPE_READ) {
-        ctx->response_buf[0] = 0x80U;
-        ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
-        ctx->response_len = 2U;
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
         return;
     }
 
     if (ctx->header.subindex != 0U) {
-        ctx->response_buf[0] = 0x80U;
-        ctx->response_buf[1] = IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL;
-        ctx->response_len = 2U;
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
         return;
     }
 
     if (ctx->dll_ctx == NULL) {
-        ctx->response_buf[0] = 0x80U;
-        ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-        ctx->response_len = 2U;
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
         return;
     }
 
@@ -1306,15 +1269,11 @@ static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
         if (!page2) {
             /* Page 1 is read-only. */
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
-            ctx->response_len = 2U;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
         }
         else if ((isdu_access_locks(ctx) & IOLINK_LOCK_PARAM) != 0U) {
             /* Table B.2.4: the Parameter access lock inhibits page-2 writes. */
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
-            ctx->response_len = 2U;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
         }
         else if (sub == 0U) {
             size_t n = ctx->buffer_idx;
@@ -1329,9 +1288,7 @@ static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
             ctx->response_len = 0U;
         }
         else {
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL;
-            ctx->response_len = 2U;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
         }
     }
     else {
@@ -1352,9 +1309,7 @@ static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
             ctx->response_len = 1U;
         }
         else {
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL;
-            ctx->response_len = 2U;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
         }
     }
     ctx->response_idx = 0U;
@@ -1391,11 +1346,7 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
     const uint8_t sub = ctx->header.subindex;
 
     if (ds == NULL) {
-        ctx->response_buf[0] = 0x80U;
-        ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-        ctx->response_len = 2U;
-        ctx->response_idx = 0U;
-        ctx->state = ISDU_STATE_RESPONSE_READY;
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
         return;
     }
 
@@ -1405,10 +1356,8 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
             /* Legacy whole-image restore (kept for wire compatibility). */
             const int rc = iolink_ds_apply_image(ds, ctx->buffer, ctx->buffer_idx);
             if (rc != 0) {
-                ctx->response_buf[0] = 0x80U;
-                ctx->response_buf[1] = (rc == -1) ? IOLINK_ISDU_ERROR_PARAM_SET_INVALID
-                                                  : IOLINK_ISDU_ERROR_PARAM_INCONSISTENT;
-                ctx->response_len = 2U;
+                isdu_respond_error(ctx, (rc == -1) ? IOLINK_ISDU_ERROR_PARAM_SET_INVALID
+                                                   : IOLINK_ISDU_ERROR_PARAM_INCONSISTENT);
             }
             else {
                 ctx->response_len = 0U; /* Write acknowledged */
@@ -1416,17 +1365,13 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
 #else
             /* Table B.10: the whole record is read-only; only DS_Command
                (subindex 1) is writable. */
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
-            ctx->response_len = 2U;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 #endif
         }
         else if (sub == 1U) {
             /* DS_Command (Table B.10 subindex 01). */
             if (ctx->buffer_idx == 0U) {
-                ctx->response_buf[0] = 0x80U;
-                ctx->response_buf[1] = IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN;
-                ctx->response_len = 2U;
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN);
             }
             else {
                 const uint16_t locks = isdu_access_locks(ctx);
@@ -1435,34 +1380,14 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
                     ctx->response_len = 0U;
                 }
                 else {
-                    ctx->response_buf[0] = 0x80U;
-                    if (ret == -1) {
-                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL;
-                    }
-                    else if (ret == -2) {
-                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
-                    }
-                    else if (ret == -4) {
-                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_PARAM_INCONSISTENT;
-                    }
-                    else if (ret == -5) {
-                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_PARAM_SET_INVALID;
-                    }
-                    else if (ret == -6) {
-                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL;
-                    }
-                    else {
-                        ctx->response_buf[1] = IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL;
-                    }
-                    ctx->response_len = 2U;
+                    isdu_respond_error(
+                        ctx, isdu_ds_result_error(ret, IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL));
                 }
             }
         }
         else {
             /* Table B.10: subindices 02-05 are read-only. */
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
-            ctx->response_len = 2U;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
         }
     }
     else {
@@ -1535,9 +1460,7 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
                 break;
             }
             default:
-                ctx->response_buf[0] = 0x80U;
-                ctx->response_buf[1] = IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL;
-                ctx->response_len = 2U;
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
                 break;
         }
     }
@@ -1567,11 +1490,7 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
                              ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_READ) &&
                               (ds->state == IOLINK_DS_STATE_DOWNLOADING));
         if (blocked) {
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_DEV_CTRL;
-            ctx->response_len = 2U;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_DEV_CTRL);
             return;
         }
     }
@@ -1582,11 +1501,7 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
             ((isdu_access_locks(ctx) & IOLINK_LOCK_PARAM) != 0U)) {
             /* B.2.4: the Parameter lock inhibits every read/write Device
                parameter (reads remain available). */
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_WRITE_PROTECTED;
-            ctx->response_len = 2U;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
             return;
         }
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -1638,22 +1553,14 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
                 handle_system_command(ctx, ctx->buffer[0]);
             }
             else {
-                ctx->response_buf[0] = 0x80U;
-                ctx->response_buf[1] = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-                ctx->response_len = 2U;
-                ctx->response_idx = 0U;
-                ctx->state = ISDU_STATE_RESPONSE_READY;
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
             }
         }
         else {
             /* SystemCommand (Table B.8) is write-only; a read is answered with
                IDX_NOT_ACCESSIBLE (Table C.1). Events are read through the
                Diagnosis-channel event memory (Table 58). */
-            ctx->response_buf[0] = 0x80U;
-            ctx->response_buf[1] = IOLINK_ISDU_ERROR_NOT_ACCESSIBLE;
-            ctx->response_len = 2U;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_NOT_ACCESSIBLE);
         }
     }
     else if ((ctx->header.index == IOLINK_IDX_DIRECT_PARAMETERS_1) ||
