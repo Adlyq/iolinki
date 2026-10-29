@@ -35,6 +35,7 @@
  *  - State transitions and callbacks: dll_queue_state ... dll_set_state
  *  - M-sequence typing and transmission: dll_mseq_type_bits ... dll_send
  *  - Timing, master commands and operate handlers: dll_get_t_ren_limit_us ...
+ *    dll_handle_operate_type1_2
  *  - Diagnostics polling: dll_poll_diagnostics
  *  - Lifecycle and ISDU snapshot: iolink_dll_init ...
  *  - Main pump: dll_frame_drop_if_stopped ... iolink_dll_process
@@ -198,8 +199,6 @@ static uint8_t dll_expected_type_bits(const iolink_dll_ctx_t* ctx)
  * message carries no PD and a single OD octet written only on a write access.
  */
 
-#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
-#endif
 static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx);
 
 /** @brief Serialise main-context reply staging against the data interrupt.
