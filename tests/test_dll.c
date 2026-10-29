@@ -1591,6 +1591,68 @@ static void test_dll_isr_back_to_box_counts_each_frame_once(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_COMM_DISABLED);
 }
 
+/* Main-pump fallback reply for a TYPE_1/2 frame: publish a valid process READ
+ * with no ISR eager answer (as if the ISR could not pre-stage it) and check the
+ * [OD][PD-in]CKS reply built by dll_send_od_reply(). */
+static void test_dll_main_pump_type1_2_reply(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 2, .pd_out_len = 2};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    iolink_device_set_timing_enforcement(&dev.ctx, true);
+
+    establish_operate_type2v(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    uint8_t frame[4] = {(uint8_t) (IOLINK_MC_CHANNEL_PROCESS | IOLINK_MC_RW_MASK),
+                        IOLINK_MSEQ_TYPE_2, 0x00U, 0x00U};
+    frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_2 | iolink_checksum6(frame, sizeof(frame)));
+
+    dev.ctx.dll.pd_in_len = 2U;
+    dev.ctx.dll.pd_in[dev.ctx.dll.pd_in_active][dev.ctx.dll.od_width] = 0xAAU;
+    dev.ctx.dll.pd_in[dev.ctx.dll.pd_in_active][dev.ctx.dll.od_width + 1U] = 0x55U;
+
+    (void) memcpy(dev.ctx.dll.isr_frame_buf, frame, sizeof(frame));
+    dev.ctx.dll.isr_frame_ptr = dev.ctx.dll.isr_frame_buf;
+    dev.ctx.dll.isr_frame_len = (uint8_t) sizeof(frame);
+    dev.ctx.dll.isr_eager_replied = 0U; /* no ISR answer: the main pump must reply */
+    dev.ctx.dll.isr_frame_ready = 1U;
+
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 5); /* OD 2 + PD-in 2 + CKS */
+    will_return(mock_phy_send, 0);
+    iolink_device_process(&dev.ctx);
+    while (dev.ctx.dll.isr_tx_active != 0U) {
+        iolink_device_process_isr(&dev.ctx);
+    }
+
+    size_t tx_len = 0U;
+    const uint8_t* tx = mock_phy_tx(&tx_len);
+    assert_int_equal(tx_len, 5U);
+    assert_int_equal(tx[0], 0x00U); /* process-channel OD reply is zero */
+    assert_int_equal(tx[1], 0x00U);
+    assert_int_equal(tx[2], 0xAAU);
+    assert_int_equal(tx[3], 0x55U);
+
+    /* A.1.6 checksum over [OD][PD-in] with the status-only CKS octet; the
+     * compressor itself is validated exhaustively in test_crc_vectors. */
+    uint8_t acc = 0x52U;
+    for (size_t i = 0U; i < tx_len; i++) {
+        uint8_t b = tx[i];
+        if (i == 1U) {
+            b = (uint8_t) (b & 0x3FU);
+        }
+        else if (i == (tx_len - 1U)) {
+            b = (uint8_t) (b & 0xC0U);
+        }
+        acc = (uint8_t) (acc ^ b);
+    }
+    assert_int_equal(tx[4] & 0x3FU, iolink_checksum6_from_acc(acc) & 0x3FU);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -1647,6 +1709,8 @@ int main(void)
                                         test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_type0_write_is_three_octets_with_two_octet_od,
                                         test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_main_pump_type1_2_reply, test_setup,
+                                        test_teardown),
         cmocka_unit_test(test_min_cycle_time_from_m_sequence),
         cmocka_unit_test_setup_teardown(test_dll_isr_back_to_box_counts_each_frame_once, test_setup,
                                         test_teardown),
