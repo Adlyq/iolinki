@@ -833,7 +833,17 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
     }
 }
 
-/** @brief Execute a SystemCommand (reset, factory restore, data-storage commands). */
+/** @brief Clear DS_UPLOAD_FLAG when a reset restored the factory set. */
+static void isdu_clear_ds_upload_req(iolink_isdu_ctx_t* ctx)
+{
+#if IOLINK_FEATURE_DATA_STORAGE
+    if (ctx->ds_ctx != NULL) {
+        iolink_ds_clear_upload((iolink_ds_ctx_t*) ctx->ds_ctx);
+    }
+#else
+    (void) ctx;
+#endif
+}
 
 /** @brief Raise the DS_UPLOAD_REQ event (10.4.2) when a command changed the
  * Data Storage parameter set locally on the Device. */
@@ -860,6 +870,7 @@ static void isdu_trigger_ds_upload_req(iolink_isdu_ctx_t* ctx)
 #endif
 }
 
+/** @brief Execute a SystemCommand (reset, factory restore, data-storage commands). */
 static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
 #if !IOLINK_FEATURE_SYSTEM_COMMAND
@@ -885,15 +896,19 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             break;
 
         case IOLINK_CMD_RESTORE_FACTORY_SETTINGS: /* 0x82 */
-            /* Reset all parameters to factory defaults */
+            /* Reset all parameters to factory defaults. Table 177 requires
+               DS_UPLOAD_FLAG = 0: the master keeps its stored parameter set
+               and re-downloads it, so no upload is requested here. */
             isdu_params_factory_reset(ctx);
-            isdu_trigger_ds_upload_req(ctx);
+            isdu_clear_ds_upload_req(ctx);
             break;
 
         case IOLINK_CMD_BACK_TO_BOX: /* 0x83 */
             /* Restore the delivery values, then stop and disable communication
-               after the response (10.7.5). */
+               after the response (10.7.5). Table 178 also requires
+               DS_UPLOAD_FLAG = 0. */
             isdu_params_factory_reset(ctx);
+            isdu_clear_ds_upload_req(ctx);
             if (ctx->dll_ctx != NULL) {
                 iolink_dll_request_back_to_box((iolink_dll_ctx_t*) ctx->dll_ctx);
             }
