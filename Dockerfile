@@ -5,7 +5,6 @@ RUN apt-get update && apt-get install -y \
     cmake \
     build-essential \
     libcmocka-dev \
-    clang-format \
     cppcheck \
     pkg-config \
     git \
@@ -14,6 +13,9 @@ RUN apt-get update && apt-get install -y \
     doxygen \
     graphviz \
     && rm -rf /var/lib/apt/lists/*
+
+# Pinned to match .pre-commit-config.yaml; check_quality.sh enforces this version.
+RUN pip3 install --no-cache-dir clang-format==23.1.1
 
 WORKDIR /workspace
 

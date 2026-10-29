@@ -46,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The unit suite compiles with `-UNDEBUG` so `assert()`-based tests keep testing
   in Release instead of becoming no-ops.
 
+### Changed (tooling)
+- clang-format is pinned to 23.1.1 and enforced by `check_quality.sh` instead of
+  being skipped on a version mismatch; the Docker images install the pinned
+  version and the tree was reformatted with it.
+- Test NVM files are per-run/per-process, so parallel ctest runs in different
+  build trees no longer corrupt each other (SDCI_TC_0316 flake).
+
 ### Added (tooling)
 - `tools/coverage.sh`: gcovr line/branch summary (and optional HTML) for `src/`.
   Local only; no coverage threshold in CI yet.

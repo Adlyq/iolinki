@@ -129,25 +129,24 @@ fi
 # 4. Code Formatting Check
 echo -e "\n[4/6] 🎨 Checking Code Formatting..."
 if command -v clang-format &> /dev/null; then
-    # AGENTS.md notes that the host clang-format may differ from the version
-    # pinned in .pre-commit-config.yaml. Different major versions format
-    # differently, so only enforce when the pinned major is installed (or when
-    # explicitly requested).
-    PINNED_CF=$(grep -A3 'mirrors-clang-format' .pre-commit-config.yaml 2>/dev/null \
-        | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/^v//; s/\..*//')
-    INSTALLED_CF=$(clang-format --version | grep -oE '[0-9]+' | head -1)
-    if [ -n "${PINNED_CF}" ] && [ "${INSTALLED_CF}" != "${PINNED_CF}" ] \
-        && [ "${IOLINKI_FORMAT_ENFORCE}" != "1" ]; then
-        echo "   ⚠️ clang-format ${INSTALLED_CF} != pinned ${PINNED_CF}; skipping"
-        echo "      (set IOLINKI_FORMAT_ENFORCE=1 to enforce anyway)"
-    elif find src include tests examples -type f \( -name "*.c" -o -name "*.h" \) -print0 | xargs -0 clang-format --dry-run --Werror; then
-       echo "   ✅ Code Formatting Passed"
+    # clang-format is pinned to 23.1.1 in .pre-commit-config.yaml and the Docker
+    # images. Other major versions reformat differently, so do not silently skip:
+    # warn and still run the check.
+    CF_VERSION=$(clang-format --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    if [ "${CF_VERSION}" != "23.1.1" ]; then
+        echo "   ⚠️ clang-format ${CF_VERSION} != pinned 23.1.1 (results may differ)"
+        echo "      Install it with: pip install clang-format==23.1.1"
+    fi
+    if find src include tests examples -type f \( -name "*.c" -o -name "*.h" \) -print0 \
+        | xargs -0 clang-format --dry-run --Werror; then
+        echo "   ✅ Code Formatting Passed"
     else
-       echo "   ❌ Code Formatting FAILED"
-       exit 1
+        echo "   ❌ Code Formatting FAILED"
+        exit 1
     fi
 else
     echo "   ⚠️ clang-format not installed. Skipping check."
+    echo "      Install the pinned version: pip install clang-format==23.1.1"
 fi
 
 # 5. Doxygen Warning Check

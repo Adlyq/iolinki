@@ -16,9 +16,8 @@ cmake -B build && cmake --build build && (cd build && ctest --output-on-failure)
 ctest --test-dir build -R test_dll
 
 # Quality script: strict -Werror build at Debug (-O0) and Release (-O3), plus
-# cppcheck and shellcheck. MISRA, clang-format and Doxygen run only when
-# installed, and MISRA/format only fail the script with IOLINKI_MISRA_ENFORCE=1 /
-# IOLINKI_FORMAT_ENFORCE=1.
+# cppcheck, clang-format and shellcheck. MISRA and Doxygen run only when
+# installed, and MISRA only fails the script with IOLINKI_MISRA_ENFORCE=1.
 ./check_quality.sh
 
 # Compile matrix (delivery gate): every feature toggle, ISR granularity and
@@ -84,8 +83,9 @@ ctest --test-dir build -R test_dll
 
 - Public symbols `iolink_` prefix, `snake_case`, `_t` suffix, `UPPER_SNAKE`
   macros; Doxygen on public API in `include/`.
-- `clang-format` (Google-based, 4 spaces, 100 cols). Note: the installed
-  clang-format may differ from the version pinned in `.pre-commit-config.yaml`.
+- `clang-format` (Google-based, 4 spaces, 100 cols), **pinned to 23.1.1** in
+  `.pre-commit-config.yaml` and the Docker images; `check_quality.sh` enforces
+  it (install locally with `pip install clang-format==23.1.1`).
 - Conventional Commits (`feat(dll): ...`); add `[Unreleased]` to `CHANGELOG.md`.
 - `no-commit-to-branch` blocks `main`/`develop`. Work on a `fix/*`/`feature/*`
   topic branch and open the PR against `own_dev`.
