@@ -285,7 +285,7 @@ flowchart TD
 
 ### 6.1 请求长度如何确定
 
-ISR 路径在第二个字节（CKT）到达后，用 `iolink_dll_expected_req_len()`（`src/dll.c:1826`）决定长度：
+ISR 路径在第二个字节（CKT）到达后，用 `iolink_dll_expected_req_len()` 决定长度：
 
 - Type-0：读 2 字节；Page/Diagnosis/ISDU 写 3 字节；
 - Type-1/2：`2 + pd_out_len_current + (写 ? od_width : 0)`；
@@ -367,12 +367,12 @@ flowchart TD
 
 | 请求 | 应答 | 代码 |
 | :--- | :--- | :--- |
-| Type-0 READ（任意通道） | `OD + CKS` | `dll_handle_operate_type0()`，`src/dll.c:651` |
+| Type-0 READ（任意通道） | `OD + CKS` | `dll_handle_operate_type0()` |
 | Type-0 WRITE（任意通道） | `CKS` | 同上 / `dll_handle_type0_od_write()` |
-| Type-1/2 READ（Process/Page/Diag/ISDU） | `[OD...][PD-in...]CKS` | `dll_handle_operate_type1_2()`，`src/dll.c:704` |
+| Type-1/2 READ（Process/Page/Diag/ISDU） | `[OD...][PD-in...]CKS` | `dll_handle_operate_type1_2()` |
 | Type-1/2 WRITE（Process/Page/Diag/ISDU） | `[PD-in...]CKS` | 同上 |
-| MasterCommand 页写 | `CKS` | `dll_handle_master_command()`，`src/dll.c:524` |
-| FALLBACK MasterCommand | `CKS`，随后 T_FBD 到期回 SIO | `dll_handle_fallback_command()`，`src/dll.c:455` |
+| MasterCommand 页写 | `CKS` | `dll_handle_master_command()` |
+| FALLBACK MasterCommand | `CKS`，随后 T_FBD 到期回 SIO | `dll_handle_fallback_command()` |
 
 CKS 位含义：
 
@@ -486,9 +486,9 @@ sequenceDiagram
   - `IDLE` → No Service `0x00`。
 - `COUNT`：继续从 `resp_idx` 顺序读取；若剩余不足 `od_len`，补 `0x00`。
 - 读完后 `RESPONSE_READY → IDLE`。
-- ISR 双泵另有一套快照分段逻辑 `dll_isr_isdu_od()`（`src/dll.c:1956`），使用 `isr_isdu_resp_buf`、`isr_isdu_idx`、`isr_isdu_seg_idx`、`isr_isdu_last_flowctrl`，不直接修改主 ISDU 传输状态。
+- ISR 双泵另有一套快照分段逻辑 `dll_isr_isdu_od()`，使用 `isr_isdu_resp_buf`、`isr_isdu_idx`、`isr_isdu_seg_idx`、`isr_isdu_last_flowctrl`，不直接修改主 ISDU 传输状态。
 
-响应组帧（`isdu_frame_response()`，`src/isdu.c:270`）：
+响应组帧（`isdu_frame_response()`）：
 
 | 情况 | 首字节 | 后续 |
 | :--- | :--- | :--- |
@@ -526,7 +526,7 @@ flowchart TD
 
 ### 7.5 SystemCommand 映射
 
-`handle_system_command()`（`src/isdu.c:822`）处理：
+`handle_system_command()` 处理：
 
 | 命令 | 行为 |
 | :--- | :--- |
@@ -765,24 +765,24 @@ stateDiagram-v2
 
 | 迁移 | 触发 | 代码 |
 | :--- | :--- | :--- |
-| 初始化 → STARTUP | `iolink_dll_init()` | `src/dll.c:865` |
-| STARTUP → AWAITING_COMM | SIO + `detect_wakeup()>0` | `src/dll.c:1475` |
-| STARTUP/AWAITING → PREOPERATE | 首个有效帧 | `src/dll.c:1126` |
-| PREOPERATE → ESTAB_COM | MC=0x0F transition command | `dll_handle_preoperate()`，`src/dll.c:547` |
-| PREOPERATE → ESTAB_COM | 0x99 DeviceOperate | `dll_apply_master_command()`，`src/dll.c:503` |
-| PREOPERATE → OPERATE | 0x98 PDOperate | `src/dll.c:498` |
-| ESTAB_COM → OPERATE | 首个非 transition 有效帧 | `src/dll.c:1191` |
-| → PREOPERATE | 0x9A DevicePreoperate | `src/dll.c:494` |
-| → FALLBACK | 0x5A Fallback | `dll_handle_fallback_command()`，`src/dll.c:455` |
-| FALLBACK/OPERATE/ESTAB/PREOP → STARTUP | T_FBD 到期，切 COM1 + SIO | `src/dll.c:1452` |
-| AWAITING/STARTUP → STARTUP | T_DSIO 到期，切 COM1 + SIO | `src/dll.c:1434` |
-| 任意 → STARTUP | 0x97 DeviceStartup 或非 OPERATE/ESTAB 的类型错误 | `dll_protocol_error_to_startup()`，`src/dll.c:426` |
-| OPERATE → COMM_DISABLED | SystemCommand 0x83 Back-to-box，服务 ≥3 帧后 | `src/dll.c:1066` |
+| 初始化 → STARTUP | `iolink_dll_init()` | `dll_set_state(STARTUP)` |
+| STARTUP → AWAITING_COMM | SIO + `detect_wakeup()>0` | `dll_handle_sio_wakeup()` |
+| STARTUP/AWAITING → PREOPERATE | 首个有效帧 | `dll_handle_valid_frame()` |
+| PREOPERATE → ESTAB_COM | MC=0x0F transition command | `dll_handle_preoperate()` |
+| PREOPERATE → ESTAB_COM | 0x99 DeviceOperate | `dll_apply_master_command()` |
+| PREOPERATE → OPERATE | 0x98 PDOperate | `dll_apply_master_command()` |
+| ESTAB_COM → OPERATE | 首个非 transition 有效帧 | `dll_dispatch_estab_com()` |
+| → PREOPERATE | 0x9A DevicePreoperate | `dll_apply_master_command()` |
+| → FALLBACK | 0x5A Fallback | `dll_handle_fallback_command()` |
+| FALLBACK/OPERATE/ESTAB/PREOP → STARTUP | T_FBD 到期，切 COM1 + SIO | `dll_check_fallback_deadline()` |
+| AWAITING/STARTUP → STARTUP | T_DSIO 到期，切 COM1 + SIO | `dll_check_dsio_deadline()` |
+| 任意 → STARTUP | 0x97 DeviceStartup 或非 OPERATE/ESTAB 的类型错误 | `dll_protocol_error_to_startup()` |
+| OPERATE → COMM_DISABLED | SystemCommand 0x83 Back-to-box，服务 ≥3 帧后 | `dll_frame_drop_if_stopped()` |
 
 补充：
 
 - 首个有效帧把 STARTUP/AWAITING_COMM 迁到 PREOPERATE 后，如果该帧本身就是 transition command（`MC=0x0F`），同一次 `dll_process_complete_frame()` 会继续调用 `dll_handle_preoperate()`，因此可以一帧内连续进入 ESTAB_COM。
-- `master_lost` 只在 OPERATE 且 `master_lost_cycles != 0` 时计算，超过阈值只置提示位并触发 `on_master_lost`，**不改变状态和波特率**（`src/dll.c:1405`，`include/iolinki/device.h:207`）。
+- `master_lost` 只在 OPERATE 且 `master_lost_cycles != 0` 时计算，超过阈值只置提示位并触发 `on_master_lost`，**不改变状态和波特率**（`dll_update_master_lost()`，`include/iolinki/device.h:207`）。
 - CRC 错误不会单独导致 STARTUP；类型非法在 OPERATE/ESTAB 只计数并丢帧，避免链路抖动。
 - `COMM_DISABLED` 会把 PHY 置为 `INACTIVE`，之后主循环不再处理帧，直到重新上电。
 - 无 `detect_wakeup` 的 PHY 在初始化时直接进入 SDCI，因此不会出现 AWAITING_COMM/T_DSIO 路径。
@@ -793,17 +793,17 @@ stateDiagram-v2
 
 | 定时/条件 | 代码行为 | 位置 |
 | :--- | :--- | :--- |
-| `t_pd` 上电保护窗口 | 截止前排空 RX，收到字节计 `t_pd_violations` 并返回 | `src/dll.c:1466` |
-| `T_WU` 唤醒后等待 | 仅在 timing enforcement 开启时，AWAITING_COMM 在截止前不处理 | `src/dll.c:1512` |
-| `T_DSIO` | 唤醒后无有效报文，超时 → COM1 + SIO + STARTUP | `src/dll.c:1434` |
-| `T_FBD` | Fallback 后 `3*MinCycleTime`（上限 500ms；MinCycleTime 为 0 时用 500ms）→ COM1 + SIO + STARTUP | `src/dll.c:1452` |
-| `t_cycle` | 帧间隔 < MinCycleTime → `t_cycle_violations` + COMM_TIMING | `src/dll.c:1086` |
-| `t_ren` | 应答发送结束 - 周期开始 > 500us → `t_ren_violations` + COMM_TIMING | `src/dll.c:812` |
-| master lost | OPERATE 下按 MasterCycleTime 计数，饱和 0xFF，仅提示 | `src/dll.c:1405` |
-| 1 s idle | `last_activity_ms` 超过 1 s → `timeout_errors++`，不改状态 | `src/dll.c:1423` |
-| CRC 错误 | 计数；连续 3 次触发 COMM_CRC 事件 | `src/dll.c:1277` |
-| 类型错误 | OPERATE/ESTAB 丢帧计数；其他状态 COMM_FRAMING + STARTUP | `src/dll.c:1255` |
-| ISR RX 超时 | `iolink_dll_on_rx_timeout()` → `timeout_errors++`、清 RX 状态 | `src/dll.c:2758` |
+| `t_pd` 上电保护窗口 | 截止前排空 RX，收到字节计 `t_pd_violations` 并返回 | `dll_check_t_pd()` |
+| `T_WU` 唤醒后等待 | 仅在 timing enforcement 开启时，AWAITING_COMM 在截止前不处理 | `dll_wakeup_window_active()` |
+| `T_DSIO` | 唤醒后无有效报文，超时 → COM1 + SIO + STARTUP | `dll_check_dsio_deadline()` |
+| `T_FBD` | Fallback 后 `3*MinCycleTime`（上限 500ms；MinCycleTime 为 0 时用 500ms）→ COM1 + SIO + STARTUP | `dll_check_fallback_deadline()` |
+| `t_cycle` | 帧间隔 < MinCycleTime → `t_cycle_violations` + COMM_TIMING | `dll_check_cycle_time()` |
+| `t_ren` | 应答发送结束 - 周期开始 > 500us → `t_ren_violations` + COMM_TIMING | `dll_send_od_reply()` |
+| master lost | OPERATE 下按 MasterCycleTime 计数，饱和 0xFF，仅提示 | `dll_update_master_lost()` |
+| 1 s idle | `last_activity_ms` 超过 1 s → `timeout_errors++`，不改状态 | `dll_check_idle_timeout()` |
+| CRC 错误 | 计数；连续 3 次触发 COMM_CRC 事件 | `dll_handle_frame_error()` |
+| 类型错误 | OPERATE/ESTAB 丢帧计数；其他状态 COMM_FRAMING + STARTUP | `dll_handle_frame_error()` |
+| ISR RX 超时 | `iolink_dll_on_rx_timeout()` → `timeout_errors++`、清 RX 状态 | `iolink_dll_on_rx_timeout()` |
 
 错误计数通过 `iolink_dll_get_stats()` 暴露；部分错误同时触发事件，事件 flag 进入 CKS bit7。
 
@@ -859,6 +859,23 @@ flowchart LR
 - `config->lock/unlock` 优先用于 `dll_send()` 暂存和 PD-in 发布；如果未配置，则退回平台临界区。
 - 平台默认临界区是空实现（`src/platform.c`）；本路径必须提供真实实现或应用锁。
 
+### 12.1 主上下文 / ISR 上下文契约
+
+`src/dll.c` 的 ISR 分区只允许调用下表中的 ISR-only 或“双上下文安全”函数：
+
+| 函数 | 上下文 | 说明 |
+| :--- | :--- | :--- |
+| `iolink_dll_process_isr()`、`iolink_dll_on_rx_timeout()`、`iolink_dll_on_stack_tick()` | ISR-only | 数据中断入口 |
+| `dll_isr_*()` | ISR-only | 双泵快路径、TYPE-0 应答、ISDU 快照读 |
+| `dll_publish_isr_frame()`、`dll_mc_is_isdu_write()` | ISR-only | 邮箱发布与 ISDU 写判定 |
+| `dll_set_state()` | 双上下文 | ISR 内 `in_isr` 只入队，不执行回调/临界区 |
+| `dll_master_activity()` | 双上下文 | ISR 在帧结束时刷新活动时间戳 |
+| `dll_pd_status_flags()`、`dll_apply_master_command()`、`dll_type_allowed()` | 双上下文 | 只读 ctx 或状态迁移 |
+| `dll_process_complete_frame()`、`dll_consume_isr_mailbox()`、`dll_check_*()`、`dll_update_master_lost()` | 主上下文 | 主泵调度与定时监督 |
+| `dll_send()` → `dll_isr_start_staged_tx()` | 主 → ISR 缝合点 | 主泵暂存应答，ISR 负责发送 |
+
+禁止在 ISR 分区调用：`iolink_isdu_process()`、事件引擎、`iolink_dll_flush_state_callbacks()`、应用回调（`state_cb`、`vendor_service` 等）。
+
 ---
 
 ## 13. 编译期分流与集成注意
@@ -896,21 +913,21 @@ flowchart LR
 | 设备初始化/主循环 | `src/device.c:298`、`src/device.c:381` |
 | 应用状态回调 | `src/device.c:25` |
 | PD 更新/读取 | `src/device.c:481`、`src/device.c:558` |
-| DLL 初始化/主处理 | `src/dll.c:865`、`src/dll.c:1333` |
-| 状态迁移 | `src/dll.c:69` |
-| 完整帧校验/分流 | `src/dll.c:1066` |
-| 通道分发 | `src/dll.c:584` |
-| Type-0 / Type-1/2 应答 | `src/dll.c:651`、`src/dll.c:704` |
-| MasterCommand/Fallback | `src/dll.c:486`、`src/dll.c:455` |
-| ISR 泵 | `src/dll.c:2392`、`src/dll.c:2734` |
-| ISR Type-0 快路径 | `src/dll.c:2096` |
-| ISR ISDU 快照读 | `src/dll.c:1956` |
-| ISR ISDU 写暂存 | `src/dll.c:2225` |
-| ISDU 传输写/读 | `src/isdu.c:322`、`src/isdu.c:411` |
-| ISDU 执行/组帧 | `src/isdu.c:1536`、`src/isdu.c:181`、`src/isdu.c:270` |
-| ISDU 索引分发 | `src/isdu.c:1439` |
-| SystemCommand | `src/isdu.c:822` |
-| Data Storage 服务 | `src/isdu.c:1297`、`src/data_storage.c:242`、`src/data_storage.c:296` |
+| DLL 初始化/主处理 | `iolink_dll_init()`、`iolink_dll_process()` |
+| 状态迁移 | `dll_set_state()` |
+| 完整帧校验/分流 | `dll_process_complete_frame()` |
+| 通道分发 | `dll_handle_valid_frame()` |
+| Type-0 / Type-1/2 应答 | `dll_handle_operate_type0()`、`dll_handle_operate_type1_2()` |
+| MasterCommand/Fallback | `dll_handle_master_command()`、`dll_handle_fallback_command()` |
+| ISR 泵 | `iolink_dll_process_isr()`、`dll_isr_drain()` |
+| ISR Type-0 快路径 | `dll_isr_handle_type0()` |
+| ISR ISDU 快照读 | `dll_isr_isdu_od()` |
+| ISR ISDU 写暂存 | `dll_isr_consume_isdu_write()` |
+| ISDU 传输写/读 | `iolink_isdu_od_write()`、`iolink_isdu_od_read()` |
+| ISDU 执行/组帧 | `isdu_execute_request()`、`isdu_decode_service()`、`isdu_frame_response()` |
+| ISDU 索引分发 | `handle_standard_commands()` |
+| SystemCommand | `handle_system_command()` |
+| Data Storage 服务 | `handle_data_storage()`、`src/data_storage.c:242`、`src/data_storage.c:296` |
 | 参数持久化 | `src/params.c:179`、`src/params.c:106` |
 | 事件 | `src/events.c:158`、`src/events.c:212`、`src/events.c:262` |
 | 校验 | `src/crc.c:58` |
