@@ -91,6 +91,7 @@ run_config() {
 
     rm -rf "$dir"
     mkdir -p "$dir"
+    # shellcheck disable=SC2086 # intentional word splitting of the option list
     if ! cmake -S "$ROOT" -B "$dir" \
             "-DCMAKE_BUILD_TYPE=$build_type" \
             "-DCMAKE_C_FLAGS=$cflags" \

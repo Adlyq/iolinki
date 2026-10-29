@@ -46,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The unit suite compiles with `-UNDEBUG` so `assert()`-based tests keep testing
   in Release instead of becoming no-ops.
 
+### Added (tooling)
+- `tools/coverage.sh`: gcovr line/branch summary (and optional HTML) for `src/`.
+  Local only; no coverage threshold in CI yet.
+- `shellcheck` now lints the maintained CI/test scripts in `check_quality.sh`
+  and in a dedicated CI job.
+
 ### Tests
 - Characterization tests for the byte RX CHK/gap frame end: a short or
   incomplete M-sequence is discarded and only a real truncation is counted as a

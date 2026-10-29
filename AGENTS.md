@@ -16,8 +16,8 @@ cmake -B build && cmake --build build && (cd build && ctest --output-on-failure)
 ctest --test-dir build -R test_dll
 
 # Quality script: strict -Werror build at Debug (-O0) and Release (-O3), plus
-# cppcheck. MISRA, clang-format and Doxygen run only when installed, and
-# MISRA/format only fail the script with IOLINKI_MISRA_ENFORCE=1 /
+# cppcheck and shellcheck. MISRA, clang-format and Doxygen run only when
+# installed, and MISRA/format only fail the script with IOLINKI_MISRA_ENFORCE=1 /
 # IOLINKI_FORMAT_ENFORCE=1.
 ./check_quality.sh
 
@@ -25,6 +25,10 @@ ctest --test-dir build -R test_dll
 # platform must build; BYTE/BYTE configs also run the suite. Required for any
 # change touching IOLINK_* switches or an #if in src/ and include/.
 ./tools/build_matrix.sh
+
+# Coverage summary for src/ (requires gcovr; local only, no CI threshold).
+# Add --html for build_coverage/coverage/.
+./tools/coverage.sh
 ```
 
 ## Build / platform gotchas

@@ -93,6 +93,21 @@ jobs:
       - name: Test
         run: ctest --test-dir build_release --output-on-failure
 
+  # Lint the maintained CI/test scripts. Keep this list in sync with the
+  # shellcheck step in check_quality.sh.
+  lint-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+      - name: Lint shell scripts
+        run: |
+          shellcheck -S warning tools/build_matrix.sh tools/coverage.sh \
+            test_all.sh check_quality.sh .docker_test_entrypoint.sh
+
   # Delivery gate for compile-time configurations: every feature toggle, ISR
   # granularity and platform must at least build; the BYTE/BYTE configurations
   # also run the unit suite.
