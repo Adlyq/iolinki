@@ -1414,12 +1414,9 @@ static uint64_t dll_read_u64(const uint64_t* value)
     return snapshot;
 }
 
-void iolink_dll_process(iolink_dll_ctx_t* ctx)
+/** @brief Consume the ISR master-activity flag (timestamp only, no cycle count). */
+static void dll_take_isr_master_activity(iolink_dll_ctx_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->phy == NULL)) {
-        return;
-    }
-
     if (ctx->isr_master_activity != 0U) {
         ctx->isr_master_activity = 0U;
         /* Timestamp only: the Back-to-box cycle count is advanced exactly once
@@ -1427,61 +1424,49 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
          * dll_process_complete_frame for a main-answered one). */
         dll_master_activity_ts(ctx);
     }
+}
 
-    /* Restore the operating COM before the SIO/power-on early returns: a
-     * recovery drop to COM1 must not leave the UART on the wrong baudrate. */
-    dll_restore_operating_baudrate(ctx);
+/**
+ * @brief Hand an ISR-staged ISDU write to the transport.
+ *
+ * The ISR only stages write octets; the main pump owns the transport and the
+ * response buffer. Copy the staged OD under a short critical section, then run
+ * the (possibly slow) execute step with interrupts enabled.
+ */
+static void dll_drain_staged_isdu_write(iolink_dll_ctx_t* ctx)
+{
+    uint8_t staged_fc = 0U;
+    uint8_t staged_len = 0U;
+    uint8_t staged_od[IOLINK_OD_MAX_SIZE];
+    bool drained = false;
 
-    /* Process acyclic ISDU state machine. In the two-pump transport the ISR
-     * only stages ISDU write octets; the main pump owns the transport and the
-     * response buffer. Drain the staged write under a short critical section,
-     * then run the (possibly slow) execute step with interrupts enabled. */
-    {
-        uint8_t staged_fc = 0U;
-        uint8_t staged_len = 0U;
-        uint8_t staged_od[IOLINK_OD_MAX_SIZE];
-        bool drained = false;
-
-        iolink_critical_enter();
-        if (ctx->isr_od_staged != 0U) {
-            staged_fc = ctx->isr_od_stage_flowctrl;
-            staged_len = ctx->isr_od_stage_len;
-            if (staged_len > sizeof(staged_od)) {
-                staged_len = (uint8_t) sizeof(staged_od);
-            }
-            for (uint8_t i = 0U; i < staged_len; i++) {
-                staged_od[i] = ctx->isr_od_stage[i];
-            }
-            ctx->isr_od_staged = 0U;
-            ctx->isdu_isr_consumed = 0U;
-            /* New request activity: force the next RESPONSE_READY to refresh
-             * the ISR response snapshot (even for a same-length response). */
-            ctx->isr_isdu_resp_valid = 0U;
-            drained = true;
+    iolink_critical_enter();
+    if (ctx->isr_od_staged != 0U) {
+        staged_fc = ctx->isr_od_stage_flowctrl;
+        staged_len = ctx->isr_od_stage_len;
+        if (staged_len > sizeof(staged_od)) {
+            staged_len = (uint8_t) sizeof(staged_od);
         }
-        iolink_critical_exit();
-
-        if (drained) {
-            iolink_isdu_od_write(&ctx->isdu, staged_fc, staged_od, staged_len);
+        for (uint8_t i = 0U; i < staged_len; i++) {
+            staged_od[i] = ctx->isr_od_stage[i];
         }
+        ctx->isr_od_staged = 0U;
+        ctx->isdu_isr_consumed = 0U;
+        /* New request activity: force the next RESPONSE_READY to refresh the
+         * ISR response snapshot (even for a same-length response). */
+        ctx->isr_isdu_resp_valid = 0U;
+        drained = true;
     }
-    iolink_isdu_process(&ctx->isdu);
-    /* The service may have completed here: refresh the ISR response snapshot. */
-    dll_isdu_sync_snapshot(ctx);
+    iolink_critical_exit();
 
-    dll_poll_diagnostics(ctx);
-
-    if (ctx->isr_master_activity != 0U) {
-        /* A frame may have completed in the ISR after the early check above. */
-        ctx->isr_master_activity = 0U;
-        dll_master_activity_ts(ctx);
+    if (drained) {
+        iolink_isdu_od_write(&ctx->isdu, staged_fc, staged_od, staged_len);
     }
+}
 
-    /* Sampled after the late activity refresh so the elapsed-time subtraction
-     * below cannot see a timestamp newer than now_ms. */
-    uint32_t now_ms = iolink_time_get_ms();
-    uint64_t now_ms64 = iolink_time_get_us() / 1000U;
-
+/** @brief ST-style master-lost supervision from completed frames/RX timeouts. */
+static void dll_update_master_lost(iolink_dll_ctx_t* ctx, uint32_t now_ms)
+{
     if ((ctx->state == IOLINK_DLL_STATE_OPERATE) && (ctx->master_lost_cycles != 0U)) {
         uint32_t cycle_ms = (dll_master_cycle_us(ctx) + 999U) / 1000U;
         if (cycle_ms == 0U) {
@@ -1499,18 +1484,28 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
         ctx->master_lost_count = 0U;
         ctx->master_lost = false;
     }
+}
 
+/**
+ * @brief 1 s idle-link diagnostic counter.
+ *
+ * This is not the ST-style master-lost hint; it does not leave the current DL
+ * mode, so a late master can resume on the existing mode/baudrate.
+ */
+static void dll_check_idle_timeout(iolink_dll_ctx_t* ctx, uint32_t now_ms)
+{
     if ((ctx->last_activity_ms != 0U) && (now_ms - ctx->last_activity_ms > 1000U)) {
-        /* Idle-link diagnostic counter: this is not the ST-style master-lost
-         * hint (computed above from completed frames/RX timeouts). It does not
-         * leave the current DL mode; a late master can resume on the existing
-         * mode/baudrate. */
         ctx->timeout_errors++;
         ctx->last_activity_ms = now_ms;
     }
+}
 
-    /* Table 47 T10: a wake-up without a valid message within T_DSIO returns the
-       device to SIO. Only applies while still waiting for the first message. */
+/**
+ * @brief Table 47 T10: a wake-up without a valid message within T_DSIO returns
+ * the device to SIO. Only applies while still waiting for the first message.
+ */
+static void dll_check_dsio_deadline(iolink_dll_ctx_t* ctx, uint64_t now_ms64)
+{
     const uint64_t dsio_deadline = dll_read_u64(&ctx->dsio_deadline_ms);
     if ((ctx->phy_mode != IOLINK_PHY_MODE_SIO) && (dsio_deadline != 0U) &&
         ((ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) ||
@@ -1525,10 +1520,15 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
             ctx->frame_index = 0U;
         }
     }
+}
 
-    /* Table 47 T8/T9 + Table 43: after a FALLBACK MasterCommand the device
-       switches to SIO after T_FBD (3 MasterCycleTimes, at most 500 ms) at the
-       latest. The reply was already sent when the command was handled. */
+/**
+ * @brief Table 47 T8/T9 + Table 43: after a FALLBACK MasterCommand the device
+ * switches to SIO after T_FBD (3 MasterCycleTimes, at most 500 ms). The reply
+ * was already sent when the command was handled.
+ */
+static void dll_check_fallback_deadline(iolink_dll_ctx_t* ctx, uint64_t now_ms64)
+{
     const uint64_t fallback_deadline = dll_read_u64(&ctx->fallback_deadline_ms);
     if ((fallback_deadline != 0U) &&
         ((ctx->state == IOLINK_DLL_STATE_FALLBACK) || (ctx->state == IOLINK_DLL_STATE_OPERATE) ||
@@ -1542,88 +1542,166 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
             ctx->frame_index = 0U;
         }
     }
+}
 
-    if (dll_t_pd_active(ctx)) {
-        if (dll_drain_rx(ctx)) {
-            ctx->timing_errors++;
-            ctx->t_pd_violations++;
-            DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING, IOLINK_EVENT_TYPE_WARNING);
-        }
-        return;
+/**
+ * @brief Enforce the t_PD guard window.
+ *
+ * @return true when the guard is active and the caller must return without
+ *         processing a mailbox frame.
+ */
+static bool dll_check_t_pd(iolink_dll_ctx_t* ctx)
+{
+    if (!dll_t_pd_active(ctx)) {
+        return false;
     }
-
-    if (ctx->phy_mode == IOLINK_PHY_MODE_SIO) {
-        if ((ctx->frame_index == 0U) && dll_phy_has_wakeup(ctx)) {
-            if (dll_phy_detect_wakeup(ctx) > 0) {
-                ctx->wakeup_seen = true;
-                dll_set_state(ctx, IOLINK_DLL_STATE_AWAITING_COMM);
-                ctx->wakeup_deadline_us = iolink_time_get_us() + IOLINK_T_WU_US;
-                /* Table 47 T10: without a valid message the device returns to
-                   SIO within T_DSIO (60..300 ms, default 300 ms). */
-                ctx->dsio_deadline_ms = iolink_time_get_us() / 1000U + IOLINK_T_DSIO_MS;
-                iolink_dll_set_sdci_mode(ctx);
-                /* A wake-up starts a fresh communication-establishment window.
-                   Reset the inactivity timer so a re-wake after a prior exchange
-                   is not immediately killed by the stale activity timestamp. */
-                ctx->last_activity_ms = iolink_time_get_ms();
-                dll_master_activity(ctx); /* ST StackOnWakeUp restarts Timer B */
-            }
-        }
-        return;
+    if (dll_drain_rx(ctx)) {
+        ctx->timing_errors++;
+        ctx->t_pd_violations++;
+        DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING, IOLINK_EVENT_TYPE_WARNING);
     }
+    return true;
+}
 
+/**
+ * @brief SIO: detect a C/Q wake-up and start the communication window.
+ *
+ * @return true when the DLL is (or stays) in SIO mode and the caller must
+ *         return.
+ */
+static bool dll_handle_sio_wakeup(iolink_dll_ctx_t* ctx)
+{
+    if (ctx->phy_mode != IOLINK_PHY_MODE_SIO) {
+        return false;
+    }
+    if ((ctx->frame_index == 0U) && dll_phy_has_wakeup(ctx)) {
+        if (dll_phy_detect_wakeup(ctx) > 0) {
+            ctx->wakeup_seen = true;
+            dll_set_state(ctx, IOLINK_DLL_STATE_AWAITING_COMM);
+            ctx->wakeup_deadline_us = iolink_time_get_us() + IOLINK_T_WU_US;
+            /* Table 47 T10: without a valid message the device returns to SIO
+               within T_DSIO (60..300 ms, default 300 ms). */
+            ctx->dsio_deadline_ms = iolink_time_get_us() / 1000U + IOLINK_T_DSIO_MS;
+            iolink_dll_set_sdci_mode(ctx);
+            /* A wake-up starts a fresh communication-establishment window.
+               Reset the inactivity timer so a re-wake after a prior exchange
+               is not immediately killed by the stale activity timestamp. */
+            ctx->last_activity_ms = iolink_time_get_ms();
+            dll_master_activity(ctx); /* ST StackOnWakeUp restarts Timer B */
+        }
+    }
+    return true;
+}
+
+/** @brief ST Timer A: a byte gap inside a frame aborts it and re-listens. */
+static void dll_check_t_byte(iolink_dll_ctx_t* ctx)
+{
     if ((ctx->frame_index > 0U) && (ctx->enforce_timing) && (ctx->t_byte_limit_us > 0U)) {
         const uint64_t last_byte_us = dll_read_u64(&ctx->last_byte_us);
         if (last_byte_us != 0U) {
-            uint64_t now_us = iolink_time_get_us();
+            const uint64_t now_us = iolink_time_get_us();
             if (now_us - last_byte_us > (uint64_t) ctx->t_byte_limit_us) {
                 ctx->timing_errors++;
                 ctx->t_byte_violations++;
                 ctx->framing_errors++;
                 DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING,
                                   IOLINK_EVENT_TYPE_WARNING);
-                /* ST Timer A timeout: abort the current frame and re-listen;
-                   the DL mode is not changed. */
+                /* Abort the current frame and re-listen; the DL mode is not
+                   changed. */
                 ctx->frame_index = 0U;
             }
         }
     }
+}
 
+/** @brief T_WU: keep waiting for the first message inside the wake-up window. */
+static bool dll_wakeup_window_active(iolink_dll_ctx_t* ctx)
+{
     if ((ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) && (ctx->enforce_timing)) {
         if ((ctx->wakeup_deadline_us != 0U) && (iolink_time_get_us() < ctx->wakeup_deadline_us)) {
-            return;
+            return true;
         }
+    }
+    return false;
+}
+
+/**
+ * @brief Move an ISR-published frame into the main context and dispatch it.
+ *
+ * Copy the mailbox and snapshot the eager flag under a short critical section,
+ * then run the validation/dispatch unlocked. ctx->isdu / ctx->events are either
+ * main-owned or take their own short critical section.
+ */
+static void dll_consume_isr_mailbox(iolink_dll_ctx_t* ctx)
+{
+    if (ctx->isr_frame_ready == 0U) {
+        return;
+    }
+    iolink_critical_enter();
+    uint8_t n = ctx->isr_frame_len;
+    if (n > sizeof(ctx->frame_buf)) {
+        n = (uint8_t) sizeof(ctx->frame_buf);
+    }
+    (void) memcpy(ctx->frame_buf, (const void*) ctx->isr_frame_ptr, n);
+    ctx->frame_index = n;
+    ctx->req_len = n;
+    /* Snapshot/clear the eager flag for *this* frame before releasing the
+     * mailbox; a new ISR frame may then set isr_eager_replied without being
+     * clobbered by this frame's processing. */
+    ctx->frame_eager = ctx->isr_eager_replied;
+    ctx->isr_eager_replied = 0U;
+    ctx->isr_frame_ready = 0U;
+    iolink_critical_exit();
+    /* A mailbox frame is received traffic: refresh the inactivity and byte-gap
+       timestamps exactly like the streaming RX path. Without this the 1 s idle
+       supervision resets a healthy ISR link. */
+    ctx->last_activity_ms = iolink_time_get_ms();
+    ctx->last_byte_us = iolink_time_get_us();
+    dll_process_complete_frame(ctx);
+}
+
+void iolink_dll_process(iolink_dll_ctx_t* ctx)
+{
+    if ((ctx == NULL) || (ctx->phy == NULL)) {
+        return;
     }
 
-    /* The ISR pump assembles one complete request and publishes it to the
-     * mailbox; run the shared validation/dispatch here in the main context. */
-    if (ctx->isr_frame_ready != 0U) {
-        /* Consume the mailbox with a short handoff critical section only: copy
-         * the frame, snapshot the eager flag and release the slot. The frame
-         * dispatch runs unlocked afterwards; ctx->isdu / ctx->events are either
-         * main-owned or take their own short critical section. */
-        iolink_critical_enter();
-        uint8_t n = ctx->isr_frame_len;
-        if (n > sizeof(ctx->frame_buf)) {
-            n = (uint8_t) sizeof(ctx->frame_buf);
-        }
-        (void) memcpy(ctx->frame_buf, (const void*) ctx->isr_frame_ptr, n);
-        ctx->frame_index = n;
-        ctx->req_len = n;
-        /* Snapshot/clear the eager flag for *this* frame before releasing the
-         * mailbox; a new ISR frame may then set isr_eager_replied without being
-         * clobbered by this frame's processing. */
-        ctx->frame_eager = ctx->isr_eager_replied;
-        ctx->isr_eager_replied = 0U;
-        ctx->isr_frame_ready = 0U;
-        iolink_critical_exit();
-        /* A mailbox frame is received traffic: refresh the inactivity and
-           byte-gap timestamps exactly like the streaming RX path. Without
-           this the 1 s idle supervision resets a healthy ISR link. */
-        ctx->last_activity_ms = iolink_time_get_ms();
-        ctx->last_byte_us = iolink_time_get_us();
-        dll_process_complete_frame(ctx);
+    dll_take_isr_master_activity(ctx);
+
+    /* Restore the operating COM before the SIO/power-on early returns: a
+     * recovery drop to COM1 must not leave the UART on the wrong baudrate. */
+    dll_restore_operating_baudrate(ctx);
+
+    dll_drain_staged_isdu_write(ctx);
+    iolink_isdu_process(&ctx->isdu);
+    /* The service may have completed here: refresh the ISR response snapshot. */
+    dll_isdu_sync_snapshot(ctx);
+    dll_poll_diagnostics(ctx);
+    /* A frame may have completed in the ISR during the steps above. */
+    dll_take_isr_master_activity(ctx);
+
+    /* Sampled after the late activity refresh so the elapsed-time subtraction
+     * below cannot see a timestamp newer than now_ms. */
+    const uint32_t now_ms = iolink_time_get_ms();
+    const uint64_t now_ms64 = iolink_time_get_us() / 1000U;
+
+    dll_update_master_lost(ctx, now_ms);
+    dll_check_idle_timeout(ctx, now_ms);
+    dll_check_dsio_deadline(ctx, now_ms64);
+    dll_check_fallback_deadline(ctx, now_ms64);
+
+    if (dll_check_t_pd(ctx)) {
+        return;
     }
+    if (dll_handle_sio_wakeup(ctx)) {
+        return;
+    }
+    dll_check_t_byte(ctx);
+    if (dll_wakeup_window_active(ctx)) {
+        return;
+    }
+
+    dll_consume_isr_mailbox(ctx);
 
     /* Undo a same-call recovery drop to COM1 (SDCI path reaches here). */
     dll_restore_operating_baudrate(ctx);
