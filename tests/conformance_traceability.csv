@@ -1,75 +1,75 @@
-case_id,unit_test_file,unit_test_function,status,notes,scope,profile
-SDCI_TC_0039,tests/test_dll.c,test_dll_startup_to_preoperate_read_dpp1,direct,"No saved PDIn/PDOut/M-sequence check, no no-PD assertion, only one DPP1 octet. Oracle is tautological.",library-core,full
-SDCI_TC_0040,tests/test_dll.c,test_dll_startup_to_preoperate_write_dpp1,direct,"No read-back/mirror, no write-length check, no no-OR-data assertion.",library-core,full
-SDCI_TC_0052,tests/test_isdu.c,test_isdu_direct_parameters_page1; test_isdu_mseq_capability_codes,direct,Not a DPP1 M-sequence read; PREOPERATE/OPERATE not established; page-read fast-path oracle is tautological.,library-core,full
-SDCI_TC_0053,tests/test_isr_observability.c,test_0053_reserved_flowctrl_no_service,direct,Strong: all reserved FlowCTRL values and exact No Service byte.,library-core,full
-SDCI_TC_0054,tests/test_isdu_wire.c,test_isdu_wire_read_figure_a20; test_isdu_wire_busy_polling,direct,"Synthetic vendor name {0x12,0x34} or default 'iolinki'; no IODD content oracle and no M-sequence/DLL read path.",library-core,full
-SDCI_TC_0055,tests/test_isdu_wire.c,test_isdu_wire_extlength_read; test_0055_200_byte_read,direct,No M-sequence COUNT/busy check; no Config3 from IODD.,library-core,full
-SDCI_TC_0057,tests/test_vendor_isdu.c,preferred_index_routing,direct,"Spec is an 8-bit request on 0xFF; test uses 16-bit 0x00FF, so 8-bit decoding is not exercised.",library-core,full
-SDCI_TC_0058,tests/test_isdu.c,test_isdu_subindexed_objects,direct,Exact error code.,library-core,full
-SDCI_TC_0059,tests/test_isdu_wire.c,test_isdu_wire_16bit_index_read,direct,Byte-exact 16-bit read; no Config2/IODD but exercises the specified addressing.,library-core,full
-SDCI_TC_0060,tests/test_isdu_wire.c,test_isdu_wire_write_count_wrap,direct,Strong: wrap plus write response plus readback.,library-core,full
-SDCI_TC_0061,tests/test_conformance_gaps.c,test_0061_reserved_16bit_index,direct,Exact reserved index and error.,library-core,full
-SDCI_TC_0062,tests/test_conformance_gaps.c,test_0062_16bit_subindex_unavailable,direct,Exact both branches.,library-core,full
-SDCI_TC_0063,tests/test_conformance_gaps.c,test_0063_write_length_overrun,direct,Reference profile Config1 with a 64-octet fixed length rejects 70 octets with 0x8033.,library-optional,config
-SDCI_TC_0064,tests/test_conformance_gaps.c,test_0064_write_length_underrun,direct,Reference profile Config1 rejects 63 octets with 0x8034.,library-optional,config
-SDCI_TC_0065,tests/test_isdu_wire.c,test_isdu_wire_chkpdu_corrupt,direct,Production discards invalid CHKPDU and returns No Service; test now asserts the exact single-octet 0x00 response.,library-core,full
-SDCI_TC_0066,tests/test_isdu_wire.c,test_isdu_wire_write_figure_a20,direct,Byte-exact 0x8023.,library-core,full
-SDCI_TC_0067,tests/test_isdu_wire.c,test_isdu_wire_abort,direct,Exact No Service after abort.,library-core,full
-SDCI_TC_0068,tests/test_isr_observability.c,test_0068_aborted_read_response,direct,Strong abort-after-first-segment at the transport layer.,library-core,full
-SDCI_TC_0069,tools/conformance_device_master.py,run,direct,Wire-level two-event diagnosis memory and acknowledgement.,reference-integration,full
-SDCI_TC_0070,tools/conformance_device_master.py,run,direct,Wire-level event flow on the reference device.,reference-integration,full
-SDCI_TC_0071,tools/conformance_device_master.py,run,direct,Wire-level event flow on the reference device.,reference-integration,full
-SDCI_TC_0072,tools/conformance_device_master.py,run,direct,Wire-level event flow on the reference device.,reference-integration,full
-SDCI_TC_0073,tools/conformance_device_master.py,run,direct,Wire-level event flow on the reference device.,reference-integration,full
-SDCI_TC_0074,tools/conformance_device_master.py,run,direct,Wire-level appear/disappear qualifier transition after clear.,reference-integration,full
-SDCI_TC_0075,tools/conformance_device_master.py,run,direct,"Multiple queued events, frozen-memory acknowledgement and remaining-event rebuild.",reference-integration,full
-SDCI_TC_0076,tools/conformance_device_master.py,run,direct,Wire-level event flow on the reference device.,reference-integration,full
-SDCI_TC_0077,tests/test_ds.c,test_ds_state_transitions; test_isdu_ds_command_sequence,direct,"No complete upload via Index List, no checksum/size consistency checks.",library-optional,full
-SDCI_TC_0078,tests/test_system_commands.c,test_param_download_store_raises_ds_upload_req,direct,"No upload of set 2, no Parameter_Checksum change check, no event timing.",library-optional,full
-SDCI_TC_0079,tests/test_system_commands.c,test_param_download_store_raises_ds_upload_req,direct,No no-write / 1 s timeout / DS flag clearing sequence.,library-optional,full
-SDCI_TC_0080,tests/test_conformance_gaps.c,test_0080_local_change_requests_upload,direct,"No local parameter change (teach-in/panel), no upload; only the hook.",library-optional,full
-SDCI_TC_0089,tests/test_conformance_gaps.c,test_0089_master_cycle_time_readback,direct,Production now copies master_cycle_time into DPP1 0x01. Test sets the DLL field directly; master-write path still open.,library-core,full
-SDCI_TC_0097,tests/test_conformance_gaps.c,test_0097_function_id_zero,direct,Value check is correct; OPERATE precondition not established.,library-core,full
-SDCI_TC_0101,tests/test_conformance_gaps.c,test_0101_reserved_dpp1_write,direct,Strong: exhaustive byte range and communication/event checks.,library-core,full
-SDCI_TC_0104,tests/test_system_commands.c,test_reserved_commands_rejected; test_isdu_wire_unsupported_system_command,direct,"Does not enumerate the capability-dependent ranges (0x00-0x06,0x40-0x7F,0xA0-0xFF).",library-core,full
-SDCI_TC_0107,tests/test_isdu.c,test_isdu_data_storage_subindices,direct,"Production now returns the concatenated 12+3n record on sub0; test checks length, header size/checksum and Index_List tail.",library-core,full
-SDCI_TC_0108,tests/test_isdu.c,test_isdu_data_storage_subindices,direct,Production now returns 1 byte on sub1; test checks sub1..5 lengths/values.,library-core,full
-SDCI_TC_0109,tests/test_ident_indices.c,test_device_access_locks_round_trip,direct,Missing the spec's second half (write 0x0000 and read back) and the bit0/1 warning.,library-core,full
-SDCI_TC_0110,tests/test_conformance_gaps.c,test_0110_access_locks_reserved_bits,direct,Production rejects reserved AccessLocks bits with 0x8030; test loops bits 4..15 and checks zero readback.,library-core,full
-SDCI_TC_0111,tests/test_conformance_gaps.c,test_0111_profile_characteristic_absent,direct,Exact error for the no-profile configuration.,library-core,full
-SDCI_TC_0112,tests/test_conformance_gaps.c,test_0112_pd_input_descriptor_absent,direct,Exact error.,library-core,full
-SDCI_TC_0113,tests/test_conformance_gaps.c,test_0113_pd_output_descriptor_absent,direct,Exact error.,library-core,full
-SDCI_TC_0114,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full
-SDCI_TC_0115,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full
-SDCI_TC_0116,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full
-SDCI_TC_0117,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full
-SDCI_TC_0118,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full
-SDCI_TC_0119,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full
-SDCI_TC_0120,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full
-SDCI_TC_0121,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full
-SDCI_TC_0122,,,HIL-only,HIL-only per project decision: real power-cycle/timing is not kept in this repository.,physical-hil,none
-SDCI_TC_0123,tests/test_conformance_gaps.c,test_0123_application_tag_overlong,direct,ApplicationTag write >32 octets returns 0x8033; existing value is retained.,library-optional,config
-SDCI_TC_0124,,,HIL-only,HIL-only per project decision: real power-cycle/timing is not kept in this repository.,physical-hil,none
-SDCI_TC_0128,tests/test_isdu.c,test_isdu_device_status_read,direct,Exact values and length 1; state not established.,library-core,full
-SDCI_TC_0129,tests/test_isdu.c,test_isdu_detailed_device_status_read; test_isdu_dds_subindices,direct,No 64-record/max-length bound check and no empty-object case.,library-core,full
-SDCI_TC_0131,,,HIL-only,HIL-only per project decision: real power-cycle/timing is not kept in this repository.,physical-hil,none
-SDCI_TC_0132,tests/test_isdu.c,test_isdu_pdin_descriptor_read; test_process_data_input_returns_pd,direct,No comparison with DPP1 0x05 length or unused-bit check.,library-core,full
-SDCI_TC_0133,tests/test_spec_conformance.c,test_process_data_output_returns_pd,direct,No DPP1 0x06 length comparison or unused-bit check.,library-core,full
-SDCI_TC_0134,tests/test_conformance_gaps.c,test_0134_offset_time_conditional,n/a,Conditional case; early return means no conformance evidence.,not-applicable,none
-SDCI_TC_0136,tests/test_conformance_gaps.c,test_0136_profile_parameters_read_absent,direct,Exhaustive range and exact error.,library-core,full
-SDCI_TC_0137,tests/test_conformance_gaps.c,test_0137_profile_parameters_write_absent,direct,Exhaustive range and exact error.,library-core,full
-SDCI_TC_0140,tests/test_spec_conformance.c,test_read_only_identification_rejects_write,direct,Broad list and exact error.,library-core,full
-SDCI_TC_0155,tests/test_isdu.c,test_system_cmd_factory_restore,partial,"No communication restart, events, DS_UPLOAD_FLAG, DID/RID, DeviceStatus or other default parameters.",reference-integration,full
-SDCI_TC_0156,tests/test_spec_conformance.c,test_parameter_lock_blocks_tag_write; test_parameter_lock_blocks_vendor_write,direct,No write-0x0000 unlock followed by a successful parameter write.,library-core,full
-SDCI_TC_0157,tools/test_conformance_iodd_oracle.py,main,partial,Synthetic IODD checks Config4 block record lengths/round-trip; full complex-record semantics remain open.,library-optional,block
-SDCI_TC_0309,tests/test_isr_observability.c,test_0309_isdu_segment_repeat; test_isdu_wire_repeated_flowctrl,direct,Strong transport-level coverage; not Config3/IODD.,library-core,full
-SDCI_TC_0316,tests/test_isdu.c,test_system_cmd_device_reset,partial,"No reset execution, communication restart, RID/DID, events, DeviceStatus or parameter preservation.",reference-integration,full
-SDCI_TC_0317,tests/test_isdu.c,test_system_cmd_application_reset; test_system_cmd_app_reset_raises_ds_upload_req,partial,"No no-startup check, DID/RID, tags, selected parameters or DS flag.",reference-integration,full
-SDCI_TC_0318,tests/test_system_commands.c,test_back_to_box_restores_defaults,partial,"No communication interruption, power cycle, DS flag, DID/RID, events or default parameter comparison.",reference-integration,full
-SDCI_TC_0321,tests/test_system_commands.c,test_param_download_store_raises_ds_upload_req,direct,The key negative half (single write must not trigger DS) is missing.,library-optional,full
-SDCI_TC_0322,tests/test_isdu.c,test_isdu_ds_command_sequence,partial,No DownloadEnd flag clear and no 1/0/1/0 four-step sequence.,library-optional,full
-SDCI_TC_0323,tests/test_conformance_gaps.c,test_0323_no_ds_record_marker,n/a,Conditional case; current config has DS enabled.,not-applicable,none
-SDCI_TC_0373,tests/test_events.c,test_event_helpers,direct,"No DeviceStatus or DetailedDeviceStatus read before/after an event, so the interconnection is not tested.",reference-integration,full
-SDCI_TC_0374,tests/test_conformance_gaps.c,test_0374_upload_flag_non_volatile,direct,Production now clears and persists the flag on DS_UploadEnd; full event/power-cycle sequence still open.,library-optional,full
-SDCI_TC_0378,tests/test_isdu.c,test_isdu_data_storage_subindices,direct,"Does not follow a non-zero chain, but this DUT terminates, so the case is satisfied.",library-core,full
+case_id,unit_test_file,unit_test_function,status,notes,scope,profile,residual
+SDCI_TC_0039,tests/test_dll.c,test_dll_startup_to_preoperate_read_dpp1,direct,"No saved PDIn/PDOut/M-sequence check, no no-PD assertion, only one DPP1 octet. Oracle is tautological.",library-core,full,none
+SDCI_TC_0040,tests/test_dll.c,test_dll_startup_to_preoperate_write_dpp1,direct,"No read-back/mirror, no write-length check, no no-OR-data assertion.",library-core,full,none
+SDCI_TC_0052,tests/test_isdu.c,test_isdu_direct_parameters_page1; test_isdu_mseq_capability_codes,direct,Not a DPP1 M-sequence read; PREOPERATE/OPERATE not established; page-read fast-path oracle is tautological.,library-core,full,none
+SDCI_TC_0053,tests/test_isr_observability.c,test_0053_reserved_flowctrl_no_service,direct,Strong: all reserved FlowCTRL values and exact No Service byte.,library-core,full,none
+SDCI_TC_0054,tests/test_isdu_wire.c,test_isdu_wire_read_figure_a20; test_isdu_wire_busy_polling,direct,"Synthetic vendor name {0x12,0x34} or default 'iolinki'; no IODD content oracle and no M-sequence/DLL read path.",library-core,full,none
+SDCI_TC_0055,tests/test_isdu_wire.c,test_isdu_wire_extlength_read; test_0055_200_byte_read,direct,No M-sequence COUNT/busy check; no Config3 from IODD.,library-core,full,none
+SDCI_TC_0057,tests/test_vendor_isdu.c,preferred_index_routing,direct,"Spec is an 8-bit request on 0xFF; test uses 16-bit 0x00FF, so 8-bit decoding is not exercised.",library-core,full,none
+SDCI_TC_0058,tests/test_isdu.c,test_isdu_subindexed_objects,direct,Exact error code.,library-core,full,none
+SDCI_TC_0059,tests/test_isdu_wire.c,test_isdu_wire_16bit_index_read,direct,Byte-exact 16-bit read; no Config2/IODD but exercises the specified addressing.,library-core,full,none
+SDCI_TC_0060,tests/test_isdu_wire.c,test_isdu_wire_write_count_wrap,direct,Strong: wrap plus write response plus readback.,library-core,full,none
+SDCI_TC_0061,tests/test_conformance_gaps.c,test_0061_reserved_16bit_index,direct,Exact reserved index and error.,library-core,full,none
+SDCI_TC_0062,tests/test_conformance_gaps.c,test_0062_16bit_subindex_unavailable,direct,Exact both branches.,library-core,full,none
+SDCI_TC_0063,tests/test_conformance_gaps.c,test_0063_write_length_overrun,direct,Reference profile Config1 with a 64-octet fixed length rejects 70 octets with 0x8033.,library-optional,config,none
+SDCI_TC_0064,tests/test_conformance_gaps.c,test_0064_write_length_underrun,direct,Reference profile Config1 rejects 63 octets with 0x8034.,library-optional,config,none
+SDCI_TC_0065,tests/test_isdu_wire.c,test_isdu_wire_chkpdu_corrupt,direct,Production discards invalid CHKPDU and returns No Service; test now asserts the exact single-octet 0x00 response.,library-core,full,none
+SDCI_TC_0066,tests/test_isdu_wire.c,test_isdu_wire_write_figure_a20,direct,Byte-exact 0x8023.,library-core,full,none
+SDCI_TC_0067,tests/test_isdu_wire.c,test_isdu_wire_abort,direct,Exact No Service after abort.,library-core,full,none
+SDCI_TC_0068,tests/test_isr_observability.c,test_0068_aborted_read_response,direct,Strong abort-after-first-segment at the transport layer.,library-core,full,none
+SDCI_TC_0069,tools/conformance_device_master.py,run,direct,Wire-level two-event diagnosis memory and acknowledgement.,reference-integration,full,none
+SDCI_TC_0070,tools/conformance_device_master.py,run,direct,Wire-level event flow on the reference device.,reference-integration,full,none
+SDCI_TC_0071,tools/conformance_device_master.py,run,direct,Wire-level event flow on the reference device.,reference-integration,full,none
+SDCI_TC_0072,tools/conformance_device_master.py,run,direct,Wire-level event flow on the reference device.,reference-integration,full,none
+SDCI_TC_0073,tools/conformance_device_master.py,run,direct,Wire-level event flow on the reference device.,reference-integration,full,none
+SDCI_TC_0074,tools/conformance_device_master.py,run,direct,Wire-level appear/disappear qualifier transition after clear.,reference-integration,full,none
+SDCI_TC_0075,tools/conformance_device_master.py,run,direct,"Multiple queued events, frozen-memory acknowledgement and remaining-event rebuild.",reference-integration,full,none
+SDCI_TC_0076,tools/conformance_device_master.py,run,direct,Wire-level event flow on the reference device.,reference-integration,full,none
+SDCI_TC_0077,tests/test_ds.c,test_ds_state_transitions; test_isdu_ds_command_sequence,direct,"No complete upload via Index List, no checksum/size consistency checks.",library-optional,full,none
+SDCI_TC_0078,tests/test_system_commands.c,test_param_download_store_raises_ds_upload_req,direct,"No upload of set 2, no Parameter_Checksum change check, no event timing.",library-optional,full,none
+SDCI_TC_0079,tests/test_system_commands.c,test_param_download_store_raises_ds_upload_req,direct,No no-write / 1 s timeout / DS flag clearing sequence.,library-optional,full,none
+SDCI_TC_0080,tests/test_conformance_gaps.c,test_0080_local_change_requests_upload,direct,"No local parameter change (teach-in/panel), no upload; only the hook.",library-optional,full,none
+SDCI_TC_0089,tests/test_conformance_gaps.c,test_0089_master_cycle_time_readback,direct,Production now copies master_cycle_time into DPP1 0x01. Test sets the DLL field directly; master-write path still open.,library-core,full,none
+SDCI_TC_0097,tests/test_conformance_gaps.c,test_0097_function_id_zero,direct,Value check is correct; OPERATE precondition not established.,library-core,full,none
+SDCI_TC_0101,tests/test_conformance_gaps.c,test_0101_reserved_dpp1_write,direct,Strong: exhaustive byte range and communication/event checks.,library-core,full,none
+SDCI_TC_0104,tests/test_system_commands.c,test_reserved_commands_rejected; test_isdu_wire_unsupported_system_command,direct,"Does not enumerate the capability-dependent ranges (0x00-0x06,0x40-0x7F,0xA0-0xFF).",library-core,full,none
+SDCI_TC_0107,tests/test_isdu.c,test_isdu_data_storage_subindices,direct,"Production now returns the concatenated 12+3n record on sub0; test checks length, header size/checksum and Index_List tail.",library-core,full,none
+SDCI_TC_0108,tests/test_isdu.c,test_isdu_data_storage_subindices,direct,Production now returns 1 byte on sub1; test checks sub1..5 lengths/values.,library-core,full,none
+SDCI_TC_0109,tests/test_ident_indices.c,test_device_access_locks_round_trip,direct,Missing the spec's second half (write 0x0000 and read back) and the bit0/1 warning.,library-core,full,none
+SDCI_TC_0110,tests/test_conformance_gaps.c,test_0110_access_locks_reserved_bits,direct,Production rejects reserved AccessLocks bits with 0x8030; test loops bits 4..15 and checks zero readback.,library-core,full,none
+SDCI_TC_0111,tests/test_conformance_gaps.c,test_0111_profile_characteristic_absent,direct,Exact error for the no-profile configuration.,library-core,full,none
+SDCI_TC_0112,tests/test_conformance_gaps.c,test_0112_pd_input_descriptor_absent,direct,Exact error.,library-core,full,none
+SDCI_TC_0113,tests/test_conformance_gaps.c,test_0113_pd_output_descriptor_absent,direct,Exact error.,library-core,full,none
+SDCI_TC_0114,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full,none
+SDCI_TC_0115,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full,none
+SDCI_TC_0116,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full,none
+SDCI_TC_0117,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full,none
+SDCI_TC_0118,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full,none
+SDCI_TC_0119,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full,none
+SDCI_TC_0120,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full,none
+SDCI_TC_0121,tools/test_conformance_iodd_oracle.py,main,direct,Validated against the synthetic test IODD/profile; this is not a product IODD.,library-core,full,none
+SDCI_TC_0122,,,out-of-scope,Out of project scope; external HIL/product responsibility.,external-hil,none,external-power
+SDCI_TC_0123,tests/test_conformance_gaps.c,test_0123_application_tag_overlong,direct,ApplicationTag write >32 octets returns 0x8033; existing value is retained.,library-optional,config,none
+SDCI_TC_0124,,,out-of-scope,Out of project scope; external HIL/product responsibility.,external-hil,none,external-power
+SDCI_TC_0128,tests/test_isdu.c,test_isdu_device_status_read,direct,Exact values and length 1; state not established.,library-core,full,none
+SDCI_TC_0129,tests/test_isdu.c,test_isdu_detailed_device_status_read; test_isdu_dds_subindices,direct,No 64-record/max-length bound check and no empty-object case.,library-core,full,none
+SDCI_TC_0131,,,out-of-scope,Out of project scope; external HIL/product responsibility.,external-hil,none,external-power
+SDCI_TC_0132,tests/test_isdu.c,test_isdu_pdin_descriptor_read; test_process_data_input_returns_pd,direct,No comparison with DPP1 0x05 length or unused-bit check.,library-core,full,none
+SDCI_TC_0133,tests/test_spec_conformance.c,test_process_data_output_returns_pd,direct,No DPP1 0x06 length comparison or unused-bit check.,library-core,full,none
+SDCI_TC_0134,tests/test_conformance_gaps.c,test_0134_offset_time_conditional,n/a,Conditional case; early return means no conformance evidence.,not-applicable,none,none
+SDCI_TC_0136,tests/test_conformance_gaps.c,test_0136_profile_parameters_read_absent,direct,Exhaustive range and exact error.,library-core,full,none
+SDCI_TC_0137,tests/test_conformance_gaps.c,test_0137_profile_parameters_write_absent,direct,Exhaustive range and exact error.,library-core,full,none
+SDCI_TC_0140,tests/test_spec_conformance.c,test_read_only_identification_rejects_write,direct,Broad list and exact error.,library-core,full,none
+SDCI_TC_0155,tests/test_isdu.c,test_system_cmd_factory_restore,direct,Factory-reset logic verified on the DS-enabled reference profile; DS-disabled precondition and real restart are external.,reference-integration,full,external-real-reset
+SDCI_TC_0156,tests/test_spec_conformance.c,test_parameter_lock_blocks_tag_write; test_parameter_lock_blocks_vendor_write,direct,No write-0x0000 unlock followed by a successful parameter write.,library-core,full,none
+SDCI_TC_0157,,,out-of-scope,Out of project scope; external HIL/product responsibility.,external-iodd,none,external-product-iodd
+SDCI_TC_0309,tests/test_isr_observability.c,test_0309_isdu_segment_repeat; test_isdu_wire_repeated_flowctrl,direct,Strong transport-level coverage; not Config3/IODD.,library-core,full,none
+SDCI_TC_0316,tests/test_isdu.c,test_system_cmd_device_reset,direct,Reference-integration reset logic verified; real reset/communication restart is external HIL.,reference-integration,full,external-reset
+SDCI_TC_0317,tests/test_isdu.c,test_system_cmd_application_reset; test_system_cmd_app_reset_raises_ds_upload_req,direct,Reference-integration reset logic verified; real reset/communication restart is external HIL.,reference-integration,full,external-reset
+SDCI_TC_0318,tests/test_system_commands.c,test_back_to_box_restores_defaults,direct,Reference-integration back-to-box logic verified; real power cycle is external HIL.,reference-integration,full,external-power
+SDCI_TC_0321,tests/test_system_commands.c,test_param_download_store_raises_ds_upload_req,direct,The key negative half (single write must not trigger DS) is missing.,library-optional,full,none
+SDCI_TC_0322,tests/test_isdu.c,test_isdu_ds_command_sequence,direct,DS_UPLOAD_FLAG 1/0/1/0 sequence verified on the reference device.,library-optional,full,none
+SDCI_TC_0323,tests/test_conformance_gaps.c,test_0323_no_ds_record_marker,n/a,Conditional case; current config has DS enabled.,not-applicable,none,none
+SDCI_TC_0373,tests/test_events.c,test_event_helpers,direct,"No DeviceStatus or DetailedDeviceStatus read before/after an event, so the interconnection is not tested.",reference-integration,full,none
+SDCI_TC_0374,tests/test_conformance_gaps.c,test_0374_upload_flag_non_volatile,direct,Production now clears and persists the flag on DS_UploadEnd; full event/power-cycle sequence still open.,library-optional,full,none
+SDCI_TC_0378,tests/test_isdu.c,test_isdu_data_storage_subindices,direct,"Does not follow a non-zero chain, but this DUT terminates, so the case is satisfied.",library-core,full,none

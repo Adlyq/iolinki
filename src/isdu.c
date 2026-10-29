@@ -130,7 +130,7 @@ static iolink_device_info_ctx_t* isdu_info_ctx(iolink_isdu_ctx_t* ctx)
 /** @brief Effective identity for this ISDU context. */
 static const iolink_device_info_t* isdu_info(const iolink_isdu_ctx_t* ctx)
 {
-    iolink_device_info_ctx_t* info_ctx =
+    const iolink_device_info_ctx_t* info_ctx =
         ((ctx != NULL) && (ctx->params_ctx != NULL)) ? ctx->params_ctx->device_info : NULL;
     return (info_ctx != NULL) ? iolink_device_info_ctx_get(info_ctx) : iolink_device_info_get();
 }
@@ -138,7 +138,7 @@ static const iolink_device_info_t* isdu_info(const iolink_isdu_ctx_t* ctx)
 /** @brief Effective access locks for this ISDU context. */
 static uint16_t isdu_access_locks(const iolink_isdu_ctx_t* ctx)
 {
-    iolink_device_info_ctx_t* info_ctx =
+    const iolink_device_info_ctx_t* info_ctx =
         ((ctx != NULL) && (ctx->params_ctx != NULL)) ? ctx->params_ctx->device_info : NULL;
     return (info_ctx != NULL) ? iolink_device_info_ctx_get_access_locks(info_ctx)
                               : iolink_device_info_get_access_locks();

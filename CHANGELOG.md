@@ -65,6 +65,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Parallel conformance hardening raised the audit to 104 direct, 8 partial,
   19 n/a and 11 HIL-only; the remaining partials are
   `0034/0083/0155/0157/0316/0317/0318/0322`.
+- Project scope now separates external HIL/physical/product-IODD work:
+  final in-scope audit is 111 direct / 19 n/a / 12 out-of-scope, with
+  `residual` reasons for external timing, reset, power and physical checks.
+- Added `tools/check_conformance_traceability.py` and a CTest gate for the
+  audit matrix and conformance annotations.
+- Fixed the pre-existing `src/dll.c` `-Wconversion` issue; `check_quality.sh`
+  now passes.
 - `tests/conformance_audit.csv` and `tests/conformance_traceability.csv`:
   `scope` and `profile` columns separate library, reference-integration,
   physical-HIL, IODD-oracle and product-integration work.

@@ -2199,7 +2199,8 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
     /* READ: [OD][PD-in]CKS from buf. WRITE: [PD-in]CKS from buf+od_width (the
      * PD-in is always stored after the configured OD header). */
     const uint8_t* base = read ? buf : (buf + ctx->od_width);
-    const uint16_t total = (uint16_t) ctx->od_width + (uint16_t) ctx->pd_in_len + 1U;
+    const uint16_t total =
+        (uint16_t) (((uint16_t) ctx->od_width) + ((uint16_t) ctx->pd_in_len) + 1U);
     const uint16_t out_len = read ? total : (uint16_t) (total - (uint16_t) ctx->od_width);
     if (out_len > (uint16_t) IOLINK_PD_REPLY_MAX) {
         return false;

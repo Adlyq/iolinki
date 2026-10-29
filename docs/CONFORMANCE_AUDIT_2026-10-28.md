@@ -473,6 +473,11 @@ After this audit, the following production changes and tests were added:
   acknowledgement bug (removing a reordered queue head) is fixed.
 - Parallel hardening result: 104 direct / 8 partial / 19 n/a / 11 HIL-only.
   Remaining partials: `0034/0083/0155/0157/0316/0317/0318/0322`.
+- Final project scope separates external work: 111 direct / 19 n/a /
+  12 out-of-scope. External items are HIL, physical-layer and product-IODD
+  responsibilities; `residual` records the reason. No in-scope partials remain.
+- `tools/check_conformance_traceability.py` enforces the matrix and annotations
+  in CTest.
 
 The per-case status in `tests/conformance_audit.csv` is updated accordingly.
 The remaining gaps are still listed there; this section does not claim full
