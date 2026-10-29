@@ -46,16 +46,16 @@ ctest --test-dir build -R test_dll
   (reserved indices, ErrorCount, ProductURI, ProcessDataInput/Output, read-only
   WRITE rejection, Parameter lock, string fixedLength).
 - The stack uses a single ISR two-pump transport: the data interrupt frames
-  requests and transmits replies (`src/dll.c`, `iolink_device_process_isr()`),
+  requests and transmits replies (`src/dll_isr.c`, `iolink_device_process_isr()`),
   while the main loop runs the protocol logic. The previous streaming transport
   (`src/frame.c`, `phy->send`/`phy->recv_byte`) was removed.
 
 ## Architecture
 
-- Layered: Application (`include/iolinki/application.h`) -> DLL (`dll.c`) ->
-  PHY vtable (`include/iolinki/phy.h`).
+- Layered: Application (`include/iolinki/application.h`) -> DLL
+  (`dll.c`/`dll_isr.c`) -> PHY vtable (`include/iolinki/phy.h`).
 - **Transport** (`IOLINK_PHY_FEATURE_ISR_PUMP` removed; always on): the ISR
-  frames requests and transmits pre-staged cyclic replies (`src/dll.c`,
+  frames requests and transmits pre-staged cyclic replies (`src/dll_isr.c`,
   `iolink_device_process_isr()`), for low-latency t_A replies on single-octet
   transceivers. Main-context replies are staged and reported through the
   optional `phy->request_service()` hook (the TX hooks then run only in the

@@ -56,6 +56,7 @@ flowchart TB
     subgraph CORE["协议核心"]
         D1["device.c<br/>顶层编排、回调分发"]
         D2["dll.c<br/>组帧、校验、DLL 状态机、定时器、通道分流"]
+        D2I["dll_isr.c<br/>ISR 双泵、eager 应答、ISDU 快照读"]
         D3["isdu.c<br/>ISDU 传输状态机、索引/系统命令服务"]
         D4["data_storage.c<br/>DS 镜像构建/恢复、DS 命令"]
         D5["params.c<br/>可写参数（Tag）管理、NVM"]
@@ -78,12 +79,18 @@ flowchart TB
     A1 --> A2
     A2 --> D1
     D1 --> D2
+    D1 --> D2I
+    D2 --> D2I
+    D2I --> D2
     D1 --> D5
     D1 --> D6
     D1 --> D4
     D2 --> D3
+    D2I --> D3
     D2 --> D7
+    D2I --> D7
     D2 --> D8
+    D2I --> D8
     D3 --> D5
     D3 --> D6
     D3 --> D4
@@ -92,9 +99,11 @@ flowchart TB
     D4 --> S1
     D5 --> S1
     D2 --> P1
+    D2I --> P1
     D3 --> P1
     P1 --> P2
     D2 --> T1
+    D2I --> T1
     D3 --> T1
     D7 --> T1
     D2 --> T2
@@ -104,7 +113,8 @@ flowchart TB
 | 文件 | 职责 | 是否在设备运行数据路径 |
 | :--- | :--- | :--- |
 | `src/device.c` | `iolink_device_init/process`、PD API、应用回调、reset、DS 参数访问适配 | 是 |
-| `src/dll.c` | M-sequence 组帧/校验、DLL 状态机、定时器、PHY 模式/波特率、通道分流、ISR 泵 | 是 |
+| `src/dll.c` | M-sequence 组帧/校验、DLL 状态机、定时器、PHY 模式/波特率、通道分流 | 是 |
+| `src/dll_isr.c` | ISR 双泵：收帧、校验、eager 应答、ISDU 快照读、暂存 TX | 是（中断上下文） |
 | `src/isdu.c` | ISDU 请求收集、索引解析、标准索引/系统命令/DS 服务、响应组帧 | 是 |
 | `src/data_storage.c` | DS 参数集序列化/恢复、DS 状态、DS_Command | 是（启用 DS 时） |
 | `src/params.c` | 三个可写 Tag 的 RAM/NVM 读写、出厂复位 | 是 |
@@ -861,7 +871,7 @@ flowchart LR
 
 ### 12.1 主上下文 / ISR 上下文契约
 
-`src/dll.c` 的 ISR 分区只允许调用下表中的 ISR-only 或“双上下文安全”函数：
+`src/dll_isr.c` 的 ISR 分区只允许调用下表中的 ISR-only 或“双上下文安全”函数：
 
 | 函数 | 上下文 | 说明 |
 | :--- | :--- | :--- |
