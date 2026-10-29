@@ -218,6 +218,84 @@ static size_t isdu_declared_total(const uint8_t* buf, size_t have)
  * handle_standard_commands(); the handler leaves a 2-octet negative marker
  * (response_buf[0]==0x80) or a positive payload in response_buf/response_len.
  */
+/** @brief Decode the service nibble into the read/write header type. */
+static bool isdu_decode_service(iolink_isdu_ctx_t* ctx, uint8_t service)
+{
+    if ((service >= 1U) && (service <= 3U)) {
+        ctx->header.type = IOLINK_ISDU_SERVICE_TYPE_WRITE;
+        return true;
+    }
+    if ((service >= 9U) && (service <= 11U)) {
+        ctx->header.type = IOLINK_ISDU_SERVICE_TYPE_READ;
+        return true;
+    }
+    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+    return false;
+}
+
+/**
+ * @brief Parse the index/subindex fields of a request.
+ *
+ * Index format per Table A.12/A.15. Service 0x1/0x9 = 8-bit index, 0x2/0xA =
+ * 8-bit index + subindex, 0x3/0xB = 16-bit index + subindex.
+ *
+ * @return false when the request was truncated and a negative response was
+ *         produced.
+ */
+static bool isdu_parse_index(iolink_isdu_ctx_t* ctx, const uint8_t* buf, size_t* pos,
+                             size_t payload_end, uint8_t service)
+{
+    if ((buf[0] & 0x0FU) == 1U) {
+        (*pos)++; /* Skip ExtLength octet */
+    }
+
+    const bool two_index = (service == 3U) || (service == 11U);
+    const bool has_sub = (service == 2U) || (service == 3U) || (service == 10U) || (service == 11U);
+
+    if (two_index) {
+        if ((*pos + 1U) >= payload_end) {
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+            return false;
+        }
+        ctx->header.index = (uint16_t) ((uint16_t) buf[*pos] << 8);
+        (*pos)++;
+        ctx->header.index |= buf[(*pos)++];
+    }
+    else {
+        if (*pos >= payload_end) {
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+            return false;
+        }
+        ctx->header.index = buf[(*pos)++];
+    }
+
+    if (has_sub) {
+        if (*pos >= payload_end) {
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+            return false;
+        }
+        ctx->header.subindex = buf[(*pos)++];
+    }
+    return true;
+}
+
+/** @brief Copy the data payload (everything before CHKPDU) into the buffer. */
+static void isdu_copy_payload(iolink_isdu_ctx_t* ctx, const uint8_t* buf, size_t pos, size_t total)
+{
+    if (pos < total) {
+        const size_t data_end = total - 1U; /* exclude CHKPDU */
+        if (data_end > pos) {
+            size_t n = data_end - pos;
+            if (n > sizeof(ctx->buffer)) {
+                n = sizeof(ctx->buffer);
+            }
+            (void) memcpy(ctx->buffer, &buf[pos], n);
+            ctx->buffer_idx = n;
+        }
+    }
+    ctx->header.length = (uint8_t) ctx->buffer_idx;
+}
+
 static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
 {
     ctx->vendor_positive = false;
@@ -231,64 +309,13 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
     ctx->header.subindex = 0U;
     ctx->header.length = 0U;
 
-    if ((service >= 1U) && (service <= 3U)) {
-        ctx->header.type = IOLINK_ISDU_SERVICE_TYPE_WRITE;
-    }
-    else if ((service >= 9U) && (service <= 11U)) {
-        ctx->header.type = IOLINK_ISDU_SERVICE_TYPE_READ;
-    }
-    else {
-        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+    if (!isdu_decode_service(ctx, service)) {
         return;
     }
-
-    if ((buf[0] & 0x0FU) == 1U) {
-        pos++; /* Skip ExtLength octet */
+    if (!isdu_parse_index(ctx, buf, &pos, payload_end, service)) {
+        return;
     }
-
-    /* Index format per Table A.12/A.15. Service 0x1/0x9 = 8-bit index,
-       0x2/0xA = 8-bit index + subindex, 0x3/0xB = 16-bit index + subindex. */
-    const bool two_index = (service == 3U) || (service == 11U);
-    const bool has_sub = (service == 2U) || (service == 3U) || (service == 10U) || (service == 11U);
-
-    if (two_index) {
-        if ((pos + 1U) >= payload_end) {
-            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
-            return;
-        }
-        ctx->header.index = (uint16_t) ((uint16_t) buf[pos] << 8);
-        pos++;
-        ctx->header.index |= buf[pos++];
-    }
-    else {
-        if (pos >= payload_end) {
-            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
-            return;
-        }
-        ctx->header.index = buf[pos++];
-    }
-
-    if (has_sub) {
-        if (pos >= payload_end) {
-            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
-            return;
-        }
-        ctx->header.subindex = buf[pos++];
-    }
-
-    /* Data payload is everything up to the CHKPDU (last octet). */
-    if (pos < total) {
-        size_t data_end = total - 1U; /* exclude CHKPDU */
-        if (data_end > pos) {
-            size_t n = data_end - pos;
-            if (n > sizeof(ctx->buffer)) {
-                n = sizeof(ctx->buffer);
-            }
-            (void) memcpy(ctx->buffer, &buf[pos], n);
-            ctx->buffer_idx = n;
-        }
-    }
-    ctx->header.length = (uint8_t) ctx->buffer_idx;
+    isdu_copy_payload(ctx, buf, pos, total);
 
     /* Parsed: execution is performed by iolink_isdu_process(), keeping the
        transport and the application dispatch separable (and testable). */
