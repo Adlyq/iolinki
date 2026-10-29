@@ -37,9 +37,26 @@
  * [ Subindex (8-bit) ]
  */
 
+/* -------------------------------------------------------------------------
+ * File map
+ *
+ *  - Transport, parsing and shared helpers: chkpdu ... iolink_isdu_od_read
+ *  - Mandatory indices: isdu_check_mandatory_write ... handle_mandatory_indices
+ *  - SystemCommand and Data Storage upload helpers: isdu_clear_ds_upload_req ...
+ *  - Access locks, detailed status, error stats and direct parameters:
+ *    handle_access_locks ... handle_direct_parameters
+ *  - Data Storage services: isdu_append_ds_index_list ... isdu_reject_ds_access
+ *  - Index routing and standard dispatch: isdu_handle_vendor_index ...
+ *  - Public API: iolink_isdu_process ...
+ * ------------------------------------------------------------------------- */
+
 /* ... includes ... */
 
 /* Structs moved to header iolink_isdu_ctx_t */
+
+/* -------------------------------------------------------------------------
+ * Transport, parsing and shared helpers
+ * ------------------------------------------------------------------------- */
 
 /** @brief CHKPDU: XOR of all ISDU octets with the checksum octet read as 0 (A.5.6). */
 static uint8_t chkpdu(const uint8_t* octets, size_t len)
@@ -525,6 +542,10 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_o
     }
 }
 
+/* -------------------------------------------------------------------------
+ * Shared response helpers
+ * ------------------------------------------------------------------------- */
+
 /** @brief Terminate the ISDU service with a two-octet negative response. */
 static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error)
 {
@@ -535,6 +556,10 @@ static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error)
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
+
+/* -------------------------------------------------------------------------
+ * Mandatory indices
+ * ------------------------------------------------------------------------- */
 
 /**
  * @brief Reject a WRITE to a read-only mandatory object.
@@ -856,6 +881,10 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
     }
 }
 
+/* -------------------------------------------------------------------------
+ * SystemCommand and Data Storage upload helpers
+ * ------------------------------------------------------------------------- */
+
 #if IOLINK_FEATURE_SYSTEM_COMMAND
 /** @brief Clear DS_UPLOAD_FLAG when a reset restored the factory set. */
 static void isdu_clear_ds_upload_req(iolink_isdu_ctx_t* ctx)
@@ -1073,6 +1102,10 @@ void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
        negative response (7.3.5.3); discard whatever the ISDU handler staged. */
     isdu_transport_reset(ctx);
 }
+
+/* -------------------------------------------------------------------------
+ * Access locks, detailed status, error stats and direct parameters
+ * ------------------------------------------------------------------------- */
 
 /** @brief Read or write the DeviceAccessLocks parameter (index 0x000C). */
 static void handle_access_locks(iolink_isdu_ctx_t* ctx)
@@ -1374,6 +1407,10 @@ static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
 
+/* -------------------------------------------------------------------------
+ * Data Storage services
+ * ------------------------------------------------------------------------- */
+
 #if IOLINK_FEATURE_DATA_STORAGE
 /** @brief Serve the Data Storage index: backup (read image) or restore (apply image). */
 static size_t isdu_append_ds_index_list(iolink_ds_ctx_t* ds, uint8_t* buf, size_t pos)
@@ -1579,6 +1616,10 @@ static bool isdu_reject_ds_access(iolink_isdu_ctx_t* ctx)
 }
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
+/* -------------------------------------------------------------------------
+ * Index routing and standard dispatch
+ * ------------------------------------------------------------------------- */
+
 /** @brief Serve a device-specific (vendor) index through the application hook. */
 static void isdu_handle_vendor_index(iolink_isdu_ctx_t* ctx)
 {
@@ -1687,6 +1728,10 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
         handle_mandatory_indices(ctx);
     }
 }
+
+/* -------------------------------------------------------------------------
+ * Public API
+ * ------------------------------------------------------------------------- */
 
 void iolink_isdu_process(iolink_isdu_ctx_t* ctx)
 {
