@@ -99,7 +99,10 @@ Docker is the primary and recommended environment for running all `iolinki` test
 ```
 
 ### Local (Requires Manual Dependencies)
-To run tests locally, ensure you have `libcmocka-dev` installed: -B build -DCMAKE_BUILD_TYPE=Debug
+To run tests locally, ensure you have `libcmocka-dev` installed:
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
 cd build && ctest --output-on-failure
 ```
@@ -174,17 +177,20 @@ See [ROADMAP.md](./docs/ROADMAP.md) for detailed development phases.
 
 ## Releases
 
-Official releases are available on [GitHub Releases](https://github.com/w1ne/iolinki/releases).
+Releases for this branch are published from `origin`
+([Adlyq/iolinki](https://github.com/Adlyq/iolinki/releases)). Upstream releases
+at `w1ne/iolinki` are a separate line and are not the source of this branch.
 
 Each release includes:
 - **Test Results**: Complete test suite validation
 - **Build Artifacts**: Pre-compiled examples and test binaries
 - **Documentation**: Updated docs and guides
 
-To create a new release:
+To create a new release (see [docs/MAINTENANCE.md](docs/MAINTENANCE.md)):
 ```bash
-git tag -a v0.1.0 -m "Release version 0.1.0"
-git push origin v0.1.0
+git switch own_dev
+git tag -a vX.Y.Z -m "Release version X.Y.Z"
+git push origin vX.Y.Z
 ```
 
 ## Development Philosophy

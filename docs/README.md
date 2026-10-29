@@ -61,7 +61,7 @@ while the main loop runs the protocol logic. See
 |----------|--------|
 | **Linux** | ✅ Verified |
 | **Bare Metal** | ✅ Verified (Build) |
-| **Code Quality** | ✅ Pass (MISRA/Cppcheck) |
+| **Code Quality** | ✅ Cppcheck enforced; MISRA report-only by default |
 
 ## Quick Start
 

@@ -13,24 +13,33 @@ comments or docs disagree with it, the PDF wins.
 cmake -B build && cmake --build build && (cd build && ctest --output-on-failure)
 
 # One test
-ctest -R test_dll
+ctest --test-dir build -R test_dll
 
-# Quality gate (strict -Werror build, cppcheck, clang-format, MISRA, Doxygen)
+# Quality script: strict -Werror build + cppcheck. MISRA, clang-format and
+# Doxygen run only when installed, and MISRA/format only fail the script with
+# IOLINKI_MISRA_ENFORCE=1 / IOLINKI_FORMAT_ENFORCE=1.
 ./check_quality.sh
 ```
 
 ## Build / platform gotchas
 
 - Platform switch is **`IOLINK_PLATFORM`** (`LINUX` default, `BAREMETAL`).
-- Tests are **silently skipped** when CMocka is absent (`tests/CMakeLists.txt`);
-  install `libcmocka-dev`.
+- Tests are skipped with a CMake **warning** when CMocka is absent
+  (`tests/CMakeLists.txt`); install `libcmocka-dev`. Feature-trimmed builds skip
+  the whole suite (`tests/CMakeLists.txt:1-10`), so use `-DBUILD_TESTING=OFF`
+  for those profiles.
+- The default CMake build sets no `CMAKE_BUILD_TYPE`, so it compiles at the
+  toolchain default (effectively `-O0` with GCC) and `static` helpers are not
+  inlined: do not assume zero-cost abstraction when judging ISR code size or
+  timing. `check_quality.sh` also uses `Debug`; only `Release` / documented
+  embedded flags (`-Os`, see `examples/stm32g0_tiol112/build.sh`) optimise.
 - `tests/test_spec_conformance.c` pins the mandatory ISDU conformance behaviour
   (reserved indices, ErrorCount, ProductURI, ProcessDataInput/Output, read-only
   WRITE rejection, Parameter lock, string fixedLength).
 - The stack uses a single ISR two-pump transport: the data interrupt frames
   requests and transmits replies (`src/dll.c`, `iolink_device_process_isr()`),
-  while the main loop runs the protocol logic. `src/frame.c` and the upstream
-  streaming transport (`phy->send`/`phy->recv_byte`) were removed.
+  while the main loop runs the protocol logic. The previous streaming transport
+  (`src/frame.c`, `phy->send`/`phy->recv_byte`) was removed.
 
 ## Architecture
 
@@ -47,7 +56,9 @@ ctest -R test_dll
 - **No dynamic memory**, context-based (no globals), `<stdint.h>` types,
   negative-int error codes. MISRA C:2012 subset.
 - Compile-time trimming in `include/iolinki/config.h`
-  (`IOLINK_FEATURE_*`, `IOLINK_PHY_FEATURE_*`, `IOLINK_MINIMAL_PROFILE`).
+  (`IOLINK_FEATURE_*`, `IOLINK_PHY_FEATURE_*`, `IOLINK_MINIMAL_PROFILE`,
+  `IOLINK_TINY_PROFILE`, `IOLINK_ISR_RX_MODE`/`IOLINK_ISR_TX_MODE`,
+  `IOLINK_COMPAT_*`, `IOLINK_DS_LEGACY_IMAGE_SUB0`, `IOLINK_PHY_OWNS_LINE_STATE`).
 
 ## Spec-precision notes
 
@@ -57,7 +68,7 @@ ctest -R test_dll
 - VendorID/DeviceID live only in DPP1; no `IOLINK_IDX_VENDOR_ID`/`DEVICE_ID`
   constants are exposed.
 - SystemCommand `Param*` codes are Table B.9 `0x01-0x06`; `0x84` is reserved.
-  These were corrected locally even though upstream still uses older values.
+  These values are mandated by Table B.9 and are the local source of truth.
 
 ## Conventions
 
@@ -66,10 +77,19 @@ ctest -R test_dll
 - `clang-format` (Google-based, 4 spaces, 100 cols). Note: the installed
   clang-format may differ from the version pinned in `.pre-commit-config.yaml`.
 - Conventional Commits (`feat(dll): ...`); add `[Unreleased]` to `CHANGELOG.md`.
-- `no-commit-to-branch` blocks `main`/`develop`; work on a topic branch.
+- `no-commit-to-branch` blocks `main`/`develop`. Work on a `fix/*`/`feature/*`
+  topic branch and open the PR against `own_dev`.
 
-## Multi-repo workflow
+## Maintenance model
 
-- `origin` is the personal fork, `upstream` is `w1ne/iolinki`. This branch is
-  converged onto `upstream/develop` so that upstream changes merge cleanly: new
-  work should be additive (prefer new files over rewriting upstream files).
+- `origin` (`Adlyq/iolinki`) is the authoritative remote. **`own_dev` is the
+  maintained mainline**; `develop` is kept only as a historical snapshot and
+  `main` does not exist.
+- `upstream` (`w1ne/iolinki`) is a read-only reference. This branch is
+  maintained independently: **do not merge or rebase onto `upstream/develop`**,
+  and do not optimise new work for clean merges with upstream (editing existing
+  files is fine).
+- Adopt upstream changes selectively: review the commit, re-implement the
+  behaviour against this codebase, and add a regression test. A single-purpose
+  fix may be sent upstream as a PR. See `docs/MAINTENANCE.md` and
+  `docs/UPSTREAM_DIVERGENCE.md`.

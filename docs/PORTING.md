@@ -28,7 +28,7 @@ The PHY layer provides hardware abstraction for UART communication.
 
 **Location**: `include/iolinki/phy.h`
 
-**Interface**: copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `void* user` first. The transport hooks depend on the configured granularity: `rx_octet`/`tx_octet` in BYTE mode or `rx_frame`/`tx_frame` in FRAME mode, plus `tx_done` and `int_active`. `detect_wakeup`, `set_cq_line`, `get_voltage_mv`, and `is_short_circuit` are optional and may be NULL. `init`, `set_mode`, and `set_baudrate` are required.
+**Interface**: copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `void* user` first. The transport hooks depend on the configured granularity: `rx_octet`/`tx_octet` in BYTE mode or `rx_frame`/`tx_frame` in FRAME mode, plus `tx_done` and `int_active`. `detect_wakeup`, `set_cq_line`, `request_service`, `response_timer_start`/`response_timer_stop`, `stack_timer_start`/`stack_timer_stop`, `get_voltage_mv`, `is_short_circuit` and `get_faults` are optional and may be NULL. `init`, `set_mode`, and `set_baudrate` are required. `request_service()` is the key hook for the ISR TX path: without it a main-context reply cannot be handed to the ISR unless the direct-send fallback is compiled in.
 
 **Implementation Steps**:
 
@@ -82,7 +82,7 @@ uint32_t iolink_time_get_ms(void) {
 }
 
 uint64_t iolink_time_get_us(void) {
-    return IOLINK_US_FROM_MS(iolink_time_get_ms());
+    return iolink_us_from_ms(iolink_time_get_ms());
 }
 ```
 
@@ -99,36 +99,60 @@ uint32_t iolink_time_get_ms(void) {
 }
 
 uint64_t iolink_time_get_us(void) {
-    return IOLINK_US_FROM_MS(g_tick_ms);
+    return iolink_us_from_ms(g_tick_ms);
 }
 ```
 
-### 3. Data Storage (Optional)
+### 3. Persistent Storage (Optional)
 
-Implement persistent storage for Device parameters.
+Parameters, the Data Storage image and the upload flag share one unified NVM
+backend, supplied through `iolink_device_config_t::storage`.
 
-**Interface**:
+**Interface** (`include/iolinki/storage.h`):
 ```c
-typedef struct {
-    int (*load)(uint8_t *data, uint16_t *len);
-    int (*store)(const uint8_t *data, uint16_t len);
-} iolink_ds_storage_api_t;
+typedef struct
+{
+    void* user;
+    int (*read)(void* user, uint32_t offset, uint8_t* buf, size_t len);
+    int (*write)(void* user, uint32_t offset, const uint8_t* buf, size_t len);
+    int (*erase)(void* user, uint32_t offset, size_t len);
+} iolink_storage_api_t;
 ```
 
-**Example** (EEPROM):
+The stack passes **relative** offsets inside a fixed region layout; the
+application adds its physical base address. Size your NVM area with
+`IOLINK_STORAGE_TOTAL_SIZE` and assert it at compile time:
+
 ```c
-static int eeprom_load(uint8_t *data, uint16_t *len) {
-    *len = EEPROM_Read(IOLINK_DS_ADDR, data, IOLINK_DS_MAX_SIZE);
-    return 0;
+static uint8_t g_nvm[IOLINK_STORAGE_TOTAL_SIZE];
+_Static_assert(sizeof(g_nvm) >= IOLINK_STORAGE_TOTAL_SIZE, "NVM region too small");
+```
+
+**Example** (EEPROM mapped at `EEPROM_BASE`):
+```c
+static int eeprom_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
+{
+    (void) user;
+    return (EEPROM_Read(EEPROM_BASE + offset, buf, (uint16_t) len) == 0) ? 0 : -1;
 }
 
-static int eeprom_store(const uint8_t *data, uint16_t len) {
-    return EEPROM_Write(IOLINK_DS_ADDR, data, len);
+static int eeprom_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
+{
+    (void) user;
+    return (EEPROM_Write(EEPROM_BASE + offset, buf, (uint16_t) len) == 0) ? 0 : -1;
 }
 
-const iolink_ds_storage_api_t g_storage_eeprom = {
-    .load = eeprom_load,
-    .store = eeprom_store
+static int eeprom_erase(void* user, uint32_t offset, size_t len)
+{
+    (void) user;
+    return (EEPROM_Erase(EEPROM_BASE + offset, (uint16_t) len) == 0) ? 0 : -1;
+}
+
+static const iolink_storage_api_t g_storage_eeprom = {
+    .user = NULL,
+    .read = eeprom_read,
+    .write = eeprom_write,
+    .erase = eeprom_erase,
 };
 ```
 
@@ -147,7 +171,8 @@ elseif(IOLINK_PLATFORM STREQUAL "STM32")
 endif()
 ```
 
-Build:
+Build (the branch above must be added to `CMakeLists.txt` first; the shipped
+CMake only handles `LINUX` and `BAREMETAL`):
 ```bash
 cmake -B build -DIOLINK_PLATFORM=STM32
 cmake --build build
@@ -261,7 +286,8 @@ The stack can be tuned via `include/iolinki/config.h`. Override the defaults by 
 
 ### Enable Debug Logging
 
-Currently uses `printf()`. Replace with platform-specific logging:
+The core stack does not log. The host `phy_virtual` example uses `printf()`;
+replace it with platform-specific logging in a real port:
 
 ```c
 // In phy_stm32.c

@@ -1,20 +1,26 @@
 # UPSTREAM_DIVERGENCE.md
 
-本文件记录 `own_dev` 相对 `upstream/develop` 的功能分歧，作为同步、cherry-pick 和向上游提 PR 的单一事实来源。
+本文件记录 `own_dev` 相对上游基线的规范/行为分歧，用于**追溯历史**，不是同步计划。
 
-- 基线：`upstream/develop`（`aaefa3e`），`own_dev` 为 `0 behind / 99 ahead`。
+- 基线：`upstream/develop`（`aaefa3e`）。写作时 `own_dev` 为 `0 behind / 114 ahead`
+  （`git rev-list --left-right --count upstream/develop...HEAD`），此数字会变，不要当作目标。
+- 本分支自 2026-10 起独立维护：**不再 merge 或 rebase 上游**，也不按上游 API 重贴补丁。
+  上游补丁的采纳流程见 [MAINTENANCE.md](MAINTENANCE.md)。
+- 部分规范纠偏已经以 PR 形式提交上游（见 §8）。上游是否合入不影响本分支的实现与测试。
 - 上游的线层 conformance（A.1.6 校验、CKS 标志、CKT 分发、ISDU FlowCTRL/CHKPDU、Table 58 事件内存、T_REN/T_WU/T_DSIO/T_FBD）已合入 develop，我们继承，**不在本表重复**。
 - 本表只列"我们 ahead、上游缺失或仍为旧值/非规范"的分歧。
 
-## 分类图例
+## 分类图例（历史分组）
 
-| 标记 | 含义 | 处理 | PR |
-| :--- | :--- | :--- | :--- |
-| `PR#1` | 无争议的规范强制纠偏 | 单独分支 port 到 upstream/develop 提 PR | #44 |
-| `PR#2` | 语义/设计分歧 | 单独分支 + 设计说明提 PR | #45 |
-| `PR#3` | PD 数据索引 + ProfileCharacteristic ArrayT | 单独分支提 PR | #46 |
-| `记录` | 需先按 PDF 定性，暂不 PR | 只记录，待定 | — |
-| `私有` | fork 自有（transport/storage/examples） | 不提 PR | — |
+| 标记 | 含义 |
+| :--- | :--- |
+| `PR#1` | 无争议的规范强制纠偏（曾作为上游 PR #44 的候选集） |
+| `PR#2` | 语义/设计分歧（曾作为上游 PR #45 的候选集） |
+| `PR#3` | PD 数据索引 + ProfileCharacteristic ArrayT（上游 PR #46） |
+| `记录` | 需先按 PDF 定性 |
+| `私有` | fork 自有（transport/storage/examples），不打算提 PR |
+
+> 这些标记只说明历史上的分组，不构成待办。当前采纳方式见 §8。
 
 ---
 
@@ -62,6 +68,9 @@
 | `ProfileCharacteristic 0x000D` | 当作单元素 | ArrayT（sub 0/1，0 时 IDX_NOTAVAIL）`isdu.c:557` | `PR#3` |
 | 未知索引写 → `0x8011` | default `0x11` | `b200e5d` | `PR#1` |
 
+> 表中 `isdu.c:NNN` 为记录时的行号，已随重构漂移；以函数名为准
+> （`handle_mandatory_indices`、`handle_access_locks`、`handle_standard_commands`）。
+
 ## 2. SystemCommand 码（`include/iolinki/protocol.h` + `src/isdu.c`）
 
 | 行为 | 上游 | 我们 | 分类 |
@@ -107,32 +116,32 @@
 
 - 上游：返回 1 字节"PD 长度描述符"。
 - 我们：返回"最后有效的 PD-in 数据"（`a9251fb`）。
-- **规范裁决**：Table B.8 `0x0028 ProcessDataInput … Read last valid Process Data from PDin channel`——**采信我们**，已由 PR#3（#46）提交。
+- **规范裁决**：Table B.8 `0x0028 ProcessDataInput … Read last valid Process Data from PDin channel`——**采信我们**，已通过上游 PR #46 提交。
 
 ### `0x84` / `0x95-0x9A` 的分支口径
 
 - 上游把 `0x95/0x96/0x97` 当 legacy DS 命令、`0x84` 当 SetCommunicationMode。
 - 我们按 Table B.9 / Table B.2 把它们归为 MasterCommand / reserved。
-- 属 PR#1（#44），规范依据见 Table B.9（`0x84-0x9F Reserved`）与 Table B.2。
+- 属 PR#1 候选集（#44），规范依据见 Table B.9（`0x84-0x9F Reserved`）与 Table B.2。
 
 ## 7. fork 私有（不提 PR）
 
 - ISR 双泵 transport（`feat(dll): shared transmit seam + opt-in ISR two-pump` 系列，`src/dll.c`、`phy.h`、`dll.h`）。
 - 统一 NVM 存储后端 + 固定 persistent 区域布局（`feat(storage): unified NVM backend`）。
 - DS 可绑定参数集/访问器（与上游 DS 路线不同）。
-- `frame.c` 主站侧 helper（若删 streaming 后仅测试引用）。
 - virtual_master、STM32G0+L6362A raw PHY 示例、文档。
+- 已删除的 `src/frame.c` 主站侧 helper（随 streaming transport 一起移除）。
 
 ---
 
-## PR 拆分计划
+## 8. 上游 PR 状态（历史）
 
-| PR | 内容 | 对应提交 | 依赖/风险 |
-| :--- | :--- | :--- | :--- |
-| PR#1 | §1 + §2 + §4（索引/SysCmd/DPP1 编码/EventCode 去重） | `6f2f0df`、`b47d9d4`、`8b793d3`、`c797f78`、`b5c3711`、`ad3475f`、`2071e28`、`a49e62d`、`a8e8d22`、`b200e5d`、`accf77c`、`9b73737`、`073141f` | 需适配上游 reentrant 上下文与 storage API |
-| PR#2 | §3（events freeze/disappears/DDS/ack-slots） | `f557be4`、`f901567`、`3e38979`、`766bc8c` | 依赖 PR#1 的索引层？events 与 DDS 耦合，见下 |
-| 暂缓/另议 | §5 DS + Fletcher-32、`0x0028` 语义 | — | 先定 PDF 语义；DS 与上游 checksum 路线冲突 |
+| PR | 内容 | 状态 |
+| :--- | :--- | :--- |
+| #44 | §1 + §2 + §4（索引/SysCmd/DPP1 编码/EventCode 去重） | 已提交；合入与否不影响本分支 |
+| #45 | §3（events freeze/disappears/DDS/ack-slots） | 已提交；若 #44 先合，#45 需按上游 API 调整 |
+| #46 | §1 PD 索引（0x0028/0x0029）+ ProfileCharacteristic ArrayT | 已提交 |
 
-> PR#2 的 DDS 语义（读 pending[]）依赖我们 events 的 pending 生命周期；若 PR#1 先合、PR#2 后合，PR#2 需在 PR#1 之后 rebase。
->
-> 所有 port 都需"按上游 API 重贴行为"，不是 `git cherry-pick` 直接可用——上游已重构为 reentrant 上下文（`iolink_device_info_get()` + 参数 ctx），我们的实现建立在自有 storage/params/DS 上。
+当前采纳方式：**不 merge、不 rebase、不 `git cherry-pick` 整段补丁**。上游若有值得吸收的
+行为，按 [MAINTENANCE.md](MAINTENANCE.md) §5 重实现并补测试；单点规范纠偏可以另开上游
+PR，但本分支的实现不依赖 PR 结果。

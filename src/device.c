@@ -110,8 +110,8 @@ static int device_ds_write(void* user, uint16_t index, uint8_t subindex, const u
  *
  * TYPE_1_2 carries 2 OD octets (code 1), TYPE_1_V 8 octets (code 6) and
  * TYPE_2_V defaults to 2 OD octets (code 5); everything else defaults to 1.
- * TYPE_1_1 keeps 1 here only so the upstream streaming transport's legacy
- * validation is unchanged; the ISR transport rejects TYPE_1_1 outright. */
+ * TYPE_1_1 is rejected at init by the ISR transport; the default of 1 is only
+ * a safe placeholder. */
 static uint8_t device_default_od_width(uint8_t m_seq_type)
 {
     switch (m_seq_type) {
@@ -153,15 +153,14 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
 
     /* Two-pump transport: the ISR frames requests and transmits the pre-staged
      * cyclic reply, so the DLL needs the OD width and whether the bound PHY can
-     * send a staged reply from ISR context. The OD width defaults to upstream's
-     * 1/2 octets; the opt-in 8/32-byte extension is enabled via config.od_width
-     * (drop that extension when upstream gains native support). */
+     * send a staged reply from ISR context. The OD width defaults to the
+     * Table A.10 value; config.od_width selects the 8/32-byte extension. */
     ctx->dll.od_width = ctx->stack_config.od_width;
     if (ctx->dll.od_width == 0U) {
         ctx->dll.od_width = device_default_od_width((uint8_t) ctx->dll.m_seq_type);
     }
     /* The ISR transport uses od_width (0/1/2/8/32) throughout; keep od_len in
-     * sync so no streaming-only 1/2 assumption leaks into this build. */
+     * sync so no legacy 1/2 assumption leaks into this build. */
     ctx->dll.od_len = ctx->dll.od_width;
     ctx->dll.cyclic_reply_precached =
         (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && dll_phy_has_tx(&ctx->dll);

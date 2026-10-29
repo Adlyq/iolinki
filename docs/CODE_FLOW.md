@@ -10,7 +10,7 @@
 - DLL 通信状态机与源码的对应关系；
 - 关键缓冲区、并发边界与定时器。
 
-> 本文只描述 `IOLINK_PHY_FEATURE_ISR_PUMP=1` 的双泵路径；其他构建不在本文范围内。
+> 本文描述 ISR 双泵路径；这是当前唯一的 transport，不再有编译期开关。
 > 事实来源：`include/iolinki/*.h`、`src/*.c` 以及 `docs/IOL-Interface-Spec_10002_V1.1.5_Oct2025/`。
 > 如果代码与规范冲突，以规范 PDF 为准；本文只描述代码当前实际行为。
 
@@ -66,7 +66,7 @@ flowchart TB
 
     subgraph PHY["PHY 抽象层"]
         P1["phy.h<br/>iolink_phy_api_t 函数指针表"]
-        P2["phy_virtual / phy_generic<br/>phy_l6362a / phy_tiol112<br/>platform/zephyr/phy_uart"]
+        P2["phy_virtual / phy_generic<br/>phy_l6362a / phy_tiol112"]
     end
 
     subgraph PLAT["平台层"]
@@ -99,9 +99,6 @@ flowchart TB
     D7 --> T1
     D2 --> T2
     D1 --> T2
-
-    F1["frame.c<br/>仅供测试/参考的主站侧编解码"]:::aux
-    classDef aux stroke-dasharray: 5 5,fill:#fff;
 ```
 
 | 文件 | 职责 | 是否在设备运行数据路径 |
@@ -114,7 +111,6 @@ flowchart TB
 | `src/device_info.c` | VendorID/DeviceID/字符串身份、Access Locks | 是 |
 | `src/events.c` | 事件队列、appears/disappears、Table 58 事件内存、DeviceStatus | 是（启用事件时） |
 | `src/crc.c` | A.1.6 XOR + 8→6 bit 压缩校验 | 是 |
-| `src/frame.c` | Type-0/Type-1 编码、OPERATE 应答解码 | 否；当前由测试使用 |
 | `src/phy_*.c` | PHY 驱动/模拟 | 是（通过 vtable） |
 
 ---
@@ -211,7 +207,7 @@ flowchart TD
 
 ## 5. ISR 双泵模型与主循环
 
-> 本章及全文只描述 `IOLINK_PHY_FEATURE_ISR_PUMP=1` 的双泵路径：数据中断负责收帧、校验和确定性应答；主循环负责 ISDU、事件、诊断、参数和状态机。
+> 本章及全文描述 ISR 双泵路径：数据中断负责收帧、校验和确定性应答；主循环负责 ISDU、事件、诊断、参数和状态机。
 
 ### 5.1 ISR 侧流程
 
@@ -869,7 +865,6 @@ flowchart LR
 
 | 开关 | 影响 |
 | :--- | :--- |
-| `IOLINK_PHY_FEATURE_ISR_PUMP` | 本文固定为 1（ISR 双泵） |
 | `IOLINK_ISR_RX_MODE` | `RX BYTE` 或 `RX FRAME` |
 | `IOLINK_ISR_TX_MODE` | `TX BYTE` 或 `TX FRAME` |
 | `IOLINK_PHY_FEATURE_ISR_TX_ONLY` | 1=必须有 `request_service()`，否则计 `isr_tx_dropped` |

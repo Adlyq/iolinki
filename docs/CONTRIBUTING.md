@@ -4,9 +4,11 @@
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/w1ne/iolinki.git
+    git clone git@github.com:Adlyq/iolinki.git
     cd iolinki
     ```
+    `w1ne/iolinki` is the upstream reference used for comparison only; this
+    repository is maintained independently (see [MAINTENANCE.md](MAINTENANCE.md)).
 
 2.  **Verify the environment**:
     Ensure you have CMake, GCC, Python 3, and cppcheck installed.
@@ -16,7 +18,7 @@
 
 ## Development Workflow
 
-1.  **Create a branch** for your feature or fix.
+1.  **Create a branch** for your feature or fix, from `own_dev`.
 2.  **Write Code** following the [Code Standards](TESTING.md#code-standards).
 3.  **Run Tests Locally**:
     ```bash
@@ -27,7 +29,8 @@
     ./check_quality.sh
     ```
 5.  **Update Changelog**: Add a matching entry in `CHANGELOG.md` under `[Unreleased]`.
-6.  **Submit Pull Request**: CI will automatically run the above checks.
+6.  **Submit Pull Request**: target **`own_dev`**; CI will automatically run the
+    above checks.
 
 ## Commit Guidelines
 

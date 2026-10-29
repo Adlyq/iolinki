@@ -36,8 +36,8 @@ Reference: docs/PUPPETEER.md
 
 How to commit a new feature (per docs/RELEASE_STRATEGY.md)
 
-1. Work on a feature branch from develop:
-   git checkout develop
+1. Work on a feature branch from own_dev (the maintained mainline):
+   git checkout own_dev
    git checkout -b feature/<short-name>
 2. Review changes:
    git status
@@ -53,5 +53,5 @@ How to commit a new feature (per docs/RELEASE_STRATEGY.md)
    - fix: <short description>
 7. Commit:
    git commit -m "feat: <short description>"
-8. Push your branch and open a PR to develop:
+8. Push your branch and open a PR to own_dev:
    git push -u origin feature/<short-name>

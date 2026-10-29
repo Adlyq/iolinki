@@ -112,12 +112,12 @@ previously missing:
   an empty descriptor set via `iolink_ds_set_param_desc()` / `iolink_ds_bind_param_access()`, which makes
   Index_List report the 0x0000 terminator (10.4.5).
 
-## Deliberate divergences from upstream (PDF wins)
+## Spec-mandated corrections
 
-- SystemCommand `Param*` codes use Table B.9 `0x01-0x06` (upstream used
-  `0x05-0x09`/`0x97`); `0x84` is reserved (upstream treated it as
-  SetCommunicationMode). Pinned by `test_protocol_constants` /
-  `test_system_commands`.
+- SystemCommand `Param*` codes use Table B.9 `0x01-0x06`; `0x84` is reserved.
+  (Historically upstream used `0x05-0x09`/`0x97`, but that comparison is no
+  longer maintained; the PDF is the reference.) Pinned by
+  `test_protocol_constants` / `test_system_commands`.
 - `PAR{M}_SETINVALID=0x40` / `PAR_SETINCONSIST=0x41` per Table C.1.
 - DPP1 `MinCycleTime` (0x02) is encoded as Table B.3 `time base | multiplier`
   and clamped to the 0.4 ms minimum; raw 0.1 ms units are only valid inside

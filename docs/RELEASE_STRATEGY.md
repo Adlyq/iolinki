@@ -7,11 +7,15 @@ This document outlines the development workflow, versioning, and release procedu
 We use a simplified **Gitflow** model.
 
 ### Branches
-- **`main`**: Production code. Stable releases. **Protected: All official version tags (`vX.Y.Z`) MUST be pushed from this branch**.
-- **`develop`**: Integration branch. Source for `feature/*` and destination for verified features.
-- **`feature/*`**: Feature branches. Created from and merged back to `develop` via PR.
-- **`release/*`**: Release preparation. Source for `vX.Y.Z-rcN` tags. Merged to `main` via PR for official release.
-- **`bugfix/*`**: Fixes for production bugs. Merged to `develop` and `main` via PRs.
+- **`own_dev`**: Maintained mainline. All development lands here and **all official version tags (`vX.Y.Z`) are pushed from this branch**.
+- **`fix/*` / `feature/*`**: Topic branches, created from and merged back to `own_dev` via PR.
+- **`release/*`**: Release preparation, branched from `own_dev`. Source for `vX.Y.Z-rcN` tags.
+- **`develop`**: Historical snapshot from before independent maintenance. Not a release branch and not a merge target.
+- **`main`**: Does not exist on `origin`. Do not create it without an explicit policy change.
+
+> This repository is maintained independently of `upstream` (`w1ne/iolinki`).
+> There is no upstream sync, promotion or back-merge step. See
+> [MAINTENANCE.md](MAINTENANCE.md).
 
 ## 2. Versioning
 
@@ -25,7 +29,8 @@ Format: `MAJOR.MINOR.PATCH`
 
 ## 3. CI/CD
 
-Automated pipelines run on every push to `main` or `develop`.
+Automated pipelines run on every push to `own_dev` (the maintained branch) and
+`develop` (historical).
 
 ### Quality Gate (runs on all pushes/PRs)
 1. **Code Formatting**: `clang-format` check (enforces `.clang-format` style).
@@ -41,44 +46,39 @@ Automated pipelines run on every push to `main` or `develop`.
 
 ## 4. Release Process
 
-### Automated Release (Main-only)
+### Automated Release (own_dev)
 
-Official releases are triggered ONLY from the `main` branch.
+Official releases are tagged from the `own_dev` branch once its checks are
+green. There is no `main` promotion and no fast-forward/back-merge step.
 
-Both `main` and `develop` are protected: the required checks are the *real* CI
-jobs (`docker-validation`, `sbom-tools`) with no admin
-bypass. Because a freshly created merge commit has no check results, release
-promotion works by **fast-forwarding `main` to a develop SHA whose checks are
-already green** — never by merging with a new commit. This keeps `main` an
-exact subset of `develop`, so no back-merge is needed.
-
-1. **Promote + tag**: Fast-forward `main` to the green `develop` SHA and tag it:
+1. **Tag the maintained branch**:
    ```bash
    git fetch origin
-   git push origin origin/develop:main   # fast-forward; rejected if main diverged
-   git tag -a v1.0.0 -m "Release version 1.0.0" origin/develop
-   git push origin v1.0.0
+   git switch own_dev
+   git pull --ff-only
+   git tag -a vX.Y.Z -m "Release version X.Y.Z"
+   git push origin vX.Y.Z
    ```
 
 2. **Workflow**: The GitHub Action automatically:
-   - Builds with **Code Coverage**.
+   - Builds with **Debug + Code Coverage** (`-DCMAKE_BUILD_TYPE=Debug
+     -DENABLE_COVERAGE=ON`).
    - Generates **Automated Release Notes**.
    - Packages binaries, **SBOMs (CycloneDX + SPDX)**, and creates a GitHub Release.
-   - **Back-merge safety net**: if `main` somehow diverged from `develop`, the
-     workflow opens a back-merge PR (it cannot push to the protected branch
-     directly). In the normal fast-forward flow this is a no-op.
 
 ### Release Candidates (RC)
 
-RCs are used to verify the release workflow and quality before finalizing on `main`.
+RCs are used to verify the release workflow and quality before finalizing.
 
-1. **RC Tagging**: Push an RC tag from a `release/*` branch:
+1. **RC Tagging**: Push an RC tag from a `release/*` branch cut from `own_dev`:
    ```bash
-   git checkout release/1.0.0
-   git tag -a v1.0.0-rc1 -m "Release Candidate 1"
-   git push origin v1.0.0-rc1
+   git checkout own_dev
+   git checkout -b release/X.Y.Z
+   git tag -a vX.Y.Z-rc1 -m "Release Candidate 1"
+   git push origin vX.Y.Z-rc1
    ```
-2. **Verification**: RC tags trigger the same build/test pipeline but do NOT update `main` or perform back-merges.
+2. **Verification**: RC tags trigger the same build/test pipeline but do NOT
+   create the final release.
 
 > [!TIP]
 > Use RC tags to "dry-run" the release notes and binary packaging without affecting the production baseline.
@@ -87,7 +87,7 @@ RCs are used to verify the release workflow and quality before finalizing on `ma
 
 1. **Prepare Release Branch**:
    ```bash
-   git checkout develop
+   git checkout own_dev
    git checkout -b release/x.y.z
    ```
 
@@ -102,27 +102,30 @@ RCs are used to verify the release workflow and quality before finalizing on `ma
    cmake --build build
    cd build && ctest --output-on-failure
    ```
+   The default CMake build sets no `CMAKE_BUILD_TYPE` (no optimisation), and the
+   release workflow above builds `Debug` with coverage. The `Release` build here
+   is an optimisation sanity check, not the configuration used for artifacts.
 
-4. **Open Pull Requests**:
+4. **Open the PR**:
    - Push the `release/x.y.z` branch to remote.
-   - Open a PR from `release/x.y.z` to **`main`**.
+   - Open a PR from `release/x.y.z` to **`own_dev`**.
    - **Wait for CI to pass** and get approval.
-   - Merge the PR (this will update `main`).
+   - Merge the PR.
 
 5. **Tag the Release**:
-   - On the updated `main` branch locally:
+   - On the updated `own_dev` branch locally:
      ```bash
-     git pull origin main
+     git pull origin own_dev
      git tag -a vx.y.z -m "Release vx.y.z"
      git push origin vx.y.z
      ```
 
 6. **Troubleshooting & Retries**:
-   - **Failed Release**: If the CI fails on a tag, delete the tag on remote and local, fix the issue on `main`, and re-tag:
+   - **Failed Release**: If the CI fails on a tag, delete the tag on remote and local, fix the issue on `own_dev`, and re-tag:
      ```bash
      git tag -d v1.0.0
      git push origin :v1.0.0
-     # Fix issue on main...
+     # Fix issue on own_dev...
      git tag v1.0.0
      git push origin v1.0.0
      ```

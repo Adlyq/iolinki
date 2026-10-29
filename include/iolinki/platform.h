@@ -36,10 +36,10 @@ extern "C" {
  * This function must prevent context switches or ISRs that could
  * corrupt shared data structures (Events, ISDU).
  *
- * The library default (src/platform.c) is a no-op. That is only safe for the
- * default streaming transport in a single-context bare-metal loop. A build with
- * the ISR two-pump transport MUST provide a real implementation
- * (e.g. PRIMASK/BASEPRI on Cortex-M) or configure the application lock pair in
+ * The library default (src/platform.c) is a no-op. That is only safe in a
+ * single-context bare-metal loop without an ISR pump. The ISR two-pump
+ * transport is the only transport and MUST have a real implementation
+ * (e.g. PRIMASK/BASEPRI on Cortex-M) or an application lock pair configured in
  * iolink_device_config_t: the ISR pump shares the mailbox, the ISDU response
  * snapshot and the reply staging buffer with the main pump.
  *

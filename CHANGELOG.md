@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (maintenance model)
+- The repository is maintained independently: `own_dev` is the mainline and
+  `upstream` (`w1ne/iolinki`) is a read-only reference. Upstream is no longer
+  merged or rebased; changes are adopted by re-implementing them against this
+  codebase and adding a regression test. See `docs/MAINTENANCE.md`.
+- Release flow now tags from `own_dev`; there is no `main` branch, promotion or
+  back-merge step.
+- Documentation aligned with the current code: removed `src/frame.c` and
+  `IOLINK_PHY_FEATURE_ISR_PUMP` references, corrected the memory guide (ISDU
+  buffer sizing, no CRC tables) and the porting examples (storage API, time
+  conversion).
+- The `upstream-sync` agent skill was replaced by a `maintenance` skill.
+
 ### Fixed (Test Spec conformance)
 - DLL: reject the V1.0 STARTUP -> OPERATE shortcut (`0x99`/`0x98`) by default;
   a TYPE_0 page read while OPERATE is active now returns STARTUP without a
@@ -849,7 +862,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Host Demo**: `examples/host_demo` showing stack execution without hardware.
 - **Documentation**: Initial README, ROADMAP, VISION, and RELEASE_STRATEGY.
 
-[Unreleased]: https://github.com/w1ne/iolinki/compare/v2.1.1...HEAD
+[Unreleased]: https://github.com/Adlyq/iolinki/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/Adlyq/iolinki/compare/v2.1.1...v2.2.0
 [2.1.1]: https://github.com/w1ne/iolinki/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/w1ne/iolinki/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/w1ne/iolinki/compare/v1.2.0...v2.0.0
