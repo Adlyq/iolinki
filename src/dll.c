@@ -2315,11 +2315,6 @@ static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, ui
     return false;
 }
 
-/* Select the pre-staged OPERATE reply payload matching the just-framed request
- * and start transmitting it from the ISR. TX BYTE: the CKS is computed while the
- * octets are sent (one per transceiver request). TX FRAME: the payload and its
- * CKS are assembled in the staging buffer and handed over in one call. A Type-0
- * request has no pre-staged variant; the main pump answers it. */
 /* Buffer an ISDU write request directly in the ISR. Only the transport is
  * performed here (byte collection + FlowCTRL + CHKPDU check); the application
  * dispatch stays in iolink_isdu_process() (main window), matching ST's
@@ -2368,25 +2363,16 @@ static void dll_isr_consume_isdu_write(iolink_dll_ctx_t* ctx, const uint8_t* fra
     ctx->isdu_isr_consumed = 1U;
 }
 
-static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
+/**
+ * @brief Fill the reply OD for the captured buffer.
+ *
+ * Reads come from the ISDU snapshot, the direct-parameter pages or the event
+ * memory; a WRITE reply only needs the PD-in tail. Returns false for a channel
+ * the ISR must not answer (the main pump owns it).
+ */
+static bool dll_isr_build_reply_od(iolink_dll_ctx_t* ctx, uint8_t* buf, bool read, uint8_t ch,
+                                   uint8_t flowctrl)
 {
-    if ((ctx->isr_frame_ptr == NULL) || !dll_phy_has_tx(ctx)) {
-        return false;
-    }
-    const uint8_t first = ctx->isr_frame_ptr[0];
-    if (first == IOLINK_MC_TRANSITION_COMMAND) {
-        return false; /* invalid in OPERATE; the main pump handles it */
-    }
-    const bool read = ((first & IOLINK_MC_RW_MASK) != 0U);
-    const uint8_t ch = (uint8_t) (first & IOLINK_MC_COMM_CHANNEL_MASK);
-    const uint8_t flowctrl = (uint8_t) (first & IOLINK_MC_ADDR_MASK);
-
-    /* Zero-copy reply: the PD-in already lives in the active reply buffer
-     * (the main fills a free copy and publishes it atomically).
-     * Layout: [OD x od_width][PD-in][CKS]. Capture the index once, so the main
-     * pump never targets this buffer until the next reply. */
-    const uint8_t captured = ctx->pd_in_active;
-    uint8_t* buf = ctx->pd_in[captured];
     if (read) {
         if (ch == IOLINK_MC_CHANNEL_ISDU) {
             uint8_t od[IOLINK_OD_MAX_SIZE];
@@ -2418,20 +2404,14 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
              (ch != IOLINK_MC_CHANNEL_PAGE) && (ch != IOLINK_MC_CHANNEL_DIAGNOSIS)) {
         return false;
     }
+    return true;
+}
 
-    /* READ: [OD][PD-in]CKS from buf. WRITE: [PD-in]CKS from buf+od_width (the
-     * PD-in is always stored after the configured OD header). */
-    const uint8_t* base = read ? buf : (buf + ctx->od_width);
-    const uint16_t total =
-        (uint16_t) (((uint16_t) ctx->od_width) + ((uint16_t) ctx->pd_in_len) + 1U);
-    const uint16_t out_len = read ? total : (uint16_t) (total - (uint16_t) ctx->od_width);
-    if (out_len > (uint16_t) IOLINK_PD_REPLY_MAX) {
-        return false;
-    }
-    /* Publish the captured buffer only once the reply is known to be valid. */
-    ctx->pd_in_captured = captured;
-    const uint8_t flags = dll_isr_status_flags(ctx);
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+/** @brief TX FRAME: assemble the reply in place and hand it to the PHY. */
+static bool dll_isr_start_reply_frame(iolink_dll_ctx_t* ctx, uint8_t* base, uint16_t out_len,
+                                      uint8_t flags)
+{
     ctx->isr_tx_len = (uint8_t) out_len;
     ctx->isr_tx_active = 0U;
     if (ctx->phy->response_timer_stop != NULL) {
@@ -2456,8 +2436,7 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
         for (uint16_t i = 0U; i < (uint16_t) (out_len - 1U); i++) {
             acc = (uint8_t) (acc ^ base[i]);
         }
-        ((uint8_t*) base)[out_len - 1U] =
-            (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
+        base[out_len - 1U] = (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
     }
     else {
         /* Short reply: fill the CKS before starting the DMA. */
@@ -2465,15 +2444,19 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
         for (uint16_t i = 0U; i < (uint16_t) (out_len - 1U); i++) {
             acc = (uint8_t) (acc ^ base[i]);
         }
-        ((uint8_t*) base)[out_len - 1U] =
-            (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
+        base[out_len - 1U] = (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
         if ((ctx->phy->tx_frame == NULL) ||
             (ctx->phy->tx_frame(ctx->phy->user, base, out_len) != 0)) {
             return false;
         }
     }
     return true;
+}
 #else
+/** @brief TX BYTE: stage the reply; the CKS is computed while sending. */
+static bool dll_isr_start_reply_byte(iolink_dll_ctx_t* ctx, uint8_t* base, uint16_t out_len,
+                                     uint8_t flags)
+{
     ctx->isr_tx_base = base;
     ctx->isr_tx_len = (uint8_t) (out_len - 1U);
     ctx->isr_tx_flags = flags;
@@ -2486,6 +2469,53 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
     }
     dll_isr_tx_step(ctx);
     return true;
+}
+#endif
+
+/* Select the pre-staged OPERATE reply payload matching the just-framed request
+ * and start transmitting it from the ISR. TX BYTE: the CKS is computed while the
+ * octets are sent (one per transceiver request). TX FRAME: the payload and its
+ * CKS are assembled in the staging buffer and handed over in one call. A Type-0
+ * request has no pre-staged variant; the main pump answers it. */
+static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
+{
+    if ((ctx->isr_frame_ptr == NULL) || !dll_phy_has_tx(ctx)) {
+        return false;
+    }
+    const uint8_t first = ctx->isr_frame_ptr[0];
+    if (first == IOLINK_MC_TRANSITION_COMMAND) {
+        return false; /* invalid in OPERATE; the main pump handles it */
+    }
+    const bool read = ((first & IOLINK_MC_RW_MASK) != 0U);
+    const uint8_t ch = (uint8_t) (first & IOLINK_MC_COMM_CHANNEL_MASK);
+    const uint8_t flowctrl = (uint8_t) (first & IOLINK_MC_ADDR_MASK);
+
+    /* Zero-copy reply: the PD-in already lives in the active reply buffer
+     * (the main fills a free copy and publishes it atomically).
+     * Layout: [OD x od_width][PD-in][CKS]. Capture the index once, so the main
+     * pump never targets this buffer until the next reply. */
+    const uint8_t captured = ctx->pd_in_active;
+    uint8_t* buf = ctx->pd_in[captured];
+    if (!dll_isr_build_reply_od(ctx, buf, read, ch, flowctrl)) {
+        return false;
+    }
+
+    /* READ: [OD][PD-in]CKS from buf. WRITE: [PD-in]CKS from buf+od_width (the
+     * PD-in is always stored after the configured OD header). */
+    uint8_t* base = read ? buf : (buf + ctx->od_width);
+    const uint16_t total =
+        (uint16_t) (((uint16_t) ctx->od_width) + ((uint16_t) ctx->pd_in_len) + 1U);
+    const uint16_t out_len = read ? total : (uint16_t) (total - (uint16_t) ctx->od_width);
+    if (out_len > (uint16_t) IOLINK_PD_REPLY_MAX) {
+        return false;
+    }
+    /* Publish the captured buffer only once the reply is known to be valid. */
+    ctx->pd_in_captured = captured;
+    const uint8_t flags = dll_isr_status_flags(ctx);
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    return dll_isr_start_reply_frame(ctx, base, out_len, flags);
+#else
+    return dll_isr_start_reply_byte(ctx, base, out_len, flags);
 #endif
 }
 
