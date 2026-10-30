@@ -19,6 +19,28 @@
 
 #include "iolinki/protocol.h"
 
+/**
+ * @name Internal clock helpers
+ *
+ * Timestamps come from the application clock bound at device initialization
+ * (iolink_device_config_t::time_us). A missing clock yields 0: the device layer
+ * rejects it, but a bare DLL context may still be inspected before it is bound.
+ * @{
+ */
+static inline uint64_t dll_time_us(const iolink_dll_ctx_t* ctx)
+{
+    if ((ctx == NULL) || (ctx->time_us == NULL)) {
+        return 0U;
+    }
+    return ctx->time_us(ctx->time_user);
+}
+
+static inline uint32_t dll_time_ms(const iolink_dll_ctx_t* ctx)
+{
+    return (uint32_t) (dll_time_us(ctx) / 1000U);
+}
+/** @} */
+
 #define IOLINK_M_SEQ_TYPE1_LEN(pd_len)                         \
     (4 + (pd_len)) /* MC(8) + CKT(8) + PD(var) + OD(8) + CK(8) \
                     */

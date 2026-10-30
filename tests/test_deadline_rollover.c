@@ -12,6 +12,12 @@ uint64_t iolink_time_get_us(void)
 {
     return now;
 }
+static uint64_t test_time_us(void* user)
+{
+    (void) user;
+    return now;
+}
+
 static int wake(void* user)
 {
     (void) user;
@@ -24,6 +30,7 @@ int main(void)
     const iolink_phy_api_t phy = {.detect_wakeup = wake};
     iolink_dll_ctx_t ctx;
     iolink_dll_init(&ctx, &phy);
+    ctx.time_us = test_time_us;
     now = ((uint64_t) UINT32_MAX - 100U) * 1000U;
     wake_pending = 1;
     iolink_dll_process(&ctx);

@@ -10,7 +10,6 @@
 #include "iolinki/crc.h"
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
-#include "iolinki/time_utils.h"
 #include "iolinki/utils.h"
 #include "iolinki/platform.h"
 #include "dll_internal.h"
@@ -85,7 +84,7 @@ void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
     if (new_state == IOLINK_DLL_STATE_OPERATE) {
         /* Master-loss supervision is meaningful only inside OPERATE; the
          * startup sequence may legitimately pause for several cycles. */
-        ctx->master_last_activity_ms = iolink_time_get_ms();
+        ctx->master_last_activity_ms = dll_time_ms(ctx);
         ctx->master_lost_count = 0U;
         ctx->master_lost = false;
     }
@@ -346,7 +345,7 @@ static bool dll_t_pd_active(const iolink_dll_ctx_t* ctx)
     if ((ctx == NULL) || (ctx->t_pd_deadline_us == 0U)) {
         return false;
     }
-    return iolink_time_get_us() < ctx->t_pd_deadline_us;
+    return dll_time_us(ctx) < ctx->t_pd_deadline_us;
 }
 
 /** @brief Drain all pending RX bytes from the PHY; returns true if any were seen. */
@@ -411,7 +410,7 @@ static void dll_handle_fallback_command(iolink_dll_ctx_t* ctx)
                 t_fbd_ms = 500U;
             }
         }
-        ctx->fallback_deadline_ms = iolink_time_get_us() / 1000U + t_fbd_ms;
+        ctx->fallback_deadline_ms = dll_time_us(ctx) / 1000U + t_fbd_ms;
         dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
     }
 
@@ -419,7 +418,7 @@ static void dll_handle_fallback_command(iolink_dll_ctx_t* ctx)
     resp[0] = 0x00U;
     resp[0] = iolink_checksum6(resp, 1U);
     dll_send(ctx, resp, 1);
-    ctx->last_response_us = iolink_time_get_us();
+    ctx->last_response_us = dll_time_us(ctx);
 }
 
 /**
@@ -495,7 +494,7 @@ static void dll_handle_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
     resp[0] |= dll_pd_status_flags(ctx);
     resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));
     dll_send(ctx, resp, 1);
-    ctx->last_response_us = iolink_time_get_us();
+    ctx->last_response_us = dll_time_us(ctx);
 }
 
 /** @brief Handle a PREOPERATE master command: advance to ESTAB_COM on the transition command. */
@@ -525,7 +524,7 @@ static void dll_handle_page_channel_read(iolink_dll_ctx_t* ctx, uint8_t mc)
     resp[1] = 0x00U;
     resp[1] = iolink_checksum6(resp, 2U);
     dll_send(ctx, resp, 2);
-    ctx->last_response_us = iolink_time_get_us();
+    ctx->last_response_us = dll_time_us(ctx);
 }
 
 /**
@@ -630,7 +629,7 @@ static void dll_handle_operate_type0(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t 
         resp[1] = (uint8_t) (resp[1] | iolink_checksum6(resp, 2U));
         dll_send(ctx, resp, 2);
     }
-    ctx->last_response_us = iolink_time_get_us();
+    ctx->last_response_us = dll_time_us(ctx);
 }
 
 /** @brief Process a 3-octet Type-0 OD WRITE (MC, CKT, OD) and reply with CKS only (Figure A.5). */
@@ -647,7 +646,7 @@ static void dll_handle_type0_od_write(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t
     resp[0] |= dll_pd_status_flags(ctx);
     resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));
     dll_send(ctx, resp, 1);
-    ctx->last_response_us = iolink_time_get_us();
+    ctx->last_response_us = dll_time_us(ctx);
 }
 
 /** @brief Process a Type-1/Type-2 OPERATE frame (PD+OD) and build the response, enforcing t_REN. */
@@ -674,7 +673,7 @@ static bool dll_handle_eager_isdu_read(iolink_dll_ctx_t* ctx, bool write)
         dll_isdu_sync_snapshot(ctx);
     }
     ctx->frame_eager = 0U;
-    ctx->last_response_us = iolink_time_get_us();
+    ctx->last_response_us = dll_time_us(ctx);
     return true;
 }
 
@@ -733,7 +732,7 @@ static void dll_send_od_reply(iolink_dll_ctx_t* ctx, bool write, const uint8_t* 
     if (dll_phy_has_tx(ctx)) {
         dll_send(ctx, resp, pos);
         ctx->fallback_count = 0U;
-        const uint32_t end_tx_us = (uint32_t) iolink_time_get_us();
+        const uint32_t end_tx_us = (uint32_t) dll_time_us(ctx);
         ctx->response_time_us = end_tx_us - (uint32_t) ctx->last_cycle_start_us;
 
         if (ctx->enforce_timing) {
@@ -746,7 +745,7 @@ static void dll_send_od_reply(iolink_dll_ctx_t* ctx, bool write, const uint8_t* 
             }
         }
     }
-    ctx->last_response_us = iolink_time_get_us();
+    ctx->last_response_us = dll_time_us(ctx);
 }
 
 static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
@@ -772,7 +771,7 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
         /* The ISR pump already transmitted the pre-staged cyclic reply for the
          * process channel at frame end. */
         ctx->fallback_count = 0U;
-        ctx->last_response_us = iolink_time_get_us();
+        ctx->last_response_us = dll_time_us(ctx);
         ctx->frame_eager = 0U;
         return;
     }
@@ -780,7 +779,7 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
         /* The ISR already acknowledged this ISDU write; do not send a second
          * reply. ISDU reads are handled before dll_dispatch_od(). */
         ctx->frame_eager = 0U;
-        ctx->last_response_us = iolink_time_get_us();
+        ctx->last_response_us = dll_time_us(ctx);
         return;
     }
 
@@ -845,7 +844,7 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     ctx->enforce_timing = (IOLINK_TIMING_ENFORCE_DEFAULT != 0U);
     ctx->sio_fallback_threshold = 3U;
     ctx->operating_baudrate = IOLINK_BAUDRATE_UNSET;
-    ctx->master_last_activity_ms = iolink_time_get_ms();
+    ctx->master_last_activity_ms = dll_time_ms(ctx);
     ctx->master_lost_cycles = 0U;
     ctx->master_lost_count = 0U;
     ctx->master_lost = false;
@@ -1002,7 +1001,7 @@ static uint32_t dll_master_cycle_us(const iolink_dll_ctx_t* ctx)
  * still be advanced exactly once, by whoever actually served the request. */
 static void dll_master_activity_ts(iolink_dll_ctx_t* ctx)
 {
-    ctx->master_last_activity_ms = iolink_time_get_ms();
+    ctx->master_last_activity_ms = dll_time_ms(ctx);
     ctx->master_lost_count = 0U;
     ctx->master_lost = false;
 }
@@ -1073,7 +1072,7 @@ static bool dll_frame_drop_if_stopped(iolink_dll_ctx_t* ctx)
 /** @brief T_CYCLE supervision: count a too-short MasterCycle and restart it. */
 static void dll_check_cycle_time(iolink_dll_ctx_t* ctx)
 {
-    const uint64_t now_us = iolink_time_get_us();
+    const uint64_t now_us = dll_time_us(ctx);
     if ((ctx->enforce_timing) && (ctx->min_cycle_time_us > 0U) &&
         (ctx->last_cycle_start_us != 0U) &&
         (now_us - ctx->last_cycle_start_us < (uint64_t) ctx->min_cycle_time_us)) {
@@ -1334,7 +1333,7 @@ static bool dll_dispatch_operate(iolink_dll_ctx_t* ctx)
  */
 static bool dll_handle_valid_frame(iolink_dll_ctx_t* ctx)
 {
-    ctx->last_valid_frame_ms = iolink_time_get_ms();
+    ctx->last_valid_frame_ms = dll_time_ms(ctx);
     const bool was_establishing =
         (ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) || (ctx->state == IOLINK_DLL_STATE_STARTUP);
 #if !IOLINK_COMPAT_V10_STARTUP_OPERATE
@@ -1597,15 +1596,15 @@ static bool dll_handle_sio_wakeup(iolink_dll_ctx_t* ctx)
         if (dll_phy_detect_wakeup(ctx) > 0) {
             ctx->wakeup_seen = true;
             dll_set_state(ctx, IOLINK_DLL_STATE_AWAITING_COMM);
-            ctx->wakeup_deadline_us = iolink_time_get_us() + IOLINK_T_WU_US;
+            ctx->wakeup_deadline_us = dll_time_us(ctx) + IOLINK_T_WU_US;
             /* Table 47 T10: without a valid message the device returns to SIO
                within T_DSIO (60..300 ms, default 300 ms). */
-            ctx->dsio_deadline_ms = iolink_time_get_us() / 1000U + IOLINK_T_DSIO_MS;
+            ctx->dsio_deadline_ms = dll_time_us(ctx) / 1000U + IOLINK_T_DSIO_MS;
             iolink_dll_set_sdci_mode(ctx);
             /* A wake-up starts a fresh communication-establishment window.
                Reset the inactivity timer so a re-wake after a prior exchange
                is not immediately killed by the stale activity timestamp. */
-            ctx->last_activity_ms = iolink_time_get_ms();
+            ctx->last_activity_ms = dll_time_ms(ctx);
             dll_master_activity(ctx); /* ST StackOnWakeUp restarts Timer B */
         }
     }
@@ -1618,7 +1617,7 @@ static void dll_check_t_byte(iolink_dll_ctx_t* ctx)
     if ((ctx->frame_index > 0U) && (ctx->enforce_timing) && (ctx->t_byte_limit_us > 0U)) {
         const uint64_t last_byte_us = dll_read_u64(&ctx->last_byte_us);
         if (last_byte_us != 0U) {
-            const uint64_t now_us = iolink_time_get_us();
+            const uint64_t now_us = dll_time_us(ctx);
             if (now_us - last_byte_us > (uint64_t) ctx->t_byte_limit_us) {
                 ctx->timing_errors++;
                 ctx->t_byte_violations++;
@@ -1637,7 +1636,7 @@ static void dll_check_t_byte(iolink_dll_ctx_t* ctx)
 static bool dll_wakeup_window_active(iolink_dll_ctx_t* ctx)
 {
     if ((ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) && (ctx->enforce_timing)) {
-        if ((ctx->wakeup_deadline_us != 0U) && (iolink_time_get_us() < ctx->wakeup_deadline_us)) {
+        if ((ctx->wakeup_deadline_us != 0U) && (dll_time_us(ctx) < ctx->wakeup_deadline_us)) {
             return true;
         }
     }
@@ -1674,8 +1673,8 @@ static void dll_consume_isr_mailbox(iolink_dll_ctx_t* ctx)
     /* A mailbox frame is received traffic: refresh the inactivity and byte-gap
        timestamps exactly like the streaming RX path. Without this the 1 s idle
        supervision resets a healthy ISR link. */
-    ctx->last_activity_ms = iolink_time_get_ms();
-    ctx->last_byte_us = iolink_time_get_us();
+    ctx->last_activity_ms = dll_time_ms(ctx);
+    ctx->last_byte_us = dll_time_us(ctx);
     dll_process_complete_frame(ctx);
 }
 
@@ -1700,9 +1699,10 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
     dll_take_isr_master_activity(ctx);
 
     /* Sampled after the late activity refresh so the elapsed-time subtraction
-     * below cannot see a timestamp newer than now_ms. */
-    const uint32_t now_ms = iolink_time_get_ms();
-    const uint64_t now_ms64 = iolink_time_get_us() / 1000U;
+     * below cannot see a timestamp newer than now_ms. One clock sample keeps
+     * the millisecond and microsecond views consistent. */
+    const uint64_t now_ms64 = dll_time_us(ctx) / 1000U;
+    const uint32_t now_ms = (uint32_t) now_ms64;
 
     dll_update_master_lost(ctx, now_ms);
     dll_check_idle_timeout(ctx, now_ms);

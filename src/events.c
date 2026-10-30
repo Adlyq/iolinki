@@ -17,7 +17,6 @@
 
 #include "iolinki/events.h"
 #include "iolinki/platform.h"
-#include "iolinki/time_utils.h"
 #include "iolinki/utils.h"
 #include <string.h>
 
@@ -28,6 +27,15 @@ void iolink_events_init(iolink_events_ctx_t* ctx)
     if (!iolink_ctx_zero(ctx, sizeof(iolink_events_ctx_t))) {
         return;
     }
+}
+
+/** @brief Current time in milliseconds from the bound application clock. */
+static uint32_t events_now_ms(const iolink_events_ctx_t* ctx)
+{
+    if (ctx->time_us == NULL) {
+        return 0U;
+    }
+    return (uint32_t) (ctx->time_us(ctx->time_user) / 1000U);
 }
 
 /** @brief EventQualifier for an event type and MODE (A.6.4, Figure A.24). */
@@ -182,7 +190,7 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
 
     iolink_critical_enter();
 
-    const uint32_t now = iolink_time_get_ms();
+    const uint32_t now = events_now_ms(ctx);
     if (event_recently_sent(ctx, code, now)) {
         iolink_critical_exit();
         return; /* A.6.4: no more than one report per second per EventCode. */
@@ -239,7 +247,7 @@ void iolink_events_process(iolink_events_ctx_t* ctx)
     }
 
     iolink_critical_enter();
-    const uint32_t now = iolink_time_get_ms();
+    const uint32_t now = events_now_ms(ctx);
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         iolink_event_pending_t* p = &ctx->pending[i];
         if (!p->active || !p->clear_pending) {

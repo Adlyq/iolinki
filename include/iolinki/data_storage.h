@@ -127,7 +127,8 @@ typedef struct
  * @brief Initialize the Data Storage engine
  *
  * @param ctx DS context to initialize
- * @param storage Optional storage implementation hooks (can be NULL for RAM-only)
+ * @param storage Storage hooks; may be NULL only for direct DS use. The device
+ *                layer requires a complete backend when DS is compiled in.
  */
 #if IOLINK_FEATURE_DATA_STORAGE
 void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage);

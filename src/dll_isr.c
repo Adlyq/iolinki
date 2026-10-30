@@ -10,7 +10,6 @@
 #include "iolinki/crc.h"
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
-#include "iolinki/time_utils.h"
 #include "iolinki/utils.h"
 #include "iolinki/platform.h"
 #include "dll_internal.h"
@@ -317,8 +316,8 @@ static void dll_isr_send_payload(iolink_dll_ctx_t* ctx, const uint8_t* payload, 
 /** @brief A frame was served by the ISR: refresh the activity timestamps. */
 static void dll_isr_note_activity(iolink_dll_ctx_t* ctx)
 {
-    ctx->last_activity_ms = iolink_time_get_ms();
-    ctx->last_byte_us = iolink_time_get_us();
+    ctx->last_activity_ms = dll_time_ms(ctx);
+    ctx->last_byte_us = dll_time_us(ctx);
 }
 
 /** @brief Type-0 startup probe (T1): page READ while waiting for the first message. */
@@ -412,7 +411,7 @@ static bool dll_isr_type0_master_command(iolink_dll_ctx_t* ctx, const uint8_t* f
                     t_fbd_ms = 500U;
                 }
             }
-            ctx->fallback_deadline_ms = iolink_time_get_us() / 1000U + t_fbd_ms;
+            ctx->fallback_deadline_ms = dll_time_us(ctx) / 1000U + t_fbd_ms;
             dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
         }
         dll_isr_send_payload(ctx, NULL, 0U, dll_isr_status_flags(ctx));

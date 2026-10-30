@@ -18,7 +18,7 @@
 
 #include "iolinki/device.h"
 #include "iolinki/platform.h"
-#include "iolinki/time_utils.h"
+#include "dll_internal.h"
 #include <string.h>
 
 /** @brief DLL state-change callback: dispatches to the app startup/preoperate/operate hooks. */
@@ -136,7 +136,7 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.master_lost_cycles = ctx->stack_config.master_lost_cycles;
     ctx->dll.t_pd_delay_us = ctx->stack_config.t_pd_us;
     if (ctx->dll.t_pd_delay_us > 0U) {
-        ctx->dll.t_pd_deadline_us = iolink_time_get_us() + (uint64_t) ctx->dll.t_pd_delay_us;
+        ctx->dll.t_pd_deadline_us = dll_time_us(&ctx->dll) + (uint64_t) ctx->dll.t_pd_delay_us;
     }
     else {
         ctx->dll.t_pd_deadline_us = 0U;
@@ -239,6 +239,10 @@ static int device_config_validate(const iolink_device_config_t* config)
     }
     stack = &config->stack;
 
+    if (config->time_us == NULL) {
+        return IOLINK_DEVICE_INIT_ERR_TIME;
+    }
+
     if ((uint32_t) stack->m_seq_type > (uint32_t) IOLINK_M_SEQ_TYPE_MAX) {
         return IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE;
     }
@@ -276,6 +280,17 @@ static int device_config_validate(const iolink_device_config_t* config)
         return IOLINK_DEVICE_INIT_ERR_LOCK_PAIR;
     }
 
+    if (iolink_platform_critical_sections_ready() != 0) {
+        return IOLINK_DEVICE_INIT_ERR_CRITICAL;
+    }
+
+#if IOLINK_FEATURE_DATA_STORAGE
+    if ((config->storage == NULL) || (config->storage->read == NULL) ||
+        (config->storage->write == NULL)) {
+        return IOLINK_DEVICE_INIT_ERR_STORAGE;
+    }
+#endif
+
     return IOLINK_DEVICE_INIT_OK;
 }
 
@@ -306,6 +321,17 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     iolink_device_info_ctx_init(&ctx->device_info, config->device_info);
     iolink_params_ctx_init(&ctx->params, &ctx->device_info);
     iolink_dll_init(&ctx->dll, &config->phy);
+    /* Bind the application clock before any deadline is derived. The device
+     * layer requires it (NULL is rejected above). The event engine shares the
+     * same clock so event timing matches the DLL. */
+    ctx->dll.time_us = config->time_us;
+    ctx->dll.time_user = config->user;
+#if IOLINK_FEATURE_EVENTS
+    ctx->dll.events.time_us = config->time_us;
+    ctx->dll.events.time_user = config->user;
+#endif
+    /* iolink_dll_init() sampled the platform clock before it was bound. */
+    ctx->dll.master_last_activity_ms = dll_time_ms(&ctx->dll);
     /* Main-context reply staging vs the data-interrupt pump needs the
      * application lock; without it dll_send() and the ISDU snapshot copy would
      * not be atomic with respect to the ISR. */
@@ -319,8 +345,8 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     ctx->dll.state_cb = device_state_cb;
     ctx->dll.state_cb_user = ctx;
     /* One backend serves the standard parameters and the Data Storage image. */
-    iolink_params_bind_storage(&ctx->params, config->storage);
 #if IOLINK_FEATURE_DATA_STORAGE
+    iolink_params_bind_storage(&ctx->params, config->storage);
     if (config->storage != NULL) {
         iolink_ds_init(&ctx->dll.ds, config->storage);
         ctx->dll.isdu.ds_ctx = &ctx->dll.ds;
@@ -337,6 +363,7 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
         (void) iolink_ds_build_image(&ctx->dll.ds);
     }
 #else
+    iolink_params_bind_storage(&ctx->params, NULL);
     ctx->dll.isdu.ds_ctx = NULL;
 #endif
     device_apply_stack_config(ctx);

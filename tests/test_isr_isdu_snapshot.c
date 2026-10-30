@@ -33,6 +33,12 @@ uint64_t iolink_time_get_us(void)
     return now_us;
 }
 
+static uint64_t test_time_us(void* user)
+{
+    (void) user;
+    return now_us;
+}
+
 #define RX_MAX 16U
 #define TX_MAX 32U
 
@@ -136,6 +142,7 @@ static int test_eager_isdu_snapshot(void)
     };
 
     iolink_dll_init(&dll, &phy);
+    dll.time_us = test_time_us;
     dll.state = IOLINK_DLL_STATE_OPERATE;
     dll.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     dll.od_width = 2U;
@@ -234,6 +241,7 @@ static int test_request_service_staging(void)
     };
 
     iolink_dll_init(&dll, &phy);
+    dll.time_us = test_time_us;
     dll.state = IOLINK_DLL_STATE_PREOPERATE;
     dll.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     dll.pd_out_len_current = 0U;
@@ -276,6 +284,7 @@ static int test_type0_diagnosis_read_isr(void)
     };
 
     iolink_dll_init(&dll, &phy);
+    dll.time_us = test_time_us;
     dll.state = IOLINK_DLL_STATE_PREOPERATE;
     dll.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     dll.pd_out_len_current = 0U;

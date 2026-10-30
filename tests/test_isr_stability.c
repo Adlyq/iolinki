@@ -33,6 +33,12 @@ uint64_t iolink_time_get_us(void)
     return now_us;
 }
 
+static uint64_t test_time_us(void* user)
+{
+    (void) user;
+    return now_us;
+}
+
 static int rx_octet(void* user, uint8_t* data, uint8_t* status)
 {
     (void) user;
@@ -118,6 +124,7 @@ int main(void)
     };
 
     iolink_dll_init(&ctx, &phy);
+    ctx.time_us = test_time_us;
     ctx.state = IOLINK_DLL_STATE_ESTAB_COM;
     ctx.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.enforce_timing = false;

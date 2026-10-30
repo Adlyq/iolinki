@@ -30,6 +30,12 @@ uint64_t iolink_time_get_us(void)
     return now_us;
 }
 
+static uint64_t test_time_us(void* user)
+{
+    (void) user;
+    return now_us;
+}
+
 #define RX_MAX 16U
 #define TX_MAX 32U
 
@@ -147,6 +153,7 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     g_phy.stack_timer_start = timer_b_start;
     g_phy.detect_wakeup = mock_detect_wakeup;
     iolink_dll_init(dll, &g_phy);
+    dll->time_us = test_time_us;
     dll->phy_mode = IOLINK_PHY_MODE_SDCI;
     dll->state = IOLINK_DLL_STATE_OPERATE;
     dll->m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
@@ -206,6 +213,7 @@ static void init_type0_ctx(iolink_dll_ctx_t* dll)
     g_phy.stack_timer_start = timer_b_start;
     g_phy.detect_wakeup = mock_detect_wakeup;
     iolink_dll_init(dll, &g_phy);
+    dll->time_us = test_time_us;
     dll->phy_mode = IOLINK_PHY_MODE_SDCI;
     dll->state = IOLINK_DLL_STATE_PREOPERATE;
     dll->m_seq_type = IOLINK_M_SEQ_TYPE_0;

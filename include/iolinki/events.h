@@ -152,6 +152,12 @@ typedef struct
     uint8_t frozen_slots; /**< Number of memory slots populated when the memory was frozen. */
     iolink_event_t frozen_events[6]; /**< Events actually presented in the frozen memory */
     uint8_t frozen_count;            /**< Entries valid in ::frozen_events */
+
+    /* Application clock bound by the device layer (config::time_us). Standalone
+     * event-engine users must set it after iolink_events_init(); a missing
+     * clock reads as time 0. */
+    uint64_t (*time_us)(void* user);
+    void* time_user;
 } iolink_events_ctx_t;
 
 /**
@@ -160,6 +166,8 @@ typedef struct
  * Resets the queue and internal counters.
  *
  * @param ctx Event context to initialize
+ * @note Standalone users must bind @c ctx->time_us / @c ctx->time_user after
+ *       this call; iolink_device_init() binds them from the device config.
  */
 #if IOLINK_FEATURE_EVENTS
 void iolink_events_init(iolink_events_ctx_t* ctx);

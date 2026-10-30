@@ -27,7 +27,20 @@
 #include "iolinki/isdu.h"
 #include "iolinki/params.h"
 #include "iolinki/protocol.h"
+#include "iolinki/time_utils.h"
 #include "test_helpers.h"
+
+static uint64_t test_time_us(void* user)
+{
+    (void) user;
+    return iolink_time_get_us();
+}
+
+static void events_init(iolink_events_ctx_t* ctx)
+{
+    iolink_events_init(ctx);
+    ctx->time_us = test_time_us;
+}
 #include "conformance_test.h"
 #define GAP_NVM_SLOTS 8U
 static char g_gap_nvm[GAP_NVM_SLOTS][64];
@@ -437,7 +450,7 @@ static void test_0072_comm_interruption_event_persists(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0072");
 
     iolink_events_ctx_t events;
-    iolink_events_init(&events);
+    events_init(&events);
     iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_WARNING);
     assert_true(iolink_events_flag(&events));
 
@@ -514,12 +527,12 @@ static void test_0073_event_power_interruption(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0073");
 
     iolink_events_ctx_t events;
-    iolink_events_init(&events);
+    events_init(&events);
     iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_WARNING);
     assert_true(iolink_events_pending(&events));
 
     /* Simulate power loss: the volatile event memory is re-initialised. */
-    iolink_events_init(&events);
+    events_init(&events);
     assert_false(iolink_events_pending(&events));
     assert_int_equal(iolink_events_memory_read(&events, 0x00U), 0x00U);
 
@@ -970,7 +983,7 @@ static void test_0069_single_event_operate(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0069");
 
     iolink_events_ctx_t events;
-    iolink_events_init(&events);
+    events_init(&events);
 
     iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_WARNING);
     iolink_event_t event;
@@ -990,7 +1003,7 @@ static void test_0070_single_event_preoperate(void** state)
     /* The event engine itself is state independent; the DLL does not drop
        events in PREOPERATE. */
     iolink_events_ctx_t events;
-    iolink_events_init(&events);
+    events_init(&events);
     iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_WARNING);
     assert_true(iolink_events_flag(&events));
 }
@@ -1001,7 +1014,7 @@ static void test_0075_multi_event_order(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0075");
 
     iolink_events_ctx_t events;
-    iolink_events_init(&events);
+    events_init(&events);
 
     iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_WARNING);
     iolink_event_trigger(&events, 0x8C01U, IOLINK_EVENT_TYPE_ERROR);
@@ -1020,7 +1033,7 @@ static void test_0076_short_event(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0076");
 
     iolink_events_ctx_t events;
-    iolink_events_init(&events);
+    events_init(&events);
 
     iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_WARNING);
     iolink_event_clear(&events, 0x8C00U);

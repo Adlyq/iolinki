@@ -19,15 +19,28 @@
 #include <unistd.h>
 
 #include "iolinki/events.h"
+#include "iolinki/time_utils.h"
 
 #include "conformance_test.h"
+
+static uint64_t test_time_us(void* user)
+{
+    (void) user;
+    return iolink_time_get_us();
+}
+
+static void events_init(iolink_events_ctx_t* ctx)
+{
+    iolink_events_init(ctx);
+    ctx->time_us = test_time_us;
+}
 
 static void test_event_queue_flow(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0069");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     assert_false(iolink_events_pending(&ctx));
 
@@ -46,7 +59,7 @@ static void test_event_queue_overflow(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0075");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     /* Fill queue (size 8 by default) */
     for (uint16_t i = 0U; i < 8U; i++) {
@@ -67,7 +80,7 @@ static void test_standard_codes(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0069");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     iolink_event_trigger(&ctx, IOLINK_EVENT_COMM_CRC, IOLINK_EVENT_TYPE_ERROR);
     iolink_event_trigger(&ctx, IOLINK_EVENT_COMM_TIMEOUT, IOLINK_EVENT_TYPE_ERROR);
@@ -84,7 +97,7 @@ static void test_phy_diagnostic_codes(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0069");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, IOLINK_EVENT_TYPE_WARNING);
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR);
@@ -105,7 +118,7 @@ static void test_event_peek(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0069");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     iolink_event_trigger(&ctx, 0x1122, IOLINK_EVENT_TYPE_NOTIFICATION);
 
@@ -124,7 +137,7 @@ static void test_event_helpers(void** state)
 {
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     /* Test highest severity */
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 0); /* OK */
@@ -176,7 +189,7 @@ static void test_event_memory_layout(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0069");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     assert_false(iolink_events_flag(&ctx));
 
@@ -206,7 +219,7 @@ static void test_event_memory_frozen(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0071");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
@@ -224,7 +237,7 @@ static void test_event_memory_confirm(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0071");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     iolink_event_trigger(&ctx, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
@@ -257,7 +270,7 @@ static void test_event_memory_confirm_only_presented(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0071");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     /* The first event freezes a 1-slot snapshot. */
@@ -282,7 +295,7 @@ static void test_event_appears_disappears(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0074");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     iolink_event_clear(&ctx, 0x1000U);
@@ -309,7 +322,7 @@ static void test_event_lifecycle_no_repeat(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0075");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_WARNING);
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_WARNING);
@@ -325,7 +338,7 @@ static void test_event_recently_sent(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0076");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
     iolink_event_t ev;
 
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
@@ -345,7 +358,7 @@ static void test_events_reset_clears(void** state)
 {
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     assert_true(iolink_events_flag(&ctx));
@@ -362,7 +375,7 @@ static void test_event_flag_invariant(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0071");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     /* Empty queue: no flag. */
     assert_false(iolink_events_flag(&ctx));
@@ -389,7 +402,7 @@ static void test_notification_dedup(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0075");
     (void) state;
     iolink_events_ctx_t ctx;
-    iolink_events_init(&ctx);
+    events_init(&ctx);
 
     /* A retrying Master must not turn repeated requests into an event storm:
        the same unacknowledged notification is queued only once. */

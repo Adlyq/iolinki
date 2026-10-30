@@ -28,6 +28,12 @@ uint64_t iolink_time_get_us(void)
     return now_us;
 }
 
+static uint64_t test_time_us(void* user)
+{
+    (void) user;
+    return now_us;
+}
+
 /* A valid Type-0 request: MC + CKT carrying the A.1.6 checksum. */
 static void make_type0_frame(uint8_t mc, uint8_t frame[2])
 {
@@ -41,6 +47,7 @@ int main(void)
     const iolink_phy_api_t phy = {0};
     iolink_dll_ctx_t ctx;
     iolink_dll_init(&ctx, &phy);
+    ctx.time_us = test_time_us;
 
     ctx.state = IOLINK_DLL_STATE_ESTAB_COM;
     ctx.phy_mode = IOLINK_PHY_MODE_SDCI;

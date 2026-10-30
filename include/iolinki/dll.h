@@ -101,6 +101,12 @@ typedef struct
     void (*lock)(void* user);
     void (*unlock)(void* user);
     void* lock_user;
+    /* Optional application clock (iolink_device_config_t::time_us). When set,
+     * the DLL and event engine use it for every timestamp instead of the
+     * platform iolink_time_get_us()/iolink_time_get_ms(). The data ISR reads it,
+     * so the callback must be monotonic and ISR-safe. */
+    uint64_t (*time_us)(void* user);
+    void* time_user;
     volatile uint32_t last_activity_ms; /**< Timestamp of last received byte */
     uint32_t last_valid_frame_ms;       /**< Timestamp of the last checksum/type-valid frame */
     volatile uint32_t master_last_activity_ms; /**< Timestamp of the last frame end / RX timeout */
@@ -367,6 +373,9 @@ typedef struct
  *
  * @param ctx DLL context to initialize
  * @param phy PHY implementation to bind
+ * @note The context is zeroed, including the clock. Direct DLL users must set
+ *       @c ctx->time_us / @c ctx->time_user after this call;
+ *       iolink_device_init() binds them from iolink_device_config_t::time_us.
  */
 void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy);
 
