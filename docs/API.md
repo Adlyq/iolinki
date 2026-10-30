@@ -32,8 +32,10 @@ typedef struct {
     iolink_config_t stack;                   /* protocol settings */
     const iolink_app_callbacks_t* app_callbacks; /* may be NULL */
     const iolink_device_info_t* device_info;     /* may be NULL */
-    const iolink_storage_api_t* storage;         /* may be NULL (no persistence) */
-    iolink_device_time_us_fn time_us;        /* optional microsecond timestamp */
+#if IOLINK_FEATURE_DATA_STORAGE
+    const iolink_storage_api_t* storage;         /* required: read+write callbacks */
+#endif
+    iolink_device_time_us_fn time_us;        /* required microsecond clock (ISR-safe); NULL rejects init */
     iolink_device_lock_fn lock;              /* optional (must be paired with unlock) */
     iolink_device_unlock_fn unlock;
     void* user;                              /* opaque pointer for callbacks */
@@ -253,8 +255,9 @@ int  iolink_ds_build_image(iolink_ds_ctx_t* ctx);
 int  iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len);
 ```
 
-The DS context is initialized by `iolink_device_init()` when `config.storage`
-is supplied; use `iolink_device_get_ds_ctx()` to reach it.
+The DS context is initialized by `iolink_device_init()` from the required
+`config.storage` backend (declared only with `IOLINK_FEATURE_DATA_STORAGE=1`);
+use `iolink_device_get_ds_ctx()` to reach it.
 
 ## Storage backend
 
@@ -284,6 +287,9 @@ typedef enum {
     IOLINK_DEVICE_INIT_ERR_BAUDRATE = -7,
     IOLINK_DEVICE_INIT_ERR_LOCK_PAIR = -8,
     IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -9,
+    IOLINK_DEVICE_INIT_ERR_TIME = -10,      /* time_us is NULL */
+    IOLINK_DEVICE_INIT_ERR_CRITICAL = -11,  /* weak critical-section default in use */
+    IOLINK_DEVICE_INIT_ERR_STORAGE = -12,   /* storage NULL or read/write missing */
 } iolink_device_init_result_t;
 ```
 
@@ -298,8 +304,15 @@ uint32_t iolink_time_get_ms(void);
 uint64_t iolink_time_get_us(void);
 ```
 
-Implement these in `src/platform/<platform>/time_utils.c`. Critical sections are `iolink_critical_enter()` /
-`iolink_critical_exit()` from `include/iolinki/platform.h`.
+`iolink_device_config_t::time_us` is required by `iolink_device_init()` (NULL is
+rejected with `IOLINK_DEVICE_INIT_ERR_TIME`), and the stack uses it for all DLL,
+ISR and event timing. The core no longer calls the platform time functions
+shown above; they remain available for platform code and for callbacks that
+choose to forward to them. Direct DLL users must bind
+`ctx->time_us`/`time_user` after `iolink_dll_init()`. Critical sections are
+`iolink_critical_enter()` / `iolink_critical_exit()` from
+`include/iolinki/platform.h`; `iolink_device_init()` rejects the library's weak
+no-op default with `IOLINK_DEVICE_INIT_ERR_CRITICAL`.
 
 ## Build configuration
 
@@ -337,8 +350,8 @@ The transport granularity is selected with `IOLINK_ISR_RX_MODE` /
 
 The stack is not internally locked. Each context must be used from one thread
 at a time, and the main loop (`iolink_device_process`) and the data ISR
-(`iolink_device_process_isr`) must not run concurrently on the same context
-unless the platform's critical section is real. Multiple device instances are
+(`iolink_device_process_isr`) must not run concurrently on the same context.
+`iolink_device_init()` verifies that the platform critical section is real. Multiple device instances are
 supported by using one `iolink_device_ctx_t` per instance; the optional
 `config.lock`/`config.unlock` callbacks guard shared reply staging and PD
 publication.

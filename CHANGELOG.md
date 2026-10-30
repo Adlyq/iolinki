@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `iolink_device_config_t::time_us` is now required: `iolink_device_init()`
+  rejects NULL with the new `IOLINK_DEVICE_INIT_ERR_TIME`. When supplied (the
+  only accepted configuration), the DLL, ISR pump and event engine take every
+  timestamp from it; the callback must be monotonic, non-blocking and ISR-safe.
+  The core no longer calls the platform `iolink_time_get_us()/get_ms()`
+  functions; direct DLL users must bind `ctx->time_us` after
+  `iolink_dll_init()`.
+- `iolink_device_init()` now probes the platform critical-section hooks and
+  returns the new `IOLINK_DEVICE_INIT_ERR_CRITICAL` when the weak no-op default
+  is still active.
+- Removed the legacy `iolink_nvm_read()`/`iolink_nvm_write()` API entirely
+  (declarations, weak stubs, the Linux file mock and its test).
+- `iolink_device_config_t::storage` is only declared with
+  `IOLINK_FEATURE_DATA_STORAGE=1` and is now required then:
+  `iolink_device_init()` rejects NULL or a backend missing `read`/`write` with
+  `IOLINK_DEVICE_INIT_ERR_STORAGE`.
+
 ### Changed (maintenance model)
 - The repository is maintained independently: `own_dev` is the mainline and
   `upstream` (`w1ne/iolinki`) is a read-only reference. Upstream is no longer

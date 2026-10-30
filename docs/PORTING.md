@@ -59,9 +59,17 @@ static int stm32_tx_octet(void* user, uint8_t data)
 }
 ```
 
-### 2. Time Utilities (Required)
+### 2. Time Utilities
 
-Provide timing functions for your platform.
+`iolink_device_config_t::time_us` is required by `iolink_device_init()` (NULL is
+rejected with `IOLINK_DEVICE_INIT_ERR_TIME`). It is an application callback
+returning a monotonic microsecond timestamp; when set, the DLL, the ISR pump and
+the event engine all use it. Because the data ISR calls it, it must be
+non-blocking and ISR-safe.
+
+The core no longer calls the platform time functions below. They remain useful
+as the implementation of your `time_us` callback; direct DLL users must bind
+`ctx->time_us`/`time_user` after `iolink_dll_init()`.
 
 **Location**: `src/platform/<platform>/time_utils.c`
 
@@ -103,10 +111,24 @@ uint64_t iolink_time_get_us(void) {
 }
 ```
 
-### 3. Persistent Storage (Optional)
+### 2.1 Critical Sections (Required)
 
-Parameters, the Data Storage image and the upload flag share one unified NVM
-backend, supplied through `iolink_device_config_t::storage`.
+Implement `iolink_critical_enter()` / `iolink_critical_exit()` with a real,
+nesting-safe critical section (for example PRIMASK/BASEPRI on Cortex-M). The
+weak no-op defaults in `src/platform.c` only keep the library linkable;
+`iolink_device_init()` probes them and returns
+`IOLINK_DEVICE_INIT_ERR_CRITICAL` when they are still active. If your toolchain
+cannot override weak symbols, exclude `src/platform.c` and provide
+`iolink_platform_critical_sections_ready()` returning 0.
+
+### 3. Persistent Storage (Required with Data Storage)
+
+When `IOLINK_FEATURE_DATA_STORAGE` is 1, `iolink_device_config_t::storage` is
+declared and required: `iolink_device_init()` rejects NULL, or a backend without
+`read`/`write`, with `IOLINK_DEVICE_INIT_ERR_STORAGE`. With Data Storage compiled
+out, the member is not declared. Parameters, the Data Storage image and the
+upload flag share the one unified NVM backend. The legacy `iolink_nvm_*` hooks
+have been removed.
 
 **Interface** (`include/iolinki/storage.h`):
 ```c

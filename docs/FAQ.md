@@ -28,14 +28,17 @@ physical transceiver implementation.
 The core is C99 and can be added as sources to a native IDE project. There is no
 verified EWARM board project yet. Use `include/` as the include path and the core
 source list in `CMakeLists.txt`, replacing the Linux time/platform code with
-your own. Exclude `phy_virtual.c`, Linux sources and `platform_stubs.c` from a
-physical target. If supplying strong platform hooks, exclude `platform.c` too;
-this avoids relying on compiler-specific weak-symbol behavior.
+your own. Exclude `phy_virtual.c` and the Linux sources from a physical target.
+If supplying strong platform hooks, exclude `platform.c` too; this avoids
+relying on compiler-specific weak-symbol behavior, but you must then also
+provide `iolink_platform_critical_sections_ready()` returning 0.
 
 The core sources are `device.c`, `crc.c`, `dll.c`, `dll_isr.c`, `isdu.c`, `events.c`,
 `data_storage.c`, `params.c`, `device_info.c`; add `phy_tiol112.c` when using the new
-TIOL112 driver. Provide all time/critical-section/NVM symbols declared in
-`include/iolinki/time_utils.h` and `include/iolinki/platform.h`. Ensure all library
+TIOL112 driver. Provide the time source through `config.time_us` and the
+critical-section symbols declared in `include/iolinki/platform.h`, and the
+storage backend through `iolink_device_config_t::storage` when Data Storage is
+enabled. The legacy `iolink_nvm_*` helpers have been removed. Ensure all library
 and application units share configuration defines and that startup/linker files
 match the actual MCU. A successful GCC build is not evidence of IAR compatibility.
 

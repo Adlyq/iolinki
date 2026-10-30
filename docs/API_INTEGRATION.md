@@ -46,8 +46,8 @@ target_include_directories(your_firmware PRIVATE path/to/iolinki/include)
 `iolinki` 不会导出接口 include 目录，因此需要显式添加 `include/` 路径。作为子项目使用时，
 优先使用 `add_subdirectory(path/to/iolinki EXCLUDE_FROM_ALL)`，避免把自带的示例/测试
 加入默认构建；`-DBUILD_TESTING=OFF` 还可以额外关闭测试。默认的
-`IOLINK_PLATFORM=LINUX` 构建会引入 POSIX 时间、NVM 模拟后端和 `phy_virtual.c`；
-不要在 MCU 固件中使用该配置。自定义目标可只编译需要的源文件：
+`IOLINK_PLATFORM=LINUX` 构建会引入 POSIX 时间和 `phy_virtual.c`；不要在 MCU
+固件中使用该配置。自定义目标可只编译需要的源文件：
 
 ```text
 src/device.c src/dll.c src/dll_isr.c src/isdu.c src/events.c src/params.c
@@ -66,27 +66,36 @@ cmake -B build && cmake --build build
 (cd build && ctest --output-on-failure)
 ```
 
-### 2.2 必需的平台符号
+### 2.2 平台符号与时间源
 
-核心会直接调用以下函数；`iolink_device_config_t::time_us` **不能**替代它们：
+`iolink_critical_enter()` / `iolink_critical_exit()` 必须由平台提供**真实实现**：
 
 ```c
-uint32_t iolink_time_get_ms(void);
-uint64_t iolink_time_get_us(void);
-
 void iolink_critical_enter(void);
 void iolink_critical_exit(void);
 ```
 
-`src/platform.c` 中的默认临界区是空实现。ISR 双泵传输需要真实且可嵌套的实现
-（例如 Cortex-M 上的 PRIMASK/BASEPRI 保存恢复）。`config.lock`/`config.unlock`
-中的 RTOS 锁只能串行化主上下文调用者，本身并不能防止数据 ISR 的并发访问；
-在适用时应同时提供两者。
+`src/platform.c` 中的 weak no-op 只用于让库可链接。`iolink_device_init()` 会探测
+这两个钩子；如果仍在用 weak 默认实现，初始化返回
+`IOLINK_DEVICE_INIT_ERR_CRITICAL`。实现必须可嵌套，并能在 ISR 双泵下保护邮箱、
+ISDU 快照和应答暂存区。
 
-时间源必须单调，并在整个上下文生命周期内有效。32 位毫秒计数器足以支持事件/状态逻辑；
-微秒时间源用于帧计时以及 t_A/t_ren 计时。自带的
-`src/platform/baremetal/time_utils.c` 由毫秒推导微秒，精度不足以支持硬件时序；
-在 MCU 上应提供真实的微秒定时器。
+`iolink_device_config_t::time_us` 是必需的。`iolink_device_init()` 在回调为
+NULL 时直接返回 `IOLINK_DEVICE_INIT_ERR_TIME`，不会进入运行阶段。设置后，DLL、
+ISR 双泵和事件引擎的所有时间戳都从该回调获取。
+
+核心不再调用平台时间函数；直接使用 `iolink_dll_*` 时，调用方必须在
+`iolink_dll_init()` 后自行绑定 `ctx->time_us`（及 `time_user`）。未绑定时内部
+计时读数为 0。
+
+`time_us` 会在主循环和数据 ISR 中调用，因此必须单调、非阻塞、可重入，并在
+上下文生命周期内保持有效。毫秒时间用于事件/状态逻辑，微秒时间用于帧计时以及
+t_A/t_ren 计时。自带的 `src/platform/baremetal/time_utils.c` 由毫秒推导微秒，
+精度不足以支持硬件时序；在 MCU 上应提供真实的微秒定时器。
+
+ISR 双泵传输要求临界区可嵌套（例如 Cortex-M 上的 PRIMASK/BASEPRI 保存恢复）。
+`config.lock`/`config.unlock` 中的 RTOS 锁只能串行化主上下文调用者，本身并不能
+防止数据 ISR 的并发访问；在适用时应同时提供两者。
 
 ### 2.3 最小配置
 
@@ -103,6 +112,7 @@ static int  board_phy_tx_octet(void* user, uint8_t data);
 static void board_phy_tx_done(void* user);
 static uint8_t board_phy_int_active(void* user);
 static void board_phy_request_service(void* user);
+static uint64_t board_time_us(void* user);
 
 static const iolink_phy_api_t g_phy = {
     .init = board_phy_init,
@@ -115,6 +125,9 @@ static const iolink_phy_api_t g_phy = {
     .request_service = board_phy_request_service,
 };
 
+/* Required while IOLINK_FEATURE_DATA_STORAGE=1; see section 5. */
+static const iolink_storage_api_t g_storage;
+
 static const iolink_device_config_t g_config = {
     .phy = g_phy,
     .stack = {
@@ -124,6 +137,10 @@ static const iolink_device_config_t g_config = {
         .od_width = 1U,
         .min_cycle_time = 20U,            /* 2.0 ms, 0.1 ms units */
     },
+    .time_us = board_time_us,             /* required; NULL rejects init */
+#if IOLINK_FEATURE_DATA_STORAGE
+    .storage = &g_storage,                /* required; read/write must be set */
+#endif
     .user = NULL,
 };
 
@@ -191,8 +208,8 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `stack` | 复制到上下文中。 |
 | `app_callbacks` | 保留指针；必须比上下文存活更久。可以为 NULL。 |
 | `device_info` | 身份来源和初始应用标签（Application Tag）。参见 8.1 节的身份限制。 |
-| `storage` | 保留指针；可以为 NULL，表示仅 RAM 运行。 |
-| `time_us` | 预留；当前核心未使用。请改为实现 `iolink_time_get_us()`。 |
+| `storage` | 仅在 `IOLINK_FEATURE_DATA_STORAGE=1` 时声明，且为必需项；`read`/`write` 必须非 NULL。 |
+| `time_us` | 必需的应用时钟。DLL、ISR 双泵和事件引擎都用它计时；回调必须单调、非阻塞、ISR 安全。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_TIME`。 |
 | `lock`, `unlock` | 必须成对提供。用于主上下文/ISR 共享数据的发布。 |
 | `user` | 传给 PHY 回调、vendor service 和锁钩子。 |
 | `vendor_service` | 可选的应用 ISDU 处理回调；参见第 6 节。 |
@@ -210,7 +227,9 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `master_lost_cycles` | 判定 `master_lost` 前的丢失周期数；0 表示关闭该提示。 |
 
 初始化会用 `IOLINK_DEVICE_INIT_ERR_*` 拒绝非法组合（参见 `device.h`），包括
-lock 回调未成对提供、PD/OD 大小超过编译期缓冲区，以及固定布局不匹配。
+`time_us` 为 NULL、平台临界区仍是 weak 默认实现、Data Storage 已启用但 `storage`
+缺失或 `read`/`write` 为空、lock 回调未成对提供、PD/OD 大小超过编译期缓冲区，以及
+固定布局不匹配。
 PHY `init` 的负返回值会原样向上传播。
 
 `IOLINK_M_SEQ_TYPE_1_1` 属于旧版类型，当前传输层会拒绝。
@@ -504,11 +523,11 @@ void iolink_ds_request_upload(iolink_ds_ctx_t* ctx);
 void iolink_ds_clear_upload(iolink_ds_ctx_t* ctx);
 ```
 
-当 `IOLINK_FEATURE_DATA_STORAGE=1` 时，`iolink_dll_init()` 会通过
-`iolink_ds_init(&ctx->ds, NULL)` 初始化 DS 上下文，并安装默认的三个标签描述符集合。
-当提供了后端时，`iolink_device_init()` 会再用 `config.storage` 重新初始化它，
-加载已持久化的镜像/标志，并重新绑定默认访问器。没有后端时，DS 镜像仅存在于
-RAM 中，仍然可以工作。启动时若不存在已持久化的镜像，会重新构建镜像。
+当 `IOLINK_FEATURE_DATA_STORAGE=1` 时，`iolink_device_init()` 会用必需的
+`config.storage` 初始化 DS 上下文、加载已持久化的镜像/标志并重新绑定默认访问器。
+`storage` 缺失或 `read`/`write` 为空会在初始化阶段被拒绝。启动时若不存在已持久化
+的镜像，会重新构建镜像。直接使用 `iolink_dll_*` 时才允许 `iolink_ds_init(..., NULL)`
+的 RAM-only 用法。
 
 序列化记录格式为：
 
@@ -562,10 +581,13 @@ set_access_locks`）操作同一个进程级上下文。
 - 同一进程中的多个设备上下文共享身份和访问锁。在该路径改为按上下文保存之前，
   不要假设多设备身份完全独立。
 
-### 8.2 `time_us` 尚未接入
+### 8.2 `time_us` 与平台时间源
 
-`iolink_device_config_t::time_us` 已声明，但核心未使用。请通过平台层提供
-`iolink_time_get_ms()`/`iolink_time_get_us()`。
+`iolink_device_config_t::time_us` 在 `iolink_device_init()` 中绑定到 DLL 和事件
+上下文。该回调为必需项：NULL 会在初始化阶段被拒绝并返回
+`IOLINK_DEVICE_INIT_ERR_TIME`。绑定后，主循环、数据 ISR 和事件引擎都使用该回调，
+核心不再调用平台时间函数。直接使用 `iolink_dll_*` 时，调用方需在初始化后自行绑定
+`ctx->time_us`/`time_user`。时间源必须在上下文生命周期内保持单调。
 
 ### 8.3 旧版全局状态
 
@@ -615,8 +637,8 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 
 ## 10. 集成检查清单
 
-1. 提供 `iolink_time_get_ms/us()` 以及可嵌套的
-   `iolink_critical_enter/exit()`。
+1. 在 `config.time_us` 中提供单调、ISR 安全的微秒时钟，并实现可嵌套的
+   `iolink_critical_enter/exit()`；初始化会拒绝 weak 默认临界区。
 2. 为选定的 BYTE/FRAME 模式实现 PHY 回调，包括 `int_active` 和
    `request_service`。
 3. 保证 `config`、PHY 状态和所有回调数据在上下文生命周期内有效。
@@ -625,7 +647,8 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
    并从数据中断调用 `iolink_device_process_isr()`。
 6. PD 只能通过 `iolink_device_pd_input_update()` 或 `on_pd_input` 回调之一提供，
    不能同时使用。
-7. 如果需要持久化，提供存储后端，并用静态断言检查 NVM 区域大小。
+7. 在 `IOLINK_FEATURE_DATA_STORAGE=1` 时提供完整存储后端（`read`/`write` 非空），
+   并用静态断言检查 NVM 区域大小。
 8. 通过 `vendor_service` 和/或 DS 描述符集合添加厂商参数。
 9. 使用真实主站验证时序、唤醒/SIO 行为和故障映射。
 
@@ -649,9 +672,8 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
   `iolink_checksum6()` / `iolink_checksum6_from_acc()`。
 - `include/iolinki/protocol.h`：标准索引、ISDU 错误码、SystemCommand 和
   M-sequence 常量。应使用这些常量而不是数字字面量。
-- `include/iolinki/platform.h` 和 `time_utils.h`：临界区、旧版 NVM 钩子以及必需的
-  时间源。协议栈不使用旧版 `iolink_nvm_*` 辅助函数；持久化通过 `config.storage`
-  完成。
+- `include/iolinki/platform.h` 和 `time_utils.h`：临界区以及时间源。旧版
+  `iolink_nvm_*` 接口已移除；持久化统一通过 `config.storage` 完成。
 
 ## 12. 参考资料
 

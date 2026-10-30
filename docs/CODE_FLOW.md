@@ -71,7 +71,7 @@ flowchart TB
     end
 
     subgraph PLAT["平台层"]
-        T1["time_utils.h<br/>iolink_time_get_ms/us"]
+        T1["config.time_us<br/>应用微秒时钟"]
         T2["platform.h<br/>iolink_critical_enter/exit"]
         S1["storage.h<br/>read/write/erase 回调"]
     end
@@ -163,10 +163,13 @@ flowchart LR
 - `dll.isdu.direct_param_page2 = ctx->direct_param_page2`；
 - `dll.isdu.vendor_service/vendor_user` 来自 `iolink_device_config_t`；
 - `dll.state_cb = device_state_cb`，用于把 DLL 状态变化转成应用回调；
-- `params` 与 `ds` 共用同一个 `storage` 后端；
+- `params` 与 `ds` 共用同一个 `storage` 后端；`IOLINK_FEATURE_DATA_STORAGE=1`
+  时 `storage` 必须非空且具备 `read`/`write`，否则初始化返回
+  `IOLINK_DEVICE_INIT_ERR_STORAGE`；
 - `ds` 绑定 `device_ds_read/device_ds_write`，实现“标准 Tag 走 params，其余走 vendor_service”。
 
-因此以下对象必须由应用保证生命周期：`iolink_device_config_t`、`device_info`、`storage`、DS 参数描述数组、PHY 上下文。
+因此以下对象必须由应用保证生命周期：`iolink_device_config_t`、`device_info`、
+`storage`（启用 DS 时）、DS 参数描述数组、PHY 上下文。
 
 ---
 
@@ -193,11 +196,9 @@ flowchart TD
     I3 --> J["绑定 lock/unlock、ISDU 依赖、state_cb"]
     I4 --> J
     J --> K["params_bind_storage()<br/>读 NVM 参数记录"]
-    K --> L{"storage 非空?"}
-    L -- 是 --> M["ds_init(storage)<br/>读 DS 镜像和 DS_UPLOAD_FLAG"]
-    L -- 否 --> N["ds 保持 NULL 存储"]
+    K --> L["DS 已启用: storage 已在 init 校验非空"]
+    L --> M["ds_init(storage)<br/>读 DS 镜像和 DS_UPLOAD_FLAG"]
     M --> O["ds_bind_params / ds_bind_param_access"]
-    N --> O
     O --> P["device_apply_stack_config()<br/>PD/OD 长度、t_pd、工作 COM、MinCycleTime"]
     P --> Q{"cyclic_reply_precached?"}
     Q -- 是 --> R["iolink_dll_prepare_cyclic_reply()<br/>当前为空操作，保留兼容接口"]
@@ -715,7 +716,7 @@ sequenceDiagram
 | `phy.detect_wakeup` | `iolink_dll_process()` | SIO 唤醒检测 |
 | `phy.get_voltage_mv` / `is_short_circuit` | `dll_poll_diagnostics()` | 旧版诊断，触发电压/短路事件 |
 | `config->lock/unlock` | PD 更新/读取、`dll_send()` 暂存 | 与 ISR/其他线程互斥；必须成对 |
-| `iolink_critical_enter/exit` | 邮箱、ISDU 快照、状态队列、事件 | 平台临界区；双泵必须提供真实实现 |
+| `iolink_critical_enter/exit` | 邮箱、ISDU 快照、状态队列、事件 | 平台临界区；双泵必须提供真实实现；初始化会拒绝 weak 默认 |
 | `on_state_change` | `device_state_cb()` | 所有实际状态迁移 |
 | `on_startup` | 初始化末尾 + 进入 STARTUP | 初始化时显式调用一次 |
 | `on_preoperate` / `on_operate` | `device_state_cb()` | 进入对应状态时 |
@@ -725,7 +726,7 @@ sequenceDiagram
 | `reset_handler` | `iolink_device_process()` | 0x80/0x81 请求后 |
 | `vendor_service` | ISDU device-specific 索引；DS 读写回退 | 参数 `input/output/output_length` 契约见 `isdu.h` |
 | `storage->read/write` | params 加载/保存、DS 加载/保存 | `erase` 当前无调用点 |
-| `iolink_device_time_us_fn time_us` | 无 | 当前头文件声明，`src/` 中未使用 |
+| `iolink_device_time_us_fn time_us` | DLL、ISR 双泵、事件引擎 | 必需；初始化时绑定，NULL 返回 `IOLINK_DEVICE_INIT_ERR_TIME`；必须单调/非阻塞/ISR 安全 |
 | `phy.get_faults` | 无 | 当前声明但未被 DLL 调用 |
 | `phy.set_cq_line` | 无 | SIO 线状态由 PHY/应用自行管理 |
 
@@ -867,7 +868,9 @@ flowchart LR
 - `ctx->isdu`、`ctx->events`、`ctx->params`、`ctx->ds` 的主要状态由主循环修改。
 - `iolink_critical_enter/exit` 保护邮箱发布/消费、ISDU 快照复制、状态队列、事件队列等短操作。
 - `config->lock/unlock` 优先用于 `dll_send()` 暂存和 PD-in 发布；如果未配置，则退回平台临界区。
-- 平台默认临界区是空实现（`src/platform.c`）；本路径必须提供真实实现或应用锁。
+- 平台默认临界区是 weak 空实现（`src/platform.c`）；`iolink_device_init()` 通过
+  `iolink_platform_critical_sections_ready()` 探测并返回
+  `IOLINK_DEVICE_INIT_ERR_CRITICAL`，因此本路径必须提供真实实现。
 
 ### 12.1 主上下文 / ISR 上下文契约
 
@@ -887,7 +890,7 @@ flowchart LR
 | `dll_process_complete_frame()`、`dll_consume_isr_mailbox()`、`dll_check_*()`、`dll_update_master_lost()` | 主上下文 | 主泵调度与定时监督 |
 | `dll_send()` | 主上下文 | 主泵暂存应答，ISR 负责发送 |
 
-ISR 还允许调用以下只读/时序 helper：`iolink_dll_expected_req_len()`、`iolink_checksum6_from_acc()`、`iolink_isdu_direct_param_page1_octet()`、`iolink_time_get_ms()`、`iolink_time_get_us()`、`iolink_events_flag()`、`iolink_events_memory_read()`。
+ISR 还允许调用以下只读/时序 helper：`iolink_dll_expected_req_len()`、`iolink_checksum6_from_acc()`、`iolink_isdu_direct_param_page1_octet()`、已绑定的时间源（`iolink_device_config_t::time_us` 回调）、`iolink_events_flag()`、`iolink_events_memory_read()`。
 
 禁止在 ISR 分区调用：`iolink_isdu_process()`、事件写路径（`iolink_event_trigger()`、`iolink_events_process()`、`iolink_event_clear()`）、`iolink_dll_flush_state_callbacks()`、应用回调（`state_cb`、`vendor_service` 等）。
 
@@ -914,10 +917,10 @@ ISR 还允许调用以下只读/时序 helper：`iolink_dll_expected_req_len()`�
 集成注意（按当前代码实际调用点）：
 
 - `IOLINK_OPERATE_TIMEOUT_MS`、`IOLINK_PHY_OWNS_LINE_STATE`、`IOLINK_OD_EVENT_MODE` 在 `src/` 中没有引用；不要按注释推断它们已生效。
-- `iolink_device_config_t::time_us` 未在库内使用；时间来自平台 `iolink_time_get_us/ms`。
+- `iolink_device_config_t::time_us` 是必需项，初始化时绑定到 DLL/事件上下文；NULL 会被 `iolink_device_init()` 拒绝。主循环、ISR 和事件计时都用它，核心不再调用平台时间函数；直接使用 `iolink_dll_*` 时需自行绑定 `ctx->time_us`。
 - `phy->get_faults`、`phy->set_cq_line`、`storage->erase` 当前没有栈内调用点。
 - `iolink_events_process()`、`iolink_ds_process()`、`iolink_ds_check()` 需要应用自行调度。
-- 本路径要求 `iolink_critical_enter/exit` 或应用锁真实可用，且 `ctx` 的主循环调用与 ISR 调用遵守文档约束。
+- 本路径要求 `iolink_critical_enter/exit` 真实可用（初始化会校验），且 `ctx` 的主循环调用与 ISR 调用遵守文档约束。
 - 当 `phy->stack_timer_start != NULL` 时，PHY 必须在 Timer B 到期时调用 `iolink_dll_on_stack_tick()`，否则 `iolink_device_process()` 会被授权门控挡住；Timer A 超时则应调用 `iolink_dll_on_rx_timeout()`。
 - `TYPE_1_1` 在本路径初始化时被拒绝；固定 Annex A 类型必须使用匹配的 PD/OD 布局。
 

@@ -5,8 +5,12 @@ This note explains how application data is persisted and how the Data Storage
 
 ## 1. One storage backend
 
-The stack talks to NVM through exactly one callback-only backend supplied in
-`iolink_device_config_t::storage`:
+When `IOLINK_FEATURE_DATA_STORAGE` is enabled (the default), the stack talks to
+NVM through exactly one callback-only backend supplied in
+`iolink_device_config_t::storage`. The member is only declared for that feature
+and is required by `iolink_device_init()`; NULL or missing `read`/`write`
+callbacks are rejected with `IOLINK_DEVICE_INIT_ERR_STORAGE`. With Data Storage
+compiled out, the member is absent and parameters are RAM-only.
 
 ```c
 typedef struct {
