@@ -61,30 +61,18 @@ void iolink_critical_enter(void);
 void iolink_critical_exit(void);
 
 /**
- * @brief Legacy platform NVM helper (not used by the stack).
+ * @brief Probe whether the platform supplied real critical-section hooks.
  *
- * The stack persists data through iolink_device_config_t::storage
- * (see storage.h). These helpers remain for platform/test harnesses only.
+ * Calls iolink_critical_enter()/iolink_critical_exit() once and reports whether
+ * the weak no-op defaults from src/platform.c were used. iolink_device_init()
+ * uses this to reject builds without a usable critical-section port.
  *
- * @param offset Offset in NVM
- * @param data Buffer to read into
- * @param len Length to read
- * @return int 0 on success
+ * @return 0 when both hooks are overridden, -1 when the weak default ran.
  */
-int iolink_nvm_read(uint32_t offset, uint8_t* data, size_t len);
+int iolink_platform_critical_sections_ready(void);
 
-/**
- * @brief Write data to non-volatile memory (NVM).
- * @param offset Offset in NVM
- * @param data Data to write
- * @param len Length to write
- * @return int 0 on success
- */
-int iolink_nvm_write(uint32_t offset, const uint8_t* data, size_t len);
-
-/* Default (Weak) Implementation typically provided in a platform source file.
- * If strictly header-only or macro-based is preferred, use #define macros here.
- * For this stack, we declere functions that the user must implement or we provide weak defaults.
+/* Weak no-op critical-section definitions live in src/platform.c; a real port
+ * overrides them and iolink_platform_critical_sections_ready() verifies that.
  */
 
 #ifdef __cplusplus

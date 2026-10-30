@@ -77,14 +77,12 @@ endforeach()
 set(IOLINK_PLATFORM "LINUX" CACHE STRING "Target platform: LINUX, BAREMETAL")
 
 if(IOLINK_PLATFORM STREQUAL "LINUX")
-    target_compile_definitions(iolinki PRIVATE IOLINK_HAVE_PLATFORM_NVM=1)
     target_sources(iolinki PRIVATE
         src/platform/linux/time_utils.c
-        src/platform/linux/nvm_mock.c
     )
     message(STATUS "Building for Linux host")
 elseif(IOLINK_PLATFORM STREQUAL "BAREMETAL")
-    target_sources(iolinki PRIVATE src/platform/baremetal/time_utils.c src/platform_stubs.c)
+    target_sources(iolinki PRIVATE src/platform/baremetal/time_utils.c)
     message(STATUS "Building for Bare Metal (Stub)")
 endif()
 

@@ -11,9 +11,9 @@
  * @brief Default weak platform abstraction implementations.
  * @ingroup iolinki_platform
  *
- * Provides no-op / not-implemented weak defaults for the critical-section and
- * NVM access hooks so the stack links without a platform port; a real port
- * overrides these symbols.
+ * Provides weak no-op critical-section defaults so the stack links, and a probe
+ * that lets iolink_device_init() reject builds still using them. A real port
+ * overrides the critical-section symbols.
  */
 
 #include "iolinki/platform.h"
@@ -26,32 +26,26 @@
 #define WEAK
 #endif
 
+static volatile uint8_t g_critical_default_used = 0U;
+
 WEAK void iolink_critical_enter(void)
 {
     /* Default: Do nothing (Bare metal single loop is implicitly safe if no IRQ contention) */
+    g_critical_default_used = 1U;
 }
 
 WEAK void iolink_critical_exit(void)
 {
     /* Default: Do nothing */
+    g_critical_default_used = 1U;
 }
 
-#ifndef IOLINK_HAVE_PLATFORM_NVM
-WEAK int iolink_nvm_read(uint32_t offset, uint8_t* data, size_t len)
+int iolink_platform_critical_sections_ready(void)
 {
-    (void) offset;
-    (void) data;
-    (void) len;
-    /* Default: Not implemented */
-    return -1;
+    g_critical_default_used = 0U;
+    iolink_critical_enter();
+    iolink_critical_exit();
+    const uint8_t used = g_critical_default_used;
+    g_critical_default_used = 0U;
+    return (used != 0U) ? -1 : 0;
 }
-
-WEAK int iolink_nvm_write(uint32_t offset, const uint8_t* data, size_t len)
-{
-    (void) offset;
-    (void) data;
-    (void) len;
-    /* Default: Not implemented */
-    return -1;
-}
-#endif
