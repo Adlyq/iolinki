@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "iolinki/protocol.h"
+#include "iolinki/time_utils.h"
 
 static int copy_out(uint8_t* output, size_t* output_length, const uint8_t* src, size_t len)
 {
@@ -195,6 +196,12 @@ static void conformance_reset_handler(iolink_reset_type_t type)
     }
 }
 
+static uint64_t conformance_time_us(void* user)
+{
+    (void) user;
+    return iolink_time_get_us();
+}
+
 int conformance_device_init(conformance_device_t* app, const conformance_profile_t* profile,
                             const iolink_phy_api_t* phy, const char* nvm_path)
 {
@@ -215,9 +222,12 @@ int conformance_device_init(conformance_device_t* app, const conformance_profile
     }
 
     app->config.phy = *phy;
+    app->config.time_us = conformance_time_us;
     app->config.stack = profile->stack;
     app->config.device_info = profile->identity;
+#if IOLINK_FEATURE_DATA_STORAGE
     app->config.storage = &app->storage.api;
+#endif
     app->config.vendor_service = conformance_vendor_service;
     app->config.user = app;
 

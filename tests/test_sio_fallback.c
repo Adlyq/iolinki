@@ -19,7 +19,14 @@
 #include "iolinki/dll.h"
 #include "iolinki/phy.h"
 #include "iolinki/crc.h"
+#include "iolinki/time_utils.h"
 #include "test_helpers.h"
+
+static uint64_t sio_time_us(void* user)
+{
+    (void) user;
+    return iolink_time_get_us();
+}
 
 static void test_crc_errors_do_not_enter_sio(void** state)
 {
@@ -166,6 +173,8 @@ static void test_fallback_command_ignored_without_wakeup(void** state)
     memset(&dev, 0, sizeof(dev));
     dev.cfg.phy = g_phy_mock;
     dev.cfg.phy.detect_wakeup = NULL;
+    dev.cfg.time_us = sio_time_us;
+    dev.cfg.storage = &g_ds_storage_mock;
     dev.cfg.stack = config;
     assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), 0);
 

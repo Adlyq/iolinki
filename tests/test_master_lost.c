@@ -51,7 +51,6 @@ static void on_online(void)
 static int test_setup(void** state)
 {
     (void) state;
-    iolink_nvm_mock_cleanup();
     g_now_ms = 0U;
     lost_calls = 0;
     online_calls = 0;
@@ -61,7 +60,6 @@ static int test_setup(void** state)
 static int test_teardown(void** state)
 {
     (void) state;
-    iolink_nvm_mock_cleanup();
     return 0;
 }
 

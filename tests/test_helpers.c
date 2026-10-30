@@ -22,10 +22,20 @@
 #include "iolinki/crc.h"
 #include "iolinki/protocol.h"
 #include "iolinki/platform.h"
+#include "iolinki/time_utils.h"
 
 /* Test buffers */
 uint8_t g_tx_buf[1024];
 uint8_t g_rx_buf[1024];
+
+/* The device layer rejects the library's weak no-op critical sections. */
+void iolink_critical_enter(void)
+{
+}
+
+void iolink_critical_exit(void)
+{
+}
 
 /* Mock implementations */
 
@@ -43,26 +53,6 @@ static int g_rx_err_pending;
 static uint8_t g_txq[1024];
 static size_t g_txq_len;
 static uint8_t g_tx_active;
-/* Strong deterministic test storage. The library's weak unsupported defaults
- * can otherwise satisfy archive references before the Linux backend is loaded. */
-static uint8_t g_nvm_mock[4096];
-int iolink_nvm_read(uint32_t offset, uint8_t* data, size_t len)
-{
-    if (offset > sizeof(g_nvm_mock) || len > sizeof(g_nvm_mock) - offset ||
-        (len != 0U && data == NULL))
-        return -1;
-    if (len != 0U) memcpy(data, g_nvm_mock + offset, len);
-    return 0;
-}
-int iolink_nvm_write(uint32_t offset, const uint8_t* data, size_t len)
-{
-    if (offset > sizeof(g_nvm_mock) || len > sizeof(g_nvm_mock) - offset ||
-        (len != 0U && data == NULL))
-        return -1;
-    if (len != 0U) memcpy(g_nvm_mock + offset, data, len);
-    return 0;
-}
-
 int mock_phy_init(void* user)
 {
     (void) user;
@@ -258,6 +248,12 @@ void test_io_cycle(iolink_device_ctx_t* ctx)
     }
 }
 
+static uint64_t test_time_us(void* user)
+{
+    (void) user;
+    return iolink_time_get_us();
+}
+
 int iolink_test_device_init(iolink_test_device_t* dev, const iolink_config_t* stack,
                             const iolink_app_callbacks_t* callbacks)
 {
@@ -267,6 +263,10 @@ int iolink_test_device_init(iolink_test_device_t* dev, const iolink_config_t* st
 
     (void) memset(dev, 0, sizeof(*dev));
     dev->cfg.phy = g_phy_mock;
+    dev->cfg.time_us = test_time_us;
+#if IOLINK_FEATURE_DATA_STORAGE
+    dev->cfg.storage = &g_ds_storage_mock;
+#endif
     if (stack != NULL) {
         dev->cfg.stack = *stack;
     }
@@ -415,12 +415,6 @@ void iolink_ds_mock_reset(void)
 uint8_t* iolink_ds_mock_get_buf(void)
 {
     return g_ds_mock_buf;
-}
-
-void iolink_nvm_mock_cleanup(void)
-{
-    memset(g_nvm_mock, 0, sizeof(g_nvm_mock));
-    remove("iolink_nvm.bin");
 }
 
 /* ISDU V1.1.5 Interleaved Format Helpers */

@@ -57,7 +57,6 @@ static iolink_device_info_t make_info(void)
 static int setup(void** state)
 {
     (void) state;
-    iolink_nvm_mock_cleanup();
     iolink_device_info_t info = make_info();
     iolink_device_info_init(&info);
     iolink_params_init();
@@ -68,7 +67,6 @@ static int teardown(void** state)
 {
     (void) state;
     iolink_device_info_init(NULL);
-    iolink_nvm_mock_cleanup();
     return 0;
 }
 

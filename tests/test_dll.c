@@ -29,14 +29,12 @@
 static int test_setup(void** state)
 {
     (void) state;
-    iolink_nvm_mock_cleanup();
     return 0;
 }
 
 static int test_teardown(void** state)
 {
     (void) state;
-    iolink_nvm_mock_cleanup();
     return 0;
 }
 

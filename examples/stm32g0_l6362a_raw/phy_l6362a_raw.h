@@ -75,8 +75,6 @@ void iolink_critical_enter(void);
 void iolink_critical_exit(void);
 uint64_t iolink_time_get_us(void);
 uint32_t iolink_time_get_ms(void);
-int iolink_nvm_read(uint32_t offset, uint8_t* data, size_t len);
-int iolink_nvm_write(uint32_t offset, const uint8_t* data, size_t len);
 
 #ifdef __cplusplus
 }

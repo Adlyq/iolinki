@@ -14,11 +14,19 @@
 
 #include "iolinki/device.h"
 #include "iolinki/protocol.h"
+#include "iolinki/time_utils.h"
+#include "test_helpers.h"
 
 static int noop_user(void* user)
 {
     (void) user;
     return 0;
+}
+
+static uint64_t reentrant_time_us(void* user)
+{
+    (void) user;
+    return iolink_time_get_us();
 }
 
 static void test_device_context_api_initializes_two_configs(void** state)
@@ -29,6 +37,8 @@ static void test_device_context_api_initializes_two_configs(void** state)
     static iolink_device_phy_t phy = {.init = noop_user};
     iolink_device_config_t cfg_a = {
         .phy = phy,
+        .time_us = reentrant_time_us,
+        .storage = &g_ds_storage_mock,
         .stack =
             {
                 .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
@@ -40,6 +50,8 @@ static void test_device_context_api_initializes_two_configs(void** state)
     };
     iolink_device_config_t cfg_b = {
         .phy = phy,
+        .time_us = reentrant_time_us,
+        .storage = &g_ds_storage_mock,
         .stack =
             {
                 .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,

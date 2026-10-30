@@ -9,6 +9,14 @@
 #include "conformance_profiles.h"
 #include "iolinki/phy_virtual.h"
 
+void iolink_critical_enter(void)
+{
+}
+
+void iolink_critical_exit(void)
+{
+}
+
 static void usage(const char* argv0)
 {
     printf("Usage: %s --phy <tty|pty> [--profile full|config|pdout-only|minimal] [--nvm <path>]\n",

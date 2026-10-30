@@ -744,22 +744,6 @@ uint32_t iolink_time_get_ms(void)
     return (uint32_t) (iolink_time_get_us() / 1000U);
 }
 
-int iolink_nvm_read(uint32_t offset, uint8_t* data, size_t len)
-{
-    (void) offset;
-    (void) data;
-    (void) len;
-    return -1;
-}
-
-int iolink_nvm_write(uint32_t offset, const uint8_t* data, size_t len)
-{
-    (void) offset;
-    (void) data;
-    (void) len;
-    return -1;
-}
-
 /* Public functions ----------------------------------------------------------*/
 
 const iolink_phy_api_t* phy_l6362a_raw_get(void)

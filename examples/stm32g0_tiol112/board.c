@@ -44,20 +44,6 @@ uint32_t iolink_time_get_ms(void)
 {
     return (uint32_t) (iolink_time_get_us() / 1000U);
 }
-int iolink_nvm_read(uint32_t offset, uint8_t* data, size_t len)
-{
-    (void) offset;
-    (void) data;
-    (void) len;
-    return -1;
-}
-int iolink_nvm_write(uint32_t offset, const uint8_t* data, size_t len)
-{
-    (void) offset;
-    (void) data;
-    (void) len;
-    return -1;
-}
 static void mode(GPIO_TypeDef* port, unsigned pin, unsigned value)
 {
     port->MODER = (port->MODER & ~(3UL << (2U * pin))) | (value << (2U * pin));

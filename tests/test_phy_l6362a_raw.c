@@ -697,8 +697,6 @@ static void test_ol_irq_during_mode_change(void)
 
 static void test_platform_hooks(void)
 {
-    uint8_t byte = 0U;
-
     mock_stm32g0_reset();
 
     /* SysTick-derived microsecond timebase. */
@@ -730,10 +728,6 @@ static void test_platform_hooks(void)
     assert(mock_primask == 1U);
     iolink_critical_exit(); /* unbalanced exit must not underflow */
     assert(mock_primask == 1U);
-
-    /* No NVM on this board: both hooks report "not implemented". */
-    assert(iolink_nvm_read(0U, &byte, 1U) == -1);
-    assert(iolink_nvm_write(0U, &byte, 1U) == -1);
 }
 
 int main(void)

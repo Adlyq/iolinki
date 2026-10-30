@@ -87,7 +87,6 @@ static const iolink_phy_api_t k_gap_noop_phy = {
 static int test_setup(void** state)
 {
     (void) state;
-    iolink_nvm_mock_cleanup();
     iolink_ds_mock_reset();
     return 0;
 }
@@ -95,7 +94,6 @@ static int test_setup(void** state)
 static int test_teardown(void** state)
 {
     (void) state;
-    iolink_nvm_mock_cleanup();
     iolink_ds_mock_reset();
     return 0;
 }

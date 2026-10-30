@@ -86,7 +86,6 @@ void iolink_ds_mock_reset(void);
 uint8_t* iolink_ds_mock_get_buf(void);
 
 /* Mock NVM Cleanup */
-void iolink_nvm_mock_cleanup(void);
 
 /* ISDU V1.1.5 Interleaved Format Helpers */
 #include "iolinki/isdu.h"

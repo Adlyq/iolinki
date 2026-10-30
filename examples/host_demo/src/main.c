@@ -9,8 +9,54 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 #include "iolinki/device.h"
 #include "iolinki/phy_virtual.h"
+#include "iolinki/time_utils.h"
+
+#if IOLINK_FEATURE_DATA_STORAGE
+static uint8_t g_storage[IOLINK_STORAGE_TOTAL_SIZE];
+
+static int storage_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
+{
+    (void) user;
+    if ((offset > sizeof(g_storage)) || (len > sizeof(g_storage) - offset)) {
+        return -1;
+    }
+    (void) memcpy(buf, &g_storage[offset], len);
+    return 0;
+}
+
+static int storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
+{
+    (void) user;
+    if ((offset > sizeof(g_storage)) || (len > sizeof(g_storage) - offset)) {
+        return -1;
+    }
+    (void) memcpy(&g_storage[offset], buf, len);
+    return 0;
+}
+
+static const iolink_storage_api_t g_storage_api = {
+    .read = storage_read,
+    .write = storage_write,
+    .erase = NULL,
+};
+#endif
+
+void iolink_critical_enter(void)
+{
+}
+
+void iolink_critical_exit(void)
+{
+}
+
+static uint64_t host_time_us(void* user)
+{
+    (void) user;
+    return iolink_time_get_us();
+}
 
 /** @brief Run the ISR pump and drain any reply it is transmitting. */
 static void pump_isr(iolink_device_ctx_t* ctx)
@@ -100,7 +146,14 @@ int main(int argc, char* argv[])
     /* Initialize stack with virtual PHY and config */
     const iolink_phy_api_t* phy = iolink_phy_virtual_get();
     iolink_device_ctx_t ctx;
-    iolink_device_config_t dev_config = {.phy = *phy, .stack = config};
+    iolink_device_config_t dev_config = {
+        .phy = *phy,
+        .stack = config,
+        .time_us = host_time_us,
+#if IOLINK_FEATURE_DATA_STORAGE
+        .storage = &g_storage_api,
+#endif
+    };
 
     if (iolink_device_init(&ctx, &dev_config) != 0) {
         printf("ERROR: Failed to initialize IO-Link stack\n");
