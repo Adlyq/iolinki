@@ -275,10 +275,25 @@ static void test_reply_staging_pokes_phy_outside_critical(void** state)
     feed_frame(frame, sizeof(frame));
 
     iolink_dll_process_isr(&s_ctx);
+
+    /* The staging path in dll_send() (slot selection, payload copy, publish) is
+     * main-owned and must not be wrapped in the platform critical section: the
+     * exclusion belongs to the direct-send fallback, not to this publish. Pin
+     * that by counting the entries around the pass that answers the ISDU read;
+     * a regression that re-adds IOLINK_CRITICAL_ENTER/EXIT around the copy is
+     * then visible even though request_service() still runs with the section
+     * released. This pass has no other section: the mock PHY has no diagnostics
+     * hooks, the ISDU FlowCTRL IDLE read only resets the transport, timing
+     * enforcement is off (no t_CYCLE event), the DLL state does not change, and
+     * the mailbox consume takes no lock. */
+#if IOLINK_NEED_CRITICAL
+    const uint32_t crit_before = s_crit_enters;
+#endif
     iolink_dll_process(&s_ctx);
 
     assert_int_equal(s_service_calls, 1U);
 #if IOLINK_NEED_CRITICAL
+    assert_int_equal(s_crit_enters, crit_before);
     assert_false(s_service_in_critical);
 #endif
     assert_int_equal(s_crit_enters, s_crit_exits);
