@@ -209,8 +209,9 @@ typedef struct
 
     /* Deadline requests staged by the data ISR. The 64-bit deadlines are
      * main-owned so no 64-bit value is written from interrupt context. */
-    volatile uint8_t isr_dsio_clear;       /**< ISR served the startup probe: clear T_DSIO */
-    volatile uint8_t isr_fallback_pending; /**< ISR accepted FALLBACK: arm T_FBD from main */
+    volatile uint8_t isr_dsio_clear;         /**< ISR served the startup probe: clear T_DSIO */
+    volatile uint8_t isr_fallback_pending;   /**< ISR accepted FALLBACK: arm T_FBD from main */
+    volatile uint8_t fallback_clear_pending; /**< A non-FALLBACK command was applied: clear T_FBD */
 
     /* Configuration */
     uint8_t m_seq_type;          /**< Supported M-sequence type */

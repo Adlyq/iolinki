@@ -424,16 +424,16 @@ bool dll_apply_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
             dll_protocol_error_to_startup(ctx);
             return true;
         case IOLINK_CMD_DEVICE_PREOPERATE:
-            ctx->fallback_deadline_ms = 0U;
+            ctx->fallback_clear_pending = 1U;
             dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
             return true;
         case IOLINK_CMD_PROCESS_DATA_OPERATE:
-            ctx->fallback_deadline_ms = 0U;
+            ctx->fallback_clear_pending = 1U;
             ctx->pd_valid = true;
             dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
             return true;
         case IOLINK_CMD_DEVICE_OPERATE:
-            ctx->fallback_deadline_ms = 0U;
+            ctx->fallback_clear_pending = 1U;
             ctx->pd_valid = false;
             /* DeviceOperate from PREOPERATE establishes communication
                (ESTAB_COM); the following PDOperate 0x98 moves to OPERATE.
@@ -1416,15 +1416,29 @@ static void dll_apply_isr_deadline_requests(iolink_dll_ctx_t* ctx)
 {
     if (ctx->isr_fallback_pending != 0U) {
         ctx->isr_fallback_pending = 0U;
-        /* Table 47 T8/T9: T_FBD is 3 MasterCycleTimes, capped at 500 ms. */
-        uint32_t t_fbd_ms = 500U;
-        if (ctx->min_cycle_time_us > 0U) {
-            t_fbd_ms = (3U * ctx->min_cycle_time_us) / 1000U;
-            if (t_fbd_ms > 500U) {
-                t_fbd_ms = 500U;
+        /* Only arm while the DL mode is still FALLBACK: a later command may
+         * have left it, in which case a T_FBD deadline would be spurious. */
+        if (ctx->state == IOLINK_DLL_STATE_FALLBACK) {
+            /* Table 47 T8/T9: T_FBD is 3 MasterCycleTimes, capped at 500 ms.
+             * The reference point is this main-context pass, one pass later
+             * than the frame end; that only stretches T_FBD (never shortens
+             * it) by at most one main-loop latency. */
+            uint32_t t_fbd_ms = 500U;
+            if (ctx->min_cycle_time_us > 0U) {
+                t_fbd_ms = (3U * ctx->min_cycle_time_us) / 1000U;
+                if (t_fbd_ms > 500U) {
+                    t_fbd_ms = 500U;
+                }
             }
+            ctx->fallback_deadline_ms = dll_time_us(ctx) / 1000U + t_fbd_ms;
         }
-        ctx->fallback_deadline_ms = dll_time_us(ctx) / 1000U + t_fbd_ms;
+    }
+    if (ctx->fallback_clear_pending != 0U) {
+        ctx->fallback_clear_pending = 0U;
+        /* A command other than FALLBACK was applied: drop any pending T_FBD. */
+        if (ctx->state != IOLINK_DLL_STATE_FALLBACK) {
+            ctx->fallback_deadline_ms = 0U;
+        }
     }
     if (ctx->isr_dsio_clear != 0U) {
         ctx->isr_dsio_clear = 0U;

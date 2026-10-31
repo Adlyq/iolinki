@@ -668,6 +668,33 @@ static int test_type0_commands_fast_path(void)
     return 0;
 }
 
+/* A non-FALLBACK MasterCommand must not write the 64-bit T_FBD deadline from
+ * the ISR: the ISR only stages a clear request, the main pump applies it. */
+static int test_fallback_clear_is_staged(void)
+{
+    iolink_dll_ctx_t dll;
+    init_type0_ctx(&dll);
+    dll.fallback_deadline_ms = 0x0000000123456789ULL;
+
+    uint8_t frame[3];
+    frame[0] = IOLINK_MC_CHANNEL_PAGE;
+    frame[1] = IOLINK_MSEQ_TYPE_0;
+    frame[2] = IOLINK_CMD_DEVICE_OPERATE;
+    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 3U));
+    tx_n = 0U;
+    feed_chk(frame, 3U);
+    iolink_dll_process_isr(&dll);
+
+    if ((dll.fallback_deadline_ms != 0x0000000123456789ULL) || (dll.fallback_clear_pending == 0U)) {
+        return 1; /* the ISR touched the 64-bit field */
+    }
+    iolink_dll_process(&dll);
+    if ((dll.fallback_deadline_ms != 0U) || (dll.fallback_clear_pending != 0U)) {
+        return 2; /* the main pump did not apply the staged clear */
+    }
+    return 0;
+}
+
 /* Phase 4a: Timer A starts on the first octet and stops before the reply;
  * Timer B starts when the reply completes. */
 static int test_timer_interlock(void)
@@ -859,6 +886,10 @@ int main(void)
     rc = test_byte_gap_incomplete();
     if (rc != 0) {
         return 120 + rc;
+    }
+    rc = test_fallback_clear_is_staged();
+    if (rc != 0) {
+        return 130 + rc;
     }
     return 0;
 }
