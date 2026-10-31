@@ -916,17 +916,19 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
  * Shared by the streaming RX loop and the ISR-pump mailbox: both assemble a
  * complete M-sequence first, then run this exact validation + dispatch.
  */
-/** @brief Pre-stage the framed ISDU response for the ISR read pump. */
+/**
+ * @brief Pre-stage the framed ISDU response for the ISR read pump.
+ *
+ * Single-writer handoff: ctx->isdu is owned by the main pump; the ISR reads
+ * only this snapshot. The decision is taken lock-free (every input is
+ * main-owned), so the steady-state pass never enters the critical section;
+ * only an actual publish or a new response copy runs with interrupts off.
+ */
 static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
 {
     if (ctx == NULL) {
         return;
     }
-    /* Single-writer handoff: ctx->isdu is owned by the main pump; the ISR reads
-     * only this snapshot. The short critical section makes the multi-octet
-     * response copy and the Busy/length/index bookkeeping atomic for the reader,
-     * without holding interrupts off across the ISDU execute step. */
-    IOLINK_CRITICAL_ENTER();
     const bool busy =
         (ctx->isdu.state == ISDU_STATE_SERVICE_EXECUTE) || (ctx->isdu.state == ISDU_STATE_BUSY);
     uint8_t n = 0U;
@@ -943,6 +945,14 @@ static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
     const bool new_resp =
         (ctx->isdu.state == ISDU_STATE_RESPONSE_READY) && (ctx->isr_isdu_resp_valid == 0U);
     const bool changed = new_resp || (ctx->isr_isdu_len != n) || (ctx->isr_isdu_busy != next_busy);
+    if (!new_resp && !changed) {
+        return; /* nothing to publish: keep the interrupt-off window at zero */
+    }
+
+    /* The multi-octet response copy and the Busy/length/index bookkeeping must
+     * be atomic for the ISR reader, without holding interrupts off across the
+     * ISDU execute step. */
+    IOLINK_CRITICAL_ENTER();
     if (new_resp) {
         /* Copy once per response: re-copying the (up to 256 octet) buffer every
          * main-loop pass would hold the interrupt gate for a few microseconds
@@ -1478,6 +1488,10 @@ static void dll_drain_staged_isdu_write(iolink_dll_ctx_t* ctx)
     uint8_t staged_len = 0U;
     uint8_t staged_od[IOLINK_OD_MAX_SIZE];
     bool drained = false;
+
+    if (ctx->isr_od_staged == 0U) {
+        return; /* steady state: nothing staged, no interrupt-off window */
+    }
 
     IOLINK_CRITICAL_ENTER();
     if (ctx->isr_od_staged != 0U) {
