@@ -243,11 +243,11 @@ flowchart TD
     J --> K["组装/接收完整请求"]
     K --> L["长度、A.1.6 校验、CKT 类型检查"]
     L --> M{"ISDU 写?"}
-    M -- 是 --> M1["暂存 OD 到 isr_od_stage<br/>由主循环执行"]
+    M -- 是 --> M1["暂存 OD 到 isr_od_ring<br/>由主循环执行"]
     M -- 否 --> N{"Type-0 快路径可处理?"}
     M1 --> N
     N -- 是 --> N1["ISR 直接应答<br/>Type-0 READ/写确认"]
-    N -- 否 --> O["发布到单槽邮箱 isr_frame_ready"]
+    N -- 否 --> O["发布到邮箱槽环 isr_frame_ring"]
     O --> P{"Type-1/2 且可 eager?"}
     P -- 是 --> P1["从 pd_in 活动缓冲零拷贝组应答<br/>并立即发送"]
     P -- 否 --> Q["由主循环应答"]
@@ -268,11 +268,11 @@ flowchart TD
     A["iolink_device_process()"] --> B{"PHY 有 stack_timer_start<br/>且没有 Timer B 授权?"}
     B -- 是 --> Z["return，等待授权"]
     B -- 否 --> C["iolink_dll_process()"]
-    C --> D["排空 isr_od_stage<br/>调用 iolink_isdu_od_write()"]
+    C --> D["排空 isr_od_ring<br/>调用 iolink_isdu_od_write()"]
     D --> E["iolink_isdu_process()<br/>执行服务并组响应"]
     E --> F["dll_isdu_sync_snapshot()<br/>刷新 ISR 读快照"]
     F --> G["诊断、定时器、t_pd 等"]
-    G --> H{"isr_frame_ready?"}
+    G --> H{"isr_frame_ring 非空?"}
     H -- 否 --> I["继续其他检查"]
     H -- 是 --> J["短临界区复制邮箱帧<br/>快照/清除 frame_eager"]
     J --> K["dll_process_complete_frame()"]
@@ -283,10 +283,10 @@ flowchart TD
 
 ### 5.3 关键约束
 
-- `ctx->isdu` 由主循环单写；ISR 不写 `ctx->isdu`，ISDU 响应只读 `isr_isdu_resp_buf` 快照，并拥有 ISDU 读的 FlowCTRL/segment 索引。Page 通道的 DPP1 读取会在 ISR 中只读 `ctx->isdu`/DLL 状态来构建页面字节。
-- ISDU 写由 ISR 暂存到 `isr_od_stage`，主循环排空后调用 `iolink_isdu_od_write()`。
-- 邮箱只有**一个槽**：`isr_frame_ready` 未消费时新帧会计入 `isr_mailbox_drops` 并被丢弃。
-- `isr_eager_replied` 表示 ISR 已应答该帧；主循环通过 `frame_eager` 避免重复发送，但仍会处理状态/错误/ISDU 读复位等。
+- `ctx->isdu` 由主循环单写；ISR 不写 `ctx->isdu`，ISDU 响应只读已发布的 `resp_store[sel]`，并拥有 ISDU 读的 FlowCTRL/segment 索引。Page 通道的 DPP1 读取会在 ISR 中只读 `ctx->isdu`/DLL 状态来构建页面字节。
+- ISDU 写由 ISR 暂存到 `isr_od_ring`，主循环排空后调用 `iolink_isdu_od_write()`。
+- 邮箱是**两个槽**的 SPSC 环：环满（两帧都未消费）时新帧计入 `isr_mailbox_drops` 并被丢弃。
+- 邮箱记录的 `eager` 字段表示 ISR 已应答该帧；主循环把它快照到 `frame_eager` 以避免重复发送，但仍会处理状态/错误/ISDU 读复位等。
 - RX FRAME 路径先发布邮箱、再启动 eager 应答，最后复制稳定副本；RX BYTE 路径先启动 eager 应答、再发布邮箱，以减少 t_A 延迟。
 - 状态迁移统一进入 `pending_states` 队列；ISR 中的迁移由主循环 `flush` 延迟交付，主循环中的迁移入队后立即 `flush`。深度为 `IOLINK_PENDING_STATES=4`。
 
@@ -430,7 +430,7 @@ flowchart LR
 | Type-0 Page/Diag/ISDU READ | 直接应答；ISDU READ 从快照取数 | 该帧不再入邮箱；若为 ISDU READ，ISR 已推进读段索引 |
 | Type-0 Page WRITE addr0（MasterCommand/Fallback） | 在 ISR 内应用并回 CKS | 该帧不再入邮箱；状态迁移排队 |
 | Type-0 Page/Diag WRITE 其他地址 | 不处理，发布邮箱 | 主循环执行 DPP 写/诊断确认；其他 Type-0 写由主循环按当前状态处理 |
-| Type-0 ISDU WRITE | 暂存 `isr_od_stage` 并回 CKS | 主循环从 `isr_od_stage` 取写请求，不经过邮箱 |
+| Type-0 ISDU WRITE | 暂存到 `isr_od_ring` 并回 CKS | 主循环从 `isr_od_ring` 取写请求，不经过邮箱 |
 | Type-1/2 READ | Process/Page/Diag/ISDU 从 `pd_in` 组应答并发送 | eager 帧仍发布到邮箱；主循环不重复发送，但会更新 PD-out、统计和 OD 分发 |
 | Type-1/2 WRITE | 暂存 ISDU 写；Process 等直接回复 `[PD-in]CKS` | eager 帧仍发布到邮箱；主循环不重复发送，但会复制 PD-out、执行 ISDU 等 |
 
@@ -472,7 +472,7 @@ sequenceDiagram
     T->>T: 达到 Length 后校验 CHKPDU
     T->>T: isdu_execute_request() 解析 I-Service/Index/Subindex/payload
     T->>T: state = SERVICE_EXECUTE
-    Note over D: 写请求先暂存在 isr_od_stage，由主循环排空执行
+    Note over D: 写请求先暂存在 isr_od_ring，由主循环排空执行
     D->>S: 下一次 iolink_dll_process() 调用 iolink_isdu_process()
     S->>S: handle_standard_commands()
     S->>T: isdu_frame_response() 组响应
@@ -497,7 +497,7 @@ sequenceDiagram
   - `IDLE` → No Service `0x00`。
 - `COUNT`：继续从 `resp_idx` 顺序读取；若剩余不足 `od_len`，补 `0x00`。
 - 读完后 `RESPONSE_READY → IDLE`。
-- ISR 双泵另有一套快照分段逻辑 `dll_isr_isdu_od()`，使用 `isr_isdu_resp_buf`、`isr_isdu_idx`、`isr_isdu_seg_idx`、`isr_isdu_last_flowctrl`，不直接修改主 ISDU 传输状态。
+- ISR 双泵另有一套快照分段逻辑 `dll_isr_isdu_od()`，读取原子发布字 `isr_isdu_pub` 指定的 `resp_store[sel]`，并拥有 `isr_isdu_idx`/`isr_isdu_seg_idx`/`isr_isdu_last_flowctrl`，不直接修改主 ISDU 传输状态。
 
 响应组帧（`isdu_frame_response()`）：
 
@@ -687,7 +687,7 @@ sequenceDiagram
 1. Timer B 授权检查；没有授权直接返回。
 2. `iolink_dll_process()`：
    - 处理 ISR 活动时间戳、恢复工作波特率；
-   - 排空 `isr_od_stage`，调用 `iolink_isdu_od_write()`；
+   - 排空 `isr_od_ring`，调用 `iolink_isdu_od_write()`；
    - `iolink_isdu_process()`，随后刷新 ISR 快照；
    - `dll_poll_diagnostics()`；
    - master-lost 计算、1 s idle 计数、T_DSIO、T_FBD、t_pd；
@@ -829,17 +829,17 @@ flowchart LR
         M2["pd_in[3][OD+PD+1]"]
         M3["active 索引"]
         M4["isr_tx_payload[2]<br/>主应答暂存"]
-        M5["isr_od_stage<br/>ISDU 写暂存"]
+        M5["isr_od_ring<br/>ISDU 写暂存"]
         M8["ctx->isdu<br/>主循环单写状态机"]
-        M6["isr_isdu_resp_buf<br/>ISDU 响应快照"]
-        M7["isr_frame_buf<br/>邮箱帧稳定副本"]
+        M6["isr_isdu_pub + resp_store[2]<br/>ISDU 响应发布字"]
+        M7["isr_frame_ring<br/>邮箱槽环"]
     end
     subgraph ISR["数据 ISR"]
         I1["捕获 pd_in_active"]
         I2["逐字节/整帧发送"]
         I3["收集 RX 到 isr_rx_buf"]
-        I4["读取 isr_isdu_resp_buf"]
-        I5["发布 isr_frame_ready"]
+        I4["读取 resp_store[sel]"]
+        I5["发布 isr_frame_ring"]
     end
     M1 --> M2
     M3 --> M2
@@ -857,16 +857,16 @@ flowchart LR
 
 - `pd_in[IOLINK_PD_IN_BUFFERS][IOLINK_PD_REPLY_MAX]`：布局为 `[OD...][PD-in...][CKS]`，主循环填一个既不是 `active` 也不是 `captured` 的缓冲区，再原子切换 `pd_in_active`；ISR 在应答开始时捕获 `pd_in_active`，零拷贝发送。`device_pd_in_free_index()` 负责选空闲缓冲：TX BYTE 下 ISR 在帧末释放租约，2 个缓冲即可；TX FRAME 下 DMA 完成时机对库不可见，租约保持到下次捕获，因此保留 3 个。没有空闲缓冲时主循环保留当前 PD-in，下个周期重试。
 - `pd_out[IOLINK_PD_OUT_MAX_SIZE]`：Type-1/2 帧处理时从 `frame_buf` 复制最新 PD-out；应用通过 `iolink_device_pd_output_read()` 读取。
-- `isr_tx_payload[2]`：主上下文暂存的应答；`isr_tx_pending_slot`/`isr_tx_pending` 交给 ISR 发送。
-- `isr_frame_buf` + `isr_frame_ready`：单槽邮箱。RX BYTE 先复制到 `isr_rx_buf` 再发布；RX FRAME 先发布 PHY 指针做 eager 应答，再复制到稳定副本。
-- `isr_isdu_resp_buf`：主循环在 `dll_isdu_sync_snapshot()` 中复制 `ctx->isdu.resp_buf`；ISR 只读。
-- `isr_od_stage`：ISR 暂存一个 ISDU 写段；如果主循环未及时排空，新段覆盖并计 `isr_od_overruns`。
+- `isr_tx_payload[3]`：应答暂存槽。主上下文在槽 0/1 之间交替（单写者，无 RMW）；槽 2 专供 ISR 自己的即时应答，两个上下文不再共享槽计数。
+- `isr_frame_slot[2]` + `isr_frame_ring`：帧邮箱改成 SPSC 槽环（`include/iolinki/ring.h`）。ISR 把长度、eager 标志和帧字节一起写入一个槽后发布 `in`；主循环 `peek` → 复制 → `release`。环满时丢帧并计 `isr_mailbox_drops`，但主循环忙时不再丢下一帧，也不需要临界区。
+- `isr_isdu_pub`（发布字）：主循环把 `{len, busy, sel}` 打包成一个原子字发布；ISR 在 START 时整体采纳并自己维护 FlowCTRL 段索引。响应缓冲双缓冲（`ctx->isdu.resp_store[2]`），ISR 直接读已发布的那个，**没有拷贝、没有临界区**。
+- `isr_od_slot[2]` + `isr_od_ring`：ISDU 写段同样走槽环；第三个未排空的段才会被丢弃并计 `isr_od_overruns`。
 - `pending_states[4]`：ISR 期间的状态迁移队列。
 
 并发边界：
 
 - `ctx->isdu`、`ctx->events`、`ctx->params`、`ctx->ds` 的主要状态由主循环修改。
-- `iolink_critical_enter/exit` 保护邮箱发布/消费、ISDU 快照复制、状态队列、事件队列等短操作。
+- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不再需要关中断；`iolink_critical_enter/exit` 只包住标量与事件引擎的短操作（状态队列、事件队列、PD-in 索引交换、`dll_send` 暂存、`set_pd_length`）。
 - `config->lock/unlock` 优先用于 `dll_send()` 暂存和 PD-in 发布；如果未配置，则退回平台临界区。
 - 平台默认临界区是 weak 空实现（`src/platform.c`）；`iolink_device_init()` 通过
   `iolink_platform_critical_sections_ready()` 探测并返回
@@ -923,17 +923,19 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 
 | 对象 | 写者（可写所有权） | 读者 | 移交机制 | 租约/回收 |
 | :--- | :--- | :--- | :--- | :--- |
-| `isr_frame_buf` + `isr_frame_ready` | ISR | 主上下文 | `isr_frame_ready` 标志 | 主上下文拷出后清标志 |
-| `isr_tx_payload[]` + `isr_tx_pending` | 主上下文 | ISR | `request_service()` | ISR 取走后清 pending |
-| `pd_in[]` + `pd_in_active` | 主上下文 | ISR | 索引交换 | `pd_in_captured` 记录 ISR 占用槽；TX FRAME 下保持到下次捕获 |
-| `isr_isdu_resp_buf` + 索引字段 | 主上下文 | ISR | 快照刷新 | 新响应使 `isr_isdu_resp_valid` 失效 |
-| `isr_od_stage` | ISR | 主上下文 | `isr_od_staged` | 主上下文排空后清标志 |
+| `isr_frame_slot[]` + `isr_frame_ring` | ISR | 主上下文 | 槽环 `in`/`out`（各单写者） | 主上下文 `release` 后归还 |
+| `isr_tx_payload[0..1]` + `isr_tx_pending` | 主上下文 | ISR | 槽索引 + `request_service()` | ISR 取走后清 pending |
+| `isr_tx_payload[2]` | ISR | ISR | 固定槽 | 帧末 `tx_done` |
+| `pd_in[]` + `pd_in_active` | 主上下文 | ISR | 索引交换 | `pd_in_captured`；TX BYTE 帧末释放，TX FRAME 保持到下次捕获 |
+| `isdu.resp_store[2]` + `isr_isdu_pub` | 主上下文（引擎） | ISR | 原子发布字 `{len,busy,sel}` | ISR 在 START 采纳新字 |
+| `isr_od_slot[]` + `isr_od_ring` | ISR | 主上下文 | 槽环 | 主上下文排空并 `release` |
 | `pending_states[]` | 主上下文 + ISR | 主上下文 | head/tail 环形 | flush 消费后推进 tail |
-| 计数器 | 两个上下文 | 读侧 | — | 共享自增，受临界区保护 |
+| 计数器 | 两个上下文 | 读侧 | — | 共享自增，仍受临界区保护 |
 
-表中"两个上下文都写"的项（计数器、`isr_tx_next` 的槽分配）属于真正的
-RMW，M0+ 无独占指令，不能靠原子宽度解决；后续（P2/P3）改为单写者
-所有权或分上下文计数。
+表中只剩“计数器共享自增”还依赖临界区（`IOLINK_STATS_MODE=SPLIT` 的
+分上下文计数尚未实现，见 `include/iolinki/port.h` 的编译期拒绝）。
+`pending_states[]` 的“主队列 + ISR 队列”拆分仍为可选项，涉及跨队列顺序
+语义，暂未实现。
 
 ---
 

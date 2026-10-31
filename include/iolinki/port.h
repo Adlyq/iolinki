@@ -205,18 +205,14 @@ int iolink_platform_critical_sections_ready(void);
  * The word must be naturally aligned (a `IOLINK_ATOMIC_UINT_T` member is, when
  * the structure places it at a multiple of its size). Each context is the
  * single writer of the words it publishes; readers never write them, so a
- * plain load is enough on a single core.
+ * plain load plus the configured barrier is enough.
  */
-#ifndef IOLINK_ATOMIC_LOAD_IMPL
 static inline IOLINK_ATOMIC_UINT_T iolink_atomic_load(const volatile IOLINK_ATOMIC_UINT_T* word)
 {
     const IOLINK_ATOMIC_UINT_T value = *word;
     IOLINK_FENCE();
     return value;
 }
-#else
-#define iolink_atomic_load(word) IOLINK_ATOMIC_LOAD_IMPL(word)
-#endif
 
 /**
  * @brief Write a publish word with release ordering.
@@ -224,16 +220,12 @@ static inline IOLINK_ATOMIC_UINT_T iolink_atomic_load(const volatile IOLINK_ATOM
  * All data the word refers to must already be written before this call; the
  * barrier keeps the compiler from sinking those writes past the publish.
  */
-#ifndef IOLINK_ATOMIC_STORE_IMPL
 static inline void iolink_atomic_store(volatile IOLINK_ATOMIC_UINT_T* word,
                                        IOLINK_ATOMIC_UINT_T value)
 {
     IOLINK_FENCE();
     *word = value;
 }
-#else
-#define iolink_atomic_store(word, value) IOLINK_ATOMIC_STORE_IMPL(word, value)
-#endif
 
 /**
  * @brief Serialise against the data interrupt (no-op without a critical need).

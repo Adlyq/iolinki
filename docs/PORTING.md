@@ -161,10 +161,10 @@ cannot be inferred):
 | `IOLINK_FENCE_DEVICE` | a DMA/PHY reads a published buffer while the CPU writes it | `IOLINK_FENCE_DEVICE_IMPL()` (e.g. `__DMB`) |
 | `IOLINK_FENCE_SMP` | the two contexts are two cores or two threads | `IOLINK_FENCE_SMP_IMPL()` (e.g. `__atomic_thread_fence(__ATOMIC_SEQ_CST)`) |
 
-The two implementations are function-like macros, so a port can also override
-`iolink_atomic_load()` / `iolink_atomic_store()` with
-`IOLINK_ATOMIC_LOAD_IMPL()` / `IOLINK_ATOMIC_STORE_IMPL()` when it has real
-acquire/release instructions (ARMv7-M+, C11 targets).
+The publish-word helpers (`iolink_atomic_load()` / `iolink_atomic_store()`)
+are a volatile access plus that barrier, so a port that needs real
+acquire/release instructions selects the `SMP` grade (or a device barrier) and
+supplies the matching `*_IMPL()` macro.
 
 #### Critical-section contract
 

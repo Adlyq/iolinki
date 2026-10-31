@@ -25,6 +25,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/test_port_capabilities.c` exercises the derivation, the barrier and
   the publish-word helpers under every profile.
 
+### Changed (ISR transport concurrency)
+- The cross-context handoffs are lock-free: the frame mailbox and the staged
+  ISDU write segments use two-slot SPSC rings (`include/iolinki/ring.h`), the
+  framed ISDU response is served zero-copy from a double buffer published as one
+  atomic word, and the PD-in lease is released at reply end (two buffers in
+  TX BYTE, three in TX FRAME). The main pump no longer disables interrupts for
+  a bulk copy; only scalar bookkeeping and the event engine take the platform
+  critical section.
+- 64-bit deadlines are main-owned: the ISR flags a T_DSIO clear / T_FBD arm
+  request instead of writing the 64-bit fields, and `last_byte_us` stores the
+  low 32 bits compared with a wrap-safe delta (`dll_read_u64()` is gone).
+- `request_service()` runs outside the reply-staging critical section; the ISDU
+  view publish and the staged-write drain are lock-free when nothing changed;
+  the DetailedDeviceStatus formatting runs outside the gate.
+- Reply staging has three statically owned slots: 0/1 alternate in the main
+  pump, slot 2 is reserved for ISR-generated replies, so no slot counter is
+  shared between the contexts.
+- `iolink_dll_ctx_t` and `iolink_isdu_ctx_t` internal layout changed accordingly
+  (all fields remain private stack state; no API change).
+
 ### Changed
 - `iolink_device_config_t::time_us` is now required: `iolink_device_init()`
   rejects NULL with the new `IOLINK_DEVICE_INIT_ERR_TIME`. When supplied (the

@@ -1476,7 +1476,9 @@ static void dll_drain_staged_isdu_write(iolink_dll_ctx_t* ctx)
             staged_od[i] = rec->data[i];
         }
         iolink_ring_release(&ctx->isr_od_ring);
-        iolink_isdu_od_write(&ctx->isdu, staged_fc, staged_od, staged_len);
+        if (staged_len > 0U) {
+            iolink_isdu_od_write(&ctx->isdu, staged_fc, staged_od, staged_len);
+        }
     }
 }
 
