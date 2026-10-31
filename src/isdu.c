@@ -1165,15 +1165,17 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
         return;
     }
 
-    IOLINK_CRITICAL_ENTER();
     iolink_events_ctx_t* event_ctx = (iolink_events_ctx_t*) ctx->event_ctx;
 
     /* Collect the currently active Error/Warning events. B.2.22: only MODE
        "Event appears" entries are listed; a disappeared event drops out, which
-       is equivalent to clearing its slot to 0x00/0x0000. */
+       is equivalent to clearing its slot to 0x00/0x0000. Only the snapshot of
+       the pending table is taken with interrupts off; the formatting below
+       runs unlocked (the response buffer is main-owned). */
     uint16_t codes[IOLINK_EVENT_PENDING_MAX];
     iolink_event_type_t types[IOLINK_EVENT_PENDING_MAX];
     uint8_t n = 0U;
+    IOLINK_CRITICAL_ENTER();
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         const iolink_event_pending_t* p = &event_ctx->pending[i];
         if (p->active && (p->type != IOLINK_EVENT_TYPE_NOTIFICATION)) {
@@ -1182,6 +1184,7 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
             n++;
         }
     }
+    IOLINK_CRITICAL_EXIT();
 
     const uint8_t sub = ctx->header.subindex;
     if ((sub == 0U) || (sub <= n)) {
@@ -1205,7 +1208,6 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
     }
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
-    IOLINK_CRITICAL_EXIT();
 }
 
 #endif /* IOLINK_FEATURE_EVENTS */
