@@ -923,12 +923,12 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
  * complete M-sequence first, then run this exact validation + dispatch.
  */
 /**
- * @brief Pre-stage the framed ISDU response for the ISR read pump.
+ * @brief Publish the framed ISDU response view for the ISR read pump.
  *
- * Single-writer handoff: ctx->isdu is owned by the main pump; the ISR reads
- * only this snapshot. The decision is taken lock-free (every input is
- * main-owned), so the steady-state pass never enters the critical section;
- * only an actual publish or a new response copy runs with interrupts off.
+ * Single-writer handoff: ctx->isdu (and the double-buffered response) is owned
+ * by the main pump; the ISR reads the last published buffer. {length, busy,
+ * buffer} travel as one atomic word, so no critical section and no copy are
+ * needed, and the ISR always reads a complete, stable response.
  */
 static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
 {
@@ -938,49 +938,19 @@ static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
     const bool busy =
         (ctx->isdu.state == ISDU_STATE_SERVICE_EXECUTE) || (ctx->isdu.state == ISDU_STATE_BUSY);
     uint8_t n = 0U;
+    uint8_t sel = ctx->isdu.resp_pub;
     if (ctx->isdu.state == ISDU_STATE_RESPONSE_READY) {
         n = (ctx->isdu.resp_total > 255U) ? 255U : (uint8_t) ctx->isdu.resp_total;
+        sel = ctx->isdu.resp_sel;
+        /* The completed response becomes the published one; the engine will
+         * build the next response in the other buffer. */
+        ctx->isdu.resp_pub = sel;
     }
-    else {
-        /* A new request/response cycle invalidates the "already copied" flag;
-         * the next RESPONSE_READY must refresh the snapshot even if it has the
-         * same length as the previous response. */
-        ctx->isr_isdu_resp_valid = 0U;
+    const IOLINK_ATOMIC_UINT_T word = IOLINK_ISDU_PUB_WORD(n, busy, sel);
+    if (word != ctx->isr_isdu_pub) {
+        /* Publish last: the response octets are already in resp_store[sel]. */
+        iolink_atomic_store(&ctx->isr_isdu_pub, word);
     }
-    const uint8_t next_busy = busy ? 1U : 0U;
-    const bool new_resp =
-        (ctx->isdu.state == ISDU_STATE_RESPONSE_READY) && (ctx->isr_isdu_resp_valid == 0U);
-    const bool changed = new_resp || (ctx->isr_isdu_len != n) || (ctx->isr_isdu_busy != next_busy);
-    if (!new_resp && !changed) {
-        return; /* nothing to publish: keep the interrupt-off window at zero */
-    }
-
-    /* The multi-octet response copy and the Busy/length/index bookkeeping must
-     * be atomic for the ISR reader, without holding interrupts off across the
-     * ISDU execute step. */
-    IOLINK_CRITICAL_ENTER();
-    if (new_resp) {
-        /* Copy once per response: re-copying the (up to 256 octet) buffer every
-         * main-loop pass would hold the interrupt gate for a few microseconds
-         * on each pass, disturbing the per-octet reply feed. */
-        if (n > 0U) {
-            (void) memcpy(ctx->isr_isdu_resp_buf, ctx->isdu.resp_buf, n);
-        }
-        ctx->isr_isdu_resp_valid = 1U;
-    }
-    if (changed) {
-        /* A new response (or Busy transition) invalidates the FlowCTRL sequence;
-         * the Master must restart with START. */
-        ctx->isr_isdu_idx = 0U;
-        ctx->isr_isdu_seg_idx = 0U;
-        ctx->isr_isdu_last_flowctrl = 0xFFU;
-    }
-    ctx->isr_isdu_busy = next_busy;
-    ctx->isr_isdu_len = n;
-    IOLINK_CRITICAL_EXIT();
-    /* Do not rewind isr_isdu_idx here: the ISR advances it across COUNT reads
-     * and only a START read restarts the response. Resetting it on every main
-     * loop pass would replay the first segment of a multi-segment read. */
 }
 
 /** @brief Decode a DPP1 MasterCycleTime/MinCycleTime octet to 100 us ticks (ST Table B.3). */
@@ -1504,9 +1474,6 @@ static void dll_drain_staged_isdu_write(iolink_dll_ctx_t* ctx)
             staged_od[i] = rec->data[i];
         }
         iolink_ring_release(&ctx->isr_od_ring);
-        /* New request activity: force the next RESPONSE_READY to refresh the
-         * ISR response snapshot (even for a same-length response). */
-        ctx->isr_isdu_resp_valid = 0U;
         iolink_isdu_od_write(&ctx->isdu, staged_fc, staged_od, staged_len);
     }
 }

@@ -176,7 +176,7 @@ static void dll_isr_tx_step(iolink_dll_ctx_t* ctx)
 }
 #endif /* IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE */
 
-/* Fill the OD octets of an ISDU read reply from the response snapshot. */
+/* Fill the OD octets of an ISDU read reply from the published response view. */
 static void dll_isr_isdu_od(iolink_dll_ctx_t* ctx, uint8_t flowctrl, uint8_t* od, uint8_t od_width)
 {
     if (od_width == 0U) {
@@ -186,17 +186,25 @@ static void dll_isr_isdu_od(iolink_dll_ctx_t* ctx, uint8_t flowctrl, uint8_t* od
         od[i] = 0x00U;
     }
 
+    /* One atomic load gives a consistent {length, busy, buffer} tuple. */
+    const IOLINK_ATOMIC_UINT_T pub = iolink_atomic_load(&ctx->isr_isdu_pub);
     bool repeat = false;
+
     if (flowctrl == IOLINK_FLOWCTRL_START) {
-        if (ctx->isr_isdu_busy != 0U) {
+        if (IOLINK_ISDU_PUB_BUSY(pub) != 0U) {
             od[0] = 0x01U; /* Busy */
             return;
         }
-        if (ctx->isr_isdu_len == 0U) {
+        if (IOLINK_ISDU_PUB_LEN(pub) == 0U) {
             od[0] = 0x00U; /* No Service */
             return;
         }
-        ctx->isr_isdu_idx = 0U; /* START restarts the response */
+        /* Adopt the published response: from here the ISR owns the segment
+         * index and the buffer choice is stable until the next START. */
+        ctx->isr_isdu_adopted = pub;
+        ctx->isr_isdu_len = IOLINK_ISDU_PUB_LEN(pub);
+        ctx->isr_isdu_sel = IOLINK_ISDU_PUB_SEL(pub);
+        ctx->isr_isdu_idx = 0U;
         ctx->isr_isdu_seg_idx = 0U;
         ctx->isr_isdu_last_flowctrl = IOLINK_FLOWCTRL_START;
     }
@@ -205,10 +213,13 @@ static void dll_isr_isdu_od(iolink_dll_ctx_t* ctx, uint8_t flowctrl, uint8_t* od
         return;
     }
     else {
-        /* COUNT (0x00..0x0F). A COUNT without START is not valid; a repeated
-         * COUNT repeats the previous segment; any other value must be +1. */
-        if (ctx->isr_isdu_last_flowctrl == 0xFFU) {
+        /* COUNT (0x00..0x0F). A changed published view (new response or a Busy
+         * transition) invalidates the segment sequence; the Master must
+         * restart with START. A repeated COUNT repeats the previous segment;
+         * any other value must be +1. */
+        if ((ctx->isr_isdu_adopted != pub) || (ctx->isr_isdu_last_flowctrl == 0xFFU)) {
             od[0] = 0x00U; /* No Service */
+            ctx->isr_isdu_last_flowctrl = 0xFFU;
             return;
         }
         if (flowctrl == ctx->isr_isdu_last_flowctrl) {
@@ -230,9 +241,10 @@ static void dll_isr_isdu_od(iolink_dll_ctx_t* ctx, uint8_t flowctrl, uint8_t* od
      * A repeat re-sends the previous segment without advancing the index. */
     uint8_t idx = repeat ? ctx->isr_isdu_seg_idx : ctx->isr_isdu_idx;
     const uint8_t len = ctx->isr_isdu_len;
+    const uint8_t* resp = ctx->isdu.resp_store[ctx->isr_isdu_sel];
     uint8_t n = 0U;
     while ((n < od_width) && (idx < len)) {
-        od[n++] = ctx->isr_isdu_resp_buf[idx++];
+        od[n++] = resp[idx++];
     }
     if (!repeat) {
         ctx->isr_isdu_seg_idx = ctx->isr_isdu_idx;

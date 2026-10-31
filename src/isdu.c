@@ -78,6 +78,9 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx)
         return;
     }
     ctx->state = ISDU_STATE_IDLE;
+    ctx->resp_sel = 0U;
+    ctx->resp_pub = 0U;
+    ctx->resp_buf = ctx->resp_store[0];
 }
 
 /** @brief Read a parameter via the bound params context, or the legacy global set. */
@@ -415,6 +418,10 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
 
     if (flowctrl == IOLINK_FLOWCTRL_START) {
         isdu_transport_reset(ctx);
+        /* Alternate the framed-response buffer: the previous response stays
+         * readable by the data ISR until it adopts this one. */
+        ctx->resp_sel = (uint8_t) (ctx->resp_sel ^ 1U);
+        ctx->resp_buf = ctx->resp_store[ctx->resp_sel];
         ctx->flowctrl_seen = true;
         ctx->last_flowctrl = flowctrl;
         ctx->state = ISDU_STATE_HEADER_INITIAL;
@@ -1655,7 +1662,7 @@ static void isdu_handle_vendor_index(iolink_isdu_ctx_t* ctx)
 #if IOLINK_ISDU_BUFFER_SIZE > 238U
     size_t length = 235U;
 #else
-    size_t length = sizeof(ctx->resp_buf) - 3U;
+    size_t length = IOLINK_ISDU_BUFFER_SIZE;
 #endif
     const size_t capacity = length;
     const uint8_t error =

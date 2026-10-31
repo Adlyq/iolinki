@@ -239,7 +239,7 @@ static int test_type0_isdu_read_fast_path(void)
 {
     iolink_dll_ctx_t dll;
     init_type0_ctx(&dll);
-    if (dll.isr_isdu_len != 2U) {
+    if (IOLINK_ISDU_PUB_LEN(dll.isr_isdu_pub) != 2U) {
         return 1;
     }
 
@@ -327,9 +327,8 @@ static int test_0309_isdu_segment_repeat(void)
     dll.isdu.state = ISDU_STATE_RESPONSE_READY;
     dll.isdu.resp_total = (uint8_t) sizeof(response);
     (void) memcpy(dll.isdu.resp_buf, response, sizeof(response));
-    dll.isr_isdu_resp_valid = 0U;
     iolink_dll_process(&dll);
-    if (dll.isr_isdu_len != (uint8_t) sizeof(response)) {
+    if (IOLINK_ISDU_PUB_LEN(dll.isr_isdu_pub) != (uint8_t) sizeof(response)) {
         return 6;
     }
 
@@ -374,7 +373,6 @@ static int test_0068_aborted_read_response(void)
     dll.isdu.state = ISDU_STATE_RESPONSE_READY;
     dll.isdu.resp_total = (uint8_t) sizeof(response);
     (void) memcpy(dll.isdu.resp_buf, response, sizeof(response));
-    dll.isr_isdu_resp_valid = 0U;
     iolink_dll_process(&dll);
 
     if (type0_isdu_exchange(&dll, IOLINK_FLOWCTRL_START) != response[0]) {
@@ -598,7 +596,8 @@ static int test_isdu_write_consumed_by_isr(void)
         return 2;
     }
     /* A write to a read-only index produces a framed negative response. */
-    if ((dll.isdu.state != ISDU_STATE_RESPONSE_READY) || (dll.isr_isdu_len == 0U)) {
+    if ((dll.isdu.state != ISDU_STATE_RESPONSE_READY) ||
+        (IOLINK_ISDU_PUB_LEN(dll.isr_isdu_pub) == 0U)) {
         return 3;
     }
     if (!iolink_ring_is_empty(&dll.isr_od_ring)) {

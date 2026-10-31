@@ -161,7 +161,8 @@ static int test_eager_isdu_snapshot(void)
     now_us = 1000000U;
     dll.last_activity_ms = iolink_time_get_ms();
     iolink_dll_process(&dll); /* refresh the ISR snapshot */
-    if ((dll.isr_isdu_len != 4U) || (dll.isr_isdu_busy != 0U)) {
+    if ((IOLINK_ISDU_PUB_LEN(dll.isr_isdu_pub) != 4U) ||
+        (IOLINK_ISDU_PUB_BUSY(dll.isr_isdu_pub) != 0U)) {
         return 1;
     }
 
@@ -205,7 +206,7 @@ static int test_eager_isdu_snapshot(void)
     }
 
     /* Busy START. */
-    dll.isr_isdu_busy = 1U;
+    dll.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 1U, 0U);
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_n = 0U;
     exchange(&dll, frame, sizeof(frame), 0U);
@@ -214,8 +215,7 @@ static int test_eager_isdu_snapshot(void)
     }
 
     /* No Service START (no response staged). */
-    dll.isr_isdu_busy = 0U;
-    dll.isr_isdu_len = 0U;
+    dll.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 0U, 0U);
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_n = 0U;
     exchange(&dll, frame, sizeof(frame), 0U);

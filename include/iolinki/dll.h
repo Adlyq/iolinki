@@ -90,6 +90,24 @@ typedef enum
 /** Staged ISDU write depth (data ISR -> main pump); also a power of two. */
 #define IOLINK_OD_SLOTS 2U
 
+/**
+ * @name ISDU read view packing
+ *
+ * The main pump publishes the framed-response view as one `IOLINK_ATOMIC_UINT_T`
+ * so the data ISR reads a consistent {length, busy, buffer} tuple in one access.
+ * The ISR keeps a copy of the last word it adopted at START; any change (a new
+ * response, or a Busy transition) breaks the FlowCTRL sequence, which is exactly
+ * the behaviour the incremental view had.
+ * @{
+ */
+#define IOLINK_ISDU_PUB_LEN(word) ((uint8_t) ((word) & 0xFFU))
+#define IOLINK_ISDU_PUB_BUSY(word) ((uint8_t) (((word) >> 8) & 0x01U))
+#define IOLINK_ISDU_PUB_SEL(word) ((uint8_t) (((word) >> 9) & 0x01U))
+#define IOLINK_ISDU_PUB_WORD(len, busy, sel)                                                     \
+    ((IOLINK_ATOMIC_UINT_T) (uint8_t) (len) | ((IOLINK_ATOMIC_UINT_T) ((busy) ? 1U : 0U) << 8) | \
+     ((IOLINK_ATOMIC_UINT_T) ((sel) ? 1U : 0U) << 9))
+/** @} */
+
 /** @brief One staged ISDU write segment (data ISR -> main pump). */
 typedef struct
 {
@@ -166,13 +184,16 @@ typedef struct
     bool cyclic_reply_precached; /**< Legacy flag (kept for source compatibility):
                                       replies are now generated directly from the
                                       shared state by the ISR pump. */
-    /* ISR ISDU read view: the ISR reads ctx->isdu.resp_buf directly and owns the
-     * FlowCTRL segment index; the main pump only refreshes the Busy/length view. */
-    volatile uint8_t isr_isdu_len;           /**< Framed response length (0 = none) */
-    volatile uint8_t isr_isdu_idx;           /**< Next response octet (ISR advances) */
-    volatile uint8_t isr_isdu_busy;          /**< 1 = service executing -> answer Busy 0x01 */
-    volatile uint8_t isr_isdu_last_flowctrl; /**< Last accepted FlowCTRL (0xFF=none) */
-    volatile uint8_t isr_isdu_seg_idx;       /**< Offset of the last served segment */
+    /* ISR ISDU read view. The main pump publishes {length, busy, buffer} as one
+     * atomic word so the ISR never observes a half-updated tuple; the ISR owns
+     * the FlowCTRL segment index and adopts a new word at START. */
+    volatile IOLINK_ATOMIC_UINT_T isr_isdu_pub; /**< len | busy<<8 | sel<<9 */
+    IOLINK_ATOMIC_UINT_T isr_isdu_adopted;      /**< Word adopted by the ISR */
+    uint8_t isr_isdu_len;                       /**< Adopted response length (0 = none) */
+    uint8_t isr_isdu_sel;                       /**< Adopted response buffer index */
+    uint8_t isr_isdu_idx;                       /**< Next response octet (ISR advances) */
+    uint8_t isr_isdu_last_flowctrl;             /**< Last accepted FlowCTRL (0xFF=none) */
+    uint8_t isr_isdu_seg_idx;                   /**< Offset of the last served segment */
 
     /* Raw-octet ISR pump state (owned by the library, driven from the PHY data
      * interrupt). Only these fields are touched from ISR context; the reply
