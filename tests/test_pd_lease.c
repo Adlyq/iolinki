@@ -48,22 +48,19 @@ static void test_lease_recovery_and_skip_counter(void** state)
     dev.ctx.dll.pd_in_captured = (uint8_t) (dev.ctx.dll.pd_in_active ^ 1U);
     dev.ctx.dll.isr_tx_active = 0U;
 
-    /* No spare buffer: the update is skipped and counted, not silently lost. */
+    /* No spare buffer: every update is skipped and counted, never silent. */
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true), -1);
     assert_int_equal(dev.ctx.dll.pd_in_skips, 1U);
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true), -1);
+    assert_int_equal(dev.ctx.dll.pd_in_skips, 2U);
 
-#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
-    /* The main pump releases a lease that cannot be in flight any more. */
-    iolink_device_process(&dev.ctx);
-    assert_int_equal(dev.ctx.dll.pd_in_captured, 0xFFU);
+    /* The library deliberately keeps the lease while it cannot prove the
+     * transfer is dead (a stalled PHY must reset); once the slot is released
+     * (what the ISR does at frame end) publishing works again. */
+    dev.ctx.dll.pd_in_captured = 0xFFU;
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true), 0);
-    assert_int_equal(dev.ctx.dll.pd_in_skips, 1U);
-#else
-    /* TX FRAME keeps the lease: the DMA completion is only known to the PHY,
-     * so the main pump must not reuse the buffer. */
-    iolink_device_process(&dev.ctx);
-    assert_int_equal(dev.ctx.dll.pd_in_captured, (uint8_t) (dev.ctx.dll.pd_in_active ^ 1U));
-#endif
+    assert_int_equal(dev.ctx.dll.pd_in_skips, 2U);
 }
 
 int main(void)

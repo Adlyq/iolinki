@@ -114,6 +114,8 @@ IOLINK_STATIC_ASSERT((IOLINK_OD_SLOTS >= 2U) && ((IOLINK_OD_SLOTS & (IOLINK_OD_S
 #define IOLINK_TX_SLOTS 3U
 /** Slot the data ISR uses for its own immediate replies. */
 #define IOLINK_TX_ISR_SLOT 2U
+IOLINK_STATIC_ASSERT(IOLINK_TX_SLOTS == IOLINK_TX_ISR_SLOT + 1U,
+                     "the ISR reply slot must be the last reply slot");
 
 /**
  * @brief Counters the data ISR also updates.
@@ -218,8 +220,10 @@ typedef struct
     volatile bool back_to_box_pending;    /**< Back-to-box requested; counting down frames */
     volatile uint8_t back_to_box_cycles;  /**< Frames seen since Back-to-box was requested */
 
-    /* Deadline requests staged by the data ISR. The 64-bit deadlines are
-     * main-owned so no 64-bit value is written from interrupt context. */
+    /* One-shot deadline requests, staged by either context and consumed by the
+     * main pump; the 64-bit deadlines stay main-owned. Each flag is set to 1
+     * and cleared to 0 only by the main pump, so a set that races the consume
+     * is idempotent: the request is applied in this pass or the next one. */
     volatile uint8_t isr_dsio_clear;         /**< ISR served the startup probe: clear T_DSIO */
     volatile uint8_t isr_fallback_pending;   /**< ISR accepted FALLBACK: arm T_FBD from main */
     volatile uint8_t fallback_clear_pending; /**< A non-FALLBACK command was applied: clear T_FBD */

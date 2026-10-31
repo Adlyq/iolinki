@@ -10,9 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed (code-review follow-up)
 - The ISR no longer writes the 64-bit `fallback_deadline_ms`: a non-FALLBACK
   MasterCommand stages `fallback_clear_pending` and the main pump applies it.
-- TX BYTE recovers a PD-in lease that can no longer be in flight (a transceiver
-  that stalls mid-frame no longer freezes PD-in); skipped publishes are counted
-  in `pd_in_skips`.
+- Skipped PD-in publishes (every spare buffer leased) are counted in
+  `pd_in_skips`. The lease is released only when the library can see the
+  transfer end: a transceiver that stalls mid-frame keeps it, because rewriting
+  a buffer that may still be on the wire would tear the reply. The counter lets
+  the application detect the stall and reset the PHY.
 - `isr_tx_dropped` is attributed to the running context, RX FRAME still answers
   and counts a frame when the mailbox is full, and a rejected short TX FRAME is
   counted.
