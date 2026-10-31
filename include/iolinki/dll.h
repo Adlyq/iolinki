@@ -79,8 +79,18 @@ typedef enum
 /* PD reply send buffer: [OD][PD-in][CKS]. Sized for the runtime PD-in length
  * plus the OD header and the trailing checksum. */
 #define IOLINK_PD_REPLY_MAX (IOLINK_OD_MAX_SIZE + IOLINK_PD_IN_MAX_SIZE + 1U)
-/** PD-in reply buffers: active, being filled, and held by the ISR. */
+/* PD-in reply buffers: active, being filled, and held by the ISR.
+ *
+ * TX BYTE ends the transfer inside the library, which releases the buffer the
+ * ISR held (pd_in_captured = 0xFF) at frame end, so two buffers are enough.
+ * TX FRAME hands the buffer to a DMA that the library cannot observe: the slot
+ * stays leased until the next capture, so a third buffer absorbs the main
+ * pump's update without touching the buffer still on the wire. */
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
 #define IOLINK_PD_IN_BUFFERS 3U
+#else
+#define IOLINK_PD_IN_BUFFERS 2U
+#endif
 /** Deferred state-transition queue depth (ISR pump -> main callbacks). */
 #define IOLINK_PENDING_STATES 4U
 /** Received-frame mailbox depth (data ISR -> main pump). A power of two; 2
@@ -297,8 +307,9 @@ typedef struct
     /* Process Data Buffers. The PD-in buffer doubles as the reply send buffer:
      * layout [OD][PD-in][CKS]. The main fills a buffer that is neither active
      * nor held by the ISR, then swaps it in atomically; the ISR captures the
-     * active copy at reply start and streams it (zero-copy). Three buffers let
-     * the main publish at any rate without touching the in-flight copy. */
+     * active copy at reply start and streams it (zero-copy). The buffer count
+     * depends on the TX mode (see IOLINK_PD_IN_BUFFERS): when no buffer is free
+     * the main keeps the current PD-in and retries on the next cycle. */
     uint8_t pd_in[IOLINK_PD_IN_BUFFERS][IOLINK_PD_REPLY_MAX]; /**< [OD][PD-in][CKS] reply buffers */
     volatile uint8_t pd_in_active;                            /**< Active PD reply buffer index */
     volatile uint8_t pd_in_captured;        /**< Buffer the ISR is streaming (0xFF = none) */

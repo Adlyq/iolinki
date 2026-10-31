@@ -172,6 +172,9 @@ static void dll_isr_tx_step(iolink_dll_ctx_t* ctx)
             ctx->phy->stack_timer_start(ctx->phy->user); /* frame end -> Timer B */
         }
         ctx->isr_tx_active = 0U;
+        /* TX BYTE: the reply is complete, so the PD-in slot the ISR leased is
+         * free for the main pump again. */
+        ctx->pd_in_captured = 0xFFU;
     }
 }
 #endif /* IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE */

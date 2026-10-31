@@ -855,7 +855,7 @@ flowchart LR
 
 实际的缓冲关系：
 
-- `pd_in[IOLINK_PD_IN_BUFFERS=3][IOLINK_PD_REPLY_MAX]`：布局为 `[OD...][PD-in...][CKS]`，主循环填一个既不是 `active` 也不是 `captured` 的缓冲区，再原子切换 `pd_in_active`；ISR 在应答开始时捕获 `pd_in_active`，零拷贝发送。`device_pd_in_free_index()` 负责选空闲缓冲。
+- `pd_in[IOLINK_PD_IN_BUFFERS][IOLINK_PD_REPLY_MAX]`：布局为 `[OD...][PD-in...][CKS]`，主循环填一个既不是 `active` 也不是 `captured` 的缓冲区，再原子切换 `pd_in_active`；ISR 在应答开始时捕获 `pd_in_active`，零拷贝发送。`device_pd_in_free_index()` 负责选空闲缓冲：TX BYTE 下 ISR 在帧末释放租约，2 个缓冲即可；TX FRAME 下 DMA 完成时机对库不可见，租约保持到下次捕获，因此保留 3 个。没有空闲缓冲时主循环保留当前 PD-in，下个周期重试。
 - `pd_out[IOLINK_PD_OUT_MAX_SIZE]`：Type-1/2 帧处理时从 `frame_buf` 复制最新 PD-out；应用通过 `iolink_device_pd_output_read()` 读取。
 - `isr_tx_payload[2]`：主上下文暂存的应答；`isr_tx_pending_slot`/`isr_tx_pending` 交给 ISR 发送。
 - `isr_frame_buf` + `isr_frame_ready`：单槽邮箱。RX BYTE 先复制到 `isr_rx_buf` 再发布；RX FRAME 先发布 PHY 指针做 eager 应答，再复制到稳定副本。
