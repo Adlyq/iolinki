@@ -151,10 +151,14 @@ int iolink_platform_critical_sections_ready(void);
  * The bulk handoffs are lock-free (frame mailbox and staged-write rings, the
  * ISDU response publish word, the PD-in buffer lease and the reply staging
  * slots). The platform critical section still protects the event engine, the
- * PD-in index swap, the reply staging copy and the pending length pair, so
- * every asynchronous profile needs it; only `SINGLE` runs without it. State
- * transitions need no section: the state is a single aligned store and its
- * application notification is level-based.
+ * PD-in index swap and the pending length pair, so every asynchronous profile
+ * needs it. The only other caller is the legacy direct-send fallback in
+ * `dll_send()`: a PHY without `request_service()` (compiled out by
+ * `IOLINK_PHY_FEATURE_ISR_TX_ONLY`) is driven from the main context inside the
+ * section. Staging the reply itself takes no section: the slots are
+ * main-owned and published last. Only `SINGLE` runs without a critical
+ * section. State transitions need no section: the state is a single aligned
+ * store and its application notification is level-based.
  *
  * `IOLINK_STATS_MODE=SPLIT` removes the one remaining counter race (both
  * contexts incrementing the same field) but does not change this requirement.

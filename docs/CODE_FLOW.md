@@ -274,7 +274,7 @@ flowchart TD
     F --> G["诊断、定时器、t_pd 等"]
     G --> H{"isr_frame_ring 非空?"}
     H -- 否 --> I["继续其他检查"]
-    H -- 是 --> J["短临界区复制邮箱帧<br/>快照/清除 frame_eager"]
+    H -- 是 --> J["复制邮箱帧（SPSC 环，无临界区）<br/>快照/清除 frame_eager"]
     J --> K["dll_process_complete_frame()"]
     K --> L["主状态机/通道处理<br/>eager 帧不再重复发送应答"]
     L --> M["dll_flush_state_callbacks()"]
@@ -715,7 +715,7 @@ sequenceDiagram
 | `phy.stack_timer_start` | 帧结束 / Timer B | 授权主循环服务窗口；`stack_timer_stop` 当前无栈内调用点 |
 | `phy.detect_wakeup` | `iolink_dll_process()` | SIO 唤醒检测 |
 | `phy.get_voltage_mv` / `is_short_circuit` | `dll_poll_diagnostics()` | 旧版诊断，触发电压/短路事件 |
-| `iolink_critical_enter/exit` | 事件引擎、PD 索引/长度、应答暂存等标量（经 `IOLINK_CRITICAL_ENTER/EXIT()`） | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
+| `iolink_critical_enter/exit` | 事件引擎、PD 索引/长度等标量；直发回退时驱动 PHY（经 `IOLINK_CRITICAL_ENTER/EXIT()`） | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
 | `on_state_change` | `device_state_cb()` | 当前状态（电平式；主上下文迁移立即投递，ISR 迁移合并） |
 | `on_startup` | 初始化末尾 + 进入 STARTUP | 初始化时显式调用一次 |
 | `on_preoperate` / `on_operate` | `device_state_cb()` | 进入对应状态时 |
@@ -865,7 +865,7 @@ flowchart LR
 并发边界：
 
 - `ctx->isdu`、`ctx->events`、`ctx->params`、`ctx->ds` 的主要状态由主循环修改。
-- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不再需要关中断；`iolink_critical_enter/exit` 只包住标量与事件引擎的短操作（事件队列、PD-in 索引交换、`dll_send` 暂存、`set_pd_length`）；状态迁移不再需要临界区。
+- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不再需要关中断；`iolink_critical_enter/exit` 只包住标量与事件引擎的短操作（事件队列、PD-in 索引交换、`set_pd_length`），以及仅在直发回退（PHY 无 `request_service()`，非 `IOLINK_PHY_FEATURE_ISR_TX_ONLY`）里驱动 PHY 的那一段；状态迁移不再需要临界区。
 - 库不取线程锁：API 只有一个主上下文调用者；共享标量由平台临界区保护，数据交接无锁。
 - 平台默认临界区是 weak 空实现（`src/platform.c`）；`iolink_device_init()` 通过
   `iolink_platform_critical_sections_ready()` 探测并返回
@@ -935,9 +935,9 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 
 | 位置 | 内容 | 归类 |
 | :--- | :--- | :--- |
-| `dll_send()`（`dll.c`） | `isr_tx_payload` 暂存（≤66 B） | 主→ISR 应答移交；`request_service()` 已在锁外 |
+| `dll_send()`（`dll.c`） | `isr_tx_payload` 暂存（≤66 B） | 主→ISR 应答移交；暂存本身无锁（主上下文单写者 + 发布字 `isr_tx_pending`），只有直发回退（PHY 无 `request_service()`，非 `IOLINK_PHY_FEATURE_ISR_TX_ONLY`）在临界区内驱动 PHY |
 | `iolink_dll_set_pd_length()`（`dll.c`） | PD-in/PD-out 长度对 | 2 字节 RMW |
-| `device.c`（3 处） | `pd_in_active` 交换、`pd_*_len`、PD-out 读取 | 索引/长度标量 |
+| `device.c`（2 处） | PD-in 发布（`on_pd_input` 回调路径 / `iolink_device_pd_input_update()`），交换 `pd_in_active`/`pd_*_len`/`pd_valid` | 索引/长度标量（PA 拷贝在锁外；PD-out 读取不取锁） |
 | `events.c`（10 处） | 事件队列、pending 表、事件内存 | 事件引擎内部不变式；ISR 侧只读 flag/memory |
 | `isdu.c`（1 处） | DetailedDeviceStatus 的 pending 表快照 | ISR 侧只读该表相关字段，快照保证一致 |
 

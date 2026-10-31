@@ -98,7 +98,7 @@ static uint64_t app_time_us(void* user)
 
 ### 2.1 Concurrency primitives (graded)
 
-The stack needs four kinds of asynchronous primitives. Each is **graded**, and
+The stack needs three kinds of asynchronous primitives. Each is **graded**, and
 the selected concurrency profile decides which grade a port must provide. A
 primitive the profile does not need is not referenced at all, so a port never
 implements more than it uses. The contract lives in `include/iolinki/port.h`.
@@ -132,8 +132,8 @@ Select one with `-DIOLINK_CONCURRENCY=...`:
 
 The RTOS tier was removed: an RTOS build uses `ISR` (or `SMP` on multiple
 cores) and must still keep exactly one task calling the API. The stack derives
-`IOLINK_NEED_FENCE` and `IOLINK_NEED_CRITICAL` from the profile. A missing or invalid combination is
-a compile error with an actionable message, for example:
+`IOLINK_NEED_FENCE` and `IOLINK_NEED_CRITICAL` from the profile. A missing or
+invalid combination is a compile error with an actionable message, for example:
 
 ```
 port.h:160:2: error: #error "IOLINK_CONCURRENCY=SMP requires IOLINK_FENCE_LEVEL=IOLINK_FENCE_SMP"
