@@ -50,6 +50,9 @@ void iolink_critical_exit(void)
 
 static volatile uint32_t g_tick_ms;
 
+/* Demo-only clock: a 1 ms tick is too coarse for t_A/t_ren timing. A real
+ * device must feed iolink_device_config_t::time_us from a microsecond timer
+ * (or expand the tick counter with the timer's free-running counter). */
 static uint64_t baremetal_time_us(void* user)
 {
     (void) user;

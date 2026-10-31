@@ -193,7 +193,7 @@ static int test_od_cutpoints(void)
     return 0;
 }
 
-#if (IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE) && IOLINK_PHY_FEATURE_LEGACY_DIAG
+#if IOLINK_PHY_FEATURE_LEGACY_DIAG
 /* The PHY callback that publishes the second frame while the main pump is
  * inside iolink_dll_process(), before it consumes the mailbox. */
 static uint8_t g_publish_on_poll;
@@ -209,14 +209,6 @@ static int poll_voltage_publish(void* user)
     return -1; /* measurement unavailable: no fault, no event */
 }
 
-static int rx_octet(void* user, uint8_t* data, uint8_t* status)
-{
-    (void) user;
-    (void) data;
-    (void) status;
-    return 0; /* the test publishes into the ring directly */
-}
-
 /* End-to-end: the real consumer (dll_consume_isr_mailbox) drains one record
  * per pass while a producer publishes mid-pass. */
 static int test_main_pass_cutpoint(void)
@@ -224,7 +216,6 @@ static int test_main_pass_cutpoint(void)
     iolink_dll_ctx_t ctx;
     const iolink_phy_api_t phy = {
         .user = NULL,
-        .rx_octet = rx_octet,
         .get_voltage_mv = poll_voltage_publish,
     };
 
@@ -256,7 +247,7 @@ static int test_main_pass_cutpoint(void)
     assert(iolink_ring_is_empty(&ctx.isr_frame_ring));
     return 0;
 }
-#endif /* RX BYTE + legacy diagnostics */
+#endif /* legacy diagnostics */
 
 int main(void)
 {
@@ -272,7 +263,7 @@ int main(void)
     if (rc != 0) {
         return rc;
     }
-#if (IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE) && IOLINK_PHY_FEATURE_LEGACY_DIAG
+#if IOLINK_PHY_FEATURE_LEGACY_DIAG
     rc = test_main_pass_cutpoint();
     if (rc != 0) {
         return rc;

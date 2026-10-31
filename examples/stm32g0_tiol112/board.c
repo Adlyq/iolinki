@@ -65,7 +65,7 @@ void board_init(void)
     SYSCFG->CFGR1 |= SYSCFG_CFGR1_UCPD1_STROBE;
     RCC->APBENR1 |= RCC_APBENR1_TIM2EN;
     (void) RCC->APBENR1;
-    TIM2->PSC = 15U;
+    TIM2->PSC = 15U; /* HSI 16 MHz / 16 -> 1 MHz: board_time_us() counts us */
     TIM2->ARR = 0xffffffffU;
     TIM2->EGR = TIM_EGR_UG;
     TIM2->SR = 0;

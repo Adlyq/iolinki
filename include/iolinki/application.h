@@ -55,7 +55,10 @@ typedef struct
     bool (*on_pd_input)(uint8_t* data, uint8_t len);   /**< Fill input PD; false = invalid */
     void (*on_pd_output)(uint8_t* data, uint8_t len);  /**< Output PD received */
     void (*on_state_change)(iolink_dll_state_t state); /**< Current DLL state on a
-                                                            level-based notification */
+                                                            level-based notification.
+                                                            Runs in main context, possibly
+                                                            inside iolink_dll_process();
+                                                            do not re-enter iolink_* here. */
     void (*on_master_lost)(void);                      /**< Master communication lost */
     void (*on_master_online)(void);                    /**< Master communication resumed */
 } iolink_app_callbacks_t;

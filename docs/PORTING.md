@@ -75,6 +75,11 @@ static uint64_t app_time_us(void* user)
 }
 ```
 
+A 32-bit tick counter wraps, so this example is only monotonic if the port
+extends it to 64 bits (e.g. by counting the wrap in the tick hook). A tick
+rate that does not divide 1000000 also truncates the conversion; pick a rate
+that divides it (100/1000/10000 Hz) or compute in nanoseconds.
+
 **Example** (Bare Metal with SysTick):
 ```c
 static volatile uint32_t g_tick_ms;

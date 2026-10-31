@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (code-review follow-up)
+- The ISR no longer writes the 64-bit `fallback_deadline_ms`: a non-FALLBACK
+  MasterCommand stages `fallback_clear_pending` and the main pump applies it.
+- TX BYTE recovers a PD-in lease that can no longer be in flight (a transceiver
+  that stalls mid-frame no longer freezes PD-in); skipped publishes are counted
+  in `pd_in_skips`.
+- `isr_tx_dropped` is attributed to the running context, RX FRAME still answers
+  and counts a frame when the mailbox is full, and a rejected short TX FRAME is
+  counted.
+- The framed ISDU response only alternates buffers after the previous response
+  was published, so a new request can never overwrite the buffer the ISR reads.
+- `IOLINK_CONCURRENCY=RTOS` now requires `config.lock/unlock`
+  (`IOLINK_DEVICE_INIT_ERR_LOCK`).
+- Documentation: state-callback re-entrancy, buffer/slot counts, counter
+  locking, FreeRTOS tick wrap and the bare-metal example's clock resolution.
+
 ### Added (concurrency primitives)
 - `include/iolinki/port.h` declares the graded asynchronous primitives and
   derives what a port must provide from the new concurrency profile

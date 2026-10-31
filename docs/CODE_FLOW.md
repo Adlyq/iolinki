@@ -419,7 +419,7 @@ flowchart LR
 - 固定 Annex A 类型的 PD-in 长度不可变；`TYPE_2_V` 可在 `pd_in_len_max` 内变化。
 - PD-out 只在 Type-1/2 请求中携带；Type-0 不携带 PD。
 - `pd_valid=false` 会置 CKS bit6，Master 可据此判断 PD 无效。
-- 三缓冲 `pd_in[3]` 允许主循环在 ISR 正在发送旧副本时填充新副本，避免撕裂。
+- `pd_in` 的缓冲数由 TX 模式决定（`IOLINK_PD_IN_BUFFERS`：TX BYTE=2、TX FRAME=3），主循环填充 ISR 未占用的副本，避免撕裂。
 
 ### 6.5 ISR 快路径与主路径的分工
 
@@ -717,7 +717,7 @@ sequenceDiagram
 | `phy.get_voltage_mv` / `is_short_circuit` | `dll_poll_diagnostics()` | 旧版诊断，触发电压/短路事件 |
 | `config->lock/unlock` | PD 更新/读取、`dll_send()` 暂存 | 与 ISR/其他线程互斥；必须成对 |
 | `iolink_critical_enter/exit` | 事件引擎、PD 索引/长度、应答暂存等标量（经 `IOLINK_CRITICAL_ENTER/EXIT()`） | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
-| `on_state_change` | `device_state_cb()` | 所有实际状态迁移 |
+| `on_state_change` | `device_state_cb()` | 当前状态（电平式；主上下文迁移立即投递，ISR 迁移合并） |
 | `on_startup` | 初始化末尾 + 进入 STARTUP | 初始化时显式调用一次 |
 | `on_preoperate` / `on_operate` | `device_state_cb()` | 进入对应状态时 |
 | `on_master_lost` / `on_master_online` | `iolink_device_process()` | OPERATE 下 `master_lost` 边沿 |
@@ -826,9 +826,9 @@ stateDiagram-v2
 flowchart LR
     subgraph MAIN["主上下文"]
         M1["应用 PD-in 数据"]
-        M2["pd_in[3][OD+PD+1]"]
+        M2["pd_in[2/3][OD+PD+1]"]
         M3["active 索引"]
-        M4["isr_tx_payload[2]<br/>主应答暂存"]
+        M4["isr_tx_payload[3]<br/>应答暂存"]
         M5["isr_od_ring<br/>ISDU 写暂存"]
         M8["ctx->isdu<br/>主循环单写状态机"]
         M6["isr_isdu_pub + resp_store[2]<br/>ISDU 响应发布字"]
@@ -925,12 +925,12 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | :--- | :--- | :--- | :--- | :--- |
 | `isr_frame_slot[]` + `isr_frame_ring` | ISR | 主上下文 | 槽环 `in`/`out`（各单写者） | 主上下文 `release` 后归还 |
 | `isr_tx_payload[0..1]` + `isr_tx_pending` | 主上下文 | ISR | 槽索引 + `request_service()` | ISR 取走后清 pending |
-| `isr_tx_payload[2]` | ISR | ISR | 固定槽 | 帧末 `tx_done` |
+| `isr_tx_payload[2]`（槽 2） | ISR | ISR | 固定槽 | 帧末 `tx_done` |
 | `pd_in[]` + `pd_in_active` | 主上下文 | ISR | 索引交换 | `pd_in_captured`；TX BYTE 帧末释放，TX FRAME 保持到下次捕获 |
 | `isdu.resp_store[2]` + `isr_isdu_pub` | 主上下文（引擎） | ISR | 原子发布字 `{len,busy,sel}` | ISR 在 START 采纳新字 |
 | `isr_od_slot[]` + `isr_od_ring` | ISR | 主上下文 | 槽环 | 主上下文排空并 `release` |
 | `ctx->state` + `last_notified_state` | 主上下文 + ISR（单字节写） | 主上下文 | 电平比较 | 每次 flush 记录已交付状态 |
-| 计数器 | 两个上下文 | 读侧 | — | 共享自增，仍受临界区保护 |
+| 计数器 | 两个上下文 | 读侧 | — | `SHARED` 共享自增（可能丢一次更新）；`SPLIT` 分上下文求和 |
 
 剩余临界区审计（每处都必须能归类，否则应在所有权表里补一行）：
 

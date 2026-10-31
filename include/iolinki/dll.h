@@ -50,6 +50,11 @@ typedef enum
  * interrupt context, the final state is never missed, and intermediate states
  * that were entered and left between two deliveries are coalesced into the
  * later one. Used by the core to drive application lifecycle callbacks.
+ *
+ * The hook runs in main context, but it may be invoked from inside
+ * iolink_dll_process() (a main-context transition notifies immediately, while
+ * the frame dispatch is still on the stack). A hook must therefore not call
+ * iolink_dll_* / iolink_device_* re-entrantly.
  */
 typedef void (*iolink_dll_state_cb_t)(void* user, iolink_dll_state_t state);
 
@@ -98,6 +103,12 @@ typedef enum
 #define IOLINK_MBX_SLOTS 2U
 /** Staged ISDU write depth (data ISR -> main pump); also a power of two. */
 #define IOLINK_OD_SLOTS 2U
+
+IOLINK_STATIC_ASSERT((IOLINK_MBX_SLOTS >= 2U) &&
+                         ((IOLINK_MBX_SLOTS & (IOLINK_MBX_SLOTS - 1U)) == 0U),
+                     "IOLINK_MBX_SLOTS must be a power of two >= 2");
+IOLINK_STATIC_ASSERT((IOLINK_OD_SLOTS >= 2U) && ((IOLINK_OD_SLOTS & (IOLINK_OD_SLOTS - 1U)) == 0U),
+                     "IOLINK_OD_SLOTS must be a power of two >= 2");
 
 /** Reply staging slots: 0/1 for the main pump (alternating), 2 for the ISR. */
 #define IOLINK_TX_SLOTS 3U
