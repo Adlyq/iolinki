@@ -64,6 +64,11 @@ add_executable(test_port_capabilities test_port_capabilities.c)
 target_link_libraries(test_port_capabilities iolinki)
 add_test(NAME test_port_capabilities COMMAND test_port_capabilities)
 
+# SPSC slot ring used by the ISR handoffs (no cmocka dependency).
+add_executable(test_ring test_ring.c)
+target_link_libraries(test_ring iolinki)
+add_test(NAME test_ring COMMAND test_ring)
+
 if(PkgConfig_FOUND)
     pkg_check_modules(CMOCKA QUIET cmocka)
 endif()
