@@ -965,7 +965,7 @@ ISR 迁移由下一次 flush 投递并合并为最终状态（不保证中间态
 | :--- | :--- |
 | `IOLINK_ISR_RX_MODE` | `RX BYTE` 或 `RX FRAME` |
 | `IOLINK_ISR_TX_MODE` | `TX BYTE` 或 `TX FRAME` |
-| `IOLINK_CONCURRENCY` | `SINGLE`/`ISR`/`RTOS`/`SMP`；决定 `IOLINK_NEED_*` 与是否需要临界区 |
+| `IOLINK_CONCURRENCY` | `SINGLE`/`ISR`/`SMP`；决定 `IOLINK_NEED_*` 与是否需要临界区 |
 | `IOLINK_FENCE_LEVEL` | `COMPILER`/`DEVICE`/`SMP`；port 声明的屏障等级，错配编译期报错 |
 | `IOLINK_STATS_MODE` | `SHARED`（默认，共享计数）/`SPLIT`（分上下文计数，读取时求和） |
 | `IOLINK_PHY_FEATURE_ISR_TX_ONLY` | 1=必须有 `request_service()`，否则计 `isr_tx_dropped` |

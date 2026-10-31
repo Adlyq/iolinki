@@ -18,7 +18,7 @@
  * @file port.h
  * @brief Declarative concurrency-primitive contract between the stack and a port.
  *
- * The stack only needs four kinds of asynchronous primitives. Each one is
+ * The stack only needs three kinds of asynchronous primitives. Each one is
  * graded by strength, so a port implements exactly the grade the selected
  * concurrency profile requires and nothing more:
  *

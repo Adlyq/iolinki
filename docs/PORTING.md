@@ -226,7 +226,7 @@ that drives the pump from a signal handler.
 #### Verification
 
 - `tests/test_port_capabilities.c` compiles and runs under every profile.
-- `tools/build_matrix.sh` builds the `SINGLE` and `RTOS` profiles and checks
+- `tools/build_matrix.sh` builds the `SINGLE` and `SMP` profiles and checks
   that the `SINGLE` library archive has **no undefined
   `iolink_critical_*` symbols**.
 - `./check_quality.sh` and the matrix are the delivery gate for any change that
@@ -365,6 +365,7 @@ target_link_libraries(my_app PRIVATE iolinki)
 static iolink_device_ctx_t g_ctx;
 static const iolink_device_config_t g_cfg = {.phy = g_phy_stm32};
 
+/* One task only: the stack has a single main-context caller. */
 void iolink_task(void *pvParameters) {
     if (iolink_device_init(&g_ctx, &g_cfg) != 0) {
         /* handle init error */
