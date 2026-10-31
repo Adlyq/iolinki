@@ -42,7 +42,14 @@ void dll_isr_start_staged_tx(iolink_dll_ctx_t* ctx, uint8_t slot, uint8_t len)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     if (ctx->phy->tx_frame != NULL) {
         if (ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload[slot], len) != 0) {
-            IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
+            /* Shared by the main fallback and the ISR pump: attribute the drop
+             * to the context that is running so SPLIT counters stay exact. */
+            if (ctx->in_isr != 0U) {
+                IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
+            }
+            else {
+                ctx->isr_tx_dropped++;
+            }
         }
     }
 #else
@@ -298,7 +305,9 @@ static void dll_isr_send_staged(iolink_dll_ctx_t* ctx, uint8_t slot, uint8_t len
     ctx->isr_tx_len = (uint8_t) (len + 1U);
     ctx->isr_tx_active = 0U;
     if (ctx->phy->tx_frame != NULL) {
-        (void) ctx->phy->tx_frame(ctx->phy->user, payload, ctx->isr_tx_len);
+        if (ctx->phy->tx_frame(ctx->phy->user, payload, ctx->isr_tx_len) != 0) {
+            IOLINK_STAT_ISR(ctx, isr_tx_dropped)++; /* PHY busy: reply lost */
+        }
     }
 #else
     ctx->isr_tx_base = ctx->isr_tx_payload[slot];
@@ -781,11 +790,10 @@ static bool dll_isr_frame_len_ok(iolink_dll_ctx_t* ctx, const uint8_t* f, uint8_
 /** @brief RX FRAME: take one PHY-delivered frame and hand it to the shared tail. */
 static void dll_isr_drain_rx_frame(iolink_dll_ctx_t* ctx)
 {
-    /* Do not call rx_frame() while the mailbox cannot take the frame: the PHY
-     * may reuse its receive buffer on the next call. */
-    if (iolink_ring_count(&ctx->isr_frame_ring) >= (uint32_t) IOLINK_MBX_SLOTS) {
-        return;
-    }
+    /* Always consume the PHY frame, even when the mailbox is full: the eager
+     * reply must still go out (as on the RX BYTE path), and publishing then
+     * counts the drop instead of losing the frame silently. The octets are
+     * copied before the ISR returns, so the PHY may reuse its buffer. */
     uint8_t st = 0U;
     uint8_t len = 0U;
     const uint8_t* f = ctx->phy->rx_frame(ctx->phy->user, &st, &len);
