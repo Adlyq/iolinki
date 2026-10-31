@@ -279,6 +279,14 @@ static int device_config_validate(const iolink_device_config_t* config)
     if ((config->lock == NULL) != (config->unlock == NULL)) {
         return IOLINK_DEVICE_INIT_ERR_LOCK_PAIR;
     }
+#if IOLINK_NEED_THREAD_LOCK
+    /* The RTOS profile spreads the main context over tasks: the platform
+     * critical section only excludes interrupts, so the thread lock is
+     * required to serialise them. */
+    if (config->lock == NULL) {
+        return IOLINK_DEVICE_INIT_ERR_LOCK;
+    }
+#endif
 
 #if IOLINK_NEED_CRITICAL
     /* Only a profile that actually serialises against an interrupt needs a

@@ -119,7 +119,7 @@ Select one with `-DIOLINK_CONCURRENCY=...`:
 | :--- | :--- | :--- |
 | `IOLINK_CONCURRENCY_SINGLE` | host simulation, cooperative loop, one context | nothing (the barrier and the critical section collapse to no-ops) |
 | `IOLINK_CONCURRENCY_ISR` (default) | one data ISR preempts one main loop (the dual-pump transport) | atomic width ≥ 32 bit + `COMPILER` barrier + the critical section |
-| `IOLINK_CONCURRENCY_RTOS` | the main context runs as RTOS tasks | the above + `config.lock/unlock` |
+| `IOLINK_CONCURRENCY_RTOS` | the main context runs as RTOS tasks | the above + `config.lock/unlock` (required: init returns `IOLINK_DEVICE_INIT_ERR_LOCK` when it is missing) |
 | `IOLINK_CONCURRENCY_SMP` | the pump and the main loop may run on different cores | atomic width + `SMP` barrier + the critical section |
 
 The stack derives `IOLINK_NEED_FENCE`, `IOLINK_NEED_CRITICAL` and

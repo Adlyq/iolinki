@@ -290,6 +290,7 @@ typedef enum {
     IOLINK_DEVICE_INIT_ERR_TIME = -10,      /* time_us is NULL */
     IOLINK_DEVICE_INIT_ERR_CRITICAL = -11,  /* weak critical-section default in use */
     IOLINK_DEVICE_INIT_ERR_STORAGE = -12,   /* storage NULL or read/write missing */
+    IOLINK_DEVICE_INIT_ERR_LOCK = -13,      /* RTOS profile without lock/unlock */
 } iolink_device_init_result_t;
 ```
 
