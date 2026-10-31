@@ -423,7 +423,8 @@ static bool dll_isr_type0_master_command(iolink_dll_ctx_t* ctx, const uint8_t* f
     return false;
 }
 
-static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len)
+static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len,
+                                 bool staged_write)
 {
     if ((frame == NULL) || (len < 2U) || !dll_phy_has_tx(ctx)) {
         return false;
@@ -455,8 +456,7 @@ static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, ui
     }
 
     /* ISDU write: the ISR already buffered the request octet(s). */
-    if ((ch == IOLINK_MC_CHANNEL_ISDU) && (ctx->isdu_isr_consumed != 0U)) {
-        ctx->isdu_isr_consumed = 0U; /* the frame is not published to main */
+    if ((ch == IOLINK_MC_CHANNEL_ISDU) && staged_write) {
         dll_isr_send_payload(ctx, NULL, 0U, dll_isr_status_flags(ctx));
         dll_isr_note_activity(ctx);
         return true;
@@ -467,17 +467,18 @@ static bool dll_isr_handle_type0(iolink_dll_ctx_t* ctx, const uint8_t* frame, ui
 /* Buffer an ISDU write request directly in the ISR. Only the transport is
  * performed here (byte collection + FlowCTRL + CHKPDU check); the application
  * dispatch stays in iolink_isdu_process() (main window), matching ST's
- * StackBaseOdWrite vs StackISDUProcess split. */
-static void dll_isr_consume_isdu_write(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len)
+ * StackBaseOdWrite vs StackISDUProcess split. Returns true when a segment was
+ * staged in the ring. */
+static bool dll_isr_consume_isdu_write(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len)
 {
     if ((frame == NULL) || (len < 2U)) {
-        return;
+        return false;
     }
     if ((frame[0] & IOLINK_MC_COMM_CHANNEL_MASK) != IOLINK_MC_CHANNEL_ISDU) {
-        return;
+        return false;
     }
     if ((frame[0] & IOLINK_MC_RW_MASK) != 0U) {
-        return; /* READ */
+        return false; /* READ */
     }
     uint8_t od_off;
     uint8_t od_n;
@@ -490,26 +491,28 @@ static void dll_isr_consume_isdu_write(iolink_dll_ctx_t* ctx, const uint8_t* fra
         od_n = ctx->od_width;
     }
     if (((uint16_t) od_off + (uint16_t) od_n) > (uint16_t) len) {
-        return;
+        return false;
+    }
+    if (od_n > IOLINK_OD_MAX_SIZE) {
+        od_n = (uint8_t) IOLINK_OD_MAX_SIZE;
     }
     /* Stage the write for the main pump instead of touching ctx->isdu from the
      * ISR: ctx->isdu then has a single writer (the main pump), so the ISDU state
-     * machine no longer needs to run with interrupts disabled. A second segment
-     * arriving before the drain would overwrite the slot (counted); IO-Link
-     * segments are master-paced with at least one cycle time between them. */
-    if (ctx->isr_od_staged != 0U) {
+     * machine no longer needs to run with interrupts disabled. Two ring slots
+     * absorb a second segment that arrives before the drain; a third one is
+     * dropped and counted (IO-Link segments are master-paced). */
+    iolink_od_rec_t* rec = (iolink_od_rec_t*) iolink_ring_claim(&ctx->isr_od_ring);
+    if (rec == NULL) {
         ctx->isr_od_overruns++;
+        return false;
     }
-    if (od_n > sizeof(ctx->isr_od_stage)) {
-        od_n = (uint8_t) sizeof(ctx->isr_od_stage);
-    }
-    ctx->isr_od_stage_flowctrl = (uint8_t) (frame[0] & IOLINK_MC_ADDR_MASK);
-    ctx->isr_od_stage_len = od_n;
+    rec->flowctrl = (uint8_t) (frame[0] & IOLINK_MC_ADDR_MASK);
+    rec->len = od_n;
     for (uint8_t i = 0U; i < od_n; i++) {
-        ctx->isr_od_stage[i] = frame[od_off + i];
+        rec->data[i] = frame[od_off + i];
     }
-    ctx->isr_od_staged = 1U;
-    ctx->isdu_isr_consumed = 1U;
+    iolink_ring_publish(&ctx->isr_od_ring);
+    return true;
 }
 
 /**
@@ -710,6 +713,7 @@ static bool dll_isr_wants_eager(const iolink_dll_ctx_t* ctx, const uint8_t* f)
 static inline void dll_isr_complete_frame(iolink_dll_ctx_t* ctx, const uint8_t* f, uint8_t len,
                                           bool allowed)
 {
+    bool staged = false;
     if (dll_mc_is_isdu_write(f)) {
         /* Buffer only a valid request: a corrupt ISDU write must not reach the
          * transport (ST validates before StackBaseOdWrite). */
@@ -717,9 +721,9 @@ static inline void dll_isr_complete_frame(iolink_dll_ctx_t* ctx, const uint8_t* 
             ctx->isr_eager_rejects++;
             return;
         }
-        dll_isr_consume_isdu_write(ctx, f, len);
+        staged = dll_isr_consume_isdu_write(ctx, f, len);
     }
-    if (allowed && dll_isr_handle_type0(ctx, f, len)) {
+    if (allowed && dll_isr_handle_type0(ctx, f, len, staged)) {
         dll_master_activity(ctx); /* served this cycle from the ISR */
         return;
     }

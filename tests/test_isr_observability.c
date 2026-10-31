@@ -435,17 +435,16 @@ static int test_type0_isdu_write_fast_path(void)
     if (dll.isdu.req_idx != 0U) {
         return 2;
     }
-    if ((dll.isr_od_staged != 1U) || (dll.isr_od_stage_len != 1U) ||
-        (dll.isr_od_stage[0] != 0x14U) || (dll.isr_od_stage_flowctrl != IOLINK_FLOWCTRL_START)) {
+    const iolink_od_rec_t* staged = (const iolink_od_rec_t*) iolink_ring_peek(&dll.isr_od_ring);
+    if ((staged == NULL) || (staged->len != 1U) || (staged->data[0] != 0x14U) ||
+        (staged->flowctrl != IOLINK_FLOWCTRL_START)) {
         return 3;
-    }
-    if (dll.isdu_isr_consumed != 0U) {
-        return 4; /* already ACKed by the Type-0 fast path */
     }
 
     /* Main window drains the staged octet into the ISDU transport. */
     iolink_dll_process(&dll);
-    if ((dll.isr_od_staged != 0U) || (dll.isdu.req_idx != 1U) || (dll.isdu.req_buf[0] != 0x14U)) {
+    if (!iolink_ring_is_empty(&dll.isr_od_ring) || (dll.isdu.req_idx != 1U) ||
+        (dll.isdu.req_buf[0] != 0x14U)) {
         return 5;
     }
     return 0;
@@ -602,8 +601,8 @@ static int test_isdu_write_consumed_by_isr(void)
     if ((dll.isdu.state != ISDU_STATE_RESPONSE_READY) || (dll.isr_isdu_len == 0U)) {
         return 3;
     }
-    if (dll.isdu_isr_consumed != 0U) {
-        return 4;
+    if (!iolink_ring_is_empty(&dll.isr_od_ring)) {
+        return 4; /* the main pump drained every staged segment */
     }
     return 0;
 }

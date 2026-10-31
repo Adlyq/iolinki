@@ -87,6 +87,16 @@ typedef enum
  * slots absorb one frame while the main pump is still handling the previous
  * one, so a busy main window no longer drops the next request. */
 #define IOLINK_MBX_SLOTS 2U
+/** Staged ISDU write depth (data ISR -> main pump); also a power of two. */
+#define IOLINK_OD_SLOTS 2U
+
+/** @brief One staged ISDU write segment (data ISR -> main pump). */
+typedef struct
+{
+    uint8_t flowctrl;                 /**< FlowCTRL nibble from the request MC octet */
+    uint8_t len;                      /**< OD octets in @ref data */
+    uint8_t data[IOLINK_OD_MAX_SIZE]; /**< OD octets */
+} iolink_od_rec_t;
 
 /**
  * @brief One received frame in the mailbox ring (data ISR -> main pump).
@@ -176,22 +186,17 @@ typedef struct
 #endif
     iolink_frame_rec_t isr_frame_slot[IOLINK_MBX_SLOTS]; /**< Mailbox ring storage */
     iolink_ring_t isr_frame_ring;                        /**< Frame mailbox (ISR -> main) */
-    volatile uint8_t frame_eager;       /**< Main-context snapshot of the record's eager flag
-                                             for the frame currently being processed. */
-    uint32_t isr_mailbox_drops;         /**< Frames dropped because the mailbox was full */
-    uint32_t isr_eager_rejects;         /**< Frames the eager path refused
-                                             (bad checksum/type) */
-    volatile uint8_t isdu_isr_consumed; /**< ISR already buffered this
-                                             ISDU write request */
+    volatile uint8_t frame_eager; /**< Main-context snapshot of the record's eager flag
+                                       for the frame currently being processed. */
+    uint32_t isr_mailbox_drops;   /**< Frames dropped because the mailbox was full */
+    uint32_t isr_eager_rejects;   /**< Frames the eager path refused
+                                       (bad checksum/type) */
     /* ISR-side ISDU staging + response snapshot (single-writer model). The ISR
-     * stages write OD octets and reads only the response snapshot; the main
-     * pump owns ctx->isdu and refreshes the snapshot under the short critical
-     * section. This keeps iolink_isdu_process() out of the IRQ-off window. */
-    uint8_t isr_od_stage_flowctrl;                      /**< Staged write FlowCTRL */
-    uint8_t isr_od_stage_len;                           /**< Staged write OD octets */
-    uint8_t isr_od_stage[IOLINK_OD_MAX_SIZE];           /**< Staged write OD payload */
-    volatile uint8_t isr_od_staged;                     /**< 1 = a write is staged */
-    uint32_t isr_od_overruns;                           /**< Staged writes overwritten */
+     * stages write OD octets in a ring and reads only the response snapshot;
+     * the main pump owns ctx->isdu and refreshes the snapshot when it changes. */
+    iolink_od_rec_t isr_od_slot[IOLINK_OD_SLOTS];       /**< Staged write ring storage */
+    iolink_ring_t isr_od_ring;                          /**< Staged ISDU writes (ISR -> main) */
+    uint32_t isr_od_overruns;                           /**< Staged writes dropped (ring full) */
     uint8_t isr_isdu_resp_buf[IOLINK_ISDU_BUFFER_SIZE]; /**< ISDU response snapshot */
     uint8_t isr_isdu_resp_valid;                        /**< Snapshot already copied for
                                                              the current response */

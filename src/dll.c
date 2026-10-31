@@ -587,15 +587,12 @@ static bool dll_dispatch_od(iolink_dll_ctx_t* ctx, uint8_t mc, const uint8_t* od
 
     if (channel == IOLINK_MC_CHANNEL_ISDU) {
         /* C3/Table 52: FlowCTRL lives in the MC address bits. A write carries
-           request octets; a read fetches the framed response (or Busy). */
-        const uint8_t flowctrl = (uint8_t) (mc & IOLINK_MC_ADDR_MASK);
+           request octets; a read fetches the framed response (or Busy). The ISR
+           stages every valid ISDU write and the main pump drains it at the top
+           of iolink_dll_process(), so a write is never applied twice here. */
         if ((mc & IOLINK_MC_RW_MASK) != 0U) {
+            const uint8_t flowctrl = (uint8_t) (mc & IOLINK_MC_ADDR_MASK);
             iolink_isdu_od_read(&ctx->isdu, flowctrl, od_out, od_len);
-        }
-        else {
-            /* The ISR stages every valid ISDU write and the main pump drains it
-             * at the top of iolink_dll_process(); never apply it twice here. */
-            ctx->isdu_isr_consumed = 0U;
         }
         return true;
     }
@@ -869,6 +866,9 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     /* Frame mailbox: the ISR publishes into the ring, the main pump consumes. */
     iolink_ring_init(&ctx->isr_frame_ring, (uint8_t*) ctx->isr_frame_slot, IOLINK_MBX_SLOTS,
                      (uint8_t) sizeof(iolink_frame_rec_t));
+    /* Staged ISDU write segments (ISR -> main). */
+    iolink_ring_init(&ctx->isr_od_ring, (uint8_t*) ctx->isr_od_slot, IOLINK_OD_SLOTS,
+                     (uint8_t) sizeof(iolink_od_rec_t));
 
     ctx->baudrate = IOLINK_BAUDRATE_COM2;
     if (ctx->phy->set_baudrate != NULL) {
@@ -1139,7 +1139,6 @@ static void dll_handle_frame_error(iolink_dll_ctx_t* ctx, dll_frame_result_t res
 {
     if (result == DLL_FRAME_TYPE_ERROR) {
         ctx->frame_eager = 0U;
-        ctx->isdu_isr_consumed = 0U;
         ctx->framing_errors++;
         ctx->frame_index = 0U;
         if ((ctx->state == IOLINK_DLL_STATE_OPERATE) ||
@@ -1382,7 +1381,6 @@ static void dll_finish_frame(iolink_dll_ctx_t* ctx)
 {
     ctx->frame_index = 0U;
     ctx->frame_eager = 0U;
-    ctx->isdu_isr_consumed = 0U;
     /* Reflect any ISDU state change (e.g. a completed write request) for the
      * ISR read pump before the next master frame. */
     dll_isdu_sync_snapshot(ctx);
@@ -1484,41 +1482,31 @@ static void dll_apply_isr_deadline_requests(iolink_dll_ctx_t* ctx)
 /**
  * @brief Hand an ISR-staged ISDU write to the transport.
  *
- * The ISR only stages write octets; the main pump owns the transport and the
- * response buffer. Copy the staged OD under a short critical section, then run
- * the (possibly slow) execute step with interrupts enabled.
+ * The ISR stages whole segments in a ring; the main pump owns the transport
+ * and the response buffer. Each iteration copies one record out of the ring,
+ * releases its slot (so the ISR may reuse it) and then runs the (possibly
+ * slow) transport with interrupts enabled. No critical section is involved.
  */
 static void dll_drain_staged_isdu_write(iolink_dll_ctx_t* ctx)
 {
-    uint8_t staged_fc = 0U;
-    uint8_t staged_len = 0U;
-    uint8_t staged_od[IOLINK_OD_MAX_SIZE];
-    bool drained = false;
-
-    if (ctx->isr_od_staged == 0U) {
-        return; /* steady state: nothing staged, no interrupt-off window */
-    }
-
-    IOLINK_CRITICAL_ENTER();
-    if (ctx->isr_od_staged != 0U) {
-        staged_fc = ctx->isr_od_stage_flowctrl;
-        staged_len = ctx->isr_od_stage_len;
-        if (staged_len > sizeof(staged_od)) {
-            staged_len = (uint8_t) sizeof(staged_od);
+    for (;;) {
+        const iolink_od_rec_t* rec = (const iolink_od_rec_t*) iolink_ring_peek(&ctx->isr_od_ring);
+        if (rec == NULL) {
+            return;
         }
+        uint8_t staged_fc = rec->flowctrl;
+        uint8_t staged_len = rec->len;
+        if (staged_len > IOLINK_OD_MAX_SIZE) {
+            staged_len = (uint8_t) IOLINK_OD_MAX_SIZE;
+        }
+        uint8_t staged_od[IOLINK_OD_MAX_SIZE];
         for (uint8_t i = 0U; i < staged_len; i++) {
-            staged_od[i] = ctx->isr_od_stage[i];
+            staged_od[i] = rec->data[i];
         }
-        ctx->isr_od_staged = 0U;
-        ctx->isdu_isr_consumed = 0U;
+        iolink_ring_release(&ctx->isr_od_ring);
         /* New request activity: force the next RESPONSE_READY to refresh the
          * ISR response snapshot (even for a same-length response). */
         ctx->isr_isdu_resp_valid = 0U;
-        drained = true;
-    }
-    IOLINK_CRITICAL_EXIT();
-
-    if (drained) {
         iolink_isdu_od_write(&ctx->isdu, staged_fc, staged_od, staged_len);
     }
 }
