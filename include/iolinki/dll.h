@@ -89,10 +89,11 @@ typedef enum
  *
  * TX BYTE ends the transfer inside the library, which releases the buffer the
  * ISR held (pd_in_captured = 0xFF) at frame end, so two buffers are enough.
- * TX FRAME hands the buffer to a DMA that the library cannot observe: the slot
- * stays leased until the next capture, so a third buffer absorbs the main
- * pump's update without touching the buffer still on the wire. */
-#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+ * TX FRAME hands the buffer to a DMA that the library cannot observe unless the
+ * PHY provides tx_busy(): with the hook the lease is released as soon as the
+ * line is free (two buffers); without it the slot stays leased until the next
+ * capture, so a third buffer absorbs the main pump's update. */
+#if (IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME) && !IOLINK_PHY_FEATURE_TX_BUSY
 #define IOLINK_PD_IN_BUFFERS 3U
 #else
 #define IOLINK_PD_IN_BUFFERS 2U
@@ -398,7 +399,7 @@ typedef struct
  * The library has a single transport path (the ISR dispatch pump). The bound
  * PHY expresses how it moves data through the two ISR-mode compile switches:
  *  - RX      : rx_octet (byte) or rx_frame (whole frame)      [IOLINK_ISR_RX_MODE]
- *  - TX      : tx_octet + tx_done (byte) or tx_frame (whole)  [IOLINK_ISR_TX_MODE]
+ *  - TX      : tx_octet + tx_done (byte) or tx_frame + tx_busy (whole) [IOLINK_ISR_TX_MODE]
  *  - wake-up : detect_wakeup present (the PHY can observe the C/Q wake-up)
  * These keep the capability checks in one place instead of scattering NULL tests.
  */

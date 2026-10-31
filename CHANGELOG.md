@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (TX FRAME line state)
+- `iolink_phy_api_t::tx_busy` (TX FRAME only, optional) reports whether the PHY
+  still owns the C/Q line. With it the library defers an eager ISR reply while
+  the previous frame is on the wire, releases the PD-in reply buffer as soon as
+  the transfer ends, and `IOLINK_PHY_FEATURE_TX_BUSY=1` drops the PD-in buffer
+  count from three to two. Without the hook the previous behaviour is unchanged.
+- `tests/test_tx_busy.c` plus a FRAME/FRAME `tx_busy` fixture and a matrix
+  configuration cover the deferral and the lease release.
+
 ### Changed (PHY API)
 - `iolink_phy_api_t::tx_done` is declared only for TX BYTE builds. TX FRAME
   builds have no such member: the library never called it in that mode (the PHY

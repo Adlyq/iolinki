@@ -659,6 +659,13 @@ static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx, const uint8_t* frame)
     if ((frame == NULL) || !dll_phy_has_tx(ctx)) {
         return false;
     }
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    /* A PHY that reports the line state says the previous reply may still be on
+     * the wire: let the main pump answer this frame instead of tearing it. */
+    if ((ctx->phy->tx_busy != NULL) && (ctx->phy->tx_busy(ctx->phy->user) != 0U)) {
+        return false;
+    }
+#endif
     const uint8_t first = frame[0];
     if (first == IOLINK_MC_TRANSITION_COMMAND) {
         return false; /* invalid in OPERATE; the main pump handles it */

@@ -142,6 +142,19 @@ typedef struct
      * @return 0 on success, negative on error.
      */
     int (*tx_frame)(void* user, const uint8_t* data, size_t len);
+
+    /**
+     * @brief Non-zero while the PHY still owns the C/Q line (optional).
+     *
+     * Read-only and non-blocking; callable from the data ISR and from the main
+     * context. The library checks it before starting an ISR reply (a busy line
+     * defers the reply to the main pump instead of tearing the frame down) and
+     * polls it from the main pump to release the PD-in reply buffer.
+     * NULL keeps the legacy behaviour: the transfer end stays unobservable, so
+     * a reply buffer is only reused after the next capture.
+     * @return 1 while a transfer is in flight, 0 when the line is free.
+     */
+    uint8_t (*tx_busy)(void* user);
 #else
     /**
      * @brief Write one reply octet (TX BYTE mode).

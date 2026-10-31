@@ -106,6 +106,7 @@ static const uint8_t* l6362_rx_frame(void* user, uint8_t* status, uint8_t* len);
 #endif
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
 static int l6362_tx_frame(void* user, const uint8_t* data, size_t len);
+static uint8_t l6362_tx_busy(void* user);
 #else
 static int l6362_tx_octet(void* user, uint8_t data);
 static void l6362_tx_done(void* user);
@@ -615,6 +616,13 @@ static int l6362_tx_frame(void* user, const uint8_t* data, size_t len)
     s_tx_bytes += (uint32_t) len;
     return 0;
 }
+
+/** Line is free once the completion handler dropped TX_EN. */
+static uint8_t l6362_tx_busy(void* user)
+{
+    (void) user;
+    return phy_txen_get() ? 1U : 0U;
+}
 #endif
 
 /** @brief Poke the USART2 interrupt so the ISR pump sends a staged reply. */
@@ -760,6 +768,7 @@ const iolink_phy_api_t* phy_l6362a_raw_get(void)
 #endif
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
         .tx_frame = l6362_tx_frame,
+        .tx_busy = l6362_tx_busy,
 #else
         .tx_octet = l6362_tx_octet,
         .tx_done = l6362_tx_done,

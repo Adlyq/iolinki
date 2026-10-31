@@ -42,22 +42,25 @@ if(IOLINK_TINY_PROFILE)
     set(IOLINK_FEATURE_EVENTS OFF)
 endif()
 
-add_library(iolinki STATIC
-    src/phy_generic.c
-    src/phy_tiol112.c
-    src/phy_l6362a.c
-    src/phy_virtual.c
-    src/crc.c
-    src/dll.c
-    src/dll_isr.c
-    src/isdu.c
-    src/events.c
-    src/platform.c
-    src/params.c
-    src/data_storage.c
-    src/device_info.c
-    src/device.c
+# Absolute paths so a subdirectory can build the same sources under a different
+# ISR granularity (see tests/CMakeLists.txt: TX FRAME fixture).
+set(IOLINK_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/phy_generic.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/phy_tiol112.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/phy_l6362a.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/phy_virtual.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/crc.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dll.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dll_isr.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/isdu.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/events.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/platform.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/params.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/data_storage.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/device_info.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/device.c
 )
+add_library(iolinki STATIC ${IOLINK_SOURCES})
 
 # Only trimmed features are defined; the rest keep the config.h defaults.
 foreach(_iolink_feature

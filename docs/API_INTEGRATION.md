@@ -178,6 +178,7 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `tx_octet` | TX BYTE 模式 | 送入一个应答 octet。 |
 | `tx_frame` | TX FRAME 模式 | 发送完整应答，通常使用 DMA。 |
 | `tx_done` | TX BYTE 模式 | 发完最后一字节后释放线路；RX BYTE 的 gap 也会用它释放接收引擎。TX FRAME 下该成员不存在，由 PHY 自己在传输完成中断里收尾。 |
+| `tx_busy` | TX FRAME 可选 | 线路仍被占用时返回非 0；库据此推迟 ISR 应答并在主泵释放 PD-in 缓冲。为 NULL 时只能等下一次 capture 复用缓冲。 |
 | `int_active` | 必需 | 数据中断电平；用于门控 ISR 泵。 |
 | `request_service` | 推荐 | 主上下文暂存应答后唤醒数据 ISR。当 `IOLINK_PHY_FEATURE_ISR_TX_ONLY=1` 时必需。 |
 | `response_timer_start/stop` | 可选 | 硬件 t_A 定时器。为 NULL 时使用软件时间戳。 |

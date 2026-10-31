@@ -136,6 +136,7 @@ run_config() {
 run_config default             BYTE_BYTE   Debug   yes   ""                            ""
 run_config release             BYTE_BYTE   Release yes   ""                            ""
 run_config isr_frame_frame     FRAME_FRAME Debug   no    ""                            ""
+run_config isr_frame_busy      FRAME_FRAME Debug   no    ""                            "-DIOLINK_PHY_FEATURE_TX_BUSY=1"
 run_config isr_frame_byte      FRAME_BYTE  Debug   no    ""                            ""
 run_config isr_byte_frame      BYTE_FRAME  Debug   no    ""                            ""
 run_config isr_tx_only         BYTE_BYTE   Debug   no    ""                            "-DIOLINK_PHY_FEATURE_ISR_TX_ONLY=1"

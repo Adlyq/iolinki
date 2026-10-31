@@ -79,6 +79,18 @@ add_executable(test_isr_cutpoints test_isr_cutpoints.c)
 target_link_libraries(test_isr_cutpoints iolinki)
 add_test(NAME test_isr_cutpoints COMMAND test_isr_cutpoints)
 
+# TX FRAME line-state hook (tx_busy): the stock library is built in the default
+# BYTE/BYTE layout, so the FRAME behaviour gets its own build of the sources.
+add_library(iolink_tx_busy_fixture STATIC ${IOLINK_SOURCES})
+target_include_directories(iolink_tx_busy_fixture PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_compile_definitions(iolink_tx_busy_fixture PUBLIC
+    IOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME
+    IOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME
+    IOLINK_PHY_FEATURE_TX_BUSY=1)
+add_executable(test_tx_busy test_tx_busy.c)
+target_link_libraries(test_tx_busy iolink_tx_busy_fixture)
+add_test(NAME test_tx_busy COMMAND test_tx_busy)
+
 if(PkgConfig_FOUND)
     pkg_check_modules(CMOCKA QUIET cmocka)
 endif()

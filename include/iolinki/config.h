@@ -142,6 +142,19 @@
 #define IOLINK_PHY_FEATURE_ISR_TX_ONLY 0
 #endif
 
+/**
+ * @brief Whether the TX FRAME PHY provides tx_busy().
+ *
+ * 1: the PHY reports when the C/Q line is free again, so the library releases a
+ *    PD-in reply buffer as soon as the transfer ends and two buffers are enough.
+ * 0 (default): the transfer end is unobservable, the buffer stays leased until
+ *    the next capture, and a third buffer absorbs the main pump's update.
+ * Ignored outside TX FRAME builds.
+ */
+#ifndef IOLINK_PHY_FEATURE_TX_BUSY
+#define IOLINK_PHY_FEATURE_TX_BUSY 0
+#endif
+
 /* -------------------------------------------------------------------------
  * Concurrency profile.
  *

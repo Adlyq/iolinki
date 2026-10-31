@@ -1657,11 +1657,20 @@ static void dll_process_body(iolink_dll_ctx_t* ctx)
     dll_apply_isr_deadline_requests(ctx);
 
     /* A captured PD-in buffer is released by the TX BYTE pump when the reply
-     * completes, and by the next capture in TX FRAME. The library cannot
-     * distinguish "still on the wire" from "transceiver stalled", so it keeps
-     * the lease rather than risk rewriting a buffer that may still be streamed;
-     * skipped PD-in publishes are counted in pd_in_skips so the application can
-     * detect a stalled PHY and reset it. */
+     * completes. A TX FRAME PHY can report the transfer end through tx_busy();
+     * without that hook the library cannot distinguish "still on the wire" from
+     * "transceiver stalled", so it keeps the lease until the next capture and
+     * pd_in_skips surfaces the stall. The section keeps the data ISR from
+     * capturing a new buffer between the poll and the release. */
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    if ((ctx->phy != NULL) && (ctx->phy->tx_busy != NULL)) {
+        IOLINK_CRITICAL_ENTER();
+        if ((ctx->pd_in_captured != 0xFFU) && (ctx->phy->tx_busy(ctx->phy->user) == 0U)) {
+            ctx->pd_in_captured = 0xFFU;
+        }
+        IOLINK_CRITICAL_EXIT();
+    }
+#endif
 
     /* Restore the operating COM before the SIO/power-on early returns: a
      * recovery drop to COM1 must not leave the UART on the wrong baudrate. */
