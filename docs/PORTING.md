@@ -59,55 +59,35 @@ static int stm32_tx_octet(void* user, uint8_t data)
 }
 ```
 
-### 2. Time Utilities
+### 2. Time Source
 
-`iolink_device_config_t::time_us` is required by `iolink_device_init()` (NULL is
-rejected with `IOLINK_DEVICE_INIT_ERR_TIME`). It is an application callback
-returning a monotonic microsecond timestamp; when set, the DLL, the ISR pump and
-the event engine all use it. Because the data ISR calls it, it must be
-non-blocking and ISR-safe.
-
-The core no longer calls the platform time functions below. They remain useful
-as the implementation of your `time_us` callback; direct DLL users must bind
-`ctx->time_us`/`time_user` after `iolink_dll_init()`.
-
-**Location**: `src/platform/<platform>/time_utils.c`
-
-**Interface**:
-```c
-uint32_t iolink_time_get_ms(void);
-uint64_t iolink_time_get_us(void);
-```
+Supply a monotonic microsecond clock through
+`iolink_device_config_t::time_us`. `iolink_device_init()` rejects NULL with
+`IOLINK_DEVICE_INIT_ERR_TIME`. The DLL, ISR pump and event engine all use this
+callback; because the data ISR calls it, it must be non-blocking and ISR-safe.
 
 **Example** (FreeRTOS):
 ```c
-#include "iolinki/time_utils.h"
-#include "FreeRTOS.h"
-#include "task.h"
-
-uint32_t iolink_time_get_ms(void) {
-    return xTaskGetTickCount() * portTICK_PERIOD_MS;
-}
-
-uint64_t iolink_time_get_us(void) {
-    return iolink_us_from_ms(iolink_time_get_ms());
+static uint64_t app_time_us(void* user)
+{
+    (void) user;
+    return (uint64_t) xTaskGetTickCount() * (1000000ULL / configTICK_RATE_HZ);
 }
 ```
 
 **Example** (Bare Metal with SysTick):
 ```c
-static volatile uint32_t g_tick_ms = 0;
+static volatile uint32_t g_tick_ms;
 
-void SysTick_Handler(void) {
+void SysTick_Handler(void)
+{
     g_tick_ms++;
 }
 
-uint32_t iolink_time_get_ms(void) {
-    return g_tick_ms;
-}
-
-uint64_t iolink_time_get_us(void) {
-    return iolink_us_from_ms(g_tick_ms);
+static uint64_t app_time_us(void* user)
+{
+    (void) user;
+    return (uint64_t) g_tick_ms * 1000ULL; /* replace with a hardware timer */
 }
 ```
 
@@ -309,7 +289,6 @@ Edit `CMakeLists.txt`:
 elseif(IOLINK_PLATFORM STREQUAL "STM32")
     target_sources(iolinki PRIVATE
         src/platform/stm32/phy_stm32.c
-        src/platform/stm32/time_utils.c
     )
     target_link_libraries(iolinki PRIVATE stm32_hal)
 endif()

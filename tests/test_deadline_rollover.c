@@ -1,17 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include <assert.h>
 #include "iolinki/dll.h"
-#include "iolinki/time_utils.h"
 static uint64_t now;
 static int wake_pending;
-uint32_t iolink_time_get_ms(void)
-{
-    return (uint32_t) (now / 1000U);
-}
-uint64_t iolink_time_get_us(void)
-{
-    return now;
-}
 static uint64_t test_time_us(void* user)
 {
     (void) user;

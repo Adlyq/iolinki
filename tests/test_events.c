@@ -19,20 +19,14 @@
 #include <unistd.h>
 
 #include "iolinki/events.h"
-#include "iolinki/time_utils.h"
 
 #include "conformance_test.h"
-
-static uint64_t test_time_us(void* user)
-{
-    (void) user;
-    return iolink_time_get_us();
-}
+#include "test_helpers.h"
 
 static void events_init(iolink_events_ctx_t* ctx)
 {
     iolink_events_init(ctx);
-    ctx->time_us = test_time_us;
+    ctx->time_us = iolink_test_time_us;
 }
 
 static void test_event_queue_flow(void** state)

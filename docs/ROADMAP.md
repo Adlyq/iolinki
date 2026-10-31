@@ -238,7 +238,7 @@ This roadmap outlines the development path for `iolinki`, enabling a fully compl
 - [ ] **DMA Support**: Extend PHY API for DMA-based transfers (zero-copy).
 - [ ] **IRQ Mode**: Add interrupt-driven receive mode to PHY abstraction.
 - [ ] **GPIO Control**: Abstract C/Q line control for PHY implementations.
-- [ ] **Timer Abstraction**: Formalize timer requirements beyond time_utils.
+- [ ] **Timer Abstraction**: Formalize timer requirements beyond the device clock callback.
 
 ### 6.4 Production Hardening
 - [ ] **Error Callbacks**: Implement `iolink_error_t` enum and user-provided error callback system.

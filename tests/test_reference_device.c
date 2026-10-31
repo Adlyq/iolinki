@@ -14,7 +14,7 @@ static void test_reference_device_payload(void** state)
     reference_device_t app;
     setup_mock_phy();
     will_return(mock_phy_init, 0);
-    assert_int_equal(reference_device_init(&app, &g_phy_mock), 0);
+    assert_int_equal(reference_device_init(&app, &g_phy_mock, iolink_test_time_us), 0);
     assert_int_equal(iolink_device_get_pd_in_len(&app.device), 3);
     assert_int_equal(iolink_device_get_pd_out_len(&app.device), 1);
     move_to_operate_ctx(&app.device);
@@ -45,8 +45,8 @@ static void test_reference_device_rejects_missing_transport(void** state)
 {
     (void) state;
     reference_device_t app;
-    assert_int_equal(reference_device_init(NULL, &g_phy_mock), -1);
-    assert_int_equal(reference_device_init(&app, NULL), -1);
+    assert_int_equal(reference_device_init(NULL, &g_phy_mock, iolink_test_time_us), -1);
+    assert_int_equal(reference_device_init(&app, NULL, iolink_test_time_us), -1);
     assert_int_equal(reference_device_tick(NULL, false), -1);
 }
 

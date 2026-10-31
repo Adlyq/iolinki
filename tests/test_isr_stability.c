@@ -24,16 +24,6 @@ static uint64_t now_us;
 static unsigned tx_octets;
 static unsigned tx_frames;
 
-uint32_t iolink_time_get_ms(void)
-{
-    return (uint32_t) (now_us / 1000U);
-}
-
-uint64_t iolink_time_get_us(void)
-{
-    return now_us;
-}
-
 static uint64_t test_time_us(void* user)
 {
     (void) user;
@@ -52,7 +42,6 @@ static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t le
     (void) memcpy(rec->data, frame, len);
     iolink_ring_publish(&ctx->isr_frame_ring);
 }
-
 
 static int rx_octet(void* user, uint8_t* data, uint8_t* status)
 {
@@ -142,7 +131,7 @@ int main(void)
     ctx.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.enforce_timing = false;
     now_us = 1000000U;
-    ctx.last_activity_ms = iolink_time_get_ms();
+    ctx.last_activity_ms = ((uint32_t) (now_us / 1000U));
 
     /* Scenario A: 60 simulated seconds at 1 ms per cycle (60k frames). */
     if (run_cycles(&ctx, 60000U, 1000U) != 0) {
@@ -160,7 +149,7 @@ int main(void)
 
     /* Scenario B: cross the 32-bit millisecond timestamp wrap. */
     now_us = ((uint64_t) UINT32_MAX - 5U) * 1000U;
-    ctx.last_activity_ms = iolink_time_get_ms();
+    ctx.last_activity_ms = ((uint32_t) (now_us / 1000U));
     ctx.timeout_errors = 0U;
     if (run_cycles(&ctx, 20U, 600000U) != 0) {
         return 20;

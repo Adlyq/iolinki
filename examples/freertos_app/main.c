@@ -23,7 +23,7 @@
 #include "iolinki/device.h"
 #include "iolinki/platform.h"
 #include "iolinki/phy.h"
-#include "iolinki/time_utils.h"
+#include <time.h>
 #include <string.h>
 
 /* Platform Override for Critical Sections */
@@ -73,7 +73,11 @@ const iolink_phy_api_t g_phy_freertos = {.init = NULL, .set_baudrate = NULL};
 static uint64_t freertos_time_us(void* user)
 {
     (void) user;
-    return iolink_time_get_us();
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0ULL;
+    }
+    return ((uint64_t) ts.tv_sec * 1000000ULL + (uint64_t) ts.tv_nsec / 1000ULL);
 }
 
 static iolink_device_ctx_t g_device_ctx;

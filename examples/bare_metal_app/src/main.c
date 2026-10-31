@@ -8,7 +8,6 @@
 
 #include "iolinki/device.h"
 #include "iolinki/phy_virtual.h"
-#include "iolinki/time_utils.h"
 #include <string.h>
 
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -49,18 +48,17 @@ void iolink_critical_exit(void)
 {
 }
 
+static volatile uint32_t g_tick_ms;
+
 static uint64_t baremetal_time_us(void* user)
 {
     (void) user;
-    return iolink_time_get_us();
+    return (uint64_t) g_tick_ms * 1000ULL;
 }
 
-/* Extern the volatile tick counter from time_utils_baremetal.c */
-extern volatile uint32_t g_iolink_ticks_ms;
-
-void sys_tick_handler(void)
+static void sys_tick_handler(void)
 {
-    g_iolink_ticks_ms++;
+    g_tick_ms++;
 }
 
 int main(void)
@@ -93,7 +91,7 @@ int main(void)
          * For this test/demo, we just loop for a bit to prevent 100% CPU on host simulation
          * or just break after N cycles for automated testing.
          */
-        if (g_iolink_ticks_ms > 100) {
+        if (g_tick_ms > 100) {
             break; /* Exit for test success */
         }
     }

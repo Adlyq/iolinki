@@ -21,15 +21,14 @@
 
 #include "iolinki/crc.h"
 #include "iolinki/device.h"
-#include "iolinki/time_utils.h"
 #include "test_helpers.h"
 
 static void test_time_get_ms(void** state)
 {
     (void) state;
-    uint32_t t1 = iolink_time_get_ms();
+    uint32_t t1 = iolink_test_time_ms();
     usleep(10000); /* 10ms */
-    uint32_t t2 = iolink_time_get_ms();
+    uint32_t t2 = iolink_test_time_ms();
 
     assert_true(t2 >= t1 + 10);
     assert_true(t2 < t1 + 50); /* Allow more jitter (was 20) */
@@ -38,9 +37,9 @@ static void test_time_get_ms(void** state)
 static void test_time_get_us(void** state)
 {
     (void) state;
-    uint64_t t1 = iolink_time_get_us();
+    uint64_t t1 = iolink_test_time_us(NULL);
     usleep(1000); /* 1ms */
-    uint64_t t2 = iolink_time_get_us();
+    uint64_t t2 = iolink_test_time_us(NULL);
 
     assert_true(t2 >= t1 + 1000);
     assert_true(t2 < t1 + 5000); /* Allow more jitter (was 2000) */

@@ -2,8 +2,6 @@
 #include "reference_device.h"
 #include <string.h>
 
-#include "iolinki/time_utils.h"
-
 static const iolink_device_info_t identity = {
     .vendor_name = "iolinki example",
     .vendor_text = "Experimental identity; replace before shipping",
@@ -49,20 +47,15 @@ static const iolink_storage_api_t g_storage_api = {
 };
 #endif
 
-static uint64_t reference_time_us(void* user)
+int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy,
+                          iolink_device_time_us_fn time_us)
 {
-    (void) user;
-    return iolink_time_get_us();
-}
-
-int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy)
-{
-    if ((app == NULL) || (phy == NULL)) {
+    if ((app == NULL) || (phy == NULL) || (time_us == NULL)) {
         return -1;
     }
     memset(app, 0, sizeof(*app));
     app->config.phy = *phy;
-    app->config.time_us = reference_time_us;
+    app->config.time_us = time_us;
 #if IOLINK_FEATURE_DATA_STORAGE
     app->config.storage = &g_storage_api;
 #endif

@@ -12,7 +12,7 @@
 #include <string.h>
 #include "iolinki/device.h"
 #include "iolinki/phy_virtual.h"
-#include "iolinki/time_utils.h"
+#include <time.h>
 
 #if IOLINK_FEATURE_DATA_STORAGE
 static uint8_t g_storage[IOLINK_STORAGE_TOTAL_SIZE];
@@ -55,7 +55,11 @@ void iolink_critical_exit(void)
 static uint64_t host_time_us(void* user)
 {
     (void) user;
-    return iolink_time_get_us();
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0ULL;
+    }
+    return ((uint64_t) ts.tv_sec * 1000000ULL + (uint64_t) ts.tv_nsec / 1000ULL);
 }
 
 /** @brief Run the ISR pump and drain any reply it is transmitting. */

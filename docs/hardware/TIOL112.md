@@ -46,10 +46,9 @@ The MCU adapter must implement:
 - Safe UART/GPIO pin-mux switching, initialized pin levels, and interrupt-latched
   wake-up consumption. Polling a short pulse from a slow application loop is
   insufficient.
-- Hardware-backed monotonic `iolink_time_get_us()` and millisecond clock,
-  critical-section hooks and persistence if advertised. Current global stack
-  timing calls still require these functions; a device configuration callback
-  alone does not replace them throughout the DLL.
+- A hardware-backed monotonic microsecond clock passed through
+  `iolink_device_config_t::time_us`, critical-section hooks and persistence if
+  advertised.
 
 TI's [wake-up description](https://www.ti.com/document-viewer/TIOL112/datasheet/GUID-589F287B-FD11-4AB2-8375-3143E3363873)
 requires timely release into receive after the indication. Measure the full

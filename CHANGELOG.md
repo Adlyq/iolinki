@@ -50,9 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rejects NULL with the new `IOLINK_DEVICE_INIT_ERR_TIME`. When supplied (the
   only accepted configuration), the DLL, ISR pump and event engine take every
   timestamp from it; the callback must be monotonic, non-blocking and ISR-safe.
-  The core no longer calls the platform `iolink_time_get_us()/get_ms()`
-  functions; direct DLL users must bind `ctx->time_us` after
-  `iolink_dll_init()`.
+  Remove `include/iolinki/time_utils.h` and the platform
+  `iolink_time_get_us()/get_ms()` sources; direct DLL users must bind
+  `ctx->time_us` after `iolink_dll_init()`.
 - `iolink_device_init()` now probes the platform critical-section hooks and
   returns the new `IOLINK_DEVICE_INIT_ERR_CRITICAL` when the weak no-op default
   is still active.

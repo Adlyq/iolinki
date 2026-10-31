@@ -46,14 +46,13 @@ target_include_directories(your_firmware PRIVATE path/to/iolinki/include)
 `iolinki` 不会导出接口 include 目录，因此需要显式添加 `include/` 路径。作为子项目使用时，
 优先使用 `add_subdirectory(path/to/iolinki EXCLUDE_FROM_ALL)`，避免把自带的示例/测试
 加入默认构建；`-DBUILD_TESTING=OFF` 还可以额外关闭测试。默认的
-`IOLINK_PLATFORM=LINUX` 构建会引入 POSIX 时间和 `phy_virtual.c`；不要在 MCU
-固件中使用该配置。自定义目标可只编译需要的源文件：
+`IOLINK_PLATFORM=LINUX` 构建会引入 `phy_virtual.c`；不要在 MCU 固件中使用
+该配置。自定义目标可只编译需要的源文件：
 
 ```text
 src/device.c src/dll.c src/dll_isr.c src/isdu.c src/events.c src/params.c
 src/data_storage.c src/device_info.c src/crc.c
 src/platform.c                    # or your own critical-section implementation
-src/platform/<target>/time_utils.c
 src/phy_<your_transceiver>.c
 ```
 
@@ -90,8 +89,8 @@ ISR 双泵和事件引擎的所有时间戳都从该回调获取。
 
 `time_us` 会在主循环和数据 ISR 中调用，因此必须单调、非阻塞、可重入，并在
 上下文生命周期内保持有效。毫秒时间用于事件/状态逻辑，微秒时间用于帧计时以及
-t_A/t_ren 计时。自带的 `src/platform/baremetal/time_utils.c` 由毫秒推导微秒，
-精度不足以支持硬件时序；在 MCU 上应提供真实的微秒定时器。
+t_A/t_ren 计时。若从毫秒计数器推导微秒，精度不足以支持硬件时序；在 MCU 上应
+提供真实的微秒定时器。
 
 ISR 双泵传输要求临界区可嵌套（例如 Cortex-M 上的 PRIMASK/BASEPRI 保存恢复）。
 `config.lock`/`config.unlock` 中的 RTOS 锁只能串行化主上下文调用者，本身并不能
@@ -672,8 +671,9 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
   `iolink_checksum6()` / `iolink_checksum6_from_acc()`。
 - `include/iolinki/protocol.h`：标准索引、ISDU 错误码、SystemCommand 和
   M-sequence 常量。应使用这些常量而不是数字字面量。
-- `include/iolinki/platform.h` 和 `time_utils.h`：临界区以及时间源。旧版
-  `iolink_nvm_*` 接口已移除；持久化统一通过 `config.storage` 完成。
+- `include/iolinki/platform.h`：临界区。时间源通过
+  `iolink_device_config_t::time_us` 提供。旧版 `iolink_nvm_*` 接口已移除；
+  持久化统一通过 `config.storage` 完成。
 
 ## 12. 参考资料
 

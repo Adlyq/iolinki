@@ -73,8 +73,8 @@ void phy_l6362a_raw_request_pump(void);
 /* iolinki platform hooks (override the weak defaults in platform.c) */
 void iolink_critical_enter(void);
 void iolink_critical_exit(void);
-uint64_t iolink_time_get_us(void);
-uint32_t iolink_time_get_ms(void);
+uint64_t phy_l6362a_time_us(void);
+uint32_t phy_l6362a_time_ms(void);
 
 #ifdef __cplusplus
 }

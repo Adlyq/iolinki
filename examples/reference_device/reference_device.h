@@ -15,7 +15,8 @@ typedef struct
     bool led;
 } reference_device_t;
 
-int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy);
+int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy,
+                          iolink_device_time_us_fn time_us);
 /* Call once per application sampling tick, independently of the much faster
  * protocol processing loop. Input: big-endian counter + button; output: LED bit 0. */
 int reference_device_tick(reference_device_t* app, bool button);

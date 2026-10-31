@@ -19,16 +19,6 @@
 
 static uint64_t now_us;
 
-uint32_t iolink_time_get_ms(void)
-{
-    return (uint32_t) (now_us / 1000U);
-}
-
-uint64_t iolink_time_get_us(void)
-{
-    return now_us;
-}
-
 static uint64_t test_time_us(void* user)
 {
     (void) user;
@@ -47,7 +37,6 @@ static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t le
     (void) memcpy(rec->data, frame, len);
     iolink_ring_publish(&ctx->isr_frame_ring);
 }
-
 
 /* A valid Type-0 request: MC + CKT carrying the A.1.6 checksum. */
 static void make_type0_frame(uint8_t mc, uint8_t frame[2])
@@ -68,7 +57,7 @@ int main(void)
     ctx.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.enforce_timing = false;
     now_us = 1000000U;
-    ctx.last_activity_ms = iolink_time_get_ms();
+    ctx.last_activity_ms = ((uint32_t) (now_us / 1000U));
 
     uint8_t frame[2];
     make_type0_frame(0x80U, frame); /* Type-0 READ */

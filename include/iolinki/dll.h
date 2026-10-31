@@ -164,10 +164,10 @@ typedef struct
     void (*lock)(void* user);
     void (*unlock)(void* user);
     void* lock_user;
-    /* Optional application clock (iolink_device_config_t::time_us). When set,
-     * the DLL and event engine use it for every timestamp instead of the
-     * platform iolink_time_get_us()/iolink_time_get_ms(). The data ISR reads it,
-     * so the callback must be monotonic and ISR-safe. */
+    /* Application clock bound from iolink_device_config_t::time_us. The DLL and
+     * event engine use it for every timestamp. The data ISR reads it, so the
+     * callback must be monotonic and ISR-safe. A bare DLL context without a
+     * bound clock reads time as 0. */
     uint64_t (*time_us)(void* user);
     void* time_user;
     volatile uint32_t last_activity_ms; /**< Timestamp of last received byte */

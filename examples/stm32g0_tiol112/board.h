@@ -1,9 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #ifndef STM32_TIOL112_BOARD_H
 #define STM32_TIOL112_BOARD_H
+#include <stdint.h>
 #include "iolinki/phy_tiol112.h"
 #include "rx_queue.h"
 void board_init(void);
+uint64_t board_time_us(void);
+uint32_t board_time_ms(void);
 const iolink_tiol112_io_t* board_tiol112_io(void);
 bool board_button(void);
 void board_led(bool on);

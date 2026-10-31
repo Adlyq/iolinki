@@ -77,12 +77,8 @@ endforeach()
 set(IOLINK_PLATFORM "LINUX" CACHE STRING "Target platform: LINUX, BAREMETAL")
 
 if(IOLINK_PLATFORM STREQUAL "LINUX")
-    target_sources(iolinki PRIVATE
-        src/platform/linux/time_utils.c
-    )
     message(STATUS "Building for Linux host")
 elseif(IOLINK_PLATFORM STREQUAL "BAREMETAL")
-    target_sources(iolinki PRIVATE src/platform/baremetal/time_utils.c)
     message(STATUS "Building for Bare Metal (Stub)")
 endif()
 

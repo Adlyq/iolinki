@@ -28,7 +28,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "phy_l6362a_raw.h"
 #include "main.h"
-#include "iolinki/time_utils.h"
 #include "iolinki/platform.h"
 
 /* Private defines -----------------------------------------------------------*/
@@ -523,12 +522,12 @@ static int l6362_tx_octet(void* user, uint8_t data)
     }
 
     /* Common case: TXE is already set, write immediately. Only pay for
-     * iolink_time_get_us() (SysTick + HAL_GetTick + division) when TDR is
+     * phy_l6362a_time_us() (SysTick + HAL_GetTick + division) when TDR is
      * still full; it must not sit between TX_EN and the first start bit
      * (it cost ~5 us in BYTE TX; FRAME does not call it on this path). */
     if ((IOD_UART->ISR & USART_ISR_TXE_TXFNF) == 0U) {
-        const uint64_t deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
-        while (((IOD_UART->ISR & USART_ISR_TXE_TXFNF) == 0U) && (iolink_time_get_us() < deadline)) {
+        const uint64_t deadline = phy_l6362a_time_us() + L6362_OCTET_TIMEOUT_US;
+        while (((IOD_UART->ISR & USART_ISR_TXE_TXFNF) == 0U) && (phy_l6362a_time_us() < deadline)) {
         }
     }
     IOD_UART->TDR = data;
@@ -551,14 +550,14 @@ static int l6362_tx_octet(void* user, uint8_t data)
 static void l6362_tx_done(void* user)
 {
     (void) user;
-    const uint64_t deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
+    const uint64_t deadline = phy_l6362a_time_us() + L6362_OCTET_TIMEOUT_US;
 
     IOD_UART->CR1 &= ~(USART_CR1_TCIE | USART_CR1_TXEIE_TXFNFIE);
     /* Wait until the last octet has left the shift register: either the TC IRQ
      * already observed it (s_tx_tc_seen) or TC is still pending (poll). The
      * per-octet clear in tx_octet makes the flag unambiguous. */
     while ((s_tx_tc_seen == 0U) && ((IOD_UART->ISR & USART_ISR_TC) == 0U) &&
-           (iolink_time_get_us() < deadline)) {
+           (phy_l6362a_time_us() < deadline)) {
     }
     s_tx_tc_seen = 0U;
     IOD_UART->ICR = USART_ICR_TCCF; /* no stale TC for the next frame */
@@ -580,8 +579,8 @@ static void TxFrameComplete(void)
     DMA1_Channel2->CCR &= ~DMA_CCR_EN;
     IOD_UART->CR3 &= ~USART_CR3_DMAT;
     /* Wait for the last octet to leave the shift register. */
-    deadline = iolink_time_get_us() + L6362_OCTET_TIMEOUT_US;
-    while (((IOD_UART->ISR & USART_ISR_TC) == 0U) && (iolink_time_get_us() < deadline)) {
+    deadline = phy_l6362a_time_us() + L6362_OCTET_TIMEOUT_US;
+    while (((IOD_UART->ISR & USART_ISR_TC) == 0U) && (phy_l6362a_time_us() < deadline)) {
     }
     phy_txen_set(false);
 }
@@ -714,7 +713,7 @@ void iolink_critical_exit(void)
         }
     }
 }
-uint64_t iolink_time_get_us(void)
+uint64_t phy_l6362a_time_us(void)
 {
     /* Microsecond timestamp derived from the running SysTick (1 ms period,
      * configured by HAL_Init). The intra-millisecond count is read from
@@ -739,9 +738,9 @@ uint64_t iolink_time_get_us(void)
 
     return ((uint64_t) tick0 * 1000ULL) + (uint64_t) (elapsed / clk_per_us);
 }
-uint32_t iolink_time_get_ms(void)
+uint32_t phy_l6362a_time_ms(void)
 {
-    return (uint32_t) (iolink_time_get_us() / 1000U);
+    return (uint32_t) (phy_l6362a_time_us() / 1000U);
 }
 
 /* Public functions ----------------------------------------------------------*/

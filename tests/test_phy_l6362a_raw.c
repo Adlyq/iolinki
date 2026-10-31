@@ -703,13 +703,13 @@ static void test_platform_hooks(void)
     mock_tick_ms = 5U;
     SysTick->LOAD = SystemCoreClock / 1000U;
     SysTick->VAL = 0U;
-    assert(iolink_time_get_us() ==
+    assert(phy_l6362a_time_us() ==
            (5ULL * 1000ULL) + (uint64_t) (SysTick->LOAD / (SystemCoreClock / 1000000U)));
-    assert(iolink_time_get_ms() == 6U);
+    assert(phy_l6362a_time_ms() == 6U);
 
     SysTick->VAL = SysTick->LOAD;
-    assert(iolink_time_get_us() == 5000ULL);
-    assert(iolink_time_get_ms() == 5U);
+    assert(phy_l6362a_time_us() == 5000ULL);
+    assert(phy_l6362a_time_ms() == 5U);
 
     /* Critical sections nest and restore the saved PRIMASK at depth zero. */
     mock_primask = 0U;

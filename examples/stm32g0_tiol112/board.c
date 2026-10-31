@@ -2,7 +2,6 @@
 #include "board.h"
 #include "stm32g0xx.h"
 #include "iolinki/platform.h"
-#include "iolinki/time_utils.h"
 
 rx_queue_t board_rx;
 volatile uint32_t board_tx_timeouts;
@@ -27,7 +26,7 @@ void TIM2_IRQHandler(void)
         ++timer_high;
     }
 }
-uint64_t iolink_time_get_us(void)
+uint64_t board_time_us(void)
 {
     uint32_t mask = __get_PRIMASK();
     __disable_irq();
@@ -40,9 +39,9 @@ uint64_t iolink_time_get_us(void)
     __set_PRIMASK(mask);
     return ((uint64_t) high << 32) | low;
 }
-uint32_t iolink_time_get_ms(void)
+uint32_t board_time_ms(void)
 {
-    return (uint32_t) (iolink_time_get_us() / 1000U);
+    return (uint32_t) (board_time_us() / 1000U);
 }
 static void mode(GPIO_TypeDef* port, unsigned pin, unsigned value)
 {
@@ -189,7 +188,7 @@ static int recv_byte(void* user, uint8_t* byte)
 static int wait_status(uint32_t flag, uint64_t deadline)
 {
     while (!(USART1->ISR & flag))
-        if (iolink_time_get_us() >= deadline) return -1;
+        if (board_time_us() >= deadline) return -1;
     return 0;
 }
 static int send_complete(void* user, const uint8_t* data, size_t len)
@@ -199,10 +198,10 @@ static int send_complete(void* user, const uint8_t* data, size_t len)
     USART1->CR1 &= ~(USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE);
     USART1->CR3 &= ~USART_CR3_EIE;
     uint32_t baud = 16000000UL / USART1->BRR;
-    uint64_t deadline = iolink_time_get_us() + ((uint64_t) len * 11000000ULL / baud) + 2000U;
+    uint64_t deadline = board_time_us() + ((uint64_t) len * 11000000ULL / baud) + 2000U;
     int result = -1;
     while (USART1->ISR & USART_ISR_REACK) {
-        if (iolink_time_get_us() >= deadline) goto finished;
+        if (board_time_us() >= deadline) goto finished;
     }
     USART1->ICR = USART_ICR_TCCF;
     for (size_t i = 0; i < len; ++i) {

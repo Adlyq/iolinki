@@ -26,6 +26,12 @@
 extern uint8_t g_tx_buf[1024];
 extern uint8_t g_rx_buf[1024];
 
+/* Monotonic host clock used by tests that need a real time source. */
+uint64_t iolink_test_time_us(void* user);
+uint32_t iolink_test_time_ms(void);
+/* Optional override used by tests that drive a controlled clock. */
+extern iolink_device_time_us_fn g_iolink_test_time_us_override;
+
 /* Build the checksum for a 2-octet message [octet, checksum-with-low-bits-zero].
  * Used by tests to construct master frames and device replies (A.1.6). */
 static inline uint8_t test_frame_checksum(uint8_t octet)
@@ -84,8 +90,6 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx);
 extern const iolink_storage_api_t g_ds_storage_mock;
 void iolink_ds_mock_reset(void);
 uint8_t* iolink_ds_mock_get_buf(void);
-
-/* Mock NVM Cleanup */
 
 /* ISDU V1.1.5 Interleaved Format Helpers */
 #include "iolinki/isdu.h"

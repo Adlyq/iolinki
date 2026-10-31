@@ -23,16 +23,6 @@
 
 static uint64_t now_us;
 
-uint32_t iolink_time_get_ms(void)
-{
-    return (uint32_t) (now_us / 1000U);
-}
-
-uint64_t iolink_time_get_us(void)
-{
-    return now_us;
-}
-
 static uint64_t test_time_us(void* user)
 {
     (void) user;
@@ -159,7 +149,7 @@ static int test_eager_isdu_snapshot(void)
 
     iolink_dll_prepare_cyclic_reply(&dll);
     now_us = 1000000U;
-    dll.last_activity_ms = iolink_time_get_ms();
+    dll.last_activity_ms = ((uint32_t) (now_us / 1000U));
     iolink_dll_process(&dll); /* refresh the ISR snapshot */
     if ((IOLINK_ISDU_PUB_LEN(dll.isr_isdu_pub) != 4U) ||
         (IOLINK_ISDU_PUB_BUSY(dll.isr_isdu_pub) != 0U)) {
@@ -247,7 +237,7 @@ static int test_request_service_staging(void)
     dll.pd_out_len_current = 0U;
     dll.pd_in_len_current = 0U;
     now_us = 1000000U;
-    dll.last_activity_ms = iolink_time_get_ms();
+    dll.last_activity_ms = ((uint32_t) (now_us / 1000U));
 
     uint8_t frame[2];
     /* A Type-0 process WRITE is not served by the ISR fast path, so it is
@@ -290,7 +280,7 @@ static int test_type0_diagnosis_read_isr(void)
     dll.pd_out_len_current = 0U;
     dll.pd_in_len_current = 0U;
     now_us = 1000000U;
-    dll.last_activity_ms = iolink_time_get_ms();
+    dll.last_activity_ms = ((uint32_t) (now_us / 1000U));
 
     uint8_t frame[2];
     make_frame(0xC0U, IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));

@@ -19,10 +19,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <time.h>
 #include "iolinki/crc.h"
 #include "iolinki/protocol.h"
 #include "iolinki/platform.h"
-#include "iolinki/time_utils.h"
 
 /* Test buffers */
 uint8_t g_tx_buf[1024];
@@ -248,11 +248,22 @@ void test_io_cycle(iolink_device_ctx_t* ctx)
     }
 }
 
-static uint64_t test_time_us(void* user)
+uint64_t iolink_test_time_us(void* user)
 {
     (void) user;
-    return iolink_time_get_us();
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0ULL;
+    }
+    return ((uint64_t) ts.tv_sec * 1000000ULL + (uint64_t) ts.tv_nsec / 1000ULL);
 }
+
+uint32_t iolink_test_time_ms(void)
+{
+    return (uint32_t) (iolink_test_time_us(NULL) / 1000U);
+}
+
+iolink_device_time_us_fn g_iolink_test_time_us_override = NULL;
 
 int iolink_test_device_init(iolink_test_device_t* dev, const iolink_config_t* stack,
                             const iolink_app_callbacks_t* callbacks)
@@ -263,7 +274,8 @@ int iolink_test_device_init(iolink_test_device_t* dev, const iolink_config_t* st
 
     (void) memset(dev, 0, sizeof(*dev));
     dev->cfg.phy = g_phy_mock;
-    dev->cfg.time_us = test_time_us;
+    dev->cfg.time_us = (g_iolink_test_time_us_override != NULL) ? g_iolink_test_time_us_override
+                                                                : iolink_test_time_us;
 #if IOLINK_FEATURE_DATA_STORAGE
     dev->cfg.storage = &g_ds_storage_mock;
 #endif

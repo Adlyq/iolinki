@@ -8,7 +8,7 @@
 
 #include <stdio.h>
 #include "iolinki/device.h"
-#include "iolinki/time_utils.h"
+#include <time.h>
 #include <string.h>
 
 /**
@@ -55,7 +55,11 @@ void iolink_critical_exit(void)
 static uint64_t simple_time_us(void* user)
 {
     (void) user;
-    return iolink_time_get_us();
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0ULL;
+    }
+    return ((uint64_t) ts.tv_sec * 1000000ULL + (uint64_t) ts.tv_nsec / 1000ULL);
 }
 
 static const iolink_phy_api_t g_hw_phy = {.init = NULL, /* No hardware yet */

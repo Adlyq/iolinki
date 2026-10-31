@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include "iolinki/protocol.h"
-#include "iolinki/time_utils.h"
+#include <time.h>
 
 static int copy_out(uint8_t* output, size_t* output_length, const uint8_t* src, size_t len)
 {
@@ -199,7 +199,11 @@ static void conformance_reset_handler(iolink_reset_type_t type)
 static uint64_t conformance_time_us(void* user)
 {
     (void) user;
-    return iolink_time_get_us();
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0ULL;
+    }
+    return ((uint64_t) ts.tv_sec * 1000000ULL + (uint64_t) ts.tv_nsec / 1000ULL);
 }
 
 int conformance_device_init(conformance_device_t* app, const conformance_profile_t* profile,

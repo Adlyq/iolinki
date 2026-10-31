@@ -20,16 +20,6 @@
 
 static uint64_t now_us;
 
-uint32_t iolink_time_get_ms(void)
-{
-    return (uint32_t) (now_us / 1000U);
-}
-
-uint64_t iolink_time_get_us(void)
-{
-    return now_us;
-}
-
 static uint64_t test_time_us(void* user)
 {
     (void) user;
@@ -641,7 +631,8 @@ static int test_type0_commands_fast_path(void)
         return 2;
     }
 
-    /* Fallback (0x5A): FALLBACK + CKS-only + deadline. */
+    /* Fallback (0x5A): FALLBACK + CKS-only. The ISR only flags the request;
+     * the 64-bit T_FBD deadline is armed by the main pump from MinCycleTime. */
     dll.state = IOLINK_DLL_STATE_PREOPERATE;
     frame[2] = IOLINK_CMD_FALLBACK;
     frame[1] = IOLINK_MSEQ_TYPE_0;

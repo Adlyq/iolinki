@@ -184,7 +184,7 @@ void NVIC_SetPendingIRQ(IRQn_Type irq)
 uint32_t HAL_GetTick(void)
 {
     if (mock_tick_auto_advance != 0U) {
-        /* Leave the two reads inside one iolink_time_get_us() sample coherent
+        /* Leave the two reads inside one phy_l6362a_time_us() sample coherent
          * (they compare equal) but let each successive sample observe a later
          * millisecond, so a driver's bounded wait can actually expire. */
         const uint32_t value = mock_tick_ms + (s_tick_calls / 2U);

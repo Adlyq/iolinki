@@ -20,18 +20,13 @@
 
 #include "iolinki/device.h"
 #include "iolinki/dll.h"
-#include "iolinki/time_utils.h"
 #include "test_helpers.h"
 
 static uint32_t g_now_ms;
 
-uint32_t iolink_time_get_ms(void)
+static uint64_t master_lost_time_us(void* user)
 {
-    return g_now_ms;
-}
-
-uint64_t iolink_time_get_us(void)
-{
+    (void) user;
     return (uint64_t) g_now_ms * 1000U;
 }
 
@@ -51,6 +46,7 @@ static void on_online(void)
 static int test_setup(void** state)
 {
     (void) state;
+    g_iolink_test_time_us_override = master_lost_time_us;
     g_now_ms = 0U;
     lost_calls = 0;
     online_calls = 0;
@@ -60,6 +56,7 @@ static int test_setup(void** state)
 static int test_teardown(void** state)
 {
     (void) state;
+    g_iolink_test_time_us_override = NULL;
     return 0;
 }
 

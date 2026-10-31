@@ -299,17 +299,10 @@ ISDU additional codes (`IOLINK_ISDU_ERROR_*`, e.g. `IDX_NOTAVAIL` `0x11`,
 
 ## Platform abstraction
 
-```c
-uint32_t iolink_time_get_ms(void);
-uint64_t iolink_time_get_us(void);
-```
-
 `iolink_device_config_t::time_us` is required by `iolink_device_init()` (NULL is
 rejected with `IOLINK_DEVICE_INIT_ERR_TIME`), and the stack uses it for all DLL,
-ISR and event timing. The core no longer calls the platform time functions
-shown above; they remain available for platform code and for callbacks that
-choose to forward to them. Direct DLL users must bind
-`ctx->time_us`/`time_user` after `iolink_dll_init()`. Critical sections are
+ISR and event timing. There is no separate platform time API; direct DLL users
+must bind `ctx->time_us`/`time_user` after `iolink_dll_init()`. Critical sections are
 `iolink_critical_enter()` / `iolink_critical_exit()` from
 `include/iolinki/platform.h`; `iolink_device_init()` rejects the library's weak
 no-op default with `IOLINK_DEVICE_INIT_ERR_CRITICAL`.

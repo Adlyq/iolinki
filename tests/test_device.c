@@ -22,7 +22,6 @@
 
 #include "iolinki/device.h"
 #include "iolinki/events.h"
-#include "iolinki/time_utils.h"
 #include "test_helpers.h"
 
 static int g_reset_count;
@@ -44,18 +43,12 @@ static void device_unlock(void* user)
     (void) user;
 }
 
-static uint64_t device_time_us(void* user)
-{
-    (void) user;
-    return iolink_time_get_us();
-}
-
 static iolink_device_config_t make_device_config(void)
 {
     iolink_device_config_t config;
 
     (void) memset(&config, 0, sizeof(config));
-    config.time_us = device_time_us;
+    config.time_us = iolink_test_time_us;
 #if IOLINK_FEATURE_DATA_STORAGE
     config.storage = &g_ds_storage_mock;
 #endif
@@ -349,7 +342,7 @@ static void test_device_init_builds_ds_image(void** state)
 
     (void) memset(&dev, 0, sizeof(dev));
     dev.cfg.phy = g_phy_mock;
-    dev.cfg.time_us = device_time_us;
+    dev.cfg.time_us = iolink_test_time_us;
     dev.cfg.stack = stack;
     dev.cfg.storage = &g_ds_storage_mock;
     assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), IOLINK_DEVICE_INIT_OK);
