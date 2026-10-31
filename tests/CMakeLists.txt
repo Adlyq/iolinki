@@ -74,6 +74,11 @@ add_executable(test_stats_split test_stats_split.c)
 target_link_libraries(test_stats_split iolinki)
 add_test(NAME test_stats_split COMMAND test_stats_split)
 
+# Deterministic cut-point tests for the lock-free ISR handoffs (no cmocka).
+add_executable(test_isr_cutpoints test_isr_cutpoints.c)
+target_link_libraries(test_isr_cutpoints iolinki)
+add_test(NAME test_isr_cutpoints COMMAND test_isr_cutpoints)
+
 if(PkgConfig_FOUND)
     pkg_check_modules(CMOCKA QUIET cmocka)
 endif()
