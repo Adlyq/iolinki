@@ -119,6 +119,11 @@ typedef struct
     volatile bool back_to_box_pending;    /**< Back-to-box requested; counting down frames */
     volatile uint8_t back_to_box_cycles;  /**< Frames seen since Back-to-box was requested */
 
+    /* Deadline requests staged by the data ISR. The 64-bit deadlines are
+     * main-owned so no 64-bit value is written from interrupt context. */
+    volatile uint8_t isr_dsio_clear;       /**< ISR served the startup probe: clear T_DSIO */
+    volatile uint8_t isr_fallback_pending; /**< ISR accepted FALLBACK: arm T_FBD from main */
+
     /* Configuration */
     uint8_t m_seq_type;          /**< Supported M-sequence type */
     uint8_t pd_in_len;           /**< Input Process Data length */
@@ -242,16 +247,18 @@ typedef struct
        size it from the compile-time maxima (was a fixed 48, too small once the
        OD width may reach IOLINK_OD_MAX_SIZE). */
     uint8_t frame_buf[IOLINK_PD_OUT_MAX_SIZE + IOLINK_OD_MAX_SIZE + 2U];
-    uint8_t frame_index;           /**< Current byte index in assembly */
-    uint8_t req_len;               /**< Expected length of current frame type */
-    uint64_t last_frame_us;        /**< Microsecond timestamp of last frame start */
-    uint64_t last_byte_us;         /**< Microsecond timestamp of last received byte */
-    uint64_t last_cycle_start_us;  /**< Microsecond timestamp of last cycle start */
-    uint32_t t_byte_limit_us;      /**< Inter-byte timeout limit in microseconds */
-    uint64_t wakeup_deadline_us;   /**< Earliest time to accept frames after wake-up */
-    uint64_t t_pd_deadline_us;     /**< Earliest time to accept frames after power-on */
-    uint64_t dsio_deadline_ms;     /**< Deadline to fall back to SIO without a valid message */
-    uint64_t fallback_deadline_ms; /**< Deadline to complete a FALLBACK MasterCommand */
+    uint8_t frame_index;            /**< Current byte index in assembly */
+    uint8_t req_len;                /**< Expected length of current frame type */
+    uint64_t last_frame_us;         /**< Microsecond timestamp of last frame start */
+    volatile uint32_t last_byte_us; /**< Low 32 bits of the last-byte timestamp; both
+                                         contexts compare it with a wrap-safe unsigned
+                                         delta (t_byte is milliseconds at most) */
+    uint64_t last_cycle_start_us;   /**< Microsecond timestamp of last cycle start */
+    uint32_t t_byte_limit_us;       /**< Inter-byte timeout limit in microseconds */
+    uint64_t wakeup_deadline_us;    /**< Earliest time to accept frames after wake-up */
+    uint64_t t_pd_deadline_us;      /**< Earliest time to accept frames after power-on */
+    uint64_t dsio_deadline_ms;      /**< Deadline to fall back to SIO without a valid message */
+    uint64_t fallback_deadline_ms;  /**< Deadline to complete a FALLBACK MasterCommand */
 
     /* Process Data Buffers. The PD-in buffer doubles as the reply send buffer:
      * layout [OD][PD-in][CKS]. The main fills a buffer that is neither active

@@ -639,8 +639,12 @@ static int test_type0_commands_fast_path(void)
         iolink_dll_process_isr(&dll);
     }
     if ((dll.state != IOLINK_DLL_STATE_FALLBACK) || (tx_n != 1U) ||
-        (dll.fallback_deadline_ms == 0U)) {
+        (dll.isr_fallback_pending == 0U) || (dll.fallback_deadline_ms != 0U)) {
         return 3;
+    }
+    iolink_dll_process(&dll);
+    if ((dll.isr_fallback_pending != 0U) || (dll.fallback_deadline_ms == 0U)) {
+        return 5;
     }
 
     /* Startup probe (page READ in STARTUP): PREOP + OD/CKS. */

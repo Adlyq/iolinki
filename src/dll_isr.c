@@ -317,7 +317,7 @@ static void dll_isr_send_payload(iolink_dll_ctx_t* ctx, const uint8_t* payload, 
 static void dll_isr_note_activity(iolink_dll_ctx_t* ctx)
 {
     ctx->last_activity_ms = dll_time_ms(ctx);
-    ctx->last_byte_us = dll_time_us(ctx);
+    ctx->last_byte_us = (uint32_t) dll_time_us(ctx);
 }
 
 /** @brief Type-0 startup probe (T1): page READ while waiting for the first message. */
@@ -328,7 +328,9 @@ static bool dll_isr_type0_startup_probe(iolink_dll_ctx_t* ctx, bool read, uint8_
         return false;
     }
     dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
-    ctx->dsio_deadline_ms = 0U;
+    /* The 64-bit T_DSIO deadline is main-owned: request the clear instead of
+     * writing it from the ISR (no torn 64-bit read in the main pump). */
+    ctx->isr_dsio_clear = 1U;
     const uint8_t od = iolink_isdu_direct_param_page1_octet(&ctx->isdu, addr);
     dll_isr_send_payload(ctx, &od, 1U, dll_isr_status_flags(ctx));
     dll_isr_note_activity(ctx);
@@ -404,14 +406,9 @@ static bool dll_isr_type0_master_command(iolink_dll_ctx_t* ctx, const uint8_t* f
         /* A PHY without wake-up detection cannot return from SIO, so the
          * unsupported transition is acked without changing the DL mode. */
         if (dll_phy_has_wakeup(ctx)) {
-            uint32_t t_fbd_ms = 500U;
-            if (ctx->min_cycle_time_us > 0U) {
-                t_fbd_ms = (3U * ctx->min_cycle_time_us) / 1000U;
-                if (t_fbd_ms > 500U) {
-                    t_fbd_ms = 500U;
-                }
-            }
-            ctx->fallback_deadline_ms = dll_time_us(ctx) / 1000U + t_fbd_ms;
+            /* The 64-bit T_FBD deadline is main-owned: the ISR only requests
+             * it, the main pump arms it from the current MinCycleTime. */
+            ctx->isr_fallback_pending = 1U;
             dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
         }
         dll_isr_send_payload(ctx, NULL, 0U, dll_isr_status_flags(ctx));

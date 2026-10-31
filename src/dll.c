@@ -1422,16 +1422,6 @@ static void dll_restore_operating_baudrate(iolink_dll_ctx_t* ctx)
     }
 }
 
-/** Read a 64-bit value shared with the data ISR without tearing its halves. */
-static uint64_t dll_read_u64(const uint64_t* value)
-{
-    uint64_t snapshot;
-    IOLINK_CRITICAL_ENTER();
-    snapshot = *value;
-    IOLINK_CRITICAL_EXIT();
-    return snapshot;
-}
-
 /** @brief Consume the ISR master-activity flag (timestamp only, no cycle count). */
 static void dll_take_isr_master_activity(iolink_dll_ctx_t* ctx)
 {
@@ -1441,6 +1431,34 @@ static void dll_take_isr_master_activity(iolink_dll_ctx_t* ctx)
          * per served request (here for an ISR-answered frame, or in
          * dll_process_complete_frame for a main-answered one). */
         dll_master_activity_ts(ctx);
+    }
+}
+
+/**
+ * @brief Apply deadline requests the data ISR only flags.
+ *
+ * The two 64-bit deadlines stay main-owned so no 64-bit value is ever written
+ * from interrupt context (a torn read would fire a spurious T_DSIO/T_FBD).
+ * The ISR sets a flag; the main pump arms or clears the deadline here, before
+ * any deadline check in the same pass.
+ */
+static void dll_apply_isr_deadline_requests(iolink_dll_ctx_t* ctx)
+{
+    if (ctx->isr_fallback_pending != 0U) {
+        ctx->isr_fallback_pending = 0U;
+        /* Table 47 T8/T9: T_FBD is 3 MasterCycleTimes, capped at 500 ms. */
+        uint32_t t_fbd_ms = 500U;
+        if (ctx->min_cycle_time_us > 0U) {
+            t_fbd_ms = (3U * ctx->min_cycle_time_us) / 1000U;
+            if (t_fbd_ms > 500U) {
+                t_fbd_ms = 500U;
+            }
+        }
+        ctx->fallback_deadline_ms = dll_time_us(ctx) / 1000U + t_fbd_ms;
+    }
+    if (ctx->isr_dsio_clear != 0U) {
+        ctx->isr_dsio_clear = 0U;
+        ctx->dsio_deadline_ms = 0U;
     }
 }
 
@@ -1524,7 +1542,7 @@ static void dll_check_idle_timeout(iolink_dll_ctx_t* ctx, uint32_t now_ms)
  */
 static void dll_check_dsio_deadline(iolink_dll_ctx_t* ctx, uint64_t now_ms64)
 {
-    const uint64_t dsio_deadline = dll_read_u64(&ctx->dsio_deadline_ms);
+    const uint64_t dsio_deadline = ctx->dsio_deadline_ms;
     if ((ctx->phy_mode != IOLINK_PHY_MODE_SIO) && (dsio_deadline != 0U) &&
         ((ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) ||
          (ctx->state == IOLINK_DLL_STATE_STARTUP))) {
@@ -1547,7 +1565,7 @@ static void dll_check_dsio_deadline(iolink_dll_ctx_t* ctx, uint64_t now_ms64)
  */
 static void dll_check_fallback_deadline(iolink_dll_ctx_t* ctx, uint64_t now_ms64)
 {
-    const uint64_t fallback_deadline = dll_read_u64(&ctx->fallback_deadline_ms);
+    const uint64_t fallback_deadline = ctx->fallback_deadline_ms;
     if ((fallback_deadline != 0U) &&
         ((ctx->state == IOLINK_DLL_STATE_FALLBACK) || (ctx->state == IOLINK_DLL_STATE_OPERATE) ||
          (ctx->state == IOLINK_DLL_STATE_ESTAB_COM) ||
@@ -1615,10 +1633,12 @@ static bool dll_handle_sio_wakeup(iolink_dll_ctx_t* ctx)
 static void dll_check_t_byte(iolink_dll_ctx_t* ctx)
 {
     if ((ctx->frame_index > 0U) && (ctx->enforce_timing) && (ctx->t_byte_limit_us > 0U)) {
-        const uint64_t last_byte_us = dll_read_u64(&ctx->last_byte_us);
+        /* The ISR writes the low 32 bits of the byte timestamp; an unsigned
+         * delta is wrap-safe for the millisecond-scale t_byte window. */
+        const uint32_t last_byte_us = ctx->last_byte_us;
         if (last_byte_us != 0U) {
-            const uint64_t now_us = dll_time_us(ctx);
-            if (now_us - last_byte_us > (uint64_t) ctx->t_byte_limit_us) {
+            const uint32_t now_us = (uint32_t) dll_time_us(ctx);
+            if ((uint32_t) (now_us - last_byte_us) > ctx->t_byte_limit_us) {
                 ctx->timing_errors++;
                 ctx->t_byte_violations++;
                 ctx->framing_errors++;
@@ -1674,7 +1694,7 @@ static void dll_consume_isr_mailbox(iolink_dll_ctx_t* ctx)
        timestamps exactly like the streaming RX path. Without this the 1 s idle
        supervision resets a healthy ISR link. */
     ctx->last_activity_ms = dll_time_ms(ctx);
-    ctx->last_byte_us = dll_time_us(ctx);
+    ctx->last_byte_us = (uint32_t) dll_time_us(ctx);
     dll_process_complete_frame(ctx);
 }
 
@@ -1685,6 +1705,7 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
     }
 
     dll_take_isr_master_activity(ctx);
+    dll_apply_isr_deadline_requests(ctx);
 
     /* Restore the operating COM before the SIO/power-on early returns: a
      * recovery drop to COM1 must not leave the UART on the wrong baudrate. */
