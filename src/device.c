@@ -511,7 +511,8 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
          * PD valid flag; the pre-cached cyclic reply must be rebuilt. */
         const uint8_t inactive = device_pd_in_free_index(&ctx->dll);
         if (inactive == 0xFFU) {
-            return; /* every spare buffer is leased: keep the current PD-in */
+            ctx->dll.pd_in_skips++; /* every spare buffer is leased */
+            return;                 /* keep the current PD-in and retry next cycle */
         }
         /* Fill the free buffer outside the critical section: the ISR keeps
          * streaming the captured copy meanwhile. */
@@ -597,6 +598,7 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
      * buffer means the ISR still holds them all: keep the current PD-in. */
     const uint8_t inactive = device_pd_in_free_index(&ctx->dll);
     if (inactive == 0xFFU) {
+        ctx->dll.pd_in_skips++; /* every spare buffer is leased: retry later */
         return -1;
     }
     if ((ctx->config != NULL) && (ctx->config->lock != NULL)) {

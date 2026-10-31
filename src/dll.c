@@ -1683,6 +1683,16 @@ static void dll_process_body(iolink_dll_ctx_t* ctx)
     dll_take_isr_master_activity(ctx);
     dll_apply_isr_deadline_requests(ctx);
 
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+    /* TX BYTE ends the transfer inside the library, so a captured PD-in buffer
+     * with no reply in flight is not being streamed any more. Recover such a
+     * lease: a transceiver that stalls mid-frame must not freeze the main
+     * pump's PD-in updates for the rest of the session. */
+    if ((ctx->isr_tx_active == 0U) && (ctx->pd_in_captured != 0xFFU)) {
+        ctx->pd_in_captured = 0xFFU;
+    }
+#endif
+
     /* Restore the operating COM before the SIO/power-on early returns: a
      * recovery drop to COM1 must not leave the UART on the wrong baudrate. */
     dll_restore_operating_baudrate(ctx);

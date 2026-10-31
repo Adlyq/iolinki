@@ -252,6 +252,7 @@ typedef struct
     volatile uint8_t frame_eager; /**< Main-context snapshot of the record's eager flag
                                        for the frame currently being processed. */
     uint32_t isr_mailbox_drops;   /**< Frames dropped because the mailbox was full */
+    uint32_t pd_in_skips;         /**< PD-in publishes skipped: every spare buffer leased */
     uint32_t isr_eager_rejects;   /**< Frames the eager path refused
                                        (bad checksum/type) */
     /* ISR-side ISDU staging + response snapshot (single-writer model). The ISR
