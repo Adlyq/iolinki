@@ -100,6 +100,11 @@ typedef enum
 /** Staged ISDU write depth (data ISR -> main pump); also a power of two. */
 #define IOLINK_OD_SLOTS 2U
 
+/** Reply staging slots: 0/1 for the main pump (alternating), 2 for the ISR. */
+#define IOLINK_TX_SLOTS 3U
+/** Slot the data ISR uses for its own immediate replies. */
+#define IOLINK_TX_ISR_SLOT 2U
+
 /**
  * @name ISDU read view packing
  *
@@ -225,31 +230,30 @@ typedef struct
     /* ISR-side ISDU staging + response snapshot (single-writer model). The ISR
      * stages write OD octets in a ring and reads only the response snapshot;
      * the main pump owns ctx->isdu and refreshes the snapshot when it changes. */
-    iolink_od_rec_t isr_od_slot[IOLINK_OD_SLOTS];       /**< Staged write ring storage */
-    iolink_ring_t isr_od_ring;                          /**< Staged ISDU writes (ISR -> main) */
-    uint32_t isr_od_overruns;                           /**< Staged writes dropped (ring full) */
-    uint8_t isr_isdu_resp_buf[IOLINK_ISDU_BUFFER_SIZE]; /**< ISDU response snapshot */
-    uint8_t isr_isdu_resp_valid;                        /**< Snapshot already copied for
-                                                             the current response */
-    volatile uint8_t stack_tick_pending;                /**< Timer B tick authorised a
-                                                             main-context service window */
-    volatile uint8_t in_isr;                            /**< ISR is running the pump */
-    volatile uint8_t isr_reentry_pending;               /**< A preempting pump invocation
-                                                             was deferred to the outer one */
+    iolink_od_rec_t isr_od_slot[IOLINK_OD_SLOTS]; /**< Staged write ring storage */
+    iolink_ring_t isr_od_ring;                    /**< Staged ISDU writes (ISR -> main) */
+    uint32_t isr_od_overruns;                     /**< Staged writes dropped (ring full) */
+    volatile uint8_t stack_tick_pending;          /**< Timer B tick authorised a
+                                                       main-context service window */
+    volatile uint8_t in_isr;                      /**< ISR is running the pump */
+    volatile uint8_t isr_reentry_pending;         /**< A preempting pump invocation
+                                                       was deferred to the outer one */
     volatile iolink_dll_state_t pending_states[IOLINK_PENDING_STATES]; /**< Deferred
                                                       transitions, in order */
     volatile uint8_t pending_state_head; /**< Deferred queue write index */
     volatile uint8_t pending_state_tail; /**< Deferred queue read index */
-    /* Reply transmission, fed one octet per data request. Two payload slots
-     * keep the in-flight TX-FRAME DMA buffer stable while the next reply is
-     * prepared (the PHY serialises the transfers). */
-    uint8_t isr_tx_payload[2][IOLINK_M_SEQ_MAX_LEN];
+    /* Reply transmission, fed one octet per data request. The main pump
+     * alternates between slots 0/1 so the in-flight TX-FRAME DMA buffer stays
+     * stable while the next reply is prepared; slot 2 is reserved for replies
+     * the data ISR generates itself, so no slot counter is shared between the
+     * two contexts (the PHY serialises the transfers). */
+    uint8_t isr_tx_payload[IOLINK_TX_SLOTS][IOLINK_M_SEQ_MAX_LEN];
     const uint8_t* isr_tx_base;           /**< Active reply source:
                                                pd_in[active] for the long
                                                PD reply, isr_tx_payload
                                                for short/main replies */
     volatile uint8_t isr_tx_slot;         /**< Slot being transmitted */
-    volatile uint8_t isr_tx_next;         /**< Next slot to fill */
+    uint8_t isr_tx_next;                  /**< Next slot the main pump fills (0/1) */
     volatile uint8_t isr_tx_pending_slot; /**< Slot of a staged main reply */
     volatile uint8_t isr_tx_len;          /**< Payload octets held */
     volatile uint8_t isr_tx_idx;          /**< Next octet index */

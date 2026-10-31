@@ -271,11 +271,12 @@ static uint8_t dll_isr_status_flags(const iolink_dll_ctx_t* ctx)
  * a TX FRAME transfer. */
 /* Transmit a reply whose payload is already staged in ctx->isr_tx_payload.
  * Appends the A.1.6 CKS (flags | checksum6(acc ^ flags)) in the same buffer. */
-static uint8_t dll_isr_tx_alloc(iolink_dll_ctx_t* ctx)
+static uint8_t dll_isr_tx_alloc(const iolink_dll_ctx_t* ctx)
 {
-    const uint8_t slot = ctx->isr_tx_next;
-    ctx->isr_tx_next ^= 1U;
-    return slot;
+    /* The ISR always uses its own slot, so the main pump can keep alternating
+     * between 0/1 without sharing a counter with interrupt context. */
+    (void) ctx;
+    return IOLINK_TX_ISR_SLOT;
 }
 
 static void dll_isr_send_staged(iolink_dll_ctx_t* ctx, uint8_t slot, uint8_t len, uint8_t flags)

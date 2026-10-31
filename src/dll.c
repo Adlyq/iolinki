@@ -251,8 +251,10 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
     /* Stage the reply (verbatim: the octets already carry the CKS) and let the
      * ISR report it. The TX hooks are never driven from this (main) context. */
     dll_send_lock(ctx);
+    /* Main-context slots only: the ISR has its own slot, so this counter has a
+     * single writer and needs no read-modify-write atomic. */
     const uint8_t slot = ctx->isr_tx_next;
-    ctx->isr_tx_next ^= 1U;
+    ctx->isr_tx_next = (uint8_t) (ctx->isr_tx_next ^ 1U);
     (void) memcpy(ctx->isr_tx_payload[slot], data, len);
     ctx->isr_tx_pending_slot = slot;
     ctx->isr_tx_len = (uint8_t) len;
