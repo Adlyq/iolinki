@@ -135,9 +135,10 @@ typedef struct
      * @brief Send one whole reply frame (TX FRAME mode).
      *
      * The library hands the complete reply (payload + already-appended CKS) for
-     * the PHY to transmit in one operation (e.g. a DMA transfer). The PHY
-     * signals completion through the data/TC interrupt; tx_done() releases the
-     * line. @p data must stay valid until completion.
+     * the PHY to transmit in one operation (e.g. a DMA transfer). The PHY owns
+     * the end of the transfer and releases the line from its own completion
+     * interrupt, so this mode has no tx_done() hook. @p data must stay valid
+     * until completion.
      * @return 0 on success, negative on error.
      */
     int (*tx_frame)(void* user, const uint8_t* data, size_t len);
@@ -152,16 +153,17 @@ typedef struct
      * @return Normalized PHY status octet for the access (IOLINK_PHY_STATUS_*).
      */
     int (*tx_octet)(void* user, uint8_t data);
-#endif
 
     /**
-     * @brief End / complete the current device transmission.
+     * @brief End / complete the current device transmission (TX BYTE only).
      *
-     * TX BYTE mode: called by the library after the last octet (transmit the
-     * frame end / release the line). TX FRAME mode: the PHY calls it once the
-     * transfer completes. Formerly named tx_end().
+     * Called by the library after the last octet (transmit the frame end /
+     * release the line) and by the RX BYTE gap handler to release the
+     * transceiver's receive engine. TX FRAME builds do not declare this member:
+     * the PHY ends the transfer itself. Formerly named tx_end().
      */
     void (*tx_done)(void* user);
+#endif
 
     /**
      * @brief Current level of the transceiver data-interrupt line.

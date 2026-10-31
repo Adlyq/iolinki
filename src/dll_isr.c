@@ -847,11 +847,14 @@ static void dll_isr_rx_byte_gap(iolink_dll_ctx_t* ctx)
         IOLINK_STAT_ISR(ctx, framing_errors)++;
     }
     dll_isr_rx_byte_reset(ctx);
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
     /* Release the transceiver's receive engine unless a reply is in flight
-     * (the TX drain calls tx_done). */
+     * (the TX drain calls tx_done). In a TX FRAME build there is no tx_done:
+     * the PHY owns both transfer ends and releases the receiver itself. */
     if ((ctx->isr_tx_active == 0U) && (ctx->phy->tx_done != NULL)) {
         ctx->phy->tx_done(ctx->phy->user);
     }
+#endif
 }
 
 /** @brief RX BYTE: seed the checksum and append one received octet. */

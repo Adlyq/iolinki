@@ -119,7 +119,7 @@ static const iolink_phy_api_t g_phy = {
     .set_baudrate = board_phy_set_baudrate,
     .rx_octet = board_phy_rx_octet,       /* RX BYTE mode */
     .tx_octet = board_phy_tx_octet,       /* TX BYTE mode */
-    .tx_done = board_phy_tx_done,
+    .tx_done = board_phy_tx_done,         /* TX BYTE mode only */
     .int_active = board_phy_int_active,
     .request_service = board_phy_request_service,
 };
@@ -177,7 +177,7 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `rx_frame` | RX FRAME 模式 | 返回 PHY 持有的完整帧，在下一次调用前有效。 |
 | `tx_octet` | TX BYTE 模式 | 送入一个应答 octet。 |
 | `tx_frame` | TX FRAME 模式 | 发送完整应答，通常使用 DMA。 |
-| `tx_done` | 必需 | 释放线路/通知发送完成。 |
+| `tx_done` | TX BYTE 模式 | 发完最后一字节后释放线路；RX BYTE 的 gap 也会用它释放接收引擎。TX FRAME 下该成员不存在，由 PHY 自己在传输完成中断里收尾。 |
 | `int_active` | 必需 | 数据中断电平；用于门控 ISR 泵。 |
 | `request_service` | 推荐 | 主上下文暂存应答后唤醒数据 ISR。当 `IOLINK_PHY_FEATURE_ISR_TX_ONLY=1` 时必需。 |
 | `response_timer_start/stop` | 可选 | 硬件 t_A 定时器。为 NULL 时使用软件时间戳。 |

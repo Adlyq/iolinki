@@ -760,7 +760,6 @@ const iolink_phy_api_t* phy_l6362a_raw_get(void)
 #endif
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
         .tx_frame = l6362_tx_frame,
-        .tx_done = NULL,
 #else
         .tx_octet = l6362_tx_octet,
         .tx_done = l6362_tx_done,

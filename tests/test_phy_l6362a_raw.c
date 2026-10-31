@@ -125,7 +125,6 @@ static void test_api_and_hw_init(void)
     assert(s_phy->set_baudrate != NULL);
     assert(s_phy->rx_frame != NULL);
     assert(s_phy->tx_frame != NULL);
-    assert(s_phy->tx_done == NULL);
     assert(s_phy->int_active != NULL);
     assert(s_phy->request_service != NULL);
     assert(s_phy->response_timer_start != NULL);

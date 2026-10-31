@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (PHY API)
+- `iolink_phy_api_t::tx_done` is declared only for TX BYTE builds. TX FRAME
+  builds have no such member: the library never called it in that mode (the PHY
+  ends the transfer from its own completion interrupt), and carrying a NULL
+  member implied otherwise. A BYTE-RX/FRAME-TX port must now release its
+  receiver itself instead of relying on the gap handler's `tx_done()` call.
+
 ### Changed (concurrency model)
 - The stack is now explicitly **single-main-caller**: the library no longer
   takes an application thread lock. `iolink_device_config_t::lock/unlock`,
