@@ -459,6 +459,7 @@ typedef struct
     uint32_t voltage_faults;     /**< Cumulative voltage fault count */
     uint32_t overtemp_faults;    /**< Cumulative over-temperature fault count */
     uint32_t short_circuits;     /**< Cumulative short circuit count */
+    uint32_t isr_tx_dropped;     /**< Replies the transport could not transmit (main and ISR) */
 } iolink_dll_stats_t;
 
 /**

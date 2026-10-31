@@ -189,7 +189,7 @@ static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx);
  * either way.
  *
  * The stack has a single main-context caller, so staging needs no lock: the
- * main pump is the only writer of the reply slots, and the data ISR reads the
+ * main pump owns slots 0/1; the data ISR owns its own slot. The ISR reads the
  * staged reply only after isr_tx_pending is published (data-first ordering plus
  * a compiler barrier). Only the legacy direct-send fallback drives the PHY from
  * this context and therefore excludes the data interrupt.
@@ -1857,7 +1857,9 @@ void iolink_dll_get_stats(const iolink_dll_ctx_t* ctx, iolink_dll_stats_t* out_s
     out_stats->t_pd_violations = ctx->t_pd_violations;
     out_stats->total_retries = ctx->total_retries;
     out_stats->voltage_faults = ctx->voltage_faults;
+    out_stats->overtemp_faults = ctx->overtemp_faults;
     out_stats->short_circuits = ctx->short_circuits;
+    out_stats->isr_tx_dropped = IOLINK_STAT_TOTAL(ctx, isr_tx_dropped);
 }
 
 void iolink_dll_set_timing_enforcement(iolink_dll_ctx_t* ctx, bool enable)
