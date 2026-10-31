@@ -36,8 +36,6 @@ typedef struct {
     const iolink_storage_api_t* storage;         /* required: read+write callbacks */
 #endif
     iolink_device_time_us_fn time_us;        /* required microsecond clock (ISR-safe); NULL rejects init */
-    iolink_device_lock_fn lock;              /* optional (must be paired with unlock) */
-    iolink_device_unlock_fn unlock;
     void* user;                              /* opaque pointer for callbacks */
     uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex,
                               bool write, const uint8_t* input, size_t length,
@@ -342,15 +340,13 @@ The transport granularity is selected with `IOLINK_ISR_RX_MODE` /
 
 ## Thread safety
 
-The stack is not internally locked. Each context must be used from one thread
-at a time, and the main loop (`iolink_device_process`) and the data ISR
-(`iolink_device_process_isr`) must not run concurrently on the same context.
-`iolink_device_init()` verifies that the platform critical section is real. Multiple device instances are
-supported by using one `iolink_device_ctx_t` per instance.
-
-There is exactly one main-context caller per context: the library does not take
-an application thread lock, and wrapping the entry points yourself is not
-supported either (the library owns the granularity of its critical sections).
-Any extra serialisation the application needs is its own business; if the stack
-ever grows thread-level locking, it will take a per-instance lock at the public
-entry points.
+The stack has a single main-context caller per context: the data ISR
+(`iolink_device_process_isr`) may preempt that caller, but no other thread or
+task may enter the API. The library does not take an application thread lock;
+the CPU-level `iolink_critical_*` (IRQ mask) is the only mutual exclusion it
+uses. Do not wrap the entry points in your own lock either: the library owns the
+granularity of its critical sections. `iolink_device_init()` verifies that the
+platform critical section is real. Multiple device instances are supported by
+using one `iolink_device_ctx_t` per instance, each with its own main-context
+caller and data ISR. If thread-level serialisation is ever added, the library
+will take a per-instance lock at the public entry points.

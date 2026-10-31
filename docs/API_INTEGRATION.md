@@ -209,8 +209,7 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `device_info` | 身份来源和初始应用标签（Application Tag）。参见 8.1 节的身份限制。 |
 | `storage` | 仅在 `IOLINK_FEATURE_DATA_STORAGE=1` 时声明，且为必需项；`read`/`write` 必须非 NULL。 |
 | `time_us` | 必需的应用时钟。DLL、ISR 双泵和事件引擎都用它计时；回调必须单调、非阻塞、ISR 安全。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_TIME`。 |
-| `lock`, `unlock` | 必须成对提供。用于主上下文/ISR 共享数据的发布。 |
-| `user` | 传给 PHY 回调、vendor service 和锁钩子。 |
+| `user` | 传给 PHY 回调和 vendor service 的透明指针。 |
 | `vendor_service` | 可选的应用 ISDU 处理回调；参见第 6 节。 |
 
 ### 3.2 `iolink_config_t`
@@ -227,7 +226,7 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 
 初始化会用 `IOLINK_DEVICE_INIT_ERR_*` 拒绝非法组合（参见 `device.h`），包括
 `time_us` 为 NULL、平台临界区仍是 weak 默认实现、Data Storage 已启用但 `storage`
-缺失或 `read`/`write` 为空、lock 回调未成对提供、PD/OD 大小超过编译期缓冲区，以及
+缺失或 `read`/`write` 为空、PD/OD 大小超过编译期缓冲区，以及
 固定布局不匹配。
 PHY `init` 的负返回值会原样向上传播。
 
@@ -267,8 +266,8 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx,
 `on_pd_input()` 接管。
 
 `pd_output_read()` 最多复制 `len` 字节，并返回实际复制的字节数；参数非法时返回负值。
-（头文件注释写的是成功返回 0，但当前实现返回复制字节数。）它通过配置的锁或平台
-临界区防止 ISR 并发访问。
+（头文件注释写的是成功返回 0，但当前实现返回复制字节数。）`pd_out` 由同一主上下文中的
+帧分发写入，因此该函数直接复制，不取锁，也不进入平台临界区。
 
 `set_pd_length()` 对非法参数返回 -1，对 `TYPE_2_V` 以外的任何 M-sequence 类型返回 -2。
 

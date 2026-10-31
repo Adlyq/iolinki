@@ -62,6 +62,9 @@ The stack is designed to be shallow. The deepest call path typically occurs duri
 ### RTOS Stack Guidelines
 
 When using an RTOS (e.g., FreeRTOS), `iolink_device_process` typically runs in its own thread.
+That thread must be the only main-context caller of the context; the data ISR may preempt it,
+and no other task may call the IO-Link API (tasks that need to signal the stack should post a
+request flag or queue item for the IO-Link task to serve).
 
 - **Stack Size**: 1024 bytes recommended (allow overhead for context switching and platform API calls).
 - **Critical Sections**: The stack uses `iolink_critical_enter/exit`. These should map to fast IRQ-disable routines to minimize latency.

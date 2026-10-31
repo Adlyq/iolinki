@@ -16,7 +16,7 @@
 
 /**
  * @file platform.h
- * @brief Platform encapsulation for RTOS integration.
+ * @brief Platform encapsulation for RTOS and bare-metal ports.
  *
  * The primitive set, its capability grades and the requirement derivation live
  * in iolinki/port.h, together with the declarations of
@@ -35,10 +35,13 @@
  * the library may enter the critical section while already inside one (a DLL
  * state transition that resets the event queue), and a DLL state transition can
  * itself be taken from the data ISR. A PRIMASK save/restore port must therefore
- * keep a nesting depth (the STM32G0 raw-PHY example does). With an RTOS, the
- * configured thread lock must also cover every thread that enters
- * iolink_dll_process() / iolink_device_process(), because disabling interrupts
- * does not serialise threads.
+ * keep a nesting depth (the STM32G0 raw-PHY example does). The library has a
+ * single main-context caller per context: the data ISR may preempt it, but no
+ * other task may enter iolink_dll_process() / iolink_device_process(), and the
+ * application must not wrap the entry points in its own lock either (the
+ * library owns the granularity of its critical sections). A port critical
+ * section that also serialises tasks therefore does not make concurrent API
+ * calls supported; it only adds latency to the caller.
  *
  * See docs/PORTING.md for the full contract, per-platform mappings and the
  * forbidden combinations.

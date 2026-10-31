@@ -23,8 +23,9 @@
 #include "iolinki/device.h"
 #include "iolinki/platform.h"
 #include "iolinki/phy.h"
-#include <time.h>
+#include <stdbool.h>
 #include <string.h>
+#include <time.h>
 
 /* Platform Override for Critical Sections */
 void iolink_critical_enter(void)
@@ -89,6 +90,10 @@ static iolink_device_config_t g_device_config = {
 #endif
 };
 
+/* Request posted by another task and served by the IO-Link task. The IO-Link
+ * API has a single main-context caller, so only iolink_task_entry() calls it. */
+static volatile bool g_event_requested;
+
 /* IO-Link Stack Task */
 void iolink_task_entry(void* pvParameters)
 {
@@ -103,6 +108,13 @@ void iolink_task_entry(void* pvParameters)
     printf("IO-Link Task Started\n");
 
     for (;;) {
+        /* Serve requests posted by other tasks from this main context. */
+        if (g_event_requested) {
+            g_event_requested = false;
+            iolink_event_trigger(iolink_device_get_events_ctx(&g_device_ctx), 0x1800,
+                                 IOLINK_EVENT_TYPE_NOTIFICATION);
+        }
+
         /* Process Stack */
         iolink_device_process(&g_device_ctx);
 
@@ -111,15 +123,15 @@ void iolink_task_entry(void* pvParameters)
     }
 }
 
-/* Application Task (simulating events trigger from another thread) */
+/* Application Task: it never enters the IO-Link API, it only posts a request
+ * for the IO-Link task to serve (a queue is the usual RTOS alternative). */
 void app_task_entry(void* pvParameters)
 {
     (void) pvParameters;
 
     for (;;) {
-        /* Trigger an event every 5 seconds safely */
-        iolink_event_trigger(iolink_device_get_events_ctx(&g_device_ctx), 0x1800,
-                             IOLINK_EVENT_TYPE_NOTIFICATION);
+        /* Request an event every 5 seconds. */
+        g_event_requested = true;
 
         vTaskDelay(pdMS_TO_TICKS(5000));
     }

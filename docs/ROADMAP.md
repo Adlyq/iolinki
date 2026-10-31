@@ -229,9 +229,9 @@ This roadmap outlines the development path for `iolinki`, enabling a fully compl
 - [x] **Memory Documentation**: Document RAM/ROM budgets and provide memory calculator tool.
 
 ### 6.2 RTOS Integration
-- [x] **Critical Sections**: Add `enter_critical()` / `exit_critical()` hooks for thread safety.
+- [x] **Critical Sections**: Add `enter_critical()` / `exit_critical()` hooks that synchronise the single main-context caller with the data ISR.
 - [x] **Reentrancy**: Eliminate static locals in functions, make all APIs reentrant.
-- [x] **FreeRTOS Example**: Demonstrate multi-task integration with proper synchronization.
+- [x] **FreeRTOS Example**: Demonstrate an RTOS integration with one IO-Link task as the sole main-context caller; other tasks only post requests to it.
 - [x] **ISR Safety**: Document which APIs are interrupt-safe vs require task context.
 
 ### 6.3 Hardware Abstraction
