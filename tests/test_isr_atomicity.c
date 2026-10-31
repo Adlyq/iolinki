@@ -259,9 +259,10 @@ static void feed_frame(const uint8_t* frame, uint8_t len)
 #endif
 }
 
-/* A no-lock device must still stage main-context replies atomically: the
- * platform critical section is held while request_service() is poked. */
-static void test_reply_staging_uses_platform_critical(void** state)
+/* A no-lock device must still stage main-context replies atomically, but the
+ * PHY service hook runs with interrupts enabled: it is port code and may be
+ * slow, while the staged reply is already published. */
+static void test_reply_staging_pokes_phy_outside_critical(void** state)
 {
     (void) state;
     /* Type-0 ISDU read with FlowCTRL IDLE: the ISR fast path leaves it to the
@@ -278,7 +279,7 @@ static void test_reply_staging_uses_platform_critical(void** state)
 
     assert_int_equal(s_service_calls, 1U);
 #if IOLINK_NEED_CRITICAL
-    assert_true(s_service_in_critical);
+    assert_false(s_service_in_critical);
 #endif
     assert_int_equal(s_crit_enters, s_crit_exits);
     assert_true(s_ctx.isr_tx_pending != 0U);
@@ -417,7 +418,7 @@ static void test_busy_tx_frame_keeps_frame_for_main(void** state)
 int main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test(test_reply_staging_uses_platform_critical),
+        cmocka_unit_test(test_reply_staging_pokes_phy_outside_critical),
         cmocka_unit_test(test_nested_pump_is_deferred),
         cmocka_unit_test(test_deferred_states_are_not_overwritten),
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME

@@ -260,10 +260,13 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
     ctx->isr_tx_pending = 1U; /* publish last */
 
     if (ctx->phy->request_service != NULL) {
-        /* Ask the PHY to run the data-interrupt pump now. Kept inside the
-         * critical section so the pend cannot race a natural data interrupt. */
-        ctx->phy->request_service(ctx->phy->user);
+        /* Poke the PHY after the publish and outside the critical section: the
+         * hook is port code (it may do an SPI access or take an RTOS lock) and
+         * must not extend the interrupt-off window. Publishing first is enough:
+         * a natural data interrupt that runs in between simply drains the
+         * staged reply, and the extra service request then finds nothing. */
         dll_send_unlock(ctx);
+        ctx->phy->request_service(ctx->phy->user);
         return;
     }
 
