@@ -277,7 +277,9 @@ static void test_reply_staging_uses_platform_critical(void** state)
     iolink_dll_process(&s_ctx);
 
     assert_int_equal(s_service_calls, 1U);
+#if IOLINK_NEED_CRITICAL
     assert_true(s_service_in_critical);
+#endif
     assert_int_equal(s_crit_enters, s_crit_exits);
     assert_true(s_ctx.isr_tx_pending != 0U);
 }

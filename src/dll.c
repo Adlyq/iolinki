@@ -78,7 +78,7 @@ void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
     if (!defer) {
         /* Main context: make the transition and its queue entry atomic with
          * respect to the data ISR, so callbacks are delivered in order. */
-        iolink_critical_enter();
+        IOLINK_CRITICAL_ENTER();
     }
     ctx->state = new_state;
     if (new_state == IOLINK_DLL_STATE_OPERATE) {
@@ -102,7 +102,7 @@ void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
         dll_queue_state(ctx, new_state);
     }
     if (!defer) {
-        iolink_critical_exit();
+        IOLINK_CRITICAL_EXIT();
         iolink_dll_flush_state_callbacks(ctx);
     }
 }
@@ -218,7 +218,7 @@ static void dll_send_lock(iolink_dll_ctx_t* ctx)
         ctx->lock(ctx->lock_user);
     }
     else {
-        iolink_critical_enter();
+        IOLINK_CRITICAL_ENTER();
     }
 }
 
@@ -228,7 +228,7 @@ static void dll_send_unlock(iolink_dll_ctx_t* ctx)
         ctx->unlock(ctx->lock_user);
     }
     else {
-        iolink_critical_exit();
+        IOLINK_CRITICAL_EXIT();
     }
 }
 
@@ -923,7 +923,7 @@ static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
      * only this snapshot. The short critical section makes the multi-octet
      * response copy and the Busy/length/index bookkeeping atomic for the reader,
      * without holding interrupts off across the ISDU execute step. */
-    iolink_critical_enter();
+    IOLINK_CRITICAL_ENTER();
     const bool busy =
         (ctx->isdu.state == ISDU_STATE_SERVICE_EXECUTE) || (ctx->isdu.state == ISDU_STATE_BUSY);
     uint8_t n = 0U;
@@ -958,7 +958,7 @@ static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
     }
     ctx->isr_isdu_busy = next_busy;
     ctx->isr_isdu_len = n;
-    iolink_critical_exit();
+    IOLINK_CRITICAL_EXIT();
     /* Do not rewind isr_isdu_idx here: the ISR advances it across COUNT reads
      * and only a START read restarts the response. Resetting it on every main
      * loop pass would replay the first segment of a multi-segment read. */
@@ -1426,9 +1426,9 @@ static void dll_restore_operating_baudrate(iolink_dll_ctx_t* ctx)
 static uint64_t dll_read_u64(const uint64_t* value)
 {
     uint64_t snapshot;
-    iolink_critical_enter();
+    IOLINK_CRITICAL_ENTER();
     snapshot = *value;
-    iolink_critical_exit();
+    IOLINK_CRITICAL_EXIT();
     return snapshot;
 }
 
@@ -1458,7 +1458,7 @@ static void dll_drain_staged_isdu_write(iolink_dll_ctx_t* ctx)
     uint8_t staged_od[IOLINK_OD_MAX_SIZE];
     bool drained = false;
 
-    iolink_critical_enter();
+    IOLINK_CRITICAL_ENTER();
     if (ctx->isr_od_staged != 0U) {
         staged_fc = ctx->isr_od_stage_flowctrl;
         staged_len = ctx->isr_od_stage_len;
@@ -1475,7 +1475,7 @@ static void dll_drain_staged_isdu_write(iolink_dll_ctx_t* ctx)
         ctx->isr_isdu_resp_valid = 0U;
         drained = true;
     }
-    iolink_critical_exit();
+    IOLINK_CRITICAL_EXIT();
 
     if (drained) {
         iolink_isdu_od_write(&ctx->isdu, staged_fc, staged_od, staged_len);
@@ -1655,7 +1655,7 @@ static void dll_consume_isr_mailbox(iolink_dll_ctx_t* ctx)
     if (ctx->isr_frame_ready == 0U) {
         return;
     }
-    iolink_critical_enter();
+    IOLINK_CRITICAL_ENTER();
     uint8_t n = ctx->isr_frame_len;
     if (n > sizeof(ctx->frame_buf)) {
         n = (uint8_t) sizeof(ctx->frame_buf);
@@ -1669,7 +1669,7 @@ static void dll_consume_isr_mailbox(iolink_dll_ctx_t* ctx)
     ctx->frame_eager = ctx->isr_eager_replied;
     ctx->isr_eager_replied = 0U;
     ctx->isr_frame_ready = 0U;
-    iolink_critical_exit();
+    IOLINK_CRITICAL_EXIT();
     /* A mailbox frame is received traffic: refresh the inactivity and byte-gap
        timestamps exactly like the streaming RX path. Without this the 1 s idle
        supervision resets a healthy ISR link. */
@@ -1818,10 +1818,10 @@ int iolink_dll_set_pd_length(iolink_dll_ctx_t* ctx, uint8_t pd_in_len, uint8_t p
         return -1;
     /* The data ISR reads pd_out_len_current to frame a request; publish the
      * PD-in/PD-out pair atomically so it cannot observe a half update. */
-    iolink_critical_enter();
+    IOLINK_CRITICAL_ENTER();
     ctx->pd_in_len_current = pd_in_len;
     ctx->pd_out_len_current = pd_out_len;
-    iolink_critical_exit();
+    IOLINK_CRITICAL_EXIT();
     return 0;
 }
 

@@ -280,9 +280,13 @@ static int device_config_validate(const iolink_device_config_t* config)
         return IOLINK_DEVICE_INIT_ERR_LOCK_PAIR;
     }
 
+#if IOLINK_NEED_CRITICAL
+    /* Only a profile that actually serialises against an interrupt needs a
+     * real critical section; a SINGLE profile never references the hooks. */
     if (iolink_platform_critical_sections_ready() != 0) {
         return IOLINK_DEVICE_INIT_ERR_CRITICAL;
     }
+#endif
 
 #if IOLINK_FEATURE_DATA_STORAGE
     if ((config->storage == NULL) || (config->storage->read == NULL) ||
@@ -510,7 +514,7 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
             ctx->config->lock(ctx->config->user);
         }
         else {
-            iolink_critical_enter();
+            IOLINK_CRITICAL_ENTER();
         }
         ctx->dll.pd_in_len = ctx->dll.pd_in_len_current;
         ctx->dll.pd_valid = valid;
@@ -519,7 +523,7 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
             ctx->config->unlock(ctx->config->user);
         }
         else {
-            iolink_critical_exit();
+            IOLINK_CRITICAL_EXIT();
         }
 
         if (ctx->dll.cyclic_reply_precached) {
@@ -584,7 +588,7 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
         ctx->config->lock(ctx->config->user);
     }
     else {
-        iolink_critical_enter();
+        IOLINK_CRITICAL_ENTER();
     }
 
     /* PD-in lives after the OD header in the reply buffer; fill a buffer the
@@ -600,7 +604,7 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
         ctx->config->unlock(ctx->config->user);
     }
     else {
-        iolink_critical_exit();
+        IOLINK_CRITICAL_EXIT();
     }
 
     /* Rebuild the pre-staged cyclic reply variants (double buffered) so the ISR
@@ -633,7 +637,7 @@ int iolink_device_pd_output_read(iolink_device_ctx_t* ctx, uint8_t* data, size_t
         ctx->config->lock(ctx->config->user);
     }
     else {
-        iolink_critical_enter();
+        IOLINK_CRITICAL_ENTER();
     }
 
     read_len = (len < ctx->dll.pd_out_len_current) ? (uint8_t) len : ctx->dll.pd_out_len_current;
@@ -643,7 +647,7 @@ int iolink_device_pd_output_read(iolink_device_ctx_t* ctx, uint8_t* data, size_t
         ctx->config->unlock(ctx->config->user);
     }
     else {
-        iolink_critical_exit();
+        IOLINK_CRITICAL_EXIT();
     }
 
     return (int) read_len;

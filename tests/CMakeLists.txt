@@ -57,6 +57,13 @@ set_target_properties(test_phy_l6362a_raw PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED ON)
 add_test(NAME test_phy_l6362a_raw COMMAND test_phy_l6362a_raw)
+
+# Graded concurrency-primitive contract (no cmocka dependency). The matrix
+# builds this executable under every IOLINK_CONCURRENCY profile.
+add_executable(test_port_capabilities test_port_capabilities.c)
+target_link_libraries(test_port_capabilities iolinki)
+add_test(NAME test_port_capabilities COMMAND test_port_capabilities)
+
 if(PkgConfig_FOUND)
     pkg_check_modules(CMOCKA QUIET cmocka)
 endif()

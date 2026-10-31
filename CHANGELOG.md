@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (concurrency primitives)
+- `include/iolinki/port.h` declares the graded asynchronous primitives and
+  derives what a port must provide from the new concurrency profile
+  (`IOLINK_CONCURRENCY`: `SINGLE`/`ISR`/`RTOS`/`SMP`). The stack publishes
+  `IOLINK_NEED_FENCE`, `IOLINK_NEED_CRITICAL` and `IOLINK_NEED_THREAD_LOCK`, so
+  a port implements only the grades its profile requires. A `SINGLE` build does
+  not reference `iolink_critical_*` at all; `tools/build_matrix.sh` proves it
+  with `nm -u`.
+- `IOLINK_FENCE_LEVEL` grades the barrier (`COMPILER`/`DEVICE`/`SMP`); a port
+  supplies `IOLINK_FENCE_DEVICE_IMPL()` / `IOLINK_FENCE_SMP_IMPL()` for the
+  higher grades, and a mismatched profile/level combination is a compile error.
+- Publish-word helpers `iolink_atomic_load()` / `iolink_atomic_store()` and
+  `IOLINK_CRITICAL_ENTER/EXIT()`; every library call site now uses the latter.
+- `IOLINK_STATS_MODE` (`SHARED` default) reserves the per-context counter
+  option; `SPLIT` is rejected at compile time until it is implemented.
+- `tests/test_port_capabilities.c` exercises the derivation, the barrier and
+  the publish-word helpers under every profile.
+
 ### Changed
 - `iolink_device_config_t::time_us` is now required: `iolink_device_init()`
   rejects NULL with the new `IOLINK_DEVICE_INIT_ERR_TIME`. When supplied (the
@@ -39,10 +57,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `upstream-sync` agent skill was replaced by a `maintenance` skill.
 
 ### Added (build verification)
-- `tools/build_matrix.sh`: compiles 19 configurations (all ISR byte/frame
-  combinations, minimal/tiny profiles, every feature toggle, compatibility
-  switches, bare-metal) and runs the unit suite for the BYTE/BYTE ones. Wired
-  into CI as the delivery gate for compile-time changes.
+- `tools/build_matrix.sh`: compiles every supported configuration (all ISR
+  byte/frame combinations, minimal/tiny profiles, every feature toggle,
+  compatibility switches, bare-metal, plus the `SINGLE` and `RTOS` concurrency
+  profiles) and runs the unit suite for the BYTE/BYTE ones. It also asserts
+  that the `SINGLE` archive has no `iolink_critical_*` reference. Wired into CI
+  as the delivery gate for compile-time changes.
 - `src/phy_virtual.c` now compiles in FRAME builds as an unusable stub instead
   of failing with `#error`, so every ISR granularity can be compiled.
 - Fixed the trimmed/no-events configurations: guarded SystemCommand-only ISDU

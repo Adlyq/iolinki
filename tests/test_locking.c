@@ -41,6 +41,7 @@ static void test_event_locking(void** state)
     /* Triggering an event should enter critical section */
     iolink_event_trigger(&ctx, 0x1800, IOLINK_EVENT_TYPE_NOTIFICATION);
 
+#if IOLINK_NEED_CRITICAL
     assert_int_equal(g_enter_count, 1);
     assert_int_equal(g_exit_count, 1);
 
@@ -50,6 +51,15 @@ static void test_event_locking(void** state)
 
     assert_int_equal(g_enter_count, 2);
     assert_int_equal(g_exit_count, 2);
+#else
+    /* SINGLE profile: the stack does not reference the critical section, so
+     * the strong overrides above must never run. */
+    iolink_event_t ev;
+    iolink_events_pop(&ctx, &ev);
+
+    assert_int_equal(g_enter_count, 0);
+    assert_int_equal(g_exit_count, 0);
+#endif
 }
 
 int main(void)

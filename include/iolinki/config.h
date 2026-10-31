@@ -143,6 +143,53 @@
 #endif
 
 /* -------------------------------------------------------------------------
+ * Concurrency profile.
+ *
+ * The profile tells the stack which asynchronous primitives a port must
+ * provide (see include/iolinki/port.h and docs/PORTING.md). It selects the
+ * minimum set; it never adds an assumption the target cannot meet.
+ *
+ *   SINGLE : no asynchronous context (host simulation, cooperative loop).
+ *            No barrier and no critical section are required; the library
+ *            does not reference the critical-section symbols at all.
+ *   ISR    : one data ISR preempts one main context (the default dual-pump
+ *            transport). Needs a naturally atomic publish word and at least a
+ *            compiler barrier; the critical section is still required while
+ *            the mailbox/ISDU staging paths use it.
+ *   RTOS   : the main context is spread over tasks; additionally needs the
+ *            application thread lock (iolink_device_config_t::lock/unlock).
+ *   SMP    : the pump and the main context may run on different cores; needs
+ *            a system-wide (SMP) barrier.
+ * ------------------------------------------------------------------------- */
+/** @brief No asynchronous context. */
+#define IOLINK_CONCURRENCY_SINGLE 0
+/** @brief One data ISR preempts one main context. */
+#define IOLINK_CONCURRENCY_ISR 1
+/** @brief Main context spread over RTOS tasks. */
+#define IOLINK_CONCURRENCY_RTOS 2
+/** @brief Separate cores for the pump and the main context. */
+#define IOLINK_CONCURRENCY_SMP 3
+
+#ifndef IOLINK_CONCURRENCY
+#define IOLINK_CONCURRENCY IOLINK_CONCURRENCY_ISR
+#endif
+
+/**
+ * @brief How the DLL statistics counters are shared between contexts.
+ *
+ * SHARED (default): one counter set, updated by both contexts under the
+ * platform critical section. SPLIT: one counter set per context, summed when
+ * the statistics are read, so no critical section is needed for them.
+ * SPLIT is not implemented yet and is rejected at compile time.
+ */
+#define IOLINK_STATS_SHARED 0
+#define IOLINK_STATS_SPLIT 1
+
+#ifndef IOLINK_STATS_MODE
+#define IOLINK_STATS_MODE IOLINK_STATS_SHARED
+#endif
+
+/* -------------------------------------------------------------------------
  * Protocol compatibility
  * ------------------------------------------------------------------------- */
 

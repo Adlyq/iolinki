@@ -55,6 +55,12 @@ int main(void)
     config.storage = &g_test_storage;
     config.time_us = test_time_us;
 
+    /* A profile without asynchronous contexts (SINGLE) never references the
+     * critical-section hooks, so a missing port is no longer fatal there. */
+#if IOLINK_NEED_CRITICAL
     assert(iolink_device_init(&ctx, &config) == IOLINK_DEVICE_INIT_ERR_CRITICAL);
+#else
+    assert(iolink_device_init(&ctx, &config) != IOLINK_DEVICE_INIT_ERR_CRITICAL);
+#endif
     return 0;
 }

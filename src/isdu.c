@@ -1165,7 +1165,7 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
         return;
     }
 
-    iolink_critical_enter();
+    IOLINK_CRITICAL_ENTER();
     iolink_events_ctx_t* event_ctx = (iolink_events_ctx_t*) ctx->event_ctx;
 
     /* Collect the currently active Error/Warning events. B.2.22: only MODE
@@ -1205,7 +1205,7 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
     }
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
-    iolink_critical_exit();
+    IOLINK_CRITICAL_EXIT();
 }
 
 #endif /* IOLINK_FEATURE_EVENTS */

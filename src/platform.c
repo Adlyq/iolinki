@@ -18,7 +18,9 @@
 
 #include "iolinki/platform.h"
 
-/* Weak definitions allow the application to override them without link errors */
+/* Weak definitions allow the application to override them without link errors.
+ * The probe below is only consulted when the selected concurrency profile
+ * requires a critical section (IOLINK_NEED_CRITICAL). */
 
 #if defined(__GNUC__) || defined(__clang__)
 #define WEAK __attribute__((weak))

@@ -716,7 +716,7 @@ sequenceDiagram
 | `phy.detect_wakeup` | `iolink_dll_process()` | SIO 唤醒检测 |
 | `phy.get_voltage_mv` / `is_short_circuit` | `dll_poll_diagnostics()` | 旧版诊断，触发电压/短路事件 |
 | `config->lock/unlock` | PD 更新/读取、`dll_send()` 暂存 | 与 ISR/其他线程互斥；必须成对 |
-| `iolink_critical_enter/exit` | 邮箱、ISDU 快照、状态队列、事件 | 平台临界区；双泵必须提供真实实现；初始化会拒绝 weak 默认 |
+| `iolink_critical_enter/exit` | 邮箱、ISDU 快照、状态队列、事件（经 `IOLINK_CRITICAL_ENTER/EXIT()`） | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
 | `on_state_change` | `device_state_cb()` | 所有实际状态迁移 |
 | `on_startup` | 初始化末尾 + 进入 STARTUP | 初始化时显式调用一次 |
 | `on_preoperate` / `on_operate` | `device_state_cb()` | 进入对应状态时 |
@@ -896,6 +896,45 @@ ISR 还允许调用以下只读/时序 helper：`iolink_dll_expected_req_len()`�
 
 例外：`dll_set_state(STARTUP)` 会在 ISR 内调用 `iolink_events_reset()`。该函数自带临界区，是当前 ISR 路径唯一的事件写操作；修改事件层时不要移除其重入保护。
 
+### 12.2 异步原语分级与最小依赖
+
+并发原语的契约集中在 `include/iolinki/port.h`，由编译期档位
+`IOLINK_CONCURRENCY` 推导出 `IOLINK_NEED_FENCE` / `IOLINK_NEED_CRITICAL` /
+`IOLINK_NEED_THREAD_LOCK`：
+
+| 档位 | 场景 | 需要的能力 |
+| :--- | :--- | :--- |
+| `SINGLE` | host 仿真、协作式循环 | 无（屏障与临界区塌缩为空） |
+| `ISR`（默认） | 数据 ISR 抢占主循环（双泵） | 原子宽度 ≥32 位 + `COMPILER` 屏障 + 临界区 |
+| `RTOS` | 主上下文是多任务 | 上一档 + `config.lock/unlock` |
+| `SMP` | 泵与主循环在不同核 | 原子宽度 + `SMP` 屏障 + 临界区 |
+
+`src/` 只调用三个入口：`IOLINK_FENCE()`、`iolink_atomic_load/store()`、
+`IOLINK_CRITICAL_ENTER/EXIT()`。档位不需要临界区时宏展开为空，库因此
+**不引用** `iolink_critical_*` 符号（`tools/build_matrix.sh` 用 `nm -u`
+对 `SINGLE` 档做机械校验）。
+
+屏障等级 `IOLINK_FENCE_LEVEL` 由 port 声明（它描述硬件事实，不能推导）：
+`COMPILER`（单核、无其他总线主设备）/ `DEVICE`（DMA 并发读发布缓冲区，
+port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port 提供
+`IOLINK_FENCE_SMP_IMPL()`）。错配在编译期 `#error`。
+
+共享对象的**所有权**（审查与后续无锁化改造的基准）：
+
+| 对象 | 写者（可写所有权） | 读者 | 移交机制 | 租约/回收 |
+| :--- | :--- | :--- | :--- | :--- |
+| `isr_frame_buf` + `isr_frame_ready` | ISR | 主上下文 | `isr_frame_ready` 标志 | 主上下文拷出后清标志 |
+| `isr_tx_payload[]` + `isr_tx_pending` | 主上下文 | ISR | `request_service()` | ISR 取走后清 pending |
+| `pd_in[]` + `pd_in_active` | 主上下文 | ISR | 索引交换 | `pd_in_captured` 记录 ISR 占用槽；TX FRAME 下保持到下次捕获 |
+| `isr_isdu_resp_buf` + 索引字段 | 主上下文 | ISR | 快照刷新 | 新响应使 `isr_isdu_resp_valid` 失效 |
+| `isr_od_stage` | ISR | 主上下文 | `isr_od_staged` | 主上下文排空后清标志 |
+| `pending_states[]` | 主上下文 + ISR | 主上下文 | head/tail 环形 | flush 消费后推进 tail |
+| 计数器 | 两个上下文 | 读侧 | — | 共享自增，受临界区保护 |
+
+表中"两个上下文都写"的项（计数器、`isr_tx_next` 的槽分配）属于真正的
+RMW，M0+ 无独占指令，不能靠原子宽度解决；后续（P2/P3）改为单写者
+所有权或分上下文计数。
+
 ---
 
 ## 13. 编译期分流与集成注意
@@ -904,6 +943,9 @@ ISR 还允许调用以下只读/时序 helper：`iolink_dll_expected_req_len()`�
 | :--- | :--- |
 | `IOLINK_ISR_RX_MODE` | `RX BYTE` 或 `RX FRAME` |
 | `IOLINK_ISR_TX_MODE` | `TX BYTE` 或 `TX FRAME` |
+| `IOLINK_CONCURRENCY` | `SINGLE`/`ISR`/`RTOS`/`SMP`；决定 `IOLINK_NEED_*` 与是否需要临界区 |
+| `IOLINK_FENCE_LEVEL` | `COMPILER`/`DEVICE`/`SMP`；port 声明的屏障等级，错配编译期报错 |
+| `IOLINK_STATS_MODE` | `SHARED`（默认）/`SPLIT`（尚未实现，编译期拒绝） |
 | `IOLINK_PHY_FEATURE_ISR_TX_ONLY` | 1=必须有 `request_service()`，否则计 `isr_tx_dropped` |
 | `IOLINK_APP_PD_INPUT_CALLBACK` | 1=用 `on_pd_input()`，禁用 `iolink_device_pd_input_update()` |
 | `IOLINK_FEATURE_DATA_STORAGE` | 是否编译 DS 引擎与 ISDU 0x0003 |
@@ -920,7 +962,7 @@ ISR 还允许调用以下只读/时序 helper：`iolink_dll_expected_req_len()`�
 - `iolink_device_config_t::time_us` 是必需项，初始化时绑定到 DLL/事件上下文；NULL 会被 `iolink_device_init()` 拒绝。主循环、ISR 和事件计时都用它，核心不再调用平台时间函数；直接使用 `iolink_dll_*` 时需自行绑定 `ctx->time_us`。
 - `phy->get_faults`、`phy->set_cq_line`、`storage->erase` 当前没有栈内调用点。
 - `iolink_events_process()`、`iolink_ds_process()`、`iolink_ds_check()` 需要应用自行调度。
-- 本路径要求 `iolink_critical_enter/exit` 真实可用（初始化会校验），且 `ctx` 的主循环调用与 ISR 调用遵守文档约束。
+- 本路径要求 `iolink_critical_enter/exit` 真实可用（初始化会校验），且 `ctx` 的主循环调用与 ISR 调用遵守文档约束。`IOLINK_CONCURRENCY=SINGLE` 档不需要临界区，初始化跳过校验且库不引用该符号；其余档位仍会校验。
 - 当 `phy->stack_timer_start != NULL` 时，PHY 必须在 Timer B 到期时调用 `iolink_dll_on_stack_tick()`，否则 `iolink_device_process()` 会被授权门控挡住；Timer A 超时则应调用 `iolink_dll_on_rx_timeout()`。
 - `TYPE_1_1` 在本路径初始化时被拒绝；固定 Annex A 类型必须使用匹配的 PD/OD 布局。
 

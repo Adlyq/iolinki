@@ -152,6 +152,20 @@ run_config phy_owns_line_state BYTE_BYTE   Debug   no    ""                     
 run_config compat_v10          BYTE_BYTE   Debug   no    ""                            "-DIOLINK_COMPAT_V10_STARTUP_OPERATE=1 -DIOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE=1"
 run_config ds_legacy_sub0      BYTE_BYTE   Debug   no    ""                            "-DIOLINK_DS_LEGACY_IMAGE_SUB0=1"
 run_config baremetal           BYTE_BYTE   Debug   no    "-DIOLINK_PLATFORM=BAREMETAL" ""
+run_config single_profile      BYTE_BYTE   Debug   yes   ""                            "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE"
+run_config rtos_profile        BYTE_BYTE   Debug   no    ""                            "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_RTOS"
+
+# Minimum-dependency proof: a SINGLE profile never references the
+# critical-section hooks, so a port is allowed to omit them entirely.
+if [ "$LIST" -eq 0 ] && [ -f "$BUILD_ROOT/single_profile/libiolinki.a" ]; then
+    undef_syms="$(nm -u "$BUILD_ROOT/single_profile/libiolinki.a" 2>/dev/null || true)"
+    if printf '%s\n' "$undef_syms" | grep -q 'iolink_critical_'; then
+        echo "single_profile         critical-section dependency detected"
+        RESULTS+=("single_profile|dependency|fail")
+    else
+        echo "single_profile         no critical-section dependency"
+    fi
+fi
 
 if [ "$LIST" -eq 1 ]; then
     exit 0

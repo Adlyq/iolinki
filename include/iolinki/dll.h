@@ -13,6 +13,7 @@
 #include <stdbool.h>
 #include "iolinki/phy.h"
 #include "iolinki/config.h"
+#include "iolinki/port.h"
 
 /**
  * @file dll.h

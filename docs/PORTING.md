@@ -111,15 +111,137 @@ uint64_t iolink_time_get_us(void) {
 }
 ```
 
-### 2.1 Critical Sections (Required)
+### 2.1 Concurrency primitives (graded)
 
-Implement `iolink_critical_enter()` / `iolink_critical_exit()` with a real,
-nesting-safe critical section (for example PRIMASK/BASEPRI on Cortex-M). The
-weak no-op defaults in `src/platform.c` only keep the library linkable;
+The stack needs four kinds of asynchronous primitives. Each is **graded**, and
+the selected concurrency profile decides which grade a port must provide. A
+primitive the profile does not need is not referenced at all, so a port never
+implements more than it uses. The contract lives in `include/iolinki/port.h`.
+
+| Primitive | Grades | What the stack assumes |
+| :--- | :--- | :--- |
+| Atomic width `IOLINK_ATOMIC_UINT_T` (default `uint32_t`) | 8/16/32/64 bit | a naturally aligned value is read/written in one access (single-copy atomic); **no read-modify-write is assumed** |
+| Barrier `IOLINK_FENCE()` | `COMPILER` / `DEVICE` / `SMP` | data written before a publish-word store is visible before it; a publish-word load is ordered before the data it publishes |
+| Mutual exclusion `IOLINK_CRITICAL_ENTER/EXIT()` | none / IRQ mask / spinlock | mutual exclusion against the data interrupt; **nesting-safe**; **callable from the ISR**; bounded duration |
+| Thread lock `iolink_device_config_t::lock/unlock` | none / thread lock | serialises main-context threads only; never taken from the ISR |
+
+#### Profiles
+
+Select one with `-DIOLINK_CONCURRENCY=...`:
+
+> Define the profile for the **whole build** (the library archive and the
+> application), for example through `CMAKE_C_FLAGS` or
+> `target_compile_definitions(iolinki PUBLIC ...)`. A profile applied to the
+> application only would make its headers disagree with the library's internal
+> use of the primitives.
+
+| Profile | Use case | Required by the stack |
+| :--- | :--- | :--- |
+| `IOLINK_CONCURRENCY_SINGLE` | host simulation, cooperative loop, one context | nothing (the barrier and the critical section collapse to no-ops) |
+| `IOLINK_CONCURRENCY_ISR` (default) | one data ISR preempts one main loop (the dual-pump transport) | atomic width ≥ 32 bit + `COMPILER` barrier + the critical section |
+| `IOLINK_CONCURRENCY_RTOS` | the main context runs as RTOS tasks | the above + `config.lock/unlock` |
+| `IOLINK_CONCURRENCY_SMP` | the pump and the main loop may run on different cores | atomic width + `SMP` barrier + the critical section |
+
+The stack derives `IOLINK_NEED_FENCE`, `IOLINK_NEED_CRITICAL` and
+`IOLINK_NEED_THREAD_LOCK` from the profile. A missing or invalid combination is
+a compile error with an actionable message, for example:
+
+```
+port.h:160:2: error: #error "IOLINK_CONCURRENCY=SMP requires IOLINK_FENCE_LEVEL=IOLINK_FENCE_SMP"
+```
+
+#### Barrier grades
+
+`IOLINK_FENCE_LEVEL` is declared by the port (it describes the hardware, so it
+cannot be inferred):
+
+| Level | When | Port must provide |
+| :--- | :--- | :--- |
+| `IOLINK_FENCE_COMPILER` (default) | one core, no other bus master reads the published buffers | nothing |
+| `IOLINK_FENCE_DEVICE` | a DMA/PHY reads a published buffer while the CPU writes it | `IOLINK_FENCE_DEVICE_IMPL()` (e.g. `__DMB`) |
+| `IOLINK_FENCE_SMP` | the two contexts are two cores or two threads | `IOLINK_FENCE_SMP_IMPL()` (e.g. `__atomic_thread_fence(__ATOMIC_SEQ_CST)`) |
+
+The two implementations are function-like macros, so a port can also override
+`iolink_atomic_load()` / `iolink_atomic_store()` with
+`IOLINK_ATOMIC_LOAD_IMPL()` / `IOLINK_ATOMIC_STORE_IMPL()` when it has real
+acquire/release instructions (ARMv7-M+, C11 targets).
+
+#### Critical-section contract
+
+`iolink_critical_enter()` / `iolink_critical_exit()` must:
+
+1. exclude the data interrupt (an IRQ mask, an RTOS IRQ lock or a spinlock);
+2. be **nesting-safe**: the stack may enter while already inside one (a DLL
+   state transition that resets the event queue), and a DLL state transition
+   can itself be taken from the data ISR;
+3. be **callable from interrupt context**;
+4. stay short (a few instructions): the data interrupt must answer within t_A,
+   which is ~43 µs at COM3.
+
+The weak no-op defaults in `src/platform.c` keep the library linkable;
 `iolink_device_init()` probes them and returns
-`IOLINK_DEVICE_INIT_ERR_CRITICAL` when they are still active. If your toolchain
-cannot override weak symbols, exclude `src/platform.c` and provide
-`iolink_platform_critical_sections_ready()` returning 0.
+`IOLINK_DEVICE_INIT_ERR_CRITICAL` when the profile needs a real implementation
+but none was supplied. Profiles that do not need it (`SINGLE`) skip the probe
+and never reference the symbols, so a port may omit them entirely. If your
+toolchain cannot override weak symbols, exclude `src/platform.c` and provide
+`iolink_platform_critical_sections_ready()` returning 0 (only valid when
+`IOLINK_NEED_CRITICAL` is 0).
+
+**Example (Cortex-M0+, no BASEPRI).** PRIMASK save/restore with a nesting depth,
+as in `examples/stm32g0_l6362a_raw/phy_l6362a_raw.c`:
+
+```c
+void iolink_critical_enter(void)
+{
+    uint32_t mask = __get_PRIMASK();
+    __disable_irq();
+    if (s_crit_depth == 0U) {
+        s_crit_primask = mask;
+    }
+    s_crit_depth++;
+}
+
+void iolink_critical_exit(void)
+{
+    if (s_crit_depth != 0U) {
+        s_crit_depth--;
+        if (s_crit_depth == 0U) {
+            __set_PRIMASK(s_crit_primask);
+        }
+    }
+}
+```
+
+**Example (FreeRTOS).** The critical section is entered from both contexts, so
+the task and ISR variants must be selected at run time:
+
+```c
+void iolink_critical_enter(void)
+{
+    if (xPortIsInsideInterrupt()) {
+        s_isr_mask = taskENTER_CRITICAL_FROM_ISR();
+    }
+    else {
+        taskENTER_CRITICAL();
+    }
+}
+```
+
+Never use the task-only `taskENTER_CRITICAL()` in the ISR path. On RT-Thread,
+`rt_enter_critical()` (the scheduler lock) does **not** exclude interrupts and
+is therefore not a valid implementation; use `rt_hw_interrupt_disable()`.
+On POSIX, a signal handler must not take a mutex, which is one reason the
+`SINGLE` profile (no critical section) is the right choice for a hosted port
+that drives the pump from a signal handler.
+
+#### Verification
+
+- `tests/test_port_capabilities.c` compiles and runs under every profile.
+- `tools/build_matrix.sh` builds the `SINGLE` and `RTOS` profiles and checks
+  that the `SINGLE` library archive has **no undefined
+  `iolink_critical_*` symbols**.
+- `./check_quality.sh` and the matrix are the delivery gate for any change that
+  touches these switches.
 
 ### 3. Persistent Storage (Required with Data Storage)
 
