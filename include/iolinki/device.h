@@ -44,13 +44,6 @@
  *  @note Called from both the main loop and the data ISR, so it must be
  *        non-blocking and ISR-safe. */
 typedef uint64_t (*iolink_device_time_us_fn)(void* user);
-/** @brief Callback acquiring the application-provided lock (critical section).
- *  @param user Opaque user pointer supplied via ::iolink_device_config_t. */
-typedef void (*iolink_device_lock_fn)(void* user);
-/** @brief Callback releasing the application-provided lock (critical section).
- *  @param user Opaque user pointer supplied via ::iolink_device_config_t. */
-typedef void (*iolink_device_unlock_fn)(void* user);
-
 /** @brief Physical layer API used by the device (alias of ::iolink_phy_api_t). */
 typedef iolink_phy_api_t iolink_device_phy_t;
 
@@ -74,8 +67,6 @@ typedef struct
     iolink_device_time_us_fn time_us; /**< Application clock used by the DLL, ISR pump and
                                            event engine; required (NULL is rejected at
                                            initialization). */
-    iolink_device_lock_fn lock;       /**< Lock callback (may be NULL). */
-    iolink_device_unlock_fn unlock;   /**< Unlock callback (may be NULL). */
     void* user;                       /**< Opaque pointer passed back to callbacks. */
     uint8_t (*vendor_service)(
         void* user, uint16_t index, uint8_t subindex, bool write, const uint8_t* input,
@@ -125,13 +116,13 @@ typedef enum
     IOLINK_DEVICE_INIT_ERR_OD_WIDTH = -5,    /**< od_width is not 1/2/8/32 */
     IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6, /**< od_width exceeds IOLINK_OD_MAX_SIZE */
     IOLINK_DEVICE_INIT_ERR_BAUDRATE = -7,    /**< baudrate_set with an invalid COM */
-    IOLINK_DEVICE_INIT_ERR_LOCK_PAIR = -8,   /**< only one of lock/unlock supplied */
     IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT =
         -9,                            /**< PD/OD lengths incompatible with the M-sequence type */
     IOLINK_DEVICE_INIT_ERR_TIME = -10, /**< time_us callback is NULL */
     IOLINK_DEVICE_INIT_ERR_CRITICAL = -11, /**< platform critical sections are the weak default */
     IOLINK_DEVICE_INIT_ERR_STORAGE = -12,  /**< storage backend is NULL or incomplete */
-    IOLINK_DEVICE_INIT_ERR_LOCK = -13,     /**< RTOS profile needs the thread lock pair */
+    /* -8 (lock pair) and -13 (RTOS lock) are retired: the stack has a single
+     * main-context caller and no longer takes an application thread lock. */
 } iolink_device_init_result_t;
 
 /**

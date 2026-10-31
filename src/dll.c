@@ -180,38 +180,6 @@ static uint8_t dll_expected_type_bits(const iolink_dll_ctx_t* ctx)
 
 static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx);
 
-/** @brief Serialise main-context reply staging against the data interrupt.
- *
- * The application lock is preferred (it also covers RTOS threads). When none is
- * configured, fall back to the platform critical section; a bare-metal port must
- * therefore provide a real implementation (the library default is a no-op). */
-static bool dll_has_app_lock(const iolink_dll_ctx_t* ctx)
-{
-    /* Both hooks must be present; a lone lock would enter the application lock
-     * but leave the platform critical section instead (unbalanced pair). */
-    return (ctx->lock != NULL) && (ctx->unlock != NULL);
-}
-
-static void dll_send_lock(iolink_dll_ctx_t* ctx)
-{
-    if (dll_has_app_lock(ctx)) {
-        ctx->lock(ctx->lock_user);
-    }
-    else {
-        IOLINK_CRITICAL_ENTER();
-    }
-}
-
-static void dll_send_unlock(iolink_dll_ctx_t* ctx)
-{
-    if (dll_has_app_lock(ctx)) {
-        ctx->unlock(ctx->lock_user);
-    }
-    else {
-        IOLINK_CRITICAL_EXIT();
-    }
-}
-
 /**
  * @brief Emit a device reply through the ISR transport.
  *
@@ -219,6 +187,12 @@ static void dll_send_unlock(iolink_dll_ctx_t* ctx)
  * or the PHY transmits the whole frame (TX FRAME). The reply octets (including
  * the CKS) are built by the shared handlers, so the frame layout is the same
  * either way.
+ *
+ * The stack has a single main-context caller, so staging needs no lock: the
+ * main pump is the only writer of the reply slots, and the data ISR reads the
+ * staged reply only after isr_tx_pending is published (data-first ordering plus
+ * a compiler barrier). Only the legacy direct-send fallback drives the PHY from
+ * this context and therefore excludes the data interrupt.
  */
 static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
 {
@@ -228,9 +202,6 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
     if (len > sizeof(ctx->isr_tx_payload[0])) {
         return;
     }
-    /* Stage the reply (verbatim: the octets already carry the CKS) and let the
-     * ISR report it. The TX hooks are never driven from this (main) context. */
-    dll_send_lock(ctx);
     /* Main-context slots only: the ISR has its own slot, so this counter has a
      * single writer and needs no read-modify-write atomic. */
     const uint8_t slot = ctx->isr_tx_next;
@@ -239,30 +210,32 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
     ctx->isr_tx_pending_slot = slot;
     ctx->isr_tx_len = (uint8_t) len;
     ctx->isr_tx_has_cks = 0U;
+    IOLINK_FENCE();           /* staged octets before the publish */
     ctx->isr_tx_pending = 1U; /* publish last */
 
     if (ctx->phy->request_service != NULL) {
-        /* Poke the PHY after the publish and outside the critical section: the
-         * hook is port code (it may do an SPI access or take an RTOS lock) and
-         * must not extend the interrupt-off window. Publishing first is enough:
-         * a natural data interrupt that runs in between simply drains the
-         * staged reply, and the extra service request then finds nothing. */
-        dll_send_unlock(ctx);
+        /* Poke the PHY after the publish and outside any interrupt-off window:
+         * the hook is port code (it may do an SPI access or take a lock). A
+         * natural data interrupt that runs in between simply drains the staged
+         * reply, and the extra service request then finds nothing. */
         ctx->phy->request_service(ctx->phy->user);
         return;
     }
 
 #if !IOLINK_PHY_FEATURE_ISR_TX_ONLY
-    /* Legacy fallback for PHYs without a service hook (streaming/host tests). */
+    /* Legacy fallback for PHYs without a service hook (streaming/host tests).
+     * It drives the TX hooks from this context, so the data interrupt must not
+     * interleave with the transfer. */
+    IOLINK_CRITICAL_ENTER();
     ctx->isr_tx_pending = 0U;
     dll_isr_start_staged_tx(ctx, slot, (uint8_t) len);
+    IOLINK_CRITICAL_EXIT();
 #else
     /* ISR-only PHY without request_service(): the reply cannot be transmitted.
      * Count it so a misconfiguration is observable instead of silent. */
     ctx->isr_tx_pending = 0U;
     ctx->isr_tx_dropped++;
 #endif /* !IOLINK_PHY_FEATURE_ISR_TX_ONLY */
-    dll_send_unlock(ctx);
 }
 
 /* -------------------------------------------------------------------------

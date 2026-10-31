@@ -276,18 +276,6 @@ static int device_config_validate(const iolink_device_config_t* config)
         return IOLINK_DEVICE_INIT_ERR_BAUDRATE;
     }
 
-    if ((config->lock == NULL) != (config->unlock == NULL)) {
-        return IOLINK_DEVICE_INIT_ERR_LOCK_PAIR;
-    }
-#if IOLINK_NEED_THREAD_LOCK
-    /* The RTOS profile spreads the main context over tasks: the platform
-     * critical section only excludes interrupts, so the thread lock is
-     * required to serialise them. */
-    if (config->lock == NULL) {
-        return IOLINK_DEVICE_INIT_ERR_LOCK;
-    }
-#endif
-
 #if IOLINK_NEED_CRITICAL
     /* Only a profile that actually serialises against an interrupt needs a
      * real critical section; a SINGLE profile never references the hooks. */
@@ -344,12 +332,6 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
 #endif
     /* iolink_dll_init() sampled the platform clock before it was bound. */
     ctx->dll.master_last_activity_ms = dll_time_ms(&ctx->dll);
-    /* Main-context reply staging vs the data-interrupt pump needs the
-     * application lock; without it dll_send() and the ISDU snapshot copy would
-     * not be atomic with respect to the ISR. */
-    ctx->dll.lock = config->lock;
-    ctx->dll.unlock = config->unlock;
-    ctx->dll.lock_user = config->user;
     ctx->dll.isdu.direct_param_page2 = ctx->direct_param_page2;
     ctx->dll.isdu.params_ctx = &ctx->params;
     ctx->dll.isdu.vendor_service = config->vendor_service;
@@ -527,21 +509,11 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
         const bool valid = ctx->config->app_callbacks->on_pd_input(
             &ctx->dll.pd_in[inactive][ctx->dll.od_width], ctx->dll.pd_in_len_current);
 
-        if (ctx->config->lock != NULL) {
-            ctx->config->lock(ctx->config->user);
-        }
-        else {
-            IOLINK_CRITICAL_ENTER();
-        }
+        IOLINK_CRITICAL_ENTER();
         ctx->dll.pd_in_len = ctx->dll.pd_in_len_current;
         ctx->dll.pd_valid = valid;
         ctx->dll.pd_in_active = inactive;
-        if (ctx->config->unlock != NULL) {
-            ctx->config->unlock(ctx->config->user);
-        }
-        else {
-            IOLINK_CRITICAL_EXIT();
-        }
+        IOLINK_CRITICAL_EXIT();
 
         if (ctx->dll.cyclic_reply_precached) {
             iolink_dll_prepare_cyclic_reply(&ctx->dll);
@@ -609,25 +581,15 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
         ctx->dll.pd_in_skips++; /* every spare buffer is leased: retry later */
         return -1;
     }
-    if ((ctx->config != NULL) && (ctx->config->lock != NULL)) {
-        ctx->config->lock(ctx->config->user);
-    }
-    else {
-        IOLINK_CRITICAL_ENTER();
-    }
-
+    /* The new PD-in image and the index that publishes it must be visible as a
+     * unit to the data ISR, which reads the buffer it captured. */
+    IOLINK_CRITICAL_ENTER();
     (void) memcpy(&ctx->dll.pd_in[inactive][ctx->dll.od_width], data, len);
     ctx->dll.pd_in_len = (uint8_t) len;
     ctx->dll.pd_in_len_current = (uint8_t) len;
     ctx->dll.pd_valid = valid;
     ctx->dll.pd_in_active = inactive;
-
-    if ((ctx->config != NULL) && (ctx->config->unlock != NULL)) {
-        ctx->config->unlock(ctx->config->user);
-    }
-    else {
-        IOLINK_CRITICAL_EXIT();
-    }
+    IOLINK_CRITICAL_EXIT();
 
     /* Rebuild the pre-staged cyclic reply variants (double buffered) so the ISR
      * can answer the next cyclic frame without the main loop in the path. */
@@ -655,22 +617,10 @@ int iolink_device_pd_output_read(iolink_device_ctx_t* ctx, uint8_t* data, size_t
         return -1;
     }
 
-    if ((ctx->config != NULL) && (ctx->config->lock != NULL)) {
-        ctx->config->lock(ctx->config->user);
-    }
-    else {
-        IOLINK_CRITICAL_ENTER();
-    }
-
+    /* pd_out is written by the frame dispatch in this same (main) context, so
+     * no lock is needed under the single-caller contract. */
     read_len = (len < ctx->dll.pd_out_len_current) ? (uint8_t) len : ctx->dll.pd_out_len_current;
     (void) memcpy(data, ctx->dll.pd_out, read_len);
-
-    if ((ctx->config != NULL) && (ctx->config->unlock != NULL)) {
-        ctx->config->unlock(ctx->config->user);
-    }
-    else {
-        IOLINK_CRITICAL_EXIT();
-    }
 
     return (int) read_len;
 }

@@ -33,16 +33,6 @@ static void device_reset_handler(iolink_reset_type_t type)
     g_last_reset = type;
 }
 
-static void device_lock(void* user)
-{
-    (void) user;
-}
-
-static void device_unlock(void* user)
-{
-    (void) user;
-}
-
 static iolink_device_config_t make_device_config(void)
 {
     iolink_device_config_t config;
@@ -115,14 +105,6 @@ static void test_device_init_rejects_invalid_config(void** state)
     config.stack.baudrate_set = true;
     config.stack.baudrate = (iolink_baudrate_t) 3;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_BAUDRATE);
-
-    config = make_device_config();
-    config.lock = device_lock;
-    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_LOCK_PAIR);
-
-    config = make_device_config();
-    config.unlock = device_unlock;
-    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_LOCK_PAIR);
 }
 
 static void test_device_init_validates_config_not_context(void** state)

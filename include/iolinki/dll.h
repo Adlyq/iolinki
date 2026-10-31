@@ -197,12 +197,6 @@ typedef struct
 {
     volatile iolink_dll_state_t state; /**< Current DLL state */
     const iolink_phy_api_t* phy;       /**< Bound PHY API implementation */
-    /* Optional application critical-section hooks. Used by dll_send() to start a
-     * main-context (Type-0) transmission atomically with respect to the data
-     * interrupt. The library does not know the platform's lock mechanism. */
-    void (*lock)(void* user);
-    void (*unlock)(void* user);
-    void* lock_user;
     /* Application clock bound from iolink_device_config_t::time_us. The DLL and
      * event engine use it for every timestamp. The data ISR reads it, so the
      * callback must be monotonic and ISR-safe. A bare DLL context without a
