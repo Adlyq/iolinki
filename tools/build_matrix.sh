@@ -153,7 +153,6 @@ run_config compat_v10          BYTE_BYTE   Debug   no    ""                     
 run_config ds_legacy_sub0      BYTE_BYTE   Debug   no    ""                            "-DIOLINK_DS_LEGACY_IMAGE_SUB0=1"
 run_config baremetal           BYTE_BYTE   Debug   no    "-DIOLINK_PLATFORM=BAREMETAL" ""
 run_config single_profile      BYTE_BYTE   Debug   yes   ""                            "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE"
-run_config rtos_profile        BYTE_BYTE   Debug   no    ""                            "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_RTOS"
 # SMP is compile-only: IOLINK_CONCURRENCY>=RTOS requires config.lock/unlock and
 # the test harness does not supply one, so the device suite cannot run here.
 run_config smp_profile         BYTE_BYTE   Debug   no    ""                            "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SMP -DIOLINK_FENCE_LEVEL=IOLINK_FENCE_SMP -DIOLINK_FENCE_SMP_IMPL=__sync_synchronize"

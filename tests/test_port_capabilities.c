@@ -44,7 +44,6 @@ int main(void)
     /* The requirement flags stay boolean. */
     assert((IOLINK_NEED_FENCE == 0) || (IOLINK_NEED_FENCE == 1));
     assert((IOLINK_NEED_CRITICAL == 0) || (IOLINK_NEED_CRITICAL == 1));
-    assert((IOLINK_NEED_THREAD_LOCK == 0) || (IOLINK_NEED_THREAD_LOCK == 1));
 
     /* Every asynchronous profile needs a barrier; SINGLE collapses it. */
 #if IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_ISR
@@ -53,12 +52,6 @@ int main(void)
 #else
     assert(IOLINK_NEED_FENCE == 0);
     assert(IOLINK_NEED_CRITICAL == 0);
-#endif
-
-#if IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_RTOS
-    assert(IOLINK_NEED_THREAD_LOCK != 0);
-#else
-    assert(IOLINK_NEED_THREAD_LOCK == 0);
 #endif
 
     /* The portable barrier and the mutex wrappers compile in every profile. */

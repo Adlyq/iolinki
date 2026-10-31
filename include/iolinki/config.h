@@ -149,26 +149,33 @@
  * provide (see include/iolinki/port.h and docs/PORTING.md). It selects the
  * minimum set; it never adds an assumption the target cannot meet.
  *
+ * The stack has a single main-context caller: the profile selects how the data
+ * ISR relates to that caller, never how many tasks may call the API.
+ *
  *   SINGLE : no asynchronous context (host simulation, cooperative loop).
  *            No barrier and no critical section are required; the library
  *            does not reference the critical-section symbols at all.
  *   ISR    : one data ISR preempts one main context (the default dual-pump
- *            transport). Needs a naturally atomic publish word and at least a
- *            compiler barrier; the critical section is still required while
- *            the mailbox/ISDU staging paths use it.
- *   RTOS   : the main context is spread over tasks; additionally needs the
- *            application thread lock (iolink_device_config_t::lock/unlock).
- *   SMP    : the pump and the main context may run on different cores; needs
- *            a system-wide (SMP) barrier.
+ *            transport). Needs a naturally atomic publish word, at least a
+ *            compiler barrier and the critical section.
+ *   SMP    : the pump may run on a different core than the main loop; the
+ *            barrier must be system-wide.
  * ------------------------------------------------------------------------- */
 /** @brief No asynchronous context. */
 #define IOLINK_CONCURRENCY_SINGLE 0
 /** @brief One data ISR preempts one main context. */
 #define IOLINK_CONCURRENCY_ISR 1
-/** @brief Main context spread over RTOS tasks. */
-#define IOLINK_CONCURRENCY_RTOS 2
-/** @brief Separate cores for the pump and the main context. */
-#define IOLINK_CONCURRENCY_SMP 3
+/** @brief The pump may run on a different core than the main context. */
+#define IOLINK_CONCURRENCY_SMP 2
+/**
+ * @brief Removed tier, kept only so an old build flag fails loudly.
+ *
+ * The stack has a single main-context caller, so the RTOS tier no longer
+ * exists. The value stays out of range (and is not a valid profile) so a stale
+ * `-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_RTOS` is rejected instead of
+ * silently evaluating to 0 (= SINGLE) in the preprocessor.
+ */
+#define IOLINK_CONCURRENCY_RTOS 3
 
 #ifndef IOLINK_CONCURRENCY
 #define IOLINK_CONCURRENCY IOLINK_CONCURRENCY_ISR

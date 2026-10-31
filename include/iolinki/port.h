@@ -29,8 +29,12 @@
  *   store, and a publish-word load before the data it publishes.
  * - **Mutual exclusion** (`IOLINK_CRITICAL_ENTER/EXIT()`): excludes the data
  *   interrupt, nesting-safe, callable from the ISR, bounded duration.
- * - **Thread lock** (`iolink_device_config_t::lock/unlock`): serialises
- *   main-context threads only; never taken from the ISR.
+ *
+ * The stack has a single main-context caller, so there is no thread lock in
+ * the contract: the CPU-level critical section above is the only mutual
+ * exclusion the library takes. A port whose critical section also serialises
+ * tasks (e.g. an RTOS scheduler lock) does not change that: the API still has
+ * to be entered from one task.
  *
  * The concurrency profile (`IOLINK_CONCURRENCY`) selects which primitives are
  * required; the library derives `IOLINK_NEED_*` from it and a missing
@@ -128,10 +132,10 @@ int iolink_platform_critical_sections_ready(void);
  * Requirement derivation and validation
  * ------------------------------------------------------------------------- */
 
-/* The IOLINK_CONCURRENCY_SINGLE/_ISR/_RTOS/_SMP values come from config.h. */
+/* The IOLINK_CONCURRENCY_SINGLE/_ISR/_SMP values come from config.h. */
 #if (IOLINK_CONCURRENCY < IOLINK_CONCURRENCY_SINGLE) || \
     (IOLINK_CONCURRENCY > IOLINK_CONCURRENCY_SMP)
-#error "IOLINK_CONCURRENCY must be IOLINK_CONCURRENCY_SINGLE/ISR/RTOS/SMP"
+#error "IOLINK_CONCURRENCY must be IOLINK_CONCURRENCY_SINGLE/ISR/SMP (the RTOS tier was removed)"
 #endif
 
 #if (IOLINK_STATS_MODE != IOLINK_STATS_SHARED) && (IOLINK_STATS_MODE != IOLINK_STATS_SPLIT)
@@ -156,9 +160,6 @@ int iolink_platform_critical_sections_ready(void);
  * contexts incrementing the same field) but does not change this requirement.
  */
 #define IOLINK_NEED_CRITICAL (IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_ISR)
-
-/** @brief Non-zero when the application-supplied thread lock is required. */
-#define IOLINK_NEED_THREAD_LOCK (IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_RTOS)
 
 #if (IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_SMP) && (IOLINK_FENCE_LEVEL < IOLINK_FENCE_SMP)
 #error "IOLINK_CONCURRENCY=SMP requires IOLINK_FENCE_LEVEL=IOLINK_FENCE_SMP"
