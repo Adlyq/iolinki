@@ -418,10 +418,13 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
 
     if (flowctrl == IOLINK_FLOWCTRL_START) {
         isdu_transport_reset(ctx);
-        /* Alternate the framed-response buffer: the previous response stays
-         * readable by the data ISR until it adopts this one. */
-        ctx->resp_sel = (uint8_t) (ctx->resp_sel ^ 1U);
-        ctx->resp_buf = ctx->resp_store[ctx->resp_sel];
+        /* Alternate the framed-response buffer only when the previous response
+         * has been published; otherwise replace the unpublished build. The
+         * buffer the ISR may still be serving is therefore never written. */
+        if (ctx->resp_sel == ctx->resp_pub) {
+            ctx->resp_sel = (uint8_t) (ctx->resp_sel ^ 1U);
+            ctx->resp_buf = ctx->resp_store[ctx->resp_sel];
+        }
         ctx->flowctrl_seen = true;
         ctx->last_flowctrl = flowctrl;
         ctx->state = ISDU_STATE_HEADER_INITIAL;
