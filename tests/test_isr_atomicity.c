@@ -285,7 +285,8 @@ static void test_reply_staging_pokes_phy_outside_critical(void** state)
      * released. This pass has no other section: the mock PHY has no diagnostics
      * hooks, the ISDU FlowCTRL IDLE read only resets the transport, timing
      * enforcement is off (no t_CYCLE event), the DLL state does not change, and
-     * the mailbox consume takes no lock. */
+     * the mailbox consume takes no lock. The suite runs this test in the
+     * BYTE/BYTE configuration; FRAME granularities are compile-only. */
 #if IOLINK_NEED_CRITICAL
     const uint32_t crit_before = s_crit_enters;
 #endif

@@ -159,7 +159,11 @@ supplies the matching `*_IMPL()` macro.
 
 `iolink_critical_enter()` / `iolink_critical_exit()` must:
 
-1. exclude the data interrupt (an IRQ mask, an RTOS IRQ lock or a spinlock);
+1. exclude the data interrupt (an IRQ mask, an RTOS IRQ lock or a spinlock).
+   An RTOS scheduler lock only excludes interrupts at or below the RTOS
+   syscall priority (FreeRTOS `configMAX_SYSCALL_INTERRUPT_PRIORITY`): the data
+   interrupt must be configured at that level, or the port must mask it
+   directly, otherwise the section does not exclude the pump;
 2. be **nesting-safe**: the stack may enter while already inside one (a DLL
    state transition that resets the event queue), and a DLL state transition
    can itself be taken from the data ISR;

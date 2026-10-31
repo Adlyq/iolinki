@@ -27,7 +27,11 @@
 #include <string.h>
 #include <time.h>
 
-/* Platform Override for Critical Sections */
+/* Platform Override for Critical Sections.
+ * taskENTER_CRITICAL() masks interrupts up to configMAX_SYSCALL_INTERRUPT_PRIORITY,
+ * so the IO-Link data interrupt must be configured at that priority or lower
+ * (numerically >= configMAX_SYSCALL_INTERRUPT_PRIORITY) for this hook to
+ * exclude the pump; otherwise mask the interrupt directly here. */
 void iolink_critical_enter(void)
 {
     taskENTER_CRITICAL();

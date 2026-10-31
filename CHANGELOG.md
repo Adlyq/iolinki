@@ -59,7 +59,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   increment can no longer be lost. `SHARED` stays the default.
 - `iolink_dll_stats_t::isr_tx_dropped` exposes the dropped-reply counter that
   both contexts increment (main + ISR, summed in `SPLIT` mode), so a transport
-  that cannot transmit replies is observable from the public statistics.
+  that cannot transmit replies is observable from the public statistics. The
+  member is appended, so `sizeof(iolink_dll_stats_t)` changes (rebuild against
+  the new header; the out-pointer call itself is unchanged).
 - `tests/test_port_capabilities.c` exercises the derivation, the barrier and
   the publish-word helpers under every profile; `test_stats_split` covers both
   statistics modes; `test_isr_cutpoints` injects the ISR publish at every
