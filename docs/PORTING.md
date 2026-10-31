@@ -108,7 +108,11 @@ implements more than it uses. The contract lives in `include/iolinki/port.h`.
 | Atomic width `IOLINK_ATOMIC_UINT_T` (default `uint32_t`) | 8/16/32/64 bit | a naturally aligned value is read/written in one access (single-copy atomic); **no read-modify-write is assumed** |
 | Barrier `IOLINK_FENCE()` | `COMPILER` / `DEVICE` / `SMP` | data written before a publish-word store is visible before it; a publish-word load is ordered before the data it publishes |
 | Mutual exclusion `IOLINK_CRITICAL_ENTER/EXIT()` | none / IRQ mask / spinlock | mutual exclusion against the data interrupt; **nesting-safe**; **callable from the ISR**; bounded duration |
-| Thread lock `iolink_device_config_t::lock/unlock` | none / thread lock | serialises main-context threads only; never taken from the ISR |
+
+The stack has **one main-context caller**: there is no thread lock in the
+contract. A port whose critical section also serialises tasks (an RTOS
+scheduler lock) gains task exclusion for the short windows, but that does not
+make concurrent API calls supported.
 
 #### Profiles
 
@@ -124,11 +128,11 @@ Select one with `-DIOLINK_CONCURRENCY=...`:
 | :--- | :--- | :--- |
 | `IOLINK_CONCURRENCY_SINGLE` | host simulation, cooperative loop, one context | nothing (the barrier and the critical section collapse to no-ops) |
 | `IOLINK_CONCURRENCY_ISR` (default) | one data ISR preempts one main loop (the dual-pump transport) | atomic width ≥ 32 bit + `COMPILER` barrier + the critical section |
-| `IOLINK_CONCURRENCY_RTOS` | the main context runs as RTOS tasks | the above + `config.lock/unlock` (required: init returns `IOLINK_DEVICE_INIT_ERR_LOCK` when it is missing) |
 | `IOLINK_CONCURRENCY_SMP` | the pump and the main loop may run on different cores | atomic width + `SMP` barrier + the critical section |
 
-The stack derives `IOLINK_NEED_FENCE`, `IOLINK_NEED_CRITICAL` and
-`IOLINK_NEED_THREAD_LOCK` from the profile. A missing or invalid combination is
+The RTOS tier was removed: an RTOS build uses `ISR` (or `SMP` on multiple
+cores) and must still keep exactly one task calling the API. The stack derives
+`IOLINK_NEED_FENCE` and `IOLINK_NEED_CRITICAL` from the profile. A missing or invalid combination is
 a compile error with an actionable message, for example:
 
 ```

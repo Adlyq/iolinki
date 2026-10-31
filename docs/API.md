@@ -285,12 +285,12 @@ typedef enum {
     IOLINK_DEVICE_INIT_ERR_OD_WIDTH = -5,
     IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6,
     IOLINK_DEVICE_INIT_ERR_BAUDRATE = -7,
-    IOLINK_DEVICE_INIT_ERR_LOCK_PAIR = -8,
+    /* -8 was the lock-pair error; retired with the application thread lock. */
     IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -9,
     IOLINK_DEVICE_INIT_ERR_TIME = -10,      /* time_us is NULL */
     IOLINK_DEVICE_INIT_ERR_CRITICAL = -11,  /* weak critical-section default in use */
     IOLINK_DEVICE_INIT_ERR_STORAGE = -12,   /* storage NULL or read/write missing */
-    IOLINK_DEVICE_INIT_ERR_LOCK = -13,      /* RTOS profile without lock/unlock */
+    /* -13 was the RTOS lock requirement; retired with the RTOS tier. */
 } iolink_device_init_result_t;
 ```
 
@@ -346,6 +346,11 @@ The stack is not internally locked. Each context must be used from one thread
 at a time, and the main loop (`iolink_device_process`) and the data ISR
 (`iolink_device_process_isr`) must not run concurrently on the same context.
 `iolink_device_init()` verifies that the platform critical section is real. Multiple device instances are
-supported by using one `iolink_device_ctx_t` per instance; the optional
-`config.lock`/`config.unlock` callbacks guard shared reply staging and PD
-publication.
+supported by using one `iolink_device_ctx_t` per instance.
+
+There is exactly one main-context caller per context: the library does not take
+an application thread lock, and wrapping the entry points yourself is not
+supported either (the library owns the granularity of its critical sections).
+Any extra serialisation the application needs is its own business; if the stack
+ever grows thread-level locking, it will take a per-instance lock at the public
+entry points.

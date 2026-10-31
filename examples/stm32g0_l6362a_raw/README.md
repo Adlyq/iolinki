@@ -147,5 +147,6 @@ regression that drives the TX hooks from the main loop.
 5. Keep `iolink_device_process()` in the main loop and
    `iolink_device_process_isr()` in the USART2 handler only; the other handlers
    call `phy_l6362a_raw_request_pump()`.
-6. Provide a real `iolink_critical_enter/exit` (this file does) or set
-   `config.lock/unlock`: the library default critical section is a no-op.
+6. Provide a real `iolink_critical_enter/exit` (this file does): the library
+   default critical section is a no-op. The stack has a single main-context
+   caller and takes no application thread lock.

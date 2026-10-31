@@ -130,6 +130,9 @@
 - 分级异步原语契约（`include/iolinki/port.h`，`IOLINK_CONCURRENCY` 档位 +
   `IOLINK_NEED_*` 推导 + 屏障等级）与 `IOLINK_STATS_MODE` 分上下文统计；
   `platform.h` 变为兼容入口。
+- 并发模型定为“单主上下文调用者”：库不取应用线程锁，移除 `config.lock/unlock`
+  与 `IOLINK_CONCURRENCY_RTOS` 档；CPU 级 `iolink_critical_*` 与将来的
+  per-instance 线程锁是两层，互不替代。
 - 统一 NVM 存储后端 + 固定 persistent 区域布局（`feat(storage): unified NVM backend`）。
 - DS 可绑定参数集/访问器（与上游 DS 路线不同）。
 - virtual_master、STM32G0+L6362A raw PHY 示例、文档。

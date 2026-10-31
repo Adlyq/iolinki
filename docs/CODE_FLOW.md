@@ -193,7 +193,7 @@ flowchart TD
     I1 --> I2{"PHY 有 detect_wakeup?"}
     I2 -- 是 --> I3["set_mode(SIO)<br/>等待唤醒"]
     I2 -- 否 --> I4["set_mode(SDCI)<br/>直接接受 M-sequence"]
-    I3 --> J["绑定 lock/unlock、ISDU 依赖、state_cb"]
+    I3 --> J["绑定 ISDU 依赖、state_cb"]
     I4 --> J
     J --> K["params_bind_storage()<br/>读 NVM 参数记录"]
     K --> L["DS 已启用: storage 已在 init 校验非空"]
@@ -715,7 +715,6 @@ sequenceDiagram
 | `phy.stack_timer_start` | 帧结束 / Timer B | 授权主循环服务窗口；`stack_timer_stop` 当前无栈内调用点 |
 | `phy.detect_wakeup` | `iolink_dll_process()` | SIO 唤醒检测 |
 | `phy.get_voltage_mv` / `is_short_circuit` | `dll_poll_diagnostics()` | 旧版诊断，触发电压/短路事件 |
-| `config->lock/unlock` | PD 更新/读取、`dll_send()` 暂存 | 与 ISR/其他线程互斥；必须成对 |
 | `iolink_critical_enter/exit` | 事件引擎、PD 索引/长度、应答暂存等标量（经 `IOLINK_CRITICAL_ENTER/EXIT()`） | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
 | `on_state_change` | `device_state_cb()` | 当前状态（电平式；主上下文迁移立即投递，ISR 迁移合并） |
 | `on_startup` | 初始化末尾 + 进入 STARTUP | 初始化时显式调用一次 |
@@ -867,7 +866,7 @@ flowchart LR
 
 - `ctx->isdu`、`ctx->events`、`ctx->params`、`ctx->ds` 的主要状态由主循环修改。
 - 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不再需要关中断；`iolink_critical_enter/exit` 只包住标量与事件引擎的短操作（事件队列、PD-in 索引交换、`dll_send` 暂存、`set_pd_length`）；状态迁移不再需要临界区。
-- `config->lock/unlock` 优先用于 `dll_send()` 暂存和 PD-in 发布；如果未配置，则退回平台临界区。
+- 库不取线程锁：API 只有一个主上下文调用者；共享标量由平台临界区保护，数据交接无锁。
 - 平台默认临界区是 weak 空实现（`src/platform.c`）；`iolink_device_init()` 通过
   `iolink_platform_critical_sections_ready()` 探测并返回
   `IOLINK_DEVICE_INIT_ERR_CRITICAL`，因此本路径必须提供真实实现。
@@ -899,15 +898,15 @@ ISR 还允许调用以下只读/时序 helper：`iolink_dll_expected_req_len()`�
 ### 12.2 异步原语分级与最小依赖
 
 并发原语的契约集中在 `include/iolinki/port.h`，由编译期档位
-`IOLINK_CONCURRENCY` 推导出 `IOLINK_NEED_FENCE` / `IOLINK_NEED_CRITICAL` /
-`IOLINK_NEED_THREAD_LOCK`：
+`IOLINK_CONCURRENCY` 推导出 `IOLINK_NEED_FENCE` / `IOLINK_NEED_CRITICAL`：
 
 | 档位 | 场景 | 需要的能力 |
 | :--- | :--- | :--- |
 | `SINGLE` | host 仿真、协作式循环 | 无（屏障与临界区塌缩为空） |
 | `ISR`（默认） | 数据 ISR 抢占主循环（双泵） | 原子宽度 ≥32 位 + `COMPILER` 屏障 + 临界区 |
-| `RTOS` | 主上下文是多任务 | 上一档 + `config.lock/unlock` |
 | `SMP` | 泵与主循环在不同核 | 原子宽度 + `SMP` 屏障 + 临界区 |
+
+三个档位都假设**一个主上下文调用者**；档位只描述数据 ISR 与它的关系，不描述多任务。
 
 `src/` 只调用三个入口：`IOLINK_FENCE()`、`iolink_atomic_load/store()`、
 `IOLINK_CRITICAL_ENTER/EXIT()`。档位不需要临界区时宏展开为空，库因此

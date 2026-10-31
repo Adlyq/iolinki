@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (concurrency model)
+- The stack is now explicitly **single-main-caller**: the library no longer
+  takes an application thread lock. `iolink_device_config_t::lock/unlock`,
+  `iolink_device_lock_fn`/`unlock_fn`, the DLL context's lock fields and the
+  `IOLINK_DEVICE_INIT_ERR_LOCK_PAIR`/`_LOCK` codes are removed (the -8 and -13
+  values stay reserved). `dll_send()` stages the reply main-owned and publishes
+  it last behind a barrier, so only the legacy direct-send fallback excludes
+  the data interrupt; PD-in publishes and the event engine use the platform
+  critical section, and `pd_out` reads need no lock.
+- `IOLINK_CONCURRENCY_RTOS` is removed; an RTOS build uses `ISR` (or `SMP`
+  across cores). The removed name stays defined out of range so a stale build
+  flag is rejected instead of silently evaluating to `SINGLE`. `SMP` now has
+  the value 2.
+- The CPU-level `iolink_critical_*` and the (future) per-instance thread lock
+  are separate layers: if thread-level serialisation is ever needed, the
+  library will take a per-instance lock at the public entry points, and the
+  application must not wrap those entry points itself.
+
 ### Fixed (code-review follow-up)
 - The ISR no longer writes the 64-bit `fallback_deadline_ms`: a non-FALLBACK
   MasterCommand stages `fallback_clear_pending` and the main pump applies it.
@@ -20,17 +38,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   counted.
 - The framed ISDU response only alternates buffers after the previous response
   was published, so a new request can never overwrite the buffer the ISR reads.
-- `IOLINK_CONCURRENCY=RTOS` now requires `config.lock/unlock`
-  (`IOLINK_DEVICE_INIT_ERR_LOCK`).
 - Documentation: state-callback re-entrancy, buffer/slot counts, counter
   locking, FreeRTOS tick wrap and the bare-metal example's clock resolution.
 
 ### Added (concurrency primitives)
 - `include/iolinki/port.h` declares the graded asynchronous primitives and
   derives what a port must provide from the new concurrency profile
-  (`IOLINK_CONCURRENCY`: `SINGLE`/`ISR`/`RTOS`/`SMP`). The stack publishes
-  `IOLINK_NEED_FENCE`, `IOLINK_NEED_CRITICAL` and `IOLINK_NEED_THREAD_LOCK`, so
-  a port implements only the grades its profile requires. A `SINGLE` build does
+  (`IOLINK_CONCURRENCY`: `SINGLE`/`ISR`/`SMP`). The stack publishes
+  `IOLINK_NEED_FENCE` and `IOLINK_NEED_CRITICAL`, so a port implements only the
+  grades its profile requires. A `SINGLE` build does
   not reference `iolink_critical_*` at all; `tools/build_matrix.sh` proves it
   with `nm -u`.
 - `IOLINK_FENCE_LEVEL` grades the barrier (`COMPILER`/`DEVICE`/`SMP`); a port
@@ -111,9 +127,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added (build verification)
 - `tools/build_matrix.sh`: compiles every supported configuration (all ISR
   byte/frame combinations, minimal/tiny profiles, every feature toggle,
-  compatibility switches, bare-metal, plus the `SINGLE`, `RTOS` and `SMP`
-  concurrency profiles and `STATS_MODE=SPLIT`) and runs the unit suite for the
-  BYTE/BYTE ones. It also asserts that the `SINGLE` archive has no
+  compatibility switches, bare-metal, plus the `SINGLE` and `SMP` concurrency
+  profiles and `STATS_MODE=SPLIT`) and runs the unit suite for the BYTE/BYTE
+  ones. It also asserts that the `SINGLE` archive has no
   `iolink_critical_*` reference. Wired into CI as the delivery gate for
   compile-time changes.
 - `src/phy_virtual.c` now compiles in FRAME builds as an unusable stub instead
