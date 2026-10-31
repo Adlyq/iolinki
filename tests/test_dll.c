@@ -1498,7 +1498,7 @@ static void test_dll_receive_error_discards_partial_frame(void** state)
     mock_phy_feed_error();
     test_io_cycle(&dev.ctx);
     assert_int_equal(dev.ctx.dll.frame_index, 0);
-    assert_int_equal(dev.ctx.dll.framing_errors, 1);
+    assert_int_equal(IOLINK_STAT_TOTAL(&dev.ctx.dll, framing_errors), 1);
 
     uint8_t frame[2] = {0xA2U, 0};
     frame[1] = iolink_checksum6(frame, sizeof(frame));

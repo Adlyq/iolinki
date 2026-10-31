@@ -69,6 +69,11 @@ add_executable(test_ring test_ring.c)
 target_link_libraries(test_ring iolinki)
 add_test(NAME test_ring COMMAND test_ring)
 
+# Statistics counter sets (SHARED vs SPLIT), built under both modes.
+add_executable(test_stats_split test_stats_split.c)
+target_link_libraries(test_stats_split iolinki)
+add_test(NAME test_stats_split COMMAND test_stats_split)
+
 if(PkgConfig_FOUND)
     pkg_check_modules(CMOCKA QUIET cmocka)
 endif()

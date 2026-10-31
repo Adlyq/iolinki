@@ -42,7 +42,7 @@ void dll_isr_start_staged_tx(iolink_dll_ctx_t* ctx, uint8_t slot, uint8_t len)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     if (ctx->phy->tx_frame != NULL) {
         if (ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload[slot], len) != 0) {
-            ctx->isr_tx_dropped++;
+            IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
         }
     }
 #else
@@ -129,7 +129,7 @@ static bool dll_publish_isr_frame(iolink_dll_ctx_t* ctx, const uint8_t* f, uint8
                                   uint8_t eager)
 {
     if ((f == NULL) || (len > IOLINK_M_SEQ_MAX_LEN)) {
-        ctx->framing_errors++;
+        IOLINK_STAT_ISR(ctx, framing_errors)++;
         return false;
     }
     iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&ctx->isr_frame_ring);
@@ -378,7 +378,7 @@ static bool dll_isr_type0_read(iolink_dll_ctx_t* ctx, uint8_t ch, uint8_t addr)
        STARTUP; the next read is served as the startup probe. */
     if ((ctx->state == IOLINK_DLL_STATE_OPERATE) && (ch == IOLINK_MC_CHANNEL_PAGE) &&
         (ctx->m_seq_type != IOLINK_M_SEQ_TYPE_0)) {
-        ctx->framing_errors++;
+        IOLINK_STAT_ISR(ctx, framing_errors)++;
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
         dll_isr_note_activity(ctx);
         return true;
@@ -767,12 +767,12 @@ static inline void dll_isr_complete_frame(iolink_dll_ctx_t* ctx, const uint8_t* 
 static bool dll_isr_frame_len_ok(iolink_dll_ctx_t* ctx, const uint8_t* f, uint8_t len)
 {
     if ((len < 2U) || (len > IOLINK_M_SEQ_MAX_LEN)) {
-        ctx->framing_errors++;
+        IOLINK_STAT_ISR(ctx, framing_errors)++;
         return false;
     }
     const uint8_t expected_len = iolink_dll_expected_req_len(ctx, f[0]);
     if ((expected_len == 0U) || (len != expected_len)) {
-        ctx->framing_errors++;
+        IOLINK_STAT_ISR(ctx, framing_errors)++;
         return false;
     }
     return true;
@@ -836,7 +836,7 @@ static void dll_isr_rx_byte_gap(iolink_dll_ctx_t* ctx)
                                (ctx->isr_rx_cnt >= IOLINK_M_SEQ_HEADER_LEN) &&
                                (ctx->isr_rx_cnt < ctx->isr_rx_expect);
     if (incomplete_ms) {
-        ctx->framing_errors++;
+        IOLINK_STAT_ISR(ctx, framing_errors)++;
     }
     dll_isr_rx_byte_reset(ctx);
     /* Release the transceiver's receive engine unless a reply is in flight
@@ -920,7 +920,7 @@ static bool dll_isr_drain_rx_byte(iolink_dll_ctx_t* ctx)
     }
     if (ok < 0) {
         /* Transport error: discard the partial frame and count it. */
-        ctx->framing_errors++;
+        IOLINK_STAT_ISR(ctx, framing_errors)++;
         dll_isr_rx_byte_reset(ctx);
         return true;
     }
@@ -1023,7 +1023,7 @@ void iolink_dll_on_rx_timeout(iolink_dll_ctx_t* ctx)
         return;
     }
     ctx->isr_master_activity = 1U;
-    ctx->timeout_errors++;
+    IOLINK_STAT_ISR(ctx, timeout_errors)++;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
     ctx->isr_rx_cnt = 0U;
     ctx->isr_rx_expect = 0U;

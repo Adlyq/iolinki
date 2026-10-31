@@ -1865,8 +1865,8 @@ void iolink_dll_get_stats(const iolink_dll_ctx_t* ctx, iolink_dll_stats_t* out_s
 {
     if ((ctx == NULL) || (out_stats == NULL)) return;
     out_stats->crc_errors = ctx->crc_errors;
-    out_stats->timeout_errors = ctx->timeout_errors;
-    out_stats->framing_errors = ctx->framing_errors;
+    out_stats->timeout_errors = IOLINK_STAT_TOTAL(ctx, timeout_errors);
+    out_stats->framing_errors = IOLINK_STAT_TOTAL(ctx, framing_errors);
     out_stats->timing_errors = ctx->timing_errors;
     out_stats->t_ren_violations = ctx->t_ren_violations;
     out_stats->t_cycle_violations = ctx->t_cycle_violations;

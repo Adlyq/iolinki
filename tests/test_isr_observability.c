@@ -709,7 +709,8 @@ static int test_rx_timeout(void)
     }
 
     iolink_dll_on_rx_timeout(&dll);
-    if ((dll.timeout_errors == 0U) || (dll.isr_rx_cnt != 0U) || (timer_a_stops == 0U)) {
+    if ((IOLINK_STAT_TOTAL(&dll, timeout_errors) == 0U) || (dll.isr_rx_cnt != 0U) ||
+        (timer_a_stops == 0U)) {
         return 2;
     }
     return 0;
@@ -750,7 +751,7 @@ static int test_byte_gap_incomplete(void)
         const uint8_t one[1] = {IOLINK_MC_CHANNEL_PROCESS};
         feed_chk(one, sizeof(one));
         iolink_dll_process_isr(&dll);
-        if (dll.framing_errors != 0U) {
+        if (IOLINK_STAT_TOTAL(&dll, framing_errors) != 0U) {
             return 1; /* a short frame is not a framing error */
         }
         if ((dll.isr_rx_cnt != 0U) || (dll.isr_rx_expect != 0U)) {
@@ -774,7 +775,7 @@ static int test_byte_gap_incomplete(void)
                         sizeof(frame));
         feed_chk(frame, 2U); /* deliver the header, then the CHK gap */
         iolink_dll_process_isr(&dll);
-        if (dll.framing_errors != 1U) {
+        if (IOLINK_STAT_TOTAL(&dll, framing_errors) != 1U) {
             return 5;
         }
         if ((dll.isr_rx_cnt != 0U) || (dll.isr_rx_expect != 0U)) {

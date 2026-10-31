@@ -106,6 +106,33 @@ typedef enum
 #define IOLINK_TX_ISR_SLOT 2U
 
 /**
+ * @brief Counters the data ISR also updates.
+ *
+ * With `IOLINK_STATS_MODE=SPLIT` each context keeps its own copy, so an
+ * increment cannot be lost to a preemption between its load and its store; the
+ * public statistics sum both sets. With `SHARED` (the default) the ISR writes
+ * the same fields as the main pump and one update can be lost.
+ */
+typedef struct
+{
+    uint32_t framing_errors; /**< Frames rejected by the ISR framing engine */
+    uint32_t timeout_errors; /**< Timer A timeouts seen by the ISR */
+    uint32_t isr_tx_dropped; /**< Replies the ISR could not transmit */
+} iolink_dll_isr_stats_t;
+
+#if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
+/** @brief Counter slot for an increment performed in ISR context. */
+#define IOLINK_STAT_ISR(ctx, field) ((ctx)->isr_stat.field)
+/** @brief Counter value including the ISR-owned set (read-only). */
+#define IOLINK_STAT_TOTAL(ctx, field) ((ctx)->field + (ctx)->isr_stat.field)
+#else
+/** @brief Counter slot for an increment performed in ISR context. */
+#define IOLINK_STAT_ISR(ctx, field) ((ctx)->field)
+/** @brief Counter value including the ISR-owned set (read-only). */
+#define IOLINK_STAT_TOTAL(ctx, field) ((ctx)->field)
+#endif
+
+/**
  * @name ISDU read view packing
  *
  * The main pump publishes the framed-response view as one `IOLINK_ATOMIC_UINT_T`
@@ -233,11 +260,14 @@ typedef struct
     iolink_od_rec_t isr_od_slot[IOLINK_OD_SLOTS]; /**< Staged write ring storage */
     iolink_ring_t isr_od_ring;                    /**< Staged ISDU writes (ISR -> main) */
     uint32_t isr_od_overruns;                     /**< Staged writes dropped (ring full) */
-    volatile uint8_t stack_tick_pending;          /**< Timer B tick authorised a
-                                                       main-context service window */
-    volatile uint8_t in_isr;                      /**< ISR is running the pump */
-    volatile uint8_t isr_reentry_pending;         /**< A preempting pump invocation
-                                                       was deferred to the outer one */
+#if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
+    iolink_dll_isr_stats_t isr_stat; /**< ISR-owned counter set (SPLIT mode) */
+#endif
+    volatile uint8_t stack_tick_pending;  /**< Timer B tick authorised a
+                                               main-context service window */
+    volatile uint8_t in_isr;              /**< ISR is running the pump */
+    volatile uint8_t isr_reentry_pending; /**< A preempting pump invocation
+                                               was deferred to the outer one */
     volatile iolink_dll_state_t pending_states[IOLINK_PENDING_STATES]; /**< Deferred
                                                       transitions, in order */
     volatile uint8_t pending_state_head; /**< Deferred queue write index */

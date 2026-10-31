@@ -138,20 +138,21 @@ int iolink_platform_critical_sections_ready(void);
 #error "IOLINK_STATS_MODE must be IOLINK_STATS_SHARED or IOLINK_STATS_SPLIT"
 #endif
 
-#if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
-#error "IOLINK_STATS_MODE=SPLIT is not implemented yet; see docs/PORTING.md"
-#endif
-
 /** @brief Non-zero when a barrier is required between contexts. */
 #define IOLINK_NEED_FENCE (IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_ISR)
 
 /**
  * @brief Non-zero when the stack calls the platform critical section.
  *
- * The dual-pump transport still serialises the frame mailbox, the ISDU
- * response snapshot, the reply staging and the state queue with the platform
- * critical section. Until the lock-free containers replace them, every
- * asynchronous profile needs it; only `SINGLE` runs without it.
+ * The bulk handoffs are lock-free (frame mailbox and staged-write rings, the
+ * ISDU response publish word, the PD-in buffer lease and the reply staging
+ * slots). The platform critical section still protects the deferred state
+ * queue, the event engine, the PD-in index swap, the reply staging copy and
+ * the pending length pair, so every asynchronous profile needs it; only
+ * `SINGLE` runs without it.
+ *
+ * `IOLINK_STATS_MODE=SPLIT` removes the one remaining counter race (both
+ * contexts incrementing the same field) but does not change this requirement.
  */
 #define IOLINK_NEED_CRITICAL (IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_ISR)
 

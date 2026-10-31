@@ -177,10 +177,10 @@
 /**
  * @brief How the DLL statistics counters are shared between contexts.
  *
- * SHARED (default): one counter set, updated by both contexts under the
- * platform critical section. SPLIT: one counter set per context, summed when
- * the statistics are read, so no critical section is needed for them.
- * SPLIT is not implemented yet and is rejected at compile time.
+ * SHARED (default): one counter set, updated by both contexts. An increment
+ * that races a preemption can be lost (diagnostics only). SPLIT: one counter
+ * set per context, summed when the statistics are read, so no update is lost
+ * and no critical section is involved.
  */
 #define IOLINK_STATS_SHARED 0
 #define IOLINK_STATS_SPLIT 1
