@@ -334,9 +334,10 @@ static void state_cb(void* user, iolink_dll_state_t state)
     }
 }
 
-/* Two ISR-side transitions before the main window must both be delivered, in
- * order: a single deferred slot would overwrite the earlier one. */
-static void test_deferred_states_are_not_overwritten(void** state)
+/* Level-based notification: two ISR-side transitions before the main window
+ * are coalesced into the current state, and the callback never runs in the
+ * ISR. A second flush without a state change delivers nothing. */
+static void test_state_notification_is_level_based(void** state)
 {
     (void) state;
     uint8_t probe[2] = {(uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x02U), 0x00U};
@@ -371,10 +372,13 @@ static void test_deferred_states_are_not_overwritten(void** state)
 
     iolink_dll_flush_state_callbacks(&s_ctx);
 
-    assert_int_equal(s_state_count, 2U);
-    assert_int_equal(s_states[0], IOLINK_DLL_STATE_PREOPERATE);
-    assert_int_equal(s_states[1], IOLINK_DLL_STATE_ESTAB_COM);
+    assert_int_equal(s_state_count, 1U);
+    assert_int_equal(s_states[0], IOLINK_DLL_STATE_ESTAB_COM);
     assert_false(s_cb_in_isr);
+
+    /* No state change since the last delivery: nothing is reported twice. */
+    iolink_dll_flush_state_callbacks(&s_ctx);
+    assert_int_equal(s_state_count, 1U);
 }
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
@@ -425,7 +429,7 @@ int main(void)
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_reply_staging_pokes_phy_outside_critical),
         cmocka_unit_test(test_nested_pump_is_deferred),
-        cmocka_unit_test(test_deferred_states_are_not_overwritten),
+        cmocka_unit_test(test_state_notification_is_level_based),
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
         cmocka_unit_test(test_busy_tx_frame_keeps_frame_for_main),
 #endif

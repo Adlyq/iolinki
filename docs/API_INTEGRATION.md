@@ -283,7 +283,7 @@ ISR 中运行。
 | `on_preoperate`, `on_operate` | 进入对应状态。 |
 | `on_pd_input(data, len)` | 当 `IOLINK_APP_PD_INPUT_CALLBACK=1` 时，每个 OPERATE 周期调用；返回值作为 PD-valid 标志。 |
 | `on_pd_output(data, len)` | 每个 OPERATE 周期调用，携带最新的主站输出数据。 |
-| `on_state_change(state)` | 任意 DLL 状态变化，按转换顺序调用。 |
+| `on_state_change(state)` | 当前 DLL 状态（电平式）：状态变化时调用一次，主上下文迁移立即投递，ISR 期间的多次迁移合并为最终状态。 |
 | `on_master_lost`, `on_master_online` | 主站静默提示的边沿。 |
 
 `on_pd_output` 收到的是指向上下文内部的指针，不能保留。

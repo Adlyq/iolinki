@@ -28,6 +28,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   statistics modes; `test_isr_cutpoints` injects the ISR publish at every
   consumer step (peek/copy/release) and inside a main-pump pass.
 
+### Changed (state notification, P3c)
+- State-change notification is now **level-based** and the deferred transition
+  queue is gone: `dll_set_state()` only writes `ctx->state` (no critical
+  section), and `iolink_dll_flush_state_callbacks()` calls the hook once when
+  the current state differs from the last delivered one. Main-context
+  transitions are delivered immediately (a PREOPERATE -> ESTAB_COM sequence
+  inside one frame still reports both); transitions taken in the data ISR are
+  delivered by the next flush and are coalesced into the final state. The hook
+  never runs in interrupt context. Applications that need every intermediate
+  transition must sample `iolink_device_get_state()` themselves.
+
 ### Changed (ISR transport concurrency)
 - The cross-context handoffs are lock-free: the frame mailbox and the staged
   ISDU write segments use two-slot SPSC rings (`include/iolinki/ring.h`), the

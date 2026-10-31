@@ -44,11 +44,12 @@ typedef enum
 /**
  * @brief Optional hook invoked when the DLL state machine changes state.
  *
- * Fired from within iolink_dll_process() at the actual transition, so no
- * transient state is missed. A transition seen by the data ISR is queued and
- * delivered from the next main-context pump pass (in transition order), so the
- * callback never runs in interrupt context. Used by the core to drive
- * application lifecycle callbacks.
+ * Notification is level-based: the hook is called from
+ * iolink_dll_flush_state_callbacks() with the *current* state when it differs
+ * from the last state delivered. The callback therefore never runs in
+ * interrupt context, the final state is never missed, and intermediate states
+ * that were entered and left between two deliveries are coalesced into the
+ * later one. Used by the core to drive application lifecycle callbacks.
  */
 typedef void (*iolink_dll_state_cb_t)(void* user, iolink_dll_state_t state);
 
@@ -91,8 +92,6 @@ typedef enum
 #else
 #define IOLINK_PD_IN_BUFFERS 2U
 #endif
-/** Deferred state-transition queue depth (ISR pump -> main callbacks). */
-#define IOLINK_PENDING_STATES 4U
 /** Received-frame mailbox depth (data ISR -> main pump). A power of two; 2
  * slots absorb one frame while the main pump is still handling the previous
  * one, so a busy main window no longer drops the next request. */
@@ -263,15 +262,13 @@ typedef struct
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
     iolink_dll_isr_stats_t isr_stat; /**< ISR-owned counter set (SPLIT mode) */
 #endif
-    volatile uint8_t stack_tick_pending;  /**< Timer B tick authorised a
-                                               main-context service window */
-    volatile uint8_t in_isr;              /**< ISR is running the pump */
-    volatile uint8_t isr_reentry_pending; /**< A preempting pump invocation
-                                               was deferred to the outer one */
-    volatile iolink_dll_state_t pending_states[IOLINK_PENDING_STATES]; /**< Deferred
-                                                      transitions, in order */
-    volatile uint8_t pending_state_head; /**< Deferred queue write index */
-    volatile uint8_t pending_state_tail; /**< Deferred queue read index */
+    volatile uint8_t stack_tick_pending;    /**< Timer B tick authorised a
+                                                 main-context service window */
+    volatile uint8_t in_isr;                /**< ISR is running the pump */
+    volatile uint8_t isr_reentry_pending;   /**< A preempting pump invocation
+                                                 was deferred to the outer one */
+    iolink_dll_state_t last_notified_state; /**< State already delivered to
+                                                 state_cb (main context only) */
     /* Reply transmission, fed one octet per data request. The main pump
      * alternates between slots 0/1 so the in-flight TX-FRAME DMA buffer stays
      * stable while the next reply is prepared; slot 2 is reserved for replies
@@ -531,12 +528,18 @@ void iolink_dll_prepare_cyclic_reply(iolink_dll_ctx_t* ctx);
 void iolink_dll_process_isr(iolink_dll_ctx_t* ctx);
 
 /**
- * @brief Deliver state-change callbacks deferred from the data ISR, in order.
+ * @brief Deliver the current DLL state to the state-change hook.
  *
- * A transition seen by iolink_dll_process_isr() cannot call the application
- * callback in interrupt context, so it is queued. The main pump drains the
- * queue here; a burst of back-to-back frames therefore cannot overwrite an
- * earlier transition. Safe to call when the queue is empty.
+ * Notification is level-based: when the current state differs from the last
+ * one delivered, the hook is called once with the current state. The data ISR
+ * only changes the state, so this function is the single place where the
+ * application hook can run (never in interrupt context). The device layer
+ * calls it once per iolink_device_process(); iolink_dll_process() calls it at
+ * the end as well, and a bare DLL user may call it from the main loop.
+ *
+ * Two states entered and left between two calls are coalesced into the later
+ * one; the final state is never lost. Safe to call when the state has not
+ * changed (it returns immediately).
  * @param ctx DLL context
  */
 void iolink_dll_flush_state_callbacks(iolink_dll_ctx_t* ctx);

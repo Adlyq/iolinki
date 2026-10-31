@@ -50,36 +50,23 @@
  * State transitions and callbacks
  * ------------------------------------------------------------------------- */
 
-/** @brief Queue one state transition for the main-context callbacks. */
-static void dll_queue_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t state)
-{
-    const uint8_t next = (uint8_t) ((ctx->pending_state_head + 1U) % IOLINK_PENDING_STATES);
-    if (next == ctx->pending_state_tail) {
-        /* Queue full: drop the oldest so the newest transition is never lost. */
-        ctx->pending_state_tail =
-            (uint8_t) ((ctx->pending_state_tail + 1U) % IOLINK_PENDING_STATES);
-    }
-    ctx->pending_states[ctx->pending_state_head] = state;
-    ctx->pending_state_head = next;
-}
-
 /**
  * @brief Centralised state transition.
  *
- * Updates the state and notifies the optional state-change hook on an actual
- * change, so no transition is ever missed.
+ * Updates the protocol state immediately. When the transition happens in main
+ * context the application hook is notified right away (level check, no queue);
+ * a transition taken in the data ISR only sets the state and is delivered by
+ * the next main-context flush. Two ISR transitions before that flush are
+ * coalesced into the later state.
  */
 void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
 {
     if (ctx->state == new_state) {
         return;
     }
-    const bool defer = (ctx->in_isr != 0U);
-    if (!defer) {
-        /* Main context: make the transition and its queue entry atomic with
-         * respect to the data ISR, so callbacks are delivered in order. */
-        IOLINK_CRITICAL_ENTER();
-    }
+    /* Single aligned store: the data ISR may read the state at any time, and
+     * both contexts may transition it (the ISR fast path does so for t_A).
+     * The state-dependent bookkeeping below is main-owned/hint-only. */
     ctx->state = new_state;
     if (new_state == IOLINK_DLL_STATE_OPERATE) {
         /* Master-loss supervision is meaningful only inside OPERATE; the
@@ -90,39 +77,32 @@ void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
     }
     if (new_state == IOLINK_DLL_STATE_STARTUP) {
         /* A.6.4: queued events are discarded when communication is
-           interrupted or cancelled. */
+           interrupted or cancelled. iolink_events_reset() takes its own short
+           critical section, so no outer one is needed. */
 #if IOLINK_FEATURE_EVENTS
         iolink_events_reset(&ctx->events);
 #endif
     }
-    /* Every transition goes through the ordered queue. Application callbacks
-     * must not run in the data ISR, and a burst of back-to-back frames must not
-     * overwrite an earlier transition. */
-    if (ctx->state_cb != NULL) {
-        dll_queue_state(ctx, new_state);
-    }
-    if (!defer) {
-        IOLINK_CRITICAL_EXIT();
+    if (ctx->in_isr == 0U) {
+        /* Main context: deliver now, so a transition sequence that happens
+         * inside one frame dispatch is still reported state by state. */
         iolink_dll_flush_state_callbacks(ctx);
     }
 }
 
 void iolink_dll_flush_state_callbacks(iolink_dll_ctx_t* ctx)
 {
-    if (ctx == NULL) {
+    if ((ctx == NULL) || (ctx->state_cb == NULL)) {
         return;
     }
-    /* Snapshot the write index: a transition queued by the data ISR while the
-     * callbacks run belongs after this batch and is delivered on the next pass. */
-    const uint8_t end = ctx->pending_state_head;
-    while (ctx->pending_state_tail != end) {
-        const iolink_dll_state_t state = ctx->pending_states[ctx->pending_state_tail];
-        ctx->pending_state_tail =
-            (uint8_t) ((ctx->pending_state_tail + 1U) % IOLINK_PENDING_STATES);
-        if (ctx->state_cb != NULL) {
-            ctx->state_cb(ctx->state_cb_user, state);
-        }
+    /* Level-based notification: deliver the current state once. Never called
+     * from interrupt context, so the application hook stays out of the ISR. */
+    const iolink_dll_state_t state = ctx->state;
+    if (state == ctx->last_notified_state) {
+        return;
     }
+    ctx->last_notified_state = state;
+    ctx->state_cb(ctx->state_cb_user, state);
 }
 
 /* -------------------------------------------------------------------------
@@ -844,6 +824,7 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
         return;
     }
     dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
+    ctx->last_notified_state = IOLINK_DLL_STATE_STARTUP;
     ctx->phy = phy;
     ctx->enforce_timing = (IOLINK_TIMING_ENFORCE_DEFAULT != 0U);
     ctx->sio_fallback_threshold = 3U;
@@ -1682,12 +1663,9 @@ static void dll_consume_isr_mailbox(iolink_dll_ctx_t* ctx)
     dll_process_complete_frame(ctx);
 }
 
-void iolink_dll_process(iolink_dll_ctx_t* ctx)
+/** @brief Main-pump body; the public entry point delivers the state afterwards. */
+static void dll_process_body(iolink_dll_ctx_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->phy == NULL)) {
-        return;
-    }
-
     dll_take_isr_master_activity(ctx);
     dll_apply_isr_deadline_requests(ctx);
 
@@ -1729,6 +1707,17 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
 
     /* Undo a same-call recovery drop to COM1 (SDCI path reaches here). */
     dll_restore_operating_baudrate(ctx);
+}
+
+void iolink_dll_process(iolink_dll_ctx_t* ctx)
+{
+    if ((ctx == NULL) || (ctx->phy == NULL)) {
+        return;
+    }
+    dll_process_body(ctx);
+    /* Level-based application notification: the single place the state hook can
+     * run. Delivery does not depend on which path the body took. */
+    iolink_dll_flush_state_callbacks(ctx);
 }
 
 /* -------------------------------------------------------------------------
