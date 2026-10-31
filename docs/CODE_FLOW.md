@@ -932,10 +932,26 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `pending_states[]` | 主上下文 + ISR | 主上下文 | head/tail 环形 | flush 消费后推进 tail |
 | 计数器 | 两个上下文 | 读侧 | — | 共享自增，仍受临界区保护 |
 
-表中只剩“计数器共享自增”还依赖临界区（`IOLINK_STATS_MODE=SPLIT` 的
-分上下文计数尚未实现，见 `include/iolinki/port.h` 的编译期拒绝）。
-`pending_states[]` 的“主队列 + ISR 队列”拆分仍为可选项，涉及跨队列顺序
-语义，暂未实现。
+剩余临界区审计（每处都必须能归类，否则应在所有权表里补一行）：
+
+| 位置 | 内容 | 归类 |
+| :--- | :--- | :--- |
+| `dll_set_state()`（`dll.c`） | `state` + `pending_states[]` 入队（迁入 STARTUP 时含 `iolink_events_reset()`） | 状态+队列的复合不变式；P3c 未实现，见下 |
+| `dll_send()`（`dll.c`） | `isr_tx_payload` 暂存（≤66 B） | 主→ISR 应答移交；`request_service()` 已在锁外 |
+| `iolink_dll_set_pd_length()`（`dll.c`） | PD-in/PD-out 长度对 | 2 字节 RMW |
+| `device.c`（3 处） | `pd_in_active` 交换、`pd_*_len`、PD-out 读取 | 索引/长度标量 |
+| `events.c`（10 处） | 事件队列、pending 表、事件内存 | 事件引擎内部不变式；ISR 侧只读 flag/memory |
+| `isdu.c`（1 处） | DetailedDeviceStatus 的 pending 表快照 | ISR 侧只读该表相关字段，快照保证一致 |
+
+计数器在 `IOLINK_STATS_MODE=SHARED`（默认）下由两个上下文写同一组字段，
+可能丢一次更新（仅影响诊断）；`SPLIT` 为 ISR 增加一组独立计数
+（`isr_stat`），`iolink_dll_get_stats()` 求和，因此不再丢更新。两种模式下
+计数器都不需要临界区。
+
+`pending_states[]` 的“主队列 + ISR 队列”拆分（P3c）仍为可选项：现状是
+单队列 + 主上下文就地冲刷，回调顺序等于真实发生顺序；拆开后需要定义
+“主上下文迁移”与“ISR 迁移”之间的全序（时间戳归并、共享序号或声明
+best-effort），涉及 API 契约与 RAM，暂未实现。
 
 ---
 
@@ -947,7 +963,7 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `IOLINK_ISR_TX_MODE` | `TX BYTE` 或 `TX FRAME` |
 | `IOLINK_CONCURRENCY` | `SINGLE`/`ISR`/`RTOS`/`SMP`；决定 `IOLINK_NEED_*` 与是否需要临界区 |
 | `IOLINK_FENCE_LEVEL` | `COMPILER`/`DEVICE`/`SMP`；port 声明的屏障等级，错配编译期报错 |
-| `IOLINK_STATS_MODE` | `SHARED`（默认）/`SPLIT`（尚未实现，编译期拒绝） |
+| `IOLINK_STATS_MODE` | `SHARED`（默认，共享计数）/`SPLIT`（分上下文计数，读取时求和） |
 | `IOLINK_PHY_FEATURE_ISR_TX_ONLY` | 1=必须有 `request_service()`，否则计 `isr_tx_dropped` |
 | `IOLINK_APP_PD_INPUT_CALLBACK` | 1=用 `on_pd_input()`，禁用 `iolink_device_pd_input_update()` |
 | `IOLINK_FEATURE_DATA_STORAGE` | 是否编译 DS 引擎与 ISDU 0x0003 |

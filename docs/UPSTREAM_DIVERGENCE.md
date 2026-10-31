@@ -128,7 +128,8 @@
 
 - ISR 双泵 transport（`feat(dll): shared transmit seam + opt-in ISR two-pump` 系列，`src/dll.c`、`phy.h`、`dll.h`）。
 - 分级异步原语契约（`include/iolinki/port.h`，`IOLINK_CONCURRENCY` 档位 +
-  `IOLINK_NEED_*` 推导 + 屏障等级）；`platform.h` 变为兼容入口。
+  `IOLINK_NEED_*` 推导 + 屏障等级）与 `IOLINK_STATS_MODE` 分上下文统计；
+  `platform.h` 变为兼容入口。
 - 统一 NVM 存储后端 + 固定 persistent 区域布局（`feat(storage): unified NVM backend`）。
 - DS 可绑定参数集/访问器（与上游 DS 路线不同）。
 - virtual_master、STM32G0+L6362A raw PHY 示例、文档。

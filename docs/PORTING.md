@@ -223,6 +223,35 @@ that drives the pump from a signal handler.
 - `./check_quality.sh` and the matrix are the delivery gate for any change that
   touches these switches.
 
+### 2.2 Statistics counters
+
+`IOLINK_STATS_MODE` selects how the DLL counters are shared between the two
+contexts:
+
+| Mode | Behaviour | Cost |
+| :--- | :--- | :--- |
+| `SHARED` (default) | one counter set, both contexts increment it; an increment that is preempted between its load and its store can be lost (diagnostics only) | none |
+| `SPLIT` | the ISR keeps its own copy (`ctx->isr_stat`), `iolink_dll_get_stats()` returns the sum; no update is lost | a few bytes of RAM |
+
+Neither mode takes a critical section for the counters. `SPLIT` is verified by
+`tests/test_stats_split.c` and by the `stats_split` matrix configuration, which
+runs the whole suite with the split counters.
+
+### 2.3 Measuring the interrupt-off window
+
+The critical-section contract is a bound, so measure it on the target instead
+of reading the code:
+
+- toggle a spare GPIO inside `iolink_critical_enter()`/`iolink_critical_exit()`
+  and capture the widest pulse with a scope or logic analyser;
+- or read `DWT->CYCCNT` on entry and keep the maximum delta in a variable the
+  application prints;
+- or use the trace unit (ETM/ITM) when the board has one.
+
+Budget: the data interrupt must start the reply within t_A, about 43 us at
+COM3 (one bit ~ 4.3 us). Keep the worst case well below that, and re-measure
+after adding a call inside the section.
+
 ### 3. Persistent Storage (Required with Data Storage)
 
 When `IOLINK_FEATURE_DATA_STORAGE` is 1, `iolink_device_config_t::storage` is
