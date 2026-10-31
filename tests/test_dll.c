@@ -940,7 +940,8 @@ static void test_dll_operate_type0_read_resets(void** state)
 
     iolink_dll_stats_t after;
     iolink_device_get_dll_stats(&dev.ctx, &after);
-    assert_int_equal(after.framing_errors, before.framing_errors + 1U);
+    /* A valid Type-0 reset request is not a framing error. */
+    assert_int_equal(after.framing_errors, before.framing_errors);
 
     /* Step b: the repeated TYPE_0 read is the startup probe and is answered. */
     feed_type0_page_read(0x02U);

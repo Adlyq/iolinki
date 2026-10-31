@@ -369,6 +369,10 @@ static bool dll_isr_type0_transition(iolink_dll_ctx_t* ctx, const uint8_t* frame
         (frame[0] == IOLINK_MC_TRANSITION_COMMAND)) {
         dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
         ctx->fallback_count = 0U;
+        /* No response to the transition command: close the t_A window. */
+        if (ctx->phy->response_timer_stop != NULL) {
+            ctx->phy->response_timer_stop(ctx->phy->user);
+        }
         if (ctx->phy->stack_timer_start != NULL) {
             ctx->phy->stack_timer_start(ctx->phy->user);
         }
@@ -387,7 +391,10 @@ static bool dll_isr_type0_read(iolink_dll_ctx_t* ctx, uint8_t ch, uint8_t addr)
        STARTUP; the next read is served as the startup probe. */
     if ((ctx->state == IOLINK_DLL_STATE_OPERATE) && (ch == IOLINK_MC_CHANNEL_PAGE) &&
         (ctx->m_seq_type != IOLINK_M_SEQ_TYPE_0)) {
-        IOLINK_STAT_ISR(ctx, framing_errors)++;
+        /* Deliberately unanswered (Tables 57/67): close the t_A window. */
+        if (ctx->phy->response_timer_stop != NULL) {
+            ctx->phy->response_timer_stop(ctx->phy->user);
+        }
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
         dll_isr_note_activity(ctx);
         return true;
@@ -773,6 +780,15 @@ static inline void dll_isr_complete_frame(iolink_dll_ctx_t* ctx, const uint8_t* 
             replied = 1U;
         }
     }
+    if ((allowed != 0U) && (replied == 0U)) {
+        /* The ISR will not answer this frame (the main pump owns it, or the
+         * exchange is deliberately unanswered): a 13-bit-time watchdog would
+         * always expire across the main context, so close it here instead of
+         * counting a timeout for a reply that is still coming. */
+        if (ctx->phy->response_timer_stop != NULL) {
+            ctx->phy->response_timer_stop(ctx->phy->user);
+        }
+    }
     /* Publish even when the eager validation failed: the main pump owns the
      * error/fallback accounting for an invalid frame. */
     (void) dll_publish_isr_frame(ctx, f, len, replied);
@@ -786,7 +802,24 @@ static bool dll_isr_frame_len_ok(iolink_dll_ctx_t* ctx, const uint8_t* f, uint8_
         IOLINK_STAT_ISR(ctx, framing_errors)++;
         return false;
     }
-    const uint8_t expected_len = iolink_dll_expected_req_len(ctx, f[0]);
+    /* A Type-0 M-sequence never carries process data (an OD write carries
+     * exactly one OD octet, Figure A.5), so its length does not follow the
+     * OPERATE layout. Mirrors dll_isr_rx_byte_derive_expect(); without this a
+     * Type-0 page read in OPERATE (the reset request) is measured against the
+     * configured PD length, counted as a framing error and dropped instead of
+     * resetting the device. */
+    uint8_t expected_len;
+    if ((f[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0) {
+        const bool write = ((f[0] & IOLINK_MC_RW_MASK) == 0U);
+        const uint8_t ch = (uint8_t) (f[0] & IOLINK_MC_COMM_CHANNEL_MASK);
+        const bool od_write = write && ((ch == IOLINK_MC_CHANNEL_PAGE) ||
+                                        (ch == IOLINK_MC_CHANNEL_DIAGNOSIS) ||
+                                        (ch == IOLINK_MC_CHANNEL_ISDU));
+        expected_len = (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + (od_write ? 1U : 0U));
+    }
+    else {
+        expected_len = iolink_dll_expected_req_len(ctx, f[0]);
+    }
     if ((expected_len == 0U) || (len != expected_len)) {
         IOLINK_STAT_ISR(ctx, framing_errors)++;
         return false;

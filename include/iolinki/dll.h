@@ -360,7 +360,8 @@ typedef struct
 
     /* Error Counters & Statistics */
     uint32_t crc_errors;             /**< Cumulative CRC error count */
-    uint32_t timeout_errors;         /**< Cumulative timeout count */
+    uint32_t timeout_errors;         /**< Cumulative t_A timeout count */
+    uint32_t idle_timeouts;          /**< 1 s idle-link diagnostics (master paused) */
     uint32_t framing_errors;         /**< Cumulative framing error count */
     uint32_t timing_errors;          /**< Cumulative timing violations */
     uint32_t t_ren_violations;       /**< t_ren violations */
@@ -461,6 +462,7 @@ typedef struct
     uint32_t overtemp_faults;    /**< Cumulative over-temperature fault count */
     uint32_t short_circuits;     /**< Cumulative short circuit count */
     uint32_t isr_tx_dropped;     /**< Replies the transport could not transmit (main and ISR) */
+    uint32_t idle_timeouts;      /**< 1 s idle-link diagnostics (not a t_A timeout) */
 } iolink_dll_stats_t;
 
 /**

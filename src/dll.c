@@ -1481,7 +1481,9 @@ static void dll_update_master_lost(iolink_dll_ctx_t* ctx, uint32_t now_ms)
 static void dll_check_idle_timeout(iolink_dll_ctx_t* ctx, uint32_t now_ms)
 {
     if ((ctx->last_activity_ms != 0U) && (now_ms - ctx->last_activity_ms > 1000U)) {
-        ctx->timeout_errors++;
+        /* A silent link is not a response-time violation: count it separately so
+         * timeout_errors stays a genuine t_A metric. */
+        ctx->idle_timeouts++;
         ctx->last_activity_ms = now_ms;
     }
 }
@@ -1858,6 +1860,7 @@ void iolink_dll_get_stats(const iolink_dll_ctx_t* ctx, iolink_dll_stats_t* out_s
     if ((ctx == NULL) || (out_stats == NULL)) return;
     out_stats->crc_errors = ctx->crc_errors;
     out_stats->timeout_errors = IOLINK_STAT_TOTAL(ctx, timeout_errors);
+    out_stats->idle_timeouts = ctx->idle_timeouts;
     out_stats->framing_errors = IOLINK_STAT_TOTAL(ctx, framing_errors);
     out_stats->timing_errors = ctx->timing_errors;
     out_stats->t_ren_violations = ctx->t_ren_violations;
