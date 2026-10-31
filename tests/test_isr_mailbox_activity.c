@@ -11,6 +11,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 
 #include "iolinki/crc.h"
 #include "iolinki/dll.h"
@@ -33,6 +34,20 @@ static uint64_t test_time_us(void* user)
     (void) user;
     return now_us;
 }
+
+/** @brief Publish one request into the mailbox ring (the ISR does this). */
+static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len)
+{
+    iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&ctx->isr_frame_ring);
+    if (rec == NULL) {
+        return;
+    }
+    rec->len = len;
+    rec->eager = 0U;
+    (void) memcpy(rec->data, frame, len);
+    iolink_ring_publish(&ctx->isr_frame_ring);
+}
+
 
 /* A valid Type-0 request: MC + CKT carrying the A.1.6 checksum. */
 static void make_type0_frame(uint8_t mc, uint8_t frame[2])
@@ -61,9 +76,7 @@ int main(void)
     for (unsigned i = 0U; i < 3U; i++) {
         /* 600 ms between served frames; >1 s accumulates over the loop. */
         now_us += 600000U;
-        ctx.isr_frame_ptr = frame;
-        ctx.isr_frame_len = (uint8_t) sizeof(frame);
-        ctx.isr_frame_ready = 1U;
+        push_mailbox(&ctx, frame, (uint8_t) sizeof(frame));
         iolink_dll_process(&ctx);
 
         /* The mailbox frame is live traffic: it must not trip the idle timer.

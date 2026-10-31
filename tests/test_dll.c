@@ -1613,11 +1613,13 @@ static void test_dll_main_pump_type1_2_reply(void** state)
     dev.ctx.dll.pd_in[dev.ctx.dll.pd_in_active][dev.ctx.dll.od_width] = 0xAAU;
     dev.ctx.dll.pd_in[dev.ctx.dll.pd_in_active][dev.ctx.dll.od_width + 1U] = 0x55U;
 
-    (void) memcpy(dev.ctx.dll.isr_frame_buf, frame, sizeof(frame));
-    dev.ctx.dll.isr_frame_ptr = dev.ctx.dll.isr_frame_buf;
-    dev.ctx.dll.isr_frame_len = (uint8_t) sizeof(frame);
-    dev.ctx.dll.isr_eager_replied = 0U; /* no ISR answer: the main pump must reply */
-    dev.ctx.dll.isr_frame_ready = 1U;
+    /* Publish the request into the mailbox ring (what the data ISR does). */
+    iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&dev.ctx.dll.isr_frame_ring);
+    assert_non_null(rec);
+    rec->len = (uint8_t) sizeof(frame);
+    rec->eager = 0U; /* no ISR answer: the main pump must reply */
+    (void) memcpy(rec->data, frame, sizeof(frame));
+    iolink_ring_publish(&dev.ctx.dll.isr_frame_ring);
 
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 5); /* OD 2 + PD-in 2 + CKS */

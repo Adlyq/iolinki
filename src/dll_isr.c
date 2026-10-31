@@ -120,29 +120,29 @@ static bool dll_isr_reply_allowed_acc(const iolink_dll_ctx_t* ctx, const uint8_t
 }
 #endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
 
-#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
-/* Copy a completed RX frame into the mailbox for the main pump. Called from the
- * ISR; drops the frame (returns false) if the previous one has not been
- * consumed yet. @p f is the assembled frame (isr_rx_buf for the BYTE path). */
-static bool dll_publish_isr_frame(iolink_dll_ctx_t* ctx, const uint8_t* f, uint8_t len)
+/* Copy a completed request into the mailbox ring for the main pump. Called
+ * from the ISR; returns false (and counts a drop) when the ring is full. The
+ * octets are copied before the publish, so the PHY may reuse its receive
+ * buffer as soon as the ISR returns. @p eager records whether this ISR already
+ * transmitted the reply (the main pump must then stay silent). */
+static bool dll_publish_isr_frame(iolink_dll_ctx_t* ctx, const uint8_t* f, uint8_t len,
+                                  uint8_t eager)
 {
-    if (ctx->isr_frame_ready != 0U) {
-        ctx->isr_mailbox_drops++;
-        return false;
-    }
-    if ((f == NULL) || (len > sizeof(ctx->isr_frame_buf))) {
+    if ((f == NULL) || (len > IOLINK_M_SEQ_MAX_LEN)) {
         ctx->framing_errors++;
         return false;
     }
-    for (uint8_t i = 0U; i < len; i++) {
-        ctx->isr_frame_buf[i] = f[i];
+    iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&ctx->isr_frame_ring);
+    if (rec == NULL) {
+        ctx->isr_mailbox_drops++;
+        return false;
     }
-    ctx->isr_frame_len = len;
-    ctx->isr_frame_ptr = ctx->isr_frame_buf; /* RX BYTE: buffer holds the frame */
-    ctx->isr_frame_ready = 1U;               /* publish last */
+    rec->len = len;
+    rec->eager = eager;
+    (void) memcpy(rec->data, f, len);
+    iolink_ring_publish(&ctx->isr_frame_ring); /* publish last */
     return true;
 }
-#endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 /* Send one step of the active reply: the next payload octet, then the computed
@@ -626,12 +626,12 @@ static bool dll_isr_start_reply_byte(iolink_dll_ctx_t* ctx, uint8_t* base, uint1
  * octets are sent (one per transceiver request). TX FRAME: the payload and its
  * CKS are assembled in the staging buffer and handed over in one call. A Type-0
  * request has no pre-staged variant; the main pump answers it. */
-static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx)
+static bool dll_isr_start_reply(iolink_dll_ctx_t* ctx, const uint8_t* frame)
 {
-    if ((ctx->isr_frame_ptr == NULL) || !dll_phy_has_tx(ctx)) {
+    if ((frame == NULL) || !dll_phy_has_tx(ctx)) {
         return false;
     }
-    const uint8_t first = ctx->isr_frame_ptr[0];
+    const uint8_t first = frame[0];
     if (first == IOLINK_MC_TRANSITION_COMMAND) {
         return false; /* invalid in OPERATE; the main pump handles it */
     }
@@ -703,10 +703,9 @@ static bool dll_isr_wants_eager(const iolink_dll_ctx_t* ctx, const uint8_t* f)
  * @brief Shared frame-complete path for both RX granularities.
  *
  * Consumes an ISDU write, runs the Type-0 fast path and decides the eager
- * reply. The publish/reply ordering is the only mode-specific part: RX BYTE
- * starts the reply before the mailbox copy so the first reply octet never waits
- * for the publish and a full mailbox cannot suppress it; RX FRAME publishes the
- * zero-copy pointer first and stabilises the mailbox after the reply window.
+ * reply. The reply is started before the mailbox copy so the first reply octet
+ * never waits for the publish (t_A), and the record then carries the reply flag
+ * with the octets.
  */
 static inline void dll_isr_complete_frame(iolink_dll_ctx_t* ctx, const uint8_t* f, uint8_t len,
                                           bool allowed)
@@ -726,39 +725,21 @@ static inline void dll_isr_complete_frame(iolink_dll_ctx_t* ctx, const uint8_t* 
     }
 
     const bool eager = dll_isr_wants_eager(ctx, f);
-    ctx->isr_eager_replied = 0U;
     if (eager && !allowed) {
         ctx->isr_eager_rejects++; /* main pump validates/falls back */
     }
-#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
     /* Start the eager reply BEFORE the mailbox copy: the first reply octet must
      * not wait for the publish, and a full mailbox must not suppress the reply.
      * The payload is built synchronously from the header and pd_in. */
+    uint8_t replied = 0U;
     if (eager && allowed) {
-        ctx->isr_frame_ptr = f;
-        ctx->isr_frame_len = len;
-        if (dll_isr_start_reply(ctx)) {
-            ctx->isr_eager_replied = 1U;
+        if (dll_isr_start_reply(ctx, f)) {
+            replied = 1U;
         }
     }
     /* Publish even when the eager validation failed: the main pump owns the
      * error/fallback accounting for an invalid frame. */
-    (void) dll_publish_isr_frame(ctx, f, len);
-#else
-    ctx->isr_frame_len = len;
-    ctx->isr_frame_ptr = f;    /* PHY buffer, valid during this ISR */
-    ctx->isr_frame_ready = 1U; /* publish last */
-    if (eager && allowed) {
-        if (dll_isr_start_reply(ctx)) {
-            ctx->isr_eager_replied = 1U;
-        }
-    }
-    /* Stabilise the frame for the main pump after the reply window has closed:
-     * the PHY's RX DMA ring may wrap while the main copies, and the eager reply
-     * must not pay for this in t_A. */
-    (void) memcpy(ctx->isr_frame_buf, f, len);
-    ctx->isr_frame_ptr = ctx->isr_frame_buf;
-#endif
+    (void) dll_publish_isr_frame(ctx, f, len, replied);
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
@@ -780,9 +761,9 @@ static bool dll_isr_frame_len_ok(iolink_dll_ctx_t* ctx, const uint8_t* f, uint8_
 /** @brief RX FRAME: take one PHY-delivered frame and hand it to the shared tail. */
 static void dll_isr_drain_rx_frame(iolink_dll_ctx_t* ctx)
 {
-    /* Do not call rx_frame() while the mailbox still holds the previous
-     * zero-copy frame: the PHY may reuse its buffer on the next call. */
-    if (ctx->isr_frame_ready != 0U) {
+    /* Do not call rx_frame() while the mailbox cannot take the frame: the PHY
+     * may reuse its receive buffer on the next call. */
+    if (iolink_ring_count(&ctx->isr_frame_ring) >= (uint32_t) IOLINK_MBX_SLOTS) {
         return;
     }
     uint8_t st = 0U;

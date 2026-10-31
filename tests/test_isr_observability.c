@@ -255,7 +255,7 @@ static int test_type0_isdu_read_fast_path(void)
     if ((tx_n != 2U) || (tx_q[0] != 0x11U)) {
         return 2;
     }
-    if (dll.isr_frame_ready != 0U) {
+    if (!iolink_ring_is_empty(&dll.isr_frame_ring)) {
         return 3; /* fast path must not publish */
     }
     return 0;
@@ -451,6 +451,19 @@ static int test_type0_isdu_write_fast_path(void)
     return 0;
 }
 
+/** @brief Publish a frame into the mailbox ring (what the data ISR does). */
+static void push_mailbox(iolink_dll_ctx_t* dll, const uint8_t* frame, uint8_t len)
+{
+    iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&dll->isr_frame_ring);
+    if (rec == NULL) {
+        return;
+    }
+    rec->len = len;
+    rec->eager = 0U;
+    (void) memcpy(rec->data, frame, len);
+    iolink_ring_publish(&dll->isr_frame_ring);
+}
+
 /* Mailbox already holds a frame: a new eager frame must be counted as dropped. */
 static int test_mailbox_drop(void)
 {
@@ -460,7 +473,9 @@ static int test_mailbox_drop(void)
     uint8_t frame[2];
     make_type2_process_read(frame, sizeof(frame));
 
-    dll.isr_frame_ready = 1U; /* previous frame not consumed yet */
+    /* Fill both slots: the previous frames are not consumed yet. */
+    push_mailbox(&dll, frame, (uint8_t) sizeof(frame));
+    push_mailbox(&dll, frame, (uint8_t) sizeof(frame));
     feed(frame, sizeof(frame));
     iolink_dll_process_isr(&dll);
     while (dll.isr_tx_active != 0U) {
@@ -497,7 +512,7 @@ static int test_eager_reject(void)
     if (tx_n != 0U) {
         return 2; /* no eager reply for a corrupt frame */
     }
-    if (dll.isr_frame_ready != 1U) {
+    if (iolink_ring_count(&dll.isr_frame_ring) != 1U) {
         return 3; /* published so the main pump can validate/fall back */
     }
     return 0;
@@ -521,7 +536,9 @@ static int test_valid_eager(void)
     if ((dll.isr_mailbox_drops != 0U) || (dll.isr_eager_rejects != 0U)) {
         return 1;
     }
-    if ((dll.isr_frame_ready != 1U) || (dll.isr_eager_replied != 1U)) {
+    const iolink_frame_rec_t* rec =
+        (const iolink_frame_rec_t*) iolink_ring_peek(&dll.isr_frame_ring);
+    if ((iolink_ring_count(&dll.isr_frame_ring) != 1U) || (rec == NULL) || (rec->eager != 1U)) {
         return 2;
     }
     /* process READ reply: OD placeholder + CKS. */
@@ -549,7 +566,7 @@ static int test_isdu_write_bad_crc_not_consumed(void)
     if (dll.isdu.req_idx != 0U) {
         return 1;
     }
-    if ((dll.isr_eager_rejects != 1U) || (dll.isr_frame_ready != 0U)) {
+    if ((dll.isr_eager_rejects != 1U) || !iolink_ring_is_empty(&dll.isr_frame_ring)) {
         return 2;
     }
     return 0;
@@ -750,7 +767,7 @@ static int test_byte_gap_incomplete(void)
         if ((dll.isr_rx_cnt != 0U) || (dll.isr_rx_expect != 0U)) {
             return 2;
         }
-        if (dll.isr_frame_ready != 0U) {
+        if (!iolink_ring_is_empty(&dll.isr_frame_ring)) {
             return 3;
         }
         if (tx_done_calls != 1U) {
@@ -774,7 +791,7 @@ static int test_byte_gap_incomplete(void)
         if ((dll.isr_rx_cnt != 0U) || (dll.isr_rx_expect != 0U)) {
             return 6;
         }
-        if (dll.isr_frame_ready != 0U) {
+        if (!iolink_ring_is_empty(&dll.isr_frame_ring)) {
             return 7; /* never published for the main pump */
         }
         if (dll.isr_eager_rejects != 0U) {

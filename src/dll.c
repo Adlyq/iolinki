@@ -359,8 +359,10 @@ static bool dll_drain_rx(iolink_dll_ctx_t* ctx)
     }
     /* The ISR pump fills the mailbox; draining it discards a frame that arrived
      * while the t_pd guard window was active. */
-    if (ctx->isr_frame_ready != 0U) {
-        ctx->isr_frame_ready = 0U;
+    if (!iolink_ring_is_empty(&ctx->isr_frame_ring)) {
+        while (iolink_ring_peek(&ctx->isr_frame_ring) != NULL) {
+            iolink_ring_release(&ctx->isr_frame_ring);
+        }
         return true;
     }
     return false;
@@ -863,6 +865,10 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     ctx->pd_out_len_max = ctx->pd_out_len;
     ctx->pd_valid = true;
     ctx->pd_in_captured = 0xFFU; /* no reply in flight */
+
+    /* Frame mailbox: the ISR publishes into the ring, the main pump consumes. */
+    iolink_ring_init(&ctx->isr_frame_ring, (uint8_t*) ctx->isr_frame_slot, IOLINK_MBX_SLOTS,
+                     (uint8_t) sizeof(iolink_frame_rec_t));
 
     ctx->baudrate = IOLINK_BAUDRATE_COM2;
     if (ctx->phy->set_baudrate != NULL) {
@@ -1683,30 +1689,32 @@ static bool dll_wakeup_window_active(iolink_dll_ctx_t* ctx)
 /**
  * @brief Move an ISR-published frame into the main context and dispatch it.
  *
- * Copy the mailbox and snapshot the eager flag under a short critical section,
- * then run the validation/dispatch unlocked. ctx->isdu / ctx->events are either
- * main-owned or take their own short critical section.
+ * The frame arrives through the SPSC mailbox ring: copy the oldest record,
+ * release its slot, then run the validation/dispatch. No critical section is
+ * needed (the ISR never writes the slot the consumer is reading), and the
+ * record carries its own length and eager flag.
  */
 static void dll_consume_isr_mailbox(iolink_dll_ctx_t* ctx)
 {
-    if (ctx->isr_frame_ready == 0U) {
+    const iolink_frame_rec_t* rec =
+        (const iolink_frame_rec_t*) iolink_ring_peek(&ctx->isr_frame_ring);
+    if (rec == NULL) {
         return;
     }
-    IOLINK_CRITICAL_ENTER();
-    uint8_t n = ctx->isr_frame_len;
+    uint8_t n = rec->len;
     if (n > sizeof(ctx->frame_buf)) {
         n = (uint8_t) sizeof(ctx->frame_buf);
     }
-    (void) memcpy(ctx->frame_buf, (const void*) ctx->isr_frame_ptr, n);
+    (void) memcpy(ctx->frame_buf, rec->data, n);
     ctx->frame_index = n;
     ctx->req_len = n;
-    /* Snapshot/clear the eager flag for *this* frame before releasing the
-     * mailbox; a new ISR frame may then set isr_eager_replied without being
-     * clobbered by this frame's processing. */
-    ctx->frame_eager = ctx->isr_eager_replied;
-    ctx->isr_eager_replied = 0U;
-    ctx->isr_frame_ready = 0U;
-    IOLINK_CRITICAL_EXIT();
+    /* The record carries the eager flag with its octets, so no cross-frame
+     * snapshot is needed. */
+    ctx->frame_eager = rec->eager;
+    /* Release after the copy: the ISR may then reuse this slot, while the other
+     * one stays intact. No critical section is required, because the ISR never
+     * writes the slot at 'out'. */
+    iolink_ring_release(&ctx->isr_frame_ring);
     /* A mailbox frame is received traffic: refresh the inactivity and byte-gap
        timestamps exactly like the streaming RX path. Without this the 1 s idle
        supervision resets a healthy ISR link. */

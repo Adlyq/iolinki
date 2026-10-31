@@ -14,6 +14,7 @@
 #include "iolinki/phy.h"
 #include "iolinki/config.h"
 #include "iolinki/port.h"
+#include "iolinki/ring.h"
 
 /**
  * @file dll.h
@@ -82,6 +83,24 @@ typedef enum
 #define IOLINK_PD_IN_BUFFERS 3U
 /** Deferred state-transition queue depth (ISR pump -> main callbacks). */
 #define IOLINK_PENDING_STATES 4U
+/** Received-frame mailbox depth (data ISR -> main pump). A power of two; 2
+ * slots absorb one frame while the main pump is still handling the previous
+ * one, so a busy main window no longer drops the next request. */
+#define IOLINK_MBX_SLOTS 2U
+
+/**
+ * @brief One received frame in the mailbox ring (data ISR -> main pump).
+ *
+ * The record carries everything the main pump needs about the frame, so no
+ * per-frame state lives outside the ring: the length and whether the ISR
+ * already transmitted the reply (eager) travel with the octets.
+ */
+typedef struct
+{
+    uint8_t len;                        /**< Frame length in octets */
+    uint8_t eager;                      /**< Non-zero when the ISR already replied to this frame */
+    uint8_t data[IOLINK_M_SEQ_MAX_LEN]; /**< Frame octets */
+} iolink_frame_rec_t;
 
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
@@ -155,26 +174,15 @@ typedef struct
     uint8_t isr_rx_acc;                       /**< A.1.6 checksum accumulated per octet */
     uint8_t isr_rx_expect;                    /**< Expected length (0 = unknown) */
 #endif
-    uint8_t isr_frame_buf[IOLINK_M_SEQ_MAX_LEN]; /**< Mailbox storage (RX BYTE) /
-                                                      stable copy (RX FRAME) */
-    volatile const uint8_t* isr_frame_ptr;       /**< Mailbox: frame pointer
-                                                      (RX BYTE: isr_frame_buf;
-                                                       RX FRAME: isr_frame_buf) */
-    volatile uint8_t isr_frame_len;              /**< Mailbox length */
-    volatile uint8_t isr_frame_ready;            /**< Mailbox ready flag */
-    volatile uint8_t isr_eager_replied;          /**< 1 if the ISR already sent the
-                                                      reply for the published frame;
-                                                      the main pump must stay silent */
-    volatile uint8_t frame_eager;                /**< Main-context snapshot of
-                                                      isr_eager_replied for the frame
-                                                      currently being processed
-                                                      (avoids cross-frame races). */
-    uint32_t isr_mailbox_drops;                  /**< Frames dropped because the
-                                                      single mailbox slot was busy */
-    uint32_t isr_eager_rejects;                  /**< Frames the eager path refused
-                                                      (bad checksum/type) */
-    volatile uint8_t isdu_isr_consumed;          /**< ISR already buffered this
-                                                      ISDU write request */
+    iolink_frame_rec_t isr_frame_slot[IOLINK_MBX_SLOTS]; /**< Mailbox ring storage */
+    iolink_ring_t isr_frame_ring;                        /**< Frame mailbox (ISR -> main) */
+    volatile uint8_t frame_eager;       /**< Main-context snapshot of the record's eager flag
+                                             for the frame currently being processed. */
+    uint32_t isr_mailbox_drops;         /**< Frames dropped because the mailbox was full */
+    uint32_t isr_eager_rejects;         /**< Frames the eager path refused
+                                             (bad checksum/type) */
+    volatile uint8_t isdu_isr_consumed; /**< ISR already buffered this
+                                             ISDU write request */
     /* ISR-side ISDU staging + response snapshot (single-writer model). The ISR
      * stages write OD octets and reads only the response snapshot; the main
      * pump owns ctx->isdu and refreshes the snapshot under the short critical

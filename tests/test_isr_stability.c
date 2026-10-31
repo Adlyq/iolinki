@@ -14,6 +14,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 
 #include "iolinki/crc.h"
 #include "iolinki/dll.h"
@@ -38,6 +39,20 @@ static uint64_t test_time_us(void* user)
     (void) user;
     return now_us;
 }
+
+/** @brief Publish one request into the mailbox ring (the ISR does this). */
+static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len)
+{
+    iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&ctx->isr_frame_ring);
+    if (rec == NULL) {
+        return;
+    }
+    rec->len = len;
+    rec->eager = 0U;
+    (void) memcpy(rec->data, frame, len);
+    iolink_ring_publish(&ctx->isr_frame_ring);
+}
+
 
 static int rx_octet(void* user, uint8_t* data, uint8_t* status)
 {
@@ -84,16 +99,14 @@ static int run_cycles(iolink_dll_ctx_t* ctx, unsigned cycles, uint64_t step_us)
 
     for (unsigned i = 0U; i < cycles; i++) {
         now_us += step_us;
-        ctx->isr_frame_ptr = frame;
-        ctx->isr_frame_len = (uint8_t) sizeof(frame);
-        ctx->isr_frame_ready = 1U;
+        push_mailbox(ctx, frame, (uint8_t) sizeof(frame));
 
         iolink_dll_process(ctx);
         while (ctx->isr_tx_active != 0U) {
             iolink_dll_process_isr(ctx);
         }
 
-        if (ctx->isr_frame_ready != 0U) {
+        if (!iolink_ring_is_empty(&ctx->isr_frame_ring)) {
             return 1; /* mailbox not consumed */
         }
         if (ctx->timeout_errors != 0U) {

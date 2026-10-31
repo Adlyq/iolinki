@@ -401,8 +401,13 @@ static void test_busy_tx_frame_keeps_frame_for_main(void** state)
     iolink_dll_process_isr(&s_ctx);
 
     assert_int_equal(s_tx_calls, 1);
-    assert_int_equal(s_ctx.isr_eager_replied, 0U);
-    assert_int_equal(s_ctx.isr_frame_ready, 1U); /* main pump owns the frame */
+    /* The reply failed (line busy), so the record carries eager = 0 and the
+     * main pump owns the frame. */
+    assert_int_equal(iolink_ring_count(&s_ctx.isr_frame_ring), 1U);
+    const iolink_frame_rec_t* rec =
+        (const iolink_frame_rec_t*) iolink_ring_peek(&s_ctx.isr_frame_ring);
+    assert_non_null(rec);
+    assert_int_equal(rec->eager, 0U);
 
     s_tx_rc = 0;
     iolink_dll_process(&s_ctx);
