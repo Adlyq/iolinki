@@ -581,10 +581,12 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
         ctx->dll.pd_in_skips++; /* every spare buffer is leased: retry later */
         return -1;
     }
-    /* The new PD-in image and the index that publishes it must be visible as a
-     * unit to the data ISR, which reads the buffer it captured. */
-    IOLINK_CRITICAL_ENTER();
+    /* Fill the free buffer outside the critical section: the ISR only ever
+     * captures pd_in_active, so a buffer that is neither active nor captured
+     * cannot be read by it. Only the publish (length, validity, index) must be
+     * atomic for the ISR. */
     (void) memcpy(&ctx->dll.pd_in[inactive][ctx->dll.od_width], data, len);
+    IOLINK_CRITICAL_ENTER();
     ctx->dll.pd_in_len = (uint8_t) len;
     ctx->dll.pd_in_len_current = (uint8_t) len;
     ctx->dll.pd_valid = valid;
