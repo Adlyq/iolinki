@@ -178,7 +178,17 @@ int iolink_platform_critical_sections_ready(void);
  * ------------------------------------------------------------------------- */
 
 /** @brief Stop the compiler from moving memory operations across this point. */
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(__CC_ARM)
+/* ARM Compiler 5 defines __GNUC__ in --gnu mode yet has no GCC-style inline
+ * asm. __schedule_barrier() stops the reordering and __memory_changed()
+ * forces cached memory to be reloaded; together they match the "memory"
+ * clobber of the GNU form. */
+#define IOLINK_COMPILER_BARRIER() \
+    do {                          \
+        __schedule_barrier();     \
+        __memory_changed();       \
+    } while (0)
+#elif defined(__GNUC__) || defined(__clang__)
 #define IOLINK_COMPILER_BARRIER() __asm__ __volatile__("" ::: "memory")
 #else
 #define IOLINK_COMPILER_BARRIER() ((void) 0)
