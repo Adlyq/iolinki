@@ -18,9 +18,6 @@ below is the contract.
 | `IOLINK_PHY_FEATURE_SIO_CQ` | 1 | `set_cq_line` is removed from the PHY vtable |
 | `IOLINK_PHY_FEATURE_LEGACY_DIAG` | 1 | `get_voltage_mv` / `is_short_circuit` and the DLL diagnostic polling are removed |
 
-`IOLINK_FEATURE_MASTER_IDENT` was removed: the MasterCommand ident subset was
-never implemented, so the switch had no effect.
-
 ## CMake options
 
 Every switch is a cache option (default `ON`). Only the trimmed features are

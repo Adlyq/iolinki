@@ -259,17 +259,10 @@ use `iolink_device_get_ds_ctx()` to reach it.
 
 ## Storage backend
 
-```c
-typedef struct {
-    void* user;
-    int (*read)(void* user, uint32_t offset, uint8_t* buf, size_t len);
-    int (*write)(void* user, uint32_t offset, const uint8_t* buf, size_t len);
-    int (*erase)(void* user, uint32_t offset, size_t len);
-} iolink_storage_api_t;
-```
-
-The persistent region layout (PARAMS | DS image | DS upload flag) and its
-magic/version/checksum are defined in `include/iolinki/storage.h`.
+`iolink_device_config_t::storage` is the single NVM backend (interface,
+region layout, sizing and an example are in [STORAGE.md](STORAGE.md)). The
+persistent region layout and its magic/version/checksum are defined in
+`include/iolinki/storage.h`.
 
 ## Error codes
 
@@ -308,35 +301,9 @@ no-op default with `IOLINK_DEVICE_INIT_ERR_CRITICAL`.
 
 ## Build configuration
 
-### CMake options
-
-```cmake
-option(IOLINK_PLATFORM "Target platform" "LINUX")
-option(IOLINK_MINIMAL_PROFILE "Compile the trimmed feature profile (keeps events)" OFF)
-option(IOLINK_TINY_PROFILE "Compile the tiny feature profile (MINIMAL + no events)" OFF)
-option(IOLINK_FEATURE_DATA_STORAGE "Compile Data Storage" ON)
-option(IOLINK_FEATURE_SYSTEM_COMMAND "Compile SystemCommand handling" ON)
-option(IOLINK_FEATURE_LEGACY_PARAMS "Compile the legacy global params API" ON)
-option(IOLINK_FEATURE_EVENTS "Compile the diagnostic event engine" ON)
-option(IOLINK_PHY_FEATURE_WAKEUP "Compile PHY wake-up detection" ON)
-option(IOLINK_PHY_FEATURE_SIO_CQ "Compile PHY manual C/Q control" ON)
-option(IOLINK_PHY_FEATURE_LEGACY_DIAG "Compile PHY legacy diagnostics" ON)
-```
-
-### Compile-time configuration
-
-Buffer sizes are defined in `include/iolinki/config.h` and may be overridden by
-defining them before the header is included (each is guarded with `#ifndef`):
-
-```c
-#define IOLINK_PD_IN_MAX_SIZE   32   /* Max input Process Data bytes */
-#define IOLINK_PD_OUT_MAX_SIZE  32   /* Max output Process Data bytes */
-#define IOLINK_ISDU_BUFFER_SIZE 256  /* ISDU request/response buffer */
-#define IOLINK_EVENT_QUEUE_SIZE 4    /* Event queue depth */
-```
-
-The transport granularity is selected with `IOLINK_ISR_RX_MODE` /
-`IOLINK_ISR_TX_MODE` (BYTE or FRAME).
+Every compile-time switch, profile and capacity override is documented in
+[feature-trimming.md](feature-trimming.md). The transport granularity is selected
+with `IOLINK_ISR_RX_MODE` / `IOLINK_ISR_TX_MODE` (BYTE or FRAME).
 
 ## Thread safety
 

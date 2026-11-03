@@ -12,12 +12,12 @@ under the EU Cyber Resilience Act.
 
 | Version | Security fixes |
 | ------- | -------------- |
-| Latest tagged release + `develop` | ✅ free of charge |
+| Latest tagged release + `own_dev` | ✅ free of charge |
 | Older releases | Under a commercial support agreement only |
 
 Security fixes are delivered as tagged releases with a changelog entry and, for
 confirmed vulnerabilities, a GitHub security advisory. Fixes for the latest
-tagged release and for `develop` are part of the public project. A contract to
+tagged release and for `own_dev` are part of the public project. A contract to
 patch an older release is paid work. It does not limit the GPLv3 grant.
 
 ## Reporting a Vulnerability

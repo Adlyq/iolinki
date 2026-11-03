@@ -89,6 +89,8 @@
  * @ingroup iolinki_protocol
  * @{
  */
+/* VendorID and DeviceID are Direct Parameter page 1 fields (octets 0x07-0x0B),
+ * not ISDU indices, so no IOLINK_IDX_* constants exist for them. */
 #define IOLINK_IDX_DIRECT_PARAMETERS_1 0x0000U    /**< Direct Parameter page 1. */
 #define IOLINK_IDX_DIRECT_PARAMETERS_2 0x0001U    /**< Direct Parameter page 2. */
 #define IOLINK_IDX_SYSTEM_COMMAND 0x0002U         /**< System Command index. */

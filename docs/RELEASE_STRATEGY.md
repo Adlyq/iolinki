@@ -4,18 +4,10 @@ This document outlines the development workflow, versioning, and release procedu
 
 ## 1. Workflow
 
-We use a simplified **Gitflow** model.
-
-### Branches
-- **`own_dev`**: Maintained mainline. All development lands here and **all official version tags (`vX.Y.Z`) are pushed from this branch**.
-- **`fix/*` / `feature/*`**: Topic branches, created from and merged back to `own_dev` via PR.
-- **`release/*`**: Release preparation, branched from `own_dev`. Source for `vX.Y.Z-rcN` tags.
-- **`develop`**: Historical snapshot from before independent maintenance. Not a release branch and not a merge target.
-- **`main`**: Does not exist on `origin`. Do not create it without an explicit policy change.
-
-> This repository is maintained independently of `upstream` (`w1ne/iolinki`).
-> There is no upstream sync, promotion or back-merge step. See
-> [MAINTENANCE.md](MAINTENANCE.md).
+The branch model is defined in [MAINTENANCE.md](MAINTENANCE.md). Official tags
+(`vX.Y.Z`) are pushed from `own_dev`; `release/*` branches cut from `own_dev` are
+the source for `vX.Y.Z-rcN` tags. There is no upstream sync, promotion or
+back-merge step.
 
 ## 2. Versioning
 
@@ -33,13 +25,16 @@ Automated pipelines run on every push to `own_dev` (the maintained branch) and
 `develop` (historical).
 
 ### Quality Gate (runs on all pushes/PRs)
-1. **Code Formatting**: `clang-format` check (enforces `.clang-format` style).
-2. **Static Analysis**: `cppcheck` with all checks enabled.
-3. **MISRA Check**: Run in Docker via `cppcheck --addon=misra` (MISRA C:2012 subset). Report-only unless `IOLINKI_MISRA_ENFORCE=1` is set.
+1. **Code Formatting**: `clang-format` check (pinned 23.1.1).
+2. **Static Analysis**: `cppcheck` (`warning,style,performance,portability`).
+3. **MISRA Check**: `cppcheck --addon=misra` (MISRA C:2012 subset). Report-only unless `IOLINKI_MISRA_ENFORCE=1` is set.
 4. **Unit Tests**: All CMocka tests must pass.
-5. **Integration Tests**: Enforced - Virtual IO-Link Master conformance (V1.1.5).
+5. **Integration Tests**: Virtual IO-Link Master conformance (V1.1.5), run by the
+   CI `docker-validation` job.
 6. **Release build**: strict `-Werror` build at `-O3` (Debug builds cannot emit
    some optimisation-only warnings).
+7. **Compile matrix**: every feature toggle, ISR mode and platform builds
+   (`tools/build_matrix.sh`).
 
 ### Build Stages
 1. **Build**: CMake build for host (Linux).
@@ -96,7 +91,6 @@ RCs are used to verify the release workflow and quality before finalizing.
 2. **Update Documentation**:
    - Update version in `CMakeLists.txt`
    - Update `CHANGELOG.md`
-   - Update `ROADMAP.md` milestones
 
 3. **Verify Quality Locally**:
    ```bash
@@ -139,12 +133,13 @@ RCs are used to verify the release workflow and quality before finalizing.
 ## 5. Release Artifacts
 
 Each GitHub Release includes:
-- **Test Results**: Test count and pass/fail summary
-- **Build Artifacts**:
-  - `simple_device` - Example executable
-  - `test_init` - Unit test executable
-- **Documentation**: Links to all project docs
-- **Source Code**: Automatic archive by GitHub
+- **Test Results**: JUnit XML, test-count summary, coverage summary and
+  per-release SBOMs (CycloneDX 1.6 + SPDX 2.3)
+- **Source**: full-source zip plus an examples zip
+- **Build Artifacts**: host demos (`host_demo`, `simple_device`, `test_init`),
+  STM32G0/TIOL112 firmware (ELF/HEX/MAP), the native IAR project, IODD packages
+  and the LabWired recipe archive
+- **Checksums**: `SHA256SUMS` over every published file
 
 ## 6. Distribution
 
@@ -162,27 +157,16 @@ Each GitHub Release includes:
   - Documentation snapshot
 - **License Delivery**: License file and terms are delivered with the SDK bundle.
 - **Lead Time**: Typical fulfillment within 2 business days.
-- **Pricing** (see `LICENSE.COMMERCIAL`):
-  - **Indie**: €1,399 (one-time, royalty-free; named individual, own independent product family)
-  - **Company**: €4,699 (one-time, royalty-free; named legal company, one agreed product family, with scoped engineering assistance)
-  - **Enterprise**: Custom pricing
-
-New quotes allow unlimited manufactured units and customers, including variants,
-successors and hardware revisions within the agreed named commercial range.
-Unrelated lines need a separate license. MCU/PHY changes within that range retain
-the license; porting and validation are separately quoted. Enterprise scope for
-multiple families, subsidiaries or broader SDK redistribution is quoted. Already
-granted or separately agreed rights retain their accepted scope.
-Indie is issued to a named individual developing and distributing their own
-independent product family, including as a sole trader. It does not grant an
-employer or separate company product rights. Company is held by the named legal
-company and allows unlimited authorized employees and contractors working on the
-family. Separate legal entities and independent contractor reuse require agreed
-additional scope.
+- **Pricing and scope**: Indie, Company and Enterprise tiers, their product-family
+  scope and support terms are defined in `LICENSE.COMMERCIAL`. New quotes cover
+  unlimited units and customers within the agreed family; separate product lines,
+  subsidiaries and broader redistribution need agreed additional scope.
 
 ### Support Policy
 - **Included Support**: 12 months of updates and support are included in the commercial price.
-- **Assistance**: Indie includes two onboarding hours for build/setup, MCU/PHY wiring and callback review, and a written bring-up checklist, with a 48-hour email response target. Company includes eight total scoped engineering hours, a 24-hour priority response target and quarterly technical reviews during the first year within that allowance. Deliverables within the hours include build/configuration review, MCU/PHY callback and wiring review, a written checklist and findings from the agreed build/test review. Agree board/compiler/PHY/tasks and the booking window before scheduling. Larger ports are quoted separately; reproducible stack bug corrections do not consume custom engineering hours. See LICENSE.COMMERCIAL for holder and support terms.
+- **Assistance**: the per-tier hours, response targets and deliverables are defined
+  in `LICENSE.COMMERCIAL`; agree the board, compiler, PHY and validation tasks
+  before scheduling.
 
 ### Provenance
 - **Signing**: Release artifacts are signed or accompanied by checksums.

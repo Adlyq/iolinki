@@ -11,9 +11,9 @@ upstream https://github.com/w1ne/iolinki.git    # read-only reference
 mainline own_dev
 ```
 
-Snapshot at the time of writing (`git rev-list --left-right --count
-upstream/develop...HEAD` → `0 114`): this branch is 114 commits ahead of, and 0
-behind, `upstream/develop`. Re-check the numbers; do not treat them as a target.
+Check the current lead/lag with
+`git rev-list --left-right --count upstream/develop...HEAD`; do not treat the
+numbers as a target.
 
 ## 2. Branch model
 
@@ -21,6 +21,7 @@ behind, `upstream/develop`. Re-check the numbers; do not treat them as a target.
 | :--- | :--- |
 | `own_dev` | maintained mainline. All work lands here; releases are tagged here. |
 | `fix/*`, `feature/*` | short-lived topic branches cut from `own_dev`, merged back via PR. |
+| `release/*` | release preparation cut from `own_dev`; source for `vX.Y.Z-rcN` tags. |
 | `develop` | historical snapshot from before independent maintenance. Not a release branch and not a merge target. |
 | `main` | does not exist on `origin`. Do not create it without an explicit policy change. |
 | `backup/*` | local safety copies, never pushed as a shared branch. |
@@ -100,4 +101,3 @@ Still possible and encouraged for self-contained spec corrections:
 | `docs/UPSTREAM_DIVERGENCE.md` | historical divergence inventory; not a sync plan |
 | `docs/SPEC_CONFORMANCE.md` | current; feature -> implementation -> test matrix |
 | `docs/RELEASE_STRATEGY.md` | current; release process |
-| `docs/superpowers/**` | historical plans/specs; not maintained |

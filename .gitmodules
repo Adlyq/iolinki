@@ -1,3 +1,0 @@
-[submodule "tools/thepuppeteer"]
-	path = tools/thepuppeteer
-	url = git@github.com:w1ne/thepuppeteer.git

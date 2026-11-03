@@ -534,6 +534,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`PAR_SETINVALID`, 0x8040) from a rejected known parameter
   (`PAR_SETINCONSIST`, 0x8041).
 
+### Documentation
+- Removed stale planning artifacts: the executed agent task board
+  (`docs/AGENT_TASKS.md`, `docs/AGENT_REPORTS.md`,
+  `docs/AGENT_INSTRUCTIONS_TEMPLATE.md`, `docs/PUPPETEER.md`, `docs/claims/`),
+  the completed `docs/superpowers/` plans/specs, `docs/ROADMAP.md` (superseded by
+  `docs/SPEC_CONFORMANCE.md`) and the empty `MISRA_DEVIATIONS.md`. The
+  `tools/thepuppeteer` submodule and its wrapper scripts are gone with them.
+- Merged duplicate content: `INSTALL.md` folded into `README.md`;
+  `docs/examples/reference-device.md` removed (it only pointed at the example
+  README); storage backend and memory sizing in `docs/PORTING.md` reduced to
+  pointers at `docs/STORAGE.md` / `docs/MEMORY_GUIDE.md`; storage and build
+  configuration in `docs/API.md` reduced to pointers; commercial tier terms in
+  `README.md`, `docs/FAQ.md` and `docs/RELEASE_STRATEGY.md` now defer to
+  `LICENSE.COMMERCIAL`; the branch model is stated once in
+  `docs/MAINTENANCE.md` and `docs/RELEASE_STRATEGY.md` links to it.
+- Corrected stale statements in `docs/CODING_STANDARDS.md`, `docs/TESTING.md`,
+  `docs/RELEASE_STRATEGY.md`, `docs/security/THREAT_MODEL.md`, `SECURITY.md` and
+  `docs/security/CRA.md` (quality-gate flags, coverage/MISRA policy, release
+  artifacts and links, test file names, supported branch).
+
 ## [2.2.0] - 2026-10-17
 
 ### Changed

@@ -193,17 +193,17 @@ The claims above are regression-checked by the existing test suite (cmocka via
 CMake/CTest, run in Docker in CI — see `run_all_tests_docker.sh`):
 
 - Frame/CRC validation: `tests/test_dll.c`, `tests/test_dll_isr.c`,
-  `tests/test_crc.c`, `tests/test_crc_manual.c`
-- ISDU parsing, segmentation, flow control: `tests/test_isdu.c`,
-  `tests/test_isdu_segmented.c`, `tests/test_isdu_flow_control.c`
+  `tests/test_crc.c`, `tests/test_crc_vectors.c`
+- ISDU parsing, segmentation and flow control: `tests/test_isdu.c`,
+  `tests/test_isdu_wire.c`, `tests/test_spec_conformance.c`
 - Data Storage checksum/recovery/locks: `tests/test_ds.c`
 - Events and classification: `tests/test_events.c`
 - Communication loss and fallback: `tests/test_sio_fallback.c`,
   `tests/test_error_recovery.c`, `tests/test_dll.c`
 - End-to-end device behavior: `tests/test_integration_full.c`
 
-Static analysis: cppcheck with MISRA-oriented rules (`tools/run-cppcheck.sh`,
-`MISRA_DEVIATIONS.md`) runs in the CI quality gate.
+Static analysis: cppcheck with MISRA-oriented rules (`tools/run-cppcheck.sh`)
+runs in the CI quality gate.
 
 *Maintenance rule:* any PR that changes a file cited as an anchor here must
 re-verify the corresponding claim or update this document.

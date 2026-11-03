@@ -19,7 +19,7 @@
 ## Development Workflow
 
 1.  **Create a branch** for your feature or fix, from `own_dev`.
-2.  **Write Code** following the [Code Standards](TESTING.md#code-standards).
+2.  **Write Code** following the [Code Standards](CODING_STANDARDS.md).
 3.  **Run Tests Locally**:
     ```bash
     ./test_all.sh

@@ -19,7 +19,7 @@ Key dates: the CRA's vulnerability-reporting obligations apply from
 
 | Deliverable | Where | Terms |
 |---|---|---|
-| SBOM per release (CycloneDX 1.6 + SPDX 2.3) | attached to every [tagged release](https://github.com/w1ne/iolinki/releases) | free, public |
+| SBOM per release (CycloneDX 1.6 + SPDX 2.3) | attached to every [tagged release](https://github.com/Adlyq/iolinki/releases) | free, public |
 | STRIDE threat model aligned to IO-Link guideline 10.512 | [`docs/security/THREAT_MODEL.md`](THREAT_MODEL.md) | free, public |
 | Coordinated disclosure + advisory process | [`SECURITY.md`](../../SECURITY.md) | free, public |
 | CRA compliance statement mapping the stack to Regulation (EU) 2024/2847 Annex I, issued per stack release for your product context | commercial license package | commercial |

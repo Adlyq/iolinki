@@ -18,19 +18,22 @@ The companion master stack is [iolinki-master](https://github.com/w1ne/iolinki-m
 
 ### Licensing
 
-**Dual-licensed: GPLv3 or Commercial.** Pick the one that matches your product.
+**Dual-licensed: GPLv3 or Commercial.** GPLv3 covers open-source use, including
+production, as long as your work that includes `iolinki` is released under the
+GPLv3. A commercial license is required only for closed-source products and is
+one-time, royalty-free, per named product family.
 
-- **GPLv3 (free, open source)** — use, modify, and ship iolinki at no cost, including in production, provided your own work that includes it is also released under the GPLv3.
-- **Commercial license** — **required only if you ship a closed-source / proprietary product** and do not want the GPLv3 copyleft obligations. One-time, royalty-free:
-  - **Indie**: €1,399 — issued to a named individual for their own independent product family; two onboarding hours for build/setup, MCU/PHY wiring and callback review, and a written bring-up checklist; 48-hour email response target
-  - **Company**: €4,699 — held by the named legal company for one agreed product family, with the same source; eight total scoped engineering hours, 24-hour priority email response target and quarterly technical reviews during the first year within those hours
-  - **Enterprise**: custom for multiple families, subsidiaries or broader SDK redistribution
-  - Indie is for independent developers, including sole traders, and does not grant product rights to an employer or separate company. Company permits unlimited authorized employees and contractors working on the licensed family; company projects require company-held rights.
-  - Includes 12 months of updates and bug fixes. Agree board/compiler/PHY/tasks and booking window before scheduling. Company assistance deliverables within the eight-hour allowance include build/configuration review, MCU/PHY callback and wiring review, a written checklist and findings from the agreed build/test review. Larger ports are quoted separately.
-  - New quotes cover one named commercial product range, including variants, successors and hardware revisions within that range: unlimited manufactured units and customers, royalty-free. An unrelated line needs a separate license. MCU/PHY changes within the agreed family keep the license valid; porting and validation are separately quoted. Already granted or separately agreed rights remain governed by their accepted agreement.
-  - Both packages receive the same source, documentation and reference release. Reproducible stack bug corrections do not consume custom engineering hours. Company contractors receive access for the licensee's project; independent reuse, subsidiaries and broader redistribution require agreed additional scope.
+- **Indie** — €1,399, for an independent developer or sole trader.
+- **Company** — €4,699, held by a legal company for one family.
+- **Enterprise** — custom scope and pricing.
 
-**Shipping a closed-source product?** A commercial license removes the GPLv3 obligations — email **andrii@shylenko.com** for terms (fast, no-friction). See [LICENSE](LICENSE) and [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL).
+Indie and Company include 12 months of updates and bug fixes. Scope, support
+hours and assistance terms are defined in [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL);
+the signed agreement governs.
+
+**Shipping a closed-source product?** A commercial license removes the GPLv3
+obligations — email **andrii@shylenko.com** for terms. See [LICENSE](LICENSE)
+and [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL).
 
 ## Quick Start
 
@@ -62,6 +65,15 @@ brew install cmake cmocka clang-format cppcheck
 cmake -B build
 cmake --build build
 ```
+
+### Running Examples
+
+```bash
+./build/examples/simple_device/simple_device
+```
+
+See [examples/](examples/) for the counter/button/LED reference device, the
+STM32G0 ports and the conformance device.
 
 ### Running Tests
 
@@ -143,19 +155,20 @@ cmake --build build_bare
 
 ## Project Status
 
-**Phase 3: Ecosystem & Verification (Current)**
+The stack implements the in-scope IO-Link V1.1.5 device behaviour: Process Data,
+ISDU, Events, Data Storage and the ISR two-pump transport. Conformance is tracked
+per Test Spec case, not by a headline test count:
 
-The stack is feature-complete for IO-Link V1.1.5, including Process Data, ISDU, Events, and Data Storage. We have achieved 100% core test coverage and established automated IODD generation and strict coding standards (MISRA-oriented).
-
-See [ROADMAP.md](./docs/ROADMAP.md) for detailed development phases.
+- **[Spec conformance matrix](./docs/SPEC_CONFORMANCE.md)** — feature ->
+  implementation -> test, plus residual risks.
+- **[Conformance audit](./docs/CONFORMANCE_AUDIT_2026-10-28.md)** — independent
+  142-case audit and scope split.
 
 ## Documentation
 
-- **[ROADMAP.md](./docs/ROADMAP.md)** - Development phases and milestones
+- **[docs/](./docs/README.md)** — full documentation index
 - **[VISION.md](./docs/VISION.md)** - Project mission and approach
 - **[RELEASE_STRATEGY.md](./docs/RELEASE_STRATEGY.md)** - Release workflow and versioning
-- **[INSTALL.md](./INSTALL.md)** - Detailed installation instructions
-- **[PUPPETEER.md](./docs/PUPPETEER.md)** - Agent task mutex workflow (submodule)
 
 ## Security
 
@@ -206,4 +219,6 @@ accept the GPLv3 copyleft). Shipping a proprietary product? Email
 
 ## Contributing
 
-Contributions are welcome! Please see [ROADMAP.md](./docs/ROADMAP.md) for areas where help is needed.
+Contributions are welcome! See [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md) for
+the workflow and [open issues](https://github.com/Adlyq/iolinki/issues) for work
+in progress.

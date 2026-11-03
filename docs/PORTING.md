@@ -267,60 +267,14 @@ after adding a call inside the section.
 
 ### 3. Persistent Storage (Required with Data Storage)
 
-When `IOLINK_FEATURE_DATA_STORAGE` is 1, `iolink_device_config_t::storage` is
-declared and required: `iolink_device_init()` rejects NULL, or a backend without
-`read`/`write`, with `IOLINK_DEVICE_INIT_ERR_STORAGE`. With Data Storage compiled
-out, the member is not declared. Parameters, the Data Storage image and the
-upload flag share the one unified NVM backend. The legacy `iolink_nvm_*` hooks
-have been removed.
+`iolink_device_config_t::storage` is declared and required when
+`IOLINK_FEATURE_DATA_STORAGE` is 1; `iolink_device_init()` rejects a NULL or
+incomplete backend with `IOLINK_DEVICE_INIT_ERR_STORAGE`. Offsets are relative to
+the stack's fixed region layout, so add the physical base address inside the
+callbacks.
 
-**Interface** (`include/iolinki/storage.h`):
-```c
-typedef struct
-{
-    void* user;
-    int (*read)(void* user, uint32_t offset, uint8_t* buf, size_t len);
-    int (*write)(void* user, uint32_t offset, const uint8_t* buf, size_t len);
-    int (*erase)(void* user, uint32_t offset, size_t len);
-} iolink_storage_api_t;
-```
-
-The stack passes **relative** offsets inside a fixed region layout; the
-application adds its physical base address. Size your NVM area with
-`IOLINK_STORAGE_TOTAL_SIZE` and assert it at compile time:
-
-```c
-static uint8_t g_nvm[IOLINK_STORAGE_TOTAL_SIZE];
-_Static_assert(sizeof(g_nvm) >= IOLINK_STORAGE_TOTAL_SIZE, "NVM region too small");
-```
-
-**Example** (EEPROM mapped at `EEPROM_BASE`):
-```c
-static int eeprom_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
-{
-    (void) user;
-    return (EEPROM_Read(EEPROM_BASE + offset, buf, (uint16_t) len) == 0) ? 0 : -1;
-}
-
-static int eeprom_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
-{
-    (void) user;
-    return (EEPROM_Write(EEPROM_BASE + offset, buf, (uint16_t) len) == 0) ? 0 : -1;
-}
-
-static int eeprom_erase(void* user, uint32_t offset, size_t len)
-{
-    (void) user;
-    return (EEPROM_Erase(EEPROM_BASE + offset, (uint16_t) len) == 0) ? 0 : -1;
-}
-
-static const iolink_storage_api_t g_storage_eeprom = {
-    .user = NULL,
-    .read = eeprom_read,
-    .write = eeprom_write,
-    .erase = eeprom_erase,
-};
-```
+The backend interface, region layout, sizing (`IOLINK_STORAGE_TOTAL_SIZE`) and a
+complete EEPROM example are in [STORAGE.md](STORAGE.md).
 
 ## CMake Integration
 
@@ -417,20 +371,8 @@ void SysTick_Handler(void) {
 
 ## Memory Requirements
 
-For detailed RAM/ROM calculations and stack depth analysis, please refer to the [Memory Usage Guide](MEMORY_GUIDE.md).
-
-### Quick Summary
-
-- **Minimum RAM**: ~300 bytes (with optimized config)
-- **Minimum Flash**: ~5 KB
-
-### Configuration
-
-The stack can be tuned via `include/iolinki/config.h`. Override the defaults by defining these macros in your build system (e.g., `-DIOLINK_ISDU_BUFFER_SIZE=64`):
-
-- `IOLINK_ISDU_BUFFER_SIZE`: Size of ISDU transfer buffers.
-- `IOLINK_EVENT_QUEUE_SIZE`: Number of events to queue.
-- `IOLINK_PD_IN_MAX_SIZE`: Max process data input size.
+See the [Memory Usage Guide](MEMORY_GUIDE.md) for RAM/ROM sizing, the per-buffer
+costs, compiler-flag advice and the context-size measurement snippet.
 
 ## Hardware Requirements
 

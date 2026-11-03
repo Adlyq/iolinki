@@ -132,4 +132,4 @@ previously missing:
 ## Related
 
 - `FRAMES.md` (A.1/A.3/A.10), `TESTING.md`, `CONFORMANCE_AUDIT_2026-10-28.md`,
-  `security/THREAT_MODEL.md`, `ROADMAP.md`.
+  `security/THREAT_MODEL.md`.

@@ -3,8 +3,10 @@
 This document defines the coding style and engineering practices for the `iolinki` project.
 
 ## 1. C Language Standard
-- **Standard**: C99 (ISO/IEC 9899:1999) or C11.
-- **Safety**: Aim for **MISRA C:2012** compliance for all core stack components.
+- **Standard**: C99 (ISO/IEC 9899:1999). A few test targets use C11 for
+  `_Static_assert`.
+- **Safety**: MISRA C:2012 subset (see `check_quality.sh`); the MISRA addon is
+  report-only unless `IOLINKI_MISRA_ENFORCE=1`.
 
 ## 2. Naming Conventions
 - **Prefixes**: All public symbols (functions, structs, enums) must start with `iolink_`.
@@ -26,14 +28,18 @@ This document defines the coding style and engineering practices for the `iolink
   ```
 
 ## 4. Static Analysis
-- **Cppcheck**: Must pass with `all` checks enabled.
-- **MISRA**: Core files must be checked against the MISRA C:2012 ruleset.
+- **Cppcheck**: Must pass with `--enable=warning,style,performance,portability`
+  and `--error-exitcode=1`.
+- **MISRA**: Checked through the cppcheck MISRA addon; report-only by default
+  (`IOLINKI_MISRA_ENFORCE=1` makes it fail).
 
 ## 5. Testing
-- **Unit Tests**: Minimum 80% line coverage for the core library.
+- **Unit Tests**: Every behaviour change needs a test. Coverage is reported in
+  the release notes and by `tools/coverage.sh`; there is no enforced threshold.
 - **Framework**: CMocka.
-- **Integration**: Every major feature must have a full-stack integration test.
+- **Integration**: Major features need a full-stack integration test.
 
 ## 6. Git & Formatting
-- **Formatter**: `clang-format` using the project's `.clang-format` file.
-- **Commit Messages**: Follow Conventional Commits (e.g., `feat: Add ISDU engine`).
+- **Formatter**: `clang-format` pinned to 23.1.1, using the project's
+  `.clang-format` file.
+- **Commit Messages**: Follow Conventional Commits (e.g. `feat(dll): ...`).

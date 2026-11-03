@@ -2,8 +2,8 @@
 
 本文件记录 `own_dev` 相对上游基线的规范/行为分歧，用于**追溯历史**，不是同步计划。
 
-- 基线：`upstream/develop`（`aaefa3e`）。写作时 `own_dev` 为 `0 behind / 114 ahead`
-  （`git rev-list --left-right --count upstream/develop...HEAD`），此数字会变，不要当作目标。
+- 基线：`upstream/develop`（`aaefa3e`）。与上游的领先/落后关系用
+  `git rev-list --left-right --count upstream/develop...HEAD` 现查，不在本文件固化。
 - 本分支自 2026-10 起独立维护：**不再 merge 或 rebase 上游**，也不按上游 API 重贴补丁。
   上游补丁的采纳流程见 [MAINTENANCE.md](MAINTENANCE.md)。
 - 部分规范纠偏已经以 PR 形式提交上游（见 §8）。上游是否合入不影响本分支的实现与测试。
