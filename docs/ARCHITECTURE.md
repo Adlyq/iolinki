@@ -38,7 +38,8 @@ The DLL (`dll.c`) implements the IO-Link state machine:
 
 The data-interrupt two-pump transport (request framing, eager replies, ISDU
 snapshot reads, staged TX) lives in `dll_isr.c`; `dll.c` owns the main pump and
-frame dispatch.
+frame dispatch. The ISR/main-context boundary is declared in the private
+`src/dll_internal.h`.
 
 ### 1.3 Application Layer (AL)
 The AL (`application.h`) provides the interface for the user application to interact with the stack without knowing protocol details.

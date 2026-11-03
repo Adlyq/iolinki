@@ -27,21 +27,10 @@ ctest --test-dir build -R test_dll
 ./tools/coverage.sh
 ```
 
-## Architecture
+## Code constraints
 
-- Layers: Application (`include/iolinki/application.h`) -> DLL
-  (`src/dll.c`, `src/dll_isr.c`) -> PHY vtable (`include/iolinki/phy.h`); the
-  ISR/main-context boundary is declared in `src/dll_internal.h`.
-- ISR two-pump transport: the data ISR frames requests and transmits staged
-  replies (`iolink_device_process_isr()`), while the main loop runs the protocol
-  logic. Main-context replies are staged and signalled through the optional
-  `phy->request_service()` hook.
 - No dynamic memory; context-based (no globals); `<stdint.h>` types; negative-int
   error codes; MISRA C:2012 subset.
-- Compile-time trimming lives in `include/iolinki/config.h`
-  (`IOLINK_FEATURE_*`, `IOLINK_PHY_FEATURE_*`, `IOLINK_MINIMAL_PROFILE`,
-  `IOLINK_TINY_PROFILE`, `IOLINK_ISR_RX_MODE`/`IOLINK_ISR_TX_MODE`,
-  `IOLINK_COMPAT_*`). `IOLINK_PLATFORM` selects `LINUX` (default) or `BAREMETAL`.
 
 ## Spec constraints
 
