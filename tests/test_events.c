@@ -401,6 +401,28 @@ static void test_event_pending_full_observable(void** state)
     iolink_event_trigger(&ctx, 0x3000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(iolink_events_get_dropped_count(&ctx), 1U);
 
+    /* Free one slot and emit its withdrawal. */
+    iolink_event_clear(&ctx, 0x2000U);
+    assert_int_equal(ctx.pending_count, IOLINK_EVENT_PENDING_MAX - 1U);
+    g_fake_ms = IOLINK_EVENT_MIN_APPEAR_MS;
+    iolink_events_process(&ctx);
+
+    /* At the 1 s mark the disappears window is still open: the slot must not be
+       recycled (that would erase its spacing history), so the surplus cause is
+       dropped observably. */
+    g_fake_ms = IOLINK_EVENT_MIN_REPEAT_MS;
+    iolink_events_process(&ctx);
+    iolink_event_trigger(&ctx, 0x3000U, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(ctx.pending_count, IOLINK_EVENT_PENDING_MAX - 1U);
+    assert_int_equal(iolink_events_get_dropped_count(&ctx), 2U);
+
+    /* Both windows elapsed: the slot is released and reusable. */
+    g_fake_ms = 2U * IOLINK_EVENT_MIN_REPEAT_MS;
+    iolink_events_process(&ctx);
+    iolink_event_trigger(&ctx, 0x3000U, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(ctx.pending_count, IOLINK_EVENT_PENDING_MAX);
+    assert_int_equal(iolink_events_get_dropped_count(&ctx), 2U);
+
     iolink_events_reset(&ctx);
     assert_int_equal(iolink_events_get_dropped_count(&ctx), 0U);
 }
