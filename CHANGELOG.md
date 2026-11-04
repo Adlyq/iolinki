@@ -137,8 +137,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disappearances. DeviceStatus (0x0024) is derived from the active conditions
   per Table B.13 (0 OK, 1 Maintenance-Required, 2 Out-of-Specification,
   3 Functional-Check, 4 Failure), and DetailedDeviceStatus (0x0025) lists the
-  active appears set through subindex 0 only (B.2.22 does not support subindex
-  access). Queued events and the lifecycle state are discarded on STARTUP.
+  reported appears set through subindex 0 only (B.2.22 does not support
+  subindex access). A condition that was cleared stays listed until its
+  "event disappears" is reported, matching the Master's diagnosis view. Queued
+  events and the lifecycle state are discarded on STARTUP.
 
 ### Fixed
 - Every reset command discards an active Block Parameter transfer (Table 101
