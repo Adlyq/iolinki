@@ -13,10 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   range no longer relies on unsigned wraparound.
 - An unconfigured optional ProductURI (0x001B) now answers `0x80 0x11`
   instead of an empty positive response.
-- ProcessDataInput (0x0028) answers `0x80 0x11` while the DLL flags PDin as
-  invalid, and ProcessDataOutput (0x0029) answers `0x80 0x11` until a PDout
-  frame has been received; a device without Process Data answers with an empty
-  positive response.
+- ProcessDataInput (0x0028) and ProcessDataOutput (0x0029) serve the current
+  Process Data buffer with the runtime channel length (B.2.23/B.2.24). PD
+  validity is carried by the CKS PD-status bit (A.1.5); the clauses do not
+  define another answer while it is invalid or before the first PD cycle, so
+  the buffer is served as-is (ST reference behaviour). A device without Process
+  Data still answers with an empty positive response.
 - Device diagnosis and status follow Table 101: Device reset (0x80), Restore
   factory settings (0x82) and Back-to-box (0x83) clear ErrorCount and the event
   memory behind DeviceStatus (0x0024) / DetailedDeviceStatus (0x0025), while

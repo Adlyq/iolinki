@@ -199,8 +199,10 @@ static void test_process_data_input_returns_pd(void** state)
     assert_int_equal(out[1], 0x22U);
 }
 
-/* B.2.23: while the DLL flags PDin as invalid there is no valid data to serve. */
-static void test_process_data_input_invalid_is_unavailable(void** state)
+/* B.2.23 is silent while the DLL flags PDin as invalid: the PD status bit
+ * (A.1.5) carries the validity, so the last Process Data snapshot is served
+ * instead of an ISDU error (ST reference behaviour). */
+static void test_process_data_input_invalid_still_serves_buffer(void** state)
 {
     (void) state;
     iolink_dll_ctx_t dll;
@@ -214,8 +216,24 @@ static void test_process_data_input_invalid_is_unavailable(void** state)
     uint8_t out[8] = {0};
     int n = read_object_with_dll(0x0028U, &dll, out, sizeof(out));
     assert_int_equal(n, 2);
-    assert_int_equal(out[0], 0x80U);
-    assert_int_equal(out[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+    assert_int_equal(out[0], 0x11U);
+    assert_int_equal(out[1], 0x22U);
+}
+
+/* B.2.24: before the first PDout frame the zero-initialised buffer of the
+ * configured length is served, not an error. */
+static void test_process_data_output_before_first_frame(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t dll;
+    (void) memset(&dll, 0, sizeof(dll));
+    dll.pd_out_len_current = 2U;
+
+    uint8_t out[8] = {0xFFU, 0xFFU};
+    int n = read_object_with_dll(0x0029U, &dll, out, sizeof(out));
+    assert_int_equal(n, 2);
+    assert_int_equal(out[0], 0x00U);
+    assert_int_equal(out[1], 0x00U);
 }
 
 /* B.2.23/B.2.24: a device without Process Data answers with an empty positive
@@ -474,7 +492,9 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_product_uri_index, setup, teardown),
         cmocka_unit_test_setup_teardown(test_product_uri_absent, setup, teardown),
         cmocka_unit_test_setup_teardown(test_process_data_input_returns_pd, setup, teardown),
-        cmocka_unit_test_setup_teardown(test_process_data_input_invalid_is_unavailable, setup,
+        cmocka_unit_test_setup_teardown(test_process_data_input_invalid_still_serves_buffer,
+                                        setup, teardown),
+        cmocka_unit_test_setup_teardown(test_process_data_output_before_first_frame, setup,
                                         teardown),
         cmocka_unit_test_setup_teardown(test_process_data_zero_length, setup, teardown),
         cmocka_unit_test_setup_teardown(test_process_data_80xx_is_positive, setup, teardown),

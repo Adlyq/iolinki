@@ -790,36 +790,28 @@ static void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
     if (ctx->dll_ctx != NULL) {
         const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
         if (input) {
-            /* B.2.23: the object carries the last *valid* process input data.
-               A zero-length PDin has nothing to serve (empty positive answer);
-               otherwise the DLL validity flag decides whether the buffer is
-               valid data or stale octets. */
-            len = dll->pd_in_len;
+            /* B.2.23: the object carries the Process Data of the PDin channel
+               with its runtime length. The PD status bit (A.1.5) carries the
+               validity; B.2.23 does not define a different answer while it is
+               invalid, so the buffer is served as-is (ST reference behaviour). */
+            len = dll->pd_in_len_current;
             if (len > IOLINK_PD_IN_MAX_SIZE) {
                 len = (uint8_t) IOLINK_PD_IN_MAX_SIZE;
             }
             if (len > 0U) {
-                if (!dll->pd_valid) {
-                    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
-                    return;
-                }
                 const uint8_t* pdi = &dll->pd_in[dll->pd_in_active][dll->od_width];
                 (void) memcpy(ctx->response_buf, pdi, len);
             }
         }
         else {
+            /* B.2.24: same for the PDout channel. Until the first PDout frame
+               the zero-initialised buffer of the configured length is served. */
             len = dll->pd_out_len_current;
             if (len > sizeof(dll->pd_out)) {
                 len = (uint8_t) sizeof(dll->pd_out);
             }
-            if (dll->pd_out_seen) {
-                if (len > 0U) {
-                    (void) memcpy(ctx->response_buf, dll->pd_out, len);
-                }
-            }
-            else if (len > 0U) {
-                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
-                return;
+            if (len > 0U) {
+                (void) memcpy(ctx->response_buf, dll->pd_out, len);
             }
         }
     }
