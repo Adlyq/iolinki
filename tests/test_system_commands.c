@@ -205,8 +205,24 @@ static void test_reset_commands_clear_diagnostics(void** state)
         assert_int_equal(dll.timeout_errors, 0U);
         assert_int_equal(dll.framing_errors, 0U);
         assert_int_equal(dll.timing_errors, 0U);
-        assert_int_equal(dll.events.count, 0U);
-        assert_false(iolink_events_flag(&dll.events));
+        if (reset_commands[i] == IOLINK_CMD_RESTORE_FACTORY_SETTINGS) {
+            /* Table 101 "Clear": the published appearance stays, the withdraw
+               pair is appended immediately, and DeviceStatus drops. */
+            iolink_event_t event;
+            assert_int_equal(dll.events.count, 2U);
+            assert_true(iolink_events_flag(&dll.events));
+            assert_true(iolink_events_pop(&dll.events, &event));
+            assert_int_equal(event.code, 0x1000U);
+            assert_int_equal(event.mode, IOLINK_EVENT_MODE_APPEARS);
+            assert_true(iolink_events_pop(&dll.events, &event));
+            assert_int_equal(event.code, 0x1000U);
+            assert_int_equal(event.mode, IOLINK_EVENT_MODE_DISAPPEARS);
+            assert_int_equal(iolink_events_get_highest_severity(&dll.events), 0U);
+        }
+        else {
+            assert_int_equal(dll.events.count, 0U);
+            assert_false(iolink_events_flag(&dll.events));
+        }
     }
 
     /* Application reset (0x81): Table 101 says "No". */

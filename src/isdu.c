@@ -974,6 +974,14 @@ static void isdu_reset_diagnostics(iolink_isdu_ctx_t* ctx)
     }
 }
 
+/** @brief Table 101: reset ErrorCount without touching the event engine. */
+static void isdu_reset_error_counters(iolink_isdu_ctx_t* ctx)
+{
+    if (ctx->dll_ctx != NULL) {
+        iolink_dll_reset_error_counters((iolink_dll_ctx_t*) ctx->dll_ctx);
+    }
+}
+
 /** @brief 0x80-0x83: device/application reset, factory restore, back-to-box. */
 static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
@@ -996,11 +1004,19 @@ static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
         case IOLINK_CMD_RESTORE_FACTORY_SETTINGS: /* 0x82 */
             /* Reset all parameters to factory defaults. Table 177 requires
                DS_UPLOAD_FLAG = 0: the master keeps its stored parameter set
-               and re-downloads it, so no upload is requested here. Table 101:
-               "Clear" the diagnosis and status. */
+               and re-downloads it, so no upload is requested here. Table 101
+               "Clear": ErrorCount is reset and every active Error/Warning is
+               withdrawn with an "event disappears" so the Master can drop it
+               from its diagnosis. */
             isdu_params_factory_reset(ctx);
             isdu_clear_ds_upload_req(ctx);
-            isdu_reset_diagnostics(ctx);
+            isdu_reset_error_counters(ctx);
+            if (ctx->event_ctx != NULL) {
+                iolink_events_clear_diagnosis((iolink_events_ctx_t*) ctx->event_ctx);
+            }
+            else if (ctx->dll_ctx != NULL) {
+                iolink_events_clear_diagnosis(&((iolink_dll_ctx_t*) ctx->dll_ctx)->events);
+            }
             break;
 
         case IOLINK_CMD_BACK_TO_BOX: /* 0x83 */

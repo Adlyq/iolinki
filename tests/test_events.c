@@ -560,6 +560,58 @@ static void test_event_device_status_matrix(void** state)
     }
 }
 
+/* Table 101 "Clear": every asserted Error/Warning is withdrawn with MODE
+ * "event disappears", queued Notifications are discarded, and DeviceStatus is
+ * cleared by the reset. */
+static void test_event_clear_diagnosis(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    events_init(&ctx);
+    ctx.time_us = fake_time_us;
+    g_fake_ms = 0U;
+
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_MAINTENANCE_WEAR, IOLINK_EVENT_TYPE_WARNING);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST, IOLINK_EVENT_TYPE_NOTIFICATION);
+    assert_int_equal(ctx.count, 3U);
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4U);
+
+    iolink_events_clear_diagnosis(&ctx);
+
+    /* The appearances already queued stay until acknowledged; the reset adds
+       the matching disappearances immediately and drops the Notification. */
+    assert_int_equal(ctx.count, 4U);
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
+
+    /* Acknowledge the frozen appears snapshot: the withdraw pair becomes the
+       presented set, so its MODE=2 qualifier is observable on the wire
+       (Table A.20: MODE 10, TYPE 11/10, INSTANCE 4 -> 0xB4 / 0xA4). */
+    iolink_events_memory_write(&ctx, 0x00U, 0x00U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x87U); /* 3 slots */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xB4U); /* E disappears */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x02U), 0x10U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x03U), 0x00U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0xE4U); /* W appears */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x05U), 0x8CU);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x06U), 0x42U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x07U), 0xA4U); /* W disappears */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x08U), 0x8CU);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x09U), 0x42U);
+
+    iolink_event_t ev;
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_GENERAL_MALFUNCTION);
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_MAINTENANCE_WEAR);
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_MAINTENANCE_WEAR);
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
+    assert_int_equal(ctx.count, 0U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -583,6 +635,7 @@ int main(void)
         cmocka_unit_test(test_events_reset_clears),
         cmocka_unit_test(test_event_flag_invariant),
         cmocka_unit_test(test_notification_dedup),
+        cmocka_unit_test(test_event_clear_diagnosis),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

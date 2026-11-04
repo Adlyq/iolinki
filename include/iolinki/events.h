@@ -225,6 +225,20 @@ void iolink_event_clear(iolink_events_ctx_t* ctx, uint16_t code);
 void iolink_events_process(iolink_events_ctx_t* ctx);
 
 /**
+ * @brief Withdraw every active Error/Warning (Table 101 "Clear").
+ *
+ * Implements the diagnosis part of Restore factory settings: every asserted
+ * Error/Warning is released and reported with MODE "event disappears" so the
+ * Master can clear its diagnosis, and queued Notifications are discarded. The
+ * disappearance is queued immediately (the reset is deliberate), and
+ * DeviceStatus clears because the condition is no longer asserted. The caller
+ * still resets the ErrorCount counters.
+ *
+ * @param ctx Event context
+ */
+void iolink_events_clear_diagnosis(iolink_events_ctx_t* ctx);
+
+/**
  * @brief Number of events lost because the queue or pending[] was full.
  *
  * The lifecycle table holds IOLINK_EVENT_PENDING_MAX simultaneously active

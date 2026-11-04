@@ -19,10 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   define another answer while it is invalid or before the first PD cycle, so
   the buffer is served as-is (ST reference behaviour). A device without Process
   Data still answers with an empty positive response.
-- Device diagnosis and status follow Table 101: Device reset (0x80), Restore
-  factory settings (0x82) and Back-to-box (0x83) clear ErrorCount and the event
-  memory behind DeviceStatus (0x0024) / DetailedDeviceStatus (0x0025), while
-  Application reset (0x81) leaves them untouched.
+- Device diagnosis and status follow Table 101: Device reset (0x80) and
+  Back-to-box (0x83) set them to "0" (ErrorCount and the event memory behind
+  DeviceStatus (0x0024) / DetailedDeviceStatus (0x0025) are cleared), while
+  Restore factory settings (0x82) resets ErrorCount and withdraws every active
+  Error/Warning with "event disappears" ("Clear"); Application reset (0x81)
+  leaves them untouched.
 - Event lifecycle (A.6.4/10.10.2): a re-raise inside the 1 s window is
   deferred by `iolink_events_process()` instead of being dropped, timestamps no
   longer use 0 as a "never sent" sentinel (a first event at t=0 works), events

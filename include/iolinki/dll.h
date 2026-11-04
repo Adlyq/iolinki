@@ -155,7 +155,7 @@ typedef struct
  * the behaviour the incremental view had.
  * @{
  */
-#define IOLINK_ISDU_PUB_LEN(word) ((uint8_t) ((word) &0xFFU))
+#define IOLINK_ISDU_PUB_LEN(word) ((uint8_t) ((word) & 0xFFU))
 #define IOLINK_ISDU_PUB_BUSY(word) ((uint8_t) (((word) >> 8) & 0x01U))
 #define IOLINK_ISDU_PUB_SEL(word) ((uint8_t) (((word) >> 9) & 0x01U))
 #define IOLINK_ISDU_PUB_WORD(len, busy, sel)                                                     \
@@ -675,12 +675,26 @@ void iolink_dll_get_stats(const iolink_dll_ctx_t* ctx, iolink_dll_stats_t* out_s
  * Clears the counters behind ErrorCount (0x0020) and discards the event queue,
  * the Event flag and the Table 58 event memory, so DeviceStatus (0x0024) and
  * DetailedDeviceStatus (0x0025) start from "0" again. Called for the Device
- * reset, Restore factory settings and Back-to-box SystemCommands; an
- * Application reset leaves the diagnosis untouched (Table 101).
+ * Device reset and Back-to-box. Restore factory settings withdraws the active
+ * events instead (Table 101 "Clear"), so it uses
+ * iolink_dll_reset_error_counters() together with
+ * iolink_events_clear_diagnosis(). An Application reset leaves the diagnosis
+ * untouched.
  *
  * @param ctx DLL context
  */
 void iolink_dll_reset_diagnostics(iolink_dll_ctx_t* ctx);
+
+/**
+ * @brief Reset the ErrorCount counters without touching the event engine.
+ *
+ * B.2.20/Table 101: ErrorCount counts errors since power-on or reset. Used by
+ * Restore factory settings, which resets the counters but withdraws the active
+ * Events instead of discarding them.
+ *
+ * @param ctx DLL context
+ */
+void iolink_dll_reset_error_counters(iolink_dll_ctx_t* ctx);
 
 /**
  * @brief Enable/disable timing enforcement (t_ren / t_cycle)

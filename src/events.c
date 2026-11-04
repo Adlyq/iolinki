@@ -344,6 +344,53 @@ void iolink_events_process(iolink_events_ctx_t* ctx)
     IOLINK_CRITICAL_EXIT();
 }
 
+void iolink_events_clear_diagnosis(iolink_events_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+
+    IOLINK_CRITICAL_ENTER();
+
+    /* Table 101 "Clear": queued Notifications carry no diagnosis and are
+       discarded while they are still unacknowledged. */
+    uint8_t kept = 0U;
+    for (uint8_t i = 0U; i < ctx->count; i++) {
+        if (ctx->queue[i].type == IOLINK_EVENT_TYPE_NOTIFICATION) {
+            continue;
+        }
+        ctx->queue[kept] = ctx->queue[i];
+        kept++;
+    }
+    ctx->count = kept;
+
+    /* Withdraw every asserted Error/Warning. The reset is deliberate, so the
+       "event disappears" is queued immediately instead of waiting for the
+       regular A.6.4/10.10.2 spacing; DeviceStatus clears with the reset. */
+    const uint32_t now = events_now_ms(ctx);
+    for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
+        iolink_event_pending_t* p = &ctx->pending[i];
+        if (!p->active || !p->present) {
+            continue;
+        }
+        p->present = false;
+        if (ctx->pending_count > 0U) {
+            ctx->pending_count--;
+        }
+        if (p->reported) {
+            pending_emit_disappears(ctx, p, now);
+        }
+    }
+
+    if (ctx->count == 0U) {
+        ctx->frozen = false;
+        ctx->frozen_count = 0U;
+        (void) memset(ctx->memory, 0, sizeof(ctx->memory));
+    }
+    event_publish(ctx);
+    IOLINK_CRITICAL_EXIT();
+}
+
 void iolink_events_reset(iolink_events_ctx_t* ctx)
 {
     if (ctx == NULL) {

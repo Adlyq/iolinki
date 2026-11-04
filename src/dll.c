@@ -1875,15 +1875,9 @@ void iolink_dll_get_stats(const iolink_dll_ctx_t* ctx, iolink_dll_stats_t* out_s
     out_stats->isr_tx_dropped = IOLINK_STAT_TOTAL(ctx, isr_tx_dropped);
 }
 
-void iolink_dll_reset_diagnostics(iolink_dll_ctx_t* ctx)
+void iolink_dll_reset_error_counters(iolink_dll_ctx_t* ctx)
 {
     if (ctx == NULL) return;
-
-    /* B.2.20/Table 101: ErrorCount counts errors since power-on or reset, and
-       the diagnosis/status is cleared by the reset SystemCommands. The event
-       engine owns DeviceStatus and DetailedDeviceStatus; reset() keeps the
-       bound clock. */
-    iolink_events_reset(&ctx->events);
 
     IOLINK_CRITICAL_ENTER();
     ctx->crc_errors = 0U;
@@ -1897,6 +1891,18 @@ void iolink_dll_reset_diagnostics(iolink_dll_ctx_t* ctx)
     ctx->isr_stat.timing_errors = 0U;
 #endif
     IOLINK_CRITICAL_EXIT();
+}
+
+void iolink_dll_reset_diagnostics(iolink_dll_ctx_t* ctx)
+{
+    if (ctx == NULL) return;
+
+    /* B.2.20/Table 101: ErrorCount counts errors since power-on or reset, and
+       the diagnosis/status is cleared by the reset SystemCommands. The event
+       engine owns DeviceStatus and DetailedDeviceStatus; reset() keeps the
+       bound clock. */
+    iolink_events_reset(&ctx->events);
+    iolink_dll_reset_error_counters(ctx);
 }
 
 void iolink_dll_set_timing_enforcement(iolink_dll_ctx_t* ctx, bool enable)
