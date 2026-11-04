@@ -112,11 +112,25 @@
 
 ## 6. 记录项（已裁决）
 
-### `ProcessDataInput 0x0028` 语义（`已裁决 → PR#3`）
+### `ProcessDataInput 0x0028` / `ProcessDataOutput 0x0029` 语义（`已裁决 → PR#3`）
 
 - 上游：返回 1 字节"PD 长度描述符"。
-- 我们：返回"最后有效的 PD-in 数据"（`a9251fb`）。
-- **规范裁决**：Table B.8 `0x0028 ProcessDataInput … Read last valid Process Data from PDin channel`——**采信我们**，已通过上游 PR #46 提交。
+- 我们：返回 PDin/PDout 通道的 Process Data，长度取运行时通道长度（`a9251fb`、`b5c3711`）。
+- **规范裁决**：Table B.8 + B.2.23/B.2.24。条款未定义"PD 无效/首帧前"的应答，按 ST
+  参考实现返回当前缓冲；有效性由 CKS 的 PD status 位（A.1.5）表达，不作为 ISDU 错误。
+  无 PD 时返回空正响应。已通过上游 PR #46 提交，并在本次复核中把 own_dev 的实现从
+  "invalid → 0x8011" 收敛到该口径。
+
+### 2026-11 复核补充（B.2.22 / Table 101 / 10.10.2）
+
+- **DetailedDeviceStatus（0x0025）**：条目在 MODE "event disappears" 上报时才移除；
+  故障已清除但 disappears 仍被 10.10.2 间隔延迟期间保持列出（B.2.22）。
+- **DeviceStatus（0x0024）**：由当前已断言条件推导（Table B.13），不因队列里待发的
+  disappears 而保持，也不被 Notification 抬高。
+- **Restore factory settings（0x82）**：按 Table 101 "Clear" 重置 ErrorCount 并把所有
+  激活的 Error/Warning 以 "event disappears" 撤下；0x80/0x83 仍为 "0"。
+- **生命周期槽位复用**：仅当 appears/disappears 两个 1 s 窗口都结束后才复用，避免同一
+  EventCode 在 10.10.2 窗口内重复上报。
 
 ### `0x84` / `0x95-0x9A` 的分支口径
 
