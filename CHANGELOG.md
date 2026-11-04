@@ -29,7 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lost to a full queue or `pending[]` table increments
   `iolink_events_get_dropped_count()`, and slots are cleared completely when
   released. DetailedDeviceStatus (0x0025) lists only events whose "appears" has
-  actually been reported. DeviceStatus (0x0024) is derived from the currently
+  actually been reported, and keeps a cleared event listed until its
+  disappearance is reported (B.2.22). DeviceStatus (0x0024) is derived from the currently
   asserted conditions (Table B.13), so it drops with the cause and is not held
   by a queued disappearance or raised by a Notification.
 

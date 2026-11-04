@@ -1197,9 +1197,11 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
 
     iolink_events_ctx_t* event_ctx = (iolink_events_ctx_t*) ctx->event_ctx;
 
-    /* Collect the currently active Error/Warning events. B.2.22: only MODE
-       "Event appears" entries are listed; a disappeared event drops out, which
-       is equivalent to clearing its slot to 0x00/0x0000. Only the snapshot of
+    /* Collect the pending diagnosis entries: the events whose "Event appears"
+       was reported and whose "Event disappears" has not been issued yet. A
+       condition that was cleared therefore stays listed while its withdrawal
+       waits for the 10.10.2 spacing, matching the Master's diagnosis view; an
+       appearance that is still deferred is not listed. Only the snapshot of
        the pending table is taken with interrupts off; the formatting below
        runs unlocked (the response buffer is main-owned). */
     uint16_t codes[IOLINK_EVENT_PENDING_MAX];
@@ -1208,7 +1210,7 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
     IOLINK_CRITICAL_ENTER();
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         const iolink_event_pending_t* p = &event_ctx->pending[i];
-        if (p->active && p->present && p->reported && (p->type != IOLINK_EVENT_TYPE_NOTIFICATION)) {
+        if (p->active && p->reported && (p->type != IOLINK_EVENT_TYPE_NOTIFICATION)) {
             codes[n] = p->code;
             types[n] = p->type;
             n++;

@@ -996,6 +996,14 @@ static int read_events_index(iolink_events_ctx_t* events, uint16_t index, uint8_
     return isdu_collect_response(&ctx, out, out_size);
 }
 
+static uint32_t g_dds_event_ms;
+
+static uint64_t dds_event_time_us(void* user)
+{
+    (void) user;
+    return (uint64_t) g_dds_event_ms * 1000U;
+}
+
 /* SDCI_TC_0129: DDS is empty (not an error) before any event and is bounded by
  * 64 records. The stack keeps at most IOLINK_EVENT_PENDING_MAX active records. */
 static void test_isdu_dds_empty_and_max_records(void** state)
@@ -1037,6 +1045,38 @@ static void test_isdu_dds_empty_and_max_records(void** state)
     assert_int_equal(isdu_collect_response(&ctx, records, sizeof(records)), 2);
     assert_int_equal(records[0], 0x80U);
     assert_int_equal(records[1], IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+}
+
+/* B.2.22: an entry leaves DetailedDeviceStatus when the "event disappears" is
+ * reported, not when the condition is cleared. The withdrawal is deferred by
+ * the 10.10.2 spacing while the Master still holds the entry. */
+static void test_isdu_dds_keeps_cleared_event_until_disappear(void** state)
+{
+    (void) state;
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+
+    iolink_events_ctx_t events;
+    iolink_events_init(&events);
+    events.time_us = dds_event_time_us;
+    g_dds_event_ms = 0U;
+
+    uint8_t records[16];
+    iolink_event_trigger(&events, 0x1801U, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(
+        read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records, sizeof(records)), 3);
+
+    /* The condition is gone, but the withdrawal has not been reported yet. */
+    iolink_event_clear(&events, 0x1801U);
+    assert_int_equal(
+        read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records, sizeof(records)), 3);
+
+    /* After the minimum appearance window the disappear is emitted and the
+       entry drops out. */
+    g_dds_event_ms = 100U;
+    iolink_events_process(&events);
+    assert_int_equal(
+        read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records, sizeof(records)), 0);
 }
 
 /* SDCI_TC_0373: DeviceStatus and DetailedDeviceStatus reflect an event that
@@ -1177,6 +1217,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_subindexed_objects, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_dpp1_system_command, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_dds_subindices, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_dds_keeps_cleared_event_until_disappear,
+                                        test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_dds_empty_and_max_records, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_device_status_follows_event, test_setup,
