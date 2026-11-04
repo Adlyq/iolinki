@@ -542,16 +542,23 @@ static uint8_t event_type_device_status(uint16_t code, iolink_event_type_t type)
 
 uint8_t iolink_events_get_highest_severity(iolink_events_ctx_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->count == 0U)) {
+    if (ctx == NULL) {
         return 0U; /* OK */
     }
 
+    /* Table B.13 is derived from the currently active conditions, not from the
+       queue: a queued "event disappears" must not keep DeviceStatus asserted,
+       and a Notification never raises it. */
     uint8_t worst = 0U;      /* OK */
     uint8_t worst_prio = 5U; /* OK priority */
     IOLINK_CRITICAL_ENTER();
-    for (uint8_t i = 0U; i < ctx->count; i++) {
-        const iolink_event_t* ev = &ctx->queue[i];
-        const uint8_t status = event_type_device_status(ev->code, ev->type);
+    for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
+        const iolink_event_pending_t* p = &ctx->pending[i];
+        if (!p->active || !p->present || !p->reported ||
+            (p->type == IOLINK_EVENT_TYPE_NOTIFICATION)) {
+            continue;
+        }
+        const uint8_t status = event_type_device_status(p->code, p->type);
         const uint8_t prio = device_status_priority(status);
         if (prio < worst_prio) {
             worst_prio = prio;

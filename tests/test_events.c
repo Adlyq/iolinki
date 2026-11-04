@@ -470,6 +470,74 @@ static void test_notification_dedup(void** state)
     assert_false(iolink_events_pop(&ctx, &ev));
 }
 
+/* Table B.13: DeviceStatus reflects the current conditions, so it drops as
+ * soon as the cause is gone, even while the "event disappears" is still
+ * deferred by the 10.10.2 spacing. */
+static void test_event_device_status_drops_with_condition(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    events_init(&ctx);
+    ctx.time_us = fake_time_us;
+    g_fake_ms = 0U;
+
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4U);
+
+    iolink_event_clear(&ctx, IOLINK_EVENTCODE_SHORT_CIRCUIT);
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
+
+    /* A notification never raises DeviceStatus. */
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_NO_MALFUNCTION, IOLINK_EVENT_TYPE_NOTIFICATION);
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
+}
+
+/* Table B.13: values and dominance. Priority 4->1, 3->2, 1->3, 2->4; the
+ * lowest priority value wins, i.e. Failure > Functional-Check > Maintenance >
+ * Out-of-Specification. */
+static void test_event_device_status_matrix(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+
+    const struct
+    {
+        uint16_t code;
+        uint8_t expected;
+    } single[] = {
+        {IOLINK_EVENTCODE_MAINTENANCE_WEAR, 1U},
+        {IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, 2U},
+        {IOLINK_EVENTCODE_SIMULATION_ACTIVE, 3U},
+        {IOLINK_EVENTCODE_SHORT_CIRCUIT, 4U},
+    };
+    for (size_t i = 0U; i < (sizeof(single) / sizeof(single[0])); i++) {
+        events_init(&ctx);
+        iolink_event_trigger(&ctx, single[i].code, iolink_event_classify(single[i].code));
+        assert_int_equal(iolink_events_get_highest_severity(&ctx), single[i].expected);
+    }
+
+    const struct
+    {
+        uint16_t first;
+        uint16_t second;
+        uint8_t expected;
+    } pairs[] = {
+        {IOLINK_EVENTCODE_MAINTENANCE_WEAR, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, 1U},
+        {IOLINK_EVENTCODE_MAINTENANCE_WEAR, IOLINK_EVENTCODE_SIMULATION_ACTIVE, 3U},
+        {IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, IOLINK_EVENTCODE_SIMULATION_ACTIVE, 3U},
+        {IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENTCODE_MAINTENANCE_WEAR, 4U},
+        {IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENTCODE_SIMULATION_ACTIVE, 4U},
+        {IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, 4U},
+        {IOLINK_EVENTCODE_SIMULATION_ACTIVE, IOLINK_EVENTCODE_SHORT_CIRCUIT, 4U},
+    };
+    for (size_t i = 0U; i < (sizeof(pairs) / sizeof(pairs[0])); i++) {
+        events_init(&ctx);
+        iolink_event_trigger(&ctx, pairs[i].first, iolink_event_classify(pairs[i].first));
+        iolink_event_trigger(&ctx, pairs[i].second, iolink_event_classify(pairs[i].second));
+        assert_int_equal(iolink_events_get_highest_severity(&ctx), pairs[i].expected);
+    }
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -479,6 +547,8 @@ int main(void)
         cmocka_unit_test(test_phy_diagnostic_codes),
         cmocka_unit_test(test_event_peek),
         cmocka_unit_test(test_event_helpers),
+        cmocka_unit_test(test_event_device_status_drops_with_condition),
+        cmocka_unit_test(test_event_device_status_matrix),
         cmocka_unit_test(test_event_classify),
         cmocka_unit_test(test_event_memory_layout),
         cmocka_unit_test(test_event_memory_frozen),
