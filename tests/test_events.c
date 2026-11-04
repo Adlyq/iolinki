@@ -401,7 +401,7 @@ static void test_event_pending_full_observable(void** state)
     iolink_event_trigger(&ctx, 0x3000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(iolink_events_get_dropped_count(&ctx), 1U);
 
-    /* Free one slot and emit its withdrawal. */
+    /* Mark one condition as gone and emit its withdrawal. */
     iolink_event_clear(&ctx, 0x2000U);
     assert_int_equal(ctx.pending_count, IOLINK_EVENT_PENDING_MAX - 1U);
     g_fake_ms = IOLINK_EVENT_MIN_APPEAR_MS;
@@ -508,6 +508,14 @@ static void test_event_device_status_drops_with_condition(void** state)
 
     iolink_event_clear(&ctx, IOLINK_EVENTCODE_SHORT_CIRCUIT);
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
+    assert_int_equal(ctx.count, 1U); /* the appears is still queued */
+
+    /* Inside the minimum appearance window the withdrawal is deferred, yet the
+       status stays at OK because the condition is no longer asserted. */
+    g_fake_ms = 10U;
+    iolink_events_process(&ctx);
+    assert_int_equal(ctx.count, 1U);
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
 
     /* A notification never raises DeviceStatus. */
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_NO_MALFUNCTION, IOLINK_EVENT_TYPE_NOTIFICATION);
@@ -527,10 +535,9 @@ static void test_event_device_status_matrix(void** state)
         uint16_t code;
         uint8_t expected;
     } single[] = {
-        {IOLINK_EVENTCODE_MAINTENANCE_WEAR, 1U},
-        {IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, 2U},
-        {IOLINK_EVENTCODE_SIMULATION_ACTIVE, 3U},
-        {IOLINK_EVENTCODE_SHORT_CIRCUIT, 4U},
+        {IOLINK_EVENTCODE_MAINTENANCE_WEAR, 1U},   {IOLINK_EVENTCODE_MAINTENANCE_CLEANING, 1U},
+        {IOLINK_EVENTCODE_MAINTENANCE_REFILL, 1U}, {IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, 2U},
+        {IOLINK_EVENTCODE_SIMULATION_ACTIVE, 3U},  {IOLINK_EVENTCODE_SHORT_CIRCUIT, 4U},
     };
     for (size_t i = 0U; i < (sizeof(single) / sizeof(single[0])); i++) {
         events_init(&ctx);
@@ -580,13 +587,17 @@ static void test_event_clear_diagnosis(void** state)
     iolink_events_clear_diagnosis(&ctx);
 
     /* The appearances already queued stay until acknowledged; the reset adds
-       the matching disappearances immediately and drops the Notification. */
+       the matching disappearances immediately and drops the Notification
+       (the queue is full at 4 entries, so a missing filter would silently
+       evict the Notification and hide itself). */
     assert_int_equal(ctx.count, 4U);
+    assert_int_equal(iolink_events_get_dropped_count(&ctx), 0U);
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
 
     /* Acknowledge the frozen appears snapshot: the withdraw pair becomes the
        presented set, so its MODE=2 qualifier is observable on the wire
-       (Table A.20: MODE 10, TYPE 11/10, INSTANCE 4 -> 0xB4 / 0xA4). */
+       (Figure A.24: MODE=disappears, TYPE=error/warning, INSTANCE=Application
+       -> 0xB4 / 0xA4). */
     iolink_events_memory_write(&ctx, 0x00U, 0x00U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x87U); /* 3 slots */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xB4U); /* E disappears */
@@ -610,6 +621,37 @@ static void test_event_clear_diagnosis(void** state)
     assert_int_equal(ev.code, IOLINK_EVENTCODE_MAINTENANCE_WEAR);
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
     assert_int_equal(ctx.count, 0U);
+}
+
+/* A.6.4: an appearance that is still deferred by the 1 s window was never sent,
+ * so Clear must not put an unpaired withdrawal on the wire. */
+static void test_event_clear_diagnosis_skips_unreported_event(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    events_init(&ctx);
+    ctx.time_us = fake_time_us;
+    g_fake_ms = 0U;
+
+    iolink_event_t ev;
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
+    assert_true(iolink_events_pop(&ctx, &ev)); /* the appearance reaches the master */
+    iolink_event_clear(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION);
+    g_fake_ms = IOLINK_EVENT_MIN_APPEAR_MS;
+    iolink_events_process(&ctx);
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
+
+    /* Re-raised inside the 1 s window: the fresh appearance is deferred, the
+       master has not seen it, so Clear has nothing to withdraw. */
+    g_fake_ms = IOLINK_EVENT_MIN_REPEAT_MS / 2U;
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(ctx.count, 0U);
+
+    iolink_events_clear_diagnosis(&ctx);
+    assert_int_equal(ctx.count, 0U);
+    assert_int_equal(iolink_events_get_dropped_count(&ctx), 0U);
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
 }
 
 int main(void)
@@ -636,6 +678,7 @@ int main(void)
         cmocka_unit_test(test_event_flag_invariant),
         cmocka_unit_test(test_notification_dedup),
         cmocka_unit_test(test_event_clear_diagnosis),
+        cmocka_unit_test(test_event_clear_diagnosis_skips_unreported_event),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

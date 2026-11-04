@@ -218,10 +218,13 @@ static void test_reset_commands_clear_diagnostics(void** state)
             assert_int_equal(event.code, 0x1000U);
             assert_int_equal(event.mode, IOLINK_EVENT_MODE_DISAPPEARS);
             assert_int_equal(iolink_events_get_highest_severity(&dll.events), 0U);
+            assert_int_equal(dll.events.count, 0U);
+            assert_false(iolink_events_flag(&dll.events));
         }
         else {
             assert_int_equal(dll.events.count, 0U);
             assert_false(iolink_events_flag(&dll.events));
+            assert_int_equal(iolink_events_get_highest_severity(&dll.events), 0U);
         }
     }
 
