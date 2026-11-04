@@ -73,7 +73,7 @@ static void test_event_queue_overflow(void** state)
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
 
-    /* Overfill the queue (IOLINK_EVENT_QUEUE_SIZE entries) with Notifications. */
+    /* Overfill the queue (IOLINK_EVENT_QUEUE_SIZE + 1 triggers) with Notifications. */
     for (uint16_t i = 0U; i < (uint16_t) (IOLINK_EVENT_QUEUE_SIZE + 1U); i++) {
         iolink_event_trigger(&ctx, i, IOLINK_EVENT_TYPE_NOTIFICATION);
     }
@@ -90,11 +90,14 @@ static void test_event_queue_overflow(void** state)
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_ERROR);
 
     /* The least severe entry (the last Notification) was overwritten: the
-       remaining queue holds Notifications 0..2 only. */
+       remaining queue holds the first QUEUE_SIZE-1 Notifications only. */
+    uint8_t survivors = 0U;
     while (iolink_events_pop(&ctx, &ev)) {
-        assert_true(ev.code < 3U);
+        assert_true(ev.code < (IOLINK_EVENT_QUEUE_SIZE - 1U));
         assert_int_equal(ev.type, IOLINK_EVENT_TYPE_NOTIFICATION);
+        survivors++;
     }
+    assert_int_equal(survivors, (uint8_t) (IOLINK_EVENT_QUEUE_SIZE - 1U));
 }
 
 static void test_standard_codes(void** state)
@@ -244,7 +247,7 @@ static void test_event_memory_frozen(void** state)
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
 
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
 
     /* Further events while frozen are queued but not visible. */
@@ -262,7 +265,7 @@ static void test_event_memory_confirm(void** state)
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
 
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
     iolink_event_trigger(&ctx, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
     assert_true(iolink_events_flag(&ctx));
 
@@ -295,7 +298,7 @@ static void test_event_memory_confirm_only_presented(void** state)
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
 
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
     /* The first event freezes a 1-slot snapshot. */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
 
@@ -361,12 +364,12 @@ static void test_event_appears_disappears(void** state)
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
 
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
-    iolink_event_clear(&ctx, 0x1000U);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_clear(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION);
 
     /* Within the window the disappearance stays deferred. */
     iolink_events_process(&ctx);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_APPEARS);
+    assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_APPEARS);
     assert_false(iolink_events_pending(&ctx));
 
     clock_set(IOLINK_EVENT_MIN_APPEAR_MS - 1U);
@@ -376,7 +379,7 @@ static void test_event_appears_disappears(void** state)
     /* At the 50 ms mark the disappearance is queued. */
     clock_set(IOLINK_EVENT_MIN_APPEAR_MS);
     iolink_events_process(&ctx);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_DISAPPEARS);
+    assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_DISAPPEARS);
 }
 
 /* The same EventCode may not appear twice while it is active; clearing an
@@ -388,8 +391,8 @@ static void test_event_lifecycle_no_repeat(void** state)
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
 
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_WARNING);
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_WARNING);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_WARNING);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_WARNING);
     assert_int_equal(ctx.count, 1U);
 
     iolink_event_clear(&ctx, 0x2000U); /* not active: ignored */
@@ -407,16 +410,16 @@ static void test_event_reappear_spacing_from_clock_zero(void** state)
     iolink_events_init(&ctx);
 
     /* First incident at millisecond 0. */
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
-    iolink_event_clear(&ctx, 0x1000U);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_clear(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION);
     clock_set(IOLINK_EVENT_MIN_APPEAR_MS);
     iolink_events_process(&ctx);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_APPEARS);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_DISAPPEARS);
+    assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_APPEARS);
+    assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_DISAPPEARS);
 
     /* Re-raised inside the 1 s window: deferred, not dropped. */
     clock_set(500U);
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
     iolink_events_process(&ctx);
     assert_int_equal(ctx.count, 0U);
     assert_int_equal(ctx.pending_count, 1U);
@@ -429,7 +432,7 @@ static void test_event_reappear_spacing_from_clock_zero(void** state)
     /* At 1 s after the previous appearance the new one is queued. */
     clock_set(IOLINK_EVENT_MIN_REPEAT_MS);
     iolink_events_process(&ctx);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_APPEARS);
+    assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_APPEARS);
 }
 
 /* A deferred appearance that disappears before it could be reported needs no
@@ -441,16 +444,17 @@ static void test_event_deferred_appear_cleared(void** state)
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
 
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
-    iolink_event_clear(&ctx, 0x1000U);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_clear(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION);
     clock_set(IOLINK_EVENT_MIN_APPEAR_MS);
     iolink_events_process(&ctx);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_APPEARS);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_DISAPPEARS);
+    assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_APPEARS);
+    assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_DISAPPEARS);
 
     clock_set(500U);
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
-    iolink_event_clear(&ctx, 0x1000U); /* gone before the 1 s spacing elapsed */
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_clear(
+        &ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION); /* gone before the 1 s spacing elapsed */
 
     clock_set(2000U);
     iolink_events_process(&ctx);
@@ -468,18 +472,18 @@ static void test_event_disappears_repeat_spacing(void** state)
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
 
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
-    iolink_event_clear(&ctx, 0x1000U);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_clear(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION);
     clock_set(IOLINK_EVENT_MIN_REPEAT_MS);
     iolink_events_process(&ctx);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_APPEARS);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_DISAPPEARS);
+    assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_APPEARS);
+    assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_DISAPPEARS);
 
     /* New incident at the same instant: "appears" is allowed (1 s after the
        previous "appears"), "disappears" is not (1 s after the last one). */
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_APPEARS);
-    iolink_event_clear(&ctx, 0x1000U);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
+    assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_APPEARS);
+    iolink_event_clear(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION);
 
     clock_set(IOLINK_EVENT_MIN_REPEAT_MS + IOLINK_EVENT_MIN_APPEAR_MS);
     iolink_events_process(&ctx);
@@ -491,7 +495,7 @@ static void test_event_disappears_repeat_spacing(void** state)
 
     clock_set(2U * IOLINK_EVENT_MIN_REPEAT_MS);
     iolink_events_process(&ctx);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_DISAPPEARS);
+    assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_DISAPPEARS);
 }
 
 /* When the lifecycle table is full the surplus cause is dropped, but the drop
@@ -562,7 +566,7 @@ static void test_events_reset_clears(void** state)
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
 
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
     assert_true(iolink_events_flag(&ctx));
 
     iolink_events_reset(&ctx);
@@ -574,9 +578,9 @@ static void test_events_reset_clears(void** state)
     /* 10.10.2: after communication resumes the application reports the current
        causes again, so the same code must produce a fresh appearance instead of
        being treated as still asserted. */
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(ctx.pending_count, 1U);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_APPEARS);
+    assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_APPEARS);
 }
 
 /* The Event flag must satisfy flag == (count > 0) at every setter, so a Master
@@ -697,6 +701,8 @@ static void test_event_clear_diagnosis(void** state)
     assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_DISAPPEARS);
     assert_popped(&ctx, IOLINK_EVENTCODE_MAINTENANCE_WEAR, IOLINK_EVENT_MODE_APPEARS);
     assert_popped(&ctx, IOLINK_EVENTCODE_MAINTENANCE_WEAR, IOLINK_EVENT_MODE_DISAPPEARS);
+    assert_int_equal(ctx.count, 0U);
+    assert_false(iolink_events_pending(&ctx));
 }
 
 static void test_event_clear_diagnosis_discards_all_notifications(void** state)
@@ -746,9 +752,10 @@ static void test_event_no_malfunction_notification_invisible_in_device_status(vo
     assert_true(iolink_events_pending(&ctx));
 }
 
-/* Table B.13: DeviceStatus values and their dominance. The lowest priority
- * value wins: Failure(1) > Functional-Check(2) > Maintenance-Required(3) >
- * Out-of-Specification(4). */
+/* Table B.13: DeviceStatus values and their dominance. Each value has a
+ * priority (0 OK = 5, 1 Maintenance = 3, 2 Out-of-Spec = 4, 3 Functional = 2,
+ * 4 Failure = 1) and the lowest priority value wins, i.e.
+ * Failure > Functional-Check > Maintenance-Required > Out-of-Specification. */
 static void test_event_device_status_matrix(void** state)
 {
     (void) state;
@@ -781,6 +788,9 @@ static void test_event_device_status_matrix(void** state)
         {IOLINK_EVENTCODE_MAINTENANCE_WEAR, IOLINK_EVENTCODE_SIMULATION_ACTIVE, 3U},
         {IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, IOLINK_EVENTCODE_SIMULATION_ACTIVE, 3U},
         {IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENTCODE_MAINTENANCE_WEAR, 4U},
+        {IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENTCODE_SIMULATION_ACTIVE, 4U},
+        {IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, 4U},
+        {IOLINK_EVENTCODE_SIMULATION_ACTIVE, IOLINK_EVENTCODE_SHORT_CIRCUIT, 4U},
     };
     for (size_t i = 0U; i < (sizeof(pairs) / sizeof(pairs[0])); i++) {
         iolink_events_init(&ctx);

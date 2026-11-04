@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
 
 #include "iolinki/isdu.h"
 #include "iolinki/events.h"
@@ -2391,6 +2392,43 @@ static void test_params_legacy_factory_reset_keeps_configured_default_locks(void
     assert_int_equal(iolink_device_info_get_access_locks(), IOLINK_LOCK_DS);
 }
 
+/* B.2.22: a cleared Error/Warning stays in DetailedDeviceStatus until its
+ * "event disappears" is reported (the 10.10.2 spacing defers it); afterwards
+ * the entry leaves the list. */
+static void test_isdu_detailed_device_status_until_disappear(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_events_ctx_t events;
+    iolink_device_info_init(NULL);
+    iolink_params_init();
+    iolink_events_init(&events);
+    iolink_isdu_init(&ctx);
+    ctx.event_ctx = &events;
+
+    iolink_event_trigger(&events, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
+
+    uint8_t record[3];
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, record, sizeof(record)), 3);
+
+    /* The fault is gone, but the withdrawal has not reached the Master yet, so
+       the diagnosis entry must still be reported. */
+    iolink_event_clear(&events, IOLINK_EVENTCODE_GENERAL_MALFUNCTION);
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, record, sizeof(record)), 3);
+
+    /* After the minimum appearance window the disappear is emitted and the
+       entry drops out. */
+    usleep((IOLINK_EVENT_MIN_APPEAR_MS + 20U) * 1000U);
+    iolink_events_process(&events);
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(ctx.response_len, 0U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -2398,6 +2436,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_device_status_read, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_detailed_device_status_read, test_setup,
                                         test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_detailed_device_status_until_disappear,
+                                        test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_detailed_device_status_cr443_octet_order,
                                         test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_error_stats_read, test_setup, test_teardown),

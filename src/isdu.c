@@ -1185,17 +1185,17 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
     iolink_events_ctx_t* event_ctx = (iolink_events_ctx_t*) ctx->event_ctx;
 
     /* Collect the Error/Warning events whose "Event appears" has been reported.
-       B.2.22: only MODE "Event appears" entries are listed; a disappeared event
-       drops out, and an appearance that is still deferred for the 1 s spacing
-       has not reached the Master yet, so it is not listed either. Subindex
-       access is not supported (B.2.22), which isdu_validate_request() already
-       enforces before this handler runs. */
+       B.2.22: the list holds the currently pending diagnosis entries, i.e. the
+       events the Master has been told about and whose "event disappears" has
+       not been issued yet. A condition that was cleared therefore stays listed
+       while its disappearance waits for the 10.10.2 spacing, and an appearance
+       that is still deferred is not listed (the Master has not seen it). */
     uint16_t codes[IOLINK_EVENT_PENDING_MAX];
     iolink_event_type_t types[IOLINK_EVENT_PENDING_MAX];
     uint8_t n = 0U;
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         const iolink_event_pending_t* p = &event_ctx->pending[i];
-        if (p->active && p->present && p->reported && (p->type != IOLINK_EVENT_TYPE_NOTIFICATION)) {
+        if (p->active && p->reported && (p->type != IOLINK_EVENT_TYPE_NOTIFICATION)) {
             codes[n] = p->code;
             types[n] = p->type;
             n++;
