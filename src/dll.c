@@ -1901,7 +1901,9 @@ void iolink_dll_reset_diagnostics(iolink_dll_ctx_t* ctx)
        the diagnosis/status is cleared by the reset SystemCommands. The event
        engine owns DeviceStatus and DetailedDeviceStatus; reset() keeps the
        bound clock. */
+#if IOLINK_FEATURE_EVENTS
     iolink_events_reset(&ctx->events);
+#endif
     iolink_dll_reset_error_counters(ctx);
 }
 

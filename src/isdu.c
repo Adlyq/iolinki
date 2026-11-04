@@ -1011,12 +1011,14 @@ static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             isdu_params_factory_reset(ctx);
             isdu_clear_ds_upload_req(ctx);
             isdu_reset_error_counters(ctx);
+#if IOLINK_FEATURE_EVENTS
             if (ctx->event_ctx != NULL) {
                 iolink_events_clear_diagnosis((iolink_events_ctx_t*) ctx->event_ctx);
             }
             else if (ctx->dll_ctx != NULL) {
                 iolink_events_clear_diagnosis(&((iolink_dll_ctx_t*) ctx->dll_ctx)->events);
             }
+#endif
             break;
 
         case IOLINK_CMD_BACK_TO_BOX: /* 0x83 */
