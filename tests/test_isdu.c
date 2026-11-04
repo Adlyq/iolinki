@@ -474,9 +474,11 @@ static void test_isdu_pdin_descriptor_read(void** state)
     /* Wire a DLL context with a configured PD-in length of 3. */
     assert_int_equal(iolink_dll_set_pd_length(&dll, 3, 0), 0);
     dll.pd_in_len = 3U; /* published PD-in snapshot length */
-    dll.pd_in[0][dll.od_width + 0U] = 0x11U;
-    dll.pd_in[0][dll.od_width + 1U] = 0x22U;
-    dll.pd_in[0][dll.od_width + 2U] = 0x33U;
+    dll.pd_in_last_valid[0] = 0x11U;
+    dll.pd_in_last_valid[1] = 0x22U;
+    dll.pd_in_last_valid[2] = 0x33U;
+    dll.pd_in_last_valid_len = 3U;
+    dll.pd_in_last_valid_seen = true;
     ctx.dll_ctx = &dll;
 
     /* Table B.8/B.2.23: a read returns the last valid PD-in data (3 octets). */

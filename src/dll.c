@@ -713,6 +713,7 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
 
     if (ctx->pd_out_len_current > 0U) {
         (void) memcpy(ctx->pd_out, &ctx->frame_buf[pd_offset], ctx->pd_out_len_current);
+        ctx->pd_out_seen = true; /* B.2.24: last PDout written to the application */
     }
 
     const bool write = ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U);

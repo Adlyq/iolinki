@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (V1.1.5 review follow-up)
+- `iolink_cycle_time_encode(0)` now encodes 0x00 ("no MinCycleTime", B.1.3)
+  instead of clamping to 0.4 ms; 1..3 still clamp to 0x04 and the 317..320
+  range no longer relies on unsigned wraparound.
+- An unconfigured optional ProductURI (0x001B) now answers `0x80 0x11`
+  instead of an empty positive response.
+- ProcessDataInput (0x0028) now serves the last PDin the application published
+  as valid (a later invalidation does not hide it), and ProcessDataOutput
+  (0x0029) the last received PDout. Until the first valid value/frame exists
+  each answers `0x80 0x11`; a device without Process Data answers with an empty
+  positive response.
+- Event lifecycle (A.6.4/10.10.2): a re-raise inside the 1 s window is
+  deferred by `iolink_events_process()` instead of being dropped, timestamps no
+  longer use 0 as a "never sent" sentinel (a first event at t=0 works), events
+  lost to a full queue or `pending[]` table increments
+  `iolink_events_get_dropped_count()`, and slots are cleared completely when
+  released. DetailedDeviceStatus (0x0025) lists only events whose "appears" has
+  actually been reported.
+
 ### Added (TX FRAME line state)
 - `iolink_phy_api_t::tx_busy` (TX FRAME only, optional) reports whether the PHY
   still owns the C/Q line. With it the library defers an eager ISR reply while

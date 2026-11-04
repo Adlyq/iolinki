@@ -29,6 +29,14 @@ static void events_init(iolink_events_ctx_t* ctx)
     ctx->time_us = iolink_test_time_us;
 }
 
+static uint32_t g_fake_ms;
+
+static uint64_t fake_time_us(void* user)
+{
+    (void) user;
+    return (uint64_t) g_fake_ms * 1000U;
+}
+
 static void test_event_queue_flow(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0069");
@@ -55,13 +63,16 @@ static void test_event_queue_overflow(void** state)
     iolink_events_ctx_t ctx;
     events_init(&ctx);
 
-    /* Fill queue (size 8 by default) */
-    for (uint16_t i = 0U; i < 8U; i++) {
+    /* Overfill the queue (IOLINK_EVENT_QUEUE_SIZE entries) with Notifications. */
+    for (uint16_t i = 0U; i < (uint16_t) (IOLINK_EVENT_QUEUE_SIZE + 1U); i++) {
         iolink_event_trigger(&ctx, i, IOLINK_EVENT_TYPE_NOTIFICATION);
     }
+    const uint32_t drops_before = iolink_events_get_dropped_count(&ctx);
+    assert_true(drops_before > 0U);
 
-    /* 9th event should trigger drop of 1st */
+    /* A more severe event still overwrites the least severe one and is counted. */
     iolink_event_trigger(&ctx, 0xFFFF, IOLINK_EVENT_TYPE_ERROR);
+    assert_true(iolink_events_get_dropped_count(&ctx) > drops_before);
 
     iolink_event_t ev;
     iolink_events_pop(&ctx, &ev); /* Skip first */
@@ -326,25 +337,72 @@ static void test_event_lifecycle_no_repeat(void** state)
     assert_int_equal(ctx.count, 1U);
 }
 
-/* A.6.4: no more than one report per second for the same EventCode. */
+/* 10.10.2: no more than one report per second for the same EventCode. The
+ * second incident is deferred, not dropped, and a timestamp of 0 is valid. */
 static void test_event_recently_sent(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0076");
     (void) state;
     iolink_events_ctx_t ctx;
     events_init(&ctx);
+    ctx.time_us = fake_time_us;
+    g_fake_ms = 0U;
     iolink_event_t ev;
 
+    /* First appearance at millisecond 0 (the old sentinel dropped this). */
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
-    iolink_event_clear(&ctx, 0x1000U);
-    usleep(60000U);
-    iolink_events_process(&ctx);
-    (void) iolink_events_pop(&ctx, &ev); /* appears */
-    (void) iolink_events_pop(&ctx, &ev); /* disappears */
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
 
-    /* Re-appearing within one second is suppressed. */
+    g_fake_ms = 50U;
+    iolink_event_clear(&ctx, 0x1000U);
+    iolink_events_process(&ctx);
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
+
+    /* Re-raised inside the 1 s window: deferred, not queued or dropped. */
+    g_fake_ms = 60U;
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(ctx.count, 0U);
+    assert_int_equal(ctx.pending_count, 1U);
+
+    /* Still inside the window at 999 ms. */
+    g_fake_ms = 999U;
+    iolink_events_process(&ctx);
+    assert_int_equal(ctx.count, 0U);
+
+    /* At 1 s after the previous appearance the deferred event is emitted. */
+    g_fake_ms = 1000U;
+    iolink_events_process(&ctx);
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.code, 0x1000U);
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
+}
+
+/* A full pending[] table must make the loss observable. */
+static void test_event_pending_full_observable(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    events_init(&ctx);
+    ctx.time_us = fake_time_us;
+    g_fake_ms = 0U;
+
+    iolink_event_t ev;
+    for (uint16_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
+        iolink_event_trigger(&ctx, (uint16_t) (0x2000U + i), IOLINK_EVENT_TYPE_ERROR);
+        /* Drain the (smaller) event queue so pending[] is what fills up. */
+        while (iolink_events_pop(&ctx, &ev)) {
+        }
+    }
+    assert_int_equal(ctx.pending_count, IOLINK_EVENT_PENDING_MAX);
+    assert_int_equal(iolink_events_get_dropped_count(&ctx), 0U);
+
+    iolink_event_trigger(&ctx, 0x3000U, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(iolink_events_get_dropped_count(&ctx), 1U);
+
+    iolink_events_reset(&ctx);
+    assert_int_equal(iolink_events_get_dropped_count(&ctx), 0U);
 }
 
 /* A.6.4: queued events are discarded when communication is interrupted. */
@@ -429,6 +487,7 @@ int main(void)
         cmocka_unit_test(test_event_appears_disappears),
         cmocka_unit_test(test_event_lifecycle_no_repeat),
         cmocka_unit_test(test_event_recently_sent),
+        cmocka_unit_test(test_event_pending_full_observable),
         cmocka_unit_test(test_events_reset_clears),
         cmocka_unit_test(test_event_flag_invariant),
         cmocka_unit_test(test_notification_dedup),

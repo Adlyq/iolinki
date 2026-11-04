@@ -78,7 +78,10 @@ previously missing:
 - 0x000A/0x000B are reserved (VendorID/DeviceID live in DPP1).
 - ErrorCount (0x0020) returns the summed DLL error counters.
 - ProductURI (0x001B) is served read-only.
-- ProcessDataInput/Output (0x0028/0x0029) return the last valid PD data.
+- ProcessDataInput/Output (0x0028/0x0029) return the last valid PD data: PDin
+  keeps the last value published with valid=true, PDout the last received
+  frame. Before the first valid value/frame they answer `0x80 0x11`; a device
+  without PD answers with an empty positive response.
 - A WRITE to a known read-only object answers `0x80 0x23`; an unknown index
   keeps `0x80 0x11`.
 - DeviceAccessLocks bit 0 blocks parameter writes (tags and DPP2), not reads or
@@ -89,9 +92,13 @@ previously missing:
   (Out-of-Spec) or 1 (Maintenance), Notification → 0; priority order is
   Failure > Functional-Check > Maintenance > Out-of-Spec.
 - DetailedDeviceStatus (0x0025) lists only Error/Warning events (no
-  Notifications), per B.2.22.
+  Notifications), per B.2.22. Subindex 0 returns the whole list; element access
+  through subindex 1..n is a device extension (B.2.22 describes subindex 0
+  only).
 - A StatusCode write confirms only the event slots that were presented while
   frozen; events queued during the readout survive to the next round.
+- A re-raise inside the 1 s repeat window is deferred (not dropped), and a full
+  pending table is observable through `iolink_events_get_dropped_count()`.
 - An ISDU write-channel FlowCTRL `0x1F` (ABORT) resets the transport to Idle
   (Table 52), like the read channel.
 

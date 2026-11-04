@@ -165,11 +165,44 @@ static void test_product_uri_index(void** state)
     assert_memory_equal(out, expected, strlen(expected));
 }
 
+/* B.2.19/Table C.1: an unconfigured optional ProductURI is not available. */
+static void test_product_uri_absent(void** state)
+{
+    (void) state;
+    iolink_device_info_init(NULL); /* default info: product_uri = NULL */
+
+    uint8_t out[8] = {0};
+    int n = read_object(IOLINK_IDX_PRODUCT_URI, out, sizeof(out));
+    assert_int_equal(n, 2);
+    assert_int_equal(out[0], 0x80U);
+    assert_int_equal(out[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+}
+
 /* Table B.8 / B.2.23: ProcessDataInput (0x0028) returns the last valid PD input
  * data, not a descriptor/length byte. */
 static void test_process_data_input_returns_pd(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0132");
+    (void) state;
+    iolink_dll_ctx_t dll;
+    (void) memset(&dll, 0, sizeof(dll));
+    dll.pd_in_len_current = 2U;
+    dll.pd_in_len = 2U;
+    dll.pd_in_last_valid[0] = 0x11U;
+    dll.pd_in_last_valid[1] = 0x22U;
+    dll.pd_in_last_valid_len = 2U;
+    dll.pd_in_last_valid_seen = true;
+
+    uint8_t out[8] = {0};
+    int n = read_object_with_dll(0x0028U, &dll, out, sizeof(out));
+    assert_int_equal(n, 2);
+    assert_int_equal(out[0], 0x11U);
+    assert_int_equal(out[1], 0x22U);
+}
+
+/* B.2.23: no valid PDin was ever published, so there is nothing to serve. */
+static void test_process_data_input_never_valid_is_unavailable(void** state)
+{
     (void) state;
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
@@ -181,8 +214,44 @@ static void test_process_data_input_returns_pd(void** state)
     uint8_t out[8] = {0};
     int n = read_object_with_dll(0x0028U, &dll, out, sizeof(out));
     assert_int_equal(n, 2);
-    assert_int_equal(out[0], 0x11U);
-    assert_int_equal(out[1], 0x22U);
+    assert_int_equal(out[0], 0x80U);
+    assert_int_equal(out[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+}
+
+/* B.2.23: a later invalidation must not hide the last valid PDin. */
+static void test_process_data_input_invalid_returns_last_valid(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t dll;
+    (void) memset(&dll, 0, sizeof(dll));
+    dll.pd_in_len_current = 2U;
+    dll.pd_in_len = 2U;
+    dll.pd_valid = false;
+    dll.pd_in_last_valid[0] = 0xDEU;
+    dll.pd_in_last_valid[1] = 0xADU;
+    dll.pd_in_last_valid_len = 2U;
+    dll.pd_in_last_valid_seen = true;
+    dll.pd_in[0][dll.od_width + 0U] = 0x11U;
+    dll.pd_in[0][dll.od_width + 1U] = 0x22U;
+
+    uint8_t out[8] = {0};
+    int n = read_object_with_dll(0x0028U, &dll, out, sizeof(out));
+    assert_int_equal(n, 2);
+    assert_int_equal(out[0], 0xDEU);
+    assert_int_equal(out[1], 0xADU);
+}
+
+/* B.2.23/B.2.24: a device without Process Data answers with an empty positive
+ * response, not with the old 1-octet length descriptor. */
+static void test_process_data_zero_length(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t dll;
+    (void) memset(&dll, 0, sizeof(dll));
+
+    uint8_t out[8] = {0};
+    assert_int_equal(read_object_with_dll(0x0028U, &dll, out, sizeof(out)), 0);
+    assert_int_equal(read_object_with_dll(0x0029U, &dll, out, sizeof(out)), 0);
 }
 
 /* B.2.23: a standard 2-octet positive payload starting with 0x80 must not be
@@ -194,8 +263,10 @@ static void test_process_data_80xx_is_positive(void** state)
     (void) memset(&dll, 0, sizeof(dll));
     dll.pd_in_len_current = 2U;
     dll.pd_in_len = 2U;
-    dll.pd_in[0][dll.od_width + 0U] = 0x80U;
-    dll.pd_in[0][dll.od_width + 1U] = 0x42U;
+    dll.pd_in_last_valid[0] = 0x80U;
+    dll.pd_in_last_valid[1] = 0x42U;
+    dll.pd_in_last_valid_len = 2U;
+    dll.pd_in_last_valid_seen = true;
 
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
@@ -245,6 +316,7 @@ static void test_process_data_output_returns_pd(void** state)
     dll.pd_out_len_current = 2U;
     dll.pd_out[0] = 0xAAU;
     dll.pd_out[1] = 0xBBU;
+    dll.pd_out_seen = true;
 
     uint8_t out[8] = {0};
     int n = read_object_with_dll(0x0029U, &dll, out, sizeof(out));
@@ -424,7 +496,13 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_vendor_device_id_indices_reserved, setup, teardown),
         cmocka_unit_test_setup_teardown(test_error_count_index, setup, teardown),
         cmocka_unit_test_setup_teardown(test_product_uri_index, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_product_uri_absent, setup, teardown),
         cmocka_unit_test_setup_teardown(test_process_data_input_returns_pd, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_process_data_input_never_valid_is_unavailable, setup,
+                                        teardown),
+        cmocka_unit_test_setup_teardown(test_process_data_input_invalid_returns_last_valid, setup,
+                                        teardown),
+        cmocka_unit_test_setup_teardown(test_process_data_zero_length, setup, teardown),
         cmocka_unit_test_setup_teardown(test_process_data_80xx_is_positive, setup, teardown),
         cmocka_unit_test_setup_teardown(test_process_data_output_returns_pd, setup, teardown),
         cmocka_unit_test_setup_teardown(test_read_only_identification_rejects_write, setup,

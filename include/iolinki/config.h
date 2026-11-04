@@ -287,6 +287,19 @@
 #endif
 
 /**
+ * @brief Maximum number of simultaneously active (appears/disappears) events.
+ *
+ * Each active Error/Warning occupies one lifecycle slot. Slots that only wait
+ * out the 1 s repeat cooldown are reused first. When every slot holds a live
+ * event, a further Error/Warning is dropped and counted by
+ * iolink_events_get_dropped_count().
+ * Default: 8
+ */
+#ifndef IOLINK_EVENT_PENDING_MAX
+#define IOLINK_EVENT_PENDING_MAX 8U
+#endif
+
+/**
  * @brief Minimum delay between an "Event appears" and its "Event disappears".
  *
  * The event dispatcher must not issue a disappearance within this window

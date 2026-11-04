@@ -696,10 +696,9 @@ static bool isdu_read_identification_string(iolink_isdu_ctx_t* ctx,
 {
     const char* str_data = isdu_identification_string(info, index);
     if (index == IOLINK_IDX_PRODUCT_URI && str_data == NULL) {
-        /* Table B.8/B.2.19: optional, conditional on an associated Profile. */
-        ctx->response_len = 0U;
-        ctx->response_idx = 0U;
-        ctx->state = ISDU_STATE_RESPONSE_READY;
+        /* Table B.8/B.2.19: optional and conditional on an associated Profile;
+           without a URI the object is not available (Table C.1). */
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
         return true;
     }
     if (str_data == NULL) {
@@ -791,13 +790,21 @@ static void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
     if (ctx->dll_ctx != NULL) {
         const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
         if (input) {
-            const uint8_t* pdi = &dll->pd_in[dll->pd_in_active][dll->od_width];
-            len = dll->pd_in_len;
-            if (len > IOLINK_PD_IN_MAX_SIZE) {
-                len = (uint8_t) IOLINK_PD_IN_MAX_SIZE;
+            /* B.2.23: serve the last value the application published as valid;
+               a later invalidation does not hide it. No valid value yet means
+               a configured PDin has nothing to serve. */
+            if (dll->pd_in_last_valid_seen) {
+                len = dll->pd_in_last_valid_len;
+                if (len > sizeof(dll->pd_in_last_valid)) {
+                    len = (uint8_t) sizeof(dll->pd_in_last_valid);
+                }
+                if (len > 0U) {
+                    (void) memcpy(ctx->response_buf, dll->pd_in_last_valid, len);
+                }
             }
-            if (len > 0U) {
-                (void) memcpy(ctx->response_buf, pdi, len);
+            else if (dll->pd_in_len_current > 0U) {
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+                return;
             }
         }
         else {
@@ -805,8 +812,14 @@ static void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
             if (len > sizeof(dll->pd_out)) {
                 len = (uint8_t) sizeof(dll->pd_out);
             }
-            if (len > 0U) {
-                (void) memcpy(ctx->response_buf, dll->pd_out, len);
+            if (dll->pd_out_seen) {
+                if (len > 0U) {
+                    (void) memcpy(ctx->response_buf, dll->pd_out, len);
+                }
+            }
+            else if (len > 0U) {
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+                return;
             }
         }
     }
@@ -1188,7 +1201,7 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
     IOLINK_CRITICAL_ENTER();
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         const iolink_event_pending_t* p = &event_ctx->pending[i];
-        if (p->active && (p->type != IOLINK_EVENT_TYPE_NOTIFICATION)) {
+        if (p->active && p->present && p->reported && (p->type != IOLINK_EVENT_TYPE_NOTIFICATION)) {
             codes[n] = p->code;
             types[n] = p->type;
             n++;
@@ -1196,6 +1209,9 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
     }
     IOLINK_CRITICAL_EXIT();
 
+    /* B.2.22: the conformant read is subindex 0, which returns the complete
+       list of 3-octet entries ("Subindex access is not supported"). Element
+       access through subindex 1..n is kept as a device extension. */
     const uint8_t sub = ctx->header.subindex;
     if ((sub == 0U) || (sub <= n)) {
         const uint8_t start = (sub == 0U) ? 0U : (uint8_t) (sub - 1U);

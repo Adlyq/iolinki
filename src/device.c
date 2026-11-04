@@ -405,6 +405,24 @@ static bool device_service_window_ready(iolink_device_ctx_t* ctx)
     return true;
 }
 
+#if IOLINK_FEATURE_EVENTS
+/** @brief Whether the event engine still has queued or deferred work. */
+static bool device_events_need_service(const iolink_events_ctx_t* events)
+{
+    if ((events->count > 0U) || (events->pending_count > 0U)) {
+        return true;
+    }
+    /* A slot can still hold a deferred disappearance or a repeat cooldown even
+       when no event is asserted or queued. */
+    for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
+        if (events->pending[i].active) {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
 /**
  * @brief Service the event and Data Storage state machines from the main loop.
  *
@@ -423,7 +441,7 @@ static void device_service_events_and_ds(iolink_device_ctx_t* ctx)
     }
 #endif
 #if IOLINK_FEATURE_EVENTS
-    if ((ctx->dll.events.count > 0U) || (ctx->dll.events.pending_count > 0U)) {
+    if (device_events_need_service(&ctx->dll.events)) {
         iolink_events_process(&ctx->dll.events);
     }
 #endif
@@ -508,6 +526,12 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
          * streaming the captured copy meanwhile. */
         const bool valid = ctx->config->app_callbacks->on_pd_input(
             &ctx->dll.pd_in[inactive][ctx->dll.od_width], ctx->dll.pd_in_len_current);
+        if (valid) {
+            (void) memcpy(ctx->dll.pd_in_last_valid, &ctx->dll.pd_in[inactive][ctx->dll.od_width],
+                          ctx->dll.pd_in_len_current);
+            ctx->dll.pd_in_last_valid_len = ctx->dll.pd_in_len_current;
+            ctx->dll.pd_in_last_valid_seen = true;
+        }
 
         IOLINK_CRITICAL_ENTER();
         ctx->dll.pd_in_len = ctx->dll.pd_in_len_current;
@@ -586,6 +610,13 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
      * cannot be read by it. Only the publish (length, validity, index) must be
      * atomic for the ISR. */
     (void) memcpy(&ctx->dll.pd_in[inactive][ctx->dll.od_width], data, len);
+    if (valid) {
+        /* B.2.23: keep the last value the application marked valid, even when
+           the current Process Data later becomes invalid. */
+        (void) memcpy(ctx->dll.pd_in_last_valid, data, len);
+        ctx->dll.pd_in_last_valid_len = (uint8_t) len;
+        ctx->dll.pd_in_last_valid_seen = true;
+    }
     IOLINK_CRITICAL_ENTER();
     ctx->dll.pd_in_len = (uint8_t) len;
     ctx->dll.pd_in_len_current = (uint8_t) len;

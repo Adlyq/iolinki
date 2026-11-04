@@ -55,8 +55,11 @@ static void test_cycle_time_encode(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0090");
     (void) state;
 
+    /* B.1.3: 0 means "no MinCycleTime provided" and stays 0x00. */
+    assert_int_equal(iolink_cycle_time_encode(0U), 0x00U);
+
     /* Below the 0.4 ms minimum: clamp to 0x04 (0.4 ms). */
-    assert_int_equal(iolink_cycle_time_encode(0U), 0x04U);
+    assert_int_equal(iolink_cycle_time_encode(1U), 0x04U);
     assert_int_equal(iolink_cycle_time_encode(3U), 0x04U);
     assert_int_equal(iolink_cycle_time_encode(4U), 0x04U);
 

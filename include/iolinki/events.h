@@ -47,11 +47,6 @@ typedef enum
     IOLINK_EVENT_MODE_SINGLE_SHOT = 2U /**< Notification, reported once. */
 } iolink_event_mode_t;
 
-/** Maximum number of simultaneously active (appears/disappears) events. */
-#ifndef IOLINK_EVENT_PENDING_MAX
-#define IOLINK_EVENT_PENDING_MAX 8U
-#endif
-
 /*
  * Device vendor-specific communication events.
  *
@@ -123,12 +118,15 @@ typedef struct
  */
 typedef struct
 {
-    uint16_t code;            /**< EventCode */
-    iolink_event_type_t type; /**< Severity */
-    uint32_t appear_ms;       /**< Time the event appeared */
-    uint32_t last_tx_ms;      /**< Last time the same code/mode was queued */
-    bool clear_pending;       /**< Disappearance requested, waiting for the 50 ms window */
-    bool active;              /**< Slot in use */
+    uint16_t code;               /**< EventCode */
+    iolink_event_type_t type;    /**< Severity */
+    uint32_t last_appears_ms;    /**< Time the last "event appears" was queued */
+    uint32_t last_disappears_ms; /**< Time the last "event disappears" was queued */
+    bool appears_valid;          /**< last_appears_ms was set for this slot */
+    bool disappears_valid;       /**< last_disappears_ms was set for this slot */
+    bool present;                /**< Event condition is currently asserted */
+    bool reported;               /**< "appears" is queued for the current period */
+    bool active;                 /**< Slot allocated (live event or repeat cooldown) */
 } iolink_event_pending_t;
 
 /**
@@ -144,6 +142,7 @@ typedef struct
 
     iolink_event_pending_t pending[IOLINK_EVENT_PENDING_MAX]; /**< Active appears events */
     uint8_t pending_count;                                    /**< Used pending slots */
+    uint32_t dropped_count; /**< Events lost because the queue or pending[] was full */
 
     /* Table 58 event memory: StatusCode(1) + 6 slots * (Qualifier, CodeMSB, CodeLSB). */
     uint8_t memory[19];   /**< Event memory image (0x00-0x12) */
@@ -151,7 +150,7 @@ typedef struct
     bool flag;            /**< Event flag (CKS bit 7) */
     uint8_t frozen_slots; /**< Number of memory slots populated when the memory was frozen. */
     iolink_event_t frozen_events[6]; /**< Events actually presented in the frozen memory */
-    uint8_t frozen_count;            /**< Entries valid in ::frozen_events */
+    uint8_t frozen_count;            /**< Entries valid in frozen_events */
 
     /* Application clock bound by the device layer (config::time_us). Standalone
      * event-engine users must set it after iolink_events_init(); a missing
@@ -175,8 +174,19 @@ void iolink_events_init(iolink_events_ctx_t* ctx);
 /**
  * @brief Trigger a new diagnostic event
  *
- * Adds an event to the internal queue. If the queue is full, the newest event
- * is typically dropped or the oldest overwritten (depending on implementation).
+ * Error and Warning events are queued once as "event appears" and stay active
+ * until iolink_event_clear() is called; Notifications are queued as a single
+ * shot. A repeated trigger of an already asserted EventCode is disregarded
+ * (10.10.2: one root cause leads to one Error or Warning). A trigger that
+ * arrives less than IOLINK_EVENT_MIN_REPEAT_MS after the previous "appears" of
+ * the same code is not queued immediately: iolink_events_process() queues it
+ * as soon as the interval has elapsed.
+ *
+ * The internal queue holds IOLINK_EVENT_QUEUE_SIZE entries. When it is full the
+ * least severe entry is overwritten; only events that are already of lower
+ * severity than every queued entry are discarded. When all
+ * IOLINK_EVENT_PENDING_MAX lifecycle slots are in use the new Error/Warning is
+ * dropped. Both loss paths increment iolink_events_get_dropped_count().
  *
  * @param ctx Event context
  * @param code 16-bit IO-Link EventCode
@@ -187,9 +197,13 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
 /**
  * @brief Report that a previously triggered Error/Warning event disappeared.
  *
- * A.6.4: the disappearance is suppressed when the code is not currently
- * active, and is deferred until IOLINK_EVENT_MIN_APPEAR_MS has elapsed since
- * the appearance (checked by iolink_events_process()).
+ * A.6.4: clearing a code that is not currently asserted is ignored, and the
+ * "event disappears" is deferred until IOLINK_EVENT_MIN_APPEAR_MS has elapsed
+ * since the appearance and IOLINK_EVENT_MIN_REPEAT_MS since the previous
+ * "event disappears" of the same code (10.10.2). The deferred disappearance is
+ * queued by iolink_events_process(). If the appearance has not been queued yet
+ * (the code was re-triggered within IOLINK_EVENT_MIN_REPEAT_MS), nothing is
+ * queued: the Master never saw the event, so no withdrawal is required.
  *
  * @param ctx Event context
  * @param code EventCode that disappeared
@@ -197,16 +211,32 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
 void iolink_event_clear(iolink_events_ctx_t* ctx, uint16_t code);
 
 /**
- * @brief Service deferred disappearances.
+ * @brief Service the deferred A.6.4 lifecycle transitions.
  *
- * Emits the "Event disappears" for any pending code whose 50 ms minimum
- * appearance window has elapsed. iolink_device_process() calls this each cycle
- * while the ISDU transport is idle; call it yourself only when you drive the
- * event context directly (e.g. unit tests).
+ * Emits deferred "event appears" and "event disappears" (each respecting the
+ * IOLINK_EVENT_MIN_REPEAT_MS spacing; a disappearance also respects
+ * IOLINK_EVENT_MIN_APPEAR_MS) and releases lifecycle slots once their repeat
+ * cooldown has elapsed. iolink_device_process() calls this each cycle while the
+ * ISDU transport is idle; call it yourself only when you drive the event
+ * context directly (e.g. unit tests).
  *
  * @param ctx Event context
  */
 void iolink_events_process(iolink_events_ctx_t* ctx);
+
+/**
+ * @brief Number of events lost because the queue or pending[] was full.
+ *
+ * The lifecycle table holds IOLINK_EVENT_PENDING_MAX simultaneously active
+ * events and the queue holds IOLINK_EVENT_QUEUE_SIZE entries. A device that
+ * reports more events than that loses the surplus; this counter makes the loss
+ * observable and lets the application size the tables or raise a diagnostic of
+ * its own.
+ *
+ * @param ctx Event context
+ * @return uint32_t Number of dropped events since init/reset
+ */
+uint32_t iolink_events_get_dropped_count(const iolink_events_ctx_t* ctx);
 
 /**
  * @brief Discard all queued events and reset the lifecycle tracking.

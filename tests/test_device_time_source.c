@@ -92,8 +92,8 @@ static void test_event_engine_uses_app_clock(void)
                          IOLINK_EVENT_TYPE_ERROR);
 
     assert(ctx.dll.events.pending[0].active);
-    assert(ctx.dll.events.pending[0].appear_ms == 1234U);
-    assert(ctx.dll.events.pending[0].last_tx_ms == 1234U);
+    assert(ctx.dll.events.pending[0].appears_valid);
+    assert(ctx.dll.events.pending[0].last_appears_ms == 1234U);
 }
 
 static void test_null_clock_is_rejected_at_init(void)

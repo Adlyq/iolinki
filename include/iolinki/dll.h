@@ -155,7 +155,7 @@ typedef struct
  * the behaviour the incremental view had.
  * @{
  */
-#define IOLINK_ISDU_PUB_LEN(word) ((uint8_t) ((word) & 0xFFU))
+#define IOLINK_ISDU_PUB_LEN(word) ((uint8_t) ((word) &0xFFU))
 #define IOLINK_ISDU_PUB_BUSY(word) ((uint8_t) (((word) >> 8) & 0x01U))
 #define IOLINK_ISDU_PUB_SEL(word) ((uint8_t) (((word) >> 9) & 0x01U))
 #define IOLINK_ISDU_PUB_WORD(len, busy, sel)                                                     \
@@ -357,6 +357,12 @@ typedef struct
     volatile uint8_t pd_in_active;                            /**< Active PD reply buffer index */
     volatile uint8_t pd_in_captured;        /**< Buffer the ISR is streaming (0xFF = none) */
     uint8_t pd_out[IOLINK_PD_OUT_MAX_SIZE]; /**< Output PD buffer (Master -> Device) */
+
+    /* Last values that were actually valid, for ProcessDataInput/Output (B.2.23/B.2.24). */
+    uint8_t pd_in_last_valid[IOLINK_PD_IN_MAX_SIZE]; /**< Last PDin published as valid */
+    uint8_t pd_in_last_valid_len;                    /**< Length of pd_in_last_valid */
+    bool pd_in_last_valid_seen;                      /**< A valid PDin was published */
+    bool pd_out_seen;                                /**< A PDout frame was received */
 
     /* Error Counters & Statistics */
     uint32_t crc_errors;             /**< Cumulative CRC error count */
