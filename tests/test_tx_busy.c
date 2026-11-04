@@ -138,15 +138,15 @@ static void test_busy_defers_eager_reply(void)
     feed_process_read();
 
     iolink_dll_process_isr(&dll);
-    assert(g_tx_calls == 0U);          /* eager reply declined */
-    assert(dll.isr_tx_pending == 0U);  /* nothing staged from the ISR */
+    assert(g_tx_calls == 0U);         /* eager reply declined */
+    assert(dll.isr_tx_pending == 0U); /* nothing staged from the ISR */
     assert(dll.pd_in_captured == 0xFFU);
 
-    iolink_dll_process(&dll);          /* main pump answers the frame */
-    assert(dll.isr_tx_pending == 1U);  /* staged, waiting for the ISR */
+    iolink_dll_process(&dll);         /* main pump answers the frame */
+    assert(dll.isr_tx_pending == 1U); /* staged, waiting for the ISR */
 
     g_line_busy = 0U;
-    iolink_dll_process_isr(&dll);      /* drain the staged reply */
+    iolink_dll_process_isr(&dll); /* drain the staged reply */
     assert(g_tx_calls == 1U);
     assert(dll.isr_tx_pending == 0U);
 }
@@ -160,15 +160,15 @@ static void test_lease_released_when_line_free(void)
     init_ctx(&dll);
     feed_process_read();
 
-    iolink_dll_process_isr(&dll);      /* eager reply from the ISR */
+    iolink_dll_process_isr(&dll); /* eager reply from the ISR */
     assert(g_tx_calls == 1U);
     assert(dll.pd_in_captured != 0xFFU);
 
-    g_line_busy = 1U;                  /* still on the wire */
+    g_line_busy = 1U; /* still on the wire */
     iolink_dll_process(&dll);
     assert(dll.pd_in_captured != 0xFFU);
 
-    g_line_busy = 0U;                  /* completion seen by the PHY */
+    g_line_busy = 0U; /* completion seen by the PHY */
     iolink_dll_process(&dll);
     assert(dll.pd_in_captured == 0xFFU);
 }

@@ -95,6 +95,9 @@ int iolink_platform_critical_sections_ready(void);
 
 /** @brief Optional port configuration header, included before the defaults. */
 #ifdef IOLINK_PORT_CONFIG_FILE
+/* cppcheck 2.7 cannot evaluate a macro include and reports it even when the
+   macro is undefined; the include is valid when a port defines it. */
+// cppcheck-suppress preprocessorErrorDirective
 #include IOLINK_PORT_CONFIG_FILE
 #endif
 

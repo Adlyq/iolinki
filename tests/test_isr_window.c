@@ -5,6 +5,9 @@
  * only runs after iolink_dll_on_stack_tick() authorises it.
  */
 
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
 #include <stdint.h>
 #include <cmocka.h>
 

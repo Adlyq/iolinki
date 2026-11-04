@@ -812,9 +812,9 @@ static bool dll_isr_frame_len_ok(iolink_dll_ctx_t* ctx, const uint8_t* f, uint8_
     if ((f[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0) {
         const bool write = ((f[0] & IOLINK_MC_RW_MASK) == 0U);
         const uint8_t ch = (uint8_t) (f[0] & IOLINK_MC_COMM_CHANNEL_MASK);
-        const bool od_write = write && ((ch == IOLINK_MC_CHANNEL_PAGE) ||
-                                        (ch == IOLINK_MC_CHANNEL_DIAGNOSIS) ||
-                                        (ch == IOLINK_MC_CHANNEL_ISDU));
+        const bool od_write =
+            write && ((ch == IOLINK_MC_CHANNEL_PAGE) || (ch == IOLINK_MC_CHANNEL_DIAGNOSIS) ||
+                      (ch == IOLINK_MC_CHANNEL_ISDU));
         expected_len = (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + (od_write ? 1U : 0U));
     }
     else {

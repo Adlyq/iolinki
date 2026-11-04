@@ -368,6 +368,9 @@ void conformance_device_set_pd_valid(conformance_device_t* app, bool valid)
     }
 }
 
+/* In builds without Data Storage the parameter is only NULL-checked, which is
+   why cppcheck suggests const; the Data Storage build mutates it. */
+// cppcheck-suppress constParameter
 int conformance_device_local_change(conformance_device_t* app)
 {
     if (app == NULL) {
