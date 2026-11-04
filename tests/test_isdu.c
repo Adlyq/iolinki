@@ -471,16 +471,16 @@ static void test_isdu_pdin_descriptor_read(void** state)
     iolink_params_init();
     iolink_isdu_init(&ctx);
 
-    /* Wire a DLL context with a configured PD-in length of 3. */
+    /* Wire a DLL context with a runtime PD-in length of 3 (the public setter
+       updates pd_in_len_current, which is what 0x0028 must serve). */
     assert_int_equal(iolink_dll_set_pd_length(&dll, 3, 0), 0);
-    dll.pd_in_len = 3U; /* published PD-in snapshot length */
     dll.pd_valid = true;
     dll.pd_in[0][dll.od_width + 0U] = 0x11U;
     dll.pd_in[0][dll.od_width + 1U] = 0x22U;
     dll.pd_in[0][dll.od_width + 2U] = 0x33U;
     ctx.dll_ctx = &dll;
 
-    /* Table B.8/B.2.23: a read returns the last valid PD-in data (3 octets). */
+    /* Table B.8/B.2.23: a read returns the runtime PD-in data (3 octets). */
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00), 1);
     iolink_isdu_process(&ctx);
 
@@ -1062,19 +1062,35 @@ static void test_isdu_dds_keeps_cleared_event_until_disappear(void** state)
     g_dds_event_ms = 0U;
 
     uint8_t records[16];
-    iolink_event_trigger(&events, 0x1801U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&events, IOLINK_EVENT_COMM_CRC, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(
         read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records, sizeof(records)), 3);
+    assert_int_equal(records[0], 0xF4U); /* appears | error | instance Application */
+    assert_int_equal(records[1], 0x18U);
+    assert_int_equal(records[2], 0x01U);
+
+    /* The Master consumes the appearance; the condition stays asserted. */
+    iolink_event_t ev;
+    assert_true(iolink_events_pop(&events, &ev));
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
 
     /* The condition is gone, but the withdrawal has not been reported yet. */
-    iolink_event_clear(&events, 0x1801U);
+    iolink_event_clear(&events, IOLINK_EVENT_COMM_CRC);
     assert_int_equal(
         read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records, sizeof(records)), 3);
 
-    /* After the minimum appearance window the disappear is emitted and the
-       entry drops out. */
-    g_dds_event_ms = 100U;
+    /* Just before the minimum appearance window the entry is still listed. */
+    g_dds_event_ms = IOLINK_EVENT_MIN_APPEAR_MS - 1U;
     iolink_events_process(&events);
+    assert_int_equal(
+        read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records, sizeof(records)), 3);
+
+    /* At the window the disappear is reported and the entry drops out. */
+    g_dds_event_ms = IOLINK_EVENT_MIN_APPEAR_MS;
+    iolink_events_process(&events);
+    assert_true(iolink_events_pop(&events, &ev));
+    assert_int_equal(ev.code, IOLINK_EVENT_COMM_CRC);
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
     assert_int_equal(
         read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records, sizeof(records)), 0);
 }

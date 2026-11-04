@@ -178,16 +178,19 @@ static void test_product_uri_absent(void** state)
     assert_int_equal(out[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
 }
 
-/* Table B.8 / B.2.23: ProcessDataInput (0x0028) returns the last valid PD input
- * data, not a descriptor/length byte. */
+/* Table B.8 / B.2.23: ProcessDataInput (0x0028) returns the Process Data of
+ * the PDin channel with its runtime length, not a descriptor/length byte. */
 static void test_process_data_input_returns_pd(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0132");
     (void) state;
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
-    dll.pd_in_len_current = 2U;
-    dll.pd_in_len = 2U;
+
+    /* Only the public setter configures the length: it updates the runtime
+       field, so serving pd_in_len here would truncate the answer to 0. */
+    assert_int_equal(iolink_dll_set_pd_length(&dll, 2U, 0U), 0);
+    assert_int_equal(dll.pd_in_len, 0U);
     dll.pd_valid = true;
     dll.pd_in[0][dll.od_width + 0U] = 0x11U;
     dll.pd_in[0][dll.od_width + 1U] = 0x22U;
@@ -200,7 +203,7 @@ static void test_process_data_input_returns_pd(void** state)
 }
 
 /* B.2.23 is silent while the DLL flags PDin as invalid: the PD status bit
- * (A.1.5) carries the validity, so the last Process Data snapshot is served
+ * (A.1.5) carries the validity, so the current Process Data buffer is served
  * instead of an ISDU error (ST reference behaviour). */
 static void test_process_data_input_invalid_still_serves_buffer(void** state)
 {
@@ -220,8 +223,8 @@ static void test_process_data_input_invalid_still_serves_buffer(void** state)
     assert_int_equal(out[1], 0x22U);
 }
 
-/* B.2.24: before the first PDout frame the zero-initialised buffer of the
- * configured length is served, not an error. */
+/* B.2.24 is silent before the first PDout frame: serve the buffer as-is (ST
+ * reference behaviour), which is zero-initialised after DLL init. */
 static void test_process_data_output_before_first_frame(void** state)
 {
     (void) state;

@@ -1218,8 +1218,8 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
     /* Collect the pending diagnosis entries: the events whose "Event appears"
        was reported and whose "Event disappears" has not been issued yet. A
        condition that was cleared therefore stays listed while its withdrawal
-       waits for the 10.10.2 spacing, matching the Master's diagnosis view; an
-       appearance that is still deferred is not listed. Only the snapshot of
+       waits for the minimum appearance window (A.6.4), matching the Master's
+       diagnosis view; an appearance that is still deferred is not listed. Only the snapshot of
        the pending table is taken with interrupts off; the formatting below
        runs unlocked (the response buffer is main-owned). */
     uint16_t codes[IOLINK_EVENT_PENDING_MAX];
