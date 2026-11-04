@@ -279,6 +279,7 @@ static void test_system_cmd_resets_diagnostics(void** state)
 
     iolink_isdu_init(&ctx);
     ctx.dll_ctx = &dll;
+    ctx.event_ctx = &dll.events;
     const uint8_t device_reset = IOLINK_CMD_DEVICE_RESET;
     assert_int_equal(
         isdu_send_write_request(&ctx, IOLINK_IDX_SYSTEM_COMMAND, 0x00, &device_reset, 1), 1);
@@ -291,23 +292,38 @@ static void test_system_cmd_resets_diagnostics(void** state)
     assert_int_equal(dll.events.count, 0U);
     assert_false(iolink_events_flag(&dll.events));
 
-    /* 0x82 clears active diagnosis through Event Disappears; 0x83 sets status
-       to zero and discards the diagnosis before communication is stopped. */
-    const uint8_t keep_event_commands[] = {IOLINK_CMD_RESTORE_FACTORY_SETTINGS,
-                                           IOLINK_CMD_BACK_TO_BOX};
-    for (size_t i = 0U; i < (sizeof(keep_event_commands) / sizeof(keep_event_commands[0])); i++) {
+    /* Table 101 "0": both DeviceStatus (0x0024) and DetailedDeviceStatus
+       (0x0025) read back as "0" / empty after the reset. */
+    uint8_t drain[2];
+    assert_int_equal(isdu_collect_response(&ctx, drain, sizeof(drain)), 0);
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DEVICE_STATUS, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    uint8_t status = 0xFFU;
+    assert_int_equal(isdu_collect_response(&ctx, &status, 1), 1);
+    assert_int_equal(status, 0U);
+
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(ctx.response_len, 0U);
+    assert_int_equal(isdu_collect_response(&ctx, drain, sizeof(drain)), 0);
+
+    /* 0x82 withdraws the active diagnosis through Event Disappears; 0x83
+       discards it without queuing any Event (Table 101 "0" vs "Clear"). */
+    const uint8_t reset_commands[] = {IOLINK_CMD_RESTORE_FACTORY_SETTINGS, IOLINK_CMD_BACK_TO_BOX};
+    for (size_t i = 0U; i < (sizeof(reset_commands) / sizeof(reset_commands[0])); i++) {
         (void) memset(&dll, 0, sizeof(dll));
         iolink_events_init(&dll.events);
         dll.crc_errors = 3U;
         dll.timeout_errors = 2U;
         dll.framing_errors = 1U;
         dll.timing_errors = 4U;
-        iolink_event_trigger(&dll.events, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+        iolink_event_trigger(&dll.events, IOLINK_EVENTCODE_GENERAL_MALFUNCTION,
+                             IOLINK_EVENT_TYPE_ERROR);
 
         iolink_isdu_init(&ctx);
         ctx.dll_ctx = &dll;
         ctx.event_ctx = &dll.events;
-        const uint8_t cmd = keep_event_commands[i];
+        const uint8_t cmd = reset_commands[i];
         assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_SYSTEM_COMMAND, 0x00, &cmd, 1),
                          1);
         iolink_isdu_process(&ctx);
@@ -317,23 +333,26 @@ static void test_system_cmd_resets_diagnostics(void** state)
         assert_int_equal(dll.framing_errors, 0U);
         assert_int_equal(dll.timing_errors, 0U);
         if (cmd == IOLINK_CMD_RESTORE_FACTORY_SETTINGS) {
-            /* Table 101 "Clear": the asserted event keeps its published
-               appearance and gains the withdraw pair, and DeviceStatus is
-               cleared by the reset. */
+            /* Table 101 "Clear": the appearance already published stays in the
+               queue, the withdraw pair is appended immediately, and DeviceStatus
+               drops out because the condition is no longer asserted. */
             iolink_event_t event;
             assert_int_equal(dll.events.count, 2U);
             assert_true(iolink_events_flag(&dll.events));
             assert_true(iolink_events_pop(&dll.events, &event));
-            assert_int_equal(event.code, 0x1000U);
+            assert_int_equal(event.code, IOLINK_EVENTCODE_GENERAL_MALFUNCTION);
             assert_int_equal(event.mode, IOLINK_EVENT_MODE_APPEARS);
             assert_true(iolink_events_pop(&dll.events, &event));
-            assert_int_equal(event.code, 0x1000U);
+            assert_int_equal(event.code, IOLINK_EVENTCODE_GENERAL_MALFUNCTION);
             assert_int_equal(event.mode, IOLINK_EVENT_MODE_DISAPPEARS);
             assert_int_equal(iolink_events_get_highest_severity(&dll.events), 0U);
         }
         else {
+            /* Table 101 "0": no Event is queued and the memory is blank. */
             assert_int_equal(dll.events.count, 0U);
             assert_false(iolink_events_flag(&dll.events));
+            assert_int_equal(iolink_events_memory_read(&dll.events, 0x00U), 0x00U);
+            assert_int_equal(iolink_events_get_highest_severity(&dll.events), 0U);
         }
     }
 

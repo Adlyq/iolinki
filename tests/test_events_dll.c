@@ -10,9 +10,14 @@
  * @file test_events_dll.c
  * @brief The A.6.4 lifecycle is serviced by iolink_dll_process().
  *
- * An application that only pumps the DLL must still get its deferred
- * "event disappears" without calling iolink_events_process() itself.
+ * An application that only pumps the DLL must still get the deferred
+ * "event disappears" and the deferred re-appearance without calling
+ * iolink_events_process() itself.
  */
+
+#ifdef NDEBUG
+#error "test_events_dll.c relies on assert(); build it without NDEBUG"
+#endif
 
 #include <assert.h>
 #include <stddef.h>
@@ -78,25 +83,53 @@ int main(void)
     };
 
     iolink_dll_ctx_t ctx;
+    iolink_event_t ev;
+    const uint16_t code = IOLINK_EVENTCODE_SHORT_CIRCUIT;
+
     g_now_ms = 0U;
     iolink_dll_init(&ctx, &phy);
 
-    iolink_event_trigger(&ctx.events, IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR);
-    iolink_event_clear(&ctx.events, IOLINK_EVENTCODE_SHORT_CIRCUIT);
+    iolink_event_trigger(&ctx.events, code, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_clear(&ctx.events, code);
 
-    /* Only the DLL is pumped, never iolink_events_process(). */
+    /* The appearance is queued by the trigger itself; the disappearance must
+       only be produced by iolink_events_process(), which the DLL pumps. */
     iolink_dll_process(&ctx);
-    iolink_event_t ev;
     assert(iolink_events_pop(&ctx.events, &ev));
-    assert(ev.code == IOLINK_EVENTCODE_SHORT_CIRCUIT);
+    assert(ev.code == code);
     assert(ev.mode == IOLINK_EVENT_MODE_APPEARS);
-    assert(!iolink_events_pop(&ctx.events, &ev)); /* 50 ms window still open */
+    assert(!iolink_events_pop(&ctx.events, &ev));
 
+    /* 10.10.2: no "event disappears" before IOLINK_EVENT_MIN_APPEAR_MS, even
+       with the DLL pumped. */
+    g_now_ms = IOLINK_EVENT_MIN_APPEAR_MS - 1U;
+    iolink_dll_process(&ctx);
+    assert(!iolink_events_pop(&ctx.events, &ev));
+
+    /* At the minimum appearance time the DLL services the withdrawal. */
     g_now_ms = IOLINK_EVENT_MIN_APPEAR_MS;
     iolink_dll_process(&ctx);
     assert(iolink_events_pop(&ctx.events, &ev));
-    assert(ev.code == IOLINK_EVENTCODE_SHORT_CIRCUIT);
+    assert(ev.code == code);
     assert(ev.mode == IOLINK_EVENT_MODE_DISAPPEARS);
+
+    /* 10.10.2: the same EventCode/EventQualifier may not be reported twice
+       within one second. The re-trigger below is deferred, and the DLL emits
+       the fresh appearance only once the window elapsed. */
+    g_now_ms = IOLINK_EVENT_MIN_REPEAT_MS / 2U;
+    iolink_event_trigger(&ctx.events, code, IOLINK_EVENT_TYPE_ERROR);
+    iolink_dll_process(&ctx);
+    assert(!iolink_events_pop(&ctx.events, &ev));
+
+    g_now_ms = IOLINK_EVENT_MIN_REPEAT_MS - 1U;
+    iolink_dll_process(&ctx);
+    assert(!iolink_events_pop(&ctx.events, &ev));
+
+    g_now_ms = IOLINK_EVENT_MIN_REPEAT_MS;
+    iolink_dll_process(&ctx);
+    assert(iolink_events_pop(&ctx.events, &ev));
+    assert(ev.code == code);
+    assert(ev.mode == IOLINK_EVENT_MODE_APPEARS);
 
     return 0;
 }

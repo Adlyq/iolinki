@@ -217,7 +217,7 @@ static iolink_event_pending_t* pending_find(iolink_events_ctx_t* ctx, uint16_t c
 }
 
 /** @brief Allocate a lifecycle slot, reusing a finished repeat cooldown first. */
-static iolink_event_pending_t* pending_alloc(iolink_events_ctx_t* ctx)
+static iolink_event_pending_t* pending_alloc(iolink_events_ctx_t* ctx, uint32_t now)
 {
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         if (!ctx->pending[i].active) {
@@ -226,9 +226,17 @@ static iolink_event_pending_t* pending_alloc(iolink_events_ctx_t* ctx)
             return &ctx->pending[i];
         }
     }
+    /* Reuse a slot only after its 1 s spacing has elapsed. Reusing it earlier
+       would discard the last appears/disappears timestamps and let the same
+       EventCode be reported twice within the 10.10.2 window. */
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         iolink_event_pending_t* p = &ctx->pending[i];
-        if (!p->present && !p->reported) {
+        const bool appears_free = !p->appears_valid || ((uint32_t) (now - p->last_appears_ms) >=
+                                                        IOLINK_EVENT_MIN_REPEAT_MS);
+        const bool disappears_free =
+            !p->disappears_valid ||
+            ((uint32_t) (now - p->last_disappears_ms) >= IOLINK_EVENT_MIN_REPEAT_MS);
+        if (!p->present && !p->reported && appears_free && disappears_free) {
             (void) memset(p, 0, sizeof(*p));
             p->active = true;
             return p;
@@ -301,7 +309,7 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
     }
 
     if (p == NULL) {
-        p = pending_alloc(ctx);
+        p = pending_alloc(ctx, now);
         if (p == NULL) {
             /* All lifecycle slots hold live events: make the loss observable
                rather than silently discarding the cause. */

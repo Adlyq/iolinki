@@ -394,6 +394,12 @@ static void test_dll_illegal_mseq_type(void** state)
     move_type0_to_operate(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 
+    /* A queued event must be discarded when the link falls back to STARTUP
+       (A.6.4/10.10.2). */
+    iolink_event_trigger(&dev.ctx.dll.events, IOLINK_EVENTCODE_GENERAL_MALFUNCTION,
+                         IOLINK_EVENT_TYPE_ERROR);
+    assert_true(iolink_events_pending(&dev.ctx.dll.events));
+
     /* Type-0 device receives a Type-1 CKT. */
     uint8_t frame[2] = {0x00, IOLINK_MSEQ_TYPE_1};
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 2));
@@ -405,6 +411,9 @@ static void test_dll_illegal_mseq_type(void** state)
     iolink_device_process(&dev.ctx);
 
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_STARTUP);
+    assert_int_equal(dev.ctx.dll.events.count, 0U);
+    assert_false(iolink_events_pending(&dev.ctx.dll.events));
+    assert_int_equal(iolink_events_memory_read(&dev.ctx.dll.events, 0x00U), 0x00U);
     iolink_dll_stats_t stats;
     iolink_device_get_dll_stats(&dev.ctx, &stats);
     assert_int_not_equal(stats.framing_errors, 0);

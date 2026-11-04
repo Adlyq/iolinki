@@ -85,9 +85,16 @@ static void test_event_queue_overflow(void** state)
     assert_true(iolink_events_get_dropped_count(&ctx) > drops_before);
 
     iolink_event_t ev;
-    iolink_events_pop(&ctx, &ev); /* Skip first */
-    /* Verify we can pop others */
-    assert_true(iolink_events_pending(&ctx));
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.code, 0xFFFFU);
+    assert_int_equal(ev.type, IOLINK_EVENT_TYPE_ERROR);
+
+    /* The least severe entry (the last Notification) was overwritten: the
+       remaining queue holds Notifications 0..2 only. */
+    while (iolink_events_pop(&ctx, &ev)) {
+        assert_true(ev.code < 3U);
+        assert_int_equal(ev.type, IOLINK_EVENT_TYPE_NOTIFICATION);
+    }
 }
 
 static void test_standard_codes(void** state)
@@ -511,16 +518,28 @@ static void test_event_pending_full_observable(void** state)
     assert_int_equal(ctx.pending_count, IOLINK_EVENT_PENDING_MAX);
     assert_int_equal(iolink_events_get_dropped_count(&ctx), 1U);
 
-    /* Free one slot: disappear, then wait out the repeat cooldown. */
+    /* Free one slot: emit its disappear, then wait until both 1 s windows have
+       elapsed before the slot can be reused. */
     iolink_event_clear(&ctx, 0x5000U);
+    assert_int_equal(ctx.pending_count, IOLINK_EVENT_PENDING_MAX - 1U);
     clock_set(IOLINK_EVENT_MIN_APPEAR_MS);
     iolink_events_process(&ctx);
+
+    /* At the 1 s mark the disappears window is still open: the slot must not
+       be recycled (which would erase its spacing history) and the new cause is
+       dropped, observably. */
     clock_set(IOLINK_EVENT_MIN_REPEAT_MS);
     iolink_events_process(&ctx);
+    iolink_event_trigger(&ctx, 0x6000U, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(ctx.pending_count, IOLINK_EVENT_PENDING_MAX - 1U);
+    assert_int_equal(iolink_events_get_dropped_count(&ctx), 2U);
 
+    /* Both windows elapsed: the slot is released and reusable. */
+    clock_set(2U * IOLINK_EVENT_MIN_REPEAT_MS);
+    iolink_events_process(&ctx);
     iolink_event_trigger(&ctx, 0x6000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(ctx.pending_count, IOLINK_EVENT_PENDING_MAX);
-    assert_int_equal(iolink_events_get_dropped_count(&ctx), 1U);
+    assert_int_equal(iolink_events_get_dropped_count(&ctx), 2U);
 
     bool found = false;
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
@@ -551,6 +570,13 @@ static void test_events_reset_clears(void** state)
     assert_int_equal(ctx.pending_count, 0U);
     assert_false(iolink_events_flag(&ctx));
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x00U);
+
+    /* 10.10.2: after communication resumes the application reports the current
+       causes again, so the same code must produce a fresh appearance instead of
+       being treated as still asserted. */
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(ctx.pending_count, 1U);
+    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_APPEARS);
 }
 
 /* The Event flag must satisfy flag == (count > 0) at every setter, so a Master
@@ -562,24 +588,31 @@ static void test_event_flag_invariant(void** state)
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
 
-    /* Empty queue: no flag. */
-    assert_false(iolink_events_flag(&ctx));
+    /* Empty queue: no flag. The stored bit is checked directly because
+       iolink_events_flag() already masks with count > 0 and would hide a
+       setter that leaves the bit set on an empty queue. */
+    assert_false(ctx.flag);
+    assert_int_equal(ctx.flag, (ctx.count > 0U));
 
     /* Draining the queue through pop() must clear the flag even though the
        event memory was never acknowledged. */
     iolink_event_trigger(&ctx, 0x1001U, IOLINK_EVENT_TYPE_NOTIFICATION);
-    assert_true(iolink_events_flag(&ctx));
+    assert_true(ctx.flag);
+    assert_int_equal(ctx.flag, (ctx.count > 0U));
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx, &ev));
     assert_int_equal(ctx.count, 0U);
-    assert_false(iolink_events_flag(&ctx));
+    assert_false(ctx.flag);
+    assert_int_equal(ctx.flag, (ctx.count > 0U));
 
     /* Acknowledging the last Error through the event memory also clears it. */
     iolink_event_trigger(&ctx, 0x1002U, IOLINK_EVENT_TYPE_ERROR);
-    assert_true(iolink_events_flag(&ctx));
+    assert_true(ctx.flag);
+    assert_int_equal(ctx.flag, (ctx.count > 0U));
     iolink_events_memory_write(&ctx, 0x00U, 0x00U);
     assert_int_equal(ctx.count, 0U);
-    assert_false(iolink_events_flag(&ctx));
+    assert_false(ctx.flag);
+    assert_int_equal(ctx.flag, (ctx.count > 0U));
 }
 
 /* A retrying Master must not turn repeated requests into an event storm: the
@@ -598,6 +631,11 @@ static void test_notification_dedup(void** state)
 
     assert_popped(&ctx, 0xFF91U, IOLINK_EVENT_MODE_SINGLE_SHOT);
     assert_false(iolink_events_pending(&ctx));
+
+    /* Once acknowledged, the same notification may be reported again. */
+    iolink_event_trigger(&ctx, 0xFF91U, IOLINK_EVENT_TYPE_NOTIFICATION);
+    assert_int_equal(ctx.count, 1U);
+    assert_popped(&ctx, 0xFF91U, IOLINK_EVENT_MODE_SINGLE_SHOT);
 }
 
 /* 10.10.2/Table A.20: Notifications are always single shot (MODE = 1), never
@@ -628,8 +666,8 @@ static void test_event_clear_diagnosis(void** state)
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
 
-    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
-    iolink_event_trigger(&ctx, 0x8CA0U, IOLINK_EVENT_TYPE_WARNING);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, IOLINK_EVENTCODE_MAINTENANCE_WEAR, IOLINK_EVENT_TYPE_WARNING);
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST, IOLINK_EVENT_TYPE_NOTIFICATION);
     assert_int_equal(ctx.count, 3U);
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 4U);
@@ -639,11 +677,26 @@ static void test_event_clear_diagnosis(void** state)
     /* The appearances already queued stay until acknowledged; the reset adds
        the matching disappearances immediately and drops the Notification. */
     assert_int_equal(ctx.count, 4U);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_APPEARS);
-    assert_popped(&ctx, 0x1000U, IOLINK_EVENT_MODE_DISAPPEARS);
-    assert_popped(&ctx, 0x8CA0U, IOLINK_EVENT_MODE_APPEARS);
-    assert_popped(&ctx, 0x8CA0U, IOLINK_EVENT_MODE_DISAPPEARS);
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
+
+    /* Acknowledge the frozen appears snapshot: the withdraw pair becomes the
+       presented set, so its MODE=2 qualifier is observable on the wire
+       (Table A.20: MODE 10, TYPE 11/10, INSTANCE 4 -> 0xB4 / 0xA4). */
+    iolink_events_memory_write(&ctx, 0x00U, 0x00U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x87U); /* 3 slots */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xB4U); /* E disappears */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x02U), 0x10U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x03U), 0x00U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0xE4U); /* W appears */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x05U), 0x8CU);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x06U), 0x42U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x07U), 0xA4U); /* W disappears */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x08U), 0x8CU);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x09U), 0x42U);
+
+    assert_popped(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_MODE_DISAPPEARS);
+    assert_popped(&ctx, IOLINK_EVENTCODE_MAINTENANCE_WEAR, IOLINK_EVENT_MODE_APPEARS);
+    assert_popped(&ctx, IOLINK_EVENTCODE_MAINTENANCE_WEAR, IOLINK_EVENT_MODE_DISAPPEARS);
 }
 
 static void test_event_clear_diagnosis_discards_all_notifications(void** state)
@@ -693,6 +746,50 @@ static void test_event_no_malfunction_notification_invisible_in_device_status(vo
     assert_true(iolink_events_pending(&ctx));
 }
 
+/* Table B.13: DeviceStatus values and their dominance. The lowest priority
+ * value wins: Failure(1) > Functional-Check(2) > Maintenance-Required(3) >
+ * Out-of-Specification(4). */
+static void test_event_device_status_matrix(void** state)
+{
+    (void) state;
+    clock_set(0U);
+    iolink_events_ctx_t ctx;
+
+    const struct
+    {
+        uint16_t code;
+        uint8_t expected;
+    } single[] = {
+        {IOLINK_EVENTCODE_MAINTENANCE_WEAR, 1U},
+        {IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, 2U},
+        {IOLINK_EVENTCODE_SIMULATION_ACTIVE, 3U},
+        {IOLINK_EVENTCODE_SHORT_CIRCUIT, 4U},
+    };
+    for (size_t i = 0U; i < (sizeof(single) / sizeof(single[0])); i++) {
+        iolink_events_init(&ctx);
+        iolink_event_trigger(&ctx, single[i].code, iolink_event_classify(single[i].code));
+        assert_int_equal(iolink_events_get_highest_severity(&ctx), single[i].expected);
+    }
+
+    const struct
+    {
+        uint16_t first;
+        uint16_t second;
+        uint8_t expected;
+    } pairs[] = {
+        {IOLINK_EVENTCODE_MAINTENANCE_WEAR, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, 1U},
+        {IOLINK_EVENTCODE_MAINTENANCE_WEAR, IOLINK_EVENTCODE_SIMULATION_ACTIVE, 3U},
+        {IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN, IOLINK_EVENTCODE_SIMULATION_ACTIVE, 3U},
+        {IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENTCODE_MAINTENANCE_WEAR, 4U},
+    };
+    for (size_t i = 0U; i < (sizeof(pairs) / sizeof(pairs[0])); i++) {
+        iolink_events_init(&ctx);
+        iolink_event_trigger(&ctx, pairs[i].first, iolink_event_classify(pairs[i].first));
+        iolink_event_trigger(&ctx, pairs[i].second, iolink_event_classify(pairs[i].second));
+        assert_int_equal(iolink_events_get_highest_severity(&ctx), pairs[i].expected);
+    }
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -702,6 +799,7 @@ int main(void)
         cmocka_unit_test(test_phy_diagnostic_codes),
         cmocka_unit_test(test_event_peek),
         cmocka_unit_test(test_event_helpers),
+        cmocka_unit_test(test_event_device_status_matrix),
         cmocka_unit_test(test_event_classify),
         cmocka_unit_test(test_event_memory_layout),
         cmocka_unit_test(test_event_memory_frozen),
