@@ -79,9 +79,9 @@ previously missing:
 - ErrorCount (0x0020) returns the summed DLL error counters.
 - ProductURI (0x001B) is served read-only.
 - ProcessDataInput/Output (0x0028/0x0029) return the last valid PD data: PDin
-  keeps the last value published with valid=true, PDout the last received
-  frame. Before the first valid value/frame they answer `0x80 0x11`; a device
-  without PD answers with an empty positive response.
+  answers `0x80 0x11` while the DLL flags it invalid, PDout answers `0x80 0x11`
+  until a frame has been received; a device without PD answers with an empty
+  positive response.
 - A WRITE to a known read-only object answers `0x80 0x23`; an unknown index
   keeps `0x80 0x11`.
 - DeviceAccessLocks bit 0 blocks parameter writes (tags and DPP2), not reads or

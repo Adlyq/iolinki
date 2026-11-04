@@ -358,11 +358,7 @@ typedef struct
     volatile uint8_t pd_in_captured;        /**< Buffer the ISR is streaming (0xFF = none) */
     uint8_t pd_out[IOLINK_PD_OUT_MAX_SIZE]; /**< Output PD buffer (Master -> Device) */
 
-    /* Last values that were actually valid, for ProcessDataInput/Output (B.2.23/B.2.24). */
-    uint8_t pd_in_last_valid[IOLINK_PD_IN_MAX_SIZE]; /**< Last PDin published as valid */
-    uint8_t pd_in_last_valid_len;                    /**< Length of pd_in_last_valid */
-    bool pd_in_last_valid_seen;                      /**< A valid PDin was published */
-    bool pd_out_seen;                                /**< A PDout frame was received */
+    bool pd_out_seen; /**< A PDout frame has been received (B.2.24) */
 
     /* Error Counters & Statistics */
     uint32_t crc_errors;             /**< Cumulative CRC error count */
@@ -672,6 +668,19 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_ctx_t* ctx);
  * @param[out] out_stats Output stats structure, populated with a counter snapshot
  */
 void iolink_dll_get_stats(const iolink_dll_ctx_t* ctx, iolink_dll_stats_t* out_stats);
+
+/**
+ * @brief Reset the Device diagnosis and status (Table 101)
+ *
+ * Clears the counters behind ErrorCount (0x0020) and discards the event queue,
+ * the Event flag and the Table 58 event memory, so DeviceStatus (0x0024) and
+ * DetailedDeviceStatus (0x0025) start from "0" again. Called for the Device
+ * reset, Restore factory settings and Back-to-box SystemCommands; an
+ * Application reset leaves the diagnosis untouched (Table 101).
+ *
+ * @param ctx DLL context
+ */
+void iolink_dll_reset_diagnostics(iolink_dll_ctx_t* ctx);
 
 /**
  * @brief Enable/disable timing enforcement (t_ren / t_cycle)

@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "iolinki/isdu.h"
+#include "iolinki/dll.h"
 #include "iolinki/params.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/events.h"
@@ -172,6 +173,58 @@ static void test_back_to_box_restores_defaults(void** state)
     uint8_t readback[33];
     assert_int_equal(iolink_params_get(IOLINK_IDX_APPLICATION_TAG, 0U, readback, sizeof(readback)),
                      0);
+}
+
+/* Table 101: the reset SystemCommands clear Device diagnosis and status;
+ * Application reset leaves them untouched. */
+static void test_reset_commands_clear_diagnostics(void** state)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0316");
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_dll_ctx_t dll;
+
+    const uint8_t reset_commands[] = {IOLINK_CMD_DEVICE_RESET, IOLINK_CMD_RESTORE_FACTORY_SETTINGS,
+                                      IOLINK_CMD_BACK_TO_BOX};
+    for (size_t i = 0U; i < (sizeof(reset_commands) / sizeof(reset_commands[0])); i++) {
+        (void) memset(&dll, 0, sizeof(dll));
+        iolink_events_init(&dll.events);
+        dll.crc_errors = 3U;
+        dll.timeout_errors = 2U;
+        dll.framing_errors = 1U;
+        dll.timing_errors = 4U;
+        iolink_event_trigger(&dll.events, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+
+        iolink_isdu_init(&ctx);
+        ctx.dll_ctx = &dll;
+        ctx.event_ctx = &dll.events;
+        assert_int_equal(send_system_command(&ctx, reset_commands[i]), 1);
+        iolink_isdu_process(&ctx);
+
+        assert_int_equal(dll.crc_errors, 0U);
+        assert_int_equal(dll.timeout_errors, 0U);
+        assert_int_equal(dll.framing_errors, 0U);
+        assert_int_equal(dll.timing_errors, 0U);
+        assert_int_equal(dll.events.count, 0U);
+        assert_false(iolink_events_flag(&dll.events));
+    }
+
+    /* Application reset (0x81): Table 101 says "No". */
+    (void) memset(&dll, 0, sizeof(dll));
+    iolink_events_init(&dll.events);
+    dll.crc_errors = 5U;
+    iolink_event_trigger(&dll.events, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
+
+    iolink_isdu_init(&ctx);
+    ctx.dll_ctx = &dll;
+    ctx.event_ctx = &dll.events;
+    assert_int_equal(send_system_command(&ctx, IOLINK_CMD_APPLICATION_RESET), 1);
+    iolink_isdu_process(&ctx);
+
+    assert_int_equal(dll.crc_errors, 5U);
+    iolink_event_t ev;
+    assert_true(iolink_events_peek(&dll.events, &ev));
+    assert_int_equal(ev.code, 0x2000U); /* the original diagnosis survives */
 }
 
 /* Reserved commands (0x07..0x3F, 0x84..0x9F) answer FUNC_NOTAVAIL. */
@@ -1186,6 +1239,8 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_back_to_box_restores_defaults, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_reset_commands_clear_diagnostics, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_reserved_commands_rejected, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_ds_download_rejected_by_access_lock, test_setup,

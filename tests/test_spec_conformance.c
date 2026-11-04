@@ -188,10 +188,9 @@ static void test_process_data_input_returns_pd(void** state)
     (void) memset(&dll, 0, sizeof(dll));
     dll.pd_in_len_current = 2U;
     dll.pd_in_len = 2U;
-    dll.pd_in_last_valid[0] = 0x11U;
-    dll.pd_in_last_valid[1] = 0x22U;
-    dll.pd_in_last_valid_len = 2U;
-    dll.pd_in_last_valid_seen = true;
+    dll.pd_valid = true;
+    dll.pd_in[0][dll.od_width + 0U] = 0x11U;
+    dll.pd_in[0][dll.od_width + 1U] = 0x22U;
 
     uint8_t out[8] = {0};
     int n = read_object_with_dll(0x0028U, &dll, out, sizeof(out));
@@ -200,14 +199,15 @@ static void test_process_data_input_returns_pd(void** state)
     assert_int_equal(out[1], 0x22U);
 }
 
-/* B.2.23: no valid PDin was ever published, so there is nothing to serve. */
-static void test_process_data_input_never_valid_is_unavailable(void** state)
+/* B.2.23: while the DLL flags PDin as invalid there is no valid data to serve. */
+static void test_process_data_input_invalid_is_unavailable(void** state)
 {
     (void) state;
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
     dll.pd_in_len_current = 2U;
     dll.pd_in_len = 2U;
+    dll.pd_valid = false;
     dll.pd_in[0][dll.od_width + 0U] = 0x11U;
     dll.pd_in[0][dll.od_width + 1U] = 0x22U;
 
@@ -216,29 +216,6 @@ static void test_process_data_input_never_valid_is_unavailable(void** state)
     assert_int_equal(n, 2);
     assert_int_equal(out[0], 0x80U);
     assert_int_equal(out[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
-}
-
-/* B.2.23: a later invalidation must not hide the last valid PDin. */
-static void test_process_data_input_invalid_returns_last_valid(void** state)
-{
-    (void) state;
-    iolink_dll_ctx_t dll;
-    (void) memset(&dll, 0, sizeof(dll));
-    dll.pd_in_len_current = 2U;
-    dll.pd_in_len = 2U;
-    dll.pd_valid = false;
-    dll.pd_in_last_valid[0] = 0xDEU;
-    dll.pd_in_last_valid[1] = 0xADU;
-    dll.pd_in_last_valid_len = 2U;
-    dll.pd_in_last_valid_seen = true;
-    dll.pd_in[0][dll.od_width + 0U] = 0x11U;
-    dll.pd_in[0][dll.od_width + 1U] = 0x22U;
-
-    uint8_t out[8] = {0};
-    int n = read_object_with_dll(0x0028U, &dll, out, sizeof(out));
-    assert_int_equal(n, 2);
-    assert_int_equal(out[0], 0xDEU);
-    assert_int_equal(out[1], 0xADU);
 }
 
 /* B.2.23/B.2.24: a device without Process Data answers with an empty positive
@@ -263,10 +240,9 @@ static void test_process_data_80xx_is_positive(void** state)
     (void) memset(&dll, 0, sizeof(dll));
     dll.pd_in_len_current = 2U;
     dll.pd_in_len = 2U;
-    dll.pd_in_last_valid[0] = 0x80U;
-    dll.pd_in_last_valid[1] = 0x42U;
-    dll.pd_in_last_valid_len = 2U;
-    dll.pd_in_last_valid_seen = true;
+    dll.pd_valid = true;
+    dll.pd_in[0][dll.od_width + 0U] = 0x80U;
+    dll.pd_in[0][dll.od_width + 1U] = 0x42U;
 
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
@@ -498,9 +474,7 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_product_uri_index, setup, teardown),
         cmocka_unit_test_setup_teardown(test_product_uri_absent, setup, teardown),
         cmocka_unit_test_setup_teardown(test_process_data_input_returns_pd, setup, teardown),
-        cmocka_unit_test_setup_teardown(test_process_data_input_never_valid_is_unavailable, setup,
-                                        teardown),
-        cmocka_unit_test_setup_teardown(test_process_data_input_invalid_returns_last_valid, setup,
+        cmocka_unit_test_setup_teardown(test_process_data_input_invalid_is_unavailable, setup,
                                         teardown),
         cmocka_unit_test_setup_teardown(test_process_data_zero_length, setup, teardown),
         cmocka_unit_test_setup_teardown(test_process_data_80xx_is_positive, setup, teardown),

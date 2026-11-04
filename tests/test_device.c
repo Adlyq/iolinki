@@ -202,25 +202,6 @@ static void test_device_pd_valid_flag(void** state)
     assert_true(dev.ctx.dll.pd_valid);
 }
 
-/* B.2.23: keep the last value published as valid for ProcessDataInput. */
-static void test_device_pd_last_valid_snapshot(void** state)
-{
-    (void) state;
-    iolink_test_device_t dev;
-    init_device(&dev, IOLINK_M_SEQ_TYPE_2_2, 2U, 0U);
-
-    const uint8_t valid[2] = {0x11U, 0x22U};
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, valid, sizeof(valid), true), 0);
-    assert_true(dev.ctx.dll.pd_in_last_valid_seen);
-    assert_int_equal(dev.ctx.dll.pd_in_last_valid_len, 2U);
-    assert_memory_equal(dev.ctx.dll.pd_in_last_valid, valid, 2U);
-
-    const uint8_t invalid[2] = {0x33U, 0x44U};
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, invalid, sizeof(invalid), false), 0);
-    assert_false(dev.ctx.dll.pd_valid);
-    assert_memory_equal(dev.ctx.dll.pd_in_last_valid, valid, 2U);
-}
-
 static void test_device_pd_output_read(void** state)
 {
     (void) state;
@@ -408,7 +389,6 @@ int main(void)
         cmocka_unit_test(test_device_init_accepts_valid_config),
         cmocka_unit_test(test_device_pd_input_bounds),
         cmocka_unit_test(test_device_pd_valid_flag),
-        cmocka_unit_test(test_device_pd_last_valid_snapshot),
         cmocka_unit_test(test_device_pd_output_read),
         cmocka_unit_test(test_device_reset_handler),
         cmocka_unit_test(test_device_introspection),

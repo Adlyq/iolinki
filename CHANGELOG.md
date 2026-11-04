@@ -13,11 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   range no longer relies on unsigned wraparound.
 - An unconfigured optional ProductURI (0x001B) now answers `0x80 0x11`
   instead of an empty positive response.
-- ProcessDataInput (0x0028) now serves the last PDin the application published
-  as valid (a later invalidation does not hide it), and ProcessDataOutput
-  (0x0029) the last received PDout. Until the first valid value/frame exists
-  each answers `0x80 0x11`; a device without Process Data answers with an empty
+- ProcessDataInput (0x0028) answers `0x80 0x11` while the DLL flags PDin as
+  invalid, and ProcessDataOutput (0x0029) answers `0x80 0x11` until a PDout
+  frame has been received; a device without Process Data answers with an empty
   positive response.
+- Device diagnosis and status follow Table 101: Device reset (0x80), Restore
+  factory settings (0x82) and Back-to-box (0x83) clear ErrorCount and the event
+  memory behind DeviceStatus (0x0024) / DetailedDeviceStatus (0x0025), while
+  Application reset (0x81) leaves them untouched.
 - Event lifecycle (A.6.4/10.10.2): a re-raise inside the 1 s window is
   deferred by `iolink_events_process()` instead of being dropped, timestamps no
   longer use 0 as a "never sent" sentinel (a first event at t=0 works), events

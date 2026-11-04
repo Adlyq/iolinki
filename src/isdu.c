@@ -790,21 +790,21 @@ static void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
     if (ctx->dll_ctx != NULL) {
         const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
         if (input) {
-            /* B.2.23: serve the last value the application published as valid;
-               a later invalidation does not hide it. No valid value yet means
-               a configured PDin has nothing to serve. */
-            if (dll->pd_in_last_valid_seen) {
-                len = dll->pd_in_last_valid_len;
-                if (len > sizeof(dll->pd_in_last_valid)) {
-                    len = (uint8_t) sizeof(dll->pd_in_last_valid);
-                }
-                if (len > 0U) {
-                    (void) memcpy(ctx->response_buf, dll->pd_in_last_valid, len);
-                }
+            /* B.2.23: the object carries the last *valid* process input data.
+               A zero-length PDin has nothing to serve (empty positive answer);
+               otherwise the DLL validity flag decides whether the buffer is
+               valid data or stale octets. */
+            len = dll->pd_in_len;
+            if (len > IOLINK_PD_IN_MAX_SIZE) {
+                len = (uint8_t) IOLINK_PD_IN_MAX_SIZE;
             }
-            else if (dll->pd_in_len_current > 0U) {
-                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
-                return;
+            if (len > 0U) {
+                if (!dll->pd_valid) {
+                    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+                    return;
+                }
+                const uint8_t* pdi = &dll->pd_in[dll->pd_in_active][dll->od_width];
+                (void) memcpy(ctx->response_buf, pdi, len);
             }
         }
         else {
@@ -974,17 +974,28 @@ static uint8_t isdu_ds_result_error(int ret, uint8_t fallback)
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
 #if IOLINK_FEATURE_SYSTEM_COMMAND
+/** @brief Table 101: clear Device diagnosis/status on the reset commands. */
+static void isdu_reset_diagnostics(iolink_isdu_ctx_t* ctx)
+{
+    if (ctx->dll_ctx != NULL) {
+        iolink_dll_reset_diagnostics((iolink_dll_ctx_t*) ctx->dll_ctx);
+    }
+}
+
 /** @brief 0x80-0x83: device/application reset, factory restore, back-to-box. */
 static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
     switch (cmd) {
         case IOLINK_CMD_DEVICE_RESET: /* 0x80 */
+            /* Table 101: Device reset sets Diagnosis and status to "0". */
+            isdu_reset_diagnostics(ctx);
             /* Set reset flag for application to handle */
             ctx->reset_pending = true;
             break;
 
         case IOLINK_CMD_APPLICATION_RESET: /* 0x81 */
-            /* Set application reset flag; the parameter set will change, so the
+            /* Table 101: Application reset leaves the diagnosis untouched.
+               Set application reset flag; the parameter set will change, so the
                Master must be prompted to re-upload via DS_UPLOAD_REQ (10.4.2). */
             ctx->app_reset_pending = true;
             isdu_trigger_ds_upload_req(ctx);
@@ -993,20 +1004,24 @@ static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
         case IOLINK_CMD_RESTORE_FACTORY_SETTINGS: /* 0x82 */
             /* Reset all parameters to factory defaults. Table 177 requires
                DS_UPLOAD_FLAG = 0: the master keeps its stored parameter set
-               and re-downloads it, so no upload is requested here. */
+               and re-downloads it, so no upload is requested here. Table 101:
+               "Clear" the diagnosis and status. */
             isdu_params_factory_reset(ctx);
             isdu_clear_ds_upload_req(ctx);
+            isdu_reset_diagnostics(ctx);
             break;
 
         case IOLINK_CMD_BACK_TO_BOX: /* 0x83 */
             /* Restore the delivery values, then stop and disable communication
                after the response (10.7.5). Table 178 also requires
-               DS_UPLOAD_FLAG = 0. */
+               DS_UPLOAD_FLAG = 0; Table 101 sets the diagnosis and status to
+               "0". */
             isdu_params_factory_reset(ctx);
             isdu_clear_ds_upload_req(ctx);
             if (ctx->dll_ctx != NULL) {
                 iolink_dll_request_back_to_box((iolink_dll_ctx_t*) ctx->dll_ctx);
             }
+            isdu_reset_diagnostics(ctx);
             break;
 
         default:

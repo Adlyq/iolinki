@@ -1875,6 +1875,30 @@ void iolink_dll_get_stats(const iolink_dll_ctx_t* ctx, iolink_dll_stats_t* out_s
     out_stats->isr_tx_dropped = IOLINK_STAT_TOTAL(ctx, isr_tx_dropped);
 }
 
+void iolink_dll_reset_diagnostics(iolink_dll_ctx_t* ctx)
+{
+    if (ctx == NULL) return;
+
+    /* B.2.20/Table 101: ErrorCount counts errors since power-on or reset, and
+       the diagnosis/status is cleared by the reset SystemCommands. The event
+       engine owns DeviceStatus and DetailedDeviceStatus; reset() keeps the
+       bound clock. */
+    iolink_events_reset(&ctx->events);
+
+    IOLINK_CRITICAL_ENTER();
+    ctx->crc_errors = 0U;
+    ctx->timeout_errors = 0U;
+    ctx->framing_errors = 0U;
+    ctx->timing_errors = 0U;
+#if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
+    ctx->isr_stat.crc_errors = 0U;
+    ctx->isr_stat.timeout_errors = 0U;
+    ctx->isr_stat.framing_errors = 0U;
+    ctx->isr_stat.timing_errors = 0U;
+#endif
+    IOLINK_CRITICAL_EXIT();
+}
+
 void iolink_dll_set_timing_enforcement(iolink_dll_ctx_t* ctx, bool enable)
 {
     if (ctx != NULL) ctx->enforce_timing = enable;
