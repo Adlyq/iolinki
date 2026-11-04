@@ -1885,10 +1885,8 @@ void iolink_dll_reset_error_counters(iolink_dll_ctx_t* ctx)
     ctx->framing_errors = 0U;
     ctx->timing_errors = 0U;
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
-    ctx->isr_stat.crc_errors = 0U;
     ctx->isr_stat.timeout_errors = 0U;
     ctx->isr_stat.framing_errors = 0U;
-    ctx->isr_stat.timing_errors = 0U;
 #endif
     IOLINK_CRITICAL_EXIT();
 }

@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed (V1.1.5 review follow-up)
+- `IOLINK_STATS_MODE=SPLIT` compiles again: the diagnostics reset only clears
+  the ISR-owned counters that exist (`timeout_errors`, `framing_errors`), not
+  the nonexistent `isr_stat.crc_errors`/`isr_stat.timing_errors`.
 - `iolink_cycle_time_encode(0)` now encodes 0x00 ("no MinCycleTime", B.1.3)
   instead of clamping to 0.4 ms; 1..3 still clamp to 0x04 and the 317..320
   range no longer relies on unsigned wraparound.
