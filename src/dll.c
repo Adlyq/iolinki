@@ -517,8 +517,14 @@ static bool dll_dispatch_od(iolink_dll_ctx_t* ctx, uint8_t mc, const uint8_t* od
     if (channel == IOLINK_MC_CHANNEL_PAGE) {
         /* 7.3.5.3: Direct Parameter page read/write. A read returns the page
            octet at the address; unimplemented addresses return 0, writes are
-           ignored (A.1.2). MasterCommand at address 0 is handled by the
-           PREOPERATE branch. */
+           ignored (A.1.2). Table 45 T6/T7/T9: a MasterCommand (Table B.2) is
+           written to Direct Parameter page 1 address 0. The TYPE_0 frame paths
+           intercept it before the dispatch; an OPERATE M-sequence carries the
+           same command as its OD octet, so the write is applied here. */
+        if (((mc & IOLINK_MC_RW_MASK) == 0U) && (od_len > 0U) &&
+            ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
+            (void) dll_apply_master_command(ctx, od_in[0]);
+        }
         if (((mc & IOLINK_MC_RW_MASK) == 0U) && (od_len > 0U) &&
             ((mc & IOLINK_MC_ADDR_MASK) == 0x01U)) {
             ctx->master_cycle_time = od_in[0];

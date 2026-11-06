@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed (Type-0 reset and PHY frame contract)
+- A MasterCommand (Table B.2, e.g. `0x97` DeviceStartup) written to Direct
+  Parameter page 1 address 0 is now applied when it is carried by the OPERATE
+  M-sequence instead of a TYPE_0 frame, so Table 45 T6/T7/T9 hold for every
+  M-sequence type. It was previously ignored on the Type-1/2 path (only the
+  TYPE_0 frame paths handled it).
 - Kept the V1.1.5 behavior for non-TYPE_0 OPERATE devices: a valid TYPE_0
   request is consumed as the simulated restart, returns the link to STARTUP,
   and is not answered. An ISR-triggered STARTUP transition is now reported by

@@ -268,6 +268,29 @@ static uint8_t read_dpp1_type2v(iolink_device_ctx_t* ctx, uint8_t addr)
     return tx[0];
 }
 
+/* Deliver one TYPE_2_1 page-channel WRITE (MC + CKT + OD) and verify that the
+ * [PD-in 1][CKS] acknowledgement is internally consistent (A.1.6 layout with
+ * the status flags in bits 6-7 of the CKS octet). */
+static void deliver_type21_page_write(iolink_device_ctx_t* ctx, uint8_t addr, uint8_t od)
+{
+    uint8_t frame[3] = {(uint8_t) (IOLINK_MC_CHANNEL_PAGE | (addr & IOLINK_MC_ADDR_MASK)),
+                        IOLINK_MSEQ_TYPE_2, od};
+    frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_2 | iolink_checksum6(frame, sizeof(frame)));
+    feed_frame_bytes(frame, sizeof(frame));
+    mock_phy_clear_tx();
+    expect_any(mock_phy_send, data);
+    expect_value(mock_phy_send, len, 2); /* PD-in 1 + CKS */
+    will_return(mock_phy_send, 0);
+    deliver_frame_to_main(ctx);
+
+    size_t tx_len = 0U;
+    const uint8_t* tx = mock_phy_tx(&tx_len);
+    assert_int_equal(tx_len, 2U);
+    const uint8_t flags = (uint8_t) (tx[1] & 0xC0U);
+    const uint8_t crc_octets[2] = {tx[0], flags};
+    assert_int_equal(tx[1], (uint8_t) (flags | iolink_checksum6(crc_octets, sizeof(crc_octets))));
+}
+
 /* Decode a DPP1 ProcessDataIn/Out octet (B.1.6) to a byte count. */
 static uint32_t dpp1_pd_octets(uint8_t value)
 {
@@ -1134,6 +1157,31 @@ static void test_dll_operate_to_startup_0x97(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
 }
 
+/* Table 45 T7: DeviceStartup 0x97 carried by the OPERATE M-sequence (page
+ * channel, address 0) must return the Device to STARTUP. The same command also
+ * arrives as a TYPE_0 frame in SDCI_TC_0037; that path is covered above. */
+static void test_dll_operate_type_master_command_0x97_restarts(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .pd_in_len = 1, .pd_out_len = 0};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    establish_operate_type21(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    /* Control: 0x97 written to DPP1 MasterCycleTime (address 0x01) is a plain
+     * parameter write and must keep OPERATE. This separates "command 0x97 at
+     * address 0" from "the value 0x97 anywhere on the page channel". */
+    deliver_type21_page_write(&dev.ctx, 0x01U, IOLINK_CMD_DEVICE_STARTUP);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    /* DeviceStartup 0x97 at page address 0 must return to STARTUP. */
+    deliver_type21_page_write(&dev.ctx, 0x00U, IOLINK_CMD_DEVICE_STARTUP);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_STARTUP);
+}
+
 /* Test Spec 0041: a truncated DPP1 write in PREOPERATE is not answered; the
  * following complete write is answered. */
 static void test_dll_preoperate_truncated_write(void** state)
@@ -1734,6 +1782,8 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_operate_to_startup_0x97, test_setup,
                                         test_teardown),
+        cmocka_unit_test_setup_teardown(test_dll_operate_type_master_command_0x97_restarts,
+                                        test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_preoperate_truncated_write, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_preoperate_illegal_operate_type, test_setup,

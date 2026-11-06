@@ -382,7 +382,7 @@ flowchart TD
 | Type-0 WRITE（任意通道） | `CKS` | 同上 / `dll_handle_type0_od_write()` |
 | Type-1/2 READ（Process/Page/Diag/ISDU） | `[OD...][PD-in...]CKS` | `dll_handle_operate_type1_2()` |
 | Type-1/2 WRITE（Process/Page/Diag/ISDU） | `[PD-in...]CKS` | 同上 |
-| MasterCommand 页写 | `CKS` | `dll_handle_master_command()` |
+| MasterCommand 页写 | Type-0：`CKS`；Type-1/2：`[PD-in...]CKS` | `dll_handle_master_command()` / `dll_dispatch_od()` |
 | FALLBACK MasterCommand | `CKS`，随后 T_FBD 到期回 SIO | `dll_handle_fallback_command()` |
 
 CKS 位含义：
