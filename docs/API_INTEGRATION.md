@@ -174,7 +174,7 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `set_mode` | 实际使用中必需 | 切换 SDCI/SIO/INACTIVE。 |
 | `set_baudrate` | 实际使用中必需 | COM1/2/3。 |
 | `rx_octet` | RX BYTE 模式 | 读到 octet 返回 1，无数据返回 0，出错返回负值。 |
-| `rx_frame` | RX FRAME 模式 | 返回 PHY 持有的完整帧，在下一次调用前有效。 |
+| `rx_frame` | RX FRAME 模式 | 返回 PHY 持有的完整帧，在下一次调用前有效；不得返回两字节帧头或其他截断片段。 |
 | `tx_octet` | TX BYTE 模式 | 送入一个应答 octet。 |
 | `tx_frame` | TX FRAME 模式 | 发送完整应答，通常使用 DMA。 |
 | `tx_done` | TX BYTE 模式 | 发完最后一字节后释放线路；RX BYTE 的 gap 也会用它释放接收引擎。TX FRAME 下该成员不存在，由 PHY 自己在传输完成中断里收尾。 |
@@ -283,7 +283,7 @@ ISR 中运行。
 | `on_preoperate`, `on_operate` | 进入对应状态。 |
 | `on_pd_input(data, len)` | 当 `IOLINK_APP_PD_INPUT_CALLBACK=1` 时，每个 OPERATE 周期调用；返回值作为 PD-valid 标志。 |
 | `on_pd_output(data, len)` | 每个 OPERATE 周期调用，携带最新的主站输出数据。 |
-| `on_state_change(state)` | 当前 DLL 状态（电平式）：状态变化时调用一次，主上下文迁移立即投递，ISR 期间的多次迁移合并为最终状态。 |
+| `on_state_change(state)` | 当前 DLL 状态（电平式）：状态变化时调用一次，主上下文迁移立即投递，ISR 期间的多次迁移合并为最终状态；例外是 ISR 进入 STARTUP 的复位迁移，会先于最终状态单独投递。 |
 | `on_master_lost`, `on_master_online` | 主站静默提示的边沿。 |
 
 `on_pd_output` 收到的是指向上下文内部的指针，不能保留。

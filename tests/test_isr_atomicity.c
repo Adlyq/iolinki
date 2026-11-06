@@ -397,6 +397,36 @@ static void test_state_notification_is_level_based(void** state)
     assert_int_equal(s_state_count, 1U);
 }
 
+/* An ISR-side OPERATE -> STARTUP reset must remain observable even when the
+ * next startup probe advances the link to PREOPERATE before the main flush. */
+static void test_isr_startup_notification_is_not_coalesced(void** state)
+{
+    (void) state;
+    reset_ctx();
+    s_ctx.state_cb = state_cb;
+    s_ctx.state_cb_user = NULL;
+    s_ctx.state = IOLINK_DLL_STATE_OPERATE;
+    s_ctx.last_notified_state = IOLINK_DLL_STATE_OPERATE;
+    s_state_count = 0U;
+    s_cb_in_isr = false;
+
+    s_ctx.in_isr = 1U;
+    /* Model the two writes made by dll_set_state() while the data ISR owns the
+     * context. The pending bit is the ISR-to-main edge notification. */
+    s_ctx.state = IOLINK_DLL_STATE_STARTUP;
+    s_ctx.startup_notification_pending = 1U;
+    s_ctx.state = IOLINK_DLL_STATE_PREOPERATE;
+    s_ctx.in_isr = 0U;
+
+    iolink_dll_flush_state_callbacks(&s_ctx);
+
+    assert_int_equal(s_state_count, 2U);
+    assert_int_equal(s_states[0], IOLINK_DLL_STATE_STARTUP);
+    assert_int_equal(s_states[1], IOLINK_DLL_STATE_PREOPERATE);
+    assert_false(s_cb_in_isr);
+    assert_int_equal(s_ctx.startup_notification_pending, 0U);
+}
+
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
 /* A busy PHY (previous reply still on the wire) must not swallow the frame: the
  * eager reply is abandoned and the main pump stages it on the next window. */
@@ -446,6 +476,7 @@ int main(void)
         cmocka_unit_test(test_reply_staging_pokes_phy_outside_critical),
         cmocka_unit_test(test_nested_pump_is_deferred),
         cmocka_unit_test(test_state_notification_is_level_based),
+        cmocka_unit_test(test_isr_startup_notification_is_not_coalesced),
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
         cmocka_unit_test(test_busy_tx_frame_keeps_frame_for_main),
 #endif

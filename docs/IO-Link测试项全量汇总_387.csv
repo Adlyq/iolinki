@@ -32,7 +32,7 @@
 31,test-spec-c1,SDCI_TC_0035,TCD_DLPC_STUP_STUPOPER1,Table 53,Device,可单测，已覆盖,Both MasterCycleTime values and the legacy OPERATE-type ISDU idle are covered in tests/test_dll.c.
 32,test-spec-c1,SDCI_TC_0036,TCD_DLPC_STUP_STUPOPER2,Table 55,Device,可单测，已覆盖,STARTUP receives an OPERATE-type request; no response and state stays STARTUP.
 33,test-spec-c1,SDCI_TC_0037,TCD_DLPC_OPER_OPERSTUP1,Table 56,Device,可单测，已覆盖,"0x97 -> STARTUP, OPERATE-type idle dropped, TYPE_0 probe answered. Uses a directly-seeded OPERATE state rather than a full handshake."
-34,test-spec-c1,SDCI_TC_0038,TCD_DLPC_OPER_OPERSTAR2,Table 57,Device,可单测，已覆盖,Production now returns STARTUP with no reply for a TYPE_0 page read in OPERATE. Test uses a TYPE_0-established link with m_seq_type switched for the check; full non-TYPE_0 establishment still open.
+34,test-spec-c1,SDCI_TC_0038,TCD_DLPC_OPER_OPERSTAR2,Table 57,Device,可单测，已覆盖,`test_dll_operate_type0_read_resets` covers the strict non-TYPE_0 OPERATE reset behavior and repeated startup probe.
 35,test-spec-c1,SDCI_TC_0039,TCD_DLPC_PROP_READDPP1,Table 58,Device,可单测，已覆盖,"No saved PDIn/PDOut/M-sequence check, no no-PD assertion, only one DPP1 octet. Oracle is tautological."
 36,test-spec-c1,SDCI_TC_0040,TCD_DLPC_PROP_WRITEDPP1,Table 59,Device,可单测，已覆盖,"No read-back/mirror, no write-length check, no no-OR-data assertion."
 37,test-spec-c1,SDCI_TC_0041,TCD_DLPC_PROP_SHORTMESSAGE,Table 60,Device,可单测，已覆盖,PREOPERATE drops a one-octet-short DPP1 write and accepts the complete write.
@@ -41,7 +41,7 @@
 40,test-spec-c1,SDCI_TC_0045,TCD_DLPC_OPER_READ,Table 64,Device,可单测，已覆盖,Only one DPP1 octet; oracle is the same production function; no PD/no-OR-data checks.
 41,test-spec-c1,SDCI_TC_0046,TCD_DLPC_OPER_WRITE,Table 65,Device,可单测，已覆盖,"DPP1 read/write accepted in OPERATE; state was seeded directly, so the 0x99/0x98 transition is covered by 0045."
 42,test-spec-c1,SDCI_TC_0047,TCD_DLPC_OPER_NEGWRITE,Table 66,Device,可单测，已覆盖,Short DPP1 write is not answered and the complete write is accepted; state seeded directly.
-43,test-spec-c1,SDCI_TC_0049,TCD_DLPC_OPER_SIMRESET,Table 67,Device,可单测，已覆盖,Same reset path as 0038. Full non-TYPE_0 establishment still open.
+43,test-spec-c1,SDCI_TC_0049,TCD_DLPC_OPER_SIMRESET,Table 67,Device,可单测，已覆盖,`test_dll_operate_type0_min_cycle_time_read` covers the first-read reset and second-read MinCycleTime response.
 44,test-spec-c1,SDCI_TC_0052,TCD_DLPC_ISDU_AVAILMSEQCAP,Table 71,Device,可单测，已覆盖,Not a DPP1 M-sequence read; PREOPERATE/OPERATE not established; page-read fast-path oracle is tautological.
 45,test-spec-c1,SDCI_TC_0053,TCD_DLIC_ISDU_IDLEBUSYCHECK,Table 72,Device,可单测，已覆盖,Strong: all reserved FlowCTRL values and exact No Service byte.
 46,test-spec-c1,SDCI_TC_0054,TCD_DLIC_ISDU_READINDEX8,Table 73,Device,可单测，已覆盖,"Synthetic vendor name {0x12,0x34} or default 'iolinki'; no IODD content oracle and no M-sequence/DLL read path."

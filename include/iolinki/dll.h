@@ -49,7 +49,9 @@ typedef enum
  * from the last state delivered. The callback therefore never runs in
  * interrupt context, the final state is never missed, and intermediate states
  * that were entered and left between two deliveries are coalesced into the
- * later one. Used by the core to drive application lifecycle callbacks.
+ * later one, except an ISR-side transition into STARTUP, which is always
+ * delivered (Table 45 T11 requires the reset to reach system management).
+ * Used by the core to drive application lifecycle callbacks.
  *
  * The hook runs in main context, but it may be invoked from inside
  * iolink_dll_process() (a main-context transition notifies immediately, while
@@ -274,13 +276,15 @@ typedef struct
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
     iolink_dll_isr_stats_t isr_stat; /**< ISR-owned counter set (SPLIT mode) */
 #endif
-    volatile uint8_t stack_tick_pending;    /**< Timer B tick authorised a
-                                                 main-context service window */
-    volatile uint8_t in_isr;                /**< ISR is running the pump */
-    volatile uint8_t isr_reentry_pending;   /**< A preempting pump invocation
-                                                 was deferred to the outer one */
-    iolink_dll_state_t last_notified_state; /**< State already delivered to
-                                                 state_cb (main context only) */
+    volatile uint8_t stack_tick_pending;           /**< Timer B tick authorised a
+                                                        main-context service window */
+    volatile uint8_t in_isr;                       /**< ISR is running the pump */
+    volatile uint8_t isr_reentry_pending;          /**< A preempting pump invocation
+                                                         was deferred to the outer one */
+    volatile uint8_t startup_notification_pending; /**< ISR entered STARTUP; main
+                                                        context must report it */
+    iolink_dll_state_t last_notified_state;        /**< State already delivered to
+                                                         state_cb (main context only) */
     /* Reply transmission, fed one octet per data request. The main pump
      * alternates between slots 0/1 so the in-flight TX-FRAME DMA buffer stays
      * stable while the next reply is prepared; slot 2 is reserved for replies
@@ -555,8 +559,10 @@ void iolink_dll_process_isr(iolink_dll_ctx_t* ctx);
  * the end as well, and a bare DLL user may call it from the main loop.
  *
  * Two states entered and left between two calls are coalesced into the later
- * one; the final state is never lost. Safe to call when the state has not
- * changed (it returns immediately).
+ * one; the final state is never lost. A STARTUP transition taken in the data
+ * ISR is retained as a pending notification and reported before the current
+ * state, so a rapid STARTUP -> PREOPERATE sequence cannot hide the reset.
+ * Safe to call when the state has not changed (it returns immediately).
  * @param ctx DLL context
  */
 void iolink_dll_flush_state_callbacks(iolink_dll_ctx_t* ctx);

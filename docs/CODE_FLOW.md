@@ -288,7 +288,7 @@ flowchart TD
 - 邮箱是**两个槽**的 SPSC 环：环满（两帧都未消费）时新帧计入 `isr_mailbox_drops` 并被丢弃。
 - 邮箱记录的 `eager` 字段表示 ISR 已应答该帧；主循环把它快照到 `frame_eager` 以避免重复发送，但仍会处理状态/错误/ISDU 读复位等。
 - RX FRAME 路径先发布邮箱、再启动 eager 应答，最后复制稳定副本；RX BYTE 路径先启动 eager 应答、再发布邮箱，以减少 t_A 延迟。
-- 状态通知是**电平式**的：`ctx->state` 立即更新（单字节写，无临界区），`iolink_dll_flush_state_callbacks()` 只在“当前状态 ≠ 上次已交付状态”时调用一次回调。主上下文迁移在 `dll_set_state()` 内立即投递；ISR 迁移只改状态，由下一次主上下文 flush 投递，多次 ISR 迁移会合并为最终状态（中间态不单独回调）。
+- 状态通知是**电平式**的：`ctx->state` 立即更新（单字节写，无临界区），`iolink_dll_flush_state_callbacks()` 只在“当前状态 ≠ 上次已交付状态”时调用一次回调。主上下文迁移在 `dll_set_state()` 内立即投递；ISR 迁移只改状态，由下一次主上下文 flush 投递，多次 ISR 迁移会合并为最终状态（中间态不单独回调）。例外：ISR 进入 STARTUP 会置 `startup_notification_pending`，该复位通知优先投递，不会被后续 PREOPERATE 覆盖。
 
 ---
 
@@ -693,7 +693,7 @@ sequenceDiagram
    - master-lost 计算、1 s idle 计数、T_DSIO、T_FBD、t_pd；
    - SIO 唤醒检测；
    - 邮箱处理 → `dll_process_complete_frame()`。
-3. `iolink_dll_flush_state_callbacks()`，电平式交付当前状态（ISR 期间的多次迁移合并为最终状态）。
+3. `iolink_dll_flush_state_callbacks()`，电平式交付当前状态（ISR 期间的多次迁移合并为最终状态；ISR 进入 STARTUP 的复位通知优先单独投递）。
 4. master-lost/online 边沿回调：只在 `state == OPERATE` 时比较 `master_lost` 与 `master_lost_last`；离开 OPERATE 时清空旧状态。
 5. reset handler：`isdu.reset_pending` / `isdu.app_reset_pending`。
 6. OPERATE 下：
@@ -860,7 +860,7 @@ flowchart LR
 - `isr_frame_slot[2]` + `isr_frame_ring`：帧邮箱改成 SPSC 槽环（`include/iolinki/ring.h`）。ISR 把长度、eager 标志和帧字节一起写入一个槽后发布 `in`；主循环 `peek` → 复制 → `release`。环满时丢帧并计 `isr_mailbox_drops`，但主循环忙时不再丢下一帧，也不需要临界区。
 - `isr_isdu_pub`（发布字）：主循环把 `{len, busy, sel}` 打包成一个原子字发布；ISR 在 START 时整体采纳并自己维护 FlowCTRL 段索引。响应缓冲双缓冲（`ctx->isdu.resp_store[2]`），ISR 直接读已发布的那个，**没有拷贝、没有临界区**。
 - `isr_od_slot[2]` + `isr_od_ring`：ISDU 写段同样走槽环；第三个未排空的段才会被丢弃并计 `isr_od_overruns`。
-- `last_notified_state`：主上下文记录“已交付给应用的状态”，配合 `ctx->state` 做电平式通知（无队列、无锁）。
+- `last_notified_state`：主上下文记录“已交付给应用的状态”，配合 `ctx->state` 做电平式通知；`startup_notification_pending` 保留 ISR 触发的 STARTUP 边沿，避免快速进入 PREOPERATE 时丢失复位通知。
 
 并发边界：
 
@@ -928,7 +928,7 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `pd_in[]` + `pd_in_active` | 主上下文 | ISR | 索引交换 | `pd_in_captured`；TX BYTE 帧末释放，TX FRAME 保持到下次捕获 |
 | `isdu.resp_store[2]` + `isr_isdu_pub` | 主上下文（引擎） | ISR | 原子发布字 `{len,busy,sel}` | ISR 在 START 采纳新字 |
 | `isr_od_slot[]` + `isr_od_ring` | ISR | 主上下文 | 槽环 | 主上下文排空并 `release` |
-| `ctx->state` + `last_notified_state` | 主上下文 + ISR（单字节写） | 主上下文 | 电平比较 | 每次 flush 记录已交付状态 |
+| `ctx->state` + `last_notified_state` + `startup_notification_pending` | 主上下文 + ISR（单字节写） | 主上下文 | 电平比较 + STARTUP 边沿标志 | 每次 flush 记录已交付状态；ISR 触发 STARTUP 时优先通知 |
 | 计数器 | 两个上下文 | 读侧 | — | `SHARED` 共享自增（可能丢一次更新）；`SPLIT` 分上下文求和 |
 
 剩余临界区审计（每处都必须能归类，否则应在所有权表里补一行）：
@@ -941,21 +941,21 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `events.c`（10 处） | 事件队列、pending 表、事件内存 | 事件引擎内部不变式；ISR 侧只读 flag/memory |
 | `isdu.c`（1 处） | DetailedDeviceStatus 的 pending 表快照 | ISR 侧只读该表相关字段，快照保证一致 |
 
-`dll_set_state()` 已不在表中：状态是单字节原子写，通知改为电平式，迁入
-STARTUP 时的 `iolink_events_reset()` 自带嵌套临界区。
+`dll_set_state()` 已不在表中：状态是单字节原子写，通知以电平式为主；但
+ISR 迁入 STARTUP 时设置 `startup_notification_pending`，由主上下文优先投递
+STARTUP。迁入 STARTUP 时的 `iolink_events_reset()` 自带嵌套临界区。
 
 计数器在 `IOLINK_STATS_MODE=SHARED`（默认）下由两个上下文写同一组字段，
 可能丢一次更新（仅影响诊断）；`SPLIT` 为 ISR 增加一组独立计数
 （`isr_stat`），`iolink_dll_get_stats()` 求和，因此不再丢更新。两种模式下
 计数器都不需要临界区。
 
-状态通知已改为**电平式**（原 P3c）：`dll_set_state()` 只写 `ctx->state`，
-不再有队列和临界区；`iolink_dll_flush_state_callbacks()` 比较
-`ctx->state` 与 `last_notified_state`，有变化才调用一次 `state_cb`。
-主上下文迁移立即投递（同一帧内的 PREOPERATE→ESTAB_COM 仍会逐个回调），
-ISR 迁移由下一次 flush 投递并合并为最终状态（不保证中间态）。
-代价：不提供“每次迁移都按时间顺序回调”的保证；需要逐次历史的用户应
-自行采样 `iolink_device_get_state()` 或增加自己的事件记录。
+状态通知以**电平式**为基础：`dll_set_state()` 只写 `ctx->state`，不在 ISR
+执行回调；`iolink_dll_flush_state_callbacks()` 比较 `ctx->state` 与
+`last_notified_state`，有变化才调用一次 `state_cb`。主上下文迁移立即投递。
+ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE → STARTUP
+会设置 `startup_notification_pending`，因此 STARTUP 这一规范要求的复位状态
+不会被紧随其后的 PREOPERATE 覆盖。应用回调仍只在主上下文执行。
 
 ---
 

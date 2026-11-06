@@ -110,9 +110,12 @@ typedef struct
      *
      * The PHY owns the frame; the returned pointer is valid until the next
      * rx_frame() call (zero-copy: the library reads it directly and does not
-     * copy it in the ISR). The PHY delimits the frame electrically (e.g. USART
-     * IDLE) and reports the octet count in @p len and a PHY status octet
-     * (IOLINK_PHY_STATUS_*) in @p status.
+     * copy it in the ISR). The PHY delimits and validates frame completeness
+     * electrically (e.g. USART IDLE plus the configured end-of-frame rule).
+     * It must not return a header or other truncated prefix as a complete
+     * frame. The octet count is reported in @p len and a PHY status octet
+     * (IOLINK_PHY_STATUS_*) in @p status; protocol checksum and M-sequence
+     * validation remain the library's responsibility.
      * @return Pointer to the frame, or NULL when no complete frame is ready.
      */
     const uint8_t* (*rx_frame)(void* user, uint8_t* status, uint8_t* len);

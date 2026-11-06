@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (Type-0 reset and PHY frame contract)
+- Kept the V1.1.5 behavior for non-TYPE_0 OPERATE devices: a valid TYPE_0
+  request is consumed as the simulated restart, returns the link to STARTUP,
+  and is not answered. An ISR-triggered STARTUP transition is now reported by
+  the main-context state callback even if the next startup probe reaches
+  PREOPERATE before the callback flush.
+- Documented that Direct Parameter page 2 addresses `0x10-0x1F` are valid;
+  unimplemented reads return zero and writes are ignored. Address filtering is
+  not used as protection against truncated frames.
+- Clarified that RX FRAME PHY adapters must deliver complete M-sequences and
+  must not submit a two-octet header or another truncated prefix as a frame.
+
 ### Fixed (V1.1.5 review follow-up)
 - `IOLINK_STATS_MODE=SPLIT` compiles again: the diagnostics reset only clears
   the ISR-owned counters that exist (`timeout_errors`, `framing_errors`), not

@@ -42,6 +42,13 @@ in OPERATE for On-request Data access.
 A Type-0 request on the page, diagnosis or ISDU communication channel carries
 one OD octet on a write. FlowCTRL for ISDU lives in `MC & 0x1F`.
 
+The page channel uses the complete Direct Parameter address field: page 1 is
+`0x00..0x0F` and page 2 is `0x10..0x1F` (V1.1.5 B.1.1). An unimplemented page
+address is still a valid request: reads return `0` and writes are ignored.
+The OPERATE Type-0 reset rule is based on the M-sequence type, not on the page
+address: a device whose OPERATE type is not TYPE_0 treats a valid TYPE_0 frame
+as the simulated restart request described by Table 45 T11.
+
 ### 1.3 Fixed Type 1_x / 2_x layouts
 
 Every fixed type has its own request/reply shape; the variable TYPE_2_V is the

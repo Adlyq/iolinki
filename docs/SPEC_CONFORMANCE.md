@@ -26,12 +26,15 @@ out-of-scope set is physical/HIL or product-IODD work and is tracked in
 | OD width / OPERATE codes 0-7 (Table A.10) | PASS | `include/iolinki/iolink.h` | `test_protocol_tables` |
 | Checksum A.1.6 (incl. ISR accumulator) | PASS | `src/crc.c` | `test_crc`, `test_crc_vectors` |
 | Protocol constants (A.1/A.3/A.12/B.2/B.9/C.1/D.1) | PASS | `include/iolinki/protocol.h` | `test_protocol_constants` |
+| OPERATE TYPE_0 restart for non-TYPE_0 devices (Table 45 T11; SDCI_TC_0038/0049) | PASS | `dll_dispatch_operate()`, `dll_isr_type0_read()` | `test_dll_operate_type0_read_resets`, `test_dll_operate_type0_min_cycle_time_read` |
+| ISR OPERATE → STARTUP notification remains observable before PREOPERATE | PASS | `startup_notification_pending`, `iolink_dll_flush_state_callbacks()` | `test_isr_startup_notification_is_not_coalesced` |
+| RX FRAME receives complete frames only; truncated prefixes stay in PHY | PASS | `iolink_phy_api_t::rx_frame()` contract | `test_dll_isr` / PHY integration tests |
 
 ## Identification objects (Table B.8)
 
 | Index | Object | Status | Test |
 |---|---|---|---|
-| 0x0000/0x0001 | Direct Parameter pages 1/2 | PASS | `test_dll`, `test_isdu` |
+| 0x0000/0x0001 | Direct Parameter pages 1/2; DPP1 `0x00-0x0F`, DPP2 `0x10-0x1F`; unimplemented reads return 0 | PASS | `test_dll_type0_dpp2_unimplemented_read_returns_zero`, `test_isdu` |
 | 0x0002 | SystemCommand (0x01-0x06, 0x80-0x83; 0x84-0x9F reserved and rejected) | PASS | `test_system_commands`, `test_isdu`, `test_isdu_wire` |
 | 0x0003 | DataStorageIndex — sub 01 DS_Command, 02 State_Property, 03 Size (UInt32), 04 Parameter_Checksum (UInt32), 05 Index_List; sub 0 whole-image (legacy) | PASS | `test_ds`, `test_isdu`, `test_system_commands` |
 | 0x0004-0x000B | Reserved (VendorID/DeviceID are DPP1) | PASS | `test_vendor_device_id_indices_reserved` |

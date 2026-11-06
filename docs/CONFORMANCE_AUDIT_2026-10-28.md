@@ -106,7 +106,7 @@ contradict the Test Spec.
 | 0035 | gap | No test. **Probe shows non-conformance**: from AWAITING_COMM/STARTUP, 0x99 is ACKed (`tx=75`), state becomes ESTAB_COM, and the following OPERATE-type ISDU idle is answered (`state=4`, `tx=00 00 00 00 75`). Table 53 requires a non-V1.0 device not to answer. Root cause: `src/dll.c:1062-1067` promotes the startup frame to PREOPERATE, `:1098-1107` dispatches 0x99, `:1146-1165` then answers OPERATE traffic. |
 | 0036 | gap | No test. Current `!type_ok` path outside OPERATE (`src/dll.c:1187-1206`) should drop the illegal OPERATE-type frame, but this is unverified. |
 | 0037 | gap | No test. 0x97 is implemented (`src/dll.c:446-448`); sequence is unverified. |
-| 0038 | gap | No test. **Probe shows non-conformance**: in OPERATE, a TYPE_0 page read of 0x02 is answered (`state=4`, `tx=1E 28`) and the device stays in OPERATE on the second read. Table 57 requires no reply to the first read and OPERATE→STARTUP. `src/dll.c:160-164` explicitly allows TYPE_0 page reads in OPERATE; `:602-632` answers them. |
+| 0038 | closed | `test_dll_operate_type0_read_resets` verifies that a non-TYPE_0 OPERATE device consumes the first TYPE_0 page read without reply, enters STARTUP, and answers the repeated read as the startup probe. |
 | 0039 | partial | `test_dll_startup_to_preoperate_read_dpp1` reaches PREOPERATE via 0x9A and reads DPP1 0x03, but the expected value is produced by `iolink_isdu_direct_param_page1_octet()` — the function under test (`tests/test_dll.c:488,518`). Only one octet, no saved PDIn/PDOut/M-sequence check, no no-PD assertion. |
 | 0040 | partial | `test_dll_startup_to_preoperate_write_dpp1` writes DPP1 0x01=0x4F and asserts only the CKS ack and PREOPERATE (`tests/test_dll.c:522-562`). No read-back/mirror, no write-length check. |
 | 0041 | gap | **Mislabeled**: `test_dll_receive_error_discards_partial_frame` is tagged 0041 but injects a PHY receive error, not a one-octet-short DPP1 VendorID write (Table 60) (`tests/test_dll.c:657-687`). |
@@ -117,7 +117,7 @@ contradict the Test Spec.
 | 0046 | gap | No OPERATE DPP1 write test (Table 65). |
 | 0047 | gap | No short-write negative test in OPERATE (Table 66). |
 | 0048 | n/a | Removed by V1.1.4. |
-| 0049 | gap | Same TYPE_0-in-OPERATE conflict as 0038 (Table 67); no test. |
+| 0049 | closed | `test_dll_operate_type0_min_cycle_time_read` verifies the first TYPE_0 MinCycleTime read resets to STARTUP and the second read returns the value. |
 | 0052 | partial | `test_isdu_direct_parameters_page1` reads the DPP1 object through the ISDU API and checks bit0; it is not a DPP1 M-sequence read, and PREOPERATE/OPERATE is not established (`tests/test_isdu.c:682-723`). The ISR page-read test compares against the same production helper (`tests/test_isr_observability.c:397-399`). |
 | 0089 | known-gap | `test_0089_master_cycle_time_readback` skips because `build_direct_param_page1()` never copies `master_cycle_time` into page[0x01]; it remains 0. Runtime confirms SKIPPED (`tests/test_conformance_gaps.c:131-156`, `src/isdu.c:1178-1205`). |
 | 0090 | partial | Tests only the Table B.3 encode/decode helpers and the worst-case computation. It never reads DPP1.MinCycleTime and never compares with the IODD `minCycleTime` (`tests/test_protocol_tables.c:27-95`, `tests/test_dll.c:689-712`). |
@@ -137,6 +137,7 @@ The probe was compiled from `/tmp/audit/probe_states.c` against
 `build/libiolinki.a` and `tests/test_helpers.c`. Relevant output:
 
 ```
+Historical probe output (before the strict Type-0 reset fix):
 after wake state=1
 after 0x99 from STARTUP: state=3 txlen=1 tx=75
 after OPERATE-type ISDU idle: state=4 txlen=5 tx=00 00 00 00 75
@@ -145,8 +146,9 @@ after TYPE_0 page read in OPERATE: state=4 txlen=2 tx=1E 28
 after second TYPE_0 page read: state=4 txlen=2 tx=1E 28
 ```
 
-State values: 1 = AWAITING_COMM, 3 = ESTAB_COM, 4 = OPERATE. This is direct
-evidence that 0035/0038/0049 are implementation gaps, not only test gaps.
+State values: 1 = AWAITING_COMM, 3 = ESTAB_COM, 4 = OPERATE. The output above
+is retained as historical evidence; current regression tests cover the closed
+0038/0049 behavior.
 
 ---
 
@@ -186,11 +188,11 @@ modified.
 
 ### P0 — direct Test Spec contradictions
 
-1. **0035 / 0038 / 0049 — illegal state transitions accepted.**
-   `src/dll.c:160-164` allows TYPE_0 page reads in OPERATE, and `:602-632`
-   answers them; `src/dll.c:1062-1067` + `:1098-1107` accept 0x99 from the
-   startup phase. Probe evidence in §3. Test Spec 10032 Tables 53/57/67 require
-   the opposite for a non-V1.0 device.
+1. **0035 / 0038 / 0049 — historical illegal state transitions.**
+   The original probe accepted TYPE_0 page reads in OPERATE and accepted 0x99
+   from startup. The strict Type-0 reset behavior is now implemented and
+   covered by the DLL regression tests; the remaining 0035 behavior is tracked
+   separately.
 
 2. **0065 — corrupt CHKPDU answered with 0xC4 instead of No Service.**
    `test_isdu_wire_chkpdu_corrupt` explicitly skips on 0xC4

@@ -125,6 +125,7 @@ static void feed_master_command(uint8_t cmd)
     feed_type0_page_write(0x00U, cmd);
 }
 
+#if !IOLINK_COMPAT_V10_STARTUP_OPERATE
 /* An ISDU idle read (READ | ISDU channel | FlowCTRL idle) tagged with a
  * non-Type-0 M-sequence type. A V1.1 Device that is still in STARTUP must not
  * answer a legacy OPERATE M-sequence. */
@@ -135,6 +136,7 @@ static void feed_isdu_idle_with_type(uint8_t type_bits)
     frame[1] = (uint8_t) (type_bits | iolink_checksum6(frame, sizeof(frame)));
     feed_frame_bytes(frame, sizeof(frame));
 }
+#endif
 
 static void deliver_expect_type0_ack(iolink_device_ctx_t* ctx)
 {
@@ -215,6 +217,7 @@ static void establish_operate_type21(iolink_device_ctx_t* ctx)
     uint8_t frame[3] = {0x00U, IOLINK_MSEQ_TYPE_2, 0x00U};
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
     feed_frame_bytes(frame, sizeof(frame));
+    mock_phy_clear_tx();
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 2); /* PD-in 1 + CKS */
     will_return(mock_phy_send, 0);
@@ -845,6 +848,7 @@ static void test_dll_preoperate_to_operate_read_dpp1(void** state)
 /* Test Spec 0035: a V1.1 Device shall not accept 0x99 during STARTUP, but must
  * accept the same command after the Type-0 startup probe has reached
  * PREOPERATE and then complete a non-TYPE_0 establishment. */
+#if !IOLINK_COMPAT_V10_STARTUP_OPERATE
 static void test_dll_startup_0x99_rejected(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0035");
@@ -914,7 +918,9 @@ static void test_dll_startup_0x99_rejected(void** state)
     deliver_frame_to_main(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 }
+#endif
 
+#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
 /* Test Spec 0038: in a non-TYPE_0 OPERATE link, the first TYPE_0 page read is
  * consumed without a reply and drops the Device to STARTUP; the next one is
  * answered as the startup probe, and an OPERATE-type idle stays unanswered. */
@@ -955,7 +961,9 @@ static void test_dll_operate_type0_read_resets(void** state)
     deliver_expect_no_reply(&dev.ctx);
     assert_int_not_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 }
+#endif
 
+#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
 /* Test Spec 0049: in OPERATE the first TYPE_0 MinCycleTime read drops the link
  * to STARTUP without a reply; the second one returns the MinCycleTime octet. */
 static void test_dll_operate_type0_min_cycle_time_read(void** state)
@@ -979,6 +987,47 @@ static void test_dll_operate_type0_min_cycle_time_read(void** state)
     assert_int_equal(min_cycle_time, k_dpp1_type21_com2[0x02]);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
 }
+#endif
+
+/* B.1.1/Table B.1: DPP2 addresses 0x10..0x1F are valid page addresses. An
+ * unimplemented read returns zero rather than being rejected. */
+static void test_dll_type0_dpp2_unimplemented_read_returns_zero(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+
+    move_type0_to_operate(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    feed_type0_page_read(0x10U);
+    assert_int_equal(deliver_type0_read(&dev.ctx), 0U);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+}
+
+#if IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
+/* Legacy-master workaround: with the compat switch the OPERATE TYPE_0 page read
+ * is answered in place and the link is not restarted (non-conformant with
+ * SDCI_TC_0038/0049; kept for masters that poll pages in OPERATE). */
+static void test_dll_compat_type0_page_read_answered_in_operate(void** state)
+{
+    (void) state;
+    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .pd_in_len = 1, .pd_out_len = 0};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    establish_operate_type21(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+
+    feed_type0_page_read(0x02U);
+    assert_int_equal(deliver_type0_read(&dev.ctx), k_dpp1_type21_com2[0x02]);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+}
+#endif
 
 /* Feed a complete frame including its CHK marker. */
 static void feed_frame_bytes(const uint8_t* frame, size_t len)
@@ -1664,11 +1713,21 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_preoperate_to_operate_read_dpp1, test_setup,
                                         test_teardown),
+#if !IOLINK_COMPAT_V10_STARTUP_OPERATE
         cmocka_unit_test_setup_teardown(test_dll_startup_0x99_rejected, test_setup, test_teardown),
+#endif
+#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
         cmocka_unit_test_setup_teardown(test_dll_operate_type0_read_resets, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_operate_type0_min_cycle_time_read, test_setup,
                                         test_teardown),
+#endif
+        cmocka_unit_test_setup_teardown(test_dll_type0_dpp2_unimplemented_read_returns_zero,
+                                        test_setup, test_teardown),
+#if IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
+        cmocka_unit_test_setup_teardown(test_dll_compat_type0_page_read_answered_in_operate,
+                                        test_setup, test_teardown),
+#endif
         cmocka_unit_test_setup_teardown(test_dll_startup_cycle_time_reads, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_startup_operate_type_no_response, test_setup,

@@ -56,8 +56,9 @@
  * Updates the protocol state immediately. When the transition happens in main
  * context the application hook is notified right away (level check, no queue);
  * a transition taken in the data ISR only sets the state and is delivered by
- * the next main-context flush. Two ISR transitions before that flush are
- * coalesced into the later state.
+ * the next main-context flush. An ISR transition into STARTUP is retained as
+ * a notification so a rapid STARTUP -> PREOPERATE sequence cannot hide the
+ * protocol reset from the application.
  */
 void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
 {
@@ -82,6 +83,9 @@ void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
 #if IOLINK_FEATURE_EVENTS
         iolink_events_reset(&ctx->events);
 #endif
+        if (ctx->in_isr != 0U) {
+            ctx->startup_notification_pending = 1U;
+        }
     }
     if (ctx->in_isr == 0U) {
         /* Main context: deliver now, so a transition sequence that happens
@@ -95,8 +99,18 @@ void iolink_dll_flush_state_callbacks(iolink_dll_ctx_t* ctx)
     if ((ctx == NULL) || (ctx->state_cb == NULL)) {
         return;
     }
-    /* Level-based notification: deliver the current state once. Never called
-     * from interrupt context, so the application hook stays out of the ISR. */
+    /* A STARTUP transition from the ISR is an edge that must not be lost when
+     * the main context observes a later PREOPERATE state. Never called from
+     * interrupt context, so the application hook stays out of the ISR. */
+    if (ctx->startup_notification_pending != 0U) {
+        if (ctx->last_notified_state != IOLINK_DLL_STATE_STARTUP) {
+            ctx->last_notified_state = IOLINK_DLL_STATE_STARTUP;
+            ctx->state_cb(ctx->state_cb_user, IOLINK_DLL_STATE_STARTUP);
+        }
+        ctx->startup_notification_pending = 0U;
+    }
+
+    /* Level-based notification: deliver the current state once. */
     const iolink_dll_state_t state = ctx->state;
     if (state == ctx->last_notified_state) {
         return;
