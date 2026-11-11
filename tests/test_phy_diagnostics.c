@@ -524,6 +524,7 @@ static void test_get_faults_overvoltage(void** state)
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
 
     /* The falling edge clears the overvoltage condition. */
+    assert_int_equal(ctx.events.pending_count, 1U);
     mock_faults = 0U;
     iolink_dll_process(&ctx);
     assert_int_equal(ctx.events.pending_count, 0U);

@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - `iolink_dll_prepare_cyclic_reply()` (no-op), `cyclic_reply_precached`,
+  `iolink_dll_reply_variant()` and `iolink_reply_variant_t`,
   `IOLINK_OD_EVENT_MODE`, `IOLINK_OPERATE_TIMEOUT_MS`,
   `IOLINK_PHY_OWNS_LINE_STATE`, `IOLINK_DS_STATE_LOCKED`,
   `IOLINK_REPLY_VARIANT_COUNT`, `iolink_device_ctx_size()` and the unused ISDU

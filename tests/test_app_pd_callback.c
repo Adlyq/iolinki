@@ -88,6 +88,11 @@ static bool on_pd_input(void* user, uint8_t* data, uint8_t len)
 
 static const iolink_app_callbacks_t g_cbs = {.on_pd_input = on_pd_input};
 
+/* The callback-profile marker must be defined by the library; referencing it
+ * here also fails the link if the fixture is ever built with the wrong
+ * profile. */
+static const void* const g_profile_probe = &iolink_app_pd_input_callback_profile;
+
 static void make_config(iolink_device_config_t* cfg, const iolink_app_callbacks_t* cbs)
 {
     (void) memset(cfg, 0, sizeof(*cfg));
@@ -140,6 +145,7 @@ static void test_callback_fills_pd_input(void)
 
 int main(void)
 {
+    (void) g_profile_probe;
     test_init_requires_on_pd_input();
     test_callback_fills_pd_input();
     return 0;

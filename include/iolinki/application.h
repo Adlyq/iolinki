@@ -43,6 +43,11 @@
  * profile into a link error instead of undefined behaviour. Applications that
  * consume the library through add_subdirectory() inherit the setting
  * automatically via the PUBLIC compile definition.
+ *
+ * The check is one-directional by construction: an application built with =1
+ * against a polling-profile library fails to link, but an application built
+ * with =0 cannot reference the (undeclared) marker to detect a callback-profile
+ * library. Keeping both sides on the CMake option avoids that case.
  */
 extern const uint8_t iolink_app_pd_input_callback_profile;
 #endif
