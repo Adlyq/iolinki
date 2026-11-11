@@ -820,10 +820,59 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
  * Diagnostics polling
  * ------------------------------------------------------------------------- */
 
-/** @brief Poll PHY voltage and short-circuit status and raise events on faults. */
+/**
+ * @brief Poll the PHY fault bitmask and act on its edges.
+ *
+ * Only edges are reported: a fault that stays asserted counts and raises its
+ * event once, and the fall clears the event so the event engine can emit the
+ * matching "disappears". Mapping to Table D.1 device codes:
+ *  - UNDERVOLTAGE   -> 0x5111 supply voltage underrun (Warning)
+ *  - OVERTEMP       -> 0x4000 temperature overload (Error)
+ *  - SHORT_CIRCUIT  -> 0x7710 short circuit (Error)
+ */
+static void dll_poll_phy_faults(iolink_dll_ctx_t* ctx)
+{
+    const uint8_t faults = ctx->phy->get_faults(ctx->phy->user);
+    const uint8_t rising = (uint8_t) (faults & (uint8_t) ~ctx->phy_faults_last);
+    const uint8_t falling = (uint8_t) ((uint8_t) ~faults & ctx->phy_faults_last);
+
+    if ((rising & IOLINK_PHY_FAULT_UNDERVOLTAGE) != 0U) {
+        ctx->voltage_faults++;
+        DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN,
+                          IOLINK_EVENT_TYPE_WARNING);
+    }
+    if ((rising & IOLINK_PHY_FAULT_OVERTEMP) != 0U) {
+        ctx->overtemp_faults++;
+        DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD,
+                          IOLINK_EVENT_TYPE_ERROR);
+    }
+    if ((rising & IOLINK_PHY_FAULT_SHORT_CIRCUIT) != 0U) {
+        ctx->short_circuits++;
+        DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR);
+    }
+    if ((falling & IOLINK_PHY_FAULT_UNDERVOLTAGE) != 0U) {
+        DLL_EVENT_CLEAR(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN);
+    }
+    if ((falling & IOLINK_PHY_FAULT_OVERTEMP) != 0U) {
+        DLL_EVENT_CLEAR(&ctx->events, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD);
+    }
+    if ((falling & IOLINK_PHY_FAULT_SHORT_CIRCUIT) != 0U) {
+        DLL_EVENT_CLEAR(&ctx->events, IOLINK_EVENTCODE_SHORT_CIRCUIT);
+    }
+    ctx->phy_faults_last = faults;
+}
+
+/** @brief Poll the PHY diagnostics and raise events on faults. */
 static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
 {
     if ((ctx == NULL) || (ctx->phy == NULL)) {
+        return;
+    }
+
+    /* The fault bitmask is the preferred channel and replaces the legacy pair:
+     * a PHY that reports *what* is wrong needs no voltage thresholding here. */
+    if (ctx->phy->get_faults != NULL) {
+        dll_poll_phy_faults(ctx);
         return;
     }
 

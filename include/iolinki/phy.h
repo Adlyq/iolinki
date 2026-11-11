@@ -50,7 +50,8 @@ typedef enum
  * @brief Physical fault flags returned by iolink_phy_api_t.get_faults().
  *
  * A PHY reports the physical condition; the device decides how it is reported
- * on the wire. The DLL does not poll this hook yet (see the hook's own note).
+ * on the wire. The DLL polls the bitmask and reports each 0->1 edge as the
+ * mapped Table D.1 event (see the hook's own note).
  */
 #define IOLINK_PHY_FAULT_UNDERVOLTAGE (1U << 0)  /**< L+ supply below tolerance */
 #define IOLINK_PHY_FAULT_OVERTEMP (1U << 1)      /**< Transceiver over-temperature */
@@ -243,11 +244,13 @@ typedef struct
      * @brief Optional: physical faults currently active, as a bitmask of
      *        IOLINK_PHY_FAULT_* flags (0 when none).
      *
-     * This is the intended diagnostics channel: a PHY describes *what* is
-     * physically wrong and needs no knowledge of IO-Link EventCodes. However,
-     * the DLL does not poll this hook yet: dll_poll_diagnostics() currently
-     * uses the legacy get_voltage_mv()/is_short_circuit() pair only. Implement
-     * it for future use; wiring it is tracked separately.
+     * This is the preferred diagnostics channel: a PHY describes *what* is
+     * physically wrong and needs no knowledge of IO-Link EventCodes. The DLL
+     * polls it from iolink_dll_process(); a 0->1 edge raises the mapped event
+     * (UNDERVOLTAGE -> 0x5111 Warning, OVERTEMP -> 0x4000 Error,
+     * SHORT_CIRCUIT -> 0x7710 Error) once, and a 1->0 edge clears it so the
+     * event engine can emit "disappears". When this hook is NULL the legacy
+     * pair below is used instead.
      * @return Active fault flags.
      */
     uint8_t (*get_faults)(void* user);

@@ -185,7 +185,7 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `stack_timer_start/stop` | 可选 | 周期性的主上下文服务窗口。 |
 | `detect_wakeup` | 可选 | 存在时 DLL 从 SIO 开始，并负责唤醒/SDCI 转换。 |
 | `set_cq_line` | 可选 | SIO 推挽输出。 |
-| `get_faults` | 可选 | 首选的物理故障 API（`IOLINK_PHY_FAULT_*`）。 |
+| `get_faults` | 可选 | 首选的物理故障 API（`IOLINK_PHY_FAULT_*`）：DLL 按边沿上报映射事件。 |
 | `get_voltage_mv`, `is_short_circuit` | 可选，旧版 | 仅在 `get_faults == NULL` 时查询。 |
 
 当 `detect_wakeup == NULL` 时，DLL 认为 PHY 自己管理线路状态，并直接从 SDCI 开始。

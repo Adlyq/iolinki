@@ -66,12 +66,14 @@ typedef struct
 #if IOLINK_FEATURE_EVENTS
 #define DLL_EVENTS_INIT(ctx) iolink_events_init(ctx)
 #define DLL_EVENT_TRIGGER(ctx, code, type) iolink_event_trigger((ctx), (code), (type))
+#define DLL_EVENT_CLEAR(ctx, code) iolink_event_clear((ctx), (code))
 #define DLL_EVENTS_FLAG(ctx) iolink_events_flag(ctx)
 #define DLL_EVENTS_MEMORY_READ(ctx, addr) iolink_events_memory_read((ctx), (addr))
 #define DLL_EVENTS_MEMORY_WRITE(ctx, addr, value) iolink_events_memory_write((ctx), (addr), (value))
 #else
 #define DLL_EVENTS_INIT(ctx) ((void) 0)
 #define DLL_EVENT_TRIGGER(ctx, code, type) ((void) 0)
+#define DLL_EVENT_CLEAR(ctx, code) ((void) 0)
 #define DLL_EVENTS_FLAG(ctx) false
 #define DLL_EVENTS_MEMORY_READ(ctx, addr) 0U
 #define DLL_EVENTS_MEMORY_WRITE(ctx, addr, value) ((void) 0)

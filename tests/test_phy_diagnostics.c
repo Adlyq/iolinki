@@ -74,6 +74,52 @@ static const iolink_phy_api_t mock_phy_no_diag = {.init = mock_init,
                                                   .get_voltage_mv = NULL,
                                                   .is_short_circuit = NULL};
 
+/* PHY that reports the fault bitmask (preferred channel) plus the legacy pair,
+ * so the priority rule can be observed. */
+static uint8_t mock_faults;
+static int mock_legacy_voltage_calls;
+static int mock_legacy_short_calls;
+
+static uint8_t mock_get_faults(void* user)
+{
+    (void) user;
+    return mock_faults;
+}
+
+static int mock_get_voltage_counted(void* user)
+{
+    (void) user;
+    mock_legacy_voltage_calls++;
+    return mock_voltage_mv;
+}
+
+static bool mock_is_short_counted(void* user)
+{
+    (void) user;
+    mock_legacy_short_calls++;
+    return mock_short_circuit;
+}
+
+static const iolink_phy_api_t mock_phy_faults = {
+    .init = mock_init,
+    .set_mode = mock_set_mode,
+    .set_baudrate = mock_set_baudrate,
+    .detect_wakeup = NULL,
+    .set_cq_line = NULL,
+    .get_faults = mock_get_faults,
+#if IOLINK_PHY_FEATURE_LEGACY_DIAG
+    .get_voltage_mv = mock_get_voltage_counted,
+    .is_short_circuit = mock_is_short_counted,
+#endif
+};
+
+static void reset_fault_mock(void)
+{
+    mock_faults = 0U;
+    mock_legacy_voltage_calls = 0;
+    mock_legacy_short_calls = 0;
+}
+
 static void test_voltage_monitoring_normal(void** state)
 {
     (void) state;
@@ -292,6 +338,100 @@ static void test_combined_faults(void** state)
     assert_true(iolink_events_pending(&ctx.events));
 }
 
+/* The fault bitmask reports edges only: one count/event per 0->1 transition,
+ * no repeats while the fault stays asserted, and a fall clears the event. */
+static void test_get_faults_edges_only(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t ctx;
+    iolink_dll_stats_t stats;
+    reset_fault_mock();
+    mock_faults = IOLINK_PHY_FAULT_UNDERVOLTAGE;
+
+    iolink_dll_init(&ctx, &mock_phy_faults);
+    iolink_dll_process(&ctx);
+    iolink_dll_get_stats(&ctx, &stats);
+    assert_int_equal(stats.voltage_faults, 1);
+
+    iolink_event_t ev;
+    assert_true(iolink_events_pop(&ctx.events, &ev));
+    assert_int_equal(ev.code, 0x5111U);
+    assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
+    assert_int_equal(ctx.events.pending_count, 1U);
+
+    /* Steady fault: no repeated count. */
+    iolink_dll_process(&ctx);
+    iolink_dll_process(&ctx);
+    iolink_dll_get_stats(&ctx, &stats);
+    assert_int_equal(stats.voltage_faults, 1);
+
+    /* Fall: the pending condition is cleared (disappears is deferred to the
+     * event engine, which needs the 50 ms window). */
+    mock_faults = 0U;
+    iolink_dll_process(&ctx);
+    assert_int_equal(ctx.events.pending_count, 0U);
+
+    /* A new rise counts again. */
+    mock_faults = IOLINK_PHY_FAULT_UNDERVOLTAGE;
+    iolink_dll_process(&ctx);
+    iolink_dll_get_stats(&ctx, &stats);
+    assert_int_equal(stats.voltage_faults, 2);
+}
+
+static void test_get_faults_overtemp_and_short(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t ctx;
+    iolink_dll_stats_t stats;
+    reset_fault_mock();
+    mock_faults = (uint8_t) (IOLINK_PHY_FAULT_OVERTEMP | IOLINK_PHY_FAULT_SHORT_CIRCUIT);
+
+    iolink_dll_init(&ctx, &mock_phy_faults);
+    iolink_dll_process(&ctx);
+    iolink_dll_get_stats(&ctx, &stats);
+    assert_int_equal(stats.overtemp_faults, 1);
+    assert_int_equal(stats.short_circuits, 1);
+    assert_int_equal(stats.voltage_faults, 0);
+
+    /* Both errors are queued; the order within one severity is not asserted. */
+    const uint16_t expected[2] = {IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD,
+                                  IOLINK_EVENTCODE_SHORT_CIRCUIT};
+    bool seen[2] = {false, false};
+    for (int i = 0; i < 2; i++) {
+        iolink_event_t ev;
+        assert_true(iolink_events_pop(&ctx.events, &ev));
+        assert_int_equal(ev.type, IOLINK_EVENT_TYPE_ERROR);
+        for (int k = 0; k < 2; k++) {
+            if (ev.code == expected[k]) {
+                seen[k] = true;
+            }
+        }
+    }
+    assert_true(seen[0]);
+    assert_true(seen[1]);
+}
+
+static void test_get_faults_takes_priority_over_legacy(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t ctx;
+    iolink_dll_stats_t stats;
+    reset_fault_mock();
+    mock_voltage_mv = 10000; /* would fault through the legacy hook */
+    mock_short_circuit = true;
+
+    iolink_dll_init(&ctx, &mock_phy_faults);
+    iolink_dll_process(&ctx);
+    iolink_dll_get_stats(&ctx, &stats);
+
+    /* get_faults() == 0 wins: the legacy hooks must not be consulted. */
+    assert_int_equal(stats.voltage_faults, 0);
+    assert_int_equal(stats.short_circuits, 0);
+    assert_int_equal(mock_legacy_voltage_calls, 0);
+    assert_int_equal(mock_legacy_short_calls, 0);
+    assert_false(iolink_events_pending(&ctx.events));
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -306,6 +446,9 @@ int main(void)
         cmocka_unit_test(test_short_circuit_no_fault),
         cmocka_unit_test(test_phy_no_diagnostics_support),
         cmocka_unit_test(test_combined_faults),
+        cmocka_unit_test(test_get_faults_edges_only),
+        cmocka_unit_test(test_get_faults_overtemp_and_short),
+        cmocka_unit_test(test_get_faults_takes_priority_over_legacy),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

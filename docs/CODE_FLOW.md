@@ -638,7 +638,7 @@ flowchart TD
 - `DeviceStatus` 取当前队列最高严重度（`iolink_events_get_highest_severity()`）。
 - `DetailedDeviceStatus` 读取的是 `pending[]` 中的 Error/Warning，而不是队列。
 - `STARTUP` 状态会调用 `iolink_events_reset()` 丢弃事件（A.6.4）。
-- 物理诊断当前只轮询旧接口 `get_voltage_mv()` / `is_short_circuit()`；`phy->get_faults()` 在 `src/` 中没有调用点。
+- 物理诊断优先轮询 `phy->get_faults()` 位图：0→1 边沿计数并映射为 Table D.1 事件（UNDERVOLTAGE→0x5111、OVERTEMP→0x4000、SHORT_CIRCUIT→0x7710），1→0 边沿清除事件；`get_faults()` 为 NULL 时才回退到旧接口 `get_voltage_mv()` / `is_short_circuit()`。
 
 ---
 
@@ -723,7 +723,7 @@ sequenceDiagram
 | `vendor_service` | ISDU device-specific 索引；DS 读写回退 | 参数 `input/output/output_length` 契约见 `isdu.h` |
 | `storage->read/write` | params 加载/保存、DS 加载/保存 | `erase` 当前无调用点 |
 | `iolink_device_time_us_fn time_us` | DLL、ISR 双泵、事件引擎 | 必需；初始化时绑定，NULL 返回 `IOLINK_DEVICE_INIT_ERR_TIME`；必须单调/非阻塞/ISR 安全 |
-| `phy.get_faults` | 无 | 当前声明但未被 DLL 调用 |
+| `phy.get_faults` | `dll_poll_diagnostics()` | 优先诊断通道：边沿触发/清除 Table D.1 事件 |
 | `phy.set_cq_line` | 无 | SIO 线状态由 PHY/应用自行管理 |
 
 ### 9.4 库提供给 PHY/平台的钩子
@@ -979,7 +979,7 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 
 - 1 s idle 监督使用固定 1000 ms 常量（`dll_check_idle_timeout()`），不提供编译期开关。
 - `iolink_device_config_t::time_us` 是必需项，初始化时绑定到 DLL/事件上下文；NULL 会被 `iolink_device_init()` 拒绝。主循环、ISR 和事件计时都用它，核心不再调用平台时间函数；直接使用 `iolink_dll_*` 时需自行绑定 `ctx->time_us`。
-- `phy->get_faults`、`phy->set_cq_line`、`storage->erase` 当前没有栈内调用点。
+- `phy->set_cq_line`、`storage->erase` 当前没有栈内调用点。
 - `iolink_events_process()`、`iolink_ds_process()` 由 `iolink_device_process()` 在 ISDU 空闲时自动调度；`iolink_ds_check()` 需要应用自行调度（master 校验和来源应用自有）。
 - 本路径要求 `iolink_critical_enter/exit` 真实可用（初始化会校验），且 `ctx` 的主循环调用与 ISR 调用遵守文档约束。`IOLINK_CONCURRENCY=SINGLE` 档不需要临界区，初始化跳过校验且库不引用该符号；其余档位仍会校验。
 - 当 `phy->stack_timer_start != NULL` 时，PHY 必须在 Timer B 到期时调用 `iolink_dll_on_stack_tick()`，否则 `iolink_device_process()` 会被授权门控挡住；Timer A 超时则应调用 `iolink_dll_on_rx_timeout()`。

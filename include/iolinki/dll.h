@@ -377,6 +377,7 @@ typedef struct
     uint32_t voltage_faults;         /**< Cumulative voltage fault count */
     uint32_t overtemp_faults;        /**< Cumulative over-temperature fault count */
     uint32_t short_circuits;         /**< Cumulative short circuit count */
+    uint8_t phy_faults_last;         /**< Last get_faults() bitmask (edge detection) */
     volatile uint8_t fallback_count; /**< Consecutive fallback count for SIO transition */
     uint8_t sio_fallback_threshold;  /**< Fallback threshold to enter SIO mode (default 3) */
 
