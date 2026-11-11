@@ -39,7 +39,7 @@
 2. `iolink_device_process()` 是主循环唯一需要周期调用的入口；PHY 数据中断还要调用 `iolink_device_process_isr()`。主循环负责 DLL 协议处理，并把 ISR 延迟的状态回调、master-lost 边沿、reset 请求、PD 回调分发给应用。
 3. 数据按 **MC 通信通道**分流：Process、Page、Diagnosis、ISDU；按 **CKT M-sequence 类型**决定 Type-0 还是 Type-1/2 的帧长与应答布局。
 4. ISDU 写请求和读应答是分离的：写请求先进入 ISDU 传输状态机，`iolink_isdu_process()` 在后续主循环执行应用服务，读请求从响应缓冲区或 ISR 快照读取。
-5. Event 的 “appears” 会立即入队并冻结事件内存、置 CKS bit7；“disappears” 需要应用周期性调用 `iolink_events_process()` 才会发出。
+5. Event 的 “appears” 会立即入队并冻结事件内存、置 CKS bit7；“disappears” 由 `iolink_device_process()` 在 ISDU 传输空闲时自动调用 `iolink_events_process()` 发出（见 `device_service_events_and_ds()`）。
 6. `master_lost` 只是应用提示，**不改变 DLL 状态和波特率**；真正回到 SIO/STARTUP 的是 T_DSIO、T_FBD、DeviceStartup 等路径。
 
 ---
@@ -611,7 +611,7 @@ stateDiagram-v2
     DOWNLOADING --> IDLE: ParamBreak / DS_Break
 ```
 
-注意：`iolink_ds_process()` / `iolink_ds_check()` **不会**被 `iolink_device_process()` 自动调用。当前核心只在 SystemCommand/DS_Command 路径里直接驱动 DS；如果应用使用 `ds_check()` 的“校验和比较 → 自动上传/下载请求”流程，需要自己在主循环调用 `iolink_ds_process()`。另外 `IOLINK_DS_STATE_LOCKED` 目前没有赋值点，DS 访问锁是在命令处理入口直接返回访问拒绝。
+注意：`iolink_ds_process()` 在 ISDU 传输空闲时由 `iolink_device_process()` 自动调用（`device_service_events_and_ds()`，DS 状态非 IDLE 时驱动）。`iolink_ds_check()` 仍由应用驱动：它需要应用提供的 master 校验和（“校验和比较 → 自动上传/下载请求”流程），栈无法自行获取该值。
 
 ### 8.3 事件流
 
@@ -628,7 +628,7 @@ flowchart TD
     D --> E["CKS bit7 置位<br/>诊断通道可读事件内存"]
 
     F["条件恢复<br/>iolink_event_clear(code)"] --> G["pending.clear_pending = 1"]
-    G --> H["应用周期调用<br/>iolink_events_process()"]
+    G --> H["iolink_device_process() 自动调用<br/>iolink_events_process()<br/>（ISDU 空闲时）"]
     H --> I{"距 appear >= 50 ms?"}
     I -- 否 --> H
     I -- 是 --> J["active=0，入队 DISAPPEARS<br/>重新 publish"]
@@ -693,10 +693,11 @@ sequenceDiagram
    - master-lost 计算、1 s idle 计数、T_DSIO、T_FBD、t_pd；
    - SIO 唤醒检测；
    - 邮箱处理 → `dll_process_complete_frame()`。
-3. `iolink_dll_flush_state_callbacks()`，电平式交付当前状态（ISR 期间的多次迁移合并为最终状态；ISR 进入 STARTUP 的复位通知优先单独投递）。
-4. master-lost/online 边沿回调：只在 `state == OPERATE` 时比较 `master_lost` 与 `master_lost_last`；离开 OPERATE 时清空旧状态。
-5. reset handler：`isdu.reset_pending` / `isdu.app_reset_pending`。
-6. OPERATE 下：
+3. `device_service_events_and_ds()`：ISDU 传输空闲时驱动 `iolink_ds_process()` / `iolink_events_process()`，并在 DS 响应读完后发布 DS_UPLOAD_REQ 通知。
+4. `iolink_dll_flush_state_callbacks()`，电平式交付当前状态（ISR 期间的多次迁移合并为最终状态；ISR 进入 STARTUP 的复位通知优先单独投递）。
+5. master-lost/online 边沿回调：只在 `state == OPERATE` 时比较 `master_lost` 与 `master_lost_last`；离开 OPERATE 时清空旧状态。
+6. reset handler：`isdu.reset_pending` / `isdu.app_reset_pending`。
+7. OPERATE 下：
    - `on_pd_output(ctx->dll.pd_out, pd_out_len_current)`；
    - 若 `IOLINK_APP_PD_INPUT_CALLBACK`：取一个未被 ISR 捕获的 PD-in 缓冲区，填完后在临界区交换 `pd_in_active`，随后调用 `iolink_dll_prepare_cyclic_reply()`（当前为空操作，ISR 直接读共享状态）。
 
@@ -739,10 +740,10 @@ sequenceDiagram
 | `iolink_dll_process_isr(ctx)` | PHY 数据中断 | ISR 双泵入口 |
 | `iolink_dll_flush_state_callbacks(ctx)` | `iolink_dll_process()` 末尾、`iolink_device_process()` | 电平式交付当前状态（无变化则不调用） |
 
-### 9.5 事件与 ISDU 的“应用驱动”部分
+### 9.5 事件与 DS 的应用侧调用
 
-- `iolink_events_process()` 必须在主循环周期调用，否则 `on clear` 不会发出 “disappears”。
-- `iolink_ds_process()` / `iolink_ds_check()` 也需应用自行调用；核心不自动轮询。
+- `iolink_events_process()`（有待处理事件时）与 `iolink_ds_process()`（DS 状态非 IDLE 时）由 `iolink_device_process()` 在 ISDU 传输空闲时自动调用，见 `device_service_events_and_ds()`。
+- `iolink_ds_check()` 需应用自行调用：它需要应用提供的 master 校验和，栈无法自行获取。
 - `iolink_device_process_isr()` 设计为在 PHY 数据中断中调用；host 模拟可用主循环驱动，但真实设备不要在 `ctx` 已并发进入主循环时从另一上下文调用。
 
 ---
@@ -983,7 +984,7 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 - `IOLINK_OPERATE_TIMEOUT_MS`、`IOLINK_PHY_OWNS_LINE_STATE`、`IOLINK_OD_EVENT_MODE` 在 `src/` 中没有引用；不要按注释推断它们已生效。
 - `iolink_device_config_t::time_us` 是必需项，初始化时绑定到 DLL/事件上下文；NULL 会被 `iolink_device_init()` 拒绝。主循环、ISR 和事件计时都用它，核心不再调用平台时间函数；直接使用 `iolink_dll_*` 时需自行绑定 `ctx->time_us`。
 - `phy->get_faults`、`phy->set_cq_line`、`storage->erase` 当前没有栈内调用点。
-- `iolink_events_process()`、`iolink_ds_process()`、`iolink_ds_check()` 需要应用自行调度。
+- `iolink_events_process()`、`iolink_ds_process()` 由 `iolink_device_process()` 在 ISDU 空闲时自动调度；`iolink_ds_check()` 需要应用自行调度（master 校验和来源应用自有）。
 - 本路径要求 `iolink_critical_enter/exit` 真实可用（初始化会校验），且 `ctx` 的主循环调用与 ISR 调用遵守文档约束。`IOLINK_CONCURRENCY=SINGLE` 档不需要临界区，初始化跳过校验且库不引用该符号；其余档位仍会校验。
 - 当 `phy->stack_timer_start != NULL` 时，PHY 必须在 Timer B 到期时调用 `iolink_dll_on_stack_tick()`，否则 `iolink_device_process()` 会被授权门控挡住；Timer A 超时则应调用 `iolink_dll_on_rx_timeout()`。
 - `TYPE_1_1` 在本路径初始化时被拒绝；固定 Annex A 类型必须使用匹配的 PD/OD 布局。

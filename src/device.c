@@ -629,7 +629,7 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx)
     iolink_dll_process_isr(&ctx->dll);
 }
 
-int iolink_device_pd_output_read(iolink_device_ctx_t* ctx, uint8_t* data, size_t len)
+int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, size_t len)
 {
     uint8_t read_len;
 

@@ -29,7 +29,7 @@
  */
 
 /* -------------------------------------------------------------------------
- * File map
+ * File map and main-pump call tree
  *
  *  - State transitions and callbacks: dll_queue_state ... dll_set_state
  *  - M-sequence typing and transmission: dll_mseq_type_bits ... dll_send
@@ -40,8 +40,60 @@
  *  - Main pump: dll_frame_drop_if_stopped ... iolink_dll_process
  *  - Public configuration and query API: iolink_dll_get_state ...
  *
+ * Main pump (main context; entry iolink_dll_process):
+ *
+ *   iolink_dll_process
+ *   `- dll_process_body
+ *      |- dll_take_isr_master_activity       consume the ISR frame-end stamp
+ *      |- dll_apply_isr_deadline_requests    arm/clear T_FBD and T_DSIO
+ *      |                                     (64-bit deadlines stay main-owned)
+ *      |- [TX FRAME] pd_in lease release     poll tx_busy in the critical section
+ *      |- dll_restore_operating_baudrate     undo a recovery drop to COM1
+ *      |- dll_drain_staged_isdu_write        drain isr_od_ring -> ISDU transport
+ *      |- iolink_isdu_process                execute a queued ISDU service
+ *      |- dll_isdu_sync_snapshot             publish the ISR read view
+ *      |- dll_poll_diagnostics
+ *      |- dll_take_isr_master_activity       second sample: a frame may have
+ *      |                                     completed during the steps above
+ *      |- dll_update_master_lost / dll_check_idle_timeout /
+ *      |  dll_check_dsio_deadline / dll_check_fallback_deadline
+ *      |- dll_check_t_pd            -- early return
+ *      |- dll_handle_sio_wakeup     -- early return
+ *      |- dll_check_t_byte
+ *      |- dll_wakeup_window_active  -- early return
+ *      |- dll_consume_isr_mailbox
+ *      |  `- dll_process_complete_frame
+ *      |     |- dll_frame_drop_if_stopped / dll_check_cycle_time /
+ *      |     |  dll_master_activity
+ *      |     |- dll_frame_validate -> dll_handle_valid_frame
+ *      |     |  `- state dispatch: dll_dispatch_preoperate /
+ *      |     |     dll_dispatch_estab_com / dll_dispatch_operate
+ *      |     |     `- dll_handle_operate_type0 / dll_handle_type0_od_write /
+ *      |     |        dll_handle_operate_type1_2 -> dll_dispatch_od
+ *      |     |        (Page/Diagnosis/ISDU channel) -> dll_send
+ *      |     |- dll_handle_frame_error
+ *      |     `- dll_finish_frame (refresh the ISDU snapshot)
+ *      `- dll_restore_operating_baudrate      undo a same-pass COM1 drop
+ *
+ * Implicit structure worth knowing before changing the pump:
+ *  - dll_take_isr_master_activity() runs twice on purpose (before and after the
+ *    ISDU service); dll_restore_operating_baudrate() likewise (before the early
+ *    returns and after the mailbox drain).
+ *  - The four early-return gates (t_pd, SIO wake-up, t_byte, wake-up window)
+ *    are the only paths that skip the mailbox; keep them ahead of the drain.
+ *  - An eager frame is answered by the ISR *and* still processed here: the
+ *    mailbox record carries eager=1 so dll_send() is suppressed, but the state
+ *    machine, PD-out copy and counters must still run.
+ *
+ * Handoff to/from the data ISR (dll_isr.c):
+ *  - main -> ISR: isr_tx_payload[0..1] + isr_tx_pending (dll_send), the ISDU
+ *    publish word isr_isdu_pub/resp_store (dll_isdu_sync_snapshot) and
+ *    pd_in_active (PD-in publication).
+ *  - ISR -> main: isr_frame_ring (dll_consume_isr_mailbox), isr_od_ring
+ *    (dll_drain_staged_isdu_write), isr_master_activity and the deadline flags.
+ *
  * The ISR two-pump transport lives in dll_isr.c; see docs/CODE_FLOW.md for the
- * main/ISR context contract.
+ * full context contract and the buffer ownership table.
  * ------------------------------------------------------------------------- */
 
 #define DLL_LOG(...)

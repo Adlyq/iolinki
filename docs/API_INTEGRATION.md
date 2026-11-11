@@ -254,7 +254,7 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 ```c
 int iolink_device_pd_input_update(iolink_device_ctx_t* ctx,
                                   const uint8_t* data, size_t len, bool valid);
-int iolink_device_pd_output_read(iolink_device_ctx_t* ctx,
+int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx,
                                  uint8_t* data, size_t len);
 int iolink_device_set_pd_length(iolink_device_ctx_t* ctx,
                                 uint8_t pd_in_len, uint8_t pd_out_len);

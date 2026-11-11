@@ -43,3 +43,25 @@ This document defines the coding style and engineering practices for the `iolink
 - **Formatter**: `clang-format` pinned to 23.1.1, using the project's
   `.clang-format` file.
 - **Commit Messages**: Follow Conventional Commits (e.g. `feat(dll): ...`).
+
+## 7. Ownership and Lifetime Annotations
+
+C has no borrow checker; the stack encodes ownership in the API contract and
+the comments. Public headers are the authoritative place for that contract;
+implementation-level buffer ownership stays in `docs/CODE_FLOW.md` (section
+12.2) and is linked, never duplicated.
+
+- **Default is borrow.** A pointer parameter is borrowed for the duration of
+  the call unless documented otherwise; the stack does not retain it.
+- **Retained pointers must say so.** Any pointer kept beyond the call (e.g.
+  `iolink_device_config_t`, `device_info`, `storage`, the PHY vtable and its
+  `user`) states "must outlive the context" in its Doxygen comment.
+- **Borrowed views must state their expiry.** A returned pointer the caller
+  does not own names its invalidation point (e.g. "valid until the next
+  `rx_frame()` call").
+- **Direction tags are mandatory** for pointer parameters: `@param[in]`,
+  `@param[out]` or `@param[in,out]`.
+- **Context rules are part of the contract.** State whether a callback runs in
+  main context or the data ISR, and whether re-entering the API is allowed.
+- **Getter contexts are `const`** unless the call updates state that the
+  caller owns.

@@ -32,6 +32,58 @@
  * process-data and introspection functions used by the application.
  */
 
+/* -------------------------------------------------------------------------
+ * Integration checklist (two-pump transport)
+ *
+ * Required calls:
+ *  - iolink_device_init() once; the application owns the context object.
+ *  - iolink_device_process() periodically from the main loop. This must be the
+ *    only main-context caller (no second task may call the API).
+ *  - iolink_device_process_isr() from the PHY data interrupt.
+ *  - When the PHY provides the optional Timer A/Timer B hooks, forward those
+ *    interrupts to iolink_dll_on_rx_timeout() / iolink_dll_on_stack_tick()
+ *    (declared in dll.h). Without the Timer B forward the main service window
+ *    is gated and iolink_device_process() returns immediately.
+ *
+ * Serviced automatically by iolink_device_process():
+ *  - DLL frame dispatch, ISDU services, timing supervision and diagnostics;
+ *  - iolink_events_process() and iolink_ds_process() while the ISDU transport
+ *    is idle (device_service_events_and_ds()).
+ *
+ * Still application-driven:
+ *  - iolink_ds_check(): it needs the Master's DS checksum, which the stack
+ *    cannot obtain on its own.
+ *
+ * Normal applications only need this header plus the two ISR hooks above;
+ * dll.h is the advanced/porting interface.
+ * ------------------------------------------------------------------------- */
+
+/* -------------------------------------------------------------------------
+ * Ownership and lifetime contract
+ *
+ * Object                    | Owner           | Lifetime / access rule
+ * --------------------------+-----------------+--------------------------------
+ * iolink_device_config_t    | application     | must outlive the context
+ *  .phy (vtable)            | application/PHY | callbacks valid for ctx lifetime
+ *  .phy.user                | PHY driver      | passed only to PHY callbacks
+ *  .user                    | application     | passed to time_us, vendor_service
+ *                           |                 | and the app_callbacks on_* hooks
+ *  .app_callbacks           | application     | struct and callback targets valid
+ *  .device_info             | application     | static identification data
+ *  .storage                 | application     | read/write valid for ctx lifetime
+ *  .time_us                 | application     | monotonic, non-blocking, ISR-safe
+ * iolink_device_ctx_t       | application     | one instance per link; one main
+ *                           |                 | context caller plus the data ISR
+ * PD data (pd_input_update) | application     | borrowed for the call; copied
+ *                           |                 | into the reply buffer internally
+ * PD buffer (pd_output_read)| caller          | filled by the call; caller owns it
+ * vendor_service input      | caller          | borrowed for the call
+ * vendor_service output     | caller          | capacity in *output_length; the
+ *                           |                 | callback sets the used length
+ * rx_frame() return value   | PHY             | borrowed until the next rx_frame()
+ * tx_frame() data           | library         | valid until the transfer completes
+ * ------------------------------------------------------------------------- */
+
 /**
  * @defgroup iolinki_device Device Application Layer
  * @brief Top-level IO-Link Device context, lifecycle and process-data API.
@@ -170,7 +222,7 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
  * @param len        Size of @p data in bytes.
  * @return 0 on success, negative on error.
  */
-int iolink_device_pd_output_read(iolink_device_ctx_t* ctx, uint8_t* data, size_t len);
+int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, size_t len);
 
 /**
  * @brief Register the handler invoked on Master reset commands.

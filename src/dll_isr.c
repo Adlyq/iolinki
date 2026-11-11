@@ -23,8 +23,46 @@
  * Runs from the data interrupt: request framing, eager replies, the ISDU
  * snapshot read path and the staged TX pump. The main pump and the frame
  * dispatch live in dll.c; application callbacks must never run here.
- * `iolink_dll_can_run_user_code()` is the one main-context query kept in this
- * file because it belongs to the same Timer B transport state.
+ *
+ * Naming convention in this file: dll_isr_* is callable from ISR context only;
+ * plain dll_* helpers are shared with the main pump (see the context contract
+ * table in docs/CODE_FLOW.md section 12.1).
+ *
+ * ISR pump (entry iolink_dll_process_isr):
+ *
+ *   iolink_dll_process_isr              re-entry guard: in_isr plus the
+ *   |                                   isr_reentry_pending loop
+ *   +- dll_isr_process
+ *      |- isr_tx_pending -> dll_isr_tx_pending -> dll_isr_start_staged_tx
+ *      |                    (transmit a reply staged by the main pump)
+ *      |- int_active() == 0 -> return  (level re-check)
+ *      +- dll_isr_drain                burst loop, max 64 iterations
+ *         |- [TX BYTE] isr_tx_active -> dll_isr_tx_step (one octet, break)
+ *         |- [RX FRAME] dll_isr_drain_rx_frame
+ *         |  +- phy->rx_frame -> dll_isr_frame_len_ok ->
+ *         |     dll_isr_reply_allowed -> dll_isr_complete_frame
+ *         +- [RX BYTE] dll_isr_drain_rx_byte
+ *            +- phy->rx_octet -> gap / accumulate / derive_expect /
+ *               rx_byte_complete -> dll_isr_complete_frame
+ *
+ * dll_isr_complete_frame (per-frame decision point shared by both RX
+ * granularities, in this order):
+ *  1. ISDU write: dll_isr_consume_isdu_write -> stage into isr_od_ring (the
+ *     transport itself runs later, in the main pump).
+ *  2. Type-0 fast path: dll_isr_handle_type0 -> startup probe / transition /
+ *     read / master command, answered from the ISR.
+ *  3. Eager decision: dll_isr_wants_eager; dll_isr_start_reply builds the OD
+ *     from the ISDU snapshot / direct-parameter page / event memory and starts
+ *     TX (frame or byte mode).
+ *  4. Publish the frame to the mailbox (dll_publish_isr_frame) with the eager
+ *     flag, so the main pump knows the reply is already on the wire.
+ *
+ * Handoffs and ordering constraints:
+ *  - An eager reply starts *before* the mailbox publish (t_A); the record then
+ *    carries eager=1 together with its octets.
+ *  - ctx->isdu is main-owned: the ISR only reads the published response view
+ *    and stages writes in isr_od_ring.
+ *  - 64-bit deadlines are main-owned: the ISR only sets the one-shot flags.
  */
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE

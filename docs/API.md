@@ -119,7 +119,7 @@ requests and transmit replies.
 ```c
 int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
                                   size_t len, bool valid);
-int iolink_device_pd_output_read(iolink_device_ctx_t* ctx, uint8_t* data, size_t len);
+int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, size_t len);
 ```
 
 `pd_input_update` publishes Device-to-Master process data (`valid` drives the
