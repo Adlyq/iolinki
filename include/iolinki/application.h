@@ -16,11 +16,17 @@
 #include "iolinki/dll.h"
 
 /**
- * @brief Select the PD-input path.
+ * @brief Select the PD-input path at compile time.
  *
- * 0: the application calls iolink_device_pd_input_update() from its main loop.
+ * 0: the application calls iolink_device_pd_input_update() from its main loop;
+ *    the on_pd_input callback member does not exist (assigning it is a compile
+ *    error).
  * 1: the DLL calls on_pd_input() each OPERATE cycle to fill a free PD-in
- *    buffer; iolink_device_pd_input_update() is disabled to prevent mixing.
+ *    buffer; iolink_device_pd_input_update() is not declared (calling it is a
+ *    compile/link error, see the trap macro in device.h).
+ *
+ * Mixing the two paths is impossible: the unused symbol/member is removed from
+ * the headers instead of failing at run time.
  */
 #ifndef IOLINK_APP_PD_INPUT_CALLBACK
 #define IOLINK_APP_PD_INPUT_CALLBACK 0
@@ -46,16 +52,18 @@
  * enters the corresponding state. The PD callbacks fire on every processed
  * OPERATE cycle. @ref on_pd_output reports the output Process Data received
  * from the Master (Master -> Device). When IOLINK_APP_PD_INPUT_CALLBACK is 1,
- * @ref on_pd_input fills a free PD-in buffer (Device -> Master) and its return
+ * on_pd_input() fills a free PD-in buffer (Device -> Master) and its return
  * value becomes the PD valid flag.
  */
 typedef struct
 {
-    void (*on_startup)(void* user);                               /**< Entered STARTUP */
-    void (*on_preoperate)(void* user);                            /**< Entered PREOPERATE */
-    void (*on_operate)(void* user);                               /**< Entered OPERATE */
-    bool (*on_pd_input)(void* user, uint8_t* data, uint8_t len);  /**< Fill input PD;
+    void (*on_startup)(void* user);    /**< Entered STARTUP */
+    void (*on_preoperate)(void* user); /**< Entered PREOPERATE */
+    void (*on_operate)(void* user);    /**< Entered OPERATE */
+#if IOLINK_APP_PD_INPUT_CALLBACK
+    bool (*on_pd_input)(void* user, uint8_t* data, uint8_t len); /**< Fill input PD;
                                                                       false = invalid */
+#endif
     void (*on_pd_output)(void* user, uint8_t* data, uint8_t len); /**< Output PD received */
     void (*on_state_change)(void* user,
                             iolink_dll_state_t state); /**< Current DLL state on a

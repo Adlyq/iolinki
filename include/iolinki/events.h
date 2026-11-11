@@ -12,6 +12,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "iolinki/config.h"
+#include "iolinki/port.h"
+
+IOLINK_STATIC_ASSERT(IOLINK_EVENT_QUEUE_SIZE > 0U, "IOLINK_EVENT_QUEUE_SIZE must be > 0");
+IOLINK_STATIC_ASSERT(IOLINK_EVENT_PENDING_MAX > 0U, "IOLINK_EVENT_PENDING_MAX must be > 0");
 
 /**
  * @file events.h

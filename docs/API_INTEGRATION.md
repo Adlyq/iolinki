@@ -226,8 +226,9 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 
 初始化会用 `IOLINK_DEVICE_INIT_ERR_*` 拒绝非法组合（参见 `device.h`），包括
 `time_us` 为 NULL、平台临界区仍是 weak 默认实现、Data Storage 已启用但 `storage`
-缺失或 `read`/`write` 为空、PD/OD 大小超过编译期缓冲区，以及
-固定布局不匹配。
+缺失或 `read`/`write` 为空、PD/OD 大小超过编译期缓冲区、固定布局不匹配、
+`IOLINK_APP_PD_INPUT_CALLBACK=1` 但未提供 `on_pd_input`，以及
+`IOLINK_PHY_FEATURE_TX_BUSY=1` 但 PHY 未提供 `tx_busy`。
 PHY `init` 的负返回值会原样向上传播。
 
 `IOLINK_M_SEQ_TYPE_1_1` 属于旧版类型，当前传输层会拒绝。
@@ -261,12 +262,11 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx,
 `pd_input_update()` 发布设备到主站的数据。`valid` 决定 CKS 中的 PD-invalid 位。
 对于 `TYPE_0` 以外的固定 M-sequence 类型，长度必须等于配置的最大值；`TYPE_2_V`
 接受不超过配置最大值的任意长度；`TYPE_0` 不携带 PD，但允许调用该函数。当
-`IOLINK_APP_PD_INPUT_CALLBACK=1` 时，该函数返回 -1，因为 PD-in 路径由
-`on_pd_input()` 接管。
+`IOLINK_APP_PD_INPUT_CALLBACK=1` 时，该函数**不会被声明**（调用会编译/链接失败），
+PD-in 路径只由 `on_pd_input()` 提供。
 
 `pd_output_read()` 最多复制 `len` 字节，并返回实际复制的字节数；参数非法时返回负值。
-（头文件注释写的是成功返回 0，但当前实现返回复制字节数。）`pd_out` 由同一主上下文中的
-帧分发写入，因此该函数直接复制，不取锁，也不进入平台临界区。
+`pd_out` 由同一主上下文中的帧分发写入，因此该函数直接复制，不取锁，也不进入平台临界区。
 
 `set_pd_length()` 对非法参数返回 -1，对 `TYPE_2_V` 以外的任何 M-sequence 类型返回 -2。
 

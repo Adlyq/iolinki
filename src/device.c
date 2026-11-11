@@ -284,6 +284,22 @@ static int device_config_validate(const iolink_device_config_t* config)
     }
 #endif
 
+#if IOLINK_APP_PD_INPUT_CALLBACK
+    /* The callback is the only PD-input source in this profile: accepting a
+     * configuration without it would silently publish no process data. */
+    if ((config->app_callbacks == NULL) || (config->app_callbacks->on_pd_input == NULL)) {
+        return IOLINK_DEVICE_INIT_ERR_PD_INPUT;
+    }
+#endif
+
+#if (IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME) && IOLINK_PHY_FEATURE_TX_BUSY
+    /* The build promises tx_busy()-based lease release; a NULL hook would fall
+     * back to a never-released PD-in lease. */
+    if (config->phy.tx_busy == NULL) {
+        return IOLINK_DEVICE_INIT_ERR_PHY;
+    }
+#endif
+
     return IOLINK_DEVICE_INIT_OK;
 }
 
@@ -545,18 +561,10 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
     device_run_app_callbacks(ctx);
 }
 
+#if !IOLINK_APP_PD_INPUT_CALLBACK
 int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data, size_t len,
                                   bool valid)
 {
-#if IOLINK_APP_PD_INPUT_CALLBACK
-    /* The callback path is selected; mixing both paths would publish PD-in
-     * twice per cycle and race the pre-cached cyclic reply. */
-    (void) ctx;
-    (void) data;
-    (void) len;
-    (void) valid;
-    return -1;
-#else
     if ((ctx == NULL) || (data == NULL) || (len > IOLINK_PD_IN_MAX_SIZE)) {
         return -1;
     }
@@ -595,8 +603,8 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     IOLINK_CRITICAL_EXIT();
 
     return 0;
-#endif /* IOLINK_APP_PD_INPUT_CALLBACK */
 }
+#endif /* !IOLINK_APP_PD_INPUT_CALLBACK */
 
 void iolink_device_process_isr(iolink_device_ctx_t* ctx)
 {

@@ -168,6 +168,9 @@ typedef enum
     IOLINK_DEVICE_INIT_ERR_TIME = -10, /**< time_us callback is NULL */
     IOLINK_DEVICE_INIT_ERR_CRITICAL = -11, /**< platform critical sections are the weak default */
     IOLINK_DEVICE_INIT_ERR_STORAGE = -12,  /**< storage backend is NULL or incomplete */
+    IOLINK_DEVICE_INIT_ERR_PD_INPUT =
+        -14, /**< IOLINK_APP_PD_INPUT_CALLBACK=1 without an on_pd_input callback */
+    IOLINK_DEVICE_INIT_ERR_PHY = -15, /**< a PHY hook required by the build profile is NULL */
     /* -8 (lock pair) and -13 (RTOS lock) are retired: the stack has a single
      * main-context caller and no longer takes an application thread lock. */
 } iolink_device_init_result_t;
@@ -199,6 +202,7 @@ void iolink_device_process(iolink_device_ctx_t* ctx);
  */
 void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 
+#if !IOLINK_APP_PD_INPUT_CALLBACK
 /**
  * @brief Update the input process data (Device -> Master).
  * @param ctx    Device context.
@@ -209,13 +213,24 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
  */
 int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data, size_t len,
                                   bool valid);
+#else
+/**
+ * @brief Trap for a polling call in the on_pd_input callback build.
+ *
+ * IOLINK_APP_PD_INPUT_CALLBACK=1 selected the on_pd_input() callback as the only
+ * PD-input source; the polling API does not exist in that build. A call expands
+ * to an undeclared identifier, which is a compile error with a readable name.
+ */
+#define iolink_device_pd_input_update(...) \
+    IOLINK_PD_INPUT_UPDATE_IS_DISABLED_USE_ON_PD_INPUT_CALLBACK
+#endif
 
 /**
  * @brief Read the latest output process data (Master -> Device).
  * @param ctx        Device context.
  * @param[out] data  Buffer filled with the output process data.
  * @param len        Size of @p data in bytes.
- * @return 0 on success, negative on error.
+ * @return Number of bytes copied (0 when none), negative on error.
  */
 int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, size_t len);
 

@@ -284,6 +284,8 @@ typedef enum {
     IOLINK_DEVICE_INIT_ERR_CRITICAL = -11,  /* weak critical-section default in use */
     IOLINK_DEVICE_INIT_ERR_STORAGE = -12,   /* storage NULL or read/write missing */
     /* -13 was the RTOS lock requirement; retired with the RTOS tier. */
+    IOLINK_DEVICE_INIT_ERR_PD_INPUT = -14,  /* callback profile without on_pd_input */
+    IOLINK_DEVICE_INIT_ERR_PHY = -15,       /* required PHY hook is NULL */
 } iolink_device_init_result_t;
 ```
 

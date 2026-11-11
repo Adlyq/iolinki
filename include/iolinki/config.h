@@ -111,6 +111,15 @@
 #define IOLINK_ISR_TX_MODE IOLINK_ISR_TX_BYTE
 #endif
 
+/* A stray value would otherwise silently select the FRAME branch through the
+ * #if comparisons, so reject anything but the two defined modes here. */
+#if (IOLINK_ISR_RX_MODE != IOLINK_ISR_RX_BYTE) && (IOLINK_ISR_RX_MODE != IOLINK_ISR_RX_FRAME)
+#error "IOLINK_ISR_RX_MODE must be IOLINK_ISR_RX_BYTE or IOLINK_ISR_RX_FRAME"
+#endif
+#if (IOLINK_ISR_TX_MODE != IOLINK_ISR_TX_BYTE) && (IOLINK_ISR_TX_MODE != IOLINK_ISR_TX_FRAME)
+#error "IOLINK_ISR_TX_MODE must be IOLINK_ISR_TX_BYTE or IOLINK_ISR_TX_FRAME"
+#endif
+
 /**
  * @brief Require the PHY request_service() hook for ISR-pump replies.
  *
