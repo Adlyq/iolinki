@@ -155,6 +155,7 @@ run_config baremetal           BYTE_BYTE   Debug   no    "-DIOLINK_PLATFORM=BARE
 run_config single_profile      BYTE_BYTE   Debug   yes   ""                            "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE"
 run_config smp_profile         BYTE_BYTE   Debug   yes   ""                            "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SMP -DIOLINK_FENCE_LEVEL=IOLINK_FENCE_SMP -DIOLINK_FENCE_SMP_IMPL=__sync_synchronize"
 run_config stats_split         BYTE_BYTE   Debug   yes   ""                            "-DIOLINK_STATS_MODE=IOLINK_STATS_SPLIT"
+run_config pd_input_callback   BYTE_BYTE   Debug   no    "-DIOLINK_APP_PD_INPUT_CALLBACK=ON" ""
 
 # Minimum-dependency proof: a SINGLE profile never references the
 # critical-section hooks, so a port is allowed to omit them entirely.

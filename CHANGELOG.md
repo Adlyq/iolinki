@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (readability and API cleanup)
+- Naming: `frame_replied_by_isr` -> `frame_replied_by_isr`,
+  `dll_isr_reply_allowed[_acc]` -> `dll_isr_frame_valid[_acc]`,
+  `dll_isr_note_activity` -> `dll_isr_touch_activity`,
+  `dll_master_activity[_ts]` -> `dll_mark_master_activity[_ts]`,
+  `iolink_dll_take_service_window()` -> `iolink_dll_take_service_window()`,
+  `fallback_clear_request` -> `fallback_clear_request`,
+  `dll_publish_isr_frame` -> `dll_isr_publish_frame`,
+  `dll_mc_is_isdu_write` -> `dll_isr_is_isdu_write`; short locals expanded.
+  Spec abbreviations (`mc`, `od`, `ckt`, `flowctrl`) are intentionally kept.
+- Public types: `iolink_config_t` -> `iolink_stack_config_t`; the
+  `iolink_device_phy_t` alias is removed; `iolink_m_seq_type_t` declarations are
+  ordered by value.
+- `iolink_app_callbacks_t`: every hook takes `void* user`
+  (`iolink_device_config_t.user`), so callbacks need no global state.
+- `IOLINK_APP_PD_INPUT_CALLBACK` is a compile-time API selector
+  (`-DIOLINK_APP_PD_INPUT_CALLBACK=ON`): the polling function and the callback
+  member are mutually exclusive at compile time. Init rejects a callback
+  profile without `on_pd_input` (`IOLINK_DEVICE_INIT_ERR_PD_INPUT`, -14) and a
+  `IOLINK_PHY_FEATURE_TX_BUSY=1` build without `tx_busy`
+  (`IOLINK_DEVICE_INIT_ERR_PHY`, -15).
+- `phy->get_faults()` is polled: edge-triggered Table D.1 events
+  (under/overvoltage, over-temperature, short circuit); the legacy
+  `get_voltage_mv`/`is_short_circuit` pair is the fallback.
+- Documentation: pump call maps, a device integration checklist and an
+  ownership/lifetime contract (`dll.c`, `dll_isr.c`, `device.h`,
+  `CODING_STANDARDS.md`).
+
+### Removed
+- `iolink_dll_prepare_cyclic_reply()` (no-op), `cyclic_reply_precached`,
+  `IOLINK_OD_EVENT_MODE`, `IOLINK_OPERATE_TIMEOUT_MS`,
+  `IOLINK_PHY_OWNS_LINE_STATE`, `IOLINK_DS_STATE_LOCKED`,
+  `iolink_device_ctx_size()` and the unused ISDU transport states.
+
 ### Fixed (Type-0 reset and PHY frame contract)
 - A MasterCommand (Table B.2, e.g. `0x97` DeviceStartup) written to Direct
   Parameter page 1 address 0 is now applied when it is carried by the OPERATE
@@ -93,7 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed (code-review follow-up)
 - The ISR no longer writes the 64-bit `fallback_deadline_ms`: a non-FALLBACK
-  MasterCommand stages `fallback_clear_pending` and the main pump applies it.
+  MasterCommand stages `fallback_clear_request` and the main pump applies it.
 - Skipped PD-in publishes (every spare buffer leased) are counted in
   `pd_in_skips`. The lease is released only when the library can see the
   transfer end: a transceiver that stalls mid-frame keeps it, because rewriting
@@ -474,7 +508,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   octet past either configured maximum.
 - ISR_PUMP: Timer A/B hook wiring (`response_timer_start/stop`,
   `stack_timer_start`) plus `iolink_dll_on_rx_timeout()`,
-  `iolink_dll_on_stack_tick()` and `iolink_dll_can_run_user_code()`.
+  `iolink_dll_on_stack_tick()` and `iolink_dll_take_service_window()`.
   With a `stack_timer_start` hook installed, `iolink_device_process()` only
   runs after a Timer B tick authorises the main service window.
 - ISR_PUMP: `isr_mailbox_drops` / `isr_eager_rejects` counters so mailbox
@@ -560,7 +594,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ISR_PUMP: keep two TX payload slots so a TX-FRAME DMA keeps reading its
   buffer while the next reply is prepared; the single buffer could be
   overwritten by a back-to-back reply.
-- ISR_PUMP: `isr_eager_replied` is snapshotted into `frame_eager` when the
+- ISR_PUMP: `isr_eager_replied` is snapshotted into `frame_replied_by_isr` when the
   mailbox is consumed, removing the cross-frame race on the eager flag.
 - ISR_PUMP RX FRAME: validate the request length, do not call `rx_frame()`
   while the mailbox still holds the zero-copy pointer, and fill the TX CKS

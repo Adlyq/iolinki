@@ -332,7 +332,7 @@ bool iolink_ds_verify(const iolink_ds_ctx_t* ctx);
 /**
  * @brief Read the State_Property octet (Table B.10 subindex 02).
  *
- * Bits 1-2 encode the DS state (Inactive/Upload/Download/locked); bit 7 is the
+ * Bits 1-2 encode the DS state (Inactive/Upload/Download); bit 7 is the
  * DS_UPLOAD_FLAG (a Data Storage upload request is pending).
  *
  * @param ctx DS context

@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "iolinki/crc.h"
+#include "iolinki/device.h"
 #include "iolinki/dll.h"
 #include "iolinki/iolink.h"
 #include "iolinki/port.h"
@@ -175,9 +176,65 @@ static void test_lease_released_when_line_free(void)
  * so it keeps a third buffer. */
 IOLINK_STATIC_ASSERT(IOLINK_PD_IN_BUFFERS == 2U, "tx_busy build must use two PD-in buffers");
 
+/* IOLINK_PHY_FEATURE_TX_BUSY=1 promises lease release through tx_busy(); a PHY
+ * without the hook must be rejected at device init instead of silently keeping
+ * the PD-in buffer leased forever. */
+void iolink_critical_enter(void)
+{
+}
+
+void iolink_critical_exit(void)
+{
+}
+
+static uint64_t device_time_us(void* user)
+{
+    (void) user;
+    return 1000000ULL;
+}
+
+static int storage_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
+{
+    (void) user;
+    (void) offset;
+    (void) buf;
+    (void) len;
+    return 0;
+}
+
+static int storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
+{
+    (void) user;
+    (void) offset;
+    (void) buf;
+    (void) len;
+    return 0;
+}
+
+static const iolink_storage_api_t g_dev_storage = {.read = storage_read, .write = storage_write};
+
+static void test_device_init_requires_tx_busy(void)
+{
+    iolink_device_ctx_t ctx;
+    iolink_device_config_t cfg;
+
+    (void) memset(&cfg, 0, sizeof(cfg));
+    cfg.phy = g_phy;
+    cfg.phy.tx_busy = NULL;
+#if IOLINK_FEATURE_DATA_STORAGE
+    cfg.storage = &g_dev_storage;
+#endif
+    cfg.time_us = device_time_us;
+    assert(iolink_device_init(&ctx, &cfg) == IOLINK_DEVICE_INIT_ERR_PHY);
+
+    cfg.phy.tx_busy = mock_tx_busy;
+    assert(iolink_device_init(&ctx, &cfg) == 0);
+}
+
 int main(void)
 {
     test_busy_defers_eager_reply();
     test_lease_released_when_line_free();
+    test_device_init_requires_tx_busy();
     return 0;
 }

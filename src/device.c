@@ -522,7 +522,7 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
     if (ctx->config->app_callbacks->on_pd_input != NULL) {
         /* Fill a buffer the ISR is not streaming, then publish it atomically so
          * the ISR never streams a torn PD-in. The callback return value is the
-         * PD valid flag; the pre-cached cyclic reply must be rebuilt. */
+         * PD valid flag. */
         const uint8_t inactive = device_pd_in_free_index(&ctx->dll);
         if (inactive == 0xFFU) {
             ctx->dll.pd_in_skips++; /* every spare buffer is leased */

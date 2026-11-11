@@ -79,8 +79,9 @@
  *  - dll_take_isr_master_activity() runs twice on purpose (before and after the
  *    ISDU service); dll_restore_operating_baudrate() likewise (before the early
  *    returns and after the mailbox drain).
- *  - The four early-return gates (t_pd, SIO wake-up, t_byte, wake-up window)
- *    are the only paths that skip the mailbox; keep them ahead of the drain.
+ *  - The three early-return gates (t_pd, SIO wake-up, wake-up window) are the
+ *    only paths that skip the mailbox; dll_check_t_byte() only measures and
+ *    never returns early. Keep the gates ahead of the drain.
  *  - An eager frame is answered by the ISR *and* still processed here: the
  *    mailbox record carries eager=1 so dll_send() is suppressed, but the state
  *    machine, PD-out copy and counters must still run.
@@ -134,6 +135,10 @@ void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
            critical section, so no outer one is needed. */
 #if IOLINK_FEATURE_EVENTS
         iolink_events_reset(&ctx->events);
+        /* The engine dropped every condition; a still-present physical fault
+         * must be reported again. The poll (main context) consumes this flag
+         * and re-arms the edge latch, so this byte write stays ISR-safe. */
+        ctx->phy_faults_rearm = 1U;
 #endif
         if (ctx->in_isr != 0U) {
             ctx->startup_notification_pending = 1U;
@@ -463,16 +468,16 @@ bool dll_apply_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
             dll_protocol_error_to_startup(ctx);
             return true;
         case IOLINK_CMD_DEVICE_PREOPERATE:
-            ctx->isr_fallback_clear = 1U;
+            ctx->fallback_clear_request = 1U;
             dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
             return true;
         case IOLINK_CMD_PROCESS_DATA_OPERATE:
-            ctx->isr_fallback_clear = 1U;
+            ctx->fallback_clear_request = 1U;
             ctx->pd_valid = true;
             dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
             return true;
         case IOLINK_CMD_DEVICE_OPERATE:
-            ctx->isr_fallback_clear = 1U;
+            ctx->fallback_clear_request = 1U;
             ctx->pd_valid = false;
             /* DeviceOperate from PREOPERATE establishes communication
                (ESTAB_COM); the following PDOperate 0x98 moves to OPERATE.
@@ -827,11 +832,20 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
  * event once, and the fall clears the event so the event engine can emit the
  * matching "disappears". Mapping to Table D.1 device codes:
  *  - UNDERVOLTAGE   -> 0x5111 supply voltage underrun (Warning)
+ *  - OVERVOLTAGE    -> 0x5110 supply voltage overrun (Warning)
  *  - OVERTEMP       -> 0x4000 temperature overload (Error)
  *  - SHORT_CIRCUIT  -> 0x7710 short circuit (Error)
+ *
+ * A pending "rearm" request (the event engine was reset by STARTUP or a
+ * diagnostic reset) restarts edge detection, so a fault that is still present
+ * is reported again in the new session.
  */
 static void dll_poll_phy_faults(iolink_dll_ctx_t* ctx)
 {
+    if (ctx->phy_faults_rearm != 0U) {
+        ctx->phy_faults_rearm = 0U;
+        ctx->phy_faults_last = 0U;
+    }
     const uint8_t faults = ctx->phy->get_faults(ctx->phy->user);
     const uint8_t rising = (uint8_t) (faults & (uint8_t) ~ctx->phy_faults_last);
     const uint8_t falling = (uint8_t) ((uint8_t) ~faults & ctx->phy_faults_last);
@@ -839,6 +853,11 @@ static void dll_poll_phy_faults(iolink_dll_ctx_t* ctx)
     if ((rising & IOLINK_PHY_FAULT_UNDERVOLTAGE) != 0U) {
         ctx->voltage_faults++;
         DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN,
+                          IOLINK_EVENT_TYPE_WARNING);
+    }
+    if ((rising & IOLINK_PHY_FAULT_OVERVOLTAGE) != 0U) {
+        ctx->voltage_faults++;
+        DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN,
                           IOLINK_EVENT_TYPE_WARNING);
     }
     if ((rising & IOLINK_PHY_FAULT_OVERTEMP) != 0U) {
@@ -852,6 +871,9 @@ static void dll_poll_phy_faults(iolink_dll_ctx_t* ctx)
     }
     if ((falling & IOLINK_PHY_FAULT_UNDERVOLTAGE) != 0U) {
         DLL_EVENT_CLEAR(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN);
+    }
+    if ((falling & IOLINK_PHY_FAULT_OVERVOLTAGE) != 0U) {
+        DLL_EVENT_CLEAR(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN);
     }
     if ((falling & IOLINK_PHY_FAULT_OVERTEMP) != 0U) {
         DLL_EVENT_CLEAR(&ctx->events, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD);
@@ -1065,7 +1087,7 @@ static uint32_t dll_master_cycle_us(const iolink_dll_ctx_t* ctx)
  *
  * Used when the data ISR sees a frame but the Back-to-box cycle count must
  * still be advanced exactly once, by whoever actually served the request. */
-static void dll_master_activity_ts(iolink_dll_ctx_t* ctx)
+static void dll_mark_master_activity_ts(iolink_dll_ctx_t* ctx)
 {
     ctx->master_last_activity_ms = dll_time_ms(ctx);
     ctx->master_lost_count = 0U;
@@ -1075,7 +1097,7 @@ static void dll_master_activity_ts(iolink_dll_ctx_t* ctx)
 /** @brief ST-style master activity: frame end / RX timeout restarts the counter. */
 void dll_mark_master_activity(iolink_dll_ctx_t* ctx)
 {
-    dll_master_activity_ts(ctx);
+    dll_mark_master_activity_ts(ctx);
 
     /* 10.7.5: count the frames served after Back-to-box so the device keeps
        answering for at least 3 MasterCycles before it stops (see
@@ -1494,7 +1516,7 @@ static void dll_take_isr_master_activity(iolink_dll_ctx_t* ctx)
         /* Timestamp only: the Back-to-box cycle count is advanced exactly once
          * per served request (here for an ISR-answered frame, or in
          * dll_process_complete_frame for a main-answered one). */
-        dll_master_activity_ts(ctx);
+        dll_mark_master_activity_ts(ctx);
     }
 }
 
@@ -1527,8 +1549,8 @@ static void dll_apply_isr_deadline_requests(iolink_dll_ctx_t* ctx)
             ctx->fallback_deadline_ms = dll_time_us(ctx) / 1000U + t_fbd_ms;
         }
     }
-    if (ctx->isr_fallback_clear != 0U) {
-        ctx->isr_fallback_clear = 0U;
+    if (ctx->fallback_clear_request != 0U) {
+        ctx->fallback_clear_request = 0U;
         /* A command other than FALLBACK was applied: drop any pending T_FBD. */
         if (ctx->state != IOLINK_DLL_STATE_FALLBACK) {
             ctx->fallback_deadline_ms = 0U;
@@ -2023,6 +2045,8 @@ void iolink_dll_reset_diagnostics(iolink_dll_ctx_t* ctx)
        bound clock. */
 #if IOLINK_FEATURE_EVENTS
     iolink_events_reset(&ctx->events);
+    ctx->phy_faults_rearm = 0U;
+    ctx->phy_faults_last = 0U;
 #endif
     iolink_dll_reset_error_counters(ctx);
 }

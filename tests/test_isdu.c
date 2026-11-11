@@ -922,6 +922,27 @@ static void test_isdu_snapshot_response(void** state)
     assert_int_equal(iolink_isdu_snapshot_response(NULL, NULL, NULL, 0U), 0U);
 }
 
+/* The event/DS service gate: idle iff the transport is in ISDU_STATE_IDLE. */
+static void test_isdu_is_idle(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_isdu_init(&ctx);
+
+    assert_true(iolink_isdu_is_idle(&ctx));
+
+    ctx.state = ISDU_STATE_HEADER_INITIAL;
+    assert_false(iolink_isdu_is_idle(&ctx));
+    ctx.state = ISDU_STATE_SERVICE_EXECUTE;
+    assert_false(iolink_isdu_is_idle(&ctx));
+    ctx.state = ISDU_STATE_RESPONSE_READY;
+    assert_false(iolink_isdu_is_idle(&ctx));
+
+    ctx.state = ISDU_STATE_IDLE;
+    assert_true(iolink_isdu_is_idle(&ctx));
+    assert_false(iolink_isdu_is_idle(NULL));
+}
+
 /* B.2.4: DeviceAccessLocks is only accessible via subindex 0; B.2.5:
  * ProfileCharacteristic is an ArrayT exposing one element. */
 static void test_isdu_subindexed_objects(void** state)
@@ -1242,6 +1263,7 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_read_8bit_reserved_index, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_snapshot_response, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_is_idle, test_setup, test_teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

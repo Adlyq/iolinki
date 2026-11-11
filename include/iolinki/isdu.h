@@ -54,7 +54,7 @@ typedef struct
 typedef enum
 {
     ISDU_STATE_IDLE = 0U,            /**< Waiting for new Request */
-    ISDU_STATE_HEADER_INITIAL = 1U,  /**< Parsing the first header octet (transient) */
+    ISDU_STATE_HEADER_INITIAL = 1U,  /**< Collecting the request header/segments */
     ISDU_STATE_SERVICE_EXECUTE = 2U, /**< Dispatching to the application layer */
     ISDU_STATE_RESPONSE_READY = 3U   /**< Response buffer populated, awaiting retrieval */
 } isdu_state_t;

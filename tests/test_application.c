@@ -60,32 +60,33 @@ static int g_cb_preoperate;
 static int g_cb_operate;
 static int g_cb_pd_output;
 static int g_cb_state;
+static void* g_expected_user;
 
 static void cb_startup(void* user)
 {
-    (void) user;
+    assert_ptr_equal(user, g_expected_user);
     g_cb_startup++;
 }
 static void cb_preoperate(void* user)
 {
-    (void) user;
+    assert_ptr_equal(user, g_expected_user);
     g_cb_preoperate++;
 }
 static void cb_operate(void* user)
 {
-    (void) user;
+    assert_ptr_equal(user, g_expected_user);
     g_cb_operate++;
 }
 static void cb_pd_output(void* user, uint8_t* data, uint8_t len)
 {
-    (void) user;
+    assert_ptr_equal(user, g_expected_user);
     (void) data;
     (void) len;
     g_cb_pd_output++;
 }
 static void cb_state_change(void* user, iolink_dll_state_t state)
 {
-    (void) user;
+    assert_ptr_equal(user, g_expected_user);
     (void) state;
     g_cb_state++;
 }
@@ -100,6 +101,7 @@ static void test_app_callbacks_lifecycle(void** state)
     g_cb_operate = 0;
     g_cb_pd_output = 0;
     g_cb_state = 0;
+    g_expected_user = NULL;
 
     static const iolink_app_callbacks_t cbs = {
         .on_startup = cb_startup,
@@ -115,6 +117,12 @@ static void test_app_callbacks_lifecycle(void** state)
 
     /* Registered before init -> initial STARTUP announced. */
     assert_true(g_cb_startup >= 1);
+
+    /* config.user must reach every callback. The context keeps a pointer to the
+     * configuration object, so updating it after init is visible. */
+    static int user_sentinel;
+    g_expected_user = &user_sentinel;
+    dev.cfg.user = g_expected_user;
 
     move_to_operate_ctx(&dev.ctx);
     assert_true(g_cb_state >= 1);

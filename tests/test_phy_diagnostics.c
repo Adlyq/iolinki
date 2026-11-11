@@ -505,6 +505,60 @@ static void test_get_faults_clear_emits_disappears(void** state)
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
 }
 
+static void test_get_faults_overvoltage(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t ctx;
+    iolink_dll_stats_t stats;
+    reset_fault_mock();
+    mock_faults = IOLINK_PHY_FAULT_OVERVOLTAGE;
+
+    iolink_dll_init(&ctx, &mock_phy_faults);
+    iolink_dll_process(&ctx);
+    iolink_dll_get_stats(&ctx, &stats);
+    assert_int_equal(stats.voltage_faults, 1);
+
+    iolink_event_t ev;
+    assert_true(iolink_events_pop(&ctx.events, &ev));
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN);
+    assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
+}
+
+/* A diagnostic reset drops the condition tracking; a fault that is still
+ * present must be reported again in the new session (otherwise the master sees
+ * a cleared DeviceStatus while the hardware is still faulted). */
+static void test_get_faults_rearmed_after_reset(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t ctx;
+    iolink_dll_stats_t stats;
+    reset_fault_mock();
+    mock_faults = IOLINK_PHY_FAULT_UNDERVOLTAGE;
+
+    iolink_dll_init(&ctx, &mock_phy_faults);
+    iolink_dll_process(&ctx);
+    iolink_dll_get_stats(&ctx, &stats);
+    assert_int_equal(stats.voltage_faults, 1);
+    assert_int_equal(ctx.events.pending_count, 1U);
+
+    iolink_dll_reset_diagnostics(&ctx);
+    assert_int_equal(ctx.events.pending_count, 0U);
+
+    iolink_dll_process(&ctx);
+    iolink_dll_get_stats(&ctx, &stats);
+    assert_int_equal(stats.voltage_faults, 2);
+    assert_int_equal(ctx.events.pending_count, 1U);
+
+    /* The STARTUP path stages the same request as a flag (dll_set_state may run
+     * in ISR context); consume it with a latch that still shows the fault. */
+    ctx.phy_faults_last = IOLINK_PHY_FAULT_UNDERVOLTAGE;
+    ctx.phy_faults_rearm = 1U;
+    iolink_dll_process(&ctx);
+    iolink_dll_get_stats(&ctx, &stats);
+    assert_int_equal(stats.voltage_faults, 3);
+    assert_int_equal(ctx.phy_faults_last, IOLINK_PHY_FAULT_UNDERVOLTAGE);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -523,6 +577,8 @@ int main(void)
         cmocka_unit_test(test_get_faults_overtemp_and_short),
         cmocka_unit_test(test_get_faults_takes_priority_over_legacy),
         cmocka_unit_test(test_get_faults_clear_emits_disappears),
+        cmocka_unit_test(test_get_faults_overvoltage),
+        cmocka_unit_test(test_get_faults_rearmed_after_reset),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

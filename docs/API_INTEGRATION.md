@@ -417,6 +417,7 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl,
                          uint8_t* od_out, uint8_t od_len);
 uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* busy,
                                       uint8_t* dst, size_t dst_size);
+bool iolink_isdu_is_idle(const iolink_isdu_ctx_t* ctx); /* NULL -> false */
 int iolink_isdu_get_response_byte(iolink_isdu_ctx_t* ctx, uint8_t* byte);
 uint8_t iolink_isdu_direct_param_page1_octet(iolink_isdu_ctx_t* ctx, uint8_t addr);
 void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd);

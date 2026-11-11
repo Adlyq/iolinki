@@ -26,7 +26,9 @@
  *
  * Naming convention in this file: dll_isr_* is callable from ISR context only;
  * plain dll_* helpers are shared with the main pump (see the context contract
- * table in docs/CODE_FLOW.md section 12.1).
+ * table in docs/CODE_FLOW.md section 12.1). Exception: dll_isr_start_staged_tx()
+ * is also called from the main pump through dll_send() on the direct-send
+ * fallback path.
  *
  * ISR pump (entry iolink_dll_process_isr):
  *

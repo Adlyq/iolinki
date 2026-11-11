@@ -682,11 +682,11 @@ static int test_fallback_clear_is_staged(void)
     feed_chk(frame, 3U);
     iolink_dll_process_isr(&dll);
 
-    if ((dll.fallback_deadline_ms != 0x0000000123456789ULL) || (dll.isr_fallback_clear == 0U)) {
+    if ((dll.fallback_deadline_ms != 0x0000000123456789ULL) || (dll.fallback_clear_request == 0U)) {
         return 1; /* the ISR touched the 64-bit field */
     }
     iolink_dll_process(&dll);
-    if ((dll.fallback_deadline_ms != 0U) || (dll.isr_fallback_clear != 0U)) {
+    if ((dll.fallback_deadline_ms != 0U) || (dll.fallback_clear_request != 0U)) {
         return 2; /* the main pump did not apply the staged clear */
     }
     return 0;

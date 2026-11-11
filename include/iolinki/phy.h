@@ -56,9 +56,11 @@ typedef enum
 #define IOLINK_PHY_FAULT_UNDERVOLTAGE (1U << 0)  /**< L+ supply below tolerance */
 #define IOLINK_PHY_FAULT_OVERTEMP (1U << 1)      /**< Transceiver over-temperature */
 #define IOLINK_PHY_FAULT_SHORT_CIRCUIT (1U << 2) /**< C/Q (or L+) short circuit */
+#define IOLINK_PHY_FAULT_OVERVOLTAGE (1U << 3)   /**< L+ supply above tolerance */
 /** All defined physical fault flags. */
-#define IOLINK_PHY_FAULT_ALL \
-    (IOLINK_PHY_FAULT_UNDERVOLTAGE | IOLINK_PHY_FAULT_OVERTEMP | IOLINK_PHY_FAULT_SHORT_CIRCUIT)
+#define IOLINK_PHY_FAULT_ALL                                                                      \
+    (IOLINK_PHY_FAULT_UNDERVOLTAGE | IOLINK_PHY_FAULT_OVERTEMP | IOLINK_PHY_FAULT_SHORT_CIRCUIT | \
+     IOLINK_PHY_FAULT_OVERVOLTAGE)
 
 /**
  * @brief Normalized status bits returned by the raw-octet hooks
@@ -247,10 +249,10 @@ typedef struct
      * This is the preferred diagnostics channel: a PHY describes *what* is
      * physically wrong and needs no knowledge of IO-Link EventCodes. The DLL
      * polls it from iolink_dll_process(); a 0->1 edge raises the mapped event
-     * (UNDERVOLTAGE -> 0x5111 Warning, OVERTEMP -> 0x4000 Error,
-     * SHORT_CIRCUIT -> 0x7710 Error) once, and a 1->0 edge clears it so the
-     * event engine can emit "disappears". When this hook is NULL the legacy
-     * pair below is used instead.
+     * (UNDERVOLTAGE -> 0x5111 Warning, OVERVOLTAGE -> 0x5110 Warning,
+     * OVERTEMP -> 0x4000 Error, SHORT_CIRCUIT -> 0x7710 Error) once, and a
+     * 1->0 edge clears it so the event engine can emit "disappears". When this
+     * hook is NULL the legacy pair below is used instead.
      * @return Active fault flags.
      */
     uint8_t (*get_faults)(void* user);

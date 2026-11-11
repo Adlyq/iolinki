@@ -8,8 +8,8 @@
 
 /**
  * @file test_dll_isr.c
- * @brief Unit tests for the pure ISR-side framing helpers and the pre-staged
- *        cyclic reply variants (Figure A.5/A.9/A.14).
+ * @brief Unit tests for the pure ISR-side framing helpers and reply-variant
+ *        selection (Figure A.5/A.9/A.14).
  */
 
 #include <stdarg.h>
@@ -108,9 +108,6 @@ static void test_reply_variant_selection(void** state)
 
     assert_int_equal(iolink_dll_reply_variant(NULL, 0x80U), IOLINK_REPLY_NONE);
 }
-
-/* The old pre-staged double buffer is gone: replies are generated directly
- * from the shared state by the ISR. */
 
 int main(void)
 {

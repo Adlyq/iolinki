@@ -221,9 +221,9 @@ typedef struct
      * main pump; the 64-bit deadlines stay main-owned. Each flag is set to 1
      * and cleared to 0 only by the main pump, so a set that races the consume
      * is idempotent: the request is applied in this pass or the next one. */
-    volatile uint8_t isr_dsio_clear;       /**< ISR served the startup probe: clear T_DSIO */
-    volatile uint8_t isr_fallback_pending; /**< ISR accepted FALLBACK: arm T_FBD from main */
-    volatile uint8_t isr_fallback_clear;   /**< A non-FALLBACK command was applied: clear T_FBD */
+    volatile uint8_t isr_dsio_clear;         /**< ISR served the startup probe: clear T_DSIO */
+    volatile uint8_t isr_fallback_pending;   /**< ISR accepted FALLBACK: arm T_FBD from main */
+    volatile uint8_t fallback_clear_request; /**< A non-FALLBACK command was applied: clear T_FBD */
 
     /* Configuration */
     uint8_t m_seq_type; /**< Supported M-sequence type */
@@ -362,24 +362,26 @@ typedef struct
     bool pd_out_seen; /**< A PDout frame has been received (B.2.24) */
 
     /* Error Counters & Statistics */
-    uint32_t crc_errors;             /**< Cumulative CRC error count */
-    uint32_t timeout_errors;         /**< Cumulative t_A timeout count */
-    uint32_t idle_timeouts;          /**< 1 s idle-link diagnostics (master paused) */
-    uint32_t framing_errors;         /**< Cumulative framing error count */
-    uint32_t timing_errors;          /**< Cumulative timing violations */
-    uint32_t t_ren_violations;       /**< t_ren violations */
-    uint32_t t_cycle_violations;     /**< t_cycle violations */
-    uint32_t t_byte_violations;      /**< Inter-byte timing violations */
-    uint32_t t_pd_violations;        /**< t_pd violations */
-    uint8_t retry_count;             /**< Retry counter for current exchange */
-    uint32_t total_retries;          /**< Cumulative retry count */
-    uint8_t max_retries;             /**< Configured max retries (default 3) */
-    uint32_t voltage_faults;         /**< Cumulative voltage fault count */
-    uint32_t overtemp_faults;        /**< Cumulative over-temperature fault count */
-    uint32_t short_circuits;         /**< Cumulative short circuit count */
-    uint8_t phy_faults_last;         /**< Last get_faults() bitmask (edge detection) */
-    volatile uint8_t fallback_count; /**< Consecutive fallback count for SIO transition */
-    uint8_t sio_fallback_threshold;  /**< Fallback threshold to enter SIO mode (default 3) */
+    uint32_t crc_errors;               /**< Cumulative CRC error count */
+    uint32_t timeout_errors;           /**< Cumulative t_A timeout count */
+    uint32_t idle_timeouts;            /**< 1 s idle-link diagnostics (master paused) */
+    uint32_t framing_errors;           /**< Cumulative framing error count */
+    uint32_t timing_errors;            /**< Cumulative timing violations */
+    uint32_t t_ren_violations;         /**< t_ren violations */
+    uint32_t t_cycle_violations;       /**< t_cycle violations */
+    uint32_t t_byte_violations;        /**< Inter-byte timing violations */
+    uint32_t t_pd_violations;          /**< t_pd violations */
+    uint8_t retry_count;               /**< Retry counter for current exchange */
+    uint32_t total_retries;            /**< Cumulative retry count */
+    uint8_t max_retries;               /**< Configured max retries (default 3) */
+    uint32_t voltage_faults;           /**< Cumulative voltage fault count (edge per fault
+                                            with get_faults(), poll cycle on the legacy path) */
+    uint32_t overtemp_faults;          /**< Cumulative over-temperature fault count */
+    uint32_t short_circuits;           /**< Cumulative short circuit count */
+    uint8_t phy_faults_last;           /**< Last get_faults() bitmask (edge detection) */
+    volatile uint8_t phy_faults_rearm; /**< Event engine was reset: re-arm the edge latch */
+    volatile uint8_t fallback_count;   /**< Consecutive fallback count for SIO transition */
+    uint8_t sio_fallback_threshold;    /**< Fallback threshold to enter SIO mode (default 3) */
 
     /* Timing Statistics */
     uint64_t last_response_us; /**< Microsecond timestamp of last response */
@@ -538,9 +540,9 @@ void iolink_dll_process_isr(iolink_dll_ctx_t* ctx);
  * Notification is level-based: when the current state differs from the last
  * one delivered, the hook is called once with the current state. The data ISR
  * only changes the state, so this function is the single place where the
- * application hook can run (never in interrupt context). The device layer
- * calls it once per iolink_device_process(); iolink_dll_process() calls it at
- * the end as well, and a bare DLL user may call it from the main loop.
+ * application hook can run (never in interrupt context). iolink_dll_process()
+ * calls it at the end; the device layer relies on that call, and a bare DLL
+ * user may also call it from the main loop.
  *
  * Two states entered and left between two calls are coalesced into the later
  * one; the final state is never lost. A STARTUP transition taken in the data

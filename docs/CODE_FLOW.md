@@ -35,7 +35,7 @@
 
 ## 1. 先看结论
 
-1. 目标构建使用**双泵传输**：数据中断里的 `iolink_dll_process_isr()` 负责收帧、校验、暂存 ISDU 写、直接由共享状态组帧并发送 cyclic 应答；主循环里的 `iolink_dll_process()` 负责协议逻辑（ISDU 执行、事件、诊断、主状态机）。
+1. 目标构建使用**双泵传输**：数据中断里的 `iolink_dll_process_isr()` 负责收帧、校验、暂存 ISDU 写、直接由共享状态组帧并发送 cyclic 应答；主循环里的 `iolink_dll_process()` 负责 DLL 协议逻辑（ISDU 执行、诊断、主状态机），事件/DS 服务由 `iolink_device_process()` 在其后调用 `device_service_events_and_ds()` 完成。
 2. `iolink_device_process()` 是主循环唯一需要周期调用的入口；PHY 数据中断还要调用 `iolink_device_process_isr()`。主循环负责 DLL 协议处理，并把 ISR 延迟的状态回调、master-lost 边沿、reset 请求、PD 回调分发给应用。
 3. 数据按 **MC 通信通道**分流：Process、Page、Diagnosis、ISDU；按 **CKT M-sequence 类型**决定 Type-0 还是 Type-1/2 的帧长与应答布局。
 4. ISDU 写请求和读应答是分离的：写请求先进入 ISDU 传输状态机，`iolink_isdu_process()` 在后续主循环执行应用服务，读请求从响应缓冲区或 ISR 快照读取。
@@ -208,7 +208,7 @@ flowchart TD
 - 初始化校验在 `device_config_validate()` 完成；本路径还会在 `device_validate_fixed_mseq()` 拒绝 `TYPE_1_1` 和与 Annex A 固定布局不一致的 PD/OD 长度。
 - `dll_init()` 默认 COM2；若 `stack.baudrate_set`，`device_apply_stack_config()` 会通过 `iolink_dll_set_operating_baudrate()` 再设置工作 COM。
 - `on_startup()` 在 `iolink_device_init()` 末尾显式调用一次；`dll_init()` 内部进入 STARTUP 时因为状态初值已是 0，`dll_set_state()` 不会重复触发。
-- `IOLINK_APP_PD_INPUT_CALLBACK=1` 时，PD-in 由 `on_pd_input()` 填充，`iolink_device_pd_input_update()` 返回 `-1`，两者不能混用。
+- `IOLINK_APP_PD_INPUT_CALLBACK=1` 时，PD-in 由 `on_pd_input()` 填充，`iolink_device_pd_input_update()` 不会被声明（调用即编译/链接错误），两者不能混用。
 
 ---
 
@@ -411,7 +411,7 @@ flowchart LR
 
 规则：
 
-- `iolink_device_pd_input_update()` 与 `on_pd_input()` 二选一；`IOLINK_APP_PD_INPUT_CALLBACK=1` 时前者直接返回 `-1`。`on_pd_input()` 的返回值直接作为 `pd_valid`，返回 `false` 会置 CKS bit6。
+- `iolink_device_pd_input_update()` 与 `on_pd_input()` 二选一；`IOLINK_APP_PD_INPUT_CALLBACK=1` 时前者不会被声明（调用即编译/链接错误）。`on_pd_input()` 的返回值直接作为 `pd_valid`，返回 `false` 会置 CKS bit6。
 - 固定 Annex A 类型的 PD-in 长度不可变；`TYPE_2_V` 可在 `pd_in_len_max` 内变化。
 - PD-out 只在 Type-1/2 请求中携带；Type-0 不携带 PD。
 - `pd_valid=false` 会置 CKS bit6，Master 可据此判断 PD 无效。
@@ -638,7 +638,8 @@ flowchart TD
 - `DeviceStatus` 取当前队列最高严重度（`iolink_events_get_highest_severity()`）。
 - `DetailedDeviceStatus` 读取的是 `pending[]` 中的 Error/Warning，而不是队列。
 - `STARTUP` 状态会调用 `iolink_events_reset()` 丢弃事件（A.6.4）。
-- 物理诊断优先轮询 `phy->get_faults()` 位图：0→1 边沿计数并映射为 Table D.1 事件（UNDERVOLTAGE→0x5111、OVERTEMP→0x4000、SHORT_CIRCUIT→0x7710），1→0 边沿清除事件；`get_faults()` 为 NULL 时才回退到旧接口 `get_voltage_mv()` / `is_short_circuit()`。
+- 物理诊断优先轮询 `phy->get_faults()` 位图：0→1 边沿计数并映射为 Table D.1 事件（UNDERVOLTAGE→0x5111、OVERVOLTAGE→0x5110、OVERTEMP→0x4000、SHORT_CIRCUIT→0x7710），1→0 边沿清除事件；事件引擎被 STARTUP/诊断复位清空后，DLL 会重新武装边沿锁存，仍存在的故障会在新会话中重新上报。`get_faults()` 为 NULL 时才回退到旧接口 `get_voltage_mv()` / `is_short_circuit()`。
+- 计数器语义：`get_faults()` 路径按故障片段计数（每个 0→1 边沿一次）；legacy 路径按轮询周期计数（故障持续时每周期加一）。
 
 ---
 
@@ -667,10 +668,11 @@ sequenceDiagram
 
     APP->>DEV: iolink_device_process()
     DEV->>DLL: iolink_dll_process()
-    DLL->>SVC: iolink_isdu_process() / 诊断 / 事件
+    DLL->>SVC: iolink_isdu_process() / 诊断
     DLL->>PHY: rx_octet / rx_frame / 查询 / tx_octet / tx_frame
     DLL->>DEV: state_cb（电平通知：当前状态）
     Note over DEV: 主上下文迁移立即投递；ISR 迁移在本次 dll_process 末尾投递
+    DEV->>SVC: device_service_events_and_ds()（ISDU 空闲时）
     DEV->>APP: on_state_change + on_startup/preoperate/operate
     DEV->>APP: on_master_lost / on_master_online（边沿）
     DEV->>APP: reset handler（0x80/0x81）

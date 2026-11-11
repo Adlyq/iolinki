@@ -28,8 +28,8 @@ callback.
 
 ```c
 typedef struct {
-    iolink_phy_api_t phy;                 /* PHY driver (copy of iolink_phy_api_t) */
-    iolink_stack_config_t stack;                   /* protocol settings */
+    iolink_phy_api_t phy;                        /* PHY driver vtable */
+    iolink_stack_config_t stack;                 /* protocol settings */
     const iolink_app_callbacks_t* app_callbacks; /* may be NULL */
     const iolink_device_info_t* device_info;     /* may be NULL */
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -123,7 +123,10 @@ int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, 
 ```
 
 `pd_input_update` publishes Device-to-Master process data (`valid` drives the
-CKS PD-invalid bit). `pd_output_read` returns the latest Master-to-Device data.
+CKS PD-invalid bit). It exists only when `IOLINK_APP_PD_INPUT_CALLBACK=0`; in
+the callback profile (`=1`, configure with `-DIOLINK_APP_PD_INPUT_CALLBACK=ON`)
+the function is not declared and `on_pd_input` is the only PD-in source.
+`pd_output_read` returns the latest Master-to-Device data.
 
 ### Reset handler
 

@@ -1,6 +1,6 @@
 # The full suite exercises the untrimmed stack. Skip it for a trimmed build;
 # build the library target (or configure with -DBUILD_TESTING=OFF) instead.
-if(IOLINK_MINIMAL_PROFILE OR IOLINK_TINY_PROFILE OR
+if(IOLINK_MINIMAL_PROFILE OR IOLINK_TINY_PROFILE OR IOLINK_APP_PD_INPUT_CALLBACK OR
    NOT IOLINK_FEATURE_DATA_STORAGE OR NOT IOLINK_FEATURE_SYSTEM_COMMAND OR
    NOT IOLINK_FEATURE_LEGACY_PARAMS OR NOT IOLINK_FEATURE_EVENTS OR
    NOT IOLINK_PHY_FEATURE_WAKEUP OR NOT IOLINK_PHY_FEATURE_SIO_CQ OR
@@ -90,6 +90,15 @@ target_compile_definitions(iolink_tx_busy_fixture PUBLIC
 add_executable(test_tx_busy test_tx_busy.c)
 target_link_libraries(test_tx_busy iolink_tx_busy_fixture)
 add_test(NAME test_tx_busy COMMAND test_tx_busy)
+
+# PD-input callback profile: the polling API is removed from the headers, so the
+# profile gets its own build of the sources.
+add_library(iolink_pd_cb_fixture STATIC ${IOLINK_SOURCES})
+target_include_directories(iolink_pd_cb_fixture PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_compile_definitions(iolink_pd_cb_fixture PUBLIC IOLINK_APP_PD_INPUT_CALLBACK=1)
+add_executable(test_app_pd_callback test_app_pd_callback.c)
+target_link_libraries(test_app_pd_callback iolink_pd_cb_fixture)
+add_test(NAME test_app_pd_callback COMMAND test_app_pd_callback)
 
 if(PkgConfig_FOUND)
     pkg_check_modules(CMOCKA QUIET cmocka)

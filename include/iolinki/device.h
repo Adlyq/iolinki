@@ -105,13 +105,14 @@ typedef uint64_t (*iolink_device_time_us_fn)(void* user);
  */
 typedef struct
 {
-    iolink_phy_api_t phy;        /**< Physical layer driver API. `phy.user` is the
-                                      driver context passed to the PHY vtable only;
-                                      it is independent of @ref user below. */
-    iolink_stack_config_t stack; /**< Stack behavior configuration. */
-    const iolink_app_callbacks_t*
-        app_callbacks; /**< Application lifecycle/PD callbacks (may be NULL). */
-    const iolink_device_info_t* device_info; /**< Static device identification data. */
+    iolink_phy_api_t phy;                        /**< Physical layer driver API. `phy.user` is the
+                                                      driver context passed to the PHY vtable only;
+                                                      it is independent of @ref user below. */
+    iolink_stack_config_t stack;                 /**< Stack behavior configuration. */
+    const iolink_app_callbacks_t* app_callbacks; /**< Application lifecycle/PD callbacks (may be
+                                                    NULL unless IOLINK_APP_PD_INPUT_CALLBACK=1,
+                                                    which requires on_pd_input). */
+    const iolink_device_info_t* device_info;     /**< Static device identification data. */
 #if IOLINK_FEATURE_DATA_STORAGE
     const iolink_storage_api_t*
         storage; /**< Unified NVM backend for params, DS image and flags (required). */

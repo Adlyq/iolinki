@@ -46,9 +46,12 @@
 /**
  * @brief Application lifecycle and Process Data callbacks.
  *
- * Any field may be NULL. Every callback receives the opaque @c user pointer
- * supplied as iolink_device_config_t::user, so the application does not need a
- * global to reach its own state. Lifecycle callbacks fire once when the DLL
+ * Any field may be NULL, except that on_pd_input is required (and the only
+ * PD-input source) when IOLINK_APP_PD_INPUT_CALLBACK is 1; initialization
+ * rejects a missing callback with IOLINK_DEVICE_INIT_ERR_PD_INPUT. Every
+ * callback receives the opaque @c user pointer supplied as
+ * iolink_device_config_t::user, so the application does not need a global to
+ * reach its own state. Lifecycle callbacks fire once when the DLL
  * enters the corresponding state. The PD callbacks fire on every processed
  * OPERATE cycle. @ref on_pd_output reports the output Process Data received
  * from the Master (Master -> Device). When IOLINK_APP_PD_INPUT_CALLBACK is 1,
