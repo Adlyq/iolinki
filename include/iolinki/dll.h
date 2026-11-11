@@ -216,10 +216,10 @@ typedef struct
     volatile uint8_t back_to_box_cycles;  /**< Frames seen since Back-to-box was requested */
 
     /* One-shot handshake flags, set by either context and consumed by the main
-     * pump; the 64-bit deadlines stay main-owned. Each is set to 1 and cleared
-     * to 0 only by the main pump where the write side is ISR-context, so a set
-     * that races the consume is idempotent: the request is applied in this pass
-     * or the next one. */
+     * pump; the 64-bit deadlines stay main-owned. Each is set to 1 by either
+     * context and cleared to 0 only by the main pump; a set that races the
+     * consume is idempotent (the request is applied in this pass or the next
+     * one). phy_faults_rearm is consumed inside the critical section. */
     volatile uint8_t isr_dsio_clear;         /**< ISR served the startup probe: clear T_DSIO */
     volatile uint8_t isr_fallback_pending;   /**< ISR accepted FALLBACK: arm T_FBD from main */
     volatile uint8_t fallback_clear_request; /**< A non-FALLBACK command was applied: clear T_FBD */
@@ -376,8 +376,10 @@ typedef struct
     uint8_t max_retries;             /**< Configured max retries (default 3) */
     uint32_t voltage_faults;         /**< Cumulative voltage fault count (edge per fault
                                           with get_faults(), poll cycle on the legacy path) */
-    uint32_t overtemp_faults;        /**< Cumulative over-temperature fault count */
-    uint32_t short_circuits;         /**< Cumulative short circuit count */
+    uint32_t overtemp_faults;        /**< Cumulative over-temperature fault count (edge per
+                                          fault with get_faults(), 0 on the legacy path) */
+    uint32_t short_circuits;         /**< Cumulative short circuit count (edge per fault with
+                                          get_faults(), poll cycle on the legacy path) */
     uint8_t phy_faults_last;         /**< Last get_faults() bitmask (edge detection) */
     volatile uint8_t fallback_count; /**< Consecutive fallback count for SIO transition */
     uint8_t sio_fallback_threshold;  /**< Fallback threshold to enter SIO mode (default 3) */
@@ -465,8 +467,8 @@ typedef struct
     uint32_t total_retries;      /**< Cumulative retry count */
     uint32_t voltage_faults;     /**< Cumulative voltage fault count (edge per fault with
                                      get_faults(), poll cycle on the legacy path) */
-    uint32_t overtemp_faults;    /**< Cumulative over-temperature fault count (edge per fault
-                                     with get_faults(), poll cycle on the legacy path) */
+    uint32_t overtemp_faults;    /**< Cumulative over-temperature fault count (edge per
+                                     fault with get_faults(), 0 on the legacy path) */
     uint32_t short_circuits;     /**< Cumulative short circuit count (edge per fault with
                                      get_faults(), poll cycle on the legacy path) */
     uint32_t isr_tx_dropped;     /**< Replies the transport could not transmit (main and ISR) */

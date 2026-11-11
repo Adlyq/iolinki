@@ -78,7 +78,7 @@
  *                           |                 | into the reply buffer internally
  * PD data (on_pd_input)     | application     | filled buffer borrowed; return value
  *                           |                 | is the PD-valid flag (callback profile)
- * PD buffer (pd_output_read)| caller          | filled by the call; caller owns it
+ * PD buffer (pd_output_read) | caller          | filled by the call; caller owns it
  * vendor_service input      | caller          | borrowed for the call
  * vendor_service output     | caller          | capacity in *output_length; the
  *                           |                 | callback sets the used length

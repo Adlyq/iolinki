@@ -40,7 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `iolink_dll_prepare_cyclic_reply()` (no-op), `cyclic_reply_precached`,
   `IOLINK_OD_EVENT_MODE`, `IOLINK_OPERATE_TIMEOUT_MS`,
   `IOLINK_PHY_OWNS_LINE_STATE`, `IOLINK_DS_STATE_LOCKED`,
-  `iolink_device_ctx_size()` and the unused ISDU transport states.
+  `IOLINK_REPLY_VARIANT_COUNT`, `iolink_device_ctx_size()` and the unused ISDU
+  transport states.
 
 ### Fixed (Type-0 reset and PHY frame contract)
 - A MasterCommand (Table B.2, e.g. `0x97` DeviceStartup) written to Direct
