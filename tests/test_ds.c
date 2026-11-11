@@ -82,6 +82,24 @@ static void test_ds_state_transitions(void** state)
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
 }
 
+/* The device pump services the DS state machine while the ISDU transport is
+ * idle: no manual iolink_ds_process() call is needed. */
+static void test_ds_auto_processed_by_device_pump(void** state)
+{
+    (void) state;
+    iolink_test_device_t dev;
+
+    iolink_ds_mock_reset();
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_test_device_init(&dev, NULL, NULL), 0);
+
+    /* Queue an upload request as the DS command path would. */
+    dev.ctx.dll.ds.state = IOLINK_DS_STATE_UPLOAD_REQ;
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(dev.ctx.dll.ds.state, IOLINK_DS_STATE_UPLOADING);
+}
+
 static void test_ds_commands_locked(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0156");
@@ -896,6 +914,7 @@ int main(void)
         cmocka_unit_test(test_ds_checksum),
         cmocka_unit_test(test_ds_storage_integration),
         cmocka_unit_test(test_ds_state_transitions),
+        cmocka_unit_test(test_ds_auto_processed_by_device_pump),
         cmocka_unit_test(test_ds_commands_locked),
         cmocka_unit_test(test_ds_commands_unlocked),
         cmocka_unit_test(test_ds_param_round_trip),

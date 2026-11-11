@@ -658,7 +658,7 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 
 - `include/iolinki/dll.h`：`iolink_dll_init/process/process_isr()`、
   `iolink_dll_expected_req_len()`、
-  `iolink_dll_reply_variant()`、模式/波特率/PD 获取函数以及 `iolink_dll_stats_t`。
+  模式/波特率/PD 获取函数以及 `iolink_dll_stats_t`。
   设备层已经完成这些接线；只有实现自定义传输时才直接使用，并且需要自行负责
   事件/ISDU/DS 集成。
 - `include/iolinki/phy_tiol112.h` 和 `phy_l6362a.h`：收发器驱动。用板级 IO 回调调用

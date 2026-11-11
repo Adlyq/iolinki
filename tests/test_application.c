@@ -134,6 +134,15 @@ static void test_app_callbacks_lifecycle(void** state)
         assert_true(g_cb_operate >= 1);
         assert_true(g_cb_pd_output >= 1);
     }
+
+    /* Re-initialize with the user already configured: the init-time
+     * on_startup() must forward it too (not only the transition hooks).
+     * setup_mock_phy() is NOT called again: its infinite expectation buckets
+     * satisfy the PHY traffic of both inits. */
+    g_cb_startup = 0;
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), 0);
+    assert_true(g_cb_startup >= 1);
 }
 
 int main(void)

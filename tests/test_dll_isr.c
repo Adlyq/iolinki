@@ -8,8 +8,7 @@
 
 /**
  * @file test_dll_isr.c
- * @brief Unit tests for the pure ISR-side framing helpers and reply-variant
- *        selection (Figure A.5/A.9/A.14).
+ * @brief Unit tests for the pure ISR-side framing helpers (Figure A.5/A.9/A.14).
  */
 
 #include <stdarg.h>
@@ -83,38 +82,11 @@ static void test_expected_req_len_operate(void** state)
     assert_int_equal(iolink_dll_expected_req_len(NULL, 0x80U), 0U);
 }
 
-/* Reply-variant selection (A.14): process vs acyclic OD, read vs write. */
-static void test_reply_variant_selection(void** state)
-{
-    (void) state;
-    iolink_dll_ctx_t dll;
-    init_dll(&dll, IOLINK_M_SEQ_TYPE_0, 1U, 0U, 0U);
-    dll.state = IOLINK_DLL_STATE_PREOPERATE;
-    assert_int_equal(iolink_dll_reply_variant(&dll, 0x80U), IOLINK_REPLY_TYPE0_OD);
-    assert_int_equal(iolink_dll_reply_variant(&dll, 0x00U), IOLINK_REPLY_TYPE0_CKS);
-
-    iolink_dll_ctx_t op;
-    init_dll(&op, IOLINK_M_SEQ_TYPE_1_2, 2U, 2U, 2U);
-    op.state = IOLINK_DLL_STATE_OPERATE;
-
-    /* Process channel. */
-    assert_int_equal(iolink_dll_reply_variant(&op, 0x80U), IOLINK_REPLY_CYCLIC_READ);
-    assert_int_equal(iolink_dll_reply_variant(&op, 0x00U), IOLINK_REPLY_CYCLIC_WRITE);
-    /* Acyclic OD channels: READ serves the staged OD response, WRITE has no OD. */
-    assert_int_equal(iolink_dll_reply_variant(&op, 0xE0U), IOLINK_REPLY_ACYCLIC_READ);
-    assert_int_equal(iolink_dll_reply_variant(&op, 0x60U), IOLINK_REPLY_CYCLIC_WRITE);
-    assert_int_equal(iolink_dll_reply_variant(&op, 0xA0U), IOLINK_REPLY_ACYCLIC_READ);
-    assert_int_equal(iolink_dll_reply_variant(&op, 0xC0U), IOLINK_REPLY_ACYCLIC_READ);
-
-    assert_int_equal(iolink_dll_reply_variant(NULL, 0x80U), IOLINK_REPLY_NONE);
-}
-
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_expected_req_len_type0),
         cmocka_unit_test(test_expected_req_len_operate),
-        cmocka_unit_test(test_reply_variant_selection),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

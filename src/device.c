@@ -21,6 +21,12 @@
 #include "dll_internal.h"
 #include <string.h>
 
+#if IOLINK_APP_PD_INPUT_CALLBACK
+/* Profile marker declared in application.h: exists only in callback builds so a
+ * mismatched application fails to link instead of corrupting the vtable. */
+const uint8_t iolink_app_pd_input_callback_profile = 1U;
+#endif
+
 /** @brief DLL state-change callback: dispatches to the app startup/preoperate/operate hooks. */
 static void device_state_cb(void* user, iolink_dll_state_t state)
 {

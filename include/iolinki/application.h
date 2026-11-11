@@ -32,6 +32,21 @@
 #define IOLINK_APP_PD_INPUT_CALLBACK 0
 #endif
 
+#if IOLINK_APP_PD_INPUT_CALLBACK
+/**
+ * @brief Link-time profile marker for the callback profile.
+ *
+ * Defined only by a library built with IOLINK_APP_PD_INPUT_CALLBACK=1. An
+ * application must use the same value (the iolink_app_callbacks_t layout
+ * depends on it). Referencing this symbol from an application translation unit
+ * (e.g. a file-scope `const void* const probe = &...;`) turns a mismatched
+ * profile into a link error instead of undefined behaviour. Applications that
+ * consume the library through add_subdirectory() inherit the setting
+ * automatically via the PUBLIC compile definition.
+ */
+extern const uint8_t iolink_app_pd_input_callback_profile;
+#endif
+
 /**
  * @file application.h
  * @brief IO-Link Application Layer API for Process Data

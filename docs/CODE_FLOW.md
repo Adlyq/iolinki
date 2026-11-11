@@ -935,6 +935,7 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | 位置 | 内容 | 归类 |
 | :--- | :--- | :--- |
 | `dll_send()`（`dll.c`） | `isr_tx_payload` 暂存（≤66 B） | 主→ISR 应答移交；暂存本身无锁（主上下文单写者 + 发布字 `isr_tx_pending`），只有直发回退（PHY 无 `request_service()`，非 `IOLINK_PHY_FEATURE_ISR_TX_ONLY`）在临界区内驱动 PHY |
+| `dll_poll_phy_faults()`（`dll.c`） | `phy_faults_rearm` + `phy_faults_last` 的读-清 | ISR 置位（STARTUP 复位）、主上下文消费的握手标志；临界区只包这两个字节，`get_faults()` 在锁外调用 |
 | `iolink_dll_set_pd_length()`（`dll.c`） | PD-in/PD-out 长度对 | 2 字节 RMW |
 | `device.c`（2 处） | PD-in 发布（`on_pd_input` 回调路径 / `iolink_device_pd_input_update()`），交换 `pd_in_active`/`pd_*_len`/`pd_valid` | 索引/长度标量（PA 拷贝在锁外；PD-out 读取不取锁） |
 | `events.c`（10 处） | 事件队列、pending 表、事件内存 | 事件引擎内部不变式；ISR 侧只读 flag/memory |

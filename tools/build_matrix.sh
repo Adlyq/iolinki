@@ -26,7 +26,7 @@ if [ -z "${JOBS:-}" ]; then
     JOBS="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
 fi
 
-STRICT_FLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
+STRICT_FLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow -Wundef"
 
 FAIL_FAST=0
 KEEP=0

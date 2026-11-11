@@ -60,25 +60,6 @@ typedef enum
  */
 typedef void (*iolink_dll_state_cb_t)(void* user, iolink_dll_state_t state);
 
-/**
- * @brief Which reply layout an incoming M-sequence requires (Figure A.5/A.14).
- *
- * Derived purely from the request's MC octet plus the current state / configured
- * M-sequence type, so the ISR-side pump can select a pre-built reply image
- * without running any protocol logic itself. The content of each variant is
- * still produced by the main pump.
- */
-typedef enum
-{
-    IOLINK_REPLY_NONE = 0U,    /**< No pre-staged variant (main pump answers) */
-    IOLINK_REPLY_CYCLIC_READ,  /**< OPERATE process READ  : payload [OD...][PD-in...] */
-    IOLINK_REPLY_CYCLIC_WRITE, /**< OPERATE process WRITE : payload [PD-in...] (no OD) */
-    IOLINK_REPLY_ACYCLIC_READ, /**< OPERATE OD READ (ISDU/page/diag): payload
-                                    [od_resp...][PD-in...] (Busy until answered) */
-    IOLINK_REPLY_TYPE0_OD,     /**< Type-0 READ   : answered by the main pump */
-    IOLINK_REPLY_TYPE0_CKS     /**< Type-0 WRITE  : answered by the main pump */
-} iolink_reply_variant_t;
-
 /** Largest M-sequence the library frames (request or reply), in octets. */
 #define IOLINK_M_SEQ_MAX_LEN (IOLINK_PD_OUT_MAX_SIZE + IOLINK_OD_MAX_SIZE + 2U)
 
@@ -510,24 +491,13 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx);
 uint8_t iolink_dll_expected_req_len(const iolink_dll_ctx_t* ctx, uint8_t mc);
 
 /**
- * @brief Which reply layout the request @p mc requires.
- *
- * Pure, ISR-safe and read-only. The ISR pump selects the reply layout from it;
- * it must be kept consistent with the reply the main pump builds.
- * @param ctx DLL context (read only)
- * @param mc  Master-command (first) octet of the request
- * @return Reply variant to transmit.
- */
-iolink_reply_variant_t iolink_dll_reply_variant(const iolink_dll_ctx_t* ctx, uint8_t mc);
-
-/**
  * @brief ISR-side pump for a raw-octet (single-octet transceiver) PHY.
  *
  * Called from the PHY data-interrupt handler. It pulls received octets via
  * phy->rx_octet(), frames the M-sequence (using the pure
  * iolink_dll_expected_req_len()), publishes the complete request to the mailbox
- * consumed by iolink_dll_process(), selects the pre-built reply variant from the
- * request (iolink_dll_reply_variant()) and feeds the reply octets via
+ * consumed by iolink_dll_process(), composes the reply from the shared state and
+ * feeds the reply octets via
  * phy->tx_octet()/tx_done() (TX BYTE) or phy->tx_frame() (TX FRAME). It never
  * runs protocol logic (ISDU / params /
  * events / vendor); those stay in the main pump.

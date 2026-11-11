@@ -35,12 +35,6 @@ option(IOLINK_PHY_FEATURE_SIO_CQ "Compile PHY manual C/Q control" ON)
 option(IOLINK_PHY_FEATURE_LEGACY_DIAG "Compile PHY legacy diagnostics" ON)
 option(IOLINK_APP_PD_INPUT_CALLBACK "Use the on_pd_input callback instead of the polling PD API" OFF)
 
-if(IOLINK_APP_PD_INPUT_CALLBACK)
-    # add_definitions (rather than add_compile_definitions, which needs CMake >=
-    # 3.12) keeps the supported minimum CMake at 3.10.
-    add_definitions(-DIOLINK_APP_PD_INPUT_CALLBACK=1)
-endif()
-
 if(IOLINK_MINIMAL_PROFILE OR IOLINK_TINY_PROFILE)
     set(IOLINK_FEATURE_DATA_STORAGE OFF)
     set(IOLINK_FEATURE_SYSTEM_COMMAND OFF)
@@ -86,6 +80,12 @@ foreach(_iolink_feature
         target_compile_definitions(iolinki PUBLIC ${_iolink_feature}=0)
     endif()
 endforeach()
+
+if(IOLINK_APP_PD_INPUT_CALLBACK)
+    # PUBLIC so an application that consumes iolinki via add_subdirectory()
+    # compiles the same profile: iolink_app_callbacks_t's layout depends on it.
+    target_compile_definitions(iolinki PUBLIC IOLINK_APP_PD_INPUT_CALLBACK=1)
+endif()
 
 # Platform Selection
 set(IOLINK_PLATFORM "LINUX" CACHE STRING "Target platform: LINUX, BAREMETAL")

@@ -2105,21 +2105,3 @@ uint8_t iolink_dll_expected_req_len(const iolink_dll_ctx_t* ctx, uint8_t mc)
     }
     return dll_compute_req_len(ctx, mc);
 }
-
-iolink_reply_variant_t iolink_dll_reply_variant(const iolink_dll_ctx_t* ctx, uint8_t mc)
-{
-    if (ctx == NULL) {
-        return IOLINK_REPLY_NONE;
-    }
-    const bool write = ((mc & IOLINK_MC_RW_MASK) == 0U);
-    if (dll_expected_type_bits(ctx) == IOLINK_MSEQ_TYPE_0) {
-        return write ? IOLINK_REPLY_TYPE0_CKS : IOLINK_REPLY_TYPE0_OD;
-    }
-    if ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PROCESS) {
-        return write ? IOLINK_REPLY_CYCLIC_WRITE : IOLINK_REPLY_CYCLIC_READ;
-    }
-    /* Non-cyclic OD channel (ISDU / page / diagnosis). A WRITE reply carries no
-     * OD, so it reuses the cyclic-write payload [PD-in]. A READ reply carries the
-     * staged OD response (Busy until the main pump has answered). */
-    return write ? IOLINK_REPLY_CYCLIC_WRITE : IOLINK_REPLY_ACYCLIC_READ;
-}
