@@ -419,6 +419,9 @@ static void test_get_faults_overtemp_and_short(void** state)
     bool overtemp_present = false;
     bool short_present = false;
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
+        if (!ctx.events.pending[i].active) {
+            continue;
+        }
         if (ctx.events.pending[i].code == IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD) {
             overtemp_present = ctx.events.pending[i].present;
         }
@@ -486,9 +489,15 @@ static void test_get_faults_clear_emits_disappears(void** state)
     assert_int_equal(ev.code, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD);
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
 
-    g_fault_ms = IOLINK_EVENT_MIN_APPEAR_MS;
+    /* The fall is reported immediately, but the disappearance must respect the
+     * 50 ms minimum window: nothing is queued at 10 ms. */
+    g_fault_ms = 10U;
     mock_faults = 0U;
     iolink_dll_process(&ctx);
+    iolink_events_process(&ctx.events);
+    assert_false(iolink_events_pending(&ctx.events));
+
+    g_fault_ms = IOLINK_EVENT_MIN_APPEAR_MS;
     iolink_events_process(&ctx.events);
 
     assert_true(iolink_events_pop(&ctx.events, &ev));
