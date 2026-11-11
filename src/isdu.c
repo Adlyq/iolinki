@@ -1853,3 +1853,8 @@ uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* busy, 
     }
     return (uint8_t) n;
 }
+
+bool iolink_isdu_is_idle(const iolink_isdu_ctx_t* ctx)
+{
+    return (ctx != NULL) && (ctx->state == ISDU_STATE_IDLE);
+}

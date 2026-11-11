@@ -119,12 +119,10 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     dll->pd_out_len_current = 0U;
     dll->pd_in_len_current = 0U;
     dll->pd_valid = true;
-    dll->cyclic_reply_precached = true;
     g_frame_ready = 0U;
     g_tx_calls = 0U;
     g_line_busy = 0U;
     now_us = 1000000U;
-    iolink_dll_prepare_cyclic_reply(dll);
 }
 
 /* A busy line must not be overwritten: the ISR declines and the main pump owns

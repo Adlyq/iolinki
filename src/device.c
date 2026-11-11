@@ -162,8 +162,6 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     /* The ISR transport uses od_width (0/1/2/8/32) throughout; keep od_len in
      * sync so no legacy 1/2 assumption leaks into this build. */
     ctx->dll.od_len = ctx->dll.od_width;
-    ctx->dll.cyclic_reply_precached =
-        (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) && dll_phy_has_tx(&ctx->dll);
 
     /* Adopt the configured operating COM (and its timing limits) before the
      * minimum cycle time is derived from the baudrate. */
@@ -357,10 +355,6 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
 #endif
     device_apply_stack_config(ctx);
     ctx->master_lost_last = ctx->dll.master_lost;
-    /* Seed the pre-staged cyclic variants so the first ISR reply is complete. */
-    if (ctx->dll.cyclic_reply_precached) {
-        iolink_dll_prepare_cyclic_reply(&ctx->dll);
-    }
 
     if ((config->app_callbacks != NULL) && (config->app_callbacks->on_startup != NULL)) {
         config->app_callbacks->on_startup();
@@ -427,7 +421,7 @@ static bool device_events_need_service(const iolink_events_ctx_t* events)
  */
 static void device_service_events_and_ds(iolink_device_ctx_t* ctx)
 {
-    if (ctx->dll.isdu.state != ISDU_STATE_IDLE) {
+    if (!iolink_isdu_is_idle(&ctx->dll.isdu)) {
         return;
     }
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -527,10 +521,6 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
         ctx->dll.pd_valid = valid;
         ctx->dll.pd_in_active = inactive;
         IOLINK_CRITICAL_EXIT();
-
-        if (ctx->dll.cyclic_reply_precached) {
-            iolink_dll_prepare_cyclic_reply(&ctx->dll);
-        }
     }
 #endif
 }
@@ -547,10 +537,6 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
     iolink_dll_process(&ctx->dll);
 
     device_service_events_and_ds(ctx);
-
-    /* State callbacks triggered from the data ISR are deferred to this window,
-     * in transition order (a burst of frames cannot overwrite an earlier one). */
-    iolink_dll_flush_state_callbacks(&ctx->dll);
 
     device_notify_master_lost(ctx);
     device_dispatch_resets(ctx);
@@ -605,12 +591,6 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     ctx->dll.pd_valid = valid;
     ctx->dll.pd_in_active = inactive;
     IOLINK_CRITICAL_EXIT();
-
-    /* Rebuild the pre-staged cyclic reply variants (double buffered) so the ISR
-     * can answer the next cyclic frame without the main loop in the path. */
-    if (ctx->dll.cyclic_reply_precached) {
-        iolink_dll_prepare_cyclic_reply(&ctx->dll);
-    }
 
     return 0;
 #endif /* IOLINK_APP_PD_INPUT_CALLBACK */

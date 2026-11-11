@@ -53,17 +53,10 @@ typedef struct
  */
 typedef enum
 {
-    ISDU_STATE_IDLE = 0U,              /**< Waiting for new Request */
-    ISDU_STATE_HEADER_INITIAL = 1U,    /**< Parsing first byte (RW + Len) */
-    ISDU_STATE_HEADER_EXT_LEN = 2U,    /**< Parsing extended length byte */
-    ISDU_STATE_HEADER_INDEX_HIGH = 3U, /**< Parsing Index High byte */
-    ISDU_STATE_HEADER_INDEX_LOW = 4U,  /**< Parsing Index Low byte */
-    ISDU_STATE_HEADER_SUBINDEX = 5U,   /**< Parsing Subindex byte */
-    ISDU_STATE_DATA_COLLECT = 6U,      /**< Collecting payload for WRITE */
-    ISDU_STATE_SEGMENT_COLLECT = 7U,   /**< Waiting for next segment in multi-frame write */
-    ISDU_STATE_SERVICE_EXECUTE = 8U,   /**< Dispatching to application layer */
-    ISDU_STATE_RESPONSE_READY = 9U,    /**< Response buffer populated, awaiting retrieval */
-    ISDU_STATE_BUSY = 10U              /**< Internal command execution in progress */
+    ISDU_STATE_IDLE = 0U,            /**< Waiting for new Request */
+    ISDU_STATE_HEADER_INITIAL = 1U,  /**< Parsing the first header octet (transient) */
+    ISDU_STATE_SERVICE_EXECUTE = 2U, /**< Dispatching to the application layer */
+    ISDU_STATE_RESPONSE_READY = 3U   /**< Response buffer populated, awaiting retrieval */
 } isdu_state_t;
 
 /**
@@ -204,6 +197,17 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_o
  */
 uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* busy, uint8_t* dst,
                                       size_t dst_size);
+
+/**
+ * @brief Whether the ISDU transport is idle.
+ *
+ * Idle means no request is being collected, executed or read out; the device
+ * layer uses this to run the event/DS engines only between ISDU exchanges.
+ *
+ * @param ctx ISDU context (read only, may be NULL)
+ * @return true while the engine is in ISDU_STATE_IDLE
+ */
+bool iolink_isdu_is_idle(const iolink_isdu_ctx_t* ctx);
 
 /**
  * @brief Get the next octet of the application-level ISDU response payload.

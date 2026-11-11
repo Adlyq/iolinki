@@ -701,9 +701,6 @@ uint8_t iolink_ds_state_property(const iolink_ds_ctx_t* ctx)
         case IOLINK_DS_STATE_DOWNLOADING:
             property = 0x04U; /* 0b10 Download */
             break;
-        case IOLINK_DS_STATE_LOCKED:
-            property = 0x06U; /* 0b11 Data Storage locked */
-            break;
         default:
             property = 0x00U; /* 0b00 Inactive */
             break;

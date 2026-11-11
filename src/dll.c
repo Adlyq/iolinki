@@ -964,8 +964,7 @@ static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
     if (ctx == NULL) {
         return;
     }
-    const bool busy =
-        (ctx->isdu.state == ISDU_STATE_SERVICE_EXECUTE) || (ctx->isdu.state == ISDU_STATE_BUSY);
+    const bool busy = (ctx->isdu.state == ISDU_STATE_SERVICE_EXECUTE);
     uint8_t count = 0U;
     uint8_t sel = ctx->isdu.resp_pub;
     if (ctx->isdu.state == ISDU_STATE_RESPONSE_READY) {
@@ -1794,8 +1793,9 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
         return;
     }
     dll_process_body(ctx);
-    /* Level-based application notification: the single place the state hook can
-     * run. Delivery does not depend on which path the body took. */
+    /* Level-based application notification: the single place the state hook runs
+     * for both the device layer and direct DLL users. The device layer does not
+     * flush again after its event/DS service. */
     iolink_dll_flush_state_callbacks(ctx);
 }
 
@@ -1988,11 +1988,6 @@ void iolink_dll_set_t_ren_limit_us(iolink_dll_ctx_t* ctx, uint32_t limit_us)
     if (ctx == NULL) return;
     ctx->t_ren_limit_us = limit_us;
     ctx->t_ren_override = (limit_us != 0U);
-}
-
-void iolink_dll_prepare_cyclic_reply(iolink_dll_ctx_t* ctx)
-{
-    (void) ctx; /* Replies are generated directly from the shared state now. */
 }
 
 /* Derive the expected request length for the M-sequence whose first octet

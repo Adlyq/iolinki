@@ -311,19 +311,18 @@ static uint8_t dll_isr_status_flags(const iolink_dll_ctx_t* ctx)
     return flags;
 }
 
-/* Send a short reply from the ISR (payload + CKS). Used by the Type-0 fast path;
- * the payload buffer is the library's own staging buffer, so it stays valid for
- * a TX FRAME transfer. */
-/* Transmit a reply whose payload is already staged in ctx->isr_tx_payload.
- * Appends the A.1.6 CKS (flags | checksum6(acc ^ flags)) in the same buffer. */
+/* The ISR always uses its own staging slot, so the main pump can keep
+ * alternating between 0/1 without sharing a counter with interrupt context. */
 static uint8_t dll_isr_tx_alloc(const iolink_dll_ctx_t* ctx)
 {
-    /* The ISR always uses its own slot, so the main pump can keep alternating
-     * between 0/1 without sharing a counter with interrupt context. */
     (void) ctx;
     return IOLINK_TX_ISR_SLOT;
 }
 
+/* Send a short reply from the ISR (payload + CKS), used by the Type-0 fast
+ * path. The payload buffer is the library's own staging buffer, so it stays
+ * valid for a TX FRAME transfer. The checksum is appended as
+ * flags | checksum6(acc ^ flags) in the same buffer. */
 static void dll_isr_send_staged(iolink_dll_ctx_t* ctx, uint8_t slot, uint8_t len, uint8_t flags)
 {
     if (ctx->phy->response_timer_stop != NULL) {

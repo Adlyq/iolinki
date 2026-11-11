@@ -189,9 +189,8 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `get_voltage_mv`, `is_short_circuit` | 可选，旧版 | 仅在 `get_faults == NULL` 时查询。 |
 
 当 `detect_wakeup == NULL` 时，DLL 认为 PHY 自己管理线路状态，并直接从 SDCI 开始。
-这对自行执行唤醒握手的收发器很重要。`include/iolinki/config.h` 声明了
-`IOLINK_PHY_OWNS_LINE_STATE`，但当前源码没有引用它；以运行时根据
-`detect_wakeup` 进行的推断为准。
+这对自行执行唤醒握手的收发器很重要。该行为完全由运行时根据 `detect_wakeup`
+进行的推断决定，没有额外的编译期开关。
 
 当 `IOLINK_PHY_FEATURE_ISR_TX_ONLY=0` 时，没有 `request_service()` 的 PHY 会获得
 从调用者上下文直接发送的旧版回退路径。这只适用于主机测试，不适用于必须满足 t_A 的
@@ -655,7 +654,7 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 正常应用使用 `device.h` 及上文列出的特性头文件。其余公开头文件用于底层传输和板级支持：
 
 - `include/iolinki/dll.h`：`iolink_dll_init/process/process_isr()`、
-  `iolink_dll_prepare_cyclic_reply()`、`iolink_dll_expected_req_len()`、
+  `iolink_dll_expected_req_len()`、
   `iolink_dll_reply_variant()`、模式/波特率/PD 获取函数以及 `iolink_dll_stats_t`。
   设备层已经完成这些接线；只有实现自定义传输时才直接使用，并且需要自行负责
   事件/ISDU/DS 集成。

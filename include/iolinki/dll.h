@@ -226,18 +226,15 @@ typedef struct
     volatile uint8_t isr_fallback_clear;   /**< A non-FALLBACK command was applied: clear T_FBD */
 
     /* Configuration */
-    uint8_t m_seq_type;          /**< Supported M-sequence type */
-    uint8_t pd_in_len;           /**< Input Process Data length */
-    uint8_t pd_out_len;          /**< Output Process Data length */
-    uint8_t od_len;              /**< Streaming-path OD length (1 or 2 bytes). */
-    uint8_t od_width;            /**< OPERATE OD width m (Table A.10). Whether a frame
-                                      carries OD is decided per frame from the MC R/W
-                                      bit (Figure A.14): a WRITE request carries OD
-                                      after PD-out, a READ reply carries OD before PD-in,
-                                      and the opposite direction carries none. */
-    bool cyclic_reply_precached; /**< Legacy flag (kept for source compatibility):
-                                      replies are now generated directly from the
-                                      shared state by the ISR pump. */
+    uint8_t m_seq_type; /**< Supported M-sequence type */
+    uint8_t pd_in_len;  /**< Input Process Data length */
+    uint8_t pd_out_len; /**< Output Process Data length */
+    uint8_t od_len;     /**< Streaming-path OD length (1 or 2 bytes). */
+    uint8_t od_width;   /**< OPERATE OD width m (Table A.10). Whether a frame
+                             carries OD is decided per frame from the MC R/W
+                             bit (Figure A.14): a WRITE request carries OD
+                             after PD-out, a READ reply carries OD before PD-in,
+                             and the opposite direction carries none. */
     /* ISR ISDU read view. The main pump publishes {length, busy, buffer} as one
      * atomic word so the ISR never observes a half-updated tuple; the ISR owns
      * the FlowCTRL segment index and adopts a new word at START. */
@@ -508,27 +505,13 @@ uint8_t iolink_dll_expected_req_len(const iolink_dll_ctx_t* ctx, uint8_t mc);
 /**
  * @brief Which reply layout the request @p mc requires.
  *
- * Pure, ISR-safe and read-only. The ISR pump selects the matching pre-staged
- * reply variant from it; it must be kept consistent with the reply the main pump
- * builds in iolink_dll_prepare_cyclic_reply().
+ * Pure, ISR-safe and read-only. The ISR pump selects the reply layout from it;
+ * it must be kept consistent with the reply the main pump builds.
  * @param ctx DLL context (read only)
  * @param mc  Master-command (first) octet of the request
  * @return Reply variant to transmit.
  */
 iolink_reply_variant_t iolink_dll_reply_variant(const iolink_dll_ctx_t* ctx, uint8_t mc);
-
-/**
- * @brief Build and pre-stage the deterministic cyclic reply variants.
- *
- * Only meaningful when cyclic_reply_precached is set (raw-octet PHY): builds
- * both direction variants from the current PD-in, validity and event state into
- * the inactive slot of each double buffer (read: [OD...][PD-in...]CKS, Figure
- * A.9/A.14; write: [PD-in...]CKS, Figure A.14) and swaps the active index
- * atomically. The ISR pump selects the matching one at frame end. Call it
- * whenever the PD-in image changes (e.g. once per main-loop cycle).
- * @param ctx DLL context
- */
-void iolink_dll_prepare_cyclic_reply(iolink_dll_ctx_t* ctx);
 
 /**
  * @brief ISR-side pump for a raw-octet (single-octet transceiver) PHY.

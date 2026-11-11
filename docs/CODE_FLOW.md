@@ -200,11 +200,7 @@ flowchart TD
     L --> M["ds_init(storage)<br/>读 DS 镜像和 DS_UPLOAD_FLAG"]
     M --> O["ds_bind_params / ds_bind_param_access"]
     O --> P["device_apply_stack_config()<br/>PD/OD 长度、t_pd、工作 COM、MinCycleTime"]
-    P --> Q{"cyclic_reply_precached?"}
-    Q -- 是 --> R["iolink_dll_prepare_cyclic_reply()<br/>当前为空操作，保留兼容接口"]
-    Q -- 否 --> S["跳过"]
-    R --> T["调用 on_startup()"]
-    S --> T
+    P --> T["调用 on_startup()"]
 ```
 
 要点：
@@ -440,7 +436,7 @@ flowchart LR
 
 ### 7.1 传输状态机
 
-实际使用的状态只有 `IDLE`、`HEADER_INITIAL`（瞬态）、`SERVICE_EXECUTE`、`RESPONSE_READY`；头文件里的 `HEADER_*`、`DATA_COLLECT` 等是保留枚举，当前实现不逐字节停在这些状态。
+实际使用的状态只有 `IDLE`、`HEADER_INITIAL`（瞬态）、`SERVICE_EXECUTE`、`RESPONSE_READY`；枚举只保留这四个状态，逐字节解析在 `iolink_isdu_od_write()` 内完成，不逐字节停留。
 
 ```mermaid
 stateDiagram-v2
@@ -692,14 +688,14 @@ sequenceDiagram
    - `dll_poll_diagnostics()`；
    - master-lost 计算、1 s idle 计数、T_DSIO、T_FBD、t_pd；
    - SIO 唤醒检测；
-   - 邮箱处理 → `dll_process_complete_frame()`。
+   - 邮箱处理 → `dll_process_complete_frame()`；
+   - `iolink_dll_flush_state_callbacks()`，电平式交付当前状态（ISR 期间的多次迁移合并为最终状态；ISR 进入 STARTUP 的复位通知优先单独投递）。
 3. `device_service_events_and_ds()`：ISDU 传输空闲时驱动 `iolink_ds_process()` / `iolink_events_process()`，并在 DS 响应读完后发布 DS_UPLOAD_REQ 通知。
-4. `iolink_dll_flush_state_callbacks()`，电平式交付当前状态（ISR 期间的多次迁移合并为最终状态；ISR 进入 STARTUP 的复位通知优先单独投递）。
-5. master-lost/online 边沿回调：只在 `state == OPERATE` 时比较 `master_lost` 与 `master_lost_last`；离开 OPERATE 时清空旧状态。
-6. reset handler：`isdu.reset_pending` / `isdu.app_reset_pending`。
-7. OPERATE 下：
+4. master-lost/online 边沿回调：只在 `state == OPERATE` 时比较 `master_lost` 与 `master_lost_last`；离开 OPERATE 时清空旧状态。
+5. reset handler：`isdu.reset_pending` / `isdu.app_reset_pending`。
+6. OPERATE 下：
    - `on_pd_output(ctx->dll.pd_out, pd_out_len_current)`；
-   - 若 `IOLINK_APP_PD_INPUT_CALLBACK`：取一个未被 ISR 捕获的 PD-in 缓冲区，填完后在临界区交换 `pd_in_active`，随后调用 `iolink_dll_prepare_cyclic_reply()`（当前为空操作，ISR 直接读共享状态）。
+   - 若 `IOLINK_APP_PD_INPUT_CALLBACK`：取一个未被 ISR 捕获的 PD-in 缓冲区，填完后在临界区交换 `pd_in_active`（ISR 直接读共享状态组应答）。
 
 ### 9.3 回调清单与实际调用点
 
@@ -738,7 +734,7 @@ sequenceDiagram
 | `iolink_dll_on_stack_tick(ctx)` | PHY 的 Timer B 中断 | 仅双泵路径有效：授权一次主循环服务窗口；`iolink_device_process()` 在 `stack_timer_start != NULL` 时会等待该授权 |
 | `iolink_dll_take_service_window(ctx)` | `iolink_device_process()` | 消费/查询 Timer B 授权 |
 | `iolink_dll_process_isr(ctx)` | PHY 数据中断 | ISR 双泵入口 |
-| `iolink_dll_flush_state_callbacks(ctx)` | `iolink_dll_process()` 末尾、`iolink_device_process()` | 电平式交付当前状态（无变化则不调用） |
+| `iolink_dll_flush_state_callbacks(ctx)` | `iolink_dll_process()` 末尾 | 电平式交付当前状态（无变化则不调用） |
 
 ### 9.5 事件与 DS 的应用侧调用
 
@@ -981,7 +977,7 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 
 集成注意（按当前代码实际调用点）：
 
-- `IOLINK_OPERATE_TIMEOUT_MS`、`IOLINK_PHY_OWNS_LINE_STATE`、`IOLINK_OD_EVENT_MODE` 在 `src/` 中没有引用；不要按注释推断它们已生效。
+- 1 s idle 监督使用固定 1000 ms 常量（`dll_check_idle_timeout()`），不提供编译期开关。
 - `iolink_device_config_t::time_us` 是必需项，初始化时绑定到 DLL/事件上下文；NULL 会被 `iolink_device_init()` 拒绝。主循环、ISR 和事件计时都用它，核心不再调用平台时间函数；直接使用 `iolink_dll_*` 时需自行绑定 `ctx->time_us`。
 - `phy->get_faults`、`phy->set_cq_line`、`storage->erase` 当前没有栈内调用点。
 - `iolink_events_process()`、`iolink_ds_process()` 由 `iolink_device_process()` 在 ISDU 空闲时自动调度；`iolink_ds_check()` 需要应用自行调度（master 校验和来源应用自有）。

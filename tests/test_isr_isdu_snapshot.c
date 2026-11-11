@@ -138,7 +138,6 @@ static int test_eager_isdu_snapshot(void)
     dll.od_width = 2U;
     dll.pd_out_len_current = 2U;
     dll.pd_in_len_current = 0U;
-    dll.cyclic_reply_precached = true;
 
     dll.isdu.state = ISDU_STATE_RESPONSE_READY;
     dll.isdu.resp_buf[0] = 0xD4U;
@@ -147,7 +146,6 @@ static int test_eager_isdu_snapshot(void)
     dll.isdu.resp_buf[3] = 0xF2U;
     dll.isdu.resp_total = 4U;
 
-    iolink_dll_prepare_cyclic_reply(&dll);
     now_us = 1000000U;
     dll.last_activity_ms = ((uint32_t) (now_us / 1000U));
     iolink_dll_process(&dll); /* refresh the ISR snapshot */

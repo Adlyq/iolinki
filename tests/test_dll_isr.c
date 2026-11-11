@@ -110,16 +110,7 @@ static void test_reply_variant_selection(void** state)
 }
 
 /* The old pre-staged double buffer is gone: replies are generated directly
- * from the shared state by the ISR. The public helper stays as a safe no-op. */
-static void test_prepare_cyclic_reply_is_noop(void** state)
-{
-    (void) state;
-    iolink_dll_ctx_t dll;
-    init_dll(&dll, IOLINK_M_SEQ_TYPE_2_V, 2U, 2U, 2U);
-    dll.cyclic_reply_precached = true;
-    iolink_dll_prepare_cyclic_reply(&dll);
-    iolink_dll_prepare_cyclic_reply(NULL); /* NULL-safe */
-}
+ * from the shared state by the ISR. */
 
 int main(void)
 {
@@ -127,7 +118,6 @@ int main(void)
         cmocka_unit_test(test_expected_req_len_type0),
         cmocka_unit_test(test_expected_req_len_operate),
         cmocka_unit_test(test_reply_variant_selection),
-        cmocka_unit_test(test_prepare_cyclic_reply_is_noop),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

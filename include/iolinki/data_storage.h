@@ -54,7 +54,6 @@ typedef enum
     IOLINK_DS_STATE_UPLOADING = 2U,    /**< Parameter upload in progress */
     IOLINK_DS_STATE_DOWNLOAD_REQ = 3U, /**< Master requested parameter download */
     IOLINK_DS_STATE_DOWNLOADING = 4U,  /**< Parameter download in progress */
-    IOLINK_DS_STATE_LOCKED = 5U        /**< DS operation disabled/locked */
 } iolink_ds_state_t;
 
 /**

@@ -149,7 +149,6 @@ run_config no_legacy_params    BYTE_BYTE   Debug   no    "-DIOLINK_FEATURE_LEGAC
 run_config no_wakeup           BYTE_BYTE   Debug   no    "-DIOLINK_PHY_FEATURE_WAKEUP=OFF" ""
 run_config no_sio_cq           BYTE_BYTE   Debug   no    "-DIOLINK_PHY_FEATURE_SIO_CQ=OFF" ""
 run_config no_legacy_diag      BYTE_BYTE   Debug   no    "-DIOLINK_PHY_FEATURE_LEGACY_DIAG=OFF" ""
-run_config phy_owns_line_state BYTE_BYTE   Debug   no    ""                            "-DIOLINK_PHY_OWNS_LINE_STATE=1"
 run_config compat_v10          BYTE_BYTE   Debug   yes   ""                            "-DIOLINK_COMPAT_V10_STARTUP_OPERATE=1 -DIOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE=1"
 run_config ds_legacy_sub0      BYTE_BYTE   Debug   no    ""                            "-DIOLINK_DS_LEGACY_IMAGE_SUB0=1"
 run_config baremetal           BYTE_BYTE   Debug   no    "-DIOLINK_PLATFORM=BAREMETAL" ""

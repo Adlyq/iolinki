@@ -25,26 +25,6 @@
  */
 
 /* -------------------------------------------------------------------------
- * PHY / line-state configuration
- * ------------------------------------------------------------------------- */
-
-/**
- * @brief Whether the bound PHY owns the C/Q line state (wake-up / SIO<->SDCI).
- *
- * When non-zero the DLL skips the electrical wake-up handshake and runs in SDCI
- * (the PHY is contractually an already-established SDCI link). When zero (the
- * default) the DLL infers this at run time from the PHY: a PHY without a
- * wake-up detector (detect_wakeup == NULL) is treated as owning the line state.
- *
- * Override to 1 in the build system for a PHY such as the L6364 that manages the
- * SIO/wake-up handshake itself.
- * Default: 0 (keep the run-time inference).
- */
-#ifndef IOLINK_PHY_OWNS_LINE_STATE
-#define IOLINK_PHY_OWNS_LINE_STATE 0
-#endif
-
-/* -------------------------------------------------------------------------
  * Feature trimming (compile-time)
  *
  * Each macro is 1 (compiled in, the default full stack) or 0 (removed). The
@@ -376,18 +356,6 @@
 #endif
 
 /**
- * @brief OPERATE supervision window in milliseconds.
- *
- * If no checksum/type-valid frame arrives for this long while the DLL is in
- * OPERATE, the master is considered gone: the device returns to STARTUP/SIO and
- * refreshes the PHY, so a subsequent master restart (WURQ) is handled cleanly
- * instead of leaving the device stuck showing "connected".
- */
-#ifndef IOLINK_OPERATE_TIMEOUT_MS
-#define IOLINK_OPERATE_TIMEOUT_MS 200U
-#endif
-
-/**
  * @brief Fallback to SIO after a failed wake-up without a valid message (T_DSIO).
  *
  * Spec Table 47 T10: 60..300 ms, default 300 ms.
@@ -408,16 +376,6 @@
  */
 #ifndef IOLINK_OD_MAX_SIZE
 #define IOLINK_OD_MAX_SIZE 32U
-#endif
-
-/**
- * @brief OD Event Mode: Single (0) or Multiple (1) event mode.
- * Single mode: Only one event transmitted per OD cycle.
- * Multiple mode: Multiple events can be queued in OD.
- * Default: 0 (Single event mode)
- */
-#ifndef IOLINK_OD_EVENT_MODE
-#define IOLINK_OD_EVENT_MODE 0U
 #endif
 
 /** @} */ /* end of iolinki_config */

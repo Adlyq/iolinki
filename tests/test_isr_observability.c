@@ -150,9 +150,7 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     dll->od_width = 1U;
     dll->pd_out_len_current = 0U;
     dll->pd_in_len_current = 0U;
-    dll->cyclic_reply_precached = true;
     dll->pd_valid = true;
-    iolink_dll_prepare_cyclic_reply(dll);
     now_us = 1000000U;
     rx_n = 0U;
     rx_i = 0U;
@@ -210,7 +208,6 @@ static void init_type0_ctx(iolink_dll_ctx_t* dll)
     dll->od_width = 1U;
     dll->pd_out_len_current = 0U;
     dll->pd_in_len_current = 0U;
-    dll->cyclic_reply_precached = false;
     dll->pd_valid = true;
     dll->isdu.state = ISDU_STATE_RESPONSE_READY;
     dll->isdu.resp_buf[0] = 0x11U;
