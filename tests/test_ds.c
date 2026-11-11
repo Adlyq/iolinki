@@ -94,9 +94,11 @@ static void test_ds_auto_processed_by_device_pump(void** state)
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, NULL, NULL), 0);
 
-    /* A busy ISDU transport gates the DS service. */
+    /* A busy ISDU transport gates the DS service. HEADER_INITIAL is a state
+     * iolink_isdu_process() leaves untouched, so it stays busy across the
+     * pump call. */
     assert_int_equal(iolink_ds_start_upload(&dev.ctx.dll.ds), 0);
-    dev.ctx.dll.isdu.state = ISDU_STATE_SERVICE_EXECUTE;
+    dev.ctx.dll.isdu.state = ISDU_STATE_HEADER_INITIAL;
     iolink_device_process(&dev.ctx);
     assert_int_equal(dev.ctx.dll.ds.state, IOLINK_DS_STATE_UPLOAD_REQ);
 

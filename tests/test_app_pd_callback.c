@@ -88,11 +88,6 @@ static bool on_pd_input(void* user, uint8_t* data, uint8_t len)
 
 static const iolink_app_callbacks_t g_cbs = {.on_pd_input = on_pd_input};
 
-/* The callback-profile marker must be defined by the library; referencing it
- * here also fails the link if the fixture is ever built with the wrong
- * profile. */
-static const void* const g_profile_probe = &iolink_app_pd_input_callback_profile;
-
 static void make_config(iolink_device_config_t* cfg, const iolink_app_callbacks_t* cbs)
 {
     (void) memset(cfg, 0, sizeof(*cfg));
@@ -111,6 +106,10 @@ static void test_init_requires_on_pd_input(void)
 {
     iolink_device_ctx_t ctx;
     iolink_device_config_t cfg;
+
+    /* Real read of the link-time marker: also proves device.c defined it in
+     * this profile (a wrong #if or a polling-profile fixture fails here). */
+    assert(iolink_app_pd_input_callback_profile == 1U);
 
     make_config(&cfg, NULL);
     assert(iolink_device_init(&ctx, &cfg) == IOLINK_DEVICE_INIT_ERR_PD_INPUT);
@@ -145,7 +144,6 @@ static void test_callback_fills_pd_input(void)
 
 int main(void)
 {
-    (void) g_profile_probe;
     test_init_requires_on_pd_input();
     test_callback_fills_pd_input();
     return 0;
