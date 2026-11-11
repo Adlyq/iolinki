@@ -107,15 +107,15 @@ static const iolink_phy_api_t mock_phy_faults = {
     .detect_wakeup = NULL,
     .set_cq_line = NULL,
     .get_faults = mock_get_faults,
-#if IOLINK_PHY_FEATURE_LEGACY_DIAG
     .get_voltage_mv = mock_get_voltage_counted,
     .is_short_circuit = mock_is_short_counted,
-#endif
 };
 
 static void reset_fault_mock(void)
 {
     mock_faults = 0U;
+    mock_voltage_mv = 24000;
+    mock_short_circuit = false;
     mock_legacy_voltage_calls = 0;
     mock_legacy_short_calls = 0;
 }
@@ -409,6 +409,30 @@ static void test_get_faults_overtemp_and_short(void** state)
     }
     assert_true(seen[0]);
     assert_true(seen[1]);
+    assert_false(iolink_events_pending(&ctx.events));
+
+    /* Partial fall: only the over-temp condition clears. Check the per-code
+     * present flag, so clearing the wrong event cannot pass. */
+    mock_faults = IOLINK_PHY_FAULT_SHORT_CIRCUIT;
+    iolink_dll_process(&ctx);
+    assert_int_equal(ctx.events.pending_count, 1U);
+    bool overtemp_present = false;
+    bool short_present = false;
+    for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
+        if (ctx.events.pending[i].code == IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD) {
+            overtemp_present = ctx.events.pending[i].present;
+        }
+        if (ctx.events.pending[i].code == IOLINK_EVENTCODE_SHORT_CIRCUIT) {
+            short_present = ctx.events.pending[i].present;
+        }
+    }
+    assert_false(overtemp_present);
+    assert_true(short_present);
+
+    /* Full fall clears the remaining condition. */
+    mock_faults = 0U;
+    iolink_dll_process(&ctx);
+    assert_int_equal(ctx.events.pending_count, 0U);
 }
 
 static void test_get_faults_takes_priority_over_legacy(void** state)
@@ -432,6 +456,46 @@ static void test_get_faults_takes_priority_over_legacy(void** state)
     assert_false(iolink_events_pending(&ctx.events));
 }
 
+static uint32_t g_fault_ms;
+
+static uint64_t fault_time_us(void* user)
+{
+    (void) user;
+    return (uint64_t) g_fault_ms * 1000U;
+}
+
+/* Clear -> disappears end to end: the falling edge must clear the mapped code,
+ * and the event engine must emit its disappearance once the 50 ms window has
+ * elapsed. A wrong mapping would clear a different code and leave this one
+ * pending forever. */
+static void test_get_faults_clear_emits_disappears(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t ctx;
+    iolink_event_t ev;
+    reset_fault_mock();
+    g_fault_ms = 0U;
+    mock_faults = IOLINK_PHY_FAULT_OVERTEMP;
+
+    iolink_dll_init(&ctx, &mock_phy_faults);
+    ctx.time_us = fault_time_us;
+    ctx.events.time_us = fault_time_us;
+    iolink_dll_process(&ctx);
+
+    assert_true(iolink_events_pop(&ctx.events, &ev));
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD);
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
+
+    g_fault_ms = IOLINK_EVENT_MIN_APPEAR_MS;
+    mock_faults = 0U;
+    iolink_dll_process(&ctx);
+    iolink_events_process(&ctx.events);
+
+    assert_true(iolink_events_pop(&ctx.events, &ev));
+    assert_int_equal(ev.code, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD);
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -449,6 +513,7 @@ int main(void)
         cmocka_unit_test(test_get_faults_edges_only),
         cmocka_unit_test(test_get_faults_overtemp_and_short),
         cmocka_unit_test(test_get_faults_takes_priority_over_legacy),
+        cmocka_unit_test(test_get_faults_clear_emits_disappears),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
