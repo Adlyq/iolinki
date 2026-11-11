@@ -277,12 +277,14 @@ ISR 中运行。
 
 | 回调 | 调用时机 |
 | --- | --- |
-| `on_startup` | 进入 STARTUP。 |
-| `on_preoperate`, `on_operate` | 进入对应状态。 |
-| `on_pd_input(data, len)` | 当 `IOLINK_APP_PD_INPUT_CALLBACK=1` 时，每个 OPERATE 周期调用；返回值作为 PD-valid 标志。 |
-| `on_pd_output(data, len)` | 每个 OPERATE 周期调用，携带最新的主站输出数据。 |
-| `on_state_change(state)` | 当前 DLL 状态（电平式）：状态变化时调用一次，主上下文迁移立即投递，ISR 期间的多次迁移合并为最终状态；例外是 ISR 进入 STARTUP 的复位迁移，会先于最终状态单独投递。 |
-| `on_master_lost`, `on_master_online` | 主站静默提示的边沿。 |
+| `on_startup(user)` | 进入 STARTUP。 |
+| `on_preoperate(user)`, `on_operate(user)` | 进入对应状态。 |
+| `on_pd_input(user, data, len)` | 当 `IOLINK_APP_PD_INPUT_CALLBACK=1` 时，每个 OPERATE 周期调用；返回值作为 PD-valid 标志。 |
+| `on_pd_output(user, data, len)` | 每个 OPERATE 周期调用，携带最新的主站输出数据。 |
+| `on_state_change(user, state)` | 当前 DLL 状态（电平式）：状态变化时调用一次，主上下文迁移立即投递，ISR 期间的多次迁移合并为最终状态；例外是 ISR 进入 STARTUP 的复位迁移，会先于最终状态单独投递。 |
+| `on_master_lost(user)`, `on_master_online(user)` | 主站静默提示的边沿。 |
+
+所有回调的 `user` 参数就是 `iolink_device_config_t.user`。
 
 `on_pd_output` 收到的是指向上下文内部的指针，不能保留。
 

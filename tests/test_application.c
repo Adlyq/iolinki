@@ -61,26 +61,31 @@ static int g_cb_operate;
 static int g_cb_pd_output;
 static int g_cb_state;
 
-static void cb_startup(void)
+static void cb_startup(void* user)
 {
+    (void) user;
     g_cb_startup++;
 }
-static void cb_preoperate(void)
+static void cb_preoperate(void* user)
 {
+    (void) user;
     g_cb_preoperate++;
 }
-static void cb_operate(void)
+static void cb_operate(void* user)
 {
+    (void) user;
     g_cb_operate++;
 }
-static void cb_pd_output(uint8_t* data, uint8_t len)
+static void cb_pd_output(void* user, uint8_t* data, uint8_t len)
 {
+    (void) user;
     (void) data;
     (void) len;
     g_cb_pd_output++;
 }
-static void cb_state_change(iolink_dll_state_t state)
+static void cb_state_change(void* user, iolink_dll_state_t state)
 {
+    (void) user;
     (void) state;
     g_cb_state++;
 }

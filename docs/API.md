@@ -166,31 +166,33 @@ static int my_phy_tx_octet(void* user, uint8_t data) {
 
 ```c
 typedef struct {
-    void (*on_startup)(void);
-    void (*on_preoperate)(void);
-    void (*on_operate)(void);
-    bool (*on_pd_input)(uint8_t* data, uint8_t len);   /* IOLINK_APP_PD_INPUT_CALLBACK=1 */
-    void (*on_pd_output)(uint8_t* data, uint8_t len);
-    void (*on_state_change)(iolink_dll_state_t state);
-    void (*on_master_lost)(void);
-    void (*on_master_online)(void);
+    void (*on_startup)(void* user);
+    void (*on_preoperate)(void* user);
+    void (*on_operate)(void* user);
+    bool (*on_pd_input)(void* user, uint8_t* data, uint8_t len); /* IOLINK_APP_PD_INPUT_CALLBACK=1 */
+    void (*on_pd_output)(void* user, uint8_t* data, uint8_t len);
+    void (*on_state_change)(void* user, iolink_dll_state_t state);
+    void (*on_master_lost)(void* user);
+    void (*on_master_online)(void* user);
 } iolink_app_callbacks_t;
 ```
 
-Register them through `iolink_device_config_t.app_callbacks`; there is no
-separate registration function.
+Every callback receives `iolink_device_config_t.user`, so the application does
+not need a global to reach its own state. Register them through
+`iolink_device_config_t.app_callbacks`; there is no separate registration
+function.
 
 **Example**:
 
 ```c
-static void on_operate(void) { /* ... */ }
-static void on_pd_output(uint8_t* data, uint8_t len) { (void)data; (void)len; }
+static void on_operate(void* user) { /* ... */ }
+static void on_pd_output(void* user, uint8_t* data, uint8_t len) { (void)user; (void)data; (void)len; }
 
 static const iolink_app_callbacks_t g_app = {
     .on_operate = on_operate,
     .on_pd_output = on_pd_output,
 };
-/* ... .app_callbacks = &g_app in iolink_device_config_t ... */
+/* ... .app_callbacks = &g_app and .user = &app_state in iolink_device_config_t ... */
 ```
 
 ## Vendor ISDU service

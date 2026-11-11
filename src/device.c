@@ -31,23 +31,23 @@ static void device_state_cb(void* user, iolink_dll_state_t state)
     }
 
     if (ctx->config->app_callbacks->on_state_change != NULL) {
-        ctx->config->app_callbacks->on_state_change(state);
+        ctx->config->app_callbacks->on_state_change(ctx->config->user, state);
     }
 
     switch (state) {
         case IOLINK_DLL_STATE_STARTUP:
             if (ctx->config->app_callbacks->on_startup != NULL) {
-                ctx->config->app_callbacks->on_startup();
+                ctx->config->app_callbacks->on_startup(ctx->config->user);
             }
             break;
         case IOLINK_DLL_STATE_PREOPERATE:
             if (ctx->config->app_callbacks->on_preoperate != NULL) {
-                ctx->config->app_callbacks->on_preoperate();
+                ctx->config->app_callbacks->on_preoperate(ctx->config->user);
             }
             break;
         case IOLINK_DLL_STATE_OPERATE:
             if (ctx->config->app_callbacks->on_operate != NULL) {
-                ctx->config->app_callbacks->on_operate();
+                ctx->config->app_callbacks->on_operate(ctx->config->user);
             }
             break;
         default:
@@ -357,7 +357,7 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     ctx->master_lost_last = ctx->dll.master_lost;
 
     if ((config->app_callbacks != NULL) && (config->app_callbacks->on_startup != NULL)) {
-        config->app_callbacks->on_startup();
+        config->app_callbacks->on_startup(config->user);
     }
 
     return 0;
@@ -466,11 +466,11 @@ static void device_notify_master_lost(iolink_device_ctx_t* ctx)
     ctx->master_lost_last = lost;
     if (lost) {
         if (ctx->config->app_callbacks->on_master_lost != NULL) {
-            ctx->config->app_callbacks->on_master_lost();
+            ctx->config->app_callbacks->on_master_lost(ctx->config->user);
         }
     }
     else if (ctx->config->app_callbacks->on_master_online != NULL) {
-        ctx->config->app_callbacks->on_master_online();
+        ctx->config->app_callbacks->on_master_online(ctx->config->user);
     }
 }
 
@@ -499,7 +499,8 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
         return;
     }
     if (ctx->config->app_callbacks->on_pd_output != NULL) {
-        ctx->config->app_callbacks->on_pd_output(ctx->dll.pd_out, ctx->dll.pd_out_len_current);
+        ctx->config->app_callbacks->on_pd_output(ctx->config->user, ctx->dll.pd_out,
+                                                 ctx->dll.pd_out_len_current);
     }
 #if IOLINK_APP_PD_INPUT_CALLBACK
     if (ctx->config->app_callbacks->on_pd_input != NULL) {
@@ -514,7 +515,8 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
         /* Fill the free buffer outside the critical section: the ISR keeps
          * streaming the captured copy meanwhile. */
         const bool valid = ctx->config->app_callbacks->on_pd_input(
-            &ctx->dll.pd_in[inactive][ctx->dll.od_width], ctx->dll.pd_in_len_current);
+            ctx->config->user, &ctx->dll.pd_in[inactive][ctx->dll.od_width],
+            ctx->dll.pd_in_len_current);
 
         IOLINK_CRITICAL_ENTER();
         ctx->dll.pd_in_len = ctx->dll.pd_in_len_current;

@@ -694,7 +694,7 @@ sequenceDiagram
 4. master-lost/online 边沿回调：只在 `state == OPERATE` 时比较 `master_lost` 与 `master_lost_last`；离开 OPERATE 时清空旧状态。
 5. reset handler：`isdu.reset_pending` / `isdu.app_reset_pending`。
 6. OPERATE 下：
-   - `on_pd_output(ctx->dll.pd_out, pd_out_len_current)`；
+   - `on_pd_output(config.user, ctx->dll.pd_out, pd_out_len_current)`；
    - 若 `IOLINK_APP_PD_INPUT_CALLBACK`：取一个未被 ISR 捕获的 PD-in 缓冲区，填完后在临界区交换 `pd_in_active`（ISR 直接读共享状态组应答）。
 
 ### 9.3 回调清单与实际调用点

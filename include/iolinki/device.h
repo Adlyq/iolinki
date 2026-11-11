@@ -105,7 +105,9 @@ typedef uint64_t (*iolink_device_time_us_fn)(void* user);
  */
 typedef struct
 {
-    iolink_phy_api_t phy;        /**< Physical layer driver API. */
+    iolink_phy_api_t phy;        /**< Physical layer driver API. `phy.user` is the
+                                      driver context passed to the PHY vtable only;
+                                      it is independent of @ref user below. */
     iolink_stack_config_t stack; /**< Stack behavior configuration. */
     const iolink_app_callbacks_t*
         app_callbacks; /**< Application lifecycle/PD callbacks (may be NULL). */
@@ -117,7 +119,8 @@ typedef struct
     iolink_device_time_us_fn time_us; /**< Application clock used by the DLL, ISR pump and
                                            event engine; required (NULL is rejected at
                                            initialization). */
-    void* user;                       /**< Opaque pointer passed back to callbacks. */
+    void* user;                       /**< Application context passed to iolink_device_time_us_fn,
+                                           vendor_service and every iolink_app_callbacks_t hook. */
     uint8_t (*vendor_service)(
         void* user, uint16_t index, uint8_t subindex, bool write, const uint8_t* input,
         size_t length, uint8_t* output,

@@ -33,13 +33,15 @@ static uint64_t master_lost_time_us(void* user)
 static int lost_calls;
 static int online_calls;
 
-static void on_lost(void)
+static void on_lost(void* user)
 {
+    (void) user;
     lost_calls++;
 }
 
-static void on_online(void)
+static void on_online(void* user)
 {
+    (void) user;
     online_calls++;
 }
 

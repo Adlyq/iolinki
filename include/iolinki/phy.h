@@ -50,7 +50,7 @@ typedef enum
  * @brief Physical fault flags returned by iolink_phy_api_t.get_faults().
  *
  * A PHY reports the physical condition; the device decides how it is reported
- * on the wire (see iolink_dll_fault_map_t in dll.h).
+ * on the wire. The DLL does not poll this hook yet (see the hook's own note).
  */
 #define IOLINK_PHY_FAULT_UNDERVOLTAGE (1U << 0)  /**< L+ supply below tolerance */
 #define IOLINK_PHY_FAULT_OVERTEMP (1U << 1)      /**< Transceiver over-temperature */
@@ -192,9 +192,10 @@ typedef struct
     /* --- Optional stack timers (ISR pump alignment with ST) ----------------
      * response_timer_* implement the t_A one-shot (13 bit times): start on a
      * valid request octet (also stopping the cycle tick) and stop when the
-     * reply starts or on timeout. stack_timer_* drive the periodic tick that
-     * authorises the main-context service window. Both are optional; when
-     * NULL the library keeps its legacy software-timestamp behaviour. */
+     * reply starts or on timeout. stack_timer_start drives the periodic tick
+     * that authorises the main-context service window. Both are optional; when
+     * NULL the library keeps its legacy software-timestamp behaviour.
+     * stack_timer_stop is declared but currently not called by src/. */
     void (*response_timer_start)(void* user);
     void (*response_timer_stop)(void* user);
     void (*stack_timer_start)(void* user);
@@ -230,6 +231,9 @@ typedef struct
 #if IOLINK_PHY_FEATURE_SIO_CQ
     /**
      * @brief Manually set C/Q line state (for SIO push-pull)
+     *
+     * Declared for portability; the DLL currently has no call point (the PHY
+     * owns the SIO line state).
      * @param state 0 for Low, 1 for High
      */
     void (*set_cq_line)(void* user, uint8_t state);
@@ -239,11 +243,11 @@ typedef struct
      * @brief Optional: physical faults currently active, as a bitmask of
      *        IOLINK_PHY_FAULT_* flags (0 when none).
      *
-     * This is the preferred diagnostics channel: a PHY describes *what* is
-     * physically wrong and needs no knowledge of IO-Link EventCodes. The DLL
-     * watches the 0->1 edges and reports each fault through the device's
-     * fault -> EventCode mapping (iolink_dll_fault_map_t), so the codes stay
-     * device-specific data instead of being hard-coded in the stack.
+     * This is the intended diagnostics channel: a PHY describes *what* is
+     * physically wrong and needs no knowledge of IO-Link EventCodes. However,
+     * the DLL does not poll this hook yet: dll_poll_diagnostics() currently
+     * uses the legacy get_voltage_mv()/is_short_circuit() pair only. Implement
+     * it for future use; wiring it is tracked separately.
      * @return Active fault flags.
      */
     uint8_t (*get_faults)(void* user);
