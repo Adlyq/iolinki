@@ -76,6 +76,8 @@
  *                           |                 | context caller plus the data ISR
  * PD data (pd_input_update) | application     | borrowed for the call; copied
  *                           |                 | into the reply buffer internally
+ * PD data (on_pd_input)     | application     | filled buffer borrowed; return value
+ *                           |                 | is the PD-valid flag (callback profile)
  * PD buffer (pd_output_read)| caller          | filled by the call; caller owns it
  * vendor_service input      | caller          | borrowed for the call
  * vendor_service output     | caller          | capacity in *output_length; the

@@ -76,10 +76,11 @@ static const iolink_phy_api_t g_phy = {.init = phy_init,
 
 static int g_pd_calls;
 static uint8_t g_pd_pattern;
+static void* g_expected_user;
 
 static bool on_pd_input(void* user, uint8_t* data, uint8_t len)
 {
-    (void) user;
+    assert(user == g_expected_user);
     g_pd_calls++;
     (void) memset(data, g_pd_pattern, len);
     return true;
@@ -120,7 +121,10 @@ static void test_callback_fills_pd_input(void)
 
     g_pd_calls = 0;
     g_pd_pattern = 0xA5U;
+    static int user_sentinel;
+    g_expected_user = &user_sentinel;
     make_config(&cfg, &g_cbs);
+    cfg.user = g_expected_user;
     assert(iolink_device_init(&ctx, &cfg) == 0);
 
     /* Drive one main-loop pass in OPERATE: the callback publishes PD-in. */

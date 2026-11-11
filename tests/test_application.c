@@ -101,7 +101,6 @@ static void test_app_callbacks_lifecycle(void** state)
     g_cb_operate = 0;
     g_cb_pd_output = 0;
     g_cb_state = 0;
-    g_expected_user = NULL;
 
     static const iolink_app_callbacks_t cbs = {
         .on_startup = cb_startup,
@@ -115,11 +114,11 @@ static void test_app_callbacks_lifecycle(void** state)
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, NULL, &cbs), 0);
 
-    /* Registered before init -> initial STARTUP announced. */
+    /* Registered before init -> initial STARTUP announced. No user is configured
+     * at init (the helper builds its own config), so the init-time on_startup
+     * receives NULL; the transition hooks below get the sentinel. */
     assert_true(g_cb_startup >= 1);
 
-    /* config.user must reach every callback. The context keeps a pointer to the
-     * configuration object, so updating it after init is visible. */
     static int user_sentinel;
     g_expected_user = &user_sentinel;
     dev.cfg.user = g_expected_user;

@@ -32,16 +32,17 @@ static uint64_t master_lost_time_us(void* user)
 
 static int lost_calls;
 static int online_calls;
+static void* g_expected_user;
 
 static void on_lost(void* user)
 {
-    (void) user;
+    assert_ptr_equal(user, g_expected_user);
     lost_calls++;
 }
 
 static void on_online(void* user)
 {
-    (void) user;
+    assert_ptr_equal(user, g_expected_user);
     online_calls++;
 }
 
@@ -83,7 +84,10 @@ static void test_master_lost_after_n_cycles(void** state)
         .on_master_online = on_online,
     };
     iolink_test_device_t dev;
+    static int user_sentinel;
+    g_expected_user = &user_sentinel;
     init_device(&dev, 3U, &cbs);
+    dev.cfg.user = g_expected_user;
 
     /* Startup/preoperate gaps must not raise master-lost. */
     g_now_ms = 1000U;

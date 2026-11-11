@@ -30,7 +30,8 @@ callback.
 typedef struct {
     iolink_phy_api_t phy;                        /* PHY driver vtable */
     iolink_stack_config_t stack;                 /* protocol settings */
-    const iolink_app_callbacks_t* app_callbacks; /* may be NULL */
+    const iolink_app_callbacks_t* app_callbacks; /* may be NULL; must provide on_pd_input
+                                                    when IOLINK_APP_PD_INPUT_CALLBACK=1 */
     const iolink_device_info_t* device_info;     /* may be NULL */
 #if IOLINK_FEATURE_DATA_STORAGE
     const iolink_storage_api_t* storage;         /* required: read+write callbacks */

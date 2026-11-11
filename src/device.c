@@ -151,10 +151,10 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.pd_in_len_max = ctx->dll.pd_in_len;
     ctx->dll.pd_out_len_max = ctx->dll.pd_out_len;
 
-    /* Two-pump transport: the ISR frames requests and transmits the pre-staged
-     * cyclic reply, so the DLL needs the OD width and whether the bound PHY can
-     * send a staged reply from ISR context. The OD width defaults to the
-     * Table A.10 value; config.od_width selects the 8/32-byte extension. */
+    /* Two-pump transport: the ISR frames requests and composes replies from
+     * the shared state, so the DLL needs the OD width for the reply layout. The
+     * OD width defaults to the Table A.10 value; config.od_width selects the
+     * 8/32-byte extension. */
     ctx->dll.od_width = ctx->stack_config.od_width;
     if (ctx->dll.od_width == 0U) {
         ctx->dll.od_width = device_default_od_width((uint8_t) ctx->dll.m_seq_type);

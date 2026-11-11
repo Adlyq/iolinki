@@ -8,12 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed (readability and API cleanup)
-- Naming: `frame_replied_by_isr` -> `frame_replied_by_isr`,
+- Naming: `frame_eager` -> `frame_replied_by_isr`,
   `dll_isr_reply_allowed[_acc]` -> `dll_isr_frame_valid[_acc]`,
   `dll_isr_note_activity` -> `dll_isr_touch_activity`,
-  `dll_master_activity[_ts]` -> `dll_mark_master_activity[_ts]`,
-  `iolink_dll_take_service_window()` -> `iolink_dll_take_service_window()`,
-  `fallback_clear_request` -> `fallback_clear_request`,
+  `dll_master_activity` -> `dll_mark_master_activity`,
+  `dll_master_activity_ts` -> `dll_mark_master_activity_ts`,
+  `iolink_dll_can_run_user_code()` -> `iolink_dll_take_service_window()`,
+  `isr_fallback_clear` -> `fallback_clear_request`,
   `dll_publish_isr_frame` -> `dll_isr_publish_frame`,
   `dll_mc_is_isdu_write` -> `dll_isr_is_isdu_write`; short locals expanded.
   Spec abbreviations (`mc`, `od`, `ckt`, `flowctrl`) are intentionally kept.

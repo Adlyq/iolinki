@@ -842,10 +842,16 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
  */
 static void dll_poll_phy_faults(iolink_dll_ctx_t* ctx)
 {
+    /* The event engine is reset from dll_set_state(STARTUP) possibly in the
+     * data ISR, which only sets phy_faults_rearm=1. The critical section on the
+     * read-clear keeps that set from racing the clear, so a fault that is still
+     * present is reported again in the new session. */
+    IOLINK_CRITICAL_ENTER();
     if (ctx->phy_faults_rearm != 0U) {
         ctx->phy_faults_rearm = 0U;
         ctx->phy_faults_last = 0U;
     }
+    IOLINK_CRITICAL_EXIT();
     const uint8_t faults = ctx->phy->get_faults(ctx->phy->user);
     const uint8_t rising = (uint8_t) (faults & (uint8_t) ~ctx->phy_faults_last);
     const uint8_t falling = (uint8_t) ((uint8_t) ~faults & ctx->phy_faults_last);

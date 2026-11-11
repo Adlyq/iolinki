@@ -16,7 +16,7 @@ below is the contract.
 | `IOLINK_FEATURE_EVENTS` | 1 | `src/events.c` is replaced by inert stubs (no queue, no classification); DetailedDeviceStatus reports no events |
 | `IOLINK_PHY_FEATURE_WAKEUP` | 1 | `detect_wakeup` is removed from the PHY vtable; the DLL treats the PHY as owning the line state (starts in SDCI). A Fallback MasterCommand is acknowledged but does not switch to SIO, since the build cannot detect the next wake-up. An application that requests SIO directly still cannot leave it until a reset |
 | `IOLINK_PHY_FEATURE_SIO_CQ` | 1 | `set_cq_line` is removed from the PHY vtable |
-| `IOLINK_PHY_FEATURE_LEGACY_DIAG` | 1 | `get_voltage_mv` / `is_short_circuit` and the DLL diagnostic polling are removed |
+| `IOLINK_PHY_FEATURE_LEGACY_DIAG` | 1 | `get_voltage_mv` / `is_short_circuit` are removed; the DLL still polls `get_faults()` when that hook is present, so bitmask fault reporting is retained |
 
 ## CMake options
 
@@ -34,6 +34,7 @@ propagated as `=0`; the rest keep the `config.h` defaults.
 | `-DIOLINK_PHY_FEATURE_WAKEUP=OFF` | Individual override |
 | `-DIOLINK_PHY_FEATURE_SIO_CQ=OFF` | Individual override |
 | `-DIOLINK_PHY_FEATURE_LEGACY_DIAG=OFF` | Individual override |
+| `-DIOLINK_APP_PD_INPUT_CALLBACK=ON` | Select the `on_pd_input` callback as the only PD-in source; the polling `iolink_device_pd_input_update()` is removed and examples/tests are skipped (see `device.h`) |
 
 Profiles are bundles: when one is selected it overrides the individual feature
 options. Use the individual options for fine-grained control without a profile.

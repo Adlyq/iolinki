@@ -36,7 +36,9 @@ option(IOLINK_PHY_FEATURE_LEGACY_DIAG "Compile PHY legacy diagnostics" ON)
 option(IOLINK_APP_PD_INPUT_CALLBACK "Use the on_pd_input callback instead of the polling PD API" OFF)
 
 if(IOLINK_APP_PD_INPUT_CALLBACK)
-    add_compile_definitions(IOLINK_APP_PD_INPUT_CALLBACK=1)
+    # add_definitions (rather than add_compile_definitions, which needs CMake >=
+    # 3.12) keeps the supported minimum CMake at 3.10.
+    add_definitions(-DIOLINK_APP_PD_INPUT_CALLBACK=1)
 endif()
 
 if(IOLINK_MINIMAL_PROFILE OR IOLINK_TINY_PROFILE)
