@@ -213,7 +213,7 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `user` | 传给 PHY 回调和 vendor service 的透明指针。 |
 | `vendor_service` | 可选的应用 ISDU 处理回调；参见第 6 节。 |
 
-### 3.2 `iolink_config_t`
+### 3.2 `iolink_stack_config_t`
 
 | 字段 | 含义 |
 | --- | --- |
@@ -240,7 +240,6 @@ PHY `init` 的负返回值会原样向上传播。
 ### 4.1 生命周期与泵
 
 ```c
-size_t iolink_device_ctx_size(void);
 int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config);
 void iolink_device_process(iolink_device_ctx_t* ctx);
 void iolink_device_process_isr(iolink_device_ctx_t* ctx);

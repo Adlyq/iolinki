@@ -26,7 +26,8 @@
 static void test_crc_error_recovery(void** state)
 {
     (void) state;
-    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 1, .pd_out_len = 1};
+    iolink_stack_config_t config = {
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 1, .pd_out_len = 1};
 
     setup_mock_phy();
     will_return(mock_phy_init, 0);

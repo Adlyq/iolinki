@@ -52,7 +52,7 @@ static iolink_device_config_t make_device_config(void)
 static void init_device(iolink_test_device_t* dev, iolink_m_seq_type_t type, uint8_t pd_in,
                         uint8_t pd_out)
 {
-    iolink_config_t config = {0};
+    iolink_stack_config_t config = {0};
     config.m_seq_type = type;
     config.pd_in_len = pd_in;
     config.pd_out_len = pd_out;
@@ -128,7 +128,7 @@ static void test_device_init_accepts_valid_config(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
-    iolink_config_t stack = {0};
+    iolink_stack_config_t stack = {0};
 
     setup_mock_phy();
 
@@ -145,7 +145,7 @@ static void test_device_init_accepts_valid_config(void** state)
 
 #if (IOLINK_PD_IN_MAX_SIZE >= 28U) && (IOLINK_PD_OUT_MAX_SIZE >= 2U)
     /* Asymmetric PD sizes must be accepted independently. */
-    stack = (iolink_config_t){0};
+    stack = (iolink_stack_config_t){0};
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     stack.pd_in_len = 28U;
     stack.pd_out_len = 2U;
@@ -158,7 +158,7 @@ static void test_device_init_accepts_valid_config(void** state)
 #endif
 
     /* baudrate is ignored unless baudrate_set requests it. */
-    stack = (iolink_config_t){0};
+    stack = (iolink_stack_config_t){0};
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     stack.pd_in_len = 2U;
     stack.pd_out_len = 2U;
@@ -290,7 +290,7 @@ static void test_device_set_pd_length_variable(void** state)
 static void test_device_config_baudrate(void** state)
 {
     (void) state;
-    iolink_config_t config = {0};
+    iolink_stack_config_t config = {0};
     config.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     config.pd_in_len = 2U;
     config.pd_out_len = 2U;
@@ -312,7 +312,7 @@ static void test_device_init_builds_ds_image(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
-    iolink_config_t stack = {0};
+    iolink_stack_config_t stack = {0};
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     stack.pd_in_len = 2U;
     stack.pd_out_len = 2U;
@@ -369,7 +369,7 @@ static void test_device_od_width_default(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
-    iolink_config_t config = {0};
+    iolink_stack_config_t config = {0};
 
     config.m_seq_type = IOLINK_M_SEQ_TYPE_1_2;
     config.pd_in_len = 0U;

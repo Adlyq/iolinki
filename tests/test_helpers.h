@@ -81,7 +81,7 @@ typedef struct
     iolink_device_config_t cfg;
 } iolink_test_device_t;
 
-int iolink_test_device_init(iolink_test_device_t* dev, const iolink_config_t* stack,
+int iolink_test_device_init(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
                             const iolink_app_callbacks_t* callbacks);
 void move_to_operate_ctx(iolink_device_ctx_t* ctx);
 

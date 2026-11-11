@@ -58,7 +58,7 @@ static void test_timing_constants(void** state)
 static void test_t_ren_single_value_for_every_baudrate(void** state)
 {
     (void) state;
-    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0};
+    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0};
 
     setup_mock_phy();
     will_return(mock_phy_init, 0);

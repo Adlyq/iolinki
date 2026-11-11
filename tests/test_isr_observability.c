@@ -685,11 +685,11 @@ static int test_fallback_clear_is_staged(void)
     feed_chk(frame, 3U);
     iolink_dll_process_isr(&dll);
 
-    if ((dll.fallback_deadline_ms != 0x0000000123456789ULL) || (dll.fallback_clear_pending == 0U)) {
+    if ((dll.fallback_deadline_ms != 0x0000000123456789ULL) || (dll.isr_fallback_clear == 0U)) {
         return 1; /* the ISR touched the 64-bit field */
     }
     iolink_dll_process(&dll);
-    if ((dll.fallback_deadline_ms != 0U) || (dll.fallback_clear_pending != 0U)) {
+    if ((dll.fallback_deadline_ms != 0U) || (dll.isr_fallback_clear != 0U)) {
         return 2; /* the main pump did not apply the staged clear */
     }
     return 0;
@@ -750,14 +750,14 @@ static int test_stack_tick_window(void)
     init_type0_ctx(&dll);
 
     dll.stack_tick_pending = 0U;
-    if (iolink_dll_can_run_user_code(&dll) != 0U) {
+    if (iolink_dll_take_service_window(&dll) != 0U) {
         return 1; /* no tick yet (hardware hook installed) */
     }
     iolink_dll_on_stack_tick(&dll);
-    if (iolink_dll_can_run_user_code(&dll) != 1U) {
+    if (iolink_dll_take_service_window(&dll) != 1U) {
         return 2;
     }
-    if (iolink_dll_can_run_user_code(&dll) != 0U) {
+    if (iolink_dll_take_service_window(&dll) != 0U) {
         return 3; /* consumed exactly once */
     }
     return 0;

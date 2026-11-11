@@ -87,7 +87,7 @@ int main(int argc, char* argv[])
 
     /* Parse optional config. The M-sequence value is the C enum value, so the
      * Python Master can pass its MSequenceType directly. */
-    iolink_config_t config = {
+    iolink_stack_config_t config = {
         .m_seq_type = IOLINK_M_SEQ_TYPE_0, .min_cycle_time = 0, .pd_in_len = 0, .pd_out_len = 0};
     int type = IOLINK_M_SEQ_TYPE_0;
     int pd_len = 2;

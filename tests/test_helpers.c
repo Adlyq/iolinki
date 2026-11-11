@@ -265,7 +265,7 @@ uint32_t iolink_test_time_ms(void)
 
 iolink_device_time_us_fn g_iolink_test_time_us_override = NULL;
 
-int iolink_test_device_init(iolink_test_device_t* dev, const iolink_config_t* stack,
+int iolink_test_device_init(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
                             const iolink_app_callbacks_t* callbacks)
 {
     if (dev == NULL) {

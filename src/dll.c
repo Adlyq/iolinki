@@ -64,7 +64,7 @@
  *      |- dll_consume_isr_mailbox
  *      |  `- dll_process_complete_frame
  *      |     |- dll_frame_drop_if_stopped / dll_check_cycle_time /
- *      |     |  dll_master_activity
+ *      |     |  dll_mark_master_activity
  *      |     |- dll_frame_validate -> dll_handle_valid_frame
  *      |     |  `- state dispatch: dll_dispatch_preoperate /
  *      |     |     dll_dispatch_estab_com / dll_dispatch_operate
@@ -463,16 +463,16 @@ bool dll_apply_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
             dll_protocol_error_to_startup(ctx);
             return true;
         case IOLINK_CMD_DEVICE_PREOPERATE:
-            ctx->fallback_clear_pending = 1U;
+            ctx->isr_fallback_clear = 1U;
             dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
             return true;
         case IOLINK_CMD_PROCESS_DATA_OPERATE:
-            ctx->fallback_clear_pending = 1U;
+            ctx->isr_fallback_clear = 1U;
             ctx->pd_valid = true;
             dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
             return true;
         case IOLINK_CMD_DEVICE_OPERATE:
-            ctx->fallback_clear_pending = 1U;
+            ctx->isr_fallback_clear = 1U;
             ctx->pd_valid = false;
             /* DeviceOperate from PREOPERATE establishes communication
                (ESTAB_COM); the following PDOperate 0x98 moves to OPERATE.
@@ -690,7 +690,7 @@ static void dll_handle_type0_od_write(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t
  */
 static bool dll_handle_eager_isdu_read(iolink_dll_ctx_t* ctx, bool write)
 {
-    if (!ctx->frame_eager ||
+    if (!ctx->frame_replied_by_isr ||
         ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) != IOLINK_MC_CHANNEL_ISDU) || write) {
         return false;
     }
@@ -701,7 +701,7 @@ static bool dll_handle_eager_isdu_read(iolink_dll_ctx_t* ctx, bool write)
         iolink_isdu_od_read(&ctx->isdu, flowctrl, &dummy, 0U); /* reset only */
         dll_isdu_sync_snapshot(ctx);
     }
-    ctx->frame_eager = 0U;
+    ctx->frame_replied_by_isr = 0U;
     ctx->last_response_us = dll_time_us(ctx);
     return true;
 }
@@ -796,19 +796,19 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
     uint8_t od_out[IOLINK_OD_MAX_SIZE];
     dll_dispatch_od_reply(ctx, write, od_offset, od_out);
 
-    if (ctx->frame_eager &&
+    if (ctx->frame_replied_by_isr &&
         ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PROCESS)) {
         /* The ISR pump already transmitted the pre-staged cyclic reply for the
          * process channel at frame end. */
         ctx->fallback_count = 0U;
         ctx->last_response_us = dll_time_us(ctx);
-        ctx->frame_eager = 0U;
+        ctx->frame_replied_by_isr = 0U;
         return;
     }
-    if (ctx->frame_eager != 0U) {
+    if (ctx->frame_replied_by_isr != 0U) {
         /* The ISR already acknowledged this ISDU write; do not send a second
          * reply. ISDU reads are handled before dll_dispatch_od(). */
-        ctx->frame_eager = 0U;
+        ctx->frame_replied_by_isr = 0U;
         ctx->last_response_us = dll_time_us(ctx);
         return;
     }
@@ -966,16 +966,16 @@ static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
     }
     const bool busy =
         (ctx->isdu.state == ISDU_STATE_SERVICE_EXECUTE) || (ctx->isdu.state == ISDU_STATE_BUSY);
-    uint8_t n = 0U;
+    uint8_t count = 0U;
     uint8_t sel = ctx->isdu.resp_pub;
     if (ctx->isdu.state == ISDU_STATE_RESPONSE_READY) {
-        n = (ctx->isdu.resp_total > 255U) ? 255U : (uint8_t) ctx->isdu.resp_total;
+        count = (ctx->isdu.resp_total > 255U) ? 255U : (uint8_t) ctx->isdu.resp_total;
         sel = ctx->isdu.resp_sel;
         /* The completed response becomes the published one; the engine will
          * build the next response in the other buffer. */
         ctx->isdu.resp_pub = sel;
     }
-    const IOLINK_ATOMIC_UINT_T word = IOLINK_ISDU_PUB_WORD(n, busy, sel);
+    const IOLINK_ATOMIC_UINT_T word = IOLINK_ISDU_PUB_WORD(count, busy, sel);
     if (word != ctx->isr_isdu_pub) {
         /* Publish last: the response octets are already in resp_store[sel]. */
         iolink_atomic_store(&ctx->isr_isdu_pub, word);
@@ -1025,7 +1025,7 @@ static void dll_master_activity_ts(iolink_dll_ctx_t* ctx)
 }
 
 /** @brief ST-style master activity: frame end / RX timeout restarts the counter. */
-void dll_master_activity(iolink_dll_ctx_t* ctx)
+void dll_mark_master_activity(iolink_dll_ctx_t* ctx)
 {
     dll_master_activity_ts(ctx);
 
@@ -1137,7 +1137,7 @@ static dll_frame_result_t dll_frame_validate(iolink_dll_ctx_t* ctx)
 static void dll_handle_frame_error(iolink_dll_ctx_t* ctx, dll_frame_result_t result)
 {
     if (result == DLL_FRAME_TYPE_ERROR) {
-        ctx->frame_eager = 0U;
+        ctx->frame_replied_by_isr = 0U;
         ctx->framing_errors++;
         ctx->frame_index = 0U;
         if ((ctx->state == IOLINK_DLL_STATE_OPERATE) ||
@@ -1379,7 +1379,7 @@ static bool dll_handle_valid_frame(iolink_dll_ctx_t* ctx)
 static void dll_finish_frame(iolink_dll_ctx_t* ctx)
 {
     ctx->frame_index = 0U;
-    ctx->frame_eager = 0U;
+    ctx->frame_replied_by_isr = 0U;
     /* Reflect any ISDU state change (e.g. a completed write request) for the
      * ISR read pump before the next master frame. */
     dll_isdu_sync_snapshot(ctx);
@@ -1403,7 +1403,7 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
 
     /* ST restarts its callback timer at frame end; a completed frame (even a
        bad one) proves the link is still being driven. */
-    dll_master_activity(ctx);
+    dll_mark_master_activity(ctx);
 
     const dll_frame_result_t result = dll_frame_validate(ctx);
     if (result == DLL_FRAME_VALID) {
@@ -1479,8 +1479,8 @@ static void dll_apply_isr_deadline_requests(iolink_dll_ctx_t* ctx)
             ctx->fallback_deadline_ms = dll_time_us(ctx) / 1000U + t_fbd_ms;
         }
     }
-    if (ctx->fallback_clear_pending != 0U) {
-        ctx->fallback_clear_pending = 0U;
+    if (ctx->isr_fallback_clear != 0U) {
+        ctx->isr_fallback_clear = 0U;
         /* A command other than FALLBACK was applied: drop any pending T_FBD. */
         if (ctx->state != IOLINK_DLL_STATE_FALLBACK) {
             ctx->fallback_deadline_ms = 0U;
@@ -1503,18 +1503,19 @@ static void dll_apply_isr_deadline_requests(iolink_dll_ctx_t* ctx)
 static void dll_drain_staged_isdu_write(iolink_dll_ctx_t* ctx)
 {
     for (;;) {
-        const iolink_od_rec_t* rec = (const iolink_od_rec_t*) iolink_ring_peek(&ctx->isr_od_ring);
-        if (rec == NULL) {
+        const iolink_od_rec_t* record =
+            (const iolink_od_rec_t*) iolink_ring_peek(&ctx->isr_od_ring);
+        if (record == NULL) {
             return;
         }
-        uint8_t staged_fc = rec->flowctrl;
-        uint8_t staged_len = rec->len;
+        uint8_t staged_fc = record->flowctrl;
+        uint8_t staged_len = record->len;
         if (staged_len > IOLINK_OD_MAX_SIZE) {
             staged_len = (uint8_t) IOLINK_OD_MAX_SIZE;
         }
         uint8_t staged_od[IOLINK_OD_MAX_SIZE];
         for (uint8_t i = 0U; i < staged_len; i++) {
-            staged_od[i] = rec->data[i];
+            staged_od[i] = record->data[i];
         }
         iolink_ring_release(&ctx->isr_od_ring);
         if (staged_len > 0U) {
@@ -1648,7 +1649,7 @@ static bool dll_handle_sio_wakeup(iolink_dll_ctx_t* ctx)
                Reset the inactivity timer so a re-wake after a prior exchange
                is not immediately killed by the stale activity timestamp. */
             ctx->last_activity_ms = dll_time_ms(ctx);
-            dll_master_activity(ctx); /* ST StackOnWakeUp restarts Timer B */
+            dll_mark_master_activity(ctx); /* ST StackOnWakeUp restarts Timer B */
         }
     }
     return true;
@@ -1698,21 +1699,21 @@ static bool dll_wakeup_window_active(iolink_dll_ctx_t* ctx)
  */
 static void dll_consume_isr_mailbox(iolink_dll_ctx_t* ctx)
 {
-    const iolink_frame_rec_t* rec =
+    const iolink_frame_rec_t* record =
         (const iolink_frame_rec_t*) iolink_ring_peek(&ctx->isr_frame_ring);
-    if (rec == NULL) {
+    if (record == NULL) {
         return;
     }
-    uint8_t n = rec->len;
-    if (n > sizeof(ctx->frame_buf)) {
-        n = (uint8_t) sizeof(ctx->frame_buf);
+    uint8_t count = record->len;
+    if (count > sizeof(ctx->frame_buf)) {
+        count = (uint8_t) sizeof(ctx->frame_buf);
     }
-    (void) memcpy(ctx->frame_buf, rec->data, n);
-    ctx->frame_index = n;
-    ctx->req_len = n;
+    (void) memcpy(ctx->frame_buf, record->data, count);
+    ctx->frame_index = count;
+    ctx->req_len = count;
     /* The record carries the eager flag with its octets, so no cross-frame
      * snapshot is needed. */
-    ctx->frame_eager = rec->eager;
+    ctx->frame_replied_by_isr = record->eager;
     /* Release after the copy: the ISR may then reuse this slot, while the other
      * one stays intact. No critical section is required, because the ISR never
      * writes the slot at 'out'. */

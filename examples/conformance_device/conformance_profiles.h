@@ -32,7 +32,7 @@ typedef struct
 {
     const char* name;
     const iolink_device_info_t* identity;
-    iolink_config_t stack;
+    iolink_stack_config_t stack;
     const iolink_ds_param_desc_t* ds_params;
     size_t ds_param_count;
     bool has_pd_in;

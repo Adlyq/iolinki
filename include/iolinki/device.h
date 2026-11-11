@@ -96,8 +96,6 @@
  *  @note Called from both the main loop and the data ISR, so it must be
  *        non-blocking and ISR-safe. */
 typedef uint64_t (*iolink_device_time_us_fn)(void* user);
-/** @brief Physical layer API used by the device (alias of ::iolink_phy_api_t). */
-typedef iolink_phy_api_t iolink_device_phy_t;
 
 /**
  * @brief Device configuration supplied at initialization.
@@ -107,8 +105,8 @@ typedef iolink_phy_api_t iolink_device_phy_t;
  */
 typedef struct
 {
-    iolink_device_phy_t phy; /**< Physical layer driver API. */
-    iolink_config_t stack;   /**< Stack behavior configuration. */
+    iolink_phy_api_t phy;        /**< Physical layer driver API. */
+    iolink_stack_config_t stack; /**< Stack behavior configuration. */
     const iolink_app_callbacks_t*
         app_callbacks; /**< Application lifecycle/PD callbacks (may be NULL). */
     const iolink_device_info_t* device_info; /**< Static device identification data. */
@@ -136,7 +134,7 @@ typedef struct
 {
     /* Private fields. Allocate this object directly, but use API functions. */
     iolink_dll_ctx_t dll;                 /**< Data link layer context. */
-    iolink_config_t stack_config;         /**< Active stack configuration. */
+    iolink_stack_config_t stack_config;   /**< Active stack configuration. */
     iolink_device_info_ctx_t device_info; /**< Device identification context. */
     iolink_params_ctx_t params;           /**< Parameter manager context. */
     const iolink_device_config_t* config; /**< Pointer to the supplied configuration. */
@@ -144,12 +142,6 @@ typedef struct
     bool master_lost_last;                /**< Previous master-lost state (callback edge) */
     uint8_t direct_param_page2[16];       /**< Direct Parameter Page 2 storage. */
 } iolink_device_ctx_t;
-
-/**
- * @brief Get the size in bytes of ::iolink_device_ctx_t.
- * @return Size of the device context object, in bytes.
- */
-size_t iolink_device_ctx_size(void);
 
 /**
  * @brief Result codes returned by iolink_device_init().

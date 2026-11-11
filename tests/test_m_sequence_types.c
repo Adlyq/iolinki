@@ -71,7 +71,7 @@ static void feed_request(uint8_t* frame, size_t len, uint8_t type_bits)
 
 static void run_fixed_case(const fixed_case_t* c)
 {
-    iolink_config_t config = {
+    iolink_stack_config_t config = {
         .m_seq_type = c->type, .pd_in_len = c->pd_in, .pd_out_len = c->pd_out, .od_width = c->od};
     iolink_test_device_t dev;
     const uint8_t type_bits = case_type_bits(c->type);
@@ -150,7 +150,8 @@ static void test_fixed_types_byte_exact(void** state)
 static void test_type_1_1_rejected(void** state)
 {
     (void) state;
-    iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .pd_in_len = 2, .pd_out_len = 0};
+    iolink_stack_config_t config = {
+        .m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .pd_in_len = 2, .pd_out_len = 0};
     iolink_test_device_t dev;
 
     /* Validation rejects the config before the PHY is touched. */
@@ -165,14 +166,14 @@ static void test_fixed_layout_mismatch_rejected(void** state)
 
     /* TYPE_2_2 needs PD-in=2 and PD-out=0. */
     {
-        iolink_config_t config = {
+        iolink_stack_config_t config = {
             .m_seq_type = IOLINK_M_SEQ_TYPE_2_2, .pd_in_len = 2, .pd_out_len = 2};
         assert_int_equal(iolink_test_device_init(&dev, &config, NULL),
                          IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT);
     }
     /* TYPE_1_V is OD-only (8/32), not a variable-PD type. */
     {
-        iolink_config_t config = {
+        iolink_stack_config_t config = {
             .m_seq_type = IOLINK_M_SEQ_TYPE_1_V, .pd_in_len = 8, .pd_out_len = 8};
         assert_int_equal(iolink_test_device_init(&dev, &config, NULL),
                          IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT);

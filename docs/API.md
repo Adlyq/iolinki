@@ -28,8 +28,8 @@ callback.
 
 ```c
 typedef struct {
-    iolink_device_phy_t phy;                 /* PHY driver (copy of iolink_phy_api_t) */
-    iolink_config_t stack;                   /* protocol settings */
+    iolink_phy_api_t phy;                 /* PHY driver (copy of iolink_phy_api_t) */
+    iolink_stack_config_t stack;                   /* protocol settings */
     const iolink_app_callbacks_t* app_callbacks; /* may be NULL */
     const iolink_device_info_t* device_info;     /* may be NULL */
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -56,7 +56,7 @@ typedef struct {
     iolink_baudrate_t baudrate;     /* operating COM when baudrate_set is true */
     bool baudrate_set;              /* false keeps the COM2 default */
     uint8_t master_lost_cycles;     /* missed cycles before master_lost; 0 = off */
-} iolink_config_t;
+} iolink_stack_config_t;
 ```
 
 `min_cycle_time` is stored raw in 0.1 ms units and encoded per Table B.3 only

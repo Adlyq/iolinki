@@ -94,7 +94,7 @@ To ensure synchronization and robust parsing in software simulation, the Master-
 - **Event Queue**: 4 entries (default `IOLINK_EVENT_QUEUE_SIZE`).
 
 ### 3.2 Dynamic Configuration
-The stack is configured during `iolink_device_init()` via the `iolink_config_t`
+The stack is configured during `iolink_device_init()` via the `iolink_stack_config_t`
 structure (`include/iolinki/iolink.h`):
 
 ```c
@@ -106,7 +106,7 @@ typedef struct {
     uint8_t od_width;               /**< OD octets; 0 = type default */
     uint32_t t_pd_us;               /**< Power-on delay (t_pd) in microseconds */
     /* ... baudrate / baudrate_set / master_lost_cycles ... */
-} iolink_config_t;
+} iolink_stack_config_t;
 ```
 
 `min_cycle_time` is stored raw in 0.1 ms units and encoded per Table B.3 only

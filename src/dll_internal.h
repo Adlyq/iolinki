@@ -91,7 +91,7 @@ void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state);
 bool dll_apply_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd);
 bool dll_type_allowed(const iolink_dll_ctx_t* ctx, const uint8_t* frame);
 uint8_t dll_pd_status_flags(const iolink_dll_ctx_t* ctx);
-void dll_master_activity(iolink_dll_ctx_t* ctx);
+void dll_mark_master_activity(iolink_dll_ctx_t* ctx);
 void dll_isr_start_staged_tx(iolink_dll_ctx_t* ctx, uint8_t slot, uint8_t len);
 /** @} */
 

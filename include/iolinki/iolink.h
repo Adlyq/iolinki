@@ -38,10 +38,10 @@ typedef enum
     IOLINK_M_SEQ_TYPE_1_V = 3U, /**< Type 1_V: 8 or 32 OD octets, no PD (A.8). */
     IOLINK_M_SEQ_TYPE_2_1 = 4U, /**< Type 2_1: 1 PD-in + 1 OD, no PD-out (A.9). */
     IOLINK_M_SEQ_TYPE_2_2 = 5U, /**< Type 2_2: 2 PD-in + 1 OD, no PD-out (A.10). */
+    IOLINK_M_SEQ_TYPE_2_V = 6U, /**< Type 2_V: 0..32 PD in/out + 1/2/8/32 OD (A.14). */
     IOLINK_M_SEQ_TYPE_2_3 = 7U, /**< Type 2_3: 1 PD-out + 1 OD, no PD-in (A.11). */
     IOLINK_M_SEQ_TYPE_2_4 = 8U, /**< Type 2_4: 2 PD-out + 1 OD, no PD-in (A.12). */
     IOLINK_M_SEQ_TYPE_2_5 = 9U, /**< Type 2_5: 1 PD-in + 1 PD-out + 1 OD (A.13). */
-    IOLINK_M_SEQ_TYPE_2_V = 6U, /**< Type 2_V: 0..32 PD in/out + 1/2/8/32 OD (A.14). */
 } iolink_m_seq_type_t;
 
 /** @brief Highest valid ::iolink_m_seq_type_t value (used for range checks). */
@@ -166,7 +166,7 @@ typedef struct
     iolink_baudrate_t baudrate;     /**< Operating COM when baudrate_set is true */
     bool baudrate_set;              /**< Apply baudrate at init; false keeps the COM2 default */
     uint8_t master_lost_cycles;     /**< Missed master cycles before master_lost; 0 = disabled */
-} iolink_config_t;
+} iolink_stack_config_t;
 
 /**
  * @brief Reset request type delivered to the application reset handler.

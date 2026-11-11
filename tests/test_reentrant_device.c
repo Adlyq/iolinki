@@ -27,7 +27,7 @@ static void test_device_context_api_initializes_two_configs(void** state)
     (void) state;
     iolink_device_ctx_t dev_a;
     iolink_device_ctx_t dev_b;
-    static iolink_device_phy_t phy = {.init = noop_user};
+    static iolink_phy_api_t phy = {.init = noop_user};
     iolink_device_config_t cfg_a = {
         .phy = phy,
         .time_us = iolink_test_time_us,
@@ -55,7 +55,6 @@ static void test_device_context_api_initializes_two_configs(void** state)
             },
     };
 
-    assert_true(iolink_device_ctx_size() == sizeof(iolink_device_ctx_t));
     assert_int_equal(iolink_device_init(&dev_a, &cfg_a), 0);
     assert_int_equal(iolink_device_init(&dev_b, &cfg_b), 0);
     assert_int_equal(iolink_device_get_pd_in_len(&dev_a), 1U);

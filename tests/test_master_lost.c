@@ -63,7 +63,7 @@ static int test_teardown(void** state)
 static void init_device(iolink_test_device_t* dev, uint8_t cycles,
                         const iolink_app_callbacks_t* cbs)
 {
-    iolink_config_t config = {
+    iolink_stack_config_t config = {
         .m_seq_type = IOLINK_M_SEQ_TYPE_0,
         .min_cycle_time = 20U, /* 2 ms */
         .master_lost_cycles = cycles,
@@ -148,7 +148,7 @@ static void test_isr_frame_counts_as_master_activity(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
-    const iolink_config_t config = {
+    const iolink_stack_config_t config = {
         .m_seq_type = IOLINK_M_SEQ_TYPE_2_1,
         .min_cycle_time = 20U, /* 2 ms */
         .master_lost_cycles = 3U,

@@ -221,9 +221,9 @@ typedef struct
      * main pump; the 64-bit deadlines stay main-owned. Each flag is set to 1
      * and cleared to 0 only by the main pump, so a set that races the consume
      * is idempotent: the request is applied in this pass or the next one. */
-    volatile uint8_t isr_dsio_clear;         /**< ISR served the startup probe: clear T_DSIO */
-    volatile uint8_t isr_fallback_pending;   /**< ISR accepted FALLBACK: arm T_FBD from main */
-    volatile uint8_t fallback_clear_pending; /**< A non-FALLBACK command was applied: clear T_FBD */
+    volatile uint8_t isr_dsio_clear;       /**< ISR served the startup probe: clear T_DSIO */
+    volatile uint8_t isr_fallback_pending; /**< ISR accepted FALLBACK: arm T_FBD from main */
+    volatile uint8_t isr_fallback_clear;   /**< A non-FALLBACK command was applied: clear T_FBD */
 
     /* Configuration */
     uint8_t m_seq_type;          /**< Supported M-sequence type */
@@ -261,12 +261,12 @@ typedef struct
 #endif
     iolink_frame_rec_t isr_frame_slot[IOLINK_MBX_SLOTS]; /**< Mailbox ring storage */
     iolink_ring_t isr_frame_ring;                        /**< Frame mailbox (ISR -> main) */
-    volatile uint8_t frame_eager; /**< Main-context snapshot of the record's eager flag
+    volatile uint8_t frame_replied_by_isr; /**< Main-context snapshot of the record's eager flag
                                        for the frame currently being processed. */
-    uint32_t isr_mailbox_drops;   /**< Frames dropped because the mailbox was full */
-    uint32_t pd_in_skips;         /**< PD-in publishes skipped: every spare buffer leased */
-    uint32_t isr_eager_rejects;   /**< Frames the eager path refused
-                                       (bad checksum/type) */
+    uint32_t isr_mailbox_drops;            /**< Frames dropped because the mailbox was full */
+    uint32_t pd_in_skips;       /**< PD-in publishes skipped: every spare buffer leased */
+    uint32_t isr_eager_rejects; /**< Frames the eager path refused
+                                     (bad checksum/type) */
     /* ISR-side ISDU staging + response snapshot (single-writer model). The ISR
      * stages write OD octets in a ring and reads only the response snapshot;
      * the main pump owns ctx->isdu and refreshes the snapshot when it changes. */
@@ -574,7 +574,7 @@ void iolink_dll_on_rx_timeout(iolink_dll_ctx_t* ctx);
 void iolink_dll_on_stack_tick(iolink_dll_ctx_t* ctx);
 
 /** @brief Consume the Timer B authorisation (1 = user code may run). */
-uint8_t iolink_dll_can_run_user_code(iolink_dll_ctx_t* ctx);
+uint8_t iolink_dll_take_service_window(iolink_dll_ctx_t* ctx);
 
 /**
  * @brief Set current PD lengths for variable types (1_V, 2_V)

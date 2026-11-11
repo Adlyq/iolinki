@@ -176,11 +176,6 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.min_cycle_time_us = (uint32_t) iolink_dll_compute_min_cycle_time(&ctx->dll) * 100U;
 }
 
-size_t iolink_device_ctx_size(void)
-{
-    return sizeof(iolink_device_ctx_t);
-}
-
 /** @brief One fixed Annex A layout: PD in/out and the accepted OD width(s). */
 typedef struct
 {
@@ -207,7 +202,7 @@ static const device_fixed_layout_t g_fixed_layouts[] = {
  * V1.1.5 device (Table A.10 NOTE 3), so it is rejected. TYPE_0 and the
  * variable TYPE_2_V keep the existing range checks.
  */
-static int device_validate_fixed_mseq(const iolink_config_t* stack, uint8_t od)
+static int device_validate_fixed_mseq(const iolink_stack_config_t* stack, uint8_t od)
 {
     /* TYPE_1_1 is legacy interleave only and shall not be implemented by a
      * V1.1.5 device (Table A.10 NOTE 3). */
@@ -231,7 +226,7 @@ static int device_validate_fixed_mseq(const iolink_config_t* stack, uint8_t od)
 /** @brief Validate the stack configuration before touching the context or PHY. */
 static int device_config_validate(const iolink_device_config_t* config)
 {
-    const iolink_config_t* stack;
+    const iolink_stack_config_t* stack;
     uint8_t od;
 
     if (config == NULL) {
@@ -399,7 +394,7 @@ static uint8_t device_pd_in_free_index(const iolink_dll_ctx_t* dll)
 static bool device_service_window_ready(iolink_device_ctx_t* ctx)
 {
     if ((ctx->dll.phy != NULL) && (ctx->dll.phy->stack_timer_start != NULL) &&
-        (iolink_dll_can_run_user_code(&ctx->dll) == 0U)) {
+        (iolink_dll_take_service_window(&ctx->dll) == 0U)) {
         return false;
     }
     return true;

@@ -274,7 +274,7 @@ flowchart TD
     F --> G["诊断、定时器、t_pd 等"]
     G --> H{"isr_frame_ring 非空?"}
     H -- 否 --> I["继续其他检查"]
-    H -- 是 --> J["复制邮箱帧（SPSC 环，无临界区）<br/>快照/清除 frame_eager"]
+    H -- 是 --> J["复制邮箱帧（SPSC 环，无临界区）<br/>快照/清除 frame_replied_by_isr"]
     J --> K["dll_process_complete_frame()"]
     K --> L["主状态机/通道处理<br/>eager 帧不再重复发送应答"]
     L --> M["dll_flush_state_callbacks()"]
@@ -286,7 +286,7 @@ flowchart TD
 - `ctx->isdu` 由主循环单写；ISR 不写 `ctx->isdu`，ISDU 响应只读已发布的 `resp_store[sel]`，并拥有 ISDU 读的 FlowCTRL/segment 索引。Page 通道的 DPP1 读取会在 ISR 中只读 `ctx->isdu`/DLL 状态来构建页面字节。
 - ISDU 写由 ISR 暂存到 `isr_od_ring`，主循环排空后调用 `iolink_isdu_od_write()`。
 - 邮箱是**两个槽**的 SPSC 环：环满（两帧都未消费）时新帧计入 `isr_mailbox_drops` 并被丢弃。
-- 邮箱记录的 `eager` 字段表示 ISR 已应答该帧；主循环把它快照到 `frame_eager` 以避免重复发送，但仍会处理状态/错误/ISDU 读复位等。
+- 邮箱记录的 `eager` 字段表示 ISR 已应答该帧；主循环把它快照到 `frame_replied_by_isr` 以避免重复发送，但仍会处理状态/错误/ISDU 读复位等。
 - RX FRAME 路径先发布邮箱、再启动 eager 应答，最后复制稳定副本；RX BYTE 路径先启动 eager 应答、再发布邮箱，以减少 t_A 延迟。
 - 状态通知是**电平式**的：`ctx->state` 立即更新（单字节写，无临界区），`iolink_dll_flush_state_callbacks()` 只在“当前状态 ≠ 上次已交付状态”时调用一次回调。主上下文迁移在 `dll_set_state()` 内立即投递；ISR 迁移只改状态，由下一次主上下文 flush 投递，多次 ISR 迁移会合并为最终状态（中间态不单独回调）。例外：ISR 进入 STARTUP 会置 `startup_notification_pending`，该复位通知优先投递，不会被后续 PREOPERATE 覆盖。
 
@@ -315,7 +315,7 @@ flowchart TD
     C -- 否 --> D["t_cycle 检查"]
     D --> E{"req_len < 2?"}
     E -- 是 --> E1["丢弃（唤醒字节/噪声）"]
-    E -- 否 --> F["dll_master_activity()<br/>刷新活动时间 + Back-to-box 计数"]
+    E -- 否 --> F["dll_mark_master_activity()<br/>刷新活动时间 + Back-to-box 计数"]
     F --> G["计算并验证 A.1.6 CKT 校验"]
     G --> H["dll_type_allowed()<br/>CKT 类型是否符合当前状态"]
     H --> I{"校验和类型都 OK?"}
@@ -736,7 +736,7 @@ sequenceDiagram
 | :--- | :--- | :--- |
 | `iolink_dll_on_rx_timeout(ctx)` | PHY 的 Timer A 中断 | 仅双泵路径有效：置 `isr_master_activity`、计 `timeout_errors`、清 ISR RX 组装状态、停响应定时器 |
 | `iolink_dll_on_stack_tick(ctx)` | PHY 的 Timer B 中断 | 仅双泵路径有效：授权一次主循环服务窗口；`iolink_device_process()` 在 `stack_timer_start != NULL` 时会等待该授权 |
-| `iolink_dll_can_run_user_code(ctx)` | `iolink_device_process()` | 消费/查询 Timer B 授权 |
+| `iolink_dll_take_service_window(ctx)` | `iolink_device_process()` | 消费/查询 Timer B 授权 |
 | `iolink_dll_process_isr(ctx)` | PHY 数据中断 | ISR 双泵入口 |
 | `iolink_dll_flush_state_callbacks(ctx)` | `iolink_dll_process()` 末尾、`iolink_device_process()` | 电平式交付当前状态（无变化则不调用） |
 
@@ -883,9 +883,9 @@ flowchart LR
 | `iolink_dll_on_stack_tick()` | ISR-only | Timer B tick 入口 |
 | `dll_isr_*()`（`dll_isr_start_staged_tx()` 除外） | ISR-only | 双泵快路径、TYPE-0 应答、ISDU 快照读 |
 | `dll_isr_start_staged_tx()` | 双上下文 | 主路径由 `dll_send()` 在直发回退时调用；ISR 路径由 `dll_isr_tx_pending()` 调用 |
-| `dll_publish_isr_frame()`、`dll_mc_is_isdu_write()` | ISR-only | 邮箱发布与 ISDU 写判定 |
+| `dll_isr_publish_frame()`、`dll_isr_is_isdu_write()` | ISR-only | 邮箱发布与 ISDU 写判定 |
 | `dll_set_state()` | 双上下文 | ISR 内不 flush 回调；迁入 STARTUP 时仍会调用 `iolink_events_reset()`（含临界区与 memset） |
-| `dll_master_activity()` | 双上下文 | ISR 在帧结束时刷新活动时间戳 |
+| `dll_mark_master_activity()` | 双上下文 | ISR 在帧结束时刷新活动时间戳 |
 | `dll_pd_status_flags()`、`dll_apply_master_command()`、`dll_type_allowed()` | 双上下文 | 只读 ctx 或状态迁移 |
 | `dll_process_complete_frame()`、`dll_consume_isr_mailbox()`、`dll_check_*()`、`dll_update_master_lost()` | 主上下文 | 主泵调度与定时监督 |
 | `dll_send()` | 主上下文 | 主泵暂存应答，ISR 负责发送 |

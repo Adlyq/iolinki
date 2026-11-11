@@ -31,7 +31,7 @@
 static void test_lease_recovery_and_skip_counter(void** state)
 {
     (void) state;
-    const iolink_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0};
+    const iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0};
     iolink_test_device_t dev;
     const uint8_t data[2] = {0x11U, 0x22U};
 
