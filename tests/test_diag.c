@@ -46,40 +46,41 @@ static const struct
     uint16_t code;
     uint8_t type;
     uint8_t status;
+    uint8_t flags;
+    uint16_t hold_ms;
 } k_table_d1[] = {
-    {0x0000U, IOLINK_EVENT_TYPE_NOTIFICATION, 0U},
-    {0x1000U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x4000U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x4210U, IOLINK_EVENT_TYPE_WARNING, 2U},
-    {0x4220U, IOLINK_EVENT_TYPE_WARNING, 2U},
-    {0x5000U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x5010U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x5011U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x5012U, IOLINK_EVENT_TYPE_WARNING, 2U},
-    {0x5100U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x5101U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x5110U, IOLINK_EVENT_TYPE_WARNING, 2U},
-    {0x5111U, IOLINK_EVENT_TYPE_WARNING, 2U},
-    {0x6000U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x6320U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x6321U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x7700U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x7710U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x7711U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x8C00U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x8C01U, IOLINK_EVENT_TYPE_WARNING, 3U},
-    {0x8C10U, IOLINK_EVENT_TYPE_WARNING, 2U},
-    {0x8C20U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x8C30U, IOLINK_EVENT_TYPE_WARNING, 2U},
-    {0x8C40U, IOLINK_EVENT_TYPE_WARNING, 1U},
-    {0x8C41U, IOLINK_EVENT_TYPE_WARNING, 1U},
-    {0x8C42U, IOLINK_EVENT_TYPE_WARNING, 1U},
-    {0xFF91U, IOLINK_EVENT_TYPE_NOTIFICATION, 0U},
-    /* 厂商特定设备事件：类型/首选值由本栈注册表固定。 */
-    {0x1801U, IOLINK_EVENT_TYPE_WARNING, 2U},
-    {0x1802U, IOLINK_EVENT_TYPE_WARNING, 2U},
-    {0x1803U, IOLINK_EVENT_TYPE_ERROR, 4U},
-    {0x1804U, IOLINK_EVENT_TYPE_WARNING, 2U},
+    {0x5111U, IOLINK_EVENT_TYPE_WARNING, 2U, IOLINK_DIAG_F_LEVEL | IOLINK_DIAG_F_LATCHING, 0U},
+    {0x5110U, IOLINK_EVENT_TYPE_WARNING, 2U, IOLINK_DIAG_F_LEVEL | IOLINK_DIAG_F_LATCHING, 0U},
+    {0x4000U, IOLINK_EVENT_TYPE_ERROR, 4U, IOLINK_DIAG_F_LEVEL | IOLINK_DIAG_F_LATCHING, 0U},
+    {0x7710U, IOLINK_EVENT_TYPE_ERROR, 4U, IOLINK_DIAG_F_LEVEL | IOLINK_DIAG_F_LATCHING, 0U},
+    {0x1801U, IOLINK_EVENT_TYPE_WARNING, 2U, IOLINK_DIAG_F_PULSE, IOLINK_DIAG_PULSE_HOLD_MS},
+    {0x1802U, IOLINK_EVENT_TYPE_WARNING, 2U, IOLINK_DIAG_F_PULSE, IOLINK_DIAG_PULSE_HOLD_MS},
+    {0x1803U, IOLINK_EVENT_TYPE_ERROR, 4U, IOLINK_DIAG_F_PULSE, IOLINK_DIAG_PULSE_HOLD_MS},
+    {0x1804U, IOLINK_EVENT_TYPE_WARNING, 2U, IOLINK_DIAG_F_PULSE, IOLINK_DIAG_PULSE_HOLD_MS},
+    {0x0000U, IOLINK_EVENT_TYPE_NOTIFICATION, 0U, IOLINK_DIAG_F_NOTIFICATION, 0U},
+    {0x1000U, IOLINK_EVENT_TYPE_ERROR, 4U, 0U, 0U},
+    {0x4210U, IOLINK_EVENT_TYPE_WARNING, 2U, 0U, 0U},
+    {0x4220U, IOLINK_EVENT_TYPE_WARNING, 2U, 0U, 0U},
+    {0x5000U, IOLINK_EVENT_TYPE_ERROR, 4U, 0U, 0U},
+    {0x5010U, IOLINK_EVENT_TYPE_ERROR, 4U, 0U, 0U},
+    {0x5011U, IOLINK_EVENT_TYPE_ERROR, 4U, 0U, 0U},
+    {0x5012U, IOLINK_EVENT_TYPE_WARNING, 2U, 0U, 0U},
+    {0x5100U, IOLINK_EVENT_TYPE_ERROR, 4U, 0U, 0U},
+    {0x5101U, IOLINK_EVENT_TYPE_ERROR, 4U, 0U, 0U},
+    {0x6000U, IOLINK_EVENT_TYPE_ERROR, 4U, 0U, 0U},
+    {0x6320U, IOLINK_EVENT_TYPE_ERROR, 4U, 0U, 0U},
+    {0x6321U, IOLINK_EVENT_TYPE_ERROR, 4U, 0U, 0U},
+    {0x7700U, IOLINK_EVENT_TYPE_ERROR, 4U, 0U, 0U},
+    {0x7711U, IOLINK_EVENT_TYPE_ERROR, 4U, 0U, 0U},
+    {0x8C00U, IOLINK_EVENT_TYPE_ERROR, 4U, 0U, 0U},
+    {0x8C01U, IOLINK_EVENT_TYPE_WARNING, 3U, 0U, 0U},
+    {0x8C10U, IOLINK_EVENT_TYPE_WARNING, 2U, 0U, 0U},
+    {0x8C20U, IOLINK_EVENT_TYPE_ERROR, 4U, 0U, 0U},
+    {0x8C30U, IOLINK_EVENT_TYPE_WARNING, 2U, 0U, 0U},
+    {0x8C40U, IOLINK_EVENT_TYPE_WARNING, 1U, 0U, 0U},
+    {0x8C41U, IOLINK_EVENT_TYPE_WARNING, 1U, 0U, 0U},
+    {0x8C42U, IOLINK_EVENT_TYPE_WARNING, 1U, 0U, 0U},
+    {0xFF91U, IOLINK_EVENT_TYPE_NOTIFICATION, 0U, IOLINK_DIAG_F_NOTIFICATION, 0U},
 };
 
 static void test_registry_matches_table_d1(void** state)
@@ -95,6 +96,8 @@ static void test_registry_matches_table_d1(void** state)
         assert_int_equal(desc->code, k_table_d1[i].code);
         assert_int_equal(desc->type, k_table_d1[i].type);
         assert_int_equal(desc->status, k_table_d1[i].status);
+        assert_int_equal(desc->flags, k_table_d1[i].flags);
+        assert_int_equal(desc->hold_ms, k_table_d1[i].hold_ms);
         assert_int_equal(iolink_event_classify(k_table_d1[i].code), k_table_d1[i].type);
         assert_int_equal(iolink_diag_type_for(k_table_d1[i].code, 0xFFU), k_table_d1[i].type);
         assert_int_equal(iolink_diag_status_for(k_table_d1[i].code, k_table_d1[i].type),
@@ -125,9 +128,10 @@ static void test_registry_matches_table_d1(void** state)
     assert_int_equal(iolink_diag_src_code(IOLINK_DIAG_SRC_COMM_FRAMING), 0x1803U);
     assert_int_equal(iolink_diag_src_code(IOLINK_DIAG_SRC_COMM_TIMING), 0x1804U);
 
-    /* 注册表在边界外不可读。 */
+    /* 注册表在边界外不可读；来源条目固定排在前 IOLINK_DIAG_SRC_COUNT 项。 */
     assert_null(iolink_diag_registry_at(iolink_diag_registry_size()));
     assert_null(iolink_diag_src_desc((iolink_diag_src_t) IOLINK_DIAG_SRC_COUNT));
+    assert_int_equal(iolink_diag_registry_at(0U)->src, IOLINK_DIAG_SRC_PHY_UNDERVOLTAGE);
 }
 
 /* 电平源：0→1 触发一次并计数；稳态不重复；1→0 只清条件（disappears 由
@@ -237,6 +241,63 @@ static void test_isr_pulse_consumed_by_service(void** state)
     assert_int_equal(events.count, 0U);
 }
 
+/* 多个脉冲源在同一次 service 中合并消费。 */
+static void test_isr_pulse_merges_multiple_sources(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t events;
+    diag_events_init(&events);
+
+    iolink_diag_pulse_isr(&events, IOLINK_DIAG_SRC_COMM_TIMEOUT);
+    iolink_diag_pulse_isr(&events, IOLINK_DIAG_SRC_COMM_CRC);
+    iolink_diag_service(&events, 0U);
+
+    assert_int_equal(events.diag.isr_pulse[IOLINK_DIAG_SRC_COMM_TIMEOUT], 0U);
+    assert_int_equal(events.diag.isr_pulse[IOLINK_DIAG_SRC_COMM_CRC], 0U);
+    assert_int_equal(events.pending_count, 2U);
+}
+
+/* ISR 变体对非脉冲源不产生事件（与 iolink_diag_pulse 的守卫一致）。 */
+static void test_isr_pulse_ignores_level_sources(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t events;
+    diag_events_init(&events);
+
+    iolink_diag_pulse_isr(&events, IOLINK_DIAG_SRC_PHY_OVERTEMP);
+    iolink_diag_service(&events, 0U);
+    assert_int_equal(events.pending_count, 0U);
+    assert_int_equal(events.count, 0U);
+}
+
+/* 槽位耗尽：新条件被丢弃并计数，已有条件不受影响。 */
+static void test_pending_exhaustion_counts_drop(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t events;
+    uint8_t triggered = 0U;
+    const uint8_t total = (uint8_t) (IOLINK_EVENT_PENDING_MAX + 1U);
+    diag_events_init(&events);
+
+    assert_true(iolink_diag_registry_size() > total);
+    for (uint8_t i = 0U; (i < iolink_diag_registry_size()) && (triggered < total); i++) {
+        const iolink_diag_desc_t* desc = iolink_diag_registry_at(i);
+        if (desc->type == IOLINK_EVENT_TYPE_NOTIFICATION) {
+            continue;
+        }
+        iolink_event_trigger(&events, desc->code, desc->type);
+        /* 清空线上队列，确保瓶颈只可能是 pending 生命周期表。 */
+        iolink_event_t queued_event;
+        while (iolink_events_pop(&events, &queued_event)) {
+            /* drain */
+        }
+        triggered++;
+    }
+    assert_int_equal(triggered, total);
+    assert_int_equal(iolink_events_get_dropped_count(&events), 1U);
+    assert_true(iolink_diag_device_status(&events) >= 2U);
+}
+
 /* 注册表规范化：已登记代码的调用方类型被覆盖；未登记代码保持兼容输入。 */
 static void test_trigger_normalizes_registered_type(void** state)
 {
@@ -326,6 +387,8 @@ static void test_rearm_rearms_level_latch(void** state)
     assert_true(iolink_diag_set_level(&events, IOLINK_DIAG_SRC_PHY_OVERVOLTAGE, true));
     assert_int_equal(iolink_diag_edge_count(&events, IOLINK_DIAG_SRC_PHY_OVERVOLTAGE), 2U);
     assert_int_equal(events.pending_count, 1U);
+    /* 同一根因仍在 reported 状态：不追加第二个 appears。 */
+    assert_int_equal(events.count, 1U);
 
     /* 非电平来源的 mask 位无副作用。 */
     iolink_diag_rearm(&events, (uint8_t) (1U << IOLINK_DIAG_SRC_COMM_CRC));
@@ -491,6 +554,9 @@ int main(void)
         cmocka_unit_test(test_level_source_edges),
         cmocka_unit_test(test_pulse_hold_window),
         cmocka_unit_test(test_isr_pulse_consumed_by_service),
+        cmocka_unit_test(test_isr_pulse_merges_multiple_sources),
+        cmocka_unit_test(test_isr_pulse_ignores_level_sources),
+        cmocka_unit_test(test_pending_exhaustion_counts_drop),
         cmocka_unit_test(test_trigger_normalizes_registered_type),
         cmocka_unit_test(test_status_and_dds_share_condition_set),
         cmocka_unit_test(test_rearm_rearms_level_latch),

@@ -537,3 +537,16 @@ Table D.1；`0x1800–0x18FF` 是厂商特定设备范围，表中 0x1801–0x18
    Table D.1 不一致的 type，是静默规范化、返回错误，还是保留一个版本的兼容行为？
 9. **P4/P5 的接口归属**：0x0024/0x0025 handler 最终放在 OD 表还是诊断模块；
    P5 的发布字是否替换 `isr_pulse[]`。两者都不阻塞本设计，但决定最终文件布局。
+
+## 8. 实现备注（P10 落地后）
+
+- `IOLINK_DIAG_STATUS_NONE`（0xFF）在默认注册表中没有条目，`iolink_diag_status_for()`
+  的该分支当前不可达；若厂商表显式使用 0xFF，状态按事件类型回落（Error 4 /
+  Warning 2 / Notification 0）。`tests/test_diag.c` 已按此记录，未把不可达分支
+  当作已覆盖。
+- `IOLINK_DIAG_PULSE_HOLD_MS=0` 表示“不自动撤销”；默认表使用非 0 值，保持窗口测试
+  按编译期默认值断言。若产品切成 0，需要补一条窗口不撤销的用例。
+- ISR 变体 `iolink_diag_pulse_isr()` 与非 ISR 的 `iolink_diag_pulse()` 采用同一
+  PULSE 标志守卫：对 LEVEL 源的脉冲写入不会产生事件（已由测试钉住）。
+- 槽位耗尽测试先排空线上队列再触发第 `IOLINK_EVENT_PENDING_MAX + 1` 个条件，
+  因此丢弃计数只反映 pending 生命周期表容量，不混入队列深度。

@@ -268,7 +268,11 @@ void iolink_diag_service(iolink_events_ctx_t* events, uint32_t now_ms)
     }
     for (uint8_t i = 0U; i < (uint8_t) IOLINK_DIAG_SRC_COUNT; i++) {
         if ((fired_mask & (uint8_t) (1U << i)) != 0U) {
-            diag_pulse_at(events, (iolink_diag_src_t) i, now_ms);
+            const iolink_diag_desc_t* desc = diag_desc_by_src((iolink_diag_src_t) i);
+            /* 与 iolink_diag_pulse() 一致：只有 PULSE 源接受 one-shot。 */
+            if ((desc != NULL) && ((desc->flags & IOLINK_DIAG_F_PULSE) != 0U)) {
+                diag_pulse_at(events, (iolink_diag_src_t) i, now_ms);
+            }
         }
     }
 
