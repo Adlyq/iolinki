@@ -905,44 +905,10 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
         return;
     }
 
-    /* 故障位掩码是首选通道，替代旧的一对接口：
-     * 能报告*哪里*出错的 PHY 无需在此做电压阈值判断。 */
+    /* 故障位掩码是唯一的物理诊断通道。 */
     if (ctx->phy->get_faults != NULL) {
         dll_poll_phy_faults(ctx);
-        return;
     }
-
-#if IOLINK_PHY_FEATURE_LEGACY_DIAG
-    if (ctx->phy->get_voltage_mv != NULL) {
-        int voltage = ctx->phy->get_voltage_mv(ctx->phy->user);
-        /* 负读数表示“测量不可用”，而非故障
-           （phy_generic 的模板钩子返回 -1）。18 V 到 30 V（含端点）是
-           有效范围；Table D.1 代码 0x5111/0x5110 报告欠压/过压。 */
-        if (voltage >= 0) {
-            if (voltage < 18000) {
-                ctx->voltage_faults++;
-                /* Table D.1 设备代码 0x5111 "Primary supply voltage underrun"。 */
-                DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN,
-                                  IOLINK_EVENT_TYPE_WARNING);
-            }
-            else if (voltage > 30000) {
-                ctx->voltage_faults++;
-                /* Table D.1 设备代码 0x5110 "Primary supply voltage overrun"。 */
-                DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN,
-                                  IOLINK_EVENT_TYPE_WARNING);
-            }
-        }
-    }
-
-    if (ctx->phy->is_short_circuit != NULL) {
-        if (ctx->phy->is_short_circuit(ctx->phy->user)) {
-            ctx->short_circuits++;
-            /* Table D.1 设备代码 0x7710 "Short circuit"。 */
-            DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_SHORT_CIRCUIT,
-                              IOLINK_EVENT_TYPE_ERROR);
-        }
-    }
-#endif /* IOLINK_PHY_FEATURE_LEGACY_DIAG */
 }
 
 /* -------------------------------------------------------------------------

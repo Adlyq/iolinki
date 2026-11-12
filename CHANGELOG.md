@@ -57,6 +57,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `IOLINK_PHY_OWNS_LINE_STATE`, `IOLINK_DS_STATE_LOCKED`,
   `IOLINK_REPLY_VARIANT_COUNT`, `iolink_device_ctx_size()` and the unused ISDU
   transport states.
+- Legacy layers (no deprecation path): `IOLINK_PHY_FEATURE_LEGACY_DIAG` with the
+  `get_voltage_mv`/`is_short_circuit` PHY hooks (diagnostics now use
+  `get_faults()` only), `IOLINK_FEATURE_LEGACY_PARAMS` with the context-less
+  `iolink_params_*` API and `g_legacy_*` state, the `iolink_device_info_*`
+  process-wide wrappers and `g_legacy_device_info_ctx`, and the
+  `IOLINK_CONCURRENCY_RTOS` marker. Identity and parameters are context-only;
+  a script that calls the removed APIs must switch to the `_ctx` forms and bind
+  them through `iolink_device_init()`.
 
 ### Fixed (Type-0 reset and PHY frame contract)
 - A MasterCommand (Table B.2, e.g. `0x97` DeviceStartup) written to Direct

@@ -67,7 +67,6 @@ one-octet OD. Its trimmed configuration is:
 #define IOLINK_MINIMAL_PROFILE 1
 #define IOLINK_FEATURE_EVENTS 0
 #define IOLINK_PHY_FEATURE_WAKEUP 1
-#define IOLINK_PHY_FEATURE_LEGACY_DIAG 0
 #define IOLINK_PHY_FEATURE_ISR_TX_ONLY 1
 #define IOLINK_ISR_RX_MODE IOLINK_ISR_RX_FRAME
 #define IOLINK_ISR_TX_MODE IOLINK_ISR_TX_FRAME
@@ -89,7 +88,7 @@ Hardware check: after flashing, RTT reports `[STATE] 4` (OPERATE) and 28-byte
 `[PDO]` traffic.
 
 Disabled features fail the build: their public declarations are compiled out, so
-calling e.g. `iolink_ds_init`, `iolink_events_flag` or `iolink_params_get`
+calling e.g. `iolink_ds_init`, `iolink_events_flag` or `iolink_params_ctx_get`
 produces an implicit-declaration error (or an undefined reference if the
 compiler only warns). Wire-visible objects that cannot be removed at compile
 time answer a negative response instead: `0x0003` (Data Storage) and `0x0025`

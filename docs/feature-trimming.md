@@ -12,11 +12,9 @@ below is the contract.
 | --- | --- | --- |
 | `IOLINK_FEATURE_DATA_STORAGE` | 1 | `src/data_storage.c` body and the `ds` context field are removed; index `0x0003` and the DS SystemCommands answer `FUNC_NOTAVAIL`/`IDX_NOTAVAIL` |
 | `IOLINK_FEATURE_SYSTEM_COMMAND` | 1 | `handle_system_command()` is compiled to reject every command with `FUNC_NOTAVAIL` |
-| `IOLINK_FEATURE_LEGACY_PARAMS` | 1 | the process-wide `g_legacy_*` parameter set and the context-less `iolink_params_*` API are removed; the ISDU fallback returns an error |
 | `IOLINK_FEATURE_EVENTS` | 1 | `src/events.c` is replaced by inert stubs (no queue, no classification); DetailedDeviceStatus reports no events |
 | `IOLINK_PHY_FEATURE_WAKEUP` | 1 | `detect_wakeup` is removed from the PHY vtable; the DLL treats the PHY as owning the line state (starts in SDCI). A Fallback MasterCommand is acknowledged but does not switch to SIO, since the build cannot detect the next wake-up. An application that requests SIO directly still cannot leave it until a reset |
 | `IOLINK_PHY_FEATURE_SIO_CQ` | 1 | `set_cq_line` is removed from the PHY vtable |
-| `IOLINK_PHY_FEATURE_LEGACY_DIAG` | 1 | `get_voltage_mv` / `is_short_circuit` are removed; the DLL still polls `get_faults()` when that hook is present, so bitmask fault reporting is retained |
 
 ## CMake options
 
@@ -25,15 +23,13 @@ propagated as `=0`; the rest keep the `config.h` defaults.
 
 | Option | Effect |
 | --- | --- |
-| `-DIOLINK_MINIMAL_PROFILE=ON` | Bundle: Data Storage, SystemCommand, LegacyParams and the three PHY hooks off; **events kept** |
+| `-DIOLINK_MINIMAL_PROFILE=ON` | Bundle: Data Storage, SystemCommand and the PHY hooks off; **events kept** |
 | `-DIOLINK_TINY_PROFILE=ON` | Bundle: MINIMAL + `IOLINK_FEATURE_EVENTS=OFF` |
 | `-DIOLINK_FEATURE_DATA_STORAGE=OFF` | Individual override |
 | `-DIOLINK_FEATURE_SYSTEM_COMMAND=OFF` | Individual override |
-| `-DIOLINK_FEATURE_LEGACY_PARAMS=OFF` | Individual override |
 | `-DIOLINK_FEATURE_EVENTS=OFF` | Individual override |
 | `-DIOLINK_PHY_FEATURE_WAKEUP=OFF` | Individual override |
 | `-DIOLINK_PHY_FEATURE_SIO_CQ=OFF` | Individual override |
-| `-DIOLINK_PHY_FEATURE_LEGACY_DIAG=OFF` | Individual override |
 | `-DIOLINK_APP_PD_INPUT_CALLBACK=ON` | Select the `on_pd_input` callback as the only PD-in source; the polling `iolink_device_pd_input_update()` is removed and examples/tests are skipped (see `include/iolinki/device.h` and `include/iolinki/application.h`) |
 
 Profiles are bundles: when one is selected it overrides the individual feature

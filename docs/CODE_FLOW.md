@@ -638,8 +638,8 @@ flowchart TD
 - `DeviceStatus` 取当前队列最高严重度（`iolink_events_get_highest_severity()`）。
 - `DetailedDeviceStatus` 读取的是 `pending[]` 中的 Error/Warning，而不是队列。
 - `STARTUP` 状态会调用 `iolink_events_reset()` 丢弃事件（A.6.4）。
-- 物理诊断优先轮询 `phy->get_faults()` 位图：0→1 边沿计数并映射为 Table D.1 事件（UNDERVOLTAGE→0x5111、OVERVOLTAGE→0x5110、OVERTEMP→0x4000、SHORT_CIRCUIT→0x7710），1→0 边沿清除事件；事件引擎被 STARTUP/诊断复位清空后，DLL 会重新武装边沿锁存，仍存在的故障会在新会话中重新上报。`get_faults()` 为 NULL 时才回退到旧接口 `get_voltage_mv()` / `is_short_circuit()`。
-- 计数器语义：`get_faults()` 路径按故障片段计数（每个 0→1 边沿一次）；legacy 路径按轮询周期计数（故障持续时每周期加一）。
+- 物理诊断轮询 `phy->get_faults()` 位图：0→1 边沿计数并映射为 Table D.1 事件（UNDERVOLTAGE→0x5111、OVERVOLTAGE→0x5110、OVERTEMP→0x4000、SHORT_CIRCUIT→0x7710），1→0 边沿清除事件；事件引擎被 STARTUP/诊断复位清空后，DLL 会重新武装边沿锁存，仍存在的故障会在新会话中重新上报。`get_faults()` 为 NULL 时诊断静默（不再有 legacy 电压/短路回退）。
+- 计数器语义：`get_faults()` 路径按故障片段计数（每个 0→1 边沿一次）。
 
 ---
 
@@ -713,7 +713,6 @@ sequenceDiagram
 | `phy.response_timer_start/stop` | ISR RX/TX | t_A 看门狗 |
 | `phy.stack_timer_start` | 帧结束 / Timer B | 授权主循环服务窗口；`stack_timer_stop` 当前无栈内调用点 |
 | `phy.detect_wakeup` | `iolink_dll_process()` | SIO 唤醒检测 |
-| `phy.get_voltage_mv` / `is_short_circuit` | `dll_poll_diagnostics()` | 旧版诊断，触发电压/短路事件 |
 | `iolink_critical_enter/exit` | 事件引擎、PD 索引/长度等标量；直发回退时驱动 PHY（经 `IOLINK_CRITICAL_ENTER/EXIT()`） | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
 | `on_state_change` | `device_state_cb()` | 当前状态（电平式；主上下文迁移立即投递，ISR 迁移合并） |
 | `on_startup` | 初始化末尾 + 进入 STARTUP | 初始化时显式调用一次 |
@@ -725,7 +724,7 @@ sequenceDiagram
 | `vendor_service` | ISDU device-specific 索引；DS 读写回退 | 参数 `input/output/output_length` 契约见 `isdu.h` |
 | `storage->read/write` | params 加载/保存、DS 加载/保存 | `erase` 当前无调用点 |
 | `iolink_device_time_us_fn time_us` | DLL、ISR 双泵、事件引擎 | 必需；初始化时绑定，NULL 返回 `IOLINK_DEVICE_INIT_ERR_TIME`；必须单调/非阻塞/ISR 安全 |
-| `phy.get_faults` | `dll_poll_diagnostics()` | 优先诊断通道：边沿触发/清除 Table D.1 事件 |
+| `phy.get_faults` | `dll_poll_diagnostics()` | 边沿触发/清除 Table D.1 事件；NULL 时诊断静默 |
 | `phy.set_cq_line` | 无 | SIO 线状态由 PHY/应用自行管理 |
 
 ### 9.4 库提供给 PHY/平台的钩子
@@ -973,10 +972,9 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 | `IOLINK_FEATURE_DATA_STORAGE` | 是否编译 DS 引擎与 ISDU 0x0003 |
 | `IOLINK_FEATURE_SYSTEM_COMMAND` | 是否编译 SystemCommand |
 | `IOLINK_FEATURE_EVENTS` | 是否编译事件队列/事件内存/诊断事件 |
-| `IOLINK_FEATURE_LEGACY_PARAMS` | 是否保留全局 legacy params API |
 | `IOLINK_PHY_FEATURE_WAKEUP` | 是否编译 `detect_wakeup` 能力 |
-| `IOLINK_PHY_FEATURE_LEGACY_DIAG` | 是否轮询 `get_voltage_mv`/`is_short_circuit` |
-| `IOLINK_MINIMAL_PROFILE` | 一键关闭 DS/SystemCommand/legacy params/wakeup/SIO_CQ/legacy diag |
+| `IOLINK_PHY_FEATURE_SIO_CQ` | 是否编译 `set_cq_line` 能力 |
+| `IOLINK_MINIMAL_PROFILE` | 一键关闭 DS/SystemCommand/wakeup/SIO_CQ |
 
 集成注意（按当前代码实际调用点）：
 

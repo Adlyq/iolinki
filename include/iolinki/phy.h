@@ -75,10 +75,6 @@ typedef enum
 #define IOLINK_PHY_STATUS_CHK (1U << 0)        /**< 帧结束超时 / 接收错误 */
 #define IOLINK_PHY_STATUS_DATA_READY (1U << 1) /**< 有已接收的字节可用 */
 
-/** 旧版 iolink_phy_api_t.get_voltage_mv() 钩子的有效 L+ 窗口，单位 mV。 */
-#define IOLINK_PHY_VOLTAGE_MIN_MV (18000)
-#define IOLINK_PHY_VOLTAGE_MAX_MV (30000)
-
 /**
  * @brief 物理层（PHY）API 结构
  *
@@ -246,39 +242,16 @@ typedef struct
      * @brief 可选：当前活跃的物理故障，为
      *        IOLINK_PHY_FAULT_* 标志的位掩码（无故障时为 0）。
      *
-     * 这是首选的诊断通道：PHY 描述物理上
+     * 这是诊断通道：PHY 描述物理上
      * 出了什么问题，无需了解 IO-Link EventCodes。DLL
      * 从 iolink_dll_process() 轮询它；0->1 边沿会触发映射的事件
      * （UNDERVOLTAGE -> 0x5111 Warning，OVERVOLTAGE -> 0x5110 Warning，
      * OVERTEMP -> 0x4000 Error，SHORT_CIRCUIT -> 0x7710 Error）一次，以及
-     * 1->0 边沿会清除它，使事件引擎能够发出“disappears”。当该
-     * 钩子为 NULL 时，改用下面的旧版组合。
+     * 1->0 边沿会清除它，使事件引擎能够发出“disappears”。该钩子为
+     * NULL 时不做物理诊断。
      * @return 活跃故障标志。
      */
     uint8_t (*get_faults)(void* user);
-
-#if IOLINK_PHY_FEATURE_LEGACY_DIAG
-    /**
-     * @brief get_faults() 的旧版替代：测得的 L+ 电源电压。
-     *
-     * 仅在 get_faults() 为 NULL 时参考。*负* 返回值表示
-     * “测量不可用”，并非故障；非负读数
-     * 超出 [IOLINK_PHY_VOLTAGE_MIN_MV, IOLINK_PHY_VOLTAGE_MAX_MV] 会触发
-     * IOLINK_PHY_FAULT_UNDERVOLTAGE。
-     * @return 电压值（毫伏），测量不可用时为负
-     */
-    int (*get_voltage_mv)(void* user);
-
-    /**
-     * @brief get_faults() 的旧版替代：硬件故障状态。
-     *
-     * 仅在 get_faults() 为 NULL 时参考。文档化的契约为
-     * “检测到短路或过温”，即原因无法
-     * 区分，因此它触发 IOLINK_PHY_FAULT_SHORT_CIRCUIT。
-     * @return 检测到故障时返回 true
-     */
-    bool (*is_short_circuit)(void* user);
-#endif /* IOLINK_PHY_FEATURE_LEGACY_DIAG */
 } iolink_phy_api_t;
 
 /** @} */ /* iolinki_phy 结束 */

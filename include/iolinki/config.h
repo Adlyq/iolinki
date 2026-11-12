@@ -198,17 +198,11 @@
 #ifndef IOLINK_FEATURE_SYSTEM_COMMAND
 #define IOLINK_FEATURE_SYSTEM_COMMAND 0
 #endif
-#ifndef IOLINK_FEATURE_LEGACY_PARAMS
-#define IOLINK_FEATURE_LEGACY_PARAMS 0
-#endif
 #ifndef IOLINK_PHY_FEATURE_WAKEUP
 #define IOLINK_PHY_FEATURE_WAKEUP 0
 #endif
 #ifndef IOLINK_PHY_FEATURE_SIO_CQ
 #define IOLINK_PHY_FEATURE_SIO_CQ 0
-#endif
-#ifndef IOLINK_PHY_FEATURE_LEGACY_DIAG
-#define IOLINK_PHY_FEATURE_LEGACY_DIAG 0
 #endif
 #endif /* IOLINK_MINIMAL_PROFILE */
 
@@ -224,10 +218,6 @@
 #ifndef IOLINK_FEATURE_EVENTS
 #define IOLINK_FEATURE_EVENTS 1
 #endif
-/** @brief 旧版全局参数 API + g_legacy_* 全局变量（推荐使用 ctx API）。 */
-#ifndef IOLINK_FEATURE_LEGACY_PARAMS
-#define IOLINK_FEATURE_LEGACY_PARAMS 1
-#endif
 /** @brief PHY 唤醒检测（detect_wakeup）。 */
 #ifndef IOLINK_PHY_FEATURE_WAKEUP
 #define IOLINK_PHY_FEATURE_WAKEUP 1
@@ -235,10 +225,6 @@
 /** @brief PHY 手动 C/Q 推挽（set_cq_line）。 */
 #ifndef IOLINK_PHY_FEATURE_SIO_CQ
 #define IOLINK_PHY_FEATURE_SIO_CQ 1
-#endif
-/** @brief PHY 旧版诊断（get_voltage_mv + is_short_circuit）。 */
-#ifndef IOLINK_PHY_FEATURE_LEGACY_DIAG
-#define IOLINK_PHY_FEATURE_LEGACY_DIAG 1
 #endif
 
 /* --- 3.2 ISR 传输粒度 [可覆盖] ----------------------------------------- */
@@ -309,13 +295,6 @@
 #define IOLINK_CONCURRENCY_SINGLE 0
 #define IOLINK_CONCURRENCY_ISR 1
 #define IOLINK_CONCURRENCY_SMP 2
-/**
- * @brief 已移除的档位，仅用于让旧的构建标志显式报错。
- *
- * 该值保持越界，使过期的 `-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_RTOS`
- * 被 port.h 拒绝，而不是静默求值为 0（= SINGLE）。
- */
-#define IOLINK_CONCURRENCY_RTOS 3
 
 #ifndef IOLINK_CONCURRENCY
 #define IOLINK_CONCURRENCY IOLINK_CONCURRENCY_ISR

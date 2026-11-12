@@ -193,20 +193,19 @@ static int test_od_cutpoints(void)
     return 0;
 }
 
-#if IOLINK_PHY_FEATURE_LEGACY_DIAG
 /* 在主泵进入 iolink_dll_process()、尚未消费邮箱时
- * 发布第二帧的 PHY 回调。 */
+ * 发布第二帧的 PHY 回调（挂在故障位图诊断轮询上）。 */
 static uint8_t g_publish_on_poll;
 static iolink_dll_ctx_t* g_poll_ctx;
 
-static int poll_voltage_publish(void* user)
+static uint8_t poll_faults_publish(void* user)
 {
     (void) user;
     if (g_publish_on_poll != 0U) {
         g_publish_on_poll = 0U;
         assert(publish_frame(g_poll_ctx, 0x90U, 2U));
     }
-    return -1; /* 测量不可用：不产生故障，也不产生事件 */
+    return 0U; /* 无故障：不产生事件 */
 }
 
 /* 端到端：真实的消费者（dll_consume_isr_mailbox）每趟排空一条记录，
@@ -216,7 +215,7 @@ static int test_main_pass_cutpoint(void)
     iolink_dll_ctx_t ctx;
     const iolink_phy_api_t phy = {
         .user = NULL,
-        .get_voltage_mv = poll_voltage_publish,
+        .get_faults = poll_faults_publish,
     };
 
     iolink_dll_init(&ctx, &phy);
@@ -247,7 +246,6 @@ static int test_main_pass_cutpoint(void)
     assert(iolink_ring_is_empty(&ctx.isr_frame_ring));
     return 0;
 }
-#endif /* 旧式诊断 */
 
 int main(void)
 {
@@ -263,11 +261,9 @@ int main(void)
     if (rc != 0) {
         return rc;
     }
-#if IOLINK_PHY_FEATURE_LEGACY_DIAG
     rc = test_main_pass_cutpoint();
     if (rc != 0) {
         return rc;
     }
-#endif
     return 0;
 }

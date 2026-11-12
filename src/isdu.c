@@ -90,15 +90,11 @@ static int isdu_params_get(const iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
         return iolink_params_ctx_get(ctx->params_ctx, index, subindex, buffer, max_len);
     }
-#if IOLINK_FEATURE_LEGACY_PARAMS
-    return iolink_params_get(index, subindex, buffer, max_len);
-#else
     (void) index;
     (void) subindex;
     (void) buffer;
     (void) max_len;
     return -1;
-#endif
 }
 
 /** @brief 通过绑定的 params 上下文写入参数，否则使用旧的全局集合。 */
@@ -116,16 +112,12 @@ static int isdu_params_set(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subin
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
         return iolink_params_ctx_set(ctx->params_ctx, index, subindex, data, len, persist);
     }
-#if IOLINK_FEATURE_LEGACY_PARAMS
-    return iolink_params_set(index, subindex, data, len, persist);
-#else
     (void) index;
     (void) subindex;
     (void) data;
     (void) len;
     (void) persist;
     return -1;
-#endif
 }
 
 #if IOLINK_FEATURE_SYSTEM_COMMAND
@@ -139,11 +131,6 @@ static void isdu_params_factory_reset(iolink_isdu_ctx_t* ctx)
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
         iolink_params_ctx_factory_reset(ctx->params_ctx);
     }
-#if IOLINK_FEATURE_LEGACY_PARAMS
-    else {
-        iolink_params_factory_reset();
-    }
-#endif
 }
 #endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
 
@@ -158,7 +145,7 @@ static const iolink_device_info_t* isdu_info(const iolink_isdu_ctx_t* ctx)
 {
     const iolink_device_info_ctx_t* info_ctx =
         ((ctx != NULL) && (ctx->params_ctx != NULL)) ? ctx->params_ctx->device_info : NULL;
-    return (info_ctx != NULL) ? iolink_device_info_ctx_get(info_ctx) : iolink_device_info_get();
+    return (info_ctx != NULL) ? iolink_device_info_ctx_get(info_ctx) : NULL;
 }
 
 /** @brief 该 ISDU 上下文的有效访问锁。 */
@@ -166,8 +153,7 @@ static uint16_t isdu_access_locks(const iolink_isdu_ctx_t* ctx)
 {
     const iolink_device_info_ctx_t* info_ctx =
         ((ctx != NULL) && (ctx->params_ctx != NULL)) ? ctx->params_ctx->device_info : NULL;
-    return (info_ctx != NULL) ? iolink_device_info_ctx_get_access_locks(info_ctx)
-                              : iolink_device_info_get_access_locks();
+    return (info_ctx != NULL) ? iolink_device_info_ctx_get_access_locks(info_ctx) : 0U;
 }
 
 static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error);
@@ -1193,9 +1179,6 @@ static void handle_access_locks(iolink_isdu_ctx_t* ctx)
             iolink_device_info_ctx_t* info_ctx = isdu_info_ctx(ctx);
             if (info_ctx != NULL) {
                 iolink_device_info_ctx_set_access_locks(info_ctx, new_locks);
-            }
-            else {
-                iolink_device_info_set_access_locks(new_locks);
             }
         }
         ctx->response_len = 0U;

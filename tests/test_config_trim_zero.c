@@ -25,10 +25,8 @@ int main(void)
 {
     assert(IOLINK_FEATURE_DATA_STORAGE == 1);
     assert(IOLINK_FEATURE_SYSTEM_COMMAND == 1);
-    assert(IOLINK_FEATURE_LEGACY_PARAMS == 1);
     assert(IOLINK_FEATURE_EVENTS == 1);
     assert(IOLINK_PHY_FEATURE_WAKEUP == 1);
     assert(IOLINK_PHY_FEATURE_SIO_CQ == 1);
-    assert(IOLINK_PHY_FEATURE_LEGACY_DIAG == 1);
     return 0;
 }

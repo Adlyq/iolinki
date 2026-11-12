@@ -61,36 +61,15 @@ static void generic_set_cq_line(void* user, uint8_t state)
 }
 #endif
 
-#if IOLINK_PHY_FEATURE_LEGACY_DIAG
-/** @brief 用于读取电源电压（mV）的模板钩子（不可用时返回负值）。 */
-static int generic_get_voltage_mv(void* user)
-{
-    (void) user;
-    /* 模板：返回电源电压（mV），不可用时返回负值。 */
-    return -1;
-}
-
-/** @brief 检测到短路故障时返回真的模板钩子。 */
-static bool generic_is_short_circuit(void* user)
-{
-    (void) user;
-    /* 模板：若检测到故障则返回真。 */
-    return false;
-}
-#endif
-
-static const iolink_phy_api_t g_phy_generic = {.init = generic_init,
-                                               .set_mode = generic_set_mode,
-                                               .set_baudrate = generic_set_baudrate,
+static const iolink_phy_api_t g_phy_generic = {
+    .init = generic_init,
+    .set_mode = generic_set_mode,
+    .set_baudrate = generic_set_baudrate,
 #if IOLINK_PHY_FEATURE_WAKEUP
-                                               .detect_wakeup = generic_detect_wakeup,
+    .detect_wakeup = generic_detect_wakeup,
 #endif
 #if IOLINK_PHY_FEATURE_SIO_CQ
-                                               .set_cq_line = generic_set_cq_line,
-#endif
-#if IOLINK_PHY_FEATURE_LEGACY_DIAG
-                                               .get_voltage_mv = generic_get_voltage_mv,
-                                               .is_short_circuit = generic_is_short_circuit
+    .set_cq_line = generic_set_cq_line,
 #endif
 };
 

@@ -147,8 +147,8 @@ Copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes
 `void* user` first. `init`, `set_mode`, and `set_baudrate` are required. The
 transport hooks depend on the configured granularity: `rx_octet`/`tx_octet` in
 BYTE mode or `rx_frame`/`tx_frame` in FRAME mode, plus `tx_done` (TX BYTE
-only), `tx_busy` (TX FRAME, optional) and `int_active`. `detect_wakeup`, `set_cq_line`, `get_voltage_mv`, and
-`is_short_circuit` may be NULL.
+only), `tx_busy` (TX FRAME, optional) and `int_active`. `detect_wakeup`,
+`set_cq_line` and `get_faults` may be NULL.
 
 `IOLINK_BAUDRATE_COM1`, `COM2`, and `COM3` are 0, 1, and 2. They select 4.8,
 38.4, and 230.4 kbit/s. They are not the baud number itself.

@@ -24,12 +24,6 @@
 #include "iolinki/utils.h"
 #include <string.h>
 
-#if IOLINK_FEATURE_LEGACY_PARAMS
-static iolink_device_info_ctx_t g_legacy_device_info_ctx;
-static iolink_params_ctx_t g_legacy_params_ctx;
-static bool g_legacy_params_ctx_initialized = false;
-#endif
-
 /** @brief 将最多 32 字节复制到以 NUL 结尾的标签缓冲区并标记为有效。 */
 static void copy_tag(char* dst, bool* valid, const uint8_t* data, size_t len)
 {
@@ -233,46 +227,3 @@ void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx)
      * 保留复位结果，也要复位 RAM。集成方不能从该调用推断持久化。 */
     (void) params_ctx_write_nvm(ctx);
 }
-
-#if IOLINK_FEATURE_LEGACY_PARAMS
-
-/** @brief 延迟初始化并返回进程级的旧参数上下文。 */
-static iolink_params_ctx_t* legacy_params_ctx(void)
-{
-    if (!g_legacy_params_ctx_initialized) {
-        iolink_device_info_ctx_init(&g_legacy_device_info_ctx, NULL);
-        iolink_params_ctx_init(&g_legacy_params_ctx, &g_legacy_device_info_ctx);
-        g_legacy_params_ctx_initialized = true;
-    }
-    return &g_legacy_params_ctx;
-}
-
-void iolink_params_init(void)
-{
-    iolink_device_info_ctx_init(&g_legacy_device_info_ctx, iolink_device_info_get());
-    iolink_params_ctx_init(&g_legacy_params_ctx, &g_legacy_device_info_ctx);
-    g_legacy_params_ctx_initialized = true;
-}
-
-int iolink_params_get(uint16_t index, uint8_t subindex, uint8_t* buffer, size_t max_len)
-{
-    return iolink_params_ctx_get(legacy_params_ctx(), index, subindex, buffer, max_len);
-}
-
-int iolink_params_set(uint16_t index, uint8_t subindex, const uint8_t* data, size_t len,
-                      iolink_persist_t persist)
-{
-    int res = iolink_params_ctx_set(legacy_params_ctx(), index, subindex, data, len, persist);
-    if ((res == 0) && (index == IOLINK_IDX_APPLICATION_TAG) && (subindex == 0U)) {
-        (void) iolink_device_info_set_application_tag((const char*) data, (uint8_t) len);
-    }
-    return res;
-}
-
-void iolink_params_factory_reset(void)
-{
-    iolink_params_ctx_factory_reset(legacy_params_ctx());
-    (void) iolink_device_info_set_application_tag("", 0U);
-}
-
-#endif /* IOLINK_FEATURE_LEGACY_PARAMS */

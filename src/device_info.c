@@ -44,9 +44,6 @@ static const iolink_device_info_t k_default_info = {
     .access_locks = 0x0000U /* 默认全部未锁定 */
 };
 
-static iolink_device_info_ctx_t g_legacy_device_info_ctx;
-static bool g_legacy_device_info_ctx_initialized = false;
-
 void iolink_device_info_ctx_init(iolink_device_info_ctx_t* ctx,
                                  const iolink_device_info_t* configured)
 {
@@ -119,40 +116,4 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx, uint
     }
     ctx->access_locks = locks;
     ctx->defaults.access_locks = locks;
-}
-
-/** @brief 延迟初始化并返回进程级的旧设备信息上下文。 */
-static iolink_device_info_ctx_t* legacy_device_info_ctx(void)
-{
-    if (!g_legacy_device_info_ctx_initialized) {
-        iolink_device_info_ctx_init(&g_legacy_device_info_ctx, NULL);
-        g_legacy_device_info_ctx_initialized = true;
-    }
-    return &g_legacy_device_info_ctx;
-}
-
-void iolink_device_info_init(const iolink_device_info_t* info)
-{
-    iolink_device_info_ctx_init(&g_legacy_device_info_ctx, info);
-    g_legacy_device_info_ctx_initialized = true;
-}
-
-int iolink_device_info_set_application_tag(const char* tag, uint8_t len)
-{
-    return iolink_device_info_ctx_set_application_tag(legacy_device_info_ctx(), tag, len);
-}
-
-const iolink_device_info_t* iolink_device_info_get(void)
-{
-    return iolink_device_info_ctx_get(legacy_device_info_ctx());
-}
-
-uint16_t iolink_device_info_get_access_locks(void)
-{
-    return iolink_device_info_ctx_get_access_locks(legacy_device_info_ctx());
-}
-
-void iolink_device_info_set_access_locks(uint16_t locks)
-{
-    iolink_device_info_ctx_set_access_locks(legacy_device_info_ctx(), locks);
 }

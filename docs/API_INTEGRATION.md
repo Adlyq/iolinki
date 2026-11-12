@@ -145,8 +145,6 @@ static const iolink_device_config_t g_config = {
 
 int app_init(void)
 {
-    /* Replace NULL with the application identity; see section 8.1. */
-    iolink_device_info_init(NULL);
     return iolink_device_init(&g_device, &g_config);
 }
 
@@ -186,7 +184,6 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `detect_wakeup` | 可选 | 存在时 DLL 从 SIO 开始，并负责唤醒/SDCI 转换。 |
 | `set_cq_line` | 可选 | SIO 推挽输出。 |
 | `get_faults` | 可选 | 首选的物理故障 API（`IOLINK_PHY_FAULT_*`）：DLL 按边沿上报映射事件。 |
-| `get_voltage_mv`, `is_short_circuit` | 可选，旧版 | 仅在 `get_faults == NULL` 时查询。 |
 
 当 `detect_wakeup == NULL` 时，DLL 认为 PHY 自己管理线路状态，并直接从 SDCI 开始。
 这对自行执行唤醒握手的收发器很重要。该行为完全由运行时根据 `detect_wakeup`
@@ -447,9 +444,6 @@ void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx);
 `persist != IOLINK_PERSIST_NONE` 时，`set` 只有在存储写入成功后才应用修改。
 恢复出厂设置函数返回 void，无法报告存储失败。
 
-旧版 `iolink_params_*` 函数仅在 `IOLINK_FEATURE_LEGACY_PARAMS=1` 时存在，
-并操作进程级状态。新代码应使用上下文 API。
-
 ### 7.2 存储后端
 
 ```c
@@ -564,22 +558,14 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
                                              uint16_t locks);
 ```
 
-全局包装函数（`iolink_device_info_init/get/set_application_tag/get_access_locks/
-set_access_locks`）操作同一个进程级上下文。
+身份与参数全部按上下文绑定，没有进程级全局状态：
 
-身份相关路径（强制字符串索引和直接参数页 1）会调用
-`iolink_device_info_get()`，读取的是进程级旧版上下文。运行时访问锁对象和
-参数锁检查也是如此。因此：
-
-- `config.device_info` 提供初始应用标签（Application Tag），但本身不会让 `0x0010+` 或 DPP1
-  上报该身份。
-- 在初始化前用 `iolink_device_info_init(&identity)` 注册身份（并把同一个对象传给
-  `config.device_info` 以提供应用标签默认值）。
-- `iolink_device_info_ctx_set_access_locks()` 只更新每个上下文的结构。ISDU 的
-  参数锁检查读取的是旧版全局状态，因此在单设备场景下，如果运行时锁必须
-  生效，应使用 `iolink_device_info_set_access_locks()`；只调用上下文设置函数不够。
-- 同一进程中的多个设备上下文共享身份和访问锁。在该路径改为按上下文保存之前，
-  不要假设多设备身份完全独立。
+- `config.device_info` 提供静态身份（含 Application Tag 默认值），`iolink_device_init()`
+  把它绑定到 `ctx->device_info`；`0x0010+` 与 DPP1 从该上下文读取。
+- 运行时访问锁用 `iolink_device_info_ctx_set_access_locks()` / `_get_access_locks()`
+  操作 `ctx->device_info`；ISDU 的参数锁检查读取同一个上下文。
+- 可写参数通过 `ctx->params`（`iolink_params_ctx_*`）访问，ISDU 在初始化时绑定该上下文。
+- 同一进程中的多个设备上下文各自独立，互不共享身份、访问锁或参数。
 
 ### 8.2 `time_us` 与平台时间源
 
@@ -589,10 +575,11 @@ set_access_locks`）操作同一个进程级上下文。
 核心不再调用平台时间函数。直接使用 `iolink_dll_*` 时，调用方需在初始化后自行绑定
 `ctx->time_us`/`time_user`。时间源必须在上下文生命周期内保持单调。
 
-### 8.3 旧版全局状态
+### 8.3 上下文绑定
 
-当 `IOLINK_FEATURE_LEGACY_PARAMS=1`（默认）时，存在进程级参数和 device-info
-包装函数。它们适合单实例测试，但不适合可重入或多实例场景。
+`iolink_device_init()` 会把 `config.device_info` 和内部 `params` 上下文绑定到 ISDU；
+直接使用底层 `iolink_isdu_*` API 时，调用方需要自行设置 `isdu.params_ctx`/
+`isdu.ds_ctx`，否则身份索引返回 NULL、参数与访问锁路径按空上下文处理。
 
 ### 8.4 回调与缓冲区生命周期
 
@@ -615,15 +602,12 @@ set_access_locks`）操作同一个进程级上下文。
 | `IOLINK_FEATURE_DATA_STORAGE` | 1 | 无 DS 引擎/ISDU 索引；`0x0003` 返回索引不可用。 |
 | `IOLINK_FEATURE_SYSTEM_COMMAND` | 1 | SystemCommand 返回功能不可用。 |
 | `IOLINK_FEATURE_EVENTS` | 1 | 无事件引擎/DetailedDeviceStatus/事件标志；`0x0025` 返回索引不可用。 |
-| `IOLINK_FEATURE_LEGACY_PARAMS` | 1 | 移除旧版全局参数 API。 |
 | `IOLINK_PHY_FEATURE_WAKEUP` | 1 | 移除 `detect_wakeup` 字段。 |
 | `IOLINK_PHY_FEATURE_SIO_CQ` | 1 | 移除 `set_cq_line` 字段。 |
-| `IOLINK_PHY_FEATURE_LEGACY_DIAG` | 1 | 移除旧版电压/短路钩子。 |
 
 CMake 配置档：
 
-- `IOLINK_MINIMAL_PROFILE`：关闭 DS、SystemCommand、旧版参数、唤醒、SIO C/Q 和
-  旧版诊断；保留事件。
+- `IOLINK_MINIMAL_PROFILE`：关闭 DS、SystemCommand、唤醒和 SIO C/Q；保留事件。
 - `IOLINK_TINY_PROFILE`：在最小配置基础上再关闭事件。
 
 缓冲区大小宏包括 `IOLINK_PD_IN_MAX_SIZE`、`IOLINK_PD_OUT_MAX_SIZE`、
@@ -642,7 +626,7 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 2. 为选定的 BYTE/FRAME 模式实现 PHY 回调，包括 `int_active` 和
    `request_service`。
 3. 保证 `config`、PHY 状态和所有回调数据在上下文生命周期内有效。
-4. 如果身份索引或 DPP1 必须正确，用 `iolink_device_info_init()` 注册身份。
+4. 身份索引或 DPP1 需要正确时，在 `config.device_info` 中提供静态身份（不能为 NULL）。
 5. 调用 `iolink_device_init()`，然后周期性调用 `iolink_device_process()`，
    并从数据中断调用 `iolink_device_process_isr()`。
 6. PD 只能通过 `iolink_device_pd_input_update()` 或 `on_pd_input` 回调之一提供，

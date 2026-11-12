@@ -88,7 +88,6 @@ static void test_driver_modes_and_turnaround(void** state)
     board.wake = true;
     assert_int_equal(phy->detect_wakeup(phy->user), 1);
     assert_int_equal(phy->detect_wakeup(phy->user), 0);
-    assert_null(phy->is_short_circuit);
     assert_int_equal(iolink_phy_tiol112_fault(&driver), 0);
     board.fault_high = false;
     assert_int_equal(iolink_phy_tiol112_fault(&driver), 1);

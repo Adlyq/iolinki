@@ -68,6 +68,15 @@ void test_io_cycle(iolink_device_ctx_t* ctx);
 /* mock PHY 驱动 API */
 extern const iolink_phy_api_t g_phy_mock;
 
+/* 已删除的无上下文 API 的替代：测试需要参数/标识时先调用
+ * test_device_info_reset()，再把 params 上下文绑定到 ISDU 上下文
+ * （test_isdu_bind_params）。 */
+iolink_device_info_ctx_t* test_device_info_ctx(void);
+iolink_params_ctx_t* test_params_ctx(void);
+void test_device_info_reset(const iolink_device_info_t* info);
+void test_params_reset(void);
+void test_isdu_bind_params(iolink_isdu_ctx_t* ctx);
+
 /* 用于设置 mock 期望的辅助函数 */
 void setup_mock_phy(void);
 void iolink_phy_mock_reset(void);

@@ -100,6 +100,7 @@ static const iolink_phy_api_t k_noop_phy = {
 static void make_isdu_ctx(conformance_device_t* app, iolink_isdu_ctx_t* ctx)
 {
     iolink_isdu_init(ctx);
+    test_isdu_bind_params(ctx);
     ctx->event_ctx = iolink_device_get_events_ctx(&app->device);
     ctx->ds_ctx = iolink_device_get_ds_ctx(&app->device);
     ctx->dll_ctx = &app->device.dll;
@@ -134,6 +135,7 @@ static uint16_t device_error_count(iolink_device_ctx_t* device)
        绑定它们（iolink_isdu_init() 会清除指针字段）。 */
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx);
     ctx.dll_ctx = &device->dll;
     uint8_t data[2] = {0U};
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_ERROR_COUNT, 0U), 1);
@@ -359,14 +361,15 @@ static void test_0131_detailed_device_status_active_after_restart(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0131");
     (void) state;
-    iolink_device_info_init(NULL);
-    iolink_params_init();
+    test_device_info_reset(NULL);
+    test_params_reset();
     iolink_events_ctx_t events;
     iolink_events_init(&events);
     iolink_isdu_ctx_t ctx;
 
     iolink_event_trigger(&events, 0x8C10U, IOLINK_EVENT_TYPE_WARNING);
     iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx);
     ctx.event_ctx = &events;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS, 0U), 1);
     iolink_isdu_process(&ctx);
@@ -383,6 +386,7 @@ static void test_0131_detailed_device_status_active_after_restart(void** state)
     iolink_events_init(&events);
     iolink_event_trigger(&events, 0x8C10U, IOLINK_EVENT_TYPE_WARNING);
     iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx);
     ctx.event_ctx = &events;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS, 0U), 1);
     iolink_isdu_process(&ctx);
@@ -422,6 +426,7 @@ static int reset_fixture_isdu(reset_fixture_t* f, bool write, uint16_t index, ui
 {
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx);
     ctx.ds_ctx = &f->ds;
     ctx.params_ctx = &f->params;
     if (write) {

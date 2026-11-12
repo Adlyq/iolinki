@@ -28,20 +28,16 @@ option(IOLINK_MINIMAL_PROFILE "Compile the trimmed feature profile (keeps events
 option(IOLINK_TINY_PROFILE "Compile the tiny feature profile (MINIMAL + no events)" OFF)
 option(IOLINK_FEATURE_DATA_STORAGE "Compile Data Storage" ON)
 option(IOLINK_FEATURE_SYSTEM_COMMAND "Compile SystemCommand handling" ON)
-option(IOLINK_FEATURE_LEGACY_PARAMS "Compile the legacy global params API" ON)
 option(IOLINK_FEATURE_EVENTS "Compile the diagnostic event engine" ON)
 option(IOLINK_PHY_FEATURE_WAKEUP "Compile PHY wake-up detection" ON)
 option(IOLINK_PHY_FEATURE_SIO_CQ "Compile PHY manual C/Q control" ON)
-option(IOLINK_PHY_FEATURE_LEGACY_DIAG "Compile PHY legacy diagnostics" ON)
 option(IOLINK_APP_PD_INPUT_CALLBACK "Use the on_pd_input callback instead of the polling PD API" OFF)
 
 if(IOLINK_MINIMAL_PROFILE OR IOLINK_TINY_PROFILE)
     set(IOLINK_FEATURE_DATA_STORAGE OFF)
     set(IOLINK_FEATURE_SYSTEM_COMMAND OFF)
-    set(IOLINK_FEATURE_LEGACY_PARAMS OFF)
     set(IOLINK_PHY_FEATURE_WAKEUP OFF)
     set(IOLINK_PHY_FEATURE_SIO_CQ OFF)
-    set(IOLINK_PHY_FEATURE_LEGACY_DIAG OFF)
 endif()
 if(IOLINK_TINY_PROFILE)
     set(IOLINK_FEATURE_EVENTS OFF)
@@ -71,11 +67,9 @@ add_library(iolinki STATIC ${IOLINK_SOURCES})
 foreach(_iolink_feature
     IOLINK_FEATURE_DATA_STORAGE
     IOLINK_FEATURE_SYSTEM_COMMAND
-    IOLINK_FEATURE_LEGACY_PARAMS
     IOLINK_FEATURE_EVENTS
     IOLINK_PHY_FEATURE_WAKEUP
-    IOLINK_PHY_FEATURE_SIO_CQ
-    IOLINK_PHY_FEATURE_LEGACY_DIAG)
+    IOLINK_PHY_FEATURE_SIO_CQ)
     if(NOT ${_iolink_feature})
         target_compile_definitions(iolinki PUBLIC ${_iolink_feature}=0)
     endif()

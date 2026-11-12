@@ -113,38 +113,6 @@ uint16_t iolink_device_info_ctx_get_access_locks(const iolink_device_info_ctx_t*
  */
 void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx, uint16_t locks);
 
-/**
- * @brief 初始化设备信息
- * @param info 指向设备信息结构的指针
- */
-void iolink_device_info_init(const iolink_device_info_t* info);
-
-/**
- * @brief 获取设备信息
- * @return 指向设备信息结构的指针
- */
-const iolink_device_info_t* iolink_device_info_get(void);
-
-/**
- * @brief 设置应用标签（Index 0x18）
- * @param tag 字符串数据（最多 32 字节）
- * @param len 字符串长度
- * @return 成功时为 0，出错时为负值
- */
-int iolink_device_info_set_application_tag(const char* tag, uint8_t len);
-
-/**
- * @brief 获取设备访问锁（Index 0x000C）
- * @return 16 位访问锁值
- */
-uint16_t iolink_device_info_get_access_locks(void);
-
-/**
- * @brief 设置设备访问锁（Index 0x000C）
- * @param locks 16 位访问锁值
- */
-void iolink_device_info_set_access_locks(uint16_t locks);
-
 /** @} */ /* end of iolinki_device_info */
 
 #endif  // IOLINK_DEVICE_INFO_H

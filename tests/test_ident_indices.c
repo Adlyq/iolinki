@@ -54,15 +54,15 @@ static int setup(void** state)
 {
     (void) state;
     iolink_device_info_t info = make_info();
-    iolink_device_info_init(&info);
-    iolink_params_init();
+    test_device_info_reset(&info);
+    test_params_reset();
     return 0;
 }
 
 static int teardown(void** state)
 {
     (void) state;
-    iolink_device_info_init(NULL);
+    test_device_info_reset(NULL);
     return 0;
 }
 
@@ -70,6 +70,7 @@ static void expect_read_value(uint16_t index, const uint8_t* expected, size_t ex
 {
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx);
     assert_int_equal(isdu_send_read_request(&ctx, index, 0U), 1);
     iolink_isdu_process(&ctx);
 
@@ -120,6 +121,7 @@ static void test_device_access_locks_round_trip(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx);
 
     /* 默认：所有锁均已释放。 */
     const uint8_t unlocked[] = {0x00U, 0x00U};
@@ -133,7 +135,7 @@ static void test_device_access_locks_round_trip(void** state)
     uint8_t resp[2];
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
 
-    assert_int_equal(iolink_device_info_get_access_locks(),
+    assert_int_equal(iolink_device_info_ctx_get_access_locks(test_device_info_ctx()),
                      (IOLINK_LOCK_DS | IOLINK_LOCK_LOCAL_UI));
 
     /* 回读反映新的锁字（MSB 在前）。 */
@@ -142,23 +144,26 @@ static void test_device_access_locks_round_trip(void** state)
     /* 置位每个已实现的锁位（0..3）并校验原始字。 */
     const uint8_t all_locks[] = {0x00U, (uint8_t) IOLINK_ACCESS_LOCKS_IMPLEMENTED};
     iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx);
     assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, all_locks,
                                              sizeof(all_locks)),
                      1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
-    assert_int_equal(iolink_device_info_get_access_locks(), IOLINK_ACCESS_LOCKS_IMPLEMENTED);
+    assert_int_equal(iolink_device_info_ctx_get_access_locks(test_device_info_ctx()),
+                     IOLINK_ACCESS_LOCKS_IMPLEMENTED);
     expect_read_value(IOLINK_IDX_DEVICE_ACCESS_LOCKS, all_locks, sizeof(all_locks));
 
     /* SDCI_TC_0109 步骤 c/d：写入 0x0000 释放所有锁，且回读
        值保持不变。 */
     const uint8_t zero[] = {0x00U, 0x00U};
     iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx);
     assert_int_equal(
         isdu_send_write_request(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, zero, sizeof(zero)), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
-    assert_int_equal(iolink_device_info_get_access_locks(), 0U);
+    assert_int_equal(iolink_device_info_ctx_get_access_locks(test_device_info_ctx()), 0U);
     expect_read_value(IOLINK_IDX_DEVICE_ACCESS_LOCKS, zero, sizeof(zero));
 
     /* 位 0（Parameter）与位 1（Data Storage）已实现。对置位它们的写入
@@ -166,21 +171,24 @@ static void test_device_access_locks_round_trip(void** state)
        失败；固定该被接受的值，然后再释放它。 */
     const uint8_t param_ds[] = {0x00U, (uint8_t) (IOLINK_LOCK_PARAM | IOLINK_LOCK_DS)};
     iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx);
     assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, param_ds,
                                              sizeof(param_ds)),
                      1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
-    assert_int_equal(iolink_device_info_get_access_locks(), (IOLINK_LOCK_PARAM | IOLINK_LOCK_DS));
+    assert_int_equal(iolink_device_info_ctx_get_access_locks(test_device_info_ctx()),
+                     (IOLINK_LOCK_PARAM | IOLINK_LOCK_DS));
     expect_read_value(IOLINK_IDX_DEVICE_ACCESS_LOCKS, param_ds, sizeof(param_ds));
     print_message("[warning] SDCI_TC_0109: positive write with bits 0/1 set\n");
 
     iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx);
     assert_int_equal(
         isdu_send_write_request(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, zero, sizeof(zero)), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
-    assert_int_equal(iolink_device_info_get_access_locks(), 0U);
+    assert_int_equal(iolink_device_info_ctx_get_access_locks(test_device_info_ctx()), 0U);
 }
 
 int main(void)

@@ -90,47 +90,6 @@ int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index, uint8_t subi
  */
 void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx);
 
-/**
- * @brief 初始化参数管理器
- *
- * 基于上下文 API 的兼容封装。
- */
-#if IOLINK_FEATURE_LEGACY_PARAMS
-void iolink_params_init(void);
-
-/**
- * @brief 按 IO-Link 地址读取参数值
- *
- * @param index ISDU 索引（例如 0x10 表示 Vendor Name）
- * @param subindex ISDU 子索引（0 表示整个索引，或 1-255）
- * @param buffer [out] 用于存放值的目标缓冲区
- * @param max_len 目标缓冲区的大小
- * @return int 成功时返回读取的字节数，否则返回负的 IO-Link ErrorCode
- */
-int iolink_params_get(uint16_t index, uint8_t subindex, uint8_t* buffer, size_t max_len);
-
-/**
- * @brief 更新参数值
- *
- * @param index ISDU 索引
- * @param subindex ISDU 子索引
- * @param data 指向待写入新数据的指针
- * @param len 新数据的长度，以字节计
- * @param persist 为 true 时，将变更同步提交到 NVM
- * @return int 成功时返回 0，否则返回负的 IO-Link ErrorCode（例如 0x80XX）
- */
-int iolink_params_set(uint16_t index, uint8_t subindex, const uint8_t* data, size_t len,
-                      iolink_persist_t persist);
-
-/**
- * @brief 将所有参数恢复为出厂默认值
- *
- * 复位 RAM 中的可写参数并尝试持久化该复位。
- * 该旧版 void API 无法报告存储不可用或失败。
- */
-void iolink_params_factory_reset(void);
-#endif /* IOLINK_FEATURE_LEGACY_PARAMS */
-
 /** @} */ /* end of iolinki_params */
 
 #endif  // IOLINK_PARAMS_H

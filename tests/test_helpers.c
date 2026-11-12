@@ -200,8 +200,6 @@ const iolink_phy_api_t g_phy_mock = {.user = NULL,
                                      .set_baudrate = mock_phy_set_baudrate,
                                      .detect_wakeup = mock_phy_detect_wakeup,
                                      .set_cq_line = mock_phy_set_cq_line,
-                                     .get_voltage_mv = NULL,
-                                     .is_short_circuit = NULL,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
                                      .rx_frame = NULL,
 #else
@@ -214,6 +212,51 @@ const iolink_phy_api_t g_phy_mock = {.user = NULL,
 #endif
                                      .tx_done = mock_tx_done,
                                      .int_active = mock_int_active};
+
+/* Context-backed replacements for the removed no-context APIs. */
+static iolink_device_info_ctx_t g_test_device_info;
+static iolink_params_ctx_t g_test_params;
+static bool g_test_info_ready;
+
+static void test_ctx_ensure_ready(void)
+{
+    if (!g_test_info_ready) {
+        iolink_device_info_ctx_init(&g_test_device_info, NULL);
+        iolink_params_ctx_init(&g_test_params, &g_test_device_info);
+        g_test_info_ready = true;
+    }
+}
+
+iolink_device_info_ctx_t* test_device_info_ctx(void)
+{
+    return &g_test_device_info;
+}
+
+iolink_params_ctx_t* test_params_ctx(void)
+{
+    return &g_test_params;
+}
+
+void test_device_info_reset(const iolink_device_info_t* info)
+{
+    iolink_device_info_ctx_init(&g_test_device_info, info);
+    iolink_params_ctx_init(&g_test_params, &g_test_device_info);
+    g_test_info_ready = true;
+}
+
+void test_params_reset(void)
+{
+    test_ctx_ensure_ready();
+    iolink_params_ctx_init(&g_test_params, &g_test_device_info);
+}
+
+void test_isdu_bind_params(iolink_isdu_ctx_t* ctx)
+{
+    if (ctx != NULL) {
+        test_ctx_ensure_ready();
+        ctx->params_ctx = &g_test_params;
+    }
+}
 
 void setup_mock_phy(void)
 {
