@@ -15,6 +15,7 @@ build_coverage/
 build_diff/
 build_stream/
 *.o
+*.dump
 *.a
 *.so
 *.exe

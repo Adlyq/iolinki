@@ -22,11 +22,11 @@
  * ------------------------------------------------------------------------- */
 
 static const iolink_od_codec_t k_od_codecs[IOLINK_OD_DT_COUNT] = {
-    {1U, true, 0xFFU},        /* U8 */
-    {2U, true, 0xFFFFU},      /* U16 */
-    {4U, true, 0xFFFFFFFFU},  /* U32 */
-    {1U, true, 0x01U},        /* Bool */
-    {0U, false, 0xFFFFFFFFU}, /* OctetString（变长） */
+    {1U, 0xFFU},       /* U8 */
+    {2U, 0xFFFFU},     /* U16 */
+    {4U, 0xFFFFFFFFU}, /* U32 */
+    {1U, 0x01U},       /* Bool */
+    {0U, 0xFFFFFFFFU}, /* OctetString（变长） */
 };
 
 /* -------------------------------------------------------------------------
@@ -287,15 +287,8 @@ iolink_result_t iolink_od_decode(const iolink_od_entry_t* entry, const uint8_t* 
     }
 
     uint32_t decoded = 0U;
-    if (codec->big_endian) {
-        for (size_t i = 0U; i < len; i++) {
-            decoded = (decoded << 8U) | (uint32_t) data[i];
-        }
-    }
-    else {
-        for (size_t i = 0U; i < len; i++) {
-            decoded |= (uint32_t) data[i] << (8U * (uint32_t) i);
-        }
+    for (size_t i = 0U; i < len; i++) {
+        decoded = (decoded << 8U) | (uint32_t) data[i];
     }
     if ((decoded < entry->range_min) || (decoded > entry->range_max)) {
         /* 唯一的范围错误码来源。 */
@@ -320,15 +313,8 @@ iolink_result_t iolink_od_encode(const iolink_od_entry_t* entry, uint32_t value,
     if ((cap < (size_t) codec->len) || (value > codec->max)) {
         return iolink_result_error(IOLINK_RESULT_INVALID);
     }
-    if (codec->big_endian) {
-        for (uint8_t i = 0U; i < codec->len; i++) {
-            out[i] = (uint8_t) (value >> (8U * (uint32_t) ((codec->len - 1U) - i)));
-        }
-    }
-    else {
-        for (uint8_t i = 0U; i < codec->len; i++) {
-            out[i] = (uint8_t) (value >> (8U * (uint32_t) i));
-        }
+    for (uint8_t i = 0U; i < codec->len; i++) {
+        out[i] = (uint8_t) (value >> (8U * (uint32_t) ((codec->len - 1U) - i)));
     }
     return iolink_result_ok(codec->len);
 }

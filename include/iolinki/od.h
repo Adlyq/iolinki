@@ -271,12 +271,14 @@ typedef struct
 
 /**
  * @brief datatype codec 描述。
+ *
+ * IO-Link 线上字节序固定为大端（A.5），因此 codec 不保存字节序字段：
+ * 编解码只有一份大端实现，避免出现不可达的小端分支。
  */
 typedef struct
 {
-    uint8_t len;     /**< 定长字节数；0 表示变长（OctetString）。 */
-    bool big_endian; /**< 线上字节序。 */
-    uint32_t max;    /**< 该类型的原生上限。 */
+    uint8_t len;  /**< 定长字节数；0 表示变长（OctetString）。 */
+    uint32_t max; /**< 该类型的原生上限。 */
 } iolink_od_codec_t;
 
 /** @brief 取 datatype 的 codec 描述；越界返回 NULL。 */
