@@ -55,6 +55,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ISR-side M-sequence content constants roughly halve (27 vs 54). The device
   context grows by 256 bytes (3976 B on a 64-bit host).
 
+### Added (workspace)
+- Optional `iolink_workspace_t` (`include/iolinki/workspace.h`) holds the ISDU
+  request/payload/response/frame scratch and the DS staging buffer, so the
+  application can place them in DTCM or external RAM. ISDU and DS contexts
+  keep pointers and capacities only; `IOLINK_WORKSPACE_EMBEDDED=1` (default)
+  keeps an embedded fallback, `=0` requires a workspace and rejects init with
+  `IOLINK_DEVICE_INIT_ERR_WORKSPACE`.
+- ISDU responses now use one frame buffer with a lease (published as Busy
+  while being rebuilt) instead of two full copies; DS uploads and checksums
+  are serialized incrementally instead of keeping a resident 256 B image.
+  Device context drops to 3816 B (2520 B with the workspace externalized).
+
 ### Changed
 - DLL ownership split: `iolink_dll_ctx_t` packs `iolink_dll_main_t` (with the
   nested shared region) and `iolink_dll_isr_t` as siblings in one allocation.

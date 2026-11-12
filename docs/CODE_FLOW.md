@@ -279,7 +279,7 @@ flowchart TD
 
 ### 5.3 关键约束
 
-- `ctx->isdu` 由主循环单写；ISR 不写 `ctx->isdu`，ISDU 响应只读已发布的 `resp_store[sel]`，并拥有 ISDU 读的 FlowCTRL/segment 索引。Page 通道的 DPP1 读取会在 ISR 中只读 `ctx->isdu`/DLL 状态来构建页面字节。
+- `ctx->isdu` 由主循环单写；ISR 不写 `ctx->isdu`，ISDU 响应只读已发布的单一 `frame` 缓冲（`resp_store[0/1]` 是同一缓冲的两个视图，复用期间以租约/发布字标记 Busy），并拥有 ISDU 读的 FlowCTRL/segment 索引。Page 通道的 DPP1 读取会在 ISR 中只读 `ctx->isdu`/DLL 状态来构建页面字节。
 - ISDU 写由 ISR 暂存到 `isr_od_ring`，主循环排空后调用 `iolink_isdu_od_write()`。
 - 邮箱是**两个槽**的 SPSC 环：环满（两帧都未消费）时新帧计入 `isr_mailbox_drops` 并被丢弃。
 - 邮箱记录的 `eager` 字段表示 ISR 已应答该帧；主循环把它快照到 `frame_replied_by_isr` 以避免重复发送，但仍会处理状态/错误/ISDU 读复位等。
@@ -493,7 +493,7 @@ sequenceDiagram
   - `IDLE` → No Service `0x00`。
 - `COUNT`：继续从 `resp_idx` 顺序读取；若剩余不足 `od_len`，补 `0x00`。
 - 读完后 `RESPONSE_READY → IDLE`。
-- ISR 双泵另有一套快照分段逻辑 `dll_isr_isdu_od()`，读取原子发布字 `isr_isdu_pub` 指定的 `resp_store[sel]`，并拥有 `isr_isdu_idx`/`isr_isdu_seg_idx`/`isr_isdu_last_flowctrl`，不直接修改主 ISDU 传输状态。
+- ISR 双泵另有一套快照分段逻辑 `dll_isr_isdu_od()`，读取原子发布字 `isr_isdu_pub` 指定的响应视图（单一 `frame` + 租约，`resp_store` 仅为视图槽），并拥有 `isr_isdu_idx`/`isr_isdu_seg_idx`/`isr_isdu_last_flowctrl`，不直接修改主 ISDU 传输状态。
 
 响应组帧（`isdu_frame_response()`）：
 
@@ -828,7 +828,7 @@ flowchart LR
         M4["isr_tx_payload[3]<br/>应答暂存"]
         M5["isr_od_ring<br/>ISDU 写暂存"]
         M8["ctx->isdu<br/>主循环单写状态机"]
-        M6["isr_isdu_pub + resp_store[2]<br/>ISDU 响应发布字"]
+        M6["isr_isdu_pub + 单一 frame 租约<br/>ISDU 响应发布字"]
         M7["isr_frame_ring<br/>邮箱槽环"]
     end
     subgraph ISR["数据 ISR"]
