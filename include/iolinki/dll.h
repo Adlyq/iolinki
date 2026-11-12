@@ -38,7 +38,8 @@ typedef enum
     IOLINK_DLL_STATE_ESTAB_COM = 3U,     /**< 建立通信（转入 OPERATE） */
     IOLINK_DLL_STATE_OPERATE = 4U,       /**< 循环数据交换已激活 */
     IOLINK_DLL_STATE_FALLBACK = 5U,      /**< 错误恢复 / 回退 */
-    IOLINK_DLL_STATE_COMM_DISABLED = 6U  /**< Back-to-box：通信停止直至复位 */
+    IOLINK_DLL_STATE_COMM_DISABLED = 6U, /**< Back-to-box：通信停止直至复位 */
+    IOLINK_DLL_STATE_COUNT = 7U          /**< 状态数量（P9 状态机表维度） */
 } iolink_dll_state_t;
 
 /**
@@ -228,6 +229,7 @@ typedef struct
     uint8_t flags;        /**< @ref IOLINK_REPLY_FLAG_PD_TAIL 等 */
     uint8_t source;       /**< @ref iolink_reply_source_t */
     uint8_t action;       /**< @ref iolink_reply_action_t */
+    uint8_t state;        /**< 编译该计划时的 DLL 状态（P9：迁移后自动失效） */
 } iolink_reply_plan_t;
 /** @} */
 
@@ -290,6 +292,77 @@ typedef struct
     uint32_t isr_tx_dropped;     /**< 传输层无法发送的应答（主上下文与 ISR） */
     uint32_t idle_timeouts;      /**< 1 s 空闲链路诊断（不是 t_A 超时） */
 } iolink_dll_stats_t;
+
+/**
+ * @name 截止时间表（P7）
+ *
+ * DLL 的所有软件超时收敛为一张静态表：每个 timer 只保存一个绝对
+ * 截止时间（微秒，来自唯一时钟源 @c shared.time_us / dll_time_us()），
+ * 主上下文再维护一个 @c next_deadline。主泵正常路径只把当前时间与
+ * @c next_deadline 比较一次；表项装载/取消是边沿事件（收帧、唤醒、
+ * 主站活动），不随 timer 数量线性扫描。
+ *
+ * 每个 timer 有一条 @ref iolink_timer_contract_t 契约（名称 + 规范
+ * 条款 + 运行语义），由 @ref iolink_dll_timer_contract() 导出，测试与
+ * 文档共用同一份事实源。同刻到期的执行顺序 = 枚举顺序（索引小者先
+ * 执行），与 P7 之前 `dll_process_body()` 中逐项检查的顺序一致。
+ *
+ * `deadline == 0` 表示该 timer 未装载。所有比较都走同一处回绕安全
+ * 判定（`now - deadline` 的符号位）；表内不再混用 us/ms 或 32/64 位。
+ * WINDOW 类 timer 到期后仍保留绝对时间（表示"窗口已关闭"），由下一次
+ * 边沿事件重装；只有 DEADLINE 类进入 @c next_deadline。
+ * @{
+ */
+
+/** @brief 截止时间表的 timer 标识；顺序即同刻到期的执行优先级。 */
+typedef enum
+{
+    IOLINK_TIMER_MASTER_LOST = 0, /**< 主站丢失（N 个 MasterCycle） */
+    IOLINK_TIMER_IDLE,            /**< 1 s 空闲链路诊断 */
+    IOLINK_TIMER_T_DSIO,          /**< T_DSIO：唤醒后无有效报文回 SIO */
+    IOLINK_TIMER_T_FBD,           /**< T_FBD：FALLBACK 后切换 SIO */
+    IOLINK_TIMER_T_PD,            /**< t_PD：上电/PD 保护窗口 */
+    IOLINK_TIMER_T_WU,            /**< T_WU：唤醒后首帧窗口 */
+    IOLINK_TIMER_T_BYTE,          /**< t_byte：帧内字节间超时 */
+    IOLINK_TIMER_T_REN,           /**< t_REN：应答时间上限（边沿检查） */
+    IOLINK_TIMER_T_CYCLE,         /**< T_CYCLE：最小周期时间（边沿检查） */
+    IOLINK_TIMER_T_A,             /**< t_A：应答起始预算（PHY 定时器为准） */
+    IOLINK_TIMER_COUNT            /**< 表项数量 */
+} iolink_timer_id_t;
+
+/** @brief 截止时间表条目；@c deadline 为 0 表示未装载。 */
+typedef struct
+{
+    uint64_t deadline; /**< 绝对截止时间，单位 us（0 = 未装载） */
+    uint8_t id;        /**< 表项标识，等于其在表中的索引 */
+} iolink_timer_t;
+
+/** @brief timer 的运行语义。 */
+typedef enum
+{
+    IOLINK_TIMER_KIND_DEADLINE = 0U, /**< 到期由主泵分发（进 @c next_deadline） */
+    IOLINK_TIMER_KIND_WINDOW = 1U    /**< 只由边沿事件比较（不进 @c next_deadline） */
+} iolink_timer_kind_t;
+
+/** @brief timer 的时序契约（名称 + 规范条款 + 运行语义）。 */
+typedef struct
+{
+    const char* name;         /**< 稳定的 timer 名（日志/导出用） */
+    const char* clause;       /**< 规范条款号或"实现相关"说明 */
+    iolink_timer_id_t id;     /**< 表项标识 */
+    iolink_timer_kind_t kind; /**< @ref iolink_timer_kind_t */
+    uint8_t phase;            /**< 分发阶段：0 = 模式切换之前，1 = 门控之后 */
+} iolink_timer_contract_t;
+
+/** @brief 取时序契约表（只读，进程生命周期内稳定）。 */
+const iolink_timer_contract_t* iolink_dll_timer_contract(uint8_t* count);
+
+/** @brief 查询一个 timer 的绝对截止时间（0 = 未装载）。 */
+uint64_t iolink_dll_timer_deadline(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
+
+/** @brief 查询一个 timer 是否已装载。 */
+bool iolink_dll_timer_armed(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
+/** @} */
 
 /**
  * @brief 初始化 DLL 上下文

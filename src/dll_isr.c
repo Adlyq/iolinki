@@ -549,7 +549,8 @@ static bool dll_isr_plan_lookup(const iolink_dll_main_t* ctx, const uint8_t* fra
         const uint8_t limit = (count > IOLINK_REPLY_PLAN_SLOTS) ? IOLINK_REPLY_PLAN_SLOTS : count;
         for (uint8_t i = 0U; i < limit; i++) {
             const iolink_reply_plan_t* plan = &ctx->shared.reply_plan[i];
-            if (((mc & plan->match_mask) != plan->match_value) || (addr > plan->addr_max) ||
+            if ((plan->state != (uint8_t) ctx->shared.state) ||
+                ((mc & plan->match_mask) != plan->match_value) || (addr > plan->addr_max) ||
                 ((plan->req_len != 0U) && (plan->req_len != len)) ||
                 ((plan->ckt_mask != 0U) && ((ckt & plan->ckt_mask) != plan->ckt_value))) {
                 continue;

@@ -34,6 +34,9 @@ struct iolink_dll_main
 
     volatile bool master_lost; /**< 主站通信丢失（应用层提示） */
 
+    uint32_t master_lost_activity_ms; /**< 上次武装 MASTER_LOST 时的活动时间戳
+                                           （P7：用于识别新活动边沿） */
+
     bool wakeup_seen; /**< 检测到唤醒（若 PHY 支持） */
 
     volatile bool back_to_box_pending; /**< 已请求 Back-to-box；正在倒计帧数 */
@@ -118,19 +121,18 @@ struct iolink_dll_main
 
     uint8_t req_len; /**< 当前帧类型的期望长度 */
 
-    uint64_t last_frame_us; /**< 最后帧开始的微秒时间戳 */
+    /* P7：截止时间表。所有软件超时只在这里保存绝对截止时间（us），
+     * 主泵另存一个 next_deadline 用于单点比较。表项语义、规范条款与
+     * 同刻优先级见 include/iolinki/dll.h 的 iolink_timer_id_t 与
+     * iolink_dll_timer_contract()。 */
+    iolink_timer_t timers[IOLINK_TIMER_COUNT]; /**< 静态截止时间表 */
 
-    uint64_t last_cycle_start_us; /**< 最后周期开始的微秒时间戳 */
+    uint64_t next_deadline; /**< 所有 DEADLINE 类 timer 的最早截止时间（0 = 无） */
+
+    uint64_t t_pd_deadline_us; /**< P7 兼容入口：device.c 初始化时写入，
+                                    首次 process 导入 T_PD 表项后清零 */
 
     uint32_t t_byte_limit_us; /**< 字节间超时限制，单位为微秒 */
-
-    uint64_t wakeup_deadline_us; /**< 唤醒后最早可接受帧的时间 */
-
-    uint64_t t_pd_deadline_us; /**< 上电后最早可接受帧的时间 */
-
-    uint64_t dsio_deadline_ms; /**< 无有效报文时回退到 SIO 的截止时间 */
-
-    uint64_t fallback_deadline_ms; /**< 完成 FALLBACK MasterCommand 的截止时间 */
 
     uint8_t pd_out[IOLINK_PD_OUT_MAX_SIZE]; /**< 输出 PD 缓冲区（主站 -> 设备） */
 
@@ -183,5 +185,27 @@ struct iolink_dll_main
 
     void* state_cb_user; /**< 传给 state_cb 的用户指针 */
 };
+
+/**
+ * @name 截止时间表内部操作（库私有，dll_ 前缀）
+ *
+ * 仅供 dll.c / dll_isr.c 与单元测试使用，不属于公开 iolink_ API。
+ * `deadline == 0` 表示未装载；装载与取消都只改表和 next_deadline。
+ * @{
+ */
+void dll_timer_arm(iolink_dll_main_t* ctx, iolink_timer_id_t id, uint64_t deadline_us);
+void dll_timer_cancel(iolink_dll_main_t* ctx, iolink_timer_id_t id);
+bool dll_timer_armed(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
+uint64_t dll_timer_deadline(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
+
+/** @brief 回绕安全判定：@p now_us 已到达（>=）@p deadline_us。 */
+bool dll_time_reached(uint64_t now_us, uint64_t deadline_us);
+
+/** @brief 回绕安全判定：@p now_us 已越过（>）@p deadline_us。 */
+bool dll_time_passed(uint64_t now_us, uint64_t deadline_us);
+
+/** @brief 该 timer 已装载且已到期。 */
+bool dll_timer_due(const iolink_dll_main_t* ctx, iolink_timer_id_t id, uint64_t now_us);
+/** @} */
 
 #endif /* IOLINK_DLL_MAIN_H */

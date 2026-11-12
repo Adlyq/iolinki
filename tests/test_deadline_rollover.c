@@ -26,19 +26,24 @@ int main(void)
     wake_pending = 1;
     iolink_dll_process(&ctx.main);
     assert(ctx.main.shared.state == IOLINK_DLL_STATE_AWAITING_COMM);
-    uint64_t deadline = now / 1000U + IOLINK_T_DSIO_MS;
-    assert(ctx.main.dsio_deadline_ms == deadline);
+    /* 原条件为 now_ms > deadline_ms：绝对截止时间落在下一个毫秒起点。 */
+    const uint64_t deadline = (now / 1000U + IOLINK_T_DSIO_MS + 1U) * 1000U;
+    assert(iolink_dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_DSIO) == deadline);
     now += 150000U; /* 跨过发生回绕的毫秒 API，截止时间仍未到达 */
     iolink_dll_process(&ctx.main);
     assert(ctx.main.shared.state == IOLINK_DLL_STATE_AWAITING_COMM);
-    now = (deadline + 1U) * 1000U;
+    now = deadline - 1U;
+    iolink_dll_process(&ctx.main);
+    assert(ctx.main.shared.state == IOLINK_DLL_STATE_AWAITING_COMM);
+    now = deadline;
     iolink_dll_process(&ctx.main);
     assert(ctx.main.phy_mode == IOLINK_PHY_MODE_SIO);
 
     ctx.main.shared.state = IOLINK_DLL_STATE_FALLBACK;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.main.shared.last_activity_ms = 0;
-    ctx.main.fallback_deadline_ms = now / 1000U + 50U;
+    dll_timer_cancel(&ctx.main, IOLINK_TIMER_T_FBD);
+    dll_timer_arm(&ctx.main, IOLINK_TIMER_T_FBD, (now / 1000U + 50U) * 1000U);
     iolink_dll_process(&ctx.main);
     assert(ctx.main.phy_mode == IOLINK_PHY_MODE_SDCI);
     now += 50000U;
