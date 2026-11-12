@@ -55,6 +55,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ISR-side M-sequence content constants roughly halve (27 vs 54). The device
   context grows by 256 bytes (3976 B on a 64-bit host).
 
+### Added (timers and state machine)
+- Software timeouts converge onto one deadline table (t_A/t_ren/t_cycle/t_PD/
+  t_byte/T_DSIO/T_FBD/master_lost/idle) with re-arm/cancel semantics and a
+  single next-deadline comparison in the main loop.
+- The DLL state machine is tabulated (7 states × 8 events) with generated
+  Mermaid/CSV/test artefacts; reply plans carry a state stamp so transitions
+  invalidate them.
+
 ### Added (workspace)
 - Optional `iolink_workspace_t` (`include/iolinki/workspace.h`) holds the ISDU
   request/payload/response/frame scratch and the DS staging buffer, so the

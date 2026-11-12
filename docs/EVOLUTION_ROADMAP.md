@@ -336,17 +336,16 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 - **完成标志**：`#if` 从 198 降到核心文件个位数；matrix 22→3–4；ROM 实测数据入档。
 - **风险**：ROM 可能增长；`.a` 静态库非 LTO 下 gc-sections 基本失效 → 预期管理靠实测。
 
-### P7 截止时间表 F（M，1–2 周）——状态：未开始
+### P7 截止时间表 F（M，1–2 周）——状态：已完成（本地合并；全量验证中）
 
 - **目标**：定时器收敛为单表 + 单点比较；时序契约可枚举、可测试、可导出文档。
 - **依赖**：P5。
 - **涉及文件**：`src/dll.c`（定时器段）、`tests/test_deadline_rollover.c`（扩展）。
 - **步骤**：
-  - [ ] `iolink_timer_t` 表 + 单一 next_deadline；re-arm/cancel 语义
-        （t_A/T_DSIO/T_FBD 是边沿触发、可重装、可取消）；
-  - [ ] 迁移 t_A/t_ren/t_cycle/t_PD/t_byte/T_DSIO/T_FBD/master_lost/idle timeout；
-        时钟源保持唯一 `dll_time_us()`，消除 us/ms 与 32/64 位混用；
-  - [ ] 时序契约清单：timer 名 + 规范条款号，导出文档与测试。
+  - [x] `iolink_timer_t` 表 + 单一 next_deadline；re-arm/cancel 语义；
+  - [x] 迁移 t_A/t_ren/t_cycle/t_PD/t_byte/T_DSIO/T_FBD/master_lost/idle timeout；
+        时钟源保持唯一 `dll_time_us()`；
+  - [x] 时序契约清单（timer 名 + 条款号）与 `tests/test_timer_table.c`。
 - **完成标志**：process() 常数时间；rollover 单点处理；同刻多 timer 优先级规则定义并
   测试；差分绿。
 - **风险**：ISR 读取 deadline 的原子性——复用 P2/P5 的发布字机制。
@@ -367,7 +366,7 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 - **完成标志**：小 MCU 裁剪演示；差分绿；内存数字全进 CI。
 - **风险**：MISRA 零拷贝证明 → 租约所有权规则文档化 + 静态断言辅助。
 
-### P9 状态机表 + WCET 门 H（L，2–3 周）——状态：宿主层路径工具已落地（tools/wcet/ + CI）；状态机表化与目标端 DWT 门待 P5/硬件
+### P9 状态机表 + WCET 门 H（L，2–3 周）——状态：已完成（本地合并；目标端 DWT 门仍待硬件）
 
 - **目标**："符合规范"变成机器证据。
 - **依赖**：P5、P7。
@@ -375,9 +374,9 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
   `tools/check_conformance_traceability.py`（联动）、`tools/bench_*`（WCET 基准）、
   CI 工作流。
 - **步骤**：
-  - [ ] DLL 状态机表化（骨架分发）+ 生成测试/mermaid/CSV，联动 conformance traceability；
-  - [ ] ISR WCET 门：DWT cycle counter + 最坏帧序采样（virtual PHY 注入），上界进 CI；
-  - [ ] 手段纪律：virtual PHY 只做功能等价/帧序合法；CPU 周期上界只用目标端 DWT。
+  - [x] DLL 状态机表化（7×8）+ 生成测试/mermaid/CSV（tools/gen_dll_statemachine.py）；
+  - [x] 宿主层路径门（tools/wcet/，CI）+ reply plan 状态戳失效/相位性质测试；
+  - [x] 手段纪律已记录：virtual PHY 只做功能等价/帧序合法；目标端 DWT 门待硬件。
 - **完成标志**：重构安全网完整；WCET 回归门工作；状态机表与 traceability 联动。
 - **风险**：纯表装不下连续条件 → 表管骨架 + 函数管动作 + 性质测试管不变量。
 

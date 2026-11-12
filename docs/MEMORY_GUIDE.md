@@ -17,8 +17,8 @@ Measured on a 64-bit host with the default buffers in
 
 | Component | Size (bytes) | Description |
 | :--- | ---: | :--- |
-| **`iolink_device_ctx_t`** | **3816** | The object the application allocates (includes everything below) |
-| `iolink_dll_ctx_t` | 3504 | DLL state, timers, reply-plan table (10×24 B), ISR staging; embeds ISDU, Events and DS |
+| **`iolink_device_ctx_t`** | **3944** | The object the application allocates (includes everything below) |
+| `iolink_dll_ctx_t` | 3632 | DLL state, timers, reply-plan table (10×24 B), ISR staging; embeds ISDU, Events and DS |
 | `iolink_isdu_ctx_t` | 1320 | Transport state, buffer pointers and the embedded ISDU scratch (1033 B) |
 | `iolink_events_ctx_t` | 392 | Event queue plus lifecycle records |
 | `iolink_ds_ctx_t` | 392 | DS state, buffer pointers and the embedded download stage |
@@ -124,7 +124,7 @@ You can tune these values to fit your MCU.
 
 ### Total RAM
 
-The default `iolink_device_ctx_t` is **3816 bytes** (64-bit host, default
+The default `iolink_device_ctx_t` is **3944 bytes** (64-bit host, default
 buffers); buffer arrays dominate it. On a 32-bit target the same layout is
 smaller. To measure your own build instead of relying on the table:
 
