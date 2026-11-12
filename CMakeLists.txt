@@ -53,6 +53,7 @@ set(IOLINK_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/crc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dll.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dll_isr.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/od.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/isdu.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/events.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/platform.c

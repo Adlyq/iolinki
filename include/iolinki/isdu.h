@@ -13,6 +13,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "iolinki/config.h"
+#include "iolinki/od.h"
 #include "iolinki/params.h"
 
 /**
@@ -106,6 +107,7 @@ typedef struct
     void* ds_ctx;           /**< 用于系统命令的 Data Storage 上下文 */
     void* dll_ctx;          /**< 用于统计访问的 DLL 上下文 */
     iolink_params_ctx_t* params_ctx; /**< 设备本地可写参数上下文 */
+    const iolink_od_app_t* od;       /**< 应用对象字典（表 + get/set 后端；可为 NULL） */
     void* direct_param_page2;        /**< 每设备的 Direct Parameter page 2 存储 */
 
     /* 系统命令标志 */
@@ -120,6 +122,17 @@ typedef struct
  * @param ctx 要初始化的 ISDU 上下文
  */
 void iolink_isdu_init(iolink_isdu_ctx_t* ctx);
+
+/**
+ * @brief 绑定应用对象字典。
+ *
+ * 绑定后，应用表项优先于厂商服务；未命中的设备专用索引仍回退到
+ * @ref iolink_isdu_ctx_t::vendor_service。
+ *
+ * @param ctx ISDU 上下文
+ * @param app 应用表（必须在使用期间保持有效；NULL 解除绑定）
+ */
+void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app);
 
 /**
  * @brief 处理 ISDU 引擎逻辑

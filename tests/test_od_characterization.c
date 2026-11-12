@@ -57,8 +57,8 @@ static int char_read(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex, u
 }
 
 /** 发送写请求并收集应答（成功时长度为 0）。 */
-static int char_write(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                      const uint8_t* data, uint8_t len, uint8_t* buf, size_t cap)
+static int char_write(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex, const uint8_t* data,
+                      uint8_t len, uint8_t* buf, size_t cap)
 {
     assert_int_equal(isdu_send_write_request(ctx, index, subindex, data, len), 1);
     iolink_isdu_process(ctx);
@@ -128,12 +128,14 @@ static void test_char_system_command(void** state)
 
     uint8_t cmd = IOLINK_CMD_DEVICE_RESET;
     uint8_t buf[4] = {0U};
-    assert_int_equal(char_write(&ctx, IOLINK_IDX_SYSTEM_COMMAND, 0U, &cmd, 1U, buf, sizeof(buf)), 0);
+    assert_int_equal(char_write(&ctx, IOLINK_IDX_SYSTEM_COMMAND, 0U, &cmd, 1U, buf, sizeof(buf)),
+                     0);
     assert_true(ctx.reset_pending);
 
     char_prepare(&ctx, &k_char_info);
     cmd = IOLINK_CMD_APPLICATION_RESET;
-    assert_int_equal(char_write(&ctx, IOLINK_IDX_SYSTEM_COMMAND, 0U, &cmd, 1U, buf, sizeof(buf)), 0);
+    assert_int_equal(char_write(&ctx, IOLINK_IDX_SYSTEM_COMMAND, 0U, &cmd, 1U, buf, sizeof(buf)),
+                     0);
     assert_true(ctx.app_reset_pending);
 
     char_prepare(&ctx, &k_char_info);
@@ -247,16 +249,14 @@ static void test_char_direct_param_page2(void** state)
 
     uint8_t block[16];
     (void) memset(block, 0xA5, sizeof(block));
-    assert_int_equal(char_write(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_2, 0U, block, 16U, buf,
-                                sizeof(buf)),
-                     0);
+    assert_int_equal(
+        char_write(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_2, 0U, block, 16U, buf, sizeof(buf)), 0);
     assert_int_equal(char_read(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_2, 0U, buf, sizeof(buf)), 16);
     assert_memory_equal(buf, block, sizeof(block));
 
     uint8_t octet = 0x5AU;
-    assert_int_equal(char_write(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_2, 5U, &octet, 1U, buf,
-                                sizeof(buf)),
-                     0);
+    assert_int_equal(
+        char_write(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_2, 5U, &octet, 1U, buf, sizeof(buf)), 0);
     assert_int_equal(page2[4], 0x5AU);
 
     iolink_device_info_ctx_set_access_locks(&g_char_env.info, IOLINK_LOCK_PARAM);
@@ -274,8 +274,8 @@ static void test_char_identification_objects(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     const uint16_t ro[] = {
-        IOLINK_IDX_VENDOR_NAME,       IOLINK_IDX_VENDOR_TEXT,      IOLINK_IDX_PRODUCT_NAME,
-        IOLINK_IDX_PRODUCT_ID,        IOLINK_IDX_PRODUCT_TEXT,     IOLINK_IDX_SERIAL_NUMBER,
+        IOLINK_IDX_VENDOR_NAME,       IOLINK_IDX_VENDOR_TEXT,       IOLINK_IDX_PRODUCT_NAME,
+        IOLINK_IDX_PRODUCT_ID,        IOLINK_IDX_PRODUCT_TEXT,      IOLINK_IDX_SERIAL_NUMBER,
         IOLINK_IDX_HARDWARE_REVISION, IOLINK_IDX_FIRMWARE_REVISION, IOLINK_IDX_ERROR_COUNT,
     };
     uint8_t buf[32] = {0U};
@@ -311,12 +311,10 @@ static void test_char_tag_objects(void** state)
     char_expect_write_error(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, long_tag, 40U,
                             IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
 
-    assert_int_equal(char_write(&ctx, IOLINK_IDX_FUNCTION_TAG, 0U, long_tag, 40U, buf,
-                                sizeof(buf)),
+    assert_int_equal(char_write(&ctx, IOLINK_IDX_FUNCTION_TAG, 0U, long_tag, 40U, buf, sizeof(buf)),
                      0);
     assert_int_equal(char_read(&ctx, IOLINK_IDX_FUNCTION_TAG, 0U, buf, sizeof(buf)), 32);
-    assert_int_equal(char_write(&ctx, IOLINK_IDX_LOCATION_TAG, 0U, long_tag, 40U, buf,
-                                sizeof(buf)),
+    assert_int_equal(char_write(&ctx, IOLINK_IDX_LOCATION_TAG, 0U, long_tag, 40U, buf, sizeof(buf)),
                      0);
     assert_int_equal(char_read(&ctx, IOLINK_IDX_LOCATION_TAG, 0U, buf, sizeof(buf)), 32);
 
@@ -329,9 +327,8 @@ static void test_char_tag_objects(void** state)
                             IOLINK_ISDU_ERROR_WRITE_PROTECTED);
     /* DeviceAccessLocks 自身不受 Parameter 锁保护。 */
     uint8_t unlock[2] = {0x00U, 0x00U};
-    assert_int_equal(char_write(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, unlock, 2U, buf,
-                                sizeof(buf)),
-                     0);
+    assert_int_equal(
+        char_write(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, unlock, 2U, buf, sizeof(buf)), 0);
 }
 
 /* 0x000C DeviceAccessLocks：2 字节，保留位写入被拒。 */
@@ -351,9 +348,8 @@ static void test_char_access_locks(void** state)
                             IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG);
 
     uint8_t valid[2] = {0x00U, 0x01U};
-    assert_int_equal(char_write(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, valid, 2U, buf,
-                                sizeof(buf)),
-                     0);
+    assert_int_equal(
+        char_write(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, valid, 2U, buf, sizeof(buf)), 0);
     assert_int_equal(char_read(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, buf, sizeof(buf)), 2);
     assert_int_equal(buf[1], 0x01U);
     char_expect_read_error(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 1U,

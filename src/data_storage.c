@@ -20,6 +20,7 @@
 
 #include "iolinki/config.h"
 #include "iolinki/data_storage.h"
+#include "iolinki/od.h"
 #include "iolinki/params.h"
 #include "iolinki/utils.h"
 #include <string.h>
@@ -114,17 +115,43 @@ static void ds_storage_load_image(iolink_ds_ctx_t* ctx)
     }
 }
 
-/* 默认包含在数据存储集合中的参数（V1.1.5 设备标识参数，可写且因此
-   值得备份）。应用可通过 iolink_ds_bind_param_access() 替换或扩展
-   该集合。 */
-static const iolink_ds_param_desc_t k_default_ds_params[] = {
-    {IOLINK_IDX_APPLICATION_TAG, 0U, 0U},
-    {IOLINK_IDX_FUNCTION_TAG, 0U, 0U},
-    {IOLINK_IDX_LOCATION_TAG, 0U, 0U},
-};
-
-#define DS_PARAM_COUNT (sizeof(k_default_ds_params) / sizeof(k_default_ds_params[0]))
 #define DS_RECORD_HEADER 4U /* index(2) + subindex(1) + length(1) */
+
+/* DS 参数集不再单独维护：未绑定显式描述符时，集合 = OD 表中
+   storage 标志为 DS 的表项。应用仍可通过
+   iolink_ds_bind_param_access() 提供自己的描述符数组。 */
+
+/** @brief DS 集合中的描述符数量（显式集合优先，否则由 OD 表派生）。 */
+static size_t ds_desc_count(const iolink_ds_ctx_t* ctx)
+{
+    if ((ctx != NULL) && (ctx->params != NULL) && (ctx->param_count > 0U)) {
+        return ctx->param_count;
+    }
+    return iolink_od_ds_count();
+}
+
+/** @brief 取 DS 集合中第 @p i 个描述符。 */
+static bool ds_desc_at(const iolink_ds_ctx_t* ctx, size_t i, iolink_ds_param_desc_t* out)
+{
+    if (out == NULL) {
+        return false;
+    }
+    if ((ctx != NULL) && (ctx->params != NULL) && (ctx->param_count > 0U)) {
+        if (i >= ctx->param_count) {
+            return false;
+        }
+        *out = ctx->params[i];
+        return true;
+    }
+    const iolink_od_entry_t* entry = iolink_od_ds_at(i);
+    if (entry == NULL) {
+        return false;
+    }
+    out->index = entry->index;
+    out->subindex = entry->subindex;
+    out->max_len = entry->block_len;
+    return true;
+}
 
 void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage)
 {
@@ -133,10 +160,9 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage)
     }
     ctx->storage = storage;
     ctx->state = IOLINK_DS_STATE_IDLE;
-    /* 默认参数集：三个标准标签，通过传统 params 上下文（或调用方
-       绑定的访问器）提供。 */
-    ctx->params = k_default_ds_params;
-    ctx->param_count = DS_PARAM_COUNT;
+    /* 未绑定显式描述符：DS 集合由 OD 表派生（storage == DS）。 */
+    ctx->params = NULL;
+    ctx->param_count = 0U;
     ds_storage_load_image(ctx);
     ds_storage_load_flag(ctx);
 }
@@ -242,9 +268,14 @@ int iolink_ds_build_image(iolink_ds_ctx_t* ctx)
     }
 
     size_t pos = 0U;
-    for (size_t i = 0U; i < ctx->param_count; ++i) {
-        const uint16_t index = ctx->params[i].index;
-        const uint8_t subindex = ctx->params[i].subindex;
+    const size_t count = ds_desc_count(ctx);
+    for (size_t i = 0U; i < count; ++i) {
+        iolink_ds_param_desc_t desc;
+        if (!ds_desc_at(ctx, i, &desc)) {
+            break;
+        }
+        const uint16_t index = desc.index;
+        const uint8_t subindex = desc.subindex;
 
         if ((pos + DS_RECORD_HEADER) > IOLINK_DS_IMAGE_MAX) {
             return -1; /* 镜像放不下 */
@@ -252,8 +283,8 @@ int iolink_ds_build_image(iolink_ds_ctx_t* ctx)
         /* 直接读入镜像尾部；可选的每参数 max_len
            限制取值长度。 */
         size_t cap = (size_t) IOLINK_DS_IMAGE_MAX - pos - DS_RECORD_HEADER;
-        if ((ctx->params[i].max_len != 0U) && (cap > (size_t) ctx->params[i].max_len)) {
-            cap = (size_t) ctx->params[i].max_len;
+        if ((desc.max_len != 0U) && (cap > (size_t) desc.max_len)) {
+            cap = (size_t) desc.max_len;
         }
         const iolink_result_t read_res =
             ds_params_get(ctx, index, subindex, &ctx->image[pos + DS_RECORD_HEADER], cap);
@@ -280,8 +311,13 @@ static bool ds_param_known(const iolink_ds_ctx_t* ctx, uint16_t index, uint8_t s
     if (ctx == NULL) {
         return false;
     }
-    for (size_t i = 0U; i < ctx->param_count; ++i) {
-        if ((ctx->params[i].index == index) && (ctx->params[i].subindex == subindex)) {
+    const size_t count = ds_desc_count(ctx);
+    for (size_t i = 0U; i < count; ++i) {
+        iolink_ds_param_desc_t desc;
+        if (!ds_desc_at(ctx, i, &desc)) {
+            break;
+        }
+        if ((desc.index == index) && (desc.subindex == subindex)) {
             return true;
         }
     }
@@ -733,16 +769,15 @@ size_t iolink_ds_param_count(const iolink_ds_ctx_t* ctx)
     if (ctx == NULL) {
         return 0U;
     }
-    return ctx->param_count;
+    return ds_desc_count(ctx);
 }
 
 bool iolink_ds_param_at(const iolink_ds_ctx_t* ctx, size_t i, iolink_ds_param_desc_t* out)
 {
-    if ((ctx == NULL) || (out == NULL) || (i >= ctx->param_count)) {
+    if ((ctx == NULL) || (out == NULL)) {
         return false;
     }
-    *out = ctx->params[i];
-    return true;
+    return ds_desc_at(ctx, i, out);
 }
 
 void iolink_ds_request_upload(iolink_ds_ctx_t* ctx)
