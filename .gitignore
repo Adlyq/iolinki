@@ -16,6 +16,7 @@ build_diff/
 build_stream/
 build_wcet/
 *.o
+*.dump
 *.a
 *.so
 *.exe

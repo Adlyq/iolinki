@@ -206,6 +206,217 @@ static void test_od_switching_sensor(void** state)
 }
 
 /* -------------------------------------------------------------------------
+ * codec 与值层的错误/边界路径
+ * ------------------------------------------------------------------------- */
+
+/* 带默认值块的字节串表项（用于 iolink_od_default 的拷贝与容量不足分支）。 */
+static const uint8_t k_block_default[] = {'A', 'B', 'C', 'D'};
+static const iolink_od_entry_t k_octet_entry[] = {
+    {.index = 0x0300U,
+     .datatype = IOLINK_OD_DT_OCTET_STRING,
+     .access = IOLINK_OD_ACCESS_RW,
+     .write_semantics = IOLINK_OD_WRITE_VOLATILE,
+     .storage = IOLINK_OD_STORAGE_VOLATILE,
+     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .block_len = 4U,
+     .block_default = k_block_default,
+     .name = "OctetParameter"},
+};
+
+/* 触发语义但没有 on_change：写入必须返回 FUNC_NOTAVAIL。 */
+static const iolink_od_entry_t k_trigger_no_hook[] = {
+    {.index = 0x0301U,
+     .datatype = IOLINK_OD_DT_U8,
+     .access = IOLINK_OD_ACCESS_WO,
+     .write_semantics = IOLINK_OD_WRITE_TRIGGER,
+     .storage = IOLINK_OD_STORAGE_VOLATILE,
+     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .range_max = 1U,
+     .name = "TriggerWithoutHook"},
+};
+
+/* 0..1 的小范围，用于验证 codec 的越界错误码。 */
+static const iolink_od_entry_t k_range_entry[] = {
+    IOLINK_OD_SCALAR(0x0302U, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_BACKEND, 0U, 1U, 0U,
+                     "RangeOnly"),
+};
+
+static int g_od_change_calls;
+
+static iolink_result_t track_change(void* user, const iolink_od_entry_t* entry, const uint8_t* data,
+                                    size_t len)
+{
+    (void) user;
+    (void) entry;
+    (void) data;
+    (void) len;
+    g_od_change_calls++;
+    return iolink_result_ok(0U);
+}
+
+/* STORE/VOLATILE 写后仍要执行 on_change。 */
+static const iolink_od_entry_t k_change_entry[] = {
+    IOLINK_OD_SCALAR_EX(0x0303U, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                        IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_BACKEND, 0U, 1U, 0U,
+                        "WriteWithHook", NULL, track_change),
+};
+
+static iolink_result_t failing_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+                                    size_t cap)
+{
+    (void) user;
+    (void) entry;
+    (void) out;
+    (void) cap;
+    return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL);
+}
+
+/* 标量只返回 1 字节：与表项 codec 的 2 字节不一致。 */
+static iolink_result_t short_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+                                  size_t cap)
+{
+    (void) user;
+    (void) entry;
+    (void) out;
+    (void) cap;
+    return iolink_result_ok(1U);
+}
+
+/* 字节串返回超过调用方容量的长度。 */
+static iolink_result_t long_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+                                 size_t cap)
+{
+    (void) user;
+    (void) entry;
+    (void) out;
+    return iolink_result_ok((uint16_t) (cap + 1U));
+}
+
+static void test_od_codec_edges(void** state)
+{
+    (void) state;
+    uint8_t buf[8] = {0U};
+    const iolink_od_entry_t* scalar = &k_single_entry[0];
+    const iolink_od_entry_t* octet = &k_octet_entry[0];
+    const iolink_od_entry_t* range = &k_range_entry[0];
+    uint32_t value = 0U;
+
+    /* 未知 datatype / 表尾索引。 */
+    assert_null(iolink_od_codec((uint8_t) IOLINK_OD_DT_COUNT));
+    assert_null(iolink_od_codec(0xFFU));
+    assert_int_equal(iolink_od_count(), 24U);
+    assert_non_null(iolink_od_at(0U));
+    assert_non_null(iolink_od_at(iolink_od_count() - 1U));
+    assert_null(iolink_od_at(iolink_od_count()));
+
+    /* decode：空参数、非标量、范围越界。 */
+    assert_int_equal(iolink_od_decode(NULL, buf, 1U, &value).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_decode(scalar, buf, 1U, NULL).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_decode(octet, buf, 4U, &value).code, IOLINK_RESULT_INVALID);
+    const uint8_t too_big[1] = {2U};
+    assert_int_equal(iolink_od_decode(range, too_big, 1U, &value).code,
+                     IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG);
+
+    /* encode：空参数、非标量、超范围与容量不足。 */
+    assert_int_equal(iolink_od_encode(NULL, 0U, buf, sizeof(buf)).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_encode(scalar, 0U, NULL, sizeof(buf)).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_encode(octet, 0U, buf, sizeof(buf)).code, IOLINK_RESULT_NOT_HANDLED);
+    assert_int_equal(iolink_od_encode(range, 0x100U, buf, sizeof(buf)).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_encode(scalar, 0U, buf, 1U).code, IOLINK_RESULT_INVALID);
+
+    /* check_value：空表项、空数据但声明了长度。 */
+    assert_int_equal(iolink_od_check_value(NULL, NULL, buf, 1U).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_check_value(scalar, NULL, NULL, 1U).code, IOLINK_RESULT_INVALID);
+    assert_true(iolink_result_succeeded(iolink_od_check_value(octet, NULL, NULL, 0U)));
+}
+
+static void test_od_lookup_edges(void** state)
+{
+    (void) state;
+    iolink_od_app_t empty = {0};
+
+    /* 空应用表与空指针都返回 NULL，而不是解引用。 */
+    assert_null(iolink_od_find_app(NULL, 0x0100U, 0U));
+    assert_null(iolink_od_find_app(&empty, 0x0100U, 0U));
+    assert_null(iolink_od_find(&empty, 0x0004U, 0U));
+
+    /* DS 表尾越界。 */
+    assert_null(iolink_od_ds_at(iolink_od_ds_count()));
+    assert_non_null(iolink_od_ds_at(iolink_od_ds_count() - 1U));
+}
+
+static void test_od_value_layer_edges(void** state)
+{
+    (void) state;
+    uint8_t buf[8] = {0U};
+    const uint8_t one = 1U;
+    const iolink_od_entry_t* scalar = &k_single_entry[0];
+    const iolink_od_entry_t* octet = &k_octet_entry[0];
+
+    /* default：空参数、块默认值拷贝与容量不足。 */
+    assert_int_equal(iolink_od_default(NULL, buf, sizeof(buf)).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_default(octet, buf, sizeof(buf)).len, 4);
+    assert_memory_equal(buf, k_block_default, sizeof(k_block_default));
+    assert_int_equal(iolink_od_default(octet, buf, 3U).code, IOLINK_RESULT_INVALID);
+
+    /* read_value：空参数、缺后端、后端失败、线长不符、超出容量。 */
+    iolink_od_ctx_t ctx = {0};
+    assert_int_equal(iolink_od_read_value(NULL, scalar, 0U, buf, sizeof(buf)).code,
+                     IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_read_value(&ctx, scalar, 0U, buf, sizeof(buf)).code,
+                     IOLINK_RESULT_NOT_HANDLED);
+
+    iolink_od_app_t failing_app = {0};
+    failing_app.entries = k_single_entry;
+    failing_app.count = 1U;
+    failing_app.read = failing_read;
+    ctx.app = &failing_app;
+    assert_int_equal(iolink_od_read_value(&ctx, scalar, 0U, buf, sizeof(buf)).code,
+                     IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL);
+
+    iolink_od_app_t short_app = failing_app;
+    short_app.read = short_read;
+    ctx.app = &short_app;
+    assert_int_equal(iolink_od_read_value(&ctx, scalar, 0U, buf, sizeof(buf)).code,
+                     IOLINK_RESULT_INVALID);
+
+    iolink_od_app_t long_app = failing_app;
+    long_app.read = long_read;
+    long_app.entries = k_octet_entry;
+    ctx.app = &long_app;
+    assert_int_equal(iolink_od_read_value(&ctx, octet, 0U, buf, 4U).code, IOLINK_RESULT_INVALID);
+
+    /* write_value：空参数、TRIGGER 无钩子、TAG 无 params、缺后端、写后钩子。 */
+    assert_int_equal(iolink_od_write_value(NULL, scalar, &one, 1U).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_write_value(&ctx, &k_trigger_no_hook[0], &one, 1U).code,
+                     IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
+
+    iolink_od_ctx_t tag_ctx = {0};
+    const iolink_od_entry_t* tag = iolink_od_find(NULL, IOLINK_IDX_APPLICATION_TAG, 0U);
+    assert_non_null(tag);
+    assert_int_equal(iolink_od_write_value(&tag_ctx, tag, &one, 1U).code,
+                     IOLINK_RESULT_NOT_HANDLED);
+
+    iolink_od_ctx_t no_app = {0};
+    const uint8_t two_bytes[2] = {0U, 1U};
+    assert_int_equal(iolink_od_write_value(&no_app, scalar, two_bytes, 2U).code,
+                     IOLINK_RESULT_NOT_HANDLED);
+
+    single_cell_t cell = {.value = 0U};
+    iolink_od_app_t app = {0};
+    app.entries = k_change_entry;
+    app.count = 1U;
+    app.write = single_write;
+    app.user = &cell;
+    iolink_od_ctx_t change_ctx = {.app = &app, .params = NULL};
+    g_od_change_calls = 0;
+    assert_true(
+        iolink_result_succeeded(iolink_od_write_value(&change_ctx, &k_change_entry[0], &one, 1U)));
+    assert_int_equal(g_od_change_calls, 1);
+}
+
+/* -------------------------------------------------------------------------
  * 表自身的契约：DS 成员、codec 错误码与默认值
  * ------------------------------------------------------------------------- */
 
@@ -263,6 +474,9 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_od_single_entry_parameter, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_switching_sensor, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_table_contract, od_setup, od_teardown),
+        cmocka_unit_test_setup_teardown(test_od_codec_edges, od_setup, od_teardown),
+        cmocka_unit_test_setup_teardown(test_od_lookup_edges, od_setup, od_teardown),
+        cmocka_unit_test_setup_teardown(test_od_value_layer_edges, od_setup, od_teardown),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

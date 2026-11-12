@@ -13,6 +13,8 @@
 #include "iolinki/protocol.h"
 
 /** @brief SP1 必须 >= 迟滞；迟滞必须 <= SP1。 */
+/* 回调类型固定为 void* user；同一张表的 ss_teach 需要可变指针，不能改成 const。 */
+// cppcheck-suppress constParameterCallback
 static iolink_result_t ss_validate(void* user, const iolink_od_entry_t* entry, const uint8_t* data,
                                    size_t len)
 {
@@ -50,6 +52,8 @@ static iolink_result_t ss_teach(void* user, const iolink_od_entry_t* entry, cons
     return iolink_result_ok(0U);
 }
 
+/* 只读后端，但回调类型固定为 void* user，不能改成 const。 */
+// cppcheck-suppress constParameterCallback
 static iolink_result_t ss_od_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
                                   size_t cap)
 {
