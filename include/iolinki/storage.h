@@ -43,7 +43,6 @@ typedef struct
     void* user; /**< 不透明的应用指针。 */
     int (*read)(void* user, uint32_t offset, uint8_t* buf, size_t len);
     int (*write)(void* user, uint32_t offset, const uint8_t* buf, size_t len);
-    int (*erase)(void* user, uint32_t offset, size_t len);
 } iolink_storage_api_t;
 
 /* --- 持久化区域布局（相对偏移） ------------------------------------------

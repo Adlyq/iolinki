@@ -460,7 +460,7 @@ int ds_mock_write(void* user, uint32_t addr, const uint8_t* buf, size_t len)
 }
 
 const iolink_storage_api_t g_ds_storage_mock = {
-    .user = NULL, .read = ds_mock_read, .write = ds_mock_write, .erase = NULL};
+    .user = NULL, .read = ds_mock_read, .write = ds_mock_write};
 
 void iolink_ds_mock_reset(void)
 {

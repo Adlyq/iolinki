@@ -451,13 +451,12 @@ typedef struct {
     void* user;
     int (*read)(void* user, uint32_t offset, uint8_t* buf, size_t len);
     int (*write)(void* user, uint32_t offset, const uint8_t* buf, size_t len);
-    int (*erase)(void* user, uint32_t offset, size_t len);
 } iolink_storage_api_t;
 ```
 
 - 通过 `config.storage` 只提供一个后端。
 - offset 相对于应用拥有的存储区域；物理基址应在回调内部自行加上。
-- 成功返回 0，失败返回非零。持久化需要 `read`/`write`；核心当前不会调用 `erase`。
+- 成功返回 0，失败返回非零。持久化只使用 `read`/`write`。
 - `ASYNC` 表示回调自行负责必要的缓冲区复制；`SYNC` 必须在返回前完成提交。
 
 区域布局（`include/iolinki/storage.h`）：

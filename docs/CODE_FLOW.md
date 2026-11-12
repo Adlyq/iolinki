@@ -73,7 +73,7 @@ flowchart TB
     subgraph PLAT["平台层"]
         T1["config.time_us<br/>应用微秒时钟"]
         T2["platform.h<br/>iolink_critical_enter/exit"]
-        S1["storage.h<br/>read/write/erase 回调"]
+        S1["storage.h<br/>read/write 回调"]
     end
 
     A1 --> A2
@@ -711,7 +711,7 @@ sequenceDiagram
 | `phy.request_service` | `dll_send()` 暂存后 | 请求 PHY 触发数据中断 |
 | `phy.int_active` | ISR 门控 | 判断收发器是否请求服务 |
 | `phy.response_timer_start/stop` | ISR RX/TX | t_A 看门狗 |
-| `phy.stack_timer_start` | 帧结束 / Timer B | 授权主循环服务窗口；`stack_timer_stop` 当前无栈内调用点 |
+| `phy.stack_timer_start` | 帧结束 / Timer B | 授权主循环服务窗口 |
 | `phy.detect_wakeup` | `iolink_dll_process()` | SIO 唤醒检测 |
 | `iolink_critical_enter/exit` | 事件引擎、PD 索引/长度等标量；直发回退时驱动 PHY（经 `IOLINK_CRITICAL_ENTER/EXIT()`） | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
 | `on_state_change` | `device_state_cb()` | 当前状态（电平式；主上下文迁移立即投递，ISR 迁移合并） |
@@ -722,7 +722,7 @@ sequenceDiagram
 | `on_pd_input` | `iolink_device_process()` | 启用回调时，OPERATE 每周期 |
 | `reset_handler` | `iolink_device_process()` | 0x80/0x81 请求后 |
 | `vendor_service` | ISDU device-specific 索引；DS 读写回退 | 参数 `input/output/output_length` 契约见 `isdu.h` |
-| `storage->read/write` | params 加载/保存、DS 加载/保存 | `erase` 当前无调用点 |
+| `storage->read/write` | params 加载/保存、DS 加载/保存 | 持久化只使用 read/write |
 | `iolink_device_time_us_fn time_us` | DLL、ISR 双泵、事件引擎 | 必需；初始化时绑定，NULL 返回 `IOLINK_DEVICE_INIT_ERR_TIME`；必须单调/非阻塞/ISR 安全 |
 | `phy.get_faults` | `dll_poll_diagnostics()` | 边沿触发/清除 Table D.1 事件；NULL 时诊断静默 |
 | `phy.set_cq_line` | 无 | SIO 线状态由 PHY/应用自行管理 |
@@ -980,7 +980,7 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 
 - 1 s idle 监督使用固定 1000 ms 常量（`dll_check_idle_timeout()`），不提供编译期开关。
 - `iolink_device_config_t::time_us` 是必需项，初始化时绑定到 DLL/事件上下文；NULL 会被 `iolink_device_init()` 拒绝。主循环、ISR 和事件计时都用它，核心不再调用平台时间函数；直接使用 `iolink_dll_*` 时需自行绑定 `ctx->time_us`。
-- `phy->set_cq_line`、`storage->erase` 当前没有栈内调用点。
+- `phy->set_cq_line` 当前没有栈内调用点（PHY 自己管理 SIO 线状态）。
 - `iolink_events_process()`、`iolink_ds_process()` 由 `iolink_device_process()` 在 ISDU 空闲时自动调度；`iolink_ds_check()` 需要应用自行调度（master 校验和来源应用自有）。
 - 本路径要求 `iolink_critical_enter/exit` 真实可用（初始化会校验），且 `ctx` 的主循环调用与 ISR 调用遵守文档约束。`IOLINK_CONCURRENCY=SINGLE` 档不需要临界区，初始化跳过校验且库不引用该符号；其余档位仍会校验。
 - 当 `phy->stack_timer_start != NULL` 时，PHY 必须在 Timer B 到期时调用 `iolink_dll_on_stack_tick()`，否则 `iolink_device_process()` 会被授权门控挡住；Timer A 超时则应调用 `iolink_dll_on_rx_timeout()`。

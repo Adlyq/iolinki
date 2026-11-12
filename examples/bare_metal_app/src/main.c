@@ -36,7 +36,6 @@ static int storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t
 static const iolink_storage_api_t g_storage_api = {
     .read = storage_read,
     .write = storage_write,
-    .erase = NULL,
 };
 #endif
 

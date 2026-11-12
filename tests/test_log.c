@@ -105,19 +105,10 @@ static int fake_storage_write(void* user, uint32_t offset, const uint8_t* buf, s
     return 0;
 }
 
-static int fake_storage_erase(void* user, uint32_t offset, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) len;
-    return 0;
-}
-
 static const iolink_storage_api_t g_fake_storage = {
     NULL,
     fake_storage_read,
     fake_storage_write,
-    fake_storage_erase,
 };
 
 static void make_minimal_config(iolink_device_config_t* config)

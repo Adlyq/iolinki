@@ -27,7 +27,7 @@ static int mock_write(void* user, uint32_t offset, const uint8_t* data, size_t l
     return write_result;
 }
 static const iolink_storage_api_t mock_storage = {
-    .user = NULL, .read = mock_read, .write = mock_write, .erase = NULL};
+    .user = NULL, .read = mock_read, .write = mock_write};
 int main(void)
 {
     iolink_device_info_ctx_t info;

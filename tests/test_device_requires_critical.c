@@ -36,8 +36,8 @@ static int test_storage_write(void* user, uint32_t offset, const uint8_t* buf, s
     return 0;
 }
 
-static const iolink_storage_api_t g_test_storage = {
-    .read = test_storage_read, .write = test_storage_write, .erase = NULL};
+static const iolink_storage_api_t g_test_storage = {.read = test_storage_read,
+                                                    .write = test_storage_write};
 
 static uint64_t test_time_us(void* user)
 {

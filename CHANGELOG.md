@@ -51,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CODING_STANDARDS.md`).
 
 ### Removed
+- `phy_api->stack_timer_stop` and `iolink_storage_api_t::erase`: the stack never
+  called either hook, so the porting contract is now start/read/write only.
 - `iolink_dll_prepare_cyclic_reply()` (no-op), `cyclic_reply_precached`,
   `iolink_dll_reply_variant()`, `iolink_reply_variant_t`,
   `IOLINK_OD_EVENT_MODE`, `IOLINK_OPERATE_TIMEOUT_MS`,

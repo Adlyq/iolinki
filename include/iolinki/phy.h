@@ -193,12 +193,10 @@ typedef struct
      * 请求字节上启动（同时停止周期节拍），并在
      * 应答开始或超时时停止。stack_timer_start 驱动周期性节拍，
      * 该节拍授权主上下文服务窗口。两者均为可选；当
-     * 为 NULL 时，库保持旧有的软件时间戳行为。
-     * stack_timer_stop 已声明，但当前 src/ 未调用它。 */
+     * 为 NULL 时，库保持旧有的软件时间戳行为。 */
     void (*response_timer_start)(void* user);
     void (*response_timer_stop)(void* user);
     void (*stack_timer_start)(void* user);
-    void (*stack_timer_stop)(void* user);
 
     /**
      * @brief 请求 PHY 立即运行数据中断泵送（可选）。

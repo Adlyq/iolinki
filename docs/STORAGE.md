@@ -17,7 +17,6 @@ typedef struct {
     void* user;
     int (*read)(void* user, uint32_t offset, uint8_t* buf, size_t len);
     int (*write)(void* user, uint32_t offset, const uint8_t* buf, size_t len);
-    int (*erase)(void* user, uint32_t offset, size_t len);   /* may be NULL */
 } iolink_storage_api_t;
 ```
 

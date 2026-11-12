@@ -36,23 +36,6 @@ static int storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t
     return (fflush(storage->file) == 0) ? 0 : -1;
 }
 
-static int storage_erase(void* user, uint32_t offset, size_t len)
-{
-    conformance_file_storage_t* storage = (conformance_file_storage_t*) user;
-    if ((storage == NULL) || (storage->file == NULL)) {
-        return -1;
-    }
-    if (fseek(storage->file, (long) offset, SEEK_SET) != 0) {
-        return -1;
-    }
-    for (size_t i = 0U; i < len; i++) {
-        if (fputc(0, storage->file) == EOF) {
-            return -1;
-        }
-    }
-    return (fflush(storage->file) == 0) ? 0 : -1;
-}
-
 int conformance_file_storage_init(conformance_file_storage_t* storage, const char* path)
 {
     if ((storage == NULL) || (path == NULL) || (path[0] == '\0')) {
@@ -73,7 +56,6 @@ int conformance_file_storage_init(conformance_file_storage_t* storage, const cha
     storage->api.user = storage;
     storage->api.read = storage_read;
     storage->api.write = storage_write;
-    storage->api.erase = storage_erase;
     return 0;
 }
 
