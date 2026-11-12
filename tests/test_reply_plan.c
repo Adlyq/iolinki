@@ -138,6 +138,7 @@ static void init_operate(void)
     s_dll.main.shared.pd_out_len_current = 0U;
     s_dll.main.pd_in_len_current = 1U;
     s_dll.main.pd_valid = true;
+    s_dll.main.shared.pd_in_active = 0U;
     s_dll.main.shared.pd_in[0][1] = 0x5AU; /* PD-in 槽位（OD 头之后） */
     s_now_us = 1000000U;
     s_tx_n = 0U;

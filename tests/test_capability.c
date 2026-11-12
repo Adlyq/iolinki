@@ -36,6 +36,26 @@ static void test_build_profile_matches_macros(void** state)
     assert_int_equal(build->pd_in_buffers, (uint8_t) IOLINK_PD_IN_BUFFERS);
     assert_int_equal(build->event_min_appear_ms, IOLINK_EVENT_MIN_APPEAR_MS);
     assert_int_equal(build->event_min_repeat_ms, IOLINK_EVENT_MIN_REPEAT_MS);
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    assert_int_equal(build->isr_rx, IOLINK_CAP_ISR_RX_FRAME);
+#else
+    assert_int_equal(build->isr_rx, IOLINK_CAP_ISR_RX_BYTE);
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    assert_int_equal(build->isr_tx, IOLINK_CAP_ISR_TX_FRAME);
+#else
+    assert_int_equal(build->isr_tx, IOLINK_CAP_ISR_TX_BYTE);
+#endif
+    assert_int_equal(
+        build->compat_defaults,
+        (uint8_t) ((IOLINK_COMPAT_V10_STARTUP_OPERATE ? IOLINK_STACK_COMPAT_V10_STARTUP_OPERATE
+                                                      : 0U) |
+                   (IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
+                        ? IOLINK_STACK_COMPAT_TYPE0_PAGE_READ_OPERATE
+                        : 0U) |
+                   (IOLINK_DS_LEGACY_IMAGE_SUB0 ? IOLINK_STACK_COMPAT_DS_LEGACY_IMAGE_SUB0 : 0U)));
+    assert_int_equal(build->timing_enforce_default, IOLINK_TIMING_ENFORCE_DEFAULT);
+    assert_int_equal(build->reserved, 0U);
 
 #if IOLINK_FEATURE_EVENTS
     assert_true(iolink_caps_built(build, IOLINK_CAPB_EVENTS));
@@ -66,6 +86,15 @@ static void test_resolve_probes_the_built_vtable(void** state)
     assert_true(iolink_caps_has(caps, IOLINK_CAP_RX));
     assert_true(iolink_caps_has(caps, IOLINK_CAP_TX));
     assert_true(iolink_caps_has(caps, IOLINK_CAP_WAKEUP));
+#if IOLINK_PHY_FEATURE_SIO_CQ
+    assert_true(iolink_caps_has(caps, IOLINK_CAP_SIO_CQ));
+#else
+    assert_false(iolink_caps_has(caps, IOLINK_CAP_SIO_CQ));
+#endif
+    /* mock PHY 没有这些可选钩子：能力位必须为 0。 */
+    assert_false(iolink_caps_has(caps, IOLINK_CAP_TX_BUSY));
+    assert_false(iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE));
+    assert_false(iolink_caps_has(caps, IOLINK_CAP_PHY_FAULTS));
 
     /* 缺 send 钩子：TX 能力必须消失（不是"有 tx_octet 就算"）。 */
     iolink_phy_api_t no_tx = g_phy_mock;
@@ -77,7 +106,9 @@ static void test_resolve_probes_the_built_vtable(void** state)
     /* PHY 为 NULL：只有构建/配置能力。 */
     const iolink_caps_t null_phy = iolink_caps_resolve(NULL, NULL, NULL, NULL);
     assert_false(iolink_caps_has(null_phy, IOLINK_CAP_RX));
+#if IOLINK_FEATURE_SYSTEM_COMMAND
     assert_true(iolink_caps_has(null_phy, IOLINK_CAP_SYSTEM_COMMAND));
+#endif
 }
 
 static void test_resolve_merges_runtime_switches(void** state)
@@ -87,7 +118,9 @@ static void test_resolve_merges_runtime_switches(void** state)
     iolink_app_callbacks_t app = {0};
 
     iolink_caps_t caps = iolink_caps_resolve(NULL, &stack, &app, NULL);
+#if IOLINK_FEATURE_SYSTEM_COMMAND
     assert_true(iolink_caps_has(caps, IOLINK_CAP_SYSTEM_COMMAND));
+#endif
     assert_false(iolink_caps_has(caps, IOLINK_CAP_PD_IN_CALLBACK));
     assert_false(iolink_caps_has(caps, IOLINK_CAP_COMPAT_V10_OP));
     assert_false(iolink_caps_has(caps, IOLINK_CAP_REQUIRE_ISR_TX));
@@ -122,7 +155,18 @@ static void test_instance_caps_cannot_forge_hardware(void** state)
     const iolink_caps_t set =
         iolink_device_set_capabilities(&dev.ctx, IOLINK_CAP_SYSTEM_COMMAND | IOLINK_CAP_EVENTS);
     assert_true(iolink_caps_has(set, IOLINK_CAP_RX));
+#if IOLINK_FEATURE_SYSTEM_COMMAND
     assert_true(iolink_caps_has(set, IOLINK_CAP_SYSTEM_COMMAND));
+#endif
+#if IOLINK_FEATURE_EVENTS
+    assert_true(iolink_caps_has(set, IOLINK_CAP_EVENTS));
+#endif
+
+    /* 伪造硬件位（mock PHY 未提供 request_service）必须被 resolve 丢弃。 */
+    const iolink_caps_t forged =
+        iolink_device_set_capabilities(&dev.ctx, IOLINK_CAP_REQUEST_SERVICE);
+    assert_false(iolink_caps_has(forged, IOLINK_CAP_REQUEST_SERVICE));
+    assert_true(iolink_caps_has(forged, IOLINK_CAP_RX));
 
     /* 运行时关闭 SystemCommand 是允许的。 */
     const iolink_caps_t off =
@@ -131,13 +175,49 @@ static void test_instance_caps_cannot_forge_hardware(void** state)
     assert_int_equal(iolink_device_capabilities(&dev.ctx), off);
 }
 
+/* resolve() 的 build 覆盖入口：合成档位下的三级优先级。 */
+static void test_resolve_uses_build_override(void** state)
+{
+    (void) state;
+    iolink_build_caps_t fake = *iolink_caps_build();
+    iolink_stack_config_t stack = {0};
+
+    fake.built = 0U;
+    const iolink_caps_t none = iolink_caps_resolve(NULL, &stack, NULL, &fake);
+    assert_false(iolink_caps_has(none, IOLINK_CAP_EVENTS));
+    assert_false(iolink_caps_has(none, IOLINK_CAP_SYSTEM_COMMAND));
+
+    fake.built = IOLINK_CAPB_SYSTEM_COMMAND;
+    const iolink_caps_t only_system = iolink_caps_resolve(NULL, &stack, NULL, &fake);
+    assert_true(iolink_caps_has(only_system, IOLINK_CAP_SYSTEM_COMMAND));
+    assert_false(iolink_caps_has(only_system, IOLINK_CAP_EVENTS));
+
+    stack.flags = IOLINK_STACK_FLAG_NO_SYSTEM_COMMAND;
+    const iolink_caps_t disabled = iolink_caps_resolve(NULL, &stack, NULL, &fake);
+    assert_false(iolink_caps_has(disabled, IOLINK_CAP_SYSTEM_COMMAND));
+}
+
+/* REQUIRE_ISR_TX 但 PHY 没有 request_service()：init 必须拒绝。 */
+static void test_require_isr_tx_needs_request_service(void** state)
+{
+    (void) state;
+    iolink_test_device_t dev;
+    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0,
+                                    .flags = IOLINK_STACK_FLAG_REQUIRE_ISR_TX};
+
+    /* 校验在 PHY 初始化之前完成，因此不需要任何 mock 期望。 */
+    assert_int_equal(iolink_test_device_init(&dev, &config, NULL), IOLINK_DEVICE_INIT_ERR_PHY);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_build_profile_matches_macros),
         cmocka_unit_test(test_resolve_probes_the_built_vtable),
         cmocka_unit_test(test_resolve_merges_runtime_switches),
+        cmocka_unit_test(test_resolve_uses_build_override),
         cmocka_unit_test(test_instance_caps_cannot_forge_hardware),
+        cmocka_unit_test(test_require_isr_tx_needs_request_service),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

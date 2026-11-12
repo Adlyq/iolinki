@@ -76,7 +76,7 @@ static void test_device_binds_external_workspace(void** state)
 #endif
 }
 
-static void test_explicit_workspace_overrides_config(void** state)
+static void test_explicit_workspace_argument(void** state)
 {
     (void) state;
     iolink_phy_mock_reset();
@@ -84,14 +84,16 @@ static void test_explicit_workspace_overrides_config(void** state)
     setup_mock_phy();
     will_return(mock_phy_init, 0);
 
-    static iolink_workspace_t ws;
+    static iolink_workspace_t from_config;
+    static iolink_workspace_t from_argument;
     iolink_test_device_t dev;
     device_config_defaults(&dev);
-    dev.cfg.workspace = NULL;
+    dev.cfg.workspace = &from_config;
 
-    assert_int_equal(iolink_device_init_with_workspace(&dev.ctx, &dev.cfg, &ws),
+    /* 显式参数优先于 config.workspace（文档约定：后者被忽略）。 */
+    assert_int_equal(iolink_device_init_with_workspace(&dev.ctx, &dev.cfg, &from_argument),
                      IOLINK_DEVICE_INIT_OK);
-    assert_ptr_equal(iolink_device_get_workspace(&dev.ctx), &ws);
+    assert_ptr_equal(iolink_device_get_workspace(&dev.ctx), &from_argument);
 }
 
 static void test_device_falls_back_to_embedded_scratch(void** state)
@@ -136,13 +138,24 @@ static void test_ds_serialize_matches_stored_image(void** state)
     assert_int_equal((size_t) n, ds.image_len);
     assert_int_equal(ds.current_checksum, iolink_ds_calc_checksum(serialized, (size_t) n));
 
-    /* 同一份参数经 build_image 写入暂存缓冲，内容必须逐字节一致。 */
+    /* 同一份参数经 build_image 写入暂存缓冲，内容必须逐字节一致。
+     * 外置工作区形态没有嵌入暂存缓冲，由 test_workspace_external 覆盖。 */
+#if IOLINK_WORKSPACE_EMBEDDED
     assert_int_equal(iolink_ds_build_image(&ds), n);
     assert_memory_equal(ds.image, serialized, (size_t) n);
     assert_true(iolink_ds_verify(&ds));
+#endif
 
     /* 容量不足必须被拒绝，而不是截断。 */
     assert_int_equal(iolink_ds_serialize(&ds, serialized, 3U), -1);
+
+    /* 差一字节与恰好放下：拒绝时不得污染镜像状态。 */
+    const size_t before_len = ds.image_len;
+    const uint32_t before_checksum = ds.current_checksum;
+    assert_int_equal(iolink_ds_serialize(&ds, serialized, (size_t) n), n);
+    assert_int_equal(iolink_ds_serialize(&ds, serialized, (size_t) n - 1U), -1);
+    assert_int_equal(ds.image_len, before_len);
+    assert_int_equal(ds.current_checksum, before_checksum);
 }
 
 static void test_ds_refresh_without_image_buffer(void** state)
@@ -200,7 +213,7 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_device_binds_external_workspace),
-        cmocka_unit_test(test_explicit_workspace_overrides_config),
+        cmocka_unit_test(test_explicit_workspace_argument),
         cmocka_unit_test(test_device_falls_back_to_embedded_scratch),
         cmocka_unit_test(test_ds_serialize_matches_stored_image),
         cmocka_unit_test(test_ds_refresh_without_image_buffer),

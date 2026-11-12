@@ -185,7 +185,6 @@ typedef enum
         -14, /**< PD 回调路径与轮询调用混用（能力位已置位时调用轮询 API） */
     IOLINK_DEVICE_INIT_ERR_PHY = -15,       /**< 构建配置所需的某个 PHY 钩子为 NULL */
     IOLINK_DEVICE_INIT_ERR_WORKSPACE = -16, /**< `IOLINK_WORKSPACE_EMBEDDED=0` 但没有提供工作区 */
-    IOLINK_DEVICE_INIT_ERR_PROFILE = -17,   /**< 实例声明的能力未被编译进本镜像 */
     /* -8（锁定对）和 -13（RTOS 锁）已废弃：协议栈只有一个
      * 主上下文调用者，不再获取应用线程锁。 */
 } iolink_device_init_result_t;

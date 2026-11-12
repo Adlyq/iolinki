@@ -167,6 +167,8 @@ PROBE_SOURCES=(
     src/device.c
     src/capability.c
     src/profile.c
+    src/data_storage.c
+    src/events.c
 )
 
 run_probe() {

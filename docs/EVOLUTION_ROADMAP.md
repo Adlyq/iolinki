@@ -334,6 +334,8 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 - **验证**：79/79 测试、4 结构配置矩阵 + 7 探针、差分门 2 配置 0 allowlist、
   质量门、覆盖率 90.4%、WCET、size_matrix、profile ABI 全部通过；顺带修复
   `tools/coverage.sh` 复用旧构建树导致 gcovr 行归属错乱（假覆盖率回归）的问题。
+- **CR 修正**：`IOLINK_DEVICE_INIT_ERR_PROFILE`（-17）在全部特性运行时化后不可达，
+  已移除并保留 `REQUIRE_ISR_TX`/`TX_BUSY` → `ERR_PHY` 的可达校验。
 - **剩余项**：ISR `isr_ops` 折叠（P5/P9 交叉）、`IOLINK_CAP_BUILD_*` 单变量
   测量开关、嵌入式链接脚本锚点、C2（FRAME）行为等价门、组合探针仅编译不链接。
 

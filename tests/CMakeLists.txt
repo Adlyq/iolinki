@@ -16,6 +16,10 @@ find_package(Python3 QUIET)
 if(Python3_FOUND)
     add_test(NAME od_iodd_export
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_od_iodd_export.py)
+    # P9: the generated state-machine table, Mermaid and CSV must match the
+    # C source of truth; --check fails on drift (also run in CI).
+    add_test(NAME dll_statemachine_gen_check
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/gen_dll_statemachine.py --check)
 endif()
 
 add_executable(test_switching_sensor test_switching_sensor.c
@@ -43,6 +47,10 @@ add_test(NAME test_dll_statemachine COMMAND test_dll_statemachine)
 add_executable(test_dll_statemachine_gen test_dll_statemachine_gen.c)
 target_link_libraries(test_dll_statemachine_gen iolinki)
 add_test(NAME test_dll_statemachine_gen COMMAND test_dll_statemachine_gen)
+# P5: no cmocka dependency (plain asserts over the plan table and ISR pump).
+add_executable(test_reply_plan test_reply_plan.c)
+target_link_libraries(test_reply_plan iolinki)
+add_test(NAME test_reply_plan COMMAND test_reply_plan)
 add_executable(test_device_time_source test_device_time_source.c)
 target_link_libraries(test_device_time_source iolinki)
 add_test(NAME test_device_time_source COMMAND test_device_time_source)
@@ -186,6 +194,16 @@ if(CMOCKA_FOUND)
     add_iolink_test(test_timing test_timing.c)
     add_iolink_test(test_integration_full test_integration_full.c)
     add_iolink_test(test_workspace test_workspace.c)
+
+    # P8 external-workspace profile: a second build of the sources without the
+    # embedded scratch, so the -16 rejection and the explicit-workspace path
+    # are compiled and executed (not only syntax-probed).
+    add_library(iolink_workspace_fixture STATIC ${IOLINK_SOURCES})
+    target_include_directories(iolink_workspace_fixture PUBLIC ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(iolink_workspace_fixture PUBLIC IOLINK_WORKSPACE_EMBEDDED=0)
+    add_executable(test_workspace_external test_workspace_external.c)
+    target_link_libraries(test_workspace_external iolink_workspace_fixture)
+    add_test(NAME test_workspace_external COMMAND test_workspace_external)
     add_iolink_test(test_application test_application.c)
     # P6 能力表：构建档位、resolve() 与运行时覆盖规则。
     add_iolink_test(test_capability test_capability.c)
@@ -257,10 +275,6 @@ if(CMOCKA_FOUND)
     add_executable(test_isr_observability test_isr_observability.c)
     target_link_libraries(test_isr_observability iolinki)
     add_test(NAME test_isr_observability COMMAND test_isr_observability)
-    # P5 应答计划：发布 / 失效 / 计划外回退（无 cmocka 依赖）。
-    add_executable(test_reply_plan test_reply_plan.c)
-    target_link_libraries(test_reply_plan iolinki)
-    add_test(NAME test_reply_plan COMMAND test_reply_plan)
     add_iolink_test(test_isr_window test_isr_window.c)
 else()
     message(WARNING "CMocka not found, unit tests will be skipped. Install libcmocka-dev to enable them.")

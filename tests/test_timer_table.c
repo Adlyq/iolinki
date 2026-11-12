@@ -117,7 +117,8 @@ static void test_same_instant_priority(void)
     ctx.main.master_lost_cycles = 3U;
     ctx.main.min_cycle_time_us = 1000U;
     ctx.main.master_cycle_time = 0U;
-    ctx.main.master_last_activity_ms = 0U;
+    /* MASTER_LOST 截止时间 = last_activity + 3 × cycle = g_now。 */
+    ctx.main.master_last_activity_ms = (uint32_t) ((g_now - 3000U) / 1000U);
     ctx.main.shared.last_activity_ms = 1000U;
 
     /* 三个 DEADLINE 项同刻（g_now）到期，t_PD 处于过去（门控关闭）。 */
@@ -153,17 +154,20 @@ static void test_t_byte_rearm_and_cancel(void)
     const uint64_t deadline = iolink_dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_BYTE);
     assert(deadline == g_now + 1001U); /* 严格 > limit */
 
-    /* 新字节：绝对截止时间不变（同一个 last_byte 时间戳）。 */
+    /* 新字节：截止时间随 last_byte 推进（同一 limit）。 */
     g_now += 400U;
+    ctx.main.shared.last_byte_us = (uint32_t) g_now;
     iolink_dll_process(&ctx.main);
-    assert(iolink_dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_BYTE) == deadline);
+    const uint64_t advanced = iolink_dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_BYTE);
+    assert(advanced == g_now + 1001U);
+    assert(advanced > deadline);
 
-    g_now = deadline - 1U;
+    g_now = advanced - 1U;
     iolink_dll_process(&ctx.main);
     assert(ctx.main.t_byte_violations == 0U);
     assert(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_T_BYTE));
 
-    g_now = deadline;
+    g_now = advanced;
     iolink_dll_process(&ctx.main);
     assert(ctx.main.t_byte_violations == 1U);
     assert(ctx.main.frame_index == 0U);
@@ -214,12 +218,12 @@ static void test_millisecond_wrap(void)
     /* 现在 = 2^32 ms + 5 s；截断后的毫秒值是 5000。 */
     g_now = ((uint64_t) 0x100000000ULL + 5000ULL) * 1000ULL;
     ctx.main.shared.last_activity_ms = (uint32_t) (g_now / 1000U) - 200U;
-    ctx.main.master_last_activity_ms = (uint32_t) (g_now / 1000U) - 1U;
+    ctx.main.master_last_activity_ms = (uint32_t) (g_now / 1000U);
     iolink_dll_process(&ctx.main);
     assert(ctx.main.idle_timeouts == 0U);
     assert(!ctx.main.master_lost);
 
-    /* 1.2 s 静默：空闲诊断触发一次；主站丢失（2 ms 窗口）保持提示。 */
+    /* 1.2 s 静默：空闲诊断触发一次；主站丢失（2 ms 窗口）提示。 */
     g_now += 1000000U;
     iolink_dll_process(&ctx.main);
     assert(ctx.main.idle_timeouts == 1U);

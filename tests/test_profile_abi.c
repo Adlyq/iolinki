@@ -24,10 +24,22 @@ IOLINK_PROFILE_ANCHOR(iolink_test_profile_anchor);
 
 int main(void)
 {
-    /* 锚点数组的第 0 项非 NULL 即证明符号解析成功。 */
-    assert(iolink_test_profile_anchor[0] != NULL);
-
     const iolink_build_caps_t* build = iolink_caps_build();
+
+    /* 锚点符号已解析（否则不会链接）；同时校验档位字段本身。 */
+    assert(iolink_test_profile_anchor[0] != NULL);
     assert(build->abi == IOLINK_CAP_ABI);
+    assert(build->reserved == 0U);
+    assert(build->built != 0U);
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    assert(build->isr_rx == IOLINK_CAP_ISR_RX_FRAME);
+#else
+    assert(build->isr_rx == IOLINK_CAP_ISR_RX_BYTE);
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    assert(build->isr_tx == IOLINK_CAP_ISR_TX_FRAME);
+#else
+    assert(build->isr_tx == IOLINK_CAP_ISR_TX_BYTE);
+#endif
     return 0;
 }

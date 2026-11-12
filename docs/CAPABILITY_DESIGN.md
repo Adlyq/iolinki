@@ -232,19 +232,13 @@ static inline bool dll_phy_has_wakeup(const iolink_dll_shared_t* ctx)
   `const iolink_isr_ops_t* ctx->isr_ops`，ISR 只做一次间接调用。位测试放在每字节路径上
   会给 P9 的 WCET 分析增加一个无意义的变体（间接调用的目标集合仍是 2–3 个有界实现）。
 
-### 4.4 一致性校验（防"声明了但没编译进去"）
-
-降级后的最大风险是：运行时能力位被置位，但对应实现被裁剪掉了，于是静默走空路径。
-加一道 init 门（`device.c:device_config_validate()` 内，返回新的负码）：
-
-```c
-/* 例：实例声明了事件能力，但构建裁掉了事件引擎 */
-if (iolink_caps_has(caps, IOLINK_CAP_EVENTS) && !iolink_caps_built(b, IOLINK_CAPB_EVENTS)) {
-    return IOLINK_DEVICE_INIT_ERR_PROFILE; /* -16 */
-}
-```
-
-该错误码可被单元测试直接命中，不依赖构建矩阵。
+> **已退役（2026-11 CR）。** P6 把 12 项特性全部运行时化后，
+> "位为开但未编译"不再可能：`iolink_caps_resolve()` 只置位 `built`
+> 支持的位，未编译的能力被静默屏蔽，下面两道检查恒为假。因此移除
+> `IOLINK_DEVICE_INIT_ERR_PROFILE`；保留的一致性校验是
+> `REQUIRE_ISR_TX` 但 PHY 无 `request_service()`、以及 TX_FRAME+TX_BUSY
+> 但无 `tx_busy()`，两者返回 `IOLINK_DEVICE_INIT_ERR_PHY`。契约测试
+> 改为断言"未编译能力被屏蔽、init 成功"。
 
 ### 4.5 成本
 

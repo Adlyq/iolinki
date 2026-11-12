@@ -209,8 +209,9 @@ static void test_char_direct_param_page1(void** state)
 
     char_prepare(&ctx, &k_char_info);
     assert_int_equal(char_read(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0U, buf, sizeof(buf)), 16);
-    assert_int_equal(buf[0x00], 0x00U); /* MasterCycleTime（未绑定 DLL） */
-    assert_int_equal(buf[0x01], 0x00U); /* MinCycleTime（未配置） */
+    assert_int_equal(buf[0x00], 0x00U); /* MasterCommand（未绑定主站命令） */
+    assert_int_equal(buf[0x01], 0x00U); /* MasterCycleTime（未绑定 DLL） */
+    assert_int_equal(buf[0x02], 0x00U); /* MinCycleTime（未配置） */
     assert_int_equal(buf[0x04], 0x11U); /* RevisionID 低字节 */
     assert_int_equal(buf[0x07], 0x04U); /* VendorID MSB */
     assert_int_equal(buf[0x08], 0xD2U); /* VendorID LSB */
@@ -289,6 +290,7 @@ static void test_char_identification_objects(void** state)
     assert_int_equal(char_read(&ctx, IOLINK_IDX_VENDOR_NAME, 0U, buf, sizeof(buf)), 7);
     assert_memory_equal(buf, "iolinki", 7);
     assert_int_equal(char_read(&ctx, IOLINK_IDX_SERIAL_NUMBER, 0U, buf, sizeof(buf)), 7);
+    assert_memory_equal(buf, "SN-0001", 7);
     char_expect_read_error(&ctx, IOLINK_IDX_PRODUCT_URI, 0U, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
 
     iolink_device_info_t with_uri = k_char_info;

@@ -121,7 +121,11 @@ static void test_od_single_entry_parameter(void** state)
     app.user = &cell;
     iolink_isdu_bind_od(&ctx, &app);
 
-    /* 默认值来自表项，经 ISDU 读出。 */
+    /* 表项默认值经 od_default 解析，与应用初值一致；应用后端读出同一值。 */
+    assert_int_equal(cell.value, 42U);
+    assert_int_equal(iolink_od_default(&k_single_entry[0], buf, sizeof(buf)).len, 2U);
+    assert_int_equal(buf[0], 0x00U);
+    assert_int_equal(buf[1], 0x2AU);
     assert_int_equal(od_read(&ctx, 0x0200U, 0U, buf, sizeof(buf)), 2);
     assert_int_equal(buf[0], 0x00U);
     assert_int_equal(buf[1], 0x2AU);
@@ -164,7 +168,12 @@ static void test_od_switching_sensor(void** state)
     switching_sensor_od_init(&app, &sensor);
     iolink_isdu_bind_od(&ctx, &app);
 
-    /* 默认值 = 表项默认值。 */
+    /* 表项默认值与应用初值一致，并据此读出。 */
+    const iolink_od_entry_t* threshold_entry =
+        iolink_od_find(&app, SWITCHING_SENSOR_IDX_THRESHOLD, 0U);
+    assert_non_null(threshold_entry);
+    assert_int_equal(iolink_od_default(threshold_entry, buf, sizeof(buf)).len, 2U);
+    assert_int_equal((buf[0] << 8) | buf[1], 5000);
     assert_int_equal(od_read(&ctx, SWITCHING_SENSOR_IDX_THRESHOLD, 0U, buf, sizeof(buf)), 2);
     assert_int_equal((buf[0] << 8) | buf[1], 5000);
     assert_int_equal(od_read(&ctx, SWITCHING_SENSOR_IDX_HYSTERESIS, 0U, buf, sizeof(buf)), 2);
@@ -305,6 +314,7 @@ static void test_od_codec_edges(void** state)
     /* 未知 datatype / 表尾索引。 */
     assert_null(iolink_od_codec((uint8_t) IOLINK_OD_DT_COUNT));
     assert_null(iolink_od_codec(0xFFU));
+    /* 内建标准表规模契约：新增内建项时同步更新此处。 */
     assert_int_equal(iolink_od_count(), 24U);
     assert_non_null(iolink_od_at(0U));
     assert_non_null(iolink_od_at(iolink_od_count() - 1U));
@@ -455,10 +465,10 @@ static void test_od_table_contract(void** state)
     assert_null(iolink_od_find(NULL, 0x001CU, 0U));
 
     /* codec：长度与范围错误码唯一。 */
-    const iolink_od_entry_t* inversion = iolink_od_find(NULL, IOLINK_IDX_DEVICE_STATUS, 0U);
-    assert_non_null(inversion);
+    const iolink_od_entry_t* status_entry = iolink_od_find(NULL, IOLINK_IDX_DEVICE_STATUS, 0U);
+    assert_non_null(status_entry);
     uint32_t value = 0U;
-    assert_int_equal(iolink_od_decode(inversion, buf, 2U, &value).code,
+    assert_int_equal(iolink_od_decode(status_entry, buf, 2U, &value).code,
                      IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
 
     const iolink_od_entry_t* app_tag = iolink_od_find(NULL, IOLINK_IDX_APPLICATION_TAG, 0U);

@@ -320,20 +320,11 @@ static int device_config_validate(const iolink_device_config_t* config)
     }
 #endif
 
-    /* P6：实例能力与构建档位的一致性校验。降级后的最大风险是
-     * "能力位声明为开，但对应实现没被编译进来"，这里把它变成可
-     * 单元测试直接命中的负错误码。 */
+    /* P6：能力的一致性校验。降级后的最大风险不是"位为开但没编译"
+     * （resolve 只置位 built 支持的位，unbuilt 能力被静默屏蔽），而是
+     * 运行时要求与 PHY 实际钩子不匹配：见下方 REQUIRE_ISR_TX 与 TX_BUSY。 */
     const iolink_caps_t caps =
         iolink_caps_resolve(&config->phy, &config->stack, config->app_callbacks, NULL);
-    const iolink_build_caps_t* build = iolink_caps_build();
-
-    if (iolink_caps_has(caps, IOLINK_CAP_EVENTS) && !iolink_caps_built(build, IOLINK_CAPB_EVENTS)) {
-        return IOLINK_DEVICE_INIT_ERR_PROFILE;
-    }
-    if (iolink_caps_has(caps, IOLINK_CAP_SYSTEM_COMMAND) &&
-        !iolink_caps_built(build, IOLINK_CAPB_SYSTEM_COMMAND)) {
-        return IOLINK_DEVICE_INIT_ERR_PROFILE;
-    }
 
     if (iolink_caps_has(caps, IOLINK_CAP_REQUIRE_ISR_TX) &&
         !iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE)) {
