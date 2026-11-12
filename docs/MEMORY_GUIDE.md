@@ -17,10 +17,10 @@ Measured on a 64-bit host with the default buffers in
 
 | Component | Size (bytes) | Description |
 | :--- | ---: | :--- |
-| **`iolink_device_ctx_t`** | **3968** | The object the application allocates (includes everything below) |
-| `iolink_dll_ctx_t` | 3656 | DLL state, timers, reply-plan table (10×24 B), ISR staging; embeds ISDU, Events and DS |
+| **`iolink_device_ctx_t`** | **4072** | The object the application allocates (includes everything below) |
+| `iolink_dll_ctx_t` | 3760 | DLL state, timers, reply-plan table (10×24 B), ISR staging; embeds ISDU, Events and DS |
 | `iolink_isdu_ctx_t` | 1328 | Transport state, buffer pointers and the embedded ISDU scratch (1033 B) |
-| `iolink_events_ctx_t` | 400 | Event queue plus lifecycle records |
+| `iolink_events_ctx_t` | 504 | Event queue plus lifecycle records |
 | `iolink_ds_ctx_t` | 392 | DS state, buffer pointers and the embedded download stage |
 | **PHY API** | 20-30 bytes | Function pointers (usually const/flash, but pointer storage in RAM) |
 
@@ -76,7 +76,7 @@ To move the scratch **out of the context entirely**, build with
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 3968 | **2672** |
+| `iolink_device_ctx_t` | 4072 | **2776** |
 | `iolink_isdu_ctx_t` | 1328 | **280** |
 | `iolink_ds_ctx_t` | 392 | **136** |
 | `iolink_workspace_t` (separate allocation) | — | 1289 |
@@ -123,7 +123,7 @@ You can tune these values to fit your MCU.
 
 ### Total RAM
 
-The default `iolink_device_ctx_t` is **3968 bytes** (64-bit host, default
+The default `iolink_device_ctx_t` is **4072 bytes** (64-bit host, default
 buffers); buffer arrays dominate it. On a 32-bit target the same layout is
 smaller. To measure your own build instead of relying on the table:
 

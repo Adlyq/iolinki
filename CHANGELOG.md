@@ -55,6 +55,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ISR-side M-sequence content constants roughly halve (27 vs 54). The device
   context grows by 256 bytes (3976 B on a 64-bit host).
 
+### Added (diagnostics registry)
+- One condition registry (`include/iolinki/diag.h`) drives DeviceStatus
+  (0x0024), DetailedDeviceStatus (0x0025) and EventCode 0x1800 with latch/edge
+  semantics; sources are PHY faults, the event queue, data-path errors, mapped
+  local parameter writes and DS state. Missing DDS mappings report 0xFF.
+  `iolink_event_trigger` semantics are unchanged.
+
 ### Added (capability model)
 - `iolink_build_caps_t` / `iolink_caps_t` and `iolink_caps_resolve()` are the
   single capability resolution point (`include/iolinki/capability.h`).

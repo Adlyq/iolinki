@@ -403,10 +403,10 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 - **涉及文件**：`include/iolinki/device.h`（不透明上下文）、`src/events.c`、
   `src/dll.c`（诊断）、`docs/MEMORY_GUIDE.md`、`docs/ARCHITECTURE.md`。
 - **步骤**：
-  - [ ] 不透明上下文：`IOLINK_DEVICE_CTX_SIZE`/`IOLINK_DEVICE_CTX_ALIGN` + placement init；
-  - [ ] 诊断注册表：PHY faults → events → DeviceStatus → 0x0025 收敛，带锁存/边沿语义；
-  - [ ] 全库审计 vs 终极形态（OD 表 + 状态机表 + ISR 执行器 + 能力 ops 表）；
-        重写 MEMORY_GUIDE/ARCHITECTURE，输出最终测量数字（行数/ROM/RAM/矩阵数/#if 数）。
+  - [x] 不透明上下文：按 P2 决策降级为"兄弟结构 + 内部头"，编译期字段隔离记录为可选；
+  - [x] 诊断注册表：PHY faults / 事件队列 / 数据通路错误 / 本地参数变更 / DS 状态
+        收敛到 `iolink_diag_desc_t` + `iolink_conditions`，DeviceStatus/DDS/0x1800 派生；
+  - [x] 全库审计与尺寸更新（device 4072、DLL 3760、events 504；外置 workspace 2776）。
 - **完成标志**：审计文档 + 最终数字。
 
 ## 8. 通用验收门与命令
