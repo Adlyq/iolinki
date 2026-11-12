@@ -14,6 +14,7 @@ stack is [iolinki-master](https://github.com/w1ne/iolinki-master).
 
 - **[ARCHITECTURE](ARCHITECTURE.md)** — layers, processing model, design rules
 - **[CODE_FLOW](CODE_FLOW.md)** — main-loop/ISR call flow and integration notes (中文)
+- **[DIAGNOSTICS_DESIGN](DIAGNOSTICS_DESIGN.md)** — P10 unified diagnostics registry design (中文)
 - **[CODING_STANDARDS](CODING_STANDARDS.md)** — style, naming, quality gates
 - **[TESTING](TESTING.md)** — unit, integration and virtual-master tests; CI gates
 - **[RELEASE_STRATEGY](RELEASE_STRATEGY.md)** — versioning and release process
