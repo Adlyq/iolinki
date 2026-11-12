@@ -13,14 +13,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "iolinki/config.h"
 #include "iolinki/dll.h"
 
 /**
- * @brief 在编译期选择 PD 输入路径。
+ * @brief 在编译期选择 PD 输入路径（默认值与完整说明见 config.h）。
  *
  * 0：应用在主循环中调用 iolink_device_pd_input_update()；
- *    on_pd_input 回调成员不存在（对它赋值会导致编译
- *    错误）。
+ *    on_pd_input 回调成员不存在（对它赋值会导致编译错误）。
  * 1：DLL 在每个 OPERATE 周期调用 on_pd_input() 填充一个空闲的 PD-in
  *    缓冲区；iolink_device_pd_input_update() 未被声明（调用它会导致
  *    编译/链接错误，参见 device.h 中的陷阱宏）。
@@ -28,10 +28,6 @@
  * 混用两条路径是不可能的：未使用的符号/成员会从头文件中
  * 移除，而不是等到运行时才失败。
  */
-#ifndef IOLINK_APP_PD_INPUT_CALLBACK
-#define IOLINK_APP_PD_INPUT_CALLBACK 0
-#endif
-
 #if IOLINK_APP_PD_INPUT_CALLBACK
 /**
  * @brief 回调配置的链接期标记。

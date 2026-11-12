@@ -34,6 +34,7 @@
  * | `IOLINK_DS_IMAGE_MAX`     | 256  | Data Storage 镜像上限（字节）    |
  * | `IOLINK_EVENT_QUEUE_SIZE` | 4    | 事件队列深度                     |
  * | `IOLINK_EVENT_PENDING_MAX`| 8    | 同时活动的事件数上限             |
+ * | `IOLINK_APP_PD_INPUT_CALLBACK` | 0 | 1=PD-in 走 on_pd_input 回调；0=轮询 API |
  * | `IOLINK_TIMING_ENFORCE_DEFAULT` | 0 | 1=强制检查 t_ren/t_cycle，0=仅测量 |
  *
  * 运行时配置（PD 长度、最小周期、日志 sink 等）不在这里，见
@@ -225,6 +226,22 @@
 /** @brief PHY 手动 C/Q 推挽（set_cq_line）。 */
 #ifndef IOLINK_PHY_FEATURE_SIO_CQ
 #define IOLINK_PHY_FEATURE_SIO_CQ 1
+#endif
+
+/**
+ * @brief PD 输入路径选择 [可覆盖]。
+ *
+ * 0（默认）：应用在主循环调用 `iolink_device_pd_input_update()`；
+ *   `iolink_app_callbacks_t` 不含 `on_pd_input` 成员。
+ * 1：DLL 每个 OPERATE 周期调用 `on_pd_input()` 填充 PD-in；
+ *   `iolink_device_pd_input_update()` 不再声明（调用即编译/链接错误）。
+ *
+ * 两条路径在编译期互斥，未使用的符号/成员直接从公开头文件移除。
+ * CMake 用户请用 `-DIOLINK_APP_PD_INPUT_CALLBACK=ON`（会作为 PUBLIC
+ * 定义传播给库的消费者，保证结构体布局一致）。
+ */
+#ifndef IOLINK_APP_PD_INPUT_CALLBACK
+#define IOLINK_APP_PD_INPUT_CALLBACK 0
 #endif
 
 /* --- 3.2 ISR 传输粒度 [可覆盖] ----------------------------------------- */

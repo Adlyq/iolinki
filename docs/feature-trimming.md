@@ -30,7 +30,7 @@ propagated as `=0`; the rest keep the `config.h` defaults.
 | `-DIOLINK_FEATURE_EVENTS=OFF` | Individual override |
 | `-DIOLINK_PHY_FEATURE_WAKEUP=OFF` | Individual override |
 | `-DIOLINK_PHY_FEATURE_SIO_CQ=OFF` | Individual override |
-| `-DIOLINK_APP_PD_INPUT_CALLBACK=ON` | Select the `on_pd_input` callback as the only PD-in source; the polling `iolink_device_pd_input_update()` is removed and examples/tests are skipped (see `include/iolinki/device.h` and `include/iolinki/application.h`) |
+| `-DIOLINK_APP_PD_INPUT_CALLBACK=ON` | Select the `on_pd_input` callback as the only PD-in source; the polling `iolink_device_pd_input_update()` is removed and examples/tests are skipped (default in `include/iolinki/config.h`; the removed declarations are visible in `include/iolinki/device.h` and `include/iolinki/application.h`) |
 
 Profiles are bundles: when one is selected it overrides the individual feature
 options. Use the individual options for fine-grained control without a profile.
