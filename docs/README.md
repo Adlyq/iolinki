@@ -16,6 +16,7 @@ stack is [iolinki-master](https://github.com/w1ne/iolinki-master).
 - **[CAPABILITY_DESIGN](CAPABILITY_DESIGN.md)** — P6 capability-table design: switch
   classification, capability struct, matrix convergence and ROM measurement (中文)
 - **[CODE_FLOW](CODE_FLOW.md)** — main-loop/ISR call flow and integration notes (中文)
+- **[DIAGNOSTICS_DESIGN](DIAGNOSTICS_DESIGN.md)** — P10 unified diagnostics registry design (中文)
 - **[CODING_STANDARDS](CODING_STANDARDS.md)** — style, naming, quality gates
 - **[TESTING](TESTING.md)** — unit, integration and virtual-master tests; CI gates
 - **[RELEASE_STRATEGY](RELEASE_STRATEGY.md)** — versioning and release process
