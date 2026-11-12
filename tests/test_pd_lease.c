@@ -26,8 +26,6 @@
 #include "iolinki/dll_ctx.h"
 #include "test_helpers.h"
 
-#if !IOLINK_APP_PD_INPUT_CALLBACK
-
 static void test_lease_recovery_and_skip_counter(void** state)
 {
     (void) state;
@@ -70,12 +68,3 @@ int main(void)
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
-
-#else /* IOLINK_APP_PD_INPUT_CALLBACK：该配置下 update() 为空操作 */
-
-int main(void)
-{
-    return 0;
-}
-
-#endif

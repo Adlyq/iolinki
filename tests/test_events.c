@@ -16,6 +16,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include <stdint.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "iolinki/events.h"
@@ -335,6 +336,67 @@ static void test_event_lifecycle_no_repeat(void** state)
 
     iolink_event_clear(&ctx, 0x2000U); /* 未激活：忽略 */
     assert_int_equal(ctx.count, 1U);
+}
+
+/* P6：A.6.4 的两个时间窗口是运行时能力。零初始化的上下文回落到构建
+ * 默认值；set_window 覆盖后，消失窗口立即按新值生效。 */
+static void test_event_window_is_runtime_configurable(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    iolink_events_init(&ctx);
+    ctx.time_us = fake_time_us;
+    iolink_events_set_window(&ctx, 10U, 20U);
+    assert_int_equal(ctx.min_appear_ms, 10U);
+    assert_int_equal(ctx.min_repeat_ms, 20U);
+
+    iolink_event_t ev;
+    g_fake_ms = 0U;
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_WARNING);
+    iolink_event_clear(&ctx, 0x1000U);
+    iolink_events_process(&ctx);
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
+
+    /* 9 ms < 10 ms 窗口：消失仍被推迟。 */
+    g_fake_ms = 9U;
+    iolink_events_process(&ctx);
+    assert_false(iolink_events_pop(&ctx, &ev));
+
+    /* 10 ms：窗口满足，消失立即入队（构建默认值是 50 ms，说明运行时
+     * 值确实生效）。 */
+    g_fake_ms = 10U;
+    iolink_events_process(&ctx);
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
+}
+
+/* 未调用 iolink_events_set_window（设备层 memset 初始化的上下文）时，
+ * 窗口回落到构建默认值。 */
+static void test_event_window_defaults_without_config(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    (void) memset(&ctx, 0, sizeof(ctx));
+    ctx.time_us = fake_time_us;
+    assert_int_equal(ctx.min_appear_ms, 0U);
+    assert_int_equal(ctx.min_repeat_ms, 0U);
+
+    iolink_event_t ev;
+    g_fake_ms = 0U;
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_WARNING);
+    iolink_event_clear(&ctx, 0x1000U);
+    iolink_events_process(&ctx);
+    assert_true(iolink_events_pop(&ctx, &ev));
+
+    g_fake_ms = (uint32_t) (IOLINK_EVENT_MIN_APPEAR_MS - 1U);
+    iolink_events_process(&ctx);
+    assert_false(iolink_events_pop(&ctx, &ev));
+
+    g_fake_ms = (uint32_t) IOLINK_EVENT_MIN_APPEAR_MS;
+    iolink_events_process(&ctx);
+    assert_true(iolink_events_pop(&ctx, &ev));
+    assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
 }
 
 /* 10.10.2：同一 EventCode 每秒最多上报一次。第二次
@@ -672,6 +734,8 @@ int main(void)
         cmocka_unit_test(test_event_memory_confirm_only_presented),
         cmocka_unit_test(test_event_appears_disappears),
         cmocka_unit_test(test_event_lifecycle_no_repeat),
+        cmocka_unit_test(test_event_window_is_runtime_configurable),
+        cmocka_unit_test(test_event_window_defaults_without_config),
         cmocka_unit_test(test_event_recently_sent),
         cmocka_unit_test(test_event_pending_full_observable),
         cmocka_unit_test(test_events_reset_clears),

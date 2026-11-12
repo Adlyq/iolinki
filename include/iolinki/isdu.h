@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "iolinki/capability.h"
 #include "iolinki/config.h"
 #include "iolinki/od.h"
 #include "iolinki/params.h"
@@ -119,6 +120,7 @@ typedef struct
     const iolink_od_app_t* od;       /**< 应用对象字典（表 + get/set 后端；可为 NULL） */
     void* direct_param_page2;        /**< 每设备的 Direct Parameter page 2 存储 */
     iolink_workspace_t* workspace;   /**< 绑定的工作区；NULL = 使用内嵌 fallback */
+    const iolink_caps_t* caps;       /**< 实例能力位（P6）；NULL = 全开（独立使用引擎时） */
 
     /* 系统命令标志 */
     bool reset_pending;     /**< 请求设备复位（0x80） */
@@ -160,6 +162,17 @@ void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* ws);
  * @param app 应用表（必须在使用期间保持有效；NULL 解除绑定）
  */
 void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app);
+
+/**
+ * @brief 绑定实例能力位（P6）。
+ *
+ * 设备层在 `iolink_caps_resolve()` 之后调用；独立使用 ISDU 引擎
+ * （单元测试）时可以跳过，此时按"全部能力可用"处理。
+ *
+ * @param ctx  ISDU 上下文
+ * @param caps 指向实例能力位的指针（必须比 ctx 存活更久）；NULL 解绑
+ */
+void iolink_isdu_bind_caps(iolink_isdu_ctx_t* ctx, const iolink_caps_t* caps);
 
 /**
  * @brief 处理 ISDU 引擎逻辑

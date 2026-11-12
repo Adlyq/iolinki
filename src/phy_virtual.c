@@ -220,7 +220,6 @@ static void virtual_request_service(void* user)
     (void) user;
 }
 
-#if IOLINK_PHY_FEATURE_WAKEUP
 /** @brief 在缓冲输入中扫描 0x55 唤醒标记字节。 */
 static int virtual_detect_wakeup(void* user)
 {
@@ -239,7 +238,6 @@ static int virtual_detect_wakeup(void* user)
     }
     return 0;
 }
-#endif
 
 static const iolink_phy_api_t g_phy_virtual = {
     .init = virtual_init,
@@ -250,9 +248,7 @@ static const iolink_phy_api_t g_phy_virtual = {
     .tx_done = virtual_tx_done,
     .int_active = virtual_int_active,
     .request_service = virtual_request_service,
-#if IOLINK_PHY_FEATURE_WAKEUP
     .detect_wakeup = virtual_detect_wakeup,
-#endif
 };
 
 const iolink_phy_api_t* iolink_phy_virtual_get(void)

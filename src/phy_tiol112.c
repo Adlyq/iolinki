@@ -57,16 +57,13 @@ static void set_baudrate(void* user, iolink_baudrate_t baud)
     }
 }
 
-#if IOLINK_PHY_FEATURE_WAKEUP
 static int detect_wakeup(void* user)
 {
     iolink_tiol112_ctx_t* d = user;
     if (!d->initialized) return 0;
     return d->io.consume_wakeup(d->io.user);
 }
-#endif
 
-#if IOLINK_PHY_FEATURE_SIO_CQ
 static void set_cq(void* user, uint8_t state)
 {
     iolink_tiol112_ctx_t* d = user;
@@ -77,7 +74,6 @@ static void set_cq(void* user, uint8_t state)
         d->io.set_enable(d->io.user, true);
     }
 }
-#endif
 
 int iolink_phy_tiol112_fault(const iolink_tiol112_ctx_t* d)
 {
@@ -98,12 +94,8 @@ int iolink_phy_tiol112_init(iolink_tiol112_ctx_t* d, const iolink_tiol112_io_t* 
     d->phy.init = initialize;
     d->phy.set_mode = set_mode;
     d->phy.set_baudrate = set_baudrate;
-#if IOLINK_PHY_FEATURE_WAKEUP
     d->phy.detect_wakeup = detect_wakeup;
-#endif
-#if IOLINK_PHY_FEATURE_SIO_CQ
     d->phy.set_cq_line = set_cq;
-#endif
     return 0;
 }
 

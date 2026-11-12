@@ -1,27 +1,40 @@
 #!/usr/bin/env bash
 #
-# Compile matrix: build every supported compile-time configuration.
+# Compile matrix: build every structural configuration (roadmap P6 / DG3).
 #
-# This is the delivery gate for changes that touch IOLINK_FEATURE_*,
-# IOLINK_PHY_FEATURE_*, IOLINK_ISR_*_MODE, IOLINK_COMPAT_*, IOLINK_PLATFORM or
-# any #if in src/ and include/. A change is not ready while the matrix is red.
+# The matrix is structure x platform, not one entry per switch. The table lives
+# in tools/matrix_configs.sh, shared with tools/diff_matrix.sh so the two gates
+# cannot drift apart. This is the delivery gate for changes that touch
+# IOLINK_FEATURE_*, IOLINK_PHY_FEATURE_*, IOLINK_ISR_*_MODE, IOLINK_COMPAT_*,
+# IOLINK_PLATFORM or any #if in src/ and include/.
+#
+# Besides the four structural configurations it runs:
+#   - compile-only combination probes for legal but uninstantiated layouts;
+#   - the SINGLE profile's "no iolink_critical_*" nm -u assertion;
+#   - the link-time profile gate (tools/check_profile_abi.sh).
 #
 # Usage:
 #   ./tools/build_matrix.sh                 # build everything; run the suite for
 #                                           # the configurations that support it
 #   ./tools/build_matrix.sh --list          # print the configuration names
-#   ./tools/build_matrix.sh --filter isr_   # only names containing "isr_"
+#   ./tools/build_matrix.sh --filter host   # only names containing "host"
+#   ./tools/build_matrix.sh --only host_frame  # exactly this configuration
+#   ./tools/build_matrix.sh --probes-only   # only the compile-only probes
 #   ./tools/build_matrix.sh --fail-fast     # stop at the first failure
 #   ./tools/build_matrix.sh --keep          # keep the logs of passing configs
 #
 # Environment:
 #   IOLINKI_MATRIX_DIR   build root (default: <repo>/build_matrix)
 #   JOBS                 parallel build jobs (default: nproc)
+#   CC                   C compiler for the probes (default: cc)
 
 set -uo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=tools/matrix_configs.sh
+. "$ROOT/tools/matrix_configs.sh"
 BUILD_ROOT="${IOLINKI_MATRIX_DIR:-$ROOT/build_matrix}"
+CC_BIN="${CC:-cc}"
 if [ -z "${JOBS:-}" ]; then
     JOBS="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
 fi
@@ -32,11 +45,13 @@ FAIL_FAST=0
 KEEP=0
 LIST=0
 FILTER=""
+ONLY=""
+PROBES_ONLY=0
 STOP=0
 RESULTS=()
 
 usage() {
-    sed -n '3,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '3,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -46,6 +61,8 @@ while [ $# -gt 0 ]; do
         --fail-fast) FAIL_FAST=1 ;;
         --keep) KEEP=1 ;;
         --filter) shift; FILTER="${1:-}" ;;
+        --only) shift; ONLY="${1:-}" ;;
+        --probes-only) PROBES_ONLY=1 ;;
         -h|--help) usage 0 ;;
         *) echo "unknown option: $1" >&2; usage 2 ;;
     esac
@@ -65,6 +82,12 @@ run_config() {
     if [ -n "$FILTER" ] && [[ "$name" != *"$FILTER"* ]]; then
         return 0
     fi
+    if [ -n "$ONLY" ] && [ "$name" != "$ONLY" ]; then
+        return 0
+    fi
+    if [ "$PROBES_ONLY" -eq 1 ]; then
+        return 0
+    fi
     if [ "$LIST" -eq 1 ]; then
         printf '%-22s %-12s %-8s tests=%s\n' "$name" "$mode" "$build_type" "$run_tests"
         return 0
@@ -81,7 +104,7 @@ run_config() {
     esac
 
     # Tests drive the BYTE-only virtual PHY and BYTE mock vtables, so they are
-    # only meaningful on the BYTE/BYTE layout.
+    # only meaningful on the BYTE/BYTE layout. FRAME remains compile-only.
     local tests_flag=ON
     if [ "$mode" != "BYTE_BYTE" ] || [ "$run_tests" != "yes" ]; then
         tests_flag=OFF
@@ -132,41 +155,94 @@ run_config() {
     return 0
 }
 
-# name                   mode          type     tests  cmake-extra                  cflags-extra
-run_config default             BYTE_BYTE   Debug   yes   ""                            ""
-run_config release             BYTE_BYTE   Release yes   ""                            ""
-run_config isr_frame_frame     FRAME_FRAME Debug   no    ""                            ""
-run_config isr_frame_busy      FRAME_FRAME Debug   no    ""                            "-DIOLINK_PHY_FEATURE_TX_BUSY=1"
-run_config isr_frame_byte      FRAME_BYTE  Debug   no    ""                            ""
-run_config isr_byte_frame      BYTE_FRAME  Debug   no    ""                            ""
-run_config isr_tx_only         BYTE_BYTE   Debug   no    ""                            "-DIOLINK_PHY_FEATURE_ISR_TX_ONLY=1"
-run_config minimal_profile     BYTE_BYTE   Debug   no    "-DIOLINK_MINIMAL_PROFILE=ON" ""
-run_config tiny_profile        BYTE_BYTE   Debug   no    "-DIOLINK_TINY_PROFILE=ON"    ""
-run_config no_data_storage     BYTE_BYTE   Debug   no    "-DIOLINK_FEATURE_DATA_STORAGE=OFF" ""
-run_config no_system_command   BYTE_BYTE   Debug   no    "-DIOLINK_FEATURE_SYSTEM_COMMAND=OFF" ""
-run_config no_events           BYTE_BYTE   Debug   no    "-DIOLINK_FEATURE_EVENTS=OFF" ""
-run_config no_wakeup           BYTE_BYTE   Debug   no    "-DIOLINK_PHY_FEATURE_WAKEUP=OFF" ""
-run_config no_sio_cq           BYTE_BYTE   Debug   no    "-DIOLINK_PHY_FEATURE_SIO_CQ=OFF" ""
-run_config compat_v10          BYTE_BYTE   Debug   yes   ""                            "-DIOLINK_COMPAT_V10_STARTUP_OPERATE=1 -DIOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE=1"
-run_config ds_legacy_sub0      BYTE_BYTE   Debug   no    ""                            "-DIOLINK_DS_LEGACY_IMAGE_SUB0=1"
-run_config baremetal           BYTE_BYTE   Debug   no    "-DIOLINK_PLATFORM=BAREMETAL" ""
-run_config single_profile      BYTE_BYTE   Debug   yes   ""                            "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE"
-run_config smp_profile         BYTE_BYTE   Debug   yes   ""                            "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SMP -DIOLINK_FENCE_LEVEL=IOLINK_FENCE_SMP -DIOLINK_FENCE_SMP_IMPL=__sync_synchronize"
-run_config stats_split         BYTE_BYTE   Debug   yes   ""                            "-DIOLINK_STATS_MODE=IOLINK_STATS_SPLIT"
-run_config pd_input_callback   BYTE_BYTE   Debug   no    "-DIOLINK_APP_PD_INPUT_CALLBACK=ON" ""
-# The ISR log branch compiled for every library TU (runtime output stays
-# silent: matrix builds have no sink configured).
-run_config log_active          BYTE_BYTE   Debug   no    ""                            "-include $ROOT/tests/log_override.h"
+# run_probe <name> <cflags>: syntax-only compile of the core sources.
+#
+# The probe does not link, so it cannot catch a missing definition; its job is
+# to keep legal, uninstantiated preprocessor combinations compiling. A failure
+# is red.
+PROBE_SOURCES=(
+    src/dll.c
+    src/dll_isr.c
+    src/isdu.c
+    src/device.c
+    src/capability.c
+    src/profile.c
+)
 
-# Minimum-dependency proof: a SINGLE profile never references the
-# critical-section hooks, so a port is allowed to omit them entirely.
-if [ "$LIST" -eq 0 ] && [ -f "$BUILD_ROOT/single_profile/libiolinki.a" ]; then
-    undef_syms="$(nm -u "$BUILD_ROOT/single_profile/libiolinki.a" 2>/dev/null || true)"
-    if printf '%s\n' "$undef_syms" | grep -q 'iolink_critical_'; then
-        echo "single_profile         critical-section dependency detected"
-        RESULTS+=("single_profile|dependency|fail")
-    else
-        echo "single_profile         no critical-section dependency"
+run_probe() {
+    local name="$1"
+    local cflags_extra="$2"
+    local failed=0
+    local src
+
+    printf 'probe:%-16s ' "$name"
+    for src in "${PROBE_SOURCES[@]}"; do
+        # shellcheck disable=SC2086 # intentional word splitting of the flag list
+        if ! "$CC_BIN" -std=c99 -I"$ROOT/include" $STRICT_FLAGS $cflags_extra \
+                -fsyntax-only "$ROOT/$src" >"$BUILD_ROOT/probe_$name.log" 2>&1; then
+            failed=1
+            break
+        fi
+    done
+    if [ "$failed" -ne 0 ]; then
+        echo "PROBE FAILED ($src)"
+        sed -n '1,20p' "$BUILD_ROOT/probe_$name.log" | sed 's/^/    /'
+        RESULTS+=("probe:$name|compile|fail")
+        [ "$FAIL_FAST" -eq 1 ] && STOP=1
+        return 1
+    fi
+    echo "ok"
+    RESULTS+=("probe:$name|ok")
+    rm -f "$BUILD_ROOT/probe_$name.log"
+    return 0
+}
+
+mkdir -p "$BUILD_ROOT"
+
+iolink_matrix_emit run_config
+
+RUN_PROBES=0
+RUN_GATES=0
+if [ "$LIST" -eq 0 ]; then
+    if [ "$PROBES_ONLY" -eq 1 ]; then
+        RUN_PROBES=1
+    elif [ -z "$ONLY" ] && [ -z "$FILTER" ]; then
+        RUN_PROBES=1
+        RUN_GATES=1
+    fi
+fi
+
+if [ "$RUN_PROBES" -eq 1 ]; then
+    iolink_matrix_emit_probes run_probe
+fi
+
+if [ "$RUN_GATES" -eq 1 ]; then
+    # Minimum-dependency proof: a SINGLE profile never references the
+    # critical-section hooks, so a port is allowed to omit them entirely.
+    crit_cfg="$(iolink_matrix_no_critical_config)"
+    if [ -f "$BUILD_ROOT/$crit_cfg/libiolinki.a" ]; then
+        undef_syms="$(nm -u "$BUILD_ROOT/$crit_cfg/libiolinki.a" 2>/dev/null || true)"
+        if printf '%s\n' "$undef_syms" | grep -q 'iolink_critical_'; then
+            echo "$crit_cfg   critical-section dependency detected"
+            RESULTS+=("$crit_cfg|dependency|fail")
+        else
+            echo "$crit_cfg   no critical-section dependency"
+        fi
+    fi
+
+    # Link-time profile gate: a mismatched application must fail to link.
+    if [ "$STOP" -eq 0 ]; then
+        printf '%-22s ' "profile_abi"
+        if "$ROOT/tools/check_profile_abi.sh" >"$BUILD_ROOT/profile_abi.log" 2>&1; then
+            echo "ok"
+            RESULTS+=("profile_abi|ok")
+            rm -f "$BUILD_ROOT/profile_abi.log"
+        else
+            echo "FAILED"
+            sed -n '1,20p' "$BUILD_ROOT/profile_abi.log" | sed 's/^/    /'
+            RESULTS+=("profile_abi|link|fail")
+            [ "$FAIL_FAST" -eq 1 ] && STOP=1
+        fi
     fi
 fi
 
@@ -184,15 +260,15 @@ done
 
 echo
 if [ "${#RESULTS[@]}" -eq 0 ]; then
-    echo "compile matrix: no configuration matched '${FILTER}'"
+    echo "compile matrix: no configuration matched '${FILTER}${ONLY}'"
     exit 1
 fi
 if [ "$FAILED" -eq 0 ]; then
-    echo "compile matrix: PASS (${#RESULTS[@]} configurations)"
+    echo "compile matrix: PASS (${#RESULTS[@]} jobs, ${#IOLINK_MATRIX_STRUCTURAL_CONFIGS[@]} structural configurations)"
     exit 0
 fi
 
-echo "compile matrix: FAIL ($FAILED of ${#RESULTS[@]} configurations)"
+echo "compile matrix: FAIL ($FAILED of ${#RESULTS[@]} jobs)"
 for entry in ${RESULTS[@]+"${RESULTS[@]}"}; do
     case "$entry" in
         *"|ok") ;;

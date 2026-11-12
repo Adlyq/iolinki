@@ -211,7 +211,6 @@ typedef struct
 
     /* 可选的诊断/支持函数（可为 NULL） */
 
-#if IOLINK_PHY_FEATURE_WAKEUP
     /**
      * @brief 检测唤醒脉冲（C/Q 线路上的 80µs 脉冲）
      *
@@ -223,9 +222,7 @@ typedef struct
      * @return 当前窗口内检测到唤醒脉冲返回 1，否则返回 0
      */
     int (*detect_wakeup)(void* user);
-#endif
 
-#if IOLINK_PHY_FEATURE_SIO_CQ
     /**
      * @brief 手动设置 C/Q 线路状态（用于 SIO 推挽）
      *
@@ -234,7 +231,6 @@ typedef struct
      * @param state 0 为低电平，1 为高电平
      */
     void (*set_cq_line)(void* user, uint8_t state);
-#endif
 
     /**
      * @brief 可选：当前活跃的物理故障，为

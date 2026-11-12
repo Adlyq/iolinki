@@ -8,14 +8,13 @@
 
 /**
  * @file test_config_trim.c
- * @brief 编译期配置：显式容量覆盖、IOLINK_MINIMAL_PROFILE 便捷开关以及
- *        关闭功能时的兼容层。
+ * @brief 编译期配置：显式容量覆盖与关闭可选功能。
  *
  * 覆盖在首次 include 之前定义，因此会像项目构建那样准确命中 config.h 中的
- * #ifndef 防护。
+ * #ifndef 防护。P6 退役了 MINIMAL/TINY 组合包，最小镜像改为直接关闭
+ * Data Storage 与事件（结构配置 C3）。
  */
 
-#define IOLINK_MINIMAL_PROFILE 1
 #define IOLINK_FEATURE_EVENTS 0
 #define IOLINK_ISDU_BUFFER_SIZE 64
 #define IOLINK_EVENT_QUEUE_SIZE 2
@@ -30,17 +29,14 @@
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
 
-static void test_minimal_profile_disables_features(void** state)
+static void test_explicit_trim_is_honoured(void** state)
 {
     (void) state;
 
-    assert_int_equal(IOLINK_FEATURE_DATA_STORAGE, 0);
-    assert_int_equal(IOLINK_FEATURE_SYSTEM_COMMAND, 0);
-    assert_int_equal(IOLINK_PHY_FEATURE_WAKEUP, 0);
-    assert_int_equal(IOLINK_PHY_FEATURE_SIO_CQ, 0);
-
-    /* 显式定义优先于配置文件默认值。 */
+    /* 显式定义优先于配置文件默认值；未关闭的开关保持默认开启。 */
     assert_int_equal(IOLINK_FEATURE_EVENTS, 0);
+    assert_int_equal(IOLINK_FEATURE_DATA_STORAGE, 1);
+    assert_int_equal(IOLINK_FEATURE_SYSTEM_COMMAND, 1);
 }
 
 static void test_capacity_overrides(void** state)
@@ -66,7 +62,7 @@ static void test_capacity_overrides(void** state)
 int main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test(test_minimal_profile_disables_features),
+        cmocka_unit_test(test_explicit_trim_is_honoured),
         cmocka_unit_test(test_capacity_overrides),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);

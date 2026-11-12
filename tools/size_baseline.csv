@@ -1,0 +1,32 @@
+# 由 ./tools/size_matrix.py --update 生成；不要手改数字
+# toolchain: arm-none-eabi-gcc (Arm GNU Toolchain 15.3.Rel1 (Build arm-15.149)) 15.3.1 20260627
+# opt: -Os; lto: off; cpu: cortex-m0plus
+config,delivery,gc,text,rodata,data,bss,text_tol
+c1_full,source,on,22784,3543,0,3580,113
+c1_full,source,off,26988,3752,0,3580,113
+c1_full,archive,on,22784,3544,0,3580,113
+c1_full,archive,off,26964,3684,0,3580,113
+c3_minimal,source,on,16220,3307,0,2980,81
+c3_minimal,source,off,19760,3376,0,2980,81
+c3_minimal,archive,on,16216,3308,0,2980,81
+c3_minimal,archive,off,19732,3308,0,2980,81
+cap_events_off,source,on,19968,3479,0,3316,99
+cap_events_off,source,off,23744,3688,0,3316,99
+cap_events_off,archive,on,19968,3480,0,3316,99
+cap_events_off,archive,off,23720,3620,0,3316,99
+cap_data_storage_off,source,on,19008,3371,0,3244,95
+cap_data_storage_off,source,off,22968,3440,0,3244,95
+cap_data_storage_off,archive,on,19004,3372,0,3244,95
+cap_data_storage_off,archive,off,22940,3372,0,3244,95
+cap_isr_frame,source,on,22680,3543,0,3508,113
+cap_isr_frame,source,off,26784,3752,0,3508,113
+cap_isr_frame,archive,on,22680,3544,0,3508,113
+cap_isr_frame,archive,off,26760,3684,0,3508,113
+cap_stats_split,source,on,22788,3543,0,3588,113
+cap_stats_split,source,off,26996,3752,0,3588,113
+cap_stats_split,archive,on,22788,3544,0,3588,113
+cap_stats_split,archive,off,26972,3684,0,3588,113
+cap_single,source,on,22536,3543,0,3576,112
+cap_single,source,off,26748,3752,0,3580,112
+cap_single,archive,on,22536,3544,0,3576,112
+cap_single,archive,off,26668,3684,0,3576,112

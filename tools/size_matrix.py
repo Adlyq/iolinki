@@ -1,0 +1,465 @@
+#!/usr/bin/env python3
+#
+# Copyright (C) 2026 Andrii Shylenko
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This file is part of iolinki.
+# See LICENSE for details.
+"""ROM/RAM measurement matrix (roadmap P6, docs/CAPABILITY_DESIGN.md section 6).
+
+Measures a minimal device application for two delivery forms and two
+garbage-collection settings:
+
+  source   all objects on the link line (what the examples do)
+  archive  the same objects packed into libiolinki.a, application links the .a
+
+  gc on    -Wl,--gc-sections
+  gc off   no section GC
+
+Facts this tool is built around (measured, not assumed):
+
+  * the library build does not enable -ffunction-sections/-fdata-sections,
+    so --gc-sections works at object granularity inside libiolinki.a;
+  * the constant capability table is a GC root: every function pointer in it
+    pins its implementation, so GC can only reclaim implementations the table
+    does not list, never a listed branch that is unused at run time;
+  * a non-LTO .a is extracted object by object, so "source" and "archive" are
+    close when the application references most of the API.
+
+Usage:
+    ./tools/size_matrix.py --update   # rewrite tools/size_baseline.csv
+    ./tools/size_matrix.py --check    # rebuild and compare against the baseline
+    ./tools/size_matrix.py --table    # human-readable table (CD artefact)
+    ./tools/size_matrix.py --check --selftest
+                                      # inject a forged +1024 B entry and require
+                                      # --check to return non-zero
+
+Environment:
+    ARM_GCC        toolchain prefix (default: arm-none-eabi-)
+    IOLINKI_SIZE_DIR  build root (default: <repo>/build_size)
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+BUILD = Path(os.environ.get("IOLINKI_SIZE_DIR", ROOT / "build_size"))
+BASELINE = ROOT / "tools" / "size_baseline.csv"
+PREFIX = os.environ.get("ARM_GCC", "arm-none-eabi-")
+
+# Cortex-M0+ without LTO: the STM32G0 examples' target and options.
+CPU_FLAGS = ["-mcpu=cortex-m0plus", "-mthumb", "-std=c99", "-Os", "-g0", "-ffreestanding"]
+COMMON_FLAGS = CPU_FLAGS + ["-I" + str(ROOT / "include"), "-ffunction-sections", "-fdata-sections"]
+
+SOURCES = [
+    "src/capability.c",
+    "src/profile.c",
+    "src/crc.c",
+    "src/dll.c",
+    "src/dll_isr.c",
+    "src/od.c",
+    "src/isdu.c",
+    "src/events.c",
+    "src/platform.c",
+    "src/params.c",
+    "src/data_storage.c",
+    "src/device_info.c",
+    "src/device.c",
+    "src/phy_generic.c",
+]
+
+APP = r"""
+/* Minimal application: init once, then the main pump. No libc, no globals
+ * except the device context (which the application owns by design). */
+#include <stddef.h>
+#include <stdint.h>
+#include "iolinki/device.h"
+
+static uint64_t app_time_us(void* user)
+{
+    (void) user;
+    return 0U;
+}
+
+static int app_phy_init(void* user)
+{
+    (void) user;
+    return 0;
+}
+
+static void app_phy_set_mode(void* user, iolink_phy_mode_t mode)
+{
+    (void) user;
+    (void) mode;
+}
+
+static void app_phy_set_baudrate(void* user, iolink_baudrate_t baudrate)
+{
+    (void) user;
+    (void) baudrate;
+}
+
+static int app_storage_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
+{
+    (void) user;
+    (void) offset;
+    (void) buf;
+    (void) len;
+    return 0;
+}
+
+static int app_storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
+{
+    (void) user;
+    (void) offset;
+    (void) buf;
+    (void) len;
+    return 0;
+}
+
+static const iolink_storage_api_t g_storage = {.read = app_storage_read,
+                                                .write = app_storage_write};
+static iolink_device_ctx_t g_ctx;
+static iolink_device_config_t g_cfg;
+
+void* memset(void* dst, int c, size_t n)
+{
+    uint8_t* d = dst;
+    while (n-- != 0U) {
+        *d++ = (uint8_t) c;
+    }
+    return dst;
+}
+
+size_t strlen(const char* s)
+{
+    size_t n = 0U;
+    while (s[n] != '\0') {
+        n++;
+    }
+    return n;
+}
+
+void* memcpy(void* dst, const void* src, size_t n)
+{
+    uint8_t* d = dst;
+    const uint8_t* s = src;
+    while (n-- != 0U) {
+        *d++ = *s++;
+    }
+    return dst;
+}
+
+volatile uint32_t g_ticks;
+
+void reset_handler(void)
+{
+    g_cfg.phy.init = app_phy_init;
+    g_cfg.phy.set_mode = app_phy_set_mode;
+    g_cfg.phy.set_baudrate = app_phy_set_baudrate;
+    g_cfg.stack.m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
+    g_cfg.stack.od_width = 8U;
+#if IOLINK_FEATURE_DATA_STORAGE
+    g_cfg.storage = &g_storage;
+#endif
+    g_cfg.time_us = app_time_us;
+    if (iolink_device_init(&g_ctx, &g_cfg) != 0) {
+        for (;;) {
+            g_ticks++;
+        }
+    }
+    for (;;) {
+        iolink_device_process(&g_ctx);
+        g_ticks++;
+    }
+}
+"""
+
+# name, defines
+CONFIGS = [
+    ("c1_full", []),
+    ("c3_minimal", ["-DIOLINK_FEATURE_DATA_STORAGE=0", "-DIOLINK_FEATURE_EVENTS=0"]),
+    ("cap_events_off", ["-DIOLINK_FEATURE_EVENTS=0"]),
+    ("cap_data_storage_off", ["-DIOLINK_FEATURE_DATA_STORAGE=0"]),
+    ("cap_isr_frame", ["-DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME",
+                       "-DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME",
+                       "-DIOLINK_PHY_FEATURE_TX_BUSY=1"]),
+    ("cap_stats_split", ["-DIOLINK_STATS_MODE=IOLINK_STATS_SPLIT"]),
+    ("cap_single", ["-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE"]),
+]
+
+DELIVERIES = ["source", "archive"]
+GC_MODES = ["on", "off"]
+
+
+def run(cmd: list[str], cwd: Path | None = None) -> str:
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    if result.returncode != 0:
+        sys.stderr.write("command failed: " + " ".join(cmd) + "\n")
+        sys.stderr.write(result.stdout + result.stderr)
+        raise SystemExit(1)
+    return result.stdout
+
+
+def toolchain_version() -> str:
+    out = run([PREFIX + "gcc", "--version"])
+    return out.splitlines()[0].strip()
+
+
+def build_config(name: str, defines: list[str]) -> dict[str, dict[str, int]]:
+    cfg_dir = BUILD / name
+    obj_dir = cfg_dir / "obj"
+    if cfg_dir.exists():
+        shutil.rmtree(cfg_dir)
+    obj_dir.mkdir(parents=True)
+
+    app_c = cfg_dir / "app.c"
+    app_c.write_text(APP)
+    app_o = cfg_dir / "app.o"
+    run([PREFIX + "gcc", *COMMON_FLAGS, *defines, "-c", str(app_c), "-o", str(app_o)])
+
+    objects: list[Path] = []
+    for src in SOURCES:
+        obj = obj_dir / (Path(src).stem + ".o")
+        run([PREFIX + "gcc", *COMMON_FLAGS, *defines, "-c", str(ROOT / src), "-o", str(obj)])
+        objects.append(obj)
+
+    lib = cfg_dir / "libiolinki.a"
+    run([PREFIX + "ar", "rcs", str(lib), *[str(o) for o in objects]])
+
+    rows: dict[str, dict[str, int]] = {}
+    app_cfg = cfg_dir / "app_cfg.o"
+    # The application uses the same profile as the library.
+    run([PREFIX + "gcc", *COMMON_FLAGS, *defines, "-c", str(app_c), "-o", str(app_cfg)])
+
+    for delivery in DELIVERIES:
+        for gc in GC_MODES:
+            elf = cfg_dir / f"size-{delivery}-{gc}.elf"
+            link = [
+                PREFIX + "gcc",
+                *CPU_FLAGS,
+                "-nostdlib",
+                "-nostartfiles",
+                "-Wl,-e,reset_handler",
+                "-Wl,--no-warn-rwx-segments",
+            ]
+            if gc == "on":
+                link.append("-Wl,--gc-sections")
+            if delivery == "source":
+                link += [str(app_cfg), *[str(o) for o in objects]]
+            else:
+                link += [str(app_cfg), str(lib)]
+            link += ["-lgcc", "-o", str(elf)]
+            run(link)
+            rows[f"{delivery}|{gc}"] = section_sizes(elf)
+    return rows
+
+
+def section_sizes(elf: Path) -> dict[str, int]:
+    out = run([PREFIX + "size", "-A", str(elf)])
+    sizes = {"text": 0, "rodata": 0, "data": 0, "bss": 0}
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        section, size = parts[0], parts[1]
+        try:
+            value = int(size)
+        except ValueError:
+            continue
+        if section == ".text":
+            sizes["text"] += value
+        elif section == ".rodata":
+            sizes["rodata"] += value
+        elif section in (".data",):
+            sizes["data"] += value
+        elif section in (".bss", "COMMON"):
+            sizes["bss"] += value
+    return sizes
+
+
+def collect() -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for name, defines in CONFIGS:
+        sizes = build_config(name, defines)
+        for delivery in DELIVERIES:
+            for gc in GC_MODES:
+                s = sizes[f"{delivery}|{gc}"]
+                rows.append(
+                    {
+                        "config": name,
+                        "delivery": delivery,
+                        "gc": gc,
+                        "text": str(s["text"]),
+                        "rodata": str(s["rodata"]),
+                        "data": str(s["data"]),
+                        "bss": str(s["bss"]),
+                        # 0.5% of the full image, rounded up, as the design
+                        # suggests for a single capability; the whole-image
+                        # budget is 3%.
+                        "text_tol": str(max(64, (sizes["source|on"]["text"] * 5) // 1000)),
+                    }
+                )
+    return rows
+
+
+def write_baseline(rows: list[dict[str, str]]) -> None:
+    with BASELINE.open("w", newline="") as handle:
+        handle.write("# 由 ./tools/size_matrix.py --update 生成；不要手改数字\n")
+        handle.write(f"# toolchain: {toolchain_version()}\n")
+        handle.write("# opt: -Os; lto: off; cpu: cortex-m0plus\n")
+        writer = csv.DictWriter(
+            handle, fieldnames=["config", "delivery", "gc", "text", "rodata", "data", "bss", "text_tol"]
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def read_baseline() -> tuple[str, list[dict[str, str]]]:
+    toolchain = ""
+    rows: list[dict[str, str]] = []
+    with BASELINE.open(newline="") as handle:
+        lines = handle.readlines()
+    body = []
+    for line in lines:
+        if line.startswith("#"):
+            if "toolchain:" in line:
+                toolchain = line.split("toolchain:", 1)[1].strip()
+            continue
+        body.append(line)
+    rows = list(csv.DictReader(body))
+    return toolchain, rows
+
+
+def key(row: dict[str, str]) -> str:
+    return f"{row['config']}|{row['delivery']}|{row['gc']}"
+
+
+def print_table(current: list[dict[str, str]], baseline: list[dict[str, str]] | None) -> None:
+    base = {key(r): r for r in baseline or []}
+    print(f"{'config':22} {'delivery':9} {'gc':3} {'text':>7} {'rodata':>7} {'data':>6} {'bss':>7}")
+    for row in current:
+        old = base.get(key(row))
+        delta = ""
+        if old is not None:
+            d = int(row["text"]) - int(old["text"])
+            delta = f"  ({d:+d})"
+        print(
+            f"{row['config']:22} {row['delivery']:9} {row['gc']:3} "
+            f"{row['text']:>7} {row['rodata']:>7} {row['data']:>6} {row['bss']:>7}{delta}"
+        )
+
+
+def check(current: list[dict[str, str]], baseline: list[dict[str, str]], base_toolchain: str) -> int:
+    if base_toolchain and base_toolchain != toolchain_version():
+        print(
+            "warning: toolchain differs from the baseline "
+            f"({base_toolchain} != {toolchain_version()}); comparing anyway",
+            file=sys.stderr,
+        )
+    base = {key(r): r for r in baseline}
+    failures = 0
+    current_keys = {key(r) for r in current}
+    for row in baseline:
+        if key(row) not in current_keys:
+            print(f"FAIL {key(row)}: baseline entry was not measured", file=sys.stderr)
+            failures += 1
+    for row in current:
+        old = base.get(key(row))
+        if old is None:
+            print(f"FAIL {key(row)}: no baseline entry", file=sys.stderr)
+            failures += 1
+            continue
+        delta = int(row["text"]) - int(old["text"])
+        if delta > int(old["text_tol"]):
+            print(
+                f"FAIL {key(row)}: text grew by {delta} B "
+                f"(tolerance {old['text_tol']} B)",
+                file=sys.stderr,
+            )
+            failures += 1
+        # .bss is dominated by the application-owned device context (the probe
+        # declares it as a file-scope object), so only .data is a "no globals"
+        # signal here. A non-zero .data would mean an initialised global.
+        if int(row["data"]) != 0:
+            print(
+                f"FAIL {key(row)}: .data = {int(row['data'])} B (no initialised globals allowed)",
+                file=sys.stderr,
+            )
+            failures += 1
+    if failures:
+        return 1
+    print(f"size gate: PASS ({len(current)} measurements within tolerance)")
+    return 0
+
+
+def selftest(current: list[dict[str, str]], baseline: list[dict[str, str]]) -> int:
+    forged = [dict(r) for r in baseline]
+    # Forge the baseline *downwards* so the real measurement looks like a
+    # +1024 B regression. Forging it upwards makes the current value look
+    # smaller, and a smaller image always passes.
+    forged[0]["text"] = str(int(forged[0]["text"]) - 1024)
+    forged[0]["text_tol"] = "64"
+    old = baseline[0]["text"]
+    baseline[0] = forged[0]
+    try:
+        rc = check(current, baseline, "")
+    finally:
+        baseline[0]["text"] = old
+    if rc == 0:
+        print("selftest: FAIL (a forged +1024 B entry was accepted)", file=sys.stderr)
+        return 1
+    print("selftest: PASS (forged +1024 B entry rejected)")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--update", action="store_true", help="rewrite the baseline")
+    parser.add_argument("--check", action="store_true", help="compare against the baseline")
+    parser.add_argument("--table", action="store_true", help="print the measurement table")
+    parser.add_argument("--selftest", action="store_true", help="prove --check can fail")
+    args = parser.parse_args()
+
+    if not (args.update or args.check or args.table):
+        parser.print_help()
+        return 2
+
+    BUILD.mkdir(parents=True, exist_ok=True)
+    current = collect()
+
+    if args.update:
+        write_baseline(current)
+        print(f"wrote {BASELINE.relative_to(ROOT)} ({len(current)} measurements)")
+
+    base_toolchain, baseline = ("", [])
+    if BASELINE.exists():
+        base_toolchain, baseline = read_baseline()
+
+    if args.table:
+        print_table(current, baseline)
+
+    status = 0
+    if args.check:
+        if not baseline:
+            print("size gate: no baseline; run --update", file=sys.stderr)
+            return 1
+        status = check(current, baseline, base_toolchain)
+    if args.selftest:
+        if not baseline:
+            print("selftest: no baseline; run --update", file=sys.stderr)
+            return 1
+        if selftest(current, baseline) != 0:
+            status = 1
+    return status
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

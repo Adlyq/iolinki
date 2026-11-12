@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
 #
-# Differential frame gate (roadmap P1 / H₀).
+# Differential frame gate (roadmap P1 / H0, narrowed by P6 / DG3).
 #
-# Rebuilds the protocol test suite under every runnable BYTE/BYTE
-# configuration (the same table as tools/build_matrix.sh), records every device
-# reply frame emitted through the mock PHY, and compares the transcripts byte
-# for byte. A refactor that changes protocol behaviour fails here even when all
-# assertions still pass.
+# Rebuilds the protocol test suite under every runnable structural
+# configuration (tools/matrix_configs.sh is the single source of truth),
+# records every device reply frame emitted through the mock PHY, and compares
+# the transcripts byte for byte against the baseline configuration.
 #
-# Only BYTE/BYTE configurations build the suite (build_matrix.sh keeps the tests
-# off for FRAME transports, which are thin adapters covered by the compile
-# matrix). Tests that emit no frames produce empty transcripts and compare
-# trivially.
+# Scope after P6:
+#   - the gate guards **structural equivalence** between the remaining
+#     configurations (layout, concurrency tier, statistics mode);
+#   - switches that became runtime capabilities (compat bits, system command,
+#     wake-up, SIO C/Q, PD-input callback, ISR-tx-only) no longer produce a
+#     configuration here. Their behaviour is covered by the expected-frame
+#     tests in the C1 suite (tests/test_dll.c, tests/test_ds.c,
+#     tests/test_system_commands.c). Structural equivalence and runtime
+#     switches are complementary: neither replaces the other.
+#
+# A stale tools/diff_allowlist.txt entry (a configuration or transcript that no
+# longer exists) is a hard failure, so a removed comparison cannot silently keep
+# passing. Only BYTE/BYTE configurations build the suite (build_matrix.sh keeps
+# tests off for FRAME transports).
 #
 # Usage:
 #   ./tools/diff_matrix.sh            # run the gate
@@ -24,6 +33,8 @@
 set -uo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=tools/matrix_configs.sh
+. "$ROOT/tools/matrix_configs.sh"
 BUILD_ROOT="${IOLINKI_DIFF_DIR:-$ROOT/build_diff}"
 TRACE_ROOT="$BUILD_ROOT/traces"
 if [ -z "${JOBS:-}" ]; then
@@ -33,7 +44,7 @@ fi
 KEEP=0
 
 usage() {
-    sed -n '3,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '3,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -46,21 +57,13 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# Configurations whose suite runs (BYTE/BYTE + tests=yes in build_matrix.sh).
-#
-# P5 尝试把 FRAME 配置（isr_frame_frame / isr_frame_byte / isr_byte_frame）
-# 也纳入本门禁，结论是当前**不可运行**，因此 CONFIGS 保持 BYTE/BYTE：
-#  1. tools/build_matrix.sh 只对 BYTE/BYTE 打开 BUILD_TESTING（非 BYTE 传输
-#     视为薄适配层，只做编译覆盖）；
-#  2. 手工对 FRAME/FRAME 打开测试后，tests/test_ctx_sizes.c 的精确布局契约
-#     失败：RX BYTE 专属的 isr_rx_buf/cnt/acc/expect（约 72 字节）在 FRAME
-#     模式下不存在，所以 64 位尺寸断言需要按传输模式参数化；
-#  3. 即使补上尺寸断言，tests/test_helpers.c 的 g_phy_mock 在 FRAME 模式下
-#     把 rx_frame/tx_frame 置为 NULL（只有 raw-octet 钩子），依赖字节泵的
-#     ISR 用例无法驱动帧。
-# 差分门因此继续使用 BYTE/BYTE 的 6 个配置；FRAME 的语义等价目前由
-# ./tools/build_matrix.sh 的编译矩阵覆盖。详见 docs/EVOLUTION_ROADMAP.md P5。
-CONFIGS=(default release compat_v10 single_profile smp_profile stats_split)
+read -r -a CONFIGS <<<"$(iolink_matrix_runnable_configs)"
+BASELINE="$(iolink_matrix_diff_baseline)"
+
+if [ "${#CONFIGS[@]}" -eq 0 ]; then
+    echo "diff gate: no runnable configuration in tools/matrix_configs.sh" >&2
+    exit 1
+fi
 
 mkdir -p "$BUILD_ROOT"
 STATUS=0
@@ -70,7 +73,7 @@ for cfg in "${CONFIGS[@]}"; do
     keep_flag=()
     [ "$KEEP" -eq 1 ] && keep_flag=(--keep)
     if ! IOLINKI_MATRIX_DIR="$BUILD_ROOT" JOBS="$JOBS" \
-        "$ROOT/tools/build_matrix.sh" --filter "$cfg" "${keep_flag[@]}" \
+        "$ROOT/tools/build_matrix.sh" --only "$cfg" "${keep_flag[@]}" \
         >"$BUILD_ROOT/$cfg.matrix.log" 2>&1; then
         echo "BUILD/TEST FAILED"
         tail -20 "$BUILD_ROOT/$cfg.matrix.log" | sed 's/^/    /'
@@ -91,14 +94,17 @@ for cfg in "${CONFIGS[@]}"; do
     echo "ok (${count} transcripts)"
 done
 
-BASE="$TRACE_ROOT/default"
+BASE="$TRACE_ROOT/$BASELINE"
 if [ ! -d "$BASE" ]; then
-    echo "diff gate: no baseline transcripts from the default configuration" >&2
+    echo "diff gate: no baseline transcripts from '$BASELINE'" >&2
     exit 1
 fi
 
 ALLOWLIST="$ROOT/tools/diff_allowlist.txt"
+ALLOWED_COUNT=0
 
+# is_allowed <cfg> <transcript>: also reports stale entries as an error, so a
+# removed configuration/test cannot keep skipping a comparison forever.
 is_allowed() {
     local cfg="$1"
     local name="$2"
@@ -109,6 +115,10 @@ is_allowed() {
         case "$allowed_cfg" in
             ''|'#'*) continue ;;
         esac
+        if [ -n "${reason:-}" ] && [ -z "$allowed_test" ]; then
+            echo "diff gate: malformed allowlist entry for '$allowed_cfg' (no transcript)" >&2
+            STATUS=1
+        fi
         if [ "$allowed_cfg" = "$cfg" ] && [ "$allowed_test" = "$name" ]; then
             echo "    allowed: $cfg/$name ($reason)"
             return 0
@@ -116,6 +126,35 @@ is_allowed() {
     done <"$ALLOWLIST"
     return 1
 }
+
+# Staleness check: every entry must name a runnable configuration and a
+# baseline transcript. Run before comparing so the failure is explicit.
+if [ -f "$ALLOWLIST" ]; then
+    while IFS='|' read -r allowed_cfg allowed_test reason; do
+        case "$allowed_cfg" in
+            ''|'#'*) continue ;;
+        esac
+        ALLOWED_COUNT=$((ALLOWED_COUNT + 1))
+        if [ -z "${allowed_test:-}" ] || [ -z "${reason:-}" ]; then
+            echo "diff gate: incomplete allowlist entry: $allowed_cfg|${allowed_test:-}|${reason:-}" >&2
+            STATUS=1
+            continue
+        fi
+        known_cfg=0
+        for cfg in "${CONFIGS[@]:1}"; do
+            [ "$cfg" = "$allowed_cfg" ] && known_cfg=1
+        done
+        if [ "$known_cfg" -eq 0 ]; then
+            echo "diff gate: allowlist entry names a configuration that no longer runs: $allowed_cfg" >&2
+            STATUS=1
+            continue
+        fi
+        if [ ! -f "$BASE/$allowed_test" ]; then
+            echo "diff gate: allowlist entry names an unknown transcript: $allowed_cfg/$allowed_test" >&2
+            STATUS=1
+        fi
+    done <"$ALLOWLIST"
+fi
 
 for cfg in "${CONFIGS[@]:1}"; do
     for base_file in "$BASE"/*.txt; do
@@ -130,7 +169,7 @@ for cfg in "${CONFIGS[@]:1}"; do
             continue
         fi
         if ! cmp -s "$base_file" "$other"; then
-            echo "DIFF $cfg/$name: reply frames differ from the default configuration" >&2
+            echo "DIFF $cfg/$name: reply frames differ from the baseline configuration" >&2
             cmp -l "$base_file" "$other" | head -3 | sed 's/^/    /' >&2
             STATUS=1
         fi
@@ -138,7 +177,7 @@ for cfg in "${CONFIGS[@]:1}"; do
 done
 
 if [ "$STATUS" -eq 0 ]; then
-    echo "diff gate: PASS (all transcripts byte-identical across ${#CONFIGS[@]} configurations)"
+    echo "diff gate: PASS (all transcripts byte-identical across ${#CONFIGS[@]} configurations, ${ALLOWED_COUNT} allowlisted)"
 else
     echo "diff gate: FAIL" >&2
 fi

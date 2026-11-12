@@ -9,6 +9,7 @@
 #ifndef IOLINK_DLL_SHARED_H
 #define IOLINK_DLL_SHARED_H
 
+#include "iolinki/capability.h"
 #include "iolinki/dll.h"
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
@@ -32,6 +33,10 @@ typedef struct iolink_dll_shared
     volatile iolink_dll_state_t state; /**< 当前 DLL 状态 */
 
     const iolink_phy_api_t* phy; /**< 已绑定的 PHY API 实现 */
+
+    /* P6：实例能力位。iolink_caps_resolve() 在 init 时一次性解析；
+     * 主上下文与 ISR 都只读它（位掩码是自然对齐的单字加载）。 */
+    iolink_caps_t caps;
 
     /* 应用时钟，来自 iolink_device_config_t::time_us。DLL 与
      * 事件引擎的每个时间戳都使用它。数据 ISR 会读取它，因此
@@ -173,51 +178,32 @@ typedef struct iolink_dll_shared
 /**
  * @brief PHY 传输能力辅助函数。
  *
- * 本库只有一条传输路径（ISR 分发泵）。绑定的
- * PHY 通过两个 ISR 模式编译开关表达它如何搬运数据：
- *  - RX      : rx_octet（字节）或 rx_frame（整帧）      [IOLINK_ISR_RX_MODE]
- *  - TX      : tx_octet + tx_done（字节）或 tx_frame + tx_busy（整帧） [IOLINK_ISR_TX_MODE]
- *  - wake-up : 存在 detect_wakeup（PHY 能观察到 C/Q 唤醒）
- * 这些辅助函数把能力检查集中在一处，而不是分散 NULL 判断。
+ * 本库只有一条传输路径（ISR 分发泵）。PHY 的实际能力在 init 时由
+ * `iolink_caps_resolve()` 解析成 `ctx->caps`（见 capability.h），这里
+ * 只做薄委托：能力判定点唯一，且本文件不再出现 vtable 形状相关的
+ * `#if`。
  */
 static inline bool dll_phy_has_rx(const iolink_dll_shared_t* ctx)
 {
-#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
-    return (ctx->phy != NULL) && (ctx->phy->rx_frame != NULL);
-#else
-    return (ctx->phy != NULL) && (ctx->phy->rx_octet != NULL);
-#endif
+    return (ctx != NULL) && iolink_caps_has(ctx->caps, IOLINK_CAP_RX);
 }
 
 static inline bool dll_phy_has_tx(const iolink_dll_shared_t* ctx)
 {
-#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-    return (ctx->phy != NULL) && (ctx->phy->tx_frame != NULL);
-#else
-    return (ctx->phy != NULL) && (ctx->phy->tx_octet != NULL);
-#endif
+    return (ctx != NULL) && iolink_caps_has(ctx->caps, IOLINK_CAP_TX);
 }
 
 static inline bool dll_phy_has_wakeup(const iolink_dll_shared_t* ctx)
 {
-#if IOLINK_PHY_FEATURE_WAKEUP
-    return (ctx->phy != NULL) && (ctx->phy->detect_wakeup != NULL);
-#else
-    (void) ctx;
-    return false;
-#endif
+    return (ctx != NULL) && iolink_caps_has(ctx->caps, IOLINK_CAP_WAKEUP);
 }
 
 static inline int dll_phy_detect_wakeup(iolink_dll_shared_t* ctx)
 {
-#if IOLINK_PHY_FEATURE_WAKEUP
-    return ((ctx->phy != NULL) && (ctx->phy->detect_wakeup != NULL))
-               ? ctx->phy->detect_wakeup(ctx->phy->user)
-               : 0;
-#else
-    (void) ctx;
-    return 0;
-#endif
+    if (!dll_phy_has_wakeup(ctx)) {
+        return 0;
+    }
+    return ctx->phy->detect_wakeup(ctx->phy->user);
 }
 
 #endif /* IOLINK_DLL_SHARED_H */

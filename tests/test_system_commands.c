@@ -278,6 +278,44 @@ static void test_reserved_commands_rejected(void** state)
     }
 }
 
+/* P6：SystemCommand 是运行时能力。关闭能力位后，原本合法的命令
+ * （0x80）与数据存储命令都必须回 FUNC_NOTAVAIL，而构建里仍有完整
+ * 处理代码（不依赖构建矩阵）。 */
+static void test_system_command_disabled_at_runtime(void** state)
+{
+    (void) state;
+    const uint8_t commands[] = {IOLINK_CMD_DEVICE_RESET, IOLINK_CMD_PARAM_DOWNLOAD_START};
+
+    for (size_t i = 0U; i < sizeof(commands); i++) {
+        iolink_isdu_ctx_t ctx;
+        iolink_caps_t caps = IOLINK_CAP_LOCKS_ALL; /* 除 SystemCommand 外全开 */
+        iolink_isdu_init(&ctx);
+        test_isdu_bind_params(&ctx, &g_test_env);
+        iolink_isdu_bind_caps(&ctx, &caps);
+
+        assert_int_equal(send_system_command(&ctx, commands[i]), 1);
+        iolink_isdu_process(&ctx);
+
+        uint8_t resp[2];
+        int n = isdu_collect_response(&ctx, resp, sizeof(resp));
+        assert_int_equal(n, 2);
+        assert_int_equal(resp[0], 0x80U);
+        assert_int_equal(resp[1], IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
+    }
+
+    /* 对照：位打开时 0x80 被接受（空应答，复位挂起）。 */
+    iolink_isdu_ctx_t ctx;
+    iolink_caps_t caps = IOLINK_CAP_LOCKS_ALL | IOLINK_CAP_SYSTEM_COMMAND;
+    iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
+    iolink_isdu_bind_caps(&ctx, &caps);
+    assert_int_equal(send_system_command(&ctx, IOLINK_CMD_DEVICE_RESET), 1);
+    iolink_isdu_process(&ctx);
+    uint8_t resp[2];
+    assert_int_equal(isdu_collect_response(&ctx, resp, sizeof(resp)), 0);
+    assert_true(ctx.reset_pending);
+}
+
 /* DS 访问锁置位时，Data-Storage 下载会被拒绝。 */
 static void test_ds_download_rejected_by_access_lock(void** state)
 {
@@ -1362,6 +1400,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_reset_commands_clear_diagnostics, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_reserved_commands_rejected, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_system_command_disabled_at_runtime, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_ds_download_rejected_by_access_lock, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_ds_command_busy, test_setup, test_teardown),
