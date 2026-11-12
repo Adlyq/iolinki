@@ -192,7 +192,7 @@ typedef struct
      * response_timer_* 实现 t_A 单次定时（13 个位时间）：在有效的
      * 请求字节上启动（同时停止周期节拍），并在
      * 应答开始或超时时停止。stack_timer_start 驱动周期性节拍，
-     * 该节拍授权主上下文服务窗口。两者均为可选；当
+     * 该节拍授权主上下文服务窗口。这些钩子均为可选；当
      * 为 NULL 时，库保持旧有的软件时间戳行为。 */
     void (*response_timer_start)(void* user);
     void (*response_timer_stop)(void* user);

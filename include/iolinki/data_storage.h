@@ -34,10 +34,8 @@
  *
  * 必须容纳每一条由 DS 支持的参数记录。每条记录的布局如下：
  * [Index(2, big-endian)][Subindex(1)][Length(1)][Data(Length)]。
+ * 默认值（256）由 config.h 提供，这里只保留说明。
  */
-#ifndef IOLINK_DS_IMAGE_MAX
-#define IOLINK_DS_IMAGE_MAX 256U
-#endif
 
 /**
  * @brief DS 引擎状态
@@ -107,7 +105,7 @@ typedef struct
 {
     iolink_ds_state_t state;              /**< 当前 DS 状态机位置 */
     const iolink_storage_api_t* storage;  /**< 绑定的存储实现 API */
-    iolink_params_ctx_t* params_ctx;      /**< 旧版设备本地可写参数上下文 */
+    iolink_params_ctx_t* params_ctx;      /**< 设备本地可写参数上下文（绑定后使用） */
     void* param_user;                     /**< 参数回调使用的不透明用户指针 */
     iolink_ds_param_read_fn read_param;   /**< 统一的参数读取访问器 */
     iolink_ds_param_write_fn write_param; /**< 统一的参数写入访问器 */

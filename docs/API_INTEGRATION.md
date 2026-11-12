@@ -180,7 +180,7 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `int_active` | 必需 | 数据中断电平；用于门控 ISR 泵。 |
 | `request_service` | 推荐 | 主上下文暂存应答后唤醒数据 ISR。当 `IOLINK_PHY_FEATURE_ISR_TX_ONLY=1` 时必需。 |
 | `response_timer_start/stop` | 可选 | 硬件 t_A 定时器。为 NULL 时使用软件时间戳。 |
-| `stack_timer_start/stop` | 可选 | 周期性的主上下文服务窗口。 |
+| `stack_timer_start` | 可选 | 周期性的主上下文服务窗口（Timer B 到期时调用 `iolink_dll_on_stack_tick()`）。 |
 | `detect_wakeup` | 可选 | 存在时 DLL 从 SIO 开始，并负责唤醒/SDCI 转换。 |
 | `set_cq_line` | 可选 | SIO 推挽输出。 |
 | `get_faults` | 可选 | 首选的物理故障 API（`IOLINK_PHY_FAULT_*`）：DLL 按边沿上报映射事件。 |
@@ -578,7 +578,9 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 
 `iolink_device_init()` 会把 `config.device_info` 和内部 `params` 上下文绑定到 ISDU；
 直接使用底层 `iolink_isdu_*` API 时，调用方需要自行设置 `isdu.params_ctx`/
-`isdu.ds_ctx`，否则身份索引返回 NULL、参数与访问锁路径按空上下文处理。
+`isdu.ds_ctx`。未绑定时的行为：身份索引（`0x000D` 与 `0x0010-0x001B`）返回
+`IDX_NOT_AVAIL`；参数与访问锁路径按空上下文处理（读返回 -1、写锁被忽略）；
+`0x0020`/`0x0024`/`0x0028`/`0x0029` 不依赖身份，仍然可用。
 
 ### 8.4 回调与缓冲区生命周期
 
@@ -625,7 +627,7 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 2. 为选定的 BYTE/FRAME 模式实现 PHY 回调，包括 `int_active` 和
    `request_service`。
 3. 保证 `config`、PHY 状态和所有回调数据在上下文生命周期内有效。
-4. 身份索引或 DPP1 需要正确时，在 `config.device_info` 中提供静态身份（不能为 NULL）。
+4. 身份索引或 DPP1 需要正确时，在 `config.device_info` 中提供静态身份；传 NULL 时使用内置默认身份（`k_default_info`）。
 5. 调用 `iolink_device_init()`，然后周期性调用 `iolink_device_process()`，
    并从数据中断调用 `iolink_device_process_isr()`。
 6. PD 只能通过 `iolink_device_pd_input_update()` 或 `on_pd_input` 回调之一提供，

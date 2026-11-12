@@ -83,7 +83,7 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx)
     ctx->resp_buf = ctx->resp_store[0];
 }
 
-/** @brief 通过绑定的 params 上下文读取参数，否则使用旧的全局集合。 */
+/** @brief 通过绑定的 params 上下文读取参数；未绑定则返回 -1。 */
 static int isdu_params_get(const iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex,
                            uint8_t* buffer, size_t max_len)
 {
@@ -97,7 +97,7 @@ static int isdu_params_get(const iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t
     return -1;
 }
 
-/** @brief 通过绑定的 params 上下文写入参数，否则使用旧的全局集合。 */
+/** @brief 通过绑定的 params 上下文写入参数；未绑定则返回 -1。 */
 static int isdu_params_set(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex,
                            const uint8_t* data, size_t len, bool persist)
 {
@@ -121,11 +121,11 @@ static int isdu_params_set(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subin
 }
 
 #if IOLINK_FEATURE_SYSTEM_COMMAND
-/** @brief 对绑定的参数上下文执行恢复出厂设置，否则使用旧的全局集合。 */
+/** @brief 对绑定的参数上下文执行恢复出厂设置；未绑定则不做任何事。 */
 static void isdu_params_factory_reset(iolink_isdu_ctx_t* ctx)
 {
     /* 绑定时复位设备自身的参数上下文（如 device.c
-       通过 ctx->params_ctx 所做的那样）；否则回退到旧的全局集合。
+       通过 ctx->params_ctx 所做的那样）；未绑定时没有全局回退。
        必须使用绑定的上下文，否则每个设备的应用标签会在
        Restore Factory Settings 命令之后仍然存在。 */
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
@@ -830,10 +830,6 @@ static void isdu_read_device_status(iolink_isdu_ctx_t* ctx)
 static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
 {
     const iolink_device_info_t* info = isdu_info(ctx);
-    if (info == NULL) {
-        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
-        return;
-    }
     if (isdu_check_mandatory_write(ctx)) {
         return;
     }
@@ -852,6 +848,10 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
                0x000A/0x000B 的读取会落到默认的 IDX_NOTAVAIL。 */
 
         case IOLINK_IDX_PROFILE_CHARACTERISTIC:
+            if (info == NULL) {
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+                return;
+            }
             isdu_read_profile_characteristic(ctx, info);
             return;
         case IOLINK_IDX_ERROR_COUNT:
@@ -866,6 +866,10 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
         case IOLINK_IDX_HARDWARE_REVISION:
         case IOLINK_IDX_FIRMWARE_REVISION:
         case IOLINK_IDX_PRODUCT_URI:
+            if (info == NULL) {
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+                return;
+            }
             (void) isdu_read_identification_string(ctx, info, index);
             return;
         case IOLINK_IDX_APPLICATION_TAG:

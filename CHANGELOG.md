@@ -50,6 +50,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ownership/lifetime contract (`dll.c`, `dll_isr.c`, `device.h`,
   `CODING_STANDARDS.md`).
 
+### Changed (configuration surface)
+- `config.h` is now the single source of default values, grouped into
+  overridable buffers, spec-fixed values, build/porting tiers and logging.
+- `IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` require a non-zero value:
+  `-D...=0` genuinely disables the bundle (it used to trim because of the old
+  `#ifdef` form). In non-CMake builds a bare definition or `=ON` also evaluates
+  to 0, so write `=1`.
+- `IOLINK_APP_PD_INPUT_CALLBACK` moved from `application.h` to `config.h`.
+
 ### Removed
 - `phy_api->stack_timer_stop` and `iolink_storage_api_t::erase`: the stack never
   called either hook, so the porting contract is now start/read/write only.

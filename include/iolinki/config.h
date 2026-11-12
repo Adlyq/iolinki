@@ -189,7 +189,8 @@
  * @brief 便利档位：一次关闭下面多个可选特性（保留事件引擎）。
  *
  * 显式的 `-DIOLINK_FEATURE_*=1` 始终优先（`#ifndef` 保护）。必须定义为非 0
- * （例如 `-DIOLINK_MINIMAL_PROFILE=1`）；定义为 0 表示关闭。
+ * （例如 `-DIOLINK_MINIMAL_PROFILE=1`）；定义为 0 表示关闭。非 CMake 构建
+ * 注意：裸定义或 `=ON` 在预处理中同样求值为 0（不会启用裁剪），必须写 `=1`。
  * CMake 用户请用 `-DIOLINK_MINIMAL_PROFILE=ON`（由 CMake 转成特性开关）。
  */
 #if defined(IOLINK_MINIMAL_PROFILE) && (IOLINK_MINIMAL_PROFILE + 0)
@@ -312,6 +313,11 @@
 #define IOLINK_CONCURRENCY_SINGLE 0
 #define IOLINK_CONCURRENCY_ISR 1
 #define IOLINK_CONCURRENCY_SMP 2
+/* 拒绝值：不是受支持的档位。保留定义是为了让过期的
+ * `-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_RTOS` 落进 port.h 的越界
+ * #error；若删掉，未定义的标识符在 #if 中求值为 0（= SINGLE），
+ * 会静默降级并关闭临界区要求。 */
+#define IOLINK_CONCURRENCY_RTOS 3
 
 #ifndef IOLINK_CONCURRENCY
 #define IOLINK_CONCURRENCY IOLINK_CONCURRENCY_ISR

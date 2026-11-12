@@ -861,6 +861,50 @@ static void test_isdu_reserved_indices_negative(void** state)
     assert_int_equal(byte, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
 }
 
+/* 未绑定 params/device_info 时：身份索引返回 IDX_NOT_AVAIL，但与身份无关的
+ * 强制索引（0x0020/0x0024/0x0028）仍必须可用。 */
+static void test_isdu_unbound_identity_scope(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_dll_ctx_t dll_ctx;
+    uint8_t buf[8];
+    uint8_t byte;
+
+    (void) memset(&dll_ctx, 0, sizeof(dll_ctx));
+
+    /* 0x0010 Vendor Name：无身份 -> 否定应答 0x80 + IDX_NOT_AVAIL。 */
+    iolink_isdu_init(&ctx);
+    ctx.dll_ctx = &dll_ctx;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_VENDOR_NAME, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+    assert_int_equal(byte, 0x80U);
+    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+    assert_int_equal(byte, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+
+    /* 0x0020 ErrorCount：不依赖身份，返回 2 字节。 */
+    iolink_isdu_init(&ctx);
+    ctx.dll_ctx = &dll_ctx;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_ERROR_COUNT, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 2);
+
+    /* 0x0024 DeviceStatus：不依赖身份，返回 1 字节。 */
+    iolink_isdu_init(&ctx);
+    ctx.dll_ctx = &dll_ctx;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DEVICE_STATUS, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 1);
+
+    /* 0x0028 ProcessDataInput：不依赖身份；零长度 PD 返回空应答而不是错误。 */
+    iolink_isdu_init(&ctx);
+    ctx.dll_ctx = &dll_ctx;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 0);
+}
+
 static void test_isdu_system_command_read_only_write(void** state)
 {
     (void) state;
@@ -1281,6 +1325,8 @@ int main(void)
                                         test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_error_stats_read, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_reserved_indices_negative, test_setup,
+                                        test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_unbound_identity_scope, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_mseq_capability_codes, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_spec_index_constants, test_setup, test_teardown),

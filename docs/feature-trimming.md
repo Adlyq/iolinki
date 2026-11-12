@@ -62,7 +62,10 @@ cmake --build build_no_events --target iolinki
 
 The `config.h` `IOLINK_MINIMAL_PROFILE` block remains for non-CMake builds
 (Keil/IAR) and for `tests/test_config_trim.c`, which checks the macro defaults
-in isolation.
+in isolation. Non-CMake builds must define it as a non-zero value
+(`#define IOLINK_MINIMAL_PROFILE 1` or `-DIOLINK_MINIMAL_PROFILE=1`); a bare
+definition or `=ON` evaluates to 0 in the preprocessor and therefore disables
+nothing.
 
 ## Capacity overrides
 
