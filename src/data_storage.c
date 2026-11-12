@@ -182,39 +182,39 @@ void iolink_ds_set_param_desc(iolink_ds_ctx_t* ctx, const iolink_ds_param_desc_t
     ctx->param_count = count;
 }
 
-/** @brief 通过绑定的访问器或 params 上下文读取参数；都未绑定时返回 -1。 */
-static int ds_params_get(const iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                         uint8_t* buffer, size_t max_len)
+/** @brief 通过绑定的访问器或 params 上下文读取参数。 */
+static iolink_result_t ds_params_get(const iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
+                                     uint8_t* buffer, size_t max_len)
 {
     if ((ctx != NULL) && (ctx->read_param != NULL)) {
         return ctx->read_param(ctx->param_user, index, subindex, buffer, max_len);
     }
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
-        return iolink_params_ctx_get(ctx->params_ctx, index, subindex, buffer, max_len);
+        return iolink_params_ctx_read(ctx->params_ctx, index, subindex, buffer, max_len);
     }
     (void) index;
     (void) subindex;
     (void) buffer;
     (void) max_len;
-    return -1;
+    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
 }
 
-/** @brief 通过绑定的访问器或 params 上下文写入参数；都未绑定时返回 -1。 */
-static int ds_params_set(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                         const uint8_t* data, size_t len, bool persist)
+/** @brief 通过绑定的访问器或 params 上下文写入参数。 */
+static iolink_result_t ds_params_set(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
+                                     const uint8_t* data, size_t len, bool persist)
 {
     if ((ctx != NULL) && (ctx->write_param != NULL)) {
         return ctx->write_param(ctx->param_user, index, subindex, data, len, persist);
     }
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
-        return iolink_params_ctx_set(ctx->params_ctx, index, subindex, data, len, persist);
+        return iolink_params_ctx_write(ctx->params_ctx, index, subindex, data, len, persist);
     }
     (void) index;
     (void) subindex;
     (void) data;
     (void) len;
     (void) persist;
-    return -1;
+    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
 }
 
 uint32_t iolink_ds_calc_checksum(const uint8_t* data, size_t len)
@@ -255,11 +255,10 @@ int iolink_ds_build_image(iolink_ds_ctx_t* ctx)
         if ((ctx->params[i].max_len != 0U) && (cap > (size_t) ctx->params[i].max_len)) {
             cap = (size_t) ctx->params[i].max_len;
         }
-        int n = ds_params_get(ctx, index, subindex, &ctx->image[pos + DS_RECORD_HEADER], cap);
-        if (n < 0) {
-            n = 0; /* 参数不存在 -> 空记录 */
-        }
-        else if ((size_t) n > cap) {
+        const iolink_result_t read_res =
+            ds_params_get(ctx, index, subindex, &ctx->image[pos + DS_RECORD_HEADER], cap);
+        int n = iolink_result_succeeded(read_res) ? (int) read_res.len : 0;
+        if ((size_t) n > cap) {
             n = (int) cap;
         }
 
@@ -318,8 +317,8 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
         uint8_t subindex = data[pos + 2U];
         size_t rlen = (size_t) data[pos + 3U];
         if (ds_param_known(ctx, index, subindex)) {
-            if (ds_params_set(ctx, index, subindex, &data[pos + DS_RECORD_HEADER], rlen, true) !=
-                0) {
+            if (!iolink_result_succeeded(ds_params_set(
+                    ctx, index, subindex, &data[pos + DS_RECORD_HEADER], rlen, true))) {
                 return -2; /* 已知参数拒绝了该值 */
             }
         }
@@ -642,14 +641,14 @@ bool iolink_ds_downloading(const iolink_ds_ctx_t* ctx)
     return (ctx != NULL) && (ctx->state == IOLINK_DS_STATE_DOWNLOADING);
 }
 
-int iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                          const uint8_t* data, size_t len)
+iolink_result_t iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
+                                      const uint8_t* data, size_t len)
 {
     if (!iolink_ds_downloading(ctx)) {
-        return -1;
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
     if ((len > 0U) && !iolink_buf_is_valid(data, len)) {
-        return -1;
+        return iolink_result_error(IOLINK_RESULT_INVALID);
     }
     const size_t n = iolink_ds_param_count(ctx);
     bool found = false;
@@ -662,17 +661,17 @@ int iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex
             found = true;
             if ((d.max_len > 0U) && (len > (size_t) d.max_len)) {
                 ctx->download_invalid = true;
-                return -2; /* VAL_LENOVRRUN */
+                return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
             }
             break;
         }
     }
     if (!found) {
-        return -1;
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
     if ((ctx->image_len + DS_RECORD_HEADER + len) > IOLINK_DS_IMAGE_MAX) {
         ctx->download_invalid = true;
-        return -1; /* 缓冲区已满 */
+        return iolink_result_error(IOLINK_RESULT_INVALID);
     }
 
     const size_t pos = ctx->image_len;
@@ -684,7 +683,7 @@ int iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex
         (void) memcpy(&ctx->image[pos + DS_RECORD_HEADER], data, len);
     }
     ctx->image_len = pos + DS_RECORD_HEADER + len;
-    return 0;
+    return iolink_result_ok(0U);
 }
 
 uint8_t iolink_ds_state_property(const iolink_ds_ctx_t* ctx)

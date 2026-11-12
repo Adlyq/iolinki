@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Unified result model: `iolink_result_t` (`include/iolinki/result.h`) with
+  `0 = success`, negative internal codes and positive ISDU ErrorCodes.
+  `iolink_params_ctx_read/write`, `iolink_ds_stage_param` and the DS parameter
+  accessors now return it, so protocol errors such as `0x33` (value length
+  overrun) survive the params/DS path instead of collapsing to `0x11`.
+  `iolink_params_ctx_get/set` remain as deprecated one-version shims.
+- Context size contract: `tests/test_ctx_sizes.c` asserts the exact layout
+  sizes at build time; layout changes must update the test and
+  `docs/MEMORY_GUIDE.md` together.
+- Differential frame gate: `tools/diff_matrix.sh` replays the protocol suite
+  under every runnable configuration and compares device reply frames byte for
+  byte (`tools/diff_allowlist.txt` documents the one expected compat-v10
+  difference).
+- Coverage floor: `tools/coverage.sh --check` enforces
+  `tools/coverage_baseline.txt` in CI.
+
+### Changed
+- `iolink_device_ctx_t` no longer carries a `stack_config` copy; the caller
+  configuration (`ctx->config->stack`) is the single source of truth
+  (device context shrinks from 3712 to 3688 bytes on a 64-bit host).
+- Test helpers no longer keep process-wide parameter/identity singletons; each
+  test file owns an explicitly initialised `iolink_test_env_t`.
+
+### Added (runtime log sink)
 - Runtime log sink: `iolink_log_sink_t` (callback + user pointer + level) is
   carried by the DLL, ISDU, DS and event contexts, bound from
   `iolink_device_config_t::log_write`/`log_level` and changeable with

@@ -64,51 +64,53 @@ static void device_state_cb(void* user, iolink_dll_state_t state)
 #if IOLINK_FEATURE_DATA_STORAGE
 /** @brief 统一的 DS 参数读取：标准标签经 params 上下文，
  * 其余全部经厂商服务。 */
-static int device_ds_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out, size_t cap)
+static iolink_result_t device_ds_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out,
+                                      size_t cap)
 {
     iolink_device_ctx_t* ctx = (iolink_device_ctx_t*) user;
-    int n;
 
     if ((ctx == NULL) || (out == NULL)) {
-        return -1;
+        return iolink_result_error(IOLINK_RESULT_INVALID);
     }
-    n = iolink_params_ctx_get(&ctx->params, index, subindex, out, cap);
-    if (n >= 0) {
-        return n;
+    const iolink_result_t result = iolink_params_ctx_read(&ctx->params, index, subindex, out, cap);
+    if (result.code >= 0) {
+        return result;
     }
     if ((ctx->config != NULL) && (ctx->config->vendor_service != NULL)) {
         size_t outlen = cap;
         uint8_t err = ctx->config->vendor_service(ctx->config->user, index, subindex, false, NULL,
                                                   0U, out, &outlen);
         if (err == 0U) {
-            return (int) outlen;
+            return iolink_result_ok((uint16_t) outlen);
         }
     }
-    return -1;
+    return result;
 }
 
 /** @brief 统一的 DS 参数写入：标准标签经 params 上下文，
  * 其余全部经厂商服务。 */
-static int device_ds_write(void* user, uint16_t index, uint8_t subindex, const uint8_t* data,
-                           size_t len, bool persist)
+static iolink_result_t device_ds_write(void* user, uint16_t index, uint8_t subindex,
+                                       const uint8_t* data, size_t len, bool persist)
 {
     iolink_device_ctx_t* ctx = (iolink_device_ctx_t*) user;
 
     if (ctx == NULL) {
-        return -1;
+        return iolink_result_error(IOLINK_RESULT_INVALID);
     }
-    if (iolink_params_ctx_set(&ctx->params, index, subindex, data, len, persist) == 0) {
-        return 0;
+    const iolink_result_t result =
+        iolink_params_ctx_write(&ctx->params, index, subindex, data, len, persist);
+    if (result.code >= 0) {
+        return result;
     }
     if ((ctx->config != NULL) && (ctx->config->vendor_service != NULL)) {
         size_t outlen = 0U;
         uint8_t err = ctx->config->vendor_service(ctx->config->user, index, subindex, true, data,
                                                   len, NULL, &outlen);
         if (err == 0U) {
-            return 0;
+            return iolink_result_ok(0U);
         }
     }
-    return -1;
+    return result;
 }
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 

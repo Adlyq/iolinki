@@ -142,44 +142,44 @@ void iolink_params_bind_storage(iolink_params_ctx_t* ctx, const iolink_storage_a
     params_ctx_load(ctx);
 }
 
-int iolink_params_ctx_get(const iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                          uint8_t* buffer, size_t max_len)
+iolink_result_t iolink_params_ctx_read(const iolink_params_ctx_t* ctx, uint16_t index,
+                                       uint8_t subindex, uint8_t* buffer, size_t max_len)
 {
     if ((ctx == NULL) || (buffer == NULL)) {
-        return -1;
+        return iolink_result_error(IOLINK_RESULT_INVALID);
     }
     if ((index == IOLINK_IDX_APPLICATION_TAG) && (subindex == 0U)) {
         const iolink_device_info_t* info = iolink_device_info_ctx_get(ctx->device_info);
         if ((info != NULL) && (info->application_tag != NULL)) {
-            return read_tag(info->application_tag, buffer, max_len);
+            return iolink_result_ok((uint16_t) read_tag(info->application_tag, buffer, max_len));
         }
-        return 0;
+        return iolink_result_ok(0U);
     }
     if ((index == IOLINK_IDX_FUNCTION_TAG) && (subindex == 0U)) {
         if (!ctx->function_tag_valid) {
-            return 0;
+            return iolink_result_ok(0U);
         }
-        return read_tag(ctx->function_tag, buffer, max_len);
+        return iolink_result_ok((uint16_t) read_tag(ctx->function_tag, buffer, max_len));
     }
     if ((index == IOLINK_IDX_LOCATION_TAG) && (subindex == 0U)) {
         if (!ctx->location_tag_valid) {
-            return 0;
+            return iolink_result_ok(0U);
         }
-        return read_tag(ctx->location_tag, buffer, max_len);
+        return iolink_result_ok((uint16_t) read_tag(ctx->location_tag, buffer, max_len));
     }
-    return -1;
+    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
 }
 
-int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                          const uint8_t* data, size_t len, iolink_persist_t persist)
+iolink_result_t iolink_params_ctx_write(iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
+                                        const uint8_t* data, size_t len, iolink_persist_t persist)
 {
     if ((ctx == NULL) || !iolink_buf_is_valid(data, len)) {
-        return -1;
+        return iolink_result_error(IOLINK_RESULT_INVALID);
     }
     iolink_params_ctx_t candidate = *ctx;
     if ((index == IOLINK_IDX_APPLICATION_TAG) && (subindex == 0U)) {
         if (len >= sizeof(candidate.application_tag)) {
-            return -1;
+            return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
         }
         copy_tag(candidate.application_tag, &candidate.application_tag_valid, data, len);
     }
@@ -190,21 +190,38 @@ int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index, uint8_t subi
         copy_tag(candidate.location_tag, &candidate.location_tag_valid, data, len);
     }
     else {
-        return -1;
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
     /* 被拒绝的持久化写入不得在 RAM/回读中表现为已接受。 */
     if ((persist != IOLINK_PERSIST_NONE) && (params_ctx_write_nvm(&candidate) != 0)) {
-        return -1;
+        return iolink_result_error(IOLINK_RESULT_IO);
     }
     if ((index == IOLINK_IDX_APPLICATION_TAG) && candidate.device_info != NULL) {
         if (iolink_device_info_ctx_set_application_tag(
                 candidate.device_info, candidate.application_tag,
                 (uint8_t) strlen(candidate.application_tag)) != 0) {
-            return -1;
+            return iolink_result_error(IOLINK_RESULT_IO);
         }
     }
     *ctx = candidate;
-    return 0;
+    return iolink_result_ok(0U);
+}
+
+int iolink_params_ctx_get(const iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
+                          uint8_t* buffer, size_t max_len)
+{
+    const iolink_result_t result = iolink_params_ctx_read(ctx, index, subindex, buffer, max_len);
+
+    return iolink_result_succeeded(result) ? (int) result.len : -1;
+}
+
+int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
+                          const uint8_t* data, size_t len, iolink_persist_t persist)
+{
+    return iolink_result_succeeded(
+               iolink_params_ctx_write(ctx, index, subindex, data, len, persist))
+               ? 0
+               : -1;
 }
 
 void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx)

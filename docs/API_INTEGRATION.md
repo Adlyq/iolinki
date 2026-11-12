@@ -432,6 +432,12 @@ void iolink_params_ctx_init(iolink_params_ctx_t* ctx,
                             iolink_device_info_ctx_t* device_info);
 void iolink_params_bind_storage(iolink_params_ctx_t* ctx,
                                 const iolink_storage_api_t* storage);
+iolink_result_t iolink_params_ctx_read(const iolink_params_ctx_t* ctx, uint16_t index,
+                                       uint8_t subindex, uint8_t* buffer, size_t max_len);
+iolink_result_t iolink_params_ctx_write(iolink_params_ctx_t* ctx, uint16_t index,
+                                        uint8_t subindex, const uint8_t* data,
+                                        size_t len, iolink_persist_t persist);
+/* 兼容 shim（保留一个版本）：错误细节退化为 -1。 */
 int iolink_params_ctx_get(const iolink_params_ctx_t* ctx, uint16_t index,
                           uint8_t subindex, uint8_t* buffer, size_t max_len);
 int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index,
@@ -440,8 +446,16 @@ int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index,
 void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx);
 ```
 
-上下文 API 管理三个可写标签。`get` 返回字节数或负错误码；当
-`persist != IOLINK_PERSIST_NONE` 时，`set` 只有在存储写入成功后才应用修改。
+上下文 API 管理三个可写标签，内部统一使用 `iolink_result_t`
+（`include/iolinki/result.h`）：
+
+- `code == 0`：成功，`len` 为读取的字节数（写操作为 0）；
+- `code < 0`：内部错误，不进入线上协议（`IOLINK_RESULT_NOT_HANDLED` /
+  `INVALID` / `IO`）；
+- `code > 0`：ISDU ErrorCode（如 0x33 值长度超长），由 ISDU 应答边界原样上送。
+
+当 `persist != IOLINK_PERSIST_NONE` 时，写操作只有在存储写入成功后才应用修改。
+`get`/`set` 是保留一个版本的兼容包装；新代码应使用 `read`/`write`。
 恢复出厂设置函数返回 void，无法报告存储失败。
 
 ### 7.2 存储后端
@@ -487,6 +501,7 @@ void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx,
                                  iolink_ds_param_read_fn read,
                                  iolink_ds_param_write_fn write, void* user,
                                  const iolink_ds_param_desc_t* params, size_t count);
+/* read/write 回调返回 iolink_result_t（见 §7.1 的结果语义）。 */
 void iolink_ds_set_param_desc(iolink_ds_ctx_t* ctx,
                               const iolink_ds_param_desc_t* params, size_t count);
 void iolink_ds_process(iolink_ds_ctx_t* ctx);

@@ -285,40 +285,41 @@ static void test_ds_apply_rejects_truncated(void** state)
 static uint8_t g_vendor_param[8];
 static size_t g_vendor_param_len;
 
-static int vendor_ds_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out, size_t cap)
+static iolink_result_t vendor_ds_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out,
+                                      size_t cap)
 {
     (void) user;
     if ((index == IOLINK_IDX_APPLICATION_TAG) && (subindex == 0U)) {
-        return iolink_params_ctx_get(test_env_params(&g_test_env), index, subindex, out, cap);
+        return iolink_params_ctx_read(test_env_params(&g_test_env), index, subindex, out, cap);
     }
     if ((index == VENDOR_PARAM_IDX) && (subindex == 0U)) {
         if (g_vendor_param_len > cap) {
-            return -1;
+            return iolink_result_error(IOLINK_RESULT_INVALID);
         }
         (void) memcpy(out, g_vendor_param, g_vendor_param_len);
-        return (int) g_vendor_param_len;
+        return iolink_result_ok((uint16_t) g_vendor_param_len);
     }
-    return -1;
+    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
 }
 
-static int vendor_ds_write(void* user, uint16_t index, uint8_t subindex, const uint8_t* data,
-                           size_t len, bool persist)
+static iolink_result_t vendor_ds_write(void* user, uint16_t index, uint8_t subindex,
+                                       const uint8_t* data, size_t len, bool persist)
 {
     (void) user;
     (void) persist;
     if ((index == IOLINK_IDX_APPLICATION_TAG) && (subindex == 0U)) {
-        return iolink_params_ctx_set(test_env_params(&g_test_env), index, subindex, data, len,
-                                     true);
+        return iolink_params_ctx_write(test_env_params(&g_test_env), index, subindex, data, len,
+                                       true);
     }
     if ((index == VENDOR_PARAM_IDX) && (subindex == 0U)) {
         if (len > sizeof(g_vendor_param)) {
-            return -1;
+            return iolink_result_error(IOLINK_RESULT_INVALID);
         }
         (void) memcpy(g_vendor_param, data, len);
         g_vendor_param_len = len;
-        return 0;
+        return iolink_result_ok(0U);
     }
-    return -1;
+    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
 }
 
 static void test_ds_vendor_param_set_round_trip(void** state)
@@ -413,8 +414,8 @@ static void test_ds_download_recovery(void** state)
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOAD_REQ);
 }
 
-static int ds_rejecting_write(void* user, uint16_t index, uint8_t subindex, const uint8_t* data,
-                              size_t len, bool persist)
+static iolink_result_t ds_rejecting_write(void* user, uint16_t index, uint8_t subindex,
+                                          const uint8_t* data, size_t len, bool persist)
 {
     (void) user;
     (void) index;
@@ -422,17 +423,18 @@ static int ds_rejecting_write(void* user, uint16_t index, uint8_t subindex, cons
     (void) data;
     (void) len;
     (void) persist;
-    return -1;
+    return iolink_result_error(IOLINK_RESULT_INVALID);
 }
 
-static int ds_zero_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out, size_t cap)
+static iolink_result_t ds_zero_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out,
+                                    size_t cap)
 {
     (void) user;
     (void) index;
     (void) subindex;
     (void) out;
     (void) cap;
-    return 0;
+    return iolink_result_ok(0U);
 }
 
 /* ParamDownloadEnd 将格式错误的镜像（PAR_SETINVALID 0x8040）与
@@ -489,8 +491,8 @@ static void test_ds_image_checksum_rejects_corruption(void** state)
     assert_int_equal(ds.image_len, 0U);
 }
 
-static int ds_param_read_mock(void* user, uint16_t index, uint8_t subindex, uint8_t* out,
-                              size_t cap)
+static iolink_result_t ds_param_read_mock(void* user, uint16_t index, uint8_t subindex,
+                                          uint8_t* out, size_t cap)
 {
     static const uint8_t value[] = "ABCDEFGH";
     (void) user;
@@ -498,11 +500,11 @@ static int ds_param_read_mock(void* user, uint16_t index, uint8_t subindex, uint
     (void) subindex;
     size_t n = (sizeof(value) - 1U < cap) ? sizeof(value) - 1U : cap;
     (void) memcpy(out, value, n);
-    return (int) n;
+    return iolink_result_ok((uint16_t) n);
 }
 
-static int ds_param_write_mock(void* user, uint16_t index, uint8_t subindex, const uint8_t* data,
-                               size_t len, bool persist)
+static iolink_result_t ds_param_write_mock(void* user, uint16_t index, uint8_t subindex,
+                                           const uint8_t* data, size_t len, bool persist)
 {
     (void) user;
     (void) index;
@@ -510,7 +512,7 @@ static int ds_param_write_mock(void* user, uint16_t index, uint8_t subindex, con
     (void) data;
     (void) len;
     (void) persist;
-    return 0;
+    return iolink_result_ok(0U);
 }
 
 /* 传入 NULL 访问器时必须保留设备绑定的访问器与用户指针。 */

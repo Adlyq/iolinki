@@ -83,23 +83,23 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx)
     ctx->resp_buf = ctx->resp_store[0];
 }
 
-/** @brief 通过绑定的 params 上下文读取参数；未绑定则返回 -1。 */
-static int isdu_params_get(const iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                           uint8_t* buffer, size_t max_len)
+/** @brief 通过绑定的 params 上下文读取参数；未绑定则返回 NOT_HANDLED。 */
+static iolink_result_t isdu_params_get(const iolink_isdu_ctx_t* ctx, uint16_t index,
+                                       uint8_t subindex, uint8_t* buffer, size_t max_len)
 {
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
-        return iolink_params_ctx_get(ctx->params_ctx, index, subindex, buffer, max_len);
+        return iolink_params_ctx_read(ctx->params_ctx, index, subindex, buffer, max_len);
     }
     (void) index;
     (void) subindex;
     (void) buffer;
     (void) max_len;
-    return -1;
+    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
 }
 
-/** @brief 通过绑定的 params 上下文写入参数；未绑定则返回 -1。 */
-static int isdu_params_set(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                           const uint8_t* data, size_t len, bool persist)
+/** @brief 通过绑定的 params 上下文写入参数；未绑定则返回 NOT_HANDLED。 */
+static iolink_result_t isdu_params_set(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex,
+                                       const uint8_t* data, size_t len, bool persist)
 {
 #if IOLINK_FEATURE_DATA_STORAGE
     /* 块下载期间，写入会被缓冲，以便在
@@ -110,14 +110,14 @@ static int isdu_params_set(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subin
     }
 #endif
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
-        return iolink_params_ctx_set(ctx->params_ctx, index, subindex, data, len, persist);
+        return iolink_params_ctx_write(ctx->params_ctx, index, subindex, data, len, persist);
     }
     (void) index;
     (void) subindex;
     (void) data;
     (void) len;
     (void) persist;
-    return -1;
+    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
 }
 
 #if IOLINK_FEATURE_SYSTEM_COMMAND
@@ -158,17 +158,15 @@ static uint16_t isdu_access_locks(const iolink_isdu_ctx_t* ctx)
 
 static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error);
 
-/** @brief 将参数管理器错误映射为 ISDU 否定应答。 */
-static void isdu_respond_param_error(iolink_isdu_ctx_t* ctx, int ret)
+/** @brief 将统一结果翻译为 ISDU 否定应答。
+ *
+ * 这是内部错误语义与线上协议之间的唯一翻译点：
+ * 正值是 ISDU ErrorCode，原样上送；负值（内部错误/
+ * 未处理）统一压成 IDX_NOT_AVAIL。 */
+static void isdu_respond_result(iolink_isdu_ctx_t* ctx, iolink_result_t result)
 {
-    uint8_t error = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-    if (ret == -2) {
-        error = IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN;
-    }
-    else if (ret == -3) {
-        error = IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN;
-    }
-    isdu_respond_error(ctx, error);
+    isdu_respond_error(ctx,
+                       (result.code > 0) ? (uint8_t) result.code : IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
 }
 
 /* handle_standard_commands() 定义在下方；传输层在收齐一个
@@ -723,47 +721,36 @@ static bool isdu_read_identification_string(iolink_isdu_ctx_t* ctx,
 /** @brief 从参数集中读取应用/功能/位置标签。 */
 static void isdu_tag_read(iolink_isdu_ctx_t* ctx, uint16_t index)
 {
-    const int res =
+    const iolink_result_t res =
         isdu_params_get(ctx, index, 0U, ctx->response_buf, (size_t) IOLINK_ISDU_BUFFER_SIZE);
-    if (res >= 0) {
-        ctx->response_len = (uint8_t) res;
+    if (iolink_result_succeeded(res)) {
+        ctx->response_len = (uint8_t) res.len;
         ctx->response_idx = 0U;
         ctx->state = ISDU_STATE_RESPONSE_READY;
         return;
     }
     /* 未绑定参数上下文（或读取失败）：返回否定应答，而不是静默丢弃
        （否则主站会看到 No Service 0x00 而不是参数错误）。 */
-    isdu_respond_param_error(ctx, res);
+    isdu_respond_result(ctx, res);
 }
 
 /** @brief 将应用/功能/位置标签写入参数集。 */
 static void isdu_tag_write(iolink_isdu_ctx_t* ctx, uint16_t index)
 {
-    if (index == IOLINK_IDX_APPLICATION_TAG) {
-        if (ctx->buffer_idx > 32U) {
-            isdu_respond_param_error(ctx, -2);
-            return;
-        }
-        const int ret = isdu_params_set(ctx, index, 0U, ctx->buffer, ctx->buffer_idx, true);
-        if (ret == 0) {
-            ctx->response_len = 0U;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
-            return;
-        }
-        isdu_respond_param_error(ctx, ret);
+    if ((index == IOLINK_IDX_APPLICATION_TAG) && (ctx->buffer_idx > 32U)) {
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
         return;
     }
-
-    if (isdu_params_set(ctx, index, 0U, ctx->buffer, ctx->buffer_idx, true) == 0) {
+    const iolink_result_t res = isdu_params_set(ctx, index, 0U, ctx->buffer, ctx->buffer_idx, true);
+    if (iolink_result_succeeded(res)) {
         ctx->response_len = 0U;
         ctx->response_idx = 0U;
         ctx->state = ISDU_STATE_RESPONSE_READY;
         return;
     }
-    /* 持久化存储拒绝了该服务：以否定应答
+    /* 持久化存储或参数层拒绝了该服务：以否定应答
        终止，而不是让主站持续轮询 Busy。 */
-    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+    isdu_respond_result(ctx, res);
 }
 
 /** @brief 处理可写标识标签的读或写。 */
@@ -1688,15 +1675,16 @@ static void isdu_handle_vendor_index(iolink_isdu_ctx_t* ctx)
 #if IOLINK_FEATURE_DATA_STORAGE
     if ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) && (ctx->ds_ctx != NULL) &&
         iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx)) {
-        const int ret = iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, ctx->header.index,
-                                              ctx->header.subindex, ctx->buffer, ctx->buffer_idx);
-        if (ret == 0) {
+        const iolink_result_t staged =
+            iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, ctx->header.index,
+                                  ctx->header.subindex, ctx->buffer, ctx->buffer_idx);
+        if (iolink_result_succeeded(staged)) {
             ctx->response_len = 0U;
             ctx->response_idx = 0U;
             ctx->state = ISDU_STATE_RESPONSE_READY;
         }
         else {
-            isdu_respond_param_error(ctx, ret);
+            isdu_respond_result(ctx, staged);
         }
         return;
     }

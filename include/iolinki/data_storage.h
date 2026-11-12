@@ -10,6 +10,7 @@
 #define IOLINK_DATA_STORAGE_H
 
 #include "iolinki/config.h"
+#include "iolinki/result.h"
 #include "iolinki/storage.h"
 
 #include "iolinki/protocol.h"
@@ -73,11 +74,11 @@ typedef struct
  * @param subindex 参数子索引。
  * @param out      接收参数值的缓冲区。
  * @param cap      @p out 的容量（字节）。
- * @return int 读取的字节数 (>= 0)；参数不可用或被拒绝时
- *         返回负值。
+ * @return 结果模型：成功 `{0, len}`；未知索引
+ *         ::IOLINK_RESULT_NOT_HANDLED；协议层错误以正 ISDU ErrorCode 返回。
  */
-typedef int (*iolink_ds_param_read_fn)(void* user, uint16_t index, uint8_t subindex, uint8_t* out,
-                                       size_t cap);
+typedef iolink_result_t (*iolink_ds_param_read_fn)(void* user, uint16_t index, uint8_t subindex,
+                                                   uint8_t* out, size_t cap);
 
 /**
  * @brief 写入单个 DS 参数。
@@ -88,10 +89,11 @@ typedef int (*iolink_ds_param_read_fn)(void* user, uint16_t index, uint8_t subin
  * @param data     参数值字节。
  * @param len      @p data 的长度（字节）。
  * @param persist  写入是否必须提交到非易失性存储器。
- * @return int 成功时返回 0，参数被拒绝时返回负值。
+ * @return 结果模型：成功 `{0, 0}`；未知索引
+ *         ::IOLINK_RESULT_NOT_HANDLED；协议层错误以正 ISDU ErrorCode 返回。
  */
-typedef int (*iolink_ds_param_write_fn)(void* user, uint16_t index, uint8_t subindex,
-                                        const uint8_t* data, size_t len, bool persist);
+typedef iolink_result_t (*iolink_ds_param_write_fn)(void* user, uint16_t index, uint8_t subindex,
+                                                    const uint8_t* data, size_t len, bool persist);
 
 /**
  * @brief 数据存储引擎上下文
@@ -279,10 +281,11 @@ bool iolink_ds_downloading(const iolink_ds_ctx_t* ctx);
  * @param subindex 参数子索引
  * @param data     参数值字节
  * @param len      @p data 的长度（字节）
- * @return int 成功时返回 0，未处于下载状态或缓冲区已满时返回负值。
+ * @return 结果模型：成功 `{0, 0}`；未处于下载状态
+ *         ::IOLINK_RESULT_NOT_HANDLED；值长度超长以正 0x33 返回。
  */
-int iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                          const uint8_t* data, size_t len);
+iolink_result_t iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
+                                      const uint8_t* data, size_t len);
 
 /**
  * @brief 将设备中由 DS 支持的参数序列化到映像缓冲区。
