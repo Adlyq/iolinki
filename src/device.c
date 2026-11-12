@@ -79,7 +79,7 @@ static iolink_result_t device_param_read(void* user, uint16_t index, uint8_t sub
     if (entry == NULL) {
         /* 未在 OD 表中声明、但仍列在显式 DS 描述符集合里的厂商参数：
            其值由声明的厂商后端提供（成员判定已由描述符完成）。 */
-        if ((ctx->config->vendor_service == NULL) || (cap > 0xFFU)) {
+        if (ctx->config->vendor_service == NULL) {
             return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
         }
         size_t out_len = cap;

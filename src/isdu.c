@@ -1561,6 +1561,30 @@ static bool isdu_entry_allowed(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t* 
     return true;
 }
 
+#if IOLINK_FEATURE_DATA_STORAGE
+/** @brief 该 index/subindex 是否真的在 DS 引擎的参数集内。
+ *
+ * 表项的 storage 标志只描述"值得备份"；是否被 DS 引擎序列化取决于
+ * 绑定的描述符集合（默认由 OD 表派生）。只有真正在集合内的写入才
+ * 暂存，避免"暂存了但从不序列化"的校验和不一致。 */
+static bool isdu_ds_param_known(const iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex)
+{
+    const iolink_ds_ctx_t* ds = (const iolink_ds_ctx_t*) ctx->ds_ctx;
+    const size_t count = iolink_ds_param_count(ds);
+
+    for (size_t i = 0U; i < count; i++) {
+        iolink_ds_param_desc_t desc;
+        if (!iolink_ds_param_at(ds, i, &desc)) {
+            break;
+        }
+        if ((desc.index == index) && (desc.subindex == subindex)) {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
 /** @brief 通过表项读/写一个参数值（标签对象或应用后端）。 */
 static void isdu_serve_od_value(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t* entry)
 {
@@ -1572,7 +1596,8 @@ static void isdu_serve_od_value(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t*
 #if IOLINK_FEATURE_DATA_STORAGE
         /* 块下载期间 DS 参数先暂存，ParamDownloadEnd 时原子提交（10.3.2）。 */
         if ((entry->storage == IOLINK_OD_STORAGE_DS) && (ctx->ds_ctx != NULL) &&
-            iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx)) {
+            iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx) &&
+            isdu_ds_param_known(ctx, entry->index, ctx->header.subindex)) {
             const iolink_result_t staged =
                 iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, entry->index,
                                       ctx->header.subindex, ctx->buffer, ctx->buffer_idx);
