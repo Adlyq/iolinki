@@ -50,6 +50,10 @@ if ! command -v gcovr >/dev/null 2>&1; then
     exit 2
 fi
 
+# A reused tree keeps .gcno/.gcda from older source layouts; gcovr then
+# attributes lines to the wrong file and reports false regressions. Always
+# start from a clean coverage tree.
+rm -rf "${BUILD_DIR:?}"
 cmake -S "$ROOT" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON
 cmake --build "$BUILD_DIR" --parallel "$JOBS"
 (cd "$BUILD_DIR" && ctest --output-on-failure)
