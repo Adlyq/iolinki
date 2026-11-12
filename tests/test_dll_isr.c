@@ -82,11 +82,27 @@ static void test_expected_req_len_operate(void** state)
     assert_int_equal(iolink_dll_expected_req_len(NULL, 0x80U), 0U);
 }
 
+/* 未调用 iolink_dll_init() 时 shared.isr 为 NULL；所有 ISR 入口必须安全返回，
+ * 而不是在中断上下文里解引用空指针。 */
+static void test_isr_entries_without_binding_are_safe(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t dll;
+    (void) memset(&dll, 0, sizeof(dll));
+    dll.main.shared.phy = &g_phy_mock;
+
+    iolink_dll_process_isr(&dll.main);
+    iolink_dll_on_rx_timeout(&dll.main);
+    iolink_dll_on_stack_tick(&dll.main);
+    assert_int_equal(iolink_dll_take_service_window(&dll.main), 0U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_expected_req_len_type0),
         cmocka_unit_test(test_expected_req_len_operate),
+        cmocka_unit_test(test_isr_entries_without_binding_are_safe),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

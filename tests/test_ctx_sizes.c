@@ -53,6 +53,14 @@ IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 3728u, "device ctx (STATS_SP
 IOLINK_STATIC_ASSERT(sizeof(iolink_isdu_ctx_t) == 1488u, "isdu ctx changed");
 IOLINK_STATIC_ASSERT(sizeof(iolink_ds_ctx_t) == 376u, "ds ctx changed");
 IOLINK_STATIC_ASSERT(sizeof(iolink_events_ctx_t) == 392u, "events ctx changed");
+
+/* 布局契约（P2）：共享区必须是主上下文的首成员，ISR 状态紧随其后。
+ * 使用显式的 typedef 名称，避免 C99 下按 __LINE__ 命名的断言在跨头文件
+ * 展开时发生 typedef 重名。 */
+typedef char ctx_layout_shared_first[offsetof(struct iolink_dll_main, shared) == 0U ? 1 : -1];
+typedef char
+    ctx_layout_isr_follows[offsetof(struct iolink_dll_ctx, isr) >= sizeof(iolink_dll_main_t) ? 1
+                                                                                             : -1];
 #endif
 
 int main(void)

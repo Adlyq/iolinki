@@ -84,6 +84,9 @@ bool dll_isr_reset(iolink_dll_isr_t* isr)
 
 void dll_isr_start_staged_tx(iolink_dll_main_t* ctx, uint8_t slot, uint8_t len)
 {
+    if (ctx->shared.isr == NULL) {
+        return; /* 尚未 iolink_dll_init()：没有可驱动的 ISR 状态 */
+    }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     if (ctx->shared.phy->tx_frame != NULL) {
         if (ctx->shared.phy->tx_frame(ctx->shared.phy->user, ctx->shared.isr_tx_payload[slot],
@@ -1115,7 +1118,7 @@ static void dll_isr_process(iolink_dll_main_t* ctx)
 
 void iolink_dll_process_isr(iolink_dll_main_t* ctx)
 {
-    if (ctx == NULL) {
+    if ((ctx == NULL) || (ctx->shared.isr == NULL)) {
         return;
     }
     if (ctx->shared.in_isr != 0U) {
@@ -1137,7 +1140,7 @@ void iolink_dll_process_isr(iolink_dll_main_t* ctx)
 
 void iolink_dll_on_rx_timeout(iolink_dll_main_t* ctx)
 {
-    if (ctx == NULL) {
+    if ((ctx == NULL) || (ctx->shared.isr == NULL)) {
         return;
     }
     ctx->shared.isr_master_activity = 1U;
@@ -1154,7 +1157,7 @@ void iolink_dll_on_rx_timeout(iolink_dll_main_t* ctx)
 
 void iolink_dll_on_stack_tick(iolink_dll_main_t* ctx)
 {
-    if (ctx == NULL) {
+    if ((ctx == NULL) || (ctx->shared.isr == NULL)) {
         return;
     }
     ctx->shared.isr->stack_tick_pending = 1U;
@@ -1162,7 +1165,7 @@ void iolink_dll_on_stack_tick(iolink_dll_main_t* ctx)
 
 uint8_t iolink_dll_take_service_window(iolink_dll_main_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->shared.phy == NULL)) {
+    if ((ctx == NULL) || (ctx->shared.isr == NULL) || (ctx->shared.phy == NULL)) {
         return 0U;
     }
     if (ctx->shared.phy->stack_timer_start == NULL) {

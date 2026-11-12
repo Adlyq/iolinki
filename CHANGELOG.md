@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bytes on a 64-bit host, same single-allocation model).
 - `iolink_device_ctx_t` no longer carries a `stack_config` copy; the caller
   configuration (`ctx->config->stack`) is the single source of truth
-  (device context shrinks from 3712 to 3688 bytes on a 64-bit host).
+  (device context shrinks by 24 bytes on a 64-bit host).
 - Test helpers no longer keep process-wide parameter/identity singletons; each
   test file owns an explicitly initialised `iolink_test_env_t`.
 
