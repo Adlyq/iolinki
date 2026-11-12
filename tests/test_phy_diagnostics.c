@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "iolinki/dll.h"
+#include "iolinki/dll_ctx.h"
 #include "iolinki/phy.h"
 #include "iolinki/events.h"
 
@@ -77,14 +77,14 @@ static void test_no_faults_hook_is_silent(void** state)
     iolink_dll_stats_t stats;
 
     reset_fault_mock();
-    iolink_dll_init(&ctx, &mock_phy_no_faults);
-    iolink_dll_process(&ctx);
+    iolink_dll_init(&ctx.main, &ctx.isr, &mock_phy_no_faults);
+    iolink_dll_process(&ctx.main);
 
-    iolink_dll_get_stats(&ctx, &stats);
+    iolink_dll_get_stats(&ctx.main, &stats);
     assert_int_equal(stats.voltage_faults, 0);
     assert_int_equal(stats.overtemp_faults, 0);
     assert_int_equal(stats.short_circuits, 0);
-    assert_false(iolink_events_pending(&ctx.events));
+    assert_false(iolink_events_pending(&ctx.main.shared.events));
 }
 
 /* The fault bitmask reports edges only: one count/event per 0->1 transition,
@@ -97,33 +97,33 @@ static void test_get_faults_edges_only(void** state)
     reset_fault_mock();
     mock_faults = IOLINK_PHY_FAULT_UNDERVOLTAGE;
 
-    iolink_dll_init(&ctx, &mock_phy_faults);
-    iolink_dll_process(&ctx);
-    iolink_dll_get_stats(&ctx, &stats);
+    iolink_dll_init(&ctx.main, &ctx.isr, &mock_phy_faults);
+    iolink_dll_process(&ctx.main);
+    iolink_dll_get_stats(&ctx.main, &stats);
     assert_int_equal(stats.voltage_faults, 1);
 
     iolink_event_t ev;
-    assert_true(iolink_events_pop(&ctx.events, &ev));
+    assert_true(iolink_events_pop(&ctx.main.shared.events, &ev));
     assert_int_equal(ev.code, 0x5111U);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
-    assert_int_equal(ctx.events.pending_count, 1U);
+    assert_int_equal(ctx.main.shared.events.pending_count, 1U);
 
     /* Steady fault: no repeated count. */
-    iolink_dll_process(&ctx);
-    iolink_dll_process(&ctx);
-    iolink_dll_get_stats(&ctx, &stats);
+    iolink_dll_process(&ctx.main);
+    iolink_dll_process(&ctx.main);
+    iolink_dll_get_stats(&ctx.main, &stats);
     assert_int_equal(stats.voltage_faults, 1);
 
     /* Fall: the pending condition is cleared (disappears is deferred to the
      * event engine, which needs the 50 ms window). */
     mock_faults = 0U;
-    iolink_dll_process(&ctx);
-    assert_int_equal(ctx.events.pending_count, 0U);
+    iolink_dll_process(&ctx.main);
+    assert_int_equal(ctx.main.shared.events.pending_count, 0U);
 
     /* A new rise counts again. */
     mock_faults = IOLINK_PHY_FAULT_UNDERVOLTAGE;
-    iolink_dll_process(&ctx);
-    iolink_dll_get_stats(&ctx, &stats);
+    iolink_dll_process(&ctx.main);
+    iolink_dll_get_stats(&ctx.main, &stats);
     assert_int_equal(stats.voltage_faults, 2);
 }
 
@@ -135,9 +135,9 @@ static void test_get_faults_overtemp_and_short(void** state)
     reset_fault_mock();
     mock_faults = (uint8_t) (IOLINK_PHY_FAULT_OVERTEMP | IOLINK_PHY_FAULT_SHORT_CIRCUIT);
 
-    iolink_dll_init(&ctx, &mock_phy_faults);
-    iolink_dll_process(&ctx);
-    iolink_dll_get_stats(&ctx, &stats);
+    iolink_dll_init(&ctx.main, &ctx.isr, &mock_phy_faults);
+    iolink_dll_process(&ctx.main);
+    iolink_dll_get_stats(&ctx.main, &stats);
     assert_int_equal(stats.overtemp_faults, 1);
     assert_int_equal(stats.short_circuits, 1);
     assert_int_equal(stats.voltage_faults, 0);
@@ -148,7 +148,7 @@ static void test_get_faults_overtemp_and_short(void** state)
     bool seen[2] = {false, false};
     for (int i = 0; i < 2; i++) {
         iolink_event_t ev;
-        assert_true(iolink_events_pop(&ctx.events, &ev));
+        assert_true(iolink_events_pop(&ctx.main.shared.events, &ev));
         assert_int_equal(ev.type, IOLINK_EVENT_TYPE_ERROR);
         for (int k = 0; k < 2; k++) {
             if (ev.code == expected[k]) {
@@ -158,24 +158,24 @@ static void test_get_faults_overtemp_and_short(void** state)
     }
     assert_true(seen[0]);
     assert_true(seen[1]);
-    assert_false(iolink_events_pending(&ctx.events));
+    assert_false(iolink_events_pending(&ctx.main.shared.events));
 
     /* Partial fall: only the over-temp condition clears. Check the per-code
      * present flag, so clearing the wrong event cannot pass. */
     mock_faults = IOLINK_PHY_FAULT_SHORT_CIRCUIT;
-    iolink_dll_process(&ctx);
-    assert_int_equal(ctx.events.pending_count, 1U);
+    iolink_dll_process(&ctx.main);
+    assert_int_equal(ctx.main.shared.events.pending_count, 1U);
     bool overtemp_present = false;
     bool short_present = false;
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
-        if (!ctx.events.pending[i].active) {
+        if (!ctx.main.shared.events.pending[i].active) {
             continue;
         }
-        if (ctx.events.pending[i].code == IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD) {
-            overtemp_present = ctx.events.pending[i].present;
+        if (ctx.main.shared.events.pending[i].code == IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD) {
+            overtemp_present = ctx.main.shared.events.pending[i].present;
         }
-        if (ctx.events.pending[i].code == IOLINK_EVENTCODE_SHORT_CIRCUIT) {
-            short_present = ctx.events.pending[i].present;
+        if (ctx.main.shared.events.pending[i].code == IOLINK_EVENTCODE_SHORT_CIRCUIT) {
+            short_present = ctx.main.shared.events.pending[i].present;
         }
     }
     assert_false(overtemp_present);
@@ -183,8 +183,8 @@ static void test_get_faults_overtemp_and_short(void** state)
 
     /* Full fall clears the remaining condition. */
     mock_faults = 0U;
-    iolink_dll_process(&ctx);
-    assert_int_equal(ctx.events.pending_count, 0U);
+    iolink_dll_process(&ctx.main);
+    assert_int_equal(ctx.main.shared.events.pending_count, 0U);
 }
 
 static uint32_t g_fault_ms;
@@ -208,12 +208,12 @@ static void test_get_faults_clear_emits_disappears(void** state)
     g_fault_ms = 0U;
     mock_faults = IOLINK_PHY_FAULT_OVERTEMP;
 
-    iolink_dll_init(&ctx, &mock_phy_faults);
-    ctx.time_us = fault_time_us;
-    ctx.events.time_us = fault_time_us;
-    iolink_dll_process(&ctx);
+    iolink_dll_init(&ctx.main, &ctx.isr, &mock_phy_faults);
+    ctx.main.shared.time_us = fault_time_us;
+    ctx.main.shared.events.time_us = fault_time_us;
+    iolink_dll_process(&ctx.main);
 
-    assert_true(iolink_events_pop(&ctx.events, &ev));
+    assert_true(iolink_events_pop(&ctx.main.shared.events, &ev));
     assert_int_equal(ev.code, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD);
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
 
@@ -221,14 +221,14 @@ static void test_get_faults_clear_emits_disappears(void** state)
      * 50 ms minimum window: nothing is queued at 10 ms. */
     g_fault_ms = 10U;
     mock_faults = 0U;
-    iolink_dll_process(&ctx);
-    iolink_events_process(&ctx.events);
-    assert_false(iolink_events_pending(&ctx.events));
+    iolink_dll_process(&ctx.main);
+    iolink_events_process(&ctx.main.shared.events);
+    assert_false(iolink_events_pending(&ctx.main.shared.events));
 
     g_fault_ms = IOLINK_EVENT_MIN_APPEAR_MS;
-    iolink_events_process(&ctx.events);
+    iolink_events_process(&ctx.main.shared.events);
 
-    assert_true(iolink_events_pop(&ctx.events, &ev));
+    assert_true(iolink_events_pop(&ctx.main.shared.events, &ev));
     assert_int_equal(ev.code, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD);
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
 }
@@ -241,21 +241,21 @@ static void test_get_faults_overvoltage(void** state)
     reset_fault_mock();
     mock_faults = IOLINK_PHY_FAULT_OVERVOLTAGE;
 
-    iolink_dll_init(&ctx, &mock_phy_faults);
-    iolink_dll_process(&ctx);
-    iolink_dll_get_stats(&ctx, &stats);
+    iolink_dll_init(&ctx.main, &ctx.isr, &mock_phy_faults);
+    iolink_dll_process(&ctx.main);
+    iolink_dll_get_stats(&ctx.main, &stats);
     assert_int_equal(stats.voltage_faults, 1);
 
     iolink_event_t ev;
-    assert_true(iolink_events_pop(&ctx.events, &ev));
+    assert_true(iolink_events_pop(&ctx.main.shared.events, &ev));
     assert_int_equal(ev.code, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
 
     /* The falling edge clears the overvoltage condition. */
-    assert_int_equal(ctx.events.pending_count, 1U);
+    assert_int_equal(ctx.main.shared.events.pending_count, 1U);
     mock_faults = 0U;
-    iolink_dll_process(&ctx);
-    assert_int_equal(ctx.events.pending_count, 0U);
+    iolink_dll_process(&ctx.main);
+    assert_int_equal(ctx.main.shared.events.pending_count, 0U);
 }
 
 /* A diagnostic reset drops the condition tracking; a fault that is still
@@ -269,28 +269,28 @@ static void test_get_faults_rearmed_after_reset(void** state)
     reset_fault_mock();
     mock_faults = IOLINK_PHY_FAULT_UNDERVOLTAGE;
 
-    iolink_dll_init(&ctx, &mock_phy_faults);
-    iolink_dll_process(&ctx);
-    iolink_dll_get_stats(&ctx, &stats);
+    iolink_dll_init(&ctx.main, &ctx.isr, &mock_phy_faults);
+    iolink_dll_process(&ctx.main);
+    iolink_dll_get_stats(&ctx.main, &stats);
     assert_int_equal(stats.voltage_faults, 1);
-    assert_int_equal(ctx.events.pending_count, 1U);
+    assert_int_equal(ctx.main.shared.events.pending_count, 1U);
 
-    iolink_dll_reset_diagnostics(&ctx);
-    assert_int_equal(ctx.events.pending_count, 0U);
+    iolink_dll_reset_diagnostics(&ctx.main);
+    assert_int_equal(ctx.main.shared.events.pending_count, 0U);
 
-    iolink_dll_process(&ctx);
-    iolink_dll_get_stats(&ctx, &stats);
+    iolink_dll_process(&ctx.main);
+    iolink_dll_get_stats(&ctx.main, &stats);
     assert_int_equal(stats.voltage_faults, 2);
-    assert_int_equal(ctx.events.pending_count, 1U);
+    assert_int_equal(ctx.main.shared.events.pending_count, 1U);
 
     /* The STARTUP path stages the same request as a flag (dll_set_state may run
      * in ISR context); consume it with a latch that still shows the fault. */
-    ctx.phy_faults_last = IOLINK_PHY_FAULT_UNDERVOLTAGE;
-    ctx.phy_faults_rearm = 1U;
-    iolink_dll_process(&ctx);
-    iolink_dll_get_stats(&ctx, &stats);
+    ctx.main.phy_faults_last = IOLINK_PHY_FAULT_UNDERVOLTAGE;
+    ctx.main.phy_faults_rearm = 1U;
+    iolink_dll_process(&ctx.main);
+    iolink_dll_get_stats(&ctx.main, &stats);
     assert_int_equal(stats.voltage_faults, 3);
-    assert_int_equal(ctx.phy_faults_last, IOLINK_PHY_FAULT_UNDERVOLTAGE);
+    assert_int_equal(ctx.main.phy_faults_last, IOLINK_PHY_FAULT_UNDERVOLTAGE);
 }
 
 int main(void)

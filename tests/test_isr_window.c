@@ -12,7 +12,7 @@
 #include <cmocka.h>
 
 #include "iolinki/device.h"
-#include "iolinki/dll.h"
+#include "iolinki/dll_ctx.h"
 #include "test_helpers.h"
 
 static int reset_calls;
@@ -40,19 +40,19 @@ static void test_main_window_gated_by_tick(void** state)
     /* 安装带 Timer B 钩子的 PHY，使门控生效。 */
     iolink_phy_api_t gated = g_phy_mock;
     gated.stack_timer_start = timer_b_start;
-    dev.ctx.dll.phy = &gated;
+    dev.ctx.dll.main.shared.phy = &gated;
 
     iolink_device_set_reset_handler(&dev.ctx, reset_cb);
-    dev.ctx.dll.isdu.reset_pending = true;
+    dev.ctx.dll.main.shared.isdu.reset_pending = true;
     reset_calls = 0;
 
     /* 尚无 tick：主窗口不得执行。 */
     iolink_device_process(&dev.ctx);
     assert_int_equal(reset_calls, 0);
-    assert_true(dev.ctx.dll.isdu.reset_pending);
+    assert_true(dev.ctx.dll.main.shared.isdu.reset_pending);
 
     /* 一次 tick 只授权一个窗口。 */
-    iolink_dll_on_stack_tick(&dev.ctx.dll);
+    iolink_dll_on_stack_tick(&dev.ctx.dll.main);
     iolink_device_process(&dev.ctx);
     assert_int_equal(reset_calls, 1);
 

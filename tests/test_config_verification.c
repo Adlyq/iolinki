@@ -18,7 +18,7 @@
 
 #include "iolinki/isdu.h"
 #include "iolinki/events.h"
-#include "iolinki/dll.h"
+#include "iolinki/dll_ctx.h"
 #include "iolinki/config.h"
 
 static void test_config_defaults(void** state)
@@ -38,8 +38,8 @@ static void test_config_defaults(void** state)
 
     /* 验证 DLL 过程数据缓冲区 */
     iolink_dll_ctx_t dll;
-    assert_true(sizeof(dll.pd_in[0]) == IOLINK_PD_REPLY_MAX);
-    assert_true(sizeof(dll.pd_out) == IOLINK_PD_OUT_MAX_SIZE);
+    assert_true(sizeof(dll.main.shared.pd_in[0]) == IOLINK_PD_REPLY_MAX);
+    assert_true(sizeof(dll.main.pd_out) == IOLINK_PD_OUT_MAX_SIZE);
 }
 
 int main(void)

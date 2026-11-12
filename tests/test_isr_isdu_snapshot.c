@@ -16,7 +16,7 @@
 #include <string.h>
 
 #include "iolinki/crc.h"
-#include "iolinki/dll.h"
+#include "iolinki/dll_ctx.h"
 #include "iolinki/iolink.h"
 #include "iolinki/isdu.h"
 #include "iolinki/protocol.h"
@@ -73,13 +73,14 @@ static void tx_done(void* user)
 static uint8_t int_active(void* user)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) user;
-    return ((rx_i < rx_n) || (chk_pending != 0U) || (ctx->isr_tx_active != 0U)) ? 1U : 0U;
+    return ((rx_i < rx_n) || (chk_pending != 0U) || (ctx->main.shared.isr_tx_active != 0U)) ? 1U
+                                                                                            : 0U;
 }
 
 static void request_service(void* user)
 {
     request_calls++;
-    iolink_dll_process_isr((iolink_dll_ctx_t*) user);
+    iolink_dll_process_isr(&((iolink_dll_ctx_t*) user)->main);
 }
 
 static void feed(const uint8_t* frame, size_t n, uint8_t chk)
@@ -92,8 +93,8 @@ static void feed(const uint8_t* frame, size_t n, uint8_t chk)
 
 static void drain_tx(iolink_dll_ctx_t* ctx)
 {
-    while (ctx->isr_tx_active != 0U) {
-        iolink_dll_process_isr(ctx);
+    while (ctx->main.shared.isr_tx_active != 0U) {
+        iolink_dll_process_isr(&ctx->main);
     }
 }
 
@@ -113,9 +114,9 @@ static void make_frame(uint8_t mc, uint8_t type_bits, uint8_t* frame, size_t len
 static void exchange(iolink_dll_ctx_t* ctx, const uint8_t* frame, size_t len, uint8_t chk)
 {
     feed(frame, len, chk);
-    iolink_dll_process_isr(ctx);
+    iolink_dll_process_isr(&ctx->main);
     drain_tx(ctx);
-    iolink_dll_process(ctx);
+    iolink_dll_process(&ctx->main);
 }
 
 /* START/COUNT 读由快照提供服务；Busy 与 No Service 映射为
@@ -131,26 +132,26 @@ static int test_eager_isdu_snapshot(void)
         .int_active = int_active,
     };
 
-    iolink_dll_init(&dll, &phy);
-    dll.time_us = test_time_us;
-    dll.state = IOLINK_DLL_STATE_OPERATE;
-    dll.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    dll.od_width = 2U;
-    dll.pd_out_len_current = 2U;
-    dll.pd_in_len_current = 0U;
+    iolink_dll_init(&dll.main, &dll.isr, &phy);
+    dll.main.shared.time_us = test_time_us;
+    dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    dll.main.shared.od_width = 2U;
+    dll.main.shared.pd_out_len_current = 2U;
+    dll.main.pd_in_len_current = 0U;
 
-    dll.isdu.state = ISDU_STATE_RESPONSE_READY;
-    dll.isdu.resp_buf[0] = 0xD4U;
-    dll.isdu.resp_buf[1] = 0x12U;
-    dll.isdu.resp_buf[2] = 0x34U;
-    dll.isdu.resp_buf[3] = 0xF2U;
-    dll.isdu.resp_total = 4U;
+    dll.main.shared.isdu.state = ISDU_STATE_RESPONSE_READY;
+    dll.main.shared.isdu.resp_buf[0] = 0xD4U;
+    dll.main.shared.isdu.resp_buf[1] = 0x12U;
+    dll.main.shared.isdu.resp_buf[2] = 0x34U;
+    dll.main.shared.isdu.resp_buf[3] = 0xF2U;
+    dll.main.shared.isdu.resp_total = 4U;
 
     now_us = 1000000U;
-    dll.last_activity_ms = ((uint32_t) (now_us / 1000U));
-    iolink_dll_process(&dll); /* 刷新 ISR 快照 */
-    if ((IOLINK_ISDU_PUB_LEN(dll.isr_isdu_pub) != 4U) ||
-        (IOLINK_ISDU_PUB_BUSY(dll.isr_isdu_pub) != 0U)) {
+    dll.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));
+    iolink_dll_process(&dll.main); /* 刷新 ISR 快照 */
+    if ((IOLINK_ISDU_PUB_LEN(dll.main.shared.isr_isdu_pub) != 4U) ||
+        (IOLINK_ISDU_PUB_BUSY(dll.main.shared.isr_isdu_pub) != 0U)) {
         return 1;
     }
 
@@ -194,7 +195,7 @@ static int test_eager_isdu_snapshot(void)
     }
 
     /* Busy START。 */
-    dll.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 1U, 0U);
+    dll.main.shared.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 1U, 0U);
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_n = 0U;
     exchange(&dll, frame, sizeof(frame), 0U);
@@ -203,7 +204,7 @@ static int test_eager_isdu_snapshot(void)
     }
 
     /* No Service START（没有已暂存的响应）。 */
-    dll.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 0U, 0U);
+    dll.main.shared.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 0U, 0U);
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_n = 0U;
     exchange(&dll, frame, sizeof(frame), 0U);
@@ -228,14 +229,14 @@ static int test_request_service_staging(void)
         .request_service = request_service,
     };
 
-    iolink_dll_init(&dll, &phy);
-    dll.time_us = test_time_us;
-    dll.state = IOLINK_DLL_STATE_PREOPERATE;
-    dll.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    dll.pd_out_len_current = 0U;
-    dll.pd_in_len_current = 0U;
+    iolink_dll_init(&dll.main, &dll.isr, &phy);
+    dll.main.shared.time_us = test_time_us;
+    dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
+    dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    dll.main.shared.pd_out_len_current = 0U;
+    dll.main.pd_in_len_current = 0U;
     now_us = 1000000U;
-    dll.last_activity_ms = ((uint32_t) (now_us / 1000U));
+    dll.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));
 
     uint8_t frame[2];
     /* Type-0 过程数据写不经由 ISR 快速路径服务，因此它会在主上下文
@@ -244,8 +245,8 @@ static int test_request_service_staging(void)
     tx_n = 0U;
     request_calls = 0U;
     feed(frame, sizeof(frame), 1U);
-    iolink_dll_process_isr(&dll); /* RX -> 邮箱（Type 0 不做即时应答） */
-    iolink_dll_process(&dll);     /* 主上下文 -> dll_send -> request_service */
+    iolink_dll_process_isr(&dll.main); /* RX -> 邮箱（Type 0 不做即时应答） */
+    iolink_dll_process(&dll.main);     /* 主上下文 -> dll_send -> request_service */
     if (request_calls != 1U) {
         return 10;
     }
@@ -271,14 +272,14 @@ static int test_type0_diagnosis_read_isr(void)
         .request_service = request_service,
     };
 
-    iolink_dll_init(&dll, &phy);
-    dll.time_us = test_time_us;
-    dll.state = IOLINK_DLL_STATE_PREOPERATE;
-    dll.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    dll.pd_out_len_current = 0U;
-    dll.pd_in_len_current = 0U;
+    iolink_dll_init(&dll.main, &dll.isr, &phy);
+    dll.main.shared.time_us = test_time_us;
+    dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
+    dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    dll.main.shared.pd_out_len_current = 0U;
+    dll.main.pd_in_len_current = 0U;
     now_us = 1000000U;
-    dll.last_activity_ms = ((uint32_t) (now_us / 1000U));
+    dll.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));
 
     uint8_t frame[2];
     make_frame(0xC0U, IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));

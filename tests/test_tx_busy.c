@@ -18,7 +18,7 @@
 
 #include "iolinki/crc.h"
 #include "iolinki/device.h"
-#include "iolinki/dll.h"
+#include "iolinki/dll_ctx.h"
 #include "iolinki/iolink.h"
 #include "iolinki/port.h"
 #include "iolinki/protocol.h"
@@ -111,15 +111,15 @@ static void feed_process_read(void)
 static void init_ctx(iolink_dll_ctx_t* dll)
 {
     g_phy.user = dll;
-    iolink_dll_init(dll, &g_phy);
-    dll->time_us = test_time_us;
-    dll->phy_mode = IOLINK_PHY_MODE_SDCI;
-    dll->state = IOLINK_DLL_STATE_OPERATE;
-    dll->m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    dll->od_width = 1U;
-    dll->pd_out_len_current = 0U;
-    dll->pd_in_len_current = 0U;
-    dll->pd_valid = true;
+    iolink_dll_init(&dll->main, &dll->isr, &g_phy);
+    dll->main.shared.time_us = test_time_us;
+    dll->main.phy_mode = IOLINK_PHY_MODE_SDCI;
+    dll->main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    dll->main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    dll->main.shared.od_width = 1U;
+    dll->main.shared.pd_out_len_current = 0U;
+    dll->main.pd_in_len_current = 0U;
+    dll->main.pd_valid = true;
     g_frame_ready = 0U;
     g_tx_calls = 0U;
     g_line_busy = 0U;
@@ -136,18 +136,18 @@ static void test_busy_defers_eager_reply(void)
     g_line_busy = 1U;
     feed_process_read();
 
-    iolink_dll_process_isr(&dll);
-    assert(g_tx_calls == 0U);         /* 即时应答被放弃 */
-    assert(dll.isr_tx_pending == 0U); /* ISR 未暂存任何内容 */
-    assert(dll.pd_in_captured == 0xFFU);
+    iolink_dll_process_isr(&dll.main);
+    assert(g_tx_calls == 0U);                     /* 即时应答被放弃 */
+    assert(dll.main.shared.isr_tx_pending == 0U); /* ISR 未暂存任何内容 */
+    assert(dll.main.shared.pd_in_captured == 0xFFU);
 
-    iolink_dll_process(&dll);         /* 主泵应答该帧 */
-    assert(dll.isr_tx_pending == 1U); /* 已暂存，等待 ISR */
+    iolink_dll_process(&dll.main);                /* 主泵应答该帧 */
+    assert(dll.main.shared.isr_tx_pending == 1U); /* 已暂存，等待 ISR */
 
     g_line_busy = 0U;
-    iolink_dll_process_isr(&dll); /* 排空已暂存的应答 */
+    iolink_dll_process_isr(&dll.main); /* 排空已暂存的应答 */
     assert(g_tx_calls == 1U);
-    assert(dll.isr_tx_pending == 0U);
+    assert(dll.main.shared.isr_tx_pending == 0U);
 }
 
 /* 传输仍在线路上时，应答缓冲区的租约保持占用；一旦 tx_busy()
@@ -159,17 +159,17 @@ static void test_lease_released_when_line_free(void)
     init_ctx(&dll);
     feed_process_read();
 
-    iolink_dll_process_isr(&dll); /* 由 ISR 发出即时应答 */
+    iolink_dll_process_isr(&dll.main); /* 由 ISR 发出即时应答 */
     assert(g_tx_calls == 1U);
-    assert(dll.pd_in_captured != 0xFFU);
+    assert(dll.main.shared.pd_in_captured != 0xFFU);
 
     g_line_busy = 1U; /* 仍在线路上 */
-    iolink_dll_process(&dll);
-    assert(dll.pd_in_captured != 0xFFU);
+    iolink_dll_process(&dll.main);
+    assert(dll.main.shared.pd_in_captured != 0xFFU);
 
     g_line_busy = 0U; /* PHY 观察到传输完成 */
-    iolink_dll_process(&dll);
-    assert(dll.pd_in_captured == 0xFFU);
+    iolink_dll_process(&dll.main);
+    assert(dll.main.shared.pd_in_captured == 0xFFU);
 }
 
 /* 没有该钩子时，库无法观测 TX FRAME 传输的结束，

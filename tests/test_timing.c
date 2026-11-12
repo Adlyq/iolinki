@@ -69,15 +69,15 @@ static void test_t_ren_single_value_for_every_baudrate(void** state)
     const iolink_baudrate_t rates[] = {IOLINK_BAUDRATE_COM1, IOLINK_BAUDRATE_COM2,
                                        IOLINK_BAUDRATE_COM3};
     for (size_t i = 0U; i < (sizeof(rates) / sizeof(rates[0])); i++) {
-        assert_int_equal(iolink_dll_set_baudrate(&dev.ctx.dll, rates[i]), 0);
-        assert_int_equal(dev.ctx.dll.t_ren_limit_us, IOLINK_T_REN_US);
+        assert_int_equal(iolink_dll_set_baudrate(&dev.ctx.dll.main, rates[i]), 0);
+        assert_int_equal(dev.ctx.dll.main.t_ren_limit_us, IOLINK_T_REN_US);
     }
 
     /* 显式覆盖仍然优先（保留的公共 API）。 */
     iolink_device_set_t_ren_limit_us(&dev.ctx, 1234U);
-    assert_int_equal(dev.ctx.dll.t_ren_limit_us, 1234U);
-    assert_int_equal(iolink_dll_set_baudrate(&dev.ctx.dll, IOLINK_BAUDRATE_COM3), 0);
-    assert_int_equal(dev.ctx.dll.t_ren_limit_us, 1234U);
+    assert_int_equal(dev.ctx.dll.main.t_ren_limit_us, 1234U);
+    assert_int_equal(iolink_dll_set_baudrate(&dev.ctx.dll.main, IOLINK_BAUDRATE_COM3), 0);
+    assert_int_equal(dev.ctx.dll.main.t_ren_limit_us, 1234U);
 }
 
 int main(void)

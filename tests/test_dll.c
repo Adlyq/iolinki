@@ -20,7 +20,7 @@
 #include <unistd.h>
 
 #include "iolinki/device.h"
-#include "iolinki/dll.h"
+#include "iolinki/dll_ctx.h"
 #include "iolinki/crc.h"
 #include "test_helpers.h"
 
@@ -813,11 +813,11 @@ static void test_dll_startup_to_preoperate_write_dpp1(void** state)
 static void deliver_frame_to_main(iolink_device_ctx_t* ctx)
 {
     iolink_device_process_isr(ctx);
-    while (ctx->dll.isr_tx_active != 0U) {
+    while (ctx->dll.main.shared.isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
     }
     iolink_device_process(ctx);
-    while (ctx->dll.isr_tx_active != 0U) {
+    while (ctx->dll.main.shared.isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
     }
     mock_phy_clear_rx();
@@ -828,12 +828,12 @@ static void deliver_frame_to_main(iolink_device_ctx_t* ctx)
 static void deliver_frame_to_dll(iolink_device_ctx_t* ctx)
 {
     iolink_device_process_isr(ctx);
-    while (ctx->dll.isr_tx_active != 0U) {
+    while (ctx->dll.main.shared.isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
     }
-    ctx->dll.phy_mode = IOLINK_PHY_MODE_SDCI;
-    iolink_dll_process(&ctx->dll);
-    while (ctx->dll.isr_tx_active != 0U) {
+    ctx->dll.main.phy_mode = IOLINK_PHY_MODE_SDCI;
+    iolink_dll_process(&ctx->dll.main);
+    while (ctx->dll.main.shared.isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
     }
     mock_phy_clear_rx();
@@ -1213,7 +1213,7 @@ static void test_dll_preoperate_truncated_write(void** state)
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
     iolink_device_set_timing_enforcement(&dev.ctx, false);
-    dev.ctx.dll.state = IOLINK_DLL_STATE_PREOPERATE;
+    dev.ctx.dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
 
     uint8_t truncated[2] = {(uint8_t) (IOLINK_MC_CHANNEL_PAGE | 0x01U), 0x00U};
     truncated[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | iolink_checksum6(truncated, sizeof(truncated)));
@@ -1271,8 +1271,8 @@ static void test_dll_preoperate_illegal_operate_type(void** state)
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
     iolink_device_set_timing_enforcement(&dev.ctx, false);
-    dev.ctx.dll.state = IOLINK_DLL_STATE_PREOPERATE;
-    dev.ctx.dll.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
+    dev.ctx.dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
+    dev.ctx.dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
 
     uint8_t value = 0U;
     assert_false(preoperate_read_with_type(&dev.ctx, IOLINK_MSEQ_TYPE_2, 0x02U, false, &value));
@@ -1302,7 +1302,7 @@ static void test_dll_preoperate_type0_same_type(void** state)
     iolink_test_device_t dev0;
     iolink_test_device_init(&dev0, &type0, NULL);
     iolink_device_set_timing_enforcement(&dev0.ctx, false);
-    dev0.ctx.dll.state = IOLINK_DLL_STATE_PREOPERATE;
+    dev0.ctx.dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
 
     uint8_t value = 0U;
     for (int pass = 0; pass < 3; pass++) {
@@ -1513,8 +1513,8 @@ static void test_dll_pdout_only_status_valid(void** state)
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
     iolink_device_set_timing_enforcement(&dev.ctx, false);
-    dev.ctx.dll.state = IOLINK_DLL_STATE_OPERATE;
-    dev.ctx.dll.pd_valid = false;
+    dev.ctx.dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    dev.ctx.dll.main.pd_valid = false;
 
     uint8_t read[2] = {(uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), 0x00U};
     read[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | iolink_checksum6(read, sizeof(read)));
@@ -1620,8 +1620,8 @@ static void test_dll_receive_error_discards_partial_frame(void** state)
     mock_phy_feed_byte(0xA2U);
     mock_phy_feed_error();
     test_io_cycle(&dev.ctx);
-    assert_int_equal(dev.ctx.dll.frame_index, 0);
-    assert_int_equal(IOLINK_STAT_TOTAL(&dev.ctx.dll, framing_errors), 1);
+    assert_int_equal(dev.ctx.dll.main.frame_index, 0);
+    assert_int_equal(IOLINK_STAT_TOTAL(&dev.ctx.dll.main, framing_errors), 1);
 
     uint8_t frame[2] = {0xA2U, 0};
     frame[1] = iolink_checksum6(frame, sizeof(frame));
@@ -1634,7 +1634,7 @@ static void test_dll_receive_error_discards_partial_frame(void** state)
     will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
-    assert_int_equal(dev.ctx.dll.frame_index, 0);
+    assert_int_equal(dev.ctx.dll.main.frame_index, 0);
 }
 
 static void test_min_cycle_time_from_m_sequence(void** state)
@@ -1645,20 +1645,20 @@ static void test_min_cycle_time_from_m_sequence(void** state)
 
     /* PD 输入/输出各 28 字节、1 OD、COM3：最坏情况的写 M-sequence 为
      * (29*14 + 31*12 + 6) us ~= 3.40 ms -> 35（单位 0.1 ms）。 */
-    dll.od_width = 1U;
-    dll.pd_in_len_current = 28U;
-    dll.pd_out_len_current = 28U;
-    dll.baudrate = IOLINK_BAUDRATE_COM3;
-    assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 35U);
+    dll.main.shared.od_width = 1U;
+    dll.main.pd_in_len_current = 28U;
+    dll.main.shared.pd_out_len_current = 28U;
+    dll.main.baudrate = IOLINK_BAUDRATE_COM3;
+    assert_int_equal(iolink_dll_compute_min_cycle_time(&dll.main), 35U);
 
     /* 应用层下限更高时以它为准（5.0 ms）。 */
-    dll.min_cycle_time_app_us = 5000U;
-    assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 50U);
+    dll.main.min_cycle_time_app_us = 5000U;
+    assert_int_equal(iolink_dll_compute_min_cycle_time(&dll.main), 50U);
 
     /* 同一帧在 COM1 下需要多得多的传输时间。 */
-    dll.min_cycle_time_app_us = 0U;
-    dll.baudrate = IOLINK_BAUDRATE_COM1;
-    assert_true(iolink_dll_compute_min_cycle_time(&dll) > 35U);
+    dll.main.min_cycle_time_app_us = 0U;
+    dll.main.baudrate = IOLINK_BAUDRATE_COM1;
+    assert_true(iolink_dll_compute_min_cycle_time(&dll.main) > 35U);
 }
 
 /* Back-to-box（10.7.5）：约 3 个主站周期后 DLL 停止通信。
@@ -1684,7 +1684,7 @@ static void test_dll_isr_back_to_box_counts_each_frame_once(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
-    iolink_dll_request_back_to_box(&dev.ctx.dll);
+    iolink_dll_request_back_to_box(&dev.ctx.dll.main);
 
     /* 三个被处理的 MasterCycle 内设备仍持续应答。 */
     for (int i = 0; i < 3; i++) {
@@ -1708,7 +1708,7 @@ static void test_dll_isr_back_to_box_counts_each_frame_once(void** state)
     expect_any(mock_phy_send, len);
     will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
-    assert_false(dev.ctx.dll.back_to_box_pending);
+    assert_false(dev.ctx.dll.main.back_to_box_pending);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_COMM_DISABLED);
 }
 
@@ -1733,23 +1733,26 @@ static void test_dll_main_pump_type1_2_reply(void** state)
                         IOLINK_MSEQ_TYPE_2, 0x00U, 0x00U};
     frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_2 | iolink_checksum6(frame, sizeof(frame)));
 
-    dev.ctx.dll.pd_in_len = 2U;
-    dev.ctx.dll.pd_in[dev.ctx.dll.pd_in_active][dev.ctx.dll.od_width] = 0xAAU;
-    dev.ctx.dll.pd_in[dev.ctx.dll.pd_in_active][dev.ctx.dll.od_width + 1U] = 0x55U;
+    dev.ctx.dll.main.shared.pd_in_len = 2U;
+    dev.ctx.dll.main.shared
+        .pd_in[dev.ctx.dll.main.shared.pd_in_active][dev.ctx.dll.main.shared.od_width] = 0xAAU;
+    dev.ctx.dll.main.shared
+        .pd_in[dev.ctx.dll.main.shared.pd_in_active][dev.ctx.dll.main.shared.od_width + 1U] = 0x55U;
 
     /* 把该请求发布到邮箱环形缓冲区（即数据 ISR 所做的工作）。 */
-    iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&dev.ctx.dll.isr_frame_ring);
+    iolink_frame_rec_t* rec =
+        (iolink_frame_rec_t*) iolink_ring_claim(&dev.ctx.dll.main.shared.isr_frame_ring);
     assert_non_null(rec);
     rec->len = (uint8_t) sizeof(frame);
     rec->eager = 0U; /* 无 ISR 应答：必须由主循环泵回复 */
     (void) memcpy(rec->data, frame, sizeof(frame));
-    iolink_ring_publish(&dev.ctx.dll.isr_frame_ring);
+    iolink_ring_publish(&dev.ctx.dll.main.shared.isr_frame_ring);
 
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 5); /* OD 2 + PD-in 2 + CKS */
     will_return(mock_phy_send, 0);
     iolink_device_process(&dev.ctx);
-    while (dev.ctx.dll.isr_tx_active != 0U) {
+    while (dev.ctx.dll.main.shared.isr_tx_active != 0U) {
         iolink_device_process_isr(&dev.ctx);
     }
 

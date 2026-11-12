@@ -132,14 +132,17 @@ static void test_callback_fills_pd_input(void)
     assert(iolink_device_init(&ctx, &cfg) == 0);
 
     /* 在 OPERATE 下驱动一次主循环：回调发布 PD-in。 */
-    ctx.dll.state = IOLINK_DLL_STATE_OPERATE;
+    ctx.dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     iolink_device_process(&ctx);
 
     assert(g_pd_calls == 1);
-    assert(ctx.dll.pd_valid);
-    assert(ctx.dll.pd_in_len == 2U);
-    assert(ctx.dll.pd_in[ctx.dll.pd_in_active][ctx.dll.od_width] == 0xA5U);
-    assert(ctx.dll.pd_in[ctx.dll.pd_in_active][ctx.dll.od_width + 1U] == 0xA5U);
+    assert(ctx.dll.main.pd_valid);
+    assert(ctx.dll.main.shared.pd_in_len == 2U);
+    assert(
+        ctx.dll.main.shared.pd_in[ctx.dll.main.shared.pd_in_active][ctx.dll.main.shared.od_width] ==
+        0xA5U);
+    assert(ctx.dll.main.shared.pd_in[ctx.dll.main.shared.pd_in_active]
+                                    [ctx.dll.main.shared.od_width + 1U] == 0xA5U);
 }
 
 int main(void)

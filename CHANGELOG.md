@@ -23,8 +23,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   difference).
 - Coverage floor: `tools/coverage.sh --check` enforces
   `tools/coverage_baseline.txt` in CI.
+- DLL ownership split headers: `include/iolinki/dll_shared.h`,
+  `dll_main.h`, `dll_isr.h` and `dll_ctx.h` expose the main, shared,
+  ISR-exclusive and packed-container views separately.
+- Ownership gate: `tools/check_ownership.sh` proves that the main-context
+  translation unit cannot reference ISR-exclusive fields, and runs in
+  `check_quality.sh` and CI.
 
 ### Changed
+- DLL ownership split: `iolink_dll_ctx_t` packs `iolink_dll_main_t` (with the
+  nested shared region) and `iolink_dll_isr_t` as siblings in one allocation.
+  `src/dll.c` includes only the main header, so referencing ISR-exclusive
+  fields is a compile error. DLL public functions now take `iolink_dll_main_t*`
+  and `iolink_dll_init()` takes the main and ISR objects; the packed container
+  remains the only object the application allocates (device context is 3712
+  bytes on a 64-bit host, same single-allocation model).
 - `iolink_device_ctx_t` no longer carries a `stack_config` copy; the caller
   configuration (`ctx->config->stack`) is the single source of truth
   (device context shrinks from 3712 to 3688 bytes on a 64-bit host).

@@ -304,7 +304,8 @@ ISDU additional codes (`IOLINK_ISDU_ERROR_*`, e.g. `IDX_NOTAVAIL` `0x11`,
 `iolink_device_config_t::time_us` is required by `iolink_device_init()` (NULL is
 rejected with `IOLINK_DEVICE_INIT_ERR_TIME`), and the stack uses it for all DLL,
 ISR and event timing. There is no separate platform time API; direct DLL users
-must bind `ctx->time_us`/`time_user` after `iolink_dll_init()`. Critical sections are
+must bind `ctx->shared.time_us`/`shared.time_user` after `iolink_dll_init()`
+(the DLL context is split into a main view and an ISR view). Critical sections are
 `iolink_critical_enter()` / `iolink_critical_exit()` from
 `include/iolinki/platform.h`; `iolink_device_init()` rejects the library's weak
 no-op default with `IOLINK_DEVICE_INIT_ERR_CRITICAL`.

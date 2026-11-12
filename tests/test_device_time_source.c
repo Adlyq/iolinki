@@ -77,8 +77,8 @@ static void test_initialization_uses_app_clock(void)
     init_device(&ctx, app_time_us);
 
     /* t_pd 截止时间和主站活动种子都来自应用时钟。 */
-    assert(ctx.dll.t_pd_deadline_us == (1000000ULL + 500ULL));
-    assert(ctx.dll.master_last_activity_ms == 1000U);
+    assert(ctx.dll.main.t_pd_deadline_us == (1000000ULL + 500ULL));
+    assert(ctx.dll.main.master_last_activity_ms == 1000U);
 }
 
 static void test_event_engine_uses_app_clock(void)
@@ -88,12 +88,12 @@ static void test_event_engine_uses_app_clock(void)
     g_app_time_us = 1234000ULL;
     init_device(&ctx, app_time_us);
 
-    iolink_event_trigger(&ctx.dll.events, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD,
+    iolink_event_trigger(&ctx.dll.main.shared.events, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD,
                          IOLINK_EVENT_TYPE_ERROR);
 
-    assert(ctx.dll.events.pending[0].active);
-    assert(ctx.dll.events.pending[0].appears_valid);
-    assert(ctx.dll.events.pending[0].last_appears_ms == 1234U);
+    assert(ctx.dll.main.shared.events.pending[0].active);
+    assert(ctx.dll.main.shared.events.pending[0].appears_valid);
+    assert(ctx.dll.main.shared.events.pending[0].last_appears_ms == 1234U);
 }
 
 static void test_null_clock_is_rejected_at_init(void)

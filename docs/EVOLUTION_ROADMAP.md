@@ -23,7 +23,9 @@ P0 基线硬化 → P1 差分测试门(H₀) → P2 所有权分区(C) → P3 �
 再收敛配置与时间（P6/P7），最后做内存、证据与收尾（P8/P9/P10）。**
 
 执行记录（2026-11）：P0 → P1 → P3 已完成并验证（P3 与 P2 无依赖冲突，提前执行以
-减少 P4 的签名返工）；P2 设计已定稿（兄弟结构），P10.1 降级为可选；P2、P4–P10 待执行。
+减少 P4 的签名返工）；P2 所有权分区已完成（`dll_main_t`/`dll_shared_t`/`dll_isr_t`
+兄弟结构；device 3712 B、dll 3400 B；差分门 6 配置逐字节一致）；P10.1 降级为可选；
+P4–P10 待执行。
 
 ## 2. 背景：四类结构性债
 
@@ -216,15 +218,17 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 - **完成标志**：门在 CI 运行；注入差异可红；允许差异清单有依据；序列集随新测试自动扩展。
 - **风险**：序列集覆盖不足 → 假阴性。缓解：从测试场景自动提取而非手写。
 
-### P2 所有权分区 C（L，2–3 周）——状态：未开始（设计已定稿：兄弟结构）
+### P2 所有权分区 C（L，2–3 周）——状态：所有权分区已完成（本地验证；待提交）；`void*` 窄接口延后
 
-> **定稿设计（2026-11 评审确认）**：`dll_main_t` / `dll_isr_t` / `dll_shared_t`
-> 在 `device_internal.h` 中作为**兄弟成员**嵌入同一次分配；`dll.c` 只包含
-> `dll_main.h`（`dll_main_t`/`dll_shared_t` 定义），因此引用 `dll_isr_t` 字段
-> 是编译错误；`dll_isr.c` 单独包含 `dll_isr.h`。无强制转换、无原始字节存储，
-> D3（单次分配）与编译期字段隔离同时成立。公开 `iolink_dll_*` API 改为拆分
-> 形态（主上下文 `main/shared`，ISR 侧 `isr` + 只读主视图），`dll.h` 变薄，
-> 内部头进 `src/`。P10.1 不透明设备上下文因此降级为可选项。
+> **落地实现（2026-11）**：`iolink_dll_shared_t`（共享区，含 `events`/`isdu`
+> 子上下文与 `isr` 回指针）、`iolink_dll_main_t`（内嵌 shared + 主上下文字段）、
+> `iolink_dll_isr_t`（ISR 独占）分别定义在 `include/iolinki/dll_shared.h`、
+> `dll_main.h`、`dll_isr.h`；`dll_ctx.h` 定义单次分配容器
+> `iolink_dll_ctx_t { main; isr; }`。`dll.c` 只包含 `dll_main.h`，引用 ISR 字段
+> 是编译错误；`dll_isr.c` 同时包含两者；`device.h` 包含 `dll_ctx.h`（组装根）。
+> 共享区的 `isr` 回指针在 `iolink_dll_init()` 绑定，使主上下文可以传递 ISR
+> 句柄而无法解引用。`tools/check_ownership.sh` 把边界变成 CI 门禁
+> （含负向编译探针）。P10.1 不透明设备上下文因此降级为可选项。
 
 - **目标**：并发正确性从注释变成类型约束；头文件依赖图不再环形。
 - **依赖**：P1。
@@ -233,13 +237,15 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
   `src/events.c`、`src/data_storage.c`、`src/device.c`、`src/dll_internal.h`（已有，扩展）、
   `src/params.c`。
 - **步骤**：
-  - [ ] 头文件重划 public/internal 边界；消除 dll.h 反向 include events/isdu/
-        data_storage（前向声明 + 内部头）；inline 访问器（`dll_phy_has_*` 等）移内部
-        或改能力字；
-  - [ ] 拆 `dll_main_t` / `dll_isr_t` / `dll_shared_t`；composition root 单次分配内嵌，
-        `_Static_assert`（C99 用 typedef char 技巧）锁 offsetof 分区；
-  - [ ] `void*` 反向指针换窄接口（`iolink_diag_if_t` / `iolink_param_if_t` / ops 表）；
-  - [ ] 全程零行为变化，每 PR 过差分门。
+  - [x] 头文件重划 public/internal 边界；dll.h 不再反向 include events/isdu/
+        data_storage（拆到 `dll_shared.h` / `dll_main.h`）；`dll_phy_has_*` 移到
+        `dll_shared.h` 并以共享区为参数；
+  - [x] 拆 `iolink_dll_main_t` / `iolink_dll_isr_t` / `iolink_dll_shared_t`；
+        `iolink_dll_ctx_t` 单次分配内嵌 `{ main; isr; }`；`IOLINK_STATIC_ASSERT`
+        锁共享区首成员与容器顺序（`dll_ctx.h`）；尺寸契约同步（device 3712 B）；
+  - [ ] `void*` 反向指针换窄接口（`iolink_diag_if_t` / `iolink_param_if_t` / ops 表）
+        —— 延后到 P4/P5 的接口重构，避免与 OD/plan 改动二次冲突；
+  - [x] 全程零行为变化：差分门逐字节一致（本阶段验证）。
 - **完成标志**：ISR 头文件只暴露 `dll_isr_*`；主上下文引用 ISR 字段是编译错误；
   差分门逐字节一致；sizeof 变化（如有）同步 CI 断言。
 - **风险**：include 图改动牵涉面大 → 分小 PR；MISRA 对函数指针表的约束需确认。

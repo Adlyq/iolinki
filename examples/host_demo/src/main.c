@@ -65,7 +65,7 @@ static uint64_t host_time_us(void* user)
 static void pump_isr(iolink_device_ctx_t* ctx)
 {
     iolink_device_process_isr(ctx);
-    while (ctx->dll.isr_tx_active != 0U) {
+    while (ctx->dll.main.shared.isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
     }
 }

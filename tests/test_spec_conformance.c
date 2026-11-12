@@ -25,7 +25,7 @@
 #include <string.h>
 
 #include "iolinki/isdu.h"
-#include "iolinki/dll.h"
+#include "iolinki/dll_ctx.h"
 #include "iolinki/device_info.h"
 #include "iolinki/params.h"
 #include "iolinki/protocol.h"
@@ -194,11 +194,11 @@ static void test_process_data_input_returns_pd(void** state)
 
     /* 只有公共 setter 会配置长度：它更新运行时
        字段，因此这里改用 pd_in_len 会把应答截断为 0。 */
-    assert_int_equal(iolink_dll_set_pd_length(&dll, 2U, 0U), 0);
-    assert_int_equal(dll.pd_in_len, 0U);
-    dll.pd_valid = true;
-    dll.pd_in[0][dll.od_width + 0U] = 0x11U;
-    dll.pd_in[0][dll.od_width + 1U] = 0x22U;
+    assert_int_equal(iolink_dll_set_pd_length(&dll.main, 2U, 0U), 0);
+    assert_int_equal(dll.main.shared.pd_in_len, 0U);
+    dll.main.pd_valid = true;
+    dll.main.shared.pd_in[0][dll.main.shared.od_width + 0U] = 0x11U;
+    dll.main.shared.pd_in[0][dll.main.shared.od_width + 1U] = 0x22U;
 
     uint8_t out[8] = {0};
     int n = read_object_with_dll(0x0028U, &dll, out, sizeof(out));
@@ -215,11 +215,11 @@ static void test_process_data_input_invalid_still_serves_buffer(void** state)
     (void) state;
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
-    dll.pd_in_len_current = 2U;
-    dll.pd_in_len = 2U;
-    dll.pd_valid = false;
-    dll.pd_in[0][dll.od_width + 0U] = 0x11U;
-    dll.pd_in[0][dll.od_width + 1U] = 0x22U;
+    dll.main.pd_in_len_current = 2U;
+    dll.main.shared.pd_in_len = 2U;
+    dll.main.pd_valid = false;
+    dll.main.shared.pd_in[0][dll.main.shared.od_width + 0U] = 0x11U;
+    dll.main.shared.pd_in[0][dll.main.shared.od_width + 1U] = 0x22U;
 
     uint8_t out[8] = {0};
     int n = read_object_with_dll(0x0028U, &dll, out, sizeof(out));
@@ -235,7 +235,7 @@ static void test_process_data_output_before_first_frame(void** state)
     (void) state;
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
-    dll.pd_out_len_current = 2U;
+    dll.main.shared.pd_out_len_current = 2U;
 
     uint8_t out[8] = {0xFFU, 0xFFU};
     int n = read_object_with_dll(0x0029U, &dll, out, sizeof(out));
@@ -264,16 +264,16 @@ static void test_process_data_80xx_is_positive(void** state)
     (void) state;
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
-    dll.pd_in_len_current = 2U;
-    dll.pd_in_len = 2U;
-    dll.pd_valid = true;
-    dll.pd_in[0][dll.od_width + 0U] = 0x80U;
-    dll.pd_in[0][dll.od_width + 1U] = 0x42U;
+    dll.main.pd_in_len_current = 2U;
+    dll.main.shared.pd_in_len = 2U;
+    dll.main.pd_valid = true;
+    dll.main.shared.pd_in[0][dll.main.shared.od_width + 0U] = 0x80U;
+    dll.main.shared.pd_in[0][dll.main.shared.od_width + 1U] = 0x42U;
 
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = &dll;
+    ctx.dll_ctx = &dll.main;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0U), 1);
     iolink_isdu_process(&ctx);
 
@@ -317,10 +317,10 @@ static void test_process_data_output_returns_pd(void** state)
     (void) state;
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
-    dll.pd_out_len_current = 2U;
-    dll.pd_out[0] = 0xAAU;
-    dll.pd_out[1] = 0xBBU;
-    dll.pd_out_seen = true;
+    dll.main.shared.pd_out_len_current = 2U;
+    dll.main.pd_out[0] = 0xAAU;
+    dll.main.pd_out[1] = 0xBBU;
+    dll.main.pd_out_seen = true;
 
     uint8_t out[8] = {0};
     int n = read_object_with_dll(0x0029U, &dll, out, sizeof(out));

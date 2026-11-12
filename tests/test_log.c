@@ -144,22 +144,22 @@ static void test_device_init_binds_config_sink(void)
     assert(g_last_user == &token);
     assert(strstr(g_last_msg, "device init") != NULL);
 
-    assert(ctx.dll.log.write == log_capture);
-    assert(ctx.dll.log.user == &token);
-    assert(ctx.dll.log.level == IOLINK_LOG_LEVEL_INFO);
-    assert(ctx.dll.isdu.log.write == log_capture);
+    assert(ctx.dll.main.shared.log.write == log_capture);
+    assert(ctx.dll.main.shared.log.user == &token);
+    assert(ctx.dll.main.shared.log.level == IOLINK_LOG_LEVEL_INFO);
+    assert(ctx.dll.main.shared.isdu.log.write == log_capture);
 #if IOLINK_FEATURE_DATA_STORAGE
-    assert(ctx.dll.ds.log.write == log_capture);
+    assert(ctx.dll.main.ds.log.write == log_capture);
 #endif
 #if IOLINK_FEATURE_EVENTS
-    assert(ctx.dll.events.log.write == log_capture);
+    assert(ctx.dll.main.shared.events.log.write == log_capture);
 #endif
 
     /* The runtime switch silences an initialized device immediately. */
     iolink_device_set_log(&ctx, NULL, IOLINK_LOG_LEVEL_SILENT);
     reset_capture();
 #if IOLINK_FEATURE_DATA_STORAGE
-    iolink_ds_check(&ctx.dll.ds, 0U); /* would log an upload request */
+    iolink_ds_check(&ctx.dll.main.ds, 0U); /* would log an upload request */
 #endif
     assert(g_calls == 0);
 }
@@ -290,28 +290,28 @@ static void test_device_setter_propagates(void)
 
     iolink_device_set_log(&ctx, log_capture, IOLINK_LOG_LEVEL_INFO);
 
-    assert(ctx.dll.log.write == log_capture);
-    assert(ctx.dll.log.user == &token);
-    assert(ctx.dll.log.level == IOLINK_LOG_LEVEL_INFO);
-    assert(ctx.dll.isdu.log.write == log_capture);
-    assert(ctx.dll.isdu.log.user == &token);
+    assert(ctx.dll.main.shared.log.write == log_capture);
+    assert(ctx.dll.main.shared.log.user == &token);
+    assert(ctx.dll.main.shared.log.level == IOLINK_LOG_LEVEL_INFO);
+    assert(ctx.dll.main.shared.isdu.log.write == log_capture);
+    assert(ctx.dll.main.shared.isdu.log.user == &token);
 #if IOLINK_FEATURE_DATA_STORAGE
-    assert(ctx.dll.ds.log.write == log_capture);
-    assert(ctx.dll.ds.log.user == &token);
+    assert(ctx.dll.main.ds.log.write == log_capture);
+    assert(ctx.dll.main.ds.log.user == &token);
 #endif
 #if IOLINK_FEATURE_EVENTS
-    assert(ctx.dll.events.log.write == log_capture);
-    assert(ctx.dll.events.log.user == &token);
+    assert(ctx.dll.main.shared.events.log.write == log_capture);
+    assert(ctx.dll.main.shared.events.log.user == &token);
 #endif
 
     /* Logging through a propagated subsystem sink works. */
     reset_capture();
-    IOLINK_LOG_INFO(&ctx.dll.isdu.log, "from isdu");
+    IOLINK_LOG_INFO(&ctx.dll.main.shared.isdu.log, "from isdu");
     assert((g_calls == 1) && (strcmp(g_last_msg, "from isdu") == 0));
 
     iolink_device_set_log(&ctx, NULL, IOLINK_LOG_LEVEL_SILENT);
-    assert(ctx.dll.log.write == NULL);
-    assert(ctx.dll.log.level == IOLINK_LOG_LEVEL_SILENT);
+    assert(ctx.dll.main.shared.log.write == NULL);
+    assert(ctx.dll.main.shared.log.level == IOLINK_LOG_LEVEL_SILENT);
 }
 
 int main(void)

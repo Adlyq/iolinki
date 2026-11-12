@@ -17,7 +17,7 @@
 #include <string.h>
 
 #include "iolinki/crc.h"
-#include "iolinki/dll.h"
+#include "iolinki/dll_ctx.h"
 #include "iolinki/protocol.h"
 
 static uint64_t now_us;
@@ -33,14 +33,15 @@ static uint64_t test_time_us(void* user)
 /** @brief 向邮箱环发布一个请求（由 ISR 执行）。 */
 static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len)
 {
-    iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&ctx->isr_frame_ring);
+    iolink_frame_rec_t* rec =
+        (iolink_frame_rec_t*) iolink_ring_claim(&ctx->main.shared.isr_frame_ring);
     if (rec == NULL) {
         return;
     }
     rec->len = len;
     rec->eager = 0U;
     (void) memcpy(rec->data, frame, len);
-    iolink_ring_publish(&ctx->isr_frame_ring);
+    iolink_ring_publish(&ctx->main.shared.isr_frame_ring);
 }
 
 static int rx_octet(void* user, uint8_t* data, uint8_t* status)
@@ -68,7 +69,7 @@ static void tx_done(void* user)
 static uint8_t int_active(void* user)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) user;
-    return ((ctx != NULL) && (ctx->isr_tx_active != 0U)) ? 1U : 0U;
+    return ((ctx != NULL) && (ctx->main.shared.isr_tx_active != 0U)) ? 1U : 0U;
 }
 
 /* 一个合法的 Type-0 请求：携带 A.1.6 校验和的 MC + CKT。 */
@@ -90,24 +91,24 @@ static int run_cycles(iolink_dll_ctx_t* ctx, unsigned cycles, uint64_t step_us)
         now_us += step_us;
         push_mailbox(ctx, frame, (uint8_t) sizeof(frame));
 
-        iolink_dll_process(ctx);
-        while (ctx->isr_tx_active != 0U) {
-            iolink_dll_process_isr(ctx);
+        iolink_dll_process(&ctx->main);
+        while (ctx->main.shared.isr_tx_active != 0U) {
+            iolink_dll_process_isr(&ctx->main);
         }
 
-        if (!iolink_ring_is_empty(&ctx->isr_frame_ring)) {
+        if (!iolink_ring_is_empty(&ctx->main.shared.isr_frame_ring)) {
             return 1; /* 邮箱未被消费 */
         }
-        if (ctx->timeout_errors != 0U) {
+        if (ctx->main.shared.timeout_errors != 0U) {
             return 2; /* 空闲监控被触发 */
         }
-        if (ctx->crc_errors != 0U) {
+        if (ctx->main.crc_errors != 0U) {
             return 3;
         }
-        if (ctx->framing_errors != 0U) {
+        if (ctx->main.shared.framing_errors != 0U) {
             return 4;
         }
-        if (ctx->state == IOLINK_DLL_STATE_STARTUP) {
+        if (ctx->main.shared.state == IOLINK_DLL_STATE_STARTUP) {
             return 5;
         }
     }
@@ -125,19 +126,19 @@ int main(void)
         .int_active = int_active,
     };
 
-    iolink_dll_init(&ctx, &phy);
-    ctx.time_us = test_time_us;
-    ctx.state = IOLINK_DLL_STATE_ESTAB_COM;
-    ctx.phy_mode = IOLINK_PHY_MODE_SDCI;
-    ctx.enforce_timing = false;
+    iolink_dll_init(&ctx.main, &ctx.isr, &phy);
+    ctx.main.shared.time_us = test_time_us;
+    ctx.main.shared.state = IOLINK_DLL_STATE_ESTAB_COM;
+    ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
+    ctx.main.enforce_timing = false;
     now_us = 1000000U;
-    ctx.last_activity_ms = ((uint32_t) (now_us / 1000U));
+    ctx.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));
 
     /* 场景 A：每周期 1 ms，仿真 60 秒（60k 帧）。 */
     if (run_cycles(&ctx, 60000U, 1000U) != 0) {
         return 10;
     }
-    if (ctx.state != IOLINK_DLL_STATE_OPERATE) {
+    if (ctx.main.shared.state != IOLINK_DLL_STATE_OPERATE) {
         return 11;
     }
     if (tx_frames != 60000U) {
@@ -149,15 +150,15 @@ int main(void)
 
     /* 场景 B：跨越 32 位毫秒时间戳回绕。 */
     now_us = ((uint64_t) UINT32_MAX - 5U) * 1000U;
-    ctx.last_activity_ms = ((uint32_t) (now_us / 1000U));
-    ctx.timeout_errors = 0U;
+    ctx.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));
+    ctx.main.shared.timeout_errors = 0U;
     if (run_cycles(&ctx, 20U, 600000U) != 0) {
         return 20;
     }
-    if (ctx.state != IOLINK_DLL_STATE_OPERATE) {
+    if (ctx.main.shared.state != IOLINK_DLL_STATE_OPERATE) {
         return 21;
     }
-    if (ctx.timeout_errors != 0U) {
+    if (ctx.main.shared.timeout_errors != 0U) {
         return 22;
     }
 

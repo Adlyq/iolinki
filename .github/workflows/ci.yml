@@ -106,7 +106,8 @@ jobs:
       - name: Lint shell scripts
         run: |
           shellcheck -S warning tools/build_matrix.sh tools/coverage.sh \
-            tools/diff_matrix.sh test_all.sh check_quality.sh .docker_test_entrypoint.sh
+            tools/diff_matrix.sh tools/check_ownership.sh test_all.sh check_quality.sh \
+            .docker_test_entrypoint.sh
 
   # Coverage floor: line coverage of src/ must not drop below the checked-in
   # baseline in tools/coverage_baseline.txt.
@@ -136,6 +137,8 @@ jobs:
         run: ./tools/build_matrix.sh
       - name: Differential frame gate
         run: ./tools/diff_matrix.sh
+      - name: DLL ownership isolation
+        run: ./tools/check_ownership.sh
 
   # Branch protection on develop requires the REAL jobs directly:
   # docker-validation, sbom-tools. Do not reintroduce echo-only proxy jobs —

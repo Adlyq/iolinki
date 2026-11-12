@@ -22,7 +22,7 @@
 #include "iolinki/data_storage.h"
 #include "iolinki/device.h"
 #include "iolinki/device_info.h"
-#include "iolinki/dll.h"
+#include "iolinki/dll_ctx.h"
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
 #include "iolinki/params.h"
@@ -211,19 +211,19 @@ static void test_0089_master_cycle_time_readback(void** state)
 
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
-    dll.master_cycle_time = 0x4FU;
+    dll.main.master_cycle_time = 0x4FU;
 
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = &dll;
+    ctx.dll_ctx = &dll.main;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x02U), 1);
     iolink_isdu_process(&ctx);
 
     uint8_t value[2] = {0};
     int n = isdu_collect_response(&ctx, value, sizeof(value));
     assert_int_equal(n, 1);
-    assert_int_equal(value[0], dll.master_cycle_time);
+    assert_int_equal(value[0], dll.main.master_cycle_time);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -578,7 +578,7 @@ static void test_0101_reserved_dpp1_write(void** state)
         test_io_cycle(&dev.ctx);
 
         assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
-        assert_false(iolink_events_pending(&dev.ctx.dll.events));
+        assert_false(iolink_events_pending(&dev.ctx.dll.main.shared.events));
     }
 }
 
@@ -776,7 +776,7 @@ static void test_0054_vendor_name_conformance_identity(void** state)
                                 &k_gap_noop_phy, nvm),
         0);
 
-    iolink_isdu_ctx_t* ctx = &app.device.dll.isdu;
+    iolink_isdu_ctx_t* ctx = &app.device.dll.main.shared.isdu;
     assert_int_equal(isdu_send_read_request(ctx, IOLINK_IDX_VENDOR_NAME, 0U), 1);
 
     /* 尚未应答：首次读的 START 必须返回 Busy (0x01)。 */
@@ -825,7 +825,7 @@ static void test_0056_config1_write_readback(void** state)
                                 &k_gap_noop_phy, nvm),
         0);
 
-    iolink_isdu_ctx_t* ctx = &app.device.dll.isdu;
+    iolink_isdu_ctx_t* ctx = &app.device.dll.main.shared.isdu;
     uint8_t payload[CONFORMANCE_CONFIG1_MAX];
     for (size_t i = 0U; i < sizeof(payload); i++) {
         payload[i] = (uint8_t) (0xA0U + i);
@@ -939,7 +939,7 @@ static void test_0055_config3_long_read(void** state)
         0);
     assert_int_equal(app.config3_len, CONFORMANCE_CONFIG3_MAX);
 
-    iolink_isdu_ctx_t* ctx = &app.device.dll.isdu;
+    iolink_isdu_ctx_t* ctx = &app.device.dll.main.shared.isdu;
     assert_int_equal(isdu_send_read_request(ctx, CONFORMANCE_CONFIG3_INDEX, 0U), 1);
 
     uint8_t octet = 0U;

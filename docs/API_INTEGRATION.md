@@ -84,8 +84,9 @@ NULL 时直接返回 `IOLINK_DEVICE_INIT_ERR_TIME`，不会进入运行阶段。
 ISR 双泵和事件引擎的所有时间戳都从该回调获取。
 
 核心不再调用平台时间函数；直接使用 `iolink_dll_*` 时，调用方必须在
-`iolink_dll_init()` 后自行绑定 `ctx->time_us`（及 `time_user`）。未绑定时内部
-计时读数为 0。
+`iolink_dll_init()` 后自行绑定 `ctx->shared.time_us`（及 `shared.time_user`，
+其中 `ctx` 是 `iolink_dll_main_t*`；初始化需要同时传入 ISR 对象）。未绑定时
+内部计时读数为 0。
 
 `time_us` 会在主循环和数据 ISR 中调用，因此必须单调、非阻塞、可重入，并在
 上下文生命周期内保持有效。毫秒时间用于事件/状态逻辑，微秒时间用于帧计时以及
@@ -659,6 +660,9 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 - `include/iolinki/dll.h`：`iolink_dll_init/process/process_isr()`、
   `iolink_dll_expected_req_len()`、
   模式/波特率/PD 获取函数以及 `iolink_dll_stats_t`。
+  状态布局拆在 `dll_main.h`（主上下文 + 共享区）、`dll_shared.h`（双上下文共享）、
+  `dll_isr.h`（ISR 独占）和 `dll_ctx.h`（单次分配容器）中；直接使用 DLL 时按
+  `iolink_dll_init(&ctx.main, &ctx.isr, phy)` 初始化。
   设备层已经完成这些接线；只有实现自定义传输时才直接使用，并且需要自行负责
   事件/ISDU/DS 集成。
 - `include/iolinki/phy_tiol112.h` 和 `phy_l6362a.h`：收发器驱动。用板级 IO 回调调用

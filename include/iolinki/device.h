@@ -14,7 +14,7 @@
 #include "iolinki/application.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/device_info.h"
-#include "iolinki/dll.h"
+#include "iolinki/dll_ctx.h"
 #include "iolinki/iolink.h"
 #include "iolinki/params.h"
 #include "iolinki/phy.h"

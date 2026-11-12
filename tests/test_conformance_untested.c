@@ -20,7 +20,7 @@
 #include "iolinki/data_storage.h"
 #include "iolinki/device.h"
 #include "iolinki/device_info.h"
-#include "iolinki/dll.h"
+#include "iolinki/dll_ctx.h"
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
 #include "iolinki/params.h"
@@ -105,7 +105,7 @@ static void make_isdu_ctx(conformance_device_t* app, iolink_isdu_ctx_t* ctx)
     test_isdu_bind_params(ctx, &g_test_env);
     ctx->event_ctx = iolink_device_get_events_ctx(&app->device);
     ctx->ds_ctx = iolink_device_get_ds_ctx(&app->device);
-    ctx->dll_ctx = &app->device.dll;
+    ctx->dll_ctx = &app->device.dll.main;
     ctx->params_ctx = &app->device.params;
     ctx->vendor_service = app->config.vendor_service;
     ctx->vendor_user = app->config.user;
@@ -318,7 +318,8 @@ static void test_0128_device_status_in_operate(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 
     uint8_t status = 0xFFU;
-    assert_int_equal(isdu_read(&dev.ctx.dll.isdu, IOLINK_IDX_DEVICE_STATUS, 0U, &status, 1U), 1);
+    assert_int_equal(
+        isdu_read(&dev.ctx.dll.main.shared.isdu, IOLINK_IDX_DEVICE_STATUS, 0U, &status, 1U), 1);
     assert_true(status <= 4U);
 }
 
@@ -343,7 +344,7 @@ static void test_0124_error_count_increment_and_reset(void** state)
 
     /* 制造恰好一个计入 ErrorCount 的错误：RX 超时在 DLL 中
        只计一次。 */
-    iolink_dll_on_rx_timeout(&dev.ctx.dll);
+    iolink_dll_on_rx_timeout(&dev.ctx.dll.main);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
     assert_int_equal(device_error_count(&dev.ctx), 1U);
 
@@ -552,7 +553,7 @@ static void conformance_send_system_command(conformance_device_t* app, uint8_t c
 {
     /* 在设备自有的 ISDU 上下文上运行，使 reset_pending/标志能到达
        设备泵，与 DLL 传输的行为完全一致。 */
-    iolink_isdu_execute_system_command(&app->device.dll.isdu, cmd);
+    iolink_isdu_execute_system_command(&app->device.dll.main.shared.isdu, cmd);
     conformance_device_process(app);
 }
 

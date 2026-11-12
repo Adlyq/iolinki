@@ -136,7 +136,7 @@ static void handle_command(conformance_device_t* app, const iolink_phy_api_t* ph
     else if (strcmp(command, "dump") == 0) {
 #if IOLINK_FEATURE_DATA_STORAGE
         printf("state=%d ds_state=%d counter=%u config1=%zu config3=%zu\n",
-               (int) iolink_device_get_state(&app->device), (int) app->device.dll.ds.state,
+               (int) iolink_device_get_state(&app->device), (int) app->device.dll.main.ds.state,
                (unsigned) app->counter, app->config1_len, app->config3_len);
 #else
         printf("state=%d ds_state=n/a counter=%u config1=%zu config3=%zu\n",

@@ -19,7 +19,8 @@ iolinki is designed to be portable across different platforms and RTOSes. This g
 
 ### 0. Context-based API (Architecture)
 The stack uses a context-based API to avoid global state and ensure reentrancy.
-All public API functions take a context pointer (e.g., `iolink_dll_ctx_t*`).
+All public API functions take a context pointer (e.g., `iolink_dll_main_t*`
+for DLL calls or `iolink_device_ctx_t*` at the device layer).
 When porting, ensure your application manages this context storage (stack or static).
 
 ### 1. PHY Layer (Required)

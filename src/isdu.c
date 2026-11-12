@@ -8,7 +8,7 @@
 
 #include "iolinki/protocol.h"
 #include "iolinki/isdu.h"
-#include "iolinki/dll.h"
+#include "iolinki/dll_main.h"
 #include "iolinki/iolink.h"
 #include "iolinki/crc.h"
 #include "iolinki/events.h"
@@ -636,7 +636,7 @@ static void isdu_read_error_count(iolink_isdu_ctx_t* ctx)
     uint32_t total = 0U;
     if (ctx->dll_ctx != NULL) {
         iolink_dll_stats_t stats;
-        iolink_dll_get_stats((const iolink_dll_ctx_t*) ctx->dll_ctx, &stats);
+        iolink_dll_get_stats((const iolink_dll_main_t*) ctx->dll_ctx, &stats);
         uint64_t sum = (uint64_t) stats.crc_errors + (uint64_t) stats.framing_errors +
                        (uint64_t) stats.timeout_errors + (uint64_t) stats.timing_errors;
         total = (sum > 0xFFFFU) ? 0xFFFFU : (uint32_t) sum;
@@ -769,7 +769,7 @@ static void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
 {
     uint8_t len = 0U;
     if (ctx->dll_ctx != NULL) {
-        const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
+        const iolink_dll_main_t* dll = (const iolink_dll_main_t*) ctx->dll_ctx;
         if (input) {
             /* B.2.23：该对象携带 PDin 通道的过程数据
                及其运行时长。PD 状态位（A.1.5）承载
@@ -780,14 +780,15 @@ static void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
                 len = (uint8_t) IOLINK_PD_IN_MAX_SIZE;
             }
             if (len > 0U) {
-                const uint8_t* pdi = &dll->pd_in[dll->pd_in_active][dll->od_width];
+                const uint8_t* pdi =
+                    &dll->shared.pd_in[dll->shared.pd_in_active][dll->shared.od_width];
                 (void) memcpy(ctx->response_buf, pdi, len);
             }
         }
         else {
             /* B.2.24：PDout 通道同理。在收到第一帧 PDout 之前，
                返回按配置长度零初始化的缓冲区。 */
-            len = dll->pd_out_len_current;
+            len = dll->shared.pd_out_len_current;
             if (len > sizeof(dll->pd_out)) {
                 len = (uint8_t) sizeof(dll->pd_out);
             }
@@ -955,7 +956,7 @@ static uint8_t isdu_ds_result_error(int ret, uint8_t fallback)
 static void isdu_reset_diagnostics(iolink_isdu_ctx_t* ctx)
 {
     if (ctx->dll_ctx != NULL) {
-        iolink_dll_reset_diagnostics((iolink_dll_ctx_t*) ctx->dll_ctx);
+        iolink_dll_reset_diagnostics((iolink_dll_main_t*) ctx->dll_ctx);
     }
 }
 
@@ -963,7 +964,7 @@ static void isdu_reset_diagnostics(iolink_isdu_ctx_t* ctx)
 static void isdu_reset_error_counters(iolink_isdu_ctx_t* ctx)
 {
     if (ctx->dll_ctx != NULL) {
-        iolink_dll_reset_error_counters((iolink_dll_ctx_t*) ctx->dll_ctx);
+        iolink_dll_reset_error_counters((iolink_dll_main_t*) ctx->dll_ctx);
     }
 }
 
@@ -1001,7 +1002,7 @@ static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                 iolink_events_clear_diagnosis((iolink_events_ctx_t*) ctx->event_ctx);
             }
             else if (ctx->dll_ctx != NULL) {
-                iolink_events_clear_diagnosis(&((iolink_dll_ctx_t*) ctx->dll_ctx)->events);
+                iolink_events_clear_diagnosis(&((iolink_dll_main_t*) ctx->dll_ctx)->shared.events);
             }
 #endif
             break;
@@ -1014,7 +1015,7 @@ static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             isdu_params_factory_reset(ctx);
             isdu_clear_ds_upload_req(ctx);
             if (ctx->dll_ctx != NULL) {
-                iolink_dll_request_back_to_box((iolink_dll_ctx_t*) ctx->dll_ctx);
+                iolink_dll_request_back_to_box((iolink_dll_main_t*) ctx->dll_ctx);
             }
             isdu_reset_diagnostics(ctx);
             break;
@@ -1276,7 +1277,7 @@ static void handle_error_stats(iolink_isdu_ctx_t* ctx)
     }
 
     iolink_dll_stats_t stats;
-    iolink_dll_get_stats((const iolink_dll_ctx_t*) ctx->dll_ctx, &stats);
+    iolink_dll_get_stats((const iolink_dll_main_t*) ctx->dll_ctx, &stats);
 
     size_t idx = 0U;
     isdu_write_u32_be(ctx->response_buf, &idx, stats.crc_errors);
@@ -1343,22 +1344,22 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
     uint8_t m_seq = 0U;
     uint8_t od_width = 0U;
     if (ctx->dll_ctx != NULL) {
-        const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
+        const iolink_dll_main_t* dll = (const iolink_dll_main_t*) ctx->dll_ctx;
         iolink_dll_get_pd_length(dll, &pd_in, &pd_out);
-        m_seq = dll->m_seq_type;
-        od_width = dll->od_width;
+        m_seq = dll->shared.m_seq_type;
+        od_width = dll->shared.od_width;
     }
 
     (void) memset(page, 0, 16);
     /* 0x01 MasterCycleTime 是主站在启动期间写入的值。 */
     if (ctx->dll_ctx != NULL) {
-        const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
+        const iolink_dll_main_t* dll = (const iolink_dll_main_t*) ctx->dll_ctx;
         page[0x01] = dll->master_cycle_time;
     }
     {
         uint16_t min_cyc = (ctx->dll_ctx != NULL)
                                ? (uint16_t) iolink_dll_compute_min_cycle_time(
-                                     (const iolink_dll_ctx_t*) ctx->dll_ctx)
+                                     (const iolink_dll_main_t*) ctx->dll_ctx)
                                : ((info != NULL) ? (uint16_t) info->min_cycle_time : 0U);
         /* 0x00 表示 "no MinCycleTime"；否则编码时间基准 | 乘数（Table B.3）。 */
         page[0x02] = (min_cyc == 0U) ? 0U : iolink_cycle_time_encode(min_cyc);

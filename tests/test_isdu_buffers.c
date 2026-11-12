@@ -21,6 +21,7 @@
 
 #include "iolinki/dll.h"
 #include "iolinki/isdu.h"
+#include "iolinki/protocol.h"
 
 /* 8 位索引读请求（I-Service 0x9，索引 0x10）及其 CHKPDU。 */
 static void send_start(iolink_isdu_ctx_t* isdu)

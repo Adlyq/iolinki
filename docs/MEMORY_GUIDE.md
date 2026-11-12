@@ -17,15 +17,22 @@ Measured on a 64-bit host with the default buffers in
 
 | Component | Size (bytes) | Description |
 | :--- | ---: | :--- |
-| **`iolink_device_ctx_t`** | **3688** | The object the application allocates (includes everything below) |
-| `iolink_dll_ctx_t` | 3376 | DLL state, timers, counters, ISR staging; embeds ISDU, Events and DS |
+| **`iolink_device_ctx_t`** | **3712** | The object the application allocates (includes everything below) |
+| `iolink_dll_ctx_t` | 3400 | DLL state, timers, counters, ISR staging; embeds ISDU, Events and DS |
 | `iolink_isdu_ctx_t` | 1488 | Transport state plus the payload/transport buffers (see below) |
 | `iolink_events_ctx_t` | 392 | Event queue plus lifecycle records |
 | `iolink_ds_ctx_t` | 376 | DS state and the `IOLINK_DS_IMAGE_MAX` image |
 | **PHY API** | 20-30 bytes | Function pointers (usually const/flash, but pointer storage in RAM) |
 
-`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 8 bytes (two counter sets).
+`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 16 bytes (two counter sets plus padding).
 32-bit targets are smaller because pointers are 4 bytes.
+
+The DLL state is owned by two sibling structures inside `iolink_dll_ctx_t`:
+`iolink_dll_main_t` (which nests the main/ISR shared region) and
+`iolink_dll_isr_t`. Both live in the same single allocation; the split only
+changes type visibility, not the allocation strategy. `tools/check_ownership.sh`
+fails the build if the main-context translation unit can reference
+ISR-exclusive fields.
 
 > **These numbers are a contract.** `tests/test_ctx_sizes.c` asserts the exact
 > sizes at build time (`IOLINK_STATS_SHARED` and `SPLIT` variants); a layout or
@@ -46,7 +53,7 @@ You can tune these values to fit your MCU.
 
 ### Total RAM
 
-The default `iolink_device_ctx_t` is **3688 bytes** (64-bit host, default
+The default `iolink_device_ctx_t` is **3712 bytes** (64-bit host, default
 buffers); buffer arrays dominate it. On a 32-bit target the same layout is
 smaller. To measure your own build instead of relying on the table:
 

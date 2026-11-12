@@ -170,7 +170,8 @@ if command -v shellcheck &> /dev/null; then
     # Maintained CI/test scripts (add new ones here). tools/add_copyright_headers.sh
     # is a legacy one-shot helper with a known SC2218 false positive.
     lint_scripts=(tools/build_matrix.sh tools/coverage.sh tools/diff_matrix.sh
-                  test_all.sh check_quality.sh .docker_test_entrypoint.sh)
+                  tools/check_ownership.sh test_all.sh check_quality.sh
+                  .docker_test_entrypoint.sh)
     if shellcheck -S warning "${lint_scripts[@]}"; then
         echo "   ✅ Shellcheck Passed"
     else
@@ -180,6 +181,14 @@ if command -v shellcheck &> /dev/null; then
 else
     echo "   ⚠️ Shellcheck not installed. Skipping check."
     echo "      Arch: sudo pacman -S shellcheck-static / Debian: apt-get install shellcheck"
+fi
+
+echo -e "\n[7/7] 🔒 DLL Ownership Isolation..."
+if ./tools/check_ownership.sh; then
+    echo "   ✅ Ownership Isolation Passed"
+else
+    echo "   ❌ Ownership Isolation FAILED"
+    exit 1
 fi
 
 echo -e "\n============================================"

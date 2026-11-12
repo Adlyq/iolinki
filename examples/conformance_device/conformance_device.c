@@ -322,11 +322,11 @@ void conformance_device_process(conformance_device_t* app)
         return;
     }
     iolink_device_process_isr(&app->device);
-    while (app->device.dll.isr_tx_active != 0U) {
+    while (app->device.dll.main.shared.isr_tx_active != 0U) {
         iolink_device_process_isr(&app->device);
     }
     iolink_device_process(&app->device);
-    while (app->device.dll.isr_tx_active != 0U) {
+    while (app->device.dll.main.shared.isr_tx_active != 0U) {
         iolink_device_process_isr(&app->device);
     }
 }

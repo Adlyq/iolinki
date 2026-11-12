@@ -298,13 +298,13 @@ void setup_mock_phy(void)
 void test_io_cycle(iolink_device_ctx_t* ctx)
 {
     iolink_device_process_isr(ctx);
-    while (ctx->dll.isr_tx_active != 0U) {
+    while (ctx->dll.main.shared.isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
     }
     /* 丢弃遗留的帧结束标记（Type-1/2 帧按长度完成）。 */
     mock_phy_clear_rx();
     iolink_device_process(ctx);
-    while (ctx->dll.isr_tx_active != 0U) {
+    while (ctx->dll.main.shared.isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
     }
 }
@@ -375,7 +375,7 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     iolink_m_seq_type_t type = iolink_device_get_m_seq_type(ctx);
     uint8_t pd_out_len = iolink_device_get_pd_out_len(ctx);
     uint8_t pd_in_len = iolink_device_get_pd_in_len(ctx);
-    uint8_t od_w = ctx->dll.od_width; /* 实际的 OPERATE OD 宽度（1/2/8/32） */
+    uint8_t od_w = ctx->dll.main.shared.od_width; /* 实际的 OPERATE OD 宽度（1/2/8/32） */
 
     if (type == IOLINK_M_SEQ_TYPE_0) {
         uint8_t idle_mc = 0x00;

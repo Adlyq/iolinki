@@ -101,15 +101,15 @@ static void test_ds_auto_processed_by_device_pump(void** state)
     /* 繁忙的 ISDU 传输会阻塞 DS 服务。HEADER_INITIAL 是
      * iolink_isdu_process() 不会改变的状态，因此它在
      * 泵调用期间保持繁忙。 */
-    assert_int_equal(iolink_ds_start_upload(&dev.ctx.dll.ds), 0);
-    dev.ctx.dll.isdu.state = ISDU_STATE_HEADER_INITIAL;
+    assert_int_equal(iolink_ds_start_upload(&dev.ctx.dll.main.ds), 0);
+    dev.ctx.dll.main.shared.isdu.state = ISDU_STATE_HEADER_INITIAL;
     iolink_device_process(&dev.ctx);
-    assert_int_equal(dev.ctx.dll.ds.state, IOLINK_DS_STATE_UPLOAD_REQ);
+    assert_int_equal(dev.ctx.dll.main.ds.state, IOLINK_DS_STATE_UPLOAD_REQ);
 
     /* ISDU 空闲后，泵会推进 DS 状态机。 */
-    dev.ctx.dll.isdu.state = ISDU_STATE_IDLE;
+    dev.ctx.dll.main.shared.isdu.state = ISDU_STATE_IDLE;
     iolink_device_process(&dev.ctx);
-    assert_int_equal(dev.ctx.dll.ds.state, IOLINK_DS_STATE_UPLOADING);
+    assert_int_equal(dev.ctx.dll.main.ds.state, IOLINK_DS_STATE_UPLOADING);
 }
 
 static void test_ds_commands_locked(void** state)

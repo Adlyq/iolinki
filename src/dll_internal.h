@@ -10,7 +10,7 @@
 #define IOLINK_DLL_INTERNAL_H
 
 #include <stdint.h>
-#include "iolinki/dll.h"
+#include "iolinki/dll_main.h"
 
 /**
  * @file dll_internal.h
@@ -27,15 +27,15 @@
  * 但裸 DLL 上下文在绑定之前仍可被检查。
  * @{
  */
-static inline uint64_t dll_time_us(const iolink_dll_ctx_t* ctx)
+static inline uint64_t dll_time_us(const iolink_dll_main_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->time_us == NULL)) {
+    if ((ctx == NULL) || (ctx->shared.time_us == NULL)) {
         return 0U;
     }
-    return ctx->time_us(ctx->time_user);
+    return ctx->shared.time_us(ctx->shared.time_user);
 }
 
-static inline uint32_t dll_time_ms(const iolink_dll_ctx_t* ctx)
+static inline uint32_t dll_time_ms(const iolink_dll_main_t* ctx)
 {
     return (uint32_t) (dll_time_us(ctx) / 1000U);
 }
@@ -89,12 +89,15 @@ typedef struct
  * 上下文约定，参见 docs/CODE_FLOW.md。
  * @{
  */
-void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state);
-bool dll_apply_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd);
-bool dll_type_allowed(const iolink_dll_ctx_t* ctx, const uint8_t* frame);
-uint8_t dll_pd_status_flags(const iolink_dll_ctx_t* ctx);
-void dll_mark_master_activity(iolink_dll_ctx_t* ctx);
-void dll_isr_start_staged_tx(iolink_dll_ctx_t* ctx, uint8_t slot, uint8_t len);
+void dll_set_state(iolink_dll_main_t* ctx, iolink_dll_state_t new_state);
+bool dll_apply_master_command(iolink_dll_main_t* ctx, uint8_t cmd);
+bool dll_type_allowed(const iolink_dll_main_t* ctx, const uint8_t* frame);
+uint8_t dll_pd_status_flags(const iolink_dll_main_t* ctx);
+void dll_mark_master_activity(iolink_dll_main_t* ctx);
+void dll_isr_start_staged_tx(iolink_dll_main_t* ctx, uint8_t slot, uint8_t len);
+
+/** @brief 清零 ISR 独占状态（由 iolink_dll_init 调用）。 */
+bool dll_isr_reset(iolink_dll_isr_t* isr);
 /** @} */
 
 #endif  // IOLINK_DLL_INTERNAL_H
