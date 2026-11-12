@@ -43,7 +43,7 @@
  *  - 传输、解析与共享辅助函数：chkpdu ... iolink_isdu_od_read
  *    （公开：iolink_isdu_init、iolink_isdu_od_write、iolink_isdu_od_read）
  *  - 共享应答辅助函数：isdu_respond_error
- *  - 强制索引：isdu_check_mandatory_write ... handle_mandatory_indices
+ *  - 表驱动分发：isdu_entry_allowed ... isdu_serve_entry（OD 表见 src/od.c）
  *  - SystemCommand 与数据存储上传辅助函数：isdu_clear_ds_upload_req ...
  *    （公开：iolink_isdu_execute_system_command）
  *  - 访问锁、详细状态、错误统计与直接参数：
@@ -83,41 +83,11 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx)
     ctx->resp_buf = ctx->resp_store[0];
 }
 
-/** @brief 通过绑定的 params 上下文读取参数；未绑定则返回 NOT_HANDLED。 */
-static iolink_result_t isdu_params_get(const iolink_isdu_ctx_t* ctx, uint16_t index,
-                                       uint8_t subindex, uint8_t* buffer, size_t max_len)
+void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app)
 {
-    if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
-        return iolink_params_ctx_read(ctx->params_ctx, index, subindex, buffer, max_len);
+    if (ctx != NULL) {
+        ctx->od = app;
     }
-    (void) index;
-    (void) subindex;
-    (void) buffer;
-    (void) max_len;
-    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
-}
-
-/** @brief 通过绑定的 params 上下文写入参数；未绑定则返回 NOT_HANDLED。 */
-static iolink_result_t isdu_params_set(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                                       const uint8_t* data, size_t len, bool persist)
-{
-#if IOLINK_FEATURE_DATA_STORAGE
-    /* 块下载期间，写入会被缓冲，以便在
-       ParamDownloadEnd（10.3.2）时原子提交，而非立即生效。 */
-    if ((ctx != NULL) && (ctx->ds_ctx != NULL) &&
-        iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx)) {
-        return iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, index, subindex, data, len);
-    }
-#endif
-    if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
-        return iolink_params_ctx_write(ctx->params_ctx, index, subindex, data, len, persist);
-    }
-    (void) index;
-    (void) subindex;
-    (void) data;
-    (void) len;
-    (void) persist;
-    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
 }
 
 #if IOLINK_FEATURE_SYSTEM_COMMAND
@@ -565,52 +535,6 @@ static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error)
  * 强制索引
  * ------------------------------------------------------------------------- */
 
-/**
- * @brief 拒绝对只读强制对象的写操作（WRITE）。
- *
- * @return 当已产生否定应答时返回 true。
- */
-static bool isdu_check_mandatory_write(iolink_isdu_ctx_t* ctx)
-{
-    if (ctx->header.type != IOLINK_ISDU_SERVICE_TYPE_WRITE) {
-        return false;
-    }
-    const uint16_t index = ctx->header.index;
-    const bool writable_tag = (index == IOLINK_IDX_APPLICATION_TAG) ||
-                              (index == IOLINK_IDX_FUNCTION_TAG) ||
-                              (index == IOLINK_IDX_LOCATION_TAG);
-    if (writable_tag) {
-        /* Table B.2.4：置位 Parameter（写）访问锁后，除
-           DeviceAccessLocks 外的每个读/写参数都受写保护。 */
-        if ((isdu_access_locks(ctx) & IOLINK_LOCK_PARAM) != 0U) {
-            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
-            return true;
-        }
-        return false;
-    }
-
-    switch (index) {
-        case IOLINK_IDX_PROFILE_CHARACTERISTIC:
-        case IOLINK_IDX_VENDOR_NAME:
-        case IOLINK_IDX_VENDOR_TEXT:
-        case IOLINK_IDX_PRODUCT_NAME:
-        case IOLINK_IDX_PRODUCT_ID:
-        case IOLINK_IDX_PRODUCT_TEXT:
-        case IOLINK_IDX_SERIAL_NUMBER:
-        case IOLINK_IDX_HARDWARE_REVISION:
-        case IOLINK_IDX_FIRMWARE_REVISION:
-        case IOLINK_IDX_PRODUCT_URI:
-        case IOLINK_IDX_ERROR_COUNT:
-        case IOLINK_IDX_DEVICE_STATUS:
-        case IOLINK_IDX_PROCESS_DATA_INPUT:
-        case IOLINK_IDX_PROCESS_DATA_OUTPUT:
-            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
-            return true;
-        default:
-            return false; /* 未知索引：由分发器返回 IDX_NOTAVAIL */
-    }
-}
-
 /** @brief B.2.5：0x000D 是 UIntegerT16 的 ArrayT（此处为单元素）。 */
 static void isdu_read_profile_characteristic(iolink_isdu_ctx_t* ctx,
                                              const iolink_device_info_t* info)
@@ -682,8 +606,10 @@ static const char* isdu_identification_string(const iolink_device_info_t* info, 
  *         返回 false（传输状态保持不变）。
  */
 static bool isdu_read_identification_string(iolink_isdu_ctx_t* ctx,
-                                            const iolink_device_info_t* info, uint16_t index)
+                                            const iolink_device_info_t* info,
+                                            const iolink_od_entry_t* entry)
 {
+    const uint16_t index = entry->index;
     const char* str_data = isdu_identification_string(info, index);
     if (index == IOLINK_IDX_PRODUCT_URI && str_data == NULL) {
         /* Table B.8/B.2.19：可选，且以存在关联 Profile 为条件；
@@ -695,15 +621,9 @@ static bool isdu_read_identification_string(iolink_isdu_ctx_t* ctx,
         return false;
     }
 
-    /* Table B.8/B.2.8-B.2.19：按对象定义的 StringT fixedLength 限制应答长度。
-       ProductURI 最多允许 100 字节；SerialNumber 为 16。 */
-    size_t limit = 64U;
-    if (index == IOLINK_IDX_SERIAL_NUMBER) {
-        limit = 16U;
-    }
-    else if (index == IOLINK_IDX_PRODUCT_URI) {
-        limit = 100U;
-    }
+    /* Table B.8/B.2.8-B.2.19：StringT 的 fixedLength 由表项 block_len 给出
+       （ProductURI 100、SerialNumber 16、其余 64）。 */
+    size_t limit = (size_t) entry->block_len;
     size_t len_sz = strlen(str_data);
     if (len_sz > limit) {
         len_sz = limit;
@@ -716,52 +636,6 @@ static bool isdu_read_identification_string(iolink_isdu_ctx_t* ctx,
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
     return true;
-}
-
-/** @brief 从参数集中读取应用/功能/位置标签。 */
-static void isdu_tag_read(iolink_isdu_ctx_t* ctx, uint16_t index)
-{
-    const iolink_result_t res =
-        isdu_params_get(ctx, index, 0U, ctx->response_buf, (size_t) IOLINK_ISDU_BUFFER_SIZE);
-    if (iolink_result_succeeded(res)) {
-        ctx->response_len = (uint8_t) res.len;
-        ctx->response_idx = 0U;
-        ctx->state = ISDU_STATE_RESPONSE_READY;
-        return;
-    }
-    /* 未绑定参数上下文（或读取失败）：返回否定应答，而不是静默丢弃
-       （否则主站会看到 No Service 0x00 而不是参数错误）。 */
-    isdu_respond_result(ctx, res);
-}
-
-/** @brief 将应用/功能/位置标签写入参数集。 */
-static void isdu_tag_write(iolink_isdu_ctx_t* ctx, uint16_t index)
-{
-    if ((index == IOLINK_IDX_APPLICATION_TAG) && (ctx->buffer_idx > 32U)) {
-        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
-        return;
-    }
-    const iolink_result_t res = isdu_params_set(ctx, index, 0U, ctx->buffer, ctx->buffer_idx, true);
-    if (iolink_result_succeeded(res)) {
-        ctx->response_len = 0U;
-        ctx->response_idx = 0U;
-        ctx->state = ISDU_STATE_RESPONSE_READY;
-        return;
-    }
-    /* 持久化存储或参数层拒绝了该服务：以否定应答
-       终止，而不是让主站持续轮询 Busy。 */
-    isdu_respond_result(ctx, res);
-}
-
-/** @brief 处理可写标识标签的读或写。 */
-static void isdu_tag_service(iolink_isdu_ctx_t* ctx, uint16_t index)
-{
-    if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
-        isdu_tag_write(ctx, index);
-    }
-    else {
-        isdu_tag_read(ctx, index);
-    }
 }
 
 /** @brief Table B.8/B.2.23-B.2.24：最近一次有效的过程输入/输出数据。 */
@@ -814,76 +688,6 @@ static void isdu_read_device_status(iolink_isdu_ctx_t* ctx)
     ctx->response_len = 1U;
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
-}
-
-/** @brief 处理强制标识/状态索引（供应商、产品、标签等）。 */
-static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
-{
-    const iolink_device_info_t* info = isdu_info(ctx);
-    if (isdu_check_mandatory_write(ctx)) {
-        return;
-    }
-    /* B.2.5：0x000D 是 ArrayT；此处处理的其他每个对象都是
-       仅暴露 subindex 0 的单元素参数。对只读对象的
-       WRITE 已在上文以 WRITE_PROTECTED 应答。 */
-    if ((ctx->header.subindex != 0U) && (ctx->header.index != IOLINK_IDX_PROFILE_CHARACTERISTIC)) {
-        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
-        return;
-    }
-
-    const uint16_t index = ctx->header.index;
-    switch (index) {
-            /* Table B.8：0x0004-0x000B 为保留索引。VendorID/DeviceID 位于
-               Direct Parameter Page 1（0x07-0x0B），而不在 ISDU 索引中。因此对
-               0x000A/0x000B 的读取会落到默认的 IDX_NOTAVAIL。 */
-
-        case IOLINK_IDX_PROFILE_CHARACTERISTIC:
-            if (info == NULL) {
-                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
-                return;
-            }
-            isdu_read_profile_characteristic(ctx, info);
-            return;
-        case IOLINK_IDX_ERROR_COUNT:
-            isdu_read_error_count(ctx);
-            return;
-        case IOLINK_IDX_VENDOR_NAME:
-        case IOLINK_IDX_VENDOR_TEXT:
-        case IOLINK_IDX_PRODUCT_NAME:
-        case IOLINK_IDX_PRODUCT_ID:
-        case IOLINK_IDX_PRODUCT_TEXT:
-        case IOLINK_IDX_SERIAL_NUMBER:
-        case IOLINK_IDX_HARDWARE_REVISION:
-        case IOLINK_IDX_FIRMWARE_REVISION:
-        case IOLINK_IDX_PRODUCT_URI:
-            if (info == NULL) {
-                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
-                return;
-            }
-            (void) isdu_read_identification_string(ctx, info, index);
-            return;
-        case IOLINK_IDX_APPLICATION_TAG:
-        case IOLINK_IDX_FUNCTION_TAG:
-        case IOLINK_IDX_LOCATION_TAG:
-            isdu_tag_service(ctx, index);
-            return;
-        case IOLINK_IDX_PROCESS_DATA_INPUT:
-            isdu_read_process_data(ctx, true);
-            return;
-        case IOLINK_IDX_PROCESS_DATA_OUTPUT:
-            isdu_read_process_data(ctx, false);
-            return;
-        case IOLINK_IDX_DEVICE_STATUS:
-            isdu_read_device_status(ctx);
-            return;
-
-            /* IOLINK_IDX_DETAILED_DEVICE_STATUS（0x0025）在其前的
-               handle_standard_commands() 中由 handle_detailed_device_status() 处理。 */
-
-        default:
-            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
-            return;
-    }
 }
 
 /* -------------------------------------------------------------------------
@@ -1726,55 +1530,241 @@ static void isdu_handle_system_command_index(iolink_isdu_ctx_t* ctx)
     handle_system_command(ctx, ctx->buffer[0]);
 }
 
+/**
+ * @brief 表项级访问控制：方向、访问锁与子索引上界。
+ *
+ * @return 允许继续处理时返回 true；否则已产生否定应答。
+ */
+static bool isdu_entry_allowed(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t* entry)
+{
+    if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
+        if ((entry->access & IOLINK_OD_ACCESS_WRITE) == 0U) {
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+            return false;
+        }
+        /* B.2.4：Parameter（写）访问锁保护所有标记了 LOCK_PARAM 的对象。 */
+        if (((entry->access & IOLINK_OD_ACCESS_LOCK_PARAM) != 0U) &&
+            ((isdu_access_locks(ctx) & IOLINK_LOCK_PARAM) != 0U)) {
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+            return false;
+        }
+    }
+    else if ((entry->access & IOLINK_OD_ACCESS_READ) == 0U) {
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_NOT_ACCESSIBLE);
+        return false;
+    }
+
+    if (ctx->header.subindex > entry->max_subindex) {
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+        return false;
+    }
+    return true;
+}
+
+#if IOLINK_FEATURE_DATA_STORAGE
+/** @brief 该 index/subindex 是否真的在 DS 引擎的参数集内。
+ *
+ * 表项的 storage 标志只描述"值得备份"；是否被 DS 引擎序列化取决于
+ * 绑定的描述符集合（默认由 OD 表派生）。只有真正在集合内的写入才
+ * 暂存，避免"暂存了但从不序列化"的校验和不一致。 */
+static bool isdu_ds_param_known(const iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex)
+{
+    const iolink_ds_ctx_t* ds = (const iolink_ds_ctx_t*) ctx->ds_ctx;
+    const size_t count = iolink_ds_param_count(ds);
+
+    for (size_t i = 0U; i < count; i++) {
+        iolink_ds_param_desc_t desc;
+        if (!iolink_ds_param_at(ds, i, &desc)) {
+            break;
+        }
+        if ((desc.index == index) && (desc.subindex == subindex)) {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
+/** @brief 通过表项读/写一个参数值（标签对象或应用后端）。 */
+static void isdu_serve_od_value(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t* entry)
+{
+    iolink_od_ctx_t od;
+    od.app = ctx->od;
+    od.params = ctx->params_ctx;
+
+    if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
+#if IOLINK_FEATURE_DATA_STORAGE
+        /* 块下载期间 DS 参数先暂存，ParamDownloadEnd 时原子提交（10.3.2）。 */
+        if ((entry->storage == IOLINK_OD_STORAGE_DS) && (ctx->ds_ctx != NULL) &&
+            iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx) &&
+            isdu_ds_param_known(ctx, entry->index, ctx->header.subindex)) {
+            const iolink_result_t staged =
+                iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, entry->index,
+                                      ctx->header.subindex, ctx->buffer, ctx->buffer_idx);
+            if (!iolink_result_succeeded(staged)) {
+                isdu_respond_result(ctx, staged);
+                return;
+            }
+            ctx->response_len = 0U;
+            ctx->response_idx = 0U;
+            ctx->state = ISDU_STATE_RESPONSE_READY;
+            return;
+        }
+#endif
+        const iolink_result_t result =
+            iolink_od_write_value(&od, entry, ctx->buffer, ctx->buffer_idx);
+        if (!iolink_result_succeeded(result)) {
+            isdu_respond_result(ctx, result);
+            return;
+        }
+        ctx->response_len = 0U;
+    }
+    else {
+        const iolink_result_t result = iolink_od_read_value(
+            &od, entry, ctx->header.subindex, ctx->response_buf, sizeof(ctx->response_buf));
+        if (!iolink_result_succeeded(result)) {
+            isdu_respond_result(ctx, result);
+            return;
+        }
+        ctx->response_len = (uint8_t) result.len;
+    }
+    ctx->response_idx = 0U;
+    ctx->state = ISDU_STATE_RESPONSE_READY;
+}
+
+/**
+ * @brief 按表项的内建处理器 ID 分发标准对象。
+ *
+ * 需要设备上下文的特殊对象（SystemCommand、DPP1/2、DeviceStatus、
+ * DataStorage 等）保留独立处理器；其余对象统一走 OD 值层。表项是唯一
+ * 的索引→处理器映射，因此新增标准对象不需要改动本函数。
+ */
+static void isdu_serve_entry(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t* entry)
+{
+    if (!isdu_entry_allowed(ctx, entry)) {
+        return;
+    }
+
+    switch ((iolink_od_handler_t) entry->handler) {
+        case IOLINK_OD_HANDLER_DIRECT_PARAM_1:
+        case IOLINK_OD_HANDLER_DIRECT_PARAM_2:
+            handle_direct_parameters(ctx);
+            return;
+
+        case IOLINK_OD_HANDLER_SYSTEM_COMMAND:
+            isdu_handle_system_command_index(ctx);
+            return;
+
+        case IOLINK_OD_HANDLER_DATA_STORAGE:
+#if IOLINK_FEATURE_DATA_STORAGE
+            handle_data_storage(ctx);
+#else
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+#endif
+            return;
+
+        case IOLINK_OD_HANDLER_ACCESS_LOCKS:
+            handle_access_locks(ctx);
+            return;
+
+        case IOLINK_OD_HANDLER_PROFILE: {
+            const iolink_device_info_t* info = isdu_info(ctx);
+            if (info == NULL) {
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+                return;
+            }
+            isdu_read_profile_characteristic(ctx, info);
+            return;
+        }
+
+        case IOLINK_OD_HANDLER_IDENT_STRING: {
+            const iolink_device_info_t* info = isdu_info(ctx);
+            if (info == NULL) {
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+                return;
+            }
+            if (!isdu_read_identification_string(ctx, info, entry)) {
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+            }
+            return;
+        }
+
+        case IOLINK_OD_HANDLER_ERROR_COUNT:
+            isdu_read_error_count(ctx);
+            return;
+
+        case IOLINK_OD_HANDLER_DEVICE_STATUS:
+            isdu_read_device_status(ctx);
+            return;
+
+        case IOLINK_OD_HANDLER_DETAILED_STATUS:
+#if IOLINK_FEATURE_EVENTS
+            handle_detailed_device_status(ctx);
+#else
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+#endif
+            return;
+
+        case IOLINK_OD_HANDLER_PD_INPUT:
+            isdu_read_process_data(ctx, true);
+            return;
+
+        case IOLINK_OD_HANDLER_PD_OUTPUT:
+            isdu_read_process_data(ctx, false);
+            return;
+
+        case IOLINK_OD_HANDLER_ERROR_STATS:
+            handle_error_stats(ctx);
+            return;
+
+        case IOLINK_OD_HANDLER_TAG:
+        case IOLINK_OD_HANDLER_BACKEND:
+            isdu_serve_od_value(ctx, entry);
+            return;
+
+        default:
+            isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+            return;
+    }
+}
+
 /** @brief 将已执行的 ISDU 请求分发到其索引对应的处理器。 */
 static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
 {
     ctx->response_negative = false;
-    /* B.2.27：Preferred Indices 0x0040-0x00FE 与
-       从 0x0100 开始的 Extended Index 范围一样属于设备专用；两者都会到达应用的厂商
-       服务。0x00FF 本身为保留值。 */
+    /* B.2.27：Preferred Indices 0x0040-0x00FE 与从 0x0100 开始的
+       Extended Index 范围属于设备专用；未在应用 OD 表中声明时到达
+       厂商服务。0x00FF 本身为保留值。 */
     const uint16_t index = ctx->header.index;
 #if IOLINK_FEATURE_DATA_STORAGE
     if (isdu_reject_ds_access(ctx)) {
         return;
     }
 #endif
+    /* 应用 OD 表优先：声明过的设备专用索引走统一的值层，不再需要
+       厂商服务里的手写编解码。 */
+    const iolink_od_entry_t* entry = iolink_od_find_app(ctx->od, index, ctx->header.subindex);
+    if (entry != NULL) {
+        isdu_serve_entry(ctx, entry);
+        return;
+    }
+
     const bool device_specific = ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
-    if (device_specific && (ctx->vendor_service == NULL)) {
+    if (device_specific && (ctx->vendor_service != NULL)) {
+        isdu_handle_vendor_index(ctx);
+        return;
+    }
+    if (device_specific) {
         IOLINK_LOG_DEBUG(&ctx->log, "vendor index 0x%04X ignored: no vendor_service",
                          (unsigned) index);
     }
-    if (device_specific && (ctx->vendor_service != NULL)) {
-        isdu_handle_vendor_index(ctx);
+
+    entry = iolink_od_find(NULL, index, ctx->header.subindex);
+    if (entry == NULL) {
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+        return;
     }
-    else if (index == IOLINK_IDX_SYSTEM_COMMAND) {
-        isdu_handle_system_command_index(ctx);
-    }
-    else if ((index == IOLINK_IDX_DIRECT_PARAMETERS_1) ||
-             (index == IOLINK_IDX_DIRECT_PARAMETERS_2)) {
-        handle_direct_parameters(ctx);
-    }
-#if IOLINK_FEATURE_DATA_STORAGE
-    else if (index == IOLINK_IDX_DATA_STORAGE) {
-        handle_data_storage(ctx);
-    }
-#endif
-    else if (index == IOLINK_IDX_DEVICE_ACCESS_LOCKS) {
-        handle_access_locks(ctx);
-    }
-#if IOLINK_FEATURE_EVENTS
-    else if (index == IOLINK_IDX_DETAILED_DEVICE_STATUS) {
-        handle_detailed_device_status(ctx);
-    }
-#endif
-    else if (index == IOLINK_IDX_ERROR_STATS) {
-        handle_error_stats(ctx);
-        ctx->response_idx = 0U;
-        ctx->state = ISDU_STATE_RESPONSE_READY;
-    }
-    else {
-        handle_mandatory_indices(ctx);
-    }
+    isdu_serve_entry(ctx, entry);
 }
 
 /* -------------------------------------------------------------------------

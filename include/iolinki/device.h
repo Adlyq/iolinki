@@ -16,6 +16,7 @@
 #include "iolinki/device_info.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/iolink.h"
+#include "iolinki/od.h"
 #include "iolinki/params.h"
 #include "iolinki/phy.h"
 #include <stdbool.h>
@@ -130,6 +131,7 @@ typedef struct
                                            参见 iolinki/log.h。 */
     iolink_log_level_t log_level;     /**< 运行时日志阈值；IOLINK_LOG_LEVEL_SILENT（0）
                                            表示不输出。 */
+    const iolink_od_app_t* od;        /**< 应用对象字典（可选；优先于 vendor_service） */
     uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex, bool write,
                               const uint8_t* input, size_t length, uint8_t* output,
                               size_t* output_length); /**< 可选的厂商 ISDU 回调；参见 isdu.h。 */
