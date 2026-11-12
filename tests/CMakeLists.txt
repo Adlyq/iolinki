@@ -156,6 +156,8 @@ if(CMOCKA_FOUND)
     add_iolink_test(test_pd test_pd.c)
     add_iolink_test(test_isdu test_isdu.c)
     add_iolink_test(test_isdu_wire test_isdu_wire.c)
+    # P4 安全网：表驱动重构前钉死强制索引/Direct Parameter/标签的线上行为。
+    add_iolink_test(test_od_characterization test_od_characterization.c)
     add_iolink_test(test_events test_events.c)
     add_iolink_test(test_ds test_ds.c)
     add_iolink_test(test_error_model test_error_model.c)
