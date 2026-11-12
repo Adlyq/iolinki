@@ -192,7 +192,7 @@ static void test_fallback_command_ignored_without_wakeup(void** state)
     test_io_cycle(&dev.ctx);
 
     /* 无唤醒时不支持该命令：会确认应答，但 DL 模式/状态不变。 */
-    assert_int_equal(dev.ctx.dll.main.fallback_deadline_ms, 0U);
+    assert_false(iolink_dll_timer_armed(&dev.ctx.dll.main, IOLINK_TIMER_T_FBD));
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 

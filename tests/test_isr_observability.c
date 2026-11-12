@@ -644,18 +644,20 @@ static int test_type0_commands_fast_path(void)
     frame[1] = IOLINK_MSEQ_TYPE_0;
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 3U));
     tx_n = 0U;
-    dll.main.fallback_deadline_ms = 0U;
+    dll_timer_cancel(&dll.main, IOLINK_TIMER_T_FBD);
     feed_chk(frame, 3U);
     iolink_dll_process_isr(&dll.main);
     while (dll.main.shared.isr_tx_active != 0U) {
         iolink_dll_process_isr(&dll.main);
     }
     if ((dll.main.shared.state != IOLINK_DLL_STATE_FALLBACK) || (tx_n != 1U) ||
-        (dll.main.shared.isr_fallback_pending == 0U) || (dll.main.fallback_deadline_ms != 0U)) {
+        (dll.main.shared.isr_fallback_pending == 0U) ||
+        iolink_dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD)) {
         return 3;
     }
     iolink_dll_process(&dll.main);
-    if ((dll.main.shared.isr_fallback_pending != 0U) || (dll.main.fallback_deadline_ms == 0U)) {
+    if ((dll.main.shared.isr_fallback_pending != 0U) ||
+        !iolink_dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD)) {
         return 5;
     }
 
@@ -681,7 +683,7 @@ static int test_fallback_clear_is_staged(void)
 {
     iolink_dll_ctx_t dll;
     init_type0_ctx(&dll);
-    dll.main.fallback_deadline_ms = 0x0000000123456789ULL;
+    dll_timer_arm(&dll.main, IOLINK_TIMER_T_FBD, 0x0000000123456789ULL);
 
     uint8_t frame[3];
     frame[0] = IOLINK_MC_CHANNEL_PAGE;
@@ -692,12 +694,13 @@ static int test_fallback_clear_is_staged(void)
     feed_chk(frame, 3U);
     iolink_dll_process_isr(&dll.main);
 
-    if ((dll.main.fallback_deadline_ms != 0x0000000123456789ULL) ||
+    if ((iolink_dll_timer_deadline(&dll.main, IOLINK_TIMER_T_FBD) != 0x0000000123456789ULL) ||
         (dll.main.fallback_clear_request == 0U)) {
         return 1; /* ISR 触碰了该 64 位字段 */
     }
     iolink_dll_process(&dll.main);
-    if ((dll.main.fallback_deadline_ms != 0U) || (dll.main.fallback_clear_request != 0U)) {
+    if (iolink_dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD) ||
+        (dll.main.fallback_clear_request != 0U)) {
         return 2; /* 主泵未实施已暂存的清除 */
     }
     return 0;
