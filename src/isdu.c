@@ -72,6 +72,40 @@ static uint8_t chkpdu(const uint8_t* octets, size_t len)
     return c;
 }
 
+/** @brief 把一段 scratch 缓冲接到上下文（唯一设置缓冲指针的位置）。 */
+static void isdu_attach_scratch(iolink_isdu_ctx_t* ctx, iolink_isdu_scratch_t* scratch)
+{
+    ctx->buffer = scratch->payload;
+    ctx->buffer_size = sizeof(scratch->payload);
+    ctx->response_buf = scratch->response;
+    ctx->response_size = sizeof(scratch->response);
+    ctx->req_buf = scratch->request;
+    ctx->req_size = sizeof(scratch->request);
+    ctx->resp_frame = scratch->frame;
+    /* 租约模型只有一份成帧缓冲：两个视图槽指向同一块内存，sel 位
+     * 仍按既有发布字编码交替，但不再复制第二份应答。 */
+    ctx->resp_store[0] = scratch->frame;
+    ctx->resp_store[1] = scratch->frame;
+    ctx->resp_buf = scratch->frame;
+}
+
+void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* ws)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    ctx->workspace = ws;
+    if (ws != NULL) {
+        isdu_attach_scratch(ctx, &ws->isdu);
+        return;
+    }
+#if IOLINK_WORKSPACE_EMBEDDED
+    isdu_attach_scratch(ctx, &ctx->scratch);
+#else
+    /* 无内嵌兜底：保持未绑定状态（指针已在 init 中清零）。 */
+#endif
+}
+
 void iolink_isdu_init(iolink_isdu_ctx_t* ctx)
 {
     if (!iolink_ctx_zero(ctx, sizeof(iolink_isdu_ctx_t))) {
@@ -80,7 +114,9 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx)
     ctx->state = ISDU_STATE_IDLE;
     ctx->resp_sel = 0U;
     ctx->resp_pub = 0U;
-    ctx->resp_buf = ctx->resp_store[0];
+#if IOLINK_WORKSPACE_EMBEDDED
+    isdu_attach_scratch(ctx, &ctx->scratch);
+#endif
 }
 
 void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app)
@@ -264,8 +300,8 @@ static void isdu_copy_payload(iolink_isdu_ctx_t* ctx, const uint8_t* buf, size_t
         const size_t data_end = total - 1U; /* 排除 CHKPDU */
         if (data_end > pos) {
             size_t n = data_end - pos;
-            if (n > sizeof(ctx->buffer)) {
-                n = sizeof(ctx->buffer);
+            if (n > ctx->buffer_size) {
+                n = ctx->buffer_size;
             }
             (void) memcpy(ctx->buffer, &buf[pos], n);
             ctx->buffer_idx = n;
@@ -305,12 +341,34 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
     ctx->state = ISDU_STATE_SERVICE_EXECUTE;
 }
 
+/** @brief 租约开始：在覆盖成帧缓冲前，把 ISR 视图显式标记为 Busy。
+ *
+ * 单份成帧缓冲意味着主泵写缓冲时，ISR 不得再把它当成"当前应答"。
+ * P5 的发布字已经是唯一交接点，这里在写缓冲之前先发布
+ * `{len=0, busy=1}`：ISR 看到 Busy/无服务后不会再读取缓冲内容，
+ * 随后的完成应答由 `dll_isdu_sync_snapshot()` 连同代数字一起发布。
+ * 独立引擎（`dll_ctx == NULL`）没有 ISR 读者，直接返回。
+ */
+static void isdu_lease_begin(iolink_isdu_ctx_t* ctx)
+{
+    iolink_dll_main_t* dll = (iolink_dll_main_t*) ctx->dll_ctx;
+    if (dll == NULL) {
+        return;
+    }
+    const IOLINK_ATOMIC_UINT_T busy = IOLINK_ISDU_PUB_WORD(0U, 1U, 0U);
+    if (iolink_atomic_load(&dll->shared.isr_isdu_pub) != busy) {
+        iolink_atomic_store(&dll->shared.isr_isdu_pub, busy);
+    }
+}
+
 /** @brief 将处理器结果组帧到 ctx->resp_buf（肯定或否定，A.5/C.1）。 */
 static void isdu_frame_response(iolink_isdu_ctx_t* ctx)
 {
     const bool negative = ctx->response_negative;
     const bool write = (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE);
     size_t pos = 0U;
+
+    isdu_lease_begin(ctx);
 
     if (negative) {
         ctx->resp_buf[pos++] = write ? 0x44U : 0xC4U; /* 写/读应答（-），长度 4 */
@@ -352,6 +410,7 @@ static void isdu_frame_response(iolink_isdu_ctx_t* ctx)
 /** @brief 为尚无法应答的读 START 构造 Busy 应答字节（0x01）。 */
 static void isdu_emit_busy(iolink_isdu_ctx_t* ctx)
 {
+    isdu_lease_begin(ctx);
     ctx->resp_buf[0] = 0x01U;
     ctx->resp_total = 1U;
     ctx->resp_idx = 0U;
@@ -360,7 +419,7 @@ static void isdu_emit_busy(iolink_isdu_ctx_t* ctx)
 void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_t* od,
                           uint8_t od_len)
 {
-    if (ctx == NULL) {
+    if ((ctx == NULL) || (ctx->buffer == NULL)) {
         return;
     }
 
@@ -419,7 +478,7 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
     }
 
     for (uint8_t i = 0U; i < od_len; i++) {
-        if (ctx->req_idx < sizeof(ctx->req_buf)) {
+        if (ctx->req_idx < ctx->req_size) {
             ctx->req_buf[ctx->req_idx++] = od[i];
         }
         if (ctx->req_total == 0U) {
@@ -454,7 +513,7 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
 
 void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_out, uint8_t od_len)
 {
-    if (ctx == NULL) {
+    if ((ctx == NULL) || (ctx->buffer == NULL)) {
         return;
     }
     for (uint8_t i = 0U; i < od_len; i++) {
@@ -482,6 +541,7 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_o
         }
         else {
             /* 空闲 / 无待处理服务：No Service（0x00）。 */
+            isdu_lease_begin(ctx);
             ctx->resp_buf[0] = 0x00U;
             ctx->resp_total = 1U;
             ctx->resp_idx = 0U;
@@ -628,8 +688,8 @@ static bool isdu_read_identification_string(iolink_isdu_ctx_t* ctx,
     if (len_sz > limit) {
         len_sz = limit;
     }
-    if (len_sz > sizeof(ctx->response_buf)) {
-        len_sz = sizeof(ctx->response_buf);
+    if (len_sz > ctx->response_size) {
+        len_sz = ctx->response_size;
     }
     (void) memcpy(ctx->response_buf, str_data, len_sz);
     ctx->response_len = (uint8_t) len_sz;
@@ -1324,24 +1384,15 @@ static void isdu_ds_write_command(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
 static void isdu_ds_read_record(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
 {
 #if IOLINK_DS_LEGACY_IMAGE_SUB0
-    /* 旧的整镜像备份读取。 */
-    size_t len = 0U;
-    const uint8_t* img = iolink_ds_get_image(ds, &len);
-    if ((img == NULL) || (len > IOLINK_ISDU_BUFFER_SIZE)) {
-        ctx->response_len = 0U;
-    }
-    else {
-        if (len > 0U) {
-            (void) memcpy(ctx->response_buf, img, len);
-        }
-        ctx->response_len = len;
-    }
+    /* 旧的整镜像备份读取：直接流式写入 ISDU 应答缓冲，不常驻镜像。 */
+    const int n = iolink_ds_serialize(ds, ctx->response_buf, ctx->response_size);
+    ctx->response_len = (n > 0) ? (size_t) n : 0U;
 #else
     /* Table B.10/B.11（SDCI_TC_0107）：sub0 是拼接记录：
        DS_Command、State_Property、Data_Storage_Size、Parameter_Checksum 与
        Index_List。 */
     if (!iolink_ds_downloading(ds)) {
-        (void) iolink_ds_build_image(ds);
+        iolink_ds_refresh(ds);
     }
     size_t pos = 0U;
     ctx->response_buf[pos++] = 0x00U; /* DS_Command 读取：未规定 */
@@ -1380,7 +1431,7 @@ static void isdu_ds_read_subindex(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds, u
                ParamDownloadStore 之前读到的值会与之后的值
                不一致。 */
             if (!iolink_ds_downloading(ds)) {
-                (void) iolink_ds_build_image(ds);
+                iolink_ds_refresh(ds);
             }
             size_t idx = 0U;
             isdu_write_u32_be(ctx->response_buf, &idx, iolink_ds_checksum(ds));
@@ -1620,8 +1671,8 @@ static void isdu_serve_od_value(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t*
         ctx->response_len = 0U;
     }
     else {
-        const iolink_result_t result = iolink_od_read_value(
-            &od, entry, ctx->header.subindex, ctx->response_buf, sizeof(ctx->response_buf));
+        const iolink_result_t result = iolink_od_read_value(&od, entry, ctx->header.subindex,
+                                                            ctx->response_buf, ctx->response_size);
         if (!iolink_result_succeeded(result)) {
             isdu_respond_result(ctx, result);
             return;
@@ -1773,7 +1824,7 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
 
 void iolink_isdu_process(iolink_isdu_ctx_t* ctx)
 {
-    if (ctx == NULL) {
+    if ((ctx == NULL) || (ctx->buffer == NULL)) {
         return;
     }
 
@@ -1818,7 +1869,8 @@ uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* busy, 
         }
         return 0U;
     }
-    if ((ctx->state != ISDU_STATE_RESPONSE_READY) || (dst == NULL) || (dst_size == 0U)) {
+    if ((ctx->state != ISDU_STATE_RESPONSE_READY) || (dst == NULL) || (dst_size == 0U) ||
+        (ctx->resp_buf == NULL)) {
         return 0U;
     }
     size_t n = ctx->resp_total;

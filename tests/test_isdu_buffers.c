@@ -8,12 +8,11 @@
 
 /**
  * @file test_isdu_buffers.c
- * @brief 分段 ISDU 应答绝不覆盖已发布的缓冲区。
+ * @brief P8：成帧应答使用单个缓冲 + 租约，两个视图槽指向同一内存。
  *
- * 引擎构建到 resp_store[resp_sel]；数据 ISR 服务
- * resp_store[resp_pub]。新的 START 只能在前一个应答已发布后切换
- * 构建缓冲区，因此连续不断的请求不能
- * 写入 ISR 仍被允许读取的缓冲区。
+ * 旧实现用 `resp_store[2]` 双缓冲避免覆盖 ISR 正在读取的应答。租约模型
+ * 改为：引擎在写缓冲之前先通过 P5 发布字发布 Busy，ISR 看到 Busy 后不再
+ * 读取缓冲；`resp_sel`/`resp_pub` 仍交替，保证发布字能区分新旧应答。
  */
 
 #include <assert.h>
@@ -22,6 +21,7 @@
 #include "iolinki/dll.h"
 #include "iolinki/isdu.h"
 #include "iolinki/protocol.h"
+#include "iolinki/workspace.h"
 
 /* 8 位索引读请求（I-Service 0x9，索引 0x10）及其 CHKPDU。 */
 static void send_start(iolink_isdu_ctx_t* isdu)
@@ -36,24 +36,41 @@ int main(void)
     iolink_isdu_ctx_t isdu;
     iolink_isdu_init(&isdu);
     assert(isdu.resp_sel == isdu.resp_pub);
+    assert(isdu.resp_frame != NULL);
+    /* 租约模型：两个视图槽指向同一份成帧缓冲。 */
+    assert(isdu.resp_store[0] == isdu.resp_frame);
+    assert(isdu.resp_store[1] == isdu.resp_frame);
+    assert(isdu.resp_buf == isdu.resp_frame);
 
-    /* 第一个请求：在另一个缓冲区中构建。 */
+    /* 第一个请求：视图索引切换，发布字因此能与上一份应答区分。 */
     send_start(&isdu);
     assert(isdu.resp_sel != isdu.resp_pub);
     const uint8_t published = isdu.resp_pub;
 
-    /* 在主循环泵发布第一个应答之前的第二个 START 不得
-     * 再次切换：那会覆盖 resp_store[resp_pub]。 */
-    isdu.resp_store[published][0] = 0xA5U; /* 哨兵：已发布的那份副本 */
+    /* 在发布之前再次 START：仍使用同一视图（不会无谓切换），
+     * 但绝不会丢掉已经发布的应答——因为视图指向同一缓冲，发布字
+     * 才是唯一的交接协议。 */
     send_start(&isdu);
     assert(isdu.resp_sel != isdu.resp_pub);
-    assert(isdu.resp_store[published][0] == 0xA5U);
 
-    /* 一旦发布，下一个请求切换到另一个缓冲区。 */
+    /* 一旦发布，下一个请求切换到另一个视图索引。 */
     isdu.resp_pub = isdu.resp_sel;
     const uint8_t previous = isdu.resp_sel;
     send_start(&isdu);
     assert(isdu.resp_sel != previous);
+
+    /* 外部工作区：绑定后所有缓冲都位于 workspace 内。 */
+    iolink_workspace_t ws;
+    iolink_isdu_bind_workspace(&isdu, &ws);
+    assert(isdu.buffer == ws.isdu.payload);
+    assert(isdu.response_buf == ws.isdu.response);
+    assert(isdu.req_buf == ws.isdu.request);
+    assert(isdu.resp_frame == ws.isdu.frame);
+    assert(isdu.resp_store[0] == ws.isdu.frame);
+    assert(isdu.resp_store[1] == ws.isdu.frame);
+    assert(isdu.buffer_size == sizeof(ws.isdu.payload));
+    assert(isdu.req_size == sizeof(ws.isdu.request));
+    (void) published;
 
     return 0;
 }

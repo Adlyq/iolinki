@@ -27,9 +27,15 @@ static void test_config_defaults(void** state)
 
     /* 验证 ISDU 缓冲区大小 */
     iolink_isdu_ctx_t isdu;
-    /* 预期：2 个 IOLINK_ISDU_BUFFER_SIZE（默认 256）缓冲区 + 额外开销 */
-    assert_true(sizeof(isdu.buffer) == IOLINK_ISDU_BUFFER_SIZE);
-    assert_true(sizeof(isdu.response_buf) == IOLINK_ISDU_BUFFER_SIZE);
+    (void) isdu;
+    /* 预期：内嵌 scratch 中分别为 IOLINK_ISDU_BUFFER_SIZE（默认 256）
+       的载荷/应答缓冲，请求与成帧缓冲带协议开销。 */
+#if IOLINK_WORKSPACE_EMBEDDED
+    assert_true(sizeof(isdu.scratch.payload) == IOLINK_ISDU_BUFFER_SIZE);
+    assert_true(sizeof(isdu.scratch.response) == IOLINK_ISDU_BUFFER_SIZE);
+    assert_true(sizeof(isdu.scratch.request) == IOLINK_ISDU_BUFFER_SIZE + 6U);
+    assert_true(sizeof(isdu.scratch.frame) == IOLINK_ISDU_BUFFER_SIZE + 3U);
+#endif
 
     /* 验证事件队列 */
     iolink_events_ctx_t events;

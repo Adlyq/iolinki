@@ -51,8 +51,13 @@ static void test_capacity_overrides(void** state)
     assert_int_equal(IOLINK_EVENT_QUEUE_SIZE, 2);
 
     iolink_isdu_ctx_t isdu;
-    assert_int_equal(sizeof(isdu.buffer), 64U);
-    assert_int_equal(sizeof(isdu.response_buf), 64U);
+    (void) isdu;
+#if IOLINK_WORKSPACE_EMBEDDED
+    assert_int_equal(sizeof(((iolink_isdu_ctx_t*) 0)->scratch.payload), 64U);
+    assert_int_equal(sizeof(((iolink_isdu_ctx_t*) 0)->scratch.response), 64U);
+    assert_int_equal(sizeof(((iolink_isdu_ctx_t*) 0)->scratch.request), 64U + 6U);
+    assert_int_equal(sizeof(((iolink_isdu_ctx_t*) 0)->scratch.frame), 64U + 3U);
+#endif
 
     iolink_events_ctx_t events;
     assert_int_equal(sizeof(events.queue) / sizeof(iolink_event_t), 2U);

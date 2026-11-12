@@ -12,6 +12,7 @@
 #include "iolinki/config.h"
 #include "iolinki/result.h"
 #include "iolinki/storage.h"
+#include "iolinki/workspace.h"
 
 #include "iolinki/protocol.h"
 #include "iolinki/params.h"
@@ -114,10 +115,17 @@ typedef struct
     uint32_t master_checksum;             /**< 主站最近校验过的校验和 */
     bool ds_upload_flag;                  /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
     bool upload_event_pending;            /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
-    uint8_t image[IOLINK_DS_IMAGE_MAX];   /**< 序列化的参数映像（DS_Data 0x0003） */
-    size_t image_len;                     /**< @ref image 中的有效字节数 */
-    bool download_invalid;                /**< 被拒绝的写入会使当前下载失效 */
-    iolink_log_sink_t log;                /**< 日志汇点（默认静默；设备层绑定） */
+    /* P8：镜像不再常驻状态结构。序列化交给工作区中的暂存缓冲（上传可
+     * 直接流式写入调用方缓冲），这里只保留指针与容量。 */
+    uint8_t* image;        /**< 序列化/下载暂存缓冲（工作区或内嵌 fallback） */
+    size_t image_size;     /**< @ref image 的容量 */
+    size_t image_len;      /**< @ref image 中的有效字节数 */
+    bool image_valid;      /**< image 是否保存了当前参数的完整快照 */
+    bool download_invalid; /**< 被拒绝的写入会使当前下载失效 */
+    iolink_log_sink_t log; /**< 日志汇点（默认静默；设备层绑定） */
+#if IOLINK_WORKSPACE_EMBEDDED
+    uint8_t scratch[IOLINK_DS_IMAGE_MAX]; /**< 未提供工作区时的默认暂存缓冲 */
+#endif
 } iolink_ds_ctx_t;
 
 /**
@@ -129,6 +137,45 @@ typedef struct
  */
 #if IOLINK_FEATURE_DATA_STORAGE
 void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage);
+
+/**
+ * @brief 绑定外部工作区（P8）。
+ *
+ * 绑定后 DS 的序列化/下载暂存使用 @p ws 的 `ds_stage` 区域，不再使用
+ * 上下文内嵌的 fallback 缓冲。必须在 `iolink_ds_init()` 之后调用。
+ * 设备层由 `iolink_device_init_with_workspace()` 自动完成。
+ *
+ * @param ctx DS 上下文
+ * @param ws  工作区（必须比 ctx 存活更久）；NULL 表示回到内嵌 fallback
+ */
+void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws);
+
+/**
+ * @brief 流式序列化当前 DS 参数集（P8）。
+ *
+ * 按记录 `[Index(2)][Subindex(1)][Length(1)][Data]` 逐条写入 @p out，
+ * 同时更新 @ref iolink_ds_ctx_t::current_checksum。不要求上下文持有完整
+ * 镜像：@p out 可以是 ISDU 应答缓冲、调用方缓冲，或 NULL（只统计长度/
+ * 校验和）。
+ *
+ * @param ctx DS 上下文
+ * @param out 目标缓冲（NULL 表示只计算）
+ * @param cap @p out 的容量
+ * @return int 序列化字节数；参数集放不下或读取失败时返回负值。
+ */
+int iolink_ds_serialize(iolink_ds_ctx_t* ctx, uint8_t* out, size_t cap);
+
+/**
+ * @brief 重新计算当前参数集的长度与校验和（不保存镜像）。
+ *
+ * 上传前的快照语义由流式序列化路径承担；本函数只刷新
+ * @ref iolink_ds_ctx_t::image_len 与
+ * @ref iolink_ds_ctx_t::current_checksum，用于 Data_Storage_Size /
+ * Parameter_Checksum 的读取。
+ *
+ * @param ctx DS 上下文
+ */
+void iolink_ds_refresh(iolink_ds_ctx_t* ctx);
 
 /**
  * @brief 绑定用作 DS 参数源的可写参数上下文。

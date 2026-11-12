@@ -17,8 +17,9 @@
  *    未启用 -fshort-enums 或 #pragma pack。
  *
  * 裁剪构建不编译单元测试（见 tests/CMakeLists.txt），因此这里只覆盖
- * 完整特性配置；裁剪/32 位配置的尺寸打印尚未实现，计划见
- * docs/EVOLUTION_ROADMAP.md 的 P8。
+ * 完整特性配置；`IOLINK_WORKSPACE_EMBEDDED=0` 的裁剪尺寸由
+ * docs/MEMORY_GUIDE.md 记录，并由 `-DIOLINK_WORKSPACE_EMBEDDED=0` 的
+ * 库构建验证可编译。
  *
  * 修改布局或缓冲默认值后，CI 会在这里失败——把新数值改进来，并同步
  * MEMORY_GUIDE.md。这正是本测试存在的目的：尺寸变化必须是有意识的决定。
@@ -33,6 +34,7 @@
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
 #include "iolinki/port.h"
+#include "iolinki/workspace.h"
 
 /* 宽度无关的嵌套关系：32 位与 64 位目标都成立。 */
 IOLINK_STATIC_ASSERT(sizeof(iolink_isdu_ctx_t) < sizeof(iolink_dll_ctx_t),
@@ -42,17 +44,41 @@ IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) >= sizeof(iolink_isdu_ctx_t) +
                                                      sizeof(iolink_events_ctx_t),
                      "the DLL context must contain the ISDU, DS and events contexts");
 
+/* P8：工作区的每个缓冲都是显式契约；任何容量变化必须同步本文件与
+ * docs/MEMORY_GUIDE.md。 */
+IOLINK_STATIC_ASSERT(sizeof(((iolink_isdu_scratch_t*) 0)->request) == IOLINK_ISDU_BUFFER_SIZE + 6U,
+                     "ISDU request scratch changed");
+IOLINK_STATIC_ASSERT(sizeof(((iolink_isdu_scratch_t*) 0)->payload) == IOLINK_ISDU_BUFFER_SIZE,
+                     "ISDU payload scratch changed");
+IOLINK_STATIC_ASSERT(sizeof(((iolink_isdu_scratch_t*) 0)->response) == IOLINK_ISDU_BUFFER_SIZE,
+                     "ISDU response scratch changed");
+IOLINK_STATIC_ASSERT(sizeof(((iolink_isdu_scratch_t*) 0)->frame) == IOLINK_ISDU_BUFFER_SIZE + 3U,
+                     "ISDU frame scratch changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_isdu_scratch_t) == 4U * IOLINK_ISDU_BUFFER_SIZE + 9U,
+                     "ISDU scratch must be four buffers without padding");
+#if IOLINK_FEATURE_DATA_STORAGE
+IOLINK_STATIC_ASSERT(sizeof(((iolink_workspace_t*) 0)->ds_stage) == IOLINK_DS_IMAGE_MAX,
+                     "DS stage scratch changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_workspace_t) ==
+                         sizeof(iolink_isdu_scratch_t) + IOLINK_DS_IMAGE_MAX,
+                     "workspace must contain the ISDU scratch and the DS stage");
+#else
+IOLINK_STATIC_ASSERT(sizeof(iolink_workspace_t) == sizeof(iolink_isdu_scratch_t),
+                     "workspace must contain the ISDU scratch");
+#endif
+
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
 #if IOLINK_STATS_MODE == IOLINK_STATS_SHARED
-IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 3664u, "dll ctx (STATS_SHARED) changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 3976u, "device ctx (STATS_SHARED) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 3504u, "dll ctx (STATS_SHARED) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 3816u, "device ctx (STATS_SHARED) changed");
 #else
-IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 3680u, "dll ctx (STATS_SPLIT) changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 3992u, "device ctx (STATS_SPLIT) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 3520u, "dll ctx (STATS_SPLIT) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 3832u, "device ctx (STATS_SPLIT) changed");
 #endif
-IOLINK_STATIC_ASSERT(sizeof(iolink_isdu_ctx_t) == 1496u, "isdu ctx changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_ds_ctx_t) == 376u, "ds ctx changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_isdu_ctx_t) == 1320u, "isdu ctx changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_ds_ctx_t) == 392u, "ds ctx changed");
 IOLINK_STATIC_ASSERT(sizeof(iolink_events_ctx_t) == 392u, "events ctx changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_workspace_t) == 1289u, "workspace changed");
 
 /* 布局契约（P2）：共享区必须是主上下文的首成员，ISR 状态紧随其后。
  * 使用显式的 typedef 名称，避免 C99 下按 __LINE__ 命名的断言在跨头文件
@@ -65,8 +91,8 @@ typedef char
 
 int main(void)
 {
-    printf("ctx sizes: dll=%zu device=%zu isdu=%zu ds=%zu events=%zu\n", sizeof(iolink_dll_ctx_t),
-           sizeof(iolink_device_ctx_t), sizeof(iolink_isdu_ctx_t), sizeof(iolink_ds_ctx_t),
-           sizeof(iolink_events_ctx_t));
+    printf("ctx sizes: dll=%zu device=%zu isdu=%zu ds=%zu events=%zu workspace=%zu\n",
+           sizeof(iolink_dll_ctx_t), sizeof(iolink_device_ctx_t), sizeof(iolink_isdu_ctx_t),
+           sizeof(iolink_ds_ctx_t), sizeof(iolink_events_ctx_t), sizeof(iolink_workspace_t));
     return 0;
 }

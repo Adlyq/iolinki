@@ -334,13 +334,21 @@ static int device_config_validate(const iolink_device_config_t* config)
     return IOLINK_DEVICE_INIT_OK;
 }
 
-int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config)
+int iolink_device_init_with_workspace(iolink_device_ctx_t* ctx,
+                                      const iolink_device_config_t* config,
+                                      iolink_workspace_t* workspace)
 {
     int err;
 
     if ((ctx == NULL) || (config == NULL)) {
         return IOLINK_DEVICE_INIT_ERR_NULL;
     }
+
+#if !IOLINK_WORKSPACE_EMBEDDED
+    if (workspace == NULL) {
+        return IOLINK_DEVICE_INIT_ERR_WORKSPACE;
+    }
+#endif
 
     err = device_config_validate(config);
     if (err != IOLINK_DEVICE_INIT_OK) {
@@ -368,6 +376,8 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     iolink_device_info_ctx_init(&ctx->device_info, config->device_info);
     iolink_params_ctx_init(&ctx->params, &ctx->device_info);
     iolink_dll_init(&ctx->dll.main, &ctx->dll.isr, &config->phy);
+    /* ISDU 的传输缓冲：外部工作区（P8）或默认内嵌 fallback。 */
+    iolink_isdu_bind_workspace(&ctx->dll.main.shared.isdu, workspace);
     /* 在推导任何截止时间之前绑定应用时钟。设备层
      * 要求该时钟（NULL 已在上文被拒绝）。事件引擎共享
      * 同一时钟，使事件时序与 DLL 一致。 */
@@ -391,6 +401,7 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     iolink_params_bind_storage(&ctx->params, config->storage);
     if (config->storage != NULL) {
         iolink_ds_init(&ctx->dll.main.ds, config->storage);
+        iolink_ds_bind_workspace(&ctx->dll.main.ds, workspace);
         ctx->dll.main.shared.isdu.ds_ctx = &ctx->dll.main.ds;
     }
     iolink_ds_bind_params(&ctx->dll.main.ds, &ctx->params);
@@ -427,6 +438,22 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
                     (unsigned) config->stack.pd_out_len, (unsigned) ctx->dll.main.shared.od_width,
                     (unsigned) ctx->dll.main.baudrate);
     return 0;
+}
+
+int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config)
+{
+    if (config == NULL) {
+        return IOLINK_DEVICE_INIT_ERR_NULL;
+    }
+    return iolink_device_init_with_workspace(ctx, config, config->workspace);
+}
+
+iolink_workspace_t* iolink_device_get_workspace(const iolink_device_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return NULL;
+    }
+    return ctx->dll.main.shared.isdu.workspace;
 }
 
 void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn write,

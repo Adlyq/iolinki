@@ -19,6 +19,7 @@
 #include "iolinki/od.h"
 #include "iolinki/params.h"
 #include "iolinki/phy.h"
+#include "iolinki/workspace.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -135,6 +136,9 @@ typedef struct
     uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex, bool write,
                               const uint8_t* input, size_t length, uint8_t* output,
                               size_t* output_length); /**< 可选的厂商 ISDU 回调；参见 isdu.h。 */
+    iolink_workspace_t* workspace; /**< 可选的传输 scratch 工作区（P8）。NULL 表示使用
+                                        上下文内嵌的 fallback 存储；当
+                                        `IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供。 */
 } iolink_device_config_t;
 
 /**
@@ -179,6 +183,7 @@ typedef enum
     IOLINK_DEVICE_INIT_ERR_PD_INPUT =
         -14,                          /**< IOLINK_APP_PD_INPUT_CALLBACK=1 但没有 on_pd_input 回调 */
     IOLINK_DEVICE_INIT_ERR_PHY = -15, /**< 构建配置所需的某个 PHY 钩子为 NULL */
+    IOLINK_DEVICE_INIT_ERR_WORKSPACE = -16, /**< `IOLINK_WORKSPACE_EMBEDDED=0` 但没有提供工作区 */
     /* -8（锁定对）和 -13（RTOS 锁）已废弃：协议栈只有一个
      * 主上下文调用者，不再获取应用线程锁。 */
 } iolink_device_init_result_t;
@@ -191,6 +196,30 @@ typedef enum
  *         或 PHY 初始化回调返回的负错误码。
  */
 int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config);
+
+/**
+ * @brief 使用显式工作区初始化设备上下文（P8）。
+ *
+ * 与 `iolink_device_init()` 相同，但把 ISDU/DS 的传输 scratch 绑定到
+ * @p workspace。工作区由调用方分配（可位于 DTCM 或外部 RAM），必须比
+ * @p ctx 存活更久。@p config 中的 `workspace` 字段被忽略。
+ *
+ * @param ctx       要初始化的设备上下文。
+ * @param config    要应用的配置。
+ * @param workspace 工作区；NULL 等价于 `iolink_device_init()`。
+ * @return 同 `iolink_device_init()`。
+ */
+int iolink_device_init_with_workspace(iolink_device_ctx_t* ctx,
+                                      const iolink_device_config_t* config,
+                                      iolink_workspace_t* workspace);
+
+/**
+ * @brief 返回设备当前绑定的工作区。
+ *
+ * @param ctx 设备上下文。
+ * @return 外部工作区指针；使用内嵌 fallback 存储时返回 NULL。
+ */
+iolink_workspace_t* iolink_device_get_workspace(const iolink_device_ctx_t* ctx);
 
 /**
  * @brief 在运行时更换日志回调或阈值。

@@ -93,6 +93,22 @@
 #endif
 
 /**
+ * @brief 是否在上下文内嵌默认的传输 scratch 缓冲。
+ *
+ * 1（默认）：`iolink_isdu_ctx_t` / `iolink_ds_ctx_t` 各自内嵌 fallback
+ * 存储，`iolink_isdu_init()` 等既有入口无需额外初始化即可使用。
+ * 0：上下文只保留缓冲指针，调用方必须提供
+ * `iolink_workspace_t`（设备层要求 `iolink_device_config_t::workspace`
+ * 非 NULL）。该模式把 ISDU 与 DS 的 scratch 全部移出上下文，是 P8 的
+ * 小 MCU 裁剪路径。
+ *
+ * 该开关只影响内存归属，不改变协议行为。
+ */
+#ifndef IOLINK_WORKSPACE_EMBEDDED
+#define IOLINK_WORKSPACE_EMBEDDED 1
+#endif
+
+/**
  * @brief Data Storage 序列化镜像的最大长度，单位字节。
  *
  * 记录布局为 [Index(2,大端)][Subindex(1)][Length(1)][Data(Length)]；

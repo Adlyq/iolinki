@@ -27,6 +27,10 @@
 
 #if IOLINK_FEATURE_DATA_STORAGE
 
+/* 无镜像缓冲时的流式检查块大小。只用于长度/校验和计算与无 workspace
+ * 的持久化加载；设备构建总会绑定 workspace，因此不会限制实际参数长度。 */
+#define IOLINK_DS_STREAM_CHUNK 32U
+
 /** @brief 将 DS_UPLOAD_FLAG 持久化到标志区（10.4.2）。 */
 static void ds_storage_save_flag(iolink_ds_ctx_t* ctx, uint8_t flag)
 {
@@ -58,7 +62,8 @@ static void ds_clear_upload_flag(iolink_ds_ctx_t* ctx)
 /** @brief 持久化 DS 镜像（magic + version + length + payload）。 */
 static void ds_storage_save_image(iolink_ds_ctx_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->storage == NULL) || (ctx->storage->write == NULL)) {
+    if ((ctx == NULL) || (ctx->storage == NULL) || (ctx->storage->write == NULL) ||
+        (ctx->image == NULL) || (ctx->image_len == 0U)) {
         return;
     }
     uint8_t header[IOLINK_STORAGE_DS_HDR_SIZE];
@@ -105,12 +110,17 @@ static void ds_storage_load_image(iolink_ds_ctx_t* ctx)
     if ((len == 0U) || (len > IOLINK_DS_IMAGE_MAX)) {
         return;
     }
-    if (ctx->storage->read(ctx->storage->user, IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_HDR_SIZE,
-                           ctx->image, len) == 0) {
+    const size_t payload_base = IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_HDR_SIZE;
+    if (ctx->image == NULL) {
+        /* 无暂存缓冲：不保留镜像；绑定工作区后会重新读取。 */
+        return;
+    }
+    if (ctx->storage->read(ctx->storage->user, (uint32_t) payload_base, ctx->image, len) == 0) {
         if (checksum != iolink_storage_checksum(ctx->image, len)) {
             return; /* 已损坏（位翻转 / 写入中断）。 */
         }
         ctx->image_len = len;
+        ctx->image_valid = true;
         ctx->current_checksum = iolink_ds_calc_checksum(ctx->image, len);
     }
 }
@@ -153,6 +163,34 @@ static bool ds_desc_at(const iolink_ds_ctx_t* ctx, size_t i, iolink_ds_param_des
     return true;
 }
 
+/** @brief 把暂存缓冲接到上下文（唯一设置 image 指针的位置）。 */
+static void ds_attach_image(iolink_ds_ctx_t* ctx, uint8_t* buffer, size_t size)
+{
+    ctx->image = buffer;
+    ctx->image_size = size;
+    ctx->image_valid = false;
+}
+
+void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    if (ws != NULL) {
+        ds_attach_image(ctx, ws->ds_stage, sizeof(ws->ds_stage));
+    }
+    else {
+#if IOLINK_WORKSPACE_EMBEDDED
+        ds_attach_image(ctx, ctx->scratch, sizeof(ctx->scratch));
+#endif
+        /* 无内嵌兜底：保持未绑定状态（image 已在 init 中清零）。 */
+    }
+    /* 绑定发生在初始化之后：把持久化镜像重新读入新的暂存缓冲。 */
+    if (ctx->storage != NULL) {
+        ds_storage_load_image(ctx);
+    }
+}
+
 void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage)
 {
     if (!iolink_ctx_zero(ctx, sizeof(iolink_ds_ctx_t))) {
@@ -163,6 +201,9 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage)
     /* 未绑定显式描述符：DS 集合由 OD 表派生（storage == DS）。 */
     ctx->params = NULL;
     ctx->param_count = 0U;
+#if IOLINK_WORKSPACE_EMBEDDED
+    ds_attach_image(ctx, ctx->scratch, sizeof(ctx->scratch));
+#endif
     ds_storage_load_image(ctx);
     ds_storage_load_flag(ctx);
 }
@@ -261,48 +302,114 @@ uint32_t iolink_ds_calc_checksum(const uint8_t* data, size_t len)
     return (sum2 << 16U) | sum1;
 }
 
-int iolink_ds_build_image(iolink_ds_ctx_t* ctx)
+/** @brief 按记录顺序累加 Fletcher-32（与 iolink_ds_calc_checksum 等价）。 */
+static void ds_accumulate(uint32_t* sum1, uint32_t* sum2, const uint8_t* data, size_t len)
+{
+    for (size_t i = 0U; i < len; ++i) {
+        *sum1 = (*sum1 + (uint32_t) data[i]) % 65535U;
+        *sum2 = (*sum2 + *sum1) % 65535U;
+    }
+}
+
+int iolink_ds_serialize(iolink_ds_ctx_t* ctx, uint8_t* out, size_t cap)
 {
     if (ctx == NULL) {
         return -1;
     }
+    size_t limit = IOLINK_DS_IMAGE_MAX;
+    if ((out != NULL) && (cap < limit)) {
+        limit = cap;
+    }
 
     size_t pos = 0U;
+    uint32_t sum1 = 0U;
+    uint32_t sum2 = 0U;
     const size_t count = ds_desc_count(ctx);
     for (size_t i = 0U; i < count; ++i) {
         iolink_ds_param_desc_t desc;
         if (!ds_desc_at(ctx, i, &desc)) {
             break;
         }
-        const uint16_t index = desc.index;
-        const uint8_t subindex = desc.subindex;
-
-        if ((pos + DS_RECORD_HEADER) > IOLINK_DS_IMAGE_MAX) {
+        if ((pos + DS_RECORD_HEADER) > limit) {
             return -1; /* 镜像放不下 */
         }
-        /* 直接读入镜像尾部；可选的每参数 max_len
-           限制取值长度。 */
-        size_t cap = (size_t) IOLINK_DS_IMAGE_MAX - pos - DS_RECORD_HEADER;
-        if ((desc.max_len != 0U) && (cap > (size_t) desc.max_len)) {
-            cap = (size_t) desc.max_len;
-        }
-        const iolink_result_t read_res =
-            ds_params_get(ctx, index, subindex, &ctx->image[pos + DS_RECORD_HEADER], cap);
-        int n = iolink_result_succeeded(read_res) ? (int) read_res.len : 0;
-        if ((size_t) n > cap) {
-            n = (int) cap;
+        size_t value_cap = limit - pos - DS_RECORD_HEADER;
+        if ((desc.max_len != 0U) && (value_cap > (size_t) desc.max_len)) {
+            value_cap = (size_t) desc.max_len;
         }
 
-        ctx->image[pos] = (uint8_t) (index >> 8);
-        ctx->image[pos + 1U] = (uint8_t) (index & 0xFFU);
-        ctx->image[pos + 2U] = subindex;
-        ctx->image[pos + 3U] = (uint8_t) n;
-        pos += DS_RECORD_HEADER + (size_t) n;
+        uint8_t header[DS_RECORD_HEADER];
+        header[0] = (uint8_t) (desc.index >> 8);
+        header[1] = (uint8_t) (desc.index & 0xFFU);
+        header[2] = desc.subindex;
+
+        if (out != NULL) {
+            /* 直接把值读入输出缓冲尾部，再补记录头：无额外镜像副本。 */
+            const iolink_result_t read_res = ds_params_get(ctx, desc.index, desc.subindex,
+                                                           &out[pos + DS_RECORD_HEADER], value_cap);
+            size_t n = iolink_result_succeeded(read_res) ? (size_t) read_res.len : 0U;
+            if (n > value_cap) {
+                n = value_cap;
+            }
+            header[3] = (uint8_t) n;
+            (void) memcpy(&out[pos], header, DS_RECORD_HEADER);
+            ds_accumulate(&sum1, &sum2, &out[pos], DS_RECORD_HEADER + n);
+            pos += DS_RECORD_HEADER + n;
+        }
+        else {
+            /* 只统计：用小栈块读取；超过块大小的参数在无 workspace 的
+             * 独立构建中不计入数据（设备构建总会绑定 workspace）。 */
+            uint8_t chunk[IOLINK_DS_STREAM_CHUNK];
+            size_t chunk_cap = value_cap;
+            if (chunk_cap > sizeof(chunk)) {
+                chunk_cap = sizeof(chunk);
+            }
+            const iolink_result_t read_res =
+                ds_params_get(ctx, desc.index, desc.subindex, chunk, chunk_cap);
+            size_t n = iolink_result_succeeded(read_res) ? (size_t) read_res.len : 0U;
+            if (n > chunk_cap) {
+                n = chunk_cap;
+            }
+            header[3] = (uint8_t) n;
+            ds_accumulate(&sum1, &sum2, header, DS_RECORD_HEADER);
+            ds_accumulate(&sum1, &sum2, chunk, n);
+            pos += DS_RECORD_HEADER + n;
+        }
     }
 
     ctx->image_len = pos;
-    ctx->current_checksum = iolink_ds_calc_checksum(ctx->image, pos);
+    ctx->current_checksum = (sum2 << 16U) | sum1;
     return (int) pos;
+}
+
+int iolink_ds_build_image(iolink_ds_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return -1;
+    }
+    if (ctx->image != NULL) {
+        const int n = iolink_ds_serialize(ctx, ctx->image, ctx->image_size);
+        ctx->image_valid = (n >= 0);
+        return n;
+    }
+    ctx->image_valid = false;
+    return iolink_ds_serialize(ctx, NULL, 0U);
+}
+
+void iolink_ds_refresh(iolink_ds_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    if ((ctx->image != NULL) && (ctx->image_size > 0U)) {
+        /* 暂存缓冲只作为序列化的落点，不建立常驻快照：上传/校验和读取
+         * 之后仍可随时从当前参数重新生成。 */
+        (void) iolink_ds_serialize(ctx, ctx->image, ctx->image_size);
+        ctx->image_valid = false;
+        return;
+    }
+    (void) iolink_ds_serialize(ctx, NULL, 0U);
+    ctx->image_valid = false;
 }
 
 /** @brief 当 index/subindex 属于已配置的 DS 集合时返回真。 */
@@ -378,6 +485,10 @@ bool iolink_ds_verify(const iolink_ds_ctx_t* ctx)
     if (ctx == NULL) {
         return false;
     }
+    if ((ctx->image == NULL) || !ctx->image_valid) {
+        /* 流式构建没有保存镜像：不存在可损坏的副本。 */
+        return true;
+    }
     return iolink_ds_calc_checksum(ctx->image, ctx->image_len) == ctx->current_checksum;
 }
 
@@ -386,8 +497,17 @@ const uint8_t* iolink_ds_get_image(iolink_ds_ctx_t* ctx, size_t* out_len)
     if (ctx == NULL) {
         return NULL;
     }
-    if (ctx->image_len == 0U) {
+    if (ctx->image == NULL) {
+        if (out_len != NULL) {
+            *out_len = 0U;
+        }
+        return NULL;
+    }
+    if (!ctx->image_valid || (ctx->image_len == 0U)) {
         if (iolink_ds_build_image(ctx) < 0) {
+            if (out_len != NULL) {
+                *out_len = 0U;
+            }
             return NULL;
         }
     }
@@ -434,8 +554,8 @@ void iolink_ds_process(iolink_ds_ctx_t* ctx)
 
     switch (ctx->state) {
         case IOLINK_DS_STATE_UPLOAD_REQ:
-            /* 主站无数据 -> 为上传快照当前参数。 */
-            (void) iolink_ds_build_image(ctx);
+            /* 主站无数据 -> 刷新上传视图（长度/校验和；镜像按需流式生成）。 */
+            iolink_ds_refresh(ctx);
             ctx->state = IOLINK_DS_STATE_UPLOADING;
             break;
 
@@ -469,7 +589,7 @@ int iolink_ds_start_upload(iolink_ds_ctx_t* ctx)
         return -1; /* 忙 */
     }
 
-    (void) iolink_ds_build_image(ctx);
+    iolink_ds_refresh(ctx);
     ctx->state = IOLINK_DS_STATE_UPLOAD_REQ;
     return 0;
 }
@@ -511,7 +631,7 @@ static int ds_cmd_upload_start(iolink_ds_ctx_t* ctx)
         (ctx->state == IOLINK_DS_STATE_DOWNLOAD_REQ)) {
         ctx->image_len = 0U;
     }
-    (void) iolink_ds_build_image(ctx);
+    iolink_ds_refresh(ctx);
     ctx->state = IOLINK_DS_STATE_UPLOAD_REQ;
     return 0;
 }
@@ -705,7 +825,7 @@ iolink_result_t iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint
     if (!found) {
         return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
-    if ((ctx->image_len + DS_RECORD_HEADER + len) > IOLINK_DS_IMAGE_MAX) {
+    if ((ctx->image == NULL) || ((ctx->image_len + DS_RECORD_HEADER + len) > ctx->image_size)) {
         ctx->download_invalid = true;
         return iolink_result_error(IOLINK_RESULT_INVALID);
     }
@@ -719,6 +839,7 @@ iolink_result_t iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint
         (void) memcpy(&ctx->image[pos + DS_RECORD_HEADER], data, len);
     }
     ctx->image_len = pos + DS_RECORD_HEADER + len;
+    ctx->image_valid = true; /* 下载暂存：完整记录集合，但尚未提交 */
     return iolink_result_ok(0U);
 }
 
