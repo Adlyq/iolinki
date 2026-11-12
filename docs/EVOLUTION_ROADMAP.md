@@ -401,8 +401,9 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 - G4 覆盖率：`./tools/coverage.sh --check`（基线在 `tools/coverage_baseline.txt`）
 - G5 差分门：P1 起全绿
 - G6 提交规范：Conventional Commits + CHANGELOG `[Unreleased]`；
-  `feature/refactor-*` 分支从 `own_dev` 切出、PR 合回 `own_dev`；
-  不涉及 upstream（MAINTENANCE.md 规则不变）。
+  `feature/*` 分支从 `own_dev` 切出，完成后**本地合并回 `own_dev`**（2026-11 用户
+  指示不建 PR；GitHub 上的临时 PR/分支已清理）；不涉及 upstream
+  （MAINTENANCE.md 规则不变）。
 
 ## 9. 决策门
 
