@@ -423,6 +423,19 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
   指示不建 PR；GitHub 上的临时 PR/分支已清理）；不涉及 upstream
   （MAINTENANCE.md 规则不变）。
 
+### 8.1 统一 CR 记录（2026-11）
+
+新增单测按 P4 / P5+P7+P9 / P6+P8 三组并行 CR。首轮三组均 FAIL（P4 2 MAJOR；
+P5/P7/P9 2 MAJOR；P6/P8 1 BLOCKER + 5 MAJOR），修复后 re-CR 三组全部 PASS。
+修复提交：`18d0179`、`a8d595b`。已记录且接受的缺口：
+
+- 外置工作区 + 单个 DS 参数 > `IOLINK_DS_STREAM_CHUNK`（32 B）时，流式长度/
+  校验和与镜像路径不一致（实现注释已声明；需先定契约再补测试）；
+- seqlock 两次读不一致的重试分支需要切点钩子，单线程宿主无法触发；
+- t_A 预算只钉住 COM2=260，未覆盖 COM1/COM3 推导；
+- C2（FRAME）仍无行为等价门，只有编译矩阵 + 语法探针；
+- 状态机生成门禁覆盖 `state/event/enter_state`，动作函数或 clause 漂移由差分门兜底。
+
 ## 9. 决策门
 
 | # | 时机 | 决策 | 倾向 |
