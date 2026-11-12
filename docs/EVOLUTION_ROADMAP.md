@@ -22,11 +22,13 @@ P0 基线硬化 → P1 差分测试门(H₀) → P2 所有权分区(C) → P3 �
 一句话：**先建账目和安全网（P0/P1），再定边界（P2/P3），再做两次大语义搬迁（P4/P5），
 再收敛配置与时间（P6/P7），最后做内存、证据与收尾（P8/P9/P10）。**
 
-执行记录（2026-11）：P0/P1/P2/P3/P4/P5/P7/P8/P9 已完成并本地合并到 `own_dev`
-（P6 设计稿与 P10 诊断设计稿已合并；P6 实现进行中）。当前尺寸（64 位主机默认）：
-device 3944 B、DLL 3632 B、ISDU 1320 B、workspace 1289 B（外置后 device 2520 B）；
-差分门 6 配置逐字节一致，覆盖率下限 90.4%，P9 宿主层 WCET 门在 CI。P10.1 降级为可选。
-每阶段执行细节与验收记录见各阶段小节；协作方式为本地合并（无 PR）。
+执行记录（2026-11，全部阶段完成）：P0–P10 已全部本地合并到 `own_dev`（无 PR）。
+最终数据（64 位主机、默认缓冲）：device 4072 B、DLL 3760 B、ISDU 1328 B、
+workspace 1289 B（外置后 device 2776 B）；82 项 ctest、4 个结构配置 + 7 个组合探针；
+差分门 2 配置逐字节一致、0 allowlist；覆盖率下限 90.6%；P9 宿主层 WCET 门与
+size/profile 门在 CI；`src/` `#if` 88、`include/` 119。P6 能力表化的 ROM 成本
+（最小应用 +972 B / +4.5%）由 DG3 记录为待产品决策。每阶段执行细节与验收记录见
+各阶段小节。
 
 ## 2. 背景：四类结构性债
 
@@ -407,6 +409,8 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
   - [x] 诊断注册表：PHY faults / 事件队列 / 数据通路错误 / 本地参数变更 / DS 状态
         收敛到 `iolink_diag_desc_t` + `iolink_conditions`，DeviceStatus/DDS/0x1800 派生；
   - [x] 全库审计与尺寸更新（device 4072、DLL 3760、events 504；外置 workspace 2776）。
+- **验证**：82/82 测试、4 结构配置矩阵、差分门、质量门、覆盖率 90.6%、
+  WCET、size 28 项、profile ABI 7 个反向档位全部通过。
 - **完成标志**：审计文档 + 最终数字。
 
 ## 8. 通用验收门与命令
@@ -427,7 +431,8 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 
 新增单测按 P4 / P5+P7+P9 / P6+P8 三组并行 CR。首轮三组均 FAIL（P4 2 MAJOR；
 P5/P7/P9 2 MAJOR；P6/P8 1 BLOCKER + 5 MAJOR），修复后 re-CR 三组全部 PASS。
-修复提交：`18d0179`、`a8d595b`。已记录且接受的缺口：
+修复提交：`18d0179`、`a8d595b`；P10 单测组首轮 FAIL（2 MAJOR）→ 修复后 PASS
+（`c456c4f`）。已记录且接受的缺口：
 
 - 外置工作区 + 单个 DS 参数 > `IOLINK_DS_STREAM_CHUNK`（32 B）时，流式长度/
   校验和与镜像路径不一致（实现注释已声明；需先定契约再补测试）；
