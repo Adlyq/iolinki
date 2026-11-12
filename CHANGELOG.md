@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Capability-table design for roadmap P6: `docs/CAPABILITY_DESIGN.md`
+  classifies all 37 compile-time knobs (23 stay compile-time, 12 become
+  runtime capability bits, 2 profile bundles retire), drafts the
+  `iolink_build_caps_t` / `iolink_caps_t` model, converges the 22-config
+  matrix to 4 structural configurations, and specifies how ROM is measured
+  for source integration versus non-LTO static-library delivery.
 - Unified result model: `iolink_result_t` (`include/iolinki/result.h`) with
   `0 = success`, negative internal codes and positive ISDU ErrorCodes.
   `iolink_params_ctx_read/write`, `iolink_ds_stage_param` and the DS parameter
