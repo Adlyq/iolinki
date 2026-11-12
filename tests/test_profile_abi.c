@@ -26,9 +26,9 @@ int main(void)
 {
     const iolink_build_caps_t* build = iolink_caps_build();
 
-    /* 锚点符号已解析（否则不会链接）；同时校验档位字段本身。 */
-    assert(iolink_test_profile_anchor[0] != NULL);
-    assert(build->abi == IOLINK_CAP_ABI);
+    /* 锚点数组的初始化即链接期引用：符号缺失时不会链接成功。这里只校验
+     * 档位字段本身，避免同义反复的断言。 */
+    (void) iolink_test_profile_anchor;
     assert(build->reserved == 0U);
     assert(build->built != 0U);
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME

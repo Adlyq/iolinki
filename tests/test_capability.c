@@ -64,9 +64,13 @@ static void test_build_profile_matches_macros(void** state)
 #endif
 #if IOLINK_FEATURE_DATA_STORAGE
     assert_true(iolink_caps_built(build, IOLINK_CAPB_DATA_STORAGE));
+#else
+    assert_false(iolink_caps_built(build, IOLINK_CAPB_DATA_STORAGE));
 #endif
 #if IOLINK_FEATURE_SYSTEM_COMMAND
     assert_true(iolink_caps_built(build, IOLINK_CAPB_SYSTEM_COMMAND));
+#else
+    assert_false(iolink_caps_built(build, IOLINK_CAPB_SYSTEM_COMMAND));
 #endif
 }
 
@@ -86,11 +90,11 @@ static void test_resolve_probes_the_built_vtable(void** state)
     assert_true(iolink_caps_has(caps, IOLINK_CAP_RX));
     assert_true(iolink_caps_has(caps, IOLINK_CAP_TX));
     assert_true(iolink_caps_has(caps, IOLINK_CAP_WAKEUP));
-#if IOLINK_PHY_FEATURE_SIO_CQ
     assert_true(iolink_caps_has(caps, IOLINK_CAP_SIO_CQ));
-#else
-    assert_false(iolink_caps_has(caps, IOLINK_CAP_SIO_CQ));
-#endif
+    /* 否定侧：同样的 vtable 去掉 set_cq_line 后能力必须消失。 */
+    iolink_phy_api_t no_cq = g_phy_mock;
+    no_cq.set_cq_line = NULL;
+    assert_false(iolink_caps_has(iolink_caps_resolve(&no_cq, NULL, NULL, NULL), IOLINK_CAP_SIO_CQ));
     /* mock PHY 没有这些可选钩子：能力位必须为 0。 */
     assert_false(iolink_caps_has(caps, IOLINK_CAP_TX_BUSY));
     assert_false(iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE));
@@ -195,6 +199,11 @@ static void test_resolve_uses_build_override(void** state)
     stack.flags = IOLINK_STACK_FLAG_NO_SYSTEM_COMMAND;
     const iolink_caps_t disabled = iolink_caps_resolve(NULL, &stack, NULL, &fake);
     assert_false(iolink_caps_has(disabled, IOLINK_CAP_SYSTEM_COMMAND));
+
+    /* 构建期 ISR-TX-ONLY 也会置位运行时要求位。 */
+    fake.built = IOLINK_CAPB_ISR_TX_ONLY;
+    assert_true(
+        iolink_caps_has(iolink_caps_resolve(NULL, NULL, NULL, &fake), IOLINK_CAP_REQUIRE_ISR_TX));
 }
 
 /* REQUIRE_ISR_TX 但 PHY 没有 request_service()：init 必须拒绝。 */

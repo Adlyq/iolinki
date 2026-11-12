@@ -10,6 +10,16 @@ endif()
 # trip -Wunused-but-set-variable). Keep assertions active for the suite.
 add_compile_options(-UNDEBUG)
 
+# P8 external-workspace profile: a second build of the sources without the
+# embedded scratch, so the -16 rejection and the explicit-workspace path are
+# compiled and executed (not only syntax-probed). No cmocka dependency.
+add_library(iolink_workspace_fixture STATIC ${IOLINK_SOURCES})
+target_include_directories(iolink_workspace_fixture PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_compile_definitions(iolink_workspace_fixture PUBLIC IOLINK_WORKSPACE_EMBEDDED=0)
+add_executable(test_workspace_external test_workspace_external.c)
+target_link_libraries(test_workspace_external iolink_workspace_fixture)
+add_test(NAME test_workspace_external COMMAND test_workspace_external)
+
 find_package(PkgConfig QUIET)
 # P4/D1：参数事实源是 C 对象字典表；校验 IODD 导出使用表项而不是 JSON 变量。
 find_package(Python3 QUIET)
@@ -194,16 +204,6 @@ if(CMOCKA_FOUND)
     add_iolink_test(test_timing test_timing.c)
     add_iolink_test(test_integration_full test_integration_full.c)
     add_iolink_test(test_workspace test_workspace.c)
-
-    # P8 external-workspace profile: a second build of the sources without the
-    # embedded scratch, so the -16 rejection and the explicit-workspace path
-    # are compiled and executed (not only syntax-probed).
-    add_library(iolink_workspace_fixture STATIC ${IOLINK_SOURCES})
-    target_include_directories(iolink_workspace_fixture PUBLIC ${CMAKE_SOURCE_DIR}/include)
-    target_compile_definitions(iolink_workspace_fixture PUBLIC IOLINK_WORKSPACE_EMBEDDED=0)
-    add_executable(test_workspace_external test_workspace_external.c)
-    target_link_libraries(test_workspace_external iolink_workspace_fixture)
-    add_test(NAME test_workspace_external COMMAND test_workspace_external)
     add_iolink_test(test_application test_application.c)
     # P6 能力表：构建档位、resolve() 与运行时覆盖规则。
     add_iolink_test(test_capability test_capability.c)

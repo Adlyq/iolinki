@@ -20,9 +20,11 @@ source of "why did my build not behave as configured" reports.
    (`include/iolinki/capability.h`). Read the result with
    `iolink_device_capabilities()`; override the mutable bits with
    `iolink_device_set_capabilities()`. Hardware bits (RX/TX, wake-up, SIO C/Q,
-   `request_service`) cannot be forged; requesting a capability the image was
-   not built with fails `iolink_device_init()` with
-   `IOLINK_DEVICE_INIT_ERR_PROFILE` (-17).
+   `request_service`) cannot be forged: `resolve()` re-probes the vtable on
+   every override. A capability the image was not built with is masked out
+   (the bit reads 0) instead of failing init; the reachable init checks are
+   `REQUIRE_ISR_TX` without `request_service()` and TX-FRAME+TX_BUSY without
+   the hook, both `IOLINK_DEVICE_INIT_ERR_PHY`.
 
 ## Compile-time switches (retained)
 
