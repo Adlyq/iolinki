@@ -167,7 +167,9 @@ static void test_device_init_binds_config_sink(void)
     /* The runtime switch silences an initialized device immediately. */
     iolink_device_set_log(&ctx, NULL, IOLINK_LOG_LEVEL_SILENT);
     reset_capture();
+#if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_check(&ctx.dll.ds, 0U); /* would log an upload request */
+#endif
     assert(g_calls == 0);
 }
 

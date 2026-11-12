@@ -409,19 +409,21 @@ void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn write,
     if (ctx == NULL) {
         return;
     }
+    void* user = (ctx->config != NULL) ? ctx->config->user : NULL;
+
+    /* 字段更新必须对数据 ISR 原子：启用 ISR 日志时，中断可能正在
+     * 读取同一个 sink。临界区在 SINGLE profile 中展开为空。 */
+    IOLINK_CRITICAL_ENTER();
     /* 设备层没有自己的 sink：打印点使用 DLL 的那一份。 */
-    iolink_log_sink_init(&ctx->dll.log, write, ctx->config != NULL ? ctx->config->user : NULL,
-                         level);
-    iolink_log_sink_init(&ctx->dll.isdu.log, write, ctx->config != NULL ? ctx->config->user : NULL,
-                         level);
+    iolink_log_sink_init(&ctx->dll.log, write, user, level);
+    iolink_log_sink_init(&ctx->dll.isdu.log, write, user, level);
 #if IOLINK_FEATURE_DATA_STORAGE
-    iolink_log_sink_init(&ctx->dll.ds.log, write, ctx->config != NULL ? ctx->config->user : NULL,
-                         level);
+    iolink_log_sink_init(&ctx->dll.ds.log, write, user, level);
 #endif
 #if IOLINK_FEATURE_EVENTS
-    iolink_log_sink_init(&ctx->dll.events.log, write,
-                         ctx->config != NULL ? ctx->config->user : NULL, level);
+    iolink_log_sink_init(&ctx->dll.events.log, write, user, level);
 #endif
+    IOLINK_CRITICAL_EXIT();
 }
 
 /** 选择一个 ISR 未在流式发送且非活动的 PD 输入缓冲区。

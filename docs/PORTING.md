@@ -412,6 +412,9 @@ The host `phy_virtual` example still uses `printf()` directly; a real port
 routes the sink to its UART/RTOS logger instead:
 
 ```c
+#include <stdarg.h>
+#include <stdio.h>
+
 static void port_log(void* user, iolink_log_level_t level, const char* format, ...)
 {
     (void) user;

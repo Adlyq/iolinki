@@ -71,7 +71,8 @@ typedef void (*iolink_log_write_fn)(void* user, iolink_log_level_t level, const 
  *
  * 全零表示静默。`level` 是运行时阈值：只转发级别数值不大于它的
  * 日志。结构体按值嵌入 DLL/ISDU/DS/事件上下文，由设备层在初始化
- * 和 iolink_device_set_log() 时统一写入。
+ * 和 iolink_device_set_log() 时统一写入。设备层的更新在临界区内
+ * 完成，因此启用 ISR 日志时不会读到半更新的 sink。
  */
 typedef struct
 {
