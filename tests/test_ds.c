@@ -692,6 +692,78 @@ static void ds_assert_image_record(const uint8_t* img, size_t len, uint16_t inde
     assert_memory_equal(value, expected, strlen(expected));
 }
 
+/* P6 期望帧用例：DataStorageIndex 子索引 0 的旧式整镜像载荷是运行时
+ * 兼容位。严格路径读拼接记录（10+3n 字节），兼容路径直接返回整镜像；
+ * 写操作在严格路径被 WRITE_PROTECTED 拒绝，兼容路径被接受。
+ * 这条用例取代了已退出差分门的 ds_legacy_sub0 配置。 */
+static int ds_fixture_read_sub0_with_caps(ds_fixture_t* f, const iolink_caps_t* caps, uint8_t* buf,
+                                          size_t cap)
+{
+    iolink_isdu_ctx_t ctx;
+    iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
+    ctx.ds_ctx = &f->ds;
+    ctx.params_ctx = &f->params;
+    ctx.event_ctx = &f->events;
+    iolink_isdu_bind_caps(&ctx, caps);
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0U), 1);
+    iolink_isdu_process(&ctx);
+    return isdu_collect_response(&ctx, buf, cap);
+}
+
+static int ds_fixture_write_sub0_with_caps(ds_fixture_t* f, const iolink_caps_t* caps,
+                                           const uint8_t* data, uint8_t len, uint8_t* buf,
+                                           size_t cap)
+{
+    iolink_isdu_ctx_t ctx;
+    iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
+    ctx.ds_ctx = &f->ds;
+    ctx.params_ctx = &f->params;
+    ctx.event_ctx = &f->events;
+    iolink_isdu_bind_caps(&ctx, caps);
+    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0U, data, len), 1);
+    iolink_isdu_process(&ctx);
+    return isdu_collect_response(&ctx, buf, cap);
+}
+
+static void test_ds_legacy_sub0_is_runtime_compat(void** state)
+{
+    (void) state;
+    ds_fixture_t f;
+    ds_fixture_init(&f, NULL);
+    ds_fixture_set_tags(&f, "APP1", "FLOW", "TANK");
+    assert_true(iolink_ds_build_image(&f.ds) > 0);
+    assert_true(f.ds.image_len > 0U);
+
+    /* 严格 V1.1：sub0 读是拼接记录，写被写保护拒绝。 */
+    iolink_caps_t strict = IOLINK_CAP_SYSTEM_COMMAND;
+    uint8_t record[256] = {0U};
+    const int record_len = ds_fixture_read_sub0_with_caps(&f, &strict, record, sizeof(record));
+    assert_true(record_len > 10);
+    assert_int_equal(record[0], 0x00U); /* DS_Command 读取 */
+    assert_true(record_len != (int) f.ds.image_len);
+
+    uint8_t err[2] = {0U};
+    const int err_len = ds_fixture_write_sub0_with_caps(&f, &strict, f.ds.image,
+                                                        (uint8_t) f.ds.image_len, err, sizeof(err));
+    assert_int_equal(err_len, 2);
+    assert_int_equal(err[0], 0x80U);
+    assert_int_equal(err[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+
+    /* 兼容位打开：读回整镜像字节，写被接受（空应答）。 */
+    iolink_caps_t legacy = IOLINK_CAP_SYSTEM_COMMAND | IOLINK_CAP_DS_LEGACY_SUB0;
+    uint8_t image[256] = {0U};
+    const int image_len = ds_fixture_read_sub0_with_caps(&f, &legacy, image, sizeof(image));
+    assert_int_equal(image_len, (int) f.ds.image_len);
+    assert_memory_equal(image, f.ds.image, f.ds.image_len);
+
+    uint8_t ack[2] = {0U};
+    assert_int_equal(ds_fixture_write_sub0_with_caps(&f, &legacy, f.ds.image,
+                                                     (uint8_t) f.ds.image_len, ack, sizeof(ack)),
+                     0);
+}
+
 /* 0077：通过 Data Storage Index（Index_List）完成完整上传，校验
  * 大小、校验和与序列化记录。 */
 static void test_ds_0077_full_upload_via_index_list(void** state)
@@ -973,6 +1045,7 @@ int main(void)
         cmocka_unit_test(test_ds_desc_max_len_bounds_value),
         cmocka_unit_test(test_ds_download_end_error_classification),
         cmocka_unit_test(test_ds_download_recovery),
+        cmocka_unit_test(test_ds_legacy_sub0_is_runtime_compat),
         cmocka_unit_test(test_ds_0077_full_upload_via_index_list),
         cmocka_unit_test(test_ds_0078_upload_set2_after_store),
         cmocka_unit_test(test_ds_0079_no_write_store_timeout),

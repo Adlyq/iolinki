@@ -27,6 +27,34 @@ void iolink_events_init(iolink_events_ctx_t* ctx)
     if (!iolink_ctx_zero(ctx, sizeof(iolink_events_ctx_t))) {
         return;
     }
+    ctx->min_appear_ms = (uint16_t) IOLINK_EVENT_MIN_APPEAR_MS;
+    ctx->min_repeat_ms = (uint16_t) IOLINK_EVENT_MIN_REPEAT_MS;
+}
+
+void iolink_events_set_window(iolink_events_ctx_t* ctx, uint16_t min_appear_ms,
+                              uint16_t min_repeat_ms)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    if (min_appear_ms != 0U) {
+        ctx->min_appear_ms = min_appear_ms;
+    }
+    if (min_repeat_ms != 0U) {
+        ctx->min_repeat_ms = min_repeat_ms;
+    }
+}
+
+/** @brief 最短“出现”窗口；未显式配置时回落到构建默认值。 */
+static uint16_t events_min_appear_ms(const iolink_events_ctx_t* ctx)
+{
+    return (ctx->min_appear_ms != 0U) ? ctx->min_appear_ms : (uint16_t) IOLINK_EVENT_MIN_APPEAR_MS;
+}
+
+/** @brief 同一 EventCode 的重复上报间隔；未显式配置时回落到构建默认值。 */
+static uint16_t events_min_repeat_ms(const iolink_events_ctx_t* ctx)
+{
+    return (ctx->min_repeat_ms != 0U) ? ctx->min_repeat_ms : (uint16_t) IOLINK_EVENT_MIN_REPEAT_MS;
 }
 
 /** @brief 来自已绑定应用时钟的当前时间（毫秒）。 */
@@ -154,10 +182,10 @@ static iolink_event_pending_t* pending_alloc(iolink_events_ctx_t* ctx, uint32_t 
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         iolink_event_pending_t* p = &ctx->pending[i];
         const bool appears_free = !p->appears_valid || ((uint32_t) (now - p->last_appears_ms) >=
-                                                        IOLINK_EVENT_MIN_REPEAT_MS);
+                                                        events_min_repeat_ms(ctx));
         const bool disappears_free =
             !p->disappears_valid ||
-            ((uint32_t) (now - p->last_disappears_ms) >= IOLINK_EVENT_MIN_REPEAT_MS);
+            ((uint32_t) (now - p->last_disappears_ms) >= events_min_repeat_ms(ctx));
         if (!p->present && !p->reported && appears_free && disappears_free) {
             (void) memset(p, 0, sizeof(*p));
             p->active = true;
@@ -168,17 +196,19 @@ static iolink_event_pending_t* pending_alloc(iolink_events_ctx_t* ctx, uint32_t 
 }
 
 /** @brief 1 s 间隔是否允许新的“事件出现”。 */
-static bool event_appears_elapsed(const iolink_event_pending_t* p, uint32_t now)
+static bool event_appears_elapsed(const iolink_events_ctx_t* ctx, const iolink_event_pending_t* p,
+                                  uint32_t now)
 {
     return !p->appears_valid ||
-           ((uint32_t) (now - p->last_appears_ms) >= IOLINK_EVENT_MIN_REPEAT_MS);
+           ((uint32_t) (now - p->last_appears_ms) >= events_min_repeat_ms(ctx));
 }
 
 /** @brief 1 s 间隔是否允许新的“事件消失”。 */
-static bool event_disappears_elapsed(const iolink_event_pending_t* p, uint32_t now)
+static bool event_disappears_elapsed(const iolink_events_ctx_t* ctx,
+                                     const iolink_event_pending_t* p, uint32_t now)
 {
     return !p->disappears_valid ||
-           ((uint32_t) (now - p->last_disappears_ms) >= IOLINK_EVENT_MIN_REPEAT_MS);
+           ((uint32_t) (now - p->last_disappears_ms) >= events_min_repeat_ms(ctx));
 }
 
 /** @brief 将“事件出现”入队并启动最短出现窗口。 */
@@ -274,7 +304,7 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
     p->type = type;
     ctx->pending_count++;
 
-    if (!p->reported && event_appears_elapsed(p, now)) {
+    if (!p->reported && event_appears_elapsed(ctx, p, now)) {
         /* 首次出现，或该 code 上一次“事件出现”之后超过 1 s 的
            新事件（10.10.2）。 */
         pending_emit_appears(ctx, p, now);
@@ -323,7 +353,7 @@ void iolink_events_process(iolink_events_ctx_t* ctx)
         }
         if (p->present && !p->reported) {
             /* 推迟的出现：1 s 间隔已过。 */
-            if (event_appears_elapsed(p, now)) {
+            if (event_appears_elapsed(ctx, p, now)) {
                 pending_emit_appears(ctx, p, now);
                 queued = true;
             }
@@ -332,14 +362,14 @@ void iolink_events_process(iolink_events_ctx_t* ctx)
         if (!p->present && p->reported) {
             /* A.6.4：“出现”后不到 50 ms 不得有“消失”；10.10.2：
                1 s 窗口内不得重复“消失”。 */
-            if (((uint32_t) (now - p->last_appears_ms) >= IOLINK_EVENT_MIN_APPEAR_MS) &&
-                event_disappears_elapsed(p, now)) {
+            if (((uint32_t) (now - p->last_appears_ms) >= events_min_appear_ms(ctx)) &&
+                event_disappears_elapsed(ctx, p, now)) {
                 pending_emit_disappears(ctx, p, now);
                 queued = true;
             }
         }
-        if (!p->present && !p->reported && event_appears_elapsed(p, now) &&
-            event_disappears_elapsed(p, now)) {
+        if (!p->present && !p->reported && event_appears_elapsed(ctx, p, now) &&
+            event_disappears_elapsed(ctx, p, now)) {
             /* 事件已消失且其 1 s 冷却已过：释放槽位。 */
             (void) memset(p, 0, sizeof(*p));
         }

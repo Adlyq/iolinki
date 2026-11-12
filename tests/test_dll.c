@@ -125,7 +125,6 @@ static void feed_master_command(uint8_t cmd)
     feed_type0_page_write(0x00U, cmd);
 }
 
-#if !IOLINK_COMPAT_V10_STARTUP_OPERATE
 /* 一个标记为非 Type-0 M-sequence 类型的 ISDU 空闲读
  * （READ | ISDU channel | FlowCTRL idle）。仍处于 STARTUP 的 V1.1 设备
  * 不得应答旧式的 OPERATE M-sequence。 */
@@ -136,7 +135,6 @@ static void feed_isdu_idle_with_type(uint8_t type_bits)
     frame[1] = (uint8_t) (type_bits | iolink_checksum6(frame, sizeof(frame)));
     feed_frame_bytes(frame, sizeof(frame));
 }
-#endif
 
 static void deliver_expect_type0_ack(iolink_device_ctx_t* ctx)
 {
@@ -880,7 +878,6 @@ static void test_dll_preoperate_to_operate_read_dpp1(void** state)
 /* Test Spec 0035：V1.1 设备在 STARTUP 期间不得接受 0x99，但必须在
  * Type-0 启动探测到达 PREOPERATE 之后接受同一命令，
  * 随后完成一次非 TYPE_0 的建立。 */
-#if !IOLINK_COMPAT_V10_STARTUP_OPERATE
 static void test_dll_startup_0x99_rejected(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0035");
@@ -951,9 +948,31 @@ static void test_dll_startup_0x99_rejected(void** state)
     deliver_frame_to_main(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 }
-#endif
 
-#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
+/* P6 期望帧用例：兼容位是运行时能力。置 IOLINK_CAP_COMPAT_V10_OP 后，
+ * 同一个 STARTUP 0x99 帧不再被拒绝，而是按 V1.0 捷径进入 ESTAB_COM
+ * （应答只有一个 CKS 字节）。这条用例取代了已退出差分门的 compat_v10
+ * 配置：它直接断言字节序列，而不是跨配置比对。 */
+static void test_dll_compat_v10_startup_operate_accepted(void** state)
+{
+    (void) state;
+    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_1,
+                                    .pd_in_len = 1,
+                                    .pd_out_len = 0,
+                                    .compat_flags = IOLINK_STACK_COMPAT_V10_STARTUP_OPERATE};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+
+    assert_true(iolink_caps_has(iolink_device_capabilities(&dev.ctx), IOLINK_CAP_COMPAT_V10_OP));
+
+    wake_device(&dev.ctx);
+    feed_master_command(IOLINK_CMD_DEVICE_OPERATE);
+    deliver_expect_type0_ack(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_ESTAB_COM);
+}
+
 /* Test Spec 0038：在非 TYPE_0 的 OPERATE 链路中，第一个 TYPE_0 页读
  * 被消耗而不予应答，并使设备降到 STARTUP；下一个页读
  * 作为启动探测被应答，而 OPERATE 类型的空闲请求保持不应答。 */
@@ -995,9 +1014,7 @@ static void test_dll_operate_type0_read_resets(void** state)
     deliver_expect_no_reply(&dev.ctx);
     assert_int_not_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 }
-#endif
 
-#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
 /* Test Spec 0049：在 OPERATE 中，第一个 TYPE_0 的 MinCycleTime 读会不应答地
  * 把链路降到 STARTUP；第二次读则返回 MinCycleTime 字节。 */
 static void test_dll_operate_type0_min_cycle_time_read(void** state)
@@ -1022,7 +1039,6 @@ static void test_dll_operate_type0_min_cycle_time_read(void** state)
     assert_int_equal(min_cycle_time, k_dpp1_type21_com2[0x02]);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
 }
-#endif
 
 /* B.1.1/Table B.1：DPP2 地址 0x10..0x1F 是合法的页地址。对未实现
  * 地址的读返回 0，而不是被拒绝。 */
@@ -1044,15 +1060,17 @@ static void test_dll_type0_dpp2_unimplemented_read_returns_zero(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 }
 
-#if IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
-/* 旧式主站的兼容处理：开启兼容开关后，OPERATE 期间的 TYPE_0 页读
- * 就地应答，链路不会重启（与 SDCI_TC_0038/0049 不符；
+/* 旧式主站的兼容处理（P6：运行时开关）：置
+ * IOLINK_STACK_COMPAT_TYPE0_PAGE_READ_OPERATE 后，OPERATE 期间的
+ * TYPE_0 页读就地应答，链路不会重启（与 SDCI_TC_0038/0049 不符；
  * 保留给在 OPERATE 中轮询页面的主站使用）。 */
 static void test_dll_compat_type0_page_read_answered_in_operate(void** state)
 {
     (void) state;
-    iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .pd_in_len = 1, .pd_out_len = 0};
+    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_1,
+                                    .pd_in_len = 1,
+                                    .pd_out_len = 0,
+                                    .compat_flags = IOLINK_STACK_COMPAT_TYPE0_PAGE_READ_OPERATE};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1064,7 +1082,6 @@ static void test_dll_compat_type0_page_read_answered_in_operate(void** state)
     assert_int_equal(deliver_type0_read(&dev.ctx), k_dpp1_type21_com2[0x02]);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 }
-#endif
 
 /* 下发一个包含 CHK 标记的完整帧。 */
 static void feed_frame_bytes(const uint8_t* frame, size_t len)
@@ -1790,21 +1807,17 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_preoperate_to_operate_read_dpp1, test_setup,
                                         test_teardown),
-#if !IOLINK_COMPAT_V10_STARTUP_OPERATE
         cmocka_unit_test_setup_teardown(test_dll_startup_0x99_rejected, test_setup, test_teardown),
-#endif
-#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
+        cmocka_unit_test_setup_teardown(test_dll_compat_v10_startup_operate_accepted, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_operate_type0_read_resets, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_operate_type0_min_cycle_time_read, test_setup,
                                         test_teardown),
-#endif
         cmocka_unit_test_setup_teardown(test_dll_type0_dpp2_unimplemented_read_returns_zero,
                                         test_setup, test_teardown),
-#if IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
         cmocka_unit_test_setup_teardown(test_dll_compat_type0_page_read_answered_in_operate,
                                         test_setup, test_teardown),
-#endif
         cmocka_unit_test_setup_teardown(test_dll_startup_cycle_time_reads, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_startup_operate_type_no_response, test_setup,

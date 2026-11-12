@@ -21,12 +21,6 @@
 #include "dll_internal.h"
 #include <string.h>
 
-#if IOLINK_APP_PD_INPUT_CALLBACK
-/* 在 application.h 中声明的 profile 标记：仅存在于回调构建中，使
- * 不匹配的应用在链接时失败，而不会破坏 vtable。 */
-const uint8_t iolink_app_pd_input_callback_profile = 1U;
-#endif
-
 /** @brief DLL 状态变化回调：分发到应用的 startup/preoperate/operate 钩子。 */
 static void device_state_cb(void* user, iolink_dll_state_t state)
 {
@@ -203,6 +197,17 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
      * M-sequence（PD/OD 长度与波特率）推导，并受应用下限约束。 */
     ctx->dll.main.min_cycle_time_us =
         (uint32_t) iolink_dll_compute_min_cycle_time(&ctx->dll.main) * 100U;
+
+    /* P6：时序强制的默认值来自构建档位，栈配置可以显式覆盖。 */
+    if (stack->timing_enforce == IOLINK_STACK_TIMING_ENFORCE) {
+        iolink_dll_set_timing_enforcement(&ctx->dll.main, true);
+    }
+    else if (stack->timing_enforce == IOLINK_STACK_TIMING_MEASURE) {
+        iolink_dll_set_timing_enforcement(&ctx->dll.main, false);
+    }
+    else {
+        /* DEFAULT：保留 iolink_dll_init() 从能力表取的值。 */
+    }
 }
 
 /** @brief 一种固定的 Annex A 布局：PD 输入/输出与可接受的 OD 宽度。 */
@@ -315,21 +320,34 @@ static int device_config_validate(const iolink_device_config_t* config)
     }
 #endif
 
-#if IOLINK_APP_PD_INPUT_CALLBACK
-    /* 该 profile 中回调是唯一的 PD 输入来源：接受
-     * 缺少它的配置会静默地不发布任何过程数据。 */
-    if ((config->app_callbacks == NULL) || (config->app_callbacks->on_pd_input == NULL)) {
-        return IOLINK_DEVICE_INIT_ERR_PD_INPUT;
-    }
-#endif
+    /* P6：实例能力与构建档位的一致性校验。降级后的最大风险是
+     * "能力位声明为开，但对应实现没被编译进来"，这里把它变成可
+     * 单元测试直接命中的负错误码。 */
+    const iolink_caps_t caps =
+        iolink_caps_resolve(&config->phy, &config->stack, config->app_callbacks, NULL);
+    const iolink_build_caps_t* build = iolink_caps_build();
 
-#if (IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME) && IOLINK_PHY_FEATURE_TX_BUSY
-    /* 该构建承诺基于 tx_busy() 释放租约；NULL 钩子会
-     * 退化为永不释放的 PD 输入租约。 */
-    if (config->phy.tx_busy == NULL) {
+    if (iolink_caps_has(caps, IOLINK_CAP_EVENTS) && !iolink_caps_built(build, IOLINK_CAPB_EVENTS)) {
+        return IOLINK_DEVICE_INIT_ERR_PROFILE;
+    }
+    if (iolink_caps_has(caps, IOLINK_CAP_SYSTEM_COMMAND) &&
+        !iolink_caps_built(build, IOLINK_CAPB_SYSTEM_COMMAND)) {
+        return IOLINK_DEVICE_INIT_ERR_PROFILE;
+    }
+
+    if (iolink_caps_has(caps, IOLINK_CAP_REQUIRE_ISR_TX) &&
+        !iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE)) {
+        /* 端口要求所有应答由 ISR 发送，但 PHY 没有 request_service()：
+         * 回退路径不可用，应答会全部丢弃。 */
         return IOLINK_DEVICE_INIT_ERR_PHY;
     }
-#endif
+
+    if ((IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME) && IOLINK_PHY_FEATURE_TX_BUSY &&
+        !iolink_caps_has(caps, IOLINK_CAP_TX_BUSY)) {
+        /* 该构建承诺基于 tx_busy() 释放租约；NULL 钩子会
+         * 退化为永不释放的 PD 输入租约。 */
+        return IOLINK_DEVICE_INIT_ERR_PHY;
+    }
 
     return IOLINK_DEVICE_INIT_OK;
 }
@@ -376,8 +394,13 @@ int iolink_device_init_with_workspace(iolink_device_ctx_t* ctx,
     iolink_device_info_ctx_init(&ctx->device_info, config->device_info);
     iolink_params_ctx_init(&ctx->params, &ctx->device_info);
     iolink_dll_init(&ctx->dll.main, &ctx->dll.isr, &config->phy);
+    /* P6：实例能力在绑定 PHY 之后、任何 ISR 可能运行之前解析一次。 */
+    ctx->dll.main.shared.caps =
+        iolink_caps_resolve(&config->phy, &config->stack, config->app_callbacks, NULL);
     /* ISDU 的传输缓冲：外部工作区（P8）或默认内嵌 fallback。 */
     iolink_isdu_bind_workspace(&ctx->dll.main.shared.isdu, workspace);
+    /* ISDU 与事件引擎按实例能力位选运行时路径（P6）。 */
+    iolink_isdu_bind_caps(&ctx->dll.main.shared.isdu, &ctx->dll.main.shared.caps);
     /* 在推导任何截止时间之前绑定应用时钟。设备层
      * 要求该时钟（NULL 已在上文被拒绝）。事件引擎共享
      * 同一时钟，使事件时序与 DLL 一致。 */
@@ -386,6 +409,9 @@ int iolink_device_init_with_workspace(iolink_device_ctx_t* ctx,
 #if IOLINK_FEATURE_EVENTS
     ctx->dll.main.shared.events.time_us = config->time_us;
     ctx->dll.main.shared.events.time_user = config->user;
+    /* A.6.4 的两个窗口是运行时能力（P6）：栈配置非 0 时覆盖构建默认值。 */
+    iolink_events_set_window(&ctx->dll.main.shared.events, config->stack.event_min_appear_ms,
+                             config->stack.event_min_repeat_ms);
 #endif
     /* iolink_dll_init() 在时钟绑定之前已采样了平台时钟。 */
     ctx->dll.main.master_last_activity_ms = dll_time_ms(&ctx->dll.main);
@@ -621,8 +647,7 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
         ctx->config->app_callbacks->on_pd_output(ctx->config->user, ctx->dll.main.pd_out,
                                                  ctx->dll.main.shared.pd_out_len_current);
     }
-#if IOLINK_APP_PD_INPUT_CALLBACK
-    if (ctx->config->app_callbacks->on_pd_input != NULL) {
+    if (iolink_caps_has(ctx->dll.main.shared.caps, IOLINK_CAP_PD_IN_CALLBACK)) {
         /* 填写一个 ISR 未在流式发送的缓冲区，然后原子地发布，
          * 使 ISR 永远不会发送撕裂的 PD 输入。回调的返回值
          * 即 PD 有效标志。 */
@@ -643,7 +668,6 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
         ctx->dll.main.shared.pd_in_active = inactive;
         IOLINK_CRITICAL_EXIT();
     }
-#endif
 }
 
 void iolink_device_process(iolink_device_ctx_t* ctx)
@@ -664,12 +688,16 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
     device_run_app_callbacks(ctx);
 }
 
-#if !IOLINK_APP_PD_INPUT_CALLBACK
 int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data, size_t len,
                                   bool valid)
 {
     if ((ctx == NULL) || (data == NULL) || (len > IOLINK_PD_IN_MAX_SIZE)) {
         return -1;
+    }
+    /* 回调路径已选中时拒绝轮询调用：两条路径混用会让线上 PD 在
+     * 回调输出与调用方数据之间跳变。 */
+    if (iolink_caps_has(ctx->dll.main.shared.caps, IOLINK_CAP_PD_IN_CALLBACK)) {
+        return IOLINK_DEVICE_INIT_ERR_PD_INPUT;
     }
     /* Annex A 固定类型的 PD 输入长度不可变。TYPE_2_V 可在
      * 配置的最大值内变化；两种情况都不得悄悄改变
@@ -708,7 +736,6 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
 
     return 0;
 }
-#endif /* !IOLINK_APP_PD_INPUT_CALLBACK */
 
 void iolink_device_process_isr(iolink_device_ctx_t* ctx)
 {
@@ -755,6 +782,37 @@ iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx)
     return (ctx != NULL) ? &ctx->dll.main.ds : NULL;
 }
 #endif
+
+iolink_caps_t iolink_device_capabilities(const iolink_device_ctx_t* ctx)
+{
+    return (ctx != NULL) ? ctx->dll.main.shared.caps : (iolink_caps_t) 0U;
+}
+
+iolink_caps_t iolink_device_set_capabilities(iolink_device_ctx_t* ctx, iolink_caps_t caps)
+{
+    if ((ctx == NULL) || (ctx->config == NULL)) {
+        return (iolink_caps_t) 0U;
+    }
+    /* 与 PHY vtable、应用回调绑定的位由 resolve() 重新推导，调用方
+     * 只能修改运行时开关（兼容位、SystemCommand、访问锁）。 */
+    const iolink_caps_t bound_mask = IOLINK_CAP_RX | IOLINK_CAP_TX | IOLINK_CAP_WAKEUP |
+                                     IOLINK_CAP_SIO_CQ | IOLINK_CAP_TX_BUSY |
+                                     IOLINK_CAP_REQUEST_SERVICE | IOLINK_CAP_PHY_FAULTS |
+                                     IOLINK_CAP_REQUIRE_ISR_TX | IOLINK_CAP_PD_IN_CALLBACK;
+    const iolink_caps_t bound = iolink_caps_resolve(&ctx->config->phy, &ctx->config->stack,
+                                                    ctx->config->app_callbacks, NULL);
+    const iolink_build_caps_t* build = iolink_caps_build();
+
+    caps = (caps & (iolink_caps_t) ~bound_mask) | (bound & bound_mask);
+    if (!iolink_caps_built(build, IOLINK_CAPB_EVENTS)) {
+        caps &= (iolink_caps_t) ~IOLINK_CAP_EVENTS;
+    }
+    if (!iolink_caps_built(build, IOLINK_CAPB_SYSTEM_COMMAND)) {
+        caps &= (iolink_caps_t) ~IOLINK_CAP_SYSTEM_COMMAND;
+    }
+    ctx->dll.main.shared.caps = caps;
+    return caps;
+}
 
 bool iolink_device_master_lost(const iolink_device_ctx_t* ctx)
 {

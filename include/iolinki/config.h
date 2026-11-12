@@ -156,9 +156,12 @@
 #endif
 
 /**
- * @brief 默认启用定时强制检查。
+ * @brief 时序强制检查的构建默认值（P6：降级为数据）。
  *
- * 1：强制检查 t_ren / t_cycle；0：仅测量并计数。默认：0
+ * 1：默认强制检查 t_ren / t_cycle；0：默认仅测量并计数。默认：0
+ *
+ * 该宏只提供 `iolink_build_caps_t::timing_enforce_default` 的初值；
+ * 每个实例可用 `iolink_stack_config_t::timing_enforce` 覆盖。
  */
 #ifndef IOLINK_TIMING_ENFORCE_DEFAULT
 #define IOLINK_TIMING_ENFORCE_DEFAULT 0U
@@ -201,28 +204,10 @@
 
 /* --- 3.1 功能裁剪 [可覆盖] --------------------------------------------- */
 
-/**
- * @brief 便利档位：一次关闭下面多个可选特性（保留事件引擎）。
- *
- * 显式的 `-DIOLINK_FEATURE_*=1` 始终优先（`#ifndef` 保护）。必须定义为非 0
- * （例如 `-DIOLINK_MINIMAL_PROFILE=1`）；定义为 0 表示关闭。非 CMake 构建
- * 注意：裸定义或 `=ON` 在预处理中同样求值为 0（不会启用裁剪），必须写 `=1`。
- * CMake 用户请用 `-DIOLINK_MINIMAL_PROFILE=ON`（由 CMake 转成特性开关）。
- */
-#if defined(IOLINK_MINIMAL_PROFILE) && (IOLINK_MINIMAL_PROFILE + 0)
-#ifndef IOLINK_FEATURE_DATA_STORAGE
-#define IOLINK_FEATURE_DATA_STORAGE 0
-#endif
-#ifndef IOLINK_FEATURE_SYSTEM_COMMAND
-#define IOLINK_FEATURE_SYSTEM_COMMAND 0
-#endif
-#ifndef IOLINK_PHY_FEATURE_WAKEUP
-#define IOLINK_PHY_FEATURE_WAKEUP 0
-#endif
-#ifndef IOLINK_PHY_FEATURE_SIO_CQ
-#define IOLINK_PHY_FEATURE_SIO_CQ 0
-#endif
-#endif /* IOLINK_MINIMAL_PROFILE */
+/* P6：`IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` 已退役。它们是
+ * 组合包而不是能力，等价物是结构配置 C3（target_minimal）：显式关闭
+ * `IOLINK_FEATURE_DATA_STORAGE` 与 `IOLINK_FEATURE_EVENTS`。
+ * 需要最小镜像时请直接设置这两个开关，而不是使用组合包。 */
 
 /** @brief 数据存储子系统（data_storage.c、ISDU DS 服务、ds ctx）。 */
 #ifndef IOLINK_FEATURE_DATA_STORAGE
@@ -236,26 +221,34 @@
 #ifndef IOLINK_FEATURE_EVENTS
 #define IOLINK_FEATURE_EVENTS 1
 #endif
-/** @brief PHY 唤醒检测（detect_wakeup）。 */
+/**
+ * @brief PHY 唤醒检测（P6：已降级为运行时能力，本宏不再生效）。
+ *
+ * `detect_wakeup` 现在是常驻 vtable 成员（NULL = 无能力），由
+ * `iolink_caps_resolve()` 解析成 `IOLINK_CAP_WAKEUP`。宏保留只为兼容
+ * 旧构建脚本。
+ */
 #ifndef IOLINK_PHY_FEATURE_WAKEUP
 #define IOLINK_PHY_FEATURE_WAKEUP 1
 #endif
-/** @brief PHY 手动 C/Q 推挽（set_cq_line）。 */
+/**
+ * @brief PHY 手动 C/Q 推挽（P6：已降级为运行时能力，本宏不再生效）。
+ *
+ * 同 `IOLINK_PHY_FEATURE_WAKEUP`；能力位是 `IOLINK_CAP_SIO_CQ`。
+ */
 #ifndef IOLINK_PHY_FEATURE_SIO_CQ
 #define IOLINK_PHY_FEATURE_SIO_CQ 1
 #endif
 
 /**
- * @brief PD 输入路径选择 [可覆盖]。
+ * @brief PD 输入路径选择（P6：已降级为运行时数据，本宏不再生效）。
  *
- * 0（默认）：应用在主循环调用 `iolink_device_pd_input_update()`；
- *   `iolink_app_callbacks_t` 不含 `on_pd_input` 成员。
- * 1：DLL 每个 OPERATE 周期调用 `on_pd_input()` 填充 PD-in；
- *   `iolink_device_pd_input_update()` 不再声明（调用即编译/链接错误）。
+ * 两条路径现在同时存在：`iolink_app_callbacks_t::on_pd_input` 非 NULL
+ * 时 DLL 每周期调用回调，否则应用使用
+ * `iolink_device_pd_input_update()`。选择结果是实例能力位
+ * `IOLINK_CAP_PD_IN_CALLBACK`，不再改变任何结构体布局。
  *
- * 两条路径在编译期互斥，未使用的符号/成员直接从公开头文件移除。
- * CMake 用户请用 `-DIOLINK_APP_PD_INPUT_CALLBACK=ON`（会作为 PUBLIC
- * 定义传播给库的消费者，保证结构体布局一致）。
+ * 宏保留只为兼容旧的构建脚本；定义它不会删除任何 API。
  */
 #ifndef IOLINK_APP_PD_INPUT_CALLBACK
 #define IOLINK_APP_PD_INPUT_CALLBACK 0
@@ -294,10 +287,11 @@
 #endif
 
 /**
- * @brief 要求 PHY 为 ISR 泵应答提供 request_service() 钩子。
+ * @brief 要求 PHY 为 ISR 泵应答提供 request_service() 钩子（P6：降级）。
  *
- * 0（默认）：没有该钩子的 PHY 保留从调用上下文直接发送的回退路径（主机测试）。
- * 1：不使用回退，每个应答都由 ISR 上报，板卡必须提供 request_service()。
+ * 该宏只提供 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 的构建默认值。回退路径
+ * 常驻；"只有 ISR 能发"是运行时能力位 `IOLINK_CAP_REQUIRE_ISR_TX`，
+ * 由 `iolink_device_init()` 校验（缺 request_service() 时拒绝初始化）。
  */
 #ifndef IOLINK_PHY_FEATURE_ISR_TX_ONLY
 #define IOLINK_PHY_FEATURE_ISR_TX_ONLY 0
@@ -353,7 +347,13 @@
 #define IOLINK_STATS_MODE IOLINK_STATS_SHARED
 #endif
 
-/* --- 3.4 协议兼容 [可覆盖，默认严格 V1.1] ------------------------------ */
+/* --- 3.4 协议兼容 [P6：已降级，宏只提供构建默认值] --------------------- */
+
+/*
+ * 这三个开关现在是 `iolink_stack_config_t::compat_flags`
+ * （IOLINK_STACK_COMPAT_*）的构建默认值，实例可用运行时配置覆盖
+ * （按位或）。判定点只有一个：实例能力位 IOLINK_CAP_COMPAT_*。
+ */
 
 /**
  * @brief 接受 V1.0 的 STARTUP -> OPERATE DeviceOperate（0x99）捷径。

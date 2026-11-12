@@ -432,20 +432,20 @@ static void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
         return;
     }
 
-#if !IOLINK_PHY_FEATURE_ISR_TX_ONLY
-    /* 适用于无 service 钩子的 PHY 的旧回退路径（流式/主机测试）。
-     * 它从此上下文驱动 TX 钩子，因此数据中断不能与
-     * 传输交错。 */
-    IOLINK_CRITICAL_ENTER();
-    ctx->shared.isr_tx_pending = 0U;
-    dll_isr_start_staged_tx(ctx, slot, (uint8_t) len);
-    IOLINK_CRITICAL_EXIT();
-#else
+    if (!iolink_caps_has(ctx->shared.caps, IOLINK_CAP_REQUIRE_ISR_TX)) {
+        /* 适用于无 service 钩子的 PHY 的旧回退路径（流式/主机测试）。
+         * 它从此上下文驱动 TX 钩子，因此数据中断不能与
+         * 传输交错。 */
+        IOLINK_CRITICAL_ENTER();
+        ctx->shared.isr_tx_pending = 0U;
+        dll_isr_start_staged_tx(ctx, slot, (uint8_t) len);
+        IOLINK_CRITICAL_EXIT();
+        return;
+    }
     /* 仅有 ISR、且没有 request_service() 的 PHY：应答无法发送。
      * 对其计数，使配置错误可被观测而非静默。 */
     ctx->shared.isr_tx_pending = 0U;
     ctx->shared.isr_tx_dropped++;
-#endif /* !IOLINK_PHY_FEATURE_ISR_TX_ONLY */
 }
 
 /* -------------------------------------------------------------------------
@@ -1220,22 +1220,23 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
              (state == (uint8_t) IOLINK_DLL_STATE_ESTAB_COM)) {
         if (!type0) {
             dll_plan_push_type12(ctx, &count);
-#if IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
-            /* 兼容模式：OPERATE 中的 Type-0 页读仍按普通页读应答。 */
-            dll_plan_push(ctx, &count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
-                          IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 2U,
-                          IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_PAGE, 1U,
-                          IOLINK_REPLY_FLAG_CONSUME, IOLINK_REPLY_ACT_NONE, NULL);
-#else
-            /* Tables 57/67：OPERATE 中的 Type-0 页读是复位请求，不应答。
-             * 计划显式表达"消费该帧并回到 STARTUP"，使主泵无需再看到它
-             * （与历史的即时路径逐字节、逐计数一致）。 */
-            dll_plan_push(ctx, &count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
-                          IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 2U,
-                          IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_NONE, 0U,
-                          IOLINK_REPLY_FLAG_CLOSE_WINDOW | IOLINK_REPLY_FLAG_CONSUME,
-                          IOLINK_REPLY_ACT_RESET_STARTUP, NULL);
-#endif
+            if (iolink_caps_has(ctx->shared.caps, IOLINK_CAP_COMPAT_T0_READ)) {
+                /* 兼容模式：OPERATE 中的 Type-0 页读仍按普通页读应答。 */
+                dll_plan_push(ctx, &count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                              IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 2U,
+                              IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_PAGE, 1U,
+                              IOLINK_REPLY_FLAG_CONSUME, IOLINK_REPLY_ACT_NONE, NULL);
+            }
+            else {
+                /* Tables 57/67：OPERATE 中的 Type-0 页读是复位请求，不应答。
+                 * 计划显式表达"消费该帧并回到 STARTUP"，使主泵无需再看到它
+                 * （与历史的即时路径逐字节、逐计数一致）。 */
+                dll_plan_push(ctx, &count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                              IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 2U,
+                              IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_NONE, 0U,
+                              IOLINK_REPLY_FLAG_CLOSE_WINDOW | IOLINK_REPLY_FLAG_CONSUME,
+                              IOLINK_REPLY_ACT_RESET_STARTUP, NULL);
+            }
         }
         else if (state == (uint8_t) IOLINK_DLL_STATE_OPERATE) {
             /* Type-0 配置：转换命令在 OPERATE 中非法，交给主泵计数。 */
@@ -1262,7 +1263,10 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
     ctx->last_notified_state = IOLINK_DLL_STATE_STARTUP;
     ctx->shared.phy = phy;
-    ctx->enforce_timing = (IOLINK_TIMING_ENFORCE_DEFAULT != 0U);
+    /* P6：先解析实例能力，初始线路模式依赖"PHY 能否观测唤醒"这一位。
+     * 设备层随后会用完整的 stack/app 配置重新解析一次。 */
+    ctx->shared.caps = iolink_caps_resolve(phy, NULL, NULL, NULL);
+    ctx->enforce_timing = (iolink_caps_build()->timing_enforce_default != 0U);
     ctx->sio_fallback_threshold = 3U;
     ctx->operating_baudrate = IOLINK_BAUDRATE_UNSET;
     ctx->master_last_activity_ms = dll_time_ms(ctx);
@@ -1613,7 +1617,6 @@ static void dll_handle_frame_error(iolink_dll_main_t* ctx, dll_frame_result_t re
     }
 }
 
-#if !IOLINK_COMPAT_V10_STARTUP_OPERATE
 /**
  * @brief 拒绝在启动期间收到的 OPERATE 请求。
  *
@@ -1637,7 +1640,6 @@ static bool dll_reject_startup_operate(iolink_dll_main_t* ctx, bool was_establis
     }
     return false;
 }
-#endif /* !IOLINK_COMPAT_V10_STARTUP_OPERATE */
 
 /* -------------------------------------------------------------------------
  * 状态机骨架表（P9）
@@ -1746,16 +1748,16 @@ static bool dll_sm_transition_illegal(iolink_dll_main_t* ctx)
 /** @brief OPERATE 中的 Type-0 页读：复位请求（兼容开关除外）。 */
 static bool dll_sm_operate_page_read(iolink_dll_main_t* ctx)
 {
-#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
-    /* Table 57/67（SDCI_TC_0038/0049）：不复位兼容模式下，OPERATE 期间
-       的 Type-0 页读是复位请求：不应答，返回 STARTUP。 */
-    if (ctx->shared.m_seq_type != IOLINK_M_SEQ_TYPE_0) {
-        ctx->shared.framing_errors++;
-        ctx->frame_index = 0U;
-        dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
-        return false; /* 复位路径跳过公共尾部清理 */
+    if (!iolink_caps_has(ctx->shared.caps, IOLINK_CAP_COMPAT_T0_READ)) {
+        /* Table 57/67（SDCI_TC_0038/0049）：不复位兼容模式下，OPERATE 期间
+           的 Type-0 页读是复位请求：不应答，返回 STARTUP。 */
+        if (ctx->shared.m_seq_type != IOLINK_M_SEQ_TYPE_0) {
+            ctx->shared.framing_errors++;
+            ctx->frame_index = 0U;
+            dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
+            return false; /* 复位路径跳过公共尾部清理 */
+        }
     }
-#endif
     dll_handle_operate_type0(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
     return true;
 }
@@ -1787,11 +1789,10 @@ static bool dll_handle_valid_frame(iolink_dll_main_t* ctx)
     ctx->last_valid_frame_ms = dll_time_ms(ctx);
     const bool was_establishing = (ctx->shared.state == IOLINK_DLL_STATE_AWAITING_COMM) ||
                                   (ctx->shared.state == IOLINK_DLL_STATE_STARTUP);
-#if !IOLINK_COMPAT_V10_STARTUP_OPERATE
-    if (dll_reject_startup_operate(ctx, was_establishing)) {
+    if (!iolink_caps_has(ctx->shared.caps, IOLINK_CAP_COMPAT_V10_OP) &&
+        dll_reject_startup_operate(ctx, was_establishing)) {
         return false;
     }
-#endif
     (void) was_establishing;
 
     const iolink_dll_event_t event = dll_sm_classify(ctx);

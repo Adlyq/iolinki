@@ -148,6 +148,12 @@ typedef struct
     uint8_t pending_count;                                    /**< 已使用的 pending 槽位 */
     uint32_t dropped_count; /**< 因队列或 pending[] 已满而丢失的事件 */
 
+    /* P6：A.6.4 的两个时间窗口是运行时能力（曾经是编译期常量）。
+     * 默认值来自构建档位（IOLINK_EVENT_MIN_APPEAR_MS / _REPEAT_MS），
+     * 设备层可用 iolink_stack_config_t 的事件节覆盖。 */
+    uint16_t min_appear_ms; /**< 最短“出现”窗口（ms） */
+    uint16_t min_repeat_ms; /**< 同一 EventCode 的重复上报间隔（ms） */
+
     /* Table 58 事件存储器：StatusCode(1) + 6 个槽位 * (Qualifier, CodeMSB, CodeLSB)。 */
     uint8_t memory[19];              /**< 事件存储器映像（0x00-0x12） */
     bool frozen;                     /**< Event 标志置位期间存储器被冻结（Table 60） */
@@ -175,6 +181,19 @@ typedef struct
  */
 #if IOLINK_FEATURE_EVENTS
 void iolink_events_init(iolink_events_ctx_t* ctx);
+
+/**
+ * @brief 设置 A.6.4 的两个时间窗口（P6）。
+ *
+ * 任一参数为 0 时保留当前值（初始为构建档位默认值）。必须在
+ * `iolink_events_init()` 之后调用。
+ *
+ * @param ctx           事件上下文
+ * @param min_appear_ms 最短“出现”窗口（ms）
+ * @param min_repeat_ms 同一 EventCode 的重复上报间隔（ms）
+ */
+void iolink_events_set_window(iolink_events_ctx_t* ctx, uint16_t min_appear_ms,
+                              uint16_t min_repeat_ms);
 
 /**
  * @brief 触发一个新的诊断事件

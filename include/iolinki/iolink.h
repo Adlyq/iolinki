@@ -151,6 +151,44 @@ static inline uint8_t iolink_mseq_operate_code(uint8_t m_seq_type, uint8_t od_wi
 }
 
 /**
+ * @name 协议兼容位（P6：运行时能力）
+ *
+ * 这些位曾经是编译期开关；现在进 `iolink_stack_config_t::compat_flags`。
+ * 构建期 `-DIOLINK_COMPAT_*` / `-DIOLINK_DS_LEGACY_IMAGE_SUB0` 仍然有效，
+ * 作为镜像的默认值（见 `iolink_caps_resolve()`）。
+ * @{
+ */
+/** @brief 接受 V1.0 的 STARTUP -> OPERATE DeviceOperate（0x99）捷径。 */
+#define IOLINK_STACK_COMPAT_V10_STARTUP_OPERATE 0x01U
+/** @brief 在 OPERATE 激活时应答 TYPE_0 页读取。 */
+#define IOLINK_STACK_COMPAT_TYPE0_PAGE_READ_OPERATE 0x02U
+/** @brief 在 DataStorageIndex 子索引 0 上保留整镜像载荷。 */
+#define IOLINK_STACK_COMPAT_DS_LEGACY_IMAGE_SUB0 0x04U
+/** @} */
+
+/**
+ * @name 协议栈能力开关（P6：运行时能力）
+ * @{
+ */
+/** @brief 端口要求所有应答都由 ISR 发送；PHY 必须提供 request_service()。 */
+#define IOLINK_STACK_FLAG_REQUIRE_ISR_TX 0x01U
+/** @brief 运行时关闭 SystemCommand 处理（逐条命令回 FUNC_NOTAVAIL）。 */
+#define IOLINK_STACK_FLAG_NO_SYSTEM_COMMAND 0x02U
+/** @} */
+
+/**
+ * @name 时序强制默认值选择
+ * @{
+ */
+/** @brief 使用构建档位的默认值（`IOLINK_TIMING_ENFORCE_DEFAULT`）。 */
+#define IOLINK_STACK_TIMING_DEFAULT 0U
+/** @brief 强制检查 t_ren / t_cycle。 */
+#define IOLINK_STACK_TIMING_ENFORCE 1U
+/** @brief 仅测量并计数，不强制。 */
+#define IOLINK_STACK_TIMING_MEASURE 2U
+/** @} */
+
+/**
  * @brief IO-Link 协议栈配置
  *
  * 保存初始化协议栈行为所需的参数。
@@ -166,6 +204,14 @@ typedef struct
     iolink_baudrate_t baudrate;     /**< baudrate_set 为 true 时使用的 COM */
     bool baudrate_set;              /**< 初始化时应用波特率；false 保持 COM2 默认值 */
     uint8_t master_lost_cycles;     /**< 触发 master_lost 前允许丢失的主站周期数；0 表示禁用 */
+
+    /* --- P6 运行时能力 ------------------------------------------------- */
+    uint8_t compat_flags;         /**< IOLINK_STACK_COMPAT_* 位（构建期默认值按位或进来） */
+    uint8_t flags;                /**< IOLINK_STACK_FLAG_* 位 */
+    uint8_t timing_enforce;       /**< IOLINK_STACK_TIMING_*；DEFAULT = 构建档位默认值 */
+    uint8_t reserved;             /**< 保留，必须为 0 */
+    uint16_t event_min_appear_ms; /**< 事件最短出现间隔（ms）；0 = 构建默认 */
+    uint16_t event_min_repeat_ms; /**< 同一事件重复上报间隔（ms）；0 = 构建默认 */
 } iolink_stack_config_t;
 
 /**

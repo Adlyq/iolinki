@@ -38,6 +38,41 @@
  */
 
 /* -------------------------------------------------------------------------
+ * 能力位查询（P6）
+ * ------------------------------------------------------------------------- */
+
+/** @brief 测试"构建自带"能力位；未绑定能力表时视为开（单元测试直用引擎）。 */
+static bool isdu_cap_default_on(const iolink_isdu_ctx_t* ctx, iolink_caps_t bit)
+{
+    return (ctx->caps == NULL) || iolink_caps_has(*ctx->caps, bit);
+}
+
+/** @brief 测试"运行时可选"能力位；未绑定能力表时视为关（严格 V1.1）。 */
+IOLINK_MAYBE_UNUSED static bool isdu_cap(const iolink_isdu_ctx_t* ctx, iolink_caps_t bit)
+{
+    return (ctx->caps != NULL) && iolink_caps_has(*ctx->caps, bit);
+}
+
+/** @brief 本实例实现了哪些 DeviceAccessLocks 位（0x000C 写校验的可写掩码）。 */
+static uint16_t isdu_locks_implemented(const iolink_isdu_ctx_t* ctx)
+{
+    uint16_t mask = 0U;
+    if (isdu_cap_default_on(ctx, IOLINK_CAP_LOCK_PARAM)) {
+        mask |= IOLINK_LOCK_PARAM;
+    }
+    if (isdu_cap_default_on(ctx, IOLINK_CAP_LOCK_DS)) {
+        mask |= IOLINK_LOCK_DS;
+    }
+    if (isdu_cap_default_on(ctx, IOLINK_CAP_LOCK_LOCAL_PARAM)) {
+        mask |= IOLINK_LOCK_LOCAL_PARAM;
+    }
+    if (isdu_cap_default_on(ctx, IOLINK_CAP_LOCK_LOCAL_UI)) {
+        mask |= IOLINK_LOCK_LOCAL_UI;
+    }
+    return mask;
+}
+
+/* -------------------------------------------------------------------------
  * 文件导览
  *
  *  - 传输、解析与共享辅助函数：chkpdu ... iolink_isdu_od_read
@@ -126,7 +161,13 @@ void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app)
     }
 }
 
-#if IOLINK_FEATURE_SYSTEM_COMMAND
+void iolink_isdu_bind_caps(iolink_isdu_ctx_t* ctx, const iolink_caps_t* caps)
+{
+    if (ctx != NULL) {
+        ctx->caps = caps;
+    }
+}
+
 /** @brief 对绑定的参数上下文执行恢复出厂设置；未绑定则不做任何事。 */
 static void isdu_params_factory_reset(iolink_isdu_ctx_t* ctx)
 {
@@ -138,7 +179,6 @@ static void isdu_params_factory_reset(iolink_isdu_ctx_t* ctx)
         iolink_params_ctx_factory_reset(ctx->params_ctx);
     }
 }
-#endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
 
 /** @brief 绑定到该 ISDU 上下文的设备信息上下文（若有）。 */
 static iolink_device_info_ctx_t* isdu_info_ctx(iolink_isdu_ctx_t* ctx)
@@ -754,7 +794,6 @@ static void isdu_read_device_status(iolink_isdu_ctx_t* ctx)
  * SystemCommand 与数据存储上传辅助函数
  * ------------------------------------------------------------------------- */
 
-#if IOLINK_FEATURE_SYSTEM_COMMAND
 /** @brief 当复位恢复了出厂参数集时清除 DS_UPLOAD_FLAG。 */
 static void isdu_clear_ds_upload_req(iolink_isdu_ctx_t* ctx)
 {
@@ -791,7 +830,6 @@ static void isdu_trigger_ds_upload_req(iolink_isdu_ctx_t* ctx)
     (void) ctx;
 #endif
 }
-#endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
 
 /** @brief 执行 SystemCommand（复位、恢复出厂、数据存储命令）。 */
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -815,7 +853,6 @@ static uint8_t isdu_ds_result_error(int ret, uint8_t fallback)
 }
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
-#if IOLINK_FEATURE_SYSTEM_COMMAND
 /** @brief Table 101：在复位命令中清除设备诊断/状态。 */
 static void isdu_reset_diagnostics(iolink_isdu_ctx_t* ctx)
 {
@@ -948,16 +985,18 @@ static bool isdu_system_ds(iolink_isdu_ctx_t* ctx, uint8_t cmd)
     return false;
 }
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
-#endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
 
 static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
     IOLINK_LOG_INFO(&ctx->log, "system command 0x%02X", (unsigned) cmd);
-#if !IOLINK_FEATURE_SYSTEM_COMMAND
-    (void) cmd;
-    /* SystemCommand 支持已在编译时移除。 */
-    isdu_respond_error(ctx, IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
-#else
+    /* P6：能力位关闭时，所有命令统一回 FUNC_NOTAVAIL。拒绝分支常驻，
+     * 因此关位是运行时决定，不是构建期分裂。 */
+    if (!isdu_cap_default_on(ctx, IOLINK_CAP_SYSTEM_COMMAND)) {
+        (void) cmd;
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
+        return;
+    }
+
     switch (cmd) {
         case IOLINK_CMD_DEVICE_RESET:             /* 0x80 */
         case IOLINK_CMD_APPLICATION_RESET:        /* 0x81 */
@@ -992,7 +1031,6 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
     ctx->response_len = 0U;
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
-#endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
 }
 
 void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
@@ -1030,7 +1068,7 @@ static void handle_access_locks(iolink_isdu_ctx_t* ctx)
            以 PAR_VALOUTOFRNG 拒绝（B.2.4 / SDCI_TC_0110）。 */
         if (ctx->buffer_idx >= 2U) {
             uint16_t new_locks = ((uint16_t) ctx->buffer[0] << 8) | ctx->buffer[1];
-            if ((new_locks & (uint16_t) ~IOLINK_ACCESS_LOCKS_IMPLEMENTED) != 0U) {
+            if ((new_locks & (uint16_t) ~isdu_locks_implemented(ctx)) != 0U) {
                 isdu_respond_error(ctx, IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG);
                 return;
             }
@@ -1345,22 +1383,22 @@ static size_t isdu_append_ds_index_list(iolink_ds_ctx_t* ds, uint8_t* buf, size_
 /** @brief DS 写 subindex 0：旧的镜像恢复，或按只读拒绝。 */
 static void isdu_ds_write_sub0(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
 {
-#if IOLINK_DS_LEGACY_IMAGE_SUB0
-    /* 旧的整镜像恢复（为线上兼容而保留）。 */
-    const int rc = iolink_ds_apply_image(ds, ctx->buffer, ctx->buffer_idx);
-    if (rc != 0) {
-        isdu_respond_error(ctx, (rc == -1) ? IOLINK_ISDU_ERROR_PARAM_SET_INVALID
-                                           : IOLINK_ISDU_ERROR_PARAM_INCONSISTENT);
+    if (isdu_cap(ctx, IOLINK_CAP_DS_LEGACY_SUB0)) {
+        /* 旧的整镜像恢复（为线上兼容而保留）。 */
+        const int rc = iolink_ds_apply_image(ds, ctx->buffer, ctx->buffer_idx);
+        if (rc != 0) {
+            isdu_respond_error(ctx, (rc == -1) ? IOLINK_ISDU_ERROR_PARAM_SET_INVALID
+                                               : IOLINK_ISDU_ERROR_PARAM_INCONSISTENT);
+        }
+        else {
+            ctx->response_len = 0U; /* 写入已确认 */
+        }
+        return;
     }
-    else {
-        ctx->response_len = 0U; /* 写入已确认 */
-    }
-#else
     (void) ds;
     /* Table B.10：整条记录为只读；只有 DS_Command（subindex 1）
        可写。 */
     isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
-#endif
 }
 
 /** @brief DS 写 subindex 1：DS_Command。 */
@@ -1383,11 +1421,12 @@ static void isdu_ds_write_command(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
 /** @brief DS 读 subindex 0：拼接记录（或旧的镜像）。 */
 static void isdu_ds_read_record(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
 {
-#if IOLINK_DS_LEGACY_IMAGE_SUB0
-    /* 旧的整镜像备份读取：直接流式写入 ISDU 应答缓冲，不常驻镜像。 */
-    const int n = iolink_ds_serialize(ds, ctx->response_buf, ctx->response_size);
-    ctx->response_len = (n > 0) ? (size_t) n : 0U;
-#else
+    if (isdu_cap(ctx, IOLINK_CAP_DS_LEGACY_SUB0)) {
+        /* 旧的整镜像备份读取：直接流式写入 ISDU 应答缓冲，不常驻镜像。 */
+        const int n = iolink_ds_serialize(ds, ctx->response_buf, ctx->response_size);
+        ctx->response_len = (n > 0) ? (size_t) n : 0U;
+        return;
+    }
     /* Table B.10/B.11（SDCI_TC_0107）：sub0 是拼接记录：
        DS_Command、State_Property、Data_Storage_Size、Parameter_Checksum 与
        Index_List。 */
@@ -1401,7 +1440,6 @@ static void isdu_ds_read_record(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
     isdu_write_u32_be(ctx->response_buf, &pos, iolink_ds_checksum(ds));
     pos = isdu_append_ds_index_list(ds, ctx->response_buf, pos);
     ctx->response_len = (uint8_t) pos;
-#endif
 }
 
 /** @brief DS 读 subindex 1-5。 */

@@ -12,6 +12,7 @@
 #include "iolinki/config.h"
 
 #include "iolinki/application.h"
+#include "iolinki/capability.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/device_info.h"
 #include "iolinki/dll_ctx.h"
@@ -181,9 +182,10 @@ typedef enum
     IOLINK_DEVICE_INIT_ERR_CRITICAL = -11,   /**< 平台临界区为弱默认实现 */
     IOLINK_DEVICE_INIT_ERR_STORAGE = -12,    /**< storage 后端为 NULL 或不完整 */
     IOLINK_DEVICE_INIT_ERR_PD_INPUT =
-        -14,                          /**< IOLINK_APP_PD_INPUT_CALLBACK=1 但没有 on_pd_input 回调 */
-    IOLINK_DEVICE_INIT_ERR_PHY = -15, /**< 构建配置所需的某个 PHY 钩子为 NULL */
+        -14, /**< PD 回调路径与轮询调用混用（能力位已置位时调用轮询 API） */
+    IOLINK_DEVICE_INIT_ERR_PHY = -15,       /**< 构建配置所需的某个 PHY 钩子为 NULL */
     IOLINK_DEVICE_INIT_ERR_WORKSPACE = -16, /**< `IOLINK_WORKSPACE_EMBEDDED=0` 但没有提供工作区 */
+    IOLINK_DEVICE_INIT_ERR_PROFILE = -17,   /**< 实例声明的能力未被编译进本镜像 */
     /* -8（锁定对）和 -13（RTOS 锁）已废弃：协议栈只有一个
      * 主上下文调用者，不再获取应用线程锁。 */
 } iolink_device_init_result_t;
@@ -253,9 +255,14 @@ void iolink_device_process(iolink_device_ctx_t* ctx);
  */
 void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 
-#if !IOLINK_APP_PD_INPUT_CALLBACK
 /**
  * @brief 更新输入过程数据（设备 -> 主站）。
+ *
+ * P6：轮询 API 与 `on_pd_input` 回调在同一次构建中共存，按应用是否
+ * 提供回调在初始化时选择路径。已选择回调路径（能力位
+ * `IOLINK_CAP_PD_IN_CALLBACK` 置位）时，本函数返回
+ * `IOLINK_DEVICE_INIT_ERR_PD_INPUT`，而不是静默覆盖回调的输出。
+ *
  * @param ctx    设备上下文。
  * @param data   要发布的输入过程数据字节。
  * @param len    @p data 的长度（字节）。
@@ -264,17 +271,27 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
  */
 int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data, size_t len,
                                   bool valid);
-#else
+
 /**
- * @brief 在 on_pd_input 回调构建中拦截轮询调用。
- *
- * IOLINK_APP_PD_INPUT_CALLBACK=1 选择 on_pd_input() 回调作为唯一的
- * PD 输入来源；该构建中不存在轮询 API。对该函数的调用会展开
- * 为未声明的标识符，从而产生一个带有可读名称的编译错误。
+ * @brief 取本实例的能力位（P6）。
+ * @param ctx 设备上下文。
+ * @return 实例能力位掩码；ctx 为 NULL 时为 0。
  */
-#define iolink_device_pd_input_update(...) \
-    IOLINK_PD_INPUT_UPDATE_IS_DISABLED_USE_ON_PD_INPUT_CALLBACK
-#endif
+iolink_caps_t iolink_device_capabilities(const iolink_device_ctx_t* ctx);
+
+/**
+ * @brief 覆盖本实例的能力位（P6）。
+ *
+ * 只允许修改**运行时开关**位（兼容位、SystemCommand、访问锁）。
+ * 与 PHY/构建档位绑定的位（RX/TX/WAKEUP/REQUIRE_ISR_TX 等）会被
+ * 重新按当前 vtable 解析，调用方无法伪造。ISDU 引擎通过指向共享区
+ * 的指针读取，因此修改立即生效（必须从主上下文调用）。
+ *
+ * @param ctx  设备上下文。
+ * @param caps 新的能力位。
+ * @return 实际生效的能力位。
+ */
+iolink_caps_t iolink_device_set_capabilities(iolink_device_ctx_t* ctx, iolink_caps_t caps);
 
 /**
  * @brief 读取最新的输出过程数据（主站 -> 设备）。

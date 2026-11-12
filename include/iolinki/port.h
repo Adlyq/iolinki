@@ -263,6 +263,19 @@ static inline void iolink_atomic_store(volatile IOLINK_ATOMIC_UINT_T* word,
 #endif
 
 /**
+ * @brief 标记"可能未被任何配置使用"的内部函数/变量。
+ *
+ * 某些运行时能力只在特定结构配置下被调用（例如 DS 兼容位只在
+ * Data Storage 打开时存在），但定义本身与配置无关。用它避免
+ * `-Wunused-function` 把合法定义变成构建错误。
+ */
+#if defined(__GNUC__) || defined(__clang__) || defined(__CC_ARM)
+#define IOLINK_MAYBE_UNUSED __attribute__((unused))
+#else
+#define IOLINK_MAYBE_UNUSED
+#endif
+
+/**
  * @brief 同样适用于 C99 模式的编译期断言。
  *
  * C99 下 `-Wpedantic` 会拒绝 C11 的 `_Static_assert`，而交付

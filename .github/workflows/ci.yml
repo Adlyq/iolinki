@@ -107,6 +107,7 @@ jobs:
         run: |
           shellcheck -S warning tools/build_matrix.sh tools/coverage.sh \
             tools/diff_matrix.sh tools/check_ownership.sh tools/wcet_run.sh \
+            tools/check_profile_abi.sh tools/matrix_configs.sh \
             test_all.sh check_quality.sh .docker_test_entrypoint.sh
 
   # Coverage floor: line coverage of src/ must not drop below the checked-in
@@ -152,6 +153,20 @@ jobs:
         run: ./tools/diff_matrix.sh
       - name: DLL ownership isolation
         run: ./tools/check_ownership.sh
+
+  # ROM/RAM measurement (roadmap P6, docs/CAPABILITY_DESIGN.md section 6):
+  # source integration vs non-LTO static library, with and without
+  # --gc-sections. Same toolchain as the STM32G0 example.
+  size-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi python3
+      - name: Size gate (no growth beyond the baseline, plus selftest)
+        run: ./tools/size_matrix.py --check --selftest --table
 
   # Branch protection on develop requires the REAL jobs directly:
   # docker-validation, sbom-tools. Do not reintroduce echo-only proxy jobs —

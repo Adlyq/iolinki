@@ -41,7 +41,6 @@ static void generic_set_baudrate(void* user, iolink_baudrate_t baudrate)
     /* 模板：配置 COM1/2/3 的 UART 速率。 */
 }
 
-#if IOLINK_PHY_FEATURE_WAKEUP
 /** @brief 用于检测 C/Q 线上 80us 唤醒脉冲的模板钩子。 */
 static int generic_detect_wakeup(void* user)
 {
@@ -49,9 +48,7 @@ static int generic_detect_wakeup(void* user)
     /* 模板：检测 C/Q 线上的 80us 唤醒脉冲。 */
     return 0;
 }
-#endif
 
-#if IOLINK_PHY_FEATURE_SIO_CQ
 /** @brief 用于在 SIO 模式下驱动 C/Q 线高/低的模板钩子。 */
 static void generic_set_cq_line(void* user, uint8_t state)
 {
@@ -59,18 +56,13 @@ static void generic_set_cq_line(void* user, uint8_t state)
     (void) state;
     /* 模板：在 SIO 模式下驱动 C/Q 线高/低。 */
 }
-#endif
 
 static const iolink_phy_api_t g_phy_generic = {
     .init = generic_init,
     .set_mode = generic_set_mode,
     .set_baudrate = generic_set_baudrate,
-#if IOLINK_PHY_FEATURE_WAKEUP
     .detect_wakeup = generic_detect_wakeup,
-#endif
-#if IOLINK_PHY_FEATURE_SIO_CQ
     .set_cq_line = generic_set_cq_line,
-#endif
 };
 
 const iolink_phy_api_t* iolink_phy_generic_get(void)

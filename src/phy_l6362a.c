@@ -55,15 +55,12 @@ static void speed(void* u, iolink_baudrate_t b)
         d->error = d->io.uart_configure(d->io.user, d->baud);
     }
 }
-#if IOLINK_PHY_FEATURE_WAKEUP
 static int wake(void* u)
 {
     iolink_l6362a_ctx_t* d = u;
     return d->initialized ? d->io.consume_wakeup(d->io.user) : 0;
 }
-#endif
 
-#if IOLINK_PHY_FEATURE_SIO_CQ
 static void cq(void* u, uint8_t b)
 {
     iolink_l6362a_ctx_t* d = u;
@@ -74,7 +71,6 @@ static void cq(void* u, uint8_t b)
         enable(d, true);
     }
 }
-#endif
 
 int iolink_phy_l6362a_init(iolink_l6362a_ctx_t* d, const iolink_l6362a_io_t* io)
 {
@@ -88,12 +84,8 @@ int iolink_phy_l6362a_init(iolink_l6362a_ctx_t* d, const iolink_l6362a_io_t* io)
     d->phy.init = initialize;
     d->phy.set_mode = mode;
     d->phy.set_baudrate = speed;
-#if IOLINK_PHY_FEATURE_WAKEUP
     d->phy.detect_wakeup = wake;
-#endif
-#if IOLINK_PHY_FEATURE_SIO_CQ
     d->phy.set_cq_line = cq;
-#endif
     return 0;
 }
 const iolink_phy_api_t* iolink_phy_l6362a_get(iolink_l6362a_ctx_t* d)

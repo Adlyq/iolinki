@@ -1,9 +1,6 @@
 # The full suite exercises the untrimmed stack. Skip it for a trimmed build;
 # build the library target (or configure with -DBUILD_TESTING=OFF) instead.
-if(IOLINK_MINIMAL_PROFILE OR IOLINK_TINY_PROFILE OR IOLINK_APP_PD_INPUT_CALLBACK OR
-   NOT IOLINK_FEATURE_DATA_STORAGE OR NOT IOLINK_FEATURE_SYSTEM_COMMAND OR
-   NOT IOLINK_FEATURE_EVENTS OR
-   NOT IOLINK_PHY_FEATURE_WAKEUP OR NOT IOLINK_PHY_FEATURE_SIO_CQ)
+if(NOT IOLINK_FEATURE_DATA_STORAGE OR NOT IOLINK_FEATURE_EVENTS)
     message(STATUS "Feature-trimmed build: skipping the unit suite")
     return()
 endif()
@@ -121,14 +118,12 @@ add_executable(test_tx_busy test_tx_busy.c)
 target_link_libraries(test_tx_busy iolink_tx_busy_fixture)
 add_test(NAME test_tx_busy COMMAND test_tx_busy)
 
-# PD-input callback profile: the polling API is removed from the headers, so the
-# profile gets its own build of the sources.
-add_library(iolink_pd_cb_fixture STATIC ${IOLINK_SOURCES})
-target_include_directories(iolink_pd_cb_fixture PUBLIC ${CMAKE_SOURCE_DIR}/include)
-target_compile_definitions(iolink_pd_cb_fixture PUBLIC IOLINK_APP_PD_INPUT_CALLBACK=1)
+# PD-input path (P6): the callback and the polling API now coexist in one
+# binary, so the test needs no fixture build of the sources.
 add_executable(test_app_pd_callback test_app_pd_callback.c)
-target_link_libraries(test_app_pd_callback iolink_pd_cb_fixture)
+target_link_libraries(test_app_pd_callback iolinki)
 add_test(NAME test_app_pd_callback COMMAND test_app_pd_callback)
+
 
 if(PkgConfig_FOUND)
     pkg_check_modules(CMOCKA QUIET cmocka)
@@ -192,6 +187,11 @@ if(CMOCKA_FOUND)
     add_iolink_test(test_integration_full test_integration_full.c)
     add_iolink_test(test_workspace test_workspace.c)
     add_iolink_test(test_application test_application.c)
+    # P6 能力表：构建档位、resolve() 与运行时覆盖规则。
+    add_iolink_test(test_capability test_capability.c)
+    # P6 链接期档位断言：正向（同档位可链接）；反向由
+    # tools/check_profile_abi.sh 在构建矩阵里验证。
+    add_iolink_test(test_profile_abi test_profile_abi.c)
     add_iolink_test(test_m_sequence_types test_m_sequence_types.c)
     add_iolink_test(test_reentrant_device test_reentrant_device.c)
 
@@ -220,9 +220,6 @@ if(CMOCKA_FOUND)
     add_iolink_test(test_protocol_constants test_protocol_constants.c)
     add_iolink_test(test_system_commands test_system_commands.c)
     add_iolink_test(test_config_trim test_config_trim.c)
-    add_executable(test_config_trim_zero test_config_trim_zero.c)
-    target_link_libraries(test_config_trim_zero iolinki)
-    add_test(NAME test_config_trim_zero COMMAND test_config_trim_zero)
     # Spec-conformance assertions for known stack gaps (expected to fail until fixed)
     add_iolink_test(test_spec_conformance test_spec_conformance.c)
     if(IOLINK_PLATFORM STREQUAL "LINUX")

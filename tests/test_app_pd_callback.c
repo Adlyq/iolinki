@@ -1,20 +1,21 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
 /*
- * PD-input 回调配置（IOLINK_APP_PD_INPUT_CALLBACK=1）：
- *  - 轮询 API 不存在；不带 on_pd_input 的配置会在初始化时
- *    被 IOLINK_DEVICE_INIT_ERR_PD_INPUT 拒绝；
- *  - 回调填充一个空闲的 PD-in 缓冲区，其返回值成为
- *    PD 有效标志。
+ * PD 输入路径（P6：同一构建内的运行时选择）：
+ *  - 应用不提供 on_pd_input 时走轮询 API iolink_device_pd_input_update()；
+ *  - 提供 on_pd_input 时能力位 IOLINK_CAP_PD_IN_CALLBACK 置位，DLL 每
+ *    OPERATE 周期调用回调，轮询 API 被拒绝（ERR_PD_INPUT）而不是静默
+ *    覆盖回调输出；
+ *  - 构建档位（capability.h）与实例能力位一致。
  *
- * 针对以回调配置编译的库副本构建（见
- * tests/CMakeLists.txt）。
+ * 两条路径现在编进同一个二进制，不再需要独立的 fixture 库。
  */
 
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
 
+#include "iolinki/capability.h"
 #include "iolinki/device.h"
 
 void iolink_critical_enter(void)
@@ -102,26 +103,33 @@ static void make_config(iolink_device_config_t* cfg, const iolink_app_callbacks_
     cfg->time_us = test_time_us;
 }
 
-static void test_init_requires_on_pd_input(void)
+static void test_polling_path_without_callback(void)
 {
     iolink_device_ctx_t ctx;
     iolink_device_config_t cfg;
-
-    /* 真实读取链接期标记：也证明 device.c 在此配置中定义了它
-     * （错误的 #if 或轮询配置的夹具会在这里失败）。 */
-    assert(iolink_app_pd_input_callback_profile == 1U);
+    const uint8_t data[2] = {0x11U, 0x22U};
 
     make_config(&cfg, NULL);
-    assert(iolink_device_init(&ctx, &cfg) == IOLINK_DEVICE_INIT_ERR_PD_INPUT);
-
-    make_config(&cfg, &g_cbs);
     assert(iolink_device_init(&ctx, &cfg) == 0);
+
+    const iolink_caps_t caps = iolink_device_capabilities(&ctx);
+    assert(!iolink_caps_has(caps, IOLINK_CAP_PD_IN_CALLBACK));
+
+    assert(iolink_device_pd_input_update(&ctx, data, sizeof(data), true) == 0);
+    assert(ctx.dll.main.pd_valid);
+    assert(ctx.dll.main.shared.pd_in_len == 2U);
+    assert(
+        ctx.dll.main.shared.pd_in[ctx.dll.main.shared.pd_in_active][ctx.dll.main.shared.od_width] ==
+        0x11U);
+    assert(ctx.dll.main.shared.pd_in[ctx.dll.main.shared.pd_in_active]
+                                    [ctx.dll.main.shared.od_width + 1U] == 0x22U);
 }
 
-static void test_callback_fills_pd_input(void)
+static void test_callback_path_selected_by_presence(void)
 {
     iolink_device_ctx_t ctx;
     iolink_device_config_t cfg;
+    const uint8_t data[2] = {0x33U, 0x44U};
 
     g_pd_calls = 0;
     g_pd_pattern = 0xA5U;
@@ -130,6 +138,13 @@ static void test_callback_fills_pd_input(void)
     make_config(&cfg, &g_cbs);
     cfg.user = g_expected_user;
     assert(iolink_device_init(&ctx, &cfg) == 0);
+
+    const iolink_caps_t caps = iolink_device_capabilities(&ctx);
+    assert(iolink_caps_has(caps, IOLINK_CAP_PD_IN_CALLBACK));
+
+    /* 混用被显式拒绝：轮询 API 返回 PD 输入错误码。 */
+    assert(iolink_device_pd_input_update(&ctx, data, sizeof(data), true) ==
+           IOLINK_DEVICE_INIT_ERR_PD_INPUT);
 
     /* 在 OPERATE 下驱动一次主循环：回调发布 PD-in。 */
     ctx.dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
@@ -145,9 +160,27 @@ static void test_callback_fills_pd_input(void)
                                     [ctx.dll.main.shared.od_width + 1U] == 0xA5U);
 }
 
+static void test_build_profile_is_consistent(void)
+{
+    const iolink_build_caps_t* build = iolink_caps_build();
+
+    assert(build->abi == IOLINK_CAP_ABI);
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    assert(build->isr_rx == IOLINK_CAP_ISR_RX_FRAME);
+#else
+    assert(build->isr_rx == IOLINK_CAP_ISR_RX_BYTE);
+#endif
+    assert(build->concurrency == (uint8_t) IOLINK_CONCURRENCY);
+    assert(build->stats == (uint8_t) IOLINK_STATS_MODE);
+    assert(build->pd_in_buffers == (uint8_t) IOLINK_PD_IN_BUFFERS);
+    assert(build->event_min_appear_ms == IOLINK_EVENT_MIN_APPEAR_MS);
+    assert(build->event_min_repeat_ms == IOLINK_EVENT_MIN_REPEAT_MS);
+}
+
 int main(void)
 {
-    test_init_requires_on_pd_input();
-    test_callback_fills_pd_input();
+    test_build_profile_is_consistent();
+    test_polling_path_without_callback();
+    test_callback_path_selected_by_presence();
     return 0;
 }

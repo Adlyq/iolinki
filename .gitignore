@@ -15,6 +15,7 @@ build_coverage/
 build_diff/
 build_stream/
 build_wcet/
+build_size/
 *.o
 *.dump
 *.a
