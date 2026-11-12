@@ -176,27 +176,35 @@ struct iolink_od_entry
 };
 
 /**
+ * @brief 带钩子的标量表项初始化宏。
+ */
+#define IOLINK_OD_SCALAR_EX(index_, datatype_, access_, semantics_, storage_, handler_, low_, \
+                            high_, def_, name_, validate_, change_)                           \
+    {.index = (index_),                                                                       \
+     .subindex = 0U,                                                                          \
+     .max_subindex = 0U,                                                                      \
+     .datatype = (datatype_),                                                                 \
+     .access = (access_),                                                                     \
+     .write_semantics = (semantics_),                                                         \
+     .storage = (storage_),                                                                   \
+     .flags = 0U,                                                                             \
+     .handler = (handler_),                                                                   \
+     .block_len = 0U,                                                                         \
+     .range_min = (low_),                                                                     \
+     .range_max = (high_),                                                                    \
+     .scalar_default = (def_),                                                                \
+     .block_default = NULL,                                                                   \
+     .name = (name_),                                                                         \
+     .validate = (validate_),                                                                 \
+     .on_change = (change_)}
+
+/**
  * @brief 标量表项初始化宏（新增参数的一行写法）。
  */
 #define IOLINK_OD_SCALAR(index_, datatype_, access_, semantics_, storage_, handler_, low_, high_, \
                          def_, name_)                                                             \
-    {.index = (index_),                                                                           \
-     .subindex = 0U,                                                                              \
-     .max_subindex = 0U,                                                                          \
-     .datatype = (datatype_),                                                                     \
-     .access = (access_),                                                                         \
-     .write_semantics = (semantics_),                                                             \
-     .storage = (storage_),                                                                       \
-     .flags = 0U,                                                                                 \
-     .handler = (handler_),                                                                       \
-     .block_len = 0U,                                                                             \
-     .range_min = (low_),                                                                         \
-     .range_max = (high_),                                                                        \
-     .scalar_default = (def_),                                                                    \
-     .block_default = NULL,                                                                       \
-     .name = (name_),                                                                             \
-     .validate = NULL,                                                                            \
-     .on_change = NULL}
+    IOLINK_OD_SCALAR_EX(index_, datatype_, access_, semantics_, storage_, handler_, low_, high_,  \
+                        def_, name_, NULL, NULL)
 
 /**
  * @brief 字节串表项初始化宏（新增参数的一行写法）。

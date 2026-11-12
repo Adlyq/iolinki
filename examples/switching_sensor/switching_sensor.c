@@ -6,8 +6,8 @@
 void switching_sensor_init(switching_sensor_t* sensor)
 {
     memset(sensor, 0, sizeof(*sensor));
-    sensor->threshold = 5000;
-    sensor->hysteresis = 200;
+    sensor->threshold = SWITCHING_SENSOR_DEFAULT_THRESHOLD;
+    sensor->hysteresis = SWITCHING_SENSOR_DEFAULT_HYSTERESIS;
 }
 
 bool switching_sensor_sample(switching_sensor_t* sensor, uint16_t hundredths, bool valid)
@@ -30,50 +30,115 @@ bool switching_sensor_sample(switching_sensor_t* sensor, uint16_t hundredths, bo
     return output;
 }
 
+bool switching_sensor_value_get(const switching_sensor_t* sensor, uint16_t index, uint32_t* value)
+{
+    if ((sensor == NULL) || (value == NULL)) {
+        return false;
+    }
+    switch (index) {
+        case SWITCHING_SENSOR_IDX_THRESHOLD:
+            *value = sensor->threshold;
+            return true;
+        case SWITCHING_SENSOR_IDX_HYSTERESIS:
+            *value = sensor->hysteresis;
+            return true;
+        case SWITCHING_SENSOR_IDX_INVERSION:
+            *value = sensor->inverted ? 1U : 0U;
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool switching_sensor_value_set(switching_sensor_t* sensor, uint16_t index, uint32_t value)
+{
+    if (sensor == NULL) {
+        return false;
+    }
+    switch (index) {
+        case SWITCHING_SENSOR_IDX_THRESHOLD:
+            sensor->threshold = (uint16_t) value;
+            return true;
+        case SWITCHING_SENSOR_IDX_HYSTERESIS:
+            sensor->hysteresis = (uint16_t) value;
+            return true;
+        case SWITCHING_SENSOR_IDX_INVERSION:
+            sensor->inverted = (value != 0U);
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* -------------------------------------------------------------------------
+ * 兼容包装：旧版 vendor_service 回调
+ *
+ * 新的集成绑定 `iolink_od_app_t`（见 switching_sensor_od.c），协议细节由
+ * 栈内对象字典处理。本函数保留给既有调用点；它是一个独立翻译单元，
+ * 因此这里保留最小限度的线上转换，不依赖栈内 OD 实现。
+ * ------------------------------------------------------------------------- */
+
 uint8_t switching_sensor_service(void* user, uint16_t index, uint8_t subindex, bool write,
                                  const uint8_t* input, size_t length, uint8_t* output,
                                  size_t* output_length)
 {
     switching_sensor_t* sensor = user;
+
     if (subindex != 0U) {
         return IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL;
     }
-    if (index < 0x0100U || index > 0x0103U) {
-        return 0x11U; /* Index not available. */
+    if ((index < SWITCHING_SENSOR_IDX_THRESHOLD) || (index > SWITCHING_SENSOR_IDX_TEACH)) {
+        return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
     }
+    const bool wide = (index <= SWITCHING_SENSOR_IDX_HYSTERESIS);
+    const size_t width = wide ? 2U : 1U;
+
     if (write) {
-        if (index <= 0x0101U) {
-            if (length != 2U) return 0x33U; /* Parameter length invalid. */
-            uint16_t value = (uint16_t) ((uint16_t) input[0] << 8) | input[1];
-            if ((index == 0x0100U && value < sensor->hysteresis) ||
-                (index == 0x0101U && value > sensor->threshold))
-                return 0x30U;
-            if (index == 0x0100U)
-                sensor->threshold = value;
-            else
-                sensor->hysteresis = value;
+        if (length != width) {
+            return IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN;
         }
-        else if (index == 0x0102U) {
-            if (length != 1U) return 0x33U;
-            if (input[0] > 1U) return 0x30U;
-            sensor->inverted = input[0] != 0U;
+        uint32_t value = 0U;
+        for (size_t i = 0U; i < length; i++) {
+            value = (value << 8U) | (uint32_t) input[i];
         }
-        else {
-            if (length != 1U) return 0x33U;
-            if (input[0] != 1U || !sensor->valid || sensor->sample < sensor->hysteresis)
-                return 0x30U;
+        if ((index == SWITCHING_SENSOR_IDX_INVERSION) && (value > 1U)) {
+            return IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG;
+        }
+        if ((index == SWITCHING_SENSOR_IDX_THRESHOLD) && ((uint16_t) value < sensor->hysteresis)) {
+            return IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG;
+        }
+        if ((index == SWITCHING_SENSOR_IDX_HYSTERESIS) && ((uint16_t) value > sensor->threshold)) {
+            return IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG;
+        }
+        if (index == SWITCHING_SENSOR_IDX_TEACH) {
+            if ((value != 1U) || !sensor->valid || (sensor->sample < sensor->hysteresis)) {
+                return IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG;
+            }
             sensor->threshold = sensor->sample;
         }
-        *output_length = 0;
+        else if (!switching_sensor_value_set(sensor, index, value)) {
+            return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
+        }
+        if (output_length != NULL) {
+            *output_length = 0U;
+        }
+        return 0U;
     }
-    else {
-        if (index == 0x0103U) return IOLINK_ISDU_ERROR_NOT_ACCESSIBLE;
-        size_t needed = index == 0x0102U ? 1U : 2U;
-        if (*output_length < needed) return 0x33U;
-        uint16_t value = index == 0x0100U ? sensor->threshold : sensor->hysteresis;
-        output[0] = needed == 1U ? (uint8_t) sensor->inverted : (uint8_t) (value >> 8);
-        if (needed == 2U) output[1] = (uint8_t) value;
-        *output_length = needed;
+
+    if (index == SWITCHING_SENSOR_IDX_TEACH) {
+        return IOLINK_ISDU_ERROR_NOT_ACCESSIBLE;
     }
-    return 0;
+    if ((output == NULL) || (output_length == NULL) || (*output_length < width)) {
+        return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
+    }
+    uint32_t value = 0U;
+    if (!switching_sensor_value_get(sensor, index, &value)) {
+        return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
+    }
+    output[0] = wide ? (uint8_t) (value >> 8U) : (uint8_t) value;
+    if (wide) {
+        output[1] = (uint8_t) value;
+    }
+    *output_length = width;
+    return 0U;
 }

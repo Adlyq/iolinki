@@ -14,8 +14,19 @@ endif()
 add_compile_options(-UNDEBUG)
 
 find_package(PkgConfig QUIET)
-add_executable(test_switching_sensor test_switching_sensor.c ../examples/switching_sensor/switching_sensor.c)
+# P4/D1：参数事实源是 C 对象字典表；校验 IODD 导出使用表项而不是 JSON 变量。
+find_package(Python3 QUIET)
+if(Python3_FOUND)
+    add_test(NAME od_iodd_export
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_od_iodd_export.py)
+endif()
+
+add_executable(test_switching_sensor test_switching_sensor.c
+    ../examples/switching_sensor/switching_sensor.c
+    ../examples/switching_sensor/switching_sensor_od.c)
 target_include_directories(test_switching_sensor PRIVATE ../examples/switching_sensor)
+# OD 后端链接协议栈（表项编解码在 src/od.c）。
+target_link_libraries(test_switching_sensor iolinki)
 add_test(NAME test_switching_sensor COMMAND test_switching_sensor)
 add_executable(test_vendor_isdu test_vendor_isdu.c)
 target_link_libraries(test_vendor_isdu iolinki)
@@ -158,6 +169,12 @@ if(CMOCKA_FOUND)
     add_iolink_test(test_isdu_wire test_isdu_wire.c)
     # P4 安全网：表驱动重构前钉死强制索引/Direct Parameter/标签的线上行为。
     add_iolink_test(test_od_characterization test_od_characterization.c)
+    # P4 对象字典：一行表项新增参数 + switching_sensor 迁移 + DS 成员契约。
+    add_iolink_test(test_od_app test_od_app.c)
+    target_sources(test_od_app PRIVATE
+        ../examples/switching_sensor/switching_sensor.c
+        ../examples/switching_sensor/switching_sensor_od.c)
+    target_include_directories(test_od_app PRIVATE ../examples/switching_sensor)
     add_iolink_test(test_events test_events.c)
     add_iolink_test(test_ds test_ds.c)
     add_iolink_test(test_error_model test_error_model.c)

@@ -1,3 +1,3 @@
-add_library(switching_sensor_app STATIC switching_sensor.c)
+add_library(switching_sensor_app STATIC switching_sensor.c switching_sensor_od.c)
 target_include_directories(switching_sensor_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(switching_sensor_app PUBLIC iolinki)

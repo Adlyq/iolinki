@@ -3,7 +3,10 @@
 Portable application for an unsigned measurement in hundredths (0..655.35),
 with switching threshold, hysteresis, inversion and a teach command. This is
 an application example, not an implementation of the standardized Smart Sensor
-Profile. It shares the released stack's per-device vendor ISDU callback.
+Profile. Its parameters are described by a const object dictionary
+(`switching_sensor_od.c`), the first P4 migration: length, byte order, scalar
+range and ISDU error codes come from `src/od.c`, so adding a parameter is one
+table entry plus its value access.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
@@ -37,16 +40,22 @@ SP1 must be at least hysteresis. Invalid sizes, subindices, values and teaching
 an invalid sample return negative ISDU responses without changing settings.
 Event 0x8CA0 is an example vendor notification on a rising output.
 
-`device.json` and its generated `device.xml` describe this exact PD/parameter
-map using experimental identity 1234/5679. These example IODDs pass the official XSD and the CLI integrity/consistency
+`switching_sensor_od.c` is the authoritative description of the four
+parameters; `tools/iodd_gen.py --od examples/switching_sensor/switching_sensor_od.c
+examples/switching_sensor/device.json` exports an IODD from it. `device.json`
+keeps the non-OD metadata (identity, process data, physical layer, test
+configuration) and its legacy `variables` array is still used by the shipped
+`device.xml` until the IODD packaging scripts move to `--od`. These example IODDs pass the official XSD and the CLI integrity/consistency
 checks. Apply your assigned identity and run the applicable official IODD
 Checker for your product definition. Schema/CLI validation does not supply
 official Checker approval. See `tools/IODD_GEN.md` for generate/inspect/validate/pack.
 
-For an MCU integration, keep the sensor/config/device contexts alive, assign
-`config.user = &sensor`, `config.vendor_service = switching_sensor_service`,
-configure Type 2.V with three input bytes and no output bytes, and publish each
-sample using `iolink_device_pd_input_update`. Sample at application cadence while
+For an MCU integration, keep the sensor/config/device contexts alive, call
+`switching_sensor_od_init(&od_app, &sensor)`, assign `config.od = &od_app` and
+`config.user = &sensor`, configure Type 2.V with three input bytes and no output
+bytes, and publish each sample using `iolink_device_pd_input_update`.
+`switching_sensor_service()` remains as a deprecated `vendor_service` wrapper
+for integrations that have not moved to `config.od`. Sample at application cadence while
 servicing `iolink_device_process` fast enough for the link. Supply the MCU/PHY,
 clock, locks and sensor acquisition as in the matching hardware reference.
 

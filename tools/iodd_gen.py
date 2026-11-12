@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Generate the supported IODD 1.1 subset from a device JSON description."""
+"""Generate the supported IODD 1.1 subset.
+
+参数（Variable）的事实源是 C 对象字典表（D1/D2）：用 --od 给出包含
+IOLINK_OD_*_ENTRY 宏的 C 源文件，脚本解析表项并生成 IODD 变量。JSON 只保留
+对象字典无法表达的设备元数据（身份、过程数据、物理层、测试配置）。
+未给出 --od 时仍接受旧的 JSON "variables" 字段，用于既有调用点兼容。"""
+import argparse
 import json
 import datetime
 from pathlib import Path
@@ -27,10 +33,10 @@ def integer(value, label, low, high):
     return value
 
 
-def validate_config(config):
+def validate_config(config, skip_variables=False):
     if not isinstance(config, dict):
         raise ValueError('Configuration must be a JSON object')
-    for key in ('variables', 'processData'):
+    for key in ('processData',):
         if not isinstance(config.get(key, []), list):
             raise ValueError(key + ' must be an array')
     try:
@@ -46,11 +52,17 @@ def validate_config(config):
     ids = {'V_DirectParameters_1', 'V_DirectParameters_2', 'V_ProductName', 'V_ApplicationSpecificTag', 'V_ProductID', 'M_Identification', 'M_Parameter'}
     # ProductName, ProductID and ApplicationSpecificTag are declared below.
     indexes = {18, 19, 24}
+    if skip_variables:
+        variables = []
+    else:
+        variables = config.get('variables', [])
+        if not isinstance(variables, list):
+            raise ValueError('variables must be an array')
     def unique_id(value):
         if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_.-]*', value) or value in ids:
             raise ValueError(f'Invalid or duplicate id: {value}')
         ids.add(value)
-    for variable in config.get('variables', []):
+    for variable in variables:
         unique_id(variable['id'])
         index = integer(variable['index'], 'index', 16, 65535)
         if index in indexes:
@@ -126,8 +138,185 @@ def validate_config(config):
             raise ValueError('Config1 requires <=12 octets; Config3 requires >12 octets')
 
 
-def generate_bytes(config):
-    validate_config(config)
+# ---------------------------------------------------------------------------
+# C 对象字典 → IODD 变量（D1：C 表是事实源，IODD 是导出物）
+# ---------------------------------------------------------------------------
+
+OD_DATATYPES = {
+    'IOLINK_OD_DT_U8': ('UIntegerT', 8),
+    'IOLINK_OD_DT_U16': ('UIntegerT', 16),
+    'IOLINK_OD_DT_U32': ('UIntegerT', 32),
+    'IOLINK_OD_DT_BOOL': ('BooleanT', 1),
+    'IOLINK_OD_DT_OCTET_STRING': ('OctetStringT', None),
+}
+
+OD_ACCESS = {
+    'IOLINK_OD_ACCESS_RO': 'ro',
+    'IOLINK_OD_ACCESS_RW': 'rw',
+    'IOLINK_OD_ACCESS_RW_LOCKED': 'rw',
+    'IOLINK_OD_ACCESS_WO': 'wo',
+    'IOLINK_OD_ACCESS_WO_LOCKED': 'wo',
+}
+
+OD_ENTRY_RE = re.compile(r'IOLINK_OD_(SCALAR_EX|SCALAR|STRING)\s*\(', re.S)
+
+
+def _strip_c_comments(text):
+    text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
+    return re.sub(r'//[^\n]*', '', text)
+
+
+def _split_macro_args(text, start):
+    """从 start（左括号之后）切分宏实参，返回 (args, end_index)。"""
+    args, depth, quoted, current = [], 1, None, []
+    i = start
+    while i < len(text):
+        char = text[i]
+        if quoted:
+            current.append(char)
+            if char == '\\':
+                i += 1
+                if i < len(text):
+                    current.append(text[i])
+            elif char == quoted:
+                quoted = None
+        elif char in ('"', "'"):
+            quoted = char
+            current.append(char)
+        elif char == '(':
+            depth += 1
+            current.append(char)
+        elif char == ')':
+            depth -= 1
+            if depth == 0:
+                args.append(''.join(current).strip())
+                return args, i + 1
+            current.append(char)
+        elif char == ',' and depth == 1:
+            args.append(''.join(current).strip())
+            current = []
+        else:
+            current.append(char)
+        i += 1
+    raise ValueError('unterminated IOLINK_OD entry macro')
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _collect_defines(path, defines, visited):
+    """收集可解析的整数 #define（含被引号 include 的本地头文件）。"""
+    resolved = Path(path).resolve()
+    if resolved in visited or not resolved.is_file():
+        return
+    visited.add(resolved)
+    text = _strip_c_comments(resolved.read_text())
+    for include in re.findall(r'#\s*include\s+"([^"]+)"', text):
+        for base in (resolved.parent, ROOT / 'include'):
+            if (base / include).is_file():
+                _collect_defines(base / include, defines, visited)
+                break
+    for name, value in re.findall(r'#\s*define\s+([A-Za-z_]\w*)\s+([^\n]+)', text):
+        defines.setdefault(name, value.strip())
+
+
+def _resolve_int(token, defines, depth=0):
+    token = token.strip()
+    while token.startswith('(') and token.endswith(')') and token.count('(') == token.count(')'):
+        token = token[1:-1].strip()
+    token = token.rstrip('uUlL')
+    try:
+        return int(token, 0)
+    except ValueError:
+        pass
+    if depth < 8 and token in defines:
+        return _resolve_int(defines[token], defines, depth + 1)
+    raise ValueError(f'cannot resolve integer expression: {token}')
+
+
+def _str_arg(token):
+    token = token.strip()
+    if not (len(token) >= 2 and token[0] == '"' and token[-1] == '"'):
+        raise ValueError(f'expected a string literal, got {token}')
+    return token[1:-1]
+
+
+def parse_od_source(path):
+    """解析 C 源文件里的 IOLINK_OD_* 表项，返回 IODD 变量描述列表。"""
+    defines = {}
+    _collect_defines(path, defines, set())
+    text = _strip_c_comments(Path(path).read_text())
+    variables, seen = [], set()
+    for match in OD_ENTRY_RE.finditer(text):
+        kind = match.group(1)
+        args, _ = _split_macro_args(text, match.end())
+        if kind == 'STRING':
+            if len(args) != 7:
+                raise ValueError(f'{path}: IOLINK_OD_STRING expects 7 arguments')
+            index = _resolve_int(args[0], defines)
+            access = OD_ACCESS.get(args[1], None)
+            datatype, bits = OD_DATATYPES['IOLINK_OD_DT_OCTET_STRING']
+            bits = _resolve_int(args[5], defines) * 8
+            lower = upper = None
+            default = None
+            name = _str_arg(args[6])
+        else:
+            expected = 10 if kind == 'SCALAR' else 12
+            if len(args) != expected:
+                raise ValueError(f'{path}: IOLINK_OD_{kind} expects {expected} arguments')
+            index = _resolve_int(args[0], defines)
+            datatype, bits = OD_DATATYPES.get(args[1], (None, None))
+            access = OD_ACCESS.get(args[2], None)
+            lower, upper = _resolve_int(args[6], defines), _resolve_int(args[7], defines)
+            default = _resolve_int(args[8], defines)
+            name = _str_arg(args[9])
+        if datatype is None:
+            raise ValueError(f'{path}: unsupported datatype {args[1]}')
+        if access is None:
+            raise ValueError(f'{path}: unsupported access {args[2]}')
+        if not 16 <= index <= 65535:
+            raise ValueError(f'{path}: variable index {index} out of range')
+        if index in seen:
+            raise ValueError(f'{path}: duplicate variable index {index}')
+        seen.add(index)
+        variable = {
+            'id': f'V_OD_{index:04X}',
+            'index': index,
+            'name': name,
+            'datatype': datatype,
+            'bitLength': bits,
+            'accessRights': access,
+        }
+        if datatype == 'BooleanT':
+            variable['bitLength'] = 1
+            variable['lowerValue'], variable['upperValue'] = 0, 1
+        elif datatype in ('UIntegerT', 'IntegerT'):
+            variable['lowerValue'], variable['upperValue'] = lower, upper
+            if lower <= default <= upper:
+                variable['defaultValue'] = default
+        variables.append(variable)
+    if not variables:
+        raise ValueError(f'{path}: no IOLINK_OD entry found')
+    return variables
+
+
+def load_od_variables(paths):
+    variables = []
+    for path in paths or []:
+        for variable in parse_od_source(path):
+            variables.append(variable)
+    ids = [v['id'] for v in variables]
+    if len(ids) != len(set(ids)):
+        raise ValueError('duplicate OD variable ids across sources')
+    indexes = [v['index'] for v in variables]
+    if len(indexes) != len(set(indexes)):
+        raise ValueError('duplicate OD variable indexes across sources')
+    return variables
+
+
+def generate_bytes(config, od_variables=None):
+    validate_config(config, skip_variables=od_variables is not None)
+    param_list = list(config.get('variables', [])) if od_variables is None else list(od_variables)
     root = ET.Element('{' + NS + '}IODevice', {'{' + XSI + '}schemaLocation': NS + ' IODD1.1.xsd'})
     element(root, 'DocumentInfo', {'copyright': config.get('copyright', 'iolinki-project'), 'releaseDate': config.get('releaseDate', '2026-10-02'), 'version': config.get('version', 'V1.0')})
     header = element(root, 'ProfileHeader')
@@ -163,7 +352,7 @@ def generate_bytes(config):
     for id_ in ('V_DirectParameters_2', 'V_ProductName', 'V_ApplicationSpecificTag'):
         element(variables, 'StdVariableRef', {'id': id_})
     element(variables, 'StdVariableRef', {'id': 'V_ProductID', 'defaultValue': product_id})
-    for variable in config.get('variables', []):
+    for variable in param_list:
         attrs = {key: str(variable[key]) for key in ('id', 'index')}
         attrs['accessRights'] = variable.get('accessRights', 'rw')
         if 'defaultValue' in variable:
@@ -214,7 +403,7 @@ def generate_bytes(config):
     for role in ('Identification', 'Parameter'):
         menu = element(menus, 'Menu', {'id': 'M_' + role})
         textref(menu, 'Name', 'T_Menu_' + role, role)
-        refs = ['V_DirectParameters_1', 'V_ApplicationSpecificTag'] if role == 'Identification' else ['V_DirectParameters_1'] if not config.get('variables') else [v['id'] for v in config['variables']]
+        refs = ['V_DirectParameters_1', 'V_ApplicationSpecificTag'] if role == 'Identification' else ['V_DirectParameters_1'] if not param_list else [v['id'] for v in param_list]
         for id_ in refs:
             element(menu, 'VariableRef', {'variableId': id_})
     for role in ('Observer', 'Maintenance', 'Specialist'):
@@ -241,8 +430,8 @@ def generate_bytes(config):
     return ET.tostring(root, encoding='utf-8', xml_declaration=True) + b'\n'
 
 
-def generate_iodd(config, output=None):
-    data = generate_bytes(config)
+def generate_iodd(config, output=None, od_sources=None):
+    data = generate_bytes(config, load_od_variables(od_sources) if od_sources else None)
     path = Path(output or config.get('output', 'device.xml'))
     path.write_bytes(data)
     subprocess.run(['node', str(Path(__file__).with_name('iodd_stamp.mjs')), 'write', str(path)], check=True)
@@ -250,6 +439,10 @@ def generate_iodd(config, output=None):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        sys.exit('Usage: iodd_gen.py config.json (or use iodd_cli.py --help)')
-    print(generate_iodd(json.loads(Path(sys.argv[1]).read_text())))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('config', type=Path, help='device JSON (identity/process data/physical)')
+    parser.add_argument('--od', action='append', default=[], type=Path,
+                        help='C source with IOLINK_OD_* entries (repeatable; replaces JSON variables)')
+    parser.add_argument('-o', '--output', type=Path)
+    args = parser.parse_args()
+    print(generate_iodd(json.loads(args.config.read_text()), args.output, args.od))
