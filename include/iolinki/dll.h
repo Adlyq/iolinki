@@ -38,7 +38,8 @@ typedef enum
     IOLINK_DLL_STATE_ESTAB_COM = 3U,     /**< 建立通信（转入 OPERATE） */
     IOLINK_DLL_STATE_OPERATE = 4U,       /**< 循环数据交换已激活 */
     IOLINK_DLL_STATE_FALLBACK = 5U,      /**< 错误恢复 / 回退 */
-    IOLINK_DLL_STATE_COMM_DISABLED = 6U  /**< Back-to-box：通信停止直至复位 */
+    IOLINK_DLL_STATE_COMM_DISABLED = 6U, /**< Back-to-box：通信停止直至复位 */
+    IOLINK_DLL_STATE_COUNT = 7U          /**< 状态数量（P9 状态机表维度） */
 } iolink_dll_state_t;
 
 /**
@@ -228,6 +229,7 @@ typedef struct
     uint8_t flags;        /**< @ref IOLINK_REPLY_FLAG_PD_TAIL 等 */
     uint8_t source;       /**< @ref iolink_reply_source_t */
     uint8_t action;       /**< @ref iolink_reply_action_t */
+    uint8_t state;        /**< 编译该计划时的 DLL 状态（P9：迁移后自动失效） */
 } iolink_reply_plan_t;
 /** @} */
 
@@ -345,11 +347,11 @@ typedef enum
 /** @brief timer 的时序契约（名称 + 规范条款 + 运行语义）。 */
 typedef struct
 {
-    const char* name;            /**< 稳定的 timer 名（日志/导出用） */
-    const char* clause;          /**< 规范条款号或"实现相关"说明 */
-    iolink_timer_id_t id;        /**< 表项标识 */
-    iolink_timer_kind_t kind;    /**< @ref iolink_timer_kind_t */
-    uint8_t phase;               /**< 分发阶段：0 = 模式切换之前，1 = 门控之后 */
+    const char* name;         /**< 稳定的 timer 名（日志/导出用） */
+    const char* clause;       /**< 规范条款号或"实现相关"说明 */
+    iolink_timer_id_t id;     /**< 表项标识 */
+    iolink_timer_kind_t kind; /**< @ref iolink_timer_kind_t */
+    uint8_t phase;            /**< 分发阶段：0 = 模式切换之前，1 = 门控之后 */
 } iolink_timer_contract_t;
 
 /** @brief 取时序契约表（只读，进程生命周期内稳定）。 */

@@ -13,6 +13,7 @@
 #include "iolinki/utils.h"
 #include "iolinki/platform.h"
 #include "dll_internal.h"
+#include "iolinki/dll_sm.h"
 #include <string.h>
 
 #include <stdio.h>
@@ -59,15 +60,14 @@
  *      |  dll_timers_dispatch(phase 0)        截止时间表（P7）
  *      |- dll_check_t_pd            -- 提前返回
  *      |- dll_handle_sio_wakeup     -- 提前返回
- *      |- dll_timer_sync_t_byte / dll_timers_dispatch(phase 1)
+ *      |- dll_timers_dispatch(phase 1)   t_byte 到期检查
  *      |- dll_wakeup_window_active  -- 提前返回
  *      |- dll_consume_isr_mailbox
  *      |  `- dll_process_complete_frame
  *      |     |- dll_frame_drop_if_stopped / dll_check_cycle_time /
  *      |     |  dll_mark_master_activity
  *      |     |- dll_frame_validate -> dll_handle_valid_frame
- *      |     |  `- 状态分发：dll_dispatch_preoperate /
- *      |     |     dll_dispatch_estab_com / dll_dispatch_operate
+ *      |     |  `- 状态机骨架表 g_dll_sm[state][event]（P9，见 dll_sm.h）
  *      |     |     `- dll_handle_operate_type0 / dll_handle_type0_od_write /
  *      |     |        dll_handle_operate_type1_2 -> dll_dispatch_od
  *      |     |        （页面/诊断/ISDU 通道） -> dll_send
@@ -117,10 +117,10 @@ static const iolink_timer_contract_t g_timer_contract[IOLINK_TIMER_COUNT] = {
     {"t_pd", "A.2 / Table 47（t_PD 上电与 PD 保护窗口）", IOLINK_TIMER_T_PD,
      IOLINK_TIMER_KIND_WINDOW, 0U},
     {"t_wu", "Table 47（T_WU 唤醒后首帧窗口）", IOLINK_TIMER_T_WU, IOLINK_TIMER_KIND_WINDOW, 0U},
-    {"t_byte", "A.2 / Table 47（帧内字节间超时）", IOLINK_TIMER_T_BYTE,
-     IOLINK_TIMER_KIND_DEADLINE, 1U},
-    {"t_ren", "C6 / Table 10（t_REN 应答时间上限）", IOLINK_TIMER_T_REN,
-     IOLINK_TIMER_KIND_WINDOW, 0U},
+    {"t_byte", "A.2 / Table 47（帧内字节间超时）", IOLINK_TIMER_T_BYTE, IOLINK_TIMER_KIND_DEADLINE,
+     1U},
+    {"t_ren", "C6 / Table 10（t_REN 应答时间上限）", IOLINK_TIMER_T_REN, IOLINK_TIMER_KIND_WINDOW,
+     0U},
     {"t_cycle", "C5 / Table 47（MinCycleTime）", IOLINK_TIMER_T_CYCLE, IOLINK_TIMER_KIND_WINDOW,
      0U},
     {"t_a", "Table 47 / A.2（t_A = 10 位时间；PHY 定时器为权威）", IOLINK_TIMER_T_A,
@@ -916,8 +916,7 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
         const uint32_t end_tx_us = (uint32_t) end_us;
         const uint32_t limit = dll_get_t_ren_limit_us(ctx);
         const uint64_t ren_deadline = dll_timer_deadline(ctx, IOLINK_TIMER_T_REN);
-        const uint32_t start_us =
-            (ren_deadline != 0U) ? (uint32_t) (ren_deadline - limit) : 0U;
+        const uint32_t start_us = (ren_deadline != 0U) ? (uint32_t) (ren_deadline - limit) : 0U;
         ctx->response_time_us = end_tx_us - start_us;
 
         if ((ren_deadline != 0U) && ctx->enforce_timing && (limit > 0U) &&
@@ -1087,6 +1086,7 @@ static void dll_plan_push(iolink_dll_main_t* ctx, uint8_t* count, uint8_t match_
     plan->flags = flags;
     plan->source = source;
     plan->action = action;
+    plan->state = (uint8_t) ctx->shared.state;
     (*count)++;
 }
 
@@ -1639,158 +1639,145 @@ static bool dll_reject_startup_operate(iolink_dll_main_t* ctx, bool was_establis
 }
 #endif /* !IOLINK_COMPAT_V10_STARTUP_OPERATE */
 
-/**
- * @brief PREOPERATE：拦截唤醒后的第一条报文。
+/* -------------------------------------------------------------------------
+ * 状态机骨架表（P9）
  *
- * 转换 T1：在页通道上对 Direct Parameter 页面字节的 Type-0 READ
- * 是规范定义的启动探测。从直接参数源应答，
- * 而不是把 MC 送入 ISDU。后续 PREOPERATE 的 Type-0 帧是 ISDU
- * 流量，不会被拦截。
- */
-static bool dll_handle_startup_probe(iolink_dll_main_t* ctx, bool was_establishing, uint8_t mc)
-{
-    const bool page_read =
-        ((mc & IOLINK_MC_RW_MASK) != 0U) && ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == 0x20U);
-    if (was_establishing && (ctx->req_len == 2U) && page_read) {
-        dll_handle_page_channel_read(ctx, mc);
-        return true;
-    }
-    return false;
-}
+ * state × event -> (进入状态, 动作)。事件分类只看帧字节与长度；动作仍是
+ * 普通函数，连续条件（通道宽度、兼容开关、长度）留在函数里。
+ * 表由 include/iolinki/dll_sm.h 的 DLL_SM_ROWS 展开，tools/
+ * gen_dll_statemachine.py 从同一份宏行生成 mermaid/CSV/覆盖测试。
+ * ------------------------------------------------------------------------- */
 
-/** @brief PREOPERATE 分发：仅 Type-0，外加 FALLBACK/MasterCommand。 */
-static void dll_dispatch_preoperate(iolink_dll_main_t* ctx, bool was_establishing)
+/**
+ * @brief 对已校验帧做互斥事件分类。
+ *
+ * 判定顺序与原 dispatch 的优先级一致：过渡命令 > FALLBACK > 非 Type-0
+ * > 2 字节 Type-0（页读 / 其他）> 页写地址 0 > 页写其他地址 > Type-0 写。
+ * 长度参与分类，使畸形帧仍走与重构前完全相同的分支。
+ */
+static iolink_dll_event_t dll_sm_classify(const iolink_dll_main_t* ctx)
 {
     const uint8_t mc = ctx->frame_buf[0];
-    if (dll_handle_startup_probe(ctx, was_establishing, mc)) {
-        return;
+    const uint8_t ckt = ctx->frame_buf[1];
+    const bool type0 = ((ckt & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0);
+    const bool write = ((mc & IOLINK_MC_RW_MASK) == 0U);
+    const uint8_t channel = (uint8_t) (mc & IOLINK_MC_COMM_CHANNEL_MASK);
+
+    if (mc == IOLINK_MC_TRANSITION_COMMAND) {
+        return DLL_EV_TRANSITION;
+    }
+    if ((ctx->req_len == 3U) && dll_is_fallback_command(ctx)) {
+        return DLL_EV_FALLBACK_CMD;
+    }
+    if (!type0) {
+        return DLL_EV_PD_EXCHANGE;
     }
     if (ctx->req_len == 2U) {
-        if (mc == IOLINK_MC_TRANSITION_COMMAND) {
-            dll_handle_preoperate(ctx, mc, ctx->frame_buf[1]);
+        /* 2 字节 Type-0：页读单独分类（启动探测 / OPERATE 复位），其余
+         * （含畸形 2 字节页写）都走 operate_type0 的 CKS/OD 应答。 */
+        if (!write && (channel == IOLINK_MC_CHANNEL_PAGE)) {
+            return DLL_EV_PAGE_READ_T0;
         }
-        else {
-            dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
-        }
+        return DLL_EV_T0_SHORT;
     }
-    else if ((ctx->req_len == 3U) && dll_is_fallback_command(ctx)) {
-        /* Table B.2/43：FALLBACK MasterCommand 0x5A。 */
-        dll_handle_fallback_command(ctx);
+    if (write && (channel == IOLINK_MC_CHANNEL_PAGE)) {
+        return ((mc & IOLINK_MC_ADDR_MASK) == 0x00U) ? DLL_EV_PAGE_WRITE_ADDR0 : DLL_EV_PAGE_WRITE;
     }
-    else if ((ctx->req_len == 3U) && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
-             ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE) &&
-             ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
-        /* MasterCommand 的页通道 Type-0 WRITE（Table B.2）：
-           0x97 DeviceStartup、0x98 PDOperate、0x99 DeviceOperate、
-           0x9A DevicePreoperate、0x95/0x96 ident、0x5A Fallback。
-           ST 应用模式变更并仅用 CKS 应答。 */
-        dll_handle_master_command(ctx, ctx->frame_buf[2]);
-    }
-    else if (ctx->req_len == 3U) {
-        /* PREOPERATE 中其他任何 3 字节 Type-0 OD 写属于 ISDU 或诊断
-           流量（7.3.6 允许在 OPERATE 之前使用 ISDU）。它是 TYPE_0 帧：
-           偏移 2 处有一个 OD 字节，应答仅含 CKS（Figure A.5），绝不使用
-           配置的 OPERATE PD 宽度。 */
-        dll_handle_type0_od_write(ctx, ctx->frame_buf[0], ctx->frame_buf[2]);
-    }
+    /* 3 字节 Type-0 写，或畸形 3 字节读：原 dispatch 一律走 OD 写路径。 */
+    return DLL_EV_OD_WRITE_T0;
 }
 
-/** @brief ESTAB_COM 分发：首个有效的非转换帧进入 OPERATE。 */
-static void dll_dispatch_estab_com(iolink_dll_main_t* ctx)
+static bool dll_sm_none(iolink_dll_main_t* ctx)
 {
-    const uint8_t mc = ctx->frame_buf[0];
-    const bool type0 = ((ctx->frame_buf[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0);
-    const bool page_write = type0 && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
-                            ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE);
-    if (mc == IOLINK_MC_TRANSITION_COMMAND) {
-        dll_handle_preoperate(ctx, mc, ctx->frame_buf[1]);
-    }
-    else if (page_write && ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
-        /* 首个周期帧之前的 MasterCommand：应用它，而不是把
-           Type-0 页面写入误认为 Type-2 PD。 */
-        dll_handle_master_command(ctx, ctx->frame_buf[2]);
-    }
-    else {
-        /* 首个有效的非转换帧建立通信并
-           进入 OPERATE，包含 Type 0。 */
-        dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
-        if (page_write) {
-            dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
-        }
-        else if (type0 && (ctx->req_len == 2U)) {
-            dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
-        }
-        else if (type0) {
-            /* Type-0 OD 写（ISDU/诊断）：偏移 2 处一个 OD 字节。 */
-            dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
-        }
-        else {
-            /* 固定的 TYPE_1_x/TYPE_2_x READ 仅为 MC + CKT（req_len == 2），
-               因此 req_len 无法将其与 Type-0 区分：CKT 类型位才是
-               权威依据。 */
-            dll_handle_operate_type1_2(ctx);
-        }
-    }
-}
-
-/** @brief OPERATE 分发：所有通道均有效，禁止转换。 */
-static bool dll_dispatch_operate(iolink_dll_main_t* ctx)
-{
-    const uint8_t mc = ctx->frame_buf[0];
-    const bool type0 = ((ctx->frame_buf[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0);
-    const bool page_write = type0 && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
-                            ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE);
-    if ((ctx->req_len == 3U) && (dll_is_fallback_command(ctx))) {
-        /* Table B.2/43、Table 47 T9：T_FBD 之后 OPERATE -> SIO。 */
-        dll_handle_fallback_command(ctx);
-    }
-    else if (mc == IOLINK_MC_TRANSITION_COMMAND) {
-        /* 转换命令在 OPERATE 中非法。上报它但保持 DL
-           模式：主站在健康链路上从不发送它，且此处 ST rc=2/rc=3
-           恢复只会增加抖动。 */
-        ctx->shared.framing_errors++;
-    }
-    else if (type0 && (ctx->req_len == 2U)) {
-#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
-        /* Table 57/67（SDCI_TC_0038/0049）：OPERATE 生效期间的 TYPE_0 页面 READ
-           是复位请求。不要应答它；返回 STARTUP，使下一次读
-           被当作启动探测处理。TYPE_0 页面写保持
-           其正常行为。 */
-        if (((mc & IOLINK_MC_RW_MASK) != 0U) &&
-            ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE) &&
-            (ctx->shared.m_seq_type != IOLINK_M_SEQ_TYPE_0)) {
-            ctx->shared.framing_errors++;
-            ctx->frame_index = 0U;
-            dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
-            return false; /* 复位路径跳过公共尾部清理 */
-        }
-#endif
-        dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
-    }
-    else if (page_write && ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
-        /* OPERATE 中的 MasterCommand 页面写（0x9A/0x98/0x99/...）。ST 在
-           每种 DL 模式下都处理它们，只改变状态，从不把它们
-           当作非法 M-sequence。 */
-        dll_handle_master_command(ctx, ctx->frame_buf[2]);
-    }
-    else if (page_write) {
-        /* DPP 参数写（例如 MasterCycleTime）：仅含 CKS 的确认。 */
-        dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
-    }
-    else if (type0) {
-        /* ISDU/诊断上的 Type-0 OD 写：仅含 CKS 的确认。 */
-        dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
-    }
-    else {
-        /* 固定的 TYPE_1_x/TYPE_2_x READ 可能仅为 MC + CKT（req_len == 2）；
-           用 CKT 类型位而非长度来区分。 */
-        dll_handle_operate_type1_2(ctx);
-    }
+    (void) ctx;
     return true;
 }
 
+static bool dll_sm_transition(iolink_dll_main_t* ctx)
+{
+    dll_handle_preoperate(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
+    return true;
+}
+
+static bool dll_sm_fallback(iolink_dll_main_t* ctx)
+{
+    dll_handle_fallback_command(ctx);
+    return true;
+}
+
+/** @brief 启动探测：用 Direct Parameter 页面字节应答 Type-0 页读。 */
+static bool dll_sm_page_probe(iolink_dll_main_t* ctx)
+{
+    dll_handle_page_channel_read(ctx, ctx->frame_buf[0]);
+    return true;
+}
+
+static bool dll_sm_master_command(iolink_dll_main_t* ctx)
+{
+    dll_handle_master_command(ctx, ctx->frame_buf[2]);
+    return true;
+}
+
+static bool dll_sm_od_write_t0(iolink_dll_main_t* ctx)
+{
+    dll_handle_type0_od_write(ctx, ctx->frame_buf[0], ctx->frame_buf[2]);
+    return true;
+}
+
+static bool dll_sm_type0_read(iolink_dll_main_t* ctx)
+{
+    dll_handle_operate_type0(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
+    return true;
+}
+
+static bool dll_sm_pd_exchange(iolink_dll_main_t* ctx)
+{
+    dll_handle_operate_type1_2(ctx);
+    return true;
+}
+
+/** @brief OPERATE 中的过渡命令非法：计数但不改变 DL 模式（ST rc=2 语义）。 */
+static bool dll_sm_transition_illegal(iolink_dll_main_t* ctx)
+{
+    ctx->shared.framing_errors++;
+    return true;
+}
+
+/** @brief OPERATE 中的 Type-0 页读：复位请求（兼容开关除外）。 */
+static bool dll_sm_operate_page_read(iolink_dll_main_t* ctx)
+{
+#if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
+    /* Table 57/67（SDCI_TC_0038/0049）：不复位兼容模式下，OPERATE 期间
+       的 Type-0 页读是复位请求：不应答，返回 STARTUP。 */
+    if (ctx->shared.m_seq_type != IOLINK_M_SEQ_TYPE_0) {
+        ctx->shared.framing_errors++;
+        ctx->frame_index = 0U;
+        dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
+        return false; /* 复位路径跳过公共尾部清理 */
+    }
+#endif
+    dll_handle_operate_type0(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
+    return true;
+}
+
+/** @brief state × event 动作表（唯一事实源：dll_sm.h 的 DLL_SM_ROWS）。 */
+static const iolink_dll_sm_cell_t g_dll_sm[IOLINK_DLL_STATE_COUNT][DLL_EV_COUNT] = {
+#define DLL_SM_ROW(state, event, action, enter, clause) [state][event] = {action, enter},
+    DLL_SM_ROWS(DLL_SM_ROW)
+#undef DLL_SM_ROW
+};
+
+const iolink_dll_sm_cell_t* iolink_dll_sm_cell(iolink_dll_state_t state, iolink_dll_event_t event)
+{
+    if (((uint32_t) state >= (uint32_t) IOLINK_DLL_STATE_COUNT) ||
+        ((uint32_t) event >= (uint32_t) DLL_EV_COUNT)) {
+        return NULL;
+    }
+    return &g_dll_sm[(uint8_t) state][(uint8_t) event];
+}
+
 /**
- * @brief 按 DL 状态分发已校验的帧。
+ * @brief 按 DL 状态与事件执行状态机骨架。
  *
  * @return 当帧被拒绝且未推进状态、调用方必须跳过
  *         公共尾部清理时返回 false。
@@ -1805,22 +1792,18 @@ static bool dll_handle_valid_frame(iolink_dll_main_t* ctx)
         return false;
     }
 #endif
-    if (was_establishing) {
-        dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
-        /* 有效报文取消 T_DSIO（Table 47 T10 只约束首帧前）。 */
-        dll_timer_cancel(ctx, IOLINK_TIMER_T_DSIO);
-    }
+    (void) was_establishing;
 
-    if (ctx->shared.state == IOLINK_DLL_STATE_PREOPERATE) {
-        dll_dispatch_preoperate(ctx, was_establishing);
+    const iolink_dll_event_t event = dll_sm_classify(ctx);
+    const iolink_dll_sm_cell_t* cell = &g_dll_sm[(uint8_t) ctx->shared.state][(uint8_t) event];
+    if (cell->enter_state != DLL_SM_STATE_KEEP) {
+        dll_set_state(ctx, (iolink_dll_state_t) cell->enter_state);
+        if (cell->enter_state == (uint8_t) IOLINK_DLL_STATE_PREOPERATE) {
+            /* 有效报文取消 T_DSIO（Table 47 T10 只约束首帧前）。 */
+            dll_timer_cancel(ctx, IOLINK_TIMER_T_DSIO);
+        }
     }
-    else if (ctx->shared.state == IOLINK_DLL_STATE_ESTAB_COM) {
-        dll_dispatch_estab_com(ctx);
-    }
-    else if (ctx->shared.state == IOLINK_DLL_STATE_OPERATE) {
-        return dll_dispatch_operate(ctx);
-    }
-    return true;
+    return cell->action(ctx);
 }
 
 /** @brief 清除每帧簿记并刷新 ISR 的 ISDU 快照。 */
@@ -1996,10 +1979,9 @@ static void dll_timer_sync_master_lost(iolink_dll_main_t* ctx)
             ctx->master_lost = false;
         }
         ctx->master_lost_activity_ms = ctx->master_last_activity_ms;
-        const uint64_t deadline =
-            ((uint64_t) ctx->master_last_activity_ms +
-             ((uint64_t) ctx->master_lost_cycles * (uint64_t) cycle_ms)) *
-            1000U;
+        const uint64_t deadline = ((uint64_t) ctx->master_last_activity_ms +
+                                   ((uint64_t) ctx->master_lost_cycles * (uint64_t) cycle_ms)) *
+                                  1000U;
         dll_timer_arm(ctx, IOLINK_TIMER_MASTER_LOST, deadline);
     }
     else {
@@ -2042,14 +2024,17 @@ static void dll_timer_expire_master_lost(iolink_dll_main_t* ctx)
 static void dll_timer_sync_idle(iolink_dll_main_t* ctx)
 {
     const uint32_t last_activity_ms = ctx->shared.last_activity_ms;
-    if (last_activity_ms != 0U) {
-        /* 原条件为 now_ms - last > 1000：等价于 now_ms >= last + 1001。 */
-        dll_timer_arm(ctx, IOLINK_TIMER_IDLE,
-                      ((uint64_t) last_activity_ms + 1001U) * 1000U);
-    }
-    else {
+    if (last_activity_ms == 0U) {
         dll_timer_cancel(ctx, IOLINK_TIMER_IDLE);
+        return;
     }
+    /* 原条件为 now_ms - last > 1000（32 位无符号差值）。这里用同一差值
+     * 换算绝对微秒截止时间，跨 49 天毫秒回绕仍成立。 */
+    const uint64_t now_us = dll_time_us(ctx);
+    const uint32_t elapsed = (uint32_t) (now_us / 1000U) - last_activity_ms;
+    const uint64_t deadline =
+        (elapsed > 1000U) ? now_us : now_us + (uint64_t) (1001U - elapsed) * 1000U;
+    dll_timer_arm(ctx, IOLINK_TIMER_IDLE, deadline);
 }
 
 /**
@@ -2340,6 +2325,9 @@ static void dll_process_body(iolink_dll_main_t* ctx)
      */
     dll_timer_sync_master_lost(ctx);
     dll_timer_sync_idle(ctx);
+    /* t_byte 的 re-arm/cancel 与门控无关；提前同步，避免提前返回时留下
+     * 已到期的表项把 next_deadline 卡在过去。到期动作仍在 phase 1 执行。 */
+    dll_timer_sync_t_byte(ctx);
     dll_timers_dispatch(ctx, 0U);
 
     if (dll_check_t_pd(ctx)) {
@@ -2348,7 +2336,6 @@ static void dll_process_body(iolink_dll_main_t* ctx)
     if (dll_handle_sio_wakeup(ctx)) {
         return;
     }
-    dll_timer_sync_t_byte(ctx);
     dll_timers_dispatch(ctx, 1U);
     if (dll_wakeup_window_active(ctx)) {
         return;

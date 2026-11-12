@@ -200,6 +200,33 @@ static void test_t_pd_legacy_import(void)
     assert(dll_time_reached(g_now, iolink_dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_PD)));
 }
 
+/* 超过 2^32 ms（约 49.7 天）后，32 位毫秒时间戳回绕不得误触发。 */
+static void test_millisecond_wrap(void)
+{
+    iolink_dll_ctx_t ctx;
+    init_ctx(&ctx);
+    ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
+    ctx.main.min_cycle_time_us = 1000U;
+    ctx.main.master_cycle_time = 0U;
+    ctx.main.master_lost_cycles = 2U;
+
+    /* 现在 = 2^32 ms + 5 s；截断后的毫秒值是 5000。 */
+    g_now = ((uint64_t) 0x100000000ULL + 5000ULL) * 1000ULL;
+    ctx.main.shared.last_activity_ms = (uint32_t) (g_now / 1000U) - 200U;
+    ctx.main.master_last_activity_ms = (uint32_t) (g_now / 1000U) - 1U;
+    iolink_dll_process(&ctx.main);
+    assert(ctx.main.idle_timeouts == 0U);
+    assert(!ctx.main.master_lost);
+
+    /* 1.2 s 静默：空闲诊断触发一次；主站丢失（2 ms 窗口）保持提示。 */
+    g_now += 1000000U;
+    iolink_dll_process(&ctx.main);
+    assert(ctx.main.idle_timeouts == 1U);
+    assert(ctx.main.master_lost);
+    assert(!iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_MASTER_LOST));
+}
+
 int main(void)
 {
     test_contract_table();
@@ -208,5 +235,6 @@ int main(void)
     test_same_instant_priority();
     test_t_byte_rearm_and_cancel();
     test_t_pd_legacy_import();
+    test_millisecond_wrap();
     return 0;
 }
