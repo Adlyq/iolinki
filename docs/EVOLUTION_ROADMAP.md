@@ -321,19 +321,30 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
   回退严格等价（差分门证明）。
 - **风险**：plan 失效窗口是最大正确性风险；发布/失效协议必须先于任何优化设计。
 
-### P6 能力表化 D（L，2–3 周）——状态：设计稿已完成（docs/CAPABILITY_DESIGN.md，22→4 配置）；实现待 P4/P5
+### P6 能力表化 D（L，2–3 周）——状态：已完成（本地合并；全量验证中）
+
+- **实现结果**：`iolink_build_caps_t` / `iolink_caps_t` + `iolink_caps_resolve()`
+  单一解析点；12 项开关降级为运行时能力位；矩阵 22→4 结构配置
+  （`tools/matrix_configs.sh` 单一事实源）+ 7 个语法探针 + profile 链接探针；
+  `IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` 退役为兼容别名。
+- **实测**：`#if` src/ 94→84、include/ 117→116，`dll.c` 13→8；ROM 最小应用
+  Cortex-M0+ `-Os` text 21812→22784（**+972 B，+4.5%**）、rodata +20 B；
+  源码集成与 `.a`（非 LTO）差 0–4 B。**超出设计稿 3% 预算，DG3 需决定：
+  接受、逐项申报，或恢复部分编译期开关**。
+- **剩余项**：ISR `isr_ops` 折叠（P5/P9 交叉）、`IOLINK_CAP_BUILD_*` 单变量
+  测量开关、嵌入式链接脚本锚点、C2（FRAME）行为等价门、组合探针仅编译不链接。
 
 - **目标**：22 配置矩阵收敛为 3–4 个结构配置；特性开关降级为数据。
 - **依赖**：P5。**出口决策 DG3**。
 - **涉及文件**：`include/iolinki/config.h`、能力表（新增）、全部 `src/`（#if 清理）、
   `tools/build_matrix.sh`、`tests/`（被降级特性的测试改运行时切换）。
 - **步骤**：
-  - [ ] 能力表 const 结构 + 函数指针 NULL + capability 查询 API（扩展 `dll_phy_has_*`）；
-  - [ ] 开关审计：保留编译期（结构布局/中断语义/并发档位/ISR 颗粒度/统计模式）
-        vs 降级为数据（其余）；
-  - [ ] matrix 收敛为结构配置 × 平台；差分门覆盖新矩阵；
-  - [ ] 编译期删除契约（`IOLINK_APP_PD_INPUT_CALLBACK` 类）改链接期断言；
-  - [ ] ROM/size 实测：源码集成 vs 静态库（非 LTO）两种交付形态分别记录。
+  - [x] 能力表 const 结构 + capability 查询 API（`iolink_caps_resolve`）；
+  - [x] 开关审计并降级 12 项（SYSTEM_COMMAND/WAKEUP/SIO_CQ/PD callback/
+        ISR_TX_ONLY/3×compat/事件时间/时序强制/访问锁）；
+  - [x] matrix 收敛为 4 结构配置 + 探针；差分门改为 C1 vs C1r + 期望帧测试；
+  - [x] `IOLINK_APP_PD_INPUT_CALLBACK` 运行时化；DS/事件删除契约改链接期断言；
+  - [x] ROM 实测（源码 vs `.a`）；**+972 B（+4.5%）超预算，DG3 待决**。
 - **完成标志**：`#if` 从 198 降到核心文件个位数；matrix 22→3–4；ROM 实测数据入档。
 - **风险**：ROM 可能增长；`.a` 静态库非 LTO 下 gc-sections 基本失效 → 预期管理靠实测。
 
@@ -413,7 +424,7 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 |---|---|---|---|
 | DG1 | P3 入口 | vendor_service API 破坏策略：兼容 shim vs 2.0 断代 | 保留兼容 shim 一个版本，examples 全量迁移 |
 | DG2 | P4 出口 | 事实源格式：C 表 vs JSON 生成 | C 头为源，脚本导出 IODD |
-| DG3 | P6 出口 | 结构配置清单（3–4 个）定稿 | 待开关审计后定 |
+| DG3 | P6 出口 | 结构配置清单定稿；是否接受能力表 ROM 成本 | 已定为 4 配置；**ROM 实测 +972 B（+4.5%）超 3% 预算，需决定接受/逐项申报/部分回退** |
 | DG4 | P8 出口 | 静态库交付形态下 GC 效果 | 实测数据定论 |
 
 ## 10. 里程碑

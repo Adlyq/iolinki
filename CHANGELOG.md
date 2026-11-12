@@ -55,6 +55,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ISR-side M-sequence content constants roughly halve (27 vs 54). The device
   context grows by 256 bytes (3976 B on a 64-bit host).
 
+### Added (capability model)
+- `iolink_build_caps_t` / `iolink_caps_t` and `iolink_caps_resolve()` are the
+  single capability resolution point (`include/iolinki/capability.h`).
+  Twelve compile-time switches became runtime capability bits (SystemCommand,
+  wake-up, SIO C/Q, PD-input callback, ISR-TX-only, three compatibility bits,
+  event timing, timing enforcement, access locks); `on_pd_input` and the
+  polling API now coexist and are selected by member presence.
+- Structural matrix converged to four configurations with one source of truth
+  (`tools/matrix_configs.sh`), syntax-only combination probes, profile
+  link-probes and a ROM size baseline (`tools/size_matrix.py`).
+  `IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` are retired as no-op
+  aliases. Measured minimal-app cost: +972 B text (+4.5%), +20 B rodata.
+
 ### Added (timers and state machine)
 - Software timeouts converge onto one deadline table (t_A/t_ren/t_cycle/t_PD/
   t_byte/T_DSIO/T_FBD/master_lost/idle) with re-arm/cancel semantics and a
