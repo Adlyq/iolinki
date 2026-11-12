@@ -46,6 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is the first OD application and `tools/iodd_gen.py` exports the IODD from
   the table. ISDU context grows by 8 bytes (device context 3720 bytes).
 
+### Added (reply plan)
+- Reply-plan table in `iolink_dll_ctx_t` (10 slots × 24 B) published by the
+  main pump under a seqlock. The ISR now only looks up a plan, sources the
+  bytes, appends the checksum and feeds the PHY; unrecognised requests return
+  to the main pump instead of being interpreted in the ISR. An ISDU generation
+  bit plus staged-write invalidation keep write-then-read consistent, and the
+  ISR-side M-sequence content constants roughly halve (27 vs 54). The device
+  context grows by 256 bytes (3976 B on a 64-bit host).
+
 ### Changed
 - DLL ownership split: `iolink_dll_ctx_t` packs `iolink_dll_main_t` (with the
   nested shared region) and `iolink_dll_isr_t` as siblings in one allocation.

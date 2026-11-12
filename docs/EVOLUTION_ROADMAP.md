@@ -276,7 +276,7 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 - **风险**：API 破坏（用户已接受工程量）。vendor_service 返回 ErrorCode 语义保留
   （即结果码正域）。
 
-### P4 对象字典 A（XL，3–4 周）——状态：未开始
+### P4 对象字典 A（XL，3–4 周）——状态：已完成（本地合并；全量验证中）
 
 - **目标**：参数知识只有一份事实源（const OD 表）；ISDU/DS/IODD/文档全部派生；
   新增参数不改协议栈代码。
@@ -286,34 +286,36 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
   `src/data_storage.c`（storage 标志查询）、`tools/iodd_gen.py`（反转为表驱动）、
   `examples/switching_sensor/`（试点迁移）、`tests/`。
 - **步骤**：
-  - [ ] characterization tests：先用现有测试 + 差分门钉死 0x0002/0x000D/0x0024/DPP1/2/
-        强制索引现状行为；
-  - [ ] 定义 `iolink_od_entry_t` + datatype codec 表（长度/字节序/范围/错误码唯一实现）；
-  - [ ] 内建处理器（SystemCommand/Profile/DeviceStatus/DPP1/2/强制索引），表留 hook 位；
-  - [ ] `handle_mandatory_indices()` 64 case → 表驱动；
-  - [ ] DS 成员判断改 storage 标志查询，删除 `device_ds_read()` 探测 hack；
-  - [ ] IODD 生成反转：C 表 → IODD；删除第四份 device.json 描述；
-  - [ ] 迁移 switching_sensor，量化表吃掉多少 boilerplate（目标：4 参数 80 行手写 →
-        4 行表项 + 少量语义钩子）。
+  - [x] characterization tests：先用现有测试 + 差分门钉死 0x0002/0x000D/0x0024/DPP1/2/
+        强制索引现状行为（tests/test_od_characterization.c）；
+  - [x] 定义 `iolink_od_entry_t` + datatype codec 表（长度/字节序/范围/错误码唯一实现）；
+  - [x] 内建处理器（SystemCommand/Profile/DeviceStatus/DPP1/2/强制索引），表留 hook 位；
+  - [x] `handle_mandatory_indices()` 强制索引规则迁入表驱动（od.c），isdu.c 保留传输与
+        内建触发器（实际 1842 行，−21；行数下降有限，规则已单源化）；
+  - [x] DS 成员判断改表/描述符集合，删除"用 vendor_service 读探测"的 hack；
+  - [x] IODD 生成反转：C 表 → IODD；device.json 仅作兼容输出；
+  - [x] 迁移 switching_sensor（4 参数 → 4 行表项 + 2 个语义钩子）。
 - **完成标志**：新增参数 = 一行表项（用测试证明）；isdu.c 行数显著下降；差分门全绿；
   生成的 IODD 与现状比对通过。
 - **风险**：写触发语义（teach 类参数）必须靠 characterization tests 钉死；表占 ROM
   → size CI 观察。
 
-### P5 reply plan + ISR 执行器 B（XL，3–4 周）——状态：未开始
+### P5 reply plan + ISR 执行器 B（XL，3–4 周）——状态：已完成（本地合并；全量验证中）
 
 - **目标**：M-sequence 解读只存在一份（主泵）；ISR 收敛为执行器，可独立 WCET 分析。
 - **依赖**：P4。
 - **涉及文件**：`src/dll.c`、`src/dll_isr.c`、`include/iolinki/dll.h`、新增 plan 类型与
   发布原语（SPSC ring + 原子发布字）、`tests/test_dll_isr.c`。
 - **步骤**：
-  - [ ] characterization tests 钉死现有 eager/延迟应答行为；
-  - [ ] `iolink_reply_plan_t` + 计划表数据结构；
-  - [ ] 主泵发布计划：M-seq 头、空/错误应答、静态值、PD、预分段 ISDU 应答；
-  - [ ] 计划失效协议：OD 写路径失效对应 plan（防"写后立刻读"读旧值）；
-  - [ ] ISR 收敛为执行器：查 plan → 取源 → CKS → 喂字节；t_A 时序保留、内容语义移除；
-  - [ ] 计划外请求走显式延迟/错误应答路径，回退语义文档化（现状隐式行为的显式化）；
-  - [ ] 开始积累 WCET 基准测量（为 P9 铺路）。
+  - [x] characterization tests 钉死现有 eager/延迟应答行为；
+  - [x] `iolink_reply_plan_t` + 计划表（10 槽 × 24 B，共享区单表）；
+  - [x] 主泵发布计划：M-seq 头、空/错误应答、静态值、PD、预分段 ISDU 应答；
+  - [x] 计划失效协议：seqlock 发布 + ISDU 代数位 + 暂存写失效（写后读一致）；
+  - [x] ISR 收敛为执行器：查 plan → 取源 → CKS → 喂字节；t_A 元数据保留、内容语义移除；
+  - [x] 计划外请求回到主泵（eager=0）显式应答，回退语义写入头文件；
+  - [x] WCET 基准：宿主层路径代理工具 `tools/wcet/` 已先行落地并接入 CI。
+- **FRAME 配置说明**：`tools/diff_matrix.sh` 已记录 FRAME 不可纳入的实测原因
+  （测试套件按 BYTE 布局构建、mock PHY 无 rx_frame/tx_frame），未伪造覆盖。
 - **完成标志**：差分门全绿；ISR 代码量/分支数下降；最坏帧序下 plan 命中 100% 或
   回退严格等价（差分门证明）。
 - **风险**：plan 失效窗口是最大正确性风险；发布/失效协议必须先于任何优化设计。
