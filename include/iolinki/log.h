@@ -43,19 +43,28 @@ typedef enum
     IOLINK_LOG_LEVEL_DEBUG = 4   /**< 协议细节（索引、长度、计数器） */
 } iolink_log_level_t;
 
+#if defined(__GNUC__) || defined(__clang__)
+/** @brief 让编译器按 printf 规则校验日志格式串（GCC/Clang）。 */
+#define IOLINK_LOG_PRINTF_FORMAT(fmt_index, arg_index) \
+    __attribute__((format(printf, fmt_index, arg_index)))
+#else
+#define IOLINK_LOG_PRINTF_FORMAT(fmt_index, arg_index)
+#endif
+
 /**
  * @brief 日志输出回调。
  *
  * @param user  ::iolink_device_config_t::user（或直接 DLL 用户的
  *               ::iolink_log_sink_t::user）。
  * @param level 该条日志的级别，已通过 sink 的运行时阈值。
- * @param format printf 风格格式串；库保证它与后续参数匹配。
+ * @param format printf 风格格式串；在 GCC/Clang 下由编译器校验。
  *
  * 回调应自行格式化并输出。它在主服务上下文中被调用，必须非阻塞；
  * 启用 IOLINK_LOG_ENABLE_ISR 后它也会从数据 ISR 调用，此时必须
  * 满足 ISR 安全要求。
  */
-typedef void (*iolink_log_write_fn)(void* user, iolink_log_level_t level, const char* format, ...);
+typedef void (*iolink_log_write_fn)(void* user, iolink_log_level_t level, const char* format, ...)
+    IOLINK_LOG_PRINTF_FORMAT(3, 4);
 
 /**
  * @brief 每个上下文携带的日志汇点。

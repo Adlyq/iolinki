@@ -322,8 +322,13 @@ carries an `iolink_log_sink_t` (callback + user pointer + runtime level), so the
 application decides where and at which verbosity the lines go:
 
 ```c
+#include <stdarg.h>
+#include <stdio.h>
+
 static void my_log(void* user, iolink_log_level_t level, const char* format, ...)
 {
+    (void) user;
+    (void) level;
     va_list args;
     va_start(args, format);
     (void) vfprintf(stderr, format, args);   /* or an RTOS/UART logger */

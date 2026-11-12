@@ -399,18 +399,31 @@ costs, compiler-flag advice and the context-size measurement snippet.
 
 ## Debugging
 
-### Enable Debug Logging
+### Logging
 
-The core stack does not log. The host `phy_virtual` example uses `printf()`;
-replace it with platform-specific logging in a real port:
+The stack ships print points with a runtime sink: set
+`iolink_device_config_t::log_write` and `log_level` (the `user` argument is
+`config.user`), or call `iolink_device_set_log()` later. A zeroed sink is
+silent. The library does not format; the callback owns `vsnprintf` and the
+transport. ISR print points additionally require `IOLINK_LOG_ENABLE_ISR=1`.
+See `include/iolinki/log.h` and `docs/API.md`.
+
+The host `phy_virtual` example still uses `printf()` directly; a real port
+routes the sink to its UART/RTOS logger instead:
 
 ```c
-// In phy_stm32.c
-#ifdef IOLINK_DEBUG
-#define IOLINK_LOG(...) printf(__VA_ARGS__)
-#else
-#define IOLINK_LOG(...)
-#endif
+static void port_log(void* user, iolink_log_level_t level, const char* format, ...)
+{
+    (void) user;
+    (void) level;
+    va_list args;
+    va_start(args, format);
+    (void) vprintf(format, args);
+    va_end(args);
+}
+
+config.log_write = port_log;
+config.log_level = IOLINK_LOG_LEVEL_INFO; /* SILENT disables */
 ```
 
 ### Common Issues

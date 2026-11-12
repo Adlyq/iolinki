@@ -26,6 +26,19 @@
 #include "iolinki/device.h"
 #include "iolinki/log.h"
 
+#if IOLINK_NEED_CRITICAL
+/* Strong replacements for the weak no-op defaults: iolink_device_init()
+ * rejects builds that still use the defaults, and the integration test below
+ * initializes a real device. */
+void iolink_critical_enter(void)
+{
+}
+
+void iolink_critical_exit(void)
+{
+}
+#endif
+
 int g_calls;
 iolink_log_level_t g_last_level;
 char g_last_msg[128];
@@ -60,6 +73,123 @@ static int side_effect(void)
 }
 
 void test_log_isr_on_run(void);
+
+/* --- Real device initialization ------------------------------------------
+ * The setter test above drives the sink propagation directly. These helpers
+ * exercise the production path: iolink_device_init() must bind the config
+ * sink after the submodules are zero-initialized, and the early failure path
+ * must still log through the config (the context is not usable yet).
+ */
+
+static uint64_t fake_time_us(void* user)
+{
+    (void) user;
+    return 1000U;
+}
+
+static int fake_storage_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
+{
+    (void) user;
+    (void) offset;
+    (void) buf;
+    (void) len;
+    return -1; /* no persisted data */
+}
+
+static int fake_storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
+{
+    (void) user;
+    (void) offset;
+    (void) buf;
+    (void) len;
+    return 0;
+}
+
+static int fake_storage_erase(void* user, uint32_t offset, size_t len)
+{
+    (void) user;
+    (void) offset;
+    (void) len;
+    return 0;
+}
+
+static const iolink_storage_api_t g_fake_storage = {
+    NULL,
+    fake_storage_read,
+    fake_storage_write,
+    fake_storage_erase,
+};
+
+static void make_minimal_config(iolink_device_config_t* config)
+{
+    (void) memset(config, 0, sizeof(*config));
+    config->time_us = fake_time_us;
+#if IOLINK_FEATURE_DATA_STORAGE
+    config->storage = &g_fake_storage;
+#endif
+    config->stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    config->stack.pd_in_len = 2U;
+    config->stack.pd_out_len = 2U;
+    config->stack.od_width = 1U;
+}
+
+static void test_device_init_binds_config_sink(void)
+{
+    iolink_device_ctx_t ctx;
+    iolink_device_config_t config;
+    int token;
+
+    make_minimal_config(&config);
+    config.user = &token;
+    config.log_write = log_capture;
+    config.log_level = IOLINK_LOG_LEVEL_INFO;
+
+    reset_capture();
+    assert(iolink_device_init(&ctx, &config) == 0);
+
+    /* The init summary is emitted through the config sink, with config.user. */
+    assert(g_calls >= 1);
+    assert(g_last_level == IOLINK_LOG_LEVEL_INFO);
+    assert(g_last_user == &token);
+    assert(strstr(g_last_msg, "device init") != NULL);
+
+    assert(ctx.dll.log.write == log_capture);
+    assert(ctx.dll.log.user == &token);
+    assert(ctx.dll.log.level == IOLINK_LOG_LEVEL_INFO);
+    assert(ctx.dll.isdu.log.write == log_capture);
+#if IOLINK_FEATURE_DATA_STORAGE
+    assert(ctx.dll.ds.log.write == log_capture);
+#endif
+#if IOLINK_FEATURE_EVENTS
+    assert(ctx.dll.events.log.write == log_capture);
+#endif
+
+    /* The runtime switch silences an initialized device immediately. */
+    iolink_device_set_log(&ctx, NULL, IOLINK_LOG_LEVEL_SILENT);
+    reset_capture();
+    iolink_ds_check(&ctx.dll.ds, 0U); /* would log an upload request */
+    assert(g_calls == 0);
+}
+
+static void test_device_init_failure_logs_through_config(void)
+{
+    iolink_device_ctx_t ctx;
+    iolink_device_config_t config;
+    int token;
+
+    make_minimal_config(&config);
+    config.time_us = NULL; /* rejected before the context is initialized */
+    config.user = &token;
+    config.log_write = log_capture;
+    config.log_level = IOLINK_LOG_LEVEL_DEBUG;
+
+    reset_capture();
+    assert(iolink_device_init(&ctx, &config) == IOLINK_DEVICE_INIT_ERR_TIME);
+    assert(g_calls == 1);
+    assert(g_last_level == IOLINK_LOG_LEVEL_ERROR);
+    assert(g_last_user == &token);
+    assert(strstr(g_last_msg, "init rejected") != NULL);
+}
 
 static void test_zero_sink_is_silent(void)
 {
@@ -199,5 +329,7 @@ int main(void)
     test_arguments_not_evaluated_when_filtered();
     test_isr_family_is_off_by_default();
     test_device_setter_propagates();
+    test_device_init_binds_config_sink();
+    test_device_init_failure_logs_through_config();
     return 0;
 }

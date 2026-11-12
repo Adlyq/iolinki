@@ -120,6 +120,11 @@ void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
         IOLINK_LOG_INFO(&ctx->log, "dll state %u -> %u", (unsigned) ctx->state,
                         (unsigned) new_state);
     }
+    else {
+        /* ISR 驱动的迁移只在显式启用 ISR 日志时输出。 */
+        IOLINK_LOG_ISR_DEBUG(&ctx->log, "dll state (isr) %u -> %u", (unsigned) ctx->state,
+                             (unsigned) new_state);
+    }
     /* 单次对齐存储：数据 ISR 可能随时读取该状态，且
      * 两个上下文都可能转换它（ISR 快速路径为 t_A 这么做）。
      * 下文依赖状态的簿记由主上下文持有，或仅为提示。 */
