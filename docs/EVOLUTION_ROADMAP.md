@@ -379,7 +379,7 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 - **完成标志**：重构安全网完整；WCET 回归门工作；状态机表与 traceability 联动。
 - **风险**：纯表装不下连续条件 → 表管骨架 + 函数管动作 + 性质测试管不变量。
 
-### P10 小项收尾 + 审计 I（S，~1 周）——状态：未开始
+### P10 小项收尾 + 审计 I（S，~1 周）——状态：诊断设计稿已完成（docs/DIAGNOSTICS_DESIGN.md，14 个问题 + 10 步迁移）；实现待 P4/P5
 
 - **依赖**：全部。
 - **涉及文件**：`include/iolinki/device.h`（不透明上下文）、`src/events.c`、
