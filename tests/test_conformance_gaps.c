@@ -1017,14 +1017,16 @@ static void test_0075_multi_event_order(void** state)
     iolink_events_ctx_t events;
     events_init(&events);
 
-    iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_WARNING);
-    iolink_event_trigger(&events, 0x8C01U, IOLINK_EVENT_TYPE_ERROR);
+    /* Table D.1：0x8C00 是 Error，0x8C01 是 Warning。P10 起触发类型由
+       注册表规范化，因此这里按规范类型触发（传错也会被规范化）。 */
+    iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&events, 0x8C01U, IOLINK_EVENT_TYPE_WARNING);
     iolink_event_trigger(&events, 0x8C02U, IOLINK_EVENT_TYPE_NOTIFICATION);
 
     iolink_event_t all[8];
     uint8_t n = iolink_events_get_all(&events, all, 8U);
     assert_int_equal(n, 3);
-    assert_int_equal(all[0].code, 0x8C01U); /* Error 先于 Warning */
+    assert_int_equal(all[0].code, 0x8C00U); /* Error 先于 Warning */
     assert_int_equal(all[2].code, 0x8C02U); /* Notification 最后 */
 }
 

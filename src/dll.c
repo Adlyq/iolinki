@@ -267,13 +267,10 @@ void dll_set_state(iolink_dll_main_t* ctx, iolink_dll_state_t new_state)
     if (new_state == IOLINK_DLL_STATE_STARTUP) {
         /* A.6.4：排队的事件在通信被中断时会被丢弃，
            或被取消。iolink_events_reset() 自带一个短的
-           临界区，因此不需要外层的。 */
+           临界区，因此不需要外层的。条件表清空后，下一轮
+           PHY 采样会对仍存在的故障重新产生上升沿。 */
 #if IOLINK_FEATURE_EVENTS
         iolink_events_reset(&ctx->shared.events);
-        /* 事件引擎丢弃了所有条件；仍然存在的物理故障
-         * 必须再次上报。轮询（主上下文）消费该标志
-         * 并重新武装边沿锁存，因此这个字节写入对 ISR 安全。 */
-        ctx->phy_faults_rearm = 1U;
 #endif
         if (ctx->shared.in_isr != 0U) {
             ctx->startup_notification_pending = 1U;
@@ -923,8 +920,7 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
             dll_time_passed(end_us, ren_deadline)) {
             ctx->timing_errors++;
             ctx->t_ren_violations++;
-            DLL_EVENT_TRIGGER(&ctx->shared.events, IOLINK_EVENT_COMM_TIMING,
-                              IOLINK_EVENT_TYPE_WARNING);
+            DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_TIMING);
         }
         dll_timer_cancel(ctx, IOLINK_TIMER_T_REN);
     }
@@ -975,75 +971,58 @@ static void dll_handle_operate_type1_2(iolink_dll_main_t* ctx)
  * ------------------------------------------------------------------------- */
 
 /**
- * @brief 轮询 PHY 故障位掩码并对其边沿作出反应。
+ * @brief 轮询 PHY 故障位掩码并把每个位交给诊断注册表。
  *
- * 只上报边沿：持续有效的故障只计数并触发一次
- * 事件，故障消失时清除该事件，使事件引擎能够发出
- * 对应的“disappears”。映射到 Table D.1 设备代码：
+ * 注册表的 PHY 来源是电平源：`iolink_diag_set_level()` 用“当前电平 vs 条件
+ * 锁存”产生上升/下降沿，稳态不重复计数。Table D.1 映射（含 EventType 与首选
+ * DeviceStatus）只在 diag.c 的 ROM 表出现一次：
  *  - UNDERVOLTAGE   -> 0x5111 供电电压欠压（Warning）
  *  - OVERVOLTAGE    -> 0x5110 供电电压过压（Warning）
  *  - OVERTEMP       -> 0x4000 温度过载（Error）
  *  - SHORT_CIRCUIT  -> 0x7710 短路（Error）
  *
- * 待处理的“rearm”请求（事件引擎被 STARTUP 或诊断复位
- * 重置）会重启边沿检测，因此仍然存在的故障
- * 会在新会话中再次上报。
+ * 寄存器复位（STARTUP、0x80、0x82）清空条件表后，下一轮采样对仍为高电平的
+ * 来源重新产生上升沿，因此现存故障会在新会话中重新上报（B.2.21.2）。
  */
 static void dll_poll_phy_faults(iolink_dll_main_t* ctx)
 {
-    /* 事件引擎可能在数据 ISR 中被 dll_set_state(STARTUP) 复位，
-     * 那里只设置 phy_faults_rearm=1。读-清除操作上的临界区
-     * 可防止该设置与清除竞争，因此仍然存在的故障
-     * 会在新会话中再次上报。 */
-    IOLINK_CRITICAL_ENTER();
-    if (ctx->phy_faults_rearm != 0U) {
-        ctx->phy_faults_rearm = 0U;
-        ctx->phy_faults_last = 0U;
-    }
-    IOLINK_CRITICAL_EXIT();
+#if IOLINK_FEATURE_EVENTS
     const uint8_t faults = ctx->shared.phy->get_faults(ctx->shared.phy->user);
-    const uint8_t rising = (uint8_t) (faults & (uint8_t) ~ctx->phy_faults_last);
-    const uint8_t falling = (uint8_t) ((uint8_t) ~faults & ctx->phy_faults_last);
 
-    if ((rising & IOLINK_PHY_FAULT_UNDERVOLTAGE) != 0U) {
+    if (DLL_DIAG_SET_LEVEL(&ctx->shared.events, IOLINK_DIAG_SRC_PHY_UNDERVOLTAGE,
+                           (faults & IOLINK_PHY_FAULT_UNDERVOLTAGE) != 0U)) {
         ctx->voltage_faults++;
-        DLL_EVENT_TRIGGER(&ctx->shared.events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN,
-                          IOLINK_EVENT_TYPE_WARNING);
     }
-    if ((rising & IOLINK_PHY_FAULT_OVERVOLTAGE) != 0U) {
+    if (DLL_DIAG_SET_LEVEL(&ctx->shared.events, IOLINK_DIAG_SRC_PHY_OVERVOLTAGE,
+                           (faults & IOLINK_PHY_FAULT_OVERVOLTAGE) != 0U)) {
         ctx->voltage_faults++;
-        DLL_EVENT_TRIGGER(&ctx->shared.events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN,
-                          IOLINK_EVENT_TYPE_WARNING);
     }
-    if ((rising & IOLINK_PHY_FAULT_OVERTEMP) != 0U) {
+    if (DLL_DIAG_SET_LEVEL(&ctx->shared.events, IOLINK_DIAG_SRC_PHY_OVERTEMP,
+                           (faults & IOLINK_PHY_FAULT_OVERTEMP) != 0U)) {
         ctx->overtemp_faults++;
-        DLL_EVENT_TRIGGER(&ctx->shared.events, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD,
-                          IOLINK_EVENT_TYPE_ERROR);
     }
-    if ((rising & IOLINK_PHY_FAULT_SHORT_CIRCUIT) != 0U) {
+    if (DLL_DIAG_SET_LEVEL(&ctx->shared.events, IOLINK_DIAG_SRC_PHY_SHORT_CIRCUIT,
+                           (faults & IOLINK_PHY_FAULT_SHORT_CIRCUIT) != 0U)) {
         ctx->short_circuits++;
-        DLL_EVENT_TRIGGER(&ctx->shared.events, IOLINK_EVENTCODE_SHORT_CIRCUIT,
-                          IOLINK_EVENT_TYPE_ERROR);
     }
-    if ((falling & IOLINK_PHY_FAULT_UNDERVOLTAGE) != 0U) {
-        DLL_EVENT_CLEAR(&ctx->shared.events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN);
-    }
-    if ((falling & IOLINK_PHY_FAULT_OVERVOLTAGE) != 0U) {
-        DLL_EVENT_CLEAR(&ctx->shared.events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN);
-    }
-    if ((falling & IOLINK_PHY_FAULT_OVERTEMP) != 0U) {
-        DLL_EVENT_CLEAR(&ctx->shared.events, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD);
-    }
-    if ((falling & IOLINK_PHY_FAULT_SHORT_CIRCUIT) != 0U) {
-        DLL_EVENT_CLEAR(&ctx->shared.events, IOLINK_EVENTCODE_SHORT_CIRCUIT);
-    }
-    ctx->phy_faults_last = faults;
+#else
+    /* 事件引擎被裁剪：诊断来源恒不可用，物理故障不产生事件/统计。
+     * 这与 IOLINK_FEATURE_EVENTS=0 的降级语义一致（0x0025 返回索引不可用）。 */
+    (void) ctx;
+#endif
 }
 
-/** @brief 轮询 PHY 诊断并在故障时触发事件。 */
+/** @brief 轮询诊断：先消费 ISR 脉冲/保持窗口，再采样 PHY 电平源。 */
 static void dll_poll_diagnostics(iolink_dll_main_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->shared.phy == NULL)) {
+    if (ctx == NULL) {
+        return;
+    }
+
+    /* ISR 只发布 one-shot；这里在主上下文完成条件锁存与事件发布。 */
+    DLL_DIAG_SERVICE(&ctx->shared.events, dll_time_ms(ctx));
+
+    if (ctx->shared.phy == NULL) {
         return;
     }
 
@@ -1531,7 +1510,7 @@ static void dll_check_cycle_time(iolink_dll_main_t* ctx)
         !dll_time_reached(now_us, cycle_deadline)) {
         ctx->timing_errors++;
         ctx->t_cycle_violations++;
-        DLL_EVENT_TRIGGER(&ctx->shared.events, IOLINK_EVENT_COMM_TIMING, IOLINK_EVENT_TYPE_WARNING);
+        DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_TIMING);
     }
     /* 与原实现一致：时间戳为 0（未绑定时钟）的第一拍没有参考点，不装载。 */
     if (ctx->enforce_timing && (ctx->min_cycle_time_us > 0U) && (now_us != 0U)) {
@@ -1595,7 +1574,7 @@ static void dll_handle_frame_error(iolink_dll_main_t* ctx, dll_frame_result_t re
             (ctx->shared.state == IOLINK_DLL_STATE_ESTAB_COM)) {
             return;
         }
-        DLL_EVENT_TRIGGER(&ctx->shared.events, IOLINK_EVENT_COMM_FRAMING, IOLINK_EVENT_TYPE_ERROR);
+        DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_FRAMING);
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
         return;
     }
@@ -1613,7 +1592,7 @@ static void dll_handle_frame_error(iolink_dll_main_t* ctx, dll_frame_result_t re
     ctx->shared.fallback_count++;
     if (ctx->shared.fallback_count >= ctx->sio_fallback_threshold) {
         ctx->shared.fallback_count = 0U;
-        DLL_EVENT_TRIGGER(&ctx->shared.events, IOLINK_EVENT_COMM_CRC, IOLINK_EVENT_TYPE_WARNING);
+        DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_CRC);
     }
 }
 
@@ -2108,7 +2087,7 @@ static bool dll_check_t_pd(iolink_dll_main_t* ctx)
     if (dll_drain_rx(ctx)) {
         ctx->timing_errors++;
         ctx->t_pd_violations++;
-        DLL_EVENT_TRIGGER(&ctx->shared.events, IOLINK_EVENT_COMM_TIMING, IOLINK_EVENT_TYPE_WARNING);
+        DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_TIMING);
     }
     return true;
 }
@@ -2178,7 +2157,7 @@ static void dll_timer_expire_t_byte(iolink_dll_main_t* ctx)
     ctx->timing_errors++;
     ctx->t_byte_violations++;
     ctx->shared.framing_errors++;
-    DLL_EVENT_TRIGGER(&ctx->shared.events, IOLINK_EVENT_COMM_TIMING, IOLINK_EVENT_TYPE_WARNING);
+    DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_TIMING);
     /* 中止当前帧并重新监听；DL 模式不变。 */
     ctx->frame_index = 0U;
 }
@@ -2545,8 +2524,6 @@ void iolink_dll_reset_diagnostics(iolink_dll_main_t* ctx)
        绑定的时钟。 */
 #if IOLINK_FEATURE_EVENTS
     iolink_events_reset(&ctx->shared.events);
-    ctx->phy_faults_rearm = 0U;
-    ctx->phy_faults_last = 0U;
 #endif
     iolink_dll_reset_error_counters(ctx);
 }

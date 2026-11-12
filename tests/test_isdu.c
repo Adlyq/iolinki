@@ -88,7 +88,8 @@ static void test_isdu_device_status_read(void** state)
     assert_int_equal(isdu_collect_response(&ctx, status_buf, sizeof(status_buf)), 1);
     assert_int_equal(status_buf[0], 0);
 
-    /* 2. 触发一个错误并再次检查状态 */
+    /* 2. 触发一个警告级事件并再次检查状态（P10：0x1801 的 EventType 由
+       诊断注册表固定为 Warning，调用方传入的类型不再影响派生视图）。 */
     iolink_event_trigger(&events, IOLINK_EVENT_COMM_CRC, IOLINK_EVENT_TYPE_ERROR);
 
     iolink_isdu_init(&ctx);
@@ -98,7 +99,7 @@ static void test_isdu_device_status_read(void** state)
     iolink_isdu_process(&ctx);
 
     assert_int_equal(isdu_collect_response(&ctx, status_buf, sizeof(status_buf)), 1);
-    assert_int_equal(status_buf[0], 4); /* Failure */
+    assert_int_equal(status_buf[0], 2); /* Out-of-Specification（0x1801 = Warning） */
 }
 
 static void test_isdu_detailed_device_status_read(void** state)
@@ -123,8 +124,9 @@ static void test_isdu_detailed_device_status_read(void** state)
     uint8_t detailed_buf[3];
     assert_int_equal(isdu_collect_response(&ctx, detailed_buf, sizeof(detailed_buf)), 3);
     /* 按 V1.1.5（图 A.24/Table A.17）的 EventQualifier：MODE=appears(0xC0)
-       | TYPE=error(0x03<<4=0x30) | SOURCE=device(0) | INSTANCE=Application(0x04) = 0xF4 */
-    assert_int_equal(detailed_buf[0], 0xF4);
+       | TYPE=warning(0x02<<4=0x20) | SOURCE=device(0) | INSTANCE=Application(0x04)
+       = 0xE4；TYPE 来自诊断注册表（0x1801 固定为 Warning）。 */
+    assert_int_equal(detailed_buf[0], 0xE4);
     assert_int_equal(detailed_buf[1], 0x18); /* 代码高位 */
     assert_int_equal(detailed_buf[2], 0x01); /* 代码低位 */
 }
@@ -1206,7 +1208,7 @@ static void test_isdu_dds_keeps_cleared_event_until_disappear(void** state)
     iolink_event_trigger(&events, IOLINK_EVENT_COMM_CRC, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(
         read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records, sizeof(records)), 3);
-    assert_int_equal(records[0], 0xF4U); /* appears | error | instance Application */
+    assert_int_equal(records[0], 0xE4U); /* appears | warning | instance Application */
     assert_int_equal(records[1], 0x18U);
     assert_int_equal(records[2], 0x01U);
 
@@ -1260,10 +1262,10 @@ static void test_isdu_device_status_follows_event(void** state)
     iolink_event_trigger(&events, 0x1801U, IOLINK_EVENT_TYPE_ERROR);
 
     assert_int_equal(read_events_index(&events, IOLINK_IDX_DEVICE_STATUS, &status, 1U), 1);
-    assert_int_equal(status, 4U); /* Failure */
+    assert_int_equal(status, 2U); /* Out-of-Specification（0x1801 = Warning） */
     assert_int_equal(
         read_events_index(&events, IOLINK_IDX_DETAILED_DEVICE_STATUS, records, sizeof(records)), 3);
-    assert_int_equal(records[0], 0xF4U); /* appears | error | instance Application */
+    assert_int_equal(records[0], 0xE4U); /* appears | warning | instance Application */
     assert_int_equal((uint16_t) (((uint16_t) records[1] << 8) | records[2]), 0x1801U);
 }
 

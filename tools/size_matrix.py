@@ -67,6 +67,7 @@ SOURCES = [
     "src/od.c",
     "src/isdu.c",
     "src/events.c",
+    "src/diag.c",
     "src/platform.c",
     "src/params.c",
     "src/data_storage.c",

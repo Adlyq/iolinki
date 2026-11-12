@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "iolinki/config.h"
+#include "iolinki/diag.h"
 #include "iolinki/port.h"
 
 IOLINK_STATIC_ASSERT(IOLINK_EVENT_QUEUE_SIZE > 0U, "IOLINK_EVENT_QUEUE_SIZE must be > 0");
@@ -123,29 +124,32 @@ typedef struct
 typedef struct
 {
     uint16_t code;               /**< EventCode */
-    iolink_event_type_t type;    /**< 严重级别 */
+    iolink_event_type_t type;    /**< 严重级别（注册表命中时为规范值） */
     uint32_t last_appears_ms;    /**< 最近一次 “event appears” 入队的时间 */
     uint32_t last_disappears_ms; /**< 最近一次 “event disappears” 入队的时间 */
+    uint32_t quiet_since_ms;     /**< PULSE 来源：最后一次发生时间 */
     bool appears_valid;          /**< 该槽位的 last_appears_ms 已设置 */
     bool disappears_valid;       /**< 该槽位的 last_disappears_ms 已设置 */
-    bool present;                /**< 事件条件当前处于置位状态 */
+    bool present;                /**< 事件条件当前处于置位状态（权威锁存） */
     bool reported;               /**< 当前周期已排队 “appears” */
     bool active;                 /**< 槽位已分配（活动事件或重复冷却中） */
+    uint8_t source;              /**< iolink_diag_src_t 或 IOLINK_DIAG_SRC_NONE */
 } iolink_event_pending_t;
 
 /**
  * @brief 事件引擎上下文
  *
  * 管理待处理事件的内部队列（按严重级别排序），以及诊断通信
- * 通道上暴露的 Table 58 事件存储器。
+ * 通道上暴露的 Table 58 事件存储器。`pending[]` 是诊断条件的权威表：
+ * DeviceStatus 与 DetailedDeviceStatus 都由它派生（见 diag.h）。
  */
-typedef struct
+struct iolink_events_ctx
 {
     iolink_event_t queue[IOLINK_EVENT_QUEUE_SIZE]; /**< 按严重级别排序的事件缓冲区 */
     uint8_t count;                                 /**< 队列中当前的事件数量 */
 
-    iolink_event_pending_t pending[IOLINK_EVENT_PENDING_MAX]; /**< 活动的 appears 事件 */
-    uint8_t pending_count;                                    /**< 已使用的 pending 槽位 */
+    iolink_event_pending_t pending[IOLINK_EVENT_PENDING_MAX]; /**< 条件权威表 */
+    uint8_t pending_count;                                    /**< 已锁存的条件数量 */
     uint32_t dropped_count; /**< 因队列或 pending[] 已满而丢失的事件 */
 
     /* P6：A.6.4 的两个时间窗口是运行时能力（曾经是编译期常量）。
@@ -162,13 +166,16 @@ typedef struct
     iolink_event_t frozen_events[6]; /**< 冻结存储器中实际呈现的事件 */
     uint8_t frozen_count;            /**< frozen_events 中有效的条目数 */
 
+    /* P10：诊断注册表的 RAM 侧（ISR one-shot 脉冲、PULSE 窗口、边沿计数）。 */
+    iolink_conditions_t diag;
+
     /* 由设备层绑定的应用时钟（config::time_us）。独立使用事件引擎的
      * 用户必须在 iolink_events_init() 之后设置它；缺失的时钟会被
      * 读取为时间 0。 */
     uint64_t (*time_us)(void* user);
     void* time_user;
     iolink_log_sink_t log; /**< 日志汇点（默认静默；设备层绑定） */
-} iolink_events_ctx_t;
+};
 
 /**
  * @brief 初始化事件引擎
@@ -214,7 +221,8 @@ void iolink_events_set_window(iolink_events_ctx_t* ctx, uint16_t min_appear_ms,
  *
  * @param ctx 事件上下文
  * @param code 16 位 IO-Link EventCode
- * @param type 严重级别
+ * @param type 严重级别；注册表登记的代码（Table D.1 与 0x1801-0x1804）会被
+ *             规范化为其规范 EventType，未登记代码保留调用方输入
  */
 void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type);
 
@@ -355,17 +363,35 @@ bool iolink_events_pop(iolink_events_ctx_t* ctx, iolink_event_t* event);
 bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event);
 
 /**
- * @brief 获取事件队列中当前的最高严重级别
+ * @brief 获取由诊断条件派生的 DeviceStatus（Table B.13）。
  *
  * 按 Table B.13 映射到 IO-Link Device Status（0=OK，1=Maintenance，
  * 2=Out of Spec，3=Functional-Check，4=Failure）。最低的优先级数值
  * 占优：Failure (4) 高于 Functional-Check (3)，后者高于 Maintenance
  * (1) 和 Out of Spec (2)。
  *
+ * P10：派生自条件表（`pending[]`）的 `present || reported` 条目，优先级
+ * 值来自诊断注册表（diag.h）；与 DetailedDeviceStatus 使用同一过滤集，
+ * 因此 DDS 仍列出条目时状态不会提前回 0。Notification 不提升状态。
+ *
  * @param ctx 事件上下文
  * @return uint8_t 最高严重级别（0-4）
  */
 uint8_t iolink_events_get_highest_severity(iolink_events_ctx_t* ctx);
+
+/**
+ * @brief 由 EventType 和 MODE 生成 EventQualifier（A.6.4 / Figure A.24）。
+ *
+ * 事件存储器（Table 58）与 DetailedDeviceStatus（Table B.14）共用本函数，
+ * 避免两处位组装漂移。SOURCE 位固定为 Device（Table A.18），INSTANCE 固定
+ * 为 Application（Table A.17）。
+ *
+ * @param code 16 位 EventCode（预留给按代码选择 INSTANCE/SOURCE 的扩展）
+ * @param type EventType（Notification / Warning / Error）
+ * @param mode EventMODE（appears / disappears / single-shot）
+ * @return uint8_t EventQualifier
+ */
+uint8_t iolink_event_qualifier(uint16_t code, iolink_event_type_t type, iolink_event_mode_t mode);
 
 /**
  * @brief 将所有待处理事件复制到缓冲区而不弹出它们

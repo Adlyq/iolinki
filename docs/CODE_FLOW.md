@@ -635,10 +635,18 @@ flowchart TD
 补充：
 
 - 事件队列按严重度排序（Error 优先），队列满时保留更严重的事件。
-- `DeviceStatus` 取当前队列最高严重度（`iolink_events_get_highest_severity()`）。
-- `DetailedDeviceStatus` 读取的是 `pending[]` 中的 Error/Warning，而不是队列。
+- `DeviceStatus`（0x0024）与 `DetailedDeviceStatus`（0x0025）都由诊断注册表
+  从同一条件集派生（`iolink_diag_device_status()` / `iolink_diag_dds_snapshot()`）：
+  Error/Warning 且 `present || reported`，Notification 不提升状态、不进入 DDS。
 - `STARTUP` 状态会调用 `iolink_events_reset()` 丢弃事件（A.6.4）。
-- 物理诊断轮询 `phy->get_faults()` 位图：0→1 边沿计数并映射为 Table D.1 事件（UNDERVOLTAGE→0x5111、OVERVOLTAGE→0x5110、OVERTEMP→0x4000、SHORT_CIRCUIT→0x7710），1→0 边沿清除事件；事件引擎被 STARTUP/诊断复位清空后，DLL 会重新武装边沿锁存，仍存在的故障会在新会话中重新上报。`get_faults()` 为 NULL 时诊断静默（不再有 legacy 电压/短路回退）。
+- 物理诊断轮询 `phy->get_faults()` 位图：`iolink_diag_set_level()` 按“当前电平 vs
+  条件锁存”产生边沿（UNDERVOLTAGE→0x5111、OVERVOLTAGE→0x5110、
+  OVERTEMP→0x4000、SHORT_CIRCUIT→0x7710）；1→0 只清条件。复位清空条件表后，
+  仍存在的故障由下一轮采样重新上报。`get_faults()` 为 NULL 时诊断静默
+  （不再有 legacy 电压/短路回退）。
+- 协议错误（CRC/超时/组帧/时序）是 PULSE 源：ISR 只写 `isr_pulse[]` one-shot，
+  主泵 `iolink_diag_service()` 消费并刷新 `IOLINK_DIAG_PULSE_HOLD_MS` 保持窗口，
+  窗口结束才发 disappears。
 - 计数器语义：`get_faults()` 路径按故障片段计数（每个 0→1 边沿一次）。
 
 ---
@@ -934,7 +942,7 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | 位置 | 内容 | 归类 |
 | :--- | :--- | :--- |
 | `dll_send()`（`dll.c`） | `isr_tx_payload` 暂存（≤66 B） | 主→ISR 应答移交；暂存本身无锁（主上下文单写者 + 发布字 `isr_tx_pending`），只有直发回退（PHY 无 `request_service()`，非 `IOLINK_PHY_FEATURE_ISR_TX_ONLY`）在临界区内驱动 PHY |
-| `dll_poll_phy_faults()`（`dll.c`） | `phy_faults_rearm` + `phy_faults_last` 的读-清 | ISR 置位（STARTUP 复位）、主上下文消费的握手标志；临界区只包这两个字节，`get_faults()` 在锁外调用 |
+| `dll_poll_phy_faults()`（`dll.c`） | `iolink_diag_set_level()` 的条件锁存 | 主上下文采样；ISR 只写 `isr_pulse[]` one-shot |
 | `iolink_dll_set_pd_length()`（`dll.c`） | PD-in/PD-out 长度对 | 2 字节 RMW |
 | `device.c`（2 处） | PD-in 发布（`on_pd_input` 回调路径 / `iolink_device_pd_input_update()`），交换 `pd_in_active`/`pd_*_len`/`pd_valid` | 索引/长度标量（PA 拷贝在锁外；PD-out 读取不取锁） |
 | `events.c`（10 处） | 事件队列、pending 表、事件内存 | 事件引擎内部不变式；ISR 侧只读 flag/memory |

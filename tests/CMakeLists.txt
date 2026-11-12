@@ -180,6 +180,8 @@ if(CMOCKA_FOUND)
         ../examples/switching_sensor/switching_sensor_od.c)
     target_include_directories(test_od_app PRIVATE ../examples/switching_sensor)
     add_iolink_test(test_events test_events.c)
+    # P10 诊断注册表：Table D.1 内容、电平/脉冲语义、视图一致性与复位。
+    add_iolink_test(test_diag test_diag.c)
     add_iolink_test(test_ds test_ds.c)
     add_iolink_test(test_error_model test_error_model.c)
     add_iolink_test(test_error_recovery test_error_recovery.c)
