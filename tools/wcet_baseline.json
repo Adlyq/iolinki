@@ -1,0 +1,20 @@
+{
+  "config": {
+    "isr_rx_mode": "BYTE",
+    "isr_tx_mode": "BYTE",
+    "time_step_us": 50,
+    "pd_in_max": 32,
+    "od_max": 32,
+    "isdu_buffer": 256
+  },
+  "scenarios": {
+    "pd_max_write": {"frames": 8, "isr_pumps": 288, "isr_max_per_frame": 36, "rx_octets": 528, "tx_octets": 264, "tx_frames": 8, "tx_max_per_frame": 33, "main_pumps": 8},
+    "pd_max_read": {"frames": 8, "isr_pumps": 536, "isr_max_per_frame": 67, "rx_octets": 272, "tx_octets": 520, "tx_frames": 8, "tx_max_per_frame": 65, "main_pumps": 8},
+    "burst_write": {"frames": 16, "isr_pumps": 564, "isr_max_per_frame": 35, "rx_octets": 1056, "tx_octets": 528, "tx_frames": 16, "tx_max_per_frame": 33, "main_pumps": 4},
+    "isdu_read_chunked": {"frames": 4, "isr_pumps": 108, "isr_max_per_frame": 35, "rx_octets": 40, "tx_octets": 100, "tx_frames": 4, "tx_max_per_frame": 33, "main_pumps": 4},
+    "isdu_write_chunked": {"frames": 8, "isr_pumps": 152, "isr_max_per_frame": 35, "rx_octets": 144, "tx_octets": 136, "tx_frames": 8, "tx_max_per_frame": 33, "main_pumps": 8},
+    "event_diag_read": {"frames": 3, "isr_pumps": 73, "isr_max_per_frame": 35, "rx_octets": 38, "tx_octets": 67, "tx_frames": 3, "tx_max_per_frame": 33, "main_pumps": 4},
+    "sio_fallback": {"frames": 2, "isr_pumps": 9, "isr_max_per_frame": 5, "rx_octets": 7, "tx_octets": 3, "tx_frames": 2, "tx_max_per_frame": 2, "main_pumps": 103},
+    "invalid_frames": {"frames": 4, "isr_pumps": 42, "isr_max_per_frame": 36, "rx_octets": 143, "tx_octets": 33, "tx_frames": 1, "tx_max_per_frame": 33, "main_pumps": 4}
+  }
+}
