@@ -188,6 +188,7 @@ static bool dll_isr_publish_frame(iolink_dll_main_t* ctx, const uint8_t* frame, 
     if ((frame == NULL) || (len > IOLINK_M_SEQ_MAX_LEN)) {
         IOLINK_LOG_ISR_DEBUG(&ctx->shared.log, "frame publish rejected: len=%u", (unsigned) len);
         IOLINK_STAT_ISR(ctx, framing_errors)++;
+        DLL_DIAG_PULSE_ISR(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_FRAMING);
         return false;
     }
     iolink_frame_rec_t* record =
@@ -788,6 +789,7 @@ static bool dll_isr_frame_len_ok(iolink_dll_main_t* ctx, const uint8_t* frame, u
 {
     if ((len < 2U) || (len > IOLINK_M_SEQ_MAX_LEN)) {
         IOLINK_STAT_ISR(ctx, framing_errors)++;
+        DLL_DIAG_PULSE_ISR(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_FRAMING);
         return false;
     }
     /* Type-0 M-sequence 从不携带过程数据（OD 写恰好携带
@@ -812,6 +814,7 @@ static bool dll_isr_frame_len_ok(iolink_dll_main_t* ctx, const uint8_t* frame, u
         IOLINK_LOG_ISR_DEBUG(&ctx->shared.log, "frame length reject: len=%u expected=%u",
                              (unsigned) len, (unsigned) expected_len);
         IOLINK_STAT_ISR(ctx, framing_errors)++;
+        DLL_DIAG_PULSE_ISR(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_FRAMING);
         return false;
     }
     return true;
@@ -878,6 +881,7 @@ static void dll_isr_rx_byte_gap(iolink_dll_main_t* ctx)
                              (unsigned) ctx->shared.isr->isr_rx_cnt,
                              (unsigned) ctx->shared.isr->isr_rx_expect);
         IOLINK_STAT_ISR(ctx, framing_errors)++;
+        DLL_DIAG_PULSE_ISR(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_FRAMING);
     }
     dll_isr_rx_byte_reset(ctx);
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
@@ -967,6 +971,7 @@ static bool dll_isr_drain_rx_byte(iolink_dll_main_t* ctx)
         /* 传输错误：丢弃部分帧并计数。 */
         IOLINK_LOG_ISR_WARN(&ctx->shared.log, "rx_octet error: %d", ok);
         IOLINK_STAT_ISR(ctx, framing_errors)++;
+        DLL_DIAG_PULSE_ISR(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_FRAMING);
         dll_isr_rx_byte_reset(ctx);
         return true;
     }
@@ -1072,6 +1077,7 @@ void iolink_dll_on_rx_timeout(iolink_dll_main_t* ctx)
     ctx->shared.isr_master_activity = 1U;
     IOLINK_LOG_ISR_DEBUG(&ctx->shared.log, "rx timeout (t_A)");
     IOLINK_STAT_ISR(ctx, timeout_errors)++;
+    DLL_DIAG_PULSE_ISR(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_TIMEOUT);
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
     ctx->shared.isr->isr_rx_cnt = 0U;
     ctx->shared.isr->isr_rx_expect = 0U;

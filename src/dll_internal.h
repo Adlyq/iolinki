@@ -65,18 +65,22 @@ typedef struct
  * 下面的辅助函数折叠为常量，以便不引用任何被禁用的接口。 */
 #if IOLINK_FEATURE_EVENTS
 #define DLL_EVENTS_INIT(ctx) iolink_events_init(ctx)
-#define DLL_EVENT_TRIGGER(ctx, code, type) iolink_event_trigger((ctx), (code), (type))
-#define DLL_EVENT_CLEAR(ctx, code) iolink_event_clear((ctx), (code))
 #define DLL_EVENTS_FLAG(ctx) iolink_events_flag(ctx)
 #define DLL_EVENTS_MEMORY_READ(ctx, addr) iolink_events_memory_read((ctx), (addr))
 #define DLL_EVENTS_MEMORY_WRITE(ctx, addr, value) iolink_events_memory_write((ctx), (addr), (value))
+#define DLL_DIAG_PULSE(ctx, src) iolink_diag_pulse((ctx), (src))
+#define DLL_DIAG_PULSE_ISR(ctx, src) iolink_diag_pulse_isr((ctx), (src))
+#define DLL_DIAG_SERVICE(ctx, now_ms) iolink_diag_service((ctx), (now_ms))
+#define DLL_DIAG_SET_LEVEL(ctx, src, level) iolink_diag_set_level((ctx), (src), (level))
 #else
 #define DLL_EVENTS_INIT(ctx) ((void) 0)
-#define DLL_EVENT_TRIGGER(ctx, code, type) ((void) 0)
-#define DLL_EVENT_CLEAR(ctx, code) ((void) 0)
 #define DLL_EVENTS_FLAG(ctx) false
 #define DLL_EVENTS_MEMORY_READ(ctx, addr) 0U
 #define DLL_EVENTS_MEMORY_WRITE(ctx, addr, value) ((void) 0)
+#define DLL_DIAG_PULSE(ctx, src) ((void) 0)
+#define DLL_DIAG_PULSE_ISR(ctx, src) ((void) 0)
+#define DLL_DIAG_SERVICE(ctx, now_ms) ((void) 0)
+#define DLL_DIAG_SET_LEVEL(ctx, src, level) false
 #endif
 
 /**

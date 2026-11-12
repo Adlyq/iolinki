@@ -575,8 +575,7 @@ static void device_service_events_and_ds(iolink_device_ctx_t* ctx)
      * 进行中插入诊断读取。 */
     if (ctx->dll.main.ds.upload_event_pending) {
         ctx->dll.main.ds.upload_event_pending = false;
-        iolink_event_trigger(&ctx->dll.main.shared.events, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST,
-                             IOLINK_EVENT_TYPE_NOTIFICATION);
+        iolink_diag_raise_code(&ctx->dll.main.shared.events, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST);
     }
 #endif
 }

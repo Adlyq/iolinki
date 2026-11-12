@@ -54,7 +54,7 @@ typedef struct iolink_dll_shared
      * 64 位截止时间始终由主上下文拥有。每个标志由任一上下文置 1，
      * 且只能由主泵清 0；与消费竞争的一次置位是幂等的
      * （请求在本次或下一次处理中被应用）。
-     * phy_faults_rearm 在临界区内被消费。 */
+     * 诊断来源的 ISR 脉冲位于 iolink_conditions_t::isr_pulse。 */
     volatile uint8_t isr_dsio_clear; /**< ISR 已处理启动探测：清除 T_DSIO */
 
     volatile uint8_t isr_fallback_pending; /**< ISR 已接受 FALLBACK：由主上下文启动 T_FBD */

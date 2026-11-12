@@ -3,6 +3,26 @@
 本文是 [EVOLUTION_ROADMAP](EVOLUTION_ROADMAP.md) §P10 中“诊断注册表：PHY faults →
 events → DeviceStatus → 0x0025 收敛，带锁存/边沿语义”的设计稿。
 
+> **实现状态（P10，2026-11）**：§3 的注册表、条件缓存与派生视图已落地
+> （`include/iolinki/diag.h`、`src/diag.c`）；M2–M6、M9 已完成，M1 由
+> `tests/test_diag.c`、`tests/test_phy_diagnostics.c`、`tests/test_events.c`、
+> `tests/test_isdu.c` 覆盖。与设计稿的差异：
+>
+> - 条件权威表仍是 `iolink_events_ctx_t::pending[]`（新增 `source` /
+>   `quiet_since_ms`），没有第二份条件副本；`iolink_conditions_t` 只缓存来源自身
+>   的 ISR one-shot、PULSE 最后发生时间与边沿计数。
+> - M7 只完成“复位后由电平重新锁存”：STARTUP 仍在 `dll_set_state()` 内同步
+>   `iolink_events_reset()`（现有 ISR 临界区契约不变），尚未改为
+>   `reset_pending`；0x82 通过 `clear_diagnosis()` 清 `present` 后由下一轮采样
+>   重新触发。
+> - 应用自定义 EventCode 的配置表尚未提供：登记代码使用注册表类型，未登记代码
+>   保留调用方 `type`（`iolink_event_trigger()` 兼容语义）。
+> - `IOLINK_DIAG_SRC_NONE` / `IOLINK_DIAG_STATUS_NONE` 用 0xFF 作为内部哨兵；
+>   线上 DDS 的“无条目”按 B.2.22 仍是 `EventQualifier=0x00`、`EventCode=0x0000`。
+> - PULSE 保持窗口由 `IOLINK_DIAG_PULSE_HOLD_MS`（默认 1000 ms）配置；§7
+>   第 2 条的产品化取值仍待确认。
+
+
 范围：只描述诊断链路的目标结构、迁移步骤和验证方式，不修改 `src/`、`include/`、
 `tests/`、`tools/` 或 CI。实现阶段必须继续遵守无动态内存、上下文式（无全局）、
 C99、MISRA C:2012 子集等约束（见 [AGENTS](../AGENTS.md) 与

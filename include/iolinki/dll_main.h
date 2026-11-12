@@ -45,8 +45,6 @@ struct iolink_dll_main
 
     volatile uint8_t fallback_clear_request; /**< 已应用非 FALLBACK 命令：清除 T_FBD */
 
-    volatile uint8_t phy_faults_rearm; /**< 事件引擎已复位：重新启动故障锁存 */
-
     uint8_t pd_out_len; /**< 输出过程数据长度 */
 
     uint8_t od_len; /**< 流式路径的 OD 长度（1 或 2 字节）。 */
@@ -167,8 +165,6 @@ struct iolink_dll_main
 
     uint32_t short_circuits; /**< 累计短路次数（走 get_faults() 时按故障
                                   边沿计数，走旧路径时按轮询周期计数） */
-
-    uint8_t phy_faults_last; /**< 最后一次 get_faults() 的位掩码（用于边沿检测） */
 
     uint8_t sio_fallback_threshold; /**< 进入 SIO 模式的回退阈值（默认 3） */
 

@@ -206,8 +206,9 @@ static void test_event_memory_layout(void** state)
     /* Table 58 / Figure A.22：StatusCode 类型 2，第 7 位置位，第 0 位激活。 */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
 
-    /* 槽位 1 位于地址 1,2,3：限定符 0xF4（appears|error|device|Application）、0x1801。 */
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xF4U);
+    /* 槽位 1 位于地址 1,2,3：限定符 0xE4（appears|warning|device|Application）、
+       0x1801（注册表把该厂商代码固定为 Warning，调用方传入的 Error 被规范化）。 */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xE4U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x02U), 0x18U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x03U), 0x01U);
 
@@ -262,11 +263,12 @@ static void test_event_memory_confirm(void** state)
     assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0x00U);
 
     /* 写入其他地址会被忽略。 */
+    /* Table D.1：0x4000 是 Error；传入的 Warning 会被注册表规范化。 */
     iolink_event_trigger(&ctx, 0x4000U, IOLINK_EVENT_TYPE_WARNING);
     assert_true(iolink_events_flag(&ctx));
     iolink_events_memory_write(&ctx, 0x01U, 0xAAU);
     assert_true(iolink_events_flag(&ctx));
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xE4U); /* Warning 限定符 */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xF4U); /* Error 限定符 */
 }
 
 /* 确认只应答实际呈现过的槽位；冻结期间入队的事件
@@ -554,9 +556,9 @@ static void test_notification_dedup(void** state)
     assert_false(iolink_events_pop(&ctx, &ev));
 }
 
-/* Table B.13：DeviceStatus 反映当前条件，因此一旦原因消失就下降，
- * 即使 "event disappears" 仍因 10.10.2 的间隔而
- * 被推迟。 */
+/* Table B.13/B.2.21.2：DeviceStatus 与 DetailedDeviceStatus 使用同一过滤集
+ * （present || reported）。disappears 仍在队列中时 DeviceStatus 不得回 0；
+ * 撤销发出后两者同时归零（P10 消除 D7 的不一致窗口）。 */
 static void test_event_device_status_drops_with_condition(void** state)
 {
     (void) state;
@@ -569,14 +571,20 @@ static void test_event_device_status_drops_with_condition(void** state)
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 4U);
 
     iolink_event_clear(&ctx, IOLINK_EVENTCODE_SHORT_CIRCUIT);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4U);
     assert_int_equal(ctx.count, 1U); /* appears 仍在队列中 */
 
-    /* 在最小出现窗口内，撤销被推迟，但状态
-       仍保持 OK，因为该条件已不再置起。 */
+    /* 在最小出现窗口内，撤销被推迟；DDS 仍列出该条目，因此
+       DeviceStatus 保持 Failure。 */
     g_fake_ms = 10U;
     iolink_events_process(&ctx);
     assert_int_equal(ctx.count, 1U);
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4U);
+
+    /* disappears 入队后条件与视图同时归零。 */
+    g_fake_ms = IOLINK_EVENT_MIN_APPEAR_MS;
+    iolink_events_process(&ctx);
+    assert_int_equal(ctx.count, 2U);
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
 
     /* Notification 从不提升 DeviceStatus。 */

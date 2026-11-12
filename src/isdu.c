@@ -776,7 +776,7 @@ static void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
 
-/** @brief Table B.8/B.2.21：由事件严重程度得到 DeviceStatus。 */
+/** @brief Table B.8/B.2.21：由诊断注册表派生的 DeviceStatus。 */
 static void isdu_read_device_status(iolink_isdu_ctx_t* ctx)
 {
 #if IOLINK_FEATURE_EVENTS
@@ -823,8 +823,8 @@ static void isdu_trigger_ds_upload_req(iolink_isdu_ctx_t* ctx)
 #endif
 #if IOLINK_FEATURE_EVENTS
     if (ctx->event_ctx != NULL) {
-        iolink_event_trigger((iolink_events_ctx_t*) ctx->event_ctx,
-                             IOLINK_EVENTCODE_DS_UPLOAD_REQUEST, IOLINK_EVENT_TYPE_NOTIFICATION);
+        iolink_diag_raise_code((iolink_events_ctx_t*) ctx->event_ctx,
+                               IOLINK_EVENTCODE_DS_UPLOAD_REQUEST);
     }
 #else
     (void) ctx;
@@ -1084,7 +1084,11 @@ static void handle_access_locks(iolink_isdu_ctx_t* ctx)
 }
 
 #if IOLINK_FEATURE_EVENTS
-/** @brief 处理 DetailedDeviceStatus（Table B.14）：3 字节条目的 ArrayT。 */
+/** @brief 处理 DetailedDeviceStatus（Table B.14）：3 字节条目的 ArrayT。
+ *
+ * P10：条目集合与 EventQualifier 都来自诊断注册表的单一派生点
+ * （iolink_diag_dds_snapshot + iolink_event_qualifier），与 DeviceStatus
+ * 使用同一条件过滤集。 */
 static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
 {
     if (ctx->header.type != IOLINK_ISDU_SERVICE_TYPE_READ) {
@@ -1101,26 +1105,11 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
 
     iolink_events_ctx_t* event_ctx = (iolink_events_ctx_t*) ctx->event_ctx;
 
-    /* 收集待处理的诊断条目：即 "Event appears" 已上报、
-       且 "Event disappears" 尚未发出的那些事件。因此，已被清除的
-       条件在其撤销仍等待最小出现窗口（A.6.4）期间
-       保持列出，与主站的诊断视图一致；仍被延迟的
-       出现不会被列出。仅在关中断时获取
-       待处理表的快照；下面的格式化在解锁状态下执行
-       （应答缓冲区归主上下文所有）。 */
-    uint16_t codes[IOLINK_EVENT_PENDING_MAX];
-    iolink_event_type_t types[IOLINK_EVENT_PENDING_MAX];
-    uint8_t n = 0U;
-    IOLINK_CRITICAL_ENTER();
-    for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
-        const iolink_event_pending_t* p = &event_ctx->pending[i];
-        if (p->active && p->reported && (p->type != IOLINK_EVENT_TYPE_NOTIFICATION)) {
-            codes[n] = p->code;
-            types[n] = p->type;
-            n++;
-        }
-    }
-    IOLINK_CRITICAL_EXIT();
+    /* 快照在临界区内完成；下面的格式化在锁外执行（应答缓冲区归主上下文
+       所有）。条目集合 = “Event appears 已上线、disappears 尚未发出”的
+       非 Notification 条件（B.2.22）。 */
+    iolink_diag_dds_entry_t entries[IOLINK_EVENT_PENDING_MAX];
+    const uint8_t n = iolink_diag_dds_snapshot(event_ctx, entries, IOLINK_EVENT_PENDING_MAX);
 
     /* B.2.22：符合规范的读取方式是 subindex 0，它返回完整的
        3 字节条目列表（"Subindex access is not supported"）。通过
@@ -1131,14 +1120,9 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
         const uint8_t end = (sub == 0U) ? n : (uint8_t) (start + 1U);
         uint8_t pos = 0U;
         for (uint8_t i = start; i < end; i++) {
-            /* Figure A.24：MODE 11 = appears，TYPE 10 = Warning / 11 = Error，
-               INSTANCE 4 = Application。 */
-            uint8_t qualifier = 0xC0U;
-            qualifier |= (types[i] == IOLINK_EVENT_TYPE_ERROR) ? (0x03U << 4) : (0x02U << 4);
-            qualifier |= 0x04U;
-            ctx->response_buf[pos++] = qualifier;
-            ctx->response_buf[pos++] = (uint8_t) (codes[i] >> 8);
-            ctx->response_buf[pos++] = (uint8_t) (codes[i] & 0xFFU);
+            ctx->response_buf[pos++] = entries[i].qualifier;
+            ctx->response_buf[pos++] = (uint8_t) (entries[i].code >> 8);
+            ctx->response_buf[pos++] = (uint8_t) (entries[i].code & 0xFFU);
         }
         ctx->response_len = pos;
     }

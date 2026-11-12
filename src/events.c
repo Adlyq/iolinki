@@ -27,6 +27,8 @@ void iolink_events_init(iolink_events_ctx_t* ctx)
     if (!iolink_ctx_zero(ctx, sizeof(iolink_events_ctx_t))) {
         return;
     }
+    /* P10：清空诊断来源的 RAM 缓存；注册表是 const，无需初始化。 */
+    iolink_diag_init(ctx);
     ctx->min_appear_ms = (uint16_t) IOLINK_EVENT_MIN_APPEAR_MS;
     ctx->min_repeat_ms = (uint16_t) IOLINK_EVENT_MIN_REPEAT_MS;
 }
@@ -66,9 +68,12 @@ static uint32_t events_now_ms(const iolink_events_ctx_t* ctx)
     return (uint32_t) (ctx->time_us(ctx->time_user) / 1000U);
 }
 
-/** @brief 由事件类型和 MODE 生成 EventQualifier（A.6.4，Figure A.24）。 */
-static uint8_t event_qualifier(iolink_event_type_t type, iolink_event_mode_t mode)
+/** @brief 由事件类型和 MODE 生成 EventQualifier（A.6.4，Figure A.24）。
+ *
+ * Table 58 事件存储器与 DetailedDeviceStatus 共用本函数（D10）。 */
+uint8_t iolink_event_qualifier(uint16_t code, iolink_event_type_t type, iolink_event_mode_t mode)
 {
+    (void) code; /* 预留给按代码选择 INSTANCE/SOURCE 的扩展。 */
     uint8_t q;
     switch (mode) {
         case IOLINK_EVENT_MODE_DISAPPEARS:
@@ -111,7 +116,7 @@ static uint8_t event_memory_rebuild(iolink_events_ctx_t* ctx)
     }
     for (uint8_t i = 0U; i < slots; i++) {
         const iolink_event_t* ev = &ctx->queue[i];
-        ctx->memory[1U + i * 3U] = event_qualifier(ev->type, ev->mode);
+        ctx->memory[1U + i * 3U] = iolink_event_qualifier(ev->code, ev->type, ev->mode);
         ctx->memory[2U + i * 3U] = (uint8_t) (ev->code >> 8);
         ctx->memory[3U + i * 3U] = (uint8_t) (ev->code & 0xFFU);
     }
@@ -173,6 +178,7 @@ static iolink_event_pending_t* pending_alloc(iolink_events_ctx_t* ctx, uint32_t 
         if (!ctx->pending[i].active) {
             (void) memset(&ctx->pending[i], 0, sizeof(ctx->pending[i]));
             ctx->pending[i].active = true;
+            ctx->pending[i].source = IOLINK_DIAG_SRC_NONE;
             return &ctx->pending[i];
         }
     }
@@ -189,6 +195,7 @@ static iolink_event_pending_t* pending_alloc(iolink_events_ctx_t* ctx, uint32_t 
         if (!p->present && !p->reported && appears_free && disappears_free) {
             (void) memset(p, 0, sizeof(*p));
             p->active = true;
+            p->source = IOLINK_DIAG_SRC_NONE;
             return p;
         }
     }
@@ -268,6 +275,10 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
 
     const uint32_t now = events_now_ms(ctx);
 
+    /* P10/D8：注册表登记的代码使用规范 EventType；未登记（厂商/应用）代码
+     * 保留调用方输入，保持 iolink_event_trigger() 的兼容语义。 */
+    type = (iolink_event_type_t) iolink_diag_type_for(code, (uint8_t) type);
+
     if (type == IOLINK_EVENT_TYPE_NOTIFICATION) {
         /* 通知是单次触发的。在前一个实例仍未确认时，不要再次
            将同一 code 入队：重试中的主站不得把重复的请求变成
@@ -288,6 +299,7 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
         return;
     }
 
+    bool allocated = false;
     if (p == NULL) {
         p = pending_alloc(ctx, now);
         if (p == NULL) {
@@ -298,10 +310,15 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
             return;
         }
         p->code = code;
+        allocated = true;
     }
 
     p->present = true;
-    p->type = type;
+    if (allocated) {
+        /* 10.10.2：同一 Event 的生命周期内 mode/type/instance 保持静态。
+           重触发不得改写已上报 appears 的类型（D9）。 */
+        p->type = type;
+    }
     ctx->pending_count++;
 
     if (!p->reported && event_appears_elapsed(ctx, p, now)) {
@@ -444,6 +461,7 @@ void iolink_events_reset(iolink_events_ctx_t* ctx)
     ctx->frozen_slots = 0U;
     ctx->frozen_count = 0U;
     (void) memset(ctx->frozen_events, 0, sizeof(ctx->frozen_events));
+    iolink_diag_reset(ctx);
     IOLINK_CRITICAL_EXIT();
 }
 
@@ -590,74 +608,10 @@ bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event)
     return ret;
 }
 
-/** @brief 按 Table B.13 的 DeviceStatus 优先级（数值最小者优先）。 */
-static uint8_t device_status_priority(uint8_t status)
-{
-    switch (status) {
-        case 4U: /* Failure */
-            return 1U;
-        case 3U: /* Functional-Check */
-            return 2U;
-        case 1U: /* Maintenance-Required */
-            return 3U;
-        case 2U: /* Out-of-Specification */
-            return 4U;
-        default: /* 0 = OK */
-            return 5U;
-    }
-}
-
-/** @brief 根据 EventType 将事件映射为其 DeviceStatus 值（Table B.13）；
- * 对于首选值不同的 code，则根据其 EventCode 映射。 */
-static uint8_t event_type_device_status(uint16_t code, iolink_event_type_t type)
-{
-    switch (code) {
-        case IOLINK_EVENTCODE_SIMULATION_ACTIVE:
-            return 3U; /* Functional-Check (Table D.1 preferred value) */
-        case IOLINK_EVENTCODE_MAINTENANCE_CLEANING:
-        case IOLINK_EVENTCODE_MAINTENANCE_REFILL:
-        case IOLINK_EVENTCODE_MAINTENANCE_WEAR:
-            return 1U; /* Maintenance-Required (Table D.1 preferred value) */
-        default:
-            break;
-    }
-    switch (type) {
-        case IOLINK_EVENT_TYPE_NOTIFICATION:
-            return 0U; /* OK */
-        case IOLINK_EVENT_TYPE_WARNING:
-            return 2U; /* Out-of-Specification */
-        default:
-            return 4U; /* Failure */
-    }
-}
-
 uint8_t iolink_events_get_highest_severity(iolink_events_ctx_t* ctx)
 {
-    if (ctx == NULL) {
-        return 0U; /* OK */
-    }
-
-    /* Table B.13 由当前活动的条件推导，而不是由队列推导：
-       队列中的“事件消失”不得让 DeviceStatus 保持置位，而通知
-       绝不会提升它。 */
-    uint8_t worst = 0U;      /* OK */
-    uint8_t worst_prio = 5U; /* OK 优先级 */
-    IOLINK_CRITICAL_ENTER();
-    for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
-        const iolink_event_pending_t* p = &ctx->pending[i];
-        if (!p->active || !p->present || !p->reported ||
-            (p->type == IOLINK_EVENT_TYPE_NOTIFICATION)) {
-            continue;
-        }
-        const uint8_t status = event_type_device_status(p->code, p->type);
-        const uint8_t prio = device_status_priority(status);
-        if (prio < worst_prio) {
-            worst_prio = prio;
-            worst = status;
-        }
-    }
-    IOLINK_CRITICAL_EXIT();
-    return worst;
+    /* P10：Table B.13 由条件表 + 诊断注册表派生（单一片段，见 diag.c）。 */
+    return iolink_diag_device_status(ctx);
 }
 
 uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_events,
@@ -682,45 +636,8 @@ uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_even
 
 iolink_event_type_t iolink_event_classify(uint16_t code)
 {
-    switch (code) {
-        case IOLINK_EVENTCODE_NO_MALFUNCTION:
-        case IOLINK_EVENTCODE_DS_UPLOAD_REQUEST:
-            return IOLINK_EVENT_TYPE_NOTIFICATION;
-
-        case IOLINK_EVENTCODE_TEMPERATURE_OVERRUN:
-        case IOLINK_EVENTCODE_TEMPERATURE_UNDERRUN:
-        case IOLINK_EVENTCODE_BATTERY_LOW:
-        case IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN:
-        case IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN:
-        case IOLINK_EVENTCODE_SIMULATION_ACTIVE:
-        case IOLINK_EVENTCODE_PV_RANGE_OVERRUN:
-        case IOLINK_EVENTCODE_PV_RANGE_UNDERRUN:
-        case IOLINK_EVENTCODE_MAINTENANCE_CLEANING:
-        case IOLINK_EVENTCODE_MAINTENANCE_REFILL:
-        case IOLINK_EVENTCODE_MAINTENANCE_WEAR:
-            return IOLINK_EVENT_TYPE_WARNING;
-
-        case IOLINK_EVENTCODE_GENERAL_MALFUNCTION:
-        case IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD:
-        case IOLINK_EVENTCODE_HARDWARE_FAULT:
-        case IOLINK_EVENTCODE_COMPONENT_MALFUNCTION:
-        case IOLINK_EVENTCODE_NVM_LOSS:
-        case IOLINK_EVENTCODE_POWER_SUPPLY_FAULT:
-        case IOLINK_EVENTCODE_FUSE_BLOWN:
-        case IOLINK_EVENTCODE_SOFTWARE_FAULT:
-        case IOLINK_EVENTCODE_PARAMETER_ERROR:
-        case IOLINK_EVENTCODE_PARAMETER_MISSING:
-        case IOLINK_EVENTCODE_WIRE_BREAK:
-        case IOLINK_EVENTCODE_SHORT_CIRCUIT:
-        case IOLINK_EVENTCODE_GROUND_FAULT:
-        case IOLINK_EVENTCODE_APPLICATION_FAULT:
-        case IOLINK_EVENTCODE_MEASUREMENT_RANGE_EXCEEDED:
-            return IOLINK_EVENT_TYPE_ERROR;
-
-        default:
-            /* 保留 / 厂商特定 / 未知 -> 安全默认值。 */
-            return IOLINK_EVENT_TYPE_ERROR;
-    }
+    /* P10：分类来自 ROM 注册表；保留/厂商/未知代码回落到安全的 Error。 */
+    return (iolink_event_type_t) iolink_diag_type_for(code, (uint8_t) IOLINK_EVENT_TYPE_ERROR);
 }
 
 #endif /* IOLINK_FEATURE_EVENTS */

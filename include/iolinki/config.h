@@ -156,6 +156,17 @@
 #endif
 
 /**
+ * @brief 协议错误类 PULSE 诊断源的保持窗口，单位毫秒（P10）。
+ *
+ * 每次检测到 CRC/超时/组帧/时序错误时刷新窗口；窗口结束才发出
+ * disappears，避免一次会话内的连续错误产生事件风暴（10.10.2）。
+ * 0 表示不自动撤销（需要显式清除）。默认：1000
+ */
+#ifndef IOLINK_DIAG_PULSE_HOLD_MS
+#define IOLINK_DIAG_PULSE_HOLD_MS 1000U
+#endif
+
+/**
  * @brief 时序强制检查的构建默认值（P6：降级为数据）。
  *
  * 1：默认强制检查 t_ren / t_cycle；0：默认仅测量并计数。默认：0

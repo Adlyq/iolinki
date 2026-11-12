@@ -283,14 +283,13 @@ static void test_get_faults_rearmed_after_reset(void** state)
     assert_int_equal(stats.voltage_faults, 2);
     assert_int_equal(ctx.main.shared.events.pending_count, 1U);
 
-    /* The STARTUP path stages the same request as a flag (dll_set_state may run
-     * in ISR context); consume it with a latch that still shows the fault. */
-    ctx.main.phy_faults_last = IOLINK_PHY_FAULT_UNDERVOLTAGE;
-    ctx.main.phy_faults_rearm = 1U;
+    /* STARTUP 路径同样清空条件表（ISR 中的 iolink_events_reset）；下一轮
+     * 采样必须对仍存在的电平重新产生上升沿，因此这里再复位一次。 */
+    iolink_dll_reset_diagnostics(&ctx.main);
     iolink_dll_process(&ctx.main);
     iolink_dll_get_stats(&ctx.main, &stats);
     assert_int_equal(stats.voltage_faults, 3);
-    assert_int_equal(ctx.main.phy_faults_last, IOLINK_PHY_FAULT_UNDERVOLTAGE);
+    assert_int_equal(ctx.main.shared.events.pending_count, 1U);
 }
 
 int main(void)
