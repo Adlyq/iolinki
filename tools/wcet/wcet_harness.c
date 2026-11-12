@@ -1194,8 +1194,10 @@ int main(int argc, char** argv)
             else if (!wcet_metrics_equal(&results[i], &g_m)) {
                 (void) fprintf(stderr, "[wcet] 场景 '%s' 指标不确定（repeat %u）\n",
                                g_scenarios[i].name, r + 1U);
-                wcet_print_row(stderr, g_scenarios[i].name, &g_m);
+                (void) fprintf(stderr, "  第 1 次: ");
                 wcet_print_row(stderr, g_scenarios[i].name, &results[i]);
+                (void) fprintf(stderr, "  第 %u 次: ", r + 1U);
+                wcet_print_row(stderr, g_scenarios[i].name, &g_m);
                 return 1;
             }
         }
