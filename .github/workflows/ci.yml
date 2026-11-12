@@ -106,8 +106,8 @@ jobs:
       - name: Lint shell scripts
         run: |
           shellcheck -S warning tools/build_matrix.sh tools/coverage.sh \
-            tools/diff_matrix.sh tools/check_ownership.sh test_all.sh check_quality.sh \
-            .docker_test_entrypoint.sh
+            tools/diff_matrix.sh tools/check_ownership.sh tools/wcet_run.sh \
+            test_all.sh check_quality.sh .docker_test_entrypoint.sh
 
   # Coverage floor: line coverage of src/ must not drop below the checked-in
   # baseline in tools/coverage_baseline.txt.
@@ -121,6 +121,19 @@ jobs:
           sudo apt-get install -y cmake build-essential libcmocka-dev gcovr
       - name: Coverage floor
         run: ./tools/coverage.sh --check
+
+  # Host-side path-length proxy for the ISR/main pumps (call counts, not CPU
+  # cycles; the target-side DWT gate is documented in tools/wcet/README.md).
+  wcet-path-proxy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential
+      - name: Path-length gate
+        run: ./tools/wcet_run.sh --check
 
   # Delivery gate for compile-time configurations: every feature toggle, ISR
   # granularity and platform must at least build; the default and release

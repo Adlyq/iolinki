@@ -170,8 +170,8 @@ if command -v shellcheck &> /dev/null; then
     # Maintained CI/test scripts (add new ones here). tools/add_copyright_headers.sh
     # is a legacy one-shot helper with a known SC2218 false positive.
     lint_scripts=(tools/build_matrix.sh tools/coverage.sh tools/diff_matrix.sh
-                  tools/check_ownership.sh test_all.sh check_quality.sh
-                  .docker_test_entrypoint.sh)
+                  tools/check_ownership.sh tools/wcet_run.sh test_all.sh
+                  check_quality.sh .docker_test_entrypoint.sh)
     if shellcheck -S warning "${lint_scripts[@]}"; then
         echo "   ✅ Shellcheck Passed"
     else
