@@ -353,28 +353,31 @@ static uint32_t dll_get_baud_hz(const iolink_dll_main_t* ctx)
     }
 }
 
+/** @brief 返回当前波特率下的一个位时间（us）。 */
+static uint32_t dll_get_t_bit_us(const iolink_dll_main_t* ctx)
+{
+    if (ctx == NULL) {
+        return 26U;
+    }
+    switch (ctx->baudrate) {
+        case IOLINK_BAUDRATE_COM1:
+            return 208U;
+        case IOLINK_BAUDRATE_COM2:
+            return 26U;
+        case IOLINK_BAUDRATE_COM3:
+            return 4U;
+        default:
+            return 26U;
+    }
+}
+
 /** @brief 返回当前波特率下的字节间超时（16 个位时间），单位 us。 */
 static uint32_t dll_get_t_byte_limit_us(const iolink_dll_main_t* ctx)
 {
     if (ctx == NULL) {
         return 0U;
     }
-    uint32_t t_bit_us;
-    switch (ctx->baudrate) {
-        case IOLINK_BAUDRATE_COM1:
-            t_bit_us = 208U;
-            break;
-        case IOLINK_BAUDRATE_COM2:
-            t_bit_us = 26U;
-            break;
-        case IOLINK_BAUDRATE_COM3:
-            t_bit_us = 4U;
-            break;
-        default:
-            t_bit_us = 26U;
-            break;
-    }
-    return t_bit_us * 16U;
+    return dll_get_t_bit_us(ctx) * 16U;
 }
 
 /** @brief 当掉电/PD 保护窗口（t_PD）仍有效时返回 true。 */
@@ -918,6 +921,200 @@ static void dll_poll_diagnostics(iolink_dll_main_t* ctx)
 }
 
 /* -------------------------------------------------------------------------
+ * 应答计划发布（P5）
+ * ------------------------------------------------------------------------- */
+
+/** @brief 全零 OD 模板：过程通道读的固定应答。 */
+static const uint8_t dll_reply_zero[IOLINK_OD_MAX_SIZE] = {0U};
+
+/**
+ * @brief 追加一条计划槽位。
+ *
+ * 只在 seqlock 的奇数窗口内调用（计划表正在被主泵覆盖）。
+ */
+static void dll_plan_push(iolink_dll_main_t* ctx, uint8_t* count, uint8_t match_mask,
+                          uint8_t match_value, uint8_t addr_max, uint8_t req_len, uint8_t ckt_mask,
+                          uint8_t ckt_value, uint8_t source, uint8_t len, uint8_t flags,
+                          uint8_t action, const uint8_t* data)
+{
+    if ((count == NULL) || (*count >= IOLINK_REPLY_PLAN_SLOTS)) {
+        return;
+    }
+    iolink_reply_plan_t* plan = &ctx->shared.reply_plan[*count];
+    plan->data = data;
+    plan->deadline_us = (uint16_t) (10U * dll_get_t_bit_us(ctx)); /* t_A = 10 位时间 */
+    plan->match_mask = match_mask;
+    plan->match_value = match_value;
+    plan->ckt_mask = ckt_mask;
+    plan->ckt_value = ckt_value;
+    plan->addr_max = addr_max;
+    plan->req_len = req_len;
+    plan->len = len;
+    plan->flags = flags;
+    plan->source = source;
+    plan->action = action;
+    (*count)++;
+}
+
+/** @brief Type-1/2 长应答的计划集合（OD 头来自计划，尾部来自 PD-in）。
+ *
+ * CKT 类型位必须与配置的 M-sequence 族匹配：OPERATE 中的 Type-0 页读
+ * 与 Type-1/2 页读共用 MC 形状，只有类型位能区分二者（前者在
+ * 非兼容模式下是复位请求，绝不能拿到长应答）。
+ */
+static void dll_plan_push_type12(iolink_dll_main_t* ctx, uint8_t* count)
+{
+    const uint8_t od_w = ctx->shared.od_width;
+    const uint8_t addr_max = IOLINK_MC_ADDR_MASK;
+    const uint8_t ckt = dll_mseq_type_bits(ctx->shared.m_seq_type);
+
+    /* 读：OD（按通道来源，宽度 od_width）+ PD-in。 */
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PROCESS, addr_max, 0U,
+                  IOLINK_MSEQ_TYPE_MASK, ckt, IOLINK_REPLY_SRC_TEMPLATE, od_w,
+                  IOLINK_REPLY_FLAG_PD_TAIL, IOLINK_REPLY_ACT_NONE, dll_reply_zero);
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE, addr_max, 0U, IOLINK_MSEQ_TYPE_MASK,
+                  ckt, IOLINK_REPLY_SRC_PAGE, od_w, IOLINK_REPLY_FLAG_PD_TAIL,
+                  IOLINK_REPLY_ACT_NONE, NULL);
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_DIAGNOSIS, addr_max, 0U,
+                  IOLINK_MSEQ_TYPE_MASK, ckt, IOLINK_REPLY_SRC_EVENT_MEM, od_w,
+                  IOLINK_REPLY_FLAG_PD_TAIL, IOLINK_REPLY_ACT_NONE, NULL);
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU, addr_max, 0U, IOLINK_MSEQ_TYPE_MASK,
+                  ckt, IOLINK_REPLY_SRC_ISDU_SEG, od_w, IOLINK_REPLY_FLAG_PD_TAIL,
+                  IOLINK_REPLY_ACT_NONE, NULL);
+
+    /* 写：无 OD，只有 PD-in。转换命令标记（MC 地址 0x0F）不由 ISR 应答。 */
+    const uint8_t wr_max = (uint8_t) (IOLINK_MC_TRANSITION_COMMAND - 1U);
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_CHANNEL_PROCESS, wr_max, 0U, IOLINK_MSEQ_TYPE_MASK, ckt,
+                  IOLINK_REPLY_SRC_NONE, 0U, IOLINK_REPLY_FLAG_PD_TAIL, IOLINK_REPLY_ACT_NONE,
+                  NULL);
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_CHANNEL_PAGE, addr_max, 0U, IOLINK_MSEQ_TYPE_MASK, ckt,
+                  IOLINK_REPLY_SRC_NONE, 0U, IOLINK_REPLY_FLAG_PD_TAIL, IOLINK_REPLY_ACT_NONE,
+                  NULL);
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_CHANNEL_DIAGNOSIS, addr_max, 0U, IOLINK_MSEQ_TYPE_MASK, ckt,
+                  IOLINK_REPLY_SRC_NONE, 0U, IOLINK_REPLY_FLAG_PD_TAIL, IOLINK_REPLY_ACT_NONE,
+                  NULL);
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_CHANNEL_ISDU, addr_max, 0U, IOLINK_MSEQ_TYPE_MASK, ckt,
+                  IOLINK_REPLY_SRC_NONE, 0U, IOLINK_REPLY_FLAG_PD_TAIL | IOLINK_REPLY_FLAG_STAGED,
+                  IOLINK_REPLY_ACT_NONE, NULL);
+}
+
+/** @brief Type-0 短应答的计划集合（PREOPERATE / Type-0 OPERATE）。 */
+static void dll_plan_push_type0(iolink_dll_main_t* ctx, uint8_t* count, bool transition)
+{
+    if (transition) {
+        /* 转换命令：不应答，进入 ESTAB_COM。 */
+        dll_plan_push(ctx, count, 0xFFU, IOLINK_MC_TRANSITION_COMMAND, IOLINK_MC_ADDR_MASK, 2U,
+                      IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_NONE, 0U,
+                      IOLINK_REPLY_FLAG_CLOSE_WINDOW | IOLINK_REPLY_FLAG_RESTART_TIMER_B |
+                          IOLINK_REPLY_FLAG_CONSUME,
+                      IOLINK_REPLY_ACT_ENTER_ESTAB_COM, NULL);
+    }
+
+    /* 读：一个 OD 字节 + CKS。 */
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 2U,
+                  IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_PAGE, 1U,
+                  IOLINK_REPLY_FLAG_CONSUME, IOLINK_REPLY_ACT_NONE, NULL);
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PROCESS, IOLINK_MC_ADDR_MASK, 2U,
+                  IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_TEMPLATE, 1U,
+                  IOLINK_REPLY_FLAG_CONSUME, IOLINK_REPLY_ACT_NONE, dll_reply_zero);
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_DIAGNOSIS, IOLINK_MC_ADDR_MASK, 2U,
+                  IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_EVENT_MEM, 1U,
+                  IOLINK_REPLY_FLAG_CONSUME, IOLINK_REPLY_ACT_NONE, NULL);
+    /* ISDU 读：仅 COUNT/START（FlowCTRL < IDLE）；IDLE/ABORT 交给主泵复位传输层。 */
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU, IOLINK_FLOWCTRL_START, 2U,
+                  IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_ISDU_SEG, 1U,
+                  IOLINK_REPLY_FLAG_CONSUME, IOLINK_REPLY_ACT_NONE, NULL);
+
+    /* MasterCommand 页写（地址 0）：应用命令并以 CKS 确认。 */
+    dll_plan_push(ctx, count, 0xFFU, IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 3U,
+                  IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_NONE, 0U,
+                  IOLINK_REPLY_FLAG_CONSUME, IOLINK_REPLY_ACT_MASTER_COMMAND, NULL);
+    /* ISDU 写：仅在已成功暂存时确认（FlowCTRL 由传输层校验，计划不分类）。 */
+    dll_plan_push(
+        ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK, IOLINK_MC_CHANNEL_ISDU,
+        IOLINK_MC_ADDR_MASK, 3U, IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_NONE,
+        0U, IOLINK_REPLY_FLAG_CONSUME | IOLINK_REPLY_FLAG_STAGED, IOLINK_REPLY_ACT_NONE, NULL);
+}
+
+void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    const uint8_t state = (uint8_t) ctx->shared.state;
+    /* 键 = {状态, M-sequence 类型, OD 宽度, 波特率}：计划表与 t_A 预算
+     * 都是这四项的纯函数。 */
+    const uint16_t key =
+        (uint16_t) ((uint16_t) state | ((uint16_t) (ctx->shared.m_seq_type & 0x0FU) << 3) |
+                    ((uint16_t) (ctx->shared.od_width & 0x1FU) << 7) |
+                    ((uint16_t) ((uint8_t) ctx->baudrate & 0x03U) << 12));
+    const IOLINK_ATOMIC_UINT_T seq = iolink_atomic_load(&ctx->shared.reply_plan_seq);
+    if ((seq != 0U) && (key == ctx->reply_plan_key)) {
+        return; /* 计划表是键的纯函数：没有变化就不写 */
+    }
+    ctx->reply_plan_key = key;
+
+    /* seqlock：奇数 = 正在覆盖槽位；ISR 只接受两次读取相同的偶数窗口。 */
+    iolink_atomic_store(&ctx->shared.reply_plan_seq, seq + 1U);
+    uint8_t count = 0U;
+    const bool type0 = (ctx->shared.m_seq_type == IOLINK_M_SEQ_TYPE_0);
+
+    if ((state == (uint8_t) IOLINK_DLL_STATE_STARTUP) ||
+        (state == (uint8_t) IOLINK_DLL_STATE_AWAITING_COMM)) {
+        /* 启动探测（T1）：第一个页读同时进入 PREOPERATE。 */
+        dll_plan_push(ctx, &count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                      IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 2U,
+                      IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_PAGE, 1U,
+                      IOLINK_REPLY_FLAG_CONSUME, IOLINK_REPLY_ACT_ENTER_PREOPERATE, NULL);
+    }
+    else if (state == (uint8_t) IOLINK_DLL_STATE_PREOPERATE) {
+        dll_plan_push_type0(ctx, &count, true);
+    }
+    else if ((state == (uint8_t) IOLINK_DLL_STATE_OPERATE) ||
+             (state == (uint8_t) IOLINK_DLL_STATE_ESTAB_COM)) {
+        if (!type0) {
+            dll_plan_push_type12(ctx, &count);
+#if IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
+            /* 兼容模式：OPERATE 中的 Type-0 页读仍按普通页读应答。 */
+            dll_plan_push(ctx, &count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                          IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 2U,
+                          IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_PAGE, 1U,
+                          IOLINK_REPLY_FLAG_CONSUME, IOLINK_REPLY_ACT_NONE, NULL);
+#else
+            /* Tables 57/67：OPERATE 中的 Type-0 页读是复位请求，不应答。
+             * 计划显式表达"消费该帧并回到 STARTUP"，使主泵无需再看到它
+             * （与历史的即时路径逐字节、逐计数一致）。 */
+            dll_plan_push(ctx, &count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                          IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 2U,
+                          IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_NONE, 0U,
+                          IOLINK_REPLY_FLAG_CLOSE_WINDOW | IOLINK_REPLY_FLAG_CONSUME,
+                          IOLINK_REPLY_ACT_RESET_STARTUP, NULL);
+#endif
+        }
+        else if (state == (uint8_t) IOLINK_DLL_STATE_OPERATE) {
+            /* Type-0 配置：转换命令在 OPERATE 中非法，交给主泵计数。 */
+            dll_plan_push_type0(ctx, &count, false);
+        }
+    }
+    /* 其他状态（FALLBACK / COMM_DISABLED）：没有可提前应答的计划。 */
+
+    ctx->shared.reply_plan_count = count;
+    iolink_atomic_store(&ctx->shared.reply_plan_seq, seq + 2U);
+}
+
+/* -------------------------------------------------------------------------
  * 生命周期与 ISDU 快照
  * ------------------------------------------------------------------------- */
 
@@ -1003,6 +1200,8 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     else {
         iolink_dll_set_sdci_mode(ctx);
     }
+    /* 初始状态（STARTUP）的计划：第一个应答由 ISR 提前给出。 */
+    iolink_dll_publish_reply_plans(ctx);
 }
 
 /** @brief 校验并分发 ctx->frame_buf 中保存的一个完整请求。
@@ -1017,23 +1216,57 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
  * 拥有；ISR 读取最后发布的缓冲区。{length, busy,
  * buffer} 作为一个原子字传递，因此无需临界区、无需拷贝，
  * ISR 总是读到完整、稳定的响应。
+ *
+ * 失效协议（P5，防"写后立刻读"返回旧值）：
+ *  - 每份**新**应答翻转代数位（位 10）。长度与缓冲区选择完全相同的
+ *    两份应答因此仍是不同的发布字，ISR 的段索引序列会被打断；
+ *  - ISR 暂存 ISDU 写后置 `isr_isdu_invalidated`；在写被应用并产出
+ *    新应答之前，这里发布 len = 0（无服务），绝不让旧应答继续充当
+ *    "当前值"。
  */
 static void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx)
 {
     if (ctx == NULL) {
         return;
     }
-    const bool busy = (ctx->shared.isdu.state == ISDU_STATE_SERVICE_EXECUTE);
+    const uint8_t state = (uint8_t) ctx->shared.isdu.state;
+    const bool ready = (state == (uint8_t) ISDU_STATE_RESPONSE_READY);
+    /* 新应答：引擎把成帧结果放进另一个缓冲区（resp_sel 与已发布的不同），
+     * 或刚刚进入 RESPONSE_READY。两种信号都意味着"内容已换"。 */
+    const bool new_response = ready && ((ctx->shared.isdu.resp_sel != ctx->shared.isdu.resp_pub) ||
+                                        (ctx->isdu_pub_state != state));
+    ctx->isdu_pub_state = state;
+
+    const bool busy = (state == (uint8_t) ISDU_STATE_SERVICE_EXECUTE);
     uint8_t count = 0U;
     uint8_t sel = ctx->shared.isdu.resp_pub;
-    if (ctx->shared.isdu.state == ISDU_STATE_RESPONSE_READY) {
+    if (ready) {
+        if (new_response) {
+            ctx->isdu_pub_gen ^= 1U; /* 新应答：让 ISR 丢弃采纳的段索引 */
+        }
         count = (ctx->shared.isdu.resp_total > 255U) ? 255U : (uint8_t) ctx->shared.isdu.resp_total;
         sel = ctx->shared.isdu.resp_sel;
         /* 完成的响应成为已发布响应；引擎将在
          * 另一个缓冲区中构建下一个响应。 */
         ctx->shared.isdu.resp_pub = sel;
     }
-    const IOLINK_ATOMIC_UINT_T word = IOLINK_ISDU_PUB_WORD(count, busy, sel);
+    /* 失效旗标的清除条件：暂存的写段已被主泵消费（环为空），
+     * 即本轮发布的是"已应用该写之后"的视图。临界区把
+     * "ISR 置旗标 + 发布写段"与"主泵检查环 + 清旗标"分开，
+     * 避免清掉一个尚未入环的失效请求。 */
+    if ((ctx->shared.isr_isdu_invalidated != 0U) &&
+        iolink_ring_is_empty(&ctx->shared.isr_od_ring)) {
+        IOLINK_CRITICAL_ENTER();
+        ctx->shared.isr_isdu_invalidated = 0U;
+        IOLINK_CRITICAL_EXIT();
+    }
+    if ((ctx->shared.isr_isdu_invalidated != 0U) && !new_response) {
+        /* 写已暂存、尚未应用：显式发布"无服务"，绝不重发旧应答。 */
+        count = 0U;
+        sel = 0U;
+    }
+
+    const IOLINK_ATOMIC_UINT_T word = IOLINK_ISDU_PUB_WORD_GEN(count, busy, sel, ctx->isdu_pub_gen);
     if (word != ctx->shared.isr_isdu_pub) {
         /* 最后发布：响应字节已在 resp_store[sel] 中。 */
         iolink_atomic_store(&ctx->shared.isr_isdu_pub, word);
@@ -1870,6 +2103,9 @@ void iolink_dll_process(iolink_dll_main_t* ctx)
         return;
     }
     dll_process_body(ctx);
+    /* 主泵是 M-sequence 内容语义的唯一所有者：把本轮的
+     * 分发视图编译成计划，供数据 ISR 下一帧执行。 */
+    iolink_dll_publish_reply_plans(ctx);
     /* 基于电平的应用通知：状态钩子对设备层和直接 DLL
      * 用户的唯一运行位置。设备层在其事件/DS 服务之后
      * 不再 flush。 */

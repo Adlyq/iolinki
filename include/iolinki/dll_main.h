@@ -48,6 +48,15 @@ struct iolink_dll_main
 
     uint8_t od_len; /**< 流式路径的 OD 长度（1 或 2 字节）。 */
 
+    /* 应答计划发布键（P5）。计划表是 {状态, M-sequence 类型, OD 宽度}
+     * 的纯函数；键不变时 iolink_dll_publish_reply_plans() 不写共享区，
+     * 因此主泵循环不会与 ISR 读者无谓竞争。 */
+    uint16_t reply_plan_key; /**< 当前已发布的计划键 */
+
+    uint8_t isdu_pub_gen; /**< ISDU 应答代数（每份新应答翻转） */
+
+    uint8_t isdu_pub_state; /**< 上次看到的 ISDU 状态（检测新应答边沿） */
+
     iolink_frame_rec_t isr_frame_slot[IOLINK_MBX_SLOTS]; /**< 邮箱环存储 */
 
     volatile uint8_t frame_replied_by_isr; /**< 当前处理帧对应记录中 eager 标志的

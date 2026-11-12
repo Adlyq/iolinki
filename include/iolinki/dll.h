@@ -134,14 +134,101 @@ typedef struct
  * ISR 保留它在 START 处采纳的最后一个字的副本；任何变化（新的
  * 应答，或 Busy 迁移）都会打断 FlowCTRL 序列，这正是
  * 增量视图原本的行为。
+ *
+ * 位 10 是应答代数（generation）：主泵每产生一份*新*应答就翻转它，
+ * 即使新应答的长度与缓冲区选择与上一份完全相同。ISR 因此能识别
+ * "写后立刻读"（同一缓冲、同一长度、内容已变），不会继续使用
+ * 失效前采纳的段索引。
  * @{
  */
 #define IOLINK_ISDU_PUB_LEN(word) ((uint8_t) ((word) & 0xFFU))
 #define IOLINK_ISDU_PUB_BUSY(word) ((uint8_t) (((word) >> 8) & 0x01U))
 #define IOLINK_ISDU_PUB_SEL(word) ((uint8_t) (((word) >> 9) & 0x01U))
-#define IOLINK_ISDU_PUB_WORD(len, busy, sel)                                                     \
+#define IOLINK_ISDU_PUB_GEN(word) ((uint8_t) (((word) >> 10) & 0x01U))
+#define IOLINK_ISDU_PUB_WORD_GEN(len, busy, sel, gen)                                            \
     ((IOLINK_ATOMIC_UINT_T) (uint8_t) (len) | ((IOLINK_ATOMIC_UINT_T) ((busy) ? 1U : 0U) << 8) | \
-     ((IOLINK_ATOMIC_UINT_T) ((sel) ? 1U : 0U) << 9))
+     ((IOLINK_ATOMIC_UINT_T) ((sel) ? 1U : 0U) << 9) |                                           \
+     ((IOLINK_ATOMIC_UINT_T) ((gen) ? 1U : 0U) << 10))
+#define IOLINK_ISDU_PUB_WORD(len, busy, sel) IOLINK_ISDU_PUB_WORD_GEN(len, busy, sel, 0U)
+/** @} */
+
+/**
+ * @name 应答计划（P5）
+ *
+ * 主泵是 M-sequence 内容语义的唯一所有者：它把"哪种请求、用哪段
+ * 字节、多长、以什么方式应答"编译成一张计划表并原子发布；数据 ISR
+ * 只做 查计划 -> 取源字节 -> 追加 CKS -> 喂字节，不再解读请求内容。
+ *
+ * 计划表通过 `reply_plan_seq` 发布（seqlock：奇数表示主泵正在写，
+ * 偶数表示稳定）。ISR 在拷贝命中项前后各读一次发布字，不一致就
+ * 重试；重试仍不一致则视为"计划外请求"，走延迟路径。
+ *
+ * 计划外请求的回退语义：ISR 不应答、不解释内容，关闭 t_A 窗口并把
+ * 帧发布到邮箱，由主泵在下一个处理窗口里按既有分发路径应答
+ * （或按规范有意不应答）。因此计划表只能删除"ISR 提前应答"，
+ * 不能改变任何一帧的最终应答内容。
+ * @{
+ */
+
+/** @brief 计划表槽位上限（按最复杂状态的全集计算）。 */
+#define IOLINK_REPLY_PLAN_SLOTS 10U
+
+/** @brief 计划命中后的应答来源。 */
+typedef enum
+{
+    IOLINK_REPLY_SRC_NONE = 0U,     /**< 无载荷：仅 CKS 的确认 */
+    IOLINK_REPLY_SRC_TEMPLATE = 1U, /**< plan->data 处的静态模板 */
+    IOLINK_REPLY_SRC_PD_IN = 2U,    /**< 活动 PD-in 槽位（当前由 PD_TAIL 标志表达） */
+    IOLINK_REPLY_SRC_ISDU_SEG = 3U, /**< 已暂存的 ISDU 应答段 */
+    IOLINK_REPLY_SRC_PAGE = 4U,     /**< Direct Parameter page 1 字节 */
+    IOLINK_REPLY_SRC_EVENT_MEM = 5U /**< Table 58 事件存储器字节 */
+} iolink_reply_source_t;
+
+/** @brief 计划允许的、应在应答前应用的状态动作。 */
+typedef enum
+{
+    IOLINK_REPLY_ACT_NONE = 0U,             /**< 无副作用 */
+    IOLINK_REPLY_ACT_ENTER_PREOPERATE = 1U, /**< 启动探测被接受 */
+    IOLINK_REPLY_ACT_ENTER_ESTAB_COM = 2U,  /**< 转换命令（不应答） */
+    IOLINK_REPLY_ACT_MASTER_COMMAND = 3U,   /**< 应用请求 OD 字节中的 MasterCommand */
+    IOLINK_REPLY_ACT_RESET_STARTUP = 4U     /**< OPERATE 中的 Type-0 页读：复位到 STARTUP */
+} iolink_reply_action_t;
+
+/** @brief 应答在列表尾追加活动 PD-in 字节（Type-1/2 长应答）。 */
+#define IOLINK_REPLY_FLAG_PD_TAIL 0x01U
+/** @brief 该计划只在 ISDU 写已成功暂存时有效。 */
+#define IOLINK_REPLY_FLAG_STAGED 0x02U
+/** @brief 不应答：关闭 t_A 窗口（计划自己消费该帧）。 */
+#define IOLINK_REPLY_FLAG_CLOSE_WINDOW 0x04U
+/** @brief 关闭 t_A 窗口后启动 Timer B（转换命令的时序语义）。 */
+#define IOLINK_REPLY_FLAG_RESTART_TIMER_B 0x10U
+/** @brief 该帧由 ISR 完全消费，不再发布到主泵邮箱。 */
+#define IOLINK_REPLY_FLAG_CONSUME 0x08U
+
+/**
+ * @brief 一条应答计划：请求指纹 + 应答来源 + 时序预算。
+ *
+ * 匹配规则（全部满足才命中）：
+ *  - `(mc & match_mask) == match_value`
+ *  - `((mc & IOLINK_MC_ADDR_MASK)) <= addr_max`
+ *  - `req_len == 0` 或 `req_len == 实际请求长度`
+ *  - `ckt_mask == 0` 或 `(ckt & ckt_mask) == ckt_value`
+ */
+typedef struct
+{
+    const uint8_t* data;  /**< @ref IOLINK_REPLY_SRC_TEMPLATE 的模板字节 */
+    uint16_t deadline_us; /**< t_A 预算（10 个位时间）；时序审计/WCET 用 */
+    uint8_t match_mask;   /**< MC 字节参与匹配的位 */
+    uint8_t match_value;  /**< MC 字节匹配值 */
+    uint8_t ckt_mask;     /**< CKT 类型位掩码（0 = 不比较类型） */
+    uint8_t ckt_value;    /**< CKT 类型位匹配值 */
+    uint8_t addr_max;     /**< MC 地址字段上界（0x1F = 不限制） */
+    uint8_t req_len;      /**< 精确请求长度，0 = 不限制 */
+    uint8_t len;          /**< 载荷字节数（不含 CKS） */
+    uint8_t flags;        /**< @ref IOLINK_REPLY_FLAG_PD_TAIL 等 */
+    uint8_t source;       /**< @ref iolink_reply_source_t */
+    uint8_t action;       /**< @ref iolink_reply_action_t */
+} iolink_reply_plan_t;
 /** @} */
 
 /** @brief 一个暂存的 ISDU 写段（数据 ISR -> 主泵）。 */
@@ -222,11 +309,31 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
 /**
  * @brief 处理 DLL 逻辑
  *
- * 处理字节级数据并执行状态机迁移。
+ * 处理字节级数据并执行状态机迁移。主泵在每次调用结束时按当前
+ * DLL 状态、M-sequence 配置与 OD 宽度重新发布应答计划
+ * （见 `iolink_dll_publish_reply_plans()`），因此数据 ISR 下一次看到的
+ * 计划与主泵的分发视图一致。
  *
  * @param ctx 要处理的 DLL 上下文
  */
 void iolink_dll_process(iolink_dll_main_t* ctx);
+
+/**
+ * @brief 按当前状态重新发布应答计划表。
+ *
+ * 只允许在**主上下文**中调用（`iolink_dll_init()` 与
+ * `iolink_dll_process()` 会自动调用）。计划表是
+ * {DLL 状态, M-sequence 类型, OD 宽度} 的纯函数：键未变化时本函数
+ * 直接返回，不做任何写入。
+ *
+ * 发布协议是单写者 seqlock：主泵先把 `reply_plan_seq` 变成奇数，
+ * 覆盖计划槽位，再用下一次递增变回偶数；数据 ISR 只在偶数且前后
+ * 两次读取相同的窗口内使用计划。因此 ISR 绝不会执行半更新的计划，
+ * 最坏情况是判定为"计划外请求"并交给主泵。
+ *
+ * @param ctx DLL 上下文
+ */
+void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx);
 
 /**
  * @brief MC 字节为 @p mc 的主站请求的期望长度（字节）。
