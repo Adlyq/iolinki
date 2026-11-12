@@ -99,7 +99,7 @@ typedef enum
  *
  * 标准对象与厂商错误统计需要设备上下文（事件/DLL/标识/直接参数），
  * 由 ISDU 层内建处理器执行；表项只保存处理器 ID，因此表保持 const
- * 且不依赖任何上下文。应用参数使用 @ref IOLINK_OD_HANDLER_BACKEND。
+ * 且不依赖任何上下文。应用参数使用 @ref IOLINK_OD_HANDLER_BACKEND 处理器。
  */
 typedef enum
 {
@@ -164,7 +164,7 @@ struct iolink_od_entry
     uint8_t write_semantics;        /**< IOLINK_OD_WRITE_*。 */
     uint8_t storage;                /**< IOLINK_OD_STORAGE_*。 */
     uint8_t flags;                  /**< IOLINK_OD_FLAG_*。 */
-    uint8_t handler;                /**< @ref iolink_od_handler_t。 */
+    uint8_t handler;                /**< @ref iolink_od_handler_t 处理器 ID。 */
     uint8_t block_len;              /**< OctetString 长度上限/IODD fixedLength。 */
     uint32_t range_min;             /**< 标量下限（含）。 */
     uint32_t range_max;             /**< 标量上限（含）。 */

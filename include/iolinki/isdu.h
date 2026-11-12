@@ -127,7 +127,7 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx);
  * @brief 绑定应用对象字典。
  *
  * 绑定后，应用表项优先于厂商服务；未命中的设备专用索引仍回退到
- * @ref iolink_isdu_ctx_t::vendor_service。
+ * @ref iolink_isdu_ctx_t::vendor_service 后端。
  *
  * @param ctx ISDU 上下文
  * @param app 应用表（必须在使用期间保持有效；NULL 解除绑定）

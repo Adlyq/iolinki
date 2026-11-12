@@ -13,6 +13,7 @@
 #include "iolinki/protocol.h"
 
 /** @brief SP1 必须 >= 迟滞；迟滞必须 <= SP1。 */
+// cppcheck-suppress constParameterCallback
 static iolink_result_t ss_validate(void* user, const iolink_od_entry_t* entry, const uint8_t* data,
                                    size_t len)
 {
@@ -50,6 +51,7 @@ static iolink_result_t ss_teach(void* user, const iolink_od_entry_t* entry, cons
     return iolink_result_ok(0U);
 }
 
+// cppcheck-suppress constParameterCallback
 static iolink_result_t ss_od_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
                                   size_t cap)
 {
