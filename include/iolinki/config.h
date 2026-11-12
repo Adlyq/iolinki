@@ -387,6 +387,51 @@
 #define IOLINK_OD_MAX_SIZE 32U
 #endif
 
+/* -------------------------------------------------------------------------
+ * 日志钩子
+ *
+ * 协议栈只提供打印点，不实现输出。四个宏默认为空，因此默认构建
+ * 完全静默：字符串不进入镜像，参数也不求值。
+ *
+ * 集成时在私有配置头中覆盖这些宏，并通过 `-include` 或构建系统
+ * 让它们在所有源文件之前生效，例如：
+ *
+ *   #define IOLINK_LOG_INFO(...) my_log(LOG_LEVEL_INFO, __VA_ARGS__)
+ *
+ * 宏必须接受 printf 风格的格式串与变参；库不做格式化。
+ * ISR 打印点只使用 IOLINK_LOG_ISR_* 系列，默认关闭；置
+ * IOLINK_LOG_ENABLE_ISR 为 1 后才转发到上面的主宏。
+ * ------------------------------------------------------------------------- */
+#ifndef IOLINK_LOG_ERROR
+#define IOLINK_LOG_ERROR(...) ((void) 0)
+#endif
+#ifndef IOLINK_LOG_WARN
+#define IOLINK_LOG_WARN(...) ((void) 0)
+#endif
+#ifndef IOLINK_LOG_INFO
+#define IOLINK_LOG_INFO(...) ((void) 0)
+#endif
+#ifndef IOLINK_LOG_DEBUG
+#define IOLINK_LOG_DEBUG(...) ((void) 0)
+#endif
+
+/** @brief 启用数据 ISR 路径上的日志（默认关闭；主宏仍需配置）。 */
+#ifndef IOLINK_LOG_ENABLE_ISR
+#define IOLINK_LOG_ENABLE_ISR 0
+#endif
+
+#if IOLINK_LOG_ENABLE_ISR
+#define IOLINK_LOG_ISR_ERROR(...) IOLINK_LOG_ERROR(__VA_ARGS__)
+#define IOLINK_LOG_ISR_WARN(...) IOLINK_LOG_WARN(__VA_ARGS__)
+#define IOLINK_LOG_ISR_INFO(...) IOLINK_LOG_INFO(__VA_ARGS__)
+#define IOLINK_LOG_ISR_DEBUG(...) IOLINK_LOG_DEBUG(__VA_ARGS__)
+#else
+#define IOLINK_LOG_ISR_ERROR(...) ((void) 0)
+#define IOLINK_LOG_ISR_WARN(...) ((void) 0)
+#define IOLINK_LOG_ISR_INFO(...) ((void) 0)
+#define IOLINK_LOG_ISR_DEBUG(...) ((void) 0)
+#endif
+
 /** @} */ /* iolinki_config 结束 */
 
 #endif  // IOLINK_CONFIG_H

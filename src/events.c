@@ -231,6 +231,8 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
         return;
     }
 
+    IOLINK_LOG_DEBUG("event trigger code=0x%04X type=%u", (unsigned) code, (unsigned) type);
+
     IOLINK_CRITICAL_ENTER();
 
     const uint32_t now = events_now_ms(ctx);
@@ -297,6 +299,9 @@ void iolink_event_clear(iolink_events_ctx_t* ctx, uint16_t code)
         if (ctx->pending_count > 0U) {
             ctx->pending_count--;
         }
+        IOLINK_CRITICAL_EXIT();
+        IOLINK_LOG_DEBUG("event clear code=0x%04X", (unsigned) code);
+        return;
     }
     IOLINK_CRITICAL_EXIT();
 }

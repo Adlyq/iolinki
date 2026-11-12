@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Log hooks: `IOLINK_LOG_ERROR/WARN/INFO/DEBUG` print points across the
+  device/DLL/ISDU/DS/event code, defaulting to `((void) 0)` so a default build
+  is silent and argument-free. ISR print points use the separate
+  `IOLINK_LOG_ISR_*` family, enabled with `IOLINK_LOG_ENABLE_ISR`. Integration
+  is by macro override from a private header; see `docs/API.md`.
+
 ### Changed (documentation language)
 - Comments under `src/`, `include/iolinki/` and `tests/` are written in
   Simplified Chinese. Code, identifiers, string literals, Doxygen commands and

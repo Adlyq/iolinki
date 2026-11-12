@@ -82,6 +82,7 @@ void dll_isr_start_staged_tx(iolink_dll_ctx_t* ctx, uint8_t slot, uint8_t len)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     if (ctx->phy->tx_frame != NULL) {
         if (ctx->phy->tx_frame(ctx->phy->user, ctx->isr_tx_payload[slot], len) != 0) {
+            IOLINK_LOG_ISR_WARN("tx_frame failed: len=%u", (unsigned) len);
             /* 由主泵回退路径与 ISR 泵共享：将丢弃归属到
              * 正在运行的上下文，使 SPLIT 计数器保持精确。 */
             if (ctx->in_isr != 0U) {
@@ -176,11 +177,13 @@ static bool dll_isr_publish_frame(iolink_dll_ctx_t* ctx, const uint8_t* frame, u
                                   uint8_t eager)
 {
     if ((frame == NULL) || (len > IOLINK_M_SEQ_MAX_LEN)) {
+        IOLINK_LOG_ISR_DEBUG("frame publish rejected: len=%u", (unsigned) len);
         IOLINK_STAT_ISR(ctx, framing_errors)++;
         return false;
     }
     iolink_frame_rec_t* record = (iolink_frame_rec_t*) iolink_ring_claim(&ctx->isr_frame_ring);
     if (record == NULL) {
+        IOLINK_LOG_ISR_WARN("mailbox full: frame dropped");
         ctx->isr_mailbox_drops++;
         return false;
     }
@@ -792,6 +795,7 @@ static inline void dll_isr_complete_frame(iolink_dll_ctx_t* ctx, const uint8_t* 
                                           bool valid)
 {
     bool staged = false;
+    IOLINK_LOG_ISR_DEBUG("frame complete: len=%u valid=%u", (unsigned) len, (unsigned) valid);
     if (dll_isr_is_isdu_write(frame)) {
         /* 只缓冲有效请求：损坏的 ISDU 写绝不能到达
          * 传输层（ST 在 StackBaseOdWrite 之前校验）。 */
@@ -860,6 +864,8 @@ static bool dll_isr_frame_len_ok(iolink_dll_ctx_t* ctx, const uint8_t* frame, ui
         expected_len = iolink_dll_expected_req_len(ctx, frame[0]);
     }
     if ((expected_len == 0U) || (len != expected_len)) {
+        IOLINK_LOG_ISR_DEBUG("frame length reject: len=%u expected=%u", (unsigned) len,
+                             (unsigned) expected_len);
         IOLINK_STAT_ISR(ctx, framing_errors)++;
         return false;
     }
@@ -923,6 +929,8 @@ static void dll_isr_rx_byte_gap(iolink_dll_ctx_t* ctx)
                                (ctx->isr_rx_cnt >= IOLINK_M_SEQ_HEADER_LEN) &&
                                (ctx->isr_rx_cnt < ctx->isr_rx_expect);
     if (incomplete_ms) {
+        IOLINK_LOG_ISR_DEBUG("incomplete frame: got %u of %u bytes", (unsigned) ctx->isr_rx_cnt,
+                             (unsigned) ctx->isr_rx_expect);
         IOLINK_STAT_ISR(ctx, framing_errors)++;
     }
     dll_isr_rx_byte_reset(ctx);
@@ -1010,6 +1018,7 @@ static bool dll_isr_drain_rx_byte(iolink_dll_ctx_t* ctx)
     }
     if (ok < 0) {
         /* 传输错误：丢弃部分帧并计数。 */
+        IOLINK_LOG_ISR_WARN("rx_octet error: %d", ok);
         IOLINK_STAT_ISR(ctx, framing_errors)++;
         dll_isr_rx_byte_reset(ctx);
         return true;
@@ -1113,6 +1122,7 @@ void iolink_dll_on_rx_timeout(iolink_dll_ctx_t* ctx)
         return;
     }
     ctx->isr_master_activity = 1U;
+    IOLINK_LOG_ISR_DEBUG("rx timeout (t_A)");
     IOLINK_STAT_ISR(ctx, timeout_errors)++;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
     ctx->isr_rx_cnt = 0U;

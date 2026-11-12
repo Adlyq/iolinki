@@ -313,6 +313,34 @@ Every compile-time switch, profile and capacity override is documented in
 [feature-trimming.md](feature-trimming.md). The transport granularity is selected
 with `IOLINK_ISR_RX_MODE` / `IOLINK_ISR_TX_MODE` (BYTE or FRAME).
 
+## Logging
+
+The stack contains print points but no output implementation. `IOLINK_LOG_ERROR`,
+`IOLINK_LOG_WARN`, `IOLINK_LOG_INFO` and `IOLINK_LOG_DEBUG` are defined in
+`include/iolinki/config.h` and default to `((void) 0)`: a default build is silent,
+the format strings stay out of the image and the arguments are not evaluated.
+
+Wire them by defining the macros in a private header and force-including it
+(`-include my_iolink_log.h`) so every library translation unit sees the
+definitions before `config.h`:
+
+```c
+#include <stdio.h>
+
+#define IOLINK_LOG_ERROR(...) my_log(LOG_ERR, __VA_ARGS__)
+#define IOLINK_LOG_WARN(...)  my_log(LOG_WARNING, __VA_ARGS__)
+#define IOLINK_LOG_INFO(...)  my_log(LOG_INFO, __VA_ARGS__)
+#define IOLINK_LOG_DEBUG(...) my_log(LOG_DEBUG, __VA_ARGS__)
+```
+
+The macros receive printf-style format strings and arguments; the library does
+not format or buffer anything. Level filtering, timestamps and transport belong
+to the integration header. The ISR print points are separate: they use
+`IOLINK_LOG_ISR_ERROR/WARN/INFO/DEBUG`, stay compiled out unless
+`IOLINK_LOG_ENABLE_ISR` is 1, and then forward to the four main macros. Logging
+from an ISR is opt-in because a blocking sink would break the t_A reply budget.
+
+
 ## Thread safety
 
 The stack has a single main-context caller per context: the data ISR

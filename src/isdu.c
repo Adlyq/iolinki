@@ -341,6 +341,10 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
     }
     isdu_copy_payload(ctx, buf, pos, total);
 
+    IOLINK_LOG_DEBUG("isdu req idx=0x%04X sub=%u len=%u write=%u", (unsigned) ctx->header.index,
+                     (unsigned) ctx->header.subindex, (unsigned) ctx->header.length,
+                     (unsigned) (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE));
+
     /* 已解析：执行由 iolink_isdu_process() 完成，从而保持
        传输层与应用分发可分离（且可测试）。 */
     ctx->state = ISDU_STATE_SERVICE_EXECUTE;
@@ -563,6 +567,7 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_o
 /** @brief 以两字节否定应答终止 ISDU 服务。 */
 static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error)
 {
+    IOLINK_LOG_DEBUG("isdu error 0x%02X", (unsigned) error);
     ctx->response_negative = true;
     ctx->response_buf[0] = 0x80U;
     ctx->response_buf[1] = error;
@@ -1102,6 +1107,7 @@ static bool isdu_system_ds(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 
 static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
+    IOLINK_LOG_INFO("system command 0x%02X", (unsigned) cmd);
 #if !IOLINK_FEATURE_SYSTEM_COMMAND
     (void) cmd;
     /* SystemCommand 支持已在编译时移除。 */
@@ -1755,6 +1761,9 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
     }
 #endif
     const bool device_specific = ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
+    if (device_specific && (ctx->vendor_service == NULL)) {
+        IOLINK_LOG_DEBUG("vendor index 0x%04X ignored: no vendor_service", (unsigned) index);
+    }
     if (device_specific && (ctx->vendor_service != NULL)) {
         isdu_handle_vendor_index(ctx);
     }
@@ -1805,6 +1814,9 @@ void iolink_isdu_process(iolink_isdu_ctx_t* ctx)
         }
         else {
             isdu_frame_response(ctx);
+            IOLINK_LOG_DEBUG("isdu rsp idx=0x%04X sub=%u neg=%u len=%u",
+                             (unsigned) ctx->header.index, (unsigned) ctx->header.subindex,
+                             (unsigned) ctx->response_negative, (unsigned) ctx->resp_total);
         }
     }
 }

@@ -69,6 +69,11 @@ add_executable(test_ring test_ring.c)
 target_link_libraries(test_ring iolinki)
 add_test(NAME test_ring COMMAND test_ring)
 
+# Log hook contract: macro override forwarding, default no-op, ISR gating.
+add_executable(test_log test_log.c test_log_defaults.c test_log_isr_on.c)
+target_link_libraries(test_log iolinki)
+add_test(NAME test_log COMMAND test_log)
+
 # Statistics counter sets (SHARED vs SPLIT), built under both modes.
 add_executable(test_stats_split test_stats_split.c)
 target_link_libraries(test_stats_split iolinki)

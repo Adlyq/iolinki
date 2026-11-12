@@ -319,6 +319,7 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
 
     err = device_config_validate(config);
     if (err != IOLINK_DEVICE_INIT_OK) {
+        IOLINK_LOG_ERROR("device init rejected: err=%d", err);
         return err;
     }
 
@@ -329,6 +330,7 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     if (config->phy.init != NULL) {
         err = config->phy.init(config->phy.user);
         if (err != 0) {
+            IOLINK_LOG_ERROR("phy init failed: err=%d", err);
             return err;
         }
     }
@@ -382,6 +384,10 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
         config->app_callbacks->on_startup(config->user);
     }
 
+    IOLINK_LOG_INFO("device init: m_seq=%u pd_in=%u pd_out=%u od=%u baud=%u",
+                    (unsigned) config->stack.m_seq_type, (unsigned) config->stack.pd_in_len,
+                    (unsigned) config->stack.pd_out_len, (unsigned) ctx->dll.od_width,
+                    (unsigned) ctx->dll.baudrate);
     return 0;
 }
 
@@ -501,12 +507,14 @@ static void device_dispatch_resets(iolink_device_ctx_t* ctx)
 {
     if (ctx->dll.isdu.reset_pending) {
         ctx->dll.isdu.reset_pending = false;
+        IOLINK_LOG_WARN("device reset requested by master");
         if (ctx->reset_handler != NULL) {
             ctx->reset_handler(IOLINK_RESET_DEVICE);
         }
     }
     if (ctx->dll.isdu.app_reset_pending) {
         ctx->dll.isdu.app_reset_pending = false;
+        IOLINK_LOG_WARN("application reset requested by master");
         if (ctx->reset_handler != NULL) {
             ctx->reset_handler(IOLINK_RESET_APPLICATION);
         }
