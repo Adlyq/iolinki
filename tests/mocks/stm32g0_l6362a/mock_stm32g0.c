@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /**
  * @file mock_stm32g0.c
- * @brief Host-side register/HAL mock for the L6362A raw-PHY unit test.
+ * @brief 用于 L6362A 原始 PHY 单元测试的主机侧寄存器/HAL mock。
  */
 #include "main.h"
 
@@ -184,9 +184,9 @@ void NVIC_SetPendingIRQ(IRQn_Type irq)
 uint32_t HAL_GetTick(void)
 {
     if (mock_tick_auto_advance != 0U) {
-        /* Leave the two reads inside one phy_l6362a_time_us() sample coherent
-         * (they compare equal) but let each successive sample observe a later
-         * millisecond, so a driver's bounded wait can actually expire. */
+        /* 让一次 phy_l6362a_time_us() 采样内的两次读取保持
+         * 一致（它们比较相等），但让随后的每次采样都观察到更晚的
+         * 毫秒数，从而使驱动的有界等待能够真正超时。 */
         const uint32_t value = mock_tick_ms + (s_tick_calls / 2U);
         s_tick_calls++;
         return value;

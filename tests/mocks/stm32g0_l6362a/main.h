@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /**
  * @file main.h
- * @brief Host-side STM32G0/CubeMX mock for the L6362A raw-PHY unit test.
+ * @brief 用于 L6362A 原始 PHY 单元测试的主机侧 STM32G0/CubeMX mock。
  *
- * The example source includes the generated "main.h" for its register and
- * HAL surface. This header provides the smallest faithful subset needed to
- * compile it on the host, plus the state the test inspects.
+ * 示例源码包含生成的 "main.h" 以获取其寄存器和
+ * HAL 接口。本头文件提供在主机上编译所需的最小忠实子集，
+ * 以及测试所检查的状态。
  */
 #ifndef MOCK_STM32G0_MAIN_H
 #define MOCK_STM32G0_MAIN_H
@@ -96,7 +96,7 @@ typedef enum
 
 typedef int32_t IRQn_Type;
 
-/* Clock / core -------------------------------------------------------------- */
+/* 时钟 / 内核 --------------------------------------------------------------- */
 #define SYSCLOCK_FREQUENCY 64000000U
 #define SystemCoreClock SYSCLOCK_FREQUENCY
 
@@ -196,7 +196,7 @@ extern TIM_TypeDef mock_tim3;
 #define TIM_SR_UIF (1U << 0)
 #define TIM_EGR_UG (1U << 0)
 
-/* Core ---------------------------------------------------------------------- */
+/* 内核 ---------------------------------------------------------------------- */
 extern SysTick_Type mock_systick;
 extern SCB_Type mock_scb;
 #define SysTick (&mock_systick)
@@ -206,7 +206,7 @@ extern SCB_Type mock_scb;
 #define __HAL_RCC_TIM3_CLK_ENABLE() ((void) 0)
 #define __HAL_RCC_DMA1_CLK_ENABLE() ((void) 0)
 
-/* HAL / NVIC surface -------------------------------------------------------- */
+/* HAL / NVIC 接口 ----------------------------------------------------------- */
 void HAL_GPIO_Init(GPIO_TypeDef* port, GPIO_InitTypeDef* init);
 void HAL_GPIO_WritePin(GPIO_TypeDef* port, uint16_t pin, GPIO_PinState state);
 GPIO_PinState HAL_GPIO_ReadPin(GPIO_TypeDef* port, uint16_t pin);
@@ -223,7 +223,7 @@ void mock_set_primask(uint32_t value);
 #define __disable_irq() mock_disable_irq()
 #define __set_PRIMASK(v) mock_set_primask(v)
 
-/* Test-visible mock state --------------------------------------------------- */
+/* 测试可见的 mock 状态 ------------------------------------------------------ */
 extern uint32_t mock_tick_ms;
 extern uint32_t mock_tick_auto_advance;
 extern uint32_t mock_primask;
@@ -239,13 +239,13 @@ extern IRQn_Type mock_last_pending_irq;
 extern uint32_t mock_error_handler_calls;
 
 /*
- * Minimal NVIC/PRIMASK model for ISR-vs-main interleaving tests.
+ * 用于 ISR 与主循环交错测试的最小 NVIC/PRIMASK 模型。
  *
- * A test arms an injection trigger and registers the handler that the real
- * interrupt vector would run. When the trigger fires, the request is delivered
- * immediately if PRIMASK is clear, otherwise it stays pending until the driver
- * unmasks interrupts. This models an interrupt arriving in the middle of a
- * critical section without needing host threads.
+ * 用例装配一个注入触发器，并注册真实中断向量本该运行的
+ * 处理函数。当触发器触发时，若 PRIMASK 为清除状态则请求
+ * 立即被投递，否则保持挂起，直到驱动解除中断屏蔽。
+ * 这样无需主机线程即可模拟中断在临界区中途
+ * 到达。
  */
 typedef enum
 {
@@ -269,8 +269,8 @@ typedef void (*mock_irq_fn)(void);
 void mock_set_irq_handler(mock_irq_t irq, mock_irq_fn fn);
 void mock_inject_irq(mock_trigger_t trigger, mock_irq_t irq);
 void mock_request_irq(mock_irq_t irq);
-/* Optional action run at the trigger point, before the IRQ is pended (models
- * data that physically arrived before the interrupt was taken). */
+/* 在触发点、IRQ 挂起之前运行的可选动作（模拟在中断被
+ * 取走之前物理到达的数据）。 */
 void mock_set_inject_prepare(mock_irq_fn fn);
 
 void mock_stm32g0_reset(void);

@@ -8,20 +8,20 @@
 
 /**
  * @file test_isr_cutpoints.c
- * @brief Deterministic cut-point tests for the lock-free ISR handoffs.
+ * @brief 无锁 ISR 交接的确定性切点测试。
  *
- * The host suite is single-threaded, so concurrency is modelled by injecting
- * the data-ISR publish at every step of the consumer:
+ * 宿主测试套件是单线程的，因此并发通过在消费者的每个步骤
+ * 注入数据 ISR 的发布来建模：
  *
- *  - right after the consumer peeked (before it copied the record),
- *  - right after it copied (before it released the slot),
- *  - right after it released (before the next peek),
+ *  - 消费者刚 peek 之后（复制记录之前），
+ *  - 刚复制之后（释放槽位之前），
+ *  - 刚释放之后（下一次 peek 之前），
  *
- * plus an end-to-end case where a PHY callback publishes a record while the
- * main pump is inside iolink_dll_process(), i.e. on its way to the mailbox.
+ * 另有一个端到端用例：PHY 回调在主泵进入 iolink_dll_process() 期间发布记录，
+ * 即正在前往邮箱的途中。
  *
- * The property under test is the SPSC ring contract: the producer never writes
- * the slot the consumer is reading, and a record's metadata travels with it.
+ * 被测性质是 SPSC 环约定：生产者绝不写入消费者正在读取的
+ * 槽位，且记录的元数据随记录一起传递。
  */
 
 #include <assert.h>
@@ -39,7 +39,7 @@ static uint64_t test_time_us(void* user)
     return now_us;
 }
 
-/** @brief Publish a frame record exactly as the data ISR does. */
+/** @brief 完全按数据 ISR 的方式发布一个帧记录。 */
 static bool publish_frame(iolink_dll_ctx_t* ctx, uint8_t tag, uint8_t len)
 {
     iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&ctx->isr_frame_ring);
@@ -56,7 +56,7 @@ static bool publish_frame(iolink_dll_ctx_t* ctx, uint8_t tag, uint8_t len)
     return true;
 }
 
-/** @brief Publish a staged ISDU write segment exactly as the data ISR does. */
+/** @brief 完全按数据 ISR 的方式发布一个已暂存的 ISDU 写段。 */
 static bool publish_od(iolink_dll_ctx_t* ctx, uint8_t flowctrl, uint8_t tag)
 {
     iolink_od_rec_t* rec = (iolink_od_rec_t*) iolink_ring_claim(&ctx->isr_od_ring);
@@ -80,8 +80,8 @@ static void reset_rings(iolink_dll_ctx_t* ctx)
                      (uint8_t) sizeof(iolink_od_rec_t));
 }
 
-/* The producer publishes between every pair of consumer steps; the consumed
- * record must stay intact and the queued one must arrive afterwards. */
+/* 生产者在消费者的每一对步骤之间发布；被消费的
+ * 记录必须保持完整，而排队的记录必须随后送达。 */
 static int test_frame_cutpoints(void)
 {
     iolink_dll_ctx_t ctx;
@@ -97,28 +97,28 @@ static int test_frame_cutpoints(void)
         assert(rec != NULL);
 
         if (cut == 0U) {
-            assert(publish_frame(&ctx, 0x20U, 3U)); /* preempted after peek */
+            assert(publish_frame(&ctx, 0x20U, 3U)); /* peek 之后被抢占 */
         }
         uint8_t copy[8];
         const uint8_t n = rec->len;
         const uint8_t eager = rec->eager;
         (void) memcpy(copy, rec->data, n);
         if (cut == 1U) {
-            assert(publish_frame(&ctx, 0x20U, 3U)); /* preempted after copy */
+            assert(publish_frame(&ctx, 0x20U, 3U)); /* copy 之后被抢占 */
         }
         iolink_ring_release(&ctx.isr_frame_ring);
         if (cut == 2U) {
-            assert(publish_frame(&ctx, 0x20U, 3U)); /* preempted after release */
+            assert(publish_frame(&ctx, 0x20U, 3U)); /* release 之后被抢占 */
         }
 
-        /* The consumed record was never touched by the producer. */
+        /* 被消费的记录从未被生产者触碰。 */
         assert(n == 4U);
         assert(eager == 0U);
         for (uint8_t i = 0U; i < n; i++) {
             assert(copy[i] == (uint8_t) (0x10U + i));
         }
 
-        /* The second record is intact and next in line. */
+        /* 第二条记录完整无损，且排在队首。 */
         const iolink_frame_rec_t* next =
             (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.isr_frame_ring);
         assert(next != NULL);
@@ -134,7 +134,7 @@ static int test_frame_cutpoints(void)
     return 0;
 }
 
-/* A full ring rejects the producer instead of overwriting a leased slot. */
+/* 环满时拒绝生产者，而不是覆盖已租用的槽位。 */
 static int test_frame_full_rejects(void)
 {
     iolink_dll_ctx_t ctx;
@@ -147,7 +147,7 @@ static int test_frame_full_rejects(void)
     assert(ctx.isr_mailbox_drops == 1U);
     assert(iolink_ring_count(&ctx.isr_frame_ring) == IOLINK_MBX_SLOTS);
 
-    /* The two queued records are unchanged. */
+    /* 两条排队记录保持不变。 */
     const iolink_frame_rec_t* first =
         (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.isr_frame_ring);
     assert(first != NULL);
@@ -161,7 +161,7 @@ static int test_frame_full_rejects(void)
     return 0;
 }
 
-/* The same cut-point property for the staged ISDU write ring. */
+/* 暂存 ISDU 写环上的同一组切点性质。 */
 static int test_od_cutpoints(void)
 {
     iolink_dll_ctx_t ctx;
@@ -172,7 +172,7 @@ static int test_od_cutpoints(void)
 
     const iolink_od_rec_t* rec = (const iolink_od_rec_t*) iolink_ring_peek(&ctx.isr_od_ring);
     assert(rec != NULL);
-    assert(publish_od(&ctx, 1U, 0x71U)); /* preempted after peek */
+    assert(publish_od(&ctx, 1U, 0x71U)); /* peek 之后被抢占 */
     uint8_t fc = rec->flowctrl;
     uint8_t len = rec->len;
     uint8_t od[IOLINK_OD_MAX_SIZE];
@@ -194,8 +194,8 @@ static int test_od_cutpoints(void)
 }
 
 #if IOLINK_PHY_FEATURE_LEGACY_DIAG
-/* The PHY callback that publishes the second frame while the main pump is
- * inside iolink_dll_process(), before it consumes the mailbox. */
+/* 在主泵进入 iolink_dll_process()、尚未消费邮箱时
+ * 发布第二帧的 PHY 回调。 */
 static uint8_t g_publish_on_poll;
 static iolink_dll_ctx_t* g_poll_ctx;
 
@@ -206,11 +206,11 @@ static int poll_voltage_publish(void* user)
         g_publish_on_poll = 0U;
         assert(publish_frame(g_poll_ctx, 0x90U, 2U));
     }
-    return -1; /* measurement unavailable: no fault, no event */
+    return -1; /* 测量不可用：不产生故障，也不产生事件 */
 }
 
-/* End-to-end: the real consumer (dll_consume_isr_mailbox) drains one record
- * per pass while a producer publishes mid-pass. */
+/* 端到端：真实的消费者（dll_consume_isr_mailbox）每趟排空一条记录，
+ * 而生产者在一趟执行中途发布。 */
 static int test_main_pass_cutpoint(void)
 {
     iolink_dll_ctx_t ctx;
@@ -232,7 +232,7 @@ static int test_main_pass_cutpoint(void)
 
     g_poll_ctx = &ctx;
     g_publish_on_poll = 1U;
-    iolink_dll_process(&ctx); /* polls diagnostics -> publishes B -> consumes A */
+    iolink_dll_process(&ctx); /* 轮询诊断 -> 发布 B -> 消费 A */
 
     assert(iolink_ring_count(&ctx.isr_frame_ring) == 1U);
     assert(ctx.isr_mailbox_drops == 0U);
@@ -243,11 +243,11 @@ static int test_main_pass_cutpoint(void)
     assert(pending->data[0] == 0x90U);
     assert(pending->data[1] == 0x91U);
 
-    iolink_dll_process(&ctx); /* consumes B */
+    iolink_dll_process(&ctx); /* 消费 B */
     assert(iolink_ring_is_empty(&ctx.isr_frame_ring));
     return 0;
 }
-#endif /* legacy diagnostics */
+#endif /* 旧式诊断 */
 
 int main(void)
 {

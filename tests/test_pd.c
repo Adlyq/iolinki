@@ -8,7 +8,7 @@
 
 /**
  * @file test_pd.c
- * @brief Unit tests for Process Data (PD) handling
+ * @brief 过程数据（PD）处理的单元测试
  */
 
 #include <stdarg.h>
@@ -35,16 +35,16 @@ static void test_pd_input_output(void** state)
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
 
-    /* Move to OPERATE */
+    /* 进入 OPERATE */
     move_to_operate_ctx(&dev.ctx);
 
-    /* 1. Set Input PD */
+    /* 1. 设置输入 PD */
     uint8_t input[2] = {0x11, 0x22};
     iolink_device_pd_input_update(&dev.ctx, input, 2, true);
 
-    /* 2. Simulate Master Frame (Type 2_2 READ: MC, CKT [+ OD on the legacy
-       streaming transport, which counts an OD octet in every request]).
-       Table A.10: TYPE_2_2 carries one OD octet and no PD-out (A.10). */
+    /* 2. 模拟主站帧（Type 2_2 READ：MC、CKT [+ 旧式流式传输上的
+       OD，它在每个请求中计入一个 OD 八位字节]）。
+       Table A.10：TYPE_2_2 携带一个 OD 八位字节且无 PD-out（A.10）。 */
     uint8_t frame[2] = {0x80, IOLINK_MSEQ_TYPE_2};
     const int frame_len = 2;
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, (size_t) frame_len));
@@ -54,7 +54,7 @@ static void test_pd_input_output(void** state)
     }
     mock_phy_feed_chk();
 
-    /* Response: PD_IN(2), OD(1), CKS(1) = 4 bytes for TYPE_2_2 (A.1.5) */
+    /* 响应：TYPE_2_2 为 PD_IN(2)、OD(1)、CKS(1) = 4 字节（A.1.5） */
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 4);
     will_return(mock_phy_send, 0);

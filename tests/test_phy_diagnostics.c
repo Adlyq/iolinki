@@ -8,7 +8,7 @@
 
 /**
  * @file test_phy_diagnostics.c
- * @brief Unit tests for PHY diagnostics (voltage monitoring and short circuit detection)
+ * @brief PHY 诊断（电压监测与短路检测）的单元测试
  */
 
 #include <stdarg.h>
@@ -23,8 +23,8 @@
 #include "iolinki/phy_generic.h"
 #include "iolinki/events.h"
 
-/* Mock PHY implementation with configurable voltage and fault returns */
-static int mock_voltage_mv = 24000; /* Default: 24V (normal) */
+/* 可配置电压与故障返回值的 mock PHY 实现 */
+static int mock_voltage_mv = 24000; /* 默认值：24V（正常） */
 static bool mock_short_circuit = false;
 
 static int mock_init(void* user)
@@ -65,7 +65,7 @@ static const iolink_phy_api_t mock_phy = {.init = mock_init,
                                           .get_voltage_mv = mock_get_voltage_mv,
                                           .is_short_circuit = mock_is_short_circuit};
 
-/* PHY without diagnostics support */
+/* 不支持诊断的 PHY */
 static const iolink_phy_api_t mock_phy_no_diag = {.init = mock_init,
                                                   .set_mode = mock_set_mode,
                                                   .set_baudrate = mock_set_baudrate,
@@ -74,8 +74,8 @@ static const iolink_phy_api_t mock_phy_no_diag = {.init = mock_init,
                                                   .get_voltage_mv = NULL,
                                                   .is_short_circuit = NULL};
 
-/* PHY that reports the fault bitmask (preferred channel) plus the legacy pair,
- * so the priority rule can be observed. */
+/* 上报故障位掩码（首选通道）以及旧式一对接口的 PHY，
+ * 以便观察优先级规则。 */
 static uint8_t mock_faults;
 static int mock_legacy_voltage_calls;
 static int mock_legacy_short_calls;
@@ -124,12 +124,12 @@ static void test_voltage_monitoring_normal(void** state)
 {
     (void) state;
     iolink_dll_ctx_t ctx;
-    mock_voltage_mv = 24000; /* 24V - normal */
+    mock_voltage_mv = 24000; /* 24V - 正常 */
 
     iolink_dll_init(&ctx, &mock_phy);
     iolink_dll_process(&ctx);
 
-    /* No voltage faults should be detected */
+    /* 不应检测到电压故障 */
     iolink_dll_stats_t stats;
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.voltage_faults, 0);
@@ -140,18 +140,18 @@ static void test_voltage_monitoring_low(void** state)
 {
     (void) state;
     iolink_dll_ctx_t ctx;
-    mock_voltage_mv = 12000; /* 12V - too low */
+    mock_voltage_mv = 12000; /* 12V - 过低 */
 
     iolink_dll_init(&ctx, &mock_phy);
     iolink_dll_process(&ctx);
 
-    /* Voltage fault should be detected */
+    /* 应检测到电压故障 */
     iolink_dll_stats_t stats;
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.voltage_faults, 1);
 
-    /* Event should be triggered with the Table D.1 device code
-       "Primary supply voltage underrun" (0x5111). */
+    /* 应使用 Table D.1 的设备代码
+       "Primary supply voltage underrun"（0x5111）触发事件。 */
     assert_true(iolink_events_pending(&ctx.events));
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx.events, &ev));
@@ -163,18 +163,18 @@ static void test_voltage_monitoring_high(void** state)
 {
     (void) state;
     iolink_dll_ctx_t ctx;
-    mock_voltage_mv = 35000; /* 35V - too high */
+    mock_voltage_mv = 35000; /* 35V - 过高 */
 
     iolink_dll_init(&ctx, &mock_phy);
     iolink_dll_process(&ctx);
 
-    /* Voltage fault should be detected */
+    /* 应检测到电压故障 */
     iolink_dll_stats_t stats;
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.voltage_faults, 1);
 
-    /* Event should be triggered with the Table D.1 device code
-       "Primary supply voltage overrun" (0x5110). */
+    /* 应使用 Table D.1 的设备代码
+       "Primary supply voltage overrun"（0x5110）触发事件。 */
     assert_true(iolink_events_pending(&ctx.events));
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx.events, &ev));
@@ -188,7 +188,7 @@ static void test_voltage_monitoring_boundaries(void** state)
     iolink_dll_ctx_t ctx;
     iolink_dll_stats_t stats;
 
-    /* 18 V and 30 V are the inclusive limits: inside the range is OK. */
+    /* 18 V 与 30 V 为包含在内的限值：区间之内即正常。 */
     mock_voltage_mv = 18000;
     mock_short_circuit = false;
     iolink_dll_init(&ctx, &mock_phy);
@@ -209,13 +209,13 @@ static void test_voltage_measurement_unavailable(void** state)
 {
     (void) state;
     iolink_dll_ctx_t ctx;
-    mock_voltage_mv = -1; /* Negative: measurement unavailable, not a fault */
+    mock_voltage_mv = -1; /* 负值：测量不可用，并非故障 */
     mock_short_circuit = false;
 
     iolink_dll_init(&ctx, &mock_phy);
     iolink_dll_process(&ctx);
 
-    /* An unavailable measurement must not raise a fault or an event. */
+    /* 不可用的测量不得产生故障或事件。 */
     iolink_dll_stats_t stats;
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.voltage_faults, 0);
@@ -227,8 +227,8 @@ static void test_generic_phy_negative_voltage_is_not_a_fault(void** state)
     (void) state;
     iolink_dll_ctx_t ctx;
 
-    /* The template PHY reports -1 (unavailable) on every poll; that must not
-       raise a voltage event on every cycle. */
+    /* 模板 PHY 在每次轮询时都报告 -1（不可用）；这不得
+       在每个周期都产生电压事件。 */
     const iolink_phy_api_t* generic = iolink_phy_generic_get();
     assert_non_null(generic->get_voltage_mv);
     assert_int_equal(generic->get_voltage_mv(NULL), -1);
@@ -246,16 +246,16 @@ static void test_voltage_monitoring_multiple_cycles(void** state)
 {
     (void) state;
     iolink_dll_ctx_t ctx;
-    mock_voltage_mv = 10000; /* 10V - too low */
+    mock_voltage_mv = 10000; /* 10V - 过低 */
 
     iolink_dll_init(&ctx, &mock_phy);
 
-    /* Run multiple process cycles */
+    /* 运行多个处理周期 */
     for (int i = 0; i < 5; i++) {
         iolink_dll_process(&ctx);
     }
 
-    /* Voltage faults should accumulate */
+    /* 电压故障应累加 */
     iolink_dll_stats_t stats;
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.voltage_faults, 5);
@@ -265,19 +265,19 @@ static void test_short_circuit_detection(void** state)
 {
     (void) state;
     iolink_dll_ctx_t ctx;
-    mock_voltage_mv = 24000; /* Ensure normal voltage */
+    mock_voltage_mv = 24000; /* 确保电压正常 */
     mock_short_circuit = true;
 
     iolink_dll_init(&ctx, &mock_phy);
     iolink_dll_process(&ctx);
 
-    /* Short circuit should be detected */
+    /* 应检测到短路 */
     iolink_dll_stats_t stats;
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.short_circuits, 1);
 
-    /* Event should be triggered with the Table D.1 device code
-       "Short circuit" (0x7710). */
+    /* 应使用 Table D.1 的设备代码
+       "Short circuit"（0x7710）触发事件。 */
     assert_true(iolink_events_pending(&ctx.events));
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx.events, &ev));
@@ -289,13 +289,13 @@ static void test_short_circuit_no_fault(void** state)
 {
     (void) state;
     iolink_dll_ctx_t ctx;
-    mock_voltage_mv = 24000; /* Ensure normal voltage */
+    mock_voltage_mv = 24000; /* 确保电压正常 */
     mock_short_circuit = false;
 
     iolink_dll_init(&ctx, &mock_phy);
     iolink_dll_process(&ctx);
 
-    /* No short circuit should be detected */
+    /* 不应检测到短路 */
     iolink_dll_stats_t stats;
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.short_circuits, 0);
@@ -307,11 +307,11 @@ static void test_phy_no_diagnostics_support(void** state)
     (void) state;
     iolink_dll_ctx_t ctx;
 
-    /* Use PHY without diagnostics support */
+    /* 使用不支持诊断的 PHY */
     iolink_dll_init(&ctx, &mock_phy_no_diag);
     iolink_dll_process(&ctx);
 
-    /* Should not crash, counters should remain zero */
+    /* 不应崩溃，计数器应保持为零 */
     iolink_dll_stats_t stats;
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.voltage_faults, 0);
@@ -322,24 +322,24 @@ static void test_combined_faults(void** state)
 {
     (void) state;
     iolink_dll_ctx_t ctx;
-    mock_voltage_mv = 10000; /* Too low */
+    mock_voltage_mv = 10000; /* 过低 */
     mock_short_circuit = true;
 
     iolink_dll_init(&ctx, &mock_phy);
     iolink_dll_process(&ctx);
 
-    /* Both faults should be detected */
+    /* 两种故障都应被检测到 */
     iolink_dll_stats_t stats;
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.voltage_faults, 1);
     assert_int_equal(stats.short_circuits, 1);
 
-    /* Both events should be triggered */
+    /* 两个事件都应被触发 */
     assert_true(iolink_events_pending(&ctx.events));
 }
 
-/* The fault bitmask reports edges only: one count/event per 0->1 transition,
- * no repeats while the fault stays asserted, and a fall clears the event. */
+/* 故障位掩码只上报边沿：每次 0->1 跳变计数/上报一次，
+ * 故障保持置起期间不重复，下降沿会清除事件。 */
 static void test_get_faults_edges_only(void** state)
 {
     (void) state;
@@ -359,19 +359,19 @@ static void test_get_faults_edges_only(void** state)
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
     assert_int_equal(ctx.events.pending_count, 1U);
 
-    /* Steady fault: no repeated count. */
+    /* 持续故障：不重复计数。 */
     iolink_dll_process(&ctx);
     iolink_dll_process(&ctx);
     iolink_dll_get_stats(&ctx, &stats);
     assert_int_equal(stats.voltage_faults, 1);
 
-    /* Fall: the pending condition is cleared (disappears is deferred to the
-     * event engine, which needs the 50 ms window). */
+    /* 下降沿：挂起的条件被清除（disappears 被推迟到
+     * 事件引擎，它需要 50 ms 窗口）。 */
     mock_faults = 0U;
     iolink_dll_process(&ctx);
     assert_int_equal(ctx.events.pending_count, 0U);
 
-    /* A new rise counts again. */
+    /* 新的上升沿会再次计数。 */
     mock_faults = IOLINK_PHY_FAULT_UNDERVOLTAGE;
     iolink_dll_process(&ctx);
     iolink_dll_get_stats(&ctx, &stats);
@@ -393,7 +393,7 @@ static void test_get_faults_overtemp_and_short(void** state)
     assert_int_equal(stats.short_circuits, 1);
     assert_int_equal(stats.voltage_faults, 0);
 
-    /* Both errors are queued; the order within one severity is not asserted. */
+    /* 两个错误都入队；同一严重级别内的顺序不作断言。 */
     const uint16_t expected[2] = {IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD,
                                   IOLINK_EVENTCODE_SHORT_CIRCUIT};
     bool seen[2] = {false, false};
@@ -411,8 +411,8 @@ static void test_get_faults_overtemp_and_short(void** state)
     assert_true(seen[1]);
     assert_false(iolink_events_pending(&ctx.events));
 
-    /* Partial fall: only the over-temp condition clears. Check the per-code
-     * present flag, so clearing the wrong event cannot pass. */
+    /* 部分下降：只有过温条件被清除。检查每个代码的
+     * present 标志，使清除错误事件无法通过。 */
     mock_faults = IOLINK_PHY_FAULT_SHORT_CIRCUIT;
     iolink_dll_process(&ctx);
     assert_int_equal(ctx.events.pending_count, 1U);
@@ -432,7 +432,7 @@ static void test_get_faults_overtemp_and_short(void** state)
     assert_false(overtemp_present);
     assert_true(short_present);
 
-    /* Full fall clears the remaining condition. */
+    /* 完全下降会清除剩余条件。 */
     mock_faults = 0U;
     iolink_dll_process(&ctx);
     assert_int_equal(ctx.events.pending_count, 0U);
@@ -444,14 +444,14 @@ static void test_get_faults_takes_priority_over_legacy(void** state)
     iolink_dll_ctx_t ctx;
     iolink_dll_stats_t stats;
     reset_fault_mock();
-    mock_voltage_mv = 10000; /* would fault through the legacy hook */
+    mock_voltage_mv = 10000; /* 会通过旧式钩子产生故障 */
     mock_short_circuit = true;
 
     iolink_dll_init(&ctx, &mock_phy_faults);
     iolink_dll_process(&ctx);
     iolink_dll_get_stats(&ctx, &stats);
 
-    /* get_faults() == 0 wins: the legacy hooks must not be consulted. */
+    /* get_faults() == 0 优先：不得查询旧式钩子。 */
     assert_int_equal(stats.voltage_faults, 0);
     assert_int_equal(stats.short_circuits, 0);
     assert_int_equal(mock_legacy_voltage_calls, 0);
@@ -467,10 +467,10 @@ static uint64_t fault_time_us(void* user)
     return (uint64_t) g_fault_ms * 1000U;
 }
 
-/* Clear -> disappears end to end: the falling edge must clear the mapped code,
- * and the event engine must emit its disappearance once the 50 ms window has
- * elapsed. A wrong mapping would clear a different code and leave this one
- * pending forever. */
+/* 清除 -> disappears 端到端：下降沿必须清除映射的代码，
+ * 且事件引擎必须在 50 ms 窗口结束之后发出其消失。
+ * 映射错误会清除另一个代码，并使本代码
+ * 永远保持挂起。 */
 static void test_get_faults_clear_emits_disappears(void** state)
 {
     (void) state;
@@ -489,8 +489,8 @@ static void test_get_faults_clear_emits_disappears(void** state)
     assert_int_equal(ev.code, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD);
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
 
-    /* The fall is reported immediately, but the disappearance must respect the
-     * 50 ms minimum window: nothing is queued at 10 ms. */
+    /* 下降沿会立即上报，但消失必须遵守
+     * 50 ms 最小窗口：10 ms 时不会入队任何内容。 */
     g_fault_ms = 10U;
     mock_faults = 0U;
     iolink_dll_process(&ctx);
@@ -523,16 +523,16 @@ static void test_get_faults_overvoltage(void** state)
     assert_int_equal(ev.code, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_WARNING);
 
-    /* The falling edge clears the overvoltage condition. */
+    /* 下降沿清除过压条件。 */
     assert_int_equal(ctx.events.pending_count, 1U);
     mock_faults = 0U;
     iolink_dll_process(&ctx);
     assert_int_equal(ctx.events.pending_count, 0U);
 }
 
-/* A diagnostic reset drops the condition tracking; a fault that is still
- * present must be reported again in the new session (otherwise the master sees
- * a cleared DeviceStatus while the hardware is still faulted). */
+/* 诊断复位会丢弃条件跟踪；仍然存在的故障
+ * 必须在新会话中再次上报（否则主站会看到
+ * 已清除的 DeviceStatus，而硬件仍处于故障状态）。 */
 static void test_get_faults_rearmed_after_reset(void** state)
 {
     (void) state;
@@ -555,8 +555,8 @@ static void test_get_faults_rearmed_after_reset(void** state)
     assert_int_equal(stats.voltage_faults, 2);
     assert_int_equal(ctx.events.pending_count, 1U);
 
-    /* The STARTUP path stages the same request as a flag (dll_set_state may run
-     * in ISR context); consume it with a latch that still shows the fault. */
+    /* STARTUP 路径将同一请求暂存为标志（dll_set_state 可能在
+     * ISR 上下文中运行）；用仍显示该故障的锁存来消费它。 */
     ctx.phy_faults_last = IOLINK_PHY_FAULT_UNDERVOLTAGE;
     ctx.phy_faults_rearm = 1U;
     iolink_dll_process(&ctx);

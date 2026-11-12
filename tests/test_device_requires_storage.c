@@ -8,8 +8,8 @@
 
 /**
  * @file test_device_requires_storage.c
- * @brief With Data Storage compiled in, initialization requires a complete
- *        storage backend.
+ * @brief 编入 Data Storage 后，初始化要求完整的
+ *        存储后端。
  */
 
 #include <assert.h>

@@ -78,7 +78,7 @@ static void test_driver_modes_and_turnaround(void** state)
     phy->set_mode(phy->user, IOLINK_PHY_MODE_SIO);
     phy->set_cq_line(phy->user, 1);
     assert_true(board.enabled);
-    assert_false(board.tx_high); /* TI truth table: TX low produces CQ high */
+    assert_false(board.tx_high); /* TI 真值表：TX 为低时 CQ 为高 */
     phy->set_cq_line(phy->user, 0);
     assert_true(board.tx_high);
     phy->set_mode(phy->user, IOLINK_PHY_MODE_SDCI);

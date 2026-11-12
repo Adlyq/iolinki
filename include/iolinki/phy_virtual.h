@@ -13,35 +13,35 @@
 
 /**
  * @file phy_virtual.h
- * @brief Virtual PHY implementation for simulation
+ * @brief 用于仿真的虚拟 PHY 实现
  */
 
 /**
- * @defgroup iolinki_phy_virtual Virtual PHY (loopback/testing)
- * @brief Socket/TTY-backed PHY for simulating an IO-Link Master.
+ * @defgroup iolinki_phy_virtual 虚拟 PHY（回环/测试）
+ * @brief 由 Socket/TTY 支撑的 PHY，用于仿真 IO-Link 主站。
  * @{
  */
 
 /**
- * @brief Get the virtual PHY provider
+ * @brief 获取虚拟 PHY 提供者
  *
- * This PHY communicates with a virtual IO-Link Master over a pseudo-terminal.
- * It implements the ISR BYTE hooks
- * (`rx_octet`/`tx_octet`/`tx_done`/`int_active`/`request_service`).
- * ISR FRAME mode is intentionally not implemented: a PTY is a byte stream with
- * no frame boundaries. `int_active()` only claims service in SDCI so the pump
- * never consumes the SIO wake-up byte.
+ * 该 PHY 通过伪终端与虚拟 IO-Link 主站通信。
+ * 它实现 ISR BYTE 钩子
+ * （`rx_octet`/`tx_octet`/`tx_done`/`int_active`/`request_service`）。
+ * 有意不实现 ISR FRAME 模式：PTY 是不带
+ * 帧边界的字节流。`int_active()` 仅在 SDCI 中声明需要服务，因此泵送
+ * 不会消费 SIO 唤醒字节。
  *
  * @return const iolink_phy_api_t*
  */
 const iolink_phy_api_t* iolink_phy_virtual_get(void);
 
 /**
- * @brief Set the serial port for virtual PHY
- * @param port TTY path (e.g., "/dev/pts/5")
+ * @brief 设置虚拟 PHY 的串口
+ * @param port TTY 路径（例如 "/dev/pts/5"）
  */
 void iolink_phy_virtual_set_port(const char* port);
 
-/** @} */ /* end of iolinki_phy_virtual */
+/** @} */ /* iolinki_phy_virtual 结束 */
 
 #endif  // IOLINK_PHY_VIRTUAL_H

@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /*
- * Conformance items that were not yet covered by the existing unit suite.
+ * 现有单元测试套件尚未覆盖的一致性条目。
  *
- * The assertions follow the IO-Link Test Specification 10032 V1.1.4 and the
- * IO-Link Interface and System Specification V1.1.5.  Tests whose DUT/library
- * behaviour is still non-conformant are deliberately marked as "known gap" via
- * skip() so that the regression suite stays green until the production fix is
- * approved.  Remove the skip() once the corresponding fix lands.
+ * 断言依据 IO-Link Test Specification 10032 V1.1.4 和
+ * IO-Link Interface and System Specification V1.1.5。对于 DUT/库
+ * 行为仍不符合一致性要求的用例，通过 skip() 有意标记为 "known gap"，
+ * 以便在生产修复获批前保持回归套件通过。
+ * 对应修复落地后请删除 skip()。
  */
 
 #include <stdarg.h>
@@ -46,7 +46,7 @@ static void cleanup_gap_nvm(void)
     }
 }
 
-/* Unique per process and tag: parallel ctest runs must not share the NVM. */
+/* 每个进程与 tag 唯一：并行的 ctest 运行不得共用 NVM。 */
 static const char* gap_nvm_path(const char* tag)
 {
     static int registered = 0;
@@ -55,7 +55,7 @@ static const char* gap_nvm_path(const char* tag)
         registered = 1;
     }
     if (g_gap_nvm_count >= GAP_NVM_SLOTS) {
-        return g_gap_nvm[GAP_NVM_SLOTS - 1U]; /* cannot happen: one path per case */
+        return g_gap_nvm[GAP_NVM_SLOTS - 1U]; /* 不会发生：每个用例只有一个路径 */
     }
     char* path = g_gap_nvm[g_gap_nvm_count];
     (void) snprintf(path, sizeof(g_gap_nvm[0]), "/tmp/iolink-gap-%s-%ld.nvm", tag, (long) getpid());
@@ -130,7 +130,7 @@ static void skip_known_gap(const char* case_id, const char* reason)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0063 / SDCI_TC_0123: ApplicationTag length overrun               */
+/* SDCI_TC_0063 / SDCI_TC_0123：ApplicationTag 长度超限                       */
 /* ------------------------------------------------------------------------- */
 
 static void test_0063_write_length_overrun(void** state)
@@ -194,7 +194,7 @@ static void test_0123_application_tag_overlong(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0089: DPP1 0x01 MasterCycleTime readback                         */
+/* SDCI_TC_0089：DPP1 0x01 MasterCycleTime 回读                               */
 /* ------------------------------------------------------------------------- */
 
 static void test_0089_master_cycle_time_readback(void** state)
@@ -222,7 +222,7 @@ static void test_0089_master_cycle_time_readback(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0092: DPP1 RevisionID comes from the configured identity         */
+/* SDCI_TC_0092：DPP1 RevisionID 来自已配置的身份信息                         */
 /* ------------------------------------------------------------------------- */
 
 static void test_0092_revision_id_configured(void** state)
@@ -248,7 +248,7 @@ static void test_0092_revision_id_configured(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0097: DPP1 FunctionID is reserved and shall be zero              */
+/* SDCI_TC_0097：DPP1 FunctionID 为保留字段，应始终为 0                       */
 /* ------------------------------------------------------------------------- */
 
 static void test_0097_function_id_zero(void** state)
@@ -270,7 +270,7 @@ static void test_0097_function_id_zero(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0110: DeviceAccessLocks reserved bits                            */
+/* SDCI_TC_0110：DeviceAccessLocks 保留位                                     */
 /* ------------------------------------------------------------------------- */
 
 static void test_0110_access_locks_reserved_bits(void** state)
@@ -282,7 +282,7 @@ static void test_0110_access_locks_reserved_bits(void** state)
     iolink_params_init();
     iolink_device_info_set_access_locks(0U);
 
-    /* B.2.4 / Table B.12: bits 0..3 are implemented, bits 4..15 are reserved. */
+    /* B.2.4 / Table B.12：位 0..3 已实现，位 4..15 为保留位。 */
     for (unsigned bit = 4U; bit <= 15U; bit++) {
         iolink_isdu_ctx_t ctx;
         const uint16_t locks = (uint16_t) (1U << bit);
@@ -307,7 +307,7 @@ static void test_0110_access_locks_reserved_bits(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0112 / SDCI_TC_0113: PD descriptors without a profile            */
+/* SDCI_TC_0112 / SDCI_TC_0113：无配置文件时的 PD 描述符                      */
 /* ------------------------------------------------------------------------- */
 
 static void test_0112_pd_input_descriptor_absent(void** state)
@@ -343,7 +343,7 @@ static void test_0113_pd_output_descriptor_absent(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0134: OffsetTime - conditional. Current DUT does not implement it. */
+/* SDCI_TC_0134：OffsetTime —— 条件项。当前 DUT 未实现。                      */
 /* ------------------------------------------------------------------------- */
 
 static void test_0134_offset_time_conditional(void** state)
@@ -359,12 +359,12 @@ static void test_0134_offset_time_conditional(void** state)
     int n = read_object(&ctx, IOLINK_IDX_OFFSET_TIME, 0U, response, sizeof(response));
 
     if ((n == 2) && (response[0] == 0x80U) && (response[1] == IOLINK_ISDU_ERROR_IDX_NOT_AVAIL)) {
-        /* Current configuration: OffsetTime is not implemented (N/A). */
+        /* 当前配置：未实现 OffsetTime（N/A）。 */
         return;
     }
 
-    /* Test Spec 0134: time base 0/1/2 with multiplier 0/63, encoded in Figure
-       B.7 as (time base << 6) | multiplier. The record is two octets. */
+    /* Test Spec 0134：时基 0/1/2 与乘数 0/63，在 Figure
+       B.7 中编码为 (time base << 6) | multiplier。该记录为 2 字节。 */
     assert_int_equal(n, 2);
     const uint8_t values[] = {0x00U, 0x3FU, 0x40U, 0x7FU, 0x80U, 0xBFU};
     for (size_t i = 0U; i < (sizeof(values) / sizeof(values[0])); i++) {
@@ -382,7 +382,7 @@ static void test_0134_offset_time_conditional(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0323: DataStorageIndex marker without a DS parameter set         */
+/* SDCI_TC_0323：无 DS 参数集时的 DataStorageIndex 标记                       */
 /* ------------------------------------------------------------------------- */
 
 static void test_0323_no_ds_record_marker(void** state)
@@ -398,8 +398,8 @@ static void test_0323_no_ds_record_marker(void** state)
     ds.params = NULL;
     ds.param_count = 0U;
 
-    /* Test Spec 0323 (device without DS support): Sub1 len 1, Sub2 len 1 with
-       bits 0 and 3..6 zero, Sub3 len 4 value 0, Sub4 len 4, Sub5 len 2 value 0. */
+    /* Test Spec 0323（不支持 DS 的设备）：Sub1 长 1，Sub2 长 1 且
+       位 0 与位 3..6 为 0，Sub3 长 4 值 0，Sub4 长 4，Sub5 长 2 值 0。 */
     const uint8_t expected_len[6] = {0U, 1U, 1U, 4U, 4U, 2U};
     for (uint8_t sub = 1U; sub <= 5U; sub++) {
         iolink_isdu_ctx_t ctx;
@@ -434,7 +434,7 @@ static void test_0323_no_ds_record_marker(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0072: communication interruption keeps an uncleared event        */
+/* SDCI_TC_0072：通信中断保留未清除的事件                                     */
 /* ------------------------------------------------------------------------- */
 
 static void test_0072_comm_interruption_event_persists(void** state)
@@ -447,8 +447,8 @@ static void test_0072_comm_interruption_event_persists(void** state)
     iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_WARNING);
     assert_true(iolink_events_flag(&events));
 
-    /* DTU reset/pause: the Device does not clear the active event because the
-       cause was not removed. */
+    /* DTU 复位/暂停：由于原因未被移除，设备不会清除
+       活动事件。 */
     usleep(2000U);
     assert_true(iolink_events_flag(&events));
 
@@ -459,7 +459,7 @@ static void test_0072_comm_interruption_event_persists(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0080: local parameter change raises DS_UPLOAD_FLAG               */
+/* SDCI_TC_0080：本地参数变更置起 DS_UPLOAD_FLAG                              */
 /* ------------------------------------------------------------------------- */
 
 static void test_0080_local_change_requests_upload(void** state)
@@ -479,7 +479,7 @@ static void test_0080_local_change_requests_upload(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0374: DS_UPLOAD_FLAG is non-volatile                              */
+/* SDCI_TC_0374：DS_UPLOAD_FLAG 具有非易失性                                  */
 /* ------------------------------------------------------------------------- */
 
 static void test_0374_upload_flag_non_volatile(void** state)
@@ -496,7 +496,7 @@ static void test_0374_upload_flag_non_volatile(void** state)
     iolink_ds_init(&second, &g_ds_storage_mock);
     assert_true(second.ds_upload_flag);
 
-    /* DS_UploadStart/UploadEnd must clear the flag and persist it. */
+    /* DS_UploadStart/UploadEnd 必须清除该标志并将其持久化。 */
     assert_int_equal(iolink_ds_handle_ds_command(&second, 0x01U, 0U), 0);
     iolink_ds_process(&second);
     assert_int_equal(second.state, IOLINK_DS_STATE_UPLOADING);
@@ -511,7 +511,7 @@ static void test_0374_upload_flag_non_volatile(void** state)
 /* ------------------------------------------------------------------------- */
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0073: cold restart does not replay stale disappear events        */
+/* SDCI_TC_0073：冷重启不会重放过期的消失事件                                 */
 /* ------------------------------------------------------------------------- */
 
 static void test_0073_event_power_interruption(void** state)
@@ -524,13 +524,13 @@ static void test_0073_event_power_interruption(void** state)
     iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_WARNING);
     assert_true(iolink_events_pending(&events));
 
-    /* Simulate power loss: the volatile event memory is re-initialised. */
+    /* 模拟掉电：易失的事件内存被重新初始化。 */
     events_init(&events);
     assert_false(iolink_events_pending(&events));
     assert_int_equal(iolink_events_memory_read(&events, 0x00U), 0x00U);
 
-    /* The application re-announces an event that is still active. The first
-       event after reconnection is an "appears", not a stale "disappears". */
+    /* 应用重新宣告一个仍处于活动状态的事件。重连后的
+       第一个事件是 "appears"，而不是过期的 "disappears"。 */
     iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_WARNING);
     iolink_event_t ev;
     assert_true(iolink_events_pop(&events, &ev));
@@ -539,7 +539,7 @@ static void test_0073_event_power_interruption(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0101: reserved DPP1 write must not disturb communication          */
+/* SDCI_TC_0101：对保留 DPP1 的写入不得干扰通信                               */
 /* ------------------------------------------------------------------------- */
 
 static void test_0101_reserved_dpp1_write(void** state)
@@ -577,7 +577,7 @@ static void test_0101_reserved_dpp1_write(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0061: reserved 16-bit index                                      */
+/* SDCI_TC_0061：保留的 16 位索引                                             */
 /* ------------------------------------------------------------------------- */
 
 static void test_0061_reserved_16bit_index(void** state)
@@ -597,7 +597,7 @@ static void test_0061_reserved_16bit_index(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0062: 16-bit index with an unavailable subindex                  */
+/* SDCI_TC_0062：子索引不可用的 16 位索引                                     */
 /* ------------------------------------------------------------------------- */
 
 static void test_0062_16bit_subindex_unavailable(void** state)
@@ -622,7 +622,7 @@ static void test_0062_16bit_subindex_unavailable(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0111: ProfileCharacteristic without a profile                    */
+/* SDCI_TC_0111：无配置文件时的 ProfileCharacteristic                         */
 /* ------------------------------------------------------------------------- */
 
 static void test_0111_profile_characteristic_absent(void** state)
@@ -642,7 +642,7 @@ static void test_0111_profile_characteristic_absent(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0136 / SDCI_TC_0137: profile parameter range 0x31..0x3F          */
+/* SDCI_TC_0136 / SDCI_TC_0137：配置文件参数范围 0x31..0x3F                   */
 /* ------------------------------------------------------------------------- */
 
 static void test_0136_profile_parameters_read_absent(void** state)
@@ -683,7 +683,7 @@ static void test_0137_profile_parameters_write_absent(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0104: reserved/capability-dependent SystemCommand codes           */
+/* SDCI_TC_0104：保留/依赖能力的 SystemCommand 代码                           */
 /* ------------------------------------------------------------------------- */
 
 static int gap_write_system_command(iolink_ds_ctx_t* ds, uint8_t cmd, uint8_t* out, size_t out_len)
@@ -713,30 +713,30 @@ static void test_0104_system_command_ranges(void** state)
 
         bool implemented = false;
 #if IOLINK_FEATURE_SYSTEM_COMMAND
-        /* Table B.9: 0x80-0x83 are Device/Application reset and restore
-           commands; all are handled by this stack. */
+        /* Table B.9：0x80-0x83 为 Device/Application 复位与恢复
+           命令；本协议栈全部处理。 */
         if ((value >= 0x80U) && (value <= 0x83U)) {
             implemented = true;
         }
 #if IOLINK_FEATURE_DATA_STORAGE
-        /* Block parameterization + Data Storage commands (0x01-0x06) are
-           handled when DS is compiled in. 0x84-0x9F stay reserved, including
-           0x95/0x96 (the legacy aliases were removed). */
+        /* 编入 DS 时会处理块参数化 + Data Storage 命令
+           (0x01-0x06)。0x84-0x9F 仍为保留，包括
+           0x95/0x96（旧的别名已移除）。 */
         if ((value >= 0x01U) && (value <= 0x06U)) {
             implemented = true;
         }
 #endif
 #endif
         if (!implemented) {
-            /* 0x00, 0x07-0x3F, 0x40-0x7F, 0x84-0x9F and 0xA0-0xFF shall be
-               answered with FUNC_NOTAVAIL (0x35). */
+            /* 0x00、0x07-0x3F、0x40-0x7F、0x84-0x9F 和 0xA0-0xFF 应
+               以 FUNC_NOTAVAIL (0x35) 应答。 */
             assert_int_equal(n, 2);
             assert_int_equal(response[0], 0x80U);
             assert_int_equal(response[1], IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
         }
         else {
-            /* A supported command may fail for its own state-specific reason,
-               but never with FUNC_NOTAVAIL. */
+            /* 受支持的命令可能因自身状态相关的原因失败，
+               但绝不会以 FUNC_NOTAVAIL 失败。 */
             assert_false((n == 2) && (response[0] == 0x80U) &&
                          (response[1] == IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL));
         }
@@ -744,7 +744,7 @@ static void test_0104_system_command_ranges(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0054: VendorName matches the synthetic conformance identity       */
+/* SDCI_TC_0054：VendorName 与合成的一致性身份一致                            */
 /* ------------------------------------------------------------------------- */
 
 static uint8_t gap_chkpdu(const uint8_t* octets, size_t len)
@@ -772,7 +772,7 @@ static void test_0054_vendor_name_conformance_identity(void** state)
     iolink_isdu_ctx_t* ctx = &app.device.dll.isdu;
     assert_int_equal(isdu_send_read_request(ctx, IOLINK_IDX_VENDOR_NAME, 0U), 1);
 
-    /* Not answered yet: the first read START must be Busy (0x01). */
+    /* 尚未应答：首次读的 START 必须返回 Busy (0x01)。 */
     uint8_t octet = 0U;
     iolink_isdu_od_read(ctx, IOLINK_FLOWCTRL_START, &octet, 1U);
     assert_int_equal(octet, 0x01U);
@@ -782,8 +782,8 @@ static void test_0054_vendor_name_conformance_identity(void** state)
     const char* expected = app.profile->identity->vendor_name;
     const size_t expected_len = strlen(expected);
 
-    /* A.5.3/A.5.6: positive read, ExtLength counts data + I-Service/Length +
-       CHKPDU, and CHKPDU is the XOR of all response octets. */
+    /* A.5.3/A.5.6：正向读取，ExtLength 统计 data + I-Service/Length +
+       CHKPDU，且 CHKPDU 为所有响应字节的 XOR。 */
     assert_true(expected_len > 13U);
     assert_int_equal(ctx->resp_total, (int) (expected_len + 3U));
     assert_int_equal(ctx->resp_buf[0], 0xD1U);
@@ -802,7 +802,7 @@ static void test_0054_vendor_name_conformance_identity(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0056: Config1 write/readback (not the FunctionTag substitute)     */
+/* SDCI_TC_0056：Config1 写入/回读（而非 FunctionTag 替代）                   */
 /* ------------------------------------------------------------------------- */
 
 static void test_0056_config1_write_readback(void** state)
@@ -828,21 +828,21 @@ static void test_0056_config1_write_readback(void** state)
                                              (uint8_t) sizeof(payload)),
                      1);
 
-    /* The write is not answered until the application has consumed it. */
+    /* 在应用消费之前，写请求不会被应答。 */
     uint8_t octet = 0U;
     iolink_isdu_od_read(ctx, IOLINK_FLOWCTRL_START, &octet, 1U);
-    assert_int_equal(octet, 0x01U); /* Busy */
+    assert_int_equal(octet, 0x01U); /* 忙 */
 
     iolink_isdu_process(ctx);
 
-    /* Positive Write Response: 0x52 followed by CHKPDU on the wire. */
+    /* 正向写响应：线上为 0x52 后跟 CHKPDU。 */
     uint8_t write_response[2] = {0};
     iolink_isdu_od_read(ctx, IOLINK_FLOWCTRL_START, &write_response[0], 1U);
     iolink_isdu_od_read(ctx, 1U, &write_response[1], 1U);
     assert_int_equal(write_response[0], 0x52U);
     assert_int_equal(write_response[1], gap_chkpdu(write_response, 1U));
 
-    /* Read Config1 back over ISDU and verify the exact image. */
+    /* 通过 ISDU 回读 Config1 并校验其精确镜像。 */
     assert_int_equal(isdu_send_read_request(ctx, CONFORMANCE_CONFIG1_INDEX, 0U), 1);
     iolink_isdu_process(ctx);
     uint8_t readback[CONFORMANCE_CONFIG1_MAX] = {0};
@@ -850,7 +850,7 @@ static void test_0056_config1_write_readback(void** state)
     assert_int_equal(n, (int) sizeof(payload));
     assert_memory_equal(readback, payload, sizeof(payload));
 
-    /* FunctionTag was not used as the Config1 substitute. */
+    /* FunctionTag 未被用作 Config1 的替代。 */
     assert_int_equal(isdu_send_read_request(ctx, IOLINK_IDX_FUNCTION_TAG, 0U), 1);
     iolink_isdu_process(ctx);
     uint8_t tag[8] = {0};
@@ -861,7 +861,7 @@ static void test_0056_config1_write_readback(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0055: 200-octet long ISDU read                                    */
+/* SDCI_TC_0055：200 字节的长 ISDU 读取                                       */
 /* ------------------------------------------------------------------------- */
 
 static uint8_t g_long_data[200];
@@ -904,7 +904,7 @@ static void test_0055_200_byte_read(void** state)
     assert_int_equal(isdu_send_read_request(&ctx, 0x00E4U, 0U), 1);
     iolink_isdu_process(&ctx);
 
-    /* A.5.3: 200 data octets -> I-Service/Length + ExtLength + data + CHKPDU. */
+    /* A.5.3：200 个数据字节 -> I-Service/Length + ExtLength + data + CHKPDU。 */
     assert_int_equal(ctx.resp_total, 203);
     assert_int_equal(ctx.resp_buf[0], 0xD1U);
     assert_int_equal(ctx.resp_buf[1], 203U);
@@ -915,8 +915,8 @@ static void test_0055_200_byte_read(void** state)
     assert_memory_equal(data, g_long_data, sizeof(g_long_data));
 }
 
-/* SDCI_TC_0055: read the synthetic Config3 (200-octet) object through the
- * conformance profile vendor service, including Busy and the COUNT wrap. */
+/* SDCI_TC_0055：通过一致性配置文件的厂商服务读取合成的
+ * Config3（200 字节）对象，包括 Busy 与 COUNT 回绕。 */
 static void test_0055_config3_long_read(void** state)
 {
     (void) state;
@@ -936,7 +936,7 @@ static void test_0055_config3_long_read(void** state)
 
     uint8_t octet = 0U;
     iolink_isdu_od_read(ctx, IOLINK_FLOWCTRL_START, &octet, 1U);
-    assert_int_equal(octet, 0x01U); /* Busy until the main pump answers. */
+    assert_int_equal(octet, 0x01U); /* 在主循环应答前保持忙。 */
 
     iolink_isdu_process(ctx);
 
@@ -946,7 +946,7 @@ static void test_0055_config3_long_read(void** state)
     assert_int_equal(ctx->resp_buf[1], (uint8_t) total);
     assert_int_equal(ctx->resp_buf[total - 1U], gap_chkpdu(ctx->resp_buf, total - 1U));
 
-    /* Read the framed response in 1-octet segments and exercise COUNT 15->0. */
+    /* 以 1 字节分段读取成帧的响应，并触发 COUNT 从 15 回绕到 0。 */
     uint8_t frame[CONFORMANCE_CONFIG3_MAX + 3U] = {0};
     uint8_t fc = IOLINK_FLOWCTRL_START;
     unsigned wraps = 0U;
@@ -967,7 +967,7 @@ static void test_0055_config3_long_read(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0069 / SDCI_TC_0070 / SDCI_TC_0075 / SDCI_TC_0076: Events        */
+/* SDCI_TC_0069 / SDCI_TC_0070 / SDCI_TC_0075 / SDCI_TC_0076：事件            */
 /* ------------------------------------------------------------------------- */
 
 static void test_0069_single_event_operate(void** state)
@@ -993,8 +993,8 @@ static void test_0070_single_event_preoperate(void** state)
 {
     (void) state;
 
-    /* The event engine itself is state independent; the DLL does not drop
-       events in PREOPERATE. */
+    /* 事件引擎本身与状态无关；DLL 不会在 PREOPERATE
+       丢弃事件。 */
     iolink_events_ctx_t events;
     events_init(&events);
     iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_WARNING);
@@ -1016,8 +1016,8 @@ static void test_0075_multi_event_order(void** state)
     iolink_event_t all[8];
     uint8_t n = iolink_events_get_all(&events, all, 8U);
     assert_int_equal(n, 3);
-    assert_int_equal(all[0].code, 0x8C01U); /* Error before Warning */
-    assert_int_equal(all[2].code, 0x8C02U); /* Notification last */
+    assert_int_equal(all[0].code, 0x8C01U); /* Error 先于 Warning */
+    assert_int_equal(all[2].code, 0x8C02U); /* Notification 最后 */
 }
 
 static void test_0076_short_event(void** state)

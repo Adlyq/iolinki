@@ -8,7 +8,7 @@
 
 /**
  * @file test_timing.c
- * @brief Unit tests for time utilities and timing logic placeholders
+ * @brief 时间工具函数与时序逻辑占位实现的单元测试
  */
 
 #include <stdarg.h>
@@ -31,7 +31,7 @@ static void test_time_get_ms(void** state)
     uint32_t t2 = iolink_test_time_ms();
 
     assert_true(t2 >= t1 + 10);
-    assert_true(t2 < t1 + 50); /* Allow more jitter (was 20) */
+    assert_true(t2 < t1 + 50); /* 允许更大的抖动（原为 20） */
 }
 
 static void test_time_get_us(void** state)
@@ -42,14 +42,14 @@ static void test_time_get_us(void** state)
     uint64_t t2 = iolink_test_time_us(NULL);
 
     assert_true(t2 >= t1 + 1000);
-    assert_true(t2 < t1 + 5000); /* Allow more jitter (was 2000) */
+    assert_true(t2 < t1 + 5000); /* 允许更大的抖动（原为 2000） */
 }
 
 static void test_timing_constants(void** state)
 {
     (void) state;
-    /* Table 10: T_WU pulse 75..85 us (typ. 80) and a single T_REN <= 500 us.
-       Table 42/47 T10: T_DSIO 60..300 ms, default 300. */
+    /* Table 10：T_WU 脉冲 75..85 us（典型值 80），单个 T_REN <= 500 us。
+       Table 42/47 T10：T_DSIO 60..300 ms，默认 300。 */
     assert_int_equal(IOLINK_T_WU_US, 80U);
     assert_int_equal(IOLINK_T_REN_US, 500U);
     assert_int_equal(IOLINK_T_DSIO_MS, 300U);
@@ -65,7 +65,7 @@ static void test_t_ren_single_value_for_every_baudrate(void** state)
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
 
-    /* Table 10: T_REN is one device property, independent of the baudrate. */
+    /* Table 10：T_REN 是设备的一项属性，与波特率无关。 */
     const iolink_baudrate_t rates[] = {IOLINK_BAUDRATE_COM1, IOLINK_BAUDRATE_COM2,
                                        IOLINK_BAUDRATE_COM3};
     for (size_t i = 0U; i < (sizeof(rates) / sizeof(rates[0])); i++) {
@@ -73,7 +73,7 @@ static void test_t_ren_single_value_for_every_baudrate(void** state)
         assert_int_equal(dev.ctx.dll.t_ren_limit_us, IOLINK_T_REN_US);
     }
 
-    /* An explicit override still wins (kept public API). */
+    /* 显式覆盖仍然优先（保留的公共 API）。 */
     iolink_device_set_t_ren_limit_us(&dev.ctx, 1234U);
     assert_int_equal(dev.ctx.dll.t_ren_limit_us, 1234U);
     assert_int_equal(iolink_dll_set_baudrate(&dev.ctx.dll, IOLINK_BAUDRATE_COM3), 0);

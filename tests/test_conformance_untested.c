@@ -1,9 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /*
- * Coverage for the Test Spec cases that the 387-item audit still listed as
- * untested. The cases that need a real power cycle are exercised at the
- * library boundary by re-initialising the device/parameter contexts; the
- * physical OFF/ON remains an external HIL step.
+ * 覆盖 387 项审计中仍列为未测试的 Test Spec 用例。
+ * 需要真实断电重启的用例，通过在库边界重新初始化设备/参数上下文
+ * 来执行；物理 OFF/ON 仍是外部 HIL 步骤。
  */
 
 #include <stdarg.h>
@@ -40,8 +39,8 @@ static void cleanup_test_nvm(void)
     }
 }
 
-/* One NVM file per process and tag: parallel ctest runs / build trees must not
-   share the persistence file. */
+/* 每个进程与 tag 一个 NVM 文件：并行的 ctest 运行 / 构建树不得
+   共用同一个持久化文件。 */
 static const char* unique_nvm_path(const char* tag)
 {
     static int registered = 0;
@@ -50,7 +49,7 @@ static const char* unique_nvm_path(const char* tag)
         registered = 1;
     }
     if (g_test_nvm_count >= TEST_NVM_SLOTS) {
-        return g_test_nvm[TEST_NVM_SLOTS - 1U]; /* cannot happen: one path per case */
+        return g_test_nvm[TEST_NVM_SLOTS - 1U]; /* 不会发生：每个用例只有一个路径 */
     }
     char* path = g_test_nvm[g_test_nvm_count];
     (void) snprintf(path, sizeof(g_test_nvm[0]), "/tmp/iolink-untested-%s-%ld.nvm", tag,
@@ -110,8 +109,8 @@ static void make_isdu_ctx(conformance_device_t* app, iolink_isdu_ctx_t* ctx)
     ctx->direct_param_page2 = app->device.direct_param_page2;
 }
 
-/* The caller prepares the context (make_isdu_ctx() or an explicit init); do not
-   re-initialise here or the bound device/params/DS pointers would be lost. */
+/* 调用方负责准备上下文（make_isdu_ctx() 或显式 init）；不要
+   在此重新初始化，否则已绑定的 device/params/DS 指针会丢失。 */
 static int isdu_read(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex, uint8_t* out,
                      size_t out_len)
 {
@@ -128,11 +127,11 @@ static int isdu_write(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex, 
     return isdu_collect_response(ctx, out, out_len);
 }
 
-/* Read ErrorCount through the ISDU context that is bound to a live device. */
+/* 通过绑定到活动设备的 ISDU 上下文读取 ErrorCount。 */
 static uint16_t device_error_count(iolink_device_ctx_t* device)
 {
-    /* ErrorCount is derived from the bound DLL counters, so bind them on a
-       fresh context (iolink_isdu_init() clears the pointer fields). */
+    /* ErrorCount 由已绑定的 DLL 计数器推导，因此在新建上下文上
+       绑定它们（iolink_isdu_init() 会清除指针字段）。 */
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
     ctx.dll_ctx = &device->dll;
@@ -144,7 +143,7 @@ static uint16_t device_error_count(iolink_device_ctx_t* device)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0063 / 0064: length error must leave Config1 untouched            */
+/* SDCI_TC_0063 / 0064：长度错误必须使 Config1 保持不变                       */
 /* ------------------------------------------------------------------------- */
 
 static void test_0063_0064_length_errors_preserve_config1(void** state)
@@ -164,7 +163,7 @@ static void test_0063_0064_length_errors_preserve_config1(void** state)
         conformance_device_read_param(&app, CONFORMANCE_CONFIG1_INDEX, 0U, before, &before_len), 0);
     assert_int_equal(before_len, CONFORMANCE_CONFIG1_MAX);
 
-    /* 0063: 70 octets is more than the fixed 64-octet length. */
+    /* 0063：70 字节超过固定的 64 字节长度。 */
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0063");
     uint8_t too_long[70];
     (void) memset(too_long, 0xA5, sizeof(too_long));
@@ -179,7 +178,7 @@ static void test_0063_0064_length_errors_preserve_config1(void** state)
     assert_int_equal(after_overrun_len, CONFORMANCE_CONFIG1_MAX);
     assert_memory_equal(after_overrun, before, sizeof(before));
 
-    /* 0064: 63 octets is one octet short. */
+    /* 0064：63 字节少了一个字节。 */
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0064");
     uint8_t too_short[63];
     (void) memset(too_short, 0x5A, sizeof(too_short));
@@ -199,7 +198,7 @@ static void test_0063_0064_length_errors_preserve_config1(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0122 / 0123: ApplicationSpecificTag in OPERATE                    */
+/* SDCI_TC_0122 / 0123：OPERATE 状态下的 ApplicationSpecificTag               */
 /* ------------------------------------------------------------------------- */
 
 static void test_0122_application_tag_valid_persists(void** state)
@@ -211,7 +210,7 @@ static void test_0122_application_tag_valid_persists(void** state)
 
     setup_mock_phy();
     will_return(mock_phy_init, 0);
-    /* The power cycle below re-initialises the PHY once more. */
+    /* 下面的断电重启会再次初始化 PHY。 */
     will_return(mock_phy_init, 0);
 
     conformance_device_t app;
@@ -221,7 +220,7 @@ static void test_0122_application_tag_valid_persists(void** state)
     move_to_operate_ctx(&app.device);
     assert_int_equal(iolink_device_get_state(&app.device), IOLINK_DLL_STATE_OPERATE);
 
-    const uint8_t tag[] = "0123456789ABCDEF01234567"; /* 24 octets, < fixed length */
+    const uint8_t tag[] = "0123456789ABCDEF01234567"; /* 24 字节，小于固定长度 */
     const uint8_t tag_len = (uint8_t) (sizeof(tag) - 1U);
     iolink_isdu_ctx_t ctx;
     make_isdu_ctx(&app, &ctx);
@@ -300,7 +299,7 @@ static void test_0123_application_tag_overlong_preserves_value(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0128: DeviceStatus in OPERATE                                     */
+/* SDCI_TC_0128：OPERATE 状态下的 DeviceStatus                                */
 /* ------------------------------------------------------------------------- */
 
 static void test_0128_device_status_in_operate(void** state)
@@ -320,7 +319,7 @@ static void test_0128_device_status_in_operate(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0124: ErrorCount increments once and resets on power-on           */
+/* SDCI_TC_0124：ErrorCount 递增一次并在上电时复位                            */
 /* ------------------------------------------------------------------------- */
 
 static void test_0124_error_count_increment_and_reset(void** state)
@@ -338,13 +337,13 @@ static void test_0124_error_count_increment_and_reset(void** state)
 
     assert_int_equal(device_error_count(&dev.ctx), 0U);
 
-    /* Stimulate exactly one error registered for ErrorCount: an RX timeout is
-       counted once in the DLL. */
+    /* 制造恰好一个计入 ErrorCount 的错误：RX 超时在 DLL 中
+       只计一次。 */
     iolink_dll_on_rx_timeout(&dev.ctx.dll);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
     assert_int_equal(device_error_count(&dev.ctx), 1U);
 
-    /* Power OFF/ON: the counter is reset and communication re-established. */
+    /* 断电/上电：计数器复位并重新建立通信。 */
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
     move_to_operate_ctx(&dev.ctx);
@@ -353,7 +352,7 @@ static void test_0124_error_count_increment_and_reset(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* SDCI_TC_0131: active Event remains visible after a restart                 */
+/* SDCI_TC_0131：活动事件在重启后仍然可见                                     */
 /* ------------------------------------------------------------------------- */
 
 static void test_0131_detailed_device_status_active_after_restart(void** state)
@@ -379,8 +378,8 @@ static void test_0131_detailed_device_status_active_after_restart(void** state)
     assert_int_equal(before[1], 0x8CU);
     assert_int_equal(before[2], 0x10U);
 
-    /* Power OFF/ON: volatile event memory is re-initialised, the still-active
-       incident is announced again by the application. */
+    /* 断电/上电：易失的事件内存被重新初始化，仍处于活动状态的
+       事件由应用重新宣告。 */
     iolink_events_init(&events);
     iolink_event_trigger(&events, 0x8C10U, IOLINK_EVENT_TYPE_WARNING);
     iolink_isdu_init(&ctx);
@@ -394,7 +393,7 @@ static void test_0131_detailed_device_status_active_after_restart(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* Block parameter / Data Storage reset cases (0145, 0329)                   */
+/* 块参数 / Data Storage 复位用例 (0145, 0329)                                */
 /* ------------------------------------------------------------------------- */
 
 typedef struct
@@ -467,14 +466,14 @@ static void test_0145_download_break_by_reset(void** state)
                                         sizeof(value2) - 1U, response, sizeof(response)),
                      0);
 
-    /* Reset during the block download: the staged value is discarded. */
+    /* 块下载期间复位：暂存的值被丢弃。 */
     reset_fixture_power_cycle(&f);
     (void) memset(readback, 0, sizeof(readback));
     assert_int_equal(reset_fixture_tag(&f, readback, sizeof(readback)),
                      (int) (sizeof(value1) - 1U));
     assert_memory_equal(readback, value1, sizeof(value1) - 1U);
 
-    /* DownloadEnd in Idle after the reset is unexpected: FUNC_TEMP_UNAVAIL. */
+    /* 复位后在 Idle 状态下出现 DownloadEnd 属于意外：FUNC_TEMP_UNAVAIL。 */
     const uint8_t end = IOLINK_CMD_PARAM_DOWNLOAD_END;
     assert_int_equal(reset_fixture_isdu(&f, true, IOLINK_IDX_SYSTEM_COMMAND, 0U, &end, 1U, response,
                                         sizeof(response)),
@@ -508,7 +507,7 @@ static void test_0329_upload_break_by_reset(void** state)
     iolink_ds_process(&f.ds);
     assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOADING);
 
-    /* A parameter write during an active Upload is rejected with 0x8022. */
+    /* 活动 Upload 期间的参数写入会被拒绝，返回 0x8022。 */
     const uint8_t value2[] = "VALUE2";
     assert_int_equal(reset_fixture_isdu(&f, true, IOLINK_IDX_APPLICATION_TAG, 0U, value2,
                                         sizeof(value2) - 1U, response, sizeof(response)),
@@ -516,7 +515,7 @@ static void test_0329_upload_break_by_reset(void** state)
     assert_int_equal(response[0], 0x80U);
     assert_int_equal(response[1], IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_DEV_CTRL);
 
-    /* The reset aborts the upload; the write is accepted afterwards. */
+    /* 复位会中止上传；之后写入会被接受。 */
     reset_fixture_power_cycle(&f);
     (void) memset(response, 0, sizeof(response));
     assert_int_equal(reset_fixture_isdu(&f, true, IOLINK_IDX_APPLICATION_TAG, 0U, value2,
@@ -530,7 +529,7 @@ static void test_0329_upload_break_by_reset(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* IODD reset/restore sequences (0155, 0316, 0317, 0318)                     */
+/* IODD 复位/恢复序列 (0155, 0316, 0317, 0318)                                */
 /* ------------------------------------------------------------------------- */
 
 static void conformance_open(conformance_device_t* app, const char* nvm,
@@ -544,8 +543,8 @@ static void conformance_open(conformance_device_t* app, const char* nvm,
 
 static void conformance_send_system_command(conformance_device_t* app, uint8_t cmd)
 {
-    /* Run on the Device-owned ISDU context so reset_pending/flags reach the
-       device pump, exactly as the DLL transport would. */
+    /* 在设备自有的 ISDU 上下文上运行，使 reset_pending/标志能到达
+       设备泵，与 DLL 传输的行为完全一致。 */
     iolink_isdu_execute_system_command(&app->device.dll.isdu, cmd);
     conformance_device_process(app);
 }
@@ -554,7 +553,7 @@ static uint8_t conformance_ds_flag(conformance_device_t* app)
 {
     iolink_isdu_ctx_t ctx;
     make_isdu_ctx(app, &ctx);
-    /* Subindex 2 is State_Property (DS_UPLOAD_FLAG is bit 7). */
+    /* 子索引 2 为 State_Property（DS_UPLOAD_FLAG 是位 7）。 */
     uint8_t state = 0xFFU;
     assert_int_equal(isdu_read(&ctx, IOLINK_IDX_DATA_STORAGE, 2U, &state, 1U), 1);
     return state;
@@ -589,11 +588,11 @@ static void test_0316_device_reset_sequence(void** state)
     assert_int_equal(obs->device_reset_count, 1U);
     assert_int_equal(obs->last_reset_reason, CONFORMANCE_RESET_DEVICE);
 
-    /* Exactly one communication startup sequence after the reset. */
+    /* 复位之后恰好有一次通信启动序列。 */
     assert_int_equal(conformance_device_power_cycle(&app, &g_phy_mock, nvm), 0);
     assert_int_equal(obs->startup_count, startup_before + 1U);
 
-    /* RID, DID and the selected parameter survive the restart. */
+    /* RID、DID 和选定的参数在重启后保持不变。 */
     assert_int_equal(app.profile->identity->vendor_id, vendor_id);
     assert_int_equal(app.profile->identity->device_id, device_id);
     assert_int_equal(app.profile->identity->revision_id, revision_id);
@@ -655,11 +654,11 @@ static void test_0317_application_reset_sequence(void** state)
 
     conformance_send_system_command(&app, IOLINK_CMD_APPLICATION_RESET);
     assert_int_equal(obs->application_reset_count, 1U);
-    /* No communication startup sequence for an application reset. */
+    /* 应用复位不会产生通信启动序列。 */
     assert_int_equal(obs->startup_count, startup_before);
     assert_true(conformance_device_is_default_state(&app));
 
-    /* Identification and writable tags are preserved. */
+    /* 标识信息和可写 tag 均被保留。 */
     assert_int_equal(app.profile->identity->vendor_id, vendor_id);
     assert_int_equal(app.profile->identity->device_id, device_id);
     assert_int_equal(app.profile->identity->revision_id, revision_id);
@@ -670,7 +669,7 @@ static void test_0317_application_reset_sequence(void** state)
                      (int) (sizeof(app_tag) - 1U));
     assert_memory_equal(tag_read, app_tag, sizeof(app_tag) - 1U);
 
-    /* DS_UPLOAD_REQ event and DS_UPLOAD_FLAG are set. */
+    /* 置起 DS_UPLOAD_REQ 事件与 DS_UPLOAD_FLAG。 */
     iolink_event_t event;
     assert_true(iolink_events_pop(iolink_device_get_events_ctx(&app.device), &event));
     assert_int_equal(event.code, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST);
@@ -707,12 +706,12 @@ static void test_0155_factory_settings_sequence(void** state)
     assert_int_equal((conformance_ds_flag(&app) & 0x80U), 0x80U);
 
     conformance_send_system_command(&app, IOLINK_CMD_RESTORE_FACTORY_SETTINGS);
-    /* Application-level completion hook for the factory restore. */
+    /* 出厂恢复的应用层完成钩子。 */
     conformance_device_note_factory_reset(&app);
     assert_int_equal(obs->factory_reset_count, 1U);
-    /* No or exactly one startup sequence. */
+    /* 没有启动序列，或恰好一次。 */
     assert_true(obs->startup_count == startup_before || obs->startup_count == startup_before + 1U);
-    /* Defaults and identification. */
+    /* 默认值与标识信息。 */
     assert_true(conformance_device_is_default_state(&app));
     assert_int_equal(app.profile->identity->revision_id, 0x0111U);
     assert_int_equal(app.profile->identity->vendor_id, 1234U);
@@ -752,12 +751,12 @@ static void test_0318_back_to_box_sequence(void** state)
 
     const uint32_t startups_before = obs->startup_count;
     conformance_send_system_command(&app, IOLINK_CMD_BACK_TO_BOX);
-    /* Application-level completion hook for Back-to-box. */
+    /* Back-to-box 的应用层完成钩子。 */
     conformance_device_note_back_to_box(&app);
     assert_int_equal(obs->back_to_box_count, 1U);
     assert_true(conformance_device_is_default_state(&app));
 
-    /* A power cycle after Back-to-box performs exactly one startup sequence. */
+    /* Back-to-box 之后的断电重启恰好执行一次启动序列。 */
     assert_int_equal(conformance_device_power_cycle(&app, &k_noop_phy, nvm), 0);
     assert_int_equal(obs->startup_count, startups_before + 1U);
     assert_true(conformance_device_is_default_state(&app));

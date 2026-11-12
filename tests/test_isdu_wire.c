@@ -8,11 +8,11 @@
 
 /**
  * @file test_isdu_wire.c
- * @brief Byte-exact ISDU transport tests (C3, A.5, Table 52/54).
+ * @brief 字节精确的 ISDU 传输测试（C3、A.5、Table 52/54）。
  *
- * All vectors are computed from the spec formula (CHKPDU = XOR of all ISDU
- * octets with the checksum octet zeroed, A.5.6) and must not be derived from
- * the implementation.
+ * 所有向量均按规范公式计算（CHKPDU = 所有 ISDU
+ * 八位组在将校验和八位组置零后的 XOR，A.5.6），且不得从
+ * 实现中推导。
  */
 
 #include <stdarg.h>
@@ -51,7 +51,7 @@ static uint8_t chkpdu(const uint8_t* o, size_t n)
     return c;
 }
 
-/* Two-octet identity object {0x12, 0x34} served at Index 0x0010. */
+/* 在索引 0x0010 处提供的两八位组标识对象 {0x12, 0x34}。 */
 static const char g_vendor_name[3] = {(char) 0x12, (char) 0x34, '\0'};
 
 static void wire_device_info_init(void)
@@ -74,7 +74,7 @@ static void wire_device_info_init(void)
     iolink_device_info_init(&info);
 }
 
-/* A 63-character VendorName, served through ExtLength (>15 data octets). */
+/* 一个 63 字符的 VendorName，通过 ExtLength（>15 个数据八位组）提供。 */
 static uint8_t g_long_name[64];
 
 static void wire_long_vendor_init(void)
@@ -82,7 +82,7 @@ static void wire_long_vendor_init(void)
     for (uint8_t i = 0U; i < 64U; i++) {
         g_long_name[i] = (uint8_t) (0x40U + i);
     }
-    g_long_name[63] = 0U; /* NUL-terminate so strlen() sees 63 characters */
+    g_long_name[63] = 0U; /* NUL 结尾，使 strlen() 看到 63 个字符 */
 
     iolink_device_info_t info;
     (void) memset(&info, 0, sizeof(info));
@@ -98,7 +98,7 @@ static void wire_long_vendor_init(void)
     iolink_params_init();
 }
 
-/* Feed a full request as consecutive 1-octet messages: START then COUNT 1..0. */
+/* 以连续的 1 八位组报文送入完整请求：START 然后是 COUNT 1..0。 */
 static void wire_write_request(iolink_isdu_ctx_t* ctx, const uint8_t* data, size_t len)
 {
     uint8_t fc = IOLINK_FLOWCTRL_START;
@@ -114,8 +114,8 @@ static void wire_write_request(iolink_isdu_ctx_t* ctx, const uint8_t* data, size
     iolink_isdu_process(ctx);
 }
 
-/* Read a framed response over the ISDU channel with 1-octet reads.
- * On START the first octet is returned; the length nibble determines the rest. */
+/* 通过 ISDU 通道以 1 八位组读的方式读取分段应答。
+ * START 时返回第一个八位组；长度半字节决定其余部分。 */
 static size_t wire_read_response(iolink_isdu_ctx_t* ctx, uint8_t* out, size_t out_size)
 {
     uint8_t octet = 0U;
@@ -135,7 +135,7 @@ static size_t wire_read_response(iolink_isdu_ctx_t* ctx, uint8_t* out, size_t ou
     if (len == 0U) {
         return 1U; /* No Service */
     }
-    total = (len == 1U) ? 0U : len; /* ExtLength read happens below */
+    total = (len == 1U) ? 0U : len; /* ExtLength 的读取在下面进行 */
 
     fc = 1U;
     while (1) {
@@ -153,7 +153,7 @@ static size_t wire_read_response(iolink_isdu_ctx_t* ctx, uint8_t* out, size_t ou
                 total = len;
             }
             else {
-                total = n; /* No ext length: two octets were the whole response */
+                total = n; /* 无扩展长度：这两个八位组就是整个应答 */
             }
         }
         if ((total != 0U) && (n >= total)) {
@@ -164,7 +164,7 @@ static size_t wire_read_response(iolink_isdu_ctx_t* ctx, uint8_t* out, size_t ou
     return n;
 }
 
-/* Figure A.20: read 8-bit Index 0x10 -> D4 12 34 F2. */
+/* 图 A.20：读取 8 位索引 0x10 -> D4 12 34 F2。 */
 static void test_isdu_wire_read_figure_a20(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0054");
@@ -184,8 +184,8 @@ static void test_isdu_wire_read_figure_a20(void** state)
     assert_memory_equal(resp, expected, sizeof(expected));
 }
 
-/* Figure A.20 / Table C.1: a WRITE to the read-only VendorName (0x10) is
- * refused with 0x80 0x23. */
+/* 图 A.20 / Table C.1：对只读 VendorName (0x10) 的 WRITE
+ * 被以 0x80 0x23 拒绝。 */
 static void test_isdu_wire_write_figure_a20(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0066");
@@ -206,9 +206,9 @@ static void test_isdu_wire_write_figure_a20(void** state)
     assert_memory_equal(resp, expected, sizeof(expected));
 }
 
-/* 16-bit index read of VendorName 0x0010 (I-Service 0xB, Length 5). The
- * request is short, so this does not exercise the COUNT wrap; see the dedicated
- * write/read wrap tests. */
+/* 对 VendorName 0x0010 的 16 位索引读（I-Service 0xB，Length 5）。该
+ * 请求较短，因此这里不涉及 COUNT 回绕；参见专门的
+ * 写/读回绕用例。 */
 static void test_isdu_wire_16bit_index_read(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0059");
@@ -218,7 +218,7 @@ static void test_isdu_wire_16bit_index_read(void** state)
     iolink_params_init();
     iolink_isdu_init(&ctx);
 
-    /* 16-bit Index + Subindex read (I-Service 0xB, Length 5): B5 00 10 00 A5. */
+    /* 16 位索引 + 子索引读（I-Service 0xB，Length 5）：B5 00 10 00 A5。 */
     const uint8_t req[5] = {0xB5U, 0x00U, 0x10U, 0x00U, 0xA5U};
     assert_int_equal(chkpdu(req, 5U), 0U);
     uint8_t fc = IOLINK_FLOWCTRL_START;
@@ -238,8 +238,8 @@ static void test_isdu_wire_16bit_index_read(void** state)
     assert_int_equal(resp[3], 0xF2U);
 }
 
-/* A request longer than 16 octets wraps FlowCTRL COUNT 15 -> 0. The wrap octet
- * must continue the request, not be rejected as a structure violation. */
+/* 超过 16 个八位组的请求会使 FlowCTRL COUNT 从 15 回绕到 0。回绕后的八位组
+ * 必须继续该请求，而不能作为结构违规被拒绝。 */
 static void test_isdu_wire_write_count_wrap(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0060");
@@ -249,14 +249,14 @@ static void test_isdu_wire_write_count_wrap(void** state)
     iolink_params_init();
     iolink_isdu_init(&ctx);
 
-    /* 16-bit ApplicationTag write with 11 data octets: 17 octets total, so the
-       final octet (CHKPDU) is carried by COUNT 0 right after COUNT 15. */
+    /* 带 11 个数据八位组的 16 位 ApplicationTag 写：共 17 个八位组，因此
+       最后一个八位组（CHKPDU）由紧接 COUNT 15 的 COUNT 0 承载。 */
     uint8_t req[17];
-    req[0] = 0x31U; /* Write, 16-bit index, ExtLength follows. */
+    req[0] = 0x31U; /* 写，16 位索引，后跟 ExtLength。 */
     req[1] = (uint8_t) sizeof(req);
     req[2] = 0x00U;
     req[3] = (uint8_t) (IOLINK_IDX_APPLICATION_TAG & 0xFFU);
-    req[4] = 0x00U; /* Subindex 0. */
+    req[4] = 0x00U; /* 子索引 0。 */
     for (size_t i = 0U; i < 11U; i++) {
         req[5U + i] = (uint8_t) ('A' + i);
     }
@@ -269,7 +269,7 @@ static void test_isdu_wire_write_count_wrap(void** state)
         fc =
             (fc == IOLINK_FLOWCTRL_START) ? 1U : (uint8_t) ((fc + 1U) & IOLINK_FLOWCTRL_COUNT_MASK);
     }
-    /* COUNT 0 was accepted after COUNT 15 (a rejected wrap would leave 15). */
+    /* COUNT 0 在 COUNT 15 之后被接受（若回绕被拒绝则会停留在 15）。 */
     assert_int_equal(ctx.last_flowctrl, 0U);
     iolink_isdu_process(&ctx);
 
@@ -285,7 +285,7 @@ static void test_isdu_wire_write_count_wrap(void** state)
     assert_memory_equal(readback, &req[5], 11U);
 }
 
-/* Repeated FlowCTRL repeats the previous message: its payload is ignored. */
+/* 重复的 FlowCTRL 重发上一条报文：其载荷被忽略。 */
 static void test_isdu_wire_repeated_flowctrl(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0309");
@@ -297,7 +297,7 @@ static void test_isdu_wire_repeated_flowctrl(void** state)
 
     iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_START, (const uint8_t[]){0x93U}, 1U);
     iolink_isdu_od_write(&ctx, 1U, (const uint8_t[]){0x10U}, 1U);
-    /* Repeat COUNT 1 with a bogus payload: must be ignored. */
+    /* 用伪造载荷重复 COUNT 1：必须被忽略。 */
     iolink_isdu_od_write(&ctx, 1U, (const uint8_t[]){0xAAU}, 1U);
     iolink_isdu_od_write(&ctx, 2U, (const uint8_t[]){0x83U}, 1U);
     iolink_isdu_process(&ctx);
@@ -308,8 +308,8 @@ static void test_isdu_wire_repeated_flowctrl(void** state)
     assert_int_equal(resp[3], 0xF2U);
 }
 
-/* A FlowCTRL that is neither COUNT+1 nor a repeat is a structure violation:
-   the request is dropped and the next read answers No Service (0x00). */
+/* 既不是 COUNT+1 也不是重复的 FlowCTRL 属于结构违规：
+   请求被丢弃，下一次读应答 No Service (0x00)。 */
 static void test_isdu_wire_flowctrl_error(void** state)
 {
     (void) state;
@@ -319,7 +319,7 @@ static void test_isdu_wire_flowctrl_error(void** state)
     iolink_isdu_init(&ctx);
 
     iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_START, (const uint8_t[]){0x93U}, 1U);
-    iolink_isdu_od_write(&ctx, 3U, (const uint8_t[]){0x10U}, 1U); /* skips 1,2 */
+    iolink_isdu_od_write(&ctx, 3U, (const uint8_t[]){0x10U}, 1U); /* 跳过 1,2 */
     iolink_isdu_process(&ctx);
 
     uint8_t resp[4];
@@ -328,8 +328,8 @@ static void test_isdu_wire_flowctrl_error(void** state)
     assert_int_equal(resp[0], 0x00U);
 }
 
-/* Test Spec 10032 V1.1.4 Table 84 (SDCI_TC_0065): a request with an incorrect
- * CHKPDU is discarded and the next Read response is I-Service 0 ("No Service"). */
+/* Test Spec 10032 V1.1.4 Table 84 (SDCI_TC_0065)：CHKPDU 不正确的
+ * 请求被丢弃，下一次读应答为 I-Service 0 ("No Service")。 */
 static void test_isdu_wire_chkpdu_corrupt(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0065");
@@ -339,7 +339,7 @@ static void test_isdu_wire_chkpdu_corrupt(void** state)
     iolink_params_init();
     iolink_isdu_init(&ctx);
 
-    const uint8_t req[3] = {0x93U, 0x10U, 0x82U}; /* should be 0x83 */
+    const uint8_t req[3] = {0x93U, 0x10U, 0x82U}; /* 应为 0x83 */
     wire_write_request(&ctx, req, sizeof(req));
 
     uint8_t resp[8];
@@ -348,7 +348,7 @@ static void test_isdu_wire_chkpdu_corrupt(void** state)
     assert_int_equal(resp[0], 0x00U);
 }
 
-/* Table C.1 / C.2.14: an unsupported SystemCommand is FUNC_NOTAVAIL. */
+/* Table C.1 / C.2.14：不支持的 SystemCommand 为 FUNC_NOTAVAIL。 */
 static void test_isdu_wire_unsupported_system_command(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0104");
@@ -367,7 +367,7 @@ static void test_isdu_wire_unsupported_system_command(void** state)
     assert_memory_equal(resp, expected, sizeof(expected));
 }
 
-/* Table C.1 / C.2.3: absent 16-bit indices still return IDX_NOTAVAIL. */
+/* Table C.1 / C.2.3：不存在的 16 位索引仍返回 IDX_NOTAVAIL。 */
 static void test_isdu_wire_unknown_index(void** state)
 {
     (void) state;
@@ -390,7 +390,7 @@ static void test_isdu_wire_unknown_index(void** state)
     assert_memory_equal(resp, write_expected, sizeof(write_expected));
 }
 
-/* A START read while the application has not answered yields Busy (0x01). */
+/* 应用尚未应答时的 START 读返回 Busy (0x01)。 */
 static void test_isdu_wire_busy_polling(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0054");
@@ -400,7 +400,7 @@ static void test_isdu_wire_busy_polling(void** state)
     iolink_params_init();
     iolink_isdu_init(&ctx);
 
-    /* Parse the request but do not run iolink_isdu_process() yet. */
+    /* 解析请求，但暂不运行 iolink_isdu_process()。 */
     const uint8_t req[3] = {0x93U, 0x10U, 0x83U};
     uint8_t fc = IOLINK_FLOWCTRL_START;
     for (size_t i = 0U; i < sizeof(req); i++) {
@@ -413,7 +413,7 @@ static void test_isdu_wire_busy_polling(void** state)
     iolink_isdu_od_read(&ctx, IOLINK_FLOWCTRL_START, &octet, 1U);
     assert_int_equal(octet, 0x01U); /* Busy */
 
-    /* Application answers; the next START read returns the response. */
+    /* 应用应答；下一次 START 读返回该应答。 */
     iolink_isdu_process(&ctx);
     uint8_t resp[4];
     size_t n = wire_read_response(&ctx, resp, sizeof(resp));
@@ -421,7 +421,7 @@ static void test_isdu_wire_busy_polling(void** state)
     assert_int_equal(resp[0], 0xD4U);
 }
 
-/* ABORT mid-request discards everything; the next read answers No Service. */
+/* 请求中途的 ABORT 丢弃所有内容；下一次读应答 No Service。 */
 static void test_isdu_wire_abort(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0067");
@@ -439,8 +439,8 @@ static void test_isdu_wire_abort(void** state)
     assert_int_equal(octet, 0x00U);
 }
 
-/* ABORT on the WRITE channel also rejects the request data and returns the
- * transport to Idle (Table 52 is direction-independent). */
+/* WRITE 通道上的 ABORT 同样拒绝请求数据并将
+ * 传输返回 Idle（Table 52 与方向无关）。 */
 static void test_isdu_wire_write_abort(void** state)
 {
     (void) state;
@@ -457,7 +457,7 @@ static void test_isdu_wire_write_abort(void** state)
     assert_int_equal(octet, 0x00U);
 }
 
-/* ExtLength read of a 63-octet string: D1 42 <63 data> <CHKPDU> (Figure A.19 ex. 3: n = data+3). */
+/* 63 八位组字符串的 ExtLength 读：D1 42 <63 data> <CHKPDU>（图 A.19 例 3：n = data+3）。 */
 static void test_isdu_wire_extlength_read(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0055");
@@ -466,13 +466,13 @@ static void test_isdu_wire_extlength_read(void** state)
     wire_long_vendor_init();
     iolink_isdu_init(&ctx);
 
-    /* 8-bit read of Index 0x10: 0x93 0x10 0x83. */
+    /* 索引 0x10 的 8 位读：0x93 0x10 0x83。 */
     const uint8_t req[3] = {0x93U, 0x10U, 0x83U};
     wire_write_request(&ctx, req, sizeof(req));
 
     uint8_t resp[128];
     size_t n = wire_read_response(&ctx, resp, sizeof(resp));
-    /* Response total = I-Service/Length octet + ExtLength + 63 data + CHKPDU = 66 (0x42). */
+    /* 应答总长 = I-Service/Length 八位组 + ExtLength + 63 数据 + CHKPDU = 66 (0x42)。 */
     assert_int_equal(n, 66U);
     assert_int_equal(resp[0], 0xD1U);
     assert_int_equal(resp[1], 0x42U);
@@ -480,7 +480,7 @@ static void test_isdu_wire_extlength_read(void** state)
     assert_int_equal(resp[65], chkpdu(resp, 65U));
 }
 
-/* A >16-octet response is read across the COUNT 15 -> 0 wrap. */
+/* 超过 16 个八位组的应答会跨 COUNT 15 -> 0 回绕读取。 */
 static void test_isdu_wire_read_count_wrap(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0055");
@@ -489,7 +489,7 @@ static void test_isdu_wire_read_count_wrap(void** state)
     wire_long_vendor_init();
     iolink_isdu_init(&ctx);
 
-    /* 63-octet VendorName -> 66-octet response. */
+    /* 63 八位组 VendorName -> 66 八位组应答。 */
     const uint8_t req[3] = {0x93U, 0x10U, 0x83U};
     wire_write_request(&ctx, req, sizeof(req));
 

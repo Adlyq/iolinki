@@ -8,8 +8,8 @@
 
 /**
  * @file test_crc_vectors.c
- * @brief A.1.6 checksum: known compression vectors and the streaming
- *        (accumulator) equivalence used by the ISR transmit path.
+ * @brief A.1.6 校验和：已知压缩向量，以及 ISR 发送路径所使用的
+ *        流式（累加器）实现与之一致性。
  */
 
 #include <stdarg.h>
@@ -20,8 +20,8 @@
 
 #include "iolinki/crc.h"
 
-/* Compress an 8-bit accumulator with the A.1 equations, independently of the
- * implementation under test (Table A.1). */
+/* 用 A.1 公式压缩 8 位累加器，与被测实现无关
+ * （Table A.1）。 */
 static uint8_t reference_compress(uint8_t acc)
 {
     const uint8_t d7 = (uint8_t) ((acc >> 7U) & 1U);
@@ -47,14 +47,14 @@ static void test_checksum6_from_acc_vectors(void** state)
 {
     (void) state;
 
-    /* Exhaustively compare the streaming compressor against the A.1 equations. */
+    /* 穷举比较流式压缩器与 A.1 公式的结果。 */
     for (uint16_t acc = 0U; acc <= 0xFFU; acc++) {
         assert_int_equal(iolink_checksum6_from_acc((uint8_t) acc),
                          reference_compress((uint8_t) acc));
     }
 
-    /* A few explicit values read off the equations. */
-    assert_int_equal(iolink_checksum6_from_acc(0x52U), 0x2DU); /* seed only */
+    /* 从公式中直接读出的一些显式值。 */
+    assert_int_equal(iolink_checksum6_from_acc(0x52U), 0x2DU); /* 仅种子值 */
     assert_int_equal(iolink_checksum6_from_acc(0x00U), 0x00U);
     assert_int_equal(iolink_checksum6_from_acc(0xFFU), 0x00U);
     assert_int_equal(iolink_checksum6_from_acc(0x01U), 0x11U);
@@ -89,8 +89,8 @@ static void test_checksum6_empty_message(void** state)
 {
     (void) state;
 
-    /* A NULL buffer with zero length is valid; the checksum is the seed folded
-     * once through the compressor. */
+    /* 长度为 0 的 NULL 缓冲区是合法的；校验和即种子值
+     * 经过压缩器折叠一次的结果。 */
     assert_int_equal(iolink_checksum6(NULL, 0U), 0x2DU);
 }
 

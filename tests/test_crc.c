@@ -8,12 +8,12 @@
 
 /**
  * @file test_crc.c
- * @brief Unit tests for the IO-Link A.1.6 message checksum
+ * @brief IO-Link A.1.6 报文校验和的单元测试
  *
- * The expected values are derived from the normative formula in IO-Link
- * Interface Specification V1.1.5 A.1.6 / equations (A.1), not from the
- * implementation under test. The checksum octet is passed in with its
- * checksum bits (0-5) cleared; type/event/PD-status bits are preserved.
+ * 期望值来自 IO-Link Interface Specification V1.1.5 A.1.6 中的
+ * 规范性公式 / 公式（A.1），而不是来自被测实现。
+ * 传入校验和字节时其校验和位（0-5）须已清零；
+ * type/event/PD-status 位保持不变。
  */
 
 #include <stdarg.h>
@@ -24,7 +24,7 @@
 
 #include "iolinki/crc.h"
 
-/* Normalise a checksum/type octet by clearing bits 0-5 (A.1.6). */
+/* 通过清零 bit 0-5 规范化校验和/类型字节（A.1.6）。 */
 static uint8_t zero_checksum_bits(uint8_t octet)
 {
     return (uint8_t) (octet & 0xC0U);
@@ -33,7 +33,7 @@ static uint8_t zero_checksum_bits(uint8_t octet)
 static void test_checksum6_master_frames(void** state)
 {
     (void) state;
-    /* Master frames: MC, CKT (type bits only), data... */
+    /* 主站帧：MC、CKT（仅类型位）、数据... */
     const uint8_t frame1[] = {0x00, 0x00}; /* (0x00,0x00) -> 0x2D */
     assert_int_equal(iolink_checksum6(frame1, 2U), 0x2DU);
 
@@ -43,11 +43,11 @@ static void test_checksum6_master_frames(void** state)
     const uint8_t frame3[] = {0x20, 0x00, 0x99}; /* -> 0x06 */
     assert_int_equal(iolink_checksum6(frame3, 3U), 0x06U);
 
-    /* A TYPE_1 write frame MC=0x00, CKT type bits=0x40, OD=A5, CK=5A. */
+    /* 一个 TYPE_1 写帧 MC=0x00、CKT 类型位=0x40、OD=A5、CK=5A。 */
     const uint8_t frame4[] = {0x00, 0x40, 0xA5, 0x5A};
     assert_int_equal(iolink_checksum6(frame4, 4U), 0x35U);
 
-    /* A TYPE_2 read frame MC=0x80, CKT type bits=0x80 -> 0x2D. */
+    /* 一个 TYPE_2 读帧 MC=0x80、CKT 类型位=0x80 -> 0x2D。 */
     const uint8_t frame5[] = {0x80, 0x80};
     assert_int_equal(iolink_checksum6(frame5, 2U), 0x2DU);
 }
@@ -55,27 +55,27 @@ static void test_checksum6_master_frames(void** state)
 static void test_checksum6_device_replies(void** state)
 {
     (void) state;
-    /* Device replies: data..., CKS (event<<7 | pdinvalid<<6 | ck6). */
+    /* 设备应答：数据...、CKS（event<<7 | pdinvalid<<6 | ck6）。 */
     const uint8_t reply1[] = {0x10}; /* -> 0x39 */
     assert_int_equal(iolink_checksum6(reply1, 1U), 0x39U);
 
     const uint8_t reply2[] = {0xA5}; /* -> 0x22 */
     assert_int_equal(iolink_checksum6(reply2, 1U), 0x22U);
 
-    /* The flag bits participate in the XOR before compression: an Event flag
-       on top of 0xA5 changes the result (A.1.6). */
+    /* 标志位在压缩前参与 XOR 运算：在 0xA5 上叠加 Event 标志
+       会改变结果（A.1.6）。 */
     const uint8_t reply3[] = {0xC5};
     assert_int_equal(iolink_checksum6(reply3, 1U), 0x1EU);
 
-    const uint8_t reply4[] = {0x00}; /* empty data -> 0x2D */
+    const uint8_t reply4[] = {0x00}; /* 空数据 -> 0x2D */
     assert_int_equal(iolink_checksum6(reply4, 1U), 0x2DU);
 }
 
 static void test_checksum6_zeroing_is_caller_duty(void** state)
 {
     (void) state;
-    /* The helper expects bits 0-5 already cleared. Verify that clearing the
-       low bits of the same octet yields the documented value. */
+    /* 该辅助函数要求 bit 0-5 已清零。验证把同一字节的低位
+       清零后能得到文档中给出的值。 */
     const uint8_t with_bits[] = {0x00, 0x2DU};
     const uint8_t cleared[] = {zero_checksum_bits(with_bits[0]), zero_checksum_bits(with_bits[1])};
     assert_int_equal(iolink_checksum6(cleared, 2U), 0x2DU);

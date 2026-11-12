@@ -8,12 +8,12 @@
 
 /**
  * @file test_pd_lease.c
- * @brief PD-in buffer lease: skip accounting and stale-lease recovery.
+ * @brief PD-in 缓冲区借用：跳过计数与过期借用恢复。
  *
- * TX BYTE ends the reply inside the library, so the main pump can tell that a
- * recorded PD-in capture is no longer being streamed. A transceiver that
- * stalls mid-frame must not freeze the PD-in updates for the rest of the
- * session.
+ * TX BYTE 在库内部结束应答，因此主泵可以判断记录下来的
+ * PD-in 捕获已不再被流式发送。在帧中途卡住的收发器
+ * 不得让 PD-in 更新在本次会话剩余时间内
+ * 冻结。
  */
 
 #include <stdarg.h>
@@ -39,25 +39,25 @@ static void test_lease_recovery_and_skip_counter(void** state)
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
 
-    /* First publish: a free buffer exists, no skip. */
+    /* 首次发布：存在空闲缓冲区，未跳过。 */
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true), 0);
     assert_int_equal(dev.ctx.dll.pd_in_skips, 0U);
 
-    /* Model a transceiver that stalled mid-reply: the ISR's capture is still
-     * recorded although no reply is in flight. */
+    /* 模拟在应答中途卡住的收发器：尽管没有应答在传输中，ISR 的捕获
+     * 仍被记录。 */
     dev.ctx.dll.pd_in_captured = (uint8_t) (dev.ctx.dll.pd_in_active ^ 1U);
     dev.ctx.dll.isr_tx_active = 0U;
 
-    /* No spare buffer: every update is skipped and counted, never silent. */
+    /* 无空闲缓冲区：每次更新都被跳过并计数，绝不静默。 */
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true), -1);
     assert_int_equal(dev.ctx.dll.pd_in_skips, 1U);
     iolink_device_process(&dev.ctx);
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true), -1);
     assert_int_equal(dev.ctx.dll.pd_in_skips, 2U);
 
-    /* The library deliberately keeps the lease while it cannot prove the
-     * transfer is dead (a stalled PHY must reset); once the slot is released
-     * (what the ISR does at frame end) publishing works again. */
+    /* 在无法证明传输已失效时（卡住的 PHY 必须复位），库有意保留借用；
+     * 一旦槽位被释放（即 ISR 在帧结束时所做的），
+     * 发布便恢复工作。 */
     dev.ctx.dll.pd_in_captured = 0xFFU;
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true), 0);
     assert_int_equal(dev.ctx.dll.pd_in_skips, 2U);
@@ -71,7 +71,7 @@ int main(void)
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
 
-#else /* IOLINK_APP_PD_INPUT_CALLBACK: update() is a no-op in that profile */
+#else /* IOLINK_APP_PD_INPUT_CALLBACK：该配置下 update() 为空操作 */
 
 int main(void)
 {

@@ -8,11 +8,11 @@
 
 /**
  * @file events.c
- * @brief IO-Link Event Handling
+ * @brief IO-Link 事件处理
  * @ingroup iolinki_events
  *
- * Implements the device event queue (enqueue/pop/peek), severity ranking and
- * event-code classification used to report diagnostics to the master.
+ * 实现设备事件队列（入队/弹出/窥视）、严重级别排序以及
+ * 用于向主站上报诊断的事件码分类。
  */
 
 #include "iolinki/events.h"
@@ -29,7 +29,7 @@ void iolink_events_init(iolink_events_ctx_t* ctx)
     }
 }
 
-/** @brief Current time in milliseconds from the bound application clock. */
+/** @brief 来自已绑定应用时钟的当前时间（毫秒）。 */
 static uint32_t events_now_ms(const iolink_events_ctx_t* ctx)
 {
     if (ctx->time_us == NULL) {
@@ -38,19 +38,19 @@ static uint32_t events_now_ms(const iolink_events_ctx_t* ctx)
     return (uint32_t) (ctx->time_us(ctx->time_user) / 1000U);
 }
 
-/** @brief EventQualifier for an event type and MODE (A.6.4, Figure A.24). */
+/** @brief 由事件类型和 MODE 生成 EventQualifier（A.6.4，Figure A.24）。 */
 static uint8_t event_qualifier(iolink_event_type_t type, iolink_event_mode_t mode)
 {
     uint8_t q;
     switch (mode) {
         case IOLINK_EVENT_MODE_DISAPPEARS:
-            q = 0x80U; /* MODE = event disappears (0b10) */
+            q = 0x80U; /* MODE = 事件消失（0b10） */
             break;
         case IOLINK_EVENT_MODE_SINGLE_SHOT:
-            q = 0x40U; /* MODE = event single shot (0b01) */
+            q = 0x40U; /* MODE = 事件单次触发（0b01） */
             break;
         default:
-            q = 0xC0U; /* MODE = event appears (0b11) */
+            q = 0xC0U; /* MODE = 事件出现（0b11） */
             break;
     }
     switch (type) {
@@ -66,14 +66,14 @@ static uint8_t event_qualifier(iolink_event_type_t type, iolink_event_mode_t mod
         default:
             break;
     }
-    q |= 0x04U; /* SOURCE = device (bit 3 = 0), INSTANCE = Application (Table A.17) */
+    q |= 0x04U; /* SOURCE = 设备（bit 3 = 0），INSTANCE = Application（Table A.17） */
     return q;
 }
 
-/** @brief Rebuild the Table 58 event memory from the oldest queued events.
+/** @brief 用队列中最旧的事件重建 Table 58 事件存储器。
  *
- * Up to six slots are populated; the StatusCode carries a bit per active slot.
- * The caller holds the critical section. Returns the number of slots written. */
+ * 最多填充六个槽位；StatusCode 为每个活动槽位携带一位。
+ * 调用方需持有临界区。返回写入的槽位数量。 */
 static uint8_t event_memory_rebuild(iolink_events_ctx_t* ctx)
 {
     (void) memset(ctx->memory, 0, sizeof(ctx->memory));
@@ -87,8 +87,8 @@ static uint8_t event_memory_rebuild(iolink_events_ctx_t* ctx)
         ctx->memory[2U + i * 3U] = (uint8_t) (ev->code >> 8);
         ctx->memory[3U + i * 3U] = (uint8_t) (ev->code & 0xFFU);
     }
-    /* StatusCode type 2: Event Details = 1, bits 0-5 = one bit per active slot
-       (Figure A.22/A.23: bit 0 is Event 1, bit 1 is Event 2, ...). */
+    /* StatusCode type 2：Event Details = 1，bits 0-5 每个活动槽位一位
+       （Figure A.22/A.23：bit 0 为 Event 1，bit 1 为 Event 2，...）。 */
     uint8_t active = 0U;
     for (uint8_t i = 0U; i < slots; i++) {
         active |= (uint8_t) (1U << i);
@@ -101,7 +101,7 @@ static uint8_t event_memory_rebuild(iolink_events_ctx_t* ctx)
     return slots;
 }
 
-/** @brief Insert an event into the severity-ordered queue (Errors first). */
+/** @brief 按严重级别顺序将事件插入队列（错误在前）。 */
 static void event_queue_insert(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type,
                                iolink_event_mode_t mode)
 {
@@ -110,12 +110,12 @@ static void event_queue_insert(iolink_events_ctx_t* ctx, uint16_t code, iolink_e
         pos++;
     }
     if (ctx->count >= IOLINK_EVENT_QUEUE_SIZE) {
-        /* The queue holds more severe events, or the least severe entry is
-           overwritten below. Either way one event is lost, so make it
-           observable like a pending[] overflow. */
+        /* 队列中保存的是更严重的事件，或者最不严重的条目会在下面被
+           覆盖。无论哪种情况都会丢失一个事件，因此让它像 pending[]
+           溢出一样可观测。 */
         ctx->dropped_count++;
         if (pos >= IOLINK_EVENT_QUEUE_SIZE) {
-            return; /* Queue holds more severe events: drop the new one. */
+            return; /* 队列保存的是更严重的事件：丢弃新的这个。 */
         }
         ctx->count = (uint8_t) (IOLINK_EVENT_QUEUE_SIZE - 1U);
     }
@@ -138,7 +138,7 @@ static iolink_event_pending_t* pending_find(iolink_events_ctx_t* ctx, uint16_t c
     return NULL;
 }
 
-/** @brief Allocate a lifecycle slot, reusing a finished repeat cooldown first. */
+/** @brief 分配生命周期槽位，优先复用已结束重复冷却的槽位。 */
 static iolink_event_pending_t* pending_alloc(iolink_events_ctx_t* ctx, uint32_t now)
 {
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
@@ -148,9 +148,9 @@ static iolink_event_pending_t* pending_alloc(iolink_events_ctx_t* ctx, uint32_t 
             return &ctx->pending[i];
         }
     }
-    /* Reuse a cooled-down slot only after both 1 s windows elapsed. Reusing it
-       earlier would discard the last appears/disappears timestamps and let the
-       same EventCode be reported twice inside the 10.10.2 window. */
+    /* 仅在两个 1 s 窗口都结束后才复用已冷却的槽位。提前复用会丢弃
+       最近的出现/消失时间戳，使同一个 EventCode 在 10.10.2 窗口内
+       被上报两次。 */
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         iolink_event_pending_t* p = &ctx->pending[i];
         const bool appears_free = !p->appears_valid || ((uint32_t) (now - p->last_appears_ms) >=
@@ -167,21 +167,21 @@ static iolink_event_pending_t* pending_alloc(iolink_events_ctx_t* ctx, uint32_t 
     return NULL;
 }
 
-/** @brief Whether the 1 s spacing allows a new "event appears". */
+/** @brief 1 s 间隔是否允许新的“事件出现”。 */
 static bool event_appears_elapsed(const iolink_event_pending_t* p, uint32_t now)
 {
     return !p->appears_valid ||
            ((uint32_t) (now - p->last_appears_ms) >= IOLINK_EVENT_MIN_REPEAT_MS);
 }
 
-/** @brief Whether the 1 s spacing allows a new "event disappears". */
+/** @brief 1 s 间隔是否允许新的“事件消失”。 */
 static bool event_disappears_elapsed(const iolink_event_pending_t* p, uint32_t now)
 {
     return !p->disappears_valid ||
            ((uint32_t) (now - p->last_disappears_ms) >= IOLINK_EVENT_MIN_REPEAT_MS);
 }
 
-/** @brief Queue the "event appears" and start the minimum appearance window. */
+/** @brief 将“事件出现”入队并启动最短出现窗口。 */
 static void pending_emit_appears(iolink_events_ctx_t* ctx, iolink_event_pending_t* p, uint32_t now)
 {
     event_queue_insert(ctx, p->code, p->type, IOLINK_EVENT_MODE_APPEARS);
@@ -190,7 +190,7 @@ static void pending_emit_appears(iolink_events_ctx_t* ctx, iolink_event_pending_
     p->reported = true;
 }
 
-/** @brief Queue the "event disappears" for a reported event. */
+/** @brief 为已上报的事件将“事件消失”入队。 */
 static void pending_emit_disappears(iolink_events_ctx_t* ctx, iolink_event_pending_t* p,
                                     uint32_t now)
 {
@@ -200,11 +200,11 @@ static void pending_emit_disappears(iolink_events_ctx_t* ctx, iolink_event_pendi
     p->reported = false;
 }
 
-/** @brief Freeze the memory and raise the flag (Table 60 T3).
+/** @brief 冻结存储器并置位标志（Table 60 T3）。
  *
- * The flag must never be set while the queue is empty: a set flag tells the
- * Master to read the diagnosis channel, and an empty queue there produces a
- * read/acknowledge loop. */
+ * 队列为空时绝不能置位该标志：置位的标志会告诉主站
+ * 读取诊断通道，而那里若队列为空，就会产生
+ * 读取/确认循环。 */
 static void event_publish(iolink_events_ctx_t* ctx)
 {
     if (!ctx->frozen && (ctx->count > 0U)) {
@@ -214,7 +214,7 @@ static void event_publish(iolink_events_ctx_t* ctx)
     ctx->flag = (ctx->count > 0U);
 }
 
-/** @brief Whether @p code is already queued (any MODE). */
+/** @brief @p code 是否已入队（任意 MODE）。 */
 static bool event_code_queued(const iolink_events_ctx_t* ctx, uint16_t code)
 {
     for (uint8_t i = 0U; i < ctx->count; i++) {
@@ -236,9 +236,9 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
     const uint32_t now = events_now_ms(ctx);
 
     if (type == IOLINK_EVENT_TYPE_NOTIFICATION) {
-        /* Notifications are single-shot. Do not queue the same code again while
-           the previous instance is still unacknowledged: a retrying Master must
-           not turn repeated requests into an event storm. */
+        /* 通知是单次触发的。在前一个实例仍未确认时，不要再次
+           将同一 code 入队：重试中的主站不得把重复的请求变成
+           事件风暴。 */
         if (!event_code_queued(ctx, code)) {
             event_queue_insert(ctx, code, type, IOLINK_EVENT_MODE_SINGLE_SHOT);
         }
@@ -249,8 +249,8 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
 
     iolink_event_pending_t* p = pending_find(ctx, code);
     if ((p != NULL) && p->present) {
-        /* Already asserted: 10.10.2 disregards subsequent incidents of the
-           same root cause, so no second "event appears" is queued. */
+        /* 已置位：10.10.2 忽略同一根因的后续事件，因此不会将
+           第二个“事件出现”入队。 */
         IOLINK_CRITICAL_EXIT();
         return;
     }
@@ -258,8 +258,8 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
     if (p == NULL) {
         p = pending_alloc(ctx, now);
         if (p == NULL) {
-            /* All lifecycle slots hold live events: make the loss observable
-               rather than silently discarding the cause. */
+            /* 所有生命周期槽位都保存着活动事件：让丢失可观测，
+               而不是静默丢弃该原因。 */
             ctx->dropped_count++;
             IOLINK_CRITICAL_EXIT();
             return;
@@ -272,13 +272,13 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
     ctx->pending_count++;
 
     if (!p->reported && event_appears_elapsed(p, now)) {
-        /* First appearance, or a new incident more than 1 s after the last
-           "event appears" of this code (10.10.2). */
+        /* 首次出现，或该 code 上一次“事件出现”之后超过 1 s 的
+           新事件（10.10.2）。 */
         pending_emit_appears(ctx, p, now);
     }
-    /* Otherwise the appearance is either already on the wire (a withdrawal was
-       pending and is now cancelled) or deferred to iolink_events_process()
-       because the same EventQualifier was reported less than 1 s ago. */
+    /* 否则该出现要么已经在线上（此前有待处理的撤销，现已取消），
+       要么因为相同的 EventQualifier 在不到 1 s 前被上报过而被推迟到
+       iolink_events_process() 处理。 */
 
     event_publish(ctx);
     IOLINK_CRITICAL_EXIT();
@@ -293,7 +293,7 @@ void iolink_event_clear(iolink_events_ctx_t* ctx, uint16_t code)
     IOLINK_CRITICAL_ENTER();
     iolink_event_pending_t* p = pending_find(ctx, code);
     if ((p != NULL) && p->present) {
-        p->present = false; /* emitted by iolink_events_process() */
+        p->present = false; /* 由 iolink_events_process() 发出 */
         if (ctx->pending_count > 0U) {
             ctx->pending_count--;
         }
@@ -316,7 +316,7 @@ void iolink_events_process(iolink_events_ctx_t* ctx)
             continue;
         }
         if (p->present && !p->reported) {
-            /* Deferred appearance: the 1 s spacing has elapsed. */
+            /* 推迟的出现：1 s 间隔已过。 */
             if (event_appears_elapsed(p, now)) {
                 pending_emit_appears(ctx, p, now);
                 queued = true;
@@ -324,8 +324,8 @@ void iolink_events_process(iolink_events_ctx_t* ctx)
             continue;
         }
         if (!p->present && p->reported) {
-            /* A.6.4: no "disappears" less than 50 ms after the "appears", and
-               10.10.2: no repeated "disappears" inside the 1 s window. */
+            /* A.6.4：“出现”后不到 50 ms 不得有“消失”；10.10.2：
+               1 s 窗口内不得重复“消失”。 */
             if (((uint32_t) (now - p->last_appears_ms) >= IOLINK_EVENT_MIN_APPEAR_MS) &&
                 event_disappears_elapsed(p, now)) {
                 pending_emit_disappears(ctx, p, now);
@@ -334,7 +334,7 @@ void iolink_events_process(iolink_events_ctx_t* ctx)
         }
         if (!p->present && !p->reported && event_appears_elapsed(p, now) &&
             event_disappears_elapsed(p, now)) {
-            /* Event gone and its 1 s cooldown elapsed: release the slot. */
+            /* 事件已消失且其 1 s 冷却已过：释放槽位。 */
             (void) memset(p, 0, sizeof(*p));
         }
     }
@@ -352,8 +352,8 @@ void iolink_events_clear_diagnosis(iolink_events_ctx_t* ctx)
 
     IOLINK_CRITICAL_ENTER();
 
-    /* Table 101 "Clear": queued Notifications carry no diagnosis and are
-       discarded while they are still unacknowledged. */
+    /* Table 101 “Clear”：队列中的通知不携带诊断信息，在仍未确认时
+       会被丢弃。 */
     uint8_t kept = 0U;
     for (uint8_t i = 0U; i < ctx->count; i++) {
         if (ctx->queue[i].type == IOLINK_EVENT_TYPE_NOTIFICATION) {
@@ -364,9 +364,9 @@ void iolink_events_clear_diagnosis(iolink_events_ctx_t* ctx)
     }
     ctx->count = kept;
 
-    /* Withdraw every asserted Error/Warning. The reset is deliberate, so the
-       "event disappears" is queued immediately instead of waiting for the
-       regular A.6.4/10.10.2 spacing; DeviceStatus clears with the reset. */
+    /* 撤销所有已置位的错误/警告。复位是刻意的，因此“事件消失”会
+       立即入队，而不等待常规的 A.6.4/10.10.2 间隔；DeviceStatus 随
+       复位一并清除。 */
     const uint32_t now = events_now_ms(ctx);
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         iolink_event_pending_t* p = &ctx->pending[i];
@@ -413,8 +413,8 @@ void iolink_events_reset(iolink_events_ctx_t* ctx)
 
 bool iolink_events_flag(const iolink_events_ctx_t* ctx)
 {
-    /* Never advertise an Event flag with an empty queue. The setters keep
-       flag == (count > 0); this guard also covers a concurrent ISR read. */
+    /* 绝不在队列为空时通告事件标志。各设置函数保持
+       flag == (count > 0)；此保护也覆盖并发的 ISR 读取。 */
     return ((ctx != NULL) && ctx->flag && (ctx->count > 0U));
 }
 
@@ -429,8 +429,8 @@ uint8_t iolink_events_memory_read(iolink_events_ctx_t* ctx, uint8_t addr)
         return 0U;
     }
     IOLINK_CRITICAL_ENTER();
-    /* The memory was frozen when the Event flag was raised (Table 60 T3), so a
-       readout is always a consistent snapshot. */
+    /* 事件标志置位时存储器已被冻结（Table 60 T3），因此读出的
+       始终是一致快照。 */
     const uint8_t value = ctx->memory[addr];
     IOLINK_CRITICAL_EXIT();
     return value;
@@ -457,14 +457,14 @@ void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t 
     }
 
     IOLINK_CRITICAL_ENTER();
-    /* Table 60 T5: confirmation releases the memory and clears the flag. Only
-       the slots actually presented (frozen_slots) are acknowledged; events
-       queued while frozen are rebuilt below and become visible again. */
+    /* Table 60 T5：确认会释放存储器并清除标志。仅确认实际呈现过的
+       槽位（frozen_slots）；冻结期间入队的事件会在下面重建并再次
+       可见。 */
     ctx->frozen = false;
     ctx->flag = false;
     if (ctx->frozen_slots > 0U) {
-        /* Acknowledge exactly the events that were presented in the frozen
-           memory; higher-severity events queued after the freeze must remain. */
+        /* 只确认冻结存储器中实际呈现的事件；冻结之后入队的更高
+           严重级别事件必须保留。 */
         const uint8_t acked =
             (ctx->frozen_count < ctx->frozen_slots) ? ctx->frozen_count : ctx->frozen_slots;
         for (uint8_t i = 0U; i < acked; i++) {
@@ -501,7 +501,7 @@ void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t 
 
 bool iolink_events_pending(const iolink_events_ctx_t* ctx)
 {
-    /* Single byte read is typically atomic, avoiding lock for perf */
+    /* 单字节读取通常是原子的，为性能避免加锁 */
     return ((ctx != NULL) && (ctx->count > 0U));
 }
 
@@ -521,8 +521,8 @@ bool iolink_events_pop(iolink_events_ctx_t* ctx, iolink_event_t* event)
         }
         ctx->count--;
         if (ctx->count == 0U) {
-            /* Keep flag == (count > 0) even when an application drains the
-               queue through pop() instead of acknowledging the event memory. */
+            /* 即使应用通过 pop() 排空队列而不是确认事件存储器，
+               也保持 flag == (count > 0)。 */
             ctx->flag = false;
             ctx->frozen = false;
             ctx->frozen_slots = 0U;
@@ -541,7 +541,7 @@ bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event)
         return false;
     }
 
-    /* Single read is atomic for small structs, but use critical section for safety */
+    /* 对小型结构体单次读取是原子的，但为安全仍使用临界区 */
     IOLINK_CRITICAL_ENTER();
 
     bool ret = false;
@@ -554,7 +554,7 @@ bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event)
     return ret;
 }
 
-/** @brief DeviceStatus priority per Table B.13 (lowest value dominates). */
+/** @brief 按 Table B.13 的 DeviceStatus 优先级（数值最小者优先）。 */
 static uint8_t device_status_priority(uint8_t status)
 {
     switch (status) {
@@ -571,8 +571,8 @@ static uint8_t device_status_priority(uint8_t status)
     }
 }
 
-/** @brief Map an event to its DeviceStatus value (Table B.13), from its
- * EventType and, for the codes whose preferred value differs, its EventCode. */
+/** @brief 根据 EventType 将事件映射为其 DeviceStatus 值（Table B.13）；
+ * 对于首选值不同的 code，则根据其 EventCode 映射。 */
 static uint8_t event_type_device_status(uint16_t code, iolink_event_type_t type)
 {
     switch (code) {
@@ -601,11 +601,11 @@ uint8_t iolink_events_get_highest_severity(iolink_events_ctx_t* ctx)
         return 0U; /* OK */
     }
 
-    /* Table B.13 is derived from the currently active conditions, not from the
-       queue: a queued "event disappears" must not keep DeviceStatus asserted,
-       and a Notification never raises it. */
+    /* Table B.13 由当前活动的条件推导，而不是由队列推导：
+       队列中的“事件消失”不得让 DeviceStatus 保持置位，而通知
+       绝不会提升它。 */
     uint8_t worst = 0U;      /* OK */
-    uint8_t worst_prio = 5U; /* OK priority */
+    uint8_t worst_prio = 5U; /* OK 优先级 */
     IOLINK_CRITICAL_ENTER();
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         const iolink_event_pending_t* p = &ctx->pending[i];
@@ -682,7 +682,7 @@ iolink_event_type_t iolink_event_classify(uint16_t code)
             return IOLINK_EVENT_TYPE_ERROR;
 
         default:
-            /* Reserved / vendor-specific / unknown -> safe default. */
+            /* 保留 / 厂商特定 / 未知 -> 安全默认值。 */
             return IOLINK_EVENT_TYPE_ERROR;
     }
 }

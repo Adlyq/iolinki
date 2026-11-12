@@ -13,135 +13,135 @@
 
 /**
  * @file device_info.h
- * @brief Device identification and mandatory ISDU indices
+ * @brief 设备标识与强制 ISDU 索引
  *
- * Implements mandatory indices required by IO-Link V1.1.5 specification.
+ * 实现 IO-Link V1.1.5 规范所要求的强制索引。
  */
 
 /**
- * @defgroup iolinki_device_info Device Identification
- * @brief Device identification data and the mandatory identity ISDU indices.
+ * @defgroup iolinki_device_info 设备标识
+ * @brief 设备标识数据以及强制的身份 ISDU 索引。
  * @{
  */
 
 /**
- * @brief Device identification structure.
+ * @brief 设备标识结构。
  *
- * Configure these values for your specific device. Each field maps to a
- * mandatory or optional IO-Link identity ISDU index.
+ * 为你的特定设备配置这些值。每个字段对应一个强制或
+ * 可选的 IO-Link 身份 ISDU 索引。
  */
 typedef struct
 {
-    /* Mandatory ID Indices (0x0010-0x0018) */
-    const char* vendor_name;       /**< Vendor name string (Index 0x0010). */
-    const char* vendor_text;       /**< Vendor text string (Index 0x0011). */
-    const char* product_name;      /**< Product name string (Index 0x0012). */
-    const char* product_id;        /**< Product ID string (Index 0x0013). */
-    const char* product_text;      /**< Product text string (Index 0x0014). */
-    const char* serial_number;     /**< Serial number string (Index 0x0015). */
-    const char* hardware_revision; /**< Hardware revision string (Index 0x0016). */
-    const char* firmware_revision; /**< Firmware revision string (Index 0x0017). */
-    const char* product_uri;     /**< ProductURI string (Index 0x001B, conditional on a Profile). */
-    const char* application_tag; /**< Application tag string (Index 0x0018, optional). */
+    /* 强制 ID 索引（0x0010-0x0018） */
+    const char* vendor_name;       /**< 厂商名称字符串（Index 0x0010）。 */
+    const char* vendor_text;       /**< 厂商文本字符串（Index 0x0011）。 */
+    const char* product_name;      /**< 产品名称字符串（Index 0x0012）。 */
+    const char* product_id;        /**< 产品 ID 字符串（Index 0x0013）。 */
+    const char* product_text;      /**< 产品文本字符串（Index 0x0014）。 */
+    const char* serial_number;     /**< 序列号字符串（Index 0x0015）。 */
+    const char* hardware_revision; /**< 硬件版本字符串（Index 0x0016）。 */
+    const char* firmware_revision; /**< 固件版本字符串（Index 0x0017）。 */
+    const char* product_uri;       /**< ProductURI 字符串（Index 0x001B，取决于 Profile）。 */
+    const char* application_tag;   /**< 应用标签字符串（Index 0x0018，可选）。 */
 
-    /* Device IDs (Direct Parameter page 1, V1.1.5 Table B.1) */
-    uint16_t vendor_id;              /**< Vendor ID (DPP1 0x07-0x08). */
-    uint32_t device_id;              /**< Device ID (DPP1 0x09-0x0B, 24-bit). */
-    uint16_t function_id;            /**< Function ID (subfield of ProfileCharacteristic 0x000D). */
-    uint16_t profile_characteristic; /**< Profile characteristic (Index 0x000D). */
+    /* 设备 ID（Direct Parameter page 1，V1.1.5 Table B.1） */
+    uint16_t vendor_id;              /**< Vendor ID（DPP1 0x07-0x08）。 */
+    uint32_t device_id;              /**< Device ID（DPP1 0x09-0x0B，24 位）。 */
+    uint16_t function_id;            /**< Function ID（ProfileCharacteristic 0x000D 的子字段）。 */
+    uint16_t profile_characteristic; /**< Profile characteristic（Index 0x000D）。 */
 
-    /* System Info */
-    uint8_t min_cycle_time;          /**< Minimum cycle time (DPP1 0x02, Table B.3). */
-    uint16_t revision_id;            /**< Revision ID (DPP1 0x04; 0x0111 = protocol v1.1). */
-    uint8_t device_status;           /**< Device status (Index 0x0024). */
-    uint16_t detailed_device_status; /**< Detailed device status (Index 0x0025, optional). */
+    /* 系统信息 */
+    uint8_t min_cycle_time;          /**< 最小周期时间（DPP1 0x02，Table B.3）。 */
+    uint16_t revision_id;            /**< Revision ID（DPP1 0x04；0x0111 = 协议 v1.1）。 */
+    uint8_t device_status;           /**< 设备状态（Index 0x0024）。 */
+    uint16_t detailed_device_status; /**< 详细设备状态（Index 0x0025，可选）。 */
 
-    /* Access Control */
-    uint16_t access_locks; /**< Device access locks bitmask (Index 0x000C). */
+    /* 访问控制 */
+    uint16_t access_locks; /**< 设备访问锁位掩码（Index 0x000C）。 */
 } iolink_device_info_t;
 
 /**
- * @brief Per-device identification runtime context.
+ * @brief 每设备的标识运行时上下文。
  *
- * Wraps the static configured identity with mutable runtime values
- * (application tag, access locks) and factory defaults.
+ * 用可变的运行时值（应用标签、访问锁）和出厂默认值
+ * 包装静态配置的身份。
  */
 typedef struct
 {
-    const iolink_device_info_t* configured; /**< Static configured identity. */
-    iolink_device_info_t defaults;          /**< Factory-default identity snapshot. */
-    char application_tag[33];               /**< Runtime application tag (32 bytes + NUL). */
-    uint16_t access_locks;                  /**< Runtime device access locks value. */
+    const iolink_device_info_t* configured; /**< 静态配置的身份。 */
+    iolink_device_info_t defaults;          /**< 出厂默认身份快照。 */
+    char application_tag[33];               /**< 运行时应用标签（32 字节 + NUL）。 */
+    uint16_t access_locks;                  /**< 运行时设备访问锁值。 */
 } iolink_device_info_ctx_t;
 
 /**
- * @brief Initialize a device-info context.
- * @param ctx         Context to initialize.
- * @param configured  Static device identity to bind (must remain valid).
+ * @brief 初始化设备信息上下文。
+ * @param ctx         要初始化的上下文。
+ * @param configured  要绑定的静态设备身份（必须保持有效）。
  */
 void iolink_device_info_ctx_init(iolink_device_info_ctx_t* ctx,
                                  const iolink_device_info_t* configured);
 
 /**
- * @brief Get the effective device identity from a context.
- * @param ctx Device-info context.
- * @return Pointer to the effective device identity.
+ * @brief 从上下文获取有效的设备身份。
+ * @param ctx 设备信息上下文。
+ * @return 指向有效设备身份的指针。
  */
 const iolink_device_info_t* iolink_device_info_ctx_get(const iolink_device_info_ctx_t* ctx);
 
 /**
- * @brief Set the runtime application tag (Index 0x0018) on a context.
- * @param ctx  Device-info context.
- * @param tag  String data (max 32 bytes).
- * @param len  Length of @p tag in bytes.
- * @return 0 on success, negative on error.
+ * @brief 在上下文上设置运行时应用标签（Index 0x0018）。
+ * @param ctx  设备信息上下文。
+ * @param tag  字符串数据（最多 32 字节）。
+ * @param len  @p tag 的长度（字节）。
+ * @return 成功时为 0，出错时为负值。
  */
 int iolink_device_info_ctx_set_application_tag(iolink_device_info_ctx_t* ctx, const char* tag,
                                                uint8_t len);
 
 /**
- * @brief Get the device access locks (Index 0x000C) from a context.
- * @param ctx Device-info context.
- * @return 16-bit access locks value.
+ * @brief 从上下文获取设备访问锁（Index 0x000C）。
+ * @param ctx 设备信息上下文。
+ * @return 16 位访问锁值。
  */
 uint16_t iolink_device_info_ctx_get_access_locks(const iolink_device_info_ctx_t* ctx);
 
 /**
- * @brief Set the device access locks (Index 0x000C) on a context.
- * @param ctx    Device-info context.
- * @param locks  16-bit access locks value.
+ * @brief 在上下文上设置设备访问锁（Index 0x000C）。
+ * @param ctx    设备信息上下文。
+ * @param locks  16 位访问锁值。
  */
 void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx, uint16_t locks);
 
 /**
- * @brief Initialize device information
- * @param info Pointer to device info structure
+ * @brief 初始化设备信息
+ * @param info 指向设备信息结构的指针
  */
 void iolink_device_info_init(const iolink_device_info_t* info);
 
 /**
- * @brief Get device information
- * @return Pointer to device info structure
+ * @brief 获取设备信息
+ * @return 指向设备信息结构的指针
  */
 const iolink_device_info_t* iolink_device_info_get(void);
 
 /**
- * @brief Set the Application Tag (Index 0x18)
- * @param tag String data (max 32 bytes)
- * @param len Length of string
- * @return 0 on success, negative on error
+ * @brief 设置应用标签（Index 0x18）
+ * @param tag 字符串数据（最多 32 字节）
+ * @param len 字符串长度
+ * @return 成功时为 0，出错时为负值
  */
 int iolink_device_info_set_application_tag(const char* tag, uint8_t len);
 
 /**
- * @brief Get Device Access Locks (Index 0x000C)
- * @return 16-bit access locks value
+ * @brief 获取设备访问锁（Index 0x000C）
+ * @return 16 位访问锁值
  */
 uint16_t iolink_device_info_get_access_locks(void);
 
 /**
- * @brief Set Device Access Locks (Index 0x000C)
- * @param locks 16-bit access locks value
+ * @brief 设置设备访问锁（Index 0x000C）
+ * @param locks 16 位访问锁值
  */
 void iolink_device_info_set_access_locks(uint16_t locks);
 

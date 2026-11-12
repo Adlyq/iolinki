@@ -8,12 +8,12 @@
 
 /**
  * @file test_isdu_buffers.c
- * @brief The framed ISDU response never overwrites the published buffer.
+ * @brief 分段 ISDU 应答绝不覆盖已发布的缓冲区。
  *
- * The engine builds into resp_store[resp_sel]; the data ISR serves
- * resp_store[resp_pub]. A new START may only alternate the build buffer once
- * the previous response has been published, so back-to-back requests cannot
- * write the buffer the ISR is still allowed to read.
+ * 引擎构建到 resp_store[resp_sel]；数据 ISR 服务
+ * resp_store[resp_pub]。新的 START 只能在前一个应答已发布后切换
+ * 构建缓冲区，因此连续不断的请求不能
+ * 写入 ISR 仍被允许读取的缓冲区。
  */
 
 #include <assert.h>
@@ -22,7 +22,7 @@
 #include "iolinki/dll.h"
 #include "iolinki/isdu.h"
 
-/* 8-bit Index read request (I-Service 0x9, index 0x10) with its CHKPDU. */
+/* 8 位索引读请求（I-Service 0x9，索引 0x10）及其 CHKPDU。 */
 static void send_start(iolink_isdu_ctx_t* isdu)
 {
     uint8_t req[3] = {0x93U, 0x10U, 0x00U};
@@ -36,19 +36,19 @@ int main(void)
     iolink_isdu_init(&isdu);
     assert(isdu.resp_sel == isdu.resp_pub);
 
-    /* First request: build in the other buffer. */
+    /* 第一个请求：在另一个缓冲区中构建。 */
     send_start(&isdu);
     assert(isdu.resp_sel != isdu.resp_pub);
     const uint8_t published = isdu.resp_pub;
 
-    /* Second START before the main pump published the first response must not
-     * alternate again: that would overwrite resp_store[resp_pub]. */
-    isdu.resp_store[published][0] = 0xA5U; /* sentinel: the published copy */
+    /* 在主循环泵发布第一个应答之前的第二个 START 不得
+     * 再次切换：那会覆盖 resp_store[resp_pub]。 */
+    isdu.resp_store[published][0] = 0xA5U; /* 哨兵：已发布的那份副本 */
     send_start(&isdu);
     assert(isdu.resp_sel != isdu.resp_pub);
     assert(isdu.resp_store[published][0] == 0xA5U);
 
-    /* Once published, the next request alternates to the other buffer. */
+    /* 一旦发布，下一个请求切换到另一个缓冲区。 */
     isdu.resp_pub = isdu.resp_sel;
     const uint8_t previous = isdu.resp_sel;
     send_start(&isdu);

@@ -8,11 +8,11 @@
 
 /**
  * @file test_stats_split.c
- * @brief Checks the statistics counter sets in both IOLINK_STATS_MODE values.
+ * @brief 检查两种 IOLINK_STATS_MODE 取值下的统计计数器集合。
  *
- * SHARED: one set, the public statistics mirror the context fields.
- * SPLIT: the ISR owns a second set, the public statistics report the sum, and
- * an ISR increment never touches the main-context field.
+ * SHARED：只有一个集合，公共统计镜像上下文字段。
+ * SPLIT：ISR 拥有第二个集合，公共统计报告两者之和，
+ * 且 ISR 侧的自增不会触及主上下文字段。
  */
 
 #include <assert.h>
@@ -35,8 +35,8 @@ int main(void)
     ctx.isr_stat.timeout_errors = 6U;
     ctx.isr_stat.isr_tx_dropped = 3U;
 
-    /* The ISR slot is distinct from the main-context field: incrementing it
-     * leaves the main counter untouched (that is the point of the split). */
+    /* ISR 槽位与主上下文字段相互独立：对其自增
+     * 不会改动主计数器（这正是 split 的意义）。 */
     assert(&IOLINK_STAT_ISR(&ctx, framing_errors) != &ctx.framing_errors);
     IOLINK_STAT_ISR(&ctx, framing_errors)++;
     assert(ctx.framing_errors == 3U);
@@ -49,13 +49,13 @@ int main(void)
     assert(stats.isr_tx_dropped == IOLINK_STAT_TOTAL(&ctx, isr_tx_dropped));
 
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
-    assert(stats.framing_errors == 8U);  /* 3 main + 5 ISR */
-    assert(stats.timeout_errors == 11U); /* 5 main + 6 ISR */
-    assert(stats.isr_tx_dropped == 5U);  /* 2 main + 3 ISR */
+    assert(stats.framing_errors == 8U);  /* 主上下文 3 + ISR 5 */
+    assert(stats.timeout_errors == 11U); /* 主上下文 5 + ISR 6 */
+    assert(stats.isr_tx_dropped == 5U);  /* 主上下文 2 + ISR 3 */
 #else
     assert(stats.framing_errors == 3U);
     assert(stats.timeout_errors == 5U);
-    /* One set: the ISR increments the main-context field itself. */
+    /* 只有一个集合：ISR 直接自增主上下文字段本身。 */
     assert(stats.isr_tx_dropped == ctx.isr_tx_dropped);
     assert(stats.isr_tx_dropped == 2U);
 #endif

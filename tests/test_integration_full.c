@@ -8,7 +8,7 @@
 
 /**
  * @file test_integration_full.c
- * @brief Full-stack integration test for iolinki
+ * @brief iolinki 的全栈集成测试
  */
 
 #include <stdarg.h>
@@ -35,25 +35,25 @@ static void test_full_stack_lifecycle(void** state)
     iolink_phy_mock_reset();
     iolink_ds_mock_reset();
 
-    /* Initialize stack with mock PHY and mock storage */
+    /* 用 mock PHY 和 mock 存储初始化协议栈 */
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, NULL, NULL);
     iolink_ds_init(iolink_device_get_ds_ctx(&dev.ctx), &g_ds_storage_mock);
 
-    /*** STEP 1: STARTUP -> PREOPERATE ***/
+    /*** 步骤 1：STARTUP -> PREOPERATE ***/
 
-    /* 1. Inject WakeUp (Transitions SIO -> AWAITING_COMM) */
+    /* 1. 注入 WakeUp（状态从 SIO 迁移到 AWAITING_COMM） */
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(&dev.ctx);
     usleep(200);
 
-    /* Note: We rely on the first byte of STEP 2 (ISDU Read) to transition
-       AWAITING_COMM -> PREOPERATE and be processed immediately. */
+    /* 注意：我们依赖 STEP 2（ISDU 读）的第一个字节完成
+       AWAITING_COMM -> PREOPERATE 的迁移并被立即处理。 */
 
-    /*** STEP 2: PREOPERATE (ISDU Read Index 0x10 - Vendor Name) ***/
-    /* Master Sends: MC=0xBB (Read Index 0x10) + CK */
+    /*** 步骤 2：PREOPERATE（ISDU 读索引 0x10 - Vendor Name） ***/
+    /* 主站发送：MC=0xBB（读索引 0x10）+ CK */
     uint8_t mc = 0xBB;
     uint8_t ck = test_frame_checksum(mc);
 
@@ -61,25 +61,25 @@ static void test_full_stack_lifecycle(void** state)
     mock_phy_feed_byte(ck);
     mock_phy_feed_chk();
 
-    /* Device Responds: OD + CK = 2 bytes */
+    /* 设备响应：OD + CK = 2 字节 */
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 2);
     will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
 
-    /*** STEP 3: EVENT TRIGGERING ***/
+    /*** 步骤 3：事件触发 ***/
     iolink_events_ctx_t* evt_ctx = iolink_device_get_events_ctx(&dev.ctx);
     iolink_event_trigger(evt_ctx, 0x1234, IOLINK_EVENT_TYPE_WARNING);
     assert_true(iolink_events_pending(evt_ctx));
 
-    /* Next cycle: Master sends Idle MC=0x00, CK=0x00 */
+    /* 下一周期：主站发送空闲 MC=0x00，CK=0x00 */
     uint8_t idle_mc = 0x00;
     uint8_t idle_ck = test_frame_checksum(idle_mc);
     mock_phy_feed_byte(idle_mc);
     mock_phy_feed_byte(idle_ck);
     mock_phy_feed_chk();
 
-    /* Device sends response with Event bit set (Type-0 write: CKS only) */
+    /* 设备发送带 Event 位设置的响应（Type-0 写：仅 CKS） */
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, 1);
     will_return(mock_phy_send, 0);

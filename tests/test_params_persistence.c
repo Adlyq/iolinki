@@ -57,8 +57,8 @@ int main(void)
         assert(iolink_params_ctx_get(&params, indices[i], 0, result, sizeof(result)) == 11);
         assert(memcmp(result, replacement, 11) == 0);
     }
-    /* Real byte transport must produce Write Response (-), not the old 52 52
-     * positive acknowledgement, when persistent tag storage rejects the write. */
+    /* 当持久化标签存储拒绝写入时，真实字节传输必须产生 Write Response (-)，
+     * 而不是旧的 52 52 肯定应答。 */
     const uint8_t requests[3][4] = {
         {0x14U, 0x18U, 0x78U, 0x74U}, /* ApplicationTag "x" */
         {0x14U, 0x19U, 0x78U, 0x75U}, /* FunctionTag "x" */

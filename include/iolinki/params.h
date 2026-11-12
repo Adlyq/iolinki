@@ -19,114 +19,114 @@
 
 /**
  * @file params.h
- * @brief IO-Link Parametrization Manager
+ * @brief IO-Link 参数管理器
  */
 
 /**
- * @defgroup iolinki_params Parameter Manager
- * @brief Read/write access to IO-Link parameters by ISDU index/subindex.
+ * @defgroup iolinki_params 参数管理器
+ * @brief 按 ISDU 索引/子索引读写 IO-Link 参数。
  * @{
  */
 
 /**
- * @brief Per-device parameter manager context.
+ * @brief 每设备参数管理器上下文。
  */
 typedef struct
 {
-    char application_tag[33];              /**< Application tag (32 bytes + NUL). */
-    char function_tag[33];                 /**< Function tag (32 bytes + NUL). */
-    char location_tag[33];                 /**< Location tag (32 bytes + NUL). */
-    bool application_tag_valid;            /**< True if the application tag has been set. */
-    bool function_tag_valid;               /**< True if the function tag has been set. */
-    bool location_tag_valid;               /**< True if the location tag has been set. */
-    iolink_device_info_ctx_t* device_info; /**< Associated device-info context. */
-    const iolink_storage_api_t* storage;   /**< Persistent backend (may be NULL). */
+    char application_tag[33];              /**< 应用标签（32 字节 + NUL）。 */
+    char function_tag[33];                 /**< 功能标签（32 字节 + NUL）。 */
+    char location_tag[33];                 /**< 位置标签（32 字节 + NUL）。 */
+    bool application_tag_valid;            /**< 已设置应用标签时为 true。 */
+    bool function_tag_valid;               /**< 已设置功能标签时为 true。 */
+    bool location_tag_valid;               /**< 已设置位置标签时为 true。 */
+    iolink_device_info_ctx_t* device_info; /**< 关联的设备信息上下文。 */
+    const iolink_storage_api_t* storage;   /**< 持久化后端（可为 NULL）。 */
 } iolink_params_ctx_t;
 
 /**
- * @brief Initialize a parameter manager context.
- * @param ctx          Context to initialize.
- * @param device_info  Device-info context to bind (must remain valid).
+ * @brief 初始化参数管理器上下文。
+ * @param ctx          要初始化的上下文。
+ * @param device_info  要绑定的设备信息上下文（必须保持有效）。
  */
 void iolink_params_ctx_init(iolink_params_ctx_t* ctx, iolink_device_info_ctx_t* device_info);
 
 /**
- * @brief Bind the persistent storage backend to a parameter context.
- * @param ctx     Parameter manager context.
- * @param storage Unified storage backend (NULL disables persistence).
+ * @brief 将持久化存储后端绑定到参数上下文。
+ * @param ctx     参数管理器上下文。
+ * @param storage 统一存储后端（NULL 表示禁用持久化）。
  */
 void iolink_params_bind_storage(iolink_params_ctx_t* ctx, const iolink_storage_api_t* storage);
 
 /**
- * @brief Retrieve a parameter value from a context by its IO-Link address.
- * @param ctx          Parameter manager context.
- * @param index        ISDU index.
- * @param subindex     ISDU subindex (0 for entire index, or 1-255).
- * @param[out] buffer  Destination buffer to store the value.
- * @param max_len      Size of the destination buffer.
- * @return Number of bytes read on success, or negative IO-Link ErrorCode.
+ * @brief 按 IO-Link 地址从上下文读取参数值。
+ * @param ctx          参数管理器上下文。
+ * @param index        ISDU 索引。
+ * @param subindex     ISDU 子索引（0 表示整个索引，或 1-255）。
+ * @param[out] buffer  用于存放值的目标缓冲区。
+ * @param max_len      目标缓冲区的大小。
+ * @return 成功时返回读取的字节数，否则返回负的 IO-Link ErrorCode。
  */
 int iolink_params_ctx_get(const iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
                           uint8_t* buffer, size_t max_len);
 
 /**
- * @brief Update a parameter value on a context.
- * @param ctx       Parameter manager context.
- * @param index     ISDU index.
- * @param subindex  ISDU subindex.
- * @param data      Pointer to the new data to write.
- * @param len       Length of the new data in bytes.
- * @param persist   If true, synchronously commit the change to NVM.
- * A failed NVM commit returns failure without changing the context/readback.
- * @return 0 on success, or negative IO-Link ErrorCode.
+ * @brief 更新上下文中的参数值。
+ * @param ctx       参数管理器上下文。
+ * @param index     ISDU 索引。
+ * @param subindex  ISDU 子索引。
+ * @param data      指向待写入新数据的指针。
+ * @param len       新数据的长度，以字节计。
+ * @param persist   为 true 时，将变更同步提交到 NVM。
+ * NVM 提交失败时返回失败，且不改变上下文/回读值。
+ * @return 成功时返回 0，否则返回负的 IO-Link ErrorCode。
  */
 int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
                           const uint8_t* data, size_t len, iolink_persist_t persist);
 
 /**
- * @brief Reset all parameters in a context to factory defaults.
- * Resets RAM and attempts NVM; this legacy void API cannot report storage failure.
- * @param ctx Parameter manager context.
+ * @brief 将上下文中的所有参数恢复为出厂默认值。
+ * 复位 RAM 并尝试写入 NVM；该旧版 void API 无法报告存储失败。
+ * @param ctx 参数管理器上下文。
  */
 void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx);
 
 /**
- * @brief Initialize the parameter manager
+ * @brief 初始化参数管理器
  *
- * Compatibility wrapper around the context API.
+ * 基于上下文 API 的兼容封装。
  */
 #if IOLINK_FEATURE_LEGACY_PARAMS
 void iolink_params_init(void);
 
 /**
- * @brief Retrieve a parameter value by its IO-Link address
+ * @brief 按 IO-Link 地址读取参数值
  *
- * @param index ISDU Index (e.g. 0x10 for Vendor Name)
- * @param subindex ISDU Subindex (0 for entire index, or 1-255)
- * @param buffer [out] Destination buffer to store the value
- * @param max_len Size of the destination buffer
- * @return int Number of bytes read on success, or negative IO-Link ErrorCode
+ * @param index ISDU 索引（例如 0x10 表示 Vendor Name）
+ * @param subindex ISDU 子索引（0 表示整个索引，或 1-255）
+ * @param buffer [out] 用于存放值的目标缓冲区
+ * @param max_len 目标缓冲区的大小
+ * @return int 成功时返回读取的字节数，否则返回负的 IO-Link ErrorCode
  */
 int iolink_params_get(uint16_t index, uint8_t subindex, uint8_t* buffer, size_t max_len);
 
 /**
- * @brief Update a parameter value
+ * @brief 更新参数值
  *
- * @param index ISDU Index
- * @param subindex ISDU Subindex
- * @param data Pointer to the new data to write
- * @param len Length of the new data in bytes
- * @param persist If true, synchronously commit the change to NVM
- * @return int 0 on success, or negative IO-Link ErrorCode (e.g. 0x80XX)
+ * @param index ISDU 索引
+ * @param subindex ISDU 子索引
+ * @param data 指向待写入新数据的指针
+ * @param len 新数据的长度，以字节计
+ * @param persist 为 true 时，将变更同步提交到 NVM
+ * @return int 成功时返回 0，否则返回负的 IO-Link ErrorCode（例如 0x80XX）
  */
 int iolink_params_set(uint16_t index, uint8_t subindex, const uint8_t* data, size_t len,
                       iolink_persist_t persist);
 
 /**
- * @brief Reset all parameters to factory defaults
+ * @brief 将所有参数恢复为出厂默认值
  *
- * Resets writable parameters in RAM and attempts to persist the reset.
- * This legacy void API cannot report unavailable or failed storage.
+ * 复位 RAM 中的可写参数并尝试持久化该复位。
+ * 该旧版 void API 无法报告存储不可用或失败。
  */
 void iolink_params_factory_reset(void);
 #endif /* IOLINK_FEATURE_LEGACY_PARAMS */

@@ -8,13 +8,13 @@
 
 /**
  * @file test_spec_conformance.c
- * @brief Conformance assertions for the mandatory ISDU objects and access
- *        rules, checked against the bundled IO-Link V1.1.5 specification.
+ * @brief 强制性 ISDU 对象与访问规则的一致性断言，
+ *        依据随附的 IO-Link V1.1.5 规范检查。
  *
- * Covers: reserved 0x000A/0x000B indices, ErrorCount (0x0020), ProductURI
- * (0x001B), ProcessDataInput/Output (0x0028/0x0029), read-only WRITE rejection
- * (Table C.1), the Parameter access lock (Table B.2.4) and the identification
- * string fixedLength limits (B.2.8-B.2.15).
+ * 覆盖：保留的 0x000A/0x000B 索引、ErrorCount (0x0020)、ProductURI
+ * (0x001B)、ProcessDataInput/Output (0x0028/0x0029)、对只读对象的 WRITE 拒绝
+ * (Table C.1)、Parameter 访问锁 (Table B.2.4) 以及标识字符串
+ * fixedLength 限制 (B.2.8-B.2.15)。
  */
 
 #include <stdarg.h>
@@ -70,7 +70,7 @@ static int teardown(void** state)
     return 0;
 }
 
-/* Read an object and copy the response into out; returns the response length. */
+/* 读取一个对象并把响应拷贝到 out；返回响应长度。 */
 static int read_object(uint16_t index, uint8_t* out, size_t out_size)
 {
     iolink_isdu_ctx_t ctx;
@@ -80,7 +80,7 @@ static int read_object(uint16_t index, uint8_t* out, size_t out_size)
     return isdu_collect_response(&ctx, out, out_size);
 }
 
-/* Same, with a DLL context bound (needed by the process-data objects). */
+/* 同上，但绑定了 DLL 上下文（过程数据对象需要）。 */
 static int read_object_with_dll(uint16_t index, iolink_dll_ctx_t* dll, uint8_t* out,
                                 size_t out_size)
 {
@@ -92,7 +92,7 @@ static int read_object_with_dll(uint16_t index, iolink_dll_ctx_t* dll, uint8_t* 
     return isdu_collect_response(&ctx, out, out_size);
 }
 
-/* Accept every vendor-service access (used to exercise the parameter lock). */
+/* 接受所有厂商服务访问（用于验证 Parameter 锁）。 */
 static uint8_t vendor_service_ok(void* user, uint16_t index, uint8_t subindex, bool write,
                                  const uint8_t* input, size_t length, uint8_t* output,
                                  size_t* output_length)
@@ -108,7 +108,7 @@ static uint8_t vendor_service_ok(void* user, uint16_t index, uint8_t subindex, b
     return 0U;
 }
 
-/* Write an object and copy the response; returns the response length. */
+/* 写入一个对象并拷贝响应；返回响应长度。 */
 static int write_object(uint16_t index, const uint8_t* data, uint8_t len, uint8_t* out,
                         size_t out_size)
 {
@@ -119,7 +119,7 @@ static int write_object(uint16_t index, const uint8_t* data, uint8_t len, uint8_
     return isdu_collect_response(&ctx, out, out_size);
 }
 
-/* Table B.8: 0x0004-0x000B are reserved; VendorID/DeviceID live in DPP1. */
+/* Table B.8：0x0004-0x000B 为保留索引；VendorID/DeviceID 位于 DPP1。 */
 static void test_vendor_device_id_indices_reserved(void** state)
 {
     (void) state;
@@ -135,7 +135,7 @@ static void test_vendor_device_id_indices_reserved(void** state)
         assert_int_equal(out[0], 0x80U);
         assert_int_equal(out[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
 
-        /* C.2.3: a write to a non-existing index is also IDX_NOTAVAIL. */
+        /* C.2.3：写入不存在的索引同样返回 IDX_NOTAVAIL。 */
         const uint8_t value = 0x5AU;
         n = write_object(reserved[i], &value, 1U, out, sizeof(out));
         assert_int_equal(n, 2);
@@ -144,17 +144,17 @@ static void test_vendor_device_id_indices_reserved(void** state)
     }
 }
 
-/* Table B.8: ErrorCount (0x0020) is a 2-octet UIntegerT (must not be an error). */
+/* Table B.8：ErrorCount (0x0020) 是 2 字节 UIntegerT（不得返回错误）。 */
 static void test_error_count_index(void** state)
 {
     (void) state;
     uint8_t out[8] = {0};
     int n = read_object(IOLINK_IDX_ERROR_COUNT, out, sizeof(out));
     assert_int_equal(n, 2);
-    assert_int_not_equal(out[0], 0x80U); /* served, not IDX_NOTAVAIL */
+    assert_int_not_equal(out[0], 0x80U); /* 已服务，而非 IDX_NOTAVAIL */
 }
 
-/* Table B.8 / B.2.19: ProductURI (0x001B) is served when a profile is declared. */
+/* Table B.8 / B.2.19：声明了配置文件时 ProductURI (0x001B) 会被服务。 */
 static void test_product_uri_index(void** state)
 {
     (void) state;
@@ -165,11 +165,11 @@ static void test_product_uri_index(void** state)
     assert_memory_equal(out, expected, strlen(expected));
 }
 
-/* B.2.19/Table C.1: an unconfigured optional ProductURI is not available. */
+/* B.2.19/Table C.1：未配置的可选 ProductURI 不可用。 */
 static void test_product_uri_absent(void** state)
 {
     (void) state;
-    iolink_device_info_init(NULL); /* default info: product_uri = NULL */
+    iolink_device_info_init(NULL); /* 默认 info：product_uri = NULL */
 
     uint8_t out[8] = {0};
     int n = read_object(IOLINK_IDX_PRODUCT_URI, out, sizeof(out));
@@ -178,8 +178,8 @@ static void test_product_uri_absent(void** state)
     assert_int_equal(out[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
 }
 
-/* Table B.8 / B.2.23: ProcessDataInput (0x0028) returns the Process Data of
- * the PDin channel with its runtime length, not a descriptor/length byte. */
+/* Table B.8 / B.2.23：ProcessDataInput (0x0028) 返回 PDin 通道的
+ * 过程数据及其运行时长度，而不是描述符/长度字节。 */
 static void test_process_data_input_returns_pd(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0132");
@@ -187,8 +187,8 @@ static void test_process_data_input_returns_pd(void** state)
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
 
-    /* Only the public setter configures the length: it updates the runtime
-       field, so serving pd_in_len here would truncate the answer to 0. */
+    /* 只有公共 setter 会配置长度：它更新运行时
+       字段，因此这里改用 pd_in_len 会把应答截断为 0。 */
     assert_int_equal(iolink_dll_set_pd_length(&dll, 2U, 0U), 0);
     assert_int_equal(dll.pd_in_len, 0U);
     dll.pd_valid = true;
@@ -202,9 +202,9 @@ static void test_process_data_input_returns_pd(void** state)
     assert_int_equal(out[1], 0x22U);
 }
 
-/* B.2.23 is silent while the DLL flags PDin as invalid: the PD status bit
- * (A.1.5) carries the validity, so the current Process Data buffer is served
- * instead of an ISDU error (ST reference behaviour). */
+/* 当 DLL 将 PDin 标记为无效时 B.2.23 未作规定：PD 状态位
+ * (A.1.5) 承载有效性，因此返回当前过程数据缓冲区
+ * 而不是 ISDU 错误（ST 参考行为）。 */
 static void test_process_data_input_invalid_still_serves_buffer(void** state)
 {
     (void) state;
@@ -223,8 +223,8 @@ static void test_process_data_input_invalid_still_serves_buffer(void** state)
     assert_int_equal(out[1], 0x22U);
 }
 
-/* B.2.24 is silent before the first PDout frame: serve the buffer as-is (ST
- * reference behaviour), which is zero-initialised after DLL init. */
+/* 首个 PDout 帧之前 B.2.24 未作规定：按原样返回缓冲区
+ * （ST 参考行为），它在 DLL 初始化后被清零。 */
 static void test_process_data_output_before_first_frame(void** state)
 {
     (void) state;
@@ -239,8 +239,8 @@ static void test_process_data_output_before_first_frame(void** state)
     assert_int_equal(out[1], 0x00U);
 }
 
-/* B.2.23/B.2.24: a device without Process Data answers with an empty positive
- * response, not with the old 1-octet length descriptor. */
+/* B.2.23/B.2.24：不含过程数据的设备以空的正向
+ * 响应应答，而不是旧的 1 字节长度描述符。 */
 static void test_process_data_zero_length(void** state)
 {
     (void) state;
@@ -252,8 +252,8 @@ static void test_process_data_zero_length(void** state)
     assert_int_equal(read_object_with_dll(0x0029U, &dll, out, sizeof(out)), 0);
 }
 
-/* B.2.23: a standard 2-octet positive payload starting with 0x80 must not be
- * mistaken for a negative response; the wire I-Service is the discriminator. */
+/* B.2.23：以 0x80 开头的标准 2 字节正向载荷不得
+ * 被误判为负向响应；线上的 I-Service 才是判别依据。 */
 static void test_process_data_80xx_is_positive(void** state)
 {
     (void) state;
@@ -273,22 +273,22 @@ static void test_process_data_80xx_is_positive(void** state)
 
     uint8_t wire[8] = {0};
     iolink_isdu_od_read(&ctx, IOLINK_FLOWCTRL_START, wire, sizeof(wire));
-    assert_int_equal(wire[0], 0xD4U); /* Read Response (+), 2 data octets */
+    assert_int_equal(wire[0], 0xD4U); /* 读响应（+），2 个数据字节 */
     assert_int_equal(wire[1], 0x80U);
     assert_int_equal(wire[2], 0x42U);
 }
 
-/* Figure B.5/Table B.6: decode the DPP1 ProcessDataIn/Out length descriptor. */
+/* Figure B.5/Table B.6：解码 DPP1 的 ProcessDataIn/Out 长度描述符。 */
 static unsigned pd_descriptor_octets(uint8_t code)
 {
     const unsigned field = (unsigned) (code & 0x1FU);
     if ((code & 0x80U) != 0U) {
-        return field + 1U; /* BYTE=1: Length is expressed in octets - 1 */
+        return field + 1U; /* BYTE=1：Length 以（字节数 - 1）表示 */
     }
-    return field / 8U; /* BYTE=0: Length is expressed in bits */
+    return field / 8U; /* BYTE=0：Length 以位数表示 */
 }
 
-/* Read one octet of Direct Parameter page 1 (address 0x00..0x0F). */
+/* 读取 Direct Parameter page 1 的一个字节（地址 0x00..0x0F）。 */
 static uint8_t read_dpp1_octet(iolink_dll_ctx_t* dll, uint8_t addr)
 {
     iolink_isdu_ctx_t ctx;
@@ -302,8 +302,8 @@ static uint8_t read_dpp1_octet(iolink_dll_ctx_t* dll, uint8_t addr)
     return value;
 }
 
-/* Table B.8 / B.2.24: ProcessDataOutput (0x0029) returns the last valid PD
- * output data written to the device. */
+/* Table B.8 / B.2.24：ProcessDataOutput (0x0029) 返回写入设备的
+ * 最后一个有效 PD 输出数据。 */
 static void test_process_data_output_returns_pd(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0133");
@@ -321,14 +321,14 @@ static void test_process_data_output_returns_pd(void** state)
     assert_int_equal(out[0], 0xAAU);
     assert_int_equal(out[1], 0xBBU);
 
-    /* SDCI_TC_0133: length matches DPP1 0x06; reserved bit 5 and the unused
-       SIO bit 6 of the descriptor are zero. */
+    /* SDCI_TC_0133：长度与 DPP1 0x06 一致；描述符中
+       保留位 5 和未使用的 SIO 位 6 均为 0。 */
     const uint8_t dpp1_pdout = read_dpp1_octet(&dll, 0x06U);
     assert_int_equal(dpp1_pdout & 0x60U, 0x00U);
     assert_int_equal(pd_descriptor_octets(dpp1_pdout), n);
 }
 
-/* Table C.1: WRITE to a read-only identification object is 0x80 0x23. */
+/* Table C.1：对只读标识对象的 WRITE 返回 0x80 0x23。 */
 static void test_read_only_identification_rejects_write(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0140");
@@ -362,14 +362,14 @@ static void test_read_only_identification_rejects_write(void** state)
     }
 }
 
-/* DeviceAccessLocks bit 0: with the parameter lock set, parameter writes are
- * refused (Table C.1 access denied). */
+/* DeviceAccessLocks 位 0：设置参数锁后，参数写入
+ * 会被拒绝（Table C.1 访问被拒）。 */
 static void test_parameter_lock_blocks_tag_write(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0156");
     (void) state;
 
-    /* Establish a known value before enabling the lock. */
+    /* 在启用锁之前建立一个已知值。 */
     const uint8_t original[] = {'X', 'Y', 'Z'};
     uint8_t out[8] = {0};
     int n = write_object(IOLINK_IDX_APPLICATION_TAG, original, sizeof(original), out, sizeof(out));
@@ -383,15 +383,15 @@ static void test_parameter_lock_blocks_tag_write(void** state)
     assert_int_equal(out[0], 0x80U);
     assert_int_equal(out[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 
-    /* B.2.4: Read access is not affected and the locked write did not change
-     * the stored value. */
+    /* B.2.4：读访问不受影响，被锁定的写入也没有改变
+     * 已存储的值。 */
     uint8_t readback[16] = {0};
     n = read_object(IOLINK_IDX_APPLICATION_TAG, readback, sizeof(readback));
     assert_int_equal(n, (int) sizeof(original));
     assert_memory_equal(readback, original, sizeof(original));
 
-    /* SDCI_TC_0156 step d: writing DeviceAccessLocks = 0x0000 releases the
-       Parameter lock and the same parameter write now succeeds. */
+    /* SDCI_TC_0156 步骤 d：写入 DeviceAccessLocks = 0x0000 解除
+       Parameter 锁，随后同样的参数写入即可成功。 */
     const uint8_t unlock[] = {0x00U, 0x00U};
     n = write_object(IOLINK_IDX_DEVICE_ACCESS_LOCKS, unlock, sizeof(unlock), out, sizeof(out));
     assert_int_equal(n, 0);
@@ -405,8 +405,8 @@ static void test_parameter_lock_blocks_tag_write(void** state)
     assert_memory_equal(readback, overwrite, sizeof(overwrite));
 }
 
-/* B.2.4: the Parameter lock also inhibits writes to device-specific
- * parameters; reads still reach the vendor service. */
+/* B.2.4：Parameter 锁同样阻止对设备特定参数的写入；
+ * 读取仍会到达厂商服务。 */
 static void test_parameter_lock_blocks_vendor_write(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0156");
@@ -435,8 +435,8 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
     assert_int_equal(n, 0);
 }
 
-/* B.2.8-B.2.19: strings are truncated to their object fixedLength
- * (64 octets, SerialNumber 16, ProductURI up to 100, tags 32). */
+/* B.2.8-B.2.19：字符串被截断到其对象的 fixedLength
+ * （64 字节，SerialNumber 为 16，ProductURI 最多 100，tag 为 32）。 */
 static void test_identification_string_length_limits(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0114");
@@ -474,11 +474,11 @@ static void test_identification_string_length_limits(void** state)
     n = read_object(IOLINK_IDX_SERIAL_NUMBER, out, sizeof(out));
     assert_int_equal(n, 16);
 
-    /* B.2.19 / Table B.8: ProductURI allows up to 100 octets. */
+    /* B.2.19 / Table B.8：ProductURI 最多允许 100 字节。 */
     n = read_object(IOLINK_IDX_PRODUCT_URI, out, sizeof(out));
     assert_int_equal(n, 100);
 
-    /* B.2.16-B.2.18 / Table B.8: tags are capped at 32 octets. */
+    /* B.2.16-B.2.18 / Table B.8：tag 上限为 32 字节。 */
     uint8_t tag_resp[8] = {0};
     n = write_object(IOLINK_IDX_FUNCTION_TAG, long_tag, (uint8_t) sizeof(long_tag), tag_resp,
                      sizeof(tag_resp));

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (documentation language)
+- Comments under `src/`, `include/iolinki/` and `tests/` are written in
+  Simplified Chinese. Code, identifiers, string literals, Doxygen commands and
+  spec references are unchanged; the Doxygen output now renders Chinese prose.
+
 ### Changed (readability and API cleanup)
 - Naming: `frame_eager` -> `frame_replied_by_isr`,
   `dll_isr_reply_allowed[_acc]` -> `dll_isr_frame_valid[_acc]`,

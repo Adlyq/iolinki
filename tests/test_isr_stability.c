@@ -1,16 +1,16 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
 /*
- * Long-horizon stability test for the ISR two-pump transport.
+ * ISR 双泵传输的长时程稳定性测试。
  *
- * The mock clock accelerates N simulated seconds and a 32-bit millisecond
- * timestamp rollover into milliseconds of wall time. It checks that:
- *  - continuous mailbox traffic never trips the 1 s inactivity supervision;
- *  - valid frames are never rejected (crc/framing/timeout stay 0);
- *  - every consumed frame starts exactly one reply;
- *  - the millisecond timestamp wrap does not reset a healthy link.
+ * mock 时钟把 N 个仿真秒以及 32 位毫秒时间戳回绕
+ * 压缩成数毫秒的实际时间。它检查：
+ *  - 持续的邮箱流量绝不触发 1 s 无活动监控；
+ *  - 合法帧绝不被拒绝（crc/framing/timeout 保持 0）；
+ *  - 每个被消费的帧恰好启动一个应答；
+ *  - 毫秒时间戳回绕不会复位健康的链路。
  *
- * ISR two-pump transport stability checks.
+ * ISR 双泵传输稳定性检查。
  */
 
 #include <stdint.h>
@@ -30,7 +30,7 @@ static uint64_t test_time_us(void* user)
     return now_us;
 }
 
-/** @brief Publish one request into the mailbox ring (the ISR does this). */
+/** @brief 向邮箱环发布一个请求（由 ISR 执行）。 */
 static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len)
 {
     iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&ctx->isr_frame_ring);
@@ -48,7 +48,7 @@ static int rx_octet(void* user, uint8_t* data, uint8_t* status)
     (void) user;
     (void) data;
     (void) status;
-    return 0; /* The test publishes into the mailbox directly. */
+    return 0; /* 测试直接向邮箱发布数据。 */
 }
 
 static int tx_octet(void* user, uint8_t data)
@@ -71,20 +71,20 @@ static uint8_t int_active(void* user)
     return ((ctx != NULL) && (ctx->isr_tx_active != 0U)) ? 1U : 0U;
 }
 
-/* A valid Type-0 request: MC + CKT carrying the A.1.6 checksum. */
+/* 一个合法的 Type-0 请求：携带 A.1.6 校验和的 MC + CKT。 */
 static void make_type0_frame(uint8_t mc, uint8_t frame[2])
 {
     frame[0] = mc;
-    frame[1] = 0x00U; /* Type 0; the checksum occupies bits 0-5. */
+    frame[1] = 0x00U; /* Type 0；校验和占用 bit 0-5。 */
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 2U));
 }
 
-/* Feed one mailbox frame per cycle, drain the reply, verify the invariants.
- * Returns 0 on success, a non-zero test-failure code otherwise. */
+/* 每个周期送入一个邮箱帧，排空应答，校验各项不变式。
+ * 成功返回 0，否则返回非零的测试失败码。 */
 static int run_cycles(iolink_dll_ctx_t* ctx, unsigned cycles, uint64_t step_us)
 {
     uint8_t frame[2];
-    make_type0_frame(0x80U, frame); /* Type-0 READ: two-octet reply. */
+    make_type0_frame(0x80U, frame); /* Type-0 READ：两个八位组的应答。 */
 
     for (unsigned i = 0U; i < cycles; i++) {
         now_us += step_us;
@@ -96,10 +96,10 @@ static int run_cycles(iolink_dll_ctx_t* ctx, unsigned cycles, uint64_t step_us)
         }
 
         if (!iolink_ring_is_empty(&ctx->isr_frame_ring)) {
-            return 1; /* mailbox not consumed */
+            return 1; /* 邮箱未被消费 */
         }
         if (ctx->timeout_errors != 0U) {
-            return 2; /* idle supervision tripped */
+            return 2; /* 空闲监控被触发 */
         }
         if (ctx->crc_errors != 0U) {
             return 3;
@@ -133,7 +133,7 @@ int main(void)
     now_us = 1000000U;
     ctx.last_activity_ms = ((uint32_t) (now_us / 1000U));
 
-    /* Scenario A: 60 simulated seconds at 1 ms per cycle (60k frames). */
+    /* 场景 A：每周期 1 ms，仿真 60 秒（60k 帧）。 */
     if (run_cycles(&ctx, 60000U, 1000U) != 0) {
         return 10;
     }
@@ -141,13 +141,13 @@ int main(void)
         return 11;
     }
     if (tx_frames != 60000U) {
-        return 12; /* one reply per consumed frame */
+        return 12; /* 每个被消费的帧对应一个应答 */
     }
     if (tx_octets != 2U * 60000U) {
-        return 13; /* Type-0 READ reply is OD + CKS */
+        return 13; /* Type-0 READ 的应答为 OD + CKS */
     }
 
-    /* Scenario B: cross the 32-bit millisecond timestamp wrap. */
+    /* 场景 B：跨越 32 位毫秒时间戳回绕。 */
     now_us = ((uint64_t) UINT32_MAX - 5U) * 1000U;
     ctx.last_activity_ms = ((uint32_t) (now_us / 1000U));
     ctx.timeout_errors = 0U;

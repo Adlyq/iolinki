@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "iolinki/phy_l6362a.h"
 #ifdef NDEBUG
-#undef NDEBUG /* Keep behavioral checks active in Release CTest builds. */
+#undef NDEBUG /* 在 Release 的 CTest 构建中保持行为检查生效。 */
 #endif
 #include <assert.h>
 #include <stdio.h>
@@ -70,7 +70,7 @@ int main(void)
     assert(p->init(p->user) == 0 && !en);
     p->set_cq_line(p->user, 1);
     p->set_mode(p->user, IOLINK_PHY_MODE_SIO);
-    assert(en && in2); /* L6362A IN1=0 is noninverting, unlike TIOL112. */
+    assert(en && in2); /* L6362A 的 IN1=0 为同相，与 TIOL112 不同。 */
     diag = false;
     assert(iolink_phy_l6362a_fault(&d) == 1);
     diag = true;

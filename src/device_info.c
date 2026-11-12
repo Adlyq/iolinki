@@ -8,12 +8,12 @@
 
 /**
  * @file device_info.c
- * @brief Device identification storage and access.
+ * @brief 设备标识信息的存储与访问。
  * @ingroup iolinki_device_info
  *
- * Holds the device identification parameters (vendor/product strings, IDs,
- * access locks) in a context, with a legacy singleton wrapper for callers that
- * do not manage their own context.
+ * 在上下文中保存设备标识参数（供应商标识/产品字符串、ID、
+ * 访问锁），并为调用方提供旧的单例封装，适用于
+ * 不自行管理上下文的调用方。
  */
 
 #include "iolinki/device_info.h"
@@ -31,17 +31,17 @@ static const iolink_device_info_t k_default_info = {
     .firmware_revision = "0.1.0",
     .application_tag = "DefaultTag",
 
-    .vendor_id = 0xFFFFU, /* Unassigned vendor ID */
+    .vendor_id = 0xFFFFU, /* 未分配的供应商标识 */
     .device_id = 0x00000001U,
     .function_id = 0x0000U,
     .profile_characteristic = 0x0000U,
 
     .min_cycle_time = 10U, /* 1.0ms (10 * 100μs) */
     .revision_id = 0x0111U,
-    .device_status = 0x00U, /* No errors */
+    .device_status = 0x00U, /* 无错误 */
     .detailed_device_status = 0x0000U,
 
-    .access_locks = 0x0000U /* All unlocked by default */
+    .access_locks = 0x0000U /* 默认全部未锁定 */
 };
 
 static iolink_device_info_ctx_t g_legacy_device_info_ctx;
@@ -121,7 +121,7 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx, uint
     ctx->defaults.access_locks = locks;
 }
 
-/** @brief Lazily initialize and return the process-wide legacy device-info context. */
+/** @brief 延迟初始化并返回进程级的旧设备信息上下文。 */
 static iolink_device_info_ctx_t* legacy_device_info_ctx(void)
 {
     if (!g_legacy_device_info_ctx_initialized) {

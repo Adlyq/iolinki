@@ -8,7 +8,7 @@
 
 /**
  * @file test_helpers.h
- * @brief Shared test utilities and mock implementations
+ * @brief 共享测试工具与 mock 实现
  */
 
 #ifndef TEST_HELPERS_H_
@@ -22,25 +22,25 @@
 #include "iolinki/crc.h"
 #include "iolinki/protocol.h"
 
-/* Test buffers */
+/* 测试缓冲区 */
 extern uint8_t g_tx_buf[1024];
 extern uint8_t g_rx_buf[1024];
 
-/* Monotonic host clock used by tests that need a real time source. */
+/* 需要真实时间源的测试所使用的单调主机时钟。 */
 uint64_t iolink_test_time_us(void* user);
 uint32_t iolink_test_time_ms(void);
-/* Optional override used by tests that drive a controlled clock. */
+/* 由驱动受控时钟的测试使用的可选覆盖项。 */
 extern iolink_device_time_us_fn g_iolink_test_time_us_override;
 
-/* Build the checksum for a 2-octet message [octet, checksum-with-low-bits-zero].
- * Used by tests to construct master frames and device replies (A.1.6). */
+/* 为 2 个八位字节的报文 [octet, checksum-with-low-bits-zero] 构造校验和。
+ * 供用例构造主站帧与设备应答时使用（A.1.6）。 */
 static inline uint8_t test_frame_checksum(uint8_t octet)
 {
     uint8_t frame[2] = {octet, 0x00U};
     return iolink_checksum6(frame, 2U);
 }
 
-/* Mock implementations (exported for CMocka symbols) */
+/* mock 实现（导出以供 CMocka 符号使用） */
 int mock_phy_init(void* user);
 void mock_phy_set_mode(void* user, iolink_phy_mode_t mode);
 void mock_phy_set_baudrate(void* user, iolink_baudrate_t baudrate);
@@ -50,10 +50,10 @@ int mock_phy_detect_wakeup(void* user);
 void mock_phy_set_cq_line(void* user, uint8_t state);
 
 /*
- * Transport warp: feed a master frame into the mock PHY and drive whichever
- * transport was compiled. Both the streaming (send/recv_byte) and the opt-in
- * ISR (rx_octet/tx_octet) paths end up calling mock_phy_send() for the reply,
- * so the same test assertions work in both builds.
+ * 传输适配层：将主站帧送入 mock PHY，并驱动实际编译的
+ * 传输方式。流式（send/recv_byte）与可选的
+ * ISR（rx_octet/tx_octet）路径最终都会调用 mock_phy_send() 交付应答，
+ * 因此同一套测试断言在两种构建中都适用。
  */
 void mock_phy_feed_byte(uint8_t b);
 void mock_phy_feed_chk(void);
@@ -62,13 +62,13 @@ void mock_phy_clear_rx(void);
 void mock_phy_clear_tx(void);
 const uint8_t* mock_phy_tx(size_t* len);
 
-/* Drive one complete request/reply cycle on the active transport. */
+/* 在生效的传输上驱动一个完整的请求/应答周期。 */
 void test_io_cycle(iolink_device_ctx_t* ctx);
 
-/* Mock PHY driver API */
+/* mock PHY 驱动 API */
 extern const iolink_phy_api_t g_phy_mock;
 
-/* Helper to setup mock expectations */
+/* 用于设置 mock 期望的辅助函数 */
 void setup_mock_phy(void);
 void iolink_phy_mock_reset(void);
 void iolink_phy_mock_set_wakeup(int detected);
@@ -85,42 +85,42 @@ int iolink_test_device_init(iolink_test_device_t* dev, const iolink_stack_config
                             const iolink_app_callbacks_t* callbacks);
 void move_to_operate_ctx(iolink_device_ctx_t* ctx);
 
-/* Mock Storage for Data Storage (DS) testing */
+/* 用于数据存储（DS）测试的 mock 存储 */
 #include "iolinki/data_storage.h"
 extern const iolink_storage_api_t g_ds_storage_mock;
 void iolink_ds_mock_reset(void);
 uint8_t* iolink_ds_mock_get_buf(void);
 
-/* ISDU V1.1.5 Interleaved Format Helpers */
+/* ISDU V1.1.5 交织格式辅助函数 */
 #include "iolinki/isdu.h"
 
 /**
- * @brief Send an ISDU read request in V1.1.5 interleaved format
- * @param ctx ISDU context
- * @param index ISDU index
- * @param subindex ISDU subindex
- * @return 1 if request is ready for processing, 0 if still collecting, -1 on error
+ * @brief 以 V1.1.5 交织格式发送 ISDU 读请求
+ * @param ctx ISDU 上下文
+ * @param index ISDU 索引
+ * @param subindex ISDU 子索引
+ * @return 请求可处理时为 1，仍在收集时为 0，出错时为 -1
  */
 int isdu_send_read_request(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex);
 
 /**
- * @brief Send an ISDU write request in V1.1.5 interleaved format
- * @param ctx ISDU context
- * @param index ISDU index
- * @param subindex ISDU subindex
- * @param data Data to write
- * @param data_len Length of data
- * @return 1 if request is ready for processing, 0 if still collecting, -1 on error
+ * @brief 以 V1.1.5 交织格式发送 ISDU 写请求
+ * @param ctx ISDU 上下文
+ * @param index ISDU 索引
+ * @param subindex ISDU 子索引
+ * @param data 要写入的数据
+ * @param data_len 数据长度
+ * @return 请求可处理时为 1，仍在收集时为 0，出错时为 -1
  */
 int isdu_send_write_request(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex,
                             const uint8_t* data, uint8_t data_len);
 
 /**
- * @brief Collect ISDU response in V1.1.5 interleaved format
- * @param ctx ISDU context
- * @param buffer Buffer to store response data
- * @param buffer_size Size of buffer
- * @return Number of data bytes collected, or -1 on error
+ * @brief 以 V1.1.5 交织格式收集 ISDU 响应
+ * @param ctx ISDU 上下文
+ * @param buffer 用于存放响应数据的缓冲区
+ * @param buffer_size 缓冲区大小
+ * @return 收集到的数据字节数，出错时为 -1
  */
 int isdu_collect_response(iolink_isdu_ctx_t* ctx, uint8_t* buffer, size_t buffer_size);
 

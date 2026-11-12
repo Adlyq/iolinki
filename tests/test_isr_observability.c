@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
 /*
- * Two-pump ISR transport observability (Phase 1):
- *  - a frame arriving while the single mailbox slot is busy is counted;
- *  - an eager frame that fails checksum/type validation is counted;
- *  - a valid eager frame still produces a reply.
+ * 双泵 ISR 传输的可观测性（阶段 1）：
+ *  - 单邮箱槽位繁忙期间到达的帧会被计数；
+ *  - 校验和/类型校验失败的即时帧会被计数；
+ *  - 合法的即时帧仍会产生应答。
  *
- * ISR two-pump transport observability.
+ * ISR 双泵传输可观测性。
  */
 
 #include <stdint.h>
@@ -88,9 +88,9 @@ static void timer_b_start(void* user)
     timer_b_starts++;
 }
 
-/* The DLL only arms the FALLBACK transition when the PHY can report a wake-up
- * (dll_phy_has_wakeup()); provide the hook so the fast-path Fallback command
- * exercises the full transition + deadline path. */
+/* 仅当 PHY 能报告唤醒（dll_phy_has_wakeup()）时，DLL 才会启用 FALLBACK 迁移；
+ * 因此提供该钩子，让快速路径上的 Fallback 命令
+ * 走完整个迁移 + 截止时间流程。 */
 static int mock_detect_wakeup(void* user)
 {
     (void) user;
@@ -167,7 +167,7 @@ static void exchange(iolink_dll_ctx_t* dll, const uint8_t* frame, size_t len)
     iolink_dll_process(dll);
 }
 
-/* Type-2_V ISDU WRITE M-sequence: MC + CKT + one OD octet. */
+/* Type-2_V ISDU WRITE 的 M 序列：MC + CKT + 一个 OD 八位组。 */
 static void make_isdu_write(const uint8_t mc, uint8_t od, uint8_t* frame, size_t len)
 {
     frame[0] = mc;
@@ -218,10 +218,10 @@ static void init_type0_ctx(iolink_dll_ctx_t* dll)
     rx_i = 0U;
     chk_pending = 0U;
     tx_n = 0U;
-    iolink_dll_process(dll); /* sync the ISDU snapshot */
+    iolink_dll_process(dll); /* 同步 ISDU 快照 */
 }
 
-/* Type-0 ISDU read in PREOPERATE is answered directly by the ISR. */
+/* PREOPERATE 下的 Type-0 ISDU 读由 ISR 直接应答。 */
 static int test_type0_isdu_read_fast_path(void)
 {
     iolink_dll_ctx_t dll;
@@ -243,12 +243,12 @@ static int test_type0_isdu_read_fast_path(void)
         return 2;
     }
     if (!iolink_ring_is_empty(&dll.isr_frame_ring)) {
-        return 3; /* fast path must not publish */
+        return 3; /* 快速路径不得发布 */
     }
     return 0;
 }
 
-/* SDCI_TC_0053: FlowCTRL 0x11..0x1F must answer "No Service" (0x00). */
+/* SDCI_TC_0053：FlowCTRL 0x11..0x1F 必须应答 “No Service”（0x00）。 */
 static int test_0053_reserved_flowctrl_no_service(void)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0053");
@@ -264,7 +264,7 @@ static int test_0053_reserved_flowctrl_no_service(void)
         while (dll.isr_tx_active != 0U) {
             iolink_dll_process_isr(&dll);
         }
-        /* Invalid FlowCTRL is deliberately left to the main pump. */
+        /* 无效 FlowCTRL 被有意留给主泵处理。 */
         iolink_dll_process(&dll);
         while (dll.isr_tx_active != 0U) {
             iolink_dll_process_isr(&dll);
@@ -276,8 +276,8 @@ static int test_0053_reserved_flowctrl_no_service(void)
     return 0;
 }
 
-/* SDCI_TC_0309: a repeated FlowCTRL must repeat the previous segment and the
- * next new FlowCTRL must continue where the response left off. */
+/* SDCI_TC_0309：重复的 FlowCTRL 必须重发前一段，且
+ * 下一个新 FlowCTRL 必须从响应中断处继续。 */
 static uint8_t type0_isdu_exchange(iolink_dll_ctx_t* dll, uint8_t fc)
 {
     uint8_t frame[2];
@@ -288,8 +288,8 @@ static uint8_t type0_isdu_exchange(iolink_dll_ctx_t* dll, uint8_t fc)
     while (dll->isr_tx_active != 0U) {
         iolink_dll_process_isr(dll);
     }
-    /* IDLE/ABORT are left to the main pump; valid COUNT/START are already
-       answered by the ISR and do not publish a frame. */
+    /* IDLE/ABORT 留给主泵处理；合法的 COUNT/START 已由
+       ISR 应答，且不发布帧。 */
     iolink_dll_process(dll);
     while (dll->isr_tx_active != 0U) {
         iolink_dll_process_isr(dll);
@@ -309,8 +309,8 @@ static int test_0309_isdu_segment_repeat(void)
     for (uint8_t i = 2U; i < sizeof(response); i++) {
         response[i] = (uint8_t) (0x30U + i);
     }
-    /* Publish a 40-octet framed response through the normal main->ISR snapshot
-       handoff, then exercise the ISR segment repeat logic. */
+    /* 通过正常的主泵->ISR 快照交接发布一个 40 八位组的已组帧响应，
+       然后检验 ISR 的分段重发逻辑。 */
     dll.isdu.state = ISDU_STATE_RESPONSE_READY;
     dll.isdu.resp_total = (uint8_t) sizeof(response);
     (void) memcpy(dll.isdu.resp_buf, response, sizeof(response));
@@ -344,7 +344,7 @@ static int test_0309_isdu_segment_repeat(void)
     return 0;
 }
 
-/* SDCI_TC_0068: aborting a partially received Read response returns No Service. */
+/* SDCI_TC_0068：中止一个部分接收的 Read 响应会返回 No Service。 */
 static int test_0068_aborted_read_response(void)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0068");
@@ -374,7 +374,7 @@ static int test_0068_aborted_read_response(void)
     return 0;
 }
 
-/* Type-0 page read in PREOPERATE is answered directly by the ISR. */
+/* PREOPERATE 下的 Type-0 page 读由 ISR 直接应答。 */
 static int test_type0_page_read_fast_path(void)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0052");
@@ -396,7 +396,7 @@ static int test_type0_page_read_fast_path(void)
     return 0;
 }
 
-/* Type-0 ISDU write in PREOPERATE: ISR buffers it and replies CKS only. */
+/* PREOPERATE 下的 Type-0 ISDU 写：ISR 将其缓冲，并且只回复 CKS。 */
 static int test_type0_isdu_write_fast_path(void)
 {
     iolink_dll_ctx_t dll;
@@ -405,7 +405,7 @@ static int test_type0_isdu_write_fast_path(void)
     uint8_t frame[3];
     frame[0] = (uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START);
     frame[1] = IOLINK_MSEQ_TYPE_0;
-    frame[2] = 0x14U; /* ISDU service octet */
+    frame[2] = 0x14U; /* ISDU 服务八位组 */
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
     feed_chk(frame, sizeof(frame));
     iolink_dll_process_isr(&dll);
@@ -414,9 +414,9 @@ static int test_type0_isdu_write_fast_path(void)
     }
 
     if (tx_n != 1U) {
-        return 1; /* CKS only */
+        return 1; /* 仅 CKS */
     }
-    /* 14d63cb: the ISR only stages the write; ctx->isdu stays main-owned. */
+    /* 14d63cb：ISR 只暂存写请求；ctx->isdu 仍归主上下文所有。 */
     if (dll.isdu.req_idx != 0U) {
         return 2;
     }
@@ -426,7 +426,7 @@ static int test_type0_isdu_write_fast_path(void)
         return 3;
     }
 
-    /* Main window drains the staged octet into the ISDU transport. */
+    /* 主窗口把已暂存的八位组排入 ISDU 传输层。 */
     iolink_dll_process(&dll);
     if (!iolink_ring_is_empty(&dll.isr_od_ring) || (dll.isdu.req_idx != 1U) ||
         (dll.isdu.req_buf[0] != 0x14U)) {
@@ -435,7 +435,7 @@ static int test_type0_isdu_write_fast_path(void)
     return 0;
 }
 
-/** @brief Publish a frame into the mailbox ring (what the data ISR does). */
+/** @brief 向邮箱环发布一个帧（即数据 ISR 所做的事）。 */
 static void push_mailbox(iolink_dll_ctx_t* dll, const uint8_t* frame, uint8_t len)
 {
     iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&dll->isr_frame_ring);
@@ -448,7 +448,7 @@ static void push_mailbox(iolink_dll_ctx_t* dll, const uint8_t* frame, uint8_t le
     iolink_ring_publish(&dll->isr_frame_ring);
 }
 
-/* Mailbox already holds a frame: a new eager frame must be counted as dropped. */
+/* 邮箱中已有帧：新的即时帧必须被记为丢弃。 */
 static int test_mailbox_drop(void)
 {
     iolink_dll_ctx_t dll;
@@ -457,7 +457,7 @@ static int test_mailbox_drop(void)
     uint8_t frame[2];
     make_type2_process_read(frame, sizeof(frame));
 
-    /* Fill both slots: the previous frames are not consumed yet. */
+    /* 填满两个槽位：此前的帧尚未被消费。 */
     push_mailbox(&dll, frame, (uint8_t) sizeof(frame));
     push_mailbox(&dll, frame, (uint8_t) sizeof(frame));
     feed(frame, sizeof(frame));
@@ -469,15 +469,15 @@ static int test_mailbox_drop(void)
     if (dll.isr_mailbox_drops != 1U) {
         return 1;
     }
-    /* The eager reply no longer depends on the mailbox: a full mailbox only
-     * drops the main-pump copy, it must not suppress the reply. */
+    /* 即时应答不再依赖邮箱：邮箱满只会丢弃主泵的副本，
+     * 不得抑制应答。 */
     if (tx_n != 2U) {
         return 2;
     }
     return 0;
 }
 
-/* Bad checksum on an eager frame must be counted, not silently dropped. */
+/* 即时帧上的错误校验和必须被计数，而不能静默丢弃。 */
 static int test_eager_reject(void)
 {
     iolink_dll_ctx_t dll;
@@ -485,7 +485,7 @@ static int test_eager_reject(void)
 
     uint8_t frame[2];
     make_type2_process_read(frame, sizeof(frame));
-    frame[1] ^= 0x01U; /* corrupt the checksum */
+    frame[1] ^= 0x01U; /* 破坏校验和 */
 
     feed(frame, sizeof(frame));
     iolink_dll_process_isr(&dll);
@@ -494,15 +494,15 @@ static int test_eager_reject(void)
         return 1;
     }
     if (tx_n != 0U) {
-        return 2; /* no eager reply for a corrupt frame */
+        return 2; /* 损坏的帧不会得到即时应答 */
     }
     if (iolink_ring_count(&dll.isr_frame_ring) != 1U) {
-        return 3; /* published so the main pump can validate/fall back */
+        return 3; /* 已发布，以便主泵校验或回退 */
     }
     return 0;
 }
 
-/* A valid eager frame still replies and publishes. */
+/* 合法的即时帧仍会应答并发布。 */
 static int test_valid_eager(void)
 {
     iolink_dll_ctx_t dll;
@@ -525,14 +525,14 @@ static int test_valid_eager(void)
     if ((iolink_ring_count(&dll.isr_frame_ring) != 1U) || (rec == NULL) || (rec->eager != 1U)) {
         return 2;
     }
-    /* process READ reply: OD placeholder + CKS. */
+    /* 过程数据 READ 应答：OD 占位 + CKS。 */
     if (tx_n != 2U) {
         return 3;
     }
     return 0;
 }
 
-/* A corrupt ISDU write must not reach the transport. */
+/* 损坏的 ISDU 写不得进入传输层。 */
 static int test_isdu_write_bad_crc_not_consumed(void)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0065");
@@ -542,7 +542,7 @@ static int test_isdu_write_bad_crc_not_consumed(void)
     uint8_t frame[3];
     make_isdu_write((uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START), 0x14U, frame,
                     sizeof(frame));
-    frame[1] ^= 0x01U; /* corrupt the CKT checksum */
+    frame[1] ^= 0x01U; /* 破坏 CKT 校验和 */
 
     feed(frame, sizeof(frame));
     iolink_dll_process_isr(&dll);
@@ -556,15 +556,15 @@ static int test_isdu_write_bad_crc_not_consumed(void)
     return 0;
 }
 
-/* Phase 2: an ISDU write split over four M-sequences is buffered by the ISR
- * and executed by the main pump, without being appended twice. */
+/* 阶段 2：被拆分为四个 M 序列的 ISDU 写由 ISR
+ * 缓冲、由主泵执行，且不会被重复追加。 */
 static int test_isdu_write_consumed_by_isr(void)
 {
     iolink_dll_ctx_t dll;
     init_ctx(&dll);
 
-    /* Write index 0x10 (VendorName, read-only) with one data octet:
-     * I-Service 0x14, index 0x10, data 0x00, CHKPDU 0x04. */
+    /* 写索引 0x10（VendorName，只读），带一个数据八位组：
+     * I-Service 0x14、index 0x10、data 0x00、CHKPDU 0x04。 */
     const uint8_t isdu_octets[4] = {0x14U, 0x10U, 0x00U, 0x04U};
     uint8_t frame[3];
     const uint8_t flowctrl[4] = {IOLINK_FLOWCTRL_START, 1U, 2U, 3U};
@@ -575,32 +575,32 @@ static int test_isdu_write_consumed_by_isr(void)
         exchange(&dll, frame, sizeof(frame));
     }
 
-    /* The ISR buffered each octet exactly once (no double append in main). */
+    /* ISR 恰好缓冲了每个八位组一次（主泵中不会重复追加）。 */
     if (dll.isdu.req_idx != 4U) {
         return 1;
     }
     if (dll.isdu.req_total != 4U) {
         return 2;
     }
-    /* A write to a read-only index produces a framed negative response. */
+    /* 对只读索引的写会产生一个已组帧的否定响应。 */
     if ((dll.isdu.state != ISDU_STATE_RESPONSE_READY) ||
         (IOLINK_ISDU_PUB_LEN(dll.isr_isdu_pub) == 0U)) {
         return 3;
     }
     if (!iolink_ring_is_empty(&dll.isr_od_ring)) {
-        return 4; /* the main pump drained every staged segment */
+        return 4; /* 主泵排空了每个已暂存的段 */
     }
     return 0;
 }
 
-/* Phase 3b: Type-0 state-changing commands are handled in the ISR. */
+/* 阶段 3b：改变状态的 Type-0 命令在 ISR 中处理。 */
 static int test_type0_commands_fast_path(void)
 {
     iolink_dll_ctx_t dll;
     init_type0_ctx(&dll);
     uint8_t frame[3];
 
-    /* Transition command (PREOP -> ESTAB_COM), no reply. */
+    /* 迁移命令（PREOP -> ESTAB_COM），无应答。 */
     make_type0(IOLINK_MC_TRANSITION_COMMAND, frame, 2U);
     tx_n = 0U;
     feed_chk(frame, 2U);
@@ -612,7 +612,7 @@ static int test_type0_commands_fast_path(void)
         return 1;
     }
 
-    /* DeviceOperate (0x99, page write addr 0): ESTAB_COM + CKS-only. */
+    /* DeviceOperate（0x99，page 写地址 0）：ESTAB_COM + 仅 CKS。 */
     dll.state = IOLINK_DLL_STATE_PREOPERATE;
     frame[0] = IOLINK_MC_CHANNEL_PAGE;
     frame[1] = IOLINK_MSEQ_TYPE_0;
@@ -628,8 +628,8 @@ static int test_type0_commands_fast_path(void)
         return 2;
     }
 
-    /* Fallback (0x5A): FALLBACK + CKS-only. The ISR only flags the request;
-     * the 64-bit T_FBD deadline is armed by the main pump from MinCycleTime. */
+    /* Fallback（0x5A）：FALLBACK + 仅 CKS。ISR 只标记该请求；
+     * 64 位 T_FBD 截止时间由主泵根据 MinCycleTime 设置。 */
     dll.state = IOLINK_DLL_STATE_PREOPERATE;
     frame[2] = IOLINK_CMD_FALLBACK;
     frame[1] = IOLINK_MSEQ_TYPE_0;
@@ -650,7 +650,7 @@ static int test_type0_commands_fast_path(void)
         return 5;
     }
 
-    /* Startup probe (page READ in STARTUP): PREOP + OD/CKS. */
+    /* 启动探测（STARTUP 下的 page 读）：PREOP + OD/CKS。 */
     dll.state = IOLINK_DLL_STATE_STARTUP;
     make_type0((uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), frame, 2U);
     tx_n = 0U;
@@ -665,8 +665,8 @@ static int test_type0_commands_fast_path(void)
     return 0;
 }
 
-/* A non-FALLBACK MasterCommand must not write the 64-bit T_FBD deadline from
- * the ISR: the ISR only stages a clear request, the main pump applies it. */
+/* 非 FALLBACK 的 MasterCommand 不得从 ISR 写入 64 位 T_FBD
+ * 截止时间：ISR 只暂存一个清除请求，由主泵实施。 */
 static int test_fallback_clear_is_staged(void)
 {
     iolink_dll_ctx_t dll;
@@ -683,17 +683,17 @@ static int test_fallback_clear_is_staged(void)
     iolink_dll_process_isr(&dll);
 
     if ((dll.fallback_deadline_ms != 0x0000000123456789ULL) || (dll.fallback_clear_request == 0U)) {
-        return 1; /* the ISR touched the 64-bit field */
+        return 1; /* ISR 触碰了该 64 位字段 */
     }
     iolink_dll_process(&dll);
     if ((dll.fallback_deadline_ms != 0U) || (dll.fallback_clear_request != 0U)) {
-        return 2; /* the main pump did not apply the staged clear */
+        return 2; /* 主泵未实施已暂存的清除 */
     }
     return 0;
 }
 
-/* Phase 4a: Timer A starts on the first octet and stops before the reply;
- * Timer B starts when the reply completes. */
+/* 阶段 4a：Timer A 在第一个八位组上启动，并在应答前停止；
+ * 应答完成时启动 Timer B。 */
 static int test_timer_interlock(void)
 {
     iolink_dll_ctx_t dll;
@@ -717,7 +717,7 @@ static int test_timer_interlock(void)
     return 0;
 }
 
-/* Phase 4a: Timer A timeout aborts the partial frame and counts a timeout. */
+/* 阶段 4a：Timer A 超时会中止部分帧并计入一次超时。 */
 static int test_rx_timeout(void)
 {
     iolink_dll_ctx_t dll;
@@ -740,7 +740,7 @@ static int test_rx_timeout(void)
     return 0;
 }
 
-/* Phase 4a: Timer B tick authorises exactly one main-context window. */
+/* 阶段 4a：Timer B tick 恰好授权一个主上下文窗口。 */
 static int test_stack_tick_window(void)
 {
     iolink_dll_ctx_t dll;
@@ -748,26 +748,26 @@ static int test_stack_tick_window(void)
 
     dll.stack_tick_pending = 0U;
     if (iolink_dll_take_service_window(&dll) != 0U) {
-        return 1; /* no tick yet (hardware hook installed) */
+        return 1; /* 尚无 tick（已安装硬件钩子） */
     }
     iolink_dll_on_stack_tick(&dll);
     if (iolink_dll_take_service_window(&dll) != 1U) {
         return 2;
     }
     if (iolink_dll_take_service_window(&dll) != 0U) {
-        return 3; /* consumed exactly once */
+        return 3; /* 恰好被消费一次 */
     }
     return 0;
 }
 
-/* Characterization of the RX BYTE CHK/gap frame end. Only a short or an
- * incomplete M-sequence can end on the gap: a length-complete frame is consumed
- * by the byte engine before the CHK indication. The gap must discard the frame,
- * count only a real truncation, release the transceiver and never publish or
- * answer. */
+/* RX BYTE CHK/间隔帧结束的表征。只有过短或不完整的
+ * M 序列可能以间隔结束：长度完整的帧会在 CHK 指示之前
+ * 就被字节引擎消费。该间隔必须丢弃帧、
+ * 只统计真正的截断、释放收发器，且绝不发布或
+ * 应答。 */
 static int test_byte_gap_incomplete(void)
 {
-    /* Short M-sequence (fewer than the two header octets). */
+    /* 过短的 M 序列（少于两个头部八位组）。 */
     {
         iolink_dll_ctx_t dll;
         init_ctx(&dll);
@@ -776,7 +776,7 @@ static int test_byte_gap_incomplete(void)
         feed_chk(one, sizeof(one));
         iolink_dll_process_isr(&dll);
         if (IOLINK_STAT_TOTAL(&dll, framing_errors) != 0U) {
-            return 1; /* a short frame is not a framing error */
+            return 1; /* 过短的帧不算 framing 错误 */
         }
         if ((dll.isr_rx_cnt != 0U) || (dll.isr_rx_expect != 0U)) {
             return 2;
@@ -789,7 +789,7 @@ static int test_byte_gap_incomplete(void)
         }
     }
 
-    /* Truncated M-sequence: header complete, known length not reached. */
+    /* 被截断的 M 序列：头部完整，但未达到已知长度。 */
     {
         iolink_dll_ctx_t dll;
         init_ctx(&dll);
@@ -797,7 +797,7 @@ static int test_byte_gap_incomplete(void)
         uint8_t frame[3];
         make_isdu_write((uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START), 0x14U, frame,
                         sizeof(frame));
-        feed_chk(frame, 2U); /* deliver the header, then the CHK gap */
+        feed_chk(frame, 2U); /* 先送头部，再送 CHK 间隔 */
         iolink_dll_process_isr(&dll);
         if (IOLINK_STAT_TOTAL(&dll, framing_errors) != 1U) {
             return 5;
@@ -806,10 +806,10 @@ static int test_byte_gap_incomplete(void)
             return 6;
         }
         if (!iolink_ring_is_empty(&dll.isr_frame_ring)) {
-            return 7; /* never published for the main pump */
+            return 7; /* 绝不为主泵发布 */
         }
         if (dll.isr_eager_rejects != 0U) {
-            return 8; /* the gap path does not run the eager validation */
+            return 8; /* 间隔路径不执行即时校验 */
         }
         if (tx_done_calls != 1U) {
             return 9;

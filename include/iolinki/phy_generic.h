@@ -17,26 +17,26 @@ extern "C" {
 
 /**
  * @file phy_generic.h
- * @brief Reference PHY template for real hardware ports.
+ * @brief 用于真实硬件端口的参考 PHY 模板。
  *
- * This template provides stub implementations that must be adapted
- * to the target transceiver and MCU/SoC peripherals.
+ * 该模板提供桩实现，必须适配
+ * 目标收发器以及 MCU/SoC 外设。
  */
 
 /**
- * @defgroup iolinki_phy_generic Generic UART PHY Adapter
- * @brief Reference PHY template to adapt for real transceiver hardware.
+ * @defgroup iolinki_phy_generic 通用 UART PHY 适配器
+ * @brief 供真实收发器硬件适配的参考 PHY 模板。
  * @{
  */
 
 /**
- * @brief Get the generic PHY API (template).
+ * @brief 获取通用 PHY API（模板）。
  *
- * @return const iolink_phy_api_t* Pointer to template PHY API
+ * @return const iolink_phy_api_t* 指向模板 PHY API 的指针
  */
 const iolink_phy_api_t* iolink_phy_generic_get(void);
 
-/** @} */ /* end of iolinki_phy_generic */
+/** @} */ /* iolinki_phy_generic 结束 */
 
 #ifdef __cplusplus
 }

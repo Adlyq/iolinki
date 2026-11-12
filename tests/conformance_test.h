@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /*
- * Test-only helpers for tagging unit assertions with IO-Link Test Spec IDs.
+ * 仅用于测试的辅助工具，为单元断言打上 IO-Link 测试规范 ID 标记。
  */
 #ifndef IOLINK_CONFORMANCE_TEST_H_
 #define IOLINK_CONFORMANCE_TEST_H_

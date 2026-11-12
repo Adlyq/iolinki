@@ -32,18 +32,18 @@ static void test_crc_errors_do_not_enter_sio(void** state)
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
 
-    /* Verify we're in SIO mode initially (default new behavior) */
+    /* 确认初始处于 SIO 模式（新的默认行为） */
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
 
-    /* Move to OPERATE */
+    /* 切换到 OPERATE */
     move_to_operate_ctx(&dev.ctx);
 
-    /* Verify we're in SDCI mode */
+    /* 确认处于 SDCI 模式 */
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 
-    /* Inject CRC errors: ST rc=2 drops each frame and stays in SDCI. */
+    /* 注入 CRC 错误：ST rc=2 会丢弃每个帧并保持 SDCI。 */
     for (int i = 0; i < 3; i++) {
-        uint8_t bad_frame[2] = {0x95, 0xFF}; /* Invalid CRC */
+        uint8_t bad_frame[2] = {0x95, 0xFF}; /* 无效 CRC */
 
         mock_phy_feed_byte(bad_frame[0]);
         mock_phy_feed_byte(bad_frame[1]);
@@ -52,7 +52,7 @@ static void test_crc_errors_do_not_enter_sio(void** state)
         test_io_cycle(&dev.ctx);
     }
 
-    /* No SIO fallback: the DL mode is untouched by CRC errors. */
+    /* 无 SIO 回退：CRC 错误不影响 DL 模式。 */
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 }
 
@@ -67,10 +67,10 @@ static void test_valid_frame_after_crc_errors(void** state)
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
 
-    /* Move to OPERATE */
+    /* 切换到 OPERATE */
     move_to_operate_ctx(&dev.ctx);
 
-    /* CRC errors are dropped in place; the link stays in SDCI. */
+    /* CRC 错误就地丢弃；链路保持 SDCI。 */
     for (int i = 0; i < 3; i++) {
         uint8_t bad_frame[2] = {0x95, 0xFF};
         mock_phy_feed_byte(bad_frame[0]);
@@ -81,7 +81,7 @@ static void test_valid_frame_after_crc_errors(void** state)
 
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 
-    /* A valid frame is still served on the same link. */
+    /* 合法帧仍会在同一条链路上被服务。 */
     uint8_t idle_mc = 0x00;
     uint8_t idle_ck = test_frame_checksum(idle_mc);
     mock_phy_feed_byte(idle_mc);
@@ -89,11 +89,11 @@ static void test_valid_frame_after_crc_errors(void** state)
     mock_phy_feed_chk();
 
     expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1); /* Type-0 write replies CKS only */
+    expect_value(mock_phy_send, len, 1); /* Type-0 写只回复 CKS */
     will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
 
-    /* Still SDCI: no SIO fallback happened. */
+    /* 仍为 SDCI：未发生 SIO 回退。 */
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 }
 
@@ -108,13 +108,13 @@ static void test_t_dsio_returns_to_sio_without_message(void** state)
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
 
-    /* A wake-up is seen: the device leaves SIO and waits for a message. */
+    /* 检测到唤醒：设备离开 SIO 并等待报文。 */
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(&dev.ctx);
     iolink_phy_mock_set_wakeup(0);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 
-    /* No valid message arrives within T_DSIO (Table 47 T10): back to SIO. */
+    /* 在 T_DSIO（Table 47 T10）内没有合法报文到达：返回 SIO。 */
     usleep((IOLINK_T_DSIO_MS + 50U) * 1000U);
     test_io_cycle(&dev.ctx);
 
@@ -125,7 +125,7 @@ static void test_fallback_command_switches_to_sio_after_t_fbd(void** state)
 {
     (void) state;
 
-    /* min_cycle_time is in 0.1 ms units: 10 -> 1 ms -> T_FBD = 3 ms. */
+    /* min_cycle_time 以 0.1 ms 为单位：10 -> 1 ms -> T_FBD = 3 ms。 */
     iolink_stack_config_t config = {
         .pd_in_len = 0, .pd_out_len = 0, .m_seq_type = IOLINK_M_SEQ_TYPE_0, .min_cycle_time = 10U};
     setup_mock_phy();
@@ -135,7 +135,7 @@ static void test_fallback_command_switches_to_sio_after_t_fbd(void** state)
     move_to_operate_ctx(&dev.ctx);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 
-    /* Page-channel Type-0 write of MasterCommand FALLBACK (0x5A, Table B.2). */
+    /* Page 通道 Type-0 写 MasterCommand FALLBACK（0x5A，Table B.2）。 */
     uint8_t frame[3] = {0x20U, 0x00U, IOLINK_CMD_FALLBACK};
     frame[1] = iolink_checksum6(frame, 3U);
     for (size_t i = 0U; i < sizeof(frame); i++) {
@@ -143,11 +143,11 @@ static void test_fallback_command_switches_to_sio_after_t_fbd(void** state)
     }
     mock_phy_feed_chk();
     expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1); /* Type-0 write replies CKS only */
+    expect_value(mock_phy_send, len, 1); /* Type-0 写只回复 CKS */
     will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
 
-    /* Still in SDCI until T_FBD has elapsed (device waits 3 MasterCycleTimes). */
+    /* 在 T_FBD 到期之前仍处于 SDCI（设备等待 3 个 MasterCycleTimes）。 */
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
     usleep(10U * 1000U);
     test_io_cycle(&dev.ctx);
@@ -163,8 +163,8 @@ static void test_fallback_command_ignored_without_wakeup(void** state)
     setup_mock_phy();
     will_return(mock_phy_init, 0);
 
-    /* Same PHY, but without the wake-up detector: the DLL starts in SDCI and
-     * has no way back from SIO. */
+    /* 相同 PHY，但没有唤醒检测器：DLL 从 SDCI 启动，
+     * 且无法回到 SIO。 */
     iolink_test_device_t dev;
     memset(&dev, 0, sizeof(dev));
     dev.cfg.phy = g_phy_mock;
@@ -179,7 +179,7 @@ static void test_fallback_command_ignored_without_wakeup(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 
-    /* Page-channel Type-0 write of MasterCommand FALLBACK (0x5A, Table B.2). */
+    /* Page 通道 Type-0 写 MasterCommand FALLBACK（0x5A，Table B.2）。 */
     uint8_t frame[3] = {0x20U, 0x00U, IOLINK_CMD_FALLBACK};
     frame[1] = iolink_checksum6(frame, 3U);
     for (size_t i = 0U; i < sizeof(frame); i++) {
@@ -187,11 +187,11 @@ static void test_fallback_command_ignored_without_wakeup(void** state)
     }
     mock_phy_feed_chk();
     expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1); /* Type-0 write replies CKS only */
+    expect_value(mock_phy_send, len, 1); /* Type-0 写只回复 CKS */
     will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
 
-    /* Unsupported without wake-up: acked, but the DL mode/state are unchanged. */
+    /* 无唤醒时不支持该命令：会确认应答，但 DL 模式/状态不变。 */
     assert_int_equal(dev.ctx.dll.fallback_deadline_ms, 0U);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);

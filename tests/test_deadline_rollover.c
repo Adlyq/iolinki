@@ -28,7 +28,7 @@ int main(void)
     assert(ctx.state == IOLINK_DLL_STATE_AWAITING_COMM);
     uint64_t deadline = now / 1000U + IOLINK_T_DSIO_MS;
     assert(ctx.dsio_deadline_ms == deadline);
-    now += 150000U; /* crossed wrapping millisecond API, deadline still ahead */
+    now += 150000U; /* 跨过发生回绕的毫秒 API，截止时间仍未到达 */
     iolink_dll_process(&ctx);
     assert(ctx.state == IOLINK_DLL_STATE_AWAITING_COMM);
     now = (deadline + 1U) * 1000U;

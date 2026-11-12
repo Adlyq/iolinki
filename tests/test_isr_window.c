@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
 /*
- * Phase 4b: with a hardware Timer B hook installed, the main service window
- * only runs after iolink_dll_on_stack_tick() authorises it.
+ * 阶段 4b：在安装硬件 Timer B 钩子的情况下，主服务窗口
+ * 只有在 iolink_dll_on_stack_tick() 授权之后才会执行。
  */
 
 #include <stdarg.h>
@@ -37,7 +37,7 @@ static void test_main_window_gated_by_tick(void** state)
     iolink_test_device_t dev;
     assert_int_equal(iolink_test_device_init(&dev, NULL, NULL), 0);
 
-    /* Install a PHY with the Timer B hook so the gate is active. */
+    /* 安装带 Timer B 钩子的 PHY，使门控生效。 */
     iolink_phy_api_t gated = g_phy_mock;
     gated.stack_timer_start = timer_b_start;
     dev.ctx.dll.phy = &gated;
@@ -46,17 +46,17 @@ static void test_main_window_gated_by_tick(void** state)
     dev.ctx.dll.isdu.reset_pending = true;
     reset_calls = 0;
 
-    /* No tick yet: the main window must not run. */
+    /* 尚无 tick：主窗口不得执行。 */
     iolink_device_process(&dev.ctx);
     assert_int_equal(reset_calls, 0);
     assert_true(dev.ctx.dll.isdu.reset_pending);
 
-    /* One tick authorises exactly one window. */
+    /* 一次 tick 只授权一个窗口。 */
     iolink_dll_on_stack_tick(&dev.ctx.dll);
     iolink_device_process(&dev.ctx);
     assert_int_equal(reset_calls, 1);
 
-    /* The authorisation is consumed; a second pass without a tick does nothing. */
+    /* 授权已被消耗；没有 tick 的第二轮不会做任何事。 */
     iolink_device_process(&dev.ctx);
     assert_int_equal(reset_calls, 1);
 }

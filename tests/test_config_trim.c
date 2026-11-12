@@ -8,11 +8,11 @@
 
 /**
  * @file test_config_trim.c
- * @brief Compile-time configuration: explicit capacity overrides, the
- *        IOLINK_MINIMAL_PROFILE convenience switch and the feature-off shims.
+ * @brief 编译期配置：显式容量覆盖、IOLINK_MINIMAL_PROFILE 便捷开关以及
+ *        关闭功能时的兼容层。
  *
- * The overrides are defined before the first include so they exercise the
- * #ifndef guards in config.h exactly as a project build would.
+ * 覆盖在首次 include 之前定义，因此会像项目构建那样准确命中 config.h 中的
+ * #ifndef 防护。
  */
 
 #define IOLINK_MINIMAL_PROFILE
@@ -41,7 +41,7 @@ static void test_minimal_profile_disables_features(void** state)
     assert_int_equal(IOLINK_PHY_FEATURE_SIO_CQ, 0);
     assert_int_equal(IOLINK_PHY_FEATURE_LEGACY_DIAG, 0);
 
-    /* An explicit definition wins over the profile default. */
+    /* 显式定义优先于配置文件默认值。 */
     assert_int_equal(IOLINK_FEATURE_EVENTS, 0);
 }
 

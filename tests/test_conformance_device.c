@@ -24,8 +24,8 @@ static void cleanup_nvm_path(void)
     (void) remove(g_nvm_path);
 }
 
-/* Unique per process so parallel ctest runs in different build trees do not
-   share the persistence file. */
+/* 每个进程唯一，使不同构建树中的并行 ctest 运行不会
+   共用同一个持久化文件。 */
 static const char* nvm_path(void)
 {
     if (g_nvm_path[0] == '\0') {
@@ -96,7 +96,7 @@ static int read_object(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex,
     return isdu_collect_response(ctx, out, out_len);
 }
 
-/* 0155/0316/0317/0318: application-level reset observation hooks. */
+/* 0155/0316/0317/0318：应用层复位观测钩子。 */
 static void test_conformance_reset_observation(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0316");
@@ -120,14 +120,14 @@ static void test_conformance_reset_observation(void** state)
         0);
     assert_false(conformance_device_is_default_state(&app));
 
-    /* 0x80 Device Reset preserves parameters and records the reason. */
+    /* 0x80 Device Reset 保留参数并记录原因。 */
     iolink_isdu_execute_system_command(&app.device.dll.isdu, IOLINK_CMD_DEVICE_RESET);
     conformance_device_process(&app);
     assert_int_equal(obs->device_reset_count, 1U);
     assert_int_equal(obs->last_reset_reason, CONFORMANCE_RESET_DEVICE);
     assert_false(conformance_device_is_default_state(&app));
 
-    /* 0x81 Application Reset restores application defaults. */
+    /* 0x81 Application Reset 恢复应用默认值。 */
     iolink_isdu_execute_system_command(&app.device.dll.isdu, IOLINK_CMD_APPLICATION_RESET);
     conformance_device_process(&app);
     assert_int_equal(obs->application_reset_count, 1U);
@@ -153,7 +153,7 @@ static void test_conformance_reset_observation(void** state)
     conformance_device_close(&app);
 }
 
-/* 0080: a local teach-in changes a parameter and requests a DS upload. */
+/* 0080：本地 teach-in 修改参数并请求一次 DS 上传。 */
 static void test_conformance_local_change(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0080");
@@ -179,7 +179,7 @@ static void test_conformance_local_change(void** state)
     conformance_device_close(&app);
 }
 
-/* 0373: DeviceStatus / DetailedDeviceStatus interlock before and after an event. */
+/* 0373：事件前后 DeviceStatus / DetailedDeviceStatus 的联动。 */
 static void test_conformance_event_device_status(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0373");
@@ -322,8 +322,8 @@ static void test_conformance_full_profile(void** state)
     conformance_device_close(&app);
 }
 
-/* 0146: an illegal parameter structure during Download poisons the transfer;
- * DownloadEnd returns PAR_SETINCONSIST and the old value is kept. */
+/* 0146：Download 期间的非法参数结构会毒化传输；
+ * DownloadEnd 返回 PAR_SETINCONSIST 并保留旧值。 */
 static void test_conformance_0146_illegal_download(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0146");

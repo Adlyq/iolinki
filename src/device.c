@@ -8,12 +8,12 @@
 
 /**
  * @file device.c
- * @brief Device application layer: top-level stack lifecycle and I/O.
+ * @brief 设备应用层：协议栈顶层生命周期与 I/O。
  * @ingroup iolinki_device
  *
- * Wires together the DLL, ISDU, parameter, device-info and data-storage
- * sub-contexts, drives the per-cycle processing, and exposes process-data
- * exchange and status accessors to the application.
+ * 将 DLL、ISDU、参数、设备信息与数据存储子上下文
+ * 连接在一起，驱动每周期处理，并向应用暴露过程数据
+ * 交换与状态访问接口。
  */
 
 #include "iolinki/device.h"
@@ -22,12 +22,12 @@
 #include <string.h>
 
 #if IOLINK_APP_PD_INPUT_CALLBACK
-/* Profile marker declared in application.h: exists only in callback builds so a
- * mismatched application fails to link instead of corrupting the vtable. */
+/* 在 application.h 中声明的 profile 标记：仅存在于回调构建中，使
+ * 不匹配的应用在链接时失败，而不会破坏 vtable。 */
 const uint8_t iolink_app_pd_input_callback_profile = 1U;
 #endif
 
-/** @brief DLL state-change callback: dispatches to the app startup/preoperate/operate hooks. */
+/** @brief DLL 状态变化回调：分发到应用的 startup/preoperate/operate 钩子。 */
 static void device_state_cb(void* user, iolink_dll_state_t state)
 {
     iolink_device_ctx_t* ctx = (iolink_device_ctx_t*) user;
@@ -62,8 +62,8 @@ static void device_state_cb(void* user, iolink_dll_state_t state)
 }
 
 #if IOLINK_FEATURE_DATA_STORAGE
-/** @brief Unified DS parameter read: standard tags via the params context,
- * everything else via the vendor service. */
+/** @brief 统一的 DS 参数读取：标准标签经 params 上下文，
+ * 其余全部经厂商服务。 */
 static int device_ds_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out, size_t cap)
 {
     iolink_device_ctx_t* ctx = (iolink_device_ctx_t*) user;
@@ -87,8 +87,8 @@ static int device_ds_read(void* user, uint16_t index, uint8_t subindex, uint8_t*
     return -1;
 }
 
-/** @brief Unified DS parameter write: standard tags via the params context,
- * everything else via the vendor service. */
+/** @brief 统一的 DS 参数写入：标准标签经 params 上下文，
+ * 其余全部经厂商服务。 */
 static int device_ds_write(void* user, uint16_t index, uint8_t subindex, const uint8_t* data,
                            size_t len, bool persist)
 {
@@ -112,12 +112,12 @@ static int device_ds_write(void* user, uint16_t index, uint8_t subindex, const u
 }
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
-/** @brief Default OD octet count for an M-sequence type (Table A.10).
+/** @brief 某种 M-sequence 类型的默认 OD 字节数（Table A.10）。
  *
- * TYPE_1_2 carries 2 OD octets (code 1), TYPE_1_V 8 octets (code 6) and
- * TYPE_2_V defaults to 2 OD octets (code 5); everything else defaults to 1.
- * TYPE_1_1 is rejected at init by the ISR transport; the default of 1 is only
- * a safe placeholder. */
+ * TYPE_1_2 携带 2 个 OD 字节（编码 1），TYPE_1_V 为 8 字节（编码 6），
+ * TYPE_2_V 默认为 2 个 OD 字节（编码 5）；其余情况默认为 1。
+ * TYPE_1_1 在初始化时被 ISR 传输层拒绝；默认值 1 仅作为
+ * 安全的占位值。 */
 static uint8_t device_default_od_width(uint8_t m_seq_type)
 {
     switch (m_seq_type) {
@@ -132,7 +132,7 @@ static uint8_t device_default_od_width(uint8_t m_seq_type)
     }
 }
 
-/** @brief Copy the user stack configuration into the DLL context and derive lengths/timing. */
+/** @brief 将用户协议栈配置复制到 DLL 上下文，并推导长度/时序。 */
 static void device_apply_stack_config(iolink_device_ctx_t* ctx)
 {
     ctx->dll.m_seq_type = (uint8_t) ctx->stack_config.m_seq_type;
@@ -148,8 +148,8 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
         ctx->dll.t_pd_deadline_us = 0U;
     }
 
-    /* Table A.10: TYPE_2_1/TYPE_2_2 carry one On-request Data octet; TYPE_2_V is
-       the two-octet variant (OPERATE M-sequence code 5). */
+    /* Table A.10：TYPE_2_1/TYPE_2_2 携带一个 On-request Data 字节；TYPE_2_V 是
+       两字节变体（OPERATE M-sequence 编码 5）。 */
     ctx->dll.od_len = (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
 
     ctx->dll.pd_in_len_current = ctx->dll.pd_in_len;
@@ -157,37 +157,37 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.pd_in_len_max = ctx->dll.pd_in_len;
     ctx->dll.pd_out_len_max = ctx->dll.pd_out_len;
 
-    /* Two-pump transport: the ISR frames requests and composes replies from
-     * the shared state, so the DLL needs the OD width for the reply layout. The
-     * OD width defaults to the Table A.10 value; config.od_width selects the
-     * 8/32-byte extension. */
+    /* 双泵传输：ISR 组帧请求，并基于共享状态
+     * 组装应答，因此 DLL 需要 OD 宽度来确定应答布局。
+     * OD 宽度默认取 Table A.10 的值；config.od_width 选择
+     * 8/32 字节扩展。 */
     ctx->dll.od_width = ctx->stack_config.od_width;
     if (ctx->dll.od_width == 0U) {
         ctx->dll.od_width = device_default_od_width((uint8_t) ctx->dll.m_seq_type);
     }
-    /* The ISR transport uses od_width (0/1/2/8/32) throughout; keep od_len in
-     * sync so no legacy 1/2 assumption leaks into this build. */
+    /* ISR 传输层始终使用 od_width（0/1/2/8/32）；保持 od_len 与之
+     * 同步，避免旧的 1/2 假设渗入该构建。 */
     ctx->dll.od_len = ctx->dll.od_width;
 
-    /* Adopt the configured operating COM (and its timing limits) before the
-     * minimum cycle time is derived from the baudrate. */
+    /* 在根据波特率推导最小周期时间之前，先采用
+     * 配置的操作 COM（及其时序限制）。 */
     if (ctx->stack_config.baudrate_set) {
         (void) iolink_dll_set_operating_baudrate(&ctx->dll, ctx->stack_config.baudrate);
     }
 
-    /* The advertised/served minimum cycle time is derived from the actual
-     * M-sequence (PD/OD lengths and baud), clamped by the app floor. */
+    /* 通告/实际提供的最小周期时间由实际的
+     * M-sequence（PD/OD 长度与波特率）推导，并受应用下限约束。 */
     ctx->dll.min_cycle_time_us = (uint32_t) iolink_dll_compute_min_cycle_time(&ctx->dll) * 100U;
 }
 
-/** @brief One fixed Annex A layout: PD in/out and the accepted OD width(s). */
+/** @brief 一种固定的 Annex A 布局：PD 输入/输出与可接受的 OD 宽度。 */
 typedef struct
 {
     uint8_t mseq;
     uint8_t pd_in;
     uint8_t pd_out;
     uint8_t od;
-    uint8_t od_alt; /* second accepted OD width, 0 when none (od is never 0 here) */
+    uint8_t od_alt; /* 第二个可接受的 OD 宽度，无则为 0（此处 od 永不为 0） */
 } device_fixed_layout_t;
 
 static const device_fixed_layout_t g_fixed_layouts[] = {
@@ -197,19 +197,19 @@ static const device_fixed_layout_t g_fixed_layouts[] = {
     {IOLINK_M_SEQ_TYPE_2_5, 1U, 1U, 1U, 0U},
 };
 
-/** @brief Enforce the fixed per-type PD/OD layout of Annex A (ISR transport).
+/** @brief 强制 Annex A 规定的按类型固定的 PD/OD 布局（ISR 传输）。
  *
- * Figures A.7-A.13 define a fixed number of PD and OD octets per M-sequence
- * type. A device that advertises one of these types must use exactly that
- * layout, otherwise the master and device disagree about the frame length.
- * TYPE_1_1 is legacy interleave only and shall not be implemented by a
- * V1.1.5 device (Table A.10 NOTE 3), so it is rejected. TYPE_0 and the
- * variable TYPE_2_V keep the existing range checks.
+ * Figure A.7-A.13 规定了每种 M-sequence
+ * 类型的固定 PD 与 OD 字节数。通告其中某一类型的设备必须
+ * 严格使用该布局，否则主站与设备对帧长度的理解不一致。
+ * TYPE_1_1 仅为旧的交错模式，V1.1.5 设备不得
+ * 实现它（Table A.10 NOTE 3），因此被拒绝。TYPE_0 与
+ * 可变的 TYPE_2_V 保留现有的范围检查。
  */
 static int device_validate_fixed_mseq(const iolink_stack_config_t* stack, uint8_t od)
 {
-    /* TYPE_1_1 is legacy interleave only and shall not be implemented by a
-     * V1.1.5 device (Table A.10 NOTE 3). */
+    /* TYPE_1_1 仅为旧的交错模式，V1.1.5 设备不得
+     * 实现它（Table A.10 NOTE 3）。 */
     if (stack->m_seq_type == IOLINK_M_SEQ_TYPE_1_1) {
         return IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE;
     }
@@ -224,10 +224,10 @@ static int device_validate_fixed_mseq(const iolink_stack_config_t* stack, uint8_
         }
         return IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT;
     }
-    return IOLINK_DEVICE_INIT_OK; /* TYPE_0 and the variable TYPE_2_V */
+    return IOLINK_DEVICE_INIT_OK; /* TYPE_0 与可变的 TYPE_2_V */
 }
 
-/** @brief Validate the stack configuration before touching the context or PHY. */
+/** @brief 在触碰上下文或 PHY 之前校验协议栈配置。 */
 static int device_config_validate(const iolink_device_config_t* config)
 {
     const iolink_stack_config_t* stack;
@@ -252,7 +252,7 @@ static int device_config_validate(const iolink_device_config_t* config)
         return IOLINK_DEVICE_INIT_ERR_PD_OUT_LEN;
     }
 
-    /* Table A.10 OD widths; 0 derives from the M-sequence type. */
+    /* Table A.10 的 OD 宽度；0 表示由 M-sequence 类型推导。 */
     od = stack->od_width;
     if (od == 0U) {
         od = device_default_od_width((uint8_t) stack->m_seq_type);
@@ -276,8 +276,8 @@ static int device_config_validate(const iolink_device_config_t* config)
     }
 
 #if IOLINK_NEED_CRITICAL
-    /* Only a profile that actually serialises against an interrupt needs a
-     * real critical section; a SINGLE profile never references the hooks. */
+    /* 只有真正与中断串行化的 profile 才需要
+     * 真正的临界区；SINGLE profile 从不引用这些钩子。 */
     if (iolink_platform_critical_sections_ready() != 0) {
         return IOLINK_DEVICE_INIT_ERR_CRITICAL;
     }
@@ -291,16 +291,16 @@ static int device_config_validate(const iolink_device_config_t* config)
 #endif
 
 #if IOLINK_APP_PD_INPUT_CALLBACK
-    /* The callback is the only PD-input source in this profile: accepting a
-     * configuration without it would silently publish no process data. */
+    /* 该 profile 中回调是唯一的 PD 输入来源：接受
+     * 缺少它的配置会静默地不发布任何过程数据。 */
     if ((config->app_callbacks == NULL) || (config->app_callbacks->on_pd_input == NULL)) {
         return IOLINK_DEVICE_INIT_ERR_PD_INPUT;
     }
 #endif
 
 #if (IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME) && IOLINK_PHY_FEATURE_TX_BUSY
-    /* The build promises tx_busy()-based lease release; a NULL hook would fall
-     * back to a never-released PD-in lease. */
+    /* 该构建承诺基于 tx_busy() 释放租约；NULL 钩子会
+     * 退化为永不释放的 PD 输入租约。 */
     if (config->phy.tx_busy == NULL) {
         return IOLINK_DEVICE_INIT_ERR_PHY;
     }
@@ -336,16 +336,16 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     iolink_device_info_ctx_init(&ctx->device_info, config->device_info);
     iolink_params_ctx_init(&ctx->params, &ctx->device_info);
     iolink_dll_init(&ctx->dll, &config->phy);
-    /* Bind the application clock before any deadline is derived. The device
-     * layer requires it (NULL is rejected above). The event engine shares the
-     * same clock so event timing matches the DLL. */
+    /* 在推导任何截止时间之前绑定应用时钟。设备层
+     * 要求该时钟（NULL 已在上文被拒绝）。事件引擎共享
+     * 同一时钟，使事件时序与 DLL 一致。 */
     ctx->dll.time_us = config->time_us;
     ctx->dll.time_user = config->user;
 #if IOLINK_FEATURE_EVENTS
     ctx->dll.events.time_us = config->time_us;
     ctx->dll.events.time_user = config->user;
 #endif
-    /* iolink_dll_init() sampled the platform clock before it was bound. */
+    /* iolink_dll_init() 在时钟绑定之前已采样了平台时钟。 */
     ctx->dll.master_last_activity_ms = dll_time_ms(&ctx->dll);
     ctx->dll.isdu.direct_param_page2 = ctx->direct_param_page2;
     ctx->dll.isdu.params_ctx = &ctx->params;
@@ -353,7 +353,7 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     ctx->dll.isdu.vendor_user = config->user;
     ctx->dll.state_cb = device_state_cb;
     ctx->dll.state_cb_user = ctx;
-    /* One backend serves the standard parameters and the Data Storage image. */
+    /* 一个后端同时服务标准参数与数据存储镜像。 */
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_params_bind_storage(&ctx->params, config->storage);
     if (config->storage != NULL) {
@@ -361,13 +361,13 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
         ctx->dll.isdu.ds_ctx = &ctx->dll.ds;
     }
     iolink_ds_bind_params(&ctx->dll.ds, &ctx->params);
-    /* Route DS parameter access through the device: standard tags via the
-       params context, everything else (vendor 0x0040+/0x0100+) via the vendor
-       service. The default descriptor set (three tags) is kept. */
+    /* 将 DS 参数访问路由到设备层：标准标签经
+       params 上下文，其余（厂商 0x0040+/0x0100+）经厂商
+       服务。保留默认描述符集（三个标签）。 */
     iolink_ds_bind_param_access(&ctx->dll.ds, device_ds_read, device_ds_write, ctx, NULL, 0U);
-    /* Establish the DS image/checksum at boot when no persisted image exists,
-       so Data_Storage_Size and Parameter_Checksum are valid before the first
-       upload. */
+    /* 启动时若不存在持久化镜像，则建立 DS 镜像/校验和，
+       使 Data_Storage_Size 与 Parameter_Checksum 在首次
+       上传之前就已有效。 */
     if (ctx->dll.ds.image_len == 0U) {
         (void) iolink_ds_build_image(&ctx->dll.ds);
     }
@@ -385,11 +385,11 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     return 0;
 }
 
-/** Pick a PD-in buffer the ISR is not streaming and that is not active.
+/** 选择一个 ISR 未在流式发送且非活动的 PD 输入缓冲区。
  *
- * @return Buffer index, or 0xFF when every other buffer is still leased by the
- *         data ISR. The caller must then keep the current PD-in and retry on a
- *         later cycle: writing a leased buffer would tear the reply on the wire.
+ * @return 缓冲区索引；当其他所有缓冲区仍被
+ *         data ISR 租用时返回 0xFF。调用方随后必须保留当前 PD 输入，并在
+ *         后续周期重试：写入已租用的缓冲区会破坏线上的应答。
  */
 static uint8_t device_pd_in_free_index(const iolink_dll_ctx_t* dll)
 {
@@ -404,8 +404,8 @@ static uint8_t device_pd_in_free_index(const iolink_dll_ctx_t* dll)
 }
 
 /**
- * @brief ST-style time partition: when the platform provides the Timer B tick
- * hook, the main service window only runs after a tick authorises it.
+ * @brief ST 风格的时间分区：当平台提供 Timer B tick 钩子时，
+ * 主服务窗口仅在某个 tick 授权之后才运行。
  */
 static bool device_service_window_ready(iolink_device_ctx_t* ctx)
 {
@@ -417,14 +417,14 @@ static bool device_service_window_ready(iolink_device_ctx_t* ctx)
 }
 
 #if IOLINK_FEATURE_EVENTS
-/** @brief Whether the event engine still has queued or deferred work. */
+/** @brief 事件引擎是否仍有排队或延迟的工作。 */
 static bool device_events_need_service(const iolink_events_ctx_t* events)
 {
     if ((events->count > 0U) || (events->pending_count > 0U)) {
         return true;
     }
-    /* A slot can still hold a deferred disappearance or a repeat cooldown even
-       when no event is asserted or queued. */
+    /* 某个槽位可能仍持有延迟的消失或重复冷却，
+       即使没有任何事件被置位或排队。 */
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         if (events->pending[i].active) {
             return true;
@@ -435,11 +435,11 @@ static bool device_events_need_service(const iolink_events_ctx_t* events)
 #endif
 
 /**
- * @brief Service the event and Data Storage state machines from the main loop.
+ * @brief 在主循环中服务事件与数据存储状态机。
  *
- * They mutate shared ISDU/event state, so only run them while the ISDU transport
- * is idle: this keeps the Event flag and the DS state from changing in the
- * middle of an ISDU response.
+ * 它们会修改共享的 ISDU/事件状态，因此仅在 ISDU 传输
+ * 空闲时运行：这可避免 Event 标志与 DS 状态在
+ * ISDU 应答中途发生变化。
  */
 static void device_service_events_and_ds(iolink_device_ctx_t* ctx)
 {
@@ -457,10 +457,10 @@ static void device_service_events_and_ds(iolink_device_ctx_t* ctx)
     }
 #endif
 #if IOLINK_FEATURE_DATA_STORAGE && IOLINK_FEATURE_EVENTS
-    /* DS_UPLOAD_REQ is a notification. Publish it only after the DS-command ISDU
-     * response has been read (ISDU idle), so the Master does not see the Event
-     * flag inside that response and interleave a diagnosis read with the
-     * ongoing ISDU transfer. */
+    /* DS_UPLOAD_REQ 是通知。仅在 DS 命令的 ISDU
+     * 应答被读取之后（ISDU 空闲）才发布它，这样主站不会在该
+     * 应答中看到 Event 标志，也不会在 ISDU 传输
+     * 进行中插入诊断读取。 */
     if (ctx->dll.ds.upload_event_pending) {
         ctx->dll.ds.upload_event_pending = false;
         iolink_event_trigger(&ctx->dll.events, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST,
@@ -469,15 +469,15 @@ static void device_service_events_and_ds(iolink_device_ctx_t* ctx)
 #endif
 }
 
-/** @brief Report master-lost / master-online edges to the application. */
+/** @brief 向应用报告主站丢失/主站在线的边沿事件。 */
 static void device_notify_master_lost(iolink_device_ctx_t* ctx)
 {
     if ((ctx->config == NULL) || (ctx->config->app_callbacks == NULL)) {
         return;
     }
     if (ctx->dll.state != IOLINK_DLL_STATE_OPERATE) {
-        /* Startup/preoperate pauses are not loss events. Suppress the edge and
-           forget any stale state when leaving OPERATE. */
+        /* 启动/预操作暂停不是丢失事件。离开 OPERATE 时
+           抑制该边沿并忘记任何过期状态。 */
         ctx->master_lost_last = false;
         return;
     }
@@ -496,7 +496,7 @@ static void device_notify_master_lost(iolink_device_ctx_t* ctx)
     }
 }
 
-/** @brief Deliver deferred ISDU reset requests to the application. */
+/** @brief 将延迟的 ISDU 复位请求递交给应用。 */
 static void device_dispatch_resets(iolink_device_ctx_t* ctx)
 {
     if (ctx->dll.isdu.reset_pending) {
@@ -513,7 +513,7 @@ static void device_dispatch_resets(iolink_device_ctx_t* ctx)
     }
 }
 
-/** @brief Run the application process-data callbacks while in OPERATE. */
+/** @brief 在 OPERATE 状态下运行应用过程数据回调。 */
 static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
 {
     if ((ctx->config == NULL) || (ctx->config->app_callbacks == NULL) ||
@@ -526,16 +526,16 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
     }
 #if IOLINK_APP_PD_INPUT_CALLBACK
     if (ctx->config->app_callbacks->on_pd_input != NULL) {
-        /* Fill a buffer the ISR is not streaming, then publish it atomically so
-         * the ISR never streams a torn PD-in. The callback return value is the
-         * PD valid flag. */
+        /* 填写一个 ISR 未在流式发送的缓冲区，然后原子地发布，
+         * 使 ISR 永远不会发送撕裂的 PD 输入。回调的返回值
+         * 即 PD 有效标志。 */
         const uint8_t inactive = device_pd_in_free_index(&ctx->dll);
         if (inactive == 0xFFU) {
-            ctx->dll.pd_in_skips++; /* every spare buffer is leased */
-            return;                 /* keep the current PD-in and retry next cycle */
+            ctx->dll.pd_in_skips++; /* 每个备用缓冲区都被租用 */
+            return;                 /* 保留当前 PD 输入并在下一周期重试 */
         }
-        /* Fill the free buffer outside the critical section: the ISR keeps
-         * streaming the captured copy meanwhile. */
+        /* 在临界区之外填写空闲缓冲区：在此期间 ISR
+         * 继续发送已捕获的副本。 */
         const bool valid = ctx->config->app_callbacks->on_pd_input(
             ctx->config->user, &ctx->dll.pd_in[inactive][ctx->dll.od_width],
             ctx->dll.pd_in_len_current);
@@ -574,32 +574,32 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     if ((ctx == NULL) || (data == NULL) || (len > IOLINK_PD_IN_MAX_SIZE)) {
         return -1;
     }
-    /* Annex A fixed types have an immutable PD-in length. TYPE_2_V may vary
-     * within the configured maximum; both cases must not silently change the
-     * reply length away from the advertised layout. */
+    /* Annex A 固定类型的 PD 输入长度不可变。TYPE_2_V 可在
+     * 配置的最大值内变化；两种情况都不得悄悄改变
+     * 应答长度而偏离通告的布局。 */
     if (ctx->dll.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) {
         if (len > ctx->dll.pd_in_len_max) {
             return -1;
         }
     }
     else if ((ctx->dll.m_seq_type != IOLINK_M_SEQ_TYPE_0) && (len != ctx->dll.pd_in_len_max)) {
-        /* Fixed Annex A type: the PD-in width is immutable. TYPE_0 carries no
-         * PD at all, so a generic update is harmless and stays permissive. */
+        /* 固定 Annex A 类型：PD 输入宽度不可变。TYPE_0
+         * 完全不带 PD，因此通用更新无害且保持宽松。 */
         return -1;
     }
 
-    /* PD-in lives after the OD header in the reply buffer; fill a buffer the
-     * ISR is not streaming and publish it with an atomic index swap. No spare
-     * buffer means the ISR still holds them all: keep the current PD-in. */
+    /* PD 输入位于应答缓冲区中 OD 头之后；填写一个
+     * ISR 未在流式发送的缓冲区，并用原子索引交换发布。没有空闲
+     * 缓冲区意味着 ISR 仍占用全部缓冲区：保留当前 PD 输入。 */
     const uint8_t inactive = device_pd_in_free_index(&ctx->dll);
     if (inactive == 0xFFU) {
-        ctx->dll.pd_in_skips++; /* every spare buffer is leased: retry later */
+        ctx->dll.pd_in_skips++; /* 每个备用缓冲区都被租用：稍后重试 */
         return -1;
     }
-    /* Fill the free buffer outside the critical section: the ISR only ever
-     * captures pd_in_active, so a buffer that is neither active nor captured
-     * cannot be read by it. Only the publish (length, validity, index) must be
-     * atomic for the ISR. */
+    /* 在临界区之外填写空闲缓冲区：ISR 只会
+     * 捕获 pd_in_active，因此既非活动也未被捕获的缓冲区
+     * 不会被它读取。只有发布（长度、有效性、索引）必须
+     * 对 ISR 是原子的。 */
     (void) memcpy(&ctx->dll.pd_in[inactive][ctx->dll.od_width], data, len);
     IOLINK_CRITICAL_ENTER();
     ctx->dll.pd_in_len = (uint8_t) len;
@@ -628,8 +628,8 @@ int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, 
         return -1;
     }
 
-    /* pd_out is written by the frame dispatch in this same (main) context, so
-     * no lock is needed under the single-caller contract. */
+    /* pd_out 由同一（主）上下文中的帧分发写入，因此在
+     * 单调用方约定下无需加锁。 */
     read_len = (len < ctx->dll.pd_out_len_current) ? (uint8_t) len : ctx->dll.pd_out_len_current;
     (void) memcpy(data, ctx->dll.pd_out, read_len);
 
@@ -729,7 +729,7 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx, uint8_t pd_in_len, uin
     if (ctx == NULL) {
         return -1;
     }
-    /* Fixed Annex A types have an immutable PD layout; only TYPE_2_V varies. */
+    /* 固定 Annex A 类型的 PD 布局不可变；只有 TYPE_2_V 可变。 */
     if (ctx->dll.m_seq_type != IOLINK_M_SEQ_TYPE_2_V) {
         return -2;
     }

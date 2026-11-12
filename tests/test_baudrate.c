@@ -9,7 +9,7 @@
 #include "iolinki/dll.h"
 #include "iolinki/phy.h"
 
-/* Mock PHY functions */
+/* Mock PHY 函数 */
 static int mock_init(void* user)
 {
     (void) user;
@@ -33,7 +33,7 @@ static void test_baudrate_init(void** state)
     (void) state;
     iolink_dll_ctx_t ctx;
 
-    /* Initialized to COM2 */
+    /* 初始化为 COM2 */
     expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM2);
     iolink_dll_init(&ctx, &mock_phy);
 
@@ -48,13 +48,13 @@ static void test_baudrate_switch(void** state)
     expect_any(mock_set_baudrate, baudrate);
     iolink_dll_init(&ctx, &mock_phy);
 
-    /* Switch to COM1 */
+    /* 切换到 COM1 */
     expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM1);
     int ret = iolink_dll_set_baudrate(&ctx, IOLINK_BAUDRATE_COM1);
     assert_int_equal(ret, 0);
     assert_int_equal(iolink_dll_get_baudrate(&ctx), IOLINK_BAUDRATE_COM1);
 
-    /* Switch to COM3 */
+    /* 切换到 COM3 */
     expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM3);
     ret = iolink_dll_set_baudrate(&ctx, IOLINK_BAUDRATE_COM3);
     assert_int_equal(ret, 0);
@@ -73,8 +73,8 @@ static void test_operating_baudrate_reassert(void** state)
     assert_int_equal(iolink_dll_set_operating_baudrate(&ctx, IOLINK_BAUDRATE_COM3), 0);
     assert_int_equal(iolink_dll_get_baudrate(&ctx), IOLINK_BAUDRATE_COM3);
 
-    /* A recovery drop to COM1 is undone by the operating COM on the next main
-     * pump pass. */
+    /* 恢复过程中降到 COM1 的动作，会在下一次主循环泵
+     * 处理时由工作 COM 撤销。 */
     expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM1);
     assert_int_equal(iolink_dll_set_baudrate(&ctx, IOLINK_BAUDRATE_COM1), 0);
     expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM3);
@@ -90,7 +90,7 @@ static void test_operating_baudrate_unset(void** state)
     expect_any(mock_set_baudrate, baudrate);
     iolink_dll_init(&ctx, &mock_phy);
 
-    /* No operating COM configured: a COM1 drop is left alone (legacy). */
+    /* 未配置工作 COM：降到 COM1 后保持不变（旧行为）。 */
     expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM1);
     assert_int_equal(iolink_dll_set_baudrate(&ctx, IOLINK_BAUDRATE_COM1), 0);
     iolink_dll_process(&ctx);
@@ -124,7 +124,7 @@ static void test_baudrate_recomputes_limits(void** state)
     assert_int_equal(iolink_dll_set_baudrate(&ctx, IOLINK_BAUDRATE_COM1), 0);
     assert_int_equal(ctx.t_byte_limit_us, 16U * 208U);
     assert_int_equal(ctx.t_ren_limit_us, IOLINK_T_REN_US);
-    /* COM1 needs ~163 ms, clamped to the 0.1 ms octet's 255-unit maximum. */
+    /* COM1 需要约 163 ms，被钳制到 0.1 ms 字节的 255 单位上限。 */
     assert_int_equal(ctx.min_cycle_time_us, 25500U);
 }
 

@@ -22,47 +22,47 @@
 
 /**
  * @file isdu.c
- * @brief ISDU service engine: acyclic parameter read/write handling.
+ * @brief ISDU 服务引擎：非循环参数读/写处理。
  * @ingroup iolinki_isdu
  *
- * Implements the ISDU segmentation state machine (byte collection, header
- * parsing, sequence tracking and response segmentation) and dispatches
- * standard indices and system commands to the device parameter, device-info,
- * event, direct-parameter and data-storage handlers.
+ * 实现 ISDU 分段状态机（字节收集、头部
+ * 解析、序列跟踪与应答分段），并将标准索引与
+ * 系统命令分发给设备参数、设备信息、
+ * 事件、直接参数与数据存储处理器。
  *
- * ISDU Header (2 or 3 bytes):
- * [7:4] Service (Read/Write)
- * [3:0] Length (if < 15)
- * [ Index (16-bit) ]
- * [ Subindex (8-bit) ]
+ * ISDU 头部（2 或 3 字节）：
+ * [7:4] Service（读/写）
+ * [3:0] Length（值小于 15 时）
+ * [ Index（16 位）]
+ * [ Subindex（8 位）]
  */
 
 /* -------------------------------------------------------------------------
- * File map
+ * 文件导览
  *
- *  - Transport, parsing and shared helpers: chkpdu ... iolink_isdu_od_read
- *    (public: iolink_isdu_init, iolink_isdu_od_write, iolink_isdu_od_read)
- *  - Shared response helpers: isdu_respond_error
- *  - Mandatory indices: isdu_check_mandatory_write ... handle_mandatory_indices
- *  - SystemCommand and Data Storage upload helpers: isdu_clear_ds_upload_req ...
- *    (public: iolink_isdu_execute_system_command)
- *  - Access locks, detailed status, error stats and direct parameters:
+ *  - 传输、解析与共享辅助函数：chkpdu ... iolink_isdu_od_read
+ *    （公开：iolink_isdu_init、iolink_isdu_od_write、iolink_isdu_od_read）
+ *  - 共享应答辅助函数：isdu_respond_error
+ *  - 强制索引：isdu_check_mandatory_write ... handle_mandatory_indices
+ *  - SystemCommand 与数据存储上传辅助函数：isdu_clear_ds_upload_req ...
+ *    （公开：iolink_isdu_execute_system_command）
+ *  - 访问锁、详细状态、错误统计与直接参数：
  *    handle_access_locks ... handle_direct_parameters
- *  - Data Storage services: isdu_append_ds_index_list ... isdu_reject_ds_access
- *  - Index routing and standard dispatch: isdu_handle_vendor_index ...
- *  - Tail public API: iolink_isdu_process, iolink_isdu_get_response_byte,
+ *  - 数据存储服务：isdu_append_ds_index_list ... isdu_reject_ds_access
+ *  - 索引路由与标准分发：isdu_handle_vendor_index ...
+ *  - 末尾公开 API：iolink_isdu_process、iolink_isdu_get_response_byte、
  *    iolink_isdu_snapshot_response
  * ------------------------------------------------------------------------- */
 
-/* ... includes ... */
+/* ... 头文件包含 ... */
 
-/* Structs moved to header iolink_isdu_ctx_t */
+/* 结构体已移至头文件 iolink_isdu_ctx_t */
 
 /* -------------------------------------------------------------------------
- * Transport, parsing and shared helpers
+ * 传输、解析与共享辅助函数
  * ------------------------------------------------------------------------- */
 
-/** @brief CHKPDU: XOR of all ISDU octets with the checksum octet read as 0 (A.5.6). */
+/** @brief CHKPDU：所有 ISDU 字节的异或，校验字节按 0 读取（A.5.6）。 */
 static uint8_t chkpdu(const uint8_t* octets, size_t len)
 {
     uint8_t c = 0U;
@@ -83,7 +83,7 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx)
     ctx->resp_buf = ctx->resp_store[0];
 }
 
-/** @brief Read a parameter via the bound params context, or the legacy global set. */
+/** @brief 通过绑定的 params 上下文读取参数，否则使用旧的全局集合。 */
 static int isdu_params_get(const iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex,
                            uint8_t* buffer, size_t max_len)
 {
@@ -101,13 +101,13 @@ static int isdu_params_get(const iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t
 #endif
 }
 
-/** @brief Write a parameter via the bound params context, or the legacy global set. */
+/** @brief 通过绑定的 params 上下文写入参数，否则使用旧的全局集合。 */
 static int isdu_params_set(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex,
                            const uint8_t* data, size_t len, bool persist)
 {
 #if IOLINK_FEATURE_DATA_STORAGE
-    /* During a block download the write is buffered for an atomic commit on
-       ParamDownloadEnd (10.3.2) rather than applied immediately. */
+    /* 块下载期间，写入会被缓冲，以便在
+       ParamDownloadEnd（10.3.2）时原子提交，而非立即生效。 */
     if ((ctx != NULL) && (ctx->ds_ctx != NULL) &&
         iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx)) {
         return iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, index, subindex, data, len);
@@ -129,13 +129,13 @@ static int isdu_params_set(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subin
 }
 
 #if IOLINK_FEATURE_SYSTEM_COMMAND
-/** @brief Factory-reset the bound parameter context, or the legacy global set. */
+/** @brief 对绑定的参数上下文执行恢复出厂设置，否则使用旧的全局集合。 */
 static void isdu_params_factory_reset(iolink_isdu_ctx_t* ctx)
 {
-    /* Reset the device's own parameter context when one is bound (as device.c
-       does via ctx->params_ctx); otherwise fall back to the legacy global set.
-       Using the bound context is required, else a per-device app tag survives a
-       Restore Factory Settings command. */
+    /* 绑定时复位设备自身的参数上下文（如 device.c
+       通过 ctx->params_ctx 所做的那样）；否则回退到旧的全局集合。
+       必须使用绑定的上下文，否则每个设备的应用标签会在
+       Restore Factory Settings 命令之后仍然存在。 */
     if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
         iolink_params_ctx_factory_reset(ctx->params_ctx);
     }
@@ -147,13 +147,13 @@ static void isdu_params_factory_reset(iolink_isdu_ctx_t* ctx)
 }
 #endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
 
-/** @brief Device-info context bound to this ISDU context, if any. */
+/** @brief 绑定到该 ISDU 上下文的设备信息上下文（若有）。 */
 static iolink_device_info_ctx_t* isdu_info_ctx(iolink_isdu_ctx_t* ctx)
 {
     return ((ctx != NULL) && (ctx->params_ctx != NULL)) ? ctx->params_ctx->device_info : NULL;
 }
 
-/** @brief Effective identity for this ISDU context. */
+/** @brief 该 ISDU 上下文的有效标识。 */
 static const iolink_device_info_t* isdu_info(const iolink_isdu_ctx_t* ctx)
 {
     const iolink_device_info_ctx_t* info_ctx =
@@ -161,7 +161,7 @@ static const iolink_device_info_t* isdu_info(const iolink_isdu_ctx_t* ctx)
     return (info_ctx != NULL) ? iolink_device_info_ctx_get(info_ctx) : iolink_device_info_get();
 }
 
-/** @brief Effective access locks for this ISDU context. */
+/** @brief 该 ISDU 上下文的有效访问锁。 */
 static uint16_t isdu_access_locks(const iolink_isdu_ctx_t* ctx)
 {
     const iolink_device_info_ctx_t* info_ctx =
@@ -172,7 +172,7 @@ static uint16_t isdu_access_locks(const iolink_isdu_ctx_t* ctx)
 
 static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error);
 
-/** @brief Map a parameter-manager error to an ISDU negative response. */
+/** @brief 将参数管理器错误映射为 ISDU 否定应答。 */
 static void isdu_respond_param_error(iolink_isdu_ctx_t* ctx, int ret)
 {
     uint8_t error = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
@@ -185,11 +185,11 @@ static void isdu_respond_param_error(iolink_isdu_ctx_t* ctx, int ret)
     isdu_respond_error(ctx, error);
 }
 
-/* handle_standard_commands() is defined below; the transport executes it once a
-   full ISDU request has been received. */
+/* handle_standard_commands() 定义在下方；传输层在收齐一个
+   完整的 ISDU 请求后执行它。 */
 static void handle_standard_commands(iolink_isdu_ctx_t* ctx);
 
-/** @brief Reset the ISDU request transport to Idle. */
+/** @brief 将 ISDU 请求传输层复位到空闲状态。 */
 static void isdu_transport_reset(iolink_isdu_ctx_t* ctx)
 {
     ctx->response_negative = false;
@@ -210,9 +210,9 @@ static void isdu_transport_reset(iolink_isdu_ctx_t* ctx)
     ctx->header.subindex = 0U;
 }
 
-/** @brief Total ISDU octet count declared by the first received octets (A.5.3/A.14).
+/** @brief 由最先收到的字节声明的 ISDU 总字节数（A.5.3/A.14）。
  *
- * Returns 0 while the ExtLength octet is still missing. */
+ * ExtLength 字节尚未到达时返回 0。 */
 static size_t isdu_declared_total(const uint8_t* buf, size_t have)
 {
     if (have == 0U) {
@@ -220,29 +220,29 @@ static size_t isdu_declared_total(const uint8_t* buf, size_t have)
     }
     const uint8_t len = (uint8_t) (buf[0] & 0x0FU);
     if (len == 0U) {
-        return 1U; /* No Service / Busy: single octet */
+        return 1U; /* No Service / Busy：单字节 */
     }
     if (len == 1U) {
         if (have < 2U) {
-            return 0U; /* ExtLength octet not yet received */
+            return 0U; /* ExtLength 字节尚未收到 */
         }
         const uint8_t ext = buf[1];
         if ((ext >= 17U) && (ext <= 238U)) {
             return ext;
         }
-        return 0U; /* Reserved / invalid */
+        return 0U; /* 保留 / 无效 */
     }
     return len;
 }
 
 /**
- * @brief Decode a complete request buffer and execute the addressed service.
+ * @brief 解码完整的请求缓冲区并执行所寻址的服务。
  *
- * Fills ctx->header and ctx->buffer from the raw octets, then dispatches via
- * handle_standard_commands(); the handler leaves a 2-octet negative marker
- * (response_buf[0]==0x80) or a positive payload in response_buf/response_len.
+ * 从原始字节填充 ctx->header 与 ctx->buffer，然后通过
+ * handle_standard_commands() 分发；处理器会留下 2 字节的否定标记
+ * （response_buf[0]==0x80）或 response_buf/response_len 中的肯定载荷。
  */
-/** @brief Decode the service nibble into the read/write header type. */
+/** @brief 将服务半字节解码为读/写头部类型。 */
 static bool isdu_decode_service(iolink_isdu_ctx_t* ctx, uint8_t service)
 {
     if ((service >= 1U) && (service <= 3U)) {
@@ -258,19 +258,19 @@ static bool isdu_decode_service(iolink_isdu_ctx_t* ctx, uint8_t service)
 }
 
 /**
- * @brief Parse the index/subindex fields of a request.
+ * @brief 解析请求的 index/subindex 字段。
  *
- * Index format per Table A.12/A.15. Service 0x1/0x9 = 8-bit index, 0x2/0xA =
- * 8-bit index + subindex, 0x3/0xB = 16-bit index + subindex.
+ * 索引格式见 Table A.12/A.15。服务 0x1/0x9 = 8 位索引，0x2/0xA =
+ * 8 位索引 + subindex，0x3/0xB = 16 位索引 + subindex。
  *
- * @return false when the request was truncated and a negative response was
- *         produced.
+ * @return 当请求被截断并已产生否定应答时
+ *         返回 false。
  */
 static bool isdu_parse_index(iolink_isdu_ctx_t* ctx, const uint8_t* buf, size_t* pos,
                              size_t payload_end, uint8_t service)
 {
     if ((buf[0] & 0x0FU) == 1U) {
-        (*pos)++; /* Skip ExtLength octet */
+        (*pos)++; /* 跳过 ExtLength 字节 */
     }
 
     const bool two_index = (service == 3U) || (service == 11U);
@@ -303,11 +303,11 @@ static bool isdu_parse_index(iolink_isdu_ctx_t* ctx, const uint8_t* buf, size_t*
     return true;
 }
 
-/** @brief Copy the data payload (everything before CHKPDU) into the buffer. */
+/** @brief 将数据载荷（CHKPDU 之前的全部内容）复制到缓冲区。 */
 static void isdu_copy_payload(iolink_isdu_ctx_t* ctx, const uint8_t* buf, size_t pos, size_t total)
 {
     if (pos < total) {
-        const size_t data_end = total - 1U; /* exclude CHKPDU */
+        const size_t data_end = total - 1U; /* 排除 CHKPDU */
         if (data_end > pos) {
             size_t n = data_end - pos;
             if (n > sizeof(ctx->buffer)) {
@@ -326,7 +326,7 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
     const uint8_t* buf = ctx->req_buf;
     const uint8_t service = (uint8_t) (buf[0] >> 4);
     size_t pos = 1U;
-    const size_t payload_end = total - 1U; /* CHKPDU cannot supply an index/subindex. */
+    const size_t payload_end = total - 1U; /* CHKPDU 无法提供 index/subindex。 */
 
     ctx->buffer_idx = 0U;
     ctx->response_idx = 0U;
@@ -341,12 +341,12 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
     }
     isdu_copy_payload(ctx, buf, pos, total);
 
-    /* Parsed: execution is performed by iolink_isdu_process(), keeping the
-       transport and the application dispatch separable (and testable). */
+    /* 已解析：执行由 iolink_isdu_process() 完成，从而保持
+       传输层与应用分发可分离（且可测试）。 */
     ctx->state = ISDU_STATE_SERVICE_EXECUTE;
 }
 
-/** @brief Frame the handler result into ctx->resp_buf (positive or negative, A.5/C.1). */
+/** @brief 将处理器结果组帧到 ctx->resp_buf（肯定或否定，A.5/C.1）。 */
 static void isdu_frame_response(iolink_isdu_ctx_t* ctx)
 {
     const bool negative = ctx->response_negative;
@@ -354,12 +354,12 @@ static void isdu_frame_response(iolink_isdu_ctx_t* ctx)
     size_t pos = 0U;
 
     if (negative) {
-        ctx->resp_buf[pos++] = write ? 0x44U : 0xC4U; /* Write/Read Response (-), Length 4 */
-        ctx->resp_buf[pos++] = 0x80U;                 /* ErrorCode (APP_DEV) */
+        ctx->resp_buf[pos++] = write ? 0x44U : 0xC4U; /* 写/读应答（-），长度 4 */
+        ctx->resp_buf[pos++] = 0x80U;                 /* ErrorCode（APP_DEV） */
         ctx->resp_buf[pos++] = ctx->response_buf[1];  /* AdditionalCode */
     }
     else if (write) {
-        ctx->resp_buf[pos++] = 0x52U; /* Write Response (+) */
+        ctx->resp_buf[pos++] = 0x52U; /* 写应答（+） */
     }
     else {
         const size_t data_len = ctx->response_len;
@@ -372,7 +372,7 @@ static void isdu_frame_response(iolink_isdu_ctx_t* ctx)
             }
         }
         else {
-            /* A.5.3 / Figure A.19: I-Service+Length octet, ExtLength, data, CHKPDU = data + 3. */
+            /* A.5.3 / Figure A.19：I-Service+Length 字节、ExtLength、data、CHKPDU = data + 3。 */
             const size_t total = data_len + 3U;
             ctx->resp_buf[pos++] = 0xD1U;
             ctx->resp_buf[pos++] = (uint8_t) total;
@@ -390,7 +390,7 @@ static void isdu_frame_response(iolink_isdu_ctx_t* ctx)
     ctx->resp_idx = 0U;
 }
 
-/** @brief Build a Busy response octet (0x01) for a read START not yet answerable. */
+/** @brief 为尚无法应答的读 START 构造 Busy 应答字节（0x01）。 */
 static void isdu_emit_busy(iolink_isdu_ctx_t* ctx)
 {
     ctx->resp_buf[0] = 0x01U;
@@ -405,9 +405,9 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
         return;
     }
 
-    /* Table 52: ABORT (0x1F) rejects the request data and resets the transport
-       to Idle regardless of direction. IDLE/IDLE2 and the reserved values
-       0x13..0x1E are not writes; they are handled by the read path. */
+    /* Table 52：ABORT（0x1F）拒绝请求数据，并将传输层
+       复位到空闲，与方向无关。IDLE/IDLE2 及保留值
+       0x13..0x1E 不是写操作；它们由读路径处理。 */
     if (flowctrl == IOLINK_FLOWCTRL_ABORT) {
         isdu_transport_reset(ctx);
         return;
@@ -418,9 +418,9 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
 
     if (flowctrl == IOLINK_FLOWCTRL_START) {
         isdu_transport_reset(ctx);
-        /* Alternate the framed-response buffer only when the previous response
-         * has been published; otherwise replace the unpublished build. The
-         * buffer the ISR may still be serving is therefore never written. */
+        /* 仅在上一应答已发布时才轮换组帧应答缓冲区；
+         * 否则替换尚未发布的构建结果。因此 ISR 可能仍在
+         * 服务的缓冲区永远不会被写入。 */
         if (ctx->resp_sel == ctx->resp_pub) {
             ctx->resp_sel = (uint8_t) (ctx->resp_sel ^ 1U);
             ctx->resp_buf = ctx->resp_store[ctx->resp_sel];
@@ -431,8 +431,8 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
         ctx->req_total = 0U;
     }
     else {
-        /* COUNT (0x00..0x0F): must follow a START. A repeated FlowCTRL repeats
-           the previous message and its payload is ignored (7.3.6.2). */
+        /* COUNT（0x00..0x0F）：必须跟在 START 之后。重复的 FlowCTRL 表示重发
+           上一报文，其载荷被忽略（7.3.6.2）。 */
         if (!ctx->flowctrl_seen || (ctx->state == ISDU_STATE_IDLE)) {
             ctx->error_code = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
             isdu_transport_reset(ctx);
@@ -444,8 +444,8 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
         }
         const uint8_t expected = (uint8_t) ((ctx->last_flowctrl + 1U) & IOLINK_FLOWCTRL_COUNT_MASK);
         if (flowctrl != expected) {
-            /* Structure violation: drop the request, go to Idle, next read
-               answers No Service (0x00) (Table 54 T13). */
+            /* 结构违例：丢弃请求，进入空闲，下一次读
+               应答 No Service（0x00）（Table 54 T13）。 */
             ctx->error_code = IOLINK_ISDU_ERROR_SEGMENTATION;
             isdu_transport_reset(ctx);
             return;
@@ -472,16 +472,16 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
     }
 
     if ((ctx->req_total > 0U) && (ctx->req_idx >= ctx->req_total)) {
-        /* A.5.6: CHKPDU is valid when XOR of all ISDU octets is zero. */
+        /* A.5.6：当所有 ISDU 字节的异或为零时 CHKPDU 有效。 */
         uint8_t x = 0U;
         for (size_t i = 0U; i < ctx->req_total; i++) {
             x ^= ctx->req_buf[i];
         }
         if (x != 0U) {
-            /* A.5.6 / Table 84 (SDCI_TC_0065): an invalid CHKPDU makes the
-               request invalid. Discard it, return to Idle and answer the next
-               Read request with I-Service 0 ("No Service"). Do not synthesize a
-               negative ISDU response for the malformed request. */
+            /* A.5.6 / Table 84（SDCI_TC_0065）：CHKPDU 无效会使
+               请求无效。丢弃它，返回空闲，并对下一次
+               Read 请求以 I-Service 0（"No Service"）应答。不要为
+               格式错误的请求合成否定 ISDU 应答。 */
             ctx->error_code = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
             isdu_transport_reset(ctx);
             return;
@@ -512,17 +512,17 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_o
     }
 
     if (flowctrl == IOLINK_FLOWCTRL_START) {
-        /* Start of response read. If a service is being executed and the
-           application has not answered, answer Busy (0x01) (Table A.14). */
+        /* 应答读取开始。若某服务正在执行且
+           应用尚未应答，则应答 Busy（0x01）（Table A.14）。 */
         if (ctx->state == ISDU_STATE_SERVICE_EXECUTE) {
             isdu_emit_busy(ctx);
         }
         else if (ctx->state == ISDU_STATE_RESPONSE_READY) {
-            /* restarted read: restart from the first response octet */
+            /* 重启的读：从第一个应答字节重新开始 */
             ctx->resp_idx = 0U;
         }
         else {
-            /* Idle / no pending service: No Service (0x00). */
+            /* 空闲 / 无待处理服务：No Service（0x00）。 */
             ctx->resp_buf[0] = 0x00U;
             ctx->resp_total = 1U;
             ctx->resp_idx = 0U;
@@ -531,14 +531,14 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_o
         ctx->flowctrl_seen = true;
     }
     else if (flowctrl < IOLINK_FLOWCTRL_START) {
-        /* COUNT on a read continues the response sequentially. */
+        /* 读操作上的 COUNT 按顺序继续应答。 */
         if (!ctx->flowctrl_seen) {
             return;
         }
         ctx->last_flowctrl = flowctrl;
     }
     else {
-        /* Reserved values are not a valid read FlowCTRL. */
+        /* 保留值不是有效的读 FlowCTRL。 */
         return;
     }
 
@@ -557,10 +557,10 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_o
 }
 
 /* -------------------------------------------------------------------------
- * Shared response helpers
+ * 共享应答辅助函数
  * ------------------------------------------------------------------------- */
 
-/** @brief Terminate the ISDU service with a two-octet negative response. */
+/** @brief 以两字节否定应答终止 ISDU 服务。 */
 static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error)
 {
     ctx->response_negative = true;
@@ -572,13 +572,13 @@ static void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error)
 }
 
 /* -------------------------------------------------------------------------
- * Mandatory indices
+ * 强制索引
  * ------------------------------------------------------------------------- */
 
 /**
- * @brief Reject a WRITE to a read-only mandatory object.
+ * @brief 拒绝对只读强制对象的写操作（WRITE）。
  *
- * @return true when a negative response was already produced.
+ * @return 当已产生否定应答时返回 true。
  */
 static bool isdu_check_mandatory_write(iolink_isdu_ctx_t* ctx)
 {
@@ -590,8 +590,8 @@ static bool isdu_check_mandatory_write(iolink_isdu_ctx_t* ctx)
                               (index == IOLINK_IDX_FUNCTION_TAG) ||
                               (index == IOLINK_IDX_LOCATION_TAG);
     if (writable_tag) {
-        /* Table B.2.4: with the Parameter (write) access lock set, every
-           read/write parameter except DeviceAccessLocks is write-protected. */
+        /* Table B.2.4：置位 Parameter（写）访问锁后，除
+           DeviceAccessLocks 外的每个读/写参数都受写保护。 */
         if ((isdu_access_locks(ctx) & IOLINK_LOCK_PARAM) != 0U) {
             isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
             return true;
@@ -617,11 +617,11 @@ static bool isdu_check_mandatory_write(iolink_isdu_ctx_t* ctx)
             isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
             return true;
         default:
-            return false; /* unknown index: IDX_NOTAVAIL in the dispatcher */
+            return false; /* 未知索引：由分发器返回 IDX_NOTAVAIL */
     }
 }
 
-/** @brief B.2.5: 0x000D is an ArrayT of UIntegerT16 (single element here). */
+/** @brief B.2.5：0x000D 是 UIntegerT16 的 ArrayT（此处为单元素）。 */
 static void isdu_read_profile_characteristic(iolink_isdu_ctx_t* ctx,
                                              const iolink_device_info_t* info)
 {
@@ -640,7 +640,7 @@ static void isdu_read_profile_characteristic(iolink_isdu_ctx_t* ctx,
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
 
-/** @brief Table B.8/B.2.20: 2-octet error count since reset. */
+/** @brief Table B.8/B.2.20：自复位以来的 2 字节错误计数。 */
 static void isdu_read_error_count(iolink_isdu_ctx_t* ctx)
 {
     uint32_t total = 0U;
@@ -658,7 +658,7 @@ static void isdu_read_error_count(iolink_isdu_ctx_t* ctx)
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
 
-/** @brief Map an identification index to its device-info string (NULL if none). */
+/** @brief 将标识索引映射到其设备信息字符串（无则 NULL）。 */
 static const char* isdu_identification_string(const iolink_device_info_t* info, uint16_t index)
 {
     switch (index) {
@@ -686,18 +686,18 @@ static const char* isdu_identification_string(const iolink_device_info_t* info, 
 }
 
 /**
- * @brief Read an identification string into the response buffer.
+ * @brief 将标识字符串读入应答缓冲区。
  *
- * @return false when the object has no string and no response was produced
- *         (the transport state is left untouched).
+ * @return 当对象没有字符串且未产生任何应答时
+ *         返回 false（传输状态保持不变）。
  */
 static bool isdu_read_identification_string(iolink_isdu_ctx_t* ctx,
                                             const iolink_device_info_t* info, uint16_t index)
 {
     const char* str_data = isdu_identification_string(info, index);
     if (index == IOLINK_IDX_PRODUCT_URI && str_data == NULL) {
-        /* Table B.8/B.2.19: optional and conditional on an associated Profile;
-           without a URI the object is not available (Table C.1). */
+        /* Table B.8/B.2.19：可选，且以存在关联 Profile 为条件；
+           没有 URI 时该对象不可用（Table C.1）。 */
         isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
         return true;
     }
@@ -705,8 +705,8 @@ static bool isdu_read_identification_string(iolink_isdu_ctx_t* ctx,
         return false;
     }
 
-    /* Table B.8/B.2.8-B.2.19: per-object StringT fixedLength caps the response.
-       ProductURI allows up to 100 octets; SerialNumber 16. */
+    /* Table B.8/B.2.8-B.2.19：按对象定义的 StringT fixedLength 限制应答长度。
+       ProductURI 最多允许 100 字节；SerialNumber 为 16。 */
     size_t limit = 64U;
     if (index == IOLINK_IDX_SERIAL_NUMBER) {
         limit = 16U;
@@ -728,7 +728,7 @@ static bool isdu_read_identification_string(iolink_isdu_ctx_t* ctx,
     return true;
 }
 
-/** @brief Read an Application/Function/Location tag from the parameter set. */
+/** @brief 从参数集中读取应用/功能/位置标签。 */
 static void isdu_tag_read(iolink_isdu_ctx_t* ctx, uint16_t index)
 {
     const int res =
@@ -738,11 +738,11 @@ static void isdu_tag_read(iolink_isdu_ctx_t* ctx, uint16_t index)
         ctx->response_idx = 0U;
         ctx->state = ISDU_STATE_RESPONSE_READY;
     }
-    /* On failure leave the state untouched; the transport reset then drops the
-       request (same as the original fall-through). */
+    /* 失败时保持状态不变；随后的传输复位会丢弃
+       该请求（与原实现的直落行为相同）。 */
 }
 
-/** @brief Write an Application/Function/Location tag to the parameter set. */
+/** @brief 将应用/功能/位置标签写入参数集。 */
 static void isdu_tag_write(iolink_isdu_ctx_t* ctx, uint16_t index)
 {
     if (index == IOLINK_IDX_APPLICATION_TAG) {
@@ -767,12 +767,12 @@ static void isdu_tag_write(iolink_isdu_ctx_t* ctx, uint16_t index)
         ctx->state = ISDU_STATE_RESPONSE_READY;
         return;
     }
-    /* Persistent storage rejected the service: terminate with a negative
-       response instead of leaving the master polling Busy. */
+    /* 持久化存储拒绝了该服务：以否定应答
+       终止，而不是让主站持续轮询 Busy。 */
     isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
 }
 
-/** @brief Serve a read or write of a writable identification tag. */
+/** @brief 处理可写标识标签的读或写。 */
 static void isdu_tag_service(iolink_isdu_ctx_t* ctx, uint16_t index)
 {
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
@@ -783,17 +783,17 @@ static void isdu_tag_service(iolink_isdu_ctx_t* ctx, uint16_t index)
     }
 }
 
-/** @brief Table B.8/B.2.23-B.2.24: last valid process input/output data. */
+/** @brief Table B.8/B.2.23-B.2.24：最近一次有效的过程输入/输出数据。 */
 static void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
 {
     uint8_t len = 0U;
     if (ctx->dll_ctx != NULL) {
         const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
         if (input) {
-            /* B.2.23: the object carries the Process Data of the PDin channel
-               with its runtime length. The PD status bit (A.1.5) carries the
-               validity; B.2.23 does not define a different answer while it is
-               invalid, so the buffer is served as-is (ST reference behaviour). */
+            /* B.2.23：该对象携带 PDin 通道的过程数据
+               及其运行时长。PD 状态位（A.1.5）承载
+               有效性；B.2.23 未定义其无效时的不同应答，
+               因此按原样返回缓冲区（ST 参考实现行为）。 */
             len = dll->pd_in_len_current;
             if (len > IOLINK_PD_IN_MAX_SIZE) {
                 len = (uint8_t) IOLINK_PD_IN_MAX_SIZE;
@@ -804,8 +804,8 @@ static void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
             }
         }
         else {
-            /* B.2.24: same for the PDout channel. Until the first PDout frame
-               the zero-initialised buffer of the configured length is served. */
+            /* B.2.24：PDout 通道同理。在收到第一帧 PDout 之前，
+               返回按配置长度零初始化的缓冲区。 */
             len = dll->pd_out_len_current;
             if (len > sizeof(dll->pd_out)) {
                 len = (uint8_t) sizeof(dll->pd_out);
@@ -820,7 +820,7 @@ static void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
 
-/** @brief Table B.8/B.2.21: DeviceStatus from the event severity. */
+/** @brief Table B.8/B.2.21：由事件严重程度得到 DeviceStatus。 */
 static void isdu_read_device_status(iolink_isdu_ctx_t* ctx)
 {
 #if IOLINK_FEATURE_EVENTS
@@ -834,7 +834,7 @@ static void isdu_read_device_status(iolink_isdu_ctx_t* ctx)
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
 
-/** @brief Serve the mandatory identification/status indices (vendor, product, tags, etc.). */
+/** @brief 处理强制标识/状态索引（供应商、产品、标签等）。 */
 static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
 {
     const iolink_device_info_t* info = isdu_info(ctx);
@@ -845,9 +845,9 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
     if (isdu_check_mandatory_write(ctx)) {
         return;
     }
-    /* B.2.5: 0x000D is an ArrayT; every other object handled here is a
-       single-element parameter that only exposes subindex 0. Read-only WRITEs
-       were already answered above with WRITE_PROTECTED. */
+    /* B.2.5：0x000D 是 ArrayT；此处处理的其他每个对象都是
+       仅暴露 subindex 0 的单元素参数。对只读对象的
+       WRITE 已在上文以 WRITE_PROTECTED 应答。 */
     if ((ctx->header.subindex != 0U) && (ctx->header.index != IOLINK_IDX_PROFILE_CHARACTERISTIC)) {
         isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
         return;
@@ -855,9 +855,9 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
 
     const uint16_t index = ctx->header.index;
     switch (index) {
-            /* Table B.8: 0x0004-0x000B are reserved. VendorID/DeviceID live in
-               Direct Parameter Page 1 (0x07-0x0B), not in an ISDU index. A read of
-               0x000A/0x000B therefore falls through to the default IDX_NOTAVAIL. */
+            /* Table B.8：0x0004-0x000B 为保留索引。VendorID/DeviceID 位于
+               Direct Parameter Page 1（0x07-0x0B），而不在 ISDU 索引中。因此对
+               0x000A/0x000B 的读取会落到默认的 IDX_NOTAVAIL。 */
 
         case IOLINK_IDX_PROFILE_CHARACTERISTIC:
             isdu_read_profile_characteristic(ctx, info);
@@ -891,8 +891,8 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
             isdu_read_device_status(ctx);
             return;
 
-            /* IOLINK_IDX_DETAILED_DEVICE_STATUS (0x0025) is handled earlier in
-               handle_standard_commands() via handle_detailed_device_status(). */
+            /* IOLINK_IDX_DETAILED_DEVICE_STATUS（0x0025）在其前的
+               handle_standard_commands() 中由 handle_detailed_device_status() 处理。 */
 
         default:
             isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
@@ -901,11 +901,11 @@ static void handle_mandatory_indices(iolink_isdu_ctx_t* ctx)
 }
 
 /* -------------------------------------------------------------------------
- * SystemCommand and Data Storage upload helpers
+ * SystemCommand 与数据存储上传辅助函数
  * ------------------------------------------------------------------------- */
 
 #if IOLINK_FEATURE_SYSTEM_COMMAND
-/** @brief Clear DS_UPLOAD_FLAG when a reset restored the factory set. */
+/** @brief 当复位恢复了出厂参数集时清除 DS_UPLOAD_FLAG。 */
 static void isdu_clear_ds_upload_req(iolink_isdu_ctx_t* ctx)
 {
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -917,17 +917,17 @@ static void isdu_clear_ds_upload_req(iolink_isdu_ctx_t* ctx)
 #endif
 }
 
-/** @brief Raise the DS_UPLOAD_REQ event (10.4.2) when a command changed the
- * Data Storage parameter set locally on the Device. */
+/** @brief 当某命令在设备本地改变了数据存储参数集时，
+ * 触发 DS_UPLOAD_REQ 事件（10.4.2）。 */
 static void isdu_trigger_ds_upload_req(iolink_isdu_ctx_t* ctx)
 {
 #if IOLINK_FEATURE_DATA_STORAGE
     if (ctx->ds_ctx != NULL) {
-        /* 10.4.2: raise DS_UPLOAD_FLAG (State_Property bit 7) immediately. The
-           corresponding notification is published by the device pump once the
-           current ISDU response has been fully read, so the Event flag cannot
-           appear inside the DS-command response and make the Master interleave
-           a diagnosis read with the ISDU transfer. */
+        /* 10.4.2：立即置位 DS_UPLOAD_FLAG（State_Property 位 7）。
+           对应的通知由设备泵在
+           当前 ISDU 应答被完整读取后发布，因此 Event 标志不会
+           出现在 DS 命令应答中，也不会使主站在 ISDU 传输
+           进行中插入诊断读取。 */
         iolink_ds_request_upload((iolink_ds_ctx_t*) ctx->ds_ctx);
         return;
     }
@@ -943,9 +943,9 @@ static void isdu_trigger_ds_upload_req(iolink_isdu_ctx_t* ctx)
 }
 #endif /* IOLINK_FEATURE_SYSTEM_COMMAND */
 
-/** @brief Execute a SystemCommand (reset, factory restore, data-storage commands). */
+/** @brief 执行 SystemCommand（复位、恢复出厂、数据存储命令）。 */
 #if IOLINK_FEATURE_DATA_STORAGE
-/** @brief Map an iolink_ds_* return code to an ISDU error (Table C.1). */
+/** @brief 将 iolink_ds_* 返回码映射为 ISDU 错误（Table C.1）。 */
 static uint8_t isdu_ds_result_error(int ret, uint8_t fallback)
 {
     switch (ret) {
@@ -966,7 +966,7 @@ static uint8_t isdu_ds_result_error(int ret, uint8_t fallback)
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
 #if IOLINK_FEATURE_SYSTEM_COMMAND
-/** @brief Table 101: clear Device diagnosis/status on the reset commands. */
+/** @brief Table 101：在复位命令中清除设备诊断/状态。 */
 static void isdu_reset_diagnostics(iolink_isdu_ctx_t* ctx)
 {
     if (ctx->dll_ctx != NULL) {
@@ -974,7 +974,7 @@ static void isdu_reset_diagnostics(iolink_isdu_ctx_t* ctx)
     }
 }
 
-/** @brief Table 101: reset ErrorCount without touching the event engine. */
+/** @brief Table 101：复位 ErrorCount 而不触碰事件引擎。 */
 static void isdu_reset_error_counters(iolink_isdu_ctx_t* ctx)
 {
     if (ctx->dll_ctx != NULL) {
@@ -982,32 +982,32 @@ static void isdu_reset_error_counters(iolink_isdu_ctx_t* ctx)
     }
 }
 
-/** @brief 0x80-0x83: device/application reset, factory restore, back-to-box. */
+/** @brief 0x80-0x83：设备/应用复位、恢复出厂、back-to-box。 */
 static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
     switch (cmd) {
         case IOLINK_CMD_DEVICE_RESET: /* 0x80 */
-            /* Table 101: Device reset sets Diagnosis and status to "0". */
+            /* Table 101：设备复位将 Diagnosis 与状态置为 "0"。 */
             isdu_reset_diagnostics(ctx);
-            /* Set reset flag for application to handle */
+            /* 置位复位标志，交由应用处理 */
             ctx->reset_pending = true;
             break;
 
         case IOLINK_CMD_APPLICATION_RESET: /* 0x81 */
-            /* Table 101: Application reset leaves the diagnosis untouched.
-               Set application reset flag; the parameter set will change, so the
-               Master must be prompted to re-upload via DS_UPLOAD_REQ (10.4.2). */
+            /* Table 101：应用复位不改变诊断信息。
+               置位应用复位标志；参数集将发生变化，因此
+               必须通过 DS_UPLOAD_REQ（10.4.2）提示主站重新上传。 */
             ctx->app_reset_pending = true;
             isdu_trigger_ds_upload_req(ctx);
             break;
 
         case IOLINK_CMD_RESTORE_FACTORY_SETTINGS: /* 0x82 */
-            /* Reset all parameters to factory defaults. Table 177 requires
-               DS_UPLOAD_FLAG = 0: the master keeps its stored parameter set
-               and re-downloads it, so no upload is requested here. Table 101
-               "Clear": ErrorCount is reset and every active Error/Warning is
-               withdrawn with an "event disappears" so the Master can drop it
-               from its diagnosis. */
+            /* 将所有参数复位为出厂默认值。Table 177 要求
+               DS_UPLOAD_FLAG = 0：主站保留其存储的参数集
+               并重新下载，因此此处不请求上传。Table 101 的
+               "Clear"：ErrorCount 被复位，且每个活动的 Error/Warning
+               都以 "event disappears" 撤销，使主站可将其
+               从诊断中移除。 */
             isdu_params_factory_reset(ctx);
             isdu_clear_ds_upload_req(ctx);
             isdu_reset_error_counters(ctx);
@@ -1022,10 +1022,10 @@ static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             break;
 
         case IOLINK_CMD_BACK_TO_BOX: /* 0x83 */
-            /* Restore the delivery values, then stop and disable communication
-               after the response (10.7.5). Table 178 also requires
-               DS_UPLOAD_FLAG = 0; Table 101 sets the diagnosis and status to
-               "0". */
+            /* 恢复交付值，然后在应答之后停止并禁用
+               通信（10.7.5）。Table 178 还要求
+               DS_UPLOAD_FLAG = 0；Table 101 将诊断与状态置为
+               "0"。 */
             isdu_params_factory_reset(ctx);
             isdu_clear_ds_upload_req(ctx);
             if (ctx->dll_ctx != NULL) {
@@ -1035,26 +1035,26 @@ static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             break;
 
         default:
-            break; /* the dispatcher routes only the four commands here */
+            break; /* 分发器只会将这四个命令路由到这里 */
     }
 }
 
 #if IOLINK_FEATURE_DATA_STORAGE
 /**
- * @brief 0x01-0x06 Data Storage commands.
+ * @brief 0x01-0x06 数据存储命令。
  *
- * @return true when an error response was already produced.
+ * @return 当已产生错误应答时返回 true。
  */
 static bool isdu_system_ds(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
     if (ctx->ds_ctx == NULL) {
-        return false; /* nothing to do: success (empty response) */
+        return false; /* 无事可做：成功（空应答） */
     }
     iolink_ds_ctx_t* ds = (iolink_ds_ctx_t*) ctx->ds_ctx;
 
     if (cmd == IOLINK_CMD_PARAM_BREAK) { /* 0x06 */
-        /* In Idle there is nothing to abort, so this is an unexpected command
-           (0324). */
+        /* 空闲状态下没有可中止的操作，因此这是一个意外命令
+           （0324）。 */
         if (ds->state == IOLINK_DS_STATE_IDLE) {
             isdu_respond_error(ctx, IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL);
             return true;
@@ -1064,14 +1064,14 @@ static bool isdu_system_ds(iolink_isdu_ctx_t* ctx, uint8_t cmd)
     }
 
     const uint16_t locks = isdu_access_locks(ctx);
-    /* ParamDownloadStore finalizes like DownloadEnd and additionally raises
-       DS_UPLOAD_REQ (10.4.2). */
+    /* ParamDownloadStore 像 DownloadEnd 一样完成收尾，并额外触发
+       DS_UPLOAD_REQ（10.4.2）。 */
     const bool store = (cmd == IOLINK_CMD_PARAM_DOWNLOAD_STORE);
     int ret = 0;
     if (store) {
-        /* 0321/0322/0327: ParamDownloadStore is valid in DSIdle_2. Finalize an
-           active download, abort an active upload, and always request the
-           following upload. */
+        /* 0321/0322/0327：ParamDownloadStore 在 DSIdle_2 中有效。结束
+           活动的下载，中止活动的上传，并始终请求
+           后续的上传。 */
         if ((locks & IOLINK_LOCK_DS) != 0U) {
             ret = -2;
         }
@@ -1104,7 +1104,7 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
 #if !IOLINK_FEATURE_SYSTEM_COMMAND
     (void) cmd;
-    /* SystemCommand support is compiled out. */
+    /* SystemCommand 支持已在编译时移除。 */
     isdu_respond_error(ctx, IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
 #else
     switch (cmd) {
@@ -1115,10 +1115,10 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             isdu_system_reset(ctx, cmd);
             break;
 
-            /* Table B.9: 0x84-0x9F are reserved (no SetCommunicationMode command). */
+            /* Table B.9：0x84-0x9F 为保留值（没有 SetCommunicationMode 命令）。 */
 
 #if IOLINK_FEATURE_DATA_STORAGE
-        /* Standard Data Storage Commands (0x01-0x06). */
+        /* 标准数据存储命令（0x01-0x06）。 */
         case IOLINK_CMD_PARAM_DOWNLOAD_START:
         case IOLINK_CMD_PARAM_DOWNLOAD_END:
         case IOLINK_CMD_PARAM_UPLOAD_START:
@@ -1132,12 +1132,12 @@ static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
         default:
-            /* Unsupported command value: FUNC_NOTAVAIL (Table C.1 / C.2.14). */
+            /* 不支持的命令值：FUNC_NOTAVAIL（Table C.1 / C.2.14）。 */
             isdu_respond_error(ctx, IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
             return;
     }
 
-    /* Success: empty response */
+    /* 成功：空应答 */
     ctx->response_len = 0U;
     ctx->response_idx = 0U;
     ctx->state = ISDU_STATE_RESPONSE_READY;
@@ -1150,19 +1150,19 @@ void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
         return;
     }
     handle_system_command(ctx, cmd);
-    /* The SystemCommand on Direct Parameter page 1 provides no positive or
-       negative response (7.3.5.3); discard whatever the ISDU handler staged. */
+    /* Direct Parameter page 1 上的 SystemCommand 不产生肯定或
+       否定应答（7.3.5.3）；丢弃 ISDU 处理器暂存的任何内容。 */
     isdu_transport_reset(ctx);
 }
 
 /* -------------------------------------------------------------------------
- * Access locks, detailed status, error stats and direct parameters
+ * 访问锁、详细状态、错误统计与直接参数
  * ------------------------------------------------------------------------- */
 
-/** @brief Read or write the DeviceAccessLocks parameter (index 0x000C). */
+/** @brief 读或写 DeviceAccessLocks 参数（索引 0x000C）。 */
 static void handle_access_locks(iolink_isdu_ctx_t* ctx)
 {
-    /* B.2.4: access to DeviceAccessLocks is only permitted via Subindex 0. */
+    /* B.2.4：仅允许通过 Subindex 0 访问 DeviceAccessLocks。 */
     if (ctx->header.subindex != 0U) {
         isdu_respond_error(ctx, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
         return;
@@ -1175,8 +1175,8 @@ static void handle_access_locks(iolink_isdu_ctx_t* ctx)
         ctx->response_len = 2U;
     }
     else {
-        /* Write: Update access locks. Bits 4..15 are reserved and shall be
-           rejected with PAR_VALOUTOFRNG (B.2.4 / SDCI_TC_0110). */
+        /* 写：更新访问锁。位 4..15 为保留位，应
+           以 PAR_VALOUTOFRNG 拒绝（B.2.4 / SDCI_TC_0110）。 */
         if (ctx->buffer_idx >= 2U) {
             uint16_t new_locks = ((uint16_t) ctx->buffer[0] << 8) | ctx->buffer[1];
             if ((new_locks & (uint16_t) ~IOLINK_ACCESS_LOCKS_IMPLEMENTED) != 0U) {
@@ -1198,7 +1198,7 @@ static void handle_access_locks(iolink_isdu_ctx_t* ctx)
 }
 
 #if IOLINK_FEATURE_EVENTS
-/** @brief Serve DetailedDeviceStatus (Table B.14): ArrayT of 3-octet entries. */
+/** @brief 处理 DetailedDeviceStatus（Table B.14）：3 字节条目的 ArrayT。 */
 static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
 {
     if (ctx->header.type != IOLINK_ISDU_SERVICE_TYPE_READ) {
@@ -1215,13 +1215,13 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
 
     iolink_events_ctx_t* event_ctx = (iolink_events_ctx_t*) ctx->event_ctx;
 
-    /* Collect the pending diagnosis entries: the events whose "Event appears"
-       was reported and whose "Event disappears" has not been issued yet. A
-       condition that was cleared therefore stays listed while its withdrawal
-       waits for the minimum appearance window (A.6.4), matching the Master's
-       diagnosis view; an appearance that is still deferred is not listed. Only the snapshot of
-       the pending table is taken with interrupts off; the formatting below
-       runs unlocked (the response buffer is main-owned). */
+    /* 收集待处理的诊断条目：即 "Event appears" 已上报、
+       且 "Event disappears" 尚未发出的那些事件。因此，已被清除的
+       条件在其撤销仍等待最小出现窗口（A.6.4）期间
+       保持列出，与主站的诊断视图一致；仍被延迟的
+       出现不会被列出。仅在关中断时获取
+       待处理表的快照；下面的格式化在解锁状态下执行
+       （应答缓冲区归主上下文所有）。 */
     uint16_t codes[IOLINK_EVENT_PENDING_MAX];
     iolink_event_type_t types[IOLINK_EVENT_PENDING_MAX];
     uint8_t n = 0U;
@@ -1236,17 +1236,17 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
     }
     IOLINK_CRITICAL_EXIT();
 
-    /* B.2.22: the conformant read is subindex 0, which returns the complete
-       list of 3-octet entries ("Subindex access is not supported"). Element
-       access through subindex 1..n is kept as a device extension. */
+    /* B.2.22：符合规范的读取方式是 subindex 0，它返回完整的
+       3 字节条目列表（"Subindex access is not supported"）。通过
+       subindex 1..n 的元素访问作为设备扩展保留。 */
     const uint8_t sub = ctx->header.subindex;
     if ((sub == 0U) || (sub <= n)) {
         const uint8_t start = (sub == 0U) ? 0U : (uint8_t) (sub - 1U);
         const uint8_t end = (sub == 0U) ? n : (uint8_t) (start + 1U);
         uint8_t pos = 0U;
         for (uint8_t i = start; i < end; i++) {
-            /* Figure A.24: MODE 11 = appears, TYPE 10 = Warning / 11 = Error,
-               INSTANCE 4 = Application. */
+            /* Figure A.24：MODE 11 = appears，TYPE 10 = Warning / 11 = Error，
+               INSTANCE 4 = Application。 */
             uint8_t qualifier = 0xC0U;
             qualifier |= (types[i] == IOLINK_EVENT_TYPE_ERROR) ? (0x03U << 4) : (0x02U << 4);
             qualifier |= 0x04U;
@@ -1265,7 +1265,7 @@ static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
 
 #endif /* IOLINK_FEATURE_EVENTS */
 
-/** @brief Append a 32-bit value to a buffer in big-endian order, advancing the index. */
+/** @brief 以大端序将 32 位值追加到缓冲区，并推进索引。 */
 static void isdu_write_u32_be(uint8_t* buf, size_t* idx, uint32_t value)
 {
     buf[(*idx)++] = (uint8_t) ((value >> 24) & 0xFFU);
@@ -1274,7 +1274,7 @@ static void isdu_write_u32_be(uint8_t* buf, size_t* idx, uint32_t value)
     buf[(*idx)++] = (uint8_t) (value & 0xFFU);
 }
 
-/** @brief Serve the vendor error-statistics index as four big-endian DLL counters. */
+/** @brief 以四个大端 DLL 计数器形式返回厂商错误统计索引。 */
 static void handle_error_stats(iolink_isdu_ctx_t* ctx)
 {
     if (ctx->header.type != IOLINK_ISDU_SERVICE_TYPE_READ) {
@@ -1305,7 +1305,7 @@ static void handle_error_stats(iolink_isdu_ctx_t* ctx)
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
 
-/** @brief Return the Direct Parameter page 2 storage (device-specific, addresses 0x10-0x1F). */
+/** @brief 返回 Direct Parameter page 2 存储（设备专用，地址 0x10-0x1F）。 */
 static uint8_t* direct_param_page2(iolink_isdu_ctx_t* ctx)
 {
     static uint8_t fallback_page2[16] = {0U};
@@ -1317,9 +1317,9 @@ static uint8_t* direct_param_page2(iolink_isdu_ctx_t* ctx)
 }
 
 /**
- * @brief Encode a Process Data length (in octets) per IO-Link V1.1.5 Figure B.5.
+ * @brief 按 IO-Link V1.1.5 Figure B.5 编码过程数据长度（以字节计）。
  *
- * <=2 octets are expressed as bit length (BYTE=0); larger as octets (BYTE=1).
+ * 不大于 2 字节时以位长度表示（BYTE=0）；更大时以字节表示（BYTE=1）。
  */
 static uint8_t direct_param_encode_pd(uint8_t octets)
 {
@@ -1327,31 +1327,31 @@ static uint8_t direct_param_encode_pd(uint8_t octets)
         return 0x00U;
     }
     if (octets <= 2U) {
-        return (uint8_t) (octets * 8U); /* BYTE=0, Length in bits (8 or 16) */
+        return (uint8_t) (octets * 8U); /* BYTE=0，长度以位计（8 或 16） */
     }
-    return (uint8_t) (0x80U | (uint8_t) (octets - 1U)); /* BYTE=1, Length=octets-1 */
+    return (uint8_t) (0x80U | (uint8_t) (octets - 1U)); /* BYTE=1，Length=octets-1 */
 }
 
 /**
- * @brief Build the M-sequenceCapability byte (Direct Parameter addr 0x03, Figure B.3).
+ * @brief 构造 M-sequenceCapability 字节（Direct Parameter 地址 0x03，Figure B.3）。
  *
- * bit0 = ISDU supported, bits1-3 = OPERATE M-sequence code (Table A.10),
- * bits4-5 = PREOPERATE M-sequence code (Table A.8; TYPE_0 = 0 here).
+ * bit0 = 支持 ISDU，bits1-3 = OPERATE M-sequence 编码（Table A.10），
+ * bits4-5 = PREOPERATE M-sequence 编码（Table A.8；此处 TYPE_0 = 0）。
  */
 static uint8_t direct_param_mseq_capability(uint8_t m_seq_type, uint8_t od_width)
 {
-    uint8_t cap = 0x01U; /* ISDU supported */
-    /* Table A.10 OPERATE code follows the actual OD width (1/2/8/32). */
+    uint8_t cap = 0x01U; /* 支持 ISDU */
+    /* Table A.10 的 OPERATE 编码跟随实际 OD 宽度（1/2/8/32）。 */
     if (od_width == 0U) {
         od_width = iolink_mseq_default_od_width(m_seq_type);
     }
     const uint8_t operate_code = iolink_mseq_operate_code(m_seq_type, od_width);
     cap |= (uint8_t) ((operate_code & 0x07U) << 1);
-    /* PREOPERATE M-sequence in this stack is TYPE_0 (code 0) -> bits 4-5 = 0. */
+    /* 本协议栈的 PREOPERATE M-sequence 为 TYPE_0（编码 0）-> bits 4-5 = 0。 */
     return cap;
 }
 
-/** @brief Populate the 16-octet Direct Parameter page 1 from device-info and DLL state. */
+/** @brief 从设备信息与 DLL 状态填充 16 字节的 Direct Parameter page 1。 */
 static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
 {
     const iolink_device_info_t* info = isdu_info(ctx);
@@ -1367,7 +1367,7 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
     }
 
     (void) memset(page, 0, 16);
-    /* 0x01 MasterCycleTime is the value the Master wrote during startup. */
+    /* 0x01 MasterCycleTime 是主站在启动期间写入的值。 */
     if (ctx->dll_ctx != NULL) {
         const iolink_dll_ctx_t* dll = (const iolink_dll_ctx_t*) ctx->dll_ctx;
         page[0x01] = dll->master_cycle_time;
@@ -1377,24 +1377,24 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
                                ? (uint16_t) iolink_dll_compute_min_cycle_time(
                                      (const iolink_dll_ctx_t*) ctx->dll_ctx)
                                : ((info != NULL) ? (uint16_t) info->min_cycle_time : 0U);
-        /* 0x00 means "no MinCycleTime"; otherwise encode time base | multiplier (Table B.3). */
+        /* 0x00 表示 "no MinCycleTime"；否则编码时间基准 | 乘数（Table B.3）。 */
         page[0x02] = (min_cyc == 0U) ? 0U : iolink_cycle_time_encode(min_cyc);
     }
     page[0x03] = direct_param_mseq_capability(m_seq, od_width); /* M-sequenceCapability */
-    /* DPP1 RevisionID is the one-octet protocol revision. The device-info
-       field stores the full IODD iolinkRevision (0x0111 for V1.1); the low
-       octet is the value transmitted in DPP1 0x04. */
+    /* DPP1 RevisionID 是一字节的协议修订号。设备信息
+       字段保存完整的 IODD iolinkRevision（V1.1 为 0x0111）；其低
+       字节即在 DPP1 0x04 中传输的值。 */
     page[0x04] = (uint8_t) (((info != NULL) ? info->revision_id : 0x0111U) & 0xFFU);
     page[0x05] = direct_param_encode_pd(pd_in);  /* ProcessDataIn */
     page[0x06] = direct_param_encode_pd(pd_out); /* ProcessDataOut */
     if (info != NULL) {
-        page[0x07] = (uint8_t) (info->vendor_id >> 8);            /* VendorID MSB */
-        page[0x08] = (uint8_t) (info->vendor_id & 0xFFU);         /* VendorID LSB */
-        page[0x09] = (uint8_t) ((info->device_id >> 16) & 0xFFU); /* DeviceID octet2 */
-        page[0x0A] = (uint8_t) ((info->device_id >> 8) & 0xFFU);  /* DeviceID octet1 */
-        page[0x0B] = (uint8_t) (info->device_id & 0xFFU);         /* DeviceID octet0 */
+        page[0x07] = (uint8_t) (info->vendor_id >> 8);            /* VendorID 高字节 */
+        page[0x08] = (uint8_t) (info->vendor_id & 0xFFU);         /* VendorID 低字节 */
+        page[0x09] = (uint8_t) ((info->device_id >> 16) & 0xFFU); /* DeviceID 第 2 字节 */
+        page[0x0A] = (uint8_t) ((info->device_id >> 8) & 0xFFU);  /* DeviceID 第 1 字节 */
+        page[0x0B] = (uint8_t) (info->device_id & 0xFFU);         /* DeviceID 第 0 字节 */
     }
-    /* 0x0C-0x0E reserved (0); 0x0F SystemCommand (W) reads 0. */
+    /* 0x0C-0x0E 保留（0）；0x0F SystemCommand（W）读出为 0。 */
 }
 
 uint8_t iolink_isdu_direct_param_page1_octet(iolink_isdu_ctx_t* ctx, uint8_t addr)
@@ -1409,7 +1409,7 @@ uint8_t iolink_isdu_direct_param_page1_octet(iolink_isdu_ctx_t* ctx, uint8_t add
     return page[addr];
 }
 
-/** @brief Read/write Direct Parameter pages 1 (read-only) and 2 (device-specific). */
+/** @brief 读/写 Direct Parameter page 1（只读）与 page 2（设备专用）。 */
 static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
 {
     bool page2 = (ctx->header.index == IOLINK_IDX_DIRECT_PARAMETERS_2);
@@ -1418,11 +1418,11 @@ static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
 
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
         if (!page2) {
-            /* Page 1 is read-only. */
+            /* Page 1 为只读。 */
             isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
         }
         else if ((isdu_access_locks(ctx) & IOLINK_LOCK_PARAM) != 0U) {
-            /* Table B.2.4: the Parameter access lock inhibits page-2 writes. */
+            /* Table B.2.4：Parameter 访问锁禁止对 page 2 的写。 */
             isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
         }
         else if (sub == 0U) {
@@ -1455,7 +1455,7 @@ static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
             ctx->response_len = sizeof(page);
         }
         else if (sub <= 16U) {
-            ctx->response_buf[0] = page[sub - 1U]; /* Unimplemented bytes already read 0 */
+            ctx->response_buf[0] = page[sub - 1U]; /* 未实现的字节读出为 0 */
             ctx->response_len = 1U;
         }
         else {
@@ -1467,11 +1467,11 @@ static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
 }
 
 /* -------------------------------------------------------------------------
- * Data Storage services
+ * 数据存储服务
  * ------------------------------------------------------------------------- */
 
 #if IOLINK_FEATURE_DATA_STORAGE
-/** @brief Serve the Data Storage index: backup (read image) or restore (apply image). */
+/** @brief 处理数据存储索引：备份（读镜像）或恢复（应用镜像）。 */
 static size_t isdu_append_ds_index_list(iolink_ds_ctx_t* ds, uint8_t* buf, size_t pos)
 {
     const size_t n = iolink_ds_param_count(ds);
@@ -1488,34 +1488,34 @@ static size_t isdu_append_ds_index_list(iolink_ds_ctx_t* ds, uint8_t* buf, size_
         buf[pos++] = d.subindex;
     }
     if ((pos + 2U) <= IOLINK_ISDU_BUFFER_SIZE) {
-        buf[pos++] = 0x00U; /* Termination marker */
+        buf[pos++] = 0x00U; /* 终止标记 */
         buf[pos++] = 0x00U;
     }
     return pos;
 }
 
-/** @brief DS write subindex 0: legacy image restore, or read-only reject. */
+/** @brief DS 写 subindex 0：旧的镜像恢复，或按只读拒绝。 */
 static void isdu_ds_write_sub0(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
 {
 #if IOLINK_DS_LEGACY_IMAGE_SUB0
-    /* Legacy whole-image restore (kept for wire compatibility). */
+    /* 旧的整镜像恢复（为线上兼容而保留）。 */
     const int rc = iolink_ds_apply_image(ds, ctx->buffer, ctx->buffer_idx);
     if (rc != 0) {
         isdu_respond_error(ctx, (rc == -1) ? IOLINK_ISDU_ERROR_PARAM_SET_INVALID
                                            : IOLINK_ISDU_ERROR_PARAM_INCONSISTENT);
     }
     else {
-        ctx->response_len = 0U; /* Write acknowledged */
+        ctx->response_len = 0U; /* 写入已确认 */
     }
 #else
     (void) ds;
-    /* Table B.10: the whole record is read-only; only DS_Command (subindex 1)
-       is writable. */
+    /* Table B.10：整条记录为只读；只有 DS_Command（subindex 1）
+       可写。 */
     isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 #endif
 }
 
-/** @brief DS write subindex 1: DS_Command. */
+/** @brief DS 写 subindex 1：DS_Command。 */
 static void isdu_ds_write_command(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
 {
     if (ctx->buffer_idx == 0U) {
@@ -1532,11 +1532,11 @@ static void isdu_ds_write_command(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
     }
 }
 
-/** @brief DS read subindex 0: concatenated record (or legacy image). */
+/** @brief DS 读 subindex 0：拼接记录（或旧的镜像）。 */
 static void isdu_ds_read_record(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
 {
 #if IOLINK_DS_LEGACY_IMAGE_SUB0
-    /* Legacy whole-image backup read. */
+    /* 旧的整镜像备份读取。 */
     size_t len = 0U;
     const uint8_t* img = iolink_ds_get_image(ds, &len);
     if ((img == NULL) || (len > IOLINK_ISDU_BUFFER_SIZE)) {
@@ -1549,14 +1549,14 @@ static void isdu_ds_read_record(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
         ctx->response_len = len;
     }
 #else
-    /* Table B.10/B.11 (SDCI_TC_0107): sub0 is the concatenated record:
-       DS_Command, State_Property, Data_Storage_Size, Parameter_Checksum and
-       Index_List. */
+    /* Table B.10/B.11（SDCI_TC_0107）：sub0 是拼接记录：
+       DS_Command、State_Property、Data_Storage_Size、Parameter_Checksum 与
+       Index_List。 */
     if (!iolink_ds_downloading(ds)) {
         (void) iolink_ds_build_image(ds);
     }
     size_t pos = 0U;
-    ctx->response_buf[pos++] = 0x00U; /* DS_Command read: unspecified */
+    ctx->response_buf[pos++] = 0x00U; /* DS_Command 读取：未规定 */
     ctx->response_buf[pos++] = iolink_ds_state_property(ds);
     isdu_write_u32_be(ctx->response_buf, &pos, iolink_ds_size(ds));
     isdu_write_u32_be(ctx->response_buf, &pos, iolink_ds_checksum(ds));
@@ -1565,13 +1565,13 @@ static void isdu_ds_read_record(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
 #endif
 }
 
-/** @brief DS read subindices 1-5. */
+/** @brief DS 读 subindex 1-5。 */
 static void isdu_ds_read_subindex(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds, uint8_t sub)
 {
     switch (sub) {
         case 1U:
-            /* DS_Command read returns unspecified values (Table B.10). Test Spec
-               0108 requires one octet with a value in 0..5. */
+            /* DS_Command 读取返回未规定的值（Table B.10）。Test Spec
+               0108 要求一个取值在 0..5 范围内的字节。 */
             ctx->response_buf[0] = 0x00U;
             ctx->response_len = 1U;
             break;
@@ -1586,11 +1586,11 @@ static void isdu_ds_read_subindex(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds, u
             break;
         }
         case 4U: {
-            /* Table B.10: Parameter_Checksum reflects the current parameter set.
-               A direct (non-download) parameter write does not rebuild the DS
-               image, so refresh it before reporting the checksum; otherwise the
-               value read before ParamDownloadStore differs from the value after
-               it. */
+            /* Table B.10：Parameter_Checksum 反映当前参数集。
+               直接的（非下载）参数写入不会重建 DS
+               镜像，因此在报告校验和之前刷新它；否则在
+               ParamDownloadStore 之前读到的值会与之后的值
+               不一致。 */
             if (!iolink_ds_downloading(ds)) {
                 (void) iolink_ds_build_image(ds);
             }
@@ -1600,7 +1600,7 @@ static void isdu_ds_read_subindex(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds, u
             break;
         }
         case 5U: {
-            /* Index_List (Table B.11): [index(2) subindex(1)]*n + 0x0000. */
+            /* Index_List（Table B.11）：[index(2) subindex(1)]*n + 0x0000。 */
             const size_t pos = isdu_append_ds_index_list(ds, ctx->response_buf, 0U);
             ctx->response_len = (uint8_t) pos;
             break;
@@ -1629,7 +1629,7 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
             isdu_ds_write_command(ctx, ds);
         }
         else {
-            /* Table B.10: subindices 02-05 are read-only. */
+            /* Table B.10：subindex 02-05 为只读。 */
             isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
         }
     }
@@ -1648,11 +1648,11 @@ static void handle_data_storage(iolink_isdu_ctx_t* ctx)
 
 #if IOLINK_FEATURE_DATA_STORAGE
 /**
- * @brief 10.6.11 / SDCI_TC_0325/0326: parameter writes are locked during an
- * active Block Upload, and parameter reads during an active Block Download.
- * SystemCommand and DataStorageIndex remain accessible.
+ * @brief 10.6.11 / SDCI_TC_0325/0326：参数写入在活动的块上传期间
+ * 被锁定，参数读取在活动的块下载期间被锁定。
+ * SystemCommand 与 DataStorageIndex 仍可访问。
  *
- * @return true when a negative response was produced.
+ * @return 当已产生否定应答时返回 true。
  */
 static bool isdu_reject_ds_access(iolink_isdu_ctx_t* ctx)
 {
@@ -1676,16 +1676,16 @@ static bool isdu_reject_ds_access(iolink_isdu_ctx_t* ctx)
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
 /* -------------------------------------------------------------------------
- * Index routing and standard dispatch
+ * 索引路由与标准分发
  * ------------------------------------------------------------------------- */
 
-/** @brief Serve a device-specific (vendor) index through the application hook. */
+/** @brief 通过应用钩子处理设备专用（厂商）索引。 */
 static void isdu_handle_vendor_index(iolink_isdu_ctx_t* ctx)
 {
     if ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) &&
         ((isdu_access_locks(ctx) & IOLINK_LOCK_PARAM) != 0U)) {
-        /* B.2.4: the Parameter lock inhibits every read/write Device parameter
-           (reads remain available). */
+        /* B.2.4：Parameter 锁禁止每个读/写设备参数
+           （读仍然可用）。 */
         isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
         return;
     }
@@ -1724,13 +1724,13 @@ static void isdu_handle_vendor_index(iolink_isdu_ctx_t* ctx)
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
 
-/** @brief SystemCommand index: write-only command octet. */
+/** @brief SystemCommand 索引：只写的命令字节。 */
 static void isdu_handle_system_command_index(iolink_isdu_ctx_t* ctx)
 {
     if (ctx->header.type != IOLINK_ISDU_SERVICE_TYPE_WRITE) {
-        /* SystemCommand (Table B.8) is write-only; a read is answered with
-           IDX_NOT_ACCESSIBLE (Table C.1). Events are read through the
-           Diagnosis-channel event memory (Table 58). */
+        /* SystemCommand（Table B.8）为只写；读请求以
+           IDX_NOT_ACCESSIBLE 应答（Table C.1）。事件通过
+           诊断通道的事件存储读取（Table 58）。 */
         isdu_respond_error(ctx, IOLINK_ISDU_ERROR_NOT_ACCESSIBLE);
         return;
     }
@@ -1741,13 +1741,13 @@ static void isdu_handle_system_command_index(iolink_isdu_ctx_t* ctx)
     handle_system_command(ctx, ctx->buffer[0]);
 }
 
-/** @brief Dispatch an executed ISDU request to the handler for its index. */
+/** @brief 将已执行的 ISDU 请求分发到其索引对应的处理器。 */
 static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
 {
     ctx->response_negative = false;
-    /* B.2.27: Preferred Indices 0x0040-0x00FE are device-specific like the
-       Extended Index range from 0x0100; both reach the application vendor
-       service. 0x00FF itself is reserved. */
+    /* B.2.27：Preferred Indices 0x0040-0x00FE 与
+       从 0x0100 开始的 Extended Index 范围一样属于设备专用；两者都会到达应用的厂商
+       服务。0x00FF 本身为保留值。 */
     const uint16_t index = ctx->header.index;
 #if IOLINK_FEATURE_DATA_STORAGE
     if (isdu_reject_ds_access(ctx)) {
@@ -1789,7 +1789,7 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
 }
 
 /* -------------------------------------------------------------------------
- * Public API
+ * 公开 API
  * ------------------------------------------------------------------------- */
 
 void iolink_isdu_process(iolink_isdu_ctx_t* ctx)
@@ -1843,8 +1843,8 @@ uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* busy, 
     if (n > dst_size) {
         n = dst_size;
     }
-    /* isr_isdu_len is a uint8_t; the spec caps framed responses at 241 octets,
-       so this clamp is defensive only. */
+    /* isr_isdu_len 是 uint8_t；规范将组帧应答限制在 241 字节，
+       因此该限制仅是防御性的。 */
     if (n > 255U) {
         n = 255U;
     }

@@ -24,321 +24,318 @@
 
 /**
  * @file device.h
- * @brief IO-Link Device application layer API.
+ * @brief IO-Link 设备应用层 API。
  *
- * Top-level entry point for an IO-Link Device. Ties together the physical
- * layer, data link layer, device identification, parameters and application
- * callbacks behind a single opaque context, and exposes the lifecycle,
- * process-data and introspection functions used by the application.
+ * IO-Link 设备的顶层入口点。它把物理层、数据链路层、
+ * 设备标识、参数和应用回调整合在单个不透明上下文之后，
+ * 并提供应用所使用的生命周期、过程数据及自省
+ * （introspection）函数。
  */
 
 /* -------------------------------------------------------------------------
- * Integration checklist (two-pump transport)
+ * 集成检查清单（双泵传输）
  *
- * Required calls:
- *  - iolink_device_init() once; the application owns the context object.
- *  - iolink_device_process() periodically from the main loop. This must be the
- *    only main-context caller (no second task may call the API).
- *  - iolink_device_process_isr() from the PHY data interrupt.
- *  - When the PHY provides the optional Timer A/Timer B hooks, forward those
- *    interrupts to iolink_dll_on_rx_timeout() / iolink_dll_on_stack_tick()
- *    (declared in dll.h). Without the Timer B forward the main service window
- *    is gated and iolink_device_process() returns immediately.
+ * 必需的调用：
+ *  - iolink_device_init() 调用一次；应用拥有该上下文对象。
+ *  - 在主循环中周期性调用 iolink_device_process()。它必须是
+ *    唯一的主上下文调用者（不允许第二个任务调用该 API）。
+ *  - 从 PHY 数据中断中调用 iolink_device_process_isr()。
+ *  - 当 PHY 提供可选的 Timer A/Timer B 钩子时，将这些中断
+ *    转发给 iolink_dll_on_rx_timeout() / iolink_dll_on_stack_tick()
+ *    （在 dll.h 中声明）。没有 Timer B 转发时，主服务窗口
+ *    会被门控，iolink_device_process() 会立即返回。
  *
- * Serviced automatically by iolink_device_process():
- *  - DLL frame dispatch, ISDU services, timing supervision and diagnostics;
- *  - iolink_events_process() and iolink_ds_process() while the ISDU transport
- *    is idle (device_service_events_and_ds()).
+ * 由 iolink_device_process() 自动服务：
+ *  - DLL 帧分发、ISDU 服务、时序监视和诊断；
+ *  - ISDU 传输空闲时的 iolink_events_process() 和 iolink_ds_process()
+ *    （device_service_events_and_ds()）。
  *
- * Still application-driven:
- *  - iolink_ds_check(): it needs the Master's DS checksum, which the stack
- *    cannot obtain on its own.
+ * 仍由应用驱动：
+ *  - iolink_ds_check()：它需要主站的 DS 校验和，协议栈
+ *    无法自行获取。
  *
- * Normal applications only need this header plus the two ISR hooks above;
- * dll.h is the advanced/porting interface.
+ * 普通应用只需要此头文件以及上面的两个 ISR 钩子；
+ * dll.h 是高级/移植接口。
  * ------------------------------------------------------------------------- */
 
 /* -------------------------------------------------------------------------
- * Ownership and lifetime contract
+ * 所有权与生命周期约定
  *
- * Object                    | Owner           | Lifetime / access rule
- * --------------------------+-----------------+--------------------------------
- * iolink_device_config_t    | application     | must outlive the context
- *  .phy (vtable)            | application/PHY | callbacks valid for ctx lifetime
- *  .phy.user                | PHY driver      | passed only to PHY callbacks
- *  .user                    | application     | passed to time_us, vendor_service
- *                           |                 | and the app_callbacks on_* hooks
- *  .app_callbacks           | application     | struct and callback targets valid
- *  .device_info             | application     | static identification data
- *  .storage                 | application     | read/write valid for ctx lifetime
- *  .time_us                 | application     | monotonic, non-blocking, ISR-safe
- * iolink_device_ctx_t       | application     | one instance per link; one main
- *                           |                 | context caller plus the data ISR
- * PD data (pd_input_update) | application     | borrowed for the call; copied
- *                           |                 | into the reply buffer internally
- * PD data (on_pd_input)     | application     | filled buffer borrowed; return value
- *                           |                 | is the PD-valid flag (callback profile)
- * PD buffer (pd_output_read) | caller          | filled by the call; caller owns it
- * vendor_service input      | caller          | borrowed for the call
- * vendor_service output     | caller          | capacity in *output_length; the
- *                           |                 | callback sets the used length
- * rx_frame() return value   | PHY             | borrowed until the next rx_frame()
- * tx_frame() data           | library         | valid until the transfer completes
+ * 对象                       | 所有者          | 生命周期 / 访问规则
+ * ---------------------------+-----------------+---------------------------------------------
+ * iolink_device_config_t     | application     | 必须比上下文存活更久
+ *  .phy (vtable)             | application/PHY | 回调在 ctx 生命周期内有效
+ *  .phy.user                 | PHY driver      | 仅传给 PHY 回调
+ *  .user                     | application     | 传给 time_us、vendor_service
+ *                            |                 | 以及 app_callbacks 的 on_* 钩子
+ *  .app_callbacks            | application     | 结构体与回调目标保持有效
+ *  .device_info              | application     | 静态标识数据
+ *  .storage                  | application     | 读/写函数在 ctx 生命周期内有效
+ *  .time_us                  | application     | 单调递增、非阻塞、ISR 安全
+ * iolink_device_ctx_t        | application     | 每个链路一个实例；一个主上下文
+ *                            |                 | 调用者加数据 ISR
+ * PD data (pd_input_update)  | application     | 调用期间借用；内部复制到
+ *                            |                 | 应答缓冲区
+ * PD data (on_pd_input)      | application     | 借用已填充的缓冲区；返回值是
+ *                            |                 | PD 有效标志（回调 profile）
+ * PD buffer (pd_output_read) | caller          | 由调用填充；调用方拥有
+ * vendor_service input       | caller          | 调用期间借用
+ * vendor_service output      | caller          | *output_length 表示容量；回调
+ *                            |                 | 设置实际使用长度
+ * rx_frame() return value    | PHY             | 借用至下一次 rx_frame()
+ * tx_frame() data            | library         | 有效至传输完成
  * ------------------------------------------------------------------------- */
 
 /**
- * @defgroup iolinki_device Device Application Layer
- * @brief Top-level IO-Link Device context, lifecycle and process-data API.
+ * @defgroup iolinki_device 设备应用层
+ * @brief 顶层 IO-Link 设备上下文、生命周期和过程数据 API。
  * @{
  */
 
-/** @brief Callback returning a monotonic timestamp in microseconds.
- *  @param user Opaque user pointer supplied via ::iolink_device_config_t.
- *  @return Current time in microseconds.
- *  @note Called from both the main loop and the data ISR, so it must be
- *        non-blocking and ISR-safe. */
+/** @brief 返回以微秒为单位的单调时间戳的回调。
+ *  @param user 通过 ::iolink_device_config_t 提供的用户不透明指针。
+ *  @return 当前时间，单位为微秒。
+ *  @note 主循环和数据 ISR 都会调用它，因此它必须是非阻塞
+ *        且 ISR 安全的。 */
 typedef uint64_t (*iolink_device_time_us_fn)(void* user);
 
 /**
- * @brief Device configuration supplied at initialization.
+ * @brief 初始化时提供的设备配置。
  *
- * Aggregates the PHY driver, stack settings, application hooks, device
- * identification, data-storage backend and platform integration callbacks.
+ * 汇总 PHY 驱动、协议栈设置、应用钩子、设备标识、
+ * 数据存储后端和平台集成回调。
  */
 typedef struct
 {
-    iolink_phy_api_t phy;                        /**< Physical layer driver API. `phy.user` is the
-                                                      driver context passed to the PHY vtable only;
-                                                      it is independent of @ref user below. */
-    iolink_stack_config_t stack;                 /**< Stack behavior configuration. */
-    const iolink_app_callbacks_t* app_callbacks; /**< Application lifecycle/PD callbacks (may be
-                                                    NULL unless IOLINK_APP_PD_INPUT_CALLBACK=1,
-                                                    which requires on_pd_input). */
-    const iolink_device_info_t* device_info;     /**< Static device identification data. */
+    iolink_phy_api_t phy;                        /**< 物理层驱动 API。`phy.user` 是仅传给
+                                                      PHY vtable 的驱动上下文；它与下面的
+                                                      @ref user 相互独立。 */
+    iolink_stack_config_t stack;                 /**< 协议栈行为配置。 */
+    const iolink_app_callbacks_t* app_callbacks; /**< 应用生命周期/PD 回调（可以为 NULL，
+                                                    除非 IOLINK_APP_PD_INPUT_CALLBACK=1，
+                                                    此时需要 on_pd_input）。 */
+    const iolink_device_info_t* device_info;     /**< 静态设备标识数据。 */
 #if IOLINK_FEATURE_DATA_STORAGE
-    const iolink_storage_api_t*
-        storage; /**< Unified NVM backend for params, DS image and flags (required). */
+    const iolink_storage_api_t* storage; /**< 用于参数、DS 映像和标志的统一 NVM 后端（必需）。 */
 #endif
-    iolink_device_time_us_fn time_us; /**< Application clock used by the DLL, ISR pump and
-                                           event engine; required (NULL is rejected at
-                                           initialization). */
-    void* user;                       /**< Application context passed to iolink_device_time_us_fn,
-                                           vendor_service and every iolink_app_callbacks_t hook. */
-    uint8_t (*vendor_service)(
-        void* user, uint16_t index, uint8_t subindex, bool write, const uint8_t* input,
-        size_t length, uint8_t* output,
-        size_t* output_length); /**< Optional vendor ISDU callback; see isdu.h. */
+    iolink_device_time_us_fn time_us; /**< DLL、ISR 泵和事件引擎使用的应用时钟；
+                                           必需（NULL 在初始化时会被
+                                           拒绝）。 */
+    void* user;                       /**< 传给 iolink_device_time_us_fn、vendor_service
+                                           以及每个 iolink_app_callbacks_t 钩子的应用上下文。 */
+    uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex, bool write,
+                              const uint8_t* input, size_t length, uint8_t* output,
+                              size_t* output_length); /**< 可选的厂商 ISDU 回调；参见 isdu.h。 */
 } iolink_device_config_t;
 
 /**
- * @brief Device runtime context.
+ * @brief 设备运行时上下文。
  *
- * Allocate this object directly, but access it only through the API functions.
- * All fields are private stack state.
+ * 直接分配此对象，但只能通过 API 函数访问它。
+ * 所有字段都是协议栈私有的状态。
  */
 typedef struct
 {
-    /* Private fields. Allocate this object directly, but use API functions. */
-    iolink_dll_ctx_t dll;                 /**< Data link layer context. */
-    iolink_stack_config_t stack_config;   /**< Active stack configuration. */
-    iolink_device_info_ctx_t device_info; /**< Device identification context. */
-    iolink_params_ctx_t params;           /**< Parameter manager context. */
-    const iolink_device_config_t* config; /**< Pointer to the supplied configuration. */
-    iolink_reset_handler_t reset_handler; /**< Application reset handler (may be NULL). */
-    bool master_lost_last;                /**< Previous master-lost state (callback edge) */
-    uint8_t direct_param_page2[16];       /**< Direct Parameter Page 2 storage. */
+    /* 私有字段。直接分配此对象，但请使用 API 函数。 */
+    iolink_dll_ctx_t dll;                 /**< 数据链路层上下文。 */
+    iolink_stack_config_t stack_config;   /**< 活动的协议栈配置。 */
+    iolink_device_info_ctx_t device_info; /**< 设备标识上下文。 */
+    iolink_params_ctx_t params;           /**< 参数管理器上下文。 */
+    const iolink_device_config_t* config; /**< 指向所提供配置的指针。 */
+    iolink_reset_handler_t reset_handler; /**< 应用重置处理函数（可以为 NULL）。 */
+    bool master_lost_last;                /**< 上一次的主站丢失状态（回调边沿） */
+    uint8_t direct_param_page2[16];       /**< Direct Parameter Page 2 存储。 */
 } iolink_device_ctx_t;
 
 /**
- * @brief Result codes returned by iolink_device_init().
+ * @brief iolink_device_init() 返回的结果代码。
  *
- * Negative values identify a rejected configuration. A negative value returned
- * by the PHY init callback is propagated unchanged and may fall outside this
- * enumeration.
+ * 负值表示配置被拒绝。PHY 初始化回调返回的负值
+ * 会原样传播，可能落在本枚举
+ * 范围之外。
  */
 typedef enum
 {
-    IOLINK_DEVICE_INIT_OK = 0,               /**< Initialization succeeded */
-    IOLINK_DEVICE_INIT_ERR_NULL = -1,        /**< ctx or config is NULL */
-    IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE = -2,   /**< m_seq_type is not a valid type */
-    IOLINK_DEVICE_INIT_ERR_PD_IN_LEN = -3,   /**< pd_in_len exceeds the buffer */
-    IOLINK_DEVICE_INIT_ERR_PD_OUT_LEN = -4,  /**< pd_out_len exceeds the buffer */
-    IOLINK_DEVICE_INIT_ERR_OD_WIDTH = -5,    /**< od_width is not 1/2/8/32 */
-    IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6, /**< od_width exceeds IOLINK_OD_MAX_SIZE */
-    IOLINK_DEVICE_INIT_ERR_BAUDRATE = -7,    /**< baudrate_set with an invalid COM */
-    IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT =
-        -9,                            /**< PD/OD lengths incompatible with the M-sequence type */
-    IOLINK_DEVICE_INIT_ERR_TIME = -10, /**< time_us callback is NULL */
-    IOLINK_DEVICE_INIT_ERR_CRITICAL = -11, /**< platform critical sections are the weak default */
-    IOLINK_DEVICE_INIT_ERR_STORAGE = -12,  /**< storage backend is NULL or incomplete */
+    IOLINK_DEVICE_INIT_OK = 0,               /**< 初始化成功 */
+    IOLINK_DEVICE_INIT_ERR_NULL = -1,        /**< ctx 或 config 为 NULL */
+    IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE = -2,   /**< m_seq_type 不是有效类型 */
+    IOLINK_DEVICE_INIT_ERR_PD_IN_LEN = -3,   /**< pd_in_len 超出缓冲区 */
+    IOLINK_DEVICE_INIT_ERR_PD_OUT_LEN = -4,  /**< pd_out_len 超出缓冲区 */
+    IOLINK_DEVICE_INIT_ERR_OD_WIDTH = -5,    /**< od_width 不是 1/2/8/32 */
+    IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6, /**< od_width 超出 IOLINK_OD_MAX_SIZE */
+    IOLINK_DEVICE_INIT_ERR_BAUDRATE = -7,    /**< baudrate_set 使用了无效的 COM */
+    IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -9, /**< PD/OD 长度与 M-sequence 类型不兼容 */
+    IOLINK_DEVICE_INIT_ERR_TIME = -10,       /**< time_us 回调为 NULL */
+    IOLINK_DEVICE_INIT_ERR_CRITICAL = -11,   /**< 平台临界区为弱默认实现 */
+    IOLINK_DEVICE_INIT_ERR_STORAGE = -12,    /**< storage 后端为 NULL 或不完整 */
     IOLINK_DEVICE_INIT_ERR_PD_INPUT =
-        -14, /**< IOLINK_APP_PD_INPUT_CALLBACK=1 without an on_pd_input callback */
-    IOLINK_DEVICE_INIT_ERR_PHY = -15, /**< a PHY hook required by the build profile is NULL */
-    /* -8 (lock pair) and -13 (RTOS lock) are retired: the stack has a single
-     * main-context caller and no longer takes an application thread lock. */
+        -14,                          /**< IOLINK_APP_PD_INPUT_CALLBACK=1 但没有 on_pd_input 回调 */
+    IOLINK_DEVICE_INIT_ERR_PHY = -15, /**< 构建配置所需的某个 PHY 钩子为 NULL */
+    /* -8（锁定对）和 -13（RTOS 锁）已废弃：协议栈只有一个
+     * 主上下文调用者，不再获取应用线程锁。 */
 } iolink_device_init_result_t;
 
 /**
- * @brief Initialize a device context from a configuration.
- * @param ctx     Device context to initialize.
- * @param config  Configuration to apply (must remain valid for the ctx lifetime).
- * @return 0 on success, a negative ::iolink_device_init_result_t for an invalid
- *         configuration, or the negative error returned by the PHY init callback.
+ * @brief 根据配置初始化设备上下文。
+ * @param ctx     要初始化的设备上下文。
+ * @param config  要应用的配置（在 ctx 生命周期内必须保持有效）。
+ * @return 成功时为 0；配置无效时为负的 ::iolink_device_init_result_t，
+ *         或 PHY 初始化回调返回的负错误码。
  */
 int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config);
 
 /**
- * @brief Run one iteration of the device state machine.
+ * @brief 运行设备状态机的一次迭代。
  *
- * Drives the DLL/PHY: services pending frames, timing and application events.
- * Call this periodically from the main loop.
- * @param ctx Device context.
+ * 驱动 DLL/PHY：处理待处理的帧、时序和应用事件。
+ * 请从主循环中周期性调用它。
+ * @param ctx 设备上下文。
  */
 void iolink_device_process(iolink_device_ctx_t* ctx);
 
 /**
- * @brief ISR-side pump for the two-pump transport.
+ * @brief 双泵传输的 ISR 侧泵。
  *
- * Called from the PHY data interrupt: frames the incoming M-sequence and feeds
- * the reply octets, publishing completed requests to a mailbox consumed by
- * iolink_device_process(). Runs no protocol logic.
+ * 从 PHY 数据中断中调用：对进入的 M-sequence 进行组帧，并供给
+ * 回复字节，将已完成的请求发布到由
+ * iolink_device_process() 消费的邮箱。不运行任何协议逻辑。
  */
 void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 
 #if !IOLINK_APP_PD_INPUT_CALLBACK
 /**
- * @brief Update the input process data (Device -> Master).
- * @param ctx    Device context.
- * @param data   Input process data bytes to publish.
- * @param len    Length of @p data in bytes.
- * @param valid  Whether the process data is currently valid.
- * @return 0 on success, negative on error.
+ * @brief 更新输入过程数据（设备 -> 主站）。
+ * @param ctx    设备上下文。
+ * @param data   要发布的输入过程数据字节。
+ * @param len    @p data 的长度（字节）。
+ * @param valid  过程数据当前是否有效。
+ * @return 成功时为 0，出错时为负值。
  */
 int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data, size_t len,
                                   bool valid);
 #else
 /**
- * @brief Trap for a polling call in the on_pd_input callback build.
+ * @brief 在 on_pd_input 回调构建中拦截轮询调用。
  *
- * IOLINK_APP_PD_INPUT_CALLBACK=1 selected the on_pd_input() callback as the only
- * PD-input source; the polling API does not exist in that build. A call expands
- * to an undeclared identifier, which is a compile error with a readable name.
+ * IOLINK_APP_PD_INPUT_CALLBACK=1 选择 on_pd_input() 回调作为唯一的
+ * PD 输入来源；该构建中不存在轮询 API。对该函数的调用会展开
+ * 为未声明的标识符，从而产生一个带有可读名称的编译错误。
  */
 #define iolink_device_pd_input_update(...) \
     IOLINK_PD_INPUT_UPDATE_IS_DISABLED_USE_ON_PD_INPUT_CALLBACK
 #endif
 
 /**
- * @brief Read the latest output process data (Master -> Device).
- * @param ctx        Device context.
- * @param[out] data  Buffer filled with the output process data.
- * @param len        Size of @p data in bytes.
- * @return Number of bytes copied (0 when none), negative on error.
+ * @brief 读取最新的输出过程数据（主站 -> 设备）。
+ * @param ctx        设备上下文。
+ * @param[out] data  填充输出过程数据的缓冲区。
+ * @param len        @p data 的大小（字节）。
+ * @return 已复制的字节数（没有时为 0），出错时为负值。
  */
 int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, size_t len);
 
 /**
- * @brief Register the handler invoked on Master reset commands.
- * @param ctx      Device context.
- * @param handler  Reset handler callback (may be NULL to clear).
+ * @brief 注册在主站重置命令时调用的处理函数。
+ * @param ctx      设备上下文。
+ * @param handler  重置处理函数回调（可以为 NULL 以清除）。
  */
 void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx, iolink_reset_handler_t handler);
 
 #if IOLINK_FEATURE_EVENTS
 /**
- * @brief Get the event handling context.
- * @param ctx Device context.
- * @return Pointer to the device's events context.
+ * @brief 获取事件处理上下文。
+ * @param ctx 设备上下文。
+ * @return 指向设备事件上下文的指针。
  */
 iolink_events_ctx_t* iolink_device_get_events_ctx(iolink_device_ctx_t* ctx);
 #endif
 
 #if IOLINK_FEATURE_DATA_STORAGE
 /**
- * @brief Get the data-storage context.
- * @param ctx Device context.
- * @return Pointer to the device's data-storage context.
+ * @brief 获取数据存储上下文。
+ * @param ctx 设备上下文。
+ * @return 指向设备数据存储上下文的指针。
  */
 iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx);
 #endif
 
 /**
- * @brief Get the current DLL state.
- * @param ctx Device context.
- * @return Current data link layer state.
+ * @brief 获取当前 DLL 状态。
+ * @param ctx 设备上下文。
+ * @return 当前数据链路层状态。
  */
 iolink_dll_state_t iolink_device_get_state(const iolink_device_ctx_t* ctx);
 
 /**
- * @brief Whether the master has been silent for the configured number of cycles.
- * @param ctx Device context.
- * @return true while the master is considered lost (application hint; the DLL
- *         state and baudrate are not changed).
+ * @brief 主站是否已静默达到配置的周期数。
+ * @param ctx 设备上下文。
+ * @return 在主站被视为丢失期间为 true（应用提示；DLL
+ *         状态和波特率不会改变）。
  */
 bool iolink_device_master_lost(const iolink_device_ctx_t* ctx);
 
 /**
- * @brief Get the current PHY communication mode.
- * @param ctx Device context.
- * @return Current physical layer mode.
+ * @brief 获取当前 PHY 通信模式。
+ * @param ctx 设备上下文。
+ * @return 当前物理层模式。
  */
 iolink_phy_mode_t iolink_device_get_phy_mode(const iolink_device_ctx_t* ctx);
 
 /**
- * @brief Get the current communication baud rate.
- * @param ctx Device context.
- * @return Active baud rate.
+ * @brief 获取当前通信波特率。
+ * @param ctx 设备上下文。
+ * @return 活动波特率。
  */
 iolink_baudrate_t iolink_device_get_baudrate(const iolink_device_ctx_t* ctx);
 
 /**
- * @brief Copy the DLL statistics counters.
- * @param ctx             Device context.
- * @param[out] out_stats  Filled with the current DLL statistics.
+ * @brief 复制 DLL 统计计数器。
+ * @param ctx             设备上下文。
+ * @param[out] out_stats  填充当前 DLL 统计信息。
  */
 void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx, iolink_dll_stats_t* out_stats);
 
 /**
- * @brief Enable or disable timing enforcement.
- * @param ctx     Device context.
- * @param enable  True to enforce timing limits, false to only measure.
+ * @brief 启用或禁用时序强制检查。
+ * @param ctx     设备上下文。
+ * @param enable  为 true 时强制时序限制，为 false 时仅测量。
  */
 void iolink_device_set_timing_enforcement(iolink_device_ctx_t* ctx, bool enable);
 
 /**
- * @brief Set the response-time (t_ren) limit.
- * @param ctx       Device context.
- * @param limit_us  Response-time limit in microseconds.
+ * @brief 设置响应时间（t_ren）限制。
+ * @param ctx       设备上下文。
+ * @param limit_us  响应时间限制，单位为微秒。
  */
 void iolink_device_set_t_ren_limit_us(iolink_device_ctx_t* ctx, uint32_t limit_us);
 
 /**
- * @brief Get the negotiated M-sequence type.
- * @param ctx Device context.
- * @return Active M-sequence type.
+ * @brief 获取协商后的 M-sequence 类型。
+ * @param ctx 设备上下文。
+ * @return 活动的 M-sequence 类型。
  */
 iolink_m_seq_type_t iolink_device_get_m_seq_type(const iolink_device_ctx_t* ctx);
 
 /**
- * @brief Get the input process data length.
- * @param ctx Device context.
- * @return Input process data length in bytes.
+ * @brief 获取输入过程数据长度。
+ * @param ctx 设备上下文。
+ * @return 输入过程数据长度（字节）。
  */
 uint8_t iolink_device_get_pd_in_len(const iolink_device_ctx_t* ctx);
 
 /**
- * @brief Get the output process data length.
- * @param ctx Device context.
- * @return Output process data length in bytes.
+ * @brief 获取输出过程数据长度。
+ * @param ctx 设备上下文。
+ * @return 输出过程数据长度（字节）。
  */
 uint8_t iolink_device_get_pd_out_len(const iolink_device_ctx_t* ctx);
 
 /**
- * @brief Set the input and output process data lengths.
- * @param ctx         Device context.
- * @param pd_in_len   Input process data length in bytes.
- * @param pd_out_len  Output process data length in bytes.
- * @return 0 on success, negative on error.
+ * @brief 设置输入和输出过程数据长度。
+ * @param ctx         设备上下文。
+ * @param pd_in_len   输入过程数据长度（字节）。
+ * @param pd_out_len  输出过程数据长度（字节）。
+ * @return 成功时为 0，出错时为负值。
  */
 int iolink_device_set_pd_length(iolink_device_ctx_t* ctx, uint8_t pd_in_len, uint8_t pd_out_len);
 

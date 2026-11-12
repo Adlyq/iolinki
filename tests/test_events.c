@@ -8,7 +8,7 @@
 
 /**
  * @file test_events.c
- * @brief Unit tests for IO-Link Event handling
+ * @brief IO-Link 事件处理的单元测试
  */
 
 #include <stdarg.h>
@@ -63,20 +63,20 @@ static void test_event_queue_overflow(void** state)
     iolink_events_ctx_t ctx;
     events_init(&ctx);
 
-    /* Overfill the queue (IOLINK_EVENT_QUEUE_SIZE entries) with Notifications. */
+    /* 用 Notification 填满并溢出队列（IOLINK_EVENT_QUEUE_SIZE 项）。 */
     for (uint16_t i = 0U; i < (uint16_t) (IOLINK_EVENT_QUEUE_SIZE + 1U); i++) {
         iolink_event_trigger(&ctx, i, IOLINK_EVENT_TYPE_NOTIFICATION);
     }
     const uint32_t drops_before = iolink_events_get_dropped_count(&ctx);
     assert_true(drops_before > 0U);
 
-    /* A more severe event still overwrites the least severe one and is counted. */
+    /* 更严重的事件仍会覆盖最不严重的事件，并被计数。 */
     iolink_event_trigger(&ctx, 0xFFFF, IOLINK_EVENT_TYPE_ERROR);
     assert_true(iolink_events_get_dropped_count(&ctx) > drops_before);
 
     iolink_event_t ev;
-    iolink_events_pop(&ctx, &ev); /* Skip first */
-    /* Verify we can pop others */
+    iolink_events_pop(&ctx, &ev); /* 跳过第一个 */
+    /* 验证可以弹出其余事件 */
     assert_true(iolink_events_pending(&ctx));
 }
 
@@ -108,7 +108,7 @@ static void test_phy_diagnostic_codes(void** state)
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR);
 
     iolink_event_t ev;
-    /* A.6.4: Errors are prioritized over Warnings. */
+    /* A.6.4：Error 优先于 Warning。 */
     assert_true(iolink_events_pop(&ctx, &ev));
     assert_int_equal(ev.code, IOLINK_EVENTCODE_SHORT_CIRCUIT);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_ERROR);
@@ -130,7 +130,7 @@ static void test_event_peek(void** state)
     iolink_event_t ev;
     assert_true(iolink_events_peek(&ctx, &ev));
     assert_int_equal(ev.code, 0x1122);
-    /* Should still be pending */
+    /* 应仍处于挂起状态 */
     assert_true(iolink_events_pending(&ctx));
 
     assert_true(iolink_events_pop(&ctx, &ev));
@@ -144,28 +144,28 @@ static void test_event_helpers(void** state)
     iolink_events_ctx_t ctx;
     events_init(&ctx);
 
-    /* Test highest severity */
+    /* 测试最高严重级别 */
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 0); /* OK */
 
     iolink_event_trigger(&ctx, 0x1001, IOLINK_EVENT_TYPE_NOTIFICATION);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0); /* Still OK */
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0); /* 仍为 OK */
 
     iolink_event_trigger(&ctx, 0x1002, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 4); /* Failure */
 
     iolink_event_trigger(&ctx, 0x1003, IOLINK_EVENT_TYPE_WARNING);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4); /* Still Failure */
+    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4); /* 仍为 Failure */
 
-    /* Test get_all */
+    /* 测试 get_all */
     iolink_event_t events[8];
     uint8_t count = iolink_events_get_all(&ctx, events, 8);
     assert_int_equal(count, 3);
-    /* Severity order: Error(0x1002) > Warning(0x1003) > Notification(0x1001). */
+    /* 严重级别顺序：Error(0x1002) > Warning(0x1003) > Notification(0x1001)。 */
     assert_int_equal(events[0].code, 0x1002);
     assert_int_equal(events[1].code, 0x1003);
     assert_int_equal(events[2].code, 0x1001);
 
-    /* Test get_all with limit */
+    /* 带限制测试 get_all */
     count = iolink_events_get_all(&ctx, events, 2);
     assert_int_equal(count, 2);
 }
@@ -185,7 +185,7 @@ static void test_event_classify(void** state)
                      IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(iolink_event_classify(IOLINK_EVENTCODE_SHORT_CIRCUIT),
                      IOLINK_EVENT_TYPE_ERROR);
-    /* Reserved/unknown defaults to error. */
+    /* 保留/未知代码默认归为 error。 */
     assert_int_equal(iolink_event_classify(0x2222U), IOLINK_EVENT_TYPE_ERROR);
 }
 
@@ -198,24 +198,24 @@ static void test_event_memory_layout(void** state)
 
     assert_false(iolink_events_flag(&ctx));
 
-    /* One error event: the memory freezes as the flag is raised (Table 60 T3). */
+    /* 一个错误事件：标志被置起时事件存储器冻结（Table 60 T3）。 */
     iolink_event_trigger(&ctx, 0x1801U, IOLINK_EVENT_TYPE_ERROR);
     assert_true(iolink_events_flag(&ctx));
 
-    /* Table 58 / Figure A.22: StatusCode type 2, bit 7 set, bit 0 active. */
+    /* Table 58 / Figure A.22：StatusCode 类型 2，第 7 位置位，第 0 位激活。 */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
 
-    /* Slot 1 at addresses 1,2,3: qualifier 0xF4 (appears|error|device|Application), 0x1801. */
+    /* 槽位 1 位于地址 1,2,3：限定符 0xF4（appears|error|device|Application）、0x1801。 */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xF4U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x02U), 0x18U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x03U), 0x01U);
 
-    /* A second event while frozen is queued but not visible. */
+    /* 冻结期间的第二个事件会入队但不可见。 */
     iolink_event_trigger(&ctx, 0x1803U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0x00U);
 
-    /* Reserved / out of range reads return 0. */
+    /* 保留地址/越界读取返回 0。 */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x13U), 0x00U);
 }
 
@@ -229,12 +229,12 @@ static void test_event_memory_frozen(void** state)
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
 
-    /* Further events while frozen are queued but not visible. */
+    /* 冻结期间的后续事件会入队但不可见。 */
     iolink_event_trigger(&ctx, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
     iolink_event_trigger(&ctx, 0x3000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0x00U); /* slot 2 unused */
-    assert_int_equal(ctx.count, 3U);                                 /* still queued */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0x00U); /* 槽位 2 未使用 */
+    assert_int_equal(ctx.count, 3U);                                 /* 仍在队列中 */
 }
 
 static void test_event_memory_confirm(void** state)
@@ -248,28 +248,28 @@ static void test_event_memory_confirm(void** state)
     iolink_event_trigger(&ctx, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
     assert_true(iolink_events_flag(&ctx));
 
-    /* Table 60 T5: confirmation releases the presented slot; the event queued
-       while frozen is re-frozen afterwards. */
+    /* Table 60 T5：确认会释放已呈现的槽位；冻结期间入队的事件
+       随后会被重新冻结。 */
     iolink_events_memory_write(&ctx, 0x00U, 0x00U);
     assert_true(iolink_events_flag(&ctx));
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
 
-    /* Confirming again clears the queue. */
+    /* 再次确认会清空队列。 */
     iolink_events_memory_write(&ctx, 0x00U, 0x00U);
     assert_false(iolink_events_flag(&ctx));
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x00U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0x00U);
 
-    /* Writes to other addresses are ignored. */
+    /* 写入其他地址会被忽略。 */
     iolink_event_trigger(&ctx, 0x4000U, IOLINK_EVENT_TYPE_WARNING);
     assert_true(iolink_events_flag(&ctx));
     iolink_events_memory_write(&ctx, 0x01U, 0xAAU);
     assert_true(iolink_events_flag(&ctx));
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xE4U); /* warning qualifier */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xE4U); /* Warning 限定符 */
 }
 
-/* Confirmation acknowledges only the slots that were actually presented; events
- * queued while frozen survive for the next readout. */
+/* 确认只应答实际呈现过的槽位；冻结期间入队的事件
+ * 会保留到下一次读出。 */
 static void test_event_memory_confirm_only_presented(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0071");
@@ -278,23 +278,23 @@ static void test_event_memory_confirm_only_presented(void** state)
     events_init(&ctx);
 
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
-    /* The first event freezes a 1-slot snapshot. */
+    /* 第一个事件冻结一个单槽位快照。 */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
 
-    /* Further events arrive while frozen: queued but not yet presented. */
+    /* 冻结期间到达的后续事件：入队但尚未呈现。 */
     iolink_event_trigger(&ctx, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
     iolink_event_trigger(&ctx, 0x3000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(ctx.count, 3U);
 
-    /* Confirm: only the presented slot is acknowledged; the other two survive. */
+    /* 确认：只应答已呈现的槽位；其余两个得以保留。 */
     iolink_events_memory_write(&ctx, 0x00U, 0x00U);
     assert_int_equal(ctx.count, 2U);
     assert_true(iolink_events_flag(&ctx));
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x83U); /* 2 slots */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x83U); /* 2 个槽位 */
 }
 
-/* A.6.4: an Error/Warning appears once and disappears only after the 50 ms
- * minimum appearance window. */
+/* A.6.4：Error/Warning 只出现一次，且仅在 50 ms 最小
+ * 出现窗口之后才消失。 */
 static void test_event_appears_disappears(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0074");
@@ -305,7 +305,7 @@ static void test_event_appears_disappears(void** state)
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     iolink_event_clear(&ctx, 0x1000U);
 
-    /* Within the window the disappearance stays deferred. */
+    /* 窗口之内，消失仍被推迟。 */
     iolink_events_process(&ctx);
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx, &ev));
@@ -320,8 +320,8 @@ static void test_event_appears_disappears(void** state)
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
 }
 
-/* The same EventCode may not appear twice while it is active; clearing an
- * unknown code is ignored. */
+/* 同一 EventCode 在激活期间不得重复出现；清除未知的
+ * 代码会被忽略。 */
 static void test_event_lifecycle_no_repeat(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0075");
@@ -333,12 +333,12 @@ static void test_event_lifecycle_no_repeat(void** state)
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_WARNING);
     assert_int_equal(ctx.count, 1U);
 
-    iolink_event_clear(&ctx, 0x2000U); /* not active: ignored */
+    iolink_event_clear(&ctx, 0x2000U); /* 未激活：忽略 */
     assert_int_equal(ctx.count, 1U);
 }
 
-/* 10.10.2: no more than one report per second for the same EventCode. The
- * second incident is deferred, not dropped, and a timestamp of 0 is valid. */
+/* 10.10.2：同一 EventCode 每秒最多上报一次。第二次
+ * 事件会被推迟而非丢弃，且时间戳为 0 是有效的。 */
 static void test_event_recently_sent(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0076");
@@ -349,7 +349,7 @@ static void test_event_recently_sent(void** state)
     g_fake_ms = 0U;
     iolink_event_t ev;
 
-    /* First appearance at millisecond 0 (the old sentinel dropped this). */
+    /* 毫秒 0 处的首次出现（旧的哨兵值会丢弃它）。 */
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     assert_true(iolink_events_pop(&ctx, &ev));
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
@@ -360,18 +360,18 @@ static void test_event_recently_sent(void** state)
     assert_true(iolink_events_pop(&ctx, &ev));
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
 
-    /* Re-raised inside the 1 s window: deferred, not queued or dropped. */
+    /* 在 1 s 窗口内重新置起：被推迟，不入队也不丢弃。 */
     g_fake_ms = 60U;
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(ctx.count, 0U);
     assert_int_equal(ctx.pending_count, 1U);
 
-    /* Still inside the window at 999 ms. */
+    /* 在 999 ms 时仍处于窗口内。 */
     g_fake_ms = 999U;
     iolink_events_process(&ctx);
     assert_int_equal(ctx.count, 0U);
 
-    /* At 1 s after the previous appearance the deferred event is emitted. */
+    /* 距上次出现 1 s 后，被推迟的事件被发出。 */
     g_fake_ms = 1000U;
     iolink_events_process(&ctx);
     assert_true(iolink_events_pop(&ctx, &ev));
@@ -379,7 +379,7 @@ static void test_event_recently_sent(void** state)
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
 }
 
-/* A full pending[] table must make the loss observable. */
+/* pending[] 表满时必须使丢失可被观察。 */
 static void test_event_pending_full_observable(void** state)
 {
     (void) state;
@@ -391,7 +391,7 @@ static void test_event_pending_full_observable(void** state)
     iolink_event_t ev;
     for (uint16_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         iolink_event_trigger(&ctx, (uint16_t) (0x2000U + i), IOLINK_EVENT_TYPE_ERROR);
-        /* Drain the (smaller) event queue so pending[] is what fills up. */
+        /* 排空（较小的）事件队列，使 pending[] 成为被填满的那一个。 */
         while (iolink_events_pop(&ctx, &ev)) {
         }
     }
@@ -401,22 +401,22 @@ static void test_event_pending_full_observable(void** state)
     iolink_event_trigger(&ctx, 0x3000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(iolink_events_get_dropped_count(&ctx), 1U);
 
-    /* Mark one condition as gone and emit its withdrawal. */
+    /* 将某一条件标记为消失并发出其撤销。 */
     iolink_event_clear(&ctx, 0x2000U);
     assert_int_equal(ctx.pending_count, IOLINK_EVENT_PENDING_MAX - 1U);
     g_fake_ms = IOLINK_EVENT_MIN_APPEAR_MS;
     iolink_events_process(&ctx);
 
-    /* At the 1 s mark the disappears window is still open: the slot must not be
-       recycled (that would erase its spacing history), so the surplus cause is
-       dropped observably. */
+    /* 到 1 s 时 disappears 窗口仍然开着：该槽位不得被
+       回收（否则会抹掉其间隔历史），因此多余的原因
+       以可观察的方式被丢弃。 */
     g_fake_ms = IOLINK_EVENT_MIN_REPEAT_MS;
     iolink_events_process(&ctx);
     iolink_event_trigger(&ctx, 0x3000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(ctx.pending_count, IOLINK_EVENT_PENDING_MAX - 1U);
     assert_int_equal(iolink_events_get_dropped_count(&ctx), 2U);
 
-    /* Both windows elapsed: the slot is released and reusable. */
+    /* 两个窗口均已结束：槽位被释放并可重用。 */
     g_fake_ms = 2U * IOLINK_EVENT_MIN_REPEAT_MS;
     iolink_events_process(&ctx);
     iolink_event_trigger(&ctx, 0x3000U, IOLINK_EVENT_TYPE_ERROR);
@@ -427,7 +427,7 @@ static void test_event_pending_full_observable(void** state)
     assert_int_equal(iolink_events_get_dropped_count(&ctx), 0U);
 }
 
-/* A.6.4: queued events are discarded when communication is interrupted. */
+/* A.6.4：通信被中断时，已入队的事件会被丢弃。 */
 static void test_events_reset_clears(void** state)
 {
     (void) state;
@@ -451,11 +451,11 @@ static void test_event_flag_invariant(void** state)
     iolink_events_ctx_t ctx;
     events_init(&ctx);
 
-    /* Empty queue: no flag. */
+    /* 空队列：无标志。 */
     assert_false(iolink_events_flag(&ctx));
 
-    /* Draining the queue through pop() must clear the flag even though the
-       event memory was never acknowledged. */
+    /* 即使事件存储器从未被应答，通过 pop() 排空队列
+       也必须清除标志。 */
     iolink_event_trigger(&ctx, 0x1001U, IOLINK_EVENT_TYPE_NOTIFICATION);
     assert_true(iolink_events_flag(&ctx));
     iolink_event_t ev;
@@ -463,7 +463,7 @@ static void test_event_flag_invariant(void** state)
     assert_int_equal(ctx.count, 0U);
     assert_false(iolink_events_flag(&ctx));
 
-    /* Acknowledging the last Error through the event memory also clears it. */
+    /* 通过事件存储器确认最后一个 Error 也会清除标志。 */
     iolink_event_trigger(&ctx, 0x1002U, IOLINK_EVENT_TYPE_ERROR);
     assert_true(iolink_events_flag(&ctx));
     iolink_events_memory_write(&ctx, 0x00U, 0x00U);
@@ -478,8 +478,8 @@ static void test_notification_dedup(void** state)
     iolink_events_ctx_t ctx;
     events_init(&ctx);
 
-    /* A retrying Master must not turn repeated requests into an event storm:
-       the same unacknowledged notification is queued only once. */
+    /* 重试的主站不得把重复请求变成事件风暴：
+       同一未应答的 Notification 只入队一次。 */
     iolink_event_trigger(&ctx, 0xFF91U, IOLINK_EVENT_TYPE_NOTIFICATION);
     iolink_event_trigger(&ctx, 0xFF91U, IOLINK_EVENT_TYPE_NOTIFICATION);
     iolink_event_trigger(&ctx, 0xFF91U, IOLINK_EVENT_TYPE_NOTIFICATION);
@@ -492,9 +492,9 @@ static void test_notification_dedup(void** state)
     assert_false(iolink_events_pop(&ctx, &ev));
 }
 
-/* Table B.13: DeviceStatus reflects the current conditions, so it drops as
- * soon as the cause is gone, even while the "event disappears" is still
- * deferred by the 10.10.2 spacing. */
+/* Table B.13：DeviceStatus 反映当前条件，因此一旦原因消失就下降，
+ * 即使 "event disappears" 仍因 10.10.2 的间隔而
+ * 被推迟。 */
 static void test_event_device_status_drops_with_condition(void** state)
 {
     (void) state;
@@ -508,23 +508,23 @@ static void test_event_device_status_drops_with_condition(void** state)
 
     iolink_event_clear(&ctx, IOLINK_EVENTCODE_SHORT_CIRCUIT);
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
-    assert_int_equal(ctx.count, 1U); /* the appears is still queued */
+    assert_int_equal(ctx.count, 1U); /* appears 仍在队列中 */
 
-    /* Inside the minimum appearance window the withdrawal is deferred, yet the
-       status stays at OK because the condition is no longer asserted. */
+    /* 在最小出现窗口内，撤销被推迟，但状态
+       仍保持 OK，因为该条件已不再置起。 */
     g_fake_ms = 10U;
     iolink_events_process(&ctx);
     assert_int_equal(ctx.count, 1U);
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
 
-    /* A notification never raises DeviceStatus. */
+    /* Notification 从不提升 DeviceStatus。 */
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_NO_MALFUNCTION, IOLINK_EVENT_TYPE_NOTIFICATION);
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
 }
 
-/* Table B.13: values and dominance. Priority 4->1, 3->2, 1->3, 2->4; the
- * lowest priority value wins, i.e. Failure > Functional-Check > Maintenance >
- * Out-of-Specification. */
+/* Table B.13：取值与优先级。优先级 4->1、3->2、1->3、2->4；
+ * 优先级数值最小者胜出，即 Failure > Functional-Check > Maintenance >
+ * Out-of-Specification。 */
 static void test_event_device_status_matrix(void** state)
 {
     (void) state;
@@ -567,9 +567,9 @@ static void test_event_device_status_matrix(void** state)
     }
 }
 
-/* Table 101 "Clear": every asserted Error/Warning is withdrawn with MODE
- * "event disappears", queued Notifications are discarded, and DeviceStatus is
- * cleared by the reset. */
+/* Table 101 "Clear"：每个已置起的 Error/Warning 都以 MODE
+ * "event disappears" 撤销，已入队的 Notification 被丢弃，且 DeviceStatus
+ * 由复位清除。 */
 static void test_event_clear_diagnosis(void** state)
 {
     (void) state;
@@ -586,27 +586,27 @@ static void test_event_clear_diagnosis(void** state)
 
     iolink_events_clear_diagnosis(&ctx);
 
-    /* The appearances already queued stay until acknowledged; the reset adds
-       the matching disappearances immediately and drops the Notification
-       (the queue is full at 4 entries, so a missing filter would silently
-       evict the Notification and hide itself). */
+    /* 已入队的出现记录保留到被应答为止；复位会立即补上
+       对应的消失记录并丢弃 Notification
+       （队列在 4 项时已满，因此缺少过滤会静默
+       挤掉 Notification 而掩盖自身）。 */
     assert_int_equal(ctx.count, 4U);
     assert_int_equal(iolink_events_get_dropped_count(&ctx), 0U);
     assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
 
-    /* Acknowledge the frozen appears snapshot: the withdraw pair becomes the
-       presented set, so its MODE=2 qualifier is observable on the wire
-       (Figure A.24: MODE=disappears, TYPE=error/warning, INSTANCE=Application
-       -> 0xB4 / 0xA4). */
+    /* 应答冻结的 appears 快照：撤销对成为
+       呈现集合，因此其 MODE=2 限定符可在线上观察到
+       （Figure A.24：MODE=disappears、TYPE=error/warning、INSTANCE=Application
+       -> 0xB4 / 0xA4）。 */
     iolink_events_memory_write(&ctx, 0x00U, 0x00U);
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x87U); /* 3 slots */
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xB4U); /* E disappears */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x87U); /* 3 个槽位 */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x01U), 0xB4U); /* E 消失 */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x02U), 0x10U);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x03U), 0x00U);
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0xE4U); /* W appears */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x04U), 0xE4U); /* W 出现 */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x05U), 0x8CU);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x06U), 0x42U);
-    assert_int_equal(iolink_events_memory_read(&ctx, 0x07U), 0xA4U); /* W disappears */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x07U), 0xA4U); /* W 消失 */
     assert_int_equal(iolink_events_memory_read(&ctx, 0x08U), 0x8CU);
     assert_int_equal(iolink_events_memory_read(&ctx, 0x09U), 0x42U);
 
@@ -623,8 +623,8 @@ static void test_event_clear_diagnosis(void** state)
     assert_int_equal(ctx.count, 0U);
 }
 
-/* A.6.4: an appearance that is still deferred by the 1 s window was never sent,
- * so Clear must not put an unpaired withdrawal on the wire. */
+/* A.6.4：仍被 1 s 窗口推迟的出现从未被发送，
+ * 因此 Clear 不得在线上放入未配对的撤销。 */
 static void test_event_clear_diagnosis_skips_unreported_event(void** state)
 {
     (void) state;
@@ -635,15 +635,15 @@ static void test_event_clear_diagnosis_skips_unreported_event(void** state)
 
     iolink_event_t ev;
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
-    assert_true(iolink_events_pop(&ctx, &ev)); /* the appearance reaches the master */
+    assert_true(iolink_events_pop(&ctx, &ev)); /* 出现记录到达主站 */
     iolink_event_clear(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION);
     g_fake_ms = IOLINK_EVENT_MIN_APPEAR_MS;
     iolink_events_process(&ctx);
     assert_true(iolink_events_pop(&ctx, &ev));
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
 
-    /* Re-raised inside the 1 s window: the fresh appearance is deferred, the
-       master has not seen it, so Clear has nothing to withdraw. */
+    /* 在 1 s 窗口内重新置起：新的出现被推迟，
+       主站未曾看到它，因此 Clear 无内容可撤销。 */
     g_fake_ms = IOLINK_EVENT_MIN_REPEAT_MS / 2U;
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(ctx.count, 0U);

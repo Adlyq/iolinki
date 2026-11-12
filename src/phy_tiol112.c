@@ -50,7 +50,7 @@ static void set_baudrate(void* user, iolink_baudrate_t baud)
             if (d->initialized) d->io.set_enable(d->io.user, false);
             return;
     }
-    /* Keep TX in GPIO mode while in SIO. Switch mux only for communication. */
+    /* 在 SIO 中保持 TX 为 GPIO 模式。仅在通信时切换复用功能。 */
     if (d->initialized && (d->mode == IOLINK_PHY_MODE_SDCI)) {
         d->io.set_enable(d->io.user, false);
         d->error = d->io.uart_configure(d->io.user, d->baud);
@@ -72,7 +72,7 @@ static void set_cq(void* user, uint8_t state)
     iolink_tiol112_ctx_t* d = user;
     d->cq = state != 0U ? 1U : 0U;
     if ((d->mode == IOLINK_PHY_MODE_SIO) && (d->error == 0)) {
-        /* TI table 8-2: high TX sinks CQ, low TX sources CQ. */
+        /* TI table 8-2：TX 高电平时 CQ 为灌电流，TX 低电平时 CQ 为拉电流。 */
         d->io.set_sio_tx(d->io.user, d->cq == 0U);
         d->io.set_enable(d->io.user, true);
     }

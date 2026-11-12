@@ -16,44 +16,44 @@
 
 /**
  * @file port.h
- * @brief Declarative concurrency-primitive contract between the stack and a port.
+ * @brief 协议栈与端口之间关于并发原语的声明式约定。
  *
- * The stack only needs three kinds of asynchronous primitives. Each one is
- * graded by strength, so a port implements exactly the grade the selected
- * concurrency profile requires and nothing more:
+ * 协议栈只需要三类异步原语。
+ * 每一类都按强度分级，因此端口只实现所选并发配置
+ * 所要求的那一级，不多实现：
  *
- * - **Atomic width** (`IOLINK_ATOMIC_UINT_T`, default `uint32_t`): a naturally
- *   aligned value is read and written in one access (single-copy atomic).
- *   No read-modify-write is assumed.
- * - **Barrier** (`IOLINK_FENCE()`): orders data writes before a publish-word
- *   store, and a publish-word load before the data it publishes.
- * - **Mutual exclusion** (`IOLINK_CRITICAL_ENTER/EXIT()`): excludes the data
- *   interrupt, nesting-safe, callable from the ISR, bounded duration.
+ * - **原子宽度**（`IOLINK_ATOMIC_UINT_T`，默认 `uint32_t`）：自然
+ *   对齐的值在一次访问中完成读写（单拷贝原子）。
+ *   不假定存在读-改-写。
+ * - **屏障**（`IOLINK_FENCE()`）：把数据写入排在发布字存储之前，
+ *   并把发布字加载排在它所发布的数据之前。
+ * - **互斥**（`IOLINK_CRITICAL_ENTER/EXIT()`）：排除数据中断，
+ *   可嵌套，可从 ISR 调用，持续时间有界。
  *
- * The stack has a single main-context caller, so there is no thread lock in
- * the contract: the CPU-level critical section above is the only mutual
- * exclusion the library takes. A port whose critical section also serialises
- * tasks (e.g. an RTOS scheduler lock) does not change that: the API still has
- * to be entered from one task.
+ * 协议栈只有单一主上下文调用者，因此约定中不存在线程锁：
+ * 上述 CPU 级临界区是库所获取的唯一互斥手段。端口若让
+ * 临界区同时串行化任务（例如 RTOS 调度器锁），
+ * 也不改变这一点：
+ * API 仍必须从同一个任务进入。
  *
- * The concurrency profile (`IOLINK_CONCURRENCY`) selects which primitives are
- * required; the library derives `IOLINK_NEED_*` from it and a missing
- * primitive is a compile error (or, for the critical section, an
- * `IOLINK_DEVICE_INIT_ERR_CRITICAL` at device initialization). A configuration
- * that needs no critical section does not reference the critical-section
- * symbols at all, so a bare-metal port can omit them.
+ * 并发配置（`IOLINK_CONCURRENCY`）选择需要哪些原语；
+ * 库据此推导出 `IOLINK_NEED_*`，缺少某个原语
+ * 会导致编译错误（对临界区而言，则是在设备初始化时返回
+ * `IOLINK_DEVICE_INIT_ERR_CRITICAL`）。不需要临界区的配置
+ * 完全不会引用临界区符号，
+ * 因此裸机端口可以省略它们。
  *
- * The stack never uses read-modify-write atomics (compare-and-swap, atomics
- * increment) on shared state, because several supported cores (ARMv6-M,
- * ARMv8-M Baseline, RV32I) have no atomic RMW instruction. Shared state is
- * single-writer with a publish word instead.
+ * 协议栈从不对共享状态使用读-改-写原子操作（比较交换、
+ * 原子自增），因为若干受支持内核（ARMv6-M、
+ * ARMv8-M Baseline、RV32I）没有原子 RMW 指令。共享状态
+ * 改用单写者加发布字的方式。
  *
- * See docs/PORTING.md for the full contract and per-platform mappings.
+ * 完整约定与各平台映射参见 docs/PORTING.md。
  */
 
 /**
- * @defgroup iolinki_port Concurrency primitives
- * @brief Graded asynchronous primitives a port provides on demand.
+ * @defgroup iolinki_port 并发原语
+ * @brief 端口按需提供的分级异步原语。
  * @{
  */
 
@@ -62,24 +62,24 @@ extern "C" {
 #endif
 
 /**
- * @name Mutual exclusion
+ * @name 互斥
  *
- * Required only when `IOLINK_NEED_CRITICAL` is non-zero. The implementation
- * must be nesting-safe and callable from interrupt context; it should map to a
- * PRIMASK/BASEPRI save/restore (Cortex-M), an IRQ lock (RTOS) or an equivalent.
+ * 仅当 `IOLINK_NEED_CRITICAL` 非零时需要。实现
+ * 必须可嵌套，并可从中断上下文调用；它应映射为
+ * PRIMASK/BASEPRI 保存/恢复（Cortex-M）、IRQ 锁（RTOS）或等效手段。
  * @{
  */
 void iolink_critical_enter(void);
 void iolink_critical_exit(void);
 
 /**
- * @brief Probe whether the platform supplied real critical-section hooks.
+ * @brief 探测平台是否提供了真正的临界区钩子。
  *
- * Calls iolink_critical_enter()/iolink_critical_exit() once and reports whether
- * the weak no-op defaults from src/platform.c were used. iolink_device_init()
- * consults this only when `IOLINK_NEED_CRITICAL` is non-zero.
+ * 调用一次 iolink_critical_enter()/iolink_critical_exit()，并报告是否
+ * 使用了 src/platform.c 中的弱定义空实现默认值。iolink_device_init()
+ * 仅在 `IOLINK_NEED_CRITICAL` 非零时查询此函数。
  *
- * @return 0 when both hooks are overridden, -1 when the weak default ran.
+ * @return 两个钩子都被覆盖时为 0，运行了弱定义默认实现时为 -1。
  */
 int iolink_platform_critical_sections_ready(void);
 /** @} */
@@ -89,53 +89,53 @@ int iolink_platform_critical_sections_ready(void);
 #endif
 
 /* -------------------------------------------------------------------------
- * Capability declaration (a port overrides these before including this file,
- * through the build system or IOLINK_PORT_CONFIG_FILE)
+ * 能力声明（端口在包含本文件之前，通过构建系统或
+ * IOLINK_PORT_CONFIG_FILE 覆盖这些定义）
  * ------------------------------------------------------------------------- */
 
-/** @brief Optional port configuration header, included before the defaults. */
+/** @brief 可选的端口配置头文件，在默认值之前包含。 */
 #ifdef IOLINK_PORT_CONFIG_FILE
-/* cppcheck 2.7 cannot evaluate a macro include and reports it even when the
-   macro is undefined; the include is valid when a port defines it. */
+/* cppcheck 2.7 无法求值宏形式的 include，即使宏未定义也会报错；
+   端口定义该宏时，此 include 是合法的。 */
 // cppcheck-suppress preprocessorErrorDirective
 #include IOLINK_PORT_CONFIG_FILE
 #endif
 
 /**
- * @brief Naturally atomic unsigned integer type (single-copy atomic when aligned).
+ * @brief 自然原子的无符号整数类型（对齐时为单拷贝原子）。
  *
- * Defaults to `uint32_t`. An 8/16-bit target overrides it with the widest
- * naturally atomic unsigned type. The ISR concurrency profile requires at
- * least 32 bits; a narrower target keeps the `SINGLE` profile.
+ * 默认为 `uint32_t`。8/16 位目标用最宽的自然原子
+ * 无符号类型覆盖它。ISR 并发配置至少要求
+ * 32 位；更窄的目标应保持 `SINGLE` 配置。
  */
 #ifndef IOLINK_ATOMIC_UINT_T
 #define IOLINK_ATOMIC_UINT_T uint32_t
 #endif
 
-/** @brief Barrier grades: compiler only, device/DMA visible, SMP/system wide. */
+/** @brief 屏障等级：仅编译器、设备/DMA 可见、SMP/系统范围。 */
 #define IOLINK_FENCE_COMPILER 0
 #define IOLINK_FENCE_DEVICE 1
 #define IOLINK_FENCE_SMP 2
 
 /**
- * @brief Barrier grade declared by the port.
+ * @brief 端口声明的屏障等级。
  *
- * `COMPILER` is the portable default: enough when the two contexts are the
- * main loop and an ISR on one core, with no other bus master reading the
- * published data. A port whose PHY/DMA reads a published buffer while the CPU
- * writes it declares `DEVICE` and provides `IOLINK_FENCE_DEVICE_IMPL()`. A
- * port whose contexts are two cores (or two threads) declares `SMP` and
- * provides `IOLINK_FENCE_SMP_IMPL()`.
+ * `COMPILER` 是可移植默认值：当两个上下文是同一内核上的
+ * 主循环与 ISR，且没有其他总线主站读取已发布数据时，它已足够。
+ * 端口的 PHY/DMA 若在 CPU 写入的同时读取已发布的缓冲区，
+ * 则声明 `DEVICE` 并提供 `IOLINK_FENCE_DEVICE_IMPL()`。
+ * 上下文为两个内核（或两个线程）的端口声明 `SMP`，
+ * 并提供 `IOLINK_FENCE_SMP_IMPL()`。
  */
 #ifndef IOLINK_FENCE_LEVEL
 #define IOLINK_FENCE_LEVEL IOLINK_FENCE_COMPILER
 #endif
 
 /* -------------------------------------------------------------------------
- * Requirement derivation and validation
+ * 需求推导与校验
  * ------------------------------------------------------------------------- */
 
-/* The IOLINK_CONCURRENCY_SINGLE/_ISR/_SMP values come from config.h. */
+/* IOLINK_CONCURRENCY_SINGLE/_ISR/_SMP 的取值来自 config.h。 */
 #if (IOLINK_CONCURRENCY < IOLINK_CONCURRENCY_SINGLE) || \
     (IOLINK_CONCURRENCY > IOLINK_CONCURRENCY_SMP)
 #error "IOLINK_CONCURRENCY must be IOLINK_CONCURRENCY_SINGLE/ISR/SMP (the RTOS tier was removed)"
@@ -145,26 +145,26 @@ int iolink_platform_critical_sections_ready(void);
 #error "IOLINK_STATS_MODE must be IOLINK_STATS_SHARED or IOLINK_STATS_SPLIT"
 #endif
 
-/** @brief Non-zero when a barrier is required between contexts. */
+/** @brief 上下文之间需要屏障时非零。 */
 #define IOLINK_NEED_FENCE (IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_ISR)
 
 /**
- * @brief Non-zero when the stack calls the platform critical section.
+ * @brief 协议栈调用平台临界区时非零。
  *
- * The bulk handoffs are lock-free (frame mailbox and staged-write rings, the
- * ISDU response publish word, the PD-in buffer lease and the reply staging
- * slots). The platform critical section still protects the event engine, the
- * PD-in index swap and the pending length pair, so every asynchronous profile
- * needs it. The only other caller is the legacy direct-send fallback in
- * `dll_send()`: a PHY without `request_service()` (compiled out by
- * `IOLINK_PHY_FEATURE_ISR_TX_ONLY`) is driven from the main context inside the
- * section. Staging the reply itself takes no section: the slots are
- * main-owned and published last. Only `SINGLE` runs without a critical
- * section. State transitions need no section: the state is a single aligned
- * store and its application notification is level-based.
+ * 批量交接是无锁的（帧邮箱与暂存写环形缓冲区、
+ * ISDU 应答发布字、PD-in 缓冲区租约以及应答暂存
+ * 槽位）。平台临界区仍然保护事件引擎、
+ * PD-in 索引交换以及待处理长度对，因此每个异步配置
+ * 都需要它。唯一的其他调用者是 `dll_send()` 中的
+ * 遗留直发回退路径：没有 `request_service()` 的 PHY
+ * （由 `IOLINK_PHY_FEATURE_ISR_TX_ONLY` 编译裁除）在主上下文中、
+ * 于该临界区内驱动。应答本身的暂存不需要临界区：槽位归
+ * 主上下文所有，并最后发布。只有 `SINGLE` 在没有临界区的
+ * 情况下运行。状态迁移不需要临界区：状态是一次对齐
+ * 存储，其应用通知是基于电平的。
  *
- * `IOLINK_STATS_MODE=SPLIT` removes the one remaining counter race (both
- * contexts incrementing the same field) but does not change this requirement.
+ * `IOLINK_STATS_MODE=SPLIT` 消除了最后一处计数器竞争（两个
+ * 上下文递增同一字段），但不改变上述要求。
  */
 #define IOLINK_NEED_CRITICAL (IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_ISR)
 
@@ -177,15 +177,15 @@ int iolink_platform_critical_sections_ready(void);
 #endif
 
 /* -------------------------------------------------------------------------
- * Barrier
+ * 屏障
  * ------------------------------------------------------------------------- */
 
-/** @brief Stop the compiler from moving memory operations across this point. */
+/** @brief 阻止编译器跨越此点移动内存操作。 */
 #if defined(__CC_ARM)
-/* ARM Compiler 5 defines __GNUC__ in --gnu mode yet has no GCC-style inline
- * asm. __schedule_barrier() stops the reordering and __memory_changed()
- * forces cached memory to be reloaded; together they match the "memory"
- * clobber of the GNU form. */
+/* ARM Compiler 5 在 --gnu 模式下定义 __GNUC__，却没有 GCC 风格的内联
+ * asm。__schedule_barrier() 阻止重排，__memory_changed()
+ * 强制重新加载缓存的内存；两者合起来等价于 GNU 形式中
+ * "memory" clobber 的效果。 */
 #define IOLINK_COMPILER_BARRIER() \
     do {                          \
         __schedule_barrier();     \
@@ -216,16 +216,16 @@ int iolink_platform_critical_sections_ready(void);
 #endif
 
 /* -------------------------------------------------------------------------
- * Publish words
+ * 发布字
  * ------------------------------------------------------------------------- */
 
 /**
- * @brief Read a publish word with acquire ordering.
+ * @brief 以获取语义读取发布字。
  *
- * The word must be naturally aligned (a `IOLINK_ATOMIC_UINT_T` member is, when
- * the structure places it at a multiple of its size). Each context is the
- * single writer of the words it publishes; readers never write them, so a
- * plain load plus the configured barrier is enough.
+ * 该字必须自然对齐（当结构体把它放在自身大小的整数倍处时，
+ * `IOLINK_ATOMIC_UINT_T` 成员即满足）。每个上下文都是它
+ * 所发布字的唯一写者；读者从不写入，因此
+ * 一次普通加载加上已配置的屏障就足够。
  */
 static inline IOLINK_ATOMIC_UINT_T iolink_atomic_load(const volatile IOLINK_ATOMIC_UINT_T* word)
 {
@@ -235,10 +235,10 @@ static inline IOLINK_ATOMIC_UINT_T iolink_atomic_load(const volatile IOLINK_ATOM
 }
 
 /**
- * @brief Write a publish word with release ordering.
+ * @brief 以释放语义写入发布字。
  *
- * All data the word refers to must already be written before this call; the
- * barrier keeps the compiler from sinking those writes past the publish.
+ * 该字所指的全部数据必须在此调用之前写完；
+ * 屏障阻止编译器把这些写入下沉到发布之后。
  */
 static inline void iolink_atomic_store(volatile IOLINK_ATOMIC_UINT_T* word,
                                        IOLINK_ATOMIC_UINT_T value)
@@ -248,11 +248,11 @@ static inline void iolink_atomic_store(volatile IOLINK_ATOMIC_UINT_T* word,
 }
 
 /**
- * @brief Serialise against the data interrupt (no-op without a critical need).
+ * @brief 与数据中断串行化（无需临界区时为空操作）。
  *
- * Expand to the platform hooks when the profile requires them, and to nothing
- * otherwise, so a lock-free or single-context configuration does not
- * reference the symbols at all.
+ * 配置需要时展开为平台钩子，否则展开为空，
+ * 这样无锁或单上下文的配置完全不会
+ * 引用这些符号。
  */
 #if IOLINK_NEED_CRITICAL
 #define IOLINK_CRITICAL_ENTER() iolink_critical_enter()
@@ -263,10 +263,10 @@ static inline void iolink_atomic_store(volatile IOLINK_ATOMIC_UINT_T* word,
 #endif
 
 /**
- * @brief Compile-time assertion that also works in C99 mode.
+ * @brief 同样适用于 C99 模式的编译期断言。
  *
- * A C11 `_Static_assert` is rejected by `-Wpedantic` in C99, which the
- * delivery matrix uses, so the fallback is the array-size idiom.
+ * C99 下 `-Wpedantic` 会拒绝 C11 的 `_Static_assert`，而交付
+ * 矩阵使用的正是 C99，因此回退为数组大小惯用法。
  */
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
 #define IOLINK_STATIC_ASSERT(cond, msg) _Static_assert((cond), msg)

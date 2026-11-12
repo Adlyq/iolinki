@@ -8,7 +8,7 @@
 
 /**
  * @file test_init.c
- * @brief Unit tests for IO-Link stack initialization
+ * @brief IO-Link 协议栈初始化的单元测试
  */
 
 #include <stdarg.h>
@@ -21,7 +21,7 @@
 #include "iolinki/device.h"
 #include "test_helpers.h"
 
-/* Local mocks to avoid linking issues with CMocka symbols */
+/* 本地 mock，避免与 CMocka 符号的链接问题 */
 static int local_mock_phy_init(void* user)
 {
     (void) user;
@@ -53,7 +53,7 @@ static iolink_device_config_t make_device_config(void)
     return config;
 }
 
-/* --- Tests --- */
+/* --- 测试 --- */
 
 static void test_iolink_init_success(void** state)
 {

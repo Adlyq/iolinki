@@ -2,11 +2,11 @@
 #ifndef IOLINK_PHY_L6362A_H
 #define IOLINK_PHY_L6362A_H
 #include "iolinki/phy.h"
-/* IN1 must be hardwired low: CQ=IN2, RX=OUTI/Q (ST tables 14/15).
- * EN must drive through the board series resistor; DIAG samples its IC side.
- * init leaves EN low. uart_send_complete suppresses echo and waits for final
- * stop bit with a bounded deadline. consume_wakeup consumes an OL falling IRQ.
- * OL is overload/current limitation, not a dedicated wake output. */
+/* IN1 必须硬连线为低：CQ=IN2，RX=OUTI/Q（ST 表 14/15）。
+ * EN 必须通过板上串联电阻驱动；DIAG 采样其 IC 侧。
+ * init 将 EN 保持为低。uart_send_complete 抑制回显并等待最后一个
+ * 停止位，带有限截止时间。consume_wakeup 消费 OL 下降沿 IRQ。
+ * OL 是过载/电流限制，不是专用唤醒输出。 */
 typedef struct
 {
     void* user;
@@ -31,9 +31,9 @@ typedef struct
 } iolink_l6362a_ctx_t;
 int iolink_phy_l6362a_init(iolink_l6362a_ctx_t*, const iolink_l6362a_io_t*);
 const iolink_phy_api_t* iolink_phy_l6362a_get(iolink_l6362a_ctx_t*);
-/* 1=overload asserted; 0=clear; -1=unavailable. No short/thermal cause inferred. */
+/* 1=过载有效；0=无故障；-1=不可用。不推断短路/热故障原因。 */
 int iolink_phy_l6362a_overload(const iolink_l6362a_ctx_t*);
-/* DIAG fault only meaningful while EN requested high; -1 otherwise.
- * Asserted aggregates cut-off/UVLO/overtemperature; cannot identify cause. */
+/* DIAG 故障仅在 EN 请求为高时才有意义；否则为 -1。
+ * 有效时聚合截止/UVLO/过温；无法识别具体原因。 */
 int iolink_phy_l6362a_fault(const iolink_l6362a_ctx_t*);
 #endif

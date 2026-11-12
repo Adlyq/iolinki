@@ -1,16 +1,16 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /*
- * Host-side unit test for examples/stm32g0_l6362a_raw/phy_l6362a_raw.c.
+ * examples/stm32g0_l6362a_raw/phy_l6362a_raw.c 的主机侧单元测试。
  *
- * The example is board code, so the STM32G0 USART/DMA/TIM/GPIO surface is
- * mocked in tests/mocks/stm32g0_l6362a. The source is compiled in its real
- * board configuration: ISR pump, RX FRAME DMA and TX FRAME DMA.
+ * 该示例属于板级代码，因此在 tests/mocks/stm32g0_l6362a 中
+ * 对 STM32G0 的 USART/DMA/TIM/GPIO 接口进行了 mock。源码按其真实
+ * 板级配置编译：ISR 泵、RX FRAME DMA 与 TX FRAME DMA。
  */
 #include "main.h"
 #include "phy_l6362a_raw.h"
 
 #ifdef NDEBUG
-#undef NDEBUG /* Keep behavioral checks active in Release CTest builds. */
+#undef NDEBUG /* 在 Release 的 CTest 构建中保持行为检查生效。 */
 #endif
 
 #include <assert.h>
@@ -21,8 +21,8 @@
 
 static const iolink_phy_api_t* s_phy;
 
-/* Model the hardware flag clear: UartConfigure() writes ICR=RTOCF inside the
- * critical section, so a deferred RTOF vector finds the flag already gone. */
+/* 模拟硬件标志清除：UartConfigure() 在临界区内写入 ICR=RTOCF，
+ * 因此被推迟的 RTOF 向量会发现该标志已被清除。 */
 static bool s_model_icr_clear;
 
 static uint32_t expected_brr(uint32_t baud)
@@ -41,9 +41,9 @@ static void boot(iolink_baudrate_t baudrate)
 }
 
 /*
- * The board is 32-bit, so the driver stores DMA addresses in 32-bit registers
- * with (uint32_t)(uintptr_t). On a 64-bit host the high address bits are lost;
- * rebuild the pointer from a neighbouring .bss symbol in the same image.
+ * 该板为 32 位，因此驱动使用 (uint32_t)(uintptr_t) 将 DMA 地址
+ * 存入 32 位寄存器。在 64 位主机上高位地址会丢失；
+ * 需从同一镜像中相邻的 .bss 符号重建该指针。
  */
 static uint8_t* rx_dma_buffer(void)
 {
@@ -52,7 +52,7 @@ static uint8_t* rx_dma_buffer(void)
     return (uint8_t*) addr;
 }
 
-/** Feed octets through the RX DMA mock and move its write index. */
+/** 通过 RX DMA mock 送入八位字节并移动其写索引。 */
 static void rx_deliver(uint32_t start, const uint8_t* data, uint32_t len)
 {
     assert((start + len) <= TEST_RX_DMA_SIZE);
@@ -72,7 +72,7 @@ static uint32_t expected_cr1(void)
            USART_CR1_UE;
 }
 
-/* Handlers for the mock NVIC: they run where the real vector would run. */
+/* mock NVIC 的处理函数：它们在真实向量本应运行的位置执行。 */
 static uint32_t s_irq_deliveries;
 static uint32_t s_irq_brr;
 static uint32_t s_irq_dma_en;
@@ -80,8 +80,8 @@ static uint32_t s_irq_cr1;
 static uint32_t s_irq_cr3;
 static const uint8_t s_injected_rx[] = {0x5AU, 0xA5U, 0x3CU};
 
-/* Data that arrived before the interrupt was taken: on hardware the DMA writes
- * the octets into the ring as they are received, and RTOF pends afterwards. */
+/* 在中断被取走之前到达的数据：在硬件上，DMA 在接收八位字节时
+ * 就将其写入环形缓冲区，随后 RTOF 挂起。 */
 static void inject_rx_bytes(void)
 {
     const uint32_t start = TEST_RX_DMA_SIZE - (DMA1_Channel1->CNDTR & 0xFFFFU);
@@ -103,11 +103,11 @@ static void injected_rx_irq(void)
 
 static void injected_tx_dma_irq(void)
 {
-    /* Snapshot the state the vector observes before the driver handles it. */
+    /* 在驱动处理之前快照该向量所观察到的状态。 */
     s_irq_brr = IOD_UART->BRR;
     s_irq_dma_en = DMA1_Channel2->CCR & DMA_CCR_EN;
     s_irq_cr3 = IOD_UART->CR3;
-    /* Writing IFCR's CTCIF2 clears the DMA ISR flag in hardware. */
+    /* 写入 IFCR 的 CTCIF2 会在硬件上清除 DMA ISR 标志。 */
     if ((DMA1->IFCR & DMA_IFCR_CTCIF2) != 0U) {
         DMA1->ISR &= ~DMA_ISR_TCIF2;
     }
@@ -133,16 +133,16 @@ static void test_api_and_hw_init(void)
     assert(s_phy->detect_wakeup != NULL);
     assert(s_phy->get_faults == NULL);
 
-    /* Transceiver enable high, transmit enable released. */
+    /* 收发器使能为高，发送使能释放。 */
     assert(mock_en_level == GPIO_PIN_SET);
     assert(mock_txen_level == GPIO_PIN_RESET);
 
-    /* TIM3: 1 us tick, one-shot update interrupt. */
+    /* TIM3：1 us 节拍，单次更新中断。 */
     assert(TIM3->PSC == ((SYSCLOCK_FREQUENCY / 1000000U) - 1U));
     assert(TIM3->DIER == TIM_DIER_UIE);
     assert((TIM3->CR1 & TIM_CR1_CEN) == 0U);
 
-    /* RX DMA: circular, one byte per request, points at the RX data register. */
+    /* RX DMA：循环模式，每次请求一个字节，指向 RX 数据寄存器。 */
     assert(DMAMUX1_Channel0->CCR == DMA_REQUEST_USART2_RX);
     assert(DMA1_Channel1->CPAR == (uint32_t) (uintptr_t) &IOD_UART->RDR);
     assert(DMA1_Channel1->CMAR != 0U);
@@ -150,11 +150,11 @@ static void test_api_and_hw_init(void)
     assert((DMA1_Channel1->CCR & (DMA_CCR_MINC | DMA_CCR_CIRC | DMA_CCR_EN)) ==
            (DMA_CCR_MINC | DMA_CCR_CIRC | DMA_CCR_EN));
 
-    /* TX DMA: configured per frame, idle after init. */
+    /* TX DMA：按帧配置，初始化后空闲。 */
     assert(DMAMUX1_Channel1->CCR == DMA_REQUEST_USART2_TX);
     assert(DMA1_Channel2->CCR == 0U);
 
-    /* UART: 9-bit, even parity, RX timeout, RX DMA and error interrupt. */
+    /* UART：9 位、偶校验、RX 超时、RX DMA 与错误中断。 */
     assert(IOD_UART->BRR == expected_brr(230400U));
     assert(IOD_UART->CR2 == USART_CR2_RTOEN);
     assert(IOD_UART->CR3 == (USART_CR3_EIE | USART_CR3_DMAR));
@@ -163,12 +163,12 @@ static void test_api_and_hw_init(void)
                              USART_ICR_TCCF | USART_ICR_RTOCF));
     assert(IOD_UART->RQR == USART_RQR_RXFRQ);
 
-    /* UART pins are routed to the USART alternate function. */
+    /* UART 引脚被路由到 USART 复用功能。 */
     assert(mock_gpio_init_calls == 1U);
     assert(mock_gpio_init_pin == (UART_TX_Pin | UART_RX_Pin));
     assert(mock_gpio_init_alternate == IOD_UART_GPIO_AF);
 
-    /* Interrupt priorities/ordering from the board bring-up. */
+    /* 板级启动时设置的中断优先级/顺序。 */
     assert(mock_nvic_priority[IOD_UART_IRQn] == 0U);
     assert(mock_nvic_priority[TIM3_IRQn] == 1U);
     assert(mock_nvic_priority[DMA1_Channel2_3_IRQn] == 2U);
@@ -176,7 +176,7 @@ static void test_api_and_hw_init(void)
     assert(mock_nvic_enabled[TIM3_IRQn] == 1U);
     assert(mock_nvic_enabled[DMA1_Channel2_3_IRQn] == 1U);
 
-    /* Timer A one-shot uses a 13 Tbit window. */
+    /* 定时器 A 的单次触发使用 13 Tbit 窗口。 */
     s_phy->response_timer_start(NULL);
     assert(TIM3->CNT == 0U);
     assert(TIM3->ARR == expected_gap_arr(230400U));
@@ -229,14 +229,14 @@ static void test_rx_frame(void)
     assert(s_phy->int_active(NULL) == 0U);
     assert(s_phy->detect_wakeup(NULL) == 0);
 
-    /* Normal frame: DMA wrote four octets, RTOF delimits it. */
+    /* 正常帧：DMA 写入了四个八位字节，RTOF 界定其结束。 */
     rx_deliver(0U, frame_a, sizeof(frame_a));
     IOD_UART->ISR = USART_ISR_RTOF;
     phy_l6362a_raw_rx_irq();
     assert((IOD_UART->ICR & USART_ICR_RTOCF) != 0U);
     assert(s_phy->int_active(NULL) == 1U);
     assert(s_phy->detect_wakeup(NULL) == 1);
-    assert(s_phy->int_active(NULL) == 1U); /* wake detection is not a read */
+    assert(s_phy->int_active(NULL) == 1U); /* 唤醒检测不是读取 */
 
     frame = s_phy->rx_frame(NULL, &status, &len);
     assert(frame != NULL);
@@ -251,7 +251,7 @@ static void test_rx_frame(void)
     assert(len == 0U);
     assert(status == 0U);
 
-    /* A frame completed while the previous one is unread is dropped. */
+    /* 前一帧尚未读取时完成的帧会被丢弃。 */
     rx_deliver(4U, frame_b, sizeof(frame_b));
     IOD_UART->ISR = USART_ISR_RTOF;
     phy_l6362a_raw_rx_irq();
@@ -265,7 +265,7 @@ static void test_rx_frame(void)
     assert(status == IOLINK_PHY_STATUS_DATA_READY);
     assert(memcmp(frame, frame_b, sizeof(frame_b)) == 0);
 
-    /* Receive error during a frame is reported as CHK, not DATA_READY. */
+    /* 帧期间出现接收错误会报告为 CHK，而非 DATA_READY。 */
     rx_deliver(9U, frame_d, sizeof(frame_d));
     IOD_UART->ISR = USART_ISR_RTOF | USART_ISR_PE;
     phy_l6362a_raw_rx_irq();
@@ -279,7 +279,7 @@ static void test_rx_frame(void)
     phy_l6362a_raw_get_counters(&tx1, &rx1, &chk1);
     assert((tx1 - tx0) == 0U);
     assert((rx1 - rx0) == (sizeof(frame_a) + sizeof(frame_b) + sizeof(frame_d)));
-    assert((chk1 - chk0) == 0U); /* CHK counter is a BYTE-RX statistic */
+    assert((chk1 - chk0) == 0U); /* CHK 计数器是 BYTE-RX 统计量 */
 }
 
 static void test_rx_frame_wraps(void)
@@ -300,7 +300,7 @@ static void test_rx_frame_wraps(void)
     frame = s_phy->rx_frame(NULL, &status, &len);
     assert(frame != NULL && len == sizeof(first));
 
-    /* Next frame starts near the end of the circular buffer and wraps. */
+    /* 下一帧从循环缓冲区末尾附近开始并回绕。 */
     for (i = 4U; i < TEST_RX_DMA_SIZE; i++) {
         dma[i] = (uint8_t) (0x40U + (i & 0x3FU));
     }
@@ -308,13 +308,13 @@ static void test_rx_frame_wraps(void)
     dma[1] = 0x31U;
     dma[2] = 0x32U;
     dma[3] = 0x33U;
-    DMA1_Channel1->CNDTR = TEST_RX_DMA_SIZE - 3U; /* write index is 3 */
+    DMA1_Channel1->CNDTR = TEST_RX_DMA_SIZE - 3U; /* 写索引为 3 */
 
     IOD_UART->ISR = USART_ISR_RTOF;
     phy_l6362a_raw_rx_irq();
     frame = s_phy->rx_frame(NULL, &status, &len);
     assert(frame != NULL);
-    assert(frame != dma); /* linearised into the shadow buffer */
+    assert(frame != dma); /* 已线性化到影子缓冲区 */
     assert(len == 255U);
     assert(status == IOLINK_PHY_STATUS_DATA_READY);
     assert(frame[0] == dma[4]);
@@ -338,7 +338,7 @@ static void test_tx_frame_and_completion(void)
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
     phy_l6362a_raw_get_counters(&tx0, &rx0, &chk0);
 
-    /* The transmit hooks may only run from the ISR pump. */
+    /* 发送钩子只能从 ISR 泵运行。 */
     SCB->ICSR = SCB_ICSR_VECTACTIVE_Msk;
 
     assert(s_phy->tx_frame(NULL, NULL, 3U) == -1);
@@ -347,7 +347,7 @@ static void test_tx_frame_and_completion(void)
 
     assert(s_phy->tx_frame(NULL, reply, sizeof(reply)) == 0);
     assert(mock_txen_level == GPIO_PIN_SET);
-    assert((IOD_UART->CR3 & USART_CR3_DMAR) == 0U); /* no echo capture */
+    assert((IOD_UART->CR3 & USART_CR3_DMAR) == 0U); /* 不回采 echo */
     assert((IOD_UART->CR3 & USART_CR3_DMAT) != 0U);
     assert(DMA1_Channel2->CPAR == (uint32_t) (uintptr_t) &IOD_UART->TDR);
     assert(DMA1_Channel2->CMAR == (uint32_t) (uintptr_t) reply);
@@ -359,7 +359,7 @@ static void test_tx_frame_and_completion(void)
     assert((rx1 - rx0) == 0U);
     assert((chk1 - chk0) == 0U);
 
-    /* DMA transfer complete releases TX_EN and re-arms the receiver. */
+    /* DMA 传输完成会释放 TX_EN 并重新武装接收器。 */
     DMA1->ISR = DMA_ISR_TCIF2;
     IOD_UART->ISR = USART_ISR_TC;
     DMA1->IFCR = 0U;
@@ -386,8 +386,8 @@ static void test_tx_frame_busy_is_refused(void)
     assert(mock_txen_level == GPIO_PIN_SET);
     assert((DMA1_Channel2->CCR & DMA_CCR_EN) != 0U);
 
-    /* While the DMA is still enabled the reply is on the wire: the new frame
-     * must be refused, never silently tear the running transfer down. */
+    /* 当 DMA 仍处于使能状态时，应答正在线上：新帧
+     * 必须被拒绝，绝不静默拆掉正在进行的传输。 */
     assert(s_phy->tx_frame(NULL, second, sizeof(second)) == -1);
     assert(DMA1_Channel2->CMAR == (uint32_t) (uintptr_t) first);
     assert(DMA1_Channel2->CNDTR == sizeof(first));
@@ -406,10 +406,10 @@ static void test_tx_frame_completes_pending_hardware(void)
 
     assert(s_phy->tx_frame(NULL, first, sizeof(first)) == 0);
 
-    /* Hardware finished the transfer (non-circular DMA clears EN) but the
-     * completion IRQ is still pending behind this higher-priority ISR. The next
-     * frame must finish the pending reply (wait for TC, release TX_EN) and then
-     * start cleanly instead of stacking on top of it. */
+    /* 硬件已完成传输（非循环 DMA 会清除 EN），但完成
+     * IRQ 仍排在这个更高优先级 ISR 之后挂起。下一帧
+     * 必须完成挂起的应答（等待 TC、释放 TX_EN），然后
+     * 干净地启动，而不是叠加在其之上。 */
     DMA1_Channel2->CCR &= ~DMA_CCR_EN;
     IOD_UART->ISR = USART_ISR_TC;
     assert(s_phy->tx_frame(NULL, second, sizeof(second)) == 0);
@@ -428,9 +428,9 @@ static void test_tx_dma_irq_tc_timeout_releases_line(void)
     SCB->ICSR = SCB_ICSR_VECTACTIVE_Msk;
     assert(s_phy->tx_frame(NULL, reply, sizeof(reply)) == 0);
 
-    /* Model a stuck UART: the DMA transfer completes (TCIF) but TC never sets.
-     * The bounded wait must expire on the (auto-advancing) mock clock and still
-     * release TX_EN / re-arm RX, never spin forever in interrupt context. */
+    /* 模拟卡死的 UART：DMA 传输完成（TCIF）但 TC 始终不置位。
+     * 有界等待必须在（自动推进的）mock 时钟上到期，并且仍然
+     * 释放 TX_EN / 重新武装 RX，绝不在中断上下文中永久自旋。 */
     mock_tick_auto_advance = 1U;
     DMA1->ISR = DMA_ISR_TCIF2;
     IOD_UART->ISR = 0U;
@@ -472,7 +472,7 @@ static void test_baudrate_change_aborts_tx(void)
     DMA1->IFCR = 0U;
     s_phy->set_baudrate(NULL, IOLINK_BAUDRATE_COM1);
 
-    /* The in-flight frame is aborted before the UART is reprogrammed. */
+    /* 正在传输的帧在 UART 重新配置之前被中止。 */
     assert((DMA1_Channel2->CCR & DMA_CCR_EN) == 0U);
     assert((IOD_UART->CR3 & USART_CR3_DMAT) == 0U);
     assert((IOD_UART->CR3 & USART_CR3_DMAR) != 0U);
@@ -489,7 +489,7 @@ static void test_mode_wakeup_and_irq_feeds(void)
 
     boot(IOLINK_BAUDRATE_COM3);
 
-    /* SIO claims no service and leaves RX capture armed. */
+    /* SIO 不声明服务，并保持 RX 捕获处于武装状态。 */
     assert(s_phy->int_active(NULL) == 0U);
     assert((IOD_UART->CR3 & USART_CR3_DMAR) != 0U);
 
@@ -499,25 +499,25 @@ static void test_mode_wakeup_and_irq_feeds(void)
     phy_l6362a_raw_rx_irq();
     assert(s_phy->int_active(NULL) == 1U);
 
-    /* Re-entering SIO flushes the stale frame and discards the bytes seen
-     * there; the next frame starts at the current write index. */
+    /* 重新进入 SIO 会冲刷陈旧帧，并丢弃在那里
+     * 看到的字节；下一帧从当前写索引开始。 */
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SIO);
     assert(s_phy->int_active(NULL) == 0U);
     assert(mock_txen_level == GPIO_PIN_RESET);
     assert(s_phy->rx_frame(NULL, &status, &len) == NULL || len == 0U);
 
-    /* OL INT latches a wake-up and is consumed once. */
+    /* OL INT 锁存一次唤醒，且只被消费一次。 */
     assert(s_phy->detect_wakeup(NULL) == 0);
     phy_l6362a_raw_ol_irq();
     assert(s_phy->detect_wakeup(NULL) == 1);
     assert(s_phy->detect_wakeup(NULL) == 0);
 
-    /* request_service pokes the USART IRQ so the ISR sends a staged reply. */
+    /* request_service 触发 USART IRQ，使 ISR 发送暂存的应答。 */
     mock_last_pending_irq = (IRQn_Type) -1;
     s_phy->request_service(NULL);
     assert(mock_last_pending_irq == IOD_UART_IRQn);
 
-    /* Byte-gap update only stops the timer in FRAME RX mode. */
+    /* 字节间隔更新只在 FRAME RX 模式下停止定时器。 */
     TIM3->SR = TIM_SR_UIF;
     TIM3->CR1 = TIM_CR1_CEN;
     phy_l6362a_raw_gap_irq();
@@ -525,29 +525,29 @@ static void test_mode_wakeup_and_irq_feeds(void)
     assert((TIM3->CR1 & TIM_CR1_CEN) == 0U);
     assert(s_phy->int_active(NULL) == 0U);
 
-    /* TC is acknowledged without producing a frame. */
+    /* TC 被确认，但不产生帧。 */
     IOD_UART->ISR = USART_ISR_TC;
     IOD_UART->ICR = 0U;
     phy_l6362a_raw_rx_irq();
     assert((IOD_UART->ICR & USART_ICR_TCCF) != 0U);
     assert(s_phy->rx_frame(NULL, &status, &len) == NULL);
 
-    /* OL_INT is read from the GPIO mock. */
+    /* OL_INT 从 GPIO mock 读取。 */
     mock_ol_pin_level = GPIO_PIN_RESET;
     assert(phy_l6362a_raw_int_line_active() == 0U);
     mock_ol_pin_level = GPIO_PIN_SET;
     assert(phy_l6362a_raw_int_line_active() == 1U);
 
-    /* Diagnostics accessors tolerate NULL outputs. */
+    /* 诊断访问器可容忍 NULL 输出。 */
     phy_l6362a_raw_get_counters(NULL, NULL, NULL);
 }
 
 /*
- * ISR/main interleaving 1: an RX RTOF arrives while main is re-entering SIO.
- * The mock delivers it at the UART pin reconfiguration point, either inline
- * (interrupts open) or when the mode-transition critical section ends.
- * The in-flight TX FRAME must be aborted and the frame must survive as the
- * wake indication.
+ * ISR/主循环交错 1：主循环重新进入 SIO 时 RX RTOF 到达。
+ * mock 在 UART 引脚重配置点投递它，可以内联
+ * （中断开放）或在模式转换临界区结束时。
+ * 正在进行的 TX FRAME 必须被中止，且该帧必须作为
+ * 唤醒指示保留。
  */
 static void test_isr_rx_during_set_mode(void)
 {
@@ -571,20 +571,20 @@ static void test_isr_rx_during_set_mode(void)
 
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SIO);
     assert(s_irq_deliveries == 1U);
-    /* Deferred until after UartConfigure(): the vector saw the re-armed UART. */
+    /* 推迟到 UartConfigure() 之后：该向量看到了重新武装的 UART。 */
     assert(s_irq_cr1 == expected_cr1());
-    /* UartConfigure() cleared RTOCF, so the vector itself could no longer
-     * publish the frame; the setter must have done it. */
+    /* UartConfigure() 清除了 RTOCF，因此该向量本身已无法
+     * 发布该帧；必须由 setter 完成。 */
     assert((IOD_UART->ISR & USART_ISR_RTOF) == 0U);
 
-    /* The SIO transition aborted the in-flight FRAME reply. */
+    /* SIO 转换中止了正在进行的 FRAME 应答。 */
     assert(mock_txen_level == GPIO_PIN_RESET);
     assert((DMA1_Channel2->CCR & DMA_CCR_EN) == 0U);
     assert((IOD_UART->CR3 & USART_CR3_DMAT) == 0U);
     assert((IOD_UART->CR3 & USART_CR3_DMAR) != 0U);
 
-    /* SIO claims no service, but the frame that arrived during the transition
-     * is retained as the wake indicator. */
+    /* SIO 不声明服务，但转换期间到达的帧
+     * 被保留为唤醒指示。 */
     assert(s_phy->int_active(NULL) == 0U);
     assert(s_phy->detect_wakeup(NULL) == 1);
 
@@ -599,9 +599,9 @@ static void test_isr_rx_during_set_mode(void)
 }
 
 /*
- * ISR/main interleaving 2: a TX DMA completion is pending while main changes
- * the baudrate. It must not nest inside the critical section; it runs after
- * the abort/reprogramming and observes the new BRR with the DMA already off.
+ * ISR/主循环交错 2：主循环更改波特率时，TX DMA 完成
+ * 处于挂起状态。它不得嵌套在临界区内；它在
+ * 中止/重新配置之后运行，并观察到 DMA 已关闭的新 BRR。
  */
 static void test_isr_tx_complete_deferred_by_baudrate(void)
 {
@@ -626,8 +626,8 @@ static void test_isr_tx_complete_deferred_by_baudrate(void)
     s_phy->set_baudrate(NULL, IOLINK_BAUDRATE_COM1);
 
     assert(s_irq_deliveries == 1U);
-    /* Deferred: the vector ran after the UART was reprogrammed and the DMA
-     * abort had already completed. */
+    /* 已推迟：该向量在 UART 重新配置之后运行，且 DMA
+     * 中止已经完成。 */
     assert(s_irq_brr == expected_brr(4800U));
     assert(s_irq_dma_en == 0U);
     assert((s_irq_cr3 & USART_CR3_DMAT) == 0U);
@@ -637,9 +637,9 @@ static void test_isr_tx_complete_deferred_by_baudrate(void)
 }
 
 /*
- * ISR/main interleaving 3: an RX frame arrives during a baudrate change.
- * The deferred vector must still publish a complete frame and leave the new
- * baudrate/UART state intact.
+ * ISR/主循环交错 3：波特率更改期间 RX 帧到达。
+ * 被推迟的向量仍必须发布完整帧，并保持新的
+ * 波特率/UART 状态不变。
  */
 static void test_isr_rx_deferred_by_baudrate(void)
 {
@@ -661,7 +661,7 @@ static void test_isr_rx_deferred_by_baudrate(void)
     assert(s_irq_deliveries == 1U);
     assert(s_irq_cr1 == expected_cr1());
     assert(IOD_UART->BRR == expected_brr(4800U));
-    /* The flag was cleared by UartConfigure(); the setter published the frame. */
+    /* 该标志已被 UartConfigure() 清除；由 setter 发布了该帧。 */
     assert((IOD_UART->ISR & USART_ISR_RTOF) == 0U);
     assert(s_phy->int_active(NULL) == 1U);
     frame = s_phy->rx_frame(NULL, &status, &len);
@@ -677,8 +677,8 @@ static void injected_ol_irq(void)
     s_irq_deliveries++;
 }
 
-/* The OL latch is written from the EXTI vector while the main context is inside
- * a mode transition; it must survive the transition and be consumed once. */
+/* OL 锁存由 EXTI 向量在主上下文处于模式转换
+ * 期间写入；它必须在转换后保留且只被消费一次。 */
 static void test_ol_irq_during_mode_change(void)
 {
     boot(IOLINK_BAUDRATE_COM3);
@@ -699,7 +699,7 @@ static void test_platform_hooks(void)
 {
     mock_stm32g0_reset();
 
-    /* SysTick-derived microsecond timebase. */
+    /* 由 SysTick 派生的微秒时基。 */
     mock_tick_ms = 5U;
     SysTick->LOAD = SystemCoreClock / 1000U;
     SysTick->VAL = 0U;
@@ -711,7 +711,7 @@ static void test_platform_hooks(void)
     assert(phy_l6362a_time_us() == 5000ULL);
     assert(phy_l6362a_time_ms() == 5U);
 
-    /* Critical sections nest and restore the saved PRIMASK at depth zero. */
+    /* 临界区可嵌套，并在深度归零时恢复保存的 PRIMASK。 */
     mock_primask = 0U;
     iolink_critical_enter();
     assert(mock_primask == 1U);
@@ -726,7 +726,7 @@ static void test_platform_hooks(void)
     iolink_critical_enter();
     iolink_critical_exit();
     assert(mock_primask == 1U);
-    iolink_critical_exit(); /* unbalanced exit must not underflow */
+    iolink_critical_exit(); /* 不平衡的退出不得下溢 */
     assert(mock_primask == 1U);
 }
 

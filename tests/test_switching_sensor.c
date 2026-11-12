@@ -15,7 +15,7 @@ int main(void)
     assert(switching_sensor_service(&sensor, 0x0102, 0, true, input + 1, 1, output, &length) == 0);
     assert(switching_sensor_sample(&sensor, 4700, true));
     assert(!switching_sensor_sample(&sensor, 6000, false));
-    assert(sensor.pd[2] == 0); /* Invalid reading clears output and validity. */
+    assert(sensor.pd[2] == 0); /* 无效读数会清除输出与有效性标志。 */
     switching_sensor_sample(&sensor, 6000, true);
     input[0] = 1;
     length = sizeof(output);

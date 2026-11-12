@@ -16,17 +16,17 @@
 #include "iolinki/dll.h"
 
 /**
- * @brief Select the PD-input path at compile time.
+ * @brief 在编译期选择 PD 输入路径。
  *
- * 0: the application calls iolink_device_pd_input_update() from its main loop;
- *    the on_pd_input callback member does not exist (assigning it is a compile
- *    error).
- * 1: the DLL calls on_pd_input() each OPERATE cycle to fill a free PD-in
- *    buffer; iolink_device_pd_input_update() is not declared (calling it is a
- *    compile/link error, see the trap macro in device.h).
+ * 0：应用在主循环中调用 iolink_device_pd_input_update()；
+ *    on_pd_input 回调成员不存在（对它赋值会导致编译
+ *    错误）。
+ * 1：DLL 在每个 OPERATE 周期调用 on_pd_input() 填充一个空闲的 PD-in
+ *    缓冲区；iolink_device_pd_input_update() 未被声明（调用它会导致
+ *    编译/链接错误，参见 device.h 中的陷阱宏）。
  *
- * Mixing the two paths is impossible: the unused symbol/member is removed from
- * the headers instead of failing at run time.
+ * 混用两条路径是不可能的：未使用的符号/成员会从头文件中
+ * 移除，而不是等到运行时才失败。
  */
 #ifndef IOLINK_APP_PD_INPUT_CALLBACK
 #define IOLINK_APP_PD_INPUT_CALLBACK 0
@@ -34,68 +34,67 @@
 
 #if IOLINK_APP_PD_INPUT_CALLBACK
 /**
- * @brief Link-time profile marker for the callback profile.
+ * @brief 回调配置的链接期标记。
  *
- * Defined only by a library built with IOLINK_APP_PD_INPUT_CALLBACK=1. An
- * application must use the same value (the iolink_app_callbacks_t layout
- * depends on it). Referencing this symbol from an application translation unit
- * (e.g. a file-scope `const void* const probe = &...;`) turns a mismatched
- * profile into a link error instead of undefined behaviour. Applications that
- * consume the library through add_subdirectory() inherit the setting
- * automatically via the PUBLIC compile definition.
+ * 仅由以 IOLINK_APP_PD_INPUT_CALLBACK=1 构建的库定义。应用
+ * 必须使用相同的值（iolink_app_callbacks_t 的布局
+ * 取决于它）。在应用翻译单元中引用该符号
+ * （例如文件作用域的 `const void* const probe = &...;`）会将配置
+ * 不匹配变为链接错误，而不是未定义行为。通过
+ * add_subdirectory() 使用该库的应用会
+ * 通过 PUBLIC 编译定义自动继承该设置。
  *
- * The check is one-directional by construction: an application built with =1
- * against a polling-profile library fails to link, but an application built
- * with =0 cannot reference the (undeclared) marker to detect a callback-profile
- * library. Keeping both sides on the CMake option avoids that case.
+ * 该检查在构造上是单向的：以 =1 构建的应用
+ * 链接轮询配置的库会失败，而以
+ * =0 构建的应用无法引用（未声明的）标记来检测回调配置的
+ * 库。让两侧都依赖 CMake 选项可避免这种情况。
  */
 extern const uint8_t iolink_app_pd_input_callback_profile;
 #endif
 
 /**
  * @file application.h
- * @brief IO-Link Application Layer API for Process Data
+ * @brief 用于过程数据的 IO-Link 应用层 API
  */
 
 /**
- * @defgroup iolinki_application Application Layer Callbacks
- * @brief Application lifecycle and process-data callback hooks.
+ * @defgroup iolinki_application 应用层回调
+ * @brief 应用生命周期与过程数据回调钩子。
  * @{
  */
 
 /**
- * @brief Application lifecycle and Process Data callbacks.
+ * @brief 应用生命周期与过程数据回调。
  *
- * Any field may be NULL, except that on_pd_input is required (and the only
- * PD-input source) when IOLINK_APP_PD_INPUT_CALLBACK is 1; initialization
- * rejects a missing callback with IOLINK_DEVICE_INIT_ERR_PD_INPUT. Every
- * callback receives the opaque @c user pointer supplied as
- * iolink_device_config_t::user, so the application does not need a global to
- * reach its own state. Lifecycle callbacks fire once when the DLL
- * enters the corresponding state. The PD callbacks fire on every processed
- * OPERATE cycle. @ref on_pd_output reports the output Process Data received
- * from the Master (Master -> Device). When IOLINK_APP_PD_INPUT_CALLBACK is 1,
- * on_pd_input() fills a free PD-in buffer (Device -> Master) and its return
- * value becomes the PD valid flag.
+ * 任何字段都可以为 NULL，但当 IOLINK_APP_PD_INPUT_CALLBACK 为 1
+ * 时，on_pd_input 是必需的（也是唯一的 PD 输入来源）；
+ * 初始化会以 IOLINK_DEVICE_INIT_ERR_PD_INPUT 拒绝缺失的回调。
+ * 每个回调都会收到以 iolink_device_config_t::user 传入的
+ * 不透明 @c user 指针，因此应用无需全局变量即可
+ * 访问自身状态。生命周期回调在 DLL 进入
+ * 对应状态时触发一次。PD 回调在每次处理的
+ * OPERATE 周期触发。@ref on_pd_output 报告从主站
+ * 收到的输出过程数据（主站 -> 设备）。
+ * 当 IOLINK_APP_PD_INPUT_CALLBACK 为 1 时，on_pd_input() 填充一个
+ * 空闲的 PD-in 缓冲区（设备 -> 主站），其返回值成为 PD 有效标志。
  */
 typedef struct
 {
-    void (*on_startup)(void* user);    /**< Entered STARTUP */
-    void (*on_preoperate)(void* user); /**< Entered PREOPERATE */
-    void (*on_operate)(void* user);    /**< Entered OPERATE */
+    void (*on_startup)(void* user);    /**< 已进入 STARTUP */
+    void (*on_preoperate)(void* user); /**< 已进入 PREOPERATE */
+    void (*on_operate)(void* user);    /**< 已进入 OPERATE */
 #if IOLINK_APP_PD_INPUT_CALLBACK
-    bool (*on_pd_input)(void* user, uint8_t* data, uint8_t len); /**< Fill input PD;
-                                                                      false = invalid */
+    bool (*on_pd_input)(void* user, uint8_t* data, uint8_t len); /**< 填充输入 PD；
+                                                                      false 表示无效 */
 #endif
-    void (*on_pd_output)(void* user, uint8_t* data, uint8_t len); /**< Output PD received */
-    void (*on_state_change)(void* user,
-                            iolink_dll_state_t state); /**< Current DLL state on a
-                                                            level-based notification.
-                                                            Runs in main context, possibly
-                                                            inside iolink_dll_process();
-                                                            do not re-enter iolink_* here. */
-    void (*on_master_lost)(void* user);                /**< Master communication lost */
-    void (*on_master_online)(void* user);              /**< Master communication resumed */
+    void (*on_pd_output)(void* user, uint8_t* data, uint8_t len);  /**< 已收到输出 PD */
+    void (*on_state_change)(void* user, iolink_dll_state_t state); /**< 基于电平通知时的
+                                                                    当前 DLL 状态。
+                                                                    在主上下文中运行，可能位于
+                                                                    iolink_dll_process() 内部；
+                                                                    在此处不得重入 iolink_*。 */
+    void (*on_master_lost)(void* user);                            /**< 主站通信丢失 */
+    void (*on_master_online)(void* user);                          /**< 主站通信恢复 */
 } iolink_app_callbacks_t;
 
 /** @} */ /* end of iolinki_application */

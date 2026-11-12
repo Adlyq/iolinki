@@ -8,7 +8,7 @@
 
 /**
  * @file test_error_recovery.c
- * @brief Unit tests for error detection and recovery
+ * @brief 错误检测与恢复的单元测试
  */
 
 #include <stdarg.h>
@@ -36,21 +36,21 @@ static void test_crc_error_recovery(void** state)
 
     move_to_operate_ctx(&dev.ctx);
 
-    /* 2. Simulate 3 CRC errors (Type 1_1 with 1-byte PD: MC, CKT, PD(1), OD(1), CK = 5 bytes) */
+    /* 2. 模拟 3 次 CRC 错误（Type 1_1、1 字节 PD：MC、CKT、PD(1)、OD(1)、CK = 5 字节） */
     for (int r = 0; r < 3; r++) {
-        /* Provide the whole frame in the mock queue */
-        mock_phy_feed_byte(0x00);               /* MC (write) */
-        mock_phy_feed_byte(IOLINK_MSEQ_TYPE_2); /* CKT with a bad checksum */
+        /* 将完整帧放入 mock 队列 */
+        mock_phy_feed_byte(0x00);               /* MC（写） */
+        mock_phy_feed_byte(IOLINK_MSEQ_TYPE_2); /* 校验和错误的 CKT */
         mock_phy_feed_byte(0x00);               /* PD-out */
         mock_phy_feed_byte(0x00);               /* OD0 */
         mock_phy_feed_byte(0x00);               /* OD1 */
-        mock_phy_feed_chk();                    /* End frame */
+        mock_phy_feed_chk();                    /* 结束帧 */
 
-        /* One call to process the whole available frame */
+        /* 一次调用即可处理整个可用帧 */
         test_io_cycle(&dev.ctx);
     }
 
-    /* 3. Check if error was detected (Event 0x5000 triggered after 3 retries) */
+    /* 3. 检查是否检测到错误（3 次重试后触发 Event 0x5000） */
     assert_true(iolink_events_pending(iolink_device_get_events_ctx(&dev.ctx)));
 }
 
@@ -62,12 +62,12 @@ static void test_communication_timeout(void** state)
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, NULL, NULL);
 
-    /* Trigger wakeup to move from SIO to SDCI */
+    /* 触发唤醒以从 SIO 进入 SDCI */
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(&dev.ctx);
     iolink_phy_mock_set_wakeup(0);
 
-    /* Ensure no data available in SDCI mode */
+    /* 确保 SDCI 模式下没有可用数据 */
     mock_phy_feed_chk();
     test_io_cycle(&dev.ctx);
 }

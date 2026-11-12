@@ -8,8 +8,8 @@
 
 /**
  * @file test_device_requires_critical.c
- * @brief Device initialization rejects the library's weak no-op critical
- *        sections; this executable deliberately links no strong override.
+ * @brief 设备初始化会拒绝库中弱符号的空操作临界区；
+ *        本可执行文件有意不链接强覆盖实现。
  */
 
 #include <assert.h>
@@ -55,8 +55,8 @@ int main(void)
     config.storage = &g_test_storage;
     config.time_us = test_time_us;
 
-    /* A profile without asynchronous contexts (SINGLE) never references the
-     * critical-section hooks, so a missing port is no longer fatal there. */
+    /* 不含异步上下文的配置文件（SINGLE）从不引用
+     * 临界区钩子，因此那里缺少 port 不再是致命错误。 */
 #if IOLINK_NEED_CRITICAL
     assert(iolink_device_init(&ctx, &config) == IOLINK_DEVICE_INIT_ERR_CRITICAL);
 #else

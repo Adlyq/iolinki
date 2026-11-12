@@ -69,7 +69,7 @@ static void cq(void* u, uint8_t b)
     iolink_l6362a_ctx_t* d = u;
     d->cq = b != 0;
     if (d->initialized && !d->error && d->mode == IOLINK_PHY_MODE_SIO) {
-        /* IN1=GND: table 14 CQ=IN2. IN2 transitions get dead-time protection. */
+        /* IN1=GND：table 14 中 CQ=IN2。IN2 跳变具有死区保护。 */
         d->io.set_in2(d->io.user, d->cq);
         enable(d, true);
     }

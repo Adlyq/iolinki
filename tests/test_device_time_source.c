@@ -8,8 +8,8 @@
 
 /**
  * @file test_device_time_source.c
- * @brief The application clock supplied via iolink_device_config_t::time_us is
- *        used by the DLL and the event engine instead of the platform clock.
+ * @brief 通过 iolink_device_config_t::time_us 提供的应用时钟会被
+ *        DLL 和事件引擎使用，而不使用平台时钟。
  */
 
 #include <assert.h>
@@ -76,7 +76,7 @@ static void test_initialization_uses_app_clock(void)
     g_app_time_us = 1000000ULL;
     init_device(&ctx, app_time_us);
 
-    /* t_pd deadline and the master-activity seed come from the app clock. */
+    /* t_pd 截止时间和主站活动种子都来自应用时钟。 */
     assert(ctx.dll.t_pd_deadline_us == (1000000ULL + 500ULL));
     assert(ctx.dll.master_last_activity_ms == 1000U);
 }

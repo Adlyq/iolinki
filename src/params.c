@@ -8,13 +8,13 @@
 
 /**
  * @file params.c
- * @brief Parameter manager: writable device tags with NVM persistence.
+ * @brief 参数管理器：支持 NVM 持久化的可写设备标签。
  * @ingroup iolinki_params
  *
- * Manages the application/function/location tag parameters, loading and
- * persisting them via the platform NVM interface, and mirrors the application
- * tag into the device-info context. A legacy singleton wrapper is provided for
- * context-less callers.
+ * 管理应用/功能/位置标签参数，通过平台 NVM 接口加载并
+ * 持久化这些参数，并将应用标签同步到设备信息
+ * 上下文。同时为无上下文的调用方提供
+ * 旧的单例封装。
  */
 
 #include "iolinki/config.h"
@@ -30,7 +30,7 @@ static iolink_params_ctx_t g_legacy_params_ctx;
 static bool g_legacy_params_ctx_initialized = false;
 #endif
 
-/** @brief Copy up to 32 bytes into a NUL-terminated tag buffer and mark it valid. */
+/** @brief 将最多 32 字节复制到以 NUL 结尾的标签缓冲区并标记为有效。 */
 static void copy_tag(char* dst, bool* valid, const uint8_t* data, size_t len)
 {
     size_t copy_len = (len > 32U) ? 32U : len;
@@ -42,7 +42,7 @@ static void copy_tag(char* dst, bool* valid, const uint8_t* data, size_t len)
     *valid = true;
 }
 
-/** @brief Return the tag string length, clamped to the 32-byte maximum. */
+/** @brief 返回标签字符串长度，并限制在 32 字节上限内。 */
 static size_t bounded_tag_len(const char* tag)
 {
     size_t len = strlen(tag);
@@ -52,7 +52,7 @@ static size_t bounded_tag_len(const char* tag)
     return len;
 }
 
-/** @brief Copy a bounded tag string into an output buffer; returns bytes written. */
+/** @brief 将有界标签字符串复制到输出缓冲区；返回写入的字节数。 */
 static int read_tag(const char* tag, uint8_t* buffer, size_t max_len)
 {
     size_t len = bounded_tag_len(tag);
@@ -65,13 +65,13 @@ static int read_tag(const char* tag, uint8_t* buffer, size_t max_len)
     return (int) len;
 }
 
-/** @brief Serialize the valid tags into the NVM record and write it to storage. */
+/** @brief 将有效标签序列化到 NVM 记录并写入存储。 */
 static int params_ctx_write_nvm(const iolink_params_ctx_t* ctx)
 {
     iolink_params_nvm_t nvm;
 
     if ((ctx == NULL) || (ctx->storage == NULL) || (ctx->storage->write == NULL)) {
-        return 0; /* No backend: RAM-only device, the write is accepted. */
+        return 0; /* 无后端：纯 RAM 设备，接受该写入。 */
     }
     (void) memset(&nvm, 0, sizeof(nvm));
     nvm.magic = IOLINK_STORAGE_MAGIC;
@@ -115,7 +115,7 @@ static void params_ctx_load(iolink_params_ctx_t* ctx)
         (nvm.magic != IOLINK_STORAGE_MAGIC) || (nvm.version != IOLINK_STORAGE_VERSION) ||
         (nvm.checksum !=
          iolink_storage_checksum((const uint8_t*) &nvm, offsetof(iolink_params_nvm_t, checksum)))) {
-        return; /* Uninitialised, different layout or corrupt. */
+        return; /* 未初始化、布局不同或已损坏。 */
     }
     copy_tag(ctx->application_tag, &ctx->application_tag_valid,
              (const uint8_t*) nvm.application_tag, bounded_tag_len(nvm.application_tag));
@@ -198,7 +198,7 @@ int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index, uint8_t subi
     else {
         return -1;
     }
-    /* A rejected persistent write must not appear accepted in RAM/readback. */
+    /* 被拒绝的持久化写入不得在 RAM/回读中表现为已接受。 */
     if ((persist != IOLINK_PERSIST_NONE) && (params_ctx_write_nvm(&candidate) != 0)) {
         return -1;
     }
@@ -229,14 +229,14 @@ void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx)
     if (ctx->device_info != NULL) {
         (void) iolink_device_info_ctx_set_application_tag(ctx->device_info, "", 0U);
     }
-    /* Legacy void API: reset RAM even if unsupported/failed storage cannot
-     * retain the reset. Integrators cannot infer persistence from this call. */
+    /* 旧的 void API：即使存储不支持或失败而无法
+     * 保留复位结果，也要复位 RAM。集成方不能从该调用推断持久化。 */
     (void) params_ctx_write_nvm(ctx);
 }
 
 #if IOLINK_FEATURE_LEGACY_PARAMS
 
-/** @brief Lazily initialize and return the process-wide legacy parameter context. */
+/** @brief 延迟初始化并返回进程级的旧参数上下文。 */
 static iolink_params_ctx_t* legacy_params_ctx(void)
 {
     if (!g_legacy_params_ctx_initialized) {

@@ -8,7 +8,7 @@
 
 /**
  * @file test_ds.c
- * @brief Unit tests for Data Storage (DS)
+ * @brief 数据存储（DS）的单元测试
  */
 
 #include <stdarg.h>
@@ -63,27 +63,27 @@ static void test_ds_state_transitions(void** state)
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds, NULL);
 
-    /* 1. Trigger Download (Master has newer data) */
+    /* 1. 触发 Download（主站数据更新） */
     iolink_ds_check(&ds, 0xABCD);
     iolink_ds_process(&ds); /* Req -> Downloading */
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOADING);
-    iolink_ds_process(&ds); /* remains Downloading until DownloadEnd */
+    iolink_ds_process(&ds); /* 保持 Downloading 直到 DownloadEnd */
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOADING);
     assert_int_equal(iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0), 0);
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
 
-    /* 2. Trigger Upload (Master has 0x0000 - empty) */
+    /* 2. 触发 Upload（主站为 0x0000——空） */
     iolink_ds_check(&ds, 0x0000);
     iolink_ds_process(&ds); /* Req -> Uploading */
     assert_int_equal(ds.state, IOLINK_DS_STATE_UPLOADING);
-    iolink_ds_process(&ds); /* remains Uploading until UploadEnd */
+    iolink_ds_process(&ds); /* 保持 Uploading 直到 UploadEnd */
     assert_int_equal(ds.state, IOLINK_DS_STATE_UPLOADING);
     assert_int_equal(iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_UPLOAD_END, 0), 0);
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
 }
 
-/* The device pump services the DS state machine while the ISDU transport is
- * idle: no manual iolink_ds_process() call is needed. */
+/* 当 ISDU 传输空闲时，设备泵会服务 DS 状态机：
+ * 无需手动调用 iolink_ds_process()。 */
 static void test_ds_auto_processed_by_device_pump(void** state)
 {
     (void) state;
@@ -94,15 +94,15 @@ static void test_ds_auto_processed_by_device_pump(void** state)
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, NULL, NULL), 0);
 
-    /* A busy ISDU transport gates the DS service. HEADER_INITIAL is a state
-     * iolink_isdu_process() leaves untouched, so it stays busy across the
-     * pump call. */
+    /* 繁忙的 ISDU 传输会阻塞 DS 服务。HEADER_INITIAL 是
+     * iolink_isdu_process() 不会改变的状态，因此它在
+     * 泵调用期间保持繁忙。 */
     assert_int_equal(iolink_ds_start_upload(&dev.ctx.dll.ds), 0);
     dev.ctx.dll.isdu.state = ISDU_STATE_HEADER_INITIAL;
     iolink_device_process(&dev.ctx);
     assert_int_equal(dev.ctx.dll.ds.state, IOLINK_DS_STATE_UPLOAD_REQ);
 
-    /* Once ISDU is idle the pump advances the DS state machine. */
+    /* ISDU 空闲后，泵会推进 DS 状态机。 */
     dev.ctx.dll.isdu.state = ISDU_STATE_IDLE;
     iolink_device_process(&dev.ctx);
     assert_int_equal(dev.ctx.dll.ds.state, IOLINK_DS_STATE_UPLOADING);
@@ -115,18 +115,18 @@ static void test_ds_commands_locked(void** state)
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds, NULL);
 
-    /* 1. Try Download Start (Write) while locked */
+    /* 1. 在锁定状态下尝试 Download Start（写） */
     int ret = iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, IOLINK_LOCK_DS);
-    assert_int_equal(ret, -2); /* Access Denied */
+    assert_int_equal(ret, -2); /* 访问被拒绝 */
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
 
-    /* 2. Try Upload Start (Read) while locked - Should usually pass?
-       Spec: Access Locks usually apply to Parameter Write (Index 2).
-       Data Storage Upload is reading from device, so maybe allowed?
-       The code we implemented only checks lock for Download (Write).
+    /* 2. 在锁定状态下尝试 Upload Start（读）——通常应通过？
+       规范：访问锁通常适用于参数写入（Index 2）。
+       Data Storage 上传是从设备读取，因此或许允许？
+       我们实现的代码只对 Download（写）检查锁定。
     */
     ret = iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_UPLOAD_START, IOLINK_LOCK_DS);
-    assert_int_equal(ret, 0); /* Success */
+    assert_int_equal(ret, 0); /* 成功 */
     assert_int_equal(ds.state, IOLINK_DS_STATE_UPLOAD_REQ);
 }
 
@@ -136,12 +136,12 @@ static void test_ds_commands_unlocked(void** state)
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds, NULL);
 
-    /* 1. Download Start (Write) unlocked */
+    /* 1. Download Start（写）未锁定 */
     int ret = iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0);
     assert_int_equal(ret, 0);
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOADING);
 
-    /* 2. End Download */
+    /* 2. 结束 Download */
     ret = iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0);
     assert_int_equal(ret, 0);
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
@@ -155,7 +155,7 @@ static void test_ds_param_round_trip(void** state)
     iolink_params_init();
     iolink_ds_init(&ds, NULL);
 
-    /* Configure known parameter values. */
+    /* 配置已知的参数值。 */
     const char* app = "APP-TAG-1";
     const char* fun = "FLOW";
     const char* loc = "TANK-7";
@@ -167,7 +167,7 @@ static void test_ds_param_round_trip(void** state)
     assert_int_equal(
         iolink_params_set(IOLINK_IDX_LOCATION_TAG, 0U, (const uint8_t*) loc, strlen(loc), true), 0);
 
-    /* Upload: serialize current parameters into the DS image (backup). */
+    /* 上传：将当前参数序列化到 DS 镜像中（备份）。 */
     int n = iolink_ds_build_image(&ds);
     assert_true(n > 0);
     size_t backup_len = 0U;
@@ -179,17 +179,17 @@ static void test_ds_param_round_trip(void** state)
     uint32_t backup_cs = ds.current_checksum;
     assert_int_not_equal(backup_cs, 0);
 
-    /* Wipe the device parameters. */
+    /* 清除设备参数。 */
     iolink_params_factory_reset();
     uint8_t buf[40];
     assert_int_equal(iolink_params_get(IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf)), 0);
     assert_int_equal(iolink_params_get(IOLINK_IDX_FUNCTION_TAG, 0U, buf, sizeof(buf)), 0);
 
-    /* Download: apply the backup image (restore). */
+    /* 下载：应用备份镜像（恢复）。 */
     assert_int_equal(iolink_ds_apply_image(&ds, backup, backup_len), 0);
     assert_int_equal(ds.current_checksum, backup_cs);
 
-    /* Parameters are restored byte-for-byte. */
+    /* 参数被逐字节恢复。 */
     int len = iolink_params_get(IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf));
     assert_int_equal(len, (int) strlen(app));
     assert_memory_equal(buf, app, strlen(app));
@@ -255,13 +255,13 @@ static void test_ds_apply_rejects_truncated(void** state)
     (void) state;
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds, NULL);
-    /* Header claims a 5-byte value but only 2 data bytes follow -> rejected. */
+    /* 头部声称有 5 字节值，但后面只有 2 个数据字节 -> 被拒绝。 */
     uint8_t bad[] = {0x00, 0x18, 0x00, 0x05, 0xAA, 0xBB};
     assert_int_equal(iolink_ds_apply_image(&ds, bad, sizeof(bad)), -1);
 }
 
-/* A vendor parameter (0x0050) backed by a static buffer, exercised through a
- * bound accessor to prove vendor parameters can join the DS set. */
+/* 由静态缓冲区支撑的厂商参数（0x0050），通过绑定的
+ * 访问器进行验证，以证明厂商参数可以加入 DS 集合。 */
 #define VENDOR_PARAM_IDX 0x0050U
 static uint8_t g_vendor_param[8];
 static size_t g_vendor_param_len;
@@ -322,7 +322,7 @@ static void test_ds_vendor_param_set_round_trip(void** state)
     g_vendor_param_len = sizeof(vend);
     (void) memcpy(g_vendor_param, vend, sizeof(vend));
 
-    /* Upload: the image must now contain the standard tag AND the vendor record. */
+    /* 上传：镜像现在必须同时包含标准标签与厂商记录。 */
     assert_true(iolink_ds_build_image(&ds) > 0);
     size_t len = 0U;
     const uint8_t* img = iolink_ds_get_image(&ds, &len);
@@ -331,7 +331,7 @@ static void test_ds_vendor_param_set_round_trip(void** state)
     assert_true(len <= sizeof(backup));
     (void) memcpy(backup, img, len);
 
-    /* Wipe both sources and restore from the image. */
+    /* 清除两个来源并从镜像恢复。 */
     g_vendor_param_len = 0U;
     (void) memset(g_vendor_param, 0, sizeof(g_vendor_param));
     iolink_params_factory_reset();
@@ -352,8 +352,8 @@ static void test_ds_download_recovery(void** state)
     iolink_params_init();
     iolink_ds_init(&ds, NULL);
 
-    /* Craft an image with a known parameter (ApplicationTag 0x18 = "X") plus an
-       UNKNOWN index (0x9999) the device cannot store. */
+    /* 构造一个镜像，包含已知参数（ApplicationTag 0x18 = "X"）以及
+       设备无法存储的未知索引（0x9999）。 */
     uint8_t img[16];
     size_t p = 0U;
     img[p++] = 0x00;
@@ -370,18 +370,18 @@ static void test_ds_download_recovery(void** state)
 
     assert_int_equal(iolink_ds_apply_image(&ds, img, p), 0);
 
-    /* Known parameter was applied. */
+    /* 已知参数已被应用。 */
     uint8_t buf[8];
     assert_int_equal(iolink_params_get(IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf)), 1);
     assert_int_equal(buf[0], 'X');
 
-    /* Device checksum reflects ACTUAL state (unknown index dropped), so it
-       differs from the Master's downloaded image checksum, and the stored image
-       is internally consistent. */
+    /* 设备校验和反映实际状态（未知索引被丢弃），因此
+       它与主站下载镜像的校验和不同，且存储的镜像
+       内部一致。 */
     assert_true(iolink_ds_verify(&ds));
     assert_int_not_equal(ds.current_checksum, downloaded_cs);
 
-    /* A consistency check against the stale Master checksum re-requests download. */
+    /* 针对过时主站校验和的一致性检查会重新请求下载。 */
     iolink_ds_check(&ds, downloaded_cs);
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOAD_REQ);
 }
@@ -408,22 +408,22 @@ static int ds_zero_read(void* user, uint16_t index, uint8_t subindex, uint8_t* o
     return 0;
 }
 
-/* ParamDownloadEnd distinguishes a malformed image (PAR_SETINVALID 0x8040) from
- * a known parameter the device rejected (PAR_SETINCONSIST 0x8041). */
+/* ParamDownloadEnd 将格式错误的镜像（PAR_SETINVALID 0x8040）与
+ * 设备拒绝的已知参数（PAR_SETINCONSIST 0x8041）区分开。 */
 static void test_ds_download_end_error_classification(void** state)
 {
     (void) state;
     iolink_ds_ctx_t ds;
 
-    /* Malformed staged image -> -1 -> PAR_SETINVALID. */
+    /* 格式错误的暂存镜像 -> -1 -> PAR_SETINVALID。 */
     iolink_ds_init(&ds, NULL);
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
-    uint8_t bad[] = {0x00U, 0x18U, 0x00U, 0x05U, 0xAAU}; /* claims 5 bytes, has 1 */
+    uint8_t bad[] = {0x00U, 0x18U, 0x00U, 0x05U, 0xAAU}; /* 声称 5 字节，实际为 1 */
     (void) memcpy(ds.image, bad, sizeof(bad));
     ds.image_len = sizeof(bad);
     assert_int_equal(iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -5);
 
-    /* Known parameter rejected -> -2 -> PAR_SETINCONSIST. */
+    /* 已知参数被拒绝 -> -2 -> PAR_SETINCONSIST。 */
     iolink_ds_init(&ds, NULL);
     static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U, 0U}};
     iolink_ds_bind_param_access(&ds, ds_zero_read, ds_rejecting_write, NULL, set, 1U);
@@ -434,7 +434,7 @@ static void test_ds_download_end_error_classification(void** state)
     assert_int_equal(iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -4);
 }
 
-/* A corrupt DS image (bit flip / torn write) must be discarded on load. */
+/* 损坏的 DS 镜像（位翻转/写撕裂）必须在加载时被丢弃。 */
 static void test_ds_image_checksum_rejects_corruption(void** state)
 {
     (void) state;
@@ -445,15 +445,15 @@ static void test_ds_image_checksum_rejects_corruption(void** state)
     iolink_ds_mock_reset();
     iolink_ds_init(&ds, &g_ds_storage_mock);
 
-    /* Persist a valid image via a parameter change request. */
+    /* 通过参数变更请求持久化一个有效镜像。 */
     iolink_ds_request_upload(&ds);
     assert_true(ds.image_len > 0U);
 
-    /* Flip one byte of the stored image. */
+    /* 翻转存储镜像中的一个字节。 */
     uint8_t* buf = iolink_ds_mock_get_buf();
     buf[IOLINK_STORAGE_DS_BASE + IOLINK_STORAGE_DS_HDR_SIZE] ^= 0xFFU;
 
-    /* Reload: the checksum mismatch must discard the image. */
+    /* 重新加载：校验和不匹配时必须丢弃该镜像。 */
     iolink_ds_init(&ds, &g_ds_storage_mock);
     assert_int_equal(ds.image_len, 0U);
 }
@@ -482,7 +482,7 @@ static int ds_param_write_mock(void* user, uint16_t index, uint8_t subindex, con
     return 0;
 }
 
-/* Passing NULL accessors must keep the device-bound accessors and user pointer. */
+/* 传入 NULL 访问器时必须保留设备绑定的访问器与用户指针。 */
 static void test_ds_bind_null_keeps_accessors(void** state)
 {
     (void) state;
@@ -500,7 +500,7 @@ static void test_ds_bind_null_keeps_accessors(void** state)
     assert_int_equal(ds.param_count, 1U);
 }
 
-/* set_param_desc only replaces the descriptor set. */
+/* set_param_desc 只替换描述符集合。 */
 static void test_ds_set_param_desc_keeps_accessors(void** state)
 {
     (void) state;
@@ -516,7 +516,7 @@ static void test_ds_set_param_desc_keeps_accessors(void** state)
     assert_int_equal(ds.param_count, 1U);
 }
 
-/* A descriptor max_len bounds the value stored in the image. */
+/* 描述符的 max_len 限制存入镜像的值。 */
 static void test_ds_desc_max_len_bounds_value(void** state)
 {
     (void) state;
@@ -529,12 +529,12 @@ static void test_ds_desc_max_len_bounds_value(void** state)
     size_t len = 0U;
     const uint8_t* img = iolink_ds_get_image(&ds, &len);
     assert_non_null(img);
-    assert_int_equal(img[3], 4U); /* length byte capped to max_len */
+    assert_int_equal(img[3], 4U); /* 长度字节被限制为 max_len */
     assert_memory_equal(&img[4], "ABCD", 4U);
 }
 
 /* ------------------------------------------------------------------------- */
-/* Shared fixture for the Data Storage conformance cases 0077-0081, 0374.    */
+/* 数据存储一致性用例 0077-0081、0374 的共享 fixture。                       */
 /* ------------------------------------------------------------------------- */
 
 typedef struct
@@ -654,8 +654,8 @@ static void ds_assert_image_record(const uint8_t* img, size_t len, uint16_t inde
     assert_memory_equal(value, expected, strlen(expected));
 }
 
-/* 0077: complete upload through the Data Storage Index (Index_List), checking
- * size, checksum and the serialized records. */
+/* 0077：通过 Data Storage Index（Index_List）完成完整上传，校验
+ * 大小、校验和与序列化记录。 */
 static void test_ds_0077_full_upload_via_index_list(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0077");
@@ -672,7 +672,7 @@ static void test_ds_0077_full_upload_via_index_list(void** state)
     iolink_ds_process(&f.ds);
     assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOADING);
 
-    /* Index_List enumerates the complete DS set and the 0x0000 terminator. */
+    /* Index_List 枚举完整的 DS 集合以及 0x0000 终止符。 */
     uint8_t list[32] = {0U};
     const int list_len = ds_fixture_isdu_read(&f, IOLINK_IDX_DATA_STORAGE, 5U, list, sizeof(list));
     assert_int_equal(list_len, 11);
@@ -680,14 +680,14 @@ static void test_ds_0077_full_upload_via_index_list(void** state)
                                             0x00U, 0x1AU, 0x00U, 0x00U, 0x00U};
     assert_memory_equal(list, expected_list, sizeof(expected_list));
 
-    /* Sub 0 is the concatenated DataStorageIndex record:
-       DS_Command(1) + State_Property(1) + Size(4) + Checksum(4) + Index_List. */
+    /* 子索引 0 是拼接的 DataStorageIndex 记录：
+       DS_Command(1) + State_Property(1) + Size(4) + Checksum(4) + Index_List。 */
     uint8_t record[64] = {0U};
     const int record_len =
         ds_fixture_isdu_read(&f, IOLINK_IDX_DATA_STORAGE, 0U, record, sizeof(record));
     assert_int_equal(record_len, 10 + list_len);
-    assert_int_equal(record[0], 0x00U); /* DS_Command read: unspecified */
-    assert_int_equal(record[1], 0x02U); /* State_Property: upload */
+    assert_int_equal(record[0], 0x00U); /* DS_Command 读取：未指定 */
+    assert_int_equal(record[1], 0x02U); /* State_Property：上传 */
     const uint32_t size = ((uint32_t) record[2] << 24) | ((uint32_t) record[3] << 16) |
                           ((uint32_t) record[4] << 8) | (uint32_t) record[5];
     const uint32_t checksum = ((uint32_t) record[6] << 24) | ((uint32_t) record[7] << 16) |
@@ -698,7 +698,7 @@ static void test_ds_0077_full_upload_via_index_list(void** state)
     assert_int_equal(ds_fixture_read_u32(&f, 3U), size);
     assert_int_equal(ds_fixture_read_u32(&f, 4U), checksum);
 
-    /* Follow every Index_List entry and compare the live value with its record. */
+    /* 遍历每个 Index_List 条目，将实时值与其记录比较。 */
     for (int i = 0; i < (list_len - 2); i += 3) {
         const uint16_t index = (uint16_t) (((uint16_t) list[i] << 8) | (uint16_t) list[i + 1]);
         const uint8_t sub = list[i + 2];
@@ -720,8 +720,8 @@ static void test_ds_0077_full_upload_via_index_list(void** state)
     assert_int_equal(ds_fixture_read_u32(&f, 4U), checksum_before_end);
 }
 
-/* 0078: set 1 -> set 2 via ParamDownloadStore, then upload set 2 and verify the
- * Parameter_Checksum changed with it. */
+/* 0078：通过 ParamDownloadStore 从集合 1 切换到集合 2，然后上传集合 2 并验证
+ * Parameter_Checksum 随之改变。 */
 static void test_ds_0078_upload_set2_after_store(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0078");
@@ -746,7 +746,7 @@ static void test_ds_0078_upload_set2_after_store(void** state)
     assert_int_equal(ds_fixture_isdu_write(&f, IOLINK_IDX_LOCATION_TAG, 0U, (const uint8_t*) "S2C",
                                            3U, resp, sizeof(resp)),
                      0);
-    /* Block writes are staged; set 1 stays active until the store. */
+    /* 块写入被暂存；在存储之前集合 1 保持生效。 */
     ds_fixture_assert_tag(&f, IOLINK_IDX_APPLICATION_TAG, "S1A");
     assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_STORE, resp, sizeof(resp)),
                      0);
@@ -757,7 +757,7 @@ static void test_ds_0078_upload_set2_after_store(void** state)
     const uint32_t checksum_set2 = ds_fixture_read_u32(&f, 4U);
     assert_int_not_equal(checksum_set2, checksum_set1);
 
-    /* Upload set 2 and verify the image now carries it. */
+    /* 上传集合 2 并验证镜像现在携带它。 */
     assert_int_equal(ds_fixture_ds_command(&f, 0x01U, resp, sizeof(resp)), 0);
     iolink_ds_process(&f.ds);
     assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOADING);
@@ -772,8 +772,8 @@ static void test_ds_0078_upload_set2_after_store(void** state)
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
 }
 
-/* 0079: a plain parameter change must not raise DS_UPLOAD_REQ (no-write /
- * timeout path), while ParamDownloadStore without parameter writes still does. */
+/* 0079：普通参数变更不得置起 DS_UPLOAD_REQ（无写入/
+ * 超时路径），而未写入任何参数的 ParamDownloadStore 仍会置起。 */
 static void test_ds_0079_no_write_store_timeout(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0079");
@@ -784,15 +784,15 @@ static void test_ds_0079_no_write_store_timeout(void** state)
     iolink_ds_clear_upload(&f.ds);
     f.ds.upload_event_pending = false;
 
-    /* Set 2 written outside a block download. The DS state must stay idle and
-       no upload notification may be pending (the 1 s timeout elapses). */
+    /* 在块下载之外写入集合 2。DS 状态必须保持空闲，且
+       不得有上传通知挂起（1 s 超时已到）。 */
     ds_fixture_set_tags(&f, "NEW", "NEW", "NEW");
     iolink_ds_process(&f.ds);
     assert_false(f.ds.upload_event_pending);
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
     assert_int_equal(f.ds.state, IOLINK_DS_STATE_IDLE);
 
-    /* ParamDownloadStart + ParamDownloadStore without writing any parameter. */
+    /* 不写入任何参数的 ParamDownloadStart + ParamDownloadStore。 */
     uint8_t resp[2] = {0U};
     assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_START, resp, sizeof(resp)),
                      0);
@@ -803,8 +803,8 @@ static void test_ds_0079_no_write_store_timeout(void** state)
     ds_fixture_assert_tag(&f, IOLINK_IDX_APPLICATION_TAG, "NEW");
 }
 
-/* 0080: a local parameter change (teach-in/menu equivalent) plus the library
- * hook must request and complete a DS upload of the new set. */
+/* 0080：本地参数变更（等价于示教/菜单操作）加上库的
+ * 钩子必须请求并完成新集合的 DS 上传。 */
 static void test_ds_0080_local_change_upload(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0080");
@@ -834,8 +834,8 @@ static void test_ds_0080_local_change_upload(void** state)
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
 }
 
-/* 0081: ParamBreak aborts an upload at three distinct points without applying
- * data or changing the parameter checksum. */
+/* 0081：ParamBreak 在三个不同时间点中止上传，且不应用
+ * 数据、不改变参数校验和。 */
 static void test_ds_0081_upload_abort_points(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0081");
@@ -859,7 +859,7 @@ static void test_ds_0081_upload_abort_points(void** state)
             assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOAD_REQ);
         }
         if (point == 2) {
-            /* Abort after the upload data has been read once. */
+            /* 在上传数据被读取一次之后中止。 */
             assert_true(ds_fixture_isdu_read(&f, IOLINK_IDX_DATA_STORAGE, 0U, img, sizeof(img)) >
                         0);
         }
@@ -871,8 +871,8 @@ static void test_ds_0081_upload_abort_points(void** state)
     }
 }
 
-/* 0374: DS_UPLOAD_FLAG is non-volatile; DS_UploadEnd clears and persists it.
- * A storage-backed re-init models a library-level power cycle. */
+/* 0374：DS_UPLOAD_FLAG 是非易失的；DS_UploadEnd 会清除并持久化它。
+ * 带存储的重新初始化用于模拟库级别的断电重启。 */
 static void test_ds_0374_upload_flag_power_cycle(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0374");
@@ -885,7 +885,7 @@ static void test_ds_0374_upload_flag_power_cycle(void** state)
     iolink_ds_clear_upload(&f.ds);
     f.ds.upload_event_pending = false;
 
-    /* ParamDownloadStore after a block download raises and persists the flag. */
+    /* 块下载之后的 ParamDownloadStore 会置起并持久化该标志。 */
     uint8_t resp[2] = {0U};
     assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_START, resp, sizeof(resp)),
                      0);
@@ -897,12 +897,12 @@ static void test_ds_0374_upload_flag_power_cycle(void** state)
     assert_true(f.ds.upload_event_pending);
     assert_true(f.ds.ds_upload_flag);
 
-    /* Power cycle: a fresh context reads the flag back from storage. */
+    /* 断电重启：新上下文从存储中读回该标志。 */
     ds_fixture_init(&f, &g_ds_storage_mock);
     assert_true(f.ds.ds_upload_flag);
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0x80U);
 
-    /* DS_UploadStart/UploadEnd clears and persists the flag. */
+    /* DS_UploadStart/UploadEnd 清除并持久化该标志。 */
     assert_int_equal(ds_fixture_ds_command(&f, 0x01U, resp, sizeof(resp)), 0);
     iolink_ds_process(&f.ds);
     assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOADING);
@@ -910,7 +910,7 @@ static void test_ds_0374_upload_flag_power_cycle(void** state)
     assert_false(f.ds.ds_upload_flag);
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
 
-    /* Another power cycle still sees the cleared flag. */
+    /* 再次断电重启仍能看到已清除的标志。 */
     ds_fixture_init(&f, &g_ds_storage_mock);
     assert_false(f.ds.ds_upload_flag);
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);

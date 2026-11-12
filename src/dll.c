@@ -19,125 +19,125 @@
 
 /**
  * @file dll.c
- * @brief Data Link Layer (DLL): M-sequence state machine and framing.
+ * @brief 数据链路层（DLL）：M-sequence 状态机与成帧。
  * @ingroup iolinki_dll
  *
- * Drives the IO-Link device DLL: wake-up detection, mode/baudrate management,
- * per-frame reception and CRC validation, the STARTUP -> PREOPERATE ->
- * OPERATE state machine, timing enforcement, fallback handling, and dispatch
- * of Type-0/Type-1/Type-2 M-sequences into the ISDU engine.
+ * 驱动 IO-Link 设备 DLL：唤醒检测、模式与波特率管理、
+ * 逐帧接收与 CRC 校验、STARTUP -> PREOPERATE ->
+ * OPERATE 状态机、时序强制、回退处理，以及把
+ * Type-0/Type-1/Type-2 M-sequence 分发到 ISDU 引擎。
  */
 
 /* -------------------------------------------------------------------------
- * File map and main-pump call tree
+ * 文件结构与主泵调用树
  *
- *  - State transitions and callbacks: dll_queue_state ... dll_set_state
- *  - M-sequence typing and transmission: dll_mseq_type_bits ... dll_send
- *  - Timing, master commands and operate handlers: dll_get_t_ren_limit_us ...
+ *  - 状态转换与回调：dll_queue_state ... dll_set_state
+ *  - M-sequence 类型判定与发送：dll_mseq_type_bits ... dll_send
+ *  - 时序、主站命令与 OPERATE 处理：dll_get_t_ren_limit_us ...
  *    dll_handle_operate_type1_2
- *  - Diagnostics polling: dll_poll_diagnostics
- *  - Lifecycle and ISDU snapshot: iolink_dll_init ...
- *  - Main pump: dll_frame_drop_if_stopped ... iolink_dll_process
- *  - Public configuration and query API: iolink_dll_get_state ...
+ *  - 诊断轮询：dll_poll_diagnostics
+ *  - 生命周期与 ISDU 快照：iolink_dll_init ...
+ *  - 主泵：dll_frame_drop_if_stopped ... iolink_dll_process
+ *  - 公共配置与查询 API：iolink_dll_get_state ...
  *
- * Main pump (main context; entry iolink_dll_process):
+ * 主泵（主上下文；入口 iolink_dll_process）：
  *
  *   iolink_dll_process
  *   `- dll_process_body
- *      |- dll_take_isr_master_activity       consume the ISR frame-end stamp
- *      |- dll_apply_isr_deadline_requests    arm/clear T_FBD and T_DSIO
- *      |                                     (64-bit deadlines stay main-owned)
- *      |- [TX FRAME] pd_in lease release     poll tx_busy in the critical section
- *      |- dll_restore_operating_baudrate     undo a recovery drop to COM1
- *      |- dll_drain_staged_isdu_write        drain isr_od_ring -> ISDU transport
- *      |- iolink_isdu_process                execute a queued ISDU service
- *      |- dll_isdu_sync_snapshot             publish the ISR read view
+ *      |- dll_take_isr_master_activity       消费 ISR 帧结束时间戳
+ *      |- dll_apply_isr_deadline_requests    设置/清除 T_FBD 与 T_DSIO
+ *      |                                     （64 位截止时间由主上下文持有）
+ *      |- [TX FRAME] pd_in 租约释放          在临界区中轮询 tx_busy
+ *      |- dll_restore_operating_baudrate     撤销恢复到 COM1 的降级
+ *      |- dll_drain_staged_isdu_write        排空 isr_od_ring -> ISDU 传送层
+ *      |- iolink_isdu_process                执行排队的 ISDU 服务
+ *      |- dll_isdu_sync_snapshot             发布 ISR 读取视图
  *      |- dll_poll_diagnostics
- *      |- dll_take_isr_master_activity       second sample: a frame may have
- *      |                                     completed during the steps above
+ *      |- dll_take_isr_master_activity       第二次采样：一帧可能已在上述步骤中
+ *      |                                     完成
  *      |- dll_update_master_lost / dll_check_idle_timeout /
  *      |  dll_check_dsio_deadline / dll_check_fallback_deadline
- *      |- dll_check_t_pd            -- early return
- *      |- dll_handle_sio_wakeup     -- early return
+ *      |- dll_check_t_pd            -- 提前返回
+ *      |- dll_handle_sio_wakeup     -- 提前返回
  *      |- dll_check_t_byte
- *      |- dll_wakeup_window_active  -- early return
+ *      |- dll_wakeup_window_active  -- 提前返回
  *      |- dll_consume_isr_mailbox
  *      |  `- dll_process_complete_frame
  *      |     |- dll_frame_drop_if_stopped / dll_check_cycle_time /
  *      |     |  dll_mark_master_activity
  *      |     |- dll_frame_validate -> dll_handle_valid_frame
- *      |     |  `- state dispatch: dll_dispatch_preoperate /
+ *      |     |  `- 状态分发：dll_dispatch_preoperate /
  *      |     |     dll_dispatch_estab_com / dll_dispatch_operate
  *      |     |     `- dll_handle_operate_type0 / dll_handle_type0_od_write /
  *      |     |        dll_handle_operate_type1_2 -> dll_dispatch_od
- *      |     |        (Page/Diagnosis/ISDU channel) -> dll_send
+ *      |     |        （页面/诊断/ISDU 通道） -> dll_send
  *      |     |- dll_handle_frame_error
- *      |     `- dll_finish_frame (refresh the ISDU snapshot)
- *      `- dll_restore_operating_baudrate      undo a same-pass COM1 drop
+ *      |     `- dll_finish_frame （刷新 ISDU 快照）
+ *      `- dll_restore_operating_baudrate      撤销同一次调用中的 COM1 降级
  *
- * Implicit structure worth knowing before changing the pump:
- *  - dll_take_isr_master_activity() runs twice on purpose (before and after the
- *    ISDU service); dll_restore_operating_baudrate() likewise (before the early
- *    returns and after the mailbox drain).
- *  - The three early-return gates (t_pd, SIO wake-up, wake-up window) are the
- *    only paths that skip the mailbox; dll_check_t_byte() only measures and
- *    never returns early. Keep the gates ahead of the drain.
- *  - An eager frame is answered by the ISR *and* still processed here: the
- *    mailbox record carries eager=1 so dll_send() is suppressed, but the state
- *    machine, PD-out copy and counters must still run.
+ * 修改主泵前值得了解的隐式结构：
+ *  - dll_take_isr_master_activity() 故意运行两次（在 ISDU 服务之前和
+ *    之后）；dll_restore_operating_baudrate() 同样（在提前返回之前和
+ *    邮箱排空之后）。
+ *  - 三个提前返回门控（t_pd、SIO 唤醒、唤醒窗口）是
+ *    唯一跳过邮箱的路径；dll_check_t_byte() 只做测量，
+ *    从不提前返回。保持这些门控在排空之前。
+ *  - 一个 eager 帧由 ISR 应答，*同时* 仍在此处处理：
+ *    邮箱记录携带 eager=1，因此 dll_send() 被抑制，但状态
+ *    机、PD-out 拷贝和计数器仍必须运行。
  *
- * Handoff to/from the data ISR (dll_isr.c):
- *  - main -> ISR: isr_tx_payload[0..1] + isr_tx_pending (dll_send), the ISDU
- *    publish word isr_isdu_pub/resp_store (dll_isdu_sync_snapshot) and
- *    pd_in_active (PD-in publication).
- *  - ISR -> main: isr_frame_ring (dll_consume_isr_mailbox), isr_od_ring
- *    (dll_drain_staged_isdu_write), isr_master_activity and the deadline flags.
+ * 与数据 ISR 的交接（dll_isr.c）：
+ *  - 主上下文 -> ISR：isr_tx_payload[0..1] + isr_tx_pending（dll_send）、ISDU
+ *    发布字 isr_isdu_pub/resp_store（dll_isdu_sync_snapshot）以及
+ *    pd_in_active（PD-in 发布）。
+ *  - ISR -> 主上下文：isr_frame_ring（dll_consume_isr_mailbox）、isr_od_ring
+ *    （dll_drain_staged_isdu_write）、isr_master_activity 以及截止时间标志。
  *
- * The ISR two-pump transport lives in dll_isr.c; see docs/CODE_FLOW.md for the
- * full context contract and the buffer ownership table.
+ * ISR 双泵传送层位于 dll_isr.c；完整上下文契约与缓冲区归属表见
+ * docs/CODE_FLOW.md。
  * ------------------------------------------------------------------------- */
 
 #define DLL_LOG(...)
 
 /* -------------------------------------------------------------------------
- * State transitions and callbacks
+ * 状态转换与回调
  * ------------------------------------------------------------------------- */
 
 /**
- * @brief Centralised state transition.
+ * @brief 集中的状态转换。
  *
- * Updates the protocol state immediately. When the transition happens in main
- * context the application hook is notified right away (level check, no queue);
- * a transition taken in the data ISR only sets the state and is delivered by
- * the next main-context flush. An ISR transition into STARTUP is retained as
- * a notification so a rapid STARTUP -> PREOPERATE sequence cannot hide the
- * protocol reset from the application.
+ * 立即更新协议状态。当转换发生在主上下文时，
+ * 应用钩子会立刻收到通知（电平检查，无队列）；
+ * 在数据 ISR 中进行的转换只设置状态，并由
+ * 下一次主上下文 flush 投递。ISR 中进入 STARTUP 的转换会作为
+ * 通知保留，以免快速的 STARTUP -> PREOPERATE 序列对应用隐藏
+ * 协议复位。
  */
 void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
 {
     if (ctx->state == new_state) {
         return;
     }
-    /* Single aligned store: the data ISR may read the state at any time, and
-     * both contexts may transition it (the ISR fast path does so for t_A).
-     * The state-dependent bookkeeping below is main-owned/hint-only. */
+    /* 单次对齐存储：数据 ISR 可能随时读取该状态，且
+     * 两个上下文都可能转换它（ISR 快速路径为 t_A 这么做）。
+     * 下文依赖状态的簿记由主上下文持有，或仅为提示。 */
     ctx->state = new_state;
     if (new_state == IOLINK_DLL_STATE_OPERATE) {
-        /* Master-loss supervision is meaningful only inside OPERATE; the
-         * startup sequence may legitimately pause for several cycles. */
+        /* 主站丢失监控仅在 OPERATE 内有意义；
+         * 启动序列可能合法地暂停数个周期。 */
         ctx->master_last_activity_ms = dll_time_ms(ctx);
         ctx->master_lost_count = 0U;
         ctx->master_lost = false;
     }
     if (new_state == IOLINK_DLL_STATE_STARTUP) {
-        /* A.6.4: queued events are discarded when communication is
-           interrupted or cancelled. iolink_events_reset() takes its own short
-           critical section, so no outer one is needed. */
+        /* A.6.4：排队的事件在通信被中断时会被丢弃，
+           或被取消。iolink_events_reset() 自带一个短的
+           临界区，因此不需要外层的。 */
 #if IOLINK_FEATURE_EVENTS
         iolink_events_reset(&ctx->events);
-        /* The engine dropped every condition; a still-present physical fault
-         * must be reported again. The poll (main context) consumes this flag
-         * and re-arms the edge latch, so this byte write stays ISR-safe. */
+        /* 事件引擎丢弃了所有条件；仍然存在的物理故障
+         * 必须再次上报。轮询（主上下文）消费该标志
+         * 并重新武装边沿锁存，因此这个字节写入对 ISR 安全。 */
         ctx->phy_faults_rearm = 1U;
 #endif
         if (ctx->in_isr != 0U) {
@@ -145,8 +145,8 @@ void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
         }
     }
     if (ctx->in_isr == 0U) {
-        /* Main context: deliver now, so a transition sequence that happens
-         * inside one frame dispatch is still reported state by state. */
+        /* 主上下文：立即投递，因此发生在一次帧
+         * 分发内的转换序列仍会逐状态上报。 */
         iolink_dll_flush_state_callbacks(ctx);
     }
 }
@@ -156,9 +156,9 @@ void iolink_dll_flush_state_callbacks(iolink_dll_ctx_t* ctx)
     if ((ctx == NULL) || (ctx->state_cb == NULL)) {
         return;
     }
-    /* A STARTUP transition from the ISR is an edge that must not be lost when
-     * the main context observes a later PREOPERATE state. Never called from
-     * interrupt context, so the application hook stays out of the ISR. */
+    /* 来自 ISR 的 STARTUP 转换是一个边沿，不能在主上下文
+     * 观察到更晚的 PREOPERATE 状态时丢失。绝不在中断上下文中
+     * 调用，因此应用钩子不会进入 ISR。 */
     if (ctx->startup_notification_pending != 0U) {
         if (ctx->last_notified_state != IOLINK_DLL_STATE_STARTUP) {
             ctx->last_notified_state = IOLINK_DLL_STATE_STARTUP;
@@ -167,7 +167,7 @@ void iolink_dll_flush_state_callbacks(iolink_dll_ctx_t* ctx)
         ctx->startup_notification_pending = 0U;
     }
 
-    /* Level-based notification: deliver the current state once. */
+    /* 基于电平的通知：只投递当前状态一次。 */
     const iolink_dll_state_t state = ctx->state;
     if (state == ctx->last_notified_state) {
         return;
@@ -177,10 +177,10 @@ void iolink_dll_flush_state_callbacks(iolink_dll_ctx_t* ctx)
 }
 
 /* -------------------------------------------------------------------------
- * M-sequence typing and transmission
+ * M-sequence 类型判定与发送
  * ------------------------------------------------------------------------- */
 
-/** @brief Return the CKT M-sequence type bits (A.1.3, Table A.3) for a configured type. */
+/** @brief 返回配置类型对应的 CKT M-sequence 类型位（A.1.3，Table A.3）。 */
 static uint8_t dll_mseq_type_bits(uint8_t m_seq_type)
 {
     switch (m_seq_type) {
@@ -201,15 +201,15 @@ static uint8_t dll_mseq_type_bits(uint8_t m_seq_type)
 }
 
 /**
- * @brief Is this request's CKT type legal in the current DLL state?
+ * @brief 该请求的 CKT 类型在当前 DLL 状态下是否合法？
  *
- * STARTUP/PREOPERATE use Type-0. OPERATE/ESTAB_COM use the configured
- * M-sequence type, with one exception: ST/Table 47 allow a Type-0 Direct
- * Parameter page access (the startup probe, MasterCommand page writes such as
- * DevicePreoperate 0x9A/DeviceOperate 0x99/PDOperate 0x98, and DPP parameter
- * writes) while the link is already in OPERATE. The master uses those
- * periodically, so treating them as an illegal type would flap the link down
- * to STARTUP every time the master re-sends its page-write sequence.
+ * STARTUP/PREOPERATE 使用 Type-0。OPERATE/ESTAB_COM 使用配置的
+ * M-sequence 类型，但有一个例外：ST/Table 47 允许在链路已处于
+ * OPERATE 时进行 Type-0 Direct Parameter 页面访问（启动探测、MasterCommand
+ * 页面写入，如 DevicePreoperate 0x9A/DeviceOperate 0x99/PDOperate 0x98，
+ * 以及 DPP 参数写入）。主站会周期性使用这些操作，
+ * 因此把它们当作非法类型会导致主站每次重发页面写入序列时
+ * 链路都掉到 STARTUP。
  */
 bool dll_type_allowed(const iolink_dll_ctx_t* ctx, const uint8_t* frame)
 {
@@ -228,10 +228,10 @@ bool dll_type_allowed(const iolink_dll_ctx_t* ctx, const uint8_t* frame)
 }
 
 /**
- * @brief Return the CKT type bits the device expects for the current state.
+ * @brief 返回设备在当前状态下期望的 CKT 类型位。
  *
- * In STARTUP and PREOPERATE every message is Type 0 (Table A.3, CKT bits 00);
- * in OPERATE the configured M-sequence type is expected.
+ * 在 STARTUP 和 PREOPERATE 中每条报文都是 Type 0（Table A.3，CKT 位 00）；
+ * 在 OPERATE 中期望配置的 M-sequence 类型。
  */
 static uint8_t dll_expected_type_bits(const iolink_dll_ctx_t* ctx)
 {
@@ -242,28 +242,28 @@ static uint8_t dll_expected_type_bits(const iolink_dll_ctx_t* ctx)
 }
 
 /**
- * @brief Return the expected request length for the given M-sequence type bits.
+ * @brief 返回给定 M-sequence 类型位对应的期望请求长度。
  *
- * The request is MC + CKT + PD-out width + OD width; the checksum is carried in
- * the CKT octet (A.1.6), so there is no trailing checksum octet. A Type-0
- * message carries no PD and a single OD octet written only on a write access.
+ * 请求为 MC + CKT + PD-out 宽度 + OD 宽度；校验和承载在
+ * CKT 字节中（A.1.6），因此没有尾随的校验和字节。Type-0
+ * 报文不携带 PD，只有一个仅在写访问时写入的 OD 字节。
  */
 
 static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx);
 
 /**
- * @brief Emit a device reply through the ISR transport.
+ * @brief 通过 ISR 传送层发送设备应答。
  *
- * Hand the octets to the raw-octet/frame TX hooks; the ISR feeds them (TX BYTE)
- * or the PHY transmits the whole frame (TX FRAME). The reply octets (including
- * the CKS) are built by the shared handlers, so the frame layout is the same
- * either way.
+ * 将字节交给原始字节/帧 TX 钩子；ISR 逐个送入（TX BYTE）
+ * 或由 PHY 发送整帧（TX FRAME）。应答字节（包括
+ * CKS）由共享处理函数构建，因此两种方式的帧布局
+ * 相同。
  *
- * The stack has a single main-context caller, so staging needs no lock: the
- * main pump owns slots 0/1; the data ISR owns its own slot. The ISR reads the
- * staged reply only after isr_tx_pending is published (data-first ordering plus
- * a compiler barrier). Only the legacy direct-send fallback drives the PHY from
- * this context and therefore excludes the data interrupt.
+ * 协议栈只有单个主上下文调用者，因此暂存无需锁：
+ * 主泵拥有槽位 0/1；数据 ISR 拥有自己的槽位。ISR 只在
+ * isr_tx_pending 发布后读取暂存应答（数据先行顺序加
+ * 编译器屏障）。只有旧的直接发送回退路径会从此上下文
+ * 驱动 PHY，因此会排除数据中断。
  */
 static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
 {
@@ -273,47 +273,47 @@ static void dll_send(iolink_dll_ctx_t* ctx, const uint8_t* data, size_t len)
     if (len > sizeof(ctx->isr_tx_payload[0])) {
         return;
     }
-    /* Main-context slots only: the ISR has its own slot, so this counter has a
-     * single writer and needs no read-modify-write atomic. */
+    /* 仅主上下文槽位：ISR 有自己的槽位，因此该计数器只有
+     * 单个写者，无需读-改-写原子操作。 */
     const uint8_t slot = ctx->isr_tx_next;
     ctx->isr_tx_next = (uint8_t) (ctx->isr_tx_next ^ 1U);
     (void) memcpy(ctx->isr_tx_payload[slot], data, len);
     ctx->isr_tx_pending_slot = slot;
     ctx->isr_tx_len = (uint8_t) len;
     ctx->isr_tx_has_cks = 0U;
-    IOLINK_FENCE();           /* staged octets before the publish */
-    ctx->isr_tx_pending = 1U; /* publish last */
+    IOLINK_FENCE();           /* 暂存字节先于发布 */
+    ctx->isr_tx_pending = 1U; /* 最后发布 */
 
     if (ctx->phy->request_service != NULL) {
-        /* Poke the PHY after the publish and outside any interrupt-off window:
-         * the hook is port code (it may do an SPI access or take a lock). A
-         * natural data interrupt that runs in between simply drains the staged
-         * reply, and the extra service request then finds nothing. */
+        /* 在发布之后、且在任何关中断窗口之外通知 PHY：
+         * 该钩子属于端口代码（可能进行 SPI 访问或获取锁）。
+         * 其间自然产生的数据中断只会排空暂存
+         * 应答，随后额外的服务请求便无事可做。 */
         ctx->phy->request_service(ctx->phy->user);
         return;
     }
 
 #if !IOLINK_PHY_FEATURE_ISR_TX_ONLY
-    /* Legacy fallback for PHYs without a service hook (streaming/host tests).
-     * It drives the TX hooks from this context, so the data interrupt must not
-     * interleave with the transfer. */
+    /* 适用于无 service 钩子的 PHY 的旧回退路径（流式/主机测试）。
+     * 它从此上下文驱动 TX 钩子，因此数据中断不能与
+     * 传输交错。 */
     IOLINK_CRITICAL_ENTER();
     ctx->isr_tx_pending = 0U;
     dll_isr_start_staged_tx(ctx, slot, (uint8_t) len);
     IOLINK_CRITICAL_EXIT();
 #else
-    /* ISR-only PHY without request_service(): the reply cannot be transmitted.
-     * Count it so a misconfiguration is observable instead of silent. */
+    /* 仅有 ISR、且没有 request_service() 的 PHY：应答无法发送。
+     * 对其计数，使配置错误可被观测而非静默。 */
     ctx->isr_tx_pending = 0U;
     ctx->isr_tx_dropped++;
 #endif /* !IOLINK_PHY_FEATURE_ISR_TX_ONLY */
 }
 
 /* -------------------------------------------------------------------------
- * Timing, master commands and operate handlers
+ * 时序、主站命令与 OPERATE 处理
  * ------------------------------------------------------------------------- */
 
-/** @brief Return the response-time (t_REN) limit in us (C6/Table 10: 500 us). */
+/** @brief 返回响应时间（t_REN）上限，单位 us（C6/Table 10：500 us）。 */
 static uint32_t dll_get_t_ren_limit_us(const iolink_dll_ctx_t* ctx)
 {
     if (ctx == NULL) {
@@ -322,11 +322,11 @@ static uint32_t dll_get_t_ren_limit_us(const iolink_dll_ctx_t* ctx)
     if (ctx->t_ren_override) {
         return ctx->t_ren_limit_us;
     }
-    /* Table 10: a single T_REN value at most 500 us, independent of baudrate. */
+    /* Table 10：T_REN 只有一个值，最大 500 us，与波特率无关。 */
     return IOLINK_T_REN_US;
 }
 
-/** @brief Return the active baudrate in Hz. */
+/** @brief 返回当前生效的波特率，单位 Hz。 */
 static uint32_t dll_get_baud_hz(const iolink_dll_ctx_t* ctx)
 {
     if (ctx == NULL) {
@@ -344,7 +344,7 @@ static uint32_t dll_get_baud_hz(const iolink_dll_ctx_t* ctx)
     }
 }
 
-/** @brief Return the inter-byte timeout (16 bit-times) in us for the active baudrate. */
+/** @brief 返回当前波特率下的字节间超时（16 个位时间），单位 us。 */
 static uint32_t dll_get_t_byte_limit_us(const iolink_dll_ctx_t* ctx)
 {
     if (ctx == NULL) {
@@ -368,7 +368,7 @@ static uint32_t dll_get_t_byte_limit_us(const iolink_dll_ctx_t* ctx)
     return t_bit_us * 16U;
 }
 
-/** @brief Return true while the power-down/PD guard window (t_PD) is still active. */
+/** @brief 当掉电/PD 保护窗口（t_PD）仍有效时返回 true。 */
 static bool dll_t_pd_active(const iolink_dll_ctx_t* ctx)
 {
     if ((ctx == NULL) || (ctx->t_pd_deadline_us == 0U)) {
@@ -377,14 +377,14 @@ static bool dll_t_pd_active(const iolink_dll_ctx_t* ctx)
     return dll_time_us(ctx) < ctx->t_pd_deadline_us;
 }
 
-/** @brief Drain all pending RX bytes from the PHY; returns true if any were seen. */
+/** @brief 排空 PHY 中所有待处理的 RX 字节；若读到任何字节则返回 true。 */
 static bool dll_drain_rx(iolink_dll_ctx_t* ctx)
 {
     if ((ctx == NULL) || (ctx->phy == NULL)) {
         return false;
     }
-    /* The ISR pump fills the mailbox; draining it discards a frame that arrived
-     * while the t_pd guard window was active. */
+    /* ISR 泵填充邮箱；排空它会丢弃在 t_pd 保护窗口
+     * 有效期间到达的帧。 */
     if (!iolink_ring_is_empty(&ctx->isr_frame_ring)) {
         while (iolink_ring_peek(&ctx->isr_frame_ring) != NULL) {
             iolink_ring_release(&ctx->isr_frame_ring);
@@ -394,11 +394,11 @@ static bool dll_drain_rx(iolink_dll_ctx_t* ctx)
     return false;
 }
 
-/** @brief ST rc=3: a protocol error drops the frame and demotes to STARTUP.
+/** @brief ST rc=3：协议错误丢弃该帧并降级到 STARTUP。
  *
- * The ST 6362 library only returns to SIO for the Fallback MasterCommand
- * (T8/T9) or a T_DSIO wake-up timeout (T10). Framing/CRC errors never leave
- * the current mode on their own. */
+ * ST 6362 库只在 Fallback MasterCommand
+ * （T8/T9）或 T_DSIO 唤醒超时（T10）时返回 SIO。成帧/CRC 错误
+ * 本身从不会离开当前模式。 */
 static void dll_protocol_error_to_startup(iolink_dll_ctx_t* ctx)
 {
     if (ctx == NULL) {
@@ -413,7 +413,7 @@ static void dll_protocol_error_to_startup(iolink_dll_ctx_t* ctx)
     }
 }
 
-/** @brief True for a page-channel Type-0 WRITE of MasterCommand FALLBACK (Table B.2). */
+/** @brief 判断是否为页通道 Type-0 WRITE 的 MasterCommand FALLBACK（Table B.2）。 */
 static bool dll_is_fallback_command(const iolink_dll_ctx_t* ctx)
 {
     uint8_t mc = ctx->frame_buf[0];
@@ -423,16 +423,16 @@ static bool dll_is_fallback_command(const iolink_dll_ctx_t* ctx)
 }
 
 /**
- * @brief Handle a FALLBACK MasterCommand (0x5A, Table B.2) from the master.
+ * @brief 处理来自主站的 FALLBACK MasterCommand（0x5A，Table B.2）。
  *
- * The device shall switch to SIO after 3 MasterCycleTimes and within at most
- * 500 ms (T_FBD, Table 43). The deadline is armed here and enforced in
- * iolink_dll_process(); the reply is a Type-0 write CKS-only response. */
+ * 设备应在 3 个 MasterCycleTime 之后、且最多
+ * 500 ms 内（T_FBD，Table 43）切换到 SIO。截止时间在此设置，并在
+ * iolink_dll_process() 中强制执行；应答是仅含 CKS 的 Type-0 写响应。 */
 static void dll_handle_fallback_command(iolink_dll_ctx_t* ctx)
 {
-    /* Without a wake-up detector the PHY cannot leave SIO again, so the
-     * FALLBACK transition is not supported: ack the Type-0 write without
-     * changing the DL mode. */
+    /* 没有唤醒检测器时，PHY 无法再次离开 SIO，因此
+     * 不支持 FALLBACK 转换：应答该 Type-0 写而不改变
+     * DL 模式。 */
     if (dll_phy_has_wakeup(ctx)) {
         uint32_t t_fbd_ms = 500U;
         if (ctx->min_cycle_time_us > 0U) {
@@ -453,11 +453,11 @@ static void dll_handle_fallback_command(iolink_dll_ctx_t* ctx)
 }
 
 /**
- * @brief Apply a MasterCommand (Table B.2) to the DL state, ST-style.
+ * @brief 以 ST 风格将 MasterCommand（Table B.2）应用到 DL 状态。
  *
- * Returns false for FALLBACK (0x5A), which needs the T_FBD deadline and is
- * handled by dll_handle_fallback_command(). Every other command is acked with
- * a CKS-only reply by the caller.
+ * 对 FALLBACK（0x5A）返回 false，它需要 T_FBD 截止时间，并由
+ * dll_handle_fallback_command() 处理。其余命令由调用方
+ * 以仅含 CKS 的应答确认。
  */
 bool dll_apply_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
 {
@@ -479,9 +479,9 @@ bool dll_apply_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
         case IOLINK_CMD_DEVICE_OPERATE:
             ctx->fallback_clear_request = 1U;
             ctx->pd_valid = false;
-            /* DeviceOperate from PREOPERATE establishes communication
-               (ESTAB_COM); the following PDOperate 0x98 moves to OPERATE.
-               In OPERATE/ESTAB it is just an idempotent acknowledgement. */
+            /* 来自 PREOPERATE 的 DeviceOperate 会建立通信
+               （ESTAB_COM）；随后的 PDOperate 0x98 进入 OPERATE。
+               在 OPERATE/ESTAB 中它只是幂等的确认。 */
             if (ctx->state == IOLINK_DLL_STATE_PREOPERATE) {
                 dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
             }
@@ -496,10 +496,10 @@ bool dll_apply_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
     }
 }
 
-/** @brief Main-context MasterCommand page write: apply the state and send CKS. */
-/* CKS PD-status bit: bit 6 is 0 for "Process Data valid".
- * A Device with no input PD cannot have invalid input PD, so it always reports
- * valid; otherwise report the current pd_valid state. */
+/** @brief 主上下文中的 MasterCommand 页面写入：应用状态并发送 CKS。 */
+/* CKS PD 状态位：位 6 为 0 表示“Process Data valid”。
+ * 没有输入 PD 的设备不可能有无效输入 PD，因此始终上报
+ * 有效；否则上报当前 pd_valid 状态。 */
 uint8_t dll_pd_status_flags(const iolink_dll_ctx_t* ctx)
 {
     if ((ctx->pd_in_len_current == 0U) && (ctx->pd_out_len_current > 0U)) {
@@ -528,24 +528,24 @@ static void dll_handle_master_command(iolink_dll_ctx_t* ctx, uint8_t cmd)
     ctx->last_response_us = dll_time_us(ctx);
 }
 
-/** @brief Handle a PREOPERATE master command: advance to ESTAB_COM on the transition command. */
+/** @brief 处理 PREOPERATE 主站命令：在转换命令上推进到 ESTAB_COM。 */
 static void dll_handle_preoperate(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t ck)
 {
     (void) ck;
     if (mc == IOLINK_MC_TRANSITION_COMMAND) {
         dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
         ctx->fallback_count = 0U;
-        /* No response to transition command per spec */
+        /* 按规范，转换命令无需响应 */
     }
 }
 
 /**
- * @brief Answer a startup Type-0 read on the page communication channel.
+ * @brief 应答页通信通道上的启动 Type-0 读。
  *
- * Spec startup transition T1: the master reads a Direct Parameter page octet
- * (address in the MC address field, e.g. 0x02 = MinCycleTime). Reply with a
- * 2-octet Type-0 frame carrying that octet, rather than feeding the MC into the
- * ISDU engine.
+ * 规范启动转换 T1：主站读取一个 Direct Parameter 页面字节
+ * （地址在 MC 地址字段中，例如 0x02 = MinCycleTime）。用一个
+ * 承载该字节的 2 字节 Type-0 帧应答，而不是把 MC 送入
+ * ISDU 引擎。
  */
 static void dll_handle_page_channel_read(iolink_dll_ctx_t* ctx, uint8_t mc)
 {
@@ -559,12 +559,12 @@ static void dll_handle_page_channel_read(iolink_dll_ctx_t* ctx, uint8_t mc)
 }
 
 /**
- * @brief Dispatch one OD message by its communication channel (C2, 7.3.5.3).
+ * @brief 按通信通道分发一条 OD 报文（C2，7.3.5.3）。
  *
- * Diagnosis channel: event memory (Table 58). ISDU channel: the ISDU
- * transport. The page and process channels are handled by the callers (page by
- * the startup probe and the legacy ISDU path until Task 4). Returns true when
- * the channel was handled here.
+ * 诊断通道：事件存储器（Table 58）。ISDU 通道：ISDU
+ * 传送层。页通道和过程通道由调用方处理（页通道由
+ * 启动探测和 Task 4 之前的旧 ISDU 路径处理）。若该通道
+ * 在此处理则返回 true。
  */
 static bool dll_dispatch_od(iolink_dll_ctx_t* ctx, uint8_t mc, const uint8_t* od_in, uint8_t od_len,
                             uint8_t* od_out)
@@ -572,12 +572,12 @@ static bool dll_dispatch_od(iolink_dll_ctx_t* ctx, uint8_t mc, const uint8_t* od
     const uint8_t channel = (uint8_t) (mc & IOLINK_MC_COMM_CHANNEL_MASK);
 
     if (channel == IOLINK_MC_CHANNEL_PAGE) {
-        /* 7.3.5.3: Direct Parameter page read/write. A read returns the page
-           octet at the address; unimplemented addresses return 0, writes are
-           ignored (A.1.2). Table 45 T6/T7/T9: a MasterCommand (Table B.2) is
-           written to Direct Parameter page 1 address 0. The TYPE_0 frame paths
-           intercept it before the dispatch; an OPERATE M-sequence carries the
-           same command as its OD octet, so the write is applied here. */
+        /* 7.3.5.3：Direct Parameter 页面读/写。读操作返回
+           该地址处的页面字节；未实现的地址返回 0，写入
+           被忽略（A.1.2）。Table 45 T6/T7/T9：MasterCommand（Table B.2）
+           写入 Direct Parameter 页面 1 的地址 0。TYPE_0 帧路径
+           在分发前拦截它；OPERATE 的 M-sequence 将其作为
+           OD 字节携带相同命令，因此在此应用该写入。 */
         if (((mc & IOLINK_MC_RW_MASK) == 0U) && (od_len > 0U) &&
             ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
             (void) dll_apply_master_command(ctx, od_in[0]);
@@ -588,7 +588,7 @@ static bool dll_dispatch_od(iolink_dll_ctx_t* ctx, uint8_t mc, const uint8_t* od
         }
         if (((mc & IOLINK_MC_RW_MASK) == 0U) && (od_len > 0U) &&
             ((mc & IOLINK_MC_ADDR_MASK) == 0x0FU)) {
-            /* 7.3.5.3: SystemCommand via Direct Parameter page 1 (no response). */
+            /* 7.3.5.3：通过 Direct Parameter 页面 1 的 SystemCommand（无响应）。 */
             iolink_isdu_execute_system_command(&ctx->isdu, od_in[0]);
         }
         if (((mc & IOLINK_MC_RW_MASK) != 0U) && (od_len > 0U)) {
@@ -599,9 +599,9 @@ static bool dll_dispatch_od(iolink_dll_ctx_t* ctx, uint8_t mc, const uint8_t* od
     }
 
     if (channel == IOLINK_MC_CHANNEL_DIAGNOSIS) {
-        /* 7.3.8 Table 58: event memory is served by the diagnosis channel.
-           A read returns the memory octet(s) at the address; a write to
-           address 0 confirms the event readout and clears the Event flag. */
+        /* 7.3.8 Table 58：事件存储器由诊断通道服务。
+           读操作返回该地址处的存储字节；对地址 0 的写入
+           确认事件读取并清除 Event 标志。 */
         const uint8_t addr = (uint8_t) (mc & IOLINK_MC_ADDR_MASK);
 #if !IOLINK_FEATURE_EVENTS
         (void) addr;
@@ -618,10 +618,10 @@ static bool dll_dispatch_od(iolink_dll_ctx_t* ctx, uint8_t mc, const uint8_t* od
     }
 
     if (channel == IOLINK_MC_CHANNEL_ISDU) {
-        /* C3/Table 52: FlowCTRL lives in the MC address bits. A write carries
-           request octets; a read fetches the framed response (or Busy). The ISR
-           stages every valid ISDU write and the main pump drains it at the top
-           of iolink_dll_process(), so a write is never applied twice here. */
+        /* C3/Table 52：FlowCTRL 位于 MC 地址位中。写操作携带
+           请求字节；读操作获取成帧响应（或 Busy）。ISR
+           暂存每个有效的 ISDU 写，主泵在 iolink_dll_process()
+           顶部排空它，因此写入在此绝不会被应用两次。 */
         if ((mc & IOLINK_MC_RW_MASK) != 0U) {
             const uint8_t flowctrl = (uint8_t) (mc & IOLINK_MC_ADDR_MASK);
             iolink_isdu_od_read(&ctx->isdu, flowctrl, od_out, od_len);
@@ -634,7 +634,7 @@ static bool dll_dispatch_od(iolink_dll_ctx_t* ctx, uint8_t mc, const uint8_t* od
     return false;
 }
 
-/** @brief Process a 2-octet Type-0 request through ISDU and send the OD response. */
+/** @brief 通过 ISDU 处理 2 字节 Type-0 请求并发送 OD 响应。 */
 static void dll_handle_operate_type0(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t cks)
 {
     (void) cks;
@@ -648,9 +648,9 @@ static void dll_handle_operate_type0(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t 
     }
     ck_flags |= dll_pd_status_flags(ctx);
 
-    /* Figure A.5: a Type-0 WRITE is answered by the CKS only, on every
-       communication channel; every Type-0 READ is answered by OD followed by
-       the CKS. */
+    /* Figure A.5：Type-0 WRITE 在每个通信通道上都只由 CKS
+       应答；每个 Type-0 READ 由 OD 后跟 CKS
+       应答。 */
     const bool type0_write = ((mc & IOLINK_MC_RW_MASK) == 0U);
     if (type0_write) {
         resp[0] = ck_flags;
@@ -666,7 +666,7 @@ static void dll_handle_operate_type0(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t 
     ctx->last_response_us = dll_time_us(ctx);
 }
 
-/** @brief Process a 3-octet Type-0 OD WRITE (MC, CKT, OD) and reply with CKS only (Figure A.5). */
+/** @brief 处理 3 字节 Type-0 OD WRITE（MC、CKT、OD），仅用 CKS 应答（Figure A.5）。 */
 static void dll_handle_type0_od_write(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t od_in)
 {
     uint8_t od_resp = 0U;
@@ -683,15 +683,15 @@ static void dll_handle_type0_od_write(iolink_dll_ctx_t* ctx, uint8_t mc, uint8_t
     ctx->last_response_us = dll_time_us(ctx);
 }
 
-/** @brief Process a Type-1/Type-2 OPERATE frame (PD+OD) and build the response, enforcing t_REN. */
+/** @brief 处理 Type-1/Type-2 OPERATE 帧（PD+OD）并构建响应，同时强制执行 t_REN。 */
 /**
- * @brief Handle an eager ISDU read that only needs the transport reset.
+ * @brief 处理只需要重置传送层的 eager ISDU 读。
  *
- * An OPERATE ISDU read is answered by the ISR from the response snapshot; the
- * main pump must not advance the ISDU segment index again. Only an IDLE/ABORT
- * read needs the transport reset (and the snapshot refresh).
+ * OPERATE 的 ISDU 读由 ISR 从响应快照中应答；
+ * 主泵不得再次推进 ISDU 段索引。只有 IDLE/ABORT
+ * 读需要重置传送层（以及刷新快照）。
  *
- * @return true when the frame was fully handled.
+ * @return 当帧被完全处理时返回 true。
  */
 static bool dll_handle_eager_isdu_read(iolink_dll_ctx_t* ctx, bool write)
 {
@@ -703,7 +703,7 @@ static bool dll_handle_eager_isdu_read(iolink_dll_ctx_t* ctx, bool write)
     if ((flowctrl == IOLINK_FLOWCTRL_IDLE) || (flowctrl == IOLINK_FLOWCTRL_IDLE2) ||
         (flowctrl == IOLINK_FLOWCTRL_ABORT)) {
         uint8_t dummy = 0U;
-        iolink_isdu_od_read(&ctx->isdu, flowctrl, &dummy, 0U); /* reset only */
+        iolink_isdu_od_read(&ctx->isdu, flowctrl, &dummy, 0U); /* 仅重置 */
         dll_isdu_sync_snapshot(ctx);
     }
     ctx->frame_replied_by_isr = 0U;
@@ -711,11 +711,11 @@ static bool dll_handle_eager_isdu_read(iolink_dll_ctx_t* ctx, bool write)
     return true;
 }
 
-/** @brief Dispatch the request OD; zero the reply OD when the channel refuses it. */
+/** @brief 分发请求 OD；当通道拒绝时把应答 OD 清零。 */
 static void dll_dispatch_od_reply(iolink_dll_ctx_t* ctx, bool write, uint16_t od_offset,
                                   uint8_t* od_out)
 {
-    const uint8_t od_w = ctx->od_width; /* 1/2/8/32 from the opt-in patch */
+    const uint8_t od_w = ctx->od_width; /* 来自 opt-in 补丁的 1/2/8/32 */
     const uint8_t req_od = write ? od_w : 0U;
 
     uint8_t od_in[IOLINK_OD_MAX_SIZE];
@@ -733,16 +733,16 @@ static void dll_dispatch_od_reply(iolink_dll_ctx_t* ctx, bool write, uint16_t od
     }
 }
 
-/** @brief Build and transmit the [OD][PD-in]CKS reply for a Type-1/2 frame. */
+/** @brief 构建并发送 Type-1/2 帧的 [OD][PD-in]CKS 应答。 */
 static void dll_send_od_reply(iolink_dll_ctx_t* ctx, bool write, const uint8_t* od_out)
 {
     const uint8_t resp_od = write ? 0U : ctx->od_width;
 
-    /* Figures A.9/A.10/A.13/A.14: the reply to a READ M-sequence is
-       [OD octets][PD-in octets] CKS; the reply to a WRITE M-sequence carries no
-       OD and is [PD-in octets] CKS. CKS carries the Event flag (bit 7), the
-       PD-validity flag (bit 6, 1 = invalid) and the 6-bit message checksum
-       (bits 0-5); there is no leading status octet (A.1.5). */
+    /* Figure A.9/A.10/A.13/A.14：对 READ M-sequence 的应答为
+       [OD 字节][PD-in 字节] CKS；对 WRITE M-sequence 的应答不携带
+       OD，为 [PD-in 字节] CKS。CKS 携带 Event 标志（位 7）、
+       PD 有效标志（位 6，1 = 无效）以及 6 位报文校验和
+       （位 0-5）；没有前置状态字节（A.1.5）。 */
     uint8_t resp[IOLINK_PD_IN_MAX_SIZE + IOLINK_OD_MAX_SIZE + 1];
     uint16_t pos = 0U;
     if (!write && (resp_od > 0U)) {
@@ -784,13 +784,13 @@ static void dll_send_od_reply(iolink_dll_ctx_t* ctx, bool write, const uint8_t* 
 
 static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
 {
-    /* Type-1/2 master message: MC | CKT | PD | OD; the checksum is in CKT. */
+    /* Type-1/2 主站报文：MC | CKT | PD | OD；校验和在 CKT 中。 */
     const uint16_t pd_offset = IOLINK_M_SEQ_HEADER_LEN;
     const uint16_t od_offset = (uint16_t) (pd_offset + ctx->pd_out_len_current);
 
     if (ctx->pd_out_len_current > 0U) {
         (void) memcpy(ctx->pd_out, &ctx->frame_buf[pd_offset], ctx->pd_out_len_current);
-        ctx->pd_out_seen = true; /* B.2.24: last PDout written to the application */
+        ctx->pd_out_seen = true; /* B.2.24：最后写入应用的 PDout */
     }
 
     const bool write = ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U);
@@ -803,16 +803,16 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
 
     if (ctx->frame_replied_by_isr &&
         ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PROCESS)) {
-        /* The ISR pump already transmitted the pre-staged cyclic reply for the
-         * process channel at frame end. */
+        /* ISR 泵已在帧结束时发送了过程通道
+         * 预暂存的周期应答。 */
         ctx->fallback_count = 0U;
         ctx->last_response_us = dll_time_us(ctx);
         ctx->frame_replied_by_isr = 0U;
         return;
     }
     if (ctx->frame_replied_by_isr != 0U) {
-        /* The ISR already acknowledged this ISDU write; do not send a second
-         * reply. ISDU reads are handled before dll_dispatch_od(). */
+        /* ISR 已确认该 ISDU 写；不要再发送第二个
+         * 应答。ISDU 读在 dll_dispatch_od() 之前处理。 */
         ctx->frame_replied_by_isr = 0U;
         ctx->last_response_us = dll_time_us(ctx);
         return;
@@ -822,30 +822,30 @@ static void dll_handle_operate_type1_2(iolink_dll_ctx_t* ctx)
 }
 
 /* -------------------------------------------------------------------------
- * Diagnostics polling
+ * 诊断轮询
  * ------------------------------------------------------------------------- */
 
 /**
- * @brief Poll the PHY fault bitmask and act on its edges.
+ * @brief 轮询 PHY 故障位掩码并对其边沿作出反应。
  *
- * Only edges are reported: a fault that stays asserted counts and raises its
- * event once, and the fall clears the event so the event engine can emit the
- * matching "disappears". Mapping to Table D.1 device codes:
- *  - UNDERVOLTAGE   -> 0x5111 supply voltage underrun (Warning)
- *  - OVERVOLTAGE    -> 0x5110 supply voltage overrun (Warning)
- *  - OVERTEMP       -> 0x4000 temperature overload (Error)
- *  - SHORT_CIRCUIT  -> 0x7710 short circuit (Error)
+ * 只上报边沿：持续有效的故障只计数并触发一次
+ * 事件，故障消失时清除该事件，使事件引擎能够发出
+ * 对应的“disappears”。映射到 Table D.1 设备代码：
+ *  - UNDERVOLTAGE   -> 0x5111 供电电压欠压（Warning）
+ *  - OVERVOLTAGE    -> 0x5110 供电电压过压（Warning）
+ *  - OVERTEMP       -> 0x4000 温度过载（Error）
+ *  - SHORT_CIRCUIT  -> 0x7710 短路（Error）
  *
- * A pending "rearm" request (the event engine was reset by STARTUP or a
- * diagnostic reset) restarts edge detection, so a fault that is still present
- * is reported again in the new session.
+ * 待处理的“rearm”请求（事件引擎被 STARTUP 或诊断复位
+ * 重置）会重启边沿检测，因此仍然存在的故障
+ * 会在新会话中再次上报。
  */
 static void dll_poll_phy_faults(iolink_dll_ctx_t* ctx)
 {
-    /* The event engine is reset from dll_set_state(STARTUP) possibly in the
-     * data ISR, which only sets phy_faults_rearm=1. The critical section on the
-     * read-clear keeps that set from racing the clear, so a fault that is still
-     * present is reported again in the new session. */
+    /* 事件引擎可能在数据 ISR 中被 dll_set_state(STARTUP) 复位，
+     * 那里只设置 phy_faults_rearm=1。读-清除操作上的临界区
+     * 可防止该设置与清除竞争，因此仍然存在的故障
+     * 会在新会话中再次上报。 */
     IOLINK_CRITICAL_ENTER();
     if (ctx->phy_faults_rearm != 0U) {
         ctx->phy_faults_rearm = 0U;
@@ -890,15 +890,15 @@ static void dll_poll_phy_faults(iolink_dll_ctx_t* ctx)
     ctx->phy_faults_last = faults;
 }
 
-/** @brief Poll the PHY diagnostics and raise events on faults. */
+/** @brief 轮询 PHY 诊断并在故障时触发事件。 */
 static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
 {
     if ((ctx == NULL) || (ctx->phy == NULL)) {
         return;
     }
 
-    /* The fault bitmask is the preferred channel and replaces the legacy pair:
-     * a PHY that reports *what* is wrong needs no voltage thresholding here. */
+    /* 故障位掩码是首选通道，替代旧的一对接口：
+     * 能报告*哪里*出错的 PHY 无需在此做电压阈值判断。 */
     if (ctx->phy->get_faults != NULL) {
         dll_poll_phy_faults(ctx);
         return;
@@ -907,19 +907,19 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
 #if IOLINK_PHY_FEATURE_LEGACY_DIAG
     if (ctx->phy->get_voltage_mv != NULL) {
         int voltage = ctx->phy->get_voltage_mv(ctx->phy->user);
-        /* A negative reading means "measurement unavailable", not a fault
-           (phy_generic's template hook returns -1). 18 V to 30 V inclusive is
-           the valid range; Table D.1 codes 0x5111/0x5110 report under/overrun. */
+        /* 负读数表示“测量不可用”，而非故障
+           （phy_generic 的模板钩子返回 -1）。18 V 到 30 V（含端点）是
+           有效范围；Table D.1 代码 0x5111/0x5110 报告欠压/过压。 */
         if (voltage >= 0) {
             if (voltage < 18000) {
                 ctx->voltage_faults++;
-                /* Table D.1 device code 0x5111 "Primary supply voltage underrun". */
+                /* Table D.1 设备代码 0x5111 "Primary supply voltage underrun"。 */
                 DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_UNDERRUN,
                                   IOLINK_EVENT_TYPE_WARNING);
             }
             else if (voltage > 30000) {
                 ctx->voltage_faults++;
-                /* Table D.1 device code 0x5110 "Primary supply voltage overrun". */
+                /* Table D.1 设备代码 0x5110 "Primary supply voltage overrun"。 */
                 DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN,
                                   IOLINK_EVENT_TYPE_WARNING);
             }
@@ -929,7 +929,7 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
     if (ctx->phy->is_short_circuit != NULL) {
         if (ctx->phy->is_short_circuit(ctx->phy->user)) {
             ctx->short_circuits++;
-            /* Table D.1 device code 0x7710 "Short circuit". */
+            /* Table D.1 设备代码 0x7710 "Short circuit"。 */
             DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENTCODE_SHORT_CIRCUIT,
                               IOLINK_EVENT_TYPE_ERROR);
         }
@@ -938,7 +938,7 @@ static void dll_poll_diagnostics(iolink_dll_ctx_t* ctx)
 }
 
 /* -------------------------------------------------------------------------
- * Lifecycle and ISDU snapshot
+ * 生命周期与 ISDU 快照
  * ------------------------------------------------------------------------- */
 
 void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
@@ -957,22 +957,22 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     ctx->master_lost_count = 0U;
     ctx->master_lost = false;
 
-    /* Table A.10: TYPE_2_1/TYPE_2_2 carry one On-request Data octet; TYPE_2_V is
-       the two-octet variant (OPERATE M-sequence code 5). */
+    /* Table A.10：TYPE_2_1/TYPE_2_2 携带一个 On-request Data 字节；TYPE_2_V 是
+       双字节变体（OPERATE M-sequence 代码 5）。 */
     ctx->od_len = (ctx->m_seq_type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
-    ctx->isr_isdu_last_flowctrl = 0xFFU; /* no START seen yet */
+    ctx->isr_isdu_last_flowctrl = 0xFFU; /* 尚未见到 START */
 
     ctx->pd_in_len_current = ctx->pd_in_len;
     ctx->pd_out_len_current = ctx->pd_out_len;
     ctx->pd_in_len_max = ctx->pd_in_len;
     ctx->pd_out_len_max = ctx->pd_out_len;
     ctx->pd_valid = true;
-    ctx->pd_in_captured = 0xFFU; /* no reply in flight */
+    ctx->pd_in_captured = 0xFFU; /* 无进行中的应答 */
 
-    /* Frame mailbox: the ISR publishes into the ring, the main pump consumes. */
+    /* 帧邮箱：ISR 发布到环中，主泵消费。 */
     iolink_ring_init(&ctx->isr_frame_ring, (uint8_t*) ctx->isr_frame_slot, IOLINK_MBX_SLOTS,
                      (uint8_t) sizeof(iolink_frame_rec_t));
-    /* Staged ISDU write segments (ISR -> main). */
+    /* 暂存的 ISDU 写段（ISR -> 主上下文）。 */
     iolink_ring_init(&ctx->isr_od_ring, (uint8_t*) ctx->isr_od_slot, IOLINK_OD_SLOTS,
                      (uint8_t) sizeof(iolink_od_rec_t));
 
@@ -1002,18 +1002,18 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     ctx->t_byte_limit_us = dll_get_t_byte_limit_us(ctx);
 
     /*
-     * Initial line mode depends on whether the PHY can observe the electrical
-     * C/Q wake-up pulse:
+     * 初始线路模式取决于 PHY 能否观测到电气
+     * C/Q 唤醒脉冲：
      *
-     *  - PHYs that can (detect_wakeup != NULL, e.g. a transceiver front-end or
-     *    the virtual PHY) start in SIO and switch to SDCI when a wake-up is
-     *    detected, matching the IO-Link startup handshake.
+     *  - 能观测到的 PHY（detect_wakeup != NULL，例如收发器前端或
+     *    虚拟 PHY）从 SIO 开始，并在检测到唤醒时切换到 SDCI，
+     *    与 IO-Link 启动握手一致。
      *
-     *  - PHYs that cannot (detect_wakeup == NULL, e.g. a plain UART sitting
-     *    behind a transceiver that has already established COM) would otherwise
-     *    sit in SIO forever and never service M-sequences. Such a link is, by
-     *    contract, an already-established SDCI link, so start in SDCI and accept
-     *    M-sequences immediately.
+     *  - 不能观测到的 PHY（detect_wakeup == NULL，例如位于已建立 COM 的
+     *    收发器之后的普通 UART）否则会
+     *    永远停在 SIO 且从不处理 M-sequence。按约定，
+     *    这样的链路属于已建立的 SDCI 链路，因此从 SDCI 开始并
+     *    立即接受 M-sequence。
      */
     if (dll_phy_has_wakeup(ctx)) {
         iolink_dll_set_sio_mode(ctx);
@@ -1023,18 +1023,18 @@ void iolink_dll_init(iolink_dll_ctx_t* ctx, const iolink_phy_api_t* phy)
     }
 }
 
-/** @brief Validate and dispatch one complete request held in ctx->frame_buf.
+/** @brief 校验并分发 ctx->frame_buf 中保存的一个完整请求。
  *
- * Shared by the streaming RX loop and the ISR-pump mailbox: both assemble a
- * complete M-sequence first, then run this exact validation + dispatch.
+ * 由流式 RX 循环和 ISR 泵邮箱共享：两者都先组装一个
+ * 完整 M-sequence，然后运行完全相同的校验 + 分发。
  */
 /**
- * @brief Publish the framed ISDU response view for the ISR read pump.
+ * @brief 为 ISR 读泵发布成帧的 ISDU 响应视图。
  *
- * Single-writer handoff: ctx->isdu (and the double-buffered response) is owned
- * by the main pump; the ISR reads the last published buffer. {length, busy,
- * buffer} travel as one atomic word, so no critical section and no copy are
- * needed, and the ISR always reads a complete, stable response.
+ * 单写者交接：ctx->isdu（以及双缓冲响应）由主泵
+ * 拥有；ISR 读取最后发布的缓冲区。{length, busy,
+ * buffer} 作为一个原子字传递，因此无需临界区、无需拷贝，
+ * ISR 总是读到完整、稳定的响应。
  */
 static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
 {
@@ -1047,18 +1047,18 @@ static void dll_isdu_sync_snapshot(iolink_dll_ctx_t* ctx)
     if (ctx->isdu.state == ISDU_STATE_RESPONSE_READY) {
         count = (ctx->isdu.resp_total > 255U) ? 255U : (uint8_t) ctx->isdu.resp_total;
         sel = ctx->isdu.resp_sel;
-        /* The completed response becomes the published one; the engine will
-         * build the next response in the other buffer. */
+        /* 完成的响应成为已发布响应；引擎将在
+         * 另一个缓冲区中构建下一个响应。 */
         ctx->isdu.resp_pub = sel;
     }
     const IOLINK_ATOMIC_UINT_T word = IOLINK_ISDU_PUB_WORD(count, busy, sel);
     if (word != ctx->isr_isdu_pub) {
-        /* Publish last: the response octets are already in resp_store[sel]. */
+        /* 最后发布：响应字节已在 resp_store[sel] 中。 */
         iolink_atomic_store(&ctx->isr_isdu_pub, word);
     }
 }
 
-/** @brief Decode a DPP1 MasterCycleTime/MinCycleTime octet to 100 us ticks (ST Table B.3). */
+/** @brief 将 DPP1 MasterCycleTime/MinCycleTime 字节解码为 100 us 刻度（ST Table B.3）。 */
 static uint16_t dll_decode_cycle_time_ticks(uint8_t value)
 {
     if (value <= 3U) {
@@ -1076,7 +1076,7 @@ static uint16_t dll_decode_cycle_time_ticks(uint8_t value)
     return 0U;
 }
 
-/** @brief Master polling period in microseconds (DPP1 MasterCycleTime, else MinCycleTime). */
+/** @brief 主站轮询周期，单位微秒（优先 DPP1 MasterCycleTime，否则 MinCycleTime）。 */
 static uint32_t dll_master_cycle_us(const iolink_dll_ctx_t* ctx)
 {
     uint16_t ticks = dll_decode_cycle_time_ticks(ctx->master_cycle_time);
@@ -1084,15 +1084,15 @@ static uint32_t dll_master_cycle_us(const iolink_dll_ctx_t* ctx)
         ticks = (uint16_t) ((ctx->min_cycle_time_us + 99U) / 100U);
     }
     if (ticks == 0U) {
-        ticks = 20U; /* 2 ms fallback */
+        ticks = 20U; /* 2 ms 回退 */
     }
     return (uint32_t) ticks * 100U;
 }
 
-/** @brief Refresh the master-activity timestamp.
+/** @brief 刷新主站活动时间戳。
  *
- * Used when the data ISR sees a frame but the Back-to-box cycle count must
- * still be advanced exactly once, by whoever actually served the request. */
+ * 用于数据 ISR 看到帧、但 Back-to-box 周期计数仍必须由
+ * 实际服务该请求的一方精确推进一次的场景。 */
 static void dll_mark_master_activity_ts(iolink_dll_ctx_t* ctx)
 {
     ctx->master_last_activity_ms = dll_time_ms(ctx);
@@ -1100,16 +1100,16 @@ static void dll_mark_master_activity_ts(iolink_dll_ctx_t* ctx)
     ctx->master_lost = false;
 }
 
-/** @brief ST-style master activity: frame end / RX timeout restarts the counter. */
+/** @brief ST 风格主站活动：帧结束/RX 超时会重启计数器。 */
 void dll_mark_master_activity(iolink_dll_ctx_t* ctx)
 {
     dll_mark_master_activity_ts(ctx);
 
-    /* 10.7.5: count the frames served after Back-to-box so the device keeps
-       answering for at least 3 MasterCycles before it stops (see
-       dll_process_complete_frame, which performs the actual stop). Counted
-       exactly once per served cycle: from the ISR for a request it answers
-       itself, otherwise from dll_process_complete_frame. */
+    /* 10.7.5：统计 Back-to-box 之后服务的帧数，以便设备在停止前
+       至少继续应答 3 个 MasterCycle（参见
+       dll_process_complete_frame，它执行实际停止）。每个
+       服务周期精确计数一次：其自身应答的请求由 ISR 计数，
+       否则由 dll_process_complete_frame 计数。 */
     if (ctx->back_to_box_pending) {
         ctx->back_to_box_cycles++;
     }
@@ -1125,28 +1125,28 @@ void iolink_dll_request_back_to_box(iolink_dll_ctx_t* ctx)
 }
 
 /* -------------------------------------------------------------------------
- * Main pump: frame validation, dispatch and timing supervision
+ * 主泵：帧校验、分发与时序监控
  * ------------------------------------------------------------------------- */
 
-/** @brief Result of the A.1.6 checksum and CKT type validation. */
+/** @brief A.1.6 校验和与 CKT 类型校验的结果。 */
 typedef enum
 {
-    DLL_FRAME_INVALID,    /**< Checksum mismatch: drop, keep the DL mode. */
-    DLL_FRAME_TYPE_ERROR, /**< Valid checksum, illegal M-sequence type. */
-    DLL_FRAME_VALID       /**< Valid request; dispatch by state. */
+    DLL_FRAME_INVALID,    /**< 校验和不匹配：丢弃，保持 DL 模式。 */
+    DLL_FRAME_TYPE_ERROR, /**< 校验和有效，M-sequence 类型非法。 */
+    DLL_FRAME_VALID       /**< 有效请求；按状态分发。 */
 } dll_frame_result_t;
 
 /**
- * @brief Handle the two states that accept no more frames.
+ * @brief 处理不再接受帧的两个状态。
  *
- * @return true when the frame was dropped (the caller must not run the common
- *         tail cleanup).
+ * @return 当帧被丢弃（调用方不得运行公共
+ *         尾部清理）时返回 true。
  */
 static bool dll_frame_drop_if_stopped(iolink_dll_ctx_t* ctx)
 {
     if (ctx->back_to_box_pending && (ctx->back_to_box_cycles >= 3U)) {
-        /* 10.7.5: after at least 3 MasterCycles the device stops and disables
-           communication and the output driver until the next power-on. */
+        /* 10.7.5：在至少 3 个 MasterCycle 之后，设备停止并禁用
+           通信和输出驱动器，直到下次上电。 */
         ctx->back_to_box_pending = false;
         dll_set_state(ctx, IOLINK_DLL_STATE_COMM_DISABLED);
         if ((ctx->phy != NULL) && (ctx->phy->set_mode != NULL)) {
@@ -1156,14 +1156,14 @@ static bool dll_frame_drop_if_stopped(iolink_dll_ctx_t* ctx)
         return true;
     }
     if (ctx->state == IOLINK_DLL_STATE_COMM_DISABLED) {
-        /* Communication stopped until the next power-on (10.7.5). */
+        /* 通信已停止，直到下次上电（10.7.5）。 */
         ctx->frame_index = 0U;
         return true;
     }
     return false;
 }
 
-/** @brief T_CYCLE supervision: count a too-short MasterCycle and restart it. */
+/** @brief T_CYCLE 监控：统计过短的 MasterCycle 并重新开始。 */
 static void dll_check_cycle_time(iolink_dll_ctx_t* ctx)
 {
     const uint64_t now_us = dll_time_us(ctx);
@@ -1178,11 +1178,11 @@ static void dll_check_cycle_time(iolink_dll_ctx_t* ctx)
 }
 
 /**
- * @brief Validate the A.1.6 checksum and the CKT M-sequence type.
+ * @brief 校验 A.1.6 校验和与 CKT M-sequence 类型。
  *
- * A.1.6/Figure A.2: the checksum lives in the CKT octet (second octet); its
- * bits 0-5 are zeroed and the type bits (6-7) are kept before the checksum is
- * computed. C5/Table 47: the type must be legal for the current state.
+ * A.1.6/Figure A.2：校验和位于 CKT 字节（第二个字节）；计算校验和
+ * 之前，其位 0-5 被清零，类型位（6-7）保留。
+ * C5/Table 47：类型必须对当前状态合法。
  */
 static dll_frame_result_t dll_frame_validate(iolink_dll_ctx_t* ctx)
 {
@@ -1203,12 +1203,12 @@ static dll_frame_result_t dll_frame_validate(iolink_dll_ctx_t* ctx)
 }
 
 /**
- * @brief Account for an invalid or type-illegal frame.
+ * @brief 处理无效或类型非法的帧。
  *
- * A checksum failure keeps the DL mode (ST rc=2 semantics). A valid checksum
- * with an illegal type is a protocol error outside OPERATE/ESTAB and returns to
- * STARTUP; inside OPERATE/ESTAB it is treated as a framing artifact from an
- * overlapping PD stream and only counted.
+ * 校验和失败保持 DL 模式（ST rc=2 语义）。校验和有效
+ * 但类型非法时，在 OPERATE/ESTAB 之外属于协议错误并返回
+ * STARTUP；在 OPERATE/ESTAB 内则视为重叠 PD 流造成的
+ * 成帧伪影，仅计数。
  */
 static void dll_handle_frame_error(iolink_dll_ctx_t* ctx, dll_frame_result_t result)
 {
@@ -1225,16 +1225,16 @@ static void dll_handle_frame_error(iolink_dll_ctx_t* ctx, dll_frame_result_t res
         return;
     }
 
-    /* Checksum failure: ST rc=2 means "discard this frame and go back to
-     * listening"; the DLL mode is left untouched. Do not demote to SIO here: a
-     * single truncated/collided frame (e.g. the master starting its next
-     * M-sequence while our reply is still on C/Q) must not take the link down.
-     * SIO is reserved for the Fallback MasterCommand and the T_DSIO timeout. */
+    /* 校验和失败：ST rc=2 表示“丢弃该帧并返回
+     * 监听”；DLL 模式保持不变。此处不要降级到 SIO：
+     * 单个截断/碰撞帧（例如主站在我们的应答仍在 C/Q 上时
+     * 开始下一个 M-sequence）不能使链路下线。
+     * SIO 保留给 Fallback MasterCommand 和 T_DSIO 超时。 */
     ctx->crc_errors++;
     ctx->framing_errors++;
     ctx->total_retries++;
-    /* Keep the diagnostic event (ST has no counter, but the application uses it
-     * for the event flag) without changing the DL mode. */
+    /* 保留诊断事件（ST 没有计数器，但应用用它
+     * 作为事件标志），同时不改变 DL 模式。 */
     ctx->fallback_count++;
     if (ctx->fallback_count >= ctx->sio_fallback_threshold) {
         ctx->fallback_count = 0U;
@@ -1244,13 +1244,13 @@ static void dll_handle_frame_error(iolink_dll_ctx_t* ctx, dll_frame_result_t res
 
 #if !IOLINK_COMPAT_V10_STARTUP_OPERATE
 /**
- * @brief Reject an OPERATE request received during startup.
+ * @brief 拒绝在启动期间收到的 OPERATE 请求。
  *
- * Table 53 (SDCI_TC_0035): only a V1.0 Device reacts to an OPERATE request
- * received during STARTUP. A V1.1 Device must not answer it and must not
- * advance to PREOPERATE/ESTAB_COM.
+ * Table 53（SDCI_TC_0035）：只有 V1.0 设备会对启动期间收到的
+ * OPERATE 请求作出反应。V1.1 设备不得应答它，也不得
+ * 推进到 PREOPERATE/ESTAB_COM。
  *
- * @return true when the frame was rejected (skip the tail cleanup).
+ * @return 当帧被拒绝（跳过尾部清理）时返回 true。
  */
 static bool dll_reject_startup_operate(iolink_dll_ctx_t* ctx, bool was_establishing)
 {
@@ -1269,12 +1269,12 @@ static bool dll_reject_startup_operate(iolink_dll_ctx_t* ctx, bool was_establish
 #endif /* !IOLINK_COMPAT_V10_STARTUP_OPERATE */
 
 /**
- * @brief PREOPERATE: intercept the first message after wake-up.
+ * @brief PREOPERATE：拦截唤醒后的第一条报文。
  *
- * Transition T1: a Type-0 READ of a Direct Parameter page octet on the page
- * channel is the spec startup probe. Answer from the direct-parameter source
- * rather than feeding the MC into ISDU. Later PREOPERATE Type-0 frames are ISDU
- * traffic and are not intercepted.
+ * 转换 T1：在页通道上对 Direct Parameter 页面字节的 Type-0 READ
+ * 是规范定义的启动探测。从直接参数源应答，
+ * 而不是把 MC 送入 ISDU。后续 PREOPERATE 的 Type-0 帧是 ISDU
+ * 流量，不会被拦截。
  */
 static bool dll_handle_startup_probe(iolink_dll_ctx_t* ctx, bool was_establishing, uint8_t mc)
 {
@@ -1287,7 +1287,7 @@ static bool dll_handle_startup_probe(iolink_dll_ctx_t* ctx, bool was_establishin
     return false;
 }
 
-/** @brief PREOPERATE dispatch: Type-0 only, plus FALLBACK/MasterCommand. */
+/** @brief PREOPERATE 分发：仅 Type-0，外加 FALLBACK/MasterCommand。 */
 static void dll_dispatch_preoperate(iolink_dll_ctx_t* ctx, bool was_establishing)
 {
     const uint8_t mc = ctx->frame_buf[0];
@@ -1303,28 +1303,28 @@ static void dll_dispatch_preoperate(iolink_dll_ctx_t* ctx, bool was_establishing
         }
     }
     else if ((ctx->req_len == 3U) && dll_is_fallback_command(ctx)) {
-        /* Table B.2/43: FALLBACK MasterCommand 0x5A. */
+        /* Table B.2/43：FALLBACK MasterCommand 0x5A。 */
         dll_handle_fallback_command(ctx);
     }
     else if ((ctx->req_len == 3U) && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
              ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE) &&
              ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
-        /* Page-channel Type-0 WRITE of a MasterCommand (Table B.2):
-           0x97 DeviceStartup, 0x98 PDOperate, 0x99 DeviceOperate,
-           0x9A DevicePreoperate, 0x95/0x96 ident, 0x5A Fallback.
-           ST applies the mode change and answers with CKS only. */
+        /* MasterCommand 的页通道 Type-0 WRITE（Table B.2）：
+           0x97 DeviceStartup、0x98 PDOperate、0x99 DeviceOperate、
+           0x9A DevicePreoperate、0x95/0x96 ident、0x5A Fallback。
+           ST 应用模式变更并仅用 CKS 应答。 */
         dll_handle_master_command(ctx, ctx->frame_buf[2]);
     }
     else if (ctx->req_len == 3U) {
-        /* Any other 3-octet Type-0 OD write in PREOPERATE is ISDU or diagnosis
-           traffic (7.3.6 allows ISDU before OPERATE). It is a TYPE_0 frame: one
-           OD octet at offset 2 and a CKS-only reply (Figure A.5), never the
-           configured OPERATE PD widths. */
+        /* PREOPERATE 中其他任何 3 字节 Type-0 OD 写属于 ISDU 或诊断
+           流量（7.3.6 允许在 OPERATE 之前使用 ISDU）。它是 TYPE_0 帧：
+           偏移 2 处有一个 OD 字节，应答仅含 CKS（Figure A.5），绝不使用
+           配置的 OPERATE PD 宽度。 */
         dll_handle_type0_od_write(ctx, ctx->frame_buf[0], ctx->frame_buf[2]);
     }
 }
 
-/** @brief ESTAB_COM dispatch: first valid non-transition frame enters OPERATE. */
+/** @brief ESTAB_COM 分发：首个有效的非转换帧进入 OPERATE。 */
 static void dll_dispatch_estab_com(iolink_dll_ctx_t* ctx)
 {
     const uint8_t mc = ctx->frame_buf[0];
@@ -1335,13 +1335,13 @@ static void dll_dispatch_estab_com(iolink_dll_ctx_t* ctx)
         dll_handle_preoperate(ctx, mc, ctx->frame_buf[1]);
     }
     else if (page_write && ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
-        /* MasterCommand before the first cyclic frame: apply it instead of
-           mistaking a Type-0 page write for Type-2 PD. */
+        /* 首个周期帧之前的 MasterCommand：应用它，而不是把
+           Type-0 页面写入误认为 Type-2 PD。 */
         dll_handle_master_command(ctx, ctx->frame_buf[2]);
     }
     else {
-        /* The first valid non-transition frame establishes communication and
-           moves to OPERATE, Type 0 included. */
+        /* 首个有效的非转换帧建立通信并
+           进入 OPERATE，包含 Type 0。 */
         dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
         if (page_write) {
             dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
@@ -1350,19 +1350,19 @@ static void dll_dispatch_estab_com(iolink_dll_ctx_t* ctx)
             dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
         }
         else if (type0) {
-            /* Type-0 OD write (ISDU/diagnosis): one OD octet at 2. */
+            /* Type-0 OD 写（ISDU/诊断）：偏移 2 处一个 OD 字节。 */
             dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
         }
         else {
-            /* A fixed TYPE_1_x/TYPE_2_x READ is only MC + CKT (req_len == 2), so
-               req_len cannot distinguish it from Type-0: the CKT type bits are
-               authoritative. */
+            /* 固定的 TYPE_1_x/TYPE_2_x READ 仅为 MC + CKT（req_len == 2），
+               因此 req_len 无法将其与 Type-0 区分：CKT 类型位才是
+               权威依据。 */
             dll_handle_operate_type1_2(ctx);
         }
     }
 }
 
-/** @brief OPERATE dispatch: every channel is valid, transitions are forbidden. */
+/** @brief OPERATE 分发：所有通道均有效，禁止转换。 */
 static bool dll_dispatch_operate(iolink_dll_ctx_t* ctx)
 {
     const uint8_t mc = ctx->frame_buf[0];
@@ -1370,59 +1370,59 @@ static bool dll_dispatch_operate(iolink_dll_ctx_t* ctx)
     const bool page_write = type0 && ((mc & IOLINK_MC_RW_MASK) == 0U) &&
                             ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE);
     if ((ctx->req_len == 3U) && (dll_is_fallback_command(ctx))) {
-        /* Table B.2/43, Table 47 T9: OPERATE -> SIO after T_FBD. */
+        /* Table B.2/43、Table 47 T9：T_FBD 之后 OPERATE -> SIO。 */
         dll_handle_fallback_command(ctx);
     }
     else if (mc == IOLINK_MC_TRANSITION_COMMAND) {
-        /* Transition command is illegal in OPERATE. Report it but keep the DL
-           mode: the master never sends it in a healthy link, and ST rc=2/rc=3
-           recovery here would only add churn. */
+        /* 转换命令在 OPERATE 中非法。上报它但保持 DL
+           模式：主站在健康链路上从不发送它，且此处 ST rc=2/rc=3
+           恢复只会增加抖动。 */
         ctx->framing_errors++;
     }
     else if (type0 && (ctx->req_len == 2U)) {
 #if !IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
-        /* Tables 57/67 (SDCI_TC_0038/0049): a TYPE_0 page READ while OPERATE is
-           active is a reset request. Do not answer it; go back to STARTUP so the
-           next read is handled as the startup probe. TYPE_0 page writes keep
-           their normal behaviour. */
+        /* Table 57/67（SDCI_TC_0038/0049）：OPERATE 生效期间的 TYPE_0 页面 READ
+           是复位请求。不要应答它；返回 STARTUP，使下一次读
+           被当作启动探测处理。TYPE_0 页面写保持
+           其正常行为。 */
         if (((mc & IOLINK_MC_RW_MASK) != 0U) &&
             ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE) &&
             (ctx->m_seq_type != IOLINK_M_SEQ_TYPE_0)) {
             ctx->framing_errors++;
             ctx->frame_index = 0U;
             dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
-            return false; /* the reset path skips the common tail cleanup */
+            return false; /* 复位路径跳过公共尾部清理 */
         }
 #endif
         dll_handle_operate_type0(ctx, mc, ctx->frame_buf[1]);
     }
     else if (page_write && ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
-        /* MasterCommand page write in OPERATE (0x9A/0x98/0x99/...). ST handles
-           these in every DL mode and only changes the state, never treats them
-           as an illegal M-sequence. */
+        /* OPERATE 中的 MasterCommand 页面写（0x9A/0x98/0x99/...）。ST 在
+           每种 DL 模式下都处理它们，只改变状态，从不把它们
+           当作非法 M-sequence。 */
         dll_handle_master_command(ctx, ctx->frame_buf[2]);
     }
     else if (page_write) {
-        /* DPP parameter write (e.g. MasterCycleTime): CKS-only ack. */
+        /* DPP 参数写（例如 MasterCycleTime）：仅含 CKS 的确认。 */
         dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
     }
     else if (type0) {
-        /* Type-0 OD write on ISDU/diagnosis: CKS-only ack. */
+        /* ISDU/诊断上的 Type-0 OD 写：仅含 CKS 的确认。 */
         dll_handle_type0_od_write(ctx, mc, ctx->frame_buf[2]);
     }
     else {
-        /* Fixed TYPE_1_x/TYPE_2_x READ may be only MC + CKT (req_len == 2);
-           disambiguate by the CKT type bits, not the length. */
+        /* 固定的 TYPE_1_x/TYPE_2_x READ 可能仅为 MC + CKT（req_len == 2）；
+           用 CKT 类型位而非长度来区分。 */
         dll_handle_operate_type1_2(ctx);
     }
     return true;
 }
 
 /**
- * @brief Dispatch a validated frame by DL state.
+ * @brief 按 DL 状态分发已校验的帧。
  *
- * @return false when the frame was rejected without state progress and the
- *         caller must skip the common tail cleanup.
+ * @return 当帧被拒绝且未推进状态、调用方必须跳过
+ *         公共尾部清理时返回 false。
  */
 static bool dll_handle_valid_frame(iolink_dll_ctx_t* ctx)
 {
@@ -1436,7 +1436,7 @@ static bool dll_handle_valid_frame(iolink_dll_ctx_t* ctx)
 #endif
     if (was_establishing) {
         dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
-        ctx->dsio_deadline_ms = 0U; /* valid message cancels T_DSIO */
+        ctx->dsio_deadline_ms = 0U; /* 有效报文取消 T_DSIO */
     }
 
     if (ctx->state == IOLINK_DLL_STATE_PREOPERATE) {
@@ -1451,13 +1451,13 @@ static bool dll_handle_valid_frame(iolink_dll_ctx_t* ctx)
     return true;
 }
 
-/** @brief Clear the per-frame bookkeeping and refresh the ISR ISDU snapshot. */
+/** @brief 清除每帧簿记并刷新 ISR 的 ISDU 快照。 */
 static void dll_finish_frame(iolink_dll_ctx_t* ctx)
 {
     ctx->frame_index = 0U;
     ctx->frame_replied_by_isr = 0U;
-    /* Reflect any ISDU state change (e.g. a completed write request) for the
-     * ISR read pump before the next master frame. */
+    /* 在下一主站帧之前，为 ISR 读泵反映任何 ISDU 状态变化
+     * （例如完成的写请求）。 */
     dll_isdu_sync_snapshot(ctx);
 }
 
@@ -1468,17 +1468,17 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
     }
     dll_check_cycle_time(ctx);
 
-    /* A one-octet "frame" is not an M-sequence: it is the wake-up byte the
-     * transceiver forwards in SIO (or line noise). Ignore it instead of failing
-     * the checksum, which would read the absent second octet and drive a
-     * spurious fallback. */
+    /* 单字节“帧”不是 M-sequence：它是收发器在 SIO 中转发的
+     * 唤醒字节（或线路噪声）。忽略它，而不是让校验和
+     * 失败——那会读取不存在的第二个字节并驱动一次
+     * 虚假回退。 */
     if (ctx->req_len < IOLINK_M_SEQ_HEADER_LEN) {
         ctx->frame_index = 0U;
         return;
     }
 
-    /* ST restarts its callback timer at frame end; a completed frame (even a
-       bad one) proves the link is still being driven. */
+    /* ST 在帧结束时重启其回调定时器；一个完成的帧（即使是
+       坏帧）证明链路仍被驱动。 */
     dll_mark_master_activity(ctx);
 
     const dll_frame_result_t result = dll_frame_validate(ctx);
@@ -1490,21 +1490,21 @@ static void dll_process_complete_frame(iolink_dll_ctx_t* ctx)
     else {
         dll_handle_frame_error(ctx, result);
         if (result == DLL_FRAME_TYPE_ERROR) {
-            return; /* the type-error path clears its own bookkeeping */
+            return; /* 类型错误路径自行清除簿记 */
         }
     }
 
     dll_finish_frame(ctx);
 }
 
-/** Re-assert the configured operating COM after a recovery drop to COM1. */
+/** 在恢复性降级到 COM1 之后重新应用配置的工作 COM。 */
 static void dll_restore_operating_baudrate(iolink_dll_ctx_t* ctx)
 {
-    /* Do not reconfigure the UART in the middle of a reply: wait for the
-     * staged main reply (isr_tx_pending) or the TX BYTE octet feed
-     * (isr_tx_active) to drain. TX FRAME transfers are owned by the PHY and are
-     * not visible here: should the baudrate change while one is on the wire, the
-     * PHY aborts it in its critical section and the master retries the request. */
+    /* 不要在应答过程中重配 UART：等待暂存的主应答
+     * （isr_tx_pending）或 TX BYTE 字节送入
+     * （isr_tx_active）排空。TX FRAME 传输由 PHY 拥有，此处
+     * 不可见：若在传输进行时改变波特率，
+     * PHY 会在其临界区中中止它，主站会重试该请求。 */
     if ((ctx->isr_tx_active != 0U) || (ctx->isr_tx_pending != 0U)) {
         return;
     }
@@ -1514,37 +1514,37 @@ static void dll_restore_operating_baudrate(iolink_dll_ctx_t* ctx)
     }
 }
 
-/** @brief Consume the ISR master-activity flag (timestamp only, no cycle count). */
+/** @brief 消费 ISR 主站活动标志（仅时间戳，不计周期数）。 */
 static void dll_take_isr_master_activity(iolink_dll_ctx_t* ctx)
 {
     if (ctx->isr_master_activity != 0U) {
         ctx->isr_master_activity = 0U;
-        /* Timestamp only: the Back-to-box cycle count is advanced exactly once
-         * per served request (here for an ISR-answered frame, or in
-         * dll_process_complete_frame for a main-answered one). */
+        /* 仅时间戳：Back-to-box 周期计数每个服务请求
+         * 精确推进一次（此处用于 ISR 应答的帧，或在
+         * dll_process_complete_frame 中用于主上下文应答的帧）。 */
         dll_mark_master_activity_ts(ctx);
     }
 }
 
 /**
- * @brief Apply deadline requests the data ISR only flags.
+ * @brief 应用数据 ISR 仅作标记的截止时间请求。
  *
- * The two 64-bit deadlines stay main-owned so no 64-bit value is ever written
- * from interrupt context (a torn read would fire a spurious T_DSIO/T_FBD).
- * The ISR sets a flag; the main pump arms or clears the deadline here, before
- * any deadline check in the same pass.
+ * 两个 64 位截止时间由主上下文持有，因此绝不从
+ * 中断上下文写入 64 位值（撕裂读会触发虚假的 T_DSIO/T_FBD）。
+ * ISR 设置标志；主泵在同一轮的任何截止时间检查之前，
+ * 在此设置或清除截止时间。
  */
 static void dll_apply_isr_deadline_requests(iolink_dll_ctx_t* ctx)
 {
     if (ctx->isr_fallback_pending != 0U) {
         ctx->isr_fallback_pending = 0U;
-        /* Only arm while the DL mode is still FALLBACK: a later command may
-         * have left it, in which case a T_FBD deadline would be spurious. */
+        /* 仅在 DL 模式仍为 FALLBACK 时设置：后续命令可能
+         * 已离开该模式，此时 T_FBD 截止时间将是虚假的。 */
         if (ctx->state == IOLINK_DLL_STATE_FALLBACK) {
-            /* Table 47 T8/T9: T_FBD is 3 MasterCycleTimes, capped at 500 ms.
-             * The reference point is this main-context pass, one pass later
-             * than the frame end; that only stretches T_FBD (never shortens
-             * it) by at most one main-loop latency. */
+            /* Table 47 T8/T9：T_FBD 为 3 个 MasterCycleTime，上限 500 ms。
+             * 参考点是本次主上下文轮询，比帧结束晚一轮；
+             * 这只会延长 T_FBD（绝不缩短它），
+             * 至多一个主循环延迟。 */
             uint32_t t_fbd_ms = 500U;
             if (ctx->min_cycle_time_us > 0U) {
                 t_fbd_ms = (3U * ctx->min_cycle_time_us) / 1000U;
@@ -1557,7 +1557,7 @@ static void dll_apply_isr_deadline_requests(iolink_dll_ctx_t* ctx)
     }
     if (ctx->fallback_clear_request != 0U) {
         ctx->fallback_clear_request = 0U;
-        /* A command other than FALLBACK was applied: drop any pending T_FBD. */
+        /* 已应用非 FALLBACK 的命令：丢弃任何待处理的 T_FBD。 */
         if (ctx->state != IOLINK_DLL_STATE_FALLBACK) {
             ctx->fallback_deadline_ms = 0U;
         }
@@ -1569,12 +1569,12 @@ static void dll_apply_isr_deadline_requests(iolink_dll_ctx_t* ctx)
 }
 
 /**
- * @brief Hand an ISR-staged ISDU write to the transport.
+ * @brief 将 ISR 暂存的 ISDU 写交给传送层。
  *
- * The ISR stages whole segments in a ring; the main pump owns the transport
- * and the response buffer. Each iteration copies one record out of the ring,
- * releases its slot (so the ISR may reuse it) and then runs the (possibly
- * slow) transport with interrupts enabled. No critical section is involved.
+ * ISR 在环中暂存完整段；主泵拥有传送层
+ * 和响应缓冲区。每次迭代从环中拷贝一条记录，
+ * 释放其槽位（以便 ISR 复用），然后在中断使能的情况下
+ * 运行（可能较慢的）传送层。不涉及临界区。
  */
 static void dll_drain_staged_isdu_write(iolink_dll_ctx_t* ctx)
 {
@@ -1600,7 +1600,7 @@ static void dll_drain_staged_isdu_write(iolink_dll_ctx_t* ctx)
     }
 }
 
-/** @brief ST-style master-lost supervision from completed frames/RX timeouts. */
+/** @brief 基于完成的帧/RX 超时的 ST 风格主站丢失监控。 */
 static void dll_update_master_lost(iolink_dll_ctx_t* ctx, uint32_t now_ms)
 {
     if ((ctx->state == IOLINK_DLL_STATE_OPERATE) && (ctx->master_lost_cycles != 0U)) {
@@ -1623,24 +1623,24 @@ static void dll_update_master_lost(iolink_dll_ctx_t* ctx, uint32_t now_ms)
 }
 
 /**
- * @brief 1 s idle-link diagnostic counter.
+ * @brief 1 s 空闲链路诊断计数器。
  *
- * This is not the ST-style master-lost hint; it does not leave the current DL
- * mode, so a late master can resume on the existing mode/baudrate.
+ * 这不是 ST 风格的主站丢失提示；它不会离开当前 DL
+ * 模式，因此迟到的主站可在现有模式/波特率上恢复。
  */
 static void dll_check_idle_timeout(iolink_dll_ctx_t* ctx, uint32_t now_ms)
 {
     if ((ctx->last_activity_ms != 0U) && (now_ms - ctx->last_activity_ms > 1000U)) {
-        /* A silent link is not a response-time violation: count it separately so
-         * timeout_errors stays a genuine t_A metric. */
+        /* 静默链路不是响应时间违规：单独计数，使
+         * timeout_errors 仍是真正的 t_A 指标。 */
         ctx->idle_timeouts++;
         ctx->last_activity_ms = now_ms;
     }
 }
 
 /**
- * @brief Table 47 T10: a wake-up without a valid message within T_DSIO returns
- * the device to SIO. Only applies while still waiting for the first message.
+ * @brief Table 47 T10：唤醒后在 T_DSIO 内没有有效报文会使
+ * 设备返回 SIO。仅在仍等待第一条报文时适用。
  */
 static void dll_check_dsio_deadline(iolink_dll_ctx_t* ctx, uint64_t now_ms64)
 {
@@ -1661,9 +1661,9 @@ static void dll_check_dsio_deadline(iolink_dll_ctx_t* ctx, uint64_t now_ms64)
 }
 
 /**
- * @brief Table 47 T8/T9 + Table 43: after a FALLBACK MasterCommand the device
- * switches to SIO after T_FBD (3 MasterCycleTimes, at most 500 ms). The reply
- * was already sent when the command was handled.
+ * @brief Table 47 T8/T9 + Table 43：收到 FALLBACK MasterCommand 后，设备
+ * 在 T_FBD（3 个 MasterCycleTime，最多 500 ms）后切换到 SIO。
+ * 应答已在处理命令时发送。
  */
 static void dll_check_fallback_deadline(iolink_dll_ctx_t* ctx, uint64_t now_ms64)
 {
@@ -1683,10 +1683,10 @@ static void dll_check_fallback_deadline(iolink_dll_ctx_t* ctx, uint64_t now_ms64
 }
 
 /**
- * @brief Enforce the t_PD guard window.
+ * @brief 强制执行 t_PD 保护窗口。
  *
- * @return true when the guard is active and the caller must return without
- *         processing a mailbox frame.
+ * @return 当保护有效且调用方必须直接返回、不处理
+ *         邮箱帧时返回 true。
  */
 static bool dll_check_t_pd(iolink_dll_ctx_t* ctx)
 {
@@ -1702,10 +1702,10 @@ static bool dll_check_t_pd(iolink_dll_ctx_t* ctx)
 }
 
 /**
- * @brief SIO: detect a C/Q wake-up and start the communication window.
+ * @brief SIO：检测 C/Q 唤醒并启动通信窗口。
  *
- * @return true when the DLL is (or stays) in SIO mode and the caller must
- *         return.
+ * @return 当 DLL 处于（或保持）SIO 模式且调用方必须
+ *         返回时返回 true。
  */
 static bool dll_handle_sio_wakeup(iolink_dll_ctx_t* ctx)
 {
@@ -1717,26 +1717,26 @@ static bool dll_handle_sio_wakeup(iolink_dll_ctx_t* ctx)
             ctx->wakeup_seen = true;
             dll_set_state(ctx, IOLINK_DLL_STATE_AWAITING_COMM);
             ctx->wakeup_deadline_us = dll_time_us(ctx) + IOLINK_T_WU_US;
-            /* Table 47 T10: without a valid message the device returns to SIO
-               within T_DSIO (60..300 ms, default 300 ms). */
+            /* Table 47 T10：没有有效报文时，设备在 T_DSIO 内
+               （60..300 ms，默认 300 ms）返回 SIO。 */
             ctx->dsio_deadline_ms = dll_time_us(ctx) / 1000U + IOLINK_T_DSIO_MS;
             iolink_dll_set_sdci_mode(ctx);
-            /* A wake-up starts a fresh communication-establishment window.
-               Reset the inactivity timer so a re-wake after a prior exchange
-               is not immediately killed by the stale activity timestamp. */
+            /* 唤醒会开启一个新的通信建立窗口。
+               重置不活动计时器，使先前交换后的再次唤醒
+               不会被陈旧的活动时间戳立刻终止。 */
             ctx->last_activity_ms = dll_time_ms(ctx);
-            dll_mark_master_activity(ctx); /* ST StackOnWakeUp restarts Timer B */
+            dll_mark_master_activity(ctx); /* ST StackOnWakeUp 重启 Timer B */
         }
     }
     return true;
 }
 
-/** @brief ST Timer A: a byte gap inside a frame aborts it and re-listens. */
+/** @brief ST Timer A：帧内字节间隙会中止该帧并重新监听。 */
 static void dll_check_t_byte(iolink_dll_ctx_t* ctx)
 {
     if ((ctx->frame_index > 0U) && (ctx->enforce_timing) && (ctx->t_byte_limit_us > 0U)) {
-        /* The ISR writes the low 32 bits of the byte timestamp; an unsigned
-         * delta is wrap-safe for the millisecond-scale t_byte window. */
+        /* ISR 写入字节时间戳的低 32 位；无符号
+         * 差值对毫秒级 t_byte 窗口是回绕安全的。 */
         const uint32_t last_byte_us = ctx->last_byte_us;
         if (last_byte_us != 0U) {
             const uint32_t now_us = (uint32_t) dll_time_us(ctx);
@@ -1746,15 +1746,15 @@ static void dll_check_t_byte(iolink_dll_ctx_t* ctx)
                 ctx->framing_errors++;
                 DLL_EVENT_TRIGGER(&ctx->events, IOLINK_EVENT_COMM_TIMING,
                                   IOLINK_EVENT_TYPE_WARNING);
-                /* Abort the current frame and re-listen; the DL mode is not
-                   changed. */
+                /* 中止当前帧并重新监听；DL 模式
+                   不变。 */
                 ctx->frame_index = 0U;
             }
         }
     }
 }
 
-/** @brief T_WU: keep waiting for the first message inside the wake-up window. */
+/** @brief T_WU：在唤醒窗口内继续等待第一条报文。 */
 static bool dll_wakeup_window_active(iolink_dll_ctx_t* ctx)
 {
     if ((ctx->state == IOLINK_DLL_STATE_AWAITING_COMM) && (ctx->enforce_timing)) {
@@ -1766,12 +1766,12 @@ static bool dll_wakeup_window_active(iolink_dll_ctx_t* ctx)
 }
 
 /**
- * @brief Move an ISR-published frame into the main context and dispatch it.
+ * @brief 将 ISR 发布的帧移入主上下文并分发。
  *
- * The frame arrives through the SPSC mailbox ring: copy the oldest record,
- * release its slot, then run the validation/dispatch. No critical section is
- * needed (the ISR never writes the slot the consumer is reading), and the
- * record carries its own length and eager flag.
+ * 帧通过 SPSC 邮箱环到达：拷贝最旧的记录，
+ * 释放其槽位，然后运行校验/分发。无需临界区
+ * （ISR 从不写入消费者正在读取的槽位），
+ * 且记录携带自身的长度和 eager 标志。
  */
 static void dll_consume_isr_mailbox(iolink_dll_ctx_t* ctx)
 {
@@ -1787,33 +1787,33 @@ static void dll_consume_isr_mailbox(iolink_dll_ctx_t* ctx)
     (void) memcpy(ctx->frame_buf, record->data, count);
     ctx->frame_index = count;
     ctx->req_len = count;
-    /* The record carries the eager flag with its octets, so no cross-frame
-     * snapshot is needed. */
+    /* 记录随其字节携带 eager 标志，因此无需跨帧
+     * 快照。 */
     ctx->frame_replied_by_isr = record->eager;
-    /* Release after the copy: the ISR may then reuse this slot, while the other
-     * one stays intact. No critical section is required, because the ISR never
-     * writes the slot at 'out'. */
+    /* 拷贝后释放：ISR 随后可复用该槽位，而另一个
+     * 槽位保持完整。无需临界区，因为 ISR 从不
+     * 写入 'out' 处的槽位。 */
     iolink_ring_release(&ctx->isr_frame_ring);
-    /* A mailbox frame is received traffic: refresh the inactivity and byte-gap
-       timestamps exactly like the streaming RX path. Without this the 1 s idle
-       supervision resets a healthy ISR link. */
+    /* 邮箱帧是接收流量：刷新不活动时间戳和字节间隙
+       时间戳，与流式 RX 路径完全一致。否则 1 s 空闲
+       监控会复位健康的 ISR 链路。 */
     ctx->last_activity_ms = dll_time_ms(ctx);
     ctx->last_byte_us = (uint32_t) dll_time_us(ctx);
     dll_process_complete_frame(ctx);
 }
 
-/** @brief Main-pump body; the public entry point delivers the state afterwards. */
+/** @brief 主泵主体；公共入口随后投递状态。 */
 static void dll_process_body(iolink_dll_ctx_t* ctx)
 {
     dll_take_isr_master_activity(ctx);
     dll_apply_isr_deadline_requests(ctx);
 
-    /* A captured PD-in buffer is released by the TX BYTE pump when the reply
-     * completes. A TX FRAME PHY can report the transfer end through tx_busy();
-     * without that hook the library cannot distinguish "still on the wire" from
-     * "transceiver stalled", so it keeps the lease until the next capture and
-     * pd_in_skips surfaces the stall. The section keeps the data ISR from
-     * capturing a new buffer between the poll and the release. */
+    /* 捕获的 PD-in 缓冲区在应答完成时由 TX BYTE 泵释放。
+     * TX FRAME 类型的 PHY 可通过 tx_busy() 报告传输结束；
+     * 没有该钩子时，库无法区分“仍在线上”与
+     * “收发器停滞”，因此会保持租约直到下次捕获，并由
+     * pd_in_skips 暴露停滞。该临界区防止数据 ISR 在
+     * 轮询与释放之间捕获新缓冲区。 */
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     if ((ctx->phy != NULL) && (ctx->phy->tx_busy != NULL)) {
         IOLINK_CRITICAL_ENTER();
@@ -1824,21 +1824,21 @@ static void dll_process_body(iolink_dll_ctx_t* ctx)
     }
 #endif
 
-    /* Restore the operating COM before the SIO/power-on early returns: a
-     * recovery drop to COM1 must not leave the UART on the wrong baudrate. */
+    /* 在 SIO/上电提前返回之前恢复工作 COM：
+     * 恢复性降级到 COM1 不能让 UART 停留在错误波特率。 */
     dll_restore_operating_baudrate(ctx);
 
     dll_drain_staged_isdu_write(ctx);
     iolink_isdu_process(&ctx->isdu);
-    /* The service may have completed here: refresh the ISR response snapshot. */
+    /* 服务可能已在此完成：刷新 ISR 响应快照。 */
     dll_isdu_sync_snapshot(ctx);
     dll_poll_diagnostics(ctx);
-    /* A frame may have completed in the ISR during the steps above. */
+    /* 在上述步骤期间，ISR 中可能已完成一帧。 */
     dll_take_isr_master_activity(ctx);
 
-    /* Sampled after the late activity refresh so the elapsed-time subtraction
-     * below cannot see a timestamp newer than now_ms. One clock sample keeps
-     * the millisecond and microsecond views consistent. */
+    /* 在延迟活动刷新之后采样，使下面的经过时间减法
+     * 不会看到比 now_ms 更新的时间戳。单次时钟采样保持
+     * 毫秒与微秒视图一致。 */
     const uint64_t now_ms64 = dll_time_us(ctx) / 1000U;
     const uint32_t now_ms = (uint32_t) now_ms64;
 
@@ -1860,7 +1860,7 @@ static void dll_process_body(iolink_dll_ctx_t* ctx)
 
     dll_consume_isr_mailbox(ctx);
 
-    /* Undo a same-call recovery drop to COM1 (SDCI path reaches here). */
+    /* 撤销同一次调用中的恢复性 COM1 降级（SDCI 路径会到达此处）。 */
     dll_restore_operating_baudrate(ctx);
 }
 
@@ -1870,14 +1870,14 @@ void iolink_dll_process(iolink_dll_ctx_t* ctx)
         return;
     }
     dll_process_body(ctx);
-    /* Level-based application notification: the single place the state hook runs
-     * for both the device layer and direct DLL users. The device layer does not
-     * flush again after its event/DS service. */
+    /* 基于电平的应用通知：状态钩子对设备层和直接 DLL
+     * 用户的唯一运行位置。设备层在其事件/DS 服务之后
+     * 不再 flush。 */
     iolink_dll_flush_state_callbacks(ctx);
 }
 
 /* -------------------------------------------------------------------------
- * Public configuration and query API
+ * 公共配置与查询 API
  * ------------------------------------------------------------------------- */
 
 iolink_dll_state_t iolink_dll_get_state(const iolink_dll_ctx_t* ctx)
@@ -1895,11 +1895,11 @@ iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_ctx_t* ctx)
     return (ctx != NULL) ? ctx->baudrate : IOLINK_BAUDRATE_COM2;
 }
 
-/** @brief Compute the device MinCycleTime from the M-sequence timing (Table B.3).
+/** @brief 根据 M-sequence 时序计算设备 MinCycleTime（Table B.3）。
  *
- * Uses the ST ministry formula: mseq_us = (reply_octets*14 + request_octets*12
- * + 6) * 1e6 / baud. The worst case of a PD write and a PD/ISDU read is taken,
- * rounded up to 0.1 ms units, and clamped to the application floor. */
+ * 使用 ST ministry 公式：mseq_us = (reply_octets*14 + request_octets*12
+ * + 6) * 1e6 / baud。取 PD 写与 PD/ISDU 读的最坏情况，
+ * 向上取整到 0.1 ms 单位，并钳制到应用下限。 */
 uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_ctx_t* ctx)
 {
     if (ctx == NULL) {
@@ -1909,20 +1909,20 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_ctx_t* ctx)
     const uint32_t pdi = ctx->pd_in_len_current;
     const uint32_t pdo = ctx->pd_out_len_current;
     const uint32_t od = ctx->od_width;
-    /* Write request: MC+CKT + PD-out + OD; reply: PD-in + CKS.
-     * Read request: MC+CKT + PD-out (no OD); reply: OD + PD-in + CKS.
-     * This holds for every Annex A type: the fixed types simply have 0 octets
-     * in the fields they do not carry (see A.6-A.13). */
+    /* 写请求：MC+CKT + PD-out + OD；应答：PD-in + CKS。
+     * 读请求：MC+CKT + PD-out（无 OD）；应答：OD + PD-in + CKS。
+     * 这适用于所有 Annex A 类型：固定类型只是在不携带的
+     * 字段中为 0 字节（参见 A.6-A.13）。 */
     const uint32_t t_write = ((pdi + 1U) * 14U + (2U + pdo + od) * 12U + 6U) * 1000000U / baud;
     const uint32_t t_read = ((od + pdi + 1U) * 14U + (2U + pdo) * 12U + 6U) * 1000000U / baud;
     const uint32_t t = (t_write > t_read) ? t_write : t_read;
-    uint32_t units = (t + 99U) / 100U; /* ceil to 0.1 ms */
+    uint32_t units = (t + 99U) / 100U; /* 向上取整到 0.1 ms */
     const uint32_t app_units = (ctx->min_cycle_time_app_us + 99U) / 100U;
     if (units < app_units) {
         units = app_units;
     }
     if (units < 4U) {
-        units = 4U; /* Table B.3 minimum is 0.4 ms. */
+        units = 4U; /* Table B.3 最小值为 0.4 ms。 */
     }
     return (units > 255U) ? 255U : (uint8_t) units;
 }
@@ -1934,9 +1934,9 @@ int iolink_dll_set_baudrate(iolink_dll_ctx_t* ctx, iolink_baudrate_t baudrate)
     ctx->baudrate = baudrate;
     if (ctx->phy->set_baudrate != NULL) ctx->phy->set_baudrate(ctx->phy->user, baudrate);
     if (changing) {
-        /* The PHY aborts an in-flight reply when the UART is reconfigured;
-         * drop the matching ISR TX state so it cannot resume the stale frame
-         * on the next request. */
+        /* UART 重配时 PHY 会中止进行中的应答；
+         * 丢弃匹配的 ISR TX 状态，使其无法在下次请求时
+         * 恢复陈旧的帧。 */
         ctx->isr_tx_pending = 0U;
         ctx->isr_tx_active = 0U;
         ctx->isr_tx_has_cks = 0U;
@@ -1966,8 +1966,8 @@ int iolink_dll_set_pd_length(iolink_dll_ctx_t* ctx, uint8_t pd_in_len, uint8_t p
     if ((ctx == NULL) || (pd_in_len > IOLINK_PD_IN_MAX_SIZE) ||
         (pd_out_len > IOLINK_PD_OUT_MAX_SIZE))
         return -1;
-    /* The data ISR reads pd_out_len_current to frame a request; publish the
-     * PD-in/PD-out pair atomically so it cannot observe a half update. */
+    /* 数据 ISR 读取 pd_out_len_current 来成帧请求；
+     * 原子发布 PD-in/PD-out 对，使其无法观察到半更新。 */
     IOLINK_CRITICAL_ENTER();
     ctx->pd_in_len_current = pd_in_len;
     ctx->pd_out_len_current = pd_out_len;
@@ -1987,9 +1987,9 @@ int iolink_dll_set_sio_mode(iolink_dll_ctx_t* ctx)
     if (ctx == NULL) return -1;
     if (ctx->phy->set_mode != NULL) ctx->phy->set_mode(ctx->phy->user, IOLINK_PHY_MODE_SIO);
     ctx->phy_mode = IOLINK_PHY_MODE_SIO;
-    /* The SIO transition aborts any in-flight reply in the PHY; drop the
-     * matching ISR TX state so a stale active index cannot leak into the next
-     * SDCI session (int_active() is false in SIO, so nothing would finish it). */
+    /* SIO 转换会中止 PHY 中任何进行中的应答；丢弃
+     * 匹配的 ISR TX 状态，使陈旧的 active 索引不会泄漏到下一个
+     * SDCI 会话（SIO 中 int_active() 为 false，因此没有东西会完成它）。 */
     ctx->isr_tx_pending = 0U;
     ctx->isr_tx_active = 0U;
     ctx->isr_tx_has_cks = 0U;
@@ -2045,10 +2045,10 @@ void iolink_dll_reset_diagnostics(iolink_dll_ctx_t* ctx)
 {
     if (ctx == NULL) return;
 
-    /* B.2.20/Table 101: ErrorCount counts errors since power-on or reset, and
-       the diagnosis/status is cleared by the reset SystemCommands. The event
-       engine owns DeviceStatus and DetailedDeviceStatus; reset() keeps the
-       bound clock. */
+    /* B.2.20/Table 101：ErrorCount 统计上电或复位以来的错误，
+       诊断/状态由重置 SystemCommand 清除。事件
+       引擎拥有 DeviceStatus 和 DetailedDeviceStatus；reset() 保留
+       绑定的时钟。 */
 #if IOLINK_FEATURE_EVENTS
     iolink_events_reset(&ctx->events);
     ctx->phy_faults_rearm = 0U;
@@ -2069,9 +2069,9 @@ void iolink_dll_set_t_ren_limit_us(iolink_dll_ctx_t* ctx, uint32_t limit_us)
     ctx->t_ren_override = (limit_us != 0U);
 }
 
-/* Derive the expected request length for the M-sequence whose first octet
- * (the MC byte) is @p mc_byte, from the current DLL state. Pure / read-only so
- * the ISR pump can call it directly; shared by both RX paths. */
+/* 根据当前 DLL 状态，推导首字节（MC 字节）为 @p mc_byte 的
+ * M-sequence 的期望请求长度。纯只读函数，因此
+ * ISR 泵可直接调用；由两条 RX 路径共享。 */
 static uint8_t dll_compute_req_len(const iolink_dll_ctx_t* ctx, uint8_t mc_byte)
 {
     const uint8_t type0_channel = (uint8_t) (mc_byte & IOLINK_MC_COMM_CHANNEL_MASK);
@@ -2081,13 +2081,13 @@ static uint8_t dll_compute_req_len(const iolink_dll_ctx_t* ctx, uint8_t mc_byte)
                                  (type0_channel == IOLINK_MC_CHANNEL_DIAGNOSIS) ||
                                  (type0_channel == IOLINK_MC_CHANNEL_ISDU));
     if (type0_od_write) {
-        /* Figure A.5: a Type-0 write carries exactly ONE OD octet
-           whatever OD width the OPERATE M-sequence uses. */
+        /* Figure A.5：Type-0 写只携带一个 OD 字节，
+           无论 OPERATE M-sequence 使用何种 OD 宽度。 */
         return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + 1U);
     }
-    /* STARTUP/PREOPERATE expect Type 0; ESTAB_COM and OPERATE use the configured
-       type (C5/Table 47). The transition command is the sole Type-0 exchange
-       once a multi type is configured. */
+    /* STARTUP/PREOPERATE 期望 Type 0；ESTAB_COM 和 OPERATE 使用配置的
+       类型（C5/Table 47）。配置为多字节类型后，转换命令是唯一的
+       Type-0 交换。 */
     uint8_t type_bits = dll_expected_type_bits(ctx);
     bool transition_cmd =
         (ctx->state == IOLINK_DLL_STATE_ESTAB_COM) && (mc_byte == IOLINK_MC_TRANSITION_COMMAND);

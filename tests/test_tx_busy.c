@@ -1,15 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
 /*
- * TX FRAME line-state hook (tx_busy):
- *  - an eager ISR reply is deferred to the main pump while the PHY reports the
- *    line busy (the previous frame is still on the wire);
- *  - the PD-in reply buffer lease is released as soon as the PHY reports the
- *    line free, so two buffers are enough;
- *  - a TX_FRAME build with the hook uses two PD-in buffers.
+ * TX FRAME 线路状态钩子（tx_busy）：
+ *  - 当 PHY 报告线路繁忙（前一帧仍在线路上）时，即时（eager）ISR 应答
+ *    被推迟到主泵处理；
+ *  - 一旦 PHY 报告线路空闲，PD-in 应答缓冲区租约立即释放，
+ *    因此两个缓冲区就足够；
+ *  - 带该钩子的 TX_FRAME 构建使用两个 PD-in 缓冲区。
  *
- * Built against a FRAME/FRAME copy of the library with
- * IOLINK_PHY_FEATURE_TX_BUSY=1 (see tests/CMakeLists.txt).
+ * 针对库的 FRAME/FRAME 副本构建，并定义
+ * IOLINK_PHY_FEATURE_TX_BUSY=1（见 tests/CMakeLists.txt）。
  */
 
 #include <assert.h>
@@ -98,7 +98,7 @@ static iolink_phy_api_t g_phy = {
     .request_service = mock_request_service,
 };
 
-/* Type-2_V process READ in OPERATE: MC + CKT (header only, PD-out = 0). */
+/* OPERATE 下的 Type-2_V 过程数据读：MC + CKT（仅头部，PD-out = 0）。 */
 static void feed_process_read(void)
 {
     g_frame[0] = (uint8_t) (IOLINK_MC_CHANNEL_PROCESS | IOLINK_MC_RW_MASK);
@@ -126,8 +126,8 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     now_us = 1000000U;
 }
 
-/* A busy line must not be overwritten: the ISR declines and the main pump owns
- * the frame, which is then transmitted once the line is free. */
+/* 繁忙的线路不得被覆盖：ISR 放弃处理，由主泵接管
+ * 该帧，待线路空闲后再发送。 */
 static void test_busy_defers_eager_reply(void)
 {
     iolink_dll_ctx_t dll;
@@ -137,21 +137,21 @@ static void test_busy_defers_eager_reply(void)
     feed_process_read();
 
     iolink_dll_process_isr(&dll);
-    assert(g_tx_calls == 0U);         /* eager reply declined */
-    assert(dll.isr_tx_pending == 0U); /* nothing staged from the ISR */
+    assert(g_tx_calls == 0U);         /* 即时应答被放弃 */
+    assert(dll.isr_tx_pending == 0U); /* ISR 未暂存任何内容 */
     assert(dll.pd_in_captured == 0xFFU);
 
-    iolink_dll_process(&dll);         /* main pump answers the frame */
-    assert(dll.isr_tx_pending == 1U); /* staged, waiting for the ISR */
+    iolink_dll_process(&dll);         /* 主泵应答该帧 */
+    assert(dll.isr_tx_pending == 1U); /* 已暂存，等待 ISR */
 
     g_line_busy = 0U;
-    iolink_dll_process_isr(&dll); /* drain the staged reply */
+    iolink_dll_process_isr(&dll); /* 排空已暂存的应答 */
     assert(g_tx_calls == 1U);
     assert(dll.isr_tx_pending == 0U);
 }
 
-/* The reply buffer stays leased while the transfer is on the wire and is
- * released by the main pump once tx_busy() reports the line free. */
+/* 传输仍在线路上时，应答缓冲区的租约保持占用；一旦 tx_busy()
+ * 报告线路空闲，就由主泵释放。 */
 static void test_lease_released_when_line_free(void)
 {
     iolink_dll_ctx_t dll;
@@ -159,26 +159,26 @@ static void test_lease_released_when_line_free(void)
     init_ctx(&dll);
     feed_process_read();
 
-    iolink_dll_process_isr(&dll); /* eager reply from the ISR */
+    iolink_dll_process_isr(&dll); /* 由 ISR 发出即时应答 */
     assert(g_tx_calls == 1U);
     assert(dll.pd_in_captured != 0xFFU);
 
-    g_line_busy = 1U; /* still on the wire */
+    g_line_busy = 1U; /* 仍在线路上 */
     iolink_dll_process(&dll);
     assert(dll.pd_in_captured != 0xFFU);
 
-    g_line_busy = 0U; /* completion seen by the PHY */
+    g_line_busy = 0U; /* PHY 观察到传输完成 */
     iolink_dll_process(&dll);
     assert(dll.pd_in_captured == 0xFFU);
 }
 
-/* Without the hook the library cannot observe the end of a TX FRAME transfer,
- * so it keeps a third buffer. */
+/* 没有该钩子时，库无法观测 TX FRAME 传输的结束，
+ * 因此会保留第三个缓冲区。 */
 IOLINK_STATIC_ASSERT(IOLINK_PD_IN_BUFFERS == 2U, "tx_busy build must use two PD-in buffers");
 
-/* IOLINK_PHY_FEATURE_TX_BUSY=1 promises lease release through tx_busy(); a PHY
- * without the hook must be rejected at device init instead of silently keeping
- * the PD-in buffer leased forever. */
+/* IOLINK_PHY_FEATURE_TX_BUSY=1 承诺通过 tx_busy() 释放租约；不带该钩子的 PHY
+ * 必须在设备初始化时被拒绝，而不是静默地
+ * 让 PD-in 缓冲区被永久占用。 */
 void iolink_critical_enter(void)
 {
 }

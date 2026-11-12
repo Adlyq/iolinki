@@ -8,7 +8,7 @@
 
 /**
  * @file test_app_pd.c
- * @brief Unit tests for Process Data Application functionality (reply layout)
+ * @brief 过程数据应用功能的单元测试（应答布局）
  */
 
 #include <stdarg.h>
@@ -24,10 +24,10 @@
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 
-/* Figures A.9/A.10: the Device reply to a READ M-sequence is [OD][PD-in] CKS
-   with no leading status octet. PD validity lives in CKS bit 6 (1 = invalid)
-   and there is no toggle bit (A.1.5). The configured TYPE_2_2 reply is
-   OD(1) + PD-in(2) + CKS, and the byte-exact arrays pin that order. */
+/* 图 A.9/A.10：设备对 READ M-sequence 的应答是 [OD][PD-in] CKS
+   且没有前导状态八位组。PD 有效性位于 CKS 位 6（1 = 无效）
+   且没有翻转位（A.1.5）。配置的 TYPE_2_2 应答为
+   OD(1) + PD-in(2) + CKS，字节精确数组固定了这一顺序。 */
 
 static void test_reply_layout_od_first_no_status_octet(void** state)
 {
@@ -53,9 +53,9 @@ static void test_reply_layout_od_first_no_status_octet(void** state)
     }
     mock_phy_feed_chk();
 
-    /* MC 0x80 is a READ M-sequence, so the reply is OD(1), PD-in(2), CKS:
-       0x00 0x11 0x22 0x2D. The process channel read serves no OD octet
-       (0x00); CKS bit 6 is clear because the PD is valid (A.1.6). */
+    /* MC 0x80 是 READ M-sequence，因此应答为 OD(1)、PD-in(2)、CKS：
+       0x00 0x11 0x22 0x2D。过程通道读不提供 OD 八位组
+       (0x00)；因为 PD 有效，CKS 位 6 为 0（A.1.6）。 */
     uint8_t expected[] = {0x00, 0x11, 0x22, 0x2D};
     expect_memory(mock_phy_send, data, expected, sizeof(expected));
     expect_value(mock_phy_send, len, sizeof(expected));
@@ -79,7 +79,7 @@ static void test_reply_flags_pd_invalid(void** state)
     const int frame_len = 2;
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, (size_t) frame_len));
 
-    /* Mark the input Process Data as invalid; CKS bit 6 must be set. */
+    /* 将输入过程数据标记为无效；CKS 位 6 必须置位。 */
     iolink_device_pd_input_update(&dev.ctx, (const uint8_t*) "\x11\x22", 2, false);
 
     for (int i = 0; i < frame_len; i++) {
@@ -87,8 +87,8 @@ static void test_reply_flags_pd_invalid(void** state)
     }
     mock_phy_feed_chk();
 
-    /* Same READ reply layout, with the PD-invalid flag in CKS bit 6:
-       0x40 | 0x35 = 0x75. */
+    /* 相同的 READ 应答布局，PD 无效标志位于 CKS 位 6：
+       0x40 | 0x35 = 0x75。 */
     uint8_t expected[] = {0x00, 0x11, 0x22, 0x75};
     expect_memory(mock_phy_send, data, expected, sizeof(expected));
     expect_value(mock_phy_send, len, sizeof(expected));

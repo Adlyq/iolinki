@@ -1,13 +1,13 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
 /*
- * Regression test: the ISR mailbox path must refresh the activity timestamps.
+ * 回归测试：ISR 邮箱路径必须刷新活动时间戳。
  *
- * Previously the mailbox branch consumed a published frame without updating
- * last_activity_ms/last_byte_us, so the 1 s inactivity supervision reset a
- * healthy ESTAB_COM link to STARTUP on every timeout tick.
+ * 此前邮箱分支在消费已发布的帧时没有更新
+ * last_activity_ms/last_byte_us，导致 1 s 无活动监控在每个超时 tick 上
+ * 都把健康的 ESTAB_COM 链路复位到 STARTUP。
  *
- * ISR two-pump mailbox-activity checks.
+ * ISR 双泵邮箱活动检查。
  */
 
 #include <stdint.h>
@@ -25,7 +25,7 @@ static uint64_t test_time_us(void* user)
     return now_us;
 }
 
-/** @brief Publish one request into the mailbox ring (the ISR does this). */
+/** @brief 向邮箱环发布一个请求（由 ISR 执行）。 */
 static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len)
 {
     iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&ctx->isr_frame_ring);
@@ -38,11 +38,11 @@ static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t le
     iolink_ring_publish(&ctx->isr_frame_ring);
 }
 
-/* A valid Type-0 request: MC + CKT carrying the A.1.6 checksum. */
+/* 一个合法的 Type-0 请求：携带 A.1.6 校验和的 MC + CKT。 */
 static void make_type0_frame(uint8_t mc, uint8_t frame[2])
 {
     frame[0] = mc;
-    frame[1] = 0x00U; /* Type 0; the checksum occupies bits 0-5. */
+    frame[1] = 0x00U; /* Type 0；校验和占用 bit 0-5。 */
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 2U));
 }
 
@@ -63,13 +63,13 @@ int main(void)
     make_type0_frame(0x80U, frame); /* Type-0 READ */
 
     for (unsigned i = 0U; i < 3U; i++) {
-        /* 600 ms between served frames; >1 s accumulates over the loop. */
+        /* 被服务的帧之间间隔 600 ms；在整个循环中累计会超过 1 s。 */
         now_us += 600000U;
         push_mailbox(&ctx, frame, (uint8_t) sizeof(frame));
         iolink_dll_process(&ctx);
 
-        /* The mailbox frame is live traffic: it must not trip the idle timer.
-           Explicit checks keep the test effective when NDEBUG is set. */
+        /* 邮箱帧属于活跃流量：它不得触发空闲计时器。
+           显式检查保证在设置 NDEBUG 时该测试仍然有效。 */
         if ((ctx.timeout_errors != 0U) || (ctx.state == IOLINK_DLL_STATE_STARTUP)) {
             return 1;
         }

@@ -1,15 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /*
- * Concurrency regressions for the opt-in ISR pump:
- *   - main-context reply staging is serialised against the data ISR even when
- *     the application provides no lock (platform critical-section fallback);
- *   - a pump invocation that is preempted by a higher-priority vector is
- *     deferred instead of re-entering the single-writer state;
- *   - a PHY that reports its line busy (tx_frame() < 0) does not lose the
- *     frame: the main pump keeps ownership and stages the reply itself.
+ * 可选 ISR 泵的并发回归：
+ *   - 即使应用不提供任何锁，主上下文的应答暂存也与数据 ISR
+ *     串行化（平台临界区回退）；
+ *   - 被更高优先级向量抢占的泵调用会被推迟，
+ *     而不是重入单写者的状态；
+ *   - 报告线路繁忙（tx_frame() < 0）的 PHY 不会丢失
+ *     帧：主泵保持所有权并自行暂存应答。
  *
- * The test drives the DLL directly with a minimal PHY so it exercises the
- * public DLL contract rather than a board driver.
+ * 该测试用最小 PHY 直接驱动 DLL，因此检验的是
+ * 公开的 DLL 约定，而不是板级驱动。
  */
 
 #include <stdarg.h>
@@ -28,7 +28,7 @@
 
 static iolink_dll_ctx_t s_ctx;
 
-/* Platform critical-section observation (overrides the weak no-op default). */
+/* 平台临界区观测（覆盖默认的弱空实现）。 */
 static bool s_in_critical;
 static uint32_t s_crit_enters;
 static uint32_t s_crit_exits;
@@ -224,7 +224,7 @@ static void reset_ctx(void)
     s_in_critical = false;
 
     iolink_dll_init(&s_ctx, &s_phy);
-    /* Drive the shared frame handlers directly: OPERATE, SDCI, no timing. */
+    /* 直接驱动共享的帧处理器：OPERATE、SDCI、不强制时序。 */
     s_ctx.state = IOLINK_DLL_STATE_OPERATE;
     s_ctx.phy_mode = IOLINK_PHY_MODE_SDCI;
     s_ctx.enforce_timing = false;
@@ -238,7 +238,7 @@ static void reset_ctx(void)
     s_ctx.pd_valid = true;
 }
 
-/* Complete an M-sequence: the CKT octet carries its type bits + A.1.6 CKS. */
+/* 补全一个 M 序列：CKT 八位组承载其类型位 + A.1.6 CKS。 */
 static void make_frame(uint8_t* frame, uint8_t len)
 {
     frame[1] = (uint8_t) (frame[1] & IOLINK_MSEQ_TYPE_MASK);
@@ -259,14 +259,14 @@ static void feed_frame(const uint8_t* frame, uint8_t len)
 #endif
 }
 
-/* A no-lock device must still stage main-context replies atomically, but the
- * PHY service hook runs with interrupts enabled: it is port code and may be
- * slow, while the staged reply is already published. */
+/* 无锁设备仍须原子地暂存主上下文应答，但
+ * PHY 服务钩子在有中断使能的情况下运行：它属于端口代码，可能
+ * 很慢，而此时已暂存的应答已经发布。 */
 static void test_reply_staging_pokes_phy_outside_critical(void** state)
 {
     (void) state;
-    /* Type-0 ISDU read with FlowCTRL IDLE: the ISR fast path leaves it to the
-     * main pump, which answers it through dll_send(). */
+    /* 带 FlowCTRL IDLE 的 Type-0 ISDU 读：ISR 快速路径把它留给
+     * 主泵，由主泵通过 dll_send() 应答。 */
     uint8_t frame[2] = {
         (uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_IDLE), 0x00U};
 
@@ -276,17 +276,17 @@ static void test_reply_staging_pokes_phy_outside_critical(void** state)
 
     iolink_dll_process_isr(&s_ctx);
 
-    /* The staging path in dll_send() (slot selection, payload copy, publish) is
-     * main-owned and must not be wrapped in the platform critical section: the
-     * exclusion belongs to the direct-send fallback, not to this publish. Pin
-     * that by counting the entries around the pass that answers the ISDU read;
-     * a regression that re-adds IOLINK_CRITICAL_ENTER/EXIT around the copy is
-     * then visible even though request_service() still runs with the section
-     * released. This pass has no other section: the mock PHY has no diagnostics
-     * hooks, the ISDU FlowCTRL IDLE read only resets the transport, timing
-     * enforcement is off (no t_CYCLE event), the DLL state does not change, and
-     * the mailbox consume takes no lock. The suite runs this test in the
-     * BYTE/BYTE configuration; FRAME granularities are compile-only. */
+    /* dll_send() 中的暂存路径（槽位选择、载荷复制、发布）归主上下文
+     * 所有，不得被平台临界区包裹：互斥属于直接发送的回退路径，
+     * 而不属于这里的一次发布。通过在应答该 ISDU 读的那一趟
+     * 前后统计进入次数来固定这一点；这样即使 request_service() 仍在
+     * 该段已释放的情况下运行，重新在复制前后加入
+     * IOLINK_CRITICAL_ENTER/EXIT 的回归也会暴露出来。
+     * 这一趟没有其它临界区：mock PHY 没有诊断钩子，
+     * ISDU FlowCTRL IDLE 读只复位传输，时序强制关闭
+     * （不产生 t_CYCLE 事件），DLL 状态不变，且
+     * 邮箱消费不取锁。本套件在 BYTE/BYTE 配置下运行该测试；
+     * FRAME 粒度仅做编译验证。 */
 #if IOLINK_NEED_CRITICAL
     const uint32_t crit_before = s_crit_enters;
 #endif
@@ -306,16 +306,16 @@ static uint32_t s_nested_calls;
 static void nested_pump_hook(void)
 {
     s_nested_calls++;
-    /* Model a higher-priority vector invoking the pump mid-frame. */
+    /* 模拟更高优先级的向量在帧中途调用泵。 */
     iolink_dll_process_isr(&s_ctx);
 }
 
-/* A preempting pump invocation must defer to the outer one instead of
- * re-entering the single-writer RX/TX staging state. */
+/* 抢占式的泵调用必须让位于外层调用，而不是
+ * 重入单写者的 RX/TX 暂存状态。 */
 static void test_nested_pump_is_deferred(void** state)
 {
     (void) state;
-    /* Type-0 page READ in OPERATE: answered eagerly from the ISR. */
+    /* OPERATE 下的 Type-0 page 读：由 ISR 即时应答。 */
     uint8_t frame[2] = {(uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x02U), 0x00U};
 
     reset_ctx();
@@ -329,7 +329,7 @@ static void test_nested_pump_is_deferred(void** state)
     assert_int_equal(s_nested_calls, 1U);
     assert_int_equal(s_ctx.isr_reentry_pending, 0U);
     assert_int_equal(s_ctx.in_isr, 0U);
-    /* Only the outer invocation consumed the request. */
+    /* 只有外层调用消费了该请求。 */
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     assert_int_equal(s_rx_calls, 1U);
 #else
@@ -350,9 +350,9 @@ static void state_cb(void* user, iolink_dll_state_t state)
     }
 }
 
-/* Level-based notification: two ISR-side transitions before the main window
- * are coalesced into the current state, and the callback never runs in the
- * ISR. A second flush without a state change delivers nothing. */
+/* 电平式通知：主窗口之前发生的两次 ISR 侧状态迁移
+ * 会合并为当前状态，且回调绝不在
+ * ISR 中运行。状态未变的第二次 flush 不会投递任何内容。 */
 static void test_state_notification_is_level_based(void** state)
 {
     (void) state;
@@ -366,7 +366,7 @@ static void test_state_notification_is_level_based(void** state)
     s_state_count = 0U;
     s_cb_in_isr = false;
 
-    /* Startup probe (T1): STARTUP -> PREOPERATE, answered by the ISR. */
+    /* 启动探测（T1）：STARTUP -> PREOPERATE，由 ISR 应答。 */
     make_frame(probe, sizeof(probe));
     feed_frame(probe, sizeof(probe));
     iolink_dll_process_isr(&s_ctx);
@@ -374,9 +374,9 @@ static void test_state_notification_is_level_based(void** state)
         iolink_dll_process_isr(&s_ctx);
     }
     assert_int_equal(s_ctx.state, IOLINK_DLL_STATE_PREOPERATE);
-    assert_int_equal(s_state_count, 0U); /* deferred to the main window */
+    assert_int_equal(s_state_count, 0U); /* 推迟到主窗口 */
 
-    /* Transition command: PREOPERATE -> ESTAB_COM, before main runs. */
+    /* 迁移命令：PREOPERATE -> ESTAB_COM，发生在主泵运行之前。 */
     make_frame(trans, sizeof(trans));
     feed_frame(trans, sizeof(trans));
     iolink_dll_process_isr(&s_ctx);
@@ -392,13 +392,13 @@ static void test_state_notification_is_level_based(void** state)
     assert_int_equal(s_states[0], IOLINK_DLL_STATE_ESTAB_COM);
     assert_false(s_cb_in_isr);
 
-    /* No state change since the last delivery: nothing is reported twice. */
+    /* 自上次投递以来没有状态变化：不会重复报告。 */
     iolink_dll_flush_state_callbacks(&s_ctx);
     assert_int_equal(s_state_count, 1U);
 }
 
-/* An ISR-side OPERATE -> STARTUP reset must remain observable even when the
- * next startup probe advances the link to PREOPERATE before the main flush. */
+/* 即使下一次启动探测在主泵 flush 之前就把链路推进到 PREOPERATE，
+ * ISR 侧的 OPERATE -> STARTUP 复位也必须仍然可被观察到。 */
 static void test_isr_startup_notification_is_not_coalesced(void** state)
 {
     (void) state;
@@ -411,8 +411,8 @@ static void test_isr_startup_notification_is_not_coalesced(void** state)
     s_cb_in_isr = false;
 
     s_ctx.in_isr = 1U;
-    /* Model the two writes made by dll_set_state() while the data ISR owns the
-     * context. The pending bit is the ISR-to-main edge notification. */
+    /* 模拟 dll_set_state() 在数据 ISR 拥有上下文时执行的那两次写操作。
+     * 挂起位即 ISR 到主泵的边沿通知。 */
     s_ctx.state = IOLINK_DLL_STATE_STARTUP;
     s_ctx.startup_notification_pending = 1U;
     s_ctx.state = IOLINK_DLL_STATE_PREOPERATE;
@@ -428,12 +428,12 @@ static void test_isr_startup_notification_is_not_coalesced(void** state)
 }
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-/* A busy PHY (previous reply still on the wire) must not swallow the frame: the
- * eager reply is abandoned and the main pump stages it on the next window. */
+/* 繁忙的 PHY（前一应答仍在线路上）不得吞掉该帧：
+ * 即时应答被放弃，由主泵在下一个窗口暂存它。 */
 static void test_busy_tx_frame_keeps_frame_for_main(void** state)
 {
     (void) state;
-    /* Type-2_1 process WRITE: MC + CKT + PD-out + OD. */
+    /* Type-2_1 过程数据写：MC + CKT + PD-out + OD。 */
     uint8_t frame[4] = {IOLINK_MC_CHANNEL_PROCESS, (uint8_t) IOLINK_MSEQ_TYPE_2, 0xAAU, 0x55U};
 
     reset_ctx();
@@ -447,12 +447,12 @@ static void test_busy_tx_frame_keeps_frame_for_main(void** state)
     make_frame(frame, sizeof(frame));
     feed_frame(frame, sizeof(frame));
 
-    s_tx_rc = -1; /* line busy */
+    s_tx_rc = -1; /* 线路繁忙 */
     iolink_dll_process_isr(&s_ctx);
 
     assert_int_equal(s_tx_calls, 1);
-    /* The reply failed (line busy), so the record carries eager = 0 and the
-     * main pump owns the frame. */
+    /* 应答失败（线路繁忙），因此该记录携带 eager = 0，
+     * 由主泵拥有该帧。 */
     assert_int_equal(iolink_ring_count(&s_ctx.isr_frame_ring), 1U);
     const iolink_frame_rec_t* rec =
         (const iolink_frame_rec_t*) iolink_ring_peek(&s_ctx.isr_frame_ring);
@@ -464,7 +464,7 @@ static void test_busy_tx_frame_keeps_frame_for_main(void** state)
     assert_true(s_service_calls > 0U);
     assert_true(s_ctx.isr_tx_pending != 0U);
 
-    /* The next ISR pass transmits the staged reply. */
+    /* 下一次 ISR pass 会发送已暂存的应答。 */
     iolink_dll_process_isr(&s_ctx);
     assert_int_equal(s_tx_calls, 2);
 }

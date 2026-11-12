@@ -8,9 +8,9 @@
 
 /**
  * @file test_protocol_constants.c
- * @brief Pins the numeric values of the protocol constants to the IO-Link
- *        V1.1.5 tables (A.1/A.3/A.10, B.8, B.9, C.1, D.1). A change here means
- *        the wire encoding diverged from the specification.
+ * @brief 将协议常量的数值固定到 IO-Link V1.1.5 的表格
+ *        （A.1/A.3/A.10、B.8、B.9、C.1、D.1）。此处发生变更意味着
+ *        线上编码已偏离规范。
  */
 
 #include <stdarg.h>
@@ -22,7 +22,7 @@
 #include "iolinki/protocol.h"
 #include "iolinki/events.h"
 
-/* Table A.3: M-sequence type bits in CKT/CKS. */
+/* Table A.3：CKT/CKS 中的 M-sequence 类型位。 */
 static void test_msequence_type_bits(void** state)
 {
     (void) state;
@@ -35,7 +35,7 @@ static void test_msequence_type_bits(void** state)
     assert_int_equal(IOLINK_M_SEQ_MIN_LEN, 3U);
 }
 
-/* Table A.1: Master Command / channel encoding. */
+/* Table A.1：Master Command / 通道编码。 */
 static void test_master_command_and_channels(void** state)
 {
     (void) state;
@@ -48,13 +48,13 @@ static void test_master_command_and_channels(void** state)
     assert_int_equal(IOLINK_MC_CHANNEL_ISDU, 0x60U);
     assert_int_equal(IOLINK_MC_TRANSITION_COMMAND, 0x0FU);
 
-    /* Table 52: FlowCTRL values. */
+    /* Table 52：FlowCTRL 取值。 */
     assert_int_equal(IOLINK_FLOWCTRL_START, 0x10U);
     assert_int_equal(IOLINK_FLOWCTRL_IDLE, 0x11U);
     assert_int_equal(IOLINK_FLOWCTRL_ABORT, 0x1FU);
     assert_int_equal(IOLINK_FLOWCTRL_COUNT_MASK, 0x0FU);
 
-    /* Table B.2: MasterCommand codes. */
+    /* Table B.2：MasterCommand 编码。 */
     assert_int_equal(IOLINK_CMD_FALLBACK, 0x5AU);
     assert_int_equal(IOLINK_CMD_MASTER_IDENT, 0x95U);
     assert_int_equal(IOLINK_CMD_DEVICE_IDENT, 0x96U);
@@ -64,7 +64,7 @@ static void test_master_command_and_channels(void** state)
     assert_int_equal(IOLINK_CMD_DEVICE_PREOPERATE, 0x9AU);
 }
 
-/* Table A.12: ISDU service identifiers. */
+/* Table A.12：ISDU 服务标识符。 */
 static void test_isdu_service_ids(void** state)
 {
     (void) state;
@@ -72,7 +72,7 @@ static void test_isdu_service_ids(void** state)
     assert_int_equal(IOLINK_ISDU_SERVICE_WRITE, 0x03U);
 }
 
-/* Table B.8: mandatory object indices. */
+/* Table B.8：强制对象索引。 */
 static void test_isdu_index_values(void** state)
 {
     (void) state;
@@ -80,8 +80,8 @@ static void test_isdu_index_values(void** state)
     assert_int_equal(IOLINK_IDX_DIRECT_PARAMETERS_2, 0x0001U);
     assert_int_equal(IOLINK_IDX_SYSTEM_COMMAND, 0x0002U);
     assert_int_equal(IOLINK_IDX_DATA_STORAGE, 0x0003U);
-    /* Table B.8: 0x0004-0x000B are reserved; VendorID/DeviceID live in
-     * Direct Parameter Page 1, and no ISDU index constants are exposed. */
+    /* Table B.8：0x0004-0x000B 为保留索引；VendorID/DeviceID 位于
+     * Direct Parameter Page 1，且不对外暴露 ISDU 索引常量。 */
     assert_int_equal(IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0x000CU);
     assert_int_equal(IOLINK_IDX_PROFILE_CHARACTERISTIC, 0x000DU);
     assert_int_equal(IOLINK_IDX_VENDOR_NAME, 0x0010U);
@@ -104,7 +104,7 @@ static void test_isdu_index_values(void** state)
     assert_int_equal(IOLINK_IDX_OFFSET_TIME, 0x0030U);
 }
 
-/* Table B.9: SystemCommand codes. */
+/* Table B.9：SystemCommand 编码。 */
 static void test_system_command_values(void** state)
 {
     (void) state;
@@ -120,7 +120,7 @@ static void test_system_command_values(void** state)
     assert_int_equal(IOLINK_CMD_BACK_TO_BOX, 0x83U);
 }
 
-/* Table C.1: ISDU error additional codes. */
+/* Table C.1：ISDU 错误附加码。 */
 static void test_isdu_error_values(void** state)
 {
     (void) state;
@@ -143,14 +143,14 @@ static void test_isdu_error_values(void** state)
     assert_int_equal(IOLINK_ISDU_ERROR_PARAM_INCONSISTENT, 0x41U);    /* PAR_SETINCONSIST */
     assert_int_equal(IOLINK_ISDU_ERROR_APP_DEV_NOT_READY, 0x82U);     /* APP_DEVNOTRDY */
 
-    /* Table C.1 defines a single "index not accessible" code; the two symbolic
-     * aliases used by the stack must stay numerically identical. */
+    /* Table C.1 只定义了一个“索引不可访问”错误码；协议栈使用的两个
+     * 符号别名必须在数值上保持一致。 */
     assert_int_equal(IOLINK_ISDU_ERROR_NOT_ACCESSIBLE, 0x23U);
     assert_int_equal(IOLINK_ISDU_ERROR_WRITE_PROTECTED, 0x23U);
     assert_int_equal(IOLINK_ISDU_ERROR_NOT_ACCESSIBLE, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 }
 
-/* Index 0x000C: DeviceAccessLocks bit assignment. */
+/* 索引 0x000C：DeviceAccessLocks 位分配。 */
 static void test_access_lock_bits(void** state)
 {
     (void) state;
@@ -160,7 +160,7 @@ static void test_access_lock_bits(void** state)
     assert_int_equal(IOLINK_LOCK_LOCAL_UI, 0x08U);
 }
 
-/* Annex D: standardized event-code ranges and event status flag. */
+/* Annex D：标准化的事件码范围和事件状态标志位。 */
 static void test_event_code_ranges(void** state)
 {
     (void) state;

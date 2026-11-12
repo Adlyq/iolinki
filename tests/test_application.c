@@ -8,7 +8,7 @@
 
 /**
  * @file test_application.c
- * @brief Unit tests for application-layer Process Data API
+ * @brief 应用层过程数据 API 的单元测试
  */
 
 #include <stdarg.h>
@@ -35,9 +35,9 @@ static void test_pd_input_update_flow(void** state)
     int res = iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true);
     assert_int_equal(res, 0);
 
-    /* Check internal state via output read (as simple proxy) */
-    /* Note: PD output reads FROM master, so this is not a direct mirror.
-       We just verify the API doesn't crash here. */
+    /* 通过输出读取检查内部状态（作为简单代理） */
+    /* 注意：PD 输出是从主站读入的，因此这不是直接的镜像。
+       这里只验证 API 不会崩溃。 */
 }
 
 static void test_pd_output_read_flow(void** state)
@@ -51,7 +51,7 @@ static void test_pd_output_read_flow(void** state)
 
     uint8_t buf[16];
     int res = iolink_device_pd_output_read(&dev.ctx, buf, sizeof(buf));
-    /* Initial state should be 0 length or zeroed */
+    /* 初始状态应为长度 0 或已清零 */
     assert_int_equal(res, 0);
 }
 
@@ -114,9 +114,9 @@ static void test_app_callbacks_lifecycle(void** state)
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, NULL, &cbs), 0);
 
-    /* Registered before init -> initial STARTUP announced. No user is configured
-     * at init (the helper builds its own config), so the init-time on_startup
-     * receives NULL; the transition hooks below get the sentinel. */
+    /* 在 init 之前注册 -> 已宣告初始 STARTUP。init 时未配置用户
+     * （辅助函数自建配置），因此 init 阶段的 on_startup
+     * 收到 NULL；下面的迁移钩子拿到哨兵值。 */
     assert_true(g_cb_startup >= 1);
 
     static int user_sentinel;
@@ -126,8 +126,8 @@ static void test_app_callbacks_lifecycle(void** state)
     move_to_operate_ctx(&dev.ctx);
     assert_true(g_cb_state >= 1);
 
-    /* PREOPERATE is traversed during the handshake; the state-change hook fires
-       even though the transition is transient. */
+    /* PREOPERATE 在握手过程中被遍历；即使该迁移是瞬态的，
+       状态变化钩子也会触发。 */
     assert_true(g_cb_preoperate >= 1);
 
     if (iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_OPERATE) {
@@ -135,10 +135,10 @@ static void test_app_callbacks_lifecycle(void** state)
         assert_true(g_cb_pd_output >= 1);
     }
 
-    /* Re-initialize with the user already configured: the init-time
-     * on_startup() must forward it too (not only the transition hooks).
-     * setup_mock_phy() is NOT called again: its infinite expectation buckets
-     * satisfy the PHY traffic of both inits. */
+    /* 在用户已配置的情况下重新初始化：init 阶段的
+     * on_startup() 也必须把用户传进去（不只是迁移钩子）。
+     * 不再调用 setup_mock_phy()：它的无限期望桶
+     * 足以满足两次 init 的 PHY 流量。 */
     g_cb_startup = 0;
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), 0);

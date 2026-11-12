@@ -17,27 +17,27 @@
 
 /**
  * @file phy.h
- * @brief IO-Link Physical Layer (PHY) Abstraction Interface
+ * @brief IO-Link 物理层（PHY）抽象接口
  */
 
 /**
- * @defgroup iolinki_phy Physical Layer (PHY) Interface
- * @brief Hardware-agnostic transceiver contract, operating modes and baudrates.
+ * @defgroup iolinki_phy 物理层（PHY）接口
+ * @brief 与硬件无关的收发器契约、运行模式和波特率。
  * @{
  */
 
 /**
- * @brief IO-Link Operating Modes
+ * @brief IO-Link 运行模式
  */
 typedef enum
 {
-    IOLINK_PHY_MODE_INACTIVE = 0U, /**< PHY interface disabled */
-    IOLINK_PHY_MODE_SIO = 1U,      /**< Standard I/O mode (Digital Input/Output) */
-    IOLINK_PHY_MODE_SDCI = 2U      /**< Digital Communication mode (IO-Link exchange) */
+    IOLINK_PHY_MODE_INACTIVE = 0U, /**< PHY 接口已禁用 */
+    IOLINK_PHY_MODE_SIO = 1U,      /**< 标准 I/O 模式（数字输入/输出） */
+    IOLINK_PHY_MODE_SDCI = 2U      /**< 数字通信模式（IO-Link 交互） */
 } iolink_phy_mode_t;
 
 /**
- * @brief IO-Link Communication Baudrates (COMx)
+ * @brief IO-Link 通信波特率（COMx）
  */
 typedef enum
 {
@@ -47,240 +47,240 @@ typedef enum
 } iolink_baudrate_t;
 
 /**
- * @brief Physical fault flags returned by iolink_phy_api_t.get_faults().
+ * @brief iolink_phy_api_t.get_faults() 返回的物理故障标志。
  *
- * A PHY reports the physical condition; the device decides how it is reported
- * on the wire. The DLL polls the bitmask and reports each 0->1 edge as the
- * mapped Table D.1 event (see the hook's own note).
+ * PHY 上报物理状态；设备决定如何
+ * 在总线上报告它。DLL 轮询该位掩码，并把每个 0->1 边沿作为
+ * 映射的 Table D.1 事件上报（参见该钩子自身的说明）。
  */
-#define IOLINK_PHY_FAULT_UNDERVOLTAGE (1U << 0)  /**< L+ supply below tolerance */
-#define IOLINK_PHY_FAULT_OVERTEMP (1U << 1)      /**< Transceiver over-temperature */
-#define IOLINK_PHY_FAULT_SHORT_CIRCUIT (1U << 2) /**< C/Q (or L+) short circuit */
-#define IOLINK_PHY_FAULT_OVERVOLTAGE (1U << 3)   /**< L+ supply above tolerance */
-/** All defined physical fault flags. */
+#define IOLINK_PHY_FAULT_UNDERVOLTAGE (1U << 0)  /**< L+ 电源低于容差 */
+#define IOLINK_PHY_FAULT_OVERTEMP (1U << 1)      /**< 收发器过温 */
+#define IOLINK_PHY_FAULT_SHORT_CIRCUIT (1U << 2) /**< C/Q（或 L+）短路 */
+#define IOLINK_PHY_FAULT_OVERVOLTAGE (1U << 3)   /**< L+ 电源高于容差 */
+/** 所有已定义的物理故障标志。 */
 #define IOLINK_PHY_FAULT_ALL                                                                      \
     (IOLINK_PHY_FAULT_UNDERVOLTAGE | IOLINK_PHY_FAULT_OVERTEMP | IOLINK_PHY_FAULT_SHORT_CIRCUIT | \
      IOLINK_PHY_FAULT_OVERVOLTAGE)
 
 /**
- * @brief Normalized status bits returned by the raw-octet hooks
- *        (iolink_phy_api_t.rx_octet()).
+ * @brief 原始字节钩子返回的规范化状态位
+ *        （iolink_phy_api_t.rx_octet()）。
  *
- * A raw-octet PHY translates its own transceiver status into these bits so the
- * library framing engine stays device-agnostic. The library only needs the
- * frame-end/error indication: on a single-octet transceiver that is the
- * "data + check" condition raised at the end of a master frame (octet-count
- * time-out) or on a receive error.
+ * 原始字节 PHY 把自身收发器状态转换为这些位，以便
+ * 库的组帧引擎保持与设备无关。库只需要
+ * 帧结束/错误指示：在单字节收发器上，即
+ * 主站帧结束时（字节计数
+ * 超时）或接收错误时产生的“数据 + 校验”条件。
  */
-#define IOLINK_PHY_STATUS_CHK (1U << 0)        /**< Frame-end time-out / receive error */
-#define IOLINK_PHY_STATUS_DATA_READY (1U << 1) /**< A received octet is available */
+#define IOLINK_PHY_STATUS_CHK (1U << 0)        /**< 帧结束超时 / 接收错误 */
+#define IOLINK_PHY_STATUS_DATA_READY (1U << 1) /**< 有已接收的字节可用 */
 
-/** Valid L+ window for the legacy iolink_phy_api_t.get_voltage_mv() hook, in mV. */
+/** 旧版 iolink_phy_api_t.get_voltage_mv() 钩子的有效 L+ 窗口，单位 mV。 */
 #define IOLINK_PHY_VOLTAGE_MIN_MV (18000)
 #define IOLINK_PHY_VOLTAGE_MAX_MV (30000)
 
 /**
- * @brief Physical Layer (PHY) API Structure
+ * @brief 物理层（PHY）API 结构
  *
- * This interface defines the contract between the stack and the hardware-specific
- * transceiver driver (e.g. for MAX14827, L6362, or a Virtual TTY).
+ * 本接口定义协议栈与硬件相关
+ * 收发器驱动（例如用于 MAX14827、L6362 或虚拟 TTY）之间的契约。
  */
 typedef struct
 {
-    void* user; /**< Opaque driver context passed back to every callback. */
+    void* user; /**< 回传给每个回调的不透明驱动上下文。 */
 
     /**
-     * @brief Initialize transceiver hardware
-     * @return 0 on success, negative error code on hardware failure
+     * @brief 初始化收发器硬件
+     * @return 成功返回 0，硬件失败返回负错误码
      */
     int (*init)(void* user);
 
     /**
-     * @brief Set PHY operating mode (SDCI vs SIO)
-     * @param mode Target mode
+     * @brief 设置 PHY 运行模式（SDCI 与 SIO）
+     * @param mode 目标模式
      */
     void (*set_mode)(void* user, iolink_phy_mode_t mode);
 
     /**
-     * @brief Set communication baudrate
-     * @param baudrate Target COMx speed
+     * @brief 设置通信波特率
+     * @param baudrate 目标 COMx 速率
      */
     void (*set_baudrate)(void* user, iolink_baudrate_t baudrate);
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     /**
-     * @brief Read one whole received frame (RX FRAME mode).
+     * @brief 读取一个完整接收帧（RX FRAME 模式）。
      *
-     * The PHY owns the frame; the returned pointer is valid until the next
-     * rx_frame() call (zero-copy: the library reads it directly and does not
-     * copy it in the ISR). The PHY delimits and validates frame completeness
-     * electrically (e.g. USART IDLE plus the configured end-of-frame rule).
-     * It must not return a header or other truncated prefix as a complete
-     * frame. The octet count is reported in @p len and a PHY status octet
-     * (IOLINK_PHY_STATUS_*) in @p status; protocol checksum and M-sequence
-     * validation remain the library's responsibility.
-     * @return Pointer to the frame, or NULL when no complete frame is ready.
+     * PHY 拥有该帧；返回的指针在下一次
+     * rx_frame() 调用前有效（零拷贝：库直接读取，不在
+     * ISR 中复制）。PHY 在电气层界定并校验帧的完整性
+     * （例如 USART IDLE 加上配置的帧结束规则）。
+     * 它不得把帧头或其他截断前缀作为完整
+     * 帧返回。字节数通过 @p len 上报，PHY 状态字节
+     * （IOLINK_PHY_STATUS_*）通过 @p status 上报；协议校验和与 M 序列
+     * 校验仍由库负责。
+     * @return 指向该帧的指针；没有完整帧就绪时为 NULL。
      */
     const uint8_t* (*rx_frame)(void* user, uint8_t* status, uint8_t* len);
 #else
     /**
-     * @brief Read one received octet and its transceiver status (RX BYTE mode).
+     * @brief 读取一个接收字节及其收发器状态（RX BYTE 模式）。
      *
-     * For a single-octet transceiver (e.g. a single-octet SPI transceiver)
-     * the library owns M-sequence framing: it pulls received octets here and
-     * feeds reply octets through tx_octet()/tx_done(). @p status is a PHY status
-     * octet (see IOLINK_PHY_STATUS_*).
-     * @return 1 if an octet was read into @p data, 0 if none was pending,
-     *         negative on transport error.
+     * 对于单字节收发器（例如单字节 SPI 收发器），
+     * 库负责 M 序列组帧：它在此拉取接收字节，并
+     * 通过 tx_octet()/tx_done() 送入应答字节。@p status 是 PHY 状态
+     * 字节（参见 IOLINK_PHY_STATUS_*）。
+     * @return 若读出字节到 @p data 则返回 1，若无待处理数据返回 0，
+     *         传输错误时返回负值。
      */
     int (*rx_octet)(void* user, uint8_t* data, uint8_t* status);
 #endif
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     /**
-     * @brief Send one whole reply frame (TX FRAME mode).
+     * @brief 发送一个完整应答帧（TX FRAME 模式）。
      *
-     * The library hands the complete reply (payload + already-appended CKS) for
-     * the PHY to transmit in one operation (e.g. a DMA transfer). The PHY owns
-     * the end of the transfer and releases the line from its own completion
-     * interrupt, so this mode has no tx_done() hook. @p data must stay valid
-     * until completion.
-     * @return 0 on success, negative on error.
+     * 库把完整应答（有效载荷 + 已追加的 CKS）交给
+     * PHY 在一次操作中发送（例如 DMA 传输）。PHY 负责
+     * 传输结束，并在自身的完成
+     * 中断中释放线路，因此该模式没有 tx_done() 钩子。@p data 必须保持有效
+     * 直到传输完成。
+     * @return 成功返回 0，出错返回负值。
      */
     int (*tx_frame)(void* user, const uint8_t* data, size_t len);
 
     /**
-     * @brief Non-zero while the PHY still owns the C/Q line (optional).
+     * @brief PHY 仍占用 C/Q 线路时返回非零值（可选）。
      *
-     * Read-only and non-blocking; callable from the data ISR and from the main
-     * context. The library checks it before starting an ISR reply (a busy line
-     * defers the reply to the main pump instead of tearing the frame down) and
-     * polls it from the main pump to release the PD-in reply buffer.
-     * NULL keeps the legacy behaviour: the transfer end stays unobservable, so
-     * a reply buffer is only reused after the next capture.
-     * @return 1 while a transfer is in flight, 0 when the line is free.
+     * 只读且非阻塞；可从数据 ISR 和主
+     * 上下文调用。库在启动 ISR 应答前检查它（线路忙时
+     * 会把应答推迟到主循环泵送，而不是拆掉该帧），并
+     * 从主循环泵送中轮询它以释放 PD-in 应答缓冲区。
+     * NULL 保持旧有行为：传输结束不可观测，因此
+     * 应答缓冲区只在下一次捕获之后才复用。
+     * @return 传输进行中返回 1，线路空闲时返回 0。
      */
     uint8_t (*tx_busy)(void* user);
 #else
     /**
-     * @brief Write one reply octet (TX BYTE mode).
+     * @brief 写入一个应答字节（TX BYTE 模式）。
      *
-     * The library feeds the reply octet by octet as the transceiver requests it
-     * (writing the first octet starts the frame); it accumulates the message
-     * checksum while sending and emits the final CKS octet before tx_done(). The
-     * transceiver arbitration with the data interrupt is the PHY's responsibility.
-     * @return Normalized PHY status octet for the access (IOLINK_PHY_STATUS_*).
+     * 库在收发器请求时逐字节送入应答
+     * （写入第一个字节即启动该帧）；它在发送过程中累加报文
+     * 校验和，并在 tx_done() 之前发出最后的 CKS 字节。收发器
+     * 与数据中断的仲裁由 PHY 负责。
+     * @return 本次访问的规范化 PHY 状态字节（IOLINK_PHY_STATUS_*）。
      */
     int (*tx_octet)(void* user, uint8_t data);
 
     /**
-     * @brief End / complete the current device transmission (TX BYTE only).
+     * @brief 结束/完成当前设备发送（仅 TX BYTE）。
      *
-     * Called by the library after the last octet (transmit the frame end /
-     * release the line) and by the RX BYTE gap handler to release the
-     * transceiver's receive engine. TX FRAME builds do not declare this member:
-     * the PHY ends the transfer itself. Formerly named tx_end().
+     * 由库在最后一个字节之后调用（发送帧结束/
+     * 释放线路），并由 RX BYTE 间隔处理程序调用，以释放
+     * 收发器的接收引擎。TX FRAME 构建不声明该成员：
+     * PHY 自行结束传输。原名为 tx_end()。
      */
     void (*tx_done)(void* user);
 #endif
 
     /**
-     * @brief Current level of the transceiver data-interrupt line.
-     * @return 1 while asserted, 0 otherwise. Used to gate the ISR pump and to
-     *         drain a back-to-back burst; in FRAME mode it also reports a
-     *         complete RX frame / TX-ready.
+     * @brief 收发器数据中断线的当前电平。
+     * @return 有效时为 1，否则为 0。用于门控 ISR 泵送并
+     *         排空背靠背突发；在 FRAME 模式下还会报告
+     *         RX 帧完整/TX 就绪。
      */
     uint8_t (*int_active)(void* user);
 
-    /* --- Optional stack timers (ISR pump alignment with ST) ----------------
-     * response_timer_* implement the t_A one-shot (13 bit times): start on a
-     * valid request octet (also stopping the cycle tick) and stop when the
-     * reply starts or on timeout. stack_timer_start drives the periodic tick
-     * that authorises the main-context service window. Both are optional; when
-     * NULL the library keeps its legacy software-timestamp behaviour.
-     * stack_timer_stop is declared but currently not called by src/. */
+    /* --- 可选协议栈定时器（与 ST 的 ISR 泵送对齐） ---------------------------
+     * response_timer_* 实现 t_A 单次定时（13 个位时间）：在有效的
+     * 请求字节上启动（同时停止周期节拍），并在
+     * 应答开始或超时时停止。stack_timer_start 驱动周期性节拍，
+     * 该节拍授权主上下文服务窗口。两者均为可选；当
+     * 为 NULL 时，库保持旧有的软件时间戳行为。
+     * stack_timer_stop 已声明，但当前 src/ 未调用它。 */
     void (*response_timer_start)(void* user);
     void (*response_timer_stop)(void* user);
     void (*stack_timer_start)(void* user);
     void (*stack_timer_stop)(void* user);
 
     /**
-     * @brief Ask the PHY to run the data-interrupt pump now (optional).
+     * @brief 请求 PHY 立即运行数据中断泵送（可选）。
      *
-     * The ISR two-pump transport transmits replies from interrupt context. When
-     * a main-context handler has staged a reply, the library calls this hook so
-     * the PHY requests its data interrupt (e.g. pends the USART IRQ) and the
-     * actual TX hooks are only ever invoked from the ISR. NULL keeps the legacy
-     * direct-send behaviour (the library sends from the caller).
+     * ISR 双泵传输从中断上下文发送应答。当
+     * 主上下文处理程序已暂存应答时，库调用该钩子，使
+     * PHY 请求其数据中断（例如挂起 USART IRQ），而
+     * 实际的 TX 钩子只从 ISR 中调用。NULL 保持旧有的
+     * 直接发送行为（由调用方发送）。
      */
     void (*request_service)(void* user);
 
-    /* Optional Diagnostic/Support Functions (can be NULL) */
+    /* 可选的诊断/支持函数（可为 NULL） */
 
 #if IOLINK_PHY_FEATURE_WAKEUP
     /**
-     * @brief Detect wake-up pulse (80µs pulse on C/Q line)
+     * @brief 检测唤醒脉冲（C/Q 线路上的 80µs 脉冲）
      *
-     * Capability flag: a PHY that implements this owns nothing of the SIO
-     * handshake and lets the DLL drive SIO/SDCI transitions. When it is NULL the
-     * PHY owns the SIO/wake-up handshake itself, so the DLL must stay in SDCI
-     * (switching to SIO would latch with no way back: a NULL PHY never reports a
-     * wake-up).
-     * @return 1 if wake-up pulse detected during current window, 0 otherwise
+     * 能力标志：实现该钩子的 PHY 不接管 SIO
+     * 握手，让 DLL 驱动 SIO/SDCI 切换。当它为 NULL 时，
+     * PHY 自行接管 SIO/唤醒握手，因此 DLL 必须停留在 SDCI
+     * （切换到 SIO 会锁存且无法返回：NULL 的 PHY 从不上报
+     * 唤醒）。
+     * @return 当前窗口内检测到唤醒脉冲返回 1，否则返回 0
      */
     int (*detect_wakeup)(void* user);
 #endif
 
 #if IOLINK_PHY_FEATURE_SIO_CQ
     /**
-     * @brief Manually set C/Q line state (for SIO push-pull)
+     * @brief 手动设置 C/Q 线路状态（用于 SIO 推挽）
      *
-     * Declared for portability; the DLL currently has no call point (the PHY
-     * owns the SIO line state).
-     * @param state 0 for Low, 1 for High
+     * 为可移植性而声明；DLL 当前没有调用点（PHY
+     * 负责 SIO 线路状态）。
+     * @param state 0 为低电平，1 为高电平
      */
     void (*set_cq_line)(void* user, uint8_t state);
 #endif
 
     /**
-     * @brief Optional: physical faults currently active, as a bitmask of
-     *        IOLINK_PHY_FAULT_* flags (0 when none).
+     * @brief 可选：当前活跃的物理故障，为
+     *        IOLINK_PHY_FAULT_* 标志的位掩码（无故障时为 0）。
      *
-     * This is the preferred diagnostics channel: a PHY describes *what* is
-     * physically wrong and needs no knowledge of IO-Link EventCodes. The DLL
-     * polls it from iolink_dll_process(); a 0->1 edge raises the mapped event
-     * (UNDERVOLTAGE -> 0x5111 Warning, OVERVOLTAGE -> 0x5110 Warning,
-     * OVERTEMP -> 0x4000 Error, SHORT_CIRCUIT -> 0x7710 Error) once, and a
-     * 1->0 edge clears it so the event engine can emit "disappears". When this
-     * hook is NULL the legacy pair below is used instead.
-     * @return Active fault flags.
+     * 这是首选的诊断通道：PHY 描述物理上
+     * 出了什么问题，无需了解 IO-Link EventCodes。DLL
+     * 从 iolink_dll_process() 轮询它；0->1 边沿会触发映射的事件
+     * （UNDERVOLTAGE -> 0x5111 Warning，OVERVOLTAGE -> 0x5110 Warning，
+     * OVERTEMP -> 0x4000 Error，SHORT_CIRCUIT -> 0x7710 Error）一次，以及
+     * 1->0 边沿会清除它，使事件引擎能够发出“disappears”。当该
+     * 钩子为 NULL 时，改用下面的旧版组合。
+     * @return 活跃故障标志。
      */
     uint8_t (*get_faults)(void* user);
 
 #if IOLINK_PHY_FEATURE_LEGACY_DIAG
     /**
-     * @brief Legacy alternative to get_faults(): measured L+ supply voltage.
+     * @brief get_faults() 的旧版替代：测得的 L+ 电源电压。
      *
-     * Only consulted when get_faults() is NULL. A *negative* return means
-     * "measurement unavailable" and is not a fault; a non-negative reading
-     * outside [IOLINK_PHY_VOLTAGE_MIN_MV, IOLINK_PHY_VOLTAGE_MAX_MV] raises
-     * IOLINK_PHY_FAULT_UNDERVOLTAGE.
-     * @return Voltage in millivolts, negative if measurement unavailable
+     * 仅在 get_faults() 为 NULL 时参考。*负* 返回值表示
+     * “测量不可用”，并非故障；非负读数
+     * 超出 [IOLINK_PHY_VOLTAGE_MIN_MV, IOLINK_PHY_VOLTAGE_MAX_MV] 会触发
+     * IOLINK_PHY_FAULT_UNDERVOLTAGE。
+     * @return 电压值（毫伏），测量不可用时为负
      */
     int (*get_voltage_mv)(void* user);
 
     /**
-     * @brief Legacy alternative to get_faults(): hardware fault condition.
+     * @brief get_faults() 的旧版替代：硬件故障状态。
      *
-     * Only consulted when get_faults() is NULL. The documented contract is
-     * "short circuit or overtemperature detected", i.e. the cause is not
-     * distinguishable, so it raises IOLINK_PHY_FAULT_SHORT_CIRCUIT.
-     * @return true if a fault is detected
+     * 仅在 get_faults() 为 NULL 时参考。文档化的契约为
+     * “检测到短路或过温”，即原因无法
+     * 区分，因此它触发 IOLINK_PHY_FAULT_SHORT_CIRCUIT。
+     * @return 检测到故障时返回 true
      */
     bool (*is_short_circuit)(void* user);
 #endif /* IOLINK_PHY_FEATURE_LEGACY_DIAG */
 } iolink_phy_api_t;
 
-/** @} */ /* end of iolinki_phy */
+/** @} */ /* iolinki_phy 结束 */
 
 #endif  // IOLINK_PHY_H

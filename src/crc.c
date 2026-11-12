@@ -8,11 +8,11 @@
 
 /**
  * @file crc.c
- * @brief IO-Link message checksum implementation (A.1.6).
+ * @brief IO-Link 报文校验和实现（A.1.6）。
  * @ingroup iolinki_crc
  *
- * Implements the XOR-seeded, 8-to-6-bit compressed message checksum used to
- * protect every IO-Link M-sequence.
+ * 实现带 XOR 种子、从 8 bit 压缩到 6 bit 的报文校验和，用于
+ * 保护每个 IO-Link M-sequence。
  */
 
 #include "iolinki/crc.h"
@@ -20,11 +20,11 @@
 #include <stddef.h>
 
 /*
- * IO-Link message checksum, IO-Link Interface Specification V1.1.5 A.1.6.
+ * IO-Link 报文校验和，IO-Link Interface Specification V1.1.5 A.1.6。
  *
- * All octets (including the checksum/type octet with bits 0-5 zeroed) are XOR
- * processed with a seed of 0x52. The 8-bit result is compressed to 6 bits by
- * the equations in (A.1):
+ * 所有 octet（包括将 bits 0-5 清零后的校验和/类型 octet）都会与
+ * 种子 0x52 进行 XOR 处理。8 bit 结果按 (A.1) 中的等式压缩为
+ * 6 bit：
  *
  *   D5_6 = D7_8 xor D5_8 xor D3_8 xor D1_8
  *   D4_6 = D6_8 xor D4_8 xor D2_8 xor D0_8
@@ -57,7 +57,7 @@ uint8_t iolink_checksum6_from_acc(uint8_t ck8)
 
 uint8_t iolink_checksum6(const uint8_t* octets, size_t len)
 {
-    uint8_t ck8 = 0x52U; /* A.1.6 seed value */
+    uint8_t ck8 = 0x52U; /* A.1.6 种子值 */
 
     if (!iolink_buf_is_valid(octets, len)) {
         return 0U;

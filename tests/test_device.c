@@ -8,8 +8,8 @@
 
 /**
  * @file test_device.c
- * @brief Unit tests for the top-level device API (device.h): process-data
- *        bounds, the PD-valid flag, reset delivery and introspection.
+ * @brief 顶层设备 API（device.h）的单元测试：过程数据边界、
+ *        PD-valid 标志、复位投递与内省。
  */
 
 #include <stdarg.h>
@@ -113,8 +113,8 @@ static void test_device_init_validates_config_not_context(void** state)
     iolink_device_ctx_t ctx;
     iolink_device_config_t config = make_device_config();
 
-    /* Values in the uninitialized context must not be validated: only the
-     * caller-supplied configuration is authoritative. */
+    /* 未初始化上下文中的值不得参与校验：只有
+     * 调用者提供的配置才是权威来源。 */
     (void) memset(&ctx, 0, sizeof(ctx));
     ctx.stack_config.m_seq_type = (iolink_m_seq_type_t) 7;
     ctx.stack_config.pd_in_len = IOLINK_PD_IN_MAX_SIZE + 1U;
@@ -132,7 +132,7 @@ static void test_device_init_accepts_valid_config(void** state)
 
     setup_mock_phy();
 
-    /* Upper PD boundary for Type 2_V, with the application's 1-octet OD. */
+    /* Type 2_V 的 PD 上限，配合应用侧的 1 字节 OD。 */
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     stack.pd_in_len = IOLINK_PD_IN_MAX_SIZE;
     stack.pd_out_len = IOLINK_PD_OUT_MAX_SIZE;
@@ -144,7 +144,7 @@ static void test_device_init_accepts_valid_config(void** state)
     assert_int_equal(iolink_device_get_pd_out_len(&dev.ctx), IOLINK_PD_OUT_MAX_SIZE);
 
 #if (IOLINK_PD_IN_MAX_SIZE >= 28U) && (IOLINK_PD_OUT_MAX_SIZE >= 2U)
-    /* Asymmetric PD sizes must be accepted independently. */
+    /* 不对称的 PD 尺寸必须能被独立接受。 */
     stack = (iolink_stack_config_t){0};
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     stack.pd_in_len = 28U;
@@ -157,7 +157,7 @@ static void test_device_init_accepts_valid_config(void** state)
     assert_int_equal(iolink_device_get_pd_out_len(&dev.ctx), 2U);
 #endif
 
-    /* baudrate is ignored unless baudrate_set requests it. */
+    /* 除非 baudrate_set 请求，否则波特率被忽略。 */
     stack = (iolink_stack_config_t){0};
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     stack.pd_in_len = 2U;
@@ -260,7 +260,7 @@ static void test_device_introspection(void** state)
     assert_non_null(iolink_device_get_events_ctx(&dev.ctx));
     assert_non_null(iolink_device_get_ds_ctx(&dev.ctx));
 
-    /* NULL-safe accessors fall back to documented defaults. */
+    /* NULL 安全的访问器回退到文档记载的默认值。 */
     assert_int_equal(iolink_device_get_state(NULL), IOLINK_DLL_STATE_STARTUP);
     assert_int_equal(iolink_device_get_m_seq_type(NULL), IOLINK_M_SEQ_TYPE_0);
 }
@@ -270,7 +270,7 @@ static void test_device_set_pd_length_fixed(void** state)
     (void) state;
     iolink_test_device_t fixed;
     init_device(&fixed, IOLINK_M_SEQ_TYPE_1_2, 0U, 0U);
-    /* Only the variable types accept a runtime length change (Table A.10). */
+    /* 只有可变类型接受运行时长度变更（Table A.10）。 */
     assert_int_equal(iolink_device_set_pd_length(&fixed.ctx, 1U, 1U), -2);
     assert_int_equal(iolink_device_set_pd_length(NULL, 1U, 1U), -1);
 }
@@ -283,7 +283,7 @@ static void test_device_set_pd_length_variable(void** state)
     assert_int_equal(iolink_device_set_pd_length(&var.ctx, 2U, 2U), 0);
     assert_int_equal(iolink_device_get_pd_in_len(&var.ctx), 2U);
     assert_int_equal(iolink_device_get_pd_out_len(&var.ctx), 2U);
-    /* Beyond the configured maximum. */
+    /* 超出配置的最大值。 */
     assert_int_equal(iolink_device_set_pd_length(&var.ctx, 5U, 5U), -1);
 }
 
@@ -305,9 +305,9 @@ static void test_device_config_baudrate(void** state)
     assert_int_equal(dev.ctx.dll.operating_baudrate, IOLINK_BAUDRATE_COM1);
 }
 
-/* The DS image/checksum is established at init when a storage backend is bound
- * and no persisted image exists, so Data_Storage_Size (0x0003/3) and
- * Parameter_Checksum (0x0003/4) are valid before the first upload. */
+/* 当绑定了存储后端且不存在已持久化的镜像时，DS 镜像和校验和会在
+ * 初始化时建立，因此 Data_Storage_Size (0x0003/3) 与
+ * Parameter_Checksum (0x0003/4) 在首次上传之前就已有效。 */
 static void test_device_init_builds_ds_image(void** state)
 {
     (void) state;
@@ -334,8 +334,8 @@ static void test_device_init_builds_ds_image(void** state)
     assert_true(ds->image_len > 0U);
 }
 
-/* iolink_device_process() services the event state machine while the ISDU
- * transport is idle, without the application calling iolink_events_process(). */
+/* 当 ISDU 传输空闲时，iolink_device_process() 会驱动事件状态机，
+ * 无需应用调用 iolink_events_process()。 */
 static void test_device_process_pumps_events(void** state)
 {
     (void) state;
@@ -346,25 +346,24 @@ static void test_device_process_pumps_events(void** state)
     iolink_event_trigger(evt, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     iolink_event_clear(evt, 0x1000U);
 
-    /* Within the 50 ms minimum appearance window the disappearance stays
-       deferred; the pump only emits the "appears" entry. */
+    /* 在 50 ms 的最短出现窗口内，消失仍保持推迟；
+       泵只输出 "appears" 条目。 */
     iolink_device_process(&dev.ctx);
     iolink_event_t ev;
     assert_true(iolink_events_pop(evt, &ev));
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
     assert_false(iolink_events_pop(evt, &ev));
 
-    /* After the window the pump emits the disappearance on its own. */
+    /* 窗口之后，泵会自行输出消失事件。 */
     usleep(60000U);
     iolink_device_process(&dev.ctx);
     assert_true(iolink_events_pop(evt, &ev));
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
 }
 
-/* Table A.10: TYPE_1_2 defaults to 2 OD octets (code 1) when config leaves
- * od_width = 0. The DLL only stores od_width under the ISR transport, so assert
- * it conditionally; the config validation (which accepts the derived 2) runs in
- * both transports. */
+/* Table A.10：当配置保留 od_width = 0 时，TYPE_1_2 默认使用 2 字节 OD（code 1）。
+ * DLL 仅在 ISR 传输下存储 od_width，因此有条件地断言它；
+ * 配置校验（接受推导出的 2）在两种传输下都会运行。 */
 static void test_device_od_width_default(void** state)
 {
     (void) state;

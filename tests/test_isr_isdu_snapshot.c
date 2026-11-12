@@ -1,15 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
 /*
- * Two-pump ISR transport: ISDU response snapshot + request_service staging.
+ * 双泵 ISR 传输：ISDU 响应快照 + request_service 暂存。
  *
- * - The main pump snapshots the framed ISDU response; the ISR answers
- *   START/COUNT reads from it (Busy / No Service / data), so no read
- *   round-trips through the main loop.
- * - A main-context reply is staged and reported through request_service();
- *   the TX hooks are only invoked from the ISR.
+ * - 主泵为已组帧的 ISDU 响应制作快照；ISR 据此应答
+ *   START/COUNT 读（Busy / No Service / 数据），因此没有任何读操作
+ *   需要往返主循环。
+ * - 主上下文的应答会被暂存，并通过 request_service() 报告；
+ *   TX 钩子只会从 ISR 中调用。
  *
- * ISR ISDU-response snapshot checks.
+ * ISR ISDU 响应快照检查。
  */
 
 #include <stdint.h>
@@ -49,7 +49,7 @@ static int rx_octet(void* user, uint8_t* data, uint8_t* status)
         return 1;
     }
     if (chk_pending != 0U) {
-        /* Type-0 frames are delimited by the transceiver frame-end (CHK). */
+        /* Type-0 帧由收发器的帧结束（CHK）定界。 */
         chk_pending = 0U;
         *status = IOLINK_PHY_STATUS_CHK;
     }
@@ -97,7 +97,7 @@ static void drain_tx(iolink_dll_ctx_t* ctx)
     }
 }
 
-/* MC + CKT + PD-out, with the A.1.6 checksum in the CKT low bits. */
+/* MC + CKT + PD-out，A.1.6 校验和位于 CKT 的低位。 */
 static void make_frame(uint8_t mc, uint8_t type_bits, uint8_t* frame, size_t len)
 {
     frame[0] = mc;
@@ -108,8 +108,8 @@ static void make_frame(uint8_t mc, uint8_t type_bits, uint8_t* frame, size_t len
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, len));
 }
 
-/* Drive one request through the ISR, drain the reply, then let the main pump
- * consume the mailbox so the next frame can be published. */
+/* 让一个请求走完 ISR，排空应答，然后让主泵
+ * 消费邮箱，以便发布下一个帧。 */
 static void exchange(iolink_dll_ctx_t* ctx, const uint8_t* frame, size_t len, uint8_t chk)
 {
     feed(frame, len, chk);
@@ -118,8 +118,8 @@ static void exchange(iolink_dll_ctx_t* ctx, const uint8_t* frame, size_t len, ui
     iolink_dll_process(ctx);
 }
 
-/* START/COUNT reads are served from the snapshot; Busy and No Service map to
- * 0x01/0x00. The OD width is 2 (TYPE_2_V). */
+/* START/COUNT 读由快照提供服务；Busy 与 No Service 映射为
+ * 0x01/0x00。OD 宽度为 2（TYPE_2_V）。 */
 static int test_eager_isdu_snapshot(void)
 {
     iolink_dll_ctx_t dll;
@@ -148,25 +148,25 @@ static int test_eager_isdu_snapshot(void)
 
     now_us = 1000000U;
     dll.last_activity_ms = ((uint32_t) (now_us / 1000U));
-    iolink_dll_process(&dll); /* refresh the ISR snapshot */
+    iolink_dll_process(&dll); /* 刷新 ISR 快照 */
     if ((IOLINK_ISDU_PUB_LEN(dll.isr_isdu_pub) != 4U) ||
         (IOLINK_ISDU_PUB_BUSY(dll.isr_isdu_pub) != 0U)) {
         return 1;
     }
 
-    /* START read: MC = RW | ISDU | FlowCTRL START = 0xF0. */
+    /* START 读：MC = RW | ISDU | FlowCTRL START = 0xF0。 */
     uint8_t frame[4];
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_n = 0U;
     exchange(&dll, frame, sizeof(frame), 0U);
     if (tx_n != 3U) {
-        return 2; /* two OD octets + CKS */
+        return 2; /* 两个 OD 八位组 + CKS */
     }
     if ((tx_q[0] != 0xD4U) || (tx_q[1] != 0x12U)) {
         return 3;
     }
 
-    /* COUNT 1 read: MC = RW | ISDU | COUNT 1 = 0xE1 -> next two octets. */
+    /* COUNT 1 读：MC = RW | ISDU | COUNT 1 = 0xE1 -> 接下来的两个八位组。 */
     make_frame(0xE1U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_n = 0U;
     exchange(&dll, frame, sizeof(frame), 0U);
@@ -177,7 +177,7 @@ static int test_eager_isdu_snapshot(void)
         return 5;
     }
 
-    /* A repeated COUNT repeats the previous segment (same two octets). */
+    /* 重复的 COUNT 会重发前一段（相同的两个八位组）。 */
     make_frame(0xE1U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_n = 0U;
     exchange(&dll, frame, sizeof(frame), 0U);
@@ -185,7 +185,7 @@ static int test_eager_isdu_snapshot(void)
         return 8;
     }
 
-    /* An out-of-order COUNT is a segmentation error -> No Service (0x00). */
+    /* 乱序的 COUNT 属于分段错误 -> No Service（0x00）。 */
     make_frame(0xE3U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_n = 0U;
     exchange(&dll, frame, sizeof(frame), 0U);
@@ -193,7 +193,7 @@ static int test_eager_isdu_snapshot(void)
         return 9;
     }
 
-    /* Busy START. */
+    /* Busy START。 */
     dll.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 1U, 0U);
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_n = 0U;
@@ -202,7 +202,7 @@ static int test_eager_isdu_snapshot(void)
         return 6;
     }
 
-    /* No Service START (no response staged). */
+    /* No Service START（没有已暂存的响应）。 */
     dll.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 0U, 0U);
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_n = 0U;
@@ -214,8 +214,8 @@ static int test_eager_isdu_snapshot(void)
     return 0;
 }
 
-/* A main-context Type-0 reply must be staged and reported via request_service;
- * the ISR is the only caller of the TX hooks. */
+/* 主上下文的 Type-0 应答必须被暂存并通过 request_service 报告；
+ * ISR 是 TX 钩子的唯一调用者。 */
 static int test_request_service_staging(void)
 {
     iolink_dll_ctx_t dll;
@@ -238,27 +238,27 @@ static int test_request_service_staging(void)
     dll.last_activity_ms = ((uint32_t) (now_us / 1000U));
 
     uint8_t frame[2];
-    /* A Type-0 process WRITE is not served by the ISR fast path, so it is
-     * staged in main context and reported through request_service. */
+    /* Type-0 过程数据写不经由 ISR 快速路径服务，因此它会在主上下文
+     * 中被暂存，并通过 request_service 报告。 */
     make_frame(0x00U, IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));
     tx_n = 0U;
     request_calls = 0U;
     feed(frame, sizeof(frame), 1U);
-    iolink_dll_process_isr(&dll); /* RX -> mailbox (not eager for Type 0) */
-    iolink_dll_process(&dll);     /* main -> dll_send -> request_service */
+    iolink_dll_process_isr(&dll); /* RX -> 邮箱（Type 0 不做即时应答） */
+    iolink_dll_process(&dll);     /* 主上下文 -> dll_send -> request_service */
     if (request_calls != 1U) {
         return 10;
     }
     drain_tx(&dll);
     if (tx_n < 1U) {
-        return 11; /* Type-0 WRITE reply: CKS only */
+        return 11; /* Type-0 WRITE 应答：仅 CKS */
     }
 
     return 0;
 }
 
-/* The diagnosis READ is served from the ISR fast path (event memory), so the
- * reply must not go through request_service / the main pump. */
+/* 诊断读由 ISR 快速路径（事件存储器）服务，因此应答
+ * 不得经过 request_service / 主泵。 */
 static int test_type0_diagnosis_read_isr(void)
 {
     iolink_dll_ctx_t dll;
@@ -289,7 +289,7 @@ static int test_type0_diagnosis_read_isr(void)
         return 12;
     }
     if (tx_n != 2U) {
-        return 13; /* Type-0 READ reply: OD + CKS */
+        return 13; /* Type-0 READ 应答：OD + CKS */
     }
     return 0;
 }

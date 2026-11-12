@@ -8,11 +8,11 @@
 
 /**
  * @file test_m_sequence_types.c
- * @brief ISR-transport conformance for the fixed Annex A M-sequence types.
+ * @brief 固定 Annex A M-sequence 类型的 ISR 传输一致性。
  *
- * Only the opt-in ISR transport implements the per-type frame layouts of
- * Figures A.7-A.13; the legacy streaming transport keeps upstream's single
- * generic layout. The byte-exact requests/replies below are the oracle.
+ * 只有可选启用的 ISR 传输实现了图 A.7-A.13 中按类型区分的帧布局；
+ * 旧式流式传输保留上游单一的通用布局。下面的字节精确请求/应答
+ * 即为判定基准。
  */
 
 #include <stdarg.h>
@@ -38,8 +38,8 @@ typedef struct
     uint8_t pd_out;
 } fixed_case_t;
 
-/* Figures A.7 (1_2), A.8 (1_V), A.9 (2_1), A.10 (2_2), A.11 (2_3),
- * A.12 (2_4) and A.13 (2_5). */
+/* 图 A.7 (1_2)、A.8 (1_V)、A.9 (2_1)、A.10 (2_2)、A.11 (2_3)、
+ * A.12 (2_4) 与 A.13 (2_5)。 */
 static const fixed_case_t g_cases[] = {
     {IOLINK_M_SEQ_TYPE_1_2, 2U, 0U, 0U},  {IOLINK_M_SEQ_TYPE_1_V, 8U, 0U, 0U},
     {IOLINK_M_SEQ_TYPE_1_V, 32U, 0U, 0U}, {IOLINK_M_SEQ_TYPE_2_1, 1U, 1U, 0U},
@@ -60,7 +60,7 @@ static uint8_t case_type_bits(iolink_m_seq_type_t type)
 
 static void feed_request(uint8_t* frame, size_t len, uint8_t type_bits)
 {
-    /* The CKT type bits are part of the checksummed message. */
+    /* CKT 类型位是参与校验和计算的报文的一部分。 */
     frame[1] = type_bits;
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, len));
     for (size_t i = 0U; i < len; i++) {
@@ -96,7 +96,7 @@ static void run_fixed_case(const fixed_case_t* c)
     }
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd_in, c->pd_in, true), 0);
 
-    /* --- READ: request = MC, CKT, PD-out (no OD); reply = OD, PD-in, CKS. */
+    /* --- READ：请求 = MC、CKT、PD-out（无 OD）；应答 = OD、PD-in、CKS。 */
     (void) memset(frame, 0, sizeof(frame));
     const size_t read_len = 2U + c->pd_out;
     frame[0] = 0x80U;
@@ -105,7 +105,7 @@ static void run_fixed_case(const fixed_case_t* c)
 
     (void) memset(expected, 0, sizeof(expected));
     size_t pos = 0U;
-    pos += c->od; /* process-channel OD octets read as zero */
+    pos += c->od; /* 过程通道 OD 八位组读作零 */
     (void) memcpy(&expected[pos], pd_in, c->pd_in);
     pos += c->pd_in;
     expected[pos] = iolink_checksum6(expected, pos);
@@ -116,7 +116,7 @@ static void run_fixed_case(const fixed_case_t* c)
     will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
 
-    /* --- WRITE: request = MC, CKT, PD-out, OD; reply = PD-in, CKS. */
+    /* --- WRITE：请求 = MC、CKT、PD-out、OD；应答 = PD-in、CKS。 */
     (void) memset(frame, 0, sizeof(frame));
     const size_t write_len = 2U + c->pd_out + c->od;
     frame[0] = 0x00U;
@@ -154,7 +154,7 @@ static void test_type_1_1_rejected(void** state)
         .m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .pd_in_len = 2, .pd_out_len = 0};
     iolink_test_device_t dev;
 
-    /* Validation rejects the config before the PHY is touched. */
+    /* 校验在接触 PHY 之前就拒绝了该配置。 */
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL),
                      IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE);
 }
@@ -164,14 +164,14 @@ static void test_fixed_layout_mismatch_rejected(void** state)
     (void) state;
     iolink_test_device_t dev;
 
-    /* TYPE_2_2 needs PD-in=2 and PD-out=0. */
+    /* TYPE_2_2 需要 PD-in=2 且 PD-out=0。 */
     {
         iolink_stack_config_t config = {
             .m_seq_type = IOLINK_M_SEQ_TYPE_2_2, .pd_in_len = 2, .pd_out_len = 2};
         assert_int_equal(iolink_test_device_init(&dev, &config, NULL),
                          IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT);
     }
-    /* TYPE_1_V is OD-only (8/32), not a variable-PD type. */
+    /* TYPE_1_V 仅用于 OD（8/32），不是可变 PD 类型。 */
     {
         iolink_stack_config_t config = {
             .m_seq_type = IOLINK_M_SEQ_TYPE_1_V, .pd_in_len = 8, .pd_out_len = 8};

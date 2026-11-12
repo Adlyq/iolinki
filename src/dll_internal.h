@@ -14,17 +14,17 @@
 
 /**
  * @file dll_internal.h
- * @brief Internal DLL definitions and structures
+ * @brief 内部 DLL 定义与结构
  */
 
 #include "iolinki/protocol.h"
 
 /**
- * @name Internal clock helpers
+ * @name 内部时钟辅助函数
  *
- * Timestamps come from the application clock bound at device initialization
- * (iolink_device_config_t::time_us). A missing clock yields 0: the device layer
- * rejects it, but a bare DLL context may still be inspected before it is bound.
+ * 时间戳来自设备初始化时绑定的应用时钟
+ * （iolink_device_config_t::time_us）。缺少时钟时返回 0：设备层会拒绝它，
+ * 但裸 DLL 上下文在绑定之前仍可被检查。
  * @{
  */
 static inline uint64_t dll_time_us(const iolink_dll_ctx_t* ctx)
@@ -47,22 +47,22 @@ static inline uint32_t dll_time_ms(const iolink_dll_ctx_t* ctx)
 #define IOLINK_M_SEQ_TYPE2_LEN(pd_len, od_len) \
     (3 + (pd_len) + (od_len)) /* MC(8) + CKT(8) + PD(var) + OD(var) + CK(8) */
 
-/** @brief Decoded 2-octet Type-0 M-sequence (master command + checksum). */
+/** @brief 解码后的 2 八位组 Type-0 M-sequence（主站命令 + 校验和）。 */
 typedef struct
 {
-    uint8_t master_command; /**< Master command octet (MC). */
-    uint8_t ck;             /**< Checksum octet (CK). */
+    uint8_t master_command; /**< 主站命令八位组（MC）。 */
+    uint8_t ck;             /**< 校验和八位组（CK）。 */
 } iolink_m_seq_type0_t;
 
-/** @brief On-request data (OD) octet paired with a validity flag. */
+/** @brief 携带有效性标志的按请求数据（OD）八位组。 */
 typedef struct
 {
-    uint8_t od_data; /**< On-request data octet. */
-    uint8_t valid;   /**< Non-zero when @ref od_data holds a valid value. */
+    uint8_t od_data; /**< 按请求数据八位组。 */
+    uint8_t valid;   /**< 当 @ref od_data 持有有效值时非零。 */
 } iolink_od_req_t;
 
-/* The event engine is internal to the DLL/ISDU. When it is compiled out, the
- * helpers below collapse to constants so no disabled interface is referenced. */
+/* 事件引擎是 DLL/ISDU 的内部实现。当它被编译排除时，
+ * 下面的辅助函数折叠为常量，以便不引用任何被禁用的接口。 */
 #if IOLINK_FEATURE_EVENTS
 #define DLL_EVENTS_INIT(ctx) iolink_events_init(ctx)
 #define DLL_EVENT_TRIGGER(ctx, code, type) iolink_event_trigger((ctx), (code), (type))
@@ -80,13 +80,13 @@ typedef struct
 #endif
 
 /**
- * @name Cross-TU DLL declarations
+ * @name 跨 TU 的 DLL 声明
  *
- * dll.c provides the state/timing helpers used by the ISR, and dll_isr.c
- * provides the staged-TX entry used by dll_send(). These symbols are private to
- * the library (not installed) and intentionally keep the dll_ prefix; they are
- * not part of the public iolink_ API. See docs/CODE_FLOW.md for the main/ISR
- * context contract.
+ * dll.c 提供 ISR 使用的状态/时序辅助函数，dll_isr.c
+ * 提供 dll_send() 使用的暂存 TX 入口。这些符号是库私有的
+ * （不安装），并有意保留 dll_ 前缀；它们
+ * 不属于公共 iolink_ API。关于主/ISR
+ * 上下文约定，参见 docs/CODE_FLOW.md。
  * @{
  */
 void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state);

@@ -1,14 +1,14 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
 /*
- * PD-input callback profile (IOLINK_APP_PD_INPUT_CALLBACK=1):
- *  - the polling API does not exist; a configuration without on_pd_input is
- *    rejected at init with IOLINK_DEVICE_INIT_ERR_PD_INPUT;
- *  - the callback fills a free PD-in buffer and its return value becomes the
- *    PD-valid flag.
+ * PD-input 回调配置（IOLINK_APP_PD_INPUT_CALLBACK=1）：
+ *  - 轮询 API 不存在；不带 on_pd_input 的配置会在初始化时
+ *    被 IOLINK_DEVICE_INIT_ERR_PD_INPUT 拒绝；
+ *  - 回调填充一个空闲的 PD-in 缓冲区，其返回值成为
+ *    PD 有效标志。
  *
- * Built against a library copy compiled with the callback profile (see
- * tests/CMakeLists.txt).
+ * 针对以回调配置编译的库副本构建（见
+ * tests/CMakeLists.txt）。
  */
 
 #include <assert.h>
@@ -107,8 +107,8 @@ static void test_init_requires_on_pd_input(void)
     iolink_device_ctx_t ctx;
     iolink_device_config_t cfg;
 
-    /* Real read of the link-time marker: also proves device.c defined it in
-     * this profile (a wrong #if or a polling-profile fixture fails here). */
+    /* 真实读取链接期标记：也证明 device.c 在此配置中定义了它
+     * （错误的 #if 或轮询配置的夹具会在这里失败）。 */
     assert(iolink_app_pd_input_callback_profile == 1U);
 
     make_config(&cfg, NULL);
@@ -131,7 +131,7 @@ static void test_callback_fills_pd_input(void)
     cfg.user = g_expected_user;
     assert(iolink_device_init(&ctx, &cfg) == 0);
 
-    /* Drive one main-loop pass in OPERATE: the callback publishes PD-in. */
+    /* 在 OPERATE 下驱动一次主循环：回调发布 PD-in。 */
     ctx.dll.state = IOLINK_DLL_STATE_OPERATE;
     iolink_device_process(&ctx);
 

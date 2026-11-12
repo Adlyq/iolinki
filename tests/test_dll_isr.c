@@ -8,7 +8,7 @@
 
 /**
  * @file test_dll_isr.c
- * @brief Unit tests for the pure ISR-side framing helpers (Figure A.5/A.9/A.14).
+ * @brief 纯 ISR 侧组帧辅助函数的单元测试（Figure A.5/A.9/A.14）。
  */
 
 #include <stdarg.h>
@@ -27,8 +27,8 @@
 static void init_dll(iolink_dll_ctx_t* dll, iolink_m_seq_type_t type, uint8_t od_width,
                      uint8_t pd_in, uint8_t pd_out)
 {
-    /* These helpers are pure/read-only: no PHY traffic is generated, so a bare
-     * context with a bound PHY is enough (avoids CMocka expectations). */
+    /* 这些辅助函数是纯函数/只读的：不会产生 PHY 通信，因此仅需一个绑定了 PHY
+     * 的空上下文即可（避免 CMocka 的期望设置）。 */
     (void) memset(dll, 0, sizeof(*dll));
     dll->phy = &g_phy_mock;
     dll->m_seq_type = (uint8_t) type;
@@ -37,7 +37,7 @@ static void init_dll(iolink_dll_ctx_t* dll, iolink_m_seq_type_t type, uint8_t od
     dll->pd_out_len_current = pd_out;
 }
 
-/* Type 0 (STARTUP/PREOPERATE) request lengths: Figure A.5. */
+/* Type 0（STARTUP/PREOPERATE）请求长度：Figure A.5。 */
 static void test_expected_req_len_type0(void** state)
 {
     (void) state;
@@ -45,17 +45,17 @@ static void test_expected_req_len_type0(void** state)
     init_dll(&dll, IOLINK_M_SEQ_TYPE_0, 1U, 0U, 0U);
     dll.state = IOLINK_DLL_STATE_PREOPERATE;
 
-    /* Reads and process-channel access are the bare MC + CKT header. */
+    /* 读取和过程通道访问仅使用 MC + CKT 报头。 */
     assert_int_equal(iolink_dll_expected_req_len(&dll, 0x80U), 2U);
     assert_int_equal(iolink_dll_expected_req_len(&dll, 0x00U), 2U);
 
-    /* A Type-0 WRITE on page/diagnosis/ISDU carries exactly one OD octet. */
+    /* Type-0 在 page/diagnosis/ISDU 通道上的 WRITE 恰好携带一个 OD 字节。 */
     assert_int_equal(iolink_dll_expected_req_len(&dll, 0x20U), 3U);
     assert_int_equal(iolink_dll_expected_req_len(&dll, 0x40U), 3U);
     assert_int_equal(iolink_dll_expected_req_len(&dll, 0x60U), 3U);
 }
 
-/* Multi-octet OPERATE request lengths: MC + CKT + PD-out + OD-on-write. */
+/* 多字节 OPERATE 请求长度：MC + CKT + PD-out + 写入时的 OD。 */
 static void test_expected_req_len_operate(void** state)
 {
     (void) state;
@@ -63,13 +63,13 @@ static void test_expected_req_len_operate(void** state)
     init_dll(&dll, IOLINK_M_SEQ_TYPE_1_2, 2U, 2U, 2U);
     dll.state = IOLINK_DLL_STATE_OPERATE;
 
-    /* READ (MC bit 7 = 1): header + PD-out, no OD. */
+    /* READ（MC bit 7 = 1）：报头 + PD-out，无 OD。 */
     assert_int_equal(iolink_dll_expected_req_len(&dll, 0x80U), 4U);
-    /* WRITE process channel: header + PD-out + OD. */
+    /* WRITE 过程通道：报头 + PD-out + OD。 */
     assert_int_equal(iolink_dll_expected_req_len(&dll, 0x00U), 6U);
-    /* READ on the ISDU channel: no OD. */
+    /* ISDU 通道上的 READ：无 OD。 */
     assert_int_equal(iolink_dll_expected_req_len(&dll, 0xE0U), 4U);
-    /* WRITE on the ISDU channel: OD present. */
+    /* ISDU 通道上的 WRITE：存在 OD。 */
     assert_int_equal(iolink_dll_expected_req_len(&dll, 0x60U), 6U);
 
     iolink_dll_ctx_t dll2;
@@ -78,7 +78,7 @@ static void test_expected_req_len_operate(void** state)
     assert_int_equal(iolink_dll_expected_req_len(&dll2, 0x80U), 5U);
     assert_int_equal(iolink_dll_expected_req_len(&dll2, 0x00U), 6U);
 
-    /* NULL context is safe. */
+    /* NULL 上下文是安全的。 */
     assert_int_equal(iolink_dll_expected_req_len(NULL, 0x80U), 0U);
 }
 

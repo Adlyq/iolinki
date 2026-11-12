@@ -6,30 +6,30 @@
  * See LICENSE for details.
  */
 
-/* cfmakeraw() is a BSD/GNU extension; request it before any libc header so the
-   declaration is visible under strict libc configurations. */
+/* cfmakeraw() 是 BSD/GNU 扩展；需在任何 libc 头文件之前请求它，以便
+   在严格的 libc 配置下也能看到其声明。 */
 #ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE 1
 #endif
 
 /**
  * @file phy_virtual.c
- * @brief Virtual PHY backed by a POSIX serial port / pseudo-terminal.
+ * @brief 由 POSIX 串口 / 伪终端支撑的虚拟 PHY。
  * @ingroup iolinki_phy_virtual
  *
- * Implements the PHY API over a host file descriptor (TTY or pipe) so the
- * device stack can be exercised via loopback or a virtual serial link during
- * development and testing.
+ * 在主机文件描述符（TTY 或管道）之上实现 PHY API，使设备
+ * 协议栈在开发和测试期间可以通过回环或虚拟串行链路
+ * 进行验证。
  */
 
 #include "iolinki/phy_virtual.h"
 
 #if (IOLINK_ISR_RX_MODE != IOLINK_ISR_RX_BYTE) || (IOLINK_ISR_TX_MODE != IOLINK_ISR_TX_BYTE)
 /*
- * This PHY is a byte stream: it implements the BYTE hooks only and cannot
- * deliver or accept whole frames. Keep the public symbols so the library and the
- * host examples still link in a FRAME build, but there is no usable virtual PHY
- * there. Tests that need a working PHY must stay on the BYTE configuration.
+ * 该 PHY 是字节流：它只实现 BYTE 钩子，无法交付或接受整帧。
+ * 保留这些公开符号，使库和主机示例在 FRAME 构建中仍能链接，
+ * 但那里没有可用的虚拟 PHY。需要可用 PHY 的测试必须保持在
+ * BYTE 配置上。
  */
 void iolink_phy_virtual_set_port(const char* port)
 {
@@ -54,7 +54,7 @@ const iolink_phy_api_t* iolink_phy_virtual_get(void)
 static int g_fd = -1;
 static const char* g_port_path = NULL;
 
-/* Largest M-sequence the stack can transmit (see IOLINK_M_SEQ_MAX_LEN). */
+/* 协议栈能发送的最大 M-sequence（见 IOLINK_M_SEQ_MAX_LEN）。 */
 #define VIRTUAL_TX_MAX (IOLINK_PD_OUT_MAX_SIZE + IOLINK_OD_MAX_SIZE + 2U)
 
 static iolink_phy_mode_t g_mode = IOLINK_PHY_MODE_INACTIVE;
@@ -67,7 +67,7 @@ void iolink_phy_virtual_set_port(const char* port)
     g_port_path = port;
 }
 
-/** @brief Open and configure the backing serial port in raw, non-blocking mode. */
+/** @brief 以 raw、非阻塞模式打开并配置后端串口。 */
 static int virtual_init(void* user)
 {
     (void) user;
@@ -83,7 +83,7 @@ static int virtual_init(void* user)
         return -1;
     }
 
-    /* Config for raw mode if it's a TTY */
+    /* 若为 TTY，则配置为 raw 模式 */
     if (isatty(g_fd)) {
         struct termios tty;
         if (tcgetattr(g_fd, &tty) != 0) {
@@ -93,7 +93,7 @@ static int virtual_init(void* user)
 
         cfmakeraw(&tty);
 
-        /* Set timeouts: No blocking */
+        /* 设置超时：不阻塞 */
         tty.c_cc[VMIN] = 0U;
         tty.c_cc[VTIME] = 0U;
 
@@ -112,25 +112,25 @@ static int virtual_init(void* user)
     return 0;
 }
 
-/** @brief Log the requested PHY mode (no electrical effect on the virtual link). */
+/** @brief 记录请求的 PHY 模式（对虚拟链路无电气影响）。 */
 static void virtual_set_mode(void* user, iolink_phy_mode_t mode)
 {
     (void) user;
-    /* int_active() only claims service in SDCI, mirroring a real transceiver:
-     * in SIO the wake-up path belongs to detect_wakeup() so the pump must not
-     * consume the 0x55 marker as a data octet. */
+    /* int_active() 仅在 SDCI 中声明需要服务，这与真实收发器一致：
+     * 在 SIO 中唤醒路径属于 detect_wakeup()，因此泵不得把 0x55
+     * 标记当作数据 octet 消费。 */
     g_mode = mode;
     printf("[PHY-VIRTUAL] Mode set to: %d\n", (int) mode);
 }
 
-/** @brief Log the requested baudrate (no effect on the virtual link). */
+/** @brief 记录请求的波特率（对虚拟链路无影响）。 */
 static void virtual_set_baudrate(void* user, iolink_baudrate_t baudrate)
 {
     (void) user;
     printf("[PHY-VIRTUAL] Baudrate set to: %d\n", (int) baudrate);
 }
 
-/** @brief Read one received octet for the ISR framing engine (non-blocking). */
+/** @brief 为 ISR 组帧引擎读取一个接收到的 octet（非阻塞）。 */
 static int virtual_rx_octet(void* user, uint8_t* data, uint8_t* status)
 {
     (void) user;
@@ -150,7 +150,7 @@ static int virtual_rx_octet(void* user, uint8_t* data, uint8_t* status)
     return 0;
 }
 
-/** @brief Buffer one reply octet; tx_done() flushes the whole frame. */
+/** @brief 缓冲一个回复 octet；tx_done() 会刷新整帧。 */
 static int virtual_tx_octet(void* user, uint8_t data)
 {
     (void) user;
@@ -164,7 +164,7 @@ static int virtual_tx_octet(void* user, uint8_t data)
     return 0;
 }
 
-/** @brief Flush the buffered reply to the PTY and release the line. */
+/** @brief 将缓冲的回复刷新到 PTY 并释放线路。 */
 static void virtual_tx_done(void* user)
 {
     (void) user;
@@ -183,13 +183,13 @@ static void virtual_tx_done(void* user)
     g_tx_active = 0U;
 }
 
-/** @brief Data-interrupt level: TX in progress or an RX octet is available. */
+/** @brief 数据中断电平：发送进行中或已有接收 octet 可用。 */
 static uint8_t virtual_int_active(void* user)
 {
     (void) user;
 
-    /* Only SDCI uses the framing pump; in SIO the wake-up byte is consumed by
-     * detect_wakeup(), so claiming service here would desynchronise startup. */
+    /* 只有 SDCI 使用组帧泵；在 SIO 中唤醒字节由 detect_wakeup()
+     * 消费，因此在此声明需要服务会使启动失步。 */
     if (g_mode != IOLINK_PHY_MODE_SDCI) {
         return 0U;
     }
@@ -214,14 +214,14 @@ static uint8_t virtual_int_active(void* user)
     return ((pfd.revents & POLLIN) != 0) ? 1U : 0U;
 }
 
-/** @brief Ask the ISR pump to run now (the host demo polls every cycle). */
+/** @brief 请求 ISR 泵立即运行（主机示例每个周期轮询）。 */
 static void virtual_request_service(void* user)
 {
     (void) user;
 }
 
 #if IOLINK_PHY_FEATURE_WAKEUP
-/** @brief Scan buffered input for a 0x55 wake-up marker byte. */
+/** @brief 在缓冲输入中扫描 0x55 唤醒标记字节。 */
 static int virtual_detect_wakeup(void* user)
 {
     (void) user;
@@ -230,7 +230,7 @@ static int virtual_detect_wakeup(void* user)
         return 0;
     }
 
-    /* Try to read bytes until we find 0x55 or run out of data */
+    /* 持续读取字节，直到找到 0x55 或数据耗尽 */
     uint8_t b;
     while (read(g_fd, &b, 1) > 0) {
         if (b == 0x55) {

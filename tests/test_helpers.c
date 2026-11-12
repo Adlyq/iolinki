@@ -8,7 +8,7 @@
 
 /**
  * @file test_helpers.c
- * @brief Shared test utilities and mock implementations
+ * @brief 共享测试工具与 mock 实现
  */
 
 #include "test_helpers.h"
@@ -24,11 +24,11 @@
 #include "iolinki/protocol.h"
 #include "iolinki/platform.h"
 
-/* Test buffers */
+/* 测试缓冲区 */
 uint8_t g_tx_buf[1024];
 uint8_t g_rx_buf[1024];
 
-/* The device layer rejects the library's weak no-op critical sections. */
+/* 设备层会拒绝库中弱定义的空操作临界区。 */
 void iolink_critical_enter(void)
 {
 }
@@ -37,13 +37,13 @@ void iolink_critical_exit(void)
 {
 }
 
-/* Mock implementations */
+/* mock 实现 */
 
 static int g_mock_wakeup = 0;
 static uint8_t g_mock_cq_state = 0U;
 static uint32_t g_mock_send_delay_us = 0U;
 
-/* Transport warp: both transports read from g_rxq and converge on mock_phy_send. */
+/* 传输适配层：两种传输都从 g_rxq 读取，并汇聚到 mock_phy_send。 */
 #define MOCK_RXQ_SIZE 8192U
 static uint8_t g_rxq[MOCK_RXQ_SIZE];
 static size_t g_rxq_head;
@@ -96,7 +96,7 @@ void mock_phy_set_cq_line(void* user, uint8_t state)
     g_mock_cq_state = state;
 }
 
-/* ---- Raw-octet ISR transport (RX BYTE / TX BYTE) ----------------------- */
+/* ---- 原始八位字节 ISR 传输（RX BYTE / TX BYTE） ------------------------ */
 void mock_phy_feed_byte(uint8_t b)
 {
     if (g_rxq_head < MOCK_RXQ_SIZE) {
@@ -156,7 +156,7 @@ static int mock_tx_octet(void* user, uint8_t b)
 {
     (void) user;
     if (!g_tx_active) {
-        g_txq_len = 0U; /* start of a new reply */
+        g_txq_len = 0U; /* 新应答的开始 */
         g_tx_active = 1U;
     }
     if (g_txq_len < sizeof(g_txq)) {
@@ -168,11 +168,11 @@ static int mock_tx_octet(void* user, uint8_t b)
 static void mock_tx_done(void* user)
 {
     if (!g_tx_active) {
-        /* CHK-path reset, not a reply: nothing to deliver. */
+        /* CHK 路径复位，并非应答：无需交付。 */
         return;
     }
     g_tx_active = 0U;
-    /* Hand the collected reply to the same expectation streaming uses. */
+    /* 将收集到的应答交给流式传输所用的同一期望。 */
     (void) mock_phy_send(user, g_txq, g_txq_len);
 }
 
@@ -217,11 +217,11 @@ const iolink_phy_api_t g_phy_mock = {.user = NULL,
 
 void setup_mock_phy(void)
 {
-    /* Use -1 for infinite expectations to avoid errors on earlier test exit. */
+    /* 使用 -1 表示无限期望，避免用例提前退出时报错。 */
     expect_any_count(mock_phy_set_mode, mode, -1);
     expect_any_count(mock_phy_set_baudrate, baudrate, -1);
 
-    /* NO default will_return here. Tests must provide them. */
+    /* 此处不提供默认 will_return。测试必须自行提供。 */
     g_mock_wakeup = 0;
     g_mock_cq_state = 0U;
     g_mock_send_delay_us = 0U;
@@ -230,17 +230,17 @@ void setup_mock_phy(void)
     mock_phy_clear_rx();
 }
 
-/* Drive both pumps for one request: the ISR pump frames the queued octets (and
- * drains the reply), then the main pump consumes the mailbox and runs the
- * protocol (Type-0 replies are sent by the main pump). In the streaming build,
- * one main-pump pass drains g_rxq directly. */
+/* 为一个请求驱动两个泵：ISR 泵对排队的八位字节组帧（并
+ * 排空应答），随后主泵消费邮箱并运行
+ * 协议（Type-0 应答由主泵发送）。在流式构建中，
+ * 一次主泵遍历直接排空 g_rxq。 */
 void test_io_cycle(iolink_device_ctx_t* ctx)
 {
     iolink_device_process_isr(ctx);
     while (ctx->dll.isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
     }
-    /* Drop a leftover frame-end marker (Type-1/2 frames complete by length). */
+    /* 丢弃遗留的帧结束标记（Type-1/2 帧按长度完成）。 */
     mock_phy_clear_rx();
     iolink_device_process(ctx);
     while (ctx->dll.isr_tx_active != 0U) {
@@ -297,12 +297,12 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
         return;
     }
 
-    /* STARTUP -> AWAITING_COMM (wake-up via the PHY). Timing enforcement is off,
-     * so no wall-clock T_DWU wait is needed: the pump is event driven. */
+    /* STARTUP -> AWAITING_COMM（通过 PHY 唤醒）。时序强制处于关闭状态，
+     * 因此无需墙钟 T_DWU 等待：泵是事件驱动的。 */
     g_mock_wakeup = 1;
     test_io_cycle(ctx);
 
-    /* AWAITING_COMM -> PREOPERATE (transition command MC=0x0F). */
+    /* AWAITING_COMM -> PREOPERATE（转换命令 MC=0x0F）。 */
     uint8_t mc = IOLINK_MC_TRANSITION_COMMAND;
     uint8_t ck = test_frame_checksum(mc);
     mock_phy_feed_byte(mc);
@@ -310,11 +310,11 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     mock_phy_feed_chk();
     test_io_cycle(ctx);
 
-    /* PREOPERATE/ESTAB_COM -> OPERATE (first valid frame for the type). */
+    /* PREOPERATE/ESTAB_COM -> OPERATE（该类型下的第一个有效帧）。 */
     iolink_m_seq_type_t type = iolink_device_get_m_seq_type(ctx);
     uint8_t pd_out_len = iolink_device_get_pd_out_len(ctx);
     uint8_t pd_in_len = iolink_device_get_pd_in_len(ctx);
-    uint8_t od_w = ctx->dll.od_width; /* actual OPERATE OD width (1/2/8/32) */
+    uint8_t od_w = ctx->dll.od_width; /* 实际的 OPERATE OD 宽度（1/2/8/32） */
 
     if (type == IOLINK_M_SEQ_TYPE_0) {
         uint8_t idle_mc = 0x00;
@@ -324,7 +324,7 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
         mock_phy_feed_chk();
 
         expect_any(mock_phy_send, data);
-        expect_value(mock_phy_send, len, 1); /* Type-0 write replies CKS only */
+        expect_value(mock_phy_send, len, 1); /* Type-0 写应答仅 CKS */
         will_return(mock_phy_send, 0);
         test_io_cycle(ctx);
         return;
@@ -332,11 +332,11 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
 
     uint8_t frame[64];
     memset(frame, 0, sizeof(frame));
-    /* Figure A.2: master message is MC, CKT, data... with the A.1.6 checksum in
-       the CKT octet (byte 1); there is no trailing checksum octet.
-       Use a WRITE M-sequence: its request layout (MC, CKT, PD-out, OD) and
-       reply (PD-in, CKS) are identical on both transports, unlike a READ
-       request whose OD presence differs. */
+    /* Figure A.2：主站报文为 MC、CKT、data……，A.1.6 校验和位于
+       CKT 八位字节（字节 1）中；没有尾随的校验和八位字节。
+       使用 WRITE M 序列：其请求布局（MC、CKT、PD-out、OD）与
+       应答（PD-in、CKS）在两种传输上完全相同，而 READ
+       请求的 OD 是否存在则不同。 */
     uint8_t frame_len = (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + pd_out_len + od_w);
     frame[0] = 0x00;
     switch (type) {
@@ -364,7 +364,7 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     }
     mock_phy_feed_chk();
 
-    /* A WRITE reply carries only the PD-in plus CKS. */
+    /* WRITE 应答只携带 PD-in 与 CKS。 */
     uint8_t resp_len = (uint8_t) (pd_in_len + 1U);
     expect_any(mock_phy_send, data);
     expect_value(mock_phy_send, len, resp_len);
@@ -395,7 +395,7 @@ void iolink_phy_mock_set_send_delay_us(uint32_t delay_us)
     g_mock_send_delay_us = delay_us;
 }
 
-/* Mock Storage for Data Storage (DS) testing */
+/* 用于数据存储（DS）测试的 mock 存储 */
 #include "iolinki/data_storage.h"
 #define DS_MOCK_SIZE ((size_t) IOLINK_STORAGE_TOTAL_SIZE)
 static uint8_t g_ds_mock_buf[DS_MOCK_SIZE];
@@ -429,7 +429,7 @@ uint8_t* iolink_ds_mock_get_buf(void)
     return g_ds_mock_buf;
 }
 
-/* ISDU V1.1.5 Interleaved Format Helpers */
+/* ISDU V1.1.5 交织格式辅助函数 */
 
 static uint8_t helper_chkpdu(const uint8_t* octets, size_t len)
 {
@@ -440,7 +440,7 @@ static uint8_t helper_chkpdu(const uint8_t* octets, size_t len)
     return c;
 }
 
-/** @brief Feed one complete ISDU request over the spec transport (C3). */
+/** @brief 通过规范传输（C3）送入一条完整的 ISDU 请求。 */
 static void helper_send_isdu(iolink_isdu_ctx_t* ctx, uint8_t* buf, size_t total)
 {
     buf[total - 1U] = 0x00U;
@@ -454,20 +454,20 @@ int isdu_send_read_request(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subin
     size_t n = 0U;
 
     if (index > 0xFFU) {
-        /* 16-bit Index and 8-bit Subindex (I-Service 0xB, Length 0x5). */
+        /* 16 位索引与 8 位子索引（I-Service 0xB，Length 0x5）。 */
         buf[n++] = 0xB5U;
         buf[n++] = (uint8_t) (index >> 8);
         buf[n++] = (uint8_t) (index & 0xFFU);
         buf[n++] = subindex;
     }
     else if (subindex != 0U) {
-        /* 8-bit Index and 8-bit Subindex (I-Service 0xA, Length 0x4). */
+        /* 8 位索引与 8 位子索引（I-Service 0xA，Length 0x4）。 */
         buf[n++] = 0xA4U;
         buf[n++] = (uint8_t) index;
         buf[n++] = subindex;
     }
     else {
-        /* 8-bit Index (I-Service 0x9, Length 0x3). */
+        /* 8 位索引（I-Service 0x9，Length 0x3）。 */
         buf[n++] = 0x93U;
         buf[n++] = (uint8_t) index;
     }
@@ -482,16 +482,16 @@ int isdu_send_write_request(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subi
     uint8_t buf[IOLINK_ISDU_BUFFER_SIZE];
     size_t n = 0U;
 
-    /* Octet count without the ExtLength octet. */
+    /* 不含 ExtLength 八位字节的八位字节计数。 */
     size_t base_total;
     if (index > 0xFFU) {
-        base_total = (size_t) data_len + 1U /* I-Service */ + 2U /* index */ + 1U /* sub */ + 1U;
+        base_total = (size_t) data_len + 1U /* I-Service */ + 2U /* 索引 */ + 1U /* 子索引 */ + 1U;
     }
     else if (subindex != 0U) {
-        base_total = (size_t) data_len + 1U + 1U /* index */ + 1U /* sub */ + 1U;
+        base_total = (size_t) data_len + 1U + 1U /* 索引 */ + 1U /* 子索引 */ + 1U;
     }
     else {
-        base_total = (size_t) data_len + 1U + 1U /* index */ + 1U;
+        base_total = (size_t) data_len + 1U + 1U /* 索引 */ + 1U;
     }
 
     const bool ext = (base_total > 15U);
