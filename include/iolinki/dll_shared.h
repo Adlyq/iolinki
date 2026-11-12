@@ -68,9 +68,34 @@ typedef struct iolink_dll_shared
     /* ISR ISDU 读取视图。主泵将 {length, busy, buffer} 作为一个
      * 原子字发布，使 ISR 绝不会观察到半更新的元组；ISR 拥有
      * FlowCTRL 段索引，并在 START 处采纳新的字。 */
-    volatile IOLINK_ATOMIC_UINT_T isr_isdu_pub; /**< len | busy<<8 | sel<<9 */
+    volatile IOLINK_ATOMIC_UINT_T isr_isdu_pub; /**< len | busy<<8 | sel<<9 | gen<<10 */
+
+    /**
+     * @brief ISDU 读取视图失效请求（ISR -> 主泵，一次性）。
+     *
+     * ISR 暂存一个 ISDU 写后置 1：在写被主泵应用并重新发布应答之前，
+     * 已发布的读视图不得再被当作"当前应答"使用（防"写后立刻读"
+     * 读到旧值）。主泵重新发布新的完成应答时清 0；尚未产出新应答时
+     * 发布 len = 0（无服务）。与 isr_dsio_clear 相同的一次性握手：
+     * 任一方置 1 幂等，只有主泵清 0。
+     */
+    volatile uint8_t isr_isdu_invalidated;
 
     uint8_t isr_isdu_last_flowctrl; /**< 最后接受的 FlowCTRL（0xFF = 无） */
+
+    /**
+     * @name 应答计划表（P5，主泵单写者 / ISR 读者）
+     *
+     * `reply_plan_seq` 是发布字兼 seqlock 序号：奇数表示主泵正在覆盖
+     * 槽位，偶数表示计划表稳定。ISR 在拷贝命中项前后各读一次，只有
+     * 两次相同且为偶数时才执行计划。计划表内容见
+     * `iolink_reply_plan_t` 与 `iolink_dll_publish_reply_plans()`。
+     * @{
+     */
+    volatile IOLINK_ATOMIC_UINT_T reply_plan_seq;            /**< seqlock 发布字 */
+    uint8_t reply_plan_count;                                /**< 有效槽位数量 */
+    iolink_reply_plan_t reply_plan[IOLINK_REPLY_PLAN_SLOTS]; /**< 计划槽位 */
+    /** @} */
 
     iolink_ring_t isr_frame_ring; /**< 帧邮箱（ISR -> 主上下文） */
 

@@ -278,6 +278,8 @@ static int test_type0_diagnosis_read_isr(void)
     dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     dll.main.shared.pd_out_len_current = 0U;
     dll.main.pd_in_len_current = 0U;
+    /* 主泵按当前状态发布应答计划；本用例直接驱动 ISR，故显式发布。 */
+    iolink_dll_publish_reply_plans(&dll.main);
     now_us = 1000000U;
     dll.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));
 

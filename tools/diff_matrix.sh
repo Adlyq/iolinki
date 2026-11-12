@@ -47,6 +47,19 @@ while [ $# -gt 0 ]; do
 done
 
 # Configurations whose suite runs (BYTE/BYTE + tests=yes in build_matrix.sh).
+#
+# P5 尝试把 FRAME 配置（isr_frame_frame / isr_frame_byte / isr_byte_frame）
+# 也纳入本门禁，结论是当前**不可运行**，因此 CONFIGS 保持 BYTE/BYTE：
+#  1. tools/build_matrix.sh 只对 BYTE/BYTE 打开 BUILD_TESTING（非 BYTE 传输
+#     视为薄适配层，只做编译覆盖）；
+#  2. 手工对 FRAME/FRAME 打开测试后，tests/test_ctx_sizes.c 的精确布局契约
+#     失败：RX BYTE 专属的 isr_rx_buf/cnt/acc/expect（约 72 字节）在 FRAME
+#     模式下不存在，所以 64 位尺寸断言需要按传输模式参数化；
+#  3. 即使补上尺寸断言，tests/test_helpers.c 的 g_phy_mock 在 FRAME 模式下
+#     把 rx_frame/tx_frame 置为 NULL（只有 raw-octet 钩子），依赖字节泵的
+#     ISR 用例无法驱动帧。
+# 差分门因此继续使用 BYTE/BYTE 的 6 个配置；FRAME 的语义等价目前由
+# ./tools/build_matrix.sh 的编译矩阵覆盖。详见 docs/EVOLUTION_ROADMAP.md P5。
 CONFIGS=(default release compat_v10 single_profile smp_profile stats_split)
 
 mkdir -p "$BUILD_ROOT"
