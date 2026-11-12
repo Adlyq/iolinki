@@ -13,6 +13,8 @@ stack is [iolinki-master](https://github.com/w1ne/iolinki-master).
 ## Development
 
 - **[ARCHITECTURE](ARCHITECTURE.md)** — layers, processing model, design rules
+- **[CAPABILITY_DESIGN](CAPABILITY_DESIGN.md)** — P6 capability-table design: switch
+  classification, capability struct, matrix convergence and ROM measurement (中文)
 - **[CODE_FLOW](CODE_FLOW.md)** — main-loop/ISR call flow and integration notes (中文)
 - **[CODING_STANDARDS](CODING_STANDARDS.md)** — style, naming, quality gates
 - **[TESTING](TESTING.md)** — unit, integration and virtual-master tests; CI gates
