@@ -183,7 +183,7 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `stack_timer_start` | 可选 | 周期性的主上下文服务窗口（Timer B 到期时调用 `iolink_dll_on_stack_tick()`）。 |
 | `detect_wakeup` | 可选 | 存在时 DLL 从 SIO 开始，并负责唤醒/SDCI 转换。 |
 | `set_cq_line` | 可选 | SIO 推挽输出。 |
-| `get_faults` | 可选 | 首选的物理故障 API（`IOLINK_PHY_FAULT_*`）：DLL 按边沿上报映射事件。 |
+| `get_faults` | 可选 | 物理故障 API（`IOLINK_PHY_FAULT_*`）：DLL 按边沿上报映射事件；NULL 时诊断静默。 |
 
 当 `detect_wakeup == NULL` 时，DLL 认为 PHY 自己管理线路状态，并直接从 SDCI 开始。
 这对自行执行唤醒握手的收发器很重要。该行为完全由运行时根据 `detect_wakeup`

@@ -182,8 +182,7 @@ void iolink_ds_set_param_desc(iolink_ds_ctx_t* ctx, const iolink_ds_param_desc_t
     ctx->param_count = count;
 }
 
-/** @brief 通过绑定的访问器、params 上下文或传统全局集合
- * 读取参数。 */
+/** @brief 通过绑定的访问器或 params 上下文读取参数；都未绑定时返回 -1。 */
 static int ds_params_get(const iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
                          uint8_t* buffer, size_t max_len)
 {
@@ -200,8 +199,7 @@ static int ds_params_get(const iolink_ds_ctx_t* ctx, uint16_t index, uint8_t sub
     return -1;
 }
 
-/** @brief 通过绑定的访问器、params 上下文或传统全局集合
- * 写入参数。 */
+/** @brief 通过绑定的访问器或 params 上下文写入参数；都未绑定时返回 -1。 */
 static int ds_params_set(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
                          const uint8_t* data, size_t len, bool persist)
 {

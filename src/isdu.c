@@ -729,9 +729,11 @@ static void isdu_tag_read(iolink_isdu_ctx_t* ctx, uint16_t index)
         ctx->response_len = (uint8_t) res;
         ctx->response_idx = 0U;
         ctx->state = ISDU_STATE_RESPONSE_READY;
+        return;
     }
-    /* 失败时保持状态不变；随后的传输复位会丢弃
-       该请求（与原实现的直落行为相同）。 */
+    /* 未绑定参数上下文（或读取失败）：返回否定应答，而不是静默丢弃
+       （否则主站会看到 No Service 0x00 而不是参数错误）。 */
+    isdu_respond_param_error(ctx, res);
 }
 
 /** @brief 将应用/功能/位置标签写入参数集。 */

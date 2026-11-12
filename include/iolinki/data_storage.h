@@ -29,12 +29,12 @@
  * @{
  */
 
-/**
- * @brief 序列化的数据存储参数映像的最大大小。
+/*
+ * 序列化的数据存储参数映像的最大大小（IOLINK_DS_IMAGE_MAX，默认值由
+ * config.h 提供，此处不再重复定义）。
  *
  * 必须容纳每一条由 DS 支持的参数记录。每条记录的布局如下：
  * [Index(2, big-endian)][Subindex(1)][Length(1)][Data(Length)]。
- * 默认值（256）由 config.h 提供，这里只保留说明。
  */
 
 /**

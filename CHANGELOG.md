@@ -44,8 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `IOLINK_PHY_FEATURE_TX_BUSY=1` build without `tx_busy`
   (`IOLINK_DEVICE_INIT_ERR_PHY`, -15).
 - `phy->get_faults()` is polled: edge-triggered Table D.1 events
-  (under/overvoltage, over-temperature, short circuit); the legacy
-  `get_voltage_mv`/`is_short_circuit` pair is the fallback.
+  (under/overvoltage, over-temperature, short circuit); a PHY without the hook
+  produces no physical diagnostics.
 - Documentation: pump call maps, a device integration checklist and an
   ownership/lifetime contract (`dll.c`, `dll_isr.c`, `device.h`,
   `CODING_STANDARDS.md`).
@@ -53,10 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed (configuration surface)
 - `config.h` is now the single source of default values, grouped into
   overridable buffers, spec-fixed values, build/porting tiers and logging.
-- `IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` require a non-zero value:
-  `-D...=0` genuinely disables the bundle (it used to trim because of the old
-  `#ifdef` form). In non-CMake builds a bare definition or `=ON` also evaluates
-  to 0, so write `=1`.
+- `IOLINK_MINIMAL_PROFILE` requires a non-zero value: `-D...=0` genuinely
+  disables the bundle (it used to trim because of the old `#ifdef` form). In
+  non-CMake builds a bare definition or `=ON` also evaluates to 0, so write
+  `=1`. `IOLINK_TINY_PROFILE` is a CMake-only bundle option (`config.h` does
+  not read it).
 - `IOLINK_APP_PD_INPUT_CALLBACK` moved from `application.h` to `config.h`.
 
 ### Removed
@@ -73,7 +74,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `get_faults()` only), `IOLINK_FEATURE_LEGACY_PARAMS` with the context-less
   `iolink_params_*` API and `g_legacy_*` state, the `iolink_device_info_*`
   process-wide wrappers and `g_legacy_device_info_ctx`, and the
-  `IOLINK_CONCURRENCY_RTOS` marker. Identity and parameters are context-only;
+  `IOLINK_CONCURRENCY_RTOS` tier (the identifier remains defined only as a
+  rejection value so a stale `-D` still hits the `port.h` `#error`). Identity
+  and parameters are context-only;
   a script that calls the removed APIs must switch to the `_ctx` forms and bind
   them through `iolink_device_init()`.
 

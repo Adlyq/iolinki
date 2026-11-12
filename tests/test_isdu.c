@@ -903,6 +903,23 @@ static void test_isdu_unbound_identity_scope(void** state)
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 0);
+
+    /* 0x0029 ProcessDataOutput：同样不依赖身份。 */
+    iolink_isdu_init(&ctx);
+    ctx.dll_ctx = &dll_ctx;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_OUTPUT, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 0);
+
+    /* 0x0018 ApplicationTag：参数上下文未绑定 -> 否定应答，而不是静默丢弃。 */
+    iolink_isdu_init(&ctx);
+    ctx.dll_ctx = &dll_ctx;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+    assert_int_equal(byte, 0x80U);
+    assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
+    assert_int_equal(byte, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
 }
 
 static void test_isdu_system_command_read_only_write(void** state)
