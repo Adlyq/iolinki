@@ -321,7 +321,7 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
   回退严格等价（差分门证明）。
 - **风险**：plan 失效窗口是最大正确性风险；发布/失效协议必须先于任何优化设计。
 
-### P6 能力表化 D（L，2–3 周）——状态：已完成（本地合并；全量验证中）
+### P6 能力表化 D（L，2–3 周）——状态：已完成（本地合并；全量验证通过）
 
 - **实现结果**：`iolink_build_caps_t` / `iolink_caps_t` + `iolink_caps_resolve()`
   单一解析点；12 项开关降级为运行时能力位；矩阵 22→4 结构配置
@@ -331,6 +331,9 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
   Cortex-M0+ `-Os` text 21812→22784（**+972 B，+4.5%**）、rodata +20 B；
   源码集成与 `.a`（非 LTO）差 0–4 B。**超出设计稿 3% 预算，DG3 需决定：
   接受、逐项申报，或恢复部分编译期开关**。
+- **验证**：79/79 测试、4 结构配置矩阵 + 7 探针、差分门 2 配置 0 allowlist、
+  质量门、覆盖率 90.4%、WCET、size_matrix、profile ABI 全部通过；顺带修复
+  `tools/coverage.sh` 复用旧构建树导致 gcovr 行归属错乱（假覆盖率回归）的问题。
 - **剩余项**：ISR `isr_ops` 折叠（P5/P9 交叉）、`IOLINK_CAP_BUILD_*` 单变量
   测量开关、嵌入式链接脚本锚点、C2（FRAME）行为等价门、组合探针仅编译不链接。
 
