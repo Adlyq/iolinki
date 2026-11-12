@@ -116,10 +116,10 @@ static void test_device_init_validates_config_not_context(void** state)
     /* 未初始化上下文中的值不得参与校验：只有
      * 调用者提供的配置才是权威来源。 */
     (void) memset(&ctx, 0, sizeof(ctx));
-    ctx.stack_config.m_seq_type = (iolink_m_seq_type_t) 7;
-    ctx.stack_config.pd_in_len = IOLINK_PD_IN_MAX_SIZE + 1U;
-    ctx.stack_config.pd_out_len = IOLINK_PD_OUT_MAX_SIZE + 1U;
-    ctx.stack_config.od_width = 3U;
+    ctx.dll.m_seq_type = 7U;
+    ctx.dll.pd_in_len = IOLINK_PD_IN_MAX_SIZE + 1U;
+    ctx.dll.pd_out_len = IOLINK_PD_OUT_MAX_SIZE + 1U;
+    ctx.dll.od_width = 3U;
 
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
 }

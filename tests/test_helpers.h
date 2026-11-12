@@ -68,14 +68,22 @@ void test_io_cycle(iolink_device_ctx_t* ctx);
 /* mock PHY 驱动 API */
 extern const iolink_phy_api_t g_phy_mock;
 
-/* 已删除的无上下文 API 的替代：测试需要参数/标识时先调用
- * test_device_info_reset()，再把 params 上下文绑定到 ISDU 上下文
- * （test_isdu_bind_params）。 */
-iolink_device_info_ctx_t* test_device_info_ctx(void);
-iolink_params_ctx_t* test_params_ctx(void);
-void test_device_info_reset(const iolink_device_info_t* info);
-void test_params_reset(void);
-void test_isdu_bind_params(iolink_isdu_ctx_t* ctx);
+/* 显式的测试环境：设备标识 + 参数上下文。
+ *
+ * 每个测试文件持有自己的实例（文件级 static），并在用例或 setup 中
+ * 显式初始化。不再有 test_helpers.c 内的进程级单例，因此不存在
+ * "访问器先于初始化被调用"的声明顺序耦合。 */
+typedef struct
+{
+    iolink_device_info_ctx_t info;
+    iolink_params_ctx_t params;
+} iolink_test_env_t;
+
+void test_env_init(iolink_test_env_t* env, const iolink_device_info_t* info);
+void test_env_reset_params(iolink_test_env_t* env);
+iolink_device_info_ctx_t* test_env_info(iolink_test_env_t* env);
+iolink_params_ctx_t* test_env_params(iolink_test_env_t* env);
+void test_isdu_bind_params(iolink_isdu_ctx_t* ctx, iolink_test_env_t* env);
 
 /* 用于设置 mock 期望的辅助函数 */
 void setup_mock_phy(void);

@@ -1,0 +1,3 @@
+# Line-coverage floor enforced by `tools/coverage.sh --check` (gcovr, src/ only).
+# Raise deliberately when coverage improves; never lower it silently.
+lines=89.1

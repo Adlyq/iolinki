@@ -68,6 +68,12 @@ add_executable(test_ring test_ring.c)
 target_link_libraries(test_ring iolinki)
 add_test(NAME test_ring COMMAND test_ring)
 
+# Context size contract: a layout or buffer default change must update the
+# assertions (and docs/MEMORY_GUIDE.md) explicitly.
+add_executable(test_ctx_sizes test_ctx_sizes.c)
+target_link_libraries(test_ctx_sizes iolinki)
+add_test(NAME test_ctx_sizes COMMAND test_ctx_sizes)
+
 # Log sink contract: runtime level filter, forwarding, default silence, ISR switch.
 add_executable(test_log test_log.c test_log_isr_on.c)
 target_link_libraries(test_log iolinki)

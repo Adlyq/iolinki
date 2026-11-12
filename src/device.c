@@ -132,15 +132,20 @@ static uint8_t device_default_od_width(uint8_t m_seq_type)
     }
 }
 
-/** @brief 将用户协议栈配置复制到 DLL 上下文，并推导长度/时序。 */
+/** @brief 将用户协议栈配置应用到 DLL 上下文，并推导长度/时序。
+ *
+ * 配置只有一个来源：调用者在初始化期间提供的
+ * @ref iolink_device_config_t 结构。上下文不保留第二份副本。 */
 static void device_apply_stack_config(iolink_device_ctx_t* ctx)
 {
-    ctx->dll.m_seq_type = (uint8_t) ctx->stack_config.m_seq_type;
-    ctx->dll.pd_in_len = ctx->stack_config.pd_in_len;
-    ctx->dll.pd_out_len = ctx->stack_config.pd_out_len;
-    ctx->dll.min_cycle_time_app_us = (uint32_t) ctx->stack_config.min_cycle_time * 100U;
-    ctx->dll.master_lost_cycles = ctx->stack_config.master_lost_cycles;
-    ctx->dll.t_pd_delay_us = ctx->stack_config.t_pd_us;
+    const iolink_stack_config_t* stack = &ctx->config->stack;
+
+    ctx->dll.m_seq_type = (uint8_t) stack->m_seq_type;
+    ctx->dll.pd_in_len = stack->pd_in_len;
+    ctx->dll.pd_out_len = stack->pd_out_len;
+    ctx->dll.min_cycle_time_app_us = (uint32_t) stack->min_cycle_time * 100U;
+    ctx->dll.master_lost_cycles = stack->master_lost_cycles;
+    ctx->dll.t_pd_delay_us = stack->t_pd_us;
     if (ctx->dll.t_pd_delay_us > 0U) {
         ctx->dll.t_pd_deadline_us = dll_time_us(&ctx->dll) + (uint64_t) ctx->dll.t_pd_delay_us;
     }
@@ -161,7 +166,7 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
      * 组装应答，因此 DLL 需要 OD 宽度来确定应答布局。
      * OD 宽度默认取 Table A.10 的值；config.od_width 选择
      * 8/32 字节扩展。 */
-    ctx->dll.od_width = ctx->stack_config.od_width;
+    ctx->dll.od_width = stack->od_width;
     if (ctx->dll.od_width == 0U) {
         ctx->dll.od_width = device_default_od_width((uint8_t) ctx->dll.m_seq_type);
     }
@@ -171,8 +176,8 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
 
     /* 在根据波特率推导最小周期时间之前，先采用
      * 配置的操作 COM（及其时序限制）。 */
-    if (ctx->stack_config.baudrate_set) {
-        (void) iolink_dll_set_operating_baudrate(&ctx->dll, ctx->stack_config.baudrate);
+    if (stack->baudrate_set) {
+        (void) iolink_dll_set_operating_baudrate(&ctx->dll, stack->baudrate);
     }
 
     /* 通告/实际提供的最小周期时间由实际的
@@ -327,7 +332,6 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     }
 
     (void) memset(ctx, 0, sizeof(*ctx));
-    (void) memcpy(&ctx->stack_config, &config->stack, sizeof(ctx->stack_config));
     ctx->config = config;
 
     if (config->phy.init != NULL) {

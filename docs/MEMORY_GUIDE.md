@@ -8,15 +8,29 @@ The stack avoids dynamic memory allocation (`malloc`). All state is held in cont
 
 ### Base Requirements
 
-The core memory footprint is determined by `iolink_device_ctx_t`, which embeds
-`iolink_dll_ctx_t` (including ISDU, Events and Data Storage).
+The application allocates one `iolink_device_ctx_t`. It embeds `iolink_dll_ctx_t`,
+which in turn embeds the ISDU, Events and Data Storage contexts, so the numbers
+below are nested—do not add them together.
 
-| Component | Size (approx) | Description |
-| :--- | :--- | :--- |
-| **DLL context** | ~1.3 KB | Core state, timers, counters, ISR staging and the ISDU snapshot |
-| **ISDU context** | ~1.1 KB | Four payload/transport buffers (see below) |
+Measured on a 64-bit host with the default buffers in
+`include/iolinki/config.h`:
+
+| Component | Size (bytes) | Description |
+| :--- | ---: | :--- |
+| **`iolink_device_ctx_t`** | **3688** | The object the application allocates (includes everything below) |
+| `iolink_dll_ctx_t` | 3376 | DLL state, timers, counters, ISR staging; embeds ISDU, Events and DS |
+| `iolink_isdu_ctx_t` | 1488 | Transport state plus the payload/transport buffers (see below) |
+| `iolink_events_ctx_t` | 392 | Event queue plus lifecycle records |
+| `iolink_ds_ctx_t` | 376 | DS state and the `IOLINK_DS_IMAGE_MAX` image |
 | **PHY API** | 20-30 bytes | Function pointers (usually const/flash, but pointer storage in RAM) |
-| **Buffers** | *Configurable* | Dependent on `include/iolinki/config.h` |
+
+`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 8 bytes (two counter sets).
+32-bit targets are smaller because pointers are 4 bytes.
+
+> **These numbers are a contract.** `tests/test_ctx_sizes.c` asserts the exact
+> sizes at build time (`IOLINK_STATS_SHARED` and `SPLIT` variants); a layout or
+> buffer-default change fails CI until the test and this table are updated
+> together. Use that test as the authority instead of trusting arithmetic.
 
 ### Configurable Memory (via `include/iolinki/config.h`)
 
@@ -32,9 +46,9 @@ You can tune these values to fit your MCU.
 
 ### Total RAM
 
-Buffer arrays alone exceed **2 KB** at the default settings (ISDU 1289 + ISR
-staging/PD ~520 + DS image 256 + events), before scalar state and alignment. Do
-not trust an arithmetic estimate:
+The default `iolink_device_ctx_t` is **3688 bytes** (64-bit host, default
+buffers); buffer arrays dominate it. On a 32-bit target the same layout is
+smaller. To measure your own build instead of relying on the table:
 
 ```c
 #include <stdio.h>

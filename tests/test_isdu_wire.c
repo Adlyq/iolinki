@@ -28,6 +28,8 @@
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 
+static iolink_test_env_t g_test_env;
+
 #include "conformance_test.h"
 
 static int test_setup(void** state)
@@ -71,7 +73,7 @@ static void wire_device_info_init(void)
     info.profile_characteristic = 0x0001U;
     info.revision_id = 0x0111U;
     info.min_cycle_time = 0U;
-    test_device_info_reset(&info);
+    test_env_init(&g_test_env, &info);
 }
 
 /* 一个 63 字符的 VendorName，通过 ExtLength（>15 个数据八位组）提供。 */
@@ -94,8 +96,8 @@ static void wire_long_vendor_init(void)
     info.serial_number = "s";
     info.hardware_revision = "h";
     info.firmware_revision = "f";
-    test_device_info_reset(&info);
-    test_params_reset();
+    test_env_init(&g_test_env, &info);
+    test_env_reset_params(&g_test_env);
 }
 
 /* 以连续的 1 八位组报文送入完整请求：START 然后是 COUNT 1..0。 */
@@ -171,9 +173,9 @@ static void test_isdu_wire_read_figure_a20(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     wire_device_info_init();
-    test_params_reset();
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     const uint8_t req[3] = {0x93U, 0x10U, 0x83U};
     wire_write_request(&ctx, req, sizeof(req));
@@ -193,9 +195,9 @@ static void test_isdu_wire_write_figure_a20(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     wire_device_info_init();
-    test_params_reset();
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     const uint8_t req[6] = {0x26U, 0x10U, 0x01U, 0x12U, 0x34U, 0x11U};
     assert_int_equal(chkpdu(req, 6U), 0U);
@@ -217,9 +219,9 @@ static void test_isdu_wire_16bit_index_read(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     wire_device_info_init();
-    test_params_reset();
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 16 位索引 + 子索引读（I-Service 0xB，Length 5）：B5 00 10 00 A5。 */
     const uint8_t req[5] = {0xB5U, 0x00U, 0x10U, 0x00U, 0xA5U};
@@ -249,9 +251,9 @@ static void test_isdu_wire_write_count_wrap(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     wire_device_info_init();
-    test_params_reset();
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 带 11 个数据八位组的 16 位 ApplicationTag 写：共 17 个八位组，因此
        最后一个八位组（CHKPDU）由紧接 COUNT 15 的 COUNT 0 承载。 */
@@ -284,8 +286,8 @@ static void test_isdu_wire_write_count_wrap(void** state)
     assert_int_equal(resp[1], chkpdu(resp, 1U));
 
     uint8_t readback[16];
-    assert_int_equal(iolink_params_ctx_get(test_params_ctx(), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                           readback, sizeof(readback)),
+    assert_int_equal(iolink_params_ctx_get(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG,
+                                           0U, readback, sizeof(readback)),
                      11);
     assert_memory_equal(readback, &req[5], 11U);
 }
@@ -297,9 +299,9 @@ static void test_isdu_wire_repeated_flowctrl(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     wire_device_info_init();
-    test_params_reset();
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_START, (const uint8_t[]){0x93U}, 1U);
     iolink_isdu_od_write(&ctx, 1U, (const uint8_t[]){0x10U}, 1U);
@@ -321,9 +323,9 @@ static void test_isdu_wire_flowctrl_error(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     wire_device_info_init();
-    test_params_reset();
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_START, (const uint8_t[]){0x93U}, 1U);
     iolink_isdu_od_write(&ctx, 3U, (const uint8_t[]){0x10U}, 1U); /* 跳过 1,2 */
@@ -343,9 +345,9 @@ static void test_isdu_wire_chkpdu_corrupt(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     wire_device_info_init();
-    test_params_reset();
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     const uint8_t req[3] = {0x93U, 0x10U, 0x82U}; /* 应为 0x83 */
     wire_write_request(&ctx, req, sizeof(req));
@@ -363,9 +365,9 @@ static void test_isdu_wire_unsupported_system_command(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     wire_device_info_init();
-    test_params_reset();
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     const uint8_t req[] = {0x14U, 0x02U, 0xFFU, 0xE9U};
     const uint8_t expected[] = {0x44U, 0x80U, 0x35U, 0xF1U};
@@ -382,9 +384,9 @@ static void test_isdu_wire_unknown_index(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     wire_device_info_init();
-    test_params_reset();
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     const uint8_t read_req[] = {0xB5U, 0x01U, 0x00U, 0x00U, 0xB4U};
     const uint8_t read_expected[] = {0xC4U, 0x80U, 0x11U, 0x55U};
@@ -407,9 +409,9 @@ static void test_isdu_wire_busy_polling(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     wire_device_info_init();
-    test_params_reset();
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 解析请求，但暂不运行 iolink_isdu_process()。 */
     const uint8_t req[3] = {0x93U, 0x10U, 0x83U};
@@ -439,9 +441,9 @@ static void test_isdu_wire_abort(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     wire_device_info_init();
-    test_params_reset();
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_START, (const uint8_t[]){0x93U}, 1U);
     iolink_isdu_od_read(&ctx, IOLINK_FLOWCTRL_ABORT, NULL, 0U);
@@ -458,9 +460,9 @@ static void test_isdu_wire_write_abort(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     wire_device_info_init();
-    test_params_reset();
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_START, (const uint8_t[]){0x93U}, 1U);
     iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_ABORT, (const uint8_t[]){0x00U}, 1U);
@@ -478,7 +480,7 @@ static void test_isdu_wire_extlength_read(void** state)
     iolink_isdu_ctx_t ctx;
     wire_long_vendor_init();
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 索引 0x10 的 8 位读：0x93 0x10 0x83。 */
     const uint8_t req[3] = {0x93U, 0x10U, 0x83U};
@@ -502,7 +504,7 @@ static void test_isdu_wire_read_count_wrap(void** state)
     iolink_isdu_ctx_t ctx;
     wire_long_vendor_init();
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 63 八位组 VendorName -> 66 八位组应答。 */
     const uint8_t req[3] = {0x93U, 0x10U, 0x83U};

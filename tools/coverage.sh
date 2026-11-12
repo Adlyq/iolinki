@@ -8,6 +8,7 @@
 # Usage:
 #   ./tools/coverage.sh              # text report + summary for src/
 #   ./tools/coverage.sh --html       # also write build_coverage/coverage/
+#   ./tools/coverage.sh --check      # fail when line coverage < tools/coverage_baseline.txt
 #   ./tools/coverage.sh --filter dll # only files whose path contains "dll"
 #
 # Environment:
@@ -23,16 +24,18 @@ if [ -z "${JOBS:-}" ]; then
 fi
 
 HTML=0
+CHECK=0
 FILTER=""
 
 usage() {
-    sed -n '3,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '3,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --html) HTML=1 ;;
+        --check) CHECK=1 ;;
         --filter) shift; FILTER="${1:-}" ;;
         -h|--help) usage 0 ;;
         *) echo "unknown option: $1" >&2; usage 2 ;;
@@ -68,7 +71,28 @@ if grep -q -- '--merge-mode-functions' <<<"$help"; then
     gcovr_opts+=(--merge-mode-functions=merge-use-line-min)
 fi
 
-gcovr -r "$ROOT" --filter "$filter" "${gcovr_opts[@]}" --print-summary
+summary="$(gcovr -r "$ROOT" --filter "$filter" "${gcovr_opts[@]}" --print-summary)"
+printf '%s\n' "$summary"
+
+if [ "$CHECK" -eq 1 ]; then
+    baseline_file="$ROOT/tools/coverage_baseline.txt"
+    if [ ! -f "$baseline_file" ]; then
+        echo "missing baseline file: $baseline_file" >&2
+        exit 2
+    fi
+    actual="$(printf '%s\n' "$summary" | sed -nE 's/^lines: ([0-9]+\.[0-9]+)%.*/\1/p')"
+    baseline="$(sed -nE 's/^lines=([0-9]+\.[0-9]+).*/\1/p' "$baseline_file")"
+    if [ -z "$actual" ] || [ -z "$baseline" ]; then
+        echo "could not parse the coverage summary or $baseline_file" >&2
+        exit 2
+    fi
+    if ! awk -v actual="$actual" -v baseline="$baseline" \
+        'BEGIN { exit (actual + 0 >= baseline + 0) ? 0 : 1 }'; then
+        echo "coverage regression: ${actual}% < ${baseline}% baseline" >&2
+        exit 1
+    fi
+    echo "coverage check: ${actual}% >= ${baseline}% baseline"
+fi
 
 if [ "$HTML" -eq 1 ]; then
     mkdir -p "$BUILD_DIR/coverage"

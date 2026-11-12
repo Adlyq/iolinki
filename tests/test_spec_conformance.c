@@ -31,6 +31,8 @@
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 
+static iolink_test_env_t g_test_env;
+
 #include "conformance_test.h"
 
 static iolink_device_info_t make_info(void)
@@ -58,15 +60,15 @@ static int setup(void** state)
 {
     (void) state;
     iolink_device_info_t info = make_info();
-    test_device_info_reset(&info);
-    test_params_reset();
+    test_env_init(&g_test_env, &info);
+    test_env_reset_params(&g_test_env);
     return 0;
 }
 
 static int teardown(void** state)
 {
     (void) state;
-    test_device_info_reset(NULL);
+    test_env_init(&g_test_env, NULL);
     return 0;
 }
 
@@ -75,7 +77,7 @@ static int read_object(uint16_t index, uint8_t* out, size_t out_size)
 {
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     assert_int_equal(isdu_send_read_request(&ctx, index, 0U), 1);
     iolink_isdu_process(&ctx);
     return isdu_collect_response(&ctx, out, out_size);
@@ -87,7 +89,7 @@ static int read_object_with_dll(uint16_t index, iolink_dll_ctx_t* dll, uint8_t* 
 {
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.dll_ctx = dll;
     assert_int_equal(isdu_send_read_request(&ctx, index, 0U), 1);
     iolink_isdu_process(&ctx);
@@ -116,7 +118,7 @@ static int write_object(uint16_t index, const uint8_t* data, uint8_t len, uint8_
 {
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     assert_int_equal(isdu_send_write_request(&ctx, index, 0U, data, len), 1);
     iolink_isdu_process(&ctx);
     return isdu_collect_response(&ctx, out, out_size);
@@ -172,7 +174,7 @@ static void test_product_uri_index(void** state)
 static void test_product_uri_absent(void** state)
 {
     (void) state;
-    test_device_info_reset(NULL); /* 默认 info：product_uri = NULL */
+    test_env_init(&g_test_env, NULL); /* 默认 info：product_uri = NULL */
 
     uint8_t out[8] = {0};
     int n = read_object(IOLINK_IDX_PRODUCT_URI, out, sizeof(out));
@@ -270,7 +272,7 @@ static void test_process_data_80xx_is_positive(void** state)
 
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.dll_ctx = &dll;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0U), 1);
     iolink_isdu_process(&ctx);
@@ -297,7 +299,7 @@ static uint8_t read_dpp1_octet(iolink_dll_ctx_t* dll, uint8_t addr)
 {
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.dll_ctx = dll;
     assert_int_equal(
         isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, (uint8_t) (addr + 1U)), 1);
@@ -380,7 +382,7 @@ static void test_parameter_lock_blocks_tag_write(void** state)
     int n = write_object(IOLINK_IDX_APPLICATION_TAG, original, sizeof(original), out, sizeof(out));
     assert_int_equal(n, 0);
 
-    iolink_device_info_ctx_set_access_locks(test_device_info_ctx(), IOLINK_LOCK_PARAM);
+    iolink_device_info_ctx_set_access_locks(test_env_info(&g_test_env), IOLINK_LOCK_PARAM);
 
     const uint8_t overwrite[] = {'A', 'B', 'C'};
     n = write_object(IOLINK_IDX_APPLICATION_TAG, overwrite, sizeof(overwrite), out, sizeof(out));
@@ -400,7 +402,7 @@ static void test_parameter_lock_blocks_tag_write(void** state)
     const uint8_t unlock[] = {0x00U, 0x00U};
     n = write_object(IOLINK_IDX_DEVICE_ACCESS_LOCKS, unlock, sizeof(unlock), out, sizeof(out));
     assert_int_equal(n, 0);
-    assert_int_equal(iolink_device_info_ctx_get_access_locks(test_device_info_ctx()), 0U);
+    assert_int_equal(iolink_device_info_ctx_get_access_locks(test_env_info(&g_test_env)), 0U);
 
     n = write_object(IOLINK_IDX_APPLICATION_TAG, overwrite, sizeof(overwrite), out, sizeof(out));
     assert_int_equal(n, 0);
@@ -417,11 +419,11 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0156");
     (void) state;
 
-    iolink_device_info_ctx_set_access_locks(test_device_info_ctx(), IOLINK_LOCK_PARAM);
+    iolink_device_info_ctx_set_access_locks(test_env_info(&g_test_env), IOLINK_LOCK_PARAM);
 
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.vendor_service = vendor_service_ok;
     const uint8_t value = 0x5AU;
     assert_int_equal(isdu_send_write_request(&ctx, 0x0040U, 0U, &value, 1U), 1);
@@ -434,7 +436,7 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
     assert_int_equal(out[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.vendor_service = vendor_service_ok;
     assert_int_equal(isdu_send_read_request(&ctx, 0x0040U, 0U), 1);
     iolink_isdu_process(&ctx);
@@ -472,7 +474,7 @@ static void test_identification_string_length_limits(void** state)
     info.vendor_name = long_name;
     info.serial_number = long_serial;
     info.product_uri = long_uri;
-    test_device_info_reset(&info);
+    test_env_init(&g_test_env, &info);
 
     uint8_t out[160] = {0};
     int n = read_object(IOLINK_IDX_VENDOR_NAME, out, sizeof(out));

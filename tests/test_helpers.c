@@ -213,48 +213,38 @@ const iolink_phy_api_t g_phy_mock = {.user = NULL,
                                      .tx_done = mock_tx_done,
                                      .int_active = mock_int_active};
 
-/* Context-backed replacements for the removed no-context APIs. */
-static iolink_device_info_ctx_t g_test_device_info;
-static iolink_params_ctx_t g_test_params;
-static bool g_test_info_ready;
-
-static void test_ctx_ensure_ready(void)
+/* 显式测试环境（替代进程级单例）。调用方拥有存储并负责初始化。 */
+void test_env_init(iolink_test_env_t* env, const iolink_device_info_t* info)
 {
-    if (!g_test_info_ready) {
-        iolink_device_info_ctx_init(&g_test_device_info, NULL);
-        iolink_params_ctx_init(&g_test_params, &g_test_device_info);
-        g_test_info_ready = true;
+    if (env == NULL) {
+        return;
+    }
+    (void) memset(env, 0, sizeof(*env));
+    iolink_device_info_ctx_init(&env->info, info);
+    iolink_params_ctx_init(&env->params, &env->info);
+}
+
+void test_env_reset_params(iolink_test_env_t* env)
+{
+    if (env != NULL) {
+        iolink_params_ctx_init(&env->params, &env->info);
     }
 }
 
-iolink_device_info_ctx_t* test_device_info_ctx(void)
+iolink_device_info_ctx_t* test_env_info(iolink_test_env_t* env)
 {
-    return &g_test_device_info;
+    return (env != NULL) ? &env->info : NULL;
 }
 
-iolink_params_ctx_t* test_params_ctx(void)
+iolink_params_ctx_t* test_env_params(iolink_test_env_t* env)
 {
-    return &g_test_params;
+    return (env != NULL) ? &env->params : NULL;
 }
 
-void test_device_info_reset(const iolink_device_info_t* info)
+void test_isdu_bind_params(iolink_isdu_ctx_t* ctx, iolink_test_env_t* env)
 {
-    iolink_device_info_ctx_init(&g_test_device_info, info);
-    iolink_params_ctx_init(&g_test_params, &g_test_device_info);
-    g_test_info_ready = true;
-}
-
-void test_params_reset(void)
-{
-    test_ctx_ensure_ready();
-    iolink_params_ctx_init(&g_test_params, &g_test_device_info);
-}
-
-void test_isdu_bind_params(iolink_isdu_ctx_t* ctx)
-{
-    if (ctx != NULL) {
-        test_ctx_ensure_ready();
-        ctx->params_ctx = &g_test_params;
+    if ((ctx != NULL) && (env != NULL)) {
+        ctx->params_ctx = &env->params;
     }
 }
 

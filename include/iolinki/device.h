@@ -145,10 +145,9 @@ typedef struct
 {
     /* 私有字段。直接分配此对象，但请使用 API 函数。 */
     iolink_dll_ctx_t dll;                 /**< 数据链路层上下文。 */
-    iolink_stack_config_t stack_config;   /**< 活动的协议栈配置。 */
     iolink_device_info_ctx_t device_info; /**< 设备标识上下文。 */
     iolink_params_ctx_t params;           /**< 参数管理器上下文。 */
-    const iolink_device_config_t* config; /**< 指向所提供配置的指针。 */
+    const iolink_device_config_t* config; /**< 指向所提供配置的指针（唯一配置来源）。 */
     iolink_reset_handler_t reset_handler; /**< 应用重置处理函数（可以为 NULL）。 */
     bool master_lost_last;                /**< 上一次的主站丢失状态（回调边沿） */
     uint8_t direct_param_page2[16];       /**< Direct Parameter Page 2 存储。 */

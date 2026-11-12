@@ -108,6 +108,19 @@ jobs:
           shellcheck -S warning tools/build_matrix.sh tools/coverage.sh \
             test_all.sh check_quality.sh .docker_test_entrypoint.sh
 
+  # Coverage floor: line coverage of src/ must not drop below the checked-in
+  # baseline in tools/coverage_baseline.txt.
+  coverage-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libcmocka-dev gcovr
+      - name: Coverage floor
+        run: ./tools/coverage.sh --check
+
   # Delivery gate for compile-time configurations: every feature toggle, ISR
   # granularity and platform must at least build; the default and release
   # configurations also run the unit suite.

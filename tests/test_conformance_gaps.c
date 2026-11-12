@@ -29,6 +29,8 @@
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 
+static iolink_test_env_t g_test_env;
+
 static void events_init(iolink_events_ctx_t* ctx)
 {
     iolink_events_init(ctx);
@@ -108,7 +110,7 @@ static int read_object(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex,
                        size_t out_len)
 {
     iolink_isdu_init(ctx);
-    test_isdu_bind_params(ctx);
+    test_isdu_bind_params(ctx, &g_test_env);
     assert_int_equal(isdu_send_read_request(ctx, index, subindex), 1);
     iolink_isdu_process(ctx);
     return isdu_collect_response(ctx, out, out_len);
@@ -118,7 +120,7 @@ static int write_object(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex
                         const uint8_t* data, uint8_t data_len, uint8_t* out, size_t out_len)
 {
     iolink_isdu_init(ctx);
-    test_isdu_bind_params(ctx);
+    test_isdu_bind_params(ctx, &g_test_env);
     assert_int_equal(isdu_send_write_request(ctx, index, subindex, data, data_len), 1);
     iolink_isdu_process(ctx);
     return isdu_collect_response(ctx, out, out_len);
@@ -178,8 +180,8 @@ static void test_0123_application_tag_overlong(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0123");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     iolink_isdu_ctx_t ctx;
     uint8_t too_long[33];
@@ -204,8 +206,8 @@ static void test_0089_master_cycle_time_readback(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0089");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
@@ -213,7 +215,7 @@ static void test_0089_master_cycle_time_readback(void** state)
 
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.dll_ctx = &dll;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x02U), 1);
     iolink_isdu_process(&ctx);
@@ -236,8 +238,8 @@ static void test_0092_revision_id_configured(void** state)
     iolink_device_info_t info;
     (void) memset(&info, 0, sizeof(info));
     info.revision_id = 0x0110U;
-    test_device_info_reset(&info);
-    test_params_reset();
+    test_env_init(&g_test_env, &info);
+    test_env_reset_params(&g_test_env);
 
     iolink_isdu_ctx_t ctx;
     uint8_t value = 0U;
@@ -245,7 +247,7 @@ static void test_0092_revision_id_configured(void** state)
     assert_int_equal(value, 0x10U);
 
     info.revision_id = 0x0111U;
-    test_device_info_reset(&info);
+    test_env_init(&g_test_env, &info);
     assert_int_equal(read_object(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x05U, &value, 1U), 1);
     assert_int_equal(value, 0x11U);
 }
@@ -259,8 +261,8 @@ static void test_0097_function_id_zero(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0097");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     iolink_isdu_ctx_t ctx;
     uint8_t msb = 0xFFU;
@@ -281,9 +283,9 @@ static void test_0110_access_locks_reserved_bits(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0110");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
-    iolink_device_info_ctx_set_access_locks(test_device_info_ctx(), 0U);
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
+    iolink_device_info_ctx_set_access_locks(test_env_info(&g_test_env), 0U);
 
     /* B.2.4 / Table B.12：位 0..3 已实现，位 4..15 为保留位。 */
     for (unsigned bit = 4U; bit <= 15U; bit++) {
@@ -318,8 +320,8 @@ static void test_0112_pd_input_descriptor_absent(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0112");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     iolink_isdu_ctx_t ctx;
     uint8_t response[8] = {0};
@@ -334,8 +336,8 @@ static void test_0113_pd_output_descriptor_absent(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0113");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     iolink_isdu_ctx_t ctx;
     uint8_t response[8] = {0};
@@ -354,8 +356,8 @@ static void test_0134_offset_time_conditional(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0134");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     iolink_isdu_ctx_t ctx;
     uint8_t response[8] = {0};
@@ -393,8 +395,8 @@ static void test_0323_no_ds_record_marker(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0323");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds, NULL);
@@ -407,7 +409,7 @@ static void test_0323_no_ds_record_marker(void** state)
     for (uint8_t sub = 1U; sub <= 5U; sub++) {
         iolink_isdu_ctx_t ctx;
         iolink_isdu_init(&ctx);
-        test_isdu_bind_params(&ctx);
+        test_isdu_bind_params(&ctx, &g_test_env);
         ctx.ds_ctx = &ds;
         uint8_t data[8] = {0xFFU};
         assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, sub), 1);
@@ -589,8 +591,8 @@ static void test_0061_reserved_16bit_index(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0061");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     iolink_isdu_ctx_t ctx;
     uint8_t response[8] = {0};
@@ -609,8 +611,8 @@ static void test_0062_16bit_subindex_unavailable(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0062");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     iolink_isdu_ctx_t ctx;
     uint8_t response[8] = {0};
@@ -634,8 +636,8 @@ static void test_0111_profile_characteristic_absent(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0111");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     iolink_isdu_ctx_t ctx;
     uint8_t response[8] = {0};
@@ -654,8 +656,8 @@ static void test_0136_profile_parameters_read_absent(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0136");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     for (uint16_t index = 0x0031U; index <= 0x003FU; index++) {
         iolink_isdu_ctx_t ctx;
@@ -672,8 +674,8 @@ static void test_0137_profile_parameters_write_absent(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0137");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     for (uint16_t index = 0x0031U; index <= 0x003FU; index++) {
         iolink_isdu_ctx_t ctx;
@@ -694,7 +696,7 @@ static int gap_write_system_command(iolink_ds_ctx_t* ds, uint8_t cmd, uint8_t* o
 {
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = ds;
     assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_SYSTEM_COMMAND, 0U, &cmd, 1U), 1);
     iolink_isdu_process(&ctx);
@@ -706,8 +708,8 @@ static void test_0104_system_command_ranges(void** state)
     (void) state;
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0104");
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     for (unsigned value = 0U; value <= 0xFFU; value++) {
         iolink_ds_ctx_t ds;
@@ -892,8 +894,8 @@ static void long_vendor_init(void)
     for (size_t i = 0U; i < sizeof(g_long_data); i++) {
         g_long_data[i] = (uint8_t) (0x30U + (i & 0x07U));
     }
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 }
 
 static void test_0055_200_byte_read(void** state)
@@ -904,7 +906,7 @@ static void test_0055_200_byte_read(void** state)
     long_vendor_init();
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.vendor_service = long_vendor_service;
 
     assert_int_equal(isdu_send_read_request(&ctx, 0x00E4U, 0U), 1);

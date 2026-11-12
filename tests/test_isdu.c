@@ -28,6 +28,8 @@
 #include "iolinki/device_info.h"
 #include "test_helpers.h"
 
+static iolink_test_env_t g_test_env;
+
 #include "conformance_test.h"
 
 static int test_setup(void** state)
@@ -47,10 +49,10 @@ static void test_isdu_vendor_name_read(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0114");
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 1. 为索引 0x10（Vendor Name）发送 READ 请求 */
     assert_int_equal(isdu_send_read_request(&ctx, 0x0010, 0x00), 1);
@@ -71,11 +73,11 @@ static void test_isdu_device_status_read(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_events_ctx_t events;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_events_init(&events);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.event_ctx = &events;
 
     /* 1. 初始状态应为 OK (0) */
@@ -90,7 +92,7 @@ static void test_isdu_device_status_read(void** state)
     iolink_event_trigger(&events, IOLINK_EVENT_COMM_CRC, IOLINK_EVENT_TYPE_ERROR);
 
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.event_ctx = &events;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DEVICE_STATUS, 0x00), 1);
     iolink_isdu_process(&ctx);
@@ -105,11 +107,11 @@ static void test_isdu_detailed_device_status_read(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_events_ctx_t events;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_events_init(&events);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.event_ctx = &events;
 
     iolink_event_trigger(&events, 0x1801, IOLINK_EVENT_TYPE_ERROR);
@@ -136,11 +138,11 @@ static void test_isdu_detailed_device_status_cr443_octet_order(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_events_ctx_t events;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_events_init(&events);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.event_ctx = &events;
 
     /* 一条排队的警告：0x8CA0（厂商专用的 Device 范围）。 */
@@ -173,10 +175,10 @@ static void test_isdu_error_stats_read(void** state)
     dll_ctx.framing_errors = 0x01020304U;
     dll_ctx.timing_errors = 0x05060708U;
 
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.dll_ctx = &dll_ctx;
 
     /* 读取错误统计（索引 0x0040 处的厂商对象） */
@@ -199,10 +201,10 @@ static void test_system_cmd_device_reset(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0316");
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 向索引 0x0002 写入 0x80 */
     uint8_t cmd_data[] = {IOLINK_CMD_DEVICE_RESET};
@@ -223,10 +225,10 @@ static void test_system_cmd_application_reset(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0317");
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 向索引 0x0002 写入 0x81 */
     uint8_t cmd_data[] = {IOLINK_CMD_APPLICATION_RESET};
@@ -250,11 +252,11 @@ static void test_system_cmd_app_reset_raises_ds_upload_req(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_events_ctx_t events;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_events_init(&events);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.event_ctx = &events;
 
     uint8_t cmd_data[] = {IOLINK_CMD_APPLICATION_RESET};
@@ -271,14 +273,15 @@ static void test_system_cmd_factory_restore(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0155");
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 先设置一个自定义应用标签 */
     const uint8_t test_tag[] = "TestTag123";
-    iolink_params_ctx_set(test_params_ctx(), 0x0018, 0x00, test_tag, sizeof(test_tag) - 1, false);
+    iolink_params_ctx_set(test_env_params(&g_test_env), 0x0018, 0x00, test_tag,
+                          sizeof(test_tag) - 1, false);
 
     /* 向索引 0x0002 写入 0x82 */
     uint8_t cmd_data[] = {IOLINK_CMD_RESTORE_FACTORY_SETTINGS};
@@ -292,7 +295,8 @@ static void test_system_cmd_factory_restore(void** state)
 
     /* 校验应用标签已被复位 */
     uint8_t readback[33];
-    int len = iolink_params_ctx_get(test_params_ctx(), 0x0018, 0x00, readback, sizeof(readback));
+    int len = iolink_params_ctx_get(test_env_params(&g_test_env), 0x0018, 0x00, readback,
+                                    sizeof(readback));
     assert_int_equal(len, 0); /* 恢复出厂设置后应为空 */
 }
 
@@ -305,11 +309,11 @@ static void test_system_cmd_reserved_ds_commands(void** state)
     for (uint8_t i = 0U; i < 2U; i++) {
         iolink_isdu_ctx_t ctx;
         iolink_ds_ctx_t ds;
-        test_device_info_reset(NULL);
-        test_params_reset();
+        test_env_init(&g_test_env, NULL);
+        test_env_reset_params(&g_test_env);
         iolink_ds_init(&ds, NULL);
         iolink_isdu_init(&ctx);
-        test_isdu_bind_params(&ctx);
+        test_isdu_bind_params(&ctx, &g_test_env);
         ctx.ds_ctx = &ds;
 
         uint8_t cmd_data[] = {reserved[i]};
@@ -331,11 +335,11 @@ static void test_system_cmd_param_break(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_ds_init(&ds, NULL);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &ds;
 
     /* 先将 DS 置为上传状态 */
@@ -360,10 +364,10 @@ static void test_system_cmd_invalid(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0104");
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 向索引 0x0002 写入无效命令 0xFF */
     uint8_t cmd_data[] = {0xFF};
@@ -383,10 +387,10 @@ static void test_isdu_function_tag_read_write(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 写入 Function Tag */
     const char* test_tag = "TestFunction";
@@ -403,7 +407,7 @@ static void test_isdu_function_tag_read_write(void** state)
 
     /* 回读 Function Tag */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     assert_int_equal(isdu_send_read_request(&ctx, 0x0019, 0x00), 1);
 
     iolink_isdu_process(&ctx);
@@ -420,10 +424,10 @@ static void test_isdu_location_tag_read_write(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 写入 Location Tag */
     const char* test_tag = "Building-A";
@@ -440,7 +444,7 @@ static void test_isdu_location_tag_read_write(void** state)
 
     /* 回读 Location Tag */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     assert_int_equal(isdu_send_read_request(&ctx, 0x001A, 0x00), 1);
 
     iolink_isdu_process(&ctx);
@@ -468,7 +472,7 @@ static uint8_t read_dpp1_octet(iolink_dll_ctx_t* dll, uint8_t addr)
 {
     iolink_isdu_ctx_t page_ctx;
     iolink_isdu_init(&page_ctx);
-    test_isdu_bind_params(&page_ctx);
+    test_isdu_bind_params(&page_ctx, &g_test_env);
     page_ctx.dll_ctx = dll;
     assert_int_equal(
         isdu_send_read_request(&page_ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, (uint8_t) (addr + 1U)),
@@ -485,10 +489,10 @@ static void test_isdu_pdin_descriptor_read(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_dll_ctx_t dll = {0};
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 连接一个运行时 PD-in 长度为 3 的 DLL 上下文（公开的 setter
        会更新 pd_in_len_current，这正是 0x0028 必须提供的内容）。 */
@@ -519,7 +523,7 @@ static void test_isdu_pdin_descriptor_read(void** state)
 
     /* 测试写保护 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     uint8_t cmd_data[] = {0x05};
     assert_int_equal(
         isdu_send_write_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00, cmd_data, 1), 1);
@@ -544,17 +548,17 @@ static void test_isdu_data_storage_round_trip(void** state)
 #else
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     iolink_ds_init(&ds, NULL);
     ctx.ds_ctx = &ds;
 
     /* 配置一个已知的 ApplicationTag。 */
     const char* app = "ISDU-DS";
-    assert_int_equal(iolink_params_ctx_set(test_params_ctx(), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                           (const uint8_t*) app, strlen(app), true),
+    assert_int_equal(iolink_params_ctx_set(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG,
+                                           0U, (const uint8_t*) app, strlen(app), true),
                      0);
 
     /* 上传（读 0x0003）：主站备份序列化后的参数镜像。 */
@@ -565,23 +569,23 @@ static void test_isdu_data_storage_round_trip(void** state)
     assert_true(img_len > 0);
 
     /* 清空参数。 */
-    iolink_params_ctx_factory_reset(test_params_ctx());
+    iolink_params_ctx_factory_reset(test_env_params(&g_test_env));
     uint8_t buf[40];
-    assert_int_equal(
-        iolink_params_ctx_get(test_params_ctx(), IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf)),
-        0);
+    assert_int_equal(iolink_params_ctx_get(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG,
+                                           0U, buf, sizeof(buf)),
+                     0);
 
     /* 下载（写 0x0003）：主站恢复已备份的镜像。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &ds;
     assert_int_equal(
         isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x00, image, (uint8_t) img_len), 1);
     iolink_isdu_process(&ctx);
 
     /* ApplicationTag 已通过总线恢复。 */
-    int len =
-        iolink_params_ctx_get(test_params_ctx(), IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf));
+    int len = iolink_params_ctx_get(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
+                                    buf, sizeof(buf));
     assert_int_equal(len, (int) strlen(app));
     assert_memory_equal(buf, app, strlen(app));
 #endif
@@ -596,10 +600,10 @@ static void test_isdu_data_storage_subindices(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     iolink_ds_init(&ds, NULL);
     ctx.ds_ctx = &ds;
 
@@ -614,7 +618,7 @@ static void test_isdu_data_storage_subindices(void** state)
 
     /* sub 00：拼接记录，长度 12 + 3n（n = 3）。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &ds;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x00), 1);
     iolink_isdu_process(&ctx);
@@ -640,7 +644,7 @@ static void test_isdu_data_storage_subindices(void** state)
 
     /* sub 03 Data_Storage_Size：4 八位组大端 == 镜像长度。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &ds;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x03), 1);
     iolink_isdu_process(&ctx);
@@ -651,7 +655,7 @@ static void test_isdu_data_storage_subindices(void** state)
 
     /* sub 04 Parameter_Checksum：4 八位组大端 == current_checksum。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &ds;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x04), 1);
     iolink_isdu_process(&ctx);
@@ -662,7 +666,7 @@ static void test_isdu_data_storage_subindices(void** state)
 
     /* sub 05 Index_List：3 个条目（0x0018/0x0019/0x001A，sub 0）+ 0x0000 标记。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &ds;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x05), 1);
     iolink_isdu_process(&ctx);
@@ -677,7 +681,7 @@ static void test_isdu_data_storage_subindices(void** state)
             continue;
         }
         iolink_isdu_init(&ctx);
-        test_isdu_bind_params(&ctx);
+        test_isdu_bind_params(&ctx, &g_test_env);
         ctx.ds_ctx = &ds;
         uint8_t w[2] = {0x00U, 0x00U};
         assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, sub, w, 2U), 1);
@@ -697,10 +701,10 @@ static void test_isdu_ds_command_sequence(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     iolink_ds_init(&ds, NULL);
     ctx.ds_ctx = &ds;
 
@@ -719,7 +723,7 @@ static void test_isdu_ds_command_sequence(void** state)
     /* DS_UploadEnd (0x02) -> idle 并清除上传标志。 */
     ds.state = IOLINK_DS_STATE_UPLOADING;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &ds;
     cmd[0] = 0x02U;
     assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x01, cmd, 1U), 1);
@@ -729,9 +733,9 @@ static void test_isdu_ds_command_sequence(void** state)
     assert_int_equal(iolink_ds_state_property(&ds) & 0x80U, 0x00U);
 
     /* DS 锁生效时的 DS_DownloadStart (0x03) -> 访问被拒绝 (0x8023)。 */
-    iolink_device_info_ctx_set_access_locks(test_device_info_ctx(), IOLINK_LOCK_DS);
+    iolink_device_info_ctx_set_access_locks(test_env_info(&g_test_env), IOLINK_LOCK_DS);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &ds;
     cmd[0] = 0x03U;
     assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x01, cmd, 1U), 1);
@@ -741,10 +745,10 @@ static void test_isdu_ds_command_sequence(void** state)
     assert_int_equal(r[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 
     /* DS_Break (0x05) 将下载复位为 idle。 */
-    iolink_device_info_ctx_set_access_locks(test_device_info_ctx(), 0U);
+    iolink_device_info_ctx_set_access_locks(test_env_info(&g_test_env), 0U);
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &ds;
     cmd[0] = 0x05U;
     assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x01, cmd, 1U), 1);
@@ -758,10 +762,10 @@ static void test_isdu_direct_parameters_page1(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0052");
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 整页 Direct Parameter 第 1 页（16 字节）。 */
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x00), 1);
@@ -769,7 +773,7 @@ static void test_isdu_direct_parameters_page1(void** state)
     uint8_t page[16];
     assert_int_equal(isdu_collect_response(&ctx, page, sizeof(page)), 16);
 
-    const iolink_device_info_t* info = iolink_device_info_ctx_get(test_device_info_ctx());
+    const iolink_device_info_t* info = iolink_device_info_ctx_get(test_env_info(&g_test_env));
     assert_int_equal(page[0x04], 0x11);          /* RevisionID = v1.1 */
     assert_int_equal(page[0x03] & 0x01U, 0x01U); /* 支持 ISDU */
     assert_int_equal(page[0x07], (uint8_t) (info->vendor_id >> 8));
@@ -780,7 +784,7 @@ static void test_isdu_direct_parameters_page1(void** state)
 
     /* 通过子索引进行单八位组读取（地址 0x04 -> 子索引 5）。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x05), 1);
     iolink_isdu_process(&ctx);
     uint8_t b[2];
@@ -789,7 +793,7 @@ static void test_isdu_direct_parameters_page1(void** state)
 
     /* 第 1 页为只读。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     uint8_t w = 0x55;
     assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x01, &w, 1), 1);
     iolink_isdu_process(&ctx);
@@ -803,9 +807,9 @@ static void test_isdu_direct_parameters_page2(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
+    test_env_init(&g_test_env, NULL);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 写入整个第 2 页，然后回读。 */
     uint8_t img[16];
@@ -817,7 +821,7 @@ static void test_isdu_direct_parameters_page2(void** state)
     iolink_isdu_process(&ctx);
 
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_2, 0x00), 1);
     iolink_isdu_process(&ctx);
     uint8_t rb[16];
@@ -826,14 +830,14 @@ static void test_isdu_direct_parameters_page2(void** state)
 
     /* 在子索引 3 处进行单八位组写，然后回读。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     uint8_t one = 0x5A;
     assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_2, 0x03, &one, 1),
                      1);
     iolink_isdu_process(&ctx);
 
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_2, 0x03), 1);
     iolink_isdu_process(&ctx);
     uint8_t one_rb[2];
@@ -845,10 +849,10 @@ static void test_isdu_reserved_indices_negative(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* 0x001C..0x001F 未使用（C5）；读操作得到否定应答。 */
     assert_int_equal(isdu_send_read_request(&ctx, 0x001CU, 0x00), 1);
@@ -926,10 +930,10 @@ static void test_isdu_system_command_read_only_write(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     /* SystemCommand (0x0002) 为只写（Table B.8）：读请求会以
        IDX_NOT_ACCESSIBLE 0x80 0x23 应答（Table C.1）。 */
@@ -944,7 +948,7 @@ static void test_isdu_system_command_read_only_write(void** state)
 
     /* 对 0x0002 的写仍会执行该命令。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     uint8_t cmd_data[] = {IOLINK_CMD_DEVICE_RESET};
     assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_SYSTEM_COMMAND, 0x00, cmd_data, 1),
                      1);
@@ -962,7 +966,7 @@ static uint8_t page1_octet3(uint8_t m_seq_type, uint8_t pd_in, uint8_t pd_out)
     dll.m_seq_type = m_seq_type;
     assert_int_equal(iolink_dll_set_pd_length(&dll, pd_in, pd_out), 0);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.dll_ctx = &dll;
     return iolink_isdu_direct_param_page1_octet(&ctx, 0x03U);
 }
@@ -971,8 +975,8 @@ static void test_isdu_mseq_capability_codes(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0052");
     (void) state;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     /* Table A.10 / 计划任务 6。 */
     assert_int_equal(page1_octet3(IOLINK_M_SEQ_TYPE_2_1, 1, 0), 0x01U); /* OD1, code 0 */
@@ -997,7 +1001,7 @@ static void test_isdu_snapshot_response(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     uint8_t out[8] = {0xAAU};
     bool busy = true;
@@ -1036,7 +1040,7 @@ static void test_isdu_is_idle(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     assert_true(iolink_isdu_is_idle(&ctx));
 
@@ -1060,10 +1064,10 @@ static void test_isdu_subindexed_objects(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0111");
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     uint8_t r[8];
 
@@ -1076,7 +1080,7 @@ static void test_isdu_subindexed_objects(void** state)
 
     /* SDCI_TC_0058：VendorName (0x10) 没有子索引 2。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_VENDOR_NAME, 2U), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
@@ -1086,7 +1090,7 @@ static void test_isdu_subindexed_objects(void** state)
     /* 未配置配置文件时 0x000D 不可用（IDX_NOTAVAIL）；
        子索引边界仅在存在 ProfileCharacteristic 时才有意义。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROFILE_CHARACTERISTIC, 2U), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
@@ -1095,7 +1099,7 @@ static void test_isdu_subindexed_objects(void** state)
 
     /* 单元素对象拒绝任何不为 0 的子索引。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_VENDOR_NAME, 1U), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, r, sizeof(r)), 2);
@@ -1108,10 +1112,10 @@ static void test_isdu_dpp1_system_command(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     iolink_isdu_execute_system_command(&ctx, IOLINK_CMD_APPLICATION_RESET);
     assert_true(ctx.app_reset_pending);
@@ -1125,7 +1129,7 @@ static int read_events_index(iolink_events_ctx_t* events, uint16_t index, uint8_
 {
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.event_ctx = events;
     assert_int_equal(isdu_send_read_request(&ctx, index, 0U), 1);
     iolink_isdu_process(&ctx);
@@ -1146,8 +1150,8 @@ static void test_isdu_dds_empty_and_max_records(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0129");
     (void) state;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     iolink_events_ctx_t events;
     iolink_events_init(&events);
@@ -1173,7 +1177,7 @@ static void test_isdu_dds_empty_and_max_records(void** state)
     /* 最后一条记录之后的下一项为 SUBINDEX_NOT_AVAIL。 */
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.event_ctx = &events;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS,
                                             (uint8_t) (IOLINK_EVENT_PENDING_MAX + 1U)),
@@ -1190,8 +1194,8 @@ static void test_isdu_dds_empty_and_max_records(void** state)
 static void test_isdu_dds_keeps_cleared_event_until_disappear(void** state)
 {
     (void) state;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     iolink_events_ctx_t events;
     iolink_events_init(&events);
@@ -1238,8 +1242,8 @@ static void test_isdu_device_status_follows_event(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0373");
     (void) state;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
 
     iolink_events_ctx_t events;
     iolink_events_init(&events);
@@ -1270,10 +1274,10 @@ static void test_isdu_read_8bit_reserved_index(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0057");
     (void) state;
     iolink_isdu_ctx_t ctx;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
 
     assert_int_equal(isdu_send_read_request(&ctx, 0x00FFU, 0U), 1);
     /* 请求为 0x93 0xFF 0x6C：8 位索引形式，而非 0xB5 0x00 0xFF。 */
@@ -1295,11 +1299,11 @@ static void test_isdu_dds_subindices(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_events_ctx_t events;
-    test_device_info_reset(NULL);
-    test_params_reset();
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
     iolink_events_init(&events);
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.event_ctx = &events;
 
     iolink_event_trigger(&events, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
@@ -1314,7 +1318,7 @@ static void test_isdu_dds_subindices(void** state)
 
     /* sub 1：第一个条目（3 个八位组）。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.event_ctx = &events;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS, 1U), 1);
     iolink_isdu_process(&ctx);
@@ -1322,7 +1326,7 @@ static void test_isdu_dds_subindices(void** state)
 
     /* sub 3：超出范围 -> SUBINDEX_NOT_AVAIL。 */
     iolink_isdu_init(&ctx);
-    test_isdu_bind_params(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
     ctx.event_ctx = &events;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS, 3U), 1);
     iolink_isdu_process(&ctx);
