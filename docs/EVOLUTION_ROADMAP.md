@@ -241,8 +241,8 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
         data_storage（拆到 `dll_shared.h` / `dll_main.h`）；`dll_phy_has_*` 移到
         `dll_shared.h` 并以共享区为参数；
   - [x] 拆 `iolink_dll_main_t` / `iolink_dll_isr_t` / `iolink_dll_shared_t`；
-        `iolink_dll_ctx_t` 单次分配内嵌 `{ main; isr; }`；`IOLINK_STATIC_ASSERT`
-        锁共享区首成员与容器顺序（`dll_ctx.h`）；尺寸契约同步（device 3712 B）；
+        `iolink_dll_ctx_t` 单次分配内嵌 `{ main; isr; }`；显式 typedef 断言
+        锁共享区首成员与容器顺序（`dll_ctx.h`，与位宽无关）；尺寸契约同步（device 3712 B）；
   - [ ] `void*` 反向指针换窄接口（`iolink_diag_if_t` / `iolink_param_if_t` / ops 表）
         —— 延后到 P4/P5 的接口重构，避免与 OD/plan 改动二次冲突；
   - [x] 全程零行为变化：差分门逐字节一致（本阶段验证）。

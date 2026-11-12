@@ -26,9 +26,9 @@ if ! "$cc_bin" -std=c99 -Iinclude -Isrc -M src/dll.c >"$deps" 2>"$tmp/deps.log";
     exit 1
 fi
 
-if grep -Eq 'dll_isr\.h|dll_ctx\.h|device\.h' "$deps"; then
+if grep -Eq '/iolinki/(dll_isr|dll_ctx|device)\.h' "$deps"; then
     echo "FAIL: src/dll.c must not transitively include dll_isr.h/dll_ctx.h/device.h" >&2
-    grep -E 'dll_isr\.h|dll_ctx\.h|device\.h' "$deps" >&2
+    grep -E '/iolinki/(dll_isr|dll_ctx|device)\.h' "$deps" >&2
     exit 1
 fi
 
