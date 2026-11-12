@@ -36,6 +36,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   translation unit cannot reference ISR-exclusive fields, and runs in
   `check_quality.sh` and CI.
 
+### Added (object dictionary)
+- Const object dictionary (`include/iolinki/od.h`, `src/od.c`) as the single
+  source for ISDU dispatch, DS membership and IODD export. Mandatory indices
+  (SystemCommand, Profile, identification, tags, DeviceStatus, DPP1/2) now
+  live in table entries; `isdu.c` keeps only transport and built-in handlers.
+- Data Storage membership is resolved from the OD table / descriptor set and
+  no longer probes `vendor_service` with a read. `examples/switching_sensor`
+  is the first OD application and `tools/iodd_gen.py` exports the IODD from
+  the table. ISDU context grows by 8 bytes (device context 3720 bytes).
+
 ### Changed
 - DLL ownership split: `iolink_dll_ctx_t` packs `iolink_dll_main_t` (with the
   nested shared region) and `iolink_dll_isr_t` as siblings in one allocation.
