@@ -1,0 +1,10 @@
+# Differential gate allowlist: config|transcript|reason
+#
+# Every entry skips one (configuration, test transcript) comparison. Keep the
+# list short and justify each entry with the switch or spec clause responsible.
+#
+# compat_v10 enables IOLINK_COMPAT_V10_STARTUP_OPERATE and
+# IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE, which deliberately change the V1.0
+# interoperability replies (see docs/feature-trimming.md). The difference is
+# behavioural by design, not a refactoring regression.
+compat_v10|test_dll.txt|IOLINK_COMPAT_V10_STARTUP_OPERATE / IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE change V1.0 interop replies (docs/feature-trimming.md)

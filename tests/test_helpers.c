@@ -16,6 +16,7 @@
 #include <stddef.h>
 #include <setjmp.h>
 #include <cmocka.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -71,11 +72,38 @@ void mock_phy_set_baudrate(void* user, iolink_baudrate_t baudrate)
     check_expected(baudrate);
 }
 
+/* 差分门：设置 IOLINK_DIFF_TRACE 后，把设备发出的每个应答帧追加到该文件。
+ * 正常 ctest 运行不受影响（环境变量缺省为空）。 */
+static void trace_tx_frame(const uint8_t* data, size_t len)
+{
+    static const char* trace_path;
+    static bool trace_ready;
+    FILE* trace;
+
+    if (!trace_ready) {
+        trace_path = getenv("IOLINK_DIFF_TRACE");
+        trace_ready = true;
+    }
+    if ((trace_path == NULL) || (data == NULL)) {
+        return;
+    }
+    trace = fopen(trace_path, "ab");
+    if (trace == NULL) {
+        return;
+    }
+    for (size_t i = 0U; i < len; i++) {
+        (void) fprintf(trace, "%02x", data[i]);
+    }
+    (void) fputc('\n', trace);
+    (void) fclose(trace);
+}
+
 int mock_phy_send(void* user, const uint8_t* data, size_t len)
 {
     (void) user;
     check_expected_ptr(data);
     check_expected(len);
+    trace_tx_frame(data, len);
     if (g_mock_send_delay_us > 0U) {
         usleep(g_mock_send_delay_us);
     }

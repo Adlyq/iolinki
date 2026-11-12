@@ -12,6 +12,7 @@ build_baremetal/
 build_isr/
 build_matrix/
 build_coverage/
+build_diff/
 build_stream/
 *.o
 *.a
