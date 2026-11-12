@@ -117,7 +117,8 @@ void dll_set_state(iolink_dll_ctx_t* ctx, iolink_dll_state_t new_state)
         return;
     }
     if (ctx->in_isr == 0U) {
-        IOLINK_LOG_INFO("dll state %u -> %u", (unsigned) ctx->state, (unsigned) new_state);
+        IOLINK_LOG_INFO(&ctx->log, "dll state %u -> %u", (unsigned) ctx->state,
+                        (unsigned) new_state);
     }
     /* 单次对齐存储：数据 ISR 可能随时读取该状态，且
      * 两个上下文都可能转换它（ISR 快速路径为 t_A 这么做）。
@@ -442,7 +443,7 @@ static void dll_handle_fallback_command(iolink_dll_ctx_t* ctx)
                 t_fbd_ms = 500U;
             }
         }
-        IOLINK_LOG_WARN("fallback command: SIO in %lu ms", (unsigned long) t_fbd_ms);
+        IOLINK_LOG_WARN(&ctx->log, "fallback command: SIO in %lu ms", (unsigned long) t_fbd_ms);
         ctx->fallback_deadline_ms = dll_time_us(ctx) / 1000U + t_fbd_ms;
         dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
     }
@@ -1214,7 +1215,8 @@ static dll_frame_result_t dll_frame_validate(iolink_dll_ctx_t* ctx)
  */
 static void dll_handle_frame_error(iolink_dll_ctx_t* ctx, dll_frame_result_t result)
 {
-    IOLINK_LOG_DEBUG("frame error: result=%d state=%u", (int) result, (unsigned) ctx->state);
+    IOLINK_LOG_DEBUG(&ctx->log, "frame error: result=%d state=%u", (int) result,
+                     (unsigned) ctx->state);
     if (result == DLL_FRAME_TYPE_ERROR) {
         ctx->frame_replied_by_isr = 0U;
         ctx->framing_errors++;
@@ -1628,10 +1630,11 @@ static void dll_update_master_lost(iolink_dll_ctx_t* ctx, uint32_t now_ms)
 
     if (ctx->master_lost != was_lost) {
         if (ctx->master_lost) {
-            IOLINK_LOG_WARN("master lost: %u missed cycles", (unsigned) ctx->master_lost_count);
+            IOLINK_LOG_WARN(&ctx->log, "master lost: %u missed cycles",
+                            (unsigned) ctx->master_lost_count);
         }
         else {
-            IOLINK_LOG_INFO("master online");
+            IOLINK_LOG_INFO(&ctx->log, "master online");
         }
     }
 }
@@ -1688,7 +1691,7 @@ static void dll_check_fallback_deadline(iolink_dll_ctx_t* ctx, uint64_t now_ms64
          (ctx->state == IOLINK_DLL_STATE_PREOPERATE))) {
         if (now_ms64 >= fallback_deadline) {
             ctx->fallback_deadline_ms = 0U;
-            IOLINK_LOG_WARN("fallback timeout: switching to SIO");
+            IOLINK_LOG_WARN(&ctx->log, "fallback timeout: switching to SIO");
             iolink_dll_set_baudrate(ctx, IOLINK_BAUDRATE_COM1);
             iolink_dll_set_sio_mode(ctx);
             dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
@@ -1756,7 +1759,7 @@ static void dll_check_t_byte(iolink_dll_ctx_t* ctx)
         if (last_byte_us != 0U) {
             const uint32_t now_us = (uint32_t) dll_time_us(ctx);
             if ((uint32_t) (now_us - last_byte_us) > ctx->t_byte_limit_us) {
-                IOLINK_LOG_DEBUG("t_byte violation: %lu us",
+                IOLINK_LOG_DEBUG(&ctx->log, "t_byte violation: %lu us",
                                  (unsigned long) (now_us - last_byte_us));
                 ctx->timing_errors++;
                 ctx->t_byte_violations++;
@@ -1949,7 +1952,8 @@ int iolink_dll_set_baudrate(iolink_dll_ctx_t* ctx, iolink_baudrate_t baudrate)
     if (ctx == NULL) return -1;
     const bool changing = (ctx->baudrate != baudrate);
     if (changing) {
-        IOLINK_LOG_INFO("baudrate %u -> %u", (unsigned) ctx->baudrate, (unsigned) baudrate);
+        IOLINK_LOG_INFO(&ctx->log, "baudrate %u -> %u", (unsigned) ctx->baudrate,
+                        (unsigned) baudrate);
     }
     ctx->baudrate = baudrate;
     if (ctx->phy->set_baudrate != NULL) ctx->phy->set_baudrate(ctx->phy->user, baudrate);

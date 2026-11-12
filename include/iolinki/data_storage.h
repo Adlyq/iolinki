@@ -120,6 +120,7 @@ typedef struct
     uint8_t image[IOLINK_DS_IMAGE_MAX];   /**< 序列化的参数映像（DS_Data 0x0003） */
     size_t image_len;                     /**< @ref image 中的有效字节数 */
     bool download_invalid;                /**< 被拒绝的写入会使当前下载失效 */
+    iolink_log_sink_t log;                /**< 日志汇点（默认静默；设备层绑定） */
 } iolink_ds_ctx_t;
 
 /**

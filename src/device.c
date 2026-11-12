@@ -319,7 +319,10 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
 
     err = device_config_validate(config);
     if (err != IOLINK_DEVICE_INIT_OK) {
-        IOLINK_LOG_ERROR("device init rejected: err=%d", err);
+        iolink_log_sink_t sink;
+        /* ctx 尚未初始化，不能经由它打印：用配置构造临时汇点。 */
+        iolink_log_sink_init(&sink, config->log_write, config->user, config->log_level);
+        IOLINK_LOG_ERROR(&sink, "device init rejected: err=%d", err);
         return err;
     }
 
@@ -330,7 +333,10 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     if (config->phy.init != NULL) {
         err = config->phy.init(config->phy.user);
         if (err != 0) {
-            IOLINK_LOG_ERROR("phy init failed: err=%d", err);
+            iolink_log_sink_t sink;
+            /* sink 尚未绑定到各子系统（PHY init 在绑定之前运行）。 */
+            iolink_log_sink_init(&sink, config->log_write, config->user, config->log_level);
+            IOLINK_LOG_ERROR(&sink, "phy init failed: err=%d", err);
             return err;
         }
     }
@@ -377,6 +383,12 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     iolink_params_bind_storage(&ctx->params, NULL);
     ctx->dll.isdu.ds_ctx = NULL;
 #endif
+    /* 运行时日志 sink：一个配置被复制到所有会打印的子系统。
+     * 必须在 iolink_dll_init()/iolink_ds_init() 之后绑定，因为这些
+     * 初始化会清零各自的上下文；放在应用配置之前，使初始化期间的
+     * 状态/波特率日志也能输出。 */
+    iolink_device_set_log(ctx, config->log_write, config->log_level);
+
     device_apply_stack_config(ctx);
     ctx->master_lost_last = ctx->dll.master_lost;
 
@@ -384,11 +396,32 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
         config->app_callbacks->on_startup(config->user);
     }
 
-    IOLINK_LOG_INFO("device init: m_seq=%u pd_in=%u pd_out=%u od=%u baud=%u",
+    IOLINK_LOG_INFO(&ctx->dll.log, "device init: m_seq=%u pd_in=%u pd_out=%u od=%u baud=%u",
                     (unsigned) config->stack.m_seq_type, (unsigned) config->stack.pd_in_len,
                     (unsigned) config->stack.pd_out_len, (unsigned) ctx->dll.od_width,
                     (unsigned) ctx->dll.baudrate);
     return 0;
+}
+
+void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn write,
+                           iolink_log_level_t level)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    /* 设备层没有自己的 sink：打印点使用 DLL 的那一份。 */
+    iolink_log_sink_init(&ctx->dll.log, write, ctx->config != NULL ? ctx->config->user : NULL,
+                         level);
+    iolink_log_sink_init(&ctx->dll.isdu.log, write, ctx->config != NULL ? ctx->config->user : NULL,
+                         level);
+#if IOLINK_FEATURE_DATA_STORAGE
+    iolink_log_sink_init(&ctx->dll.ds.log, write, ctx->config != NULL ? ctx->config->user : NULL,
+                         level);
+#endif
+#if IOLINK_FEATURE_EVENTS
+    iolink_log_sink_init(&ctx->dll.events.log, write,
+                         ctx->config != NULL ? ctx->config->user : NULL, level);
+#endif
 }
 
 /** 选择一个 ISR 未在流式发送且非活动的 PD 输入缓冲区。
@@ -507,14 +540,14 @@ static void device_dispatch_resets(iolink_device_ctx_t* ctx)
 {
     if (ctx->dll.isdu.reset_pending) {
         ctx->dll.isdu.reset_pending = false;
-        IOLINK_LOG_WARN("device reset requested by master");
+        IOLINK_LOG_WARN(&ctx->dll.log, "device reset requested by master");
         if (ctx->reset_handler != NULL) {
             ctx->reset_handler(IOLINK_RESET_DEVICE);
         }
     }
     if (ctx->dll.isdu.app_reset_pending) {
         ctx->dll.isdu.app_reset_pending = false;
-        IOLINK_LOG_WARN("application reset requested by master");
+        IOLINK_LOG_WARN(&ctx->dll.log, "application reset requested by master");
         if (ctx->reset_handler != NULL) {
             ctx->reset_handler(IOLINK_RESET_APPLICATION);
         }

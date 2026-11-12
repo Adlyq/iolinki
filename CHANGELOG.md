@@ -8,11 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Log hooks: `IOLINK_LOG_ERROR/WARN/INFO/DEBUG` print points across the
-  device/DLL/ISDU/DS/event code, defaulting to `((void) 0)` so a default build
-  is silent and argument-free. ISR print points use the separate
-  `IOLINK_LOG_ISR_*` family, enabled with `IOLINK_LOG_ENABLE_ISR`. Integration
-  is by macro override from a private header; see `docs/API.md`.
+- Runtime log sink: `iolink_log_sink_t` (callback + user pointer + level) is
+  carried by the DLL, ISDU, DS and event contexts, bound from
+  `iolink_device_config_t::log_write`/`log_level` and changeable with
+  `iolink_device_set_log()`. Print points cover device/DLL/ISDU/DS/event code;
+  the default is silent. ISR print points use the separate
+  `IOLINK_LOG_ISR_*` family, enabled with `IOLINK_LOG_ENABLE_ISR`. See
+  `include/iolinki/log.h` and `docs/API.md`.
 
 ### Changed (documentation language)
 - Comments under `src/`, `include/iolinki/` and `tests/` are written in

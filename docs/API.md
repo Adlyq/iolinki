@@ -38,6 +38,8 @@ typedef struct {
 #endif
     iolink_device_time_us_fn time_us;        /* required microsecond clock (ISR-safe); NULL rejects init */
     void* user;                              /* opaque pointer for callbacks */
+    iolink_log_write_fn log_write;           /* optional runtime log sink; NULL is silent */
+    iolink_log_level_t log_level;            /* runtime log threshold; SILENT (0) disables */
     uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex,
                               bool write, const uint8_t* input, size_t length,
                               uint8_t* output, size_t* output_length);
@@ -315,30 +317,35 @@ with `IOLINK_ISR_RX_MODE` / `IOLINK_ISR_TX_MODE` (BYTE or FRAME).
 
 ## Logging
 
-The stack contains print points but no output implementation. `IOLINK_LOG_ERROR`,
-`IOLINK_LOG_WARN`, `IOLINK_LOG_INFO` and `IOLINK_LOG_DEBUG` are defined in
-`include/iolinki/config.h` and default to `((void) 0)`: a default build is silent,
-the format strings stay out of the image and the arguments are not evaluated.
-
-Wire them by defining the macros in a private header and force-including it
-(`-include my_iolink_log.h`) so every library translation unit sees the
-definitions before `config.h`:
+The stack contains print points but no output implementation. Every context
+carries an `iolink_log_sink_t` (callback + user pointer + runtime level), so the
+application decides where and at which verbosity the lines go:
 
 ```c
-#include <stdio.h>
+static void my_log(void* user, iolink_log_level_t level, const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    (void) vfprintf(stderr, format, args);   /* or an RTOS/UART logger */
+    va_end(args);
+}
 
-#define IOLINK_LOG_ERROR(...) my_log(LOG_ERR, __VA_ARGS__)
-#define IOLINK_LOG_WARN(...)  my_log(LOG_WARNING, __VA_ARGS__)
-#define IOLINK_LOG_INFO(...)  my_log(LOG_INFO, __VA_ARGS__)
-#define IOLINK_LOG_DEBUG(...) my_log(LOG_DEBUG, __VA_ARGS__)
+config.user = my_context;
+config.log_write = my_log;
+config.log_level = IOLINK_LOG_LEVEL_INFO;
 ```
 
-The macros receive printf-style format strings and arguments; the library does
-not format or buffer anything. Level filtering, timestamps and transport belong
-to the integration header. The ISR print points are separate: they use
-`IOLINK_LOG_ISR_ERROR/WARN/INFO/DEBUG`, stay compiled out unless
-`IOLINK_LOG_ENABLE_ISR` is 1, and then forward to the four main macros. Logging
-from an ISR is opt-in because a blocking sink would break the t_A reply budget.
+`IOLINK_LOG_LEVEL_SILENT` (the default) or a NULL `config.log_write` keeps the
+stack silent. `iolink_device_set_log(ctx, write, level)` changes the sink at
+runtime; the `user` argument stays `config.user`. The sink is copied into the
+DLL, ISDU, DS and event contexts, so direct users of those modules bind
+`ctx->log` themselves with `iolink_log_sink_init()`.
+
+The library does not format or buffer anything: the callback receives a
+printf-style format string and its arguments, and only evaluates them when the
+line passes the runtime threshold. The ISR print points use a separate
+`IOLINK_LOG_ISR_*` family and stay compiled out unless `IOLINK_LOG_ENABLE_ISR`
+is 1; a sink used from the ISR must be non-blocking and ISR-safe.
 
 
 ## Thread safety

@@ -72,6 +72,8 @@
  *  .device_info              | application     | 静态标识数据
  *  .storage                  | application     | 读/写函数在 ctx 生命周期内有效
  *  .time_us                  | application     | 单调递增、非阻塞、ISR 安全
+ *  .log_write                | application     | 主服务上下文调用；启用
+ *                            |                 | IOLINK_LOG_ENABLE_ISR 时须 ISR 安全
  * iolink_device_ctx_t        | application     | 每个链路一个实例；一个主上下文
  *                            |                 | 调用者加数据 ISR
  * PD data (pd_input_update)  | application     | 调用期间借用；内部复制到
@@ -121,8 +123,13 @@ typedef struct
     iolink_device_time_us_fn time_us; /**< DLL、ISR 泵和事件引擎使用的应用时钟；
                                            必需（NULL 在初始化时会被
                                            拒绝）。 */
-    void* user;                       /**< 传给 iolink_device_time_us_fn、vendor_service
-                                           以及每个 iolink_app_callbacks_t 钩子的应用上下文。 */
+    void* user;                       /**< 传给 iolink_device_time_us_fn、vendor_service、
+                                           log_write 以及每个 iolink_app_callbacks_t 钩子的
+                                           应用上下文。 */
+    iolink_log_write_fn log_write;    /**< 可选的运行时日志回调；NULL 表示静默。
+                                           参见 iolinki/log.h。 */
+    iolink_log_level_t log_level;     /**< 运行时日志阈值；IOLINK_LOG_LEVEL_SILENT（0）
+                                           表示不输出。 */
     uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex, bool write,
                               const uint8_t* input, size_t length, uint8_t* output,
                               size_t* output_length); /**< 可选的厂商 ISDU 回调；参见 isdu.h。 */
@@ -183,6 +190,20 @@ typedef enum
  *         或 PHY 初始化回调返回的负错误码。
  */
 int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config);
+
+/**
+ * @brief 在运行时更换日志回调或阈值。
+ *
+ * 更新 DLL、ISDU、DS 和事件子系统共用的汇点；`user` 仍为
+ * ::iolink_device_config_t::user。传入 `write == NULL` 或
+ * `level == IOLINK_LOG_LEVEL_SILENT` 可立即静默。
+ *
+ * @param ctx   由 iolink_device_init() 初始化的设备上下文。
+ * @param write 新的输出回调，可为 NULL。
+ * @param level 新的运行时阈值。
+ */
+void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn write,
+                           iolink_log_level_t level);
 
 /**
  * @brief 运行设备状态机的一次迭代。

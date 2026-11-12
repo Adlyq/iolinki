@@ -69,8 +69,8 @@ add_executable(test_ring test_ring.c)
 target_link_libraries(test_ring iolinki)
 add_test(NAME test_ring COMMAND test_ring)
 
-# Log hook contract: macro override forwarding, default no-op, ISR gating.
-add_executable(test_log test_log.c test_log_defaults.c test_log_isr_on.c)
+# Log sink contract: runtime level filter, forwarding, default silence, ISR switch.
+add_executable(test_log test_log.c test_log_isr_on.c)
 target_link_libraries(test_log iolinki)
 add_test(NAME test_log COMMAND test_log)
 

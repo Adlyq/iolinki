@@ -386,17 +386,18 @@ void iolink_ds_check(iolink_ds_ctx_t* ctx, uint32_t master_checksum)
 
     if (master_checksum == 0U) {
         /* 主站无数据 -> 上传请求 */
-        IOLINK_LOG_INFO("ds check: master has no image -> upload request");
+        IOLINK_LOG_INFO(&ctx->log, "ds check: master has no image -> upload request");
         ctx->state = IOLINK_DS_STATE_UPLOAD_REQ;
     }
     else if (master_checksum != ctx->current_checksum) {
         /* 校验和不匹配 -> 下载请求（更新设备） */
-        IOLINK_LOG_INFO("ds check: checksum 0x%08lX != 0x%08lX -> download request",
+        IOLINK_LOG_INFO(&ctx->log, "ds check: checksum 0x%08lX != 0x%08lX -> download request",
                         (unsigned long) master_checksum, (unsigned long) ctx->current_checksum);
         ctx->state = IOLINK_DS_STATE_DOWNLOAD_REQ;
     }
     else {
-        IOLINK_LOG_DEBUG("ds check: checksum 0x%08lX matches", (unsigned long) master_checksum);
+        IOLINK_LOG_DEBUG(&ctx->log, "ds check: checksum 0x%08lX matches",
+                         (unsigned long) master_checksum);
     }
 }
 
@@ -509,7 +510,7 @@ static int ds_cmd_upload_end(iolink_ds_ctx_t* ctx)
     }
     ctx->state = IOLINK_DS_STATE_IDLE;
     ds_clear_upload_flag(ctx);
-    IOLINK_LOG_INFO("ds upload complete");
+    IOLINK_LOG_INFO(&ctx->log, "ds upload complete");
     return 0;
 }
 
@@ -547,7 +548,7 @@ static int ds_cmd_download_end(iolink_ds_ctx_t* ctx)
         ctx->download_invalid = false;
         ctx->image_len = 0U;
         ctx->state = IOLINK_DS_STATE_IDLE;
-        IOLINK_LOG_WARN("ds download rejected: inconsistent image");
+        IOLINK_LOG_WARN(&ctx->log, "ds download rejected: inconsistent image");
         return -4; /* PAR_SETINCONSIST (0x8041) */
     }
     if (ctx->image_len > 0U) {
@@ -555,15 +556,15 @@ static int ds_cmd_download_end(iolink_ds_ctx_t* ctx)
     }
     ctx->state = IOLINK_DS_STATE_IDLE;
     if (rc == -1) {
-        IOLINK_LOG_ERROR("ds download failed: malformed image");
+        IOLINK_LOG_ERROR(&ctx->log, "ds download failed: malformed image");
         return -5; /* PAR_SETINVALID (0x8040)：镜像格式错误 */
     }
     if (rc == -2) {
-        IOLINK_LOG_ERROR("ds download failed: parameter rejected");
+        IOLINK_LOG_ERROR(&ctx->log, "ds download failed: parameter rejected");
         return -4; /* PAR_SETINCONSIST (0x8041)：参数被拒绝 */
     }
     ds_clear_upload_flag(ctx);
-    IOLINK_LOG_INFO("ds download complete");
+    IOLINK_LOG_INFO(&ctx->log, "ds download complete");
     return 0;
 }
 

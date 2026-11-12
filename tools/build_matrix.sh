@@ -156,8 +156,8 @@ run_config single_profile      BYTE_BYTE   Debug   yes   ""                     
 run_config smp_profile         BYTE_BYTE   Debug   yes   ""                            "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SMP -DIOLINK_FENCE_LEVEL=IOLINK_FENCE_SMP -DIOLINK_FENCE_SMP_IMPL=__sync_synchronize"
 run_config stats_split         BYTE_BYTE   Debug   yes   ""                            "-DIOLINK_STATS_MODE=IOLINK_STATS_SPLIT"
 run_config pd_input_callback   BYTE_BYTE   Debug   no    "-DIOLINK_APP_PD_INPUT_CALLBACK=ON" ""
-# Every print point compiled with a real sink (fprintf) so -Werror -Wformat
-# checks the format strings and the ISR family is exercised with the switch on.
+# The ISR log branch compiled for every library TU (runtime output stays
+# silent: matrix builds have no sink configured).
 run_config log_active          BYTE_BYTE   Debug   no    ""                            "-include $ROOT/tests/log_override.h"
 
 # Minimum-dependency proof: a SINGLE profile never references the

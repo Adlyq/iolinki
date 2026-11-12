@@ -7,21 +7,19 @@
  */
 
 /*
- * ISR log family with the switch enabled: a configured main macro plus
- * IOLINK_LOG_ENABLE_ISR=1 must forward the ISR calls unchanged.
+ * ISR log family with the switch enabled: the ISR macros must forward to the
+ * context sink exactly like the main macros once IOLINK_LOG_ENABLE_ISR is 1.
  */
 
-extern void log_capture(const char* format, ...);
-
 #define IOLINK_LOG_ENABLE_ISR 1
-#define IOLINK_LOG_ERROR(...) log_capture(__VA_ARGS__)
-#define IOLINK_LOG_WARN(...) log_capture(__VA_ARGS__)
-#define IOLINK_LOG_INFO(...) log_capture(__VA_ARGS__)
-#define IOLINK_LOG_DEBUG(...) log_capture(__VA_ARGS__)
 
-#include "iolinki/config.h"
+#include "iolinki/log.h"
+
+extern void log_capture(void* user, iolink_log_level_t level, const char* format, ...);
 
 void test_log_isr_on_run(void)
 {
-    IOLINK_LOG_ISR_INFO("isr on %d", 7);
+    iolink_log_sink_t sink;
+    iolink_log_sink_init(&sink, log_capture, NULL, IOLINK_LOG_LEVEL_DEBUG);
+    IOLINK_LOG_ISR_INFO(&sink, "isr on %d", 7);
 }

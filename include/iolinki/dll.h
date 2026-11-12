@@ -379,6 +379,7 @@ typedef struct
 
     iolink_dll_state_cb_t state_cb; /**< 可选的状态变更钩子（由核心层设置） */
     void* state_cb_user;            /**< 传给 state_cb 的用户指针 */
+    iolink_log_sink_t log;          /**< 日志汇点（默认静默；设备层绑定） */
 } iolink_dll_ctx_t;
 
 /**

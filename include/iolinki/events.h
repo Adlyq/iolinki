@@ -161,6 +161,7 @@ typedef struct
      * 读取为时间 0。 */
     uint64_t (*time_us)(void* user);
     void* time_user;
+    iolink_log_sink_t log; /**< 日志汇点（默认静默；设备层绑定） */
 } iolink_events_ctx_t;
 
 /**

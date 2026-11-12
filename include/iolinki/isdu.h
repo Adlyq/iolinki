@@ -111,6 +111,7 @@ typedef struct
     /* 系统命令标志 */
     bool reset_pending;     /**< 请求设备复位（0x80） */
     bool app_reset_pending; /**< 请求应用复位（0x81） */
+    iolink_log_sink_t log;  /**< 日志汇点（默认静默；设备层绑定） */
 } iolink_isdu_ctx_t;
 
 /**
