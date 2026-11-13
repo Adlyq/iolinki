@@ -478,7 +478,8 @@ flowchart LR
 | Type-0 ISDU READ（FlowCTRL 为 START/COUNT） | `IOLINK_REPLY_SRC_ISDU_SEG`，ISR 自己推进段索引；`CONSUME` | 帧不入邮箱 |
 | Type-0 ISDU READ（IDLE/IDLE2/ABORT） | 计划不匹配 | 主泵 `dll_dispatch_od()` → `iolink_isdu_od_read()` 复位传输层并刷新快照 |
 | Type-0 Page WRITE addr 0 | 计划动作 `IOLINK_REPLY_ACT_MASTER_COMMAND`：ISR 应用命令并回 CKS | `CONSUME` 帧不入邮箱 |
-| Type-0 Page/Diag WRITE 其他地址 | 计划不匹配 | 主泵执行 DPP 写 / 诊断确认 |
+| Type-0 Page WRITE addr 1..0x1F | 计划回 CKS（`SRC_NONE`，无 `CONSUME`） | eager 帧仍入邮箱；主泵应用 DPP 写，`frame_replied_by_isr` 抑制第二次应答 |
+| Type-0 Diag WRITE | 计划回 CKS（`SRC_NONE`，无 `CONSUME`） | eager 帧仍入邮箱；主泵确认事件读取，不重发应答 |
 | Type-0 ISDU WRITE | ISR 调 `iolink_isdu_od_write()` 位置去重累计；带 `STAGED` 的计划回 CKS 并 `CONSUME` | 计划未命中时从邮箱取帧处理 |
 | OPERATE 中的 Type-0 页读（未开兼容位） | 计划动作 `IOLINK_REPLY_ACT_RESET_STARTUP` + `CLOSE_WINDOW \| CONSUME`：不应答 | 帧不入邮箱，主泵不再看到该复位请求 |
 | Type-1/2 READ（Process/Page/Diag） | `PD_TAIL` 计划：OD 头写入活动 PD-in 槽位，零拷贝发送；来源为 `TEMPLATE` / `PAGE` / `EVENT_MEM` | eager 帧仍入邮箱；主泵更新统计、PD-out 与状态，不重发应答 |
@@ -486,7 +487,7 @@ flowchart LR
 | Type-1/2 WRITE | 暂存 ISDU 写；其余只回 `[PD-in]CKS` | eager 帧仍入邮箱；主泵复制 PD-out、推进状态机 |
 | FALLBACK MasterCommand（0x5A，Type-0 页写 addr 0） | 命中 MasterCommand 计划且带唤醒能力时：回 CKS、置 `isr_fallback_pending`、迁移 FALLBACK | 主泵 `dll_apply_isr_deadline_requests()` 安装 T_FBD |
 
-计划表内容随配置不同：Type-1/2 配置下 OPERATE 的 Type-0 页读只在兼容位 `IOLINK_CAP_COMPAT_T0_READ` 置位时才有普通页读计划，否则计划显式表达“消费并回 STARTUP”；Type-1/2 的页写计划固定为 `[PD-in]CKS`，因此只有 Type-0 页写 addr 0 才会被 ISR 当作 MasterCommand 应用。
+计划表内容随配置不同：Type-1/2 配置下 OPERATE 的 Type-0 页读只在兼容位 `IOLINK_CAP_COMPAT_T0_READ` 置位时才有普通页读计划，否则计划显式表达“消费并回 STARTUP”；Type-1/2 的页写计划固定为 `[PD-in]CKS`。Type-0 下 addr 0 由 MasterCommand 计划在 ISR 内应用并 `CONSUME`，addr 1..0x1F 的页写与诊断写由 ISR 回 CKS、帧仍交给主泵应用（DPP 写语义归主泵）。
 
 ---
 

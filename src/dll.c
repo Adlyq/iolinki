@@ -837,6 +837,14 @@ static void dll_handle_type0_od_write(iolink_dll_main_t* ctx, uint8_t mc, uint8_
     uint8_t od_resp = 0U;
     (void) dll_dispatch_od(ctx, mc, &od_in, 1U, &od_resp);
 
+    /* 计划未带 CONSUME 的 Type-0 写（普通 DPP 页写/诊断写）由 ISR 先回
+     * CKS，帧仍进邮箱让主泵应用写入；此时主泵不得再发第二个应答。 */
+    if (ctx->frame_replied_by_isr != 0U) {
+        ctx->frame_replied_by_isr = 0U;
+        ctx->last_response_us = dll_time_us(ctx);
+        return;
+    }
+
     uint8_t resp[1];
     resp[0] = 0x00U;
     if (DLL_EVENTS_FLAG(&ctx->shared.events)) {
@@ -1184,6 +1192,16 @@ static void dll_plan_push_type0(iolink_dll_main_t* ctx, uint8_t* count, bool tra
     dll_plan_push(ctx, count, 0xFFU, IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 3U,
                   IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_NONE, 0U,
                   IOLINK_REPLY_FLAG_CONSUME, IOLINK_REPLY_ACT_MASTER_COMMAND, NULL);
+    /* 普通页写（地址 1..0x1F）：ISR 先以 CKS 确认，帧仍进邮箱由主泵
+     * 应用写入（DPP 写语义归主泵）。地址 0 已被上面的 MasterCommand
+     * 计划先匹配。 */
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 3U, IOLINK_MSEQ_TYPE_MASK,
+                  IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_NONE, 0U, 0U, IOLINK_REPLY_ACT_NONE, NULL);
+    /* 诊断写（事件确认）：同上，主泵应用。 */
+    dll_plan_push(ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
+                  IOLINK_MC_CHANNEL_DIAGNOSIS, IOLINK_MC_ADDR_MASK, 3U, IOLINK_MSEQ_TYPE_MASK,
+                  IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_NONE, 0U, 0U, IOLINK_REPLY_ACT_NONE, NULL);
     /* ISDU 写：仅在已成功暂存时确认（FlowCTRL 由传输层校验，计划不分类）。 */
     dll_plan_push(
         ctx, count, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK, IOLINK_MC_CHANNEL_ISDU,

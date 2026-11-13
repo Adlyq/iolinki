@@ -150,6 +150,25 @@ static void init_operate(void)
     iolink_dll_publish_reply_plans(&s_dll.main);
 }
 
+/** @brief PREOPERATE / TYPE_0：无 PD、OD 1。 */
+static void init_preoperate(void)
+{
+    (void) memset(&s_dll, 0, sizeof(s_dll));
+    iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
+    s_dll.main.shared.time_us = plan_time_us;
+    s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
+    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    s_dll.main.shared.od_width = 1U;
+    s_dll.main.shared.pd_in_len = 0U;
+    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.pd_in_len_current = 0U;
+    s_dll.main.pd_valid = true;
+    s_now_us = 1000000U;
+    s_tx_n = 0U;
+    s_tx_active = 0U;
+    iolink_dll_publish_reply_plans(&s_dll.main);
+}
+
 /** @brief Type-2 过程通道读（无 OD、无 PD-out）。 */
 static void feed_process_read(void)
 {
@@ -215,6 +234,76 @@ static int test_missing_plan_defers(void)
     }
     if ((s_tx_q[0] != 0x00U) || (s_tx_q[1] != 0x5AU)) {
         return 5;
+    }
+    return 0;
+}
+
+/* 现场回归：PREOPERATE 的 DPP 页写（地址 1 = MasterCycleTime）必须由
+ * ISR 以 CKS 确认，帧仍交给主泵应用写入，且主泵不得重发第二次应答。
+ * 诊断写走同一机制。 */
+static int test_type0_page_write_is_answered(void)
+{
+    init_preoperate();
+
+    /* 与现场一致：MC=0x21（页写地址 1），CKT=0x00（Type-0，CKS=0），OD=0x4F。 */
+    const uint8_t wr[3] = {0x21U, 0x00U, 0x4FU};
+    s_tx_n = 0U;
+    feed(wr, sizeof(wr), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if (s_tx_n != 1U) {
+        return 1; /* 仅 CKS */
+    }
+    if (s_dll.main.shared.isr_plan_misses != 0U) {
+        return 2;
+    }
+    const iolink_frame_rec_t* rec =
+        (const iolink_frame_rec_t*) iolink_ring_peek(&s_dll.main.shared.isr_frame_ring);
+    if ((rec == NULL) || (rec->eager != 1U)) {
+        return 3; /* 帧仍进邮箱，由主泵应用写入 */
+    }
+
+    /* 主泵应用写入，不重发应答。 */
+    s_tx_n = 0U;
+    iolink_dll_process(&s_dll.main);
+    drain_tx();
+    if (s_dll.main.master_cycle_time != 0x4FU) {
+        return 4;
+    }
+    if (s_tx_n != 0U) {
+        return 5; /* frame_replied_by_isr 必须抑制主泵的第二次应答 */
+    }
+    if (s_dll.main.late_reply_dropped != 0U) {
+        return 6;
+    }
+
+    /* 回读：ISR 页读拿到主泵刚写入的值。 */
+    uint8_t rd[2];
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x01U), IOLINK_MSEQ_TYPE_0,
+               rd, sizeof(rd));
+    s_tx_n = 0U;
+    feed(rd, sizeof(rd), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if ((s_tx_n != 2U) || (s_tx_q[0] != 0x4FU)) {
+        return 7;
+    }
+
+    /* 诊断写（事件确认）同样由 ISR 确认，不再落到延迟路径。 */
+    uint8_t dw[3];
+    make_frame(IOLINK_MC_CHANNEL_DIAGNOSIS, IOLINK_MSEQ_TYPE_0, dw, sizeof(dw));
+    dw[2] = 0x00U;
+    dw[1] = IOLINK_MSEQ_TYPE_0;
+    dw[1] = (uint8_t) (dw[1] | iolink_checksum6(dw, sizeof(dw)));
+    s_tx_n = 0U;
+    feed(dw, sizeof(dw), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if (s_tx_n != 1U) {
+        return 8;
+    }
+    if (s_dll.main.shared.isr_plan_misses != 0U) {
+        return 9;
     }
     return 0;
 }
@@ -735,6 +824,10 @@ int main(void)
     rc = test_tx_without_done_hook();
     if (rc != 0) {
         return 120 + rc;
+    }
+    rc = test_type0_page_write_is_answered();
+    if (rc != 0) {
+        return 130 + rc;
     }
     return 0;
 }

@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Frames discarded inside the t_PD protection window are counted in
   `t_pd_discards`; reply-plan slot exhaustion is counted in
   `reply_plan_overflows` instead of being silent.
+- Type-0 DPP page writes (addresses 1..0x1F) and diagnostic writes now have
+  ISR reply plans: the ISR acknowledges with CKS and the frame still reaches
+  the main pump, which applies the write without sending a second reply. This
+  removes the PREOPERATE stall where a late main pump dropped the MinCycleTime
+  page-write acknowledgement and the master retried it forever.
 
 ### Changed (ISDU write ingestion)
 - ISDU write requests are now accumulated in the data ISR with positional
