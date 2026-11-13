@@ -295,11 +295,6 @@
 #define IOLINK_CONCURRENCY_SINGLE 0
 #define IOLINK_CONCURRENCY_ISR 1
 #define IOLINK_CONCURRENCY_SMP 2
-/* 拒绝值：不是受支持的档位。保留定义是为了让过期的
- * `-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_RTOS` 落进 port.h 的越界
- * #error；若删掉，未定义的标识符在 #if 中求值为 0（= SINGLE），
- * 会静默降级并关闭临界区要求。 */
-#define IOLINK_CONCURRENCY_RTOS 3
 
 #ifndef IOLINK_CONCURRENCY
 #define IOLINK_CONCURRENCY IOLINK_CONCURRENCY_ISR
