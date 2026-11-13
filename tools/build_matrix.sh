@@ -230,6 +230,10 @@ if [ "$RUN_GATES" -eq 1 ]; then
         else
             echo "$crit_cfg   no critical-section dependency"
         fi
+    else
+        # 归档缺失说明该配置没有真正构建，跳过会把门禁变成空操作。
+        echo "$crit_cfg   missing libiolinki.a (critical-section gate not run)"
+        RESULTS+=("$crit_cfg|dependency|fail")
     fi
 
     # Link-time profile gate: a mismatched application must fail to link.

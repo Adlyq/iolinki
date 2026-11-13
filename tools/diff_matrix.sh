@@ -83,13 +83,23 @@ for cfg in "${CONFIGS[@]}"; do
 
     rm -rf "${TRACE_ROOT:?}/$cfg"
     mkdir -p "$TRACE_ROOT/$cfg"
-    (
+    # 测试失败必须让门禁变红：失败的二进制也可能会写出一份（空/半截）
+    # transcript，静默忽略就会把"逐字节一致"变成空比较。
+    if ! (
         cd "$BUILD_ROOT/$cfg/tests" || exit 1
         for test_bin in test_*; do
             [ -x "$test_bin" ] || continue
-            IOLINK_DIFF_TRACE="$TRACE_ROOT/$cfg/$test_bin.txt" "./$test_bin" >/dev/null 2>&1 || true
+            if ! IOLINK_DIFF_TRACE="$TRACE_ROOT/$cfg/$test_bin.txt" "./$test_bin" \
+                    >/dev/null 2>&1; then
+                echo "    $test_bin failed" >&2
+                exit 1
+            fi
         done
-    )
+    ); then
+        echo "TEST FAILED"
+        STATUS=1
+        continue
+    fi
     count="$(find "$TRACE_ROOT/$cfg" -name '*.txt' | wc -l)"
     echo "ok (${count} transcripts)"
 done

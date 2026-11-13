@@ -306,6 +306,9 @@ def collect() -> list[dict[str, str]]:
                         # suggests for a single capability; the whole-image
                         # budget is 3%.
                         "text_tol": str(max(64, (sizes["source|on"]["text"] * 5) // 1000)),
+                        # .rodata 里放的是表（OD/能力/诊断/状态机），同样
+                        # 是 0.5% 预算：只门控 text 会放过表膨胀。
+                        "rodata_tol": str(max(16, (sizes["source|on"]["rodata"] * 5) // 1000)),
                     }
                 )
     return rows
@@ -317,7 +320,18 @@ def write_baseline(rows: list[dict[str, str]]) -> None:
         handle.write(f"# toolchain: {toolchain_version()}\n")
         handle.write("# opt: -Os; lto: off; cpu: cortex-m0plus\n")
         writer = csv.DictWriter(
-            handle, fieldnames=["config", "delivery", "gc", "text", "rodata", "data", "bss", "text_tol"]
+            handle,
+            fieldnames=[
+                "config",
+                "delivery",
+                "gc",
+                "text",
+                "rodata",
+                "data",
+                "bss",
+                "text_tol",
+                "rodata_tol",
+            ],
         )
         writer.writeheader()
         writer.writerows(rows)
@@ -386,6 +400,15 @@ def check(current: list[dict[str, str]], baseline: list[dict[str, str]], base_to
                 file=sys.stderr,
             )
             failures += 1
+        # 旧基线没有 rodata_tol 列：按同样的 0.5% 规则推导，保持向后兼容。
+        rodata_tol = int(old.get("rodata_tol") or max(16, (int(old["rodata"]) * 5) // 1000))
+        rdelta = int(row["rodata"]) - int(old["rodata"])
+        if rdelta > rodata_tol:
+            print(
+                f"FAIL {key(row)}: .rodata grew by {rdelta} B (tolerance {rodata_tol} B)",
+                file=sys.stderr,
+            )
+            failures += 1
         # .bss is dominated by the application-owned device context (the probe
         # declares it as a file-scope object), so only .data is a "no globals"
         # signal here. A non-zero .data would mean an initialised global.
@@ -417,7 +440,26 @@ def selftest(current: list[dict[str, str]], baseline: list[dict[str, str]]) -> i
     if rc == 0:
         print("selftest: FAIL (a forged +1024 B entry was accepted)", file=sys.stderr)
         return 1
-    print("selftest: PASS (forged +1024 B entry rejected)")
+
+    # Same proof for .rodata: forge it down so the measured value looks larger.
+    forged_ro = dict(baseline[0])
+    forged_ro["rodata"] = str(max(0, int(forged_ro["rodata"]) - 256))
+    forged_ro["rodata_tol"] = "16"
+    old_ro = baseline[0]["rodata"]
+    old_tol = baseline[0].get("rodata_tol")
+    baseline[0] = forged_ro
+    try:
+        rc = check(current, baseline, "")
+    finally:
+        baseline[0]["rodata"] = old_ro
+        if old_tol is None:
+            baseline[0].pop("rodata_tol", None)
+        else:
+            baseline[0]["rodata_tol"] = old_tol
+    if rc == 0:
+        print("selftest: FAIL (a forged .rodata entry was accepted)", file=sys.stderr)
+        return 1
+    print("selftest: PASS (forged +1024 B text and .rodata entries rejected)")
     return 0
 
 
