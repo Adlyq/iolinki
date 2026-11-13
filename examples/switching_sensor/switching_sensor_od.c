@@ -66,12 +66,13 @@ static iolink_result_t ss_od_read(void* user, const iolink_od_entry_t* entry, ui
     return iolink_od_encode(entry, value, out, cap);
 }
 
-static iolink_result_t ss_od_write(void* user, const iolink_od_entry_t* entry, const uint8_t* data,
-                                   size_t len)
+static iolink_result_t ss_od_write(void* user, const iolink_od_entry_t* entry, uint8_t subindex,
+                                   const uint8_t* data, size_t len)
 {
     uint32_t value = 0U;
     const iolink_result_t decoded = iolink_od_decode(entry, data, len, &value);
 
+    (void) subindex;
     if (!iolink_result_succeeded(decoded)) {
         return decoded;
     }

@@ -126,6 +126,11 @@ typedef struct iolink_od_entry iolink_od_entry_t;
 /**
  * @brief 写值校验钩子：范围/交叉约束/长度例外。
  *
+ * 钩子只看到表项，请求的子索引不在参数列表中。多元素对象的子索引
+ * 校验由 @ref iolink_od_check_value() 与 ISDU 层的上界检查负责；需要
+ * 区分元素的钩子应按 @ref iolink_od_entry_t::subindex 或
+ * @ref iolink_od_entry_t::max_subindex 自行判定，而不能依赖请求值。
+ *
  * @param user  绑定后端的不透明指针（应用表为应用值，标准标签为 NULL）。
  * @param entry 被校验的表项。
  * @param data  待写入的线上字节。
@@ -137,6 +142,8 @@ typedef iolink_result_t (*iolink_od_validate_fn)(void* user, const iolink_od_ent
 
 /**
  * @brief 写后动作钩子（TRIGGER 写语义的唯一动作，或 STORE/VOLATILE 写后通知）。
+ *
+ * 与 @ref iolink_od_validate_fn 一样只看到表项，不接收请求的子索引。
  *
  * @param user  绑定后端的不透明指针。
  * @param entry 被写入的表项。
@@ -244,9 +251,17 @@ typedef iolink_result_t (*iolink_od_read_fn)(void* user, const iolink_od_entry_t
  * @brief 写入一个参数值的后端。
  *
  * 输入已经通过线长/范围/validate 校验，后端只负责应用取值。
+ *
+ * @param user     应用不透明指针
+ * @param entry    命中的表项（其 @c subindex 是表项声明的元素，
+ *                 不一定等于请求的子索引）
+ * @param subindex 请求的子索引；多元素对象用它区分元素
+ * @param data     已校验的线上字节
+ * @param len      @p data 的字节数
+ * @return 结果模型：成功时 `len` 为 0。
  */
 typedef iolink_result_t (*iolink_od_write_fn)(void* user, const iolink_od_entry_t* entry,
-                                              const uint8_t* data, size_t len);
+                                              uint8_t subindex, const uint8_t* data, size_t len);
 
 /**
  * @brief 应用对象字典：const 表 + get/set 后端。
@@ -285,7 +300,12 @@ typedef struct
 const iolink_od_codec_t* iolink_od_codec(uint8_t datatype);
 
 /**
- * @brief 校验一个待写入值：线长、标量范围与表项 validate 钩子。
+ * @brief 校验一个待写入值：线长、OctetString 长度上限、标量范围与
+ *        表项 validate 钩子。
+ *
+ * `IOLINK_OD_DT_OCTET_STRING` 表项在 @ref iolink_od_entry_t::block_len
+ * 非 0 时把 @p len 超过上限视为长度错误（0x33）；`block_len == 0`
+ * 表示不限制（例如 0x0025 这类只读数组对象）。
  *
  * @param entry 表项
  * @param user  钩子用户指针
@@ -340,7 +360,8 @@ const iolink_od_entry_t* iolink_od_find(const iolink_od_app_t* app, uint16_t ind
 /**
  * @brief 只在应用表中查找表项。
  *
- * ISDU 分发用它把"应用声明的索引"置于厂商服务之前。
+ * ISDU 分发用它把"应用声明的索引"置于厂商服务之前。标准索引的
+ * 分发不再使用它：@ref iolink_od_find 保证标准表优先。
  */
 const iolink_od_entry_t* iolink_od_find_app(const iolink_od_app_t* app, uint16_t index,
                                             uint8_t subindex);
@@ -348,11 +369,23 @@ const iolink_od_entry_t* iolink_od_find_app(const iolink_od_app_t* app, uint16_t
 /** @brief 标准表中 storage 为 DS 的表项数量。 */
 size_t iolink_od_ds_count(void);
 
-/** @brief 取第 @p i 个 DS 表项；越界返回 NULL。 */
+/** @brief 取第 @p i 个标准 DS 表项；越界返回 NULL。 */
 const iolink_od_entry_t* iolink_od_ds_at(size_t i);
 
-/** @brief index/subindex 是否属于标准 DS 参数集。 */
-bool iolink_od_is_ds(uint16_t index, uint8_t subindex);
+/** @brief 应用表中 storage 为 DS 的表项数量；@p app 为 NULL 时返回 0。 */
+size_t iolink_od_ds_count_app(const iolink_od_app_t* app);
+
+/** @brief 取第 @p i 个应用 DS 表项；越界返回 NULL。 */
+const iolink_od_entry_t* iolink_od_ds_at_app(const iolink_od_app_t* app, size_t i);
+
+/**
+ * @brief index/subindex 是否属于 DS 参数集（标准表优先，其次应用表）。
+ *
+ * @param app      应用表（可为 NULL）
+ * @param index    ISDU 索引
+ * @param subindex ISDU 子索引
+ */
+bool iolink_od_is_ds(const iolink_od_app_t* app, uint16_t index, uint8_t subindex);
 
 /**
  * @brief 通过表项读取一个值。
@@ -366,10 +399,12 @@ iolink_result_t iolink_od_read_value(const iolink_od_ctx_t* ctx, const iolink_od
  * @brief 通过表项写入一个值。
  *
  * 顺序固定为：线长/范围/validate 钩子 -> 语义动作 -> on_change 钩子。
- * TRIGGER 语义不写后端，只执行 on_change。
+ * TRIGGER 语义不写后端，只执行 on_change。@p subindex 原样传给
+ * 参数管理器或应用写钩子；validate/on_change 只看到表项（见
+ * @ref iolink_od_validate_fn 的说明）。
  */
 iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entry_t* entry,
-                                      const uint8_t* data, size_t len);
+                                      uint8_t subindex, const uint8_t* data, size_t len);
 
 /** @} */ /* end of iolinki_od */
 

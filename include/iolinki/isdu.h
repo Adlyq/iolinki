@@ -146,16 +146,22 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx);
  * fallback 存储。必须在 `iolink_isdu_init()` 之后调用；绑定不会清空
  * 传输状态。设备层由 `iolink_device_init_with_workspace()` 自动完成。
  *
+ * @p ws 为 NULL 表示解绑：没有内嵌 fallback 的构建
+ * （`IOLINK_WORKSPACE_EMBEDDED=0`）会显式清零全部缓冲指针与容量，
+ * 之后 `iolink_isdu_process()` 不处理请求、`iolink_isdu_snapshot_response()`
+ * 返回 0；实现不得保留旧工作区的指针。内嵌构建则回到上下文自带的
+ * scratch 缓冲。
+ *
  * @param ctx ISDU 上下文
- * @param ws  工作区（必须比 ctx 存活更久）；NULL 表示回到内嵌 fallback
- *            （`IOLINK_WORKSPACE_EMBEDDED=0` 时回到未绑定状态）
+ * @param ws  工作区（必须比 ctx 存活更久）；NULL 表示解绑或回到内嵌 fallback
  */
 void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* ws);
 
 /**
  * @brief 绑定应用对象字典。
  *
- * 绑定后，应用表项优先于厂商服务；未命中的设备专用索引仍回退到
+ * 分发顺序固定为：标准 OD 表、应用表项、厂商服务。应用表不能遮蔽
+ * 规范固定索引；未在两张表中命中的设备专用索引回退到
  * @ref iolink_isdu_ctx_t::vendor_service 后端。
  *
  * @param ctx ISDU 上下文

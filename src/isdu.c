@@ -124,6 +124,23 @@ static void isdu_attach_scratch(iolink_isdu_ctx_t* ctx, iolink_isdu_scratch_t* s
     ctx->resp_buf = scratch->frame;
 }
 
+#if !IOLINK_WORKSPACE_EMBEDDED
+/** @brief 解绑：清零全部传输缓冲指针与容量，不留旧工作区的悬空指针。 */
+static void isdu_clear_scratch(iolink_isdu_ctx_t* ctx)
+{
+    ctx->buffer = NULL;
+    ctx->buffer_size = 0U;
+    ctx->response_buf = NULL;
+    ctx->response_size = 0U;
+    ctx->req_buf = NULL;
+    ctx->req_size = 0U;
+    ctx->resp_frame = NULL;
+    ctx->resp_store[0] = NULL;
+    ctx->resp_store[1] = NULL;
+    ctx->resp_buf = NULL;
+}
+#endif
+
 void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* ws)
 {
     if (ctx == NULL) {
@@ -137,7 +154,8 @@ void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* ws)
 #if IOLINK_WORKSPACE_EMBEDDED
     isdu_attach_scratch(ctx, &ctx->scratch);
 #else
-    /* 无内嵌兜底：保持未绑定状态（指针已在 init 中清零）。 */
+    /* 无内嵌兜底：解绑必须是显式的，不能继续指向已失效的工作区。 */
+    isdu_clear_scratch(ctx);
 #endif
 }
 
@@ -1667,7 +1685,9 @@ static void isdu_serve_od_value(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t*
 
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
 #if IOLINK_FEATURE_DATA_STORAGE
-        /* 块下载期间 DS 参数先暂存，ParamDownloadEnd 时原子提交（10.3.2）。 */
+        /* 块下载期间 DS 参数先暂存；ParamDownloadEnd 先对整份镜像做
+           无副作用预校验，全部通过后再逐条写入并持久化（10.3.2）。
+           这不是跨参数事务：NVM 写入失败仍可能留下已生效的前缀记录。 */
         if ((entry->storage == IOLINK_OD_STORAGE_DS) && (ctx->ds_ctx != NULL) &&
             iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx) &&
             isdu_ds_param_known(ctx, entry->index, ctx->header.subindex)) {
@@ -1685,7 +1705,7 @@ static void isdu_serve_od_value(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t*
         }
 #endif
         const iolink_result_t result =
-            iolink_od_write_value(&od, entry, ctx->buffer, ctx->buffer_idx);
+            iolink_od_write_value(&od, entry, ctx->header.subindex, ctx->buffer, ctx->buffer_idx);
         if (!iolink_result_succeeded(result)) {
             isdu_respond_result(ctx, result);
             return;
@@ -1814,26 +1834,21 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
         return;
     }
 #endif
-    /* 应用 OD 表优先：声明过的设备专用索引走统一的值层，不再需要
-       厂商服务里的手写编解码。 */
-    const iolink_od_entry_t* entry = iolink_od_find_app(ctx->od, index, ctx->header.subindex);
-    if (entry != NULL) {
-        isdu_serve_entry(ctx, entry);
-        return;
-    }
-
-    const bool device_specific = ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
-    if (device_specific && (ctx->vendor_service != NULL)) {
-        isdu_handle_vendor_index(ctx);
-        return;
-    }
-    if (device_specific) {
-        IOLINK_LOG_DEBUG(&ctx->log, "vendor index 0x%04X ignored: no vendor_service",
-                         (unsigned) index);
-    }
-
-    entry = iolink_od_find(NULL, index, ctx->header.subindex);
+    /* 单一查找入口：标准表优先，应用表只在标准表未命中时才生效，
+       因此应用表无法遮蔽 0x0002/0x0024 等规范固定索引。声明过的设备
+       专用索引仍走统一的值层，不再需要厂商服务里的手写编解码。 */
+    const iolink_od_entry_t* entry = iolink_od_find(ctx->od, index, ctx->header.subindex);
     if (entry == NULL) {
+        const bool device_specific =
+            ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
+        if (device_specific && (ctx->vendor_service != NULL)) {
+            isdu_handle_vendor_index(ctx);
+            return;
+        }
+        if (device_specific) {
+            IOLINK_LOG_DEBUG(&ctx->log, "vendor index 0x%04X ignored: no vendor_service",
+                             (unsigned) index);
+        }
         isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
         return;
     }

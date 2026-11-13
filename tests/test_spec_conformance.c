@@ -413,7 +413,8 @@ static void test_parameter_lock_blocks_tag_write(void** state)
 }
 
 /* B.2.4：Parameter 锁同样阻止对设备特定参数的写入；
- * 读取仍会到达厂商服务。 */
+ * 读取仍会到达厂商服务。用 0x0041（不在标准 OD 表中）以避免与
+ * 内建的厂商错误统计对象 0x0040 冲突。 */
 static void test_parameter_lock_blocks_vendor_write(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0156");
@@ -426,7 +427,7 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
     test_isdu_bind_params(&ctx, &g_test_env);
     ctx.vendor_service = vendor_service_ok;
     const uint8_t value = 0x5AU;
-    assert_int_equal(isdu_send_write_request(&ctx, 0x0040U, 0U, &value, 1U), 1);
+    assert_int_equal(isdu_send_write_request(&ctx, 0x0041U, 0U, &value, 1U), 1);
     iolink_isdu_process(&ctx);
 
     uint8_t out[8] = {0};
@@ -438,14 +439,15 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     ctx.vendor_service = vendor_service_ok;
-    assert_int_equal(isdu_send_read_request(&ctx, 0x0040U, 0U), 1);
+    assert_int_equal(isdu_send_read_request(&ctx, 0x0041U, 0U), 1);
     iolink_isdu_process(&ctx);
     n = isdu_collect_response(&ctx, out, sizeof(out));
     assert_int_equal(n, 0);
 }
 
-/* B.2.8-B.2.19：字符串被截断到其对象的 fixedLength
- * （64 字节，SerialNumber 为 16，ProductURI 最多 100，tag 为 32）。 */
+/* B.2.8-B.2.19：标识字符串在读取时按对象的 fixedLength 截断
+ * （64 字节，SerialNumber 为 16，ProductURI 最多 100）；超出 tag 的
+ * 32 字节上限的写入按 Value length overrun（0x33）拒绝，而不是静默截断。 */
 static void test_identification_string_length_limits(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0114");
@@ -487,10 +489,15 @@ static void test_identification_string_length_limits(void** state)
     n = read_object(IOLINK_IDX_PRODUCT_URI, out, sizeof(out));
     assert_int_equal(n, 100);
 
-    /* B.2.16-B.2.18 / Table B.8：tag 上限为 32 字节。 */
+    /* B.2.16-B.2.18 / Table B.8：tag 上限为 32 字节。超长写入被拒绝，
+       之后可写入恰好 32 字节。 */
     uint8_t tag_resp[8] = {0};
     n = write_object(IOLINK_IDX_FUNCTION_TAG, long_tag, (uint8_t) sizeof(long_tag), tag_resp,
                      sizeof(tag_resp));
+    assert_int_equal(n, 2);
+    assert_int_equal(tag_resp[0], 0x80U);
+    assert_int_equal(tag_resp[1], IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+    n = write_object(IOLINK_IDX_FUNCTION_TAG, long_tag, 32U, tag_resp, sizeof(tag_resp));
     assert_int_equal(n, 0);
     n = read_object(IOLINK_IDX_FUNCTION_TAG, out, sizeof(out));
     assert_int_equal(n, 32);

@@ -299,7 +299,7 @@ static void test_char_identification_objects(void** state)
     assert_int_equal(char_read(&ctx, IOLINK_IDX_PRODUCT_URI, 0U, buf, sizeof(buf)), 27);
 }
 
-/* 标签对象：可读写，应用标签上限 32 字节，其余标签截断。 */
+/* 标签对象：可读写，超过 32 字节上限的写入被拒绝（行为变更）。 */
 static void test_char_tag_objects(void** state)
 {
     (void) state;
@@ -313,10 +313,20 @@ static void test_char_tag_objects(void** state)
     char_expect_write_error(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, long_tag, 40U,
                             IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
 
-    assert_int_equal(char_write(&ctx, IOLINK_IDX_FUNCTION_TAG, 0U, long_tag, 40U, buf, sizeof(buf)),
+    /* 有意的行为变更：function/location tag 过去被静默截断到 32 字节，
+       现在与 application tag 一致，在 OD 层按 block_len 拒绝（0x33），
+       参数值保持不变。 */
+    char_expect_write_error(&ctx, IOLINK_IDX_FUNCTION_TAG, 0U, long_tag, 40U,
+                            IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+    char_expect_write_error(&ctx, IOLINK_IDX_LOCATION_TAG, 0U, long_tag, 40U,
+                            IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+
+    /* 恰好 32 字节仍可写入并原样读回。 */
+    assert_int_equal(char_write(&ctx, IOLINK_IDX_FUNCTION_TAG, 0U, long_tag, 32U, buf, sizeof(buf)),
                      0);
     assert_int_equal(char_read(&ctx, IOLINK_IDX_FUNCTION_TAG, 0U, buf, sizeof(buf)), 32);
-    assert_int_equal(char_write(&ctx, IOLINK_IDX_LOCATION_TAG, 0U, long_tag, 40U, buf, sizeof(buf)),
+    assert_memory_equal(buf, long_tag, 32U);
+    assert_int_equal(char_write(&ctx, IOLINK_IDX_LOCATION_TAG, 0U, long_tag, 32U, buf, sizeof(buf)),
                      0);
     assert_int_equal(char_read(&ctx, IOLINK_IDX_LOCATION_TAG, 0U, buf, sizeof(buf)), 32);
 
@@ -404,6 +414,143 @@ static void test_char_status_and_process_data(void** state)
     assert_int_equal(buf[1], 0x44U);
 }
 
+/* -------------------------------------------------------------------------
+ * M1：标准索引不可被应用表遮蔽；请求子索引透传到应用写钩子
+ * ------------------------------------------------------------------------- */
+
+static int g_char_app_reads;
+static int g_char_app_writes;
+
+static iolink_result_t char_shadow_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+                                        size_t cap)
+{
+    (void) user;
+    g_char_app_reads++;
+    return iolink_od_encode(entry, 0xAAU, out, cap);
+}
+
+static iolink_result_t char_shadow_write(void* user, const iolink_od_entry_t* entry,
+                                         uint8_t subindex, const uint8_t* data, size_t len)
+{
+    (void) user;
+    (void) entry;
+    (void) subindex;
+    (void) data;
+    (void) len;
+    g_char_app_writes++;
+    return iolink_result_ok(0U);
+}
+
+/* 应用表刻意声明规范固定的 0x0024：分发必须仍走内建处理器。 */
+static const iolink_od_entry_t k_char_shadow_entries[] = {
+    IOLINK_OD_SCALAR(IOLINK_IDX_DEVICE_STATUS, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RW,
+                     IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
+                     IOLINK_OD_HANDLER_BACKEND, 0U, 0xFFU, 0U, "ShadowDeviceStatus"),
+};
+
+typedef struct
+{
+    uint16_t value;
+    uint8_t seen_subindex;
+} char_multi_cell_t;
+
+static iolink_result_t char_multi_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+                                       size_t cap)
+{
+    const char_multi_cell_t* cell = user;
+
+    return iolink_od_encode(entry, cell->value, out, cap);
+}
+
+static iolink_result_t char_multi_write(void* user, const iolink_od_entry_t* entry,
+                                        uint8_t subindex, const uint8_t* data, size_t len)
+{
+    char_multi_cell_t* cell = user;
+    uint32_t value = 0U;
+    const iolink_result_t decoded = iolink_od_decode(entry, data, len, &value);
+
+    if (!iolink_result_succeeded(decoded)) {
+        return decoded;
+    }
+    cell->value = (uint16_t) value;
+    cell->seen_subindex = subindex;
+    return iolink_result_ok(0U);
+}
+
+/* 多元素对象：一个表项覆盖 sub 0..1，写入必须带上请求的子索引。 */
+static const iolink_od_entry_t k_char_multi_entries[] = {
+    {.index = 0x0304U,
+     .subindex = 0U,
+     .max_subindex = 1U,
+     .datatype = IOLINK_OD_DT_U16,
+     .access = IOLINK_OD_ACCESS_RW,
+     .write_semantics = IOLINK_OD_WRITE_VOLATILE,
+     .storage = IOLINK_OD_STORAGE_VOLATILE,
+     .flags = 0U,
+     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .block_len = 0U,
+     .range_min = 0U,
+     .range_max = 0xFFFFU,
+     .name = "MultiElementParameter"},
+};
+
+static void test_char_standard_index_wins_over_app(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_od_app_t app = {0};
+    uint8_t buf[8] = {0U};
+
+    char_prepare(&ctx, &k_char_info);
+    app.entries = k_char_shadow_entries;
+    app.count = sizeof(k_char_shadow_entries) / sizeof(k_char_shadow_entries[0]);
+    app.read = char_shadow_read;
+    app.write = char_shadow_write;
+    iolink_isdu_bind_od(&ctx, &app);
+
+    g_char_app_reads = 0;
+    g_char_app_writes = 0;
+    assert_int_equal(char_read(&ctx, IOLINK_IDX_DEVICE_STATUS, 0U, buf, sizeof(buf)), 1);
+    assert_int_equal(buf[0], 0x00U);
+    char_expect_write_error(&ctx, IOLINK_IDX_DEVICE_STATUS, 0U, buf, 1U,
+                            IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+    assert_int_equal(g_char_app_reads, 0);
+    assert_int_equal(g_char_app_writes, 0);
+}
+
+static void test_char_subindex_reaches_app_write(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_od_app_t app = {0};
+    char_multi_cell_t cell = {0U, 0U};
+    uint8_t buf[8] = {0U};
+
+    char_prepare(&ctx, &k_char_info);
+    app.entries = k_char_multi_entries;
+    app.count = sizeof(k_char_multi_entries) / sizeof(k_char_multi_entries[0]);
+    app.read = char_multi_read;
+    app.write = char_multi_write;
+    app.user = &cell;
+    iolink_isdu_bind_od(&ctx, &app);
+
+    const uint8_t at_sub1[2] = {0x12U, 0x34U};
+    assert_int_equal(char_write(&ctx, 0x0304U, 1U, at_sub1, 2U, buf, sizeof(buf)), 0);
+    assert_int_equal(cell.seen_subindex, 1U);
+    assert_int_equal(cell.value, 0x1234U);
+    assert_int_equal(char_read(&ctx, 0x0304U, 1U, buf, sizeof(buf)), 2);
+    assert_int_equal(buf[0], 0x12U);
+    assert_int_equal(buf[1], 0x34U);
+
+    const uint8_t at_sub0[2] = {0x00U, 0x07U};
+    assert_int_equal(char_write(&ctx, 0x0304U, 0U, at_sub0, 2U, buf, sizeof(buf)), 0);
+    assert_int_equal(cell.seen_subindex, 0U);
+
+    /* max_subindex 之外的子索引在进入后端之前被拒绝。 */
+    char_expect_write_error(&ctx, 0x0304U, 2U, at_sub1, 2U, IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+    assert_int_equal(cell.value, 0x0007U);
+}
+
 /* 保留/未知索引统一返回 IDX_NOT_AVAIL。 */
 static void test_char_reserved_and_unknown_indices(void** state)
 {
@@ -438,6 +585,10 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_char_tag_objects, char_setup, char_teardown),
         cmocka_unit_test_setup_teardown(test_char_access_locks, char_setup, char_teardown),
         cmocka_unit_test_setup_teardown(test_char_status_and_process_data, char_setup,
+                                        char_teardown),
+        cmocka_unit_test_setup_teardown(test_char_standard_index_wins_over_app, char_setup,
+                                        char_teardown),
+        cmocka_unit_test_setup_teardown(test_char_subindex_reaches_app_write, char_setup,
                                         char_teardown),
         cmocka_unit_test_setup_teardown(test_char_reserved_and_unknown_indices, char_setup,
                                         char_teardown),

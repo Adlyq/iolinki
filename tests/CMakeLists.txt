@@ -197,6 +197,8 @@ if(CMOCKA_FOUND)
         ../examples/switching_sensor/switching_sensor.c
         ../examples/switching_sensor/switching_sensor_od.c)
     target_include_directories(test_od_app PRIVATE ../examples/switching_sensor)
+    # 应用 OD 表参与 DS 集合（设备层接线、暂存/序列化/恢复、整份预校验）。
+    add_iolink_test(test_ds_app_od test_ds_app_od.c)
     add_iolink_test(test_events test_events.c)
     # 诊断注册表：Table D.1 内容、电平/脉冲语义、视图一致性与复位。
     add_iolink_test(test_diag test_diag.c)

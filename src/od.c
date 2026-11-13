@@ -261,10 +261,47 @@ const iolink_od_entry_t* iolink_od_ds_at(size_t i)
     return NULL;
 }
 
-bool iolink_od_is_ds(uint16_t index, uint8_t subindex)
+size_t iolink_od_ds_count_app(const iolink_od_app_t* app)
+{
+    if (app == NULL) {
+        return 0U;
+    }
+    size_t n = 0U;
+
+    for (size_t i = 0U; i < app->count; i++) {
+        if (app->entries[i].storage == IOLINK_OD_STORAGE_DS) {
+            n++;
+        }
+    }
+    return n;
+}
+
+const iolink_od_entry_t* iolink_od_ds_at_app(const iolink_od_app_t* app, size_t i)
+{
+    size_t seen = 0U;
+
+    if (app == NULL) {
+        return NULL;
+    }
+    for (size_t j = 0U; j < app->count; j++) {
+        if (app->entries[j].storage != IOLINK_OD_STORAGE_DS) {
+            continue;
+        }
+        if (seen == i) {
+            return &app->entries[j];
+        }
+        seen++;
+    }
+    return NULL;
+}
+
+bool iolink_od_is_ds(const iolink_od_app_t* app, uint16_t index, uint8_t subindex)
 {
     const iolink_od_entry_t* entry = od_find_in(k_od_table, OD_TABLE_COUNT, index, subindex);
 
+    if (entry == NULL) {
+        entry = iolink_od_find_app(app, index, subindex);
+    }
     return (entry != NULL) && (entry->storage == IOLINK_OD_STORAGE_DS) &&
            (entry->subindex == subindex);
 }
@@ -336,6 +373,11 @@ iolink_result_t iolink_od_check_value(const iolink_od_entry_t* entry, void* user
             return decoded;
         }
     }
+    else if ((entry->block_len > 0U) && (len > (size_t) entry->block_len)) {
+        /* 块长度上限：与 DS 下载路径的 max_len 判定保持同一错误码。
+           block_len == 0 表示变长且无上限（只读数组对象）。 */
+        return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+    }
     if (entry->validate != NULL) {
         return entry->validate(user, entry, data, len);
     }
@@ -397,7 +439,7 @@ iolink_result_t iolink_od_read_value(const iolink_od_ctx_t* ctx, const iolink_od
 }
 
 iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entry_t* entry,
-                                      const uint8_t* data, size_t len)
+                                      uint8_t subindex, const uint8_t* data, size_t len)
 {
     if ((ctx == NULL) || (entry == NULL)) {
         return iolink_result_error(IOLINK_RESULT_INVALID);
@@ -425,13 +467,13 @@ iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entr
         const iolink_persist_t persist = (entry->write_semantics == (uint8_t) IOLINK_OD_WRITE_STORE)
                                              ? IOLINK_PERSIST_SYNC
                                              : IOLINK_PERSIST_NONE;
-        result = iolink_params_ctx_write(ctx->params, entry->index, 0U, data, len, persist);
+        result = iolink_params_ctx_write(ctx->params, entry->index, subindex, data, len, persist);
     }
     else {
         if ((ctx->app == NULL) || (ctx->app->write == NULL)) {
             return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
         }
-        result = ctx->app->write(ctx->app->user, entry, data, len);
+        result = ctx->app->write(ctx->app->user, entry, subindex, data, len);
     }
     if (!iolink_result_succeeded(result)) {
         return result;

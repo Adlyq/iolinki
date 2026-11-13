@@ -100,6 +100,10 @@ typedef struct
 
 int iolink_test_device_init(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
                             const iolink_app_callbacks_t* callbacks);
+/* 同上，并在初始化前绑定应用 OD 表（用于验证 config->od 的设备层接线）。 */
+int iolink_test_device_init_with_od(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
+                                    const iolink_app_callbacks_t* callbacks,
+                                    const iolink_od_app_t* od);
 void move_to_operate_ctx(iolink_device_ctx_t* ctx);
 
 /* 用于数据存储（DS）测试的 mock 存储 */
