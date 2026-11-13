@@ -9,7 +9,7 @@
 /**
  * @file platform.c
  * @brief 默认的弱符号平台抽象实现。
- * @ingroup iolinki_platform
+ * @ingroup iolinki_port
  *
  * 提供弱符号的空操作临界区默认实现以便协议栈链接，并提供一个探针，
  * 使 iolink_device_init() 能拒绝仍在使用这些实现的构建。真实移植会
