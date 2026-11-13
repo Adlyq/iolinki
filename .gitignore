@@ -10,6 +10,7 @@ build_release/
 build_bare/
 build_baremetal/
 build_isr/
+build_isr_latency/
 build_matrix/
 build_coverage/
 build_diff/
