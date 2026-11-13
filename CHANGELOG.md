@@ -19,7 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `iolink_params_ctx_read/write`, `iolink_ds_stage_param` and the DS parameter
   accessors now return it, so protocol errors such as `0x33` (value length
   overrun) survive the params/DS path instead of collapsing to `0x11`.
-  `iolink_params_ctx_get/set` remain as deprecated one-version shims.
 - Context size contract: `tests/test_ctx_sizes.c` asserts the exact layout
   sizes at build time; layout changes must update the test and
   `docs/MEMORY_GUIDE.md` together.
@@ -163,6 +162,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `IOLINK_APP_PD_INPUT_CALLBACK` moved from `application.h` to `config.h`.
 
 ### Removed
+- `iolink_params_ctx_get/set`: the integer compatibility wrappers that collapsed
+  every failure to `-1` are gone; callers must use the result-returning
+  `iolink_params_ctx_read/write` and inspect `code`/`len`.
 - `phy_api->stack_timer_stop` and `iolink_storage_api_t::erase`: the stack never
   called either hook, so the porting contract is now start/read/write only.
 - `iolink_dll_prepare_cyclic_reply()` (no-op), `cyclic_reply_precached`,

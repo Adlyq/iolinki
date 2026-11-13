@@ -207,23 +207,6 @@ iolink_result_t iolink_params_ctx_write(iolink_params_ctx_t* ctx, uint16_t index
     return iolink_result_ok(0U);
 }
 
-int iolink_params_ctx_get(const iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                          uint8_t* buffer, size_t max_len)
-{
-    const iolink_result_t result = iolink_params_ctx_read(ctx, index, subindex, buffer, max_len);
-
-    return iolink_result_succeeded(result) ? (int) result.len : -1;
-}
-
-int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                          const uint8_t* data, size_t len, iolink_persist_t persist)
-{
-    return iolink_result_succeeded(
-               iolink_params_ctx_write(ctx, index, subindex, data, len, persist))
-               ? 0
-               : -1;
-}
-
 void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx)
 {
     if (ctx == NULL) {

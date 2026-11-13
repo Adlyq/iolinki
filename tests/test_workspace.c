@@ -30,10 +30,10 @@ static void fill_env(void)
 {
     test_env_init(&g_env, NULL);
     test_env_reset_params(&g_env);
-    (void) iolink_params_ctx_set(test_env_params(&g_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                 (const uint8_t*) "WS", 2U, true);
-    (void) iolink_params_ctx_set(test_env_params(&g_env), IOLINK_IDX_FUNCTION_TAG, 0U,
-                                 (const uint8_t*) "FLOW", 4U, true);
+    (void) iolink_params_ctx_write(test_env_params(&g_env), IOLINK_IDX_APPLICATION_TAG, 0U,
+                                   (const uint8_t*) "WS", 2U, true);
+    (void) iolink_params_ctx_write(test_env_params(&g_env), IOLINK_IDX_FUNCTION_TAG, 0U,
+                                   (const uint8_t*) "FLOW", 4U, true);
 }
 
 static void device_config_defaults(iolink_test_device_t* dev)

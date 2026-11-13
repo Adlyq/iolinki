@@ -89,7 +89,7 @@ Hardware check: after flashing, RTT reports `[STATE] 4` (OPERATE) and 28-byte
 `[PDO]` traffic.
 
 Disabled features fail the build: their public declarations are compiled out, so
-calling e.g. `iolink_ds_init`, `iolink_events_flag` or `iolink_params_ctx_get`
+calling e.g. `iolink_ds_init`, `iolink_events_flag` or `iolink_params_ctx_read`
 produces an implicit-declaration error (or an undefined reference if the
 compiler only warns). Wire-visible objects that cannot be removed at compile
 time answer a negative response instead: `0x0003` (Data Storage) and `0x0025`

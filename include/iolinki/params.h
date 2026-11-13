@@ -89,22 +89,6 @@ iolink_result_t iolink_params_ctx_write(iolink_params_ctx_t* ctx, uint16_t index
                                         const uint8_t* data, size_t len, iolink_persist_t persist);
 
 /**
- * @brief 按 IO-Link 地址从上下文读取参数值（旧版整型接口）。
- * @deprecated 使用 ::iolink_params_ctx_read；本包装器只保留一个版本，
- *             用于兼容既有应用与测试，错误细节会退化为 -1。
- */
-int iolink_params_ctx_get(const iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                          uint8_t* buffer, size_t max_len);
-
-/**
- * @brief 更新上下文中的参数值（旧版整型接口）。
- * @deprecated 使用 ::iolink_params_ctx_write；本包装器只保留一个版本，
- *             用于兼容既有应用与测试。
- */
-int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                          const uint8_t* data, size_t len, iolink_persist_t persist);
-
-/**
  * @brief 将上下文中的所有参数恢复为出厂默认值。
  * 复位 RAM 并尝试写入 NVM；该旧版 void API 无法报告存储失败。
  * @param ctx 参数管理器上下文。
