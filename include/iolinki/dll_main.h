@@ -49,10 +49,12 @@ struct iolink_dll_main
 
     uint8_t od_len; /**< 流式路径的 OD 长度（1 或 2 字节）。 */
 
-    /* 应答计划发布键。计划表是 {状态, M-sequence 类型, OD 宽度}
+    /* 应答计划发布键。计划表是 {状态, M-sequence 类型, OD 宽度, 波特率}
      * 的纯函数；键不变时 iolink_dll_publish_reply_plans() 不写共享区，
-     * 因此主泵循环不会与 ISR 读者无谓竞争。 */
-    uint16_t reply_plan_key; /**< 当前已发布的计划键 */
+     * 因此主泵循环不会与 ISR 读者无谓竞争。键不覆盖实例能力位，
+     * 运行期能力变化由 iolink_dll_invalidate_reply_plans() 清零本字段
+     * 并把发布字撤到 0。 */
+    uint16_t reply_plan_key; /**< 当前已发布的计划键（0 = 已失效） */
 
     uint8_t isdu_pub_gen; /**< ISDU 应答代数（每份新应答翻转） */
 

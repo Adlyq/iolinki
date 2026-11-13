@@ -1161,6 +1161,19 @@ static void dll_plan_push_type0(iolink_dll_main_t* ctx, uint8_t* count, bool tra
         0U, IOLINK_REPLY_FLAG_CONSUME | IOLINK_REPLY_FLAG_STAGED, IOLINK_REPLY_ACT_NONE, NULL);
 }
 
+void iolink_dll_invalidate_reply_plans(iolink_dll_main_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    /* 发布字是计划表的唯一有效标志：先撤到 0，数据 ISR 从这一刻起把每一帧
+     * 当作"计划外请求"交给主泵，绝不执行与新能力位不符的旧计划。
+     * seq = 0 也是"尚未发布"的哨兵，下一次 publish 必然走完整路径
+     * （0 -> 1 -> 2），因此键清零只是让发布条件在形式上也不再命中。 */
+    iolink_atomic_store(&ctx->shared.reply_plan_seq, (IOLINK_ATOMIC_UINT_T) 0U);
+    ctx->reply_plan_key = 0U;
+}
+
 void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
 {
     if (ctx == NULL) {
@@ -1168,7 +1181,9 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
     }
     const uint8_t state = (uint8_t) ctx->shared.state;
     /* 键 = {状态, M-sequence 类型, OD 宽度, 波特率}：计划表与 t_A 预算
-     * 都是这四项的纯函数。 */
+     * 都是这四项的纯函数。该前提也约束运行期能力位：任何会改变计划内容的
+     * 能力位变化都必须先调用 iolink_dll_invalidate_reply_plans()，否则
+     * 键不变会让这里提前返回，ISR 继续执行旧计划。 */
     const uint16_t key =
         (uint16_t) ((uint16_t) state | ((uint16_t) (ctx->shared.m_seq_type & 0x0FU) << 3) |
                     ((uint16_t) (ctx->shared.od_width & 0x1FU) << 7) |

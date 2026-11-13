@@ -92,8 +92,9 @@ typedef struct iolink_dll_shared
      * @name 应答计划表（主泵单写者 / ISR 读者）
      *
      * `reply_plan_seq` 是发布字兼 seqlock 序号：奇数表示主泵正在覆盖
-     * 槽位，偶数表示计划表稳定。ISR 在拷贝命中项前后各读一次，只有
-     * 两次相同且为偶数时才执行计划。计划表内容见
+     * 槽位，偶数表示计划表稳定，0 表示计划表已失效（尚未发布或刚被
+     * `iolink_dll_invalidate_reply_plans()` 撤回）。ISR 在拷贝命中项前后
+     * 各读一次，只有两次相同且为非零偶数时才执行计划。计划表内容见
      * `iolink_reply_plan_t` 与 `iolink_dll_publish_reply_plans()`。
      * @{
      */
