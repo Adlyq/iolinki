@@ -146,16 +146,16 @@ static void test_event_helpers(void** state)
     events_init(&ctx);
 
     /* 测试最高严重级别 */
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0); /* OK */
+    assert_int_equal(iolink_diag_device_status(&ctx), 0); /* OK */
 
     iolink_event_trigger(&ctx, 0x1001, IOLINK_EVENT_TYPE_NOTIFICATION);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0); /* 仍为 OK */
+    assert_int_equal(iolink_diag_device_status(&ctx), 0); /* 仍为 OK */
 
     iolink_event_trigger(&ctx, 0x1002, IOLINK_EVENT_TYPE_ERROR);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4); /* Failure */
+    assert_int_equal(iolink_diag_device_status(&ctx), 4); /* Failure */
 
     iolink_event_trigger(&ctx, 0x1003, IOLINK_EVENT_TYPE_WARNING);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4); /* 仍为 Failure */
+    assert_int_equal(iolink_diag_device_status(&ctx), 4); /* 仍为 Failure */
 
     /* 测试 get_all */
     iolink_event_t events[8];
@@ -568,10 +568,10 @@ static void test_event_device_status_drops_with_condition(void** state)
     g_fake_ms = 0U;
 
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4U);
+    assert_int_equal(iolink_diag_device_status(&ctx), 4U);
 
     iolink_event_clear(&ctx, IOLINK_EVENTCODE_SHORT_CIRCUIT);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4U);
+    assert_int_equal(iolink_diag_device_status(&ctx), 4U);
     assert_int_equal(ctx.count, 1U); /* appears 仍在队列中 */
 
     /* 在最小出现窗口内，撤销被推迟；DDS 仍列出该条目，因此
@@ -579,17 +579,17 @@ static void test_event_device_status_drops_with_condition(void** state)
     g_fake_ms = 10U;
     iolink_events_process(&ctx);
     assert_int_equal(ctx.count, 1U);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4U);
+    assert_int_equal(iolink_diag_device_status(&ctx), 4U);
 
     /* disappears 入队后条件与视图同时归零。 */
     g_fake_ms = IOLINK_EVENT_MIN_APPEAR_MS;
     iolink_events_process(&ctx);
     assert_int_equal(ctx.count, 2U);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
+    assert_int_equal(iolink_diag_device_status(&ctx), 0U);
 
     /* Notification 从不提升 DeviceStatus。 */
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_NO_MALFUNCTION, IOLINK_EVENT_TYPE_NOTIFICATION);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
+    assert_int_equal(iolink_diag_device_status(&ctx), 0U);
 }
 
 /* Table B.13：取值与优先级。优先级 4->1、3->2、1->3、2->4；
@@ -612,7 +612,7 @@ static void test_event_device_status_matrix(void** state)
     for (size_t i = 0U; i < (sizeof(single) / sizeof(single[0])); i++) {
         events_init(&ctx);
         iolink_event_trigger(&ctx, single[i].code, iolink_event_classify(single[i].code));
-        assert_int_equal(iolink_events_get_highest_severity(&ctx), single[i].expected);
+        assert_int_equal(iolink_diag_device_status(&ctx), single[i].expected);
     }
 
     const struct
@@ -633,7 +633,7 @@ static void test_event_device_status_matrix(void** state)
         events_init(&ctx);
         iolink_event_trigger(&ctx, pairs[i].first, iolink_event_classify(pairs[i].first));
         iolink_event_trigger(&ctx, pairs[i].second, iolink_event_classify(pairs[i].second));
-        assert_int_equal(iolink_events_get_highest_severity(&ctx), pairs[i].expected);
+        assert_int_equal(iolink_diag_device_status(&ctx), pairs[i].expected);
     }
 }
 
@@ -652,7 +652,7 @@ static void test_event_clear_diagnosis(void** state)
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_MAINTENANCE_WEAR, IOLINK_EVENT_TYPE_WARNING);
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST, IOLINK_EVENT_TYPE_NOTIFICATION);
     assert_int_equal(ctx.count, 3U);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 4U);
+    assert_int_equal(iolink_diag_device_status(&ctx), 4U);
 
     iolink_events_clear_diagnosis(&ctx);
 
@@ -662,7 +662,7 @@ static void test_event_clear_diagnosis(void** state)
        挤掉 Notification 而掩盖自身）。 */
     assert_int_equal(ctx.count, 4U);
     assert_int_equal(iolink_events_get_dropped_count(&ctx), 0U);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
+    assert_int_equal(iolink_diag_device_status(&ctx), 0U);
 
     /* 应答冻结的 appears 快照：撤销对成为
        呈现集合，因此其 MODE=2 限定符可在线上观察到
@@ -721,7 +721,7 @@ static void test_event_clear_diagnosis_skips_unreported_event(void** state)
     iolink_events_clear_diagnosis(&ctx);
     assert_int_equal(ctx.count, 0U);
     assert_int_equal(iolink_events_get_dropped_count(&ctx), 0U);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx), 0U);
+    assert_int_equal(iolink_diag_device_status(&ctx), 0U);
 }
 
 int main(void)

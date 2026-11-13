@@ -61,7 +61,7 @@ static iolink_workspace_t g_ws;                 /* or IOLINK_WORKSPACE_DECLARE *
 
 iolink_device_config_t cfg = { ... };
 cfg.workspace = &g_ws;
-iolink_device_init(&ctx, &cfg);                 /* or iolink_device_init_with_workspace() */
+iolink_device_init(&ctx, &cfg);                 /* cfg.workspace binds the scratch */
 ```
 
 Passing `NULL` (or leaving the field zero) keeps the historical behaviour: each

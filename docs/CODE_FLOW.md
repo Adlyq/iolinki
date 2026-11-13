@@ -200,7 +200,7 @@ flowchart LR
 
 绑定分两处：`iolink_dll_init()` 建立 ISDU ↔ DLL/事件的内部反向链接
 （`isdu.dll_ctx = &ctx->dll.main`、`isdu.event_ctx = &shared.events`），
-`iolink_device_init_with_workspace()`（`iolink_device_init()` 是它的薄包装）
+`iolink_device_init()`（按 `config.workspace` 绑定工作区）
 绑定外部依赖：
 
 - `dll.main.shared.isdu.params_ctx = &ctx->params`、`...isdu.od = config->od`、`...isdu.ds_ctx = &ctx->dll.main.ds`；
@@ -227,7 +227,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A["iolink_device_init(ctx, config)<br/>= init_with_workspace(ctx, config, config->workspace)"] --> B{ctx/config 非空?}
+    A["iolink_device_init(ctx, config)<br/>workspace = config->workspace"] --> B{ctx/config 非空?}
     B -- 否 --> E1["返回 IOLINK_DEVICE_INIT_ERR_NULL"]
     B -- 是 --> B2{"IOLINK_WORKSPACE_EMBEDDED=0<br/>且 workspace == NULL?"}
     B2 -- 是 --> E4["返回 IOLINK_DEVICE_INIT_ERR_WORKSPACE"]
@@ -711,7 +711,7 @@ flowchart TD
 补充：
 
 - 事件队列按严重度排序（Error 优先），队列满时保留更严重的事件。
-- 两个 A.6.4 窗口默认取 `IOLINK_EVENT_MIN_APPEAR_MS`（50）与 `IOLINK_EVENT_MIN_REPEAT_MS`（1000），`iolink_device_init_with_workspace()` 用 `iolink_stack_config_t::event_min_appear_ms` / `event_min_repeat_ms` 经 `iolink_events_set_window()` 覆盖（0 = 保留构建默认）。
+- 两个 A.6.4 窗口默认取 `IOLINK_EVENT_MIN_APPEAR_MS`（50）与 `IOLINK_EVENT_MIN_REPEAT_MS`（1000），`iolink_device_init()` 用 `iolink_stack_config_t::event_min_appear_ms` / `event_min_repeat_ms` 经 `iolink_events_set_window()` 覆盖（0 = 保留构建默认）。
 - `DeviceStatus`（0x0024，Table B.13）与 `DetailedDeviceStatus`（0x0025，Table B.14）都由诊断注册表
   从同一条件集派生（`iolink_diag_device_status()` / `iolink_diag_dds_snapshot()`）：
   Error/Warning 且 `present || reported`，Notification 不提升状态、不进入 DDS。
@@ -739,13 +739,13 @@ flowchart TD
 
 | 顺序 | 调用 | 来源 |
 | :--- | :--- | :--- |
-| 1 | `phy->init()` | `iolink_device_init_with_workspace()` |
+| 1 | `phy->init()` | `iolink_device_init()` |
 | 2 | `phy->set_baudrate(COM2)` | `iolink_dll_init()` |
 | 3 | `phy->set_mode(SIO/SDCI)` | `iolink_dll_init()` 依据 `IOLINK_CAP_WAKEUP` |
 | 4 | `storage->read()` | `params_ctx_load()`、`iolink_ds_init()` |
 | 5 | `od.read`（经 `device_param_read`） | 无持久镜像时的 `iolink_ds_build_image()` |
 | 6 | `phy->set_baudrate(工作 COM)` | `device_apply_stack_config()` 可选 |
-| 7 | `on_startup()` | `iolink_device_init_with_workspace()` 末尾 |
+| 7 | `on_startup()` | `iolink_device_init()` 末尾 |
 
 ### 9.2 一个主循环内的顺序
 
@@ -795,7 +795,7 @@ sequenceDiagram
 
 | 接口/回调 | 调用点 | 上下文/说明 |
 | :--- | :--- | :--- |
-| `phy.init` | `iolink_device_init_with_workspace` | 初始化硬件 |
+| `phy.init` | `iolink_device_init` | 初始化硬件 |
 | `phy.set_baudrate` | `iolink_dll_init`、`iolink_dll_set_baudrate`、`dll_restore_operating_baudrate` | 恢复 COM 时避免在应答中途切换 |
 | `phy.set_mode` | `iolink_dll_init`、`iolink_dll_set_sio_mode`、`iolink_dll_set_sdci_mode`、`dll_frame_drop_if_stopped` | SIO/SDCI/INACTIVE |
 | `phy.rx_octet` / `rx_frame` | ISR | 逐字节或整帧 |
@@ -1148,7 +1148,7 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 
 | 主题 | 入口 |
 | :--- | :--- |
-| 设备初始化/主循环 | `iolink_device_init()`、`iolink_device_init_with_workspace()`、`iolink_device_process()` |
+| 设备初始化/主循环 | `iolink_device_init()`、`iolink_device_process()` |
 | 应用状态回调 | `device_state_cb()` |
 | PD 更新/读取 | `device_run_app_callbacks()`、`iolink_device_pd_input_update()`、`iolink_device_pd_output_read()` |
 | DLL 初始化/主处理 | `iolink_dll_init()`、`iolink_dll_process()` |

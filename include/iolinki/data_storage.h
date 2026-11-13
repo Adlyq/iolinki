@@ -164,7 +164,7 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage);
  *
  * 绑定后 DS 的序列化/下载暂存使用 @p ws 的 `ds_stage` 区域，不再使用
  * 上下文内嵌的 fallback 缓冲。必须在 `iolink_ds_init()` 之后调用。
- * 设备层由 `iolink_device_init_with_workspace()` 自动完成。
+ * 设备层由 `iolink_device_init()` 按 `config.workspace` 自动完成。
  *
  * @p ws 为 NULL 表示解绑：没有内嵌 fallback 的构建（`IOLINK_WORKSPACE_EMBEDDED=0`）
  * 会把镜像指针与容量显式清零并丢弃 `image_valid`，之后

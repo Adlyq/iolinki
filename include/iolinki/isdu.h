@@ -144,7 +144,7 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx);
  *
  * 绑定后 ISDU 传输缓冲指向 @p ws 的 `isdu` 区域，不再使用上下文内嵌的
  * fallback 存储。必须在 `iolink_isdu_init()` 之后调用；绑定不会清空
- * 传输状态。设备层由 `iolink_device_init_with_workspace()` 自动完成。
+ * 传输状态。设备层由 `iolink_device_init()` 按 `config.workspace` 自动完成。
  *
  * @p ws 为 NULL 表示解绑：没有内嵌 fallback 的构建
  * （`IOLINK_WORKSPACE_EMBEDDED=0`）会显式清零全部缓冲指针与容量，

@@ -363,23 +363,6 @@ bool iolink_events_pop(iolink_events_ctx_t* ctx, iolink_event_t* event);
 bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event);
 
 /**
- * @brief 获取由诊断条件派生的 DeviceStatus（Table B.13）。
- *
- * 按 Table B.13 映射到 IO-Link Device Status（0=OK，1=Maintenance，
- * 2=Out of Spec，3=Functional-Check，4=Failure）。最低的优先级数值
- * 占优：Failure (4) 高于 Functional-Check (3)，后者高于 Maintenance
- * (1) 和 Out of Spec (2)。
- *
- * 派生自条件表（`pending[]`）的 `present || reported` 条目，优先级
- * 值来自诊断注册表（diag.h）；与 DetailedDeviceStatus 使用同一过滤集，
- * 因此 DDS 仍列出条目时状态不会提前回 0。Notification 不提升状态。
- *
- * @param ctx 事件上下文
- * @return uint8_t 最高严重级别（0-4）
- */
-uint8_t iolink_events_get_highest_severity(iolink_events_ctx_t* ctx);
-
-/**
  * @brief 由 EventType 和 MODE 生成 EventQualifier（A.6.4 / Figure A.24）。
  *
  * 事件存储器（Table 58）与 DetailedDeviceStatus（Table B.14）共用本函数，

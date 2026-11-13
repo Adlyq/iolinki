@@ -608,12 +608,6 @@ bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event)
     return ret;
 }
 
-uint8_t iolink_events_get_highest_severity(iolink_events_ctx_t* ctx)
-{
-    /* Table B.13 由条件表 + 诊断注册表派生（单一片段，见 diag.c）。 */
-    return iolink_diag_device_status(ctx);
-}
-
 uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_events,
                               uint8_t max_count)
 {

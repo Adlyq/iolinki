@@ -798,8 +798,7 @@ static void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
 static void isdu_read_device_status(iolink_isdu_ctx_t* ctx)
 {
 #if IOLINK_FEATURE_EVENTS
-    ctx->response_buf[0] =
-        iolink_events_get_highest_severity((iolink_events_ctx_t*) ctx->event_ctx);
+    ctx->response_buf[0] = iolink_diag_device_status((iolink_events_ctx_t*) ctx->event_ctx);
 #else
     ctx->response_buf[0] = 0U;
 #endif

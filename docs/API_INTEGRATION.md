@@ -253,9 +253,6 @@ PHY `init` 的负返回值会原样向上传播。
 
 ```c
 int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config);
-int iolink_device_init_with_workspace(iolink_device_ctx_t* ctx,
-                                      const iolink_device_config_t* config,
-                                      iolink_workspace_t* workspace);
 iolink_workspace_t* iolink_device_get_workspace(const iolink_device_ctx_t* ctx);
 void iolink_device_process(iolink_device_ctx_t* ctx);
 void iolink_device_process_isr(iolink_device_ctx_t* ctx);
@@ -265,10 +262,9 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 `iolink_device_process_isr()`。同一上下文上并发运行这两个函数是不安全的。
 
 `iolink_device_init()` 使用 `config.workspace`（可为 NULL，表示使用上下文内嵌的
-ISDU/DS scratch）。`iolink_device_init_with_workspace()` 显式绑定调用方分配的
-`iolink_workspace_t` 并忽略 `config.workspace`，适合把 scratch 放进 DTCM 或外部
-RAM；工作区必须比上下文存活更久。`iolink_device_get_workspace()` 返回当前绑定的
-工作区，使用内嵌 fallback 时返回 NULL。`IOLINK_WORKSPACE_EMBEDDED=0` 时没有
+ISDU/DS scratch）；把 scratch 放进 DTCM 或外部 RAM 时在配置里指向工作区即可，工作区
+必须比上下文存活更久。`iolink_device_get_workspace()` 返回当前绑定的工作区，使用
+内嵌 fallback 时返回 NULL。`IOLINK_WORKSPACE_EMBEDDED=0` 时没有
 fallback，必须提供工作区，否则初始化返回 `IOLINK_DEVICE_INIT_ERR_WORKSPACE`。
 
 ### 4.2 过程数据
@@ -407,7 +403,6 @@ bool iolink_events_pending(const iolink_events_ctx_t* ctx);
 bool iolink_events_flag(const iolink_events_ctx_t* ctx);
 bool iolink_events_pop(iolink_events_ctx_t* ctx, iolink_event_t* event);
 bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event);
-uint8_t iolink_events_get_highest_severity(iolink_events_ctx_t* ctx);
 uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_events,
                               uint8_t max_count);
 uint8_t iolink_events_memory_read(iolink_events_ctx_t* ctx, uint8_t addr);
@@ -799,7 +794,7 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
    `request_service`。
 3. 保证 `config`、PHY 状态和所有回调数据在上下文生命周期内有效。
 4. 身份索引或 DPP1 需要正确时，在 `config.device_info` 中提供静态身份；传 NULL 时使用内置默认身份（`k_default_info`）。
-5. 调用 `iolink_device_init()`（或 `iolink_device_init_with_workspace()`），然后周期性
+5. 调用 `iolink_device_init()`，然后周期性
    调用 `iolink_device_process()`，并从数据中断调用 `iolink_device_process_isr()`。
 6. 选择一种 PD-in 来源：提供 `on_pd_input` 回调，或调用
    `iolink_device_pd_input_update()`。两者同一次初始化只能选一个；选了回调后轮询调用

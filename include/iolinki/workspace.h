@@ -55,9 +55,8 @@ typedef struct
 /**
  * @brief 协议栈 scratch 工作区。
  *
- * 由调用方分配并保持有效；`iolink_device_init_with_workspace()` 或
- * `iolink_device_config_t::workspace` 把它绑定到设备上下文。绑定后
- * ISDU/DS 不再使用上下文内嵌的默认缓冲。
+ * 由调用方分配并保持有效；`iolink_device_config_t::workspace` 把它绑定到
+ * 设备上下文。绑定后 ISDU/DS 不再使用上下文内嵌的默认缓冲。
  */
 typedef struct
 {

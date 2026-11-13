@@ -17,9 +17,6 @@ coexist as long as each has its own context. See `include/iolinki/device.h`,
 #include "iolinki/device.h"
 
 int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config);
-int iolink_device_init_with_workspace(iolink_device_ctx_t* ctx,
-                                      const iolink_device_config_t* config,
-                                      iolink_workspace_t* workspace);
 iolink_workspace_t* iolink_device_get_workspace(const iolink_device_ctx_t* ctx);
 ```
 
@@ -44,10 +41,8 @@ in DTCM or external RAM and does not need to survive a transaction.
   non-`NULL`, otherwise `iolink_device_init()` returns
   `IOLINK_DEVICE_INIT_ERR_WORKSPACE`.
 
-`iolink_device_init_with_workspace()` binds the given workspace explicitly and
-ignores `config.workspace`; passing `NULL` makes it behave exactly like
-`iolink_device_init()`. `iolink_device_get_workspace()` returns the workspace
-currently bound to the instance, or `NULL` when the embedded fallback is in use.
+`iolink_device_get_workspace()` returns the workspace currently bound to the
+instance, or `NULL` when the embedded fallback is in use.
 `IOLINK_WORKSPACE_DECLARE(name)` declares a static instance.
 
 #### Device configuration

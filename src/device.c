@@ -361,7 +361,8 @@ static int device_config_validate(const iolink_device_config_t* config)
     return IOLINK_DEVICE_INIT_OK;
 }
 
-int iolink_device_init_with_workspace(iolink_device_ctx_t* ctx,
+/** @brief 初始化实现：工作区由 config 提供（见 iolink_device_init）。 */
+static int device_init_with_workspace(iolink_device_ctx_t* ctx,
                                       const iolink_device_config_t* config,
                                       iolink_workspace_t* workspace)
 {
@@ -481,7 +482,7 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
     if (config == NULL) {
         return IOLINK_DEVICE_INIT_ERR_NULL;
     }
-    return iolink_device_init_with_workspace(ctx, config, config->workspace);
+    return device_init_with_workspace(ctx, config, config->workspace);
 }
 
 iolink_workspace_t* iolink_device_get_workspace(const iolink_device_ctx_t* ctx)

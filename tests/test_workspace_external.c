@@ -140,8 +140,9 @@ int main(void)
     /* 外置形态下缺少工作区必须被拒绝，而不是退化为空指针写入。 */
     assert(iolink_device_init(&ctx, &config) == IOLINK_DEVICE_INIT_ERR_WORKSPACE);
 
-    /* 显式提供工作区后初始化成功，并回读同一个指针。 */
-    assert(iolink_device_init_with_workspace(&ctx, &config, &workspace) == IOLINK_DEVICE_INIT_OK);
+    /* 通过 config.workspace 提供后初始化成功，并回读同一个指针。 */
+    config.workspace = &workspace;
+    assert(iolink_device_init(&ctx, &config) == IOLINK_DEVICE_INIT_OK);
     assert(iolink_device_get_workspace(&ctx) == &workspace);
 
     iolink_isdu_ctx_t* isdu = &ctx.dll.main.shared.isdu;

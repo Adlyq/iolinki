@@ -76,26 +76,6 @@ static void test_device_binds_external_workspace(void** state)
 #endif
 }
 
-static void test_explicit_workspace_argument(void** state)
-{
-    (void) state;
-    iolink_phy_mock_reset();
-    iolink_ds_mock_reset();
-    setup_mock_phy();
-    will_return(mock_phy_init, 0);
-
-    static iolink_workspace_t from_config;
-    static iolink_workspace_t from_argument;
-    iolink_test_device_t dev;
-    device_config_defaults(&dev);
-    dev.cfg.workspace = &from_config;
-
-    /* 显式参数优先于 config.workspace（文档约定：后者被忽略）。 */
-    assert_int_equal(iolink_device_init_with_workspace(&dev.ctx, &dev.cfg, &from_argument),
-                     IOLINK_DEVICE_INIT_OK);
-    assert_ptr_equal(iolink_device_get_workspace(&dev.ctx), &from_argument);
-}
-
 static void test_device_falls_back_to_embedded_scratch(void** state)
 {
     (void) state;
@@ -193,8 +173,6 @@ static void test_bind_null_is_ignored(void** state)
     iolink_ds_bind_workspace(NULL, NULL);
     assert_null(iolink_device_get_workspace(NULL));
     assert_int_equal(iolink_device_init(NULL, NULL), IOLINK_DEVICE_INIT_ERR_NULL);
-    assert_int_equal(iolink_device_init_with_workspace(NULL, NULL, NULL),
-                     IOLINK_DEVICE_INIT_ERR_NULL);
 }
 
 static void test_ds_null_api_contracts(void** state)
@@ -213,7 +191,6 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_device_binds_external_workspace),
-        cmocka_unit_test(test_explicit_workspace_argument),
         cmocka_unit_test(test_device_falls_back_to_embedded_scratch),
         cmocka_unit_test(test_ds_serialize_matches_stored_image),
         cmocka_unit_test(test_ds_refresh_without_image_buffer),

@@ -233,14 +233,14 @@ static void test_reset_commands_clear_diagnostics(void** state)
             assert_true(iolink_events_pop(&dll.main.shared.events, &event));
             assert_int_equal(event.code, 0x1000U);
             assert_int_equal(event.mode, IOLINK_EVENT_MODE_DISAPPEARS);
-            assert_int_equal(iolink_events_get_highest_severity(&dll.main.shared.events), 0U);
+            assert_int_equal(iolink_diag_device_status(&dll.main.shared.events), 0U);
             assert_int_equal(dll.main.shared.events.count, 0U);
             assert_false(iolink_events_flag(&dll.main.shared.events));
         }
         else {
             assert_int_equal(dll.main.shared.events.count, 0U);
             assert_false(iolink_events_flag(&dll.main.shared.events));
-            assert_int_equal(iolink_events_get_highest_severity(&dll.main.shared.events), 0U);
+            assert_int_equal(iolink_diag_device_status(&dll.main.shared.events), 0U);
         }
     }
 

@@ -198,22 +198,6 @@ typedef enum
 int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config);
 
 /**
- * @brief 使用显式工作区初始化设备上下文。
- *
- * 与 `iolink_device_init()` 相同，但把 ISDU/DS 的传输 scratch 绑定到
- * @p workspace。工作区由调用方分配（可位于 DTCM 或外部 RAM），必须比
- * @p ctx 存活更久。@p config 中的 `workspace` 字段被忽略。
- *
- * @param ctx       要初始化的设备上下文。
- * @param config    要应用的配置。
- * @param workspace 工作区；NULL 等价于 `iolink_device_init()`。
- * @return 同 `iolink_device_init()`。
- */
-int iolink_device_init_with_workspace(iolink_device_ctx_t* ctx,
-                                      const iolink_device_config_t* config,
-                                      iolink_workspace_t* workspace);
-
-/**
  * @brief 返回设备当前绑定的工作区。
  *
  * @param ctx 设备上下文。

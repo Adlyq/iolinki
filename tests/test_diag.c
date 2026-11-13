@@ -505,7 +505,7 @@ static void test_dll_service_publishes_isr_pulse(void** state)
 
     /* 主泵 service 后事件上线，DeviceStatus 由注册表（0x1803 = Error）派生。 */
     assert_int_equal(ctx.main.shared.events.pending_count, 1U);
-    assert_int_equal(iolink_events_get_highest_severity(&ctx.main.shared.events), 4U);
+    assert_int_equal(iolink_diag_device_status(&ctx.main.shared.events), 4U);
 
     iolink_event_t ev;
     assert_true(iolink_events_pop(&ctx.main.shared.events, &ev));
