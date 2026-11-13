@@ -319,6 +319,21 @@ add_executable(my_app
 target_link_libraries(my_app PRIVATE iolinki)
 ```
 
+### Option 3: Native IDE (IAR, Keil, vendor IDE)
+
+The stack is C99 and can be added as sources to a native IDE project; there is
+no verified EWARM board project. Use `include/` as the include path and the core
+source list from `CMakeLists.txt`, replacing the Linux time/platform sources with
+your own. For a physical target exclude `phy_virtual.c` and the Linux sources;
+if you supply strong platform hooks, exclude `platform.c` too and provide
+`iolink_platform_critical_sections_ready()` returning 0. Provide the time source
+through `config.time_us`, the critical-section symbols declared in
+`include/iolinki/platform.h`, and the storage backend through
+`iolink_device_config_t::storage` when Data Storage is enabled. Keep every
+library and application unit on the same configuration defines and make the
+startup/linker files match the actual MCU; a successful GCC build is not evidence
+of IAR compatibility.
+
 ## RTOS Integration
 
 ### FreeRTOS

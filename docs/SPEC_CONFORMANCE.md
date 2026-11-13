@@ -12,8 +12,9 @@ Status: **PASS** (implemented + tested), **PARTIAL** (subset covered), **N/A**
 (including `test_spec_conformance`) is green: `ctest --output-on-failure`.
 
 Final audit disposition is **111 direct / 19 n/a / 12 out-of-scope**. The
-out-of-scope set is physical/HIL or product-IODD work and is tracked in
-`CONFORMANCE_AUDIT_2026-10-28.md` and `tests/conformance_audit.csv`.
+out-of-scope set is physical/HIL or product-IODD work; the per-case status lives
+in [`tests/conformance_audit.csv`](../tests/conformance_audit.csv). The detailed
+2026-10-28 audit report is kept in the git history.
 
 ## Transport
 
@@ -141,5 +142,5 @@ previously missing:
 
 ## Related
 
-- `FRAMES.md` (A.1/A.3/A.10), `TESTING.md`, `CONFORMANCE_AUDIT_2026-10-28.md`,
+- `CODE_FLOW.md` (frame flow, A.1/A.3/A.10), `TESTING.md`,
   `security/THREAT_MODEL.md`.

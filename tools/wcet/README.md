@@ -9,8 +9,7 @@
 > 本工具输出 ISR 泵调用次数、`rx_octet` / `tx_octet` 调用次数等，只能说明
 > "这段代码被调用了多少次"，不能说明"在目标 MCU 上花多少周期"。CPU 周期
 > 上界必须用目标端 DWT 周期计数器测量（见下文「目标端 DWT 门」）。
-> 手段纪律来自 `docs/EVOLUTION_ROADMAP.md` 的 D8：virtual PHY 只验证功能
-> 等价与帧序合法，周期上界只用目标端 DWT。
+> 手段纪律：virtual PHY 只验证功能等价与帧序合法，周期上界只用目标端 DWT。
 
 ## 运行
 

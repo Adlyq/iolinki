@@ -21,7 +21,7 @@
  * @file capability.h
  * @brief 能力表：构建档位（ROM 常量）+ 实例能力位（运行时）。
  *
- * 设计见 docs/CAPABILITY_DESIGN.md。三层拆分：
+ * 三层拆分：
  *  1. **构建档位** `iolink_build_caps_t`：这个镜像被编译成了什么
  *     （ISR 粒度、并发/统计模式、哪些特性被编译进来）。每个镜像一份，
  *     `const`，落 `.rodata`。

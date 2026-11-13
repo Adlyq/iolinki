@@ -20,7 +20,7 @@
  * @brief 诊断源注册表：条件 → EventCode / DeviceStatus / DetailedDeviceStatus
  * 的单一派生点。
  *
- * 设计依据见 docs/DIAGNOSTICS_DESIGN.md。三类事实严格分开：
+ * 三类事实严格分开：
  *
  *  - **ROM 注册表**（`iolink_diag_desc_t`）：每个诊断来源的 EventCode、
  *    规范 EventType、Table D.1 首选 DeviceStatus、来源类型与 PULSE 保持窗口。

@@ -57,10 +57,16 @@ git tag -a vX.Y.Z -m "Release version X.Y.Z"
 git push origin vX.Y.Z
 ```
 
-There is no `main` promotion step and no back-merge. See
-[RELEASE_STRATEGY.md](RELEASE_STRATEGY.md) for the full process, and note that
-the release workflow builds **Debug with coverage** — a local `Release` build is
-only an optimisation sanity check, not what produces the artifacts.
+There is no `main` promotion step and no back-merge.
+
+Versioning is SemVer: `MAJOR` for incompatible API changes, `MINOR` for new
+functionality, `PATCH` for fixes. Release candidates are tagged `vX.Y.Z-rcN`
+from a `release/X.Y.Z` branch cut from `own_dev`; the final tag is pushed from
+`own_dev` once CI is green. The release workflow builds **Debug with coverage**
+and publishes source, example binaries, SBOMs (CycloneDX + SPDX) and SHA256
+checksums; a local `Release` build is only an optimisation sanity check, not
+what produces the artifacts. If a tag fails in CI, delete it locally and on the
+remote, fix on `own_dev`, and re-tag.
 
 ## 5. Relationship with upstream
 
@@ -100,4 +106,3 @@ Still possible and encouraged for self-contained spec corrections:
 | `docs/MAINTENANCE.md` | current; this file |
 | `docs/UPSTREAM_DIVERGENCE.md` | historical divergence inventory; not a sync plan |
 | `docs/SPEC_CONFORMANCE.md` | current; feature -> implementation -> test matrix |
-| `docs/RELEASE_STRATEGY.md` | current; release process |

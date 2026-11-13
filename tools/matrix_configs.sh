@@ -18,7 +18,8 @@
 # Everything that is no longer a structural difference (compat bits, system
 # command, wake-up, SIO C/Q, PD-input callback, ISR-tx-only) is a runtime
 # capability and is covered by expected-frame tests in the C1 suite, not by a
-# configuration here. See docs/CAPABILITY_DESIGN.md sections 5 and 7.4.
+# configuration here. The probe list below covers the legal-but-uninstantiated
+# combinations.
 
 # Structural configuration names (what --list reports as the matrix size).
 # shellcheck disable=SC2034 # consumed by the scripts that source this file
@@ -60,7 +61,7 @@ iolink_matrix_no_critical_config()
     echo target_minimal
 }
 
-# Compile-only combination probes (docs/CAPABILITY_DESIGN.md 5.3).
+# Compile-only combination probes.
 #
 # These combinations stay legal in the preprocessor but are not structural
 # configurations, so they must at least keep compiling: they only need

@@ -40,11 +40,10 @@ and [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL).
 For a runnable counter/button/LED software example, see
 [examples/reference_device](examples/reference_device/README.md). For a
 board-specific ISR two-pump PHY reference (STM32G0 + L6362A), see
-[examples/stm32g0_l6362a_raw](examples/stm32g0_l6362a_raw/README.md). For
-practical evaluation questions and integration status, see
-[docs/FAQ.md](docs/FAQ.md) and
-[the portable TIOL112 driver](docs/hardware/TIOL112.md). Physical board ports and
-commercial-master validation are separate from the host simulation.
+[examples/stm32g0_l6362a_raw](examples/stm32g0_l6362a_raw/README.md), and the
+[portable TIOL112 driver](docs/hardware/TIOL112.md) for a real transceiver.
+Physical board ports and commercial-master validation are separate from the host
+simulation; see [PORTING](docs/PORTING.md) for the bare-IDE integration path.
 
 ### Installation
 
@@ -129,8 +128,6 @@ cd build && ctest --output-on-failure
 Conformance status is tracked case by case, not by a headline test count:
 
 - **[Spec conformance matrix](docs/SPEC_CONFORMANCE.md)** — feature -> implementation -> test.
-- **[Conformance audit](docs/CONFORMANCE_AUDIT_2026-10-28.md)** — independent 142-case
-  audit, scope split and residual risks.
 - **[Machine-readable audit](tests/conformance_audit.csv)** — authoritative per-case status.
 
 Current disposition: **111 direct / 19 n/a / 12 out-of-scope** of 142 Test Spec
@@ -161,14 +158,15 @@ per Test Spec case, not by a headline test count:
 
 - **[Spec conformance matrix](./docs/SPEC_CONFORMANCE.md)** — feature ->
   implementation -> test, plus residual risks.
-- **[Conformance audit](./docs/CONFORMANCE_AUDIT_2026-10-28.md)** — independent
-  142-case audit and scope split.
+- **[Machine-readable audit](./tests/conformance_audit.csv)** — per-case status.
 
 ## Documentation
 
 - **[docs/](./docs/README.md)** — full documentation index
-- **[VISION.md](./docs/VISION.md)** - Project mission and approach
-- **[RELEASE_STRATEGY.md](./docs/RELEASE_STRATEGY.md)** - Release workflow and versioning
+- **[API](./docs/API.md)** and **[API integration](./docs/API_INTEGRATION.md)** — public
+  API and integration workflow
+- **[TESTING](./docs/TESTING.md)** and **[MAINTENANCE](./docs/MAINTENANCE.md)** — quality
+  gates, branch model and upstream-adoption rules
 
 ## Security
 
