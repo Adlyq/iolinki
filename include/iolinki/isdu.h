@@ -320,7 +320,8 @@ int iolink_isdu_get_response_byte(iolink_isdu_ctx_t* ctx, uint8_t* byte);
  * @ref iolink_isdu_direct_param_page1_octet 在重建前返回 0，而不是变更前
  * 的值，因此 ISR 绝不会发出已知过期的八位组。
  *
- * @note 重建只允许主泵侧执行：`dp_page1_seq` 只有一个写者。
+ * @note 整页重建与偶数发布只允许主泵侧执行：`dp_page1_seq` 的稳定序号
+ * 只有一个写者；ISR 侧若调用只会把序号置为奇数（当前 src/ 中没有这种调用者）。
  *
  * @param ctx ISDU 上下文（NULL 时不做任何事）
  */
@@ -339,8 +340,9 @@ void iolink_isdu_dp_page1_invalidate(iolink_isdu_ctx_t* ctx);
  *
  * @note 一致性粒度是**单个八位组**。一次多字节页读（例如 od_width=32）
  * 会逐字节调用本函数；若主泵恰好在两次调用之间刷新映像，同一应答帧可能
- * 混入新旧两代字节。DPP1 中运行期唯一可变的字节是 MasterCycleTime
- * （0x01），其余输入只在重新配置时改变，因此该窗口在实践中可忽略；
+ * 混入新旧两代字节。运行期可变的字节是 0x01（MasterCycleTime，主站写入）
+ * 以及 TYPE_2_V 的 0x05/0x02（`iolink_device_pd_input_update()` 改变宽度时
+ * 触发重建）；它们的变化频率远低于页读频率，因此该窗口在实践中可忽略。
  * 若将来需要整帧同代，应改为一次取序号后复制整段。
  *
  * @param ctx ISDU 上下文

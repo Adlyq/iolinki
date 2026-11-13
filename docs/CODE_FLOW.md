@@ -488,7 +488,7 @@ flowchart LR
 | Type-0 Page WRITE addr 0 | 计划动作 `IOLINK_REPLY_ACT_MASTER_COMMAND`：ISR 应用命令并回 CKS | `CONSUME` 帧不入邮箱 |
 | Type-0 Page WRITE addr 1..0x1F | 计划回 CKS（`SRC_NONE`，无 `CONSUME`） | eager 帧仍入邮箱；主泵应用 DPP 写，`frame_replied_by_isr` 抑制第二次应答 |
 | Type-0 Diag WRITE | 计划回 CKS（`SRC_NONE`，无 `CONSUME`） | eager 帧仍入邮箱；主泵确认事件读取，不重发应答 |
-| Type-0 ISDU WRITE | ISR 调 `iolink_isdu_od_write()` 位置去重累计；带 `STAGED` 的计划回 CKS 并 `CONSUME` | 计划未命中时从邮箱取帧处理 |
+| Type-0 ISDU WRITE | ISR 调 `iolink_isdu_od_write()` 位置去重累计；带 `STAGED` 的计划回 CKS 并 `CONSUME` | 计划命中但暂存未就绪时以 `eager=0` 入邮箱 |
 | OPERATE 中的 Type-0 页读（未开兼容位） | 计划动作 `IOLINK_REPLY_ACT_RESET_STARTUP` + `CLOSE_WINDOW \| CONSUME`：不应答 | 帧不入邮箱，主泵不再看到该复位请求 |
 | Type-1/2 READ（Process/Page/Diag） | `PD_TAIL` 计划：OD 头写入活动 PD-in 槽位，零拷贝发送；来源为 `TEMPLATE` / `PAGE` / `EVENT_MEM` | eager 帧仍入邮箱；主泵更新统计、PD-out 与状态，不重发应答 |
 | Type-1/2 READ（ISDU） | `PD_TAIL` + `IOLINK_REPLY_SRC_ISDU_SEG`：ISR 从已发布视图取段 | 同上；主泵不再推进段索引 |
@@ -939,7 +939,7 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 | 邮箱环满 | `isr_mailbox_drops++` | `dll_isr_publish_frame()` |
 | t_PD 窗口内收到帧 | 邮箱中的帧被丢弃，`t_pd_discards` 按丢弃数累加 | `dll_drain_rx()` |
 | 计划未命中 | 合法帧：`isr_plan_misses++` 并丢弃（不应答、不入邮箱）；非法帧交主泵做错误处理 | `dll_isr_complete_frame()` |
-| 应答计划槽位耗尽 | `reply_plan_overflows++`；对应请求退回延迟路径 | `dll_plan_push()` |
+| 应答计划槽位耗尽 | `reply_plan_overflows++`；该请求按计划未命中丢弃 | `dll_plan_push()` |
 
 错误计数通过 `iolink_dll_get_stats()` 暴露；部分错误同时触发诊断脉冲，事件 flag 进入 CKS bit7。
 `isr_plan_misses` 已从 ISR 独占结构移入 `iolink_dll_shared_t`，`isr_od_overruns` 与

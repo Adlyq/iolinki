@@ -240,6 +240,9 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
  * `IOLINK_CAP_PD_IN_CALLBACK` 置位）时，本函数返回
  * `IOLINK_DEVICE_INIT_ERR_PD_INPUT`，而不是静默覆盖回调的输出。
  *
+ * @note 必须从主泵上下文调用：PD-in 宽度变化会重建 DPP1 映像，整页构建
+ * 不得发生在应用自己的中断里。
+ *
  * @param ctx    设备上下文。
  * @param data   要发布的输入过程数据字节。
  * @param len    @p data 的长度（字节）。

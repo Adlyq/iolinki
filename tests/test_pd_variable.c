@@ -283,6 +283,32 @@ static void test_variable_pd_length_limits(void** state)
     assert_int_equal(iolink_device_get_pd_out_len(&dev.ctx), 0U);
 }
 
+/* 运行期 PD-in 宽度变化必须重建 DPP1 映像：0x05（PDIn 描述符）与
+ * 0x02（MinCycleTime）随之更新，而不是停留在旧值。 */
+static void test_pd_input_update_refreshes_dpp1(void** state)
+{
+    (void) state;
+    iolink_stack_config_t config = {
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 8, .pd_out_len = 8};
+    iolink_test_device_t dev;
+
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
+
+    iolink_isdu_ctx_t* isdu = &dev.ctx.dll.main.shared.isdu;
+    /* 8 字节 PD-in -> DPP1 0x05 = 0x87（BYTE=1，Length=octets-1 = 7）。 */
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x05U), 0x87U);
+    const uint8_t min_before = iolink_isdu_direct_param_page1_octet(isdu, 0x02U);
+
+    uint8_t pd[1] = {0x5AU};
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), true), 0);
+    /* 1 字节 PD-in -> 0x08；宽度已变，MinCycleTime 编码必须跟随。 */
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x05U), 0x08U);
+    assert_true(iolink_isdu_direct_param_page1_octet(isdu, 0x02U) != min_before);
+    assert_int_equal((isdu->dp_page1_seq & 1U), 0U); /* 重建完成，映像稳定 */
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -294,6 +320,7 @@ int main(void)
         cmocka_unit_test(test_variable_pd_roundtrip_asymmetric_bounds),
         cmocka_unit_test(test_type2v_pdio_len_32_roundtrip),
         cmocka_unit_test(test_variable_pd_length_limits),
+        cmocka_unit_test(test_pd_input_update_refreshes_dpp1),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

@@ -339,7 +339,7 @@ static int test_type0_page_write_is_answered(void)
     uint8_t dw[3];
     make_frame(IOLINK_MC_CHANNEL_DIAGNOSIS, IOLINK_MSEQ_TYPE_0, dw, sizeof(dw));
     dw[2] = 0x00U;
-    dw[1] = IOLINK_MSEQ_TYPE_0;
+    dw[1] = IOLINK_MSEQ_TYPE_0; /* 重算 CKS 前清掉 make_frame 写入的校验位 */
     dw[1] = (uint8_t) (dw[1] | iolink_checksum6(dw, sizeof(dw)));
     s_tx_n = 0U;
     feed(dw, sizeof(dw), 0U);
@@ -739,6 +739,18 @@ static int test_type0_idle_read_resets_transport(void)
     }
     if (s_dll.main.shared.isr_plan_misses != 0U) {
         return 5;
+    }
+
+    /* IDLE 之后紧跟 COUNT：不得重放旧段，只能回"无服务"（0x00 + CKS）。 */
+    uint8_t count[2];
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | 0x01U), IOLINK_MSEQ_TYPE_0,
+               count, sizeof(count));
+    s_tx_n = 0U;
+    feed(count, sizeof(count), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if ((s_tx_n != 2U) || (s_tx_q[0] != 0x00U)) {
+        return 8; /* 旧段索引必须已被 IDLE 清零 */
     }
 
     iolink_dll_process(&s_dll.main);

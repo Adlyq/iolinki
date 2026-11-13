@@ -140,8 +140,8 @@ typedef struct iolink_dll_shared
      */
     volatile IOLINK_ATOMIC_UINT_T reply_plan_seq;            /**< seqlock 发布字 */
     uint8_t reply_plan_total;                                /**< 有效槽位总数 */
-    uint8_t reply_plan_off[4];                               /**< 每状态切片起点 */
-    uint8_t reply_plan_cnt[4];                               /**< 每状态切片长度 */
+    uint8_t reply_plan_off[IOLINK_PLAN_SLOT_COUNT];          /**< 每状态切片起点 */
+    uint8_t reply_plan_cnt[IOLINK_PLAN_SLOT_COUNT];          /**< 每状态切片长度 */
     iolink_reply_plan_t reply_plan[IOLINK_REPLY_PLAN_SLOTS]; /**< 计划槽位 */
     /** @} */
 

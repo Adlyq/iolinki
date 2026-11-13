@@ -107,13 +107,13 @@ cmake --build build_isr_latency --parallel
 
 | 场景 | ISR 路径 | 说明 |
 | :--- | :--- | :--- |
-| `type0_page_read` | `IOLINK_REPLY_SRC_PAGE` | DPP1 逐字节查找（阶段 2 前每次调用重建整页） |
+| `type0_page_read` | `IOLINK_REPLY_SRC_PAGE` | DPP1 逐字节查找（RAM 映像索引 + seqlock 双读） |
 | `type0_page_write_cks` | `SRC_NONE` + 短应答 | CKS-only 页写确认 |
 | `type0_isdu_read_start` | `SRC_ISDU_SEG` | 读视图采纳 + 1 字节 OD |
 | `type12_pd_read_tail` | `SRC_TEMPLATE` + `PD_TAIL` | OD 头 + 32B PD-in 长应答 |
-| `type1_page_read_od32` | `SRC_PAGE` + `PD_TAIL` | OD 32 字节页读（32 次整页查找） |
+| `type1_page_read_od32` | `SRC_PAGE` + `PD_TAIL` | OD 32 字节页读（32 次 DPP1 映像索引） |
 | `isdu_write_segment` | `iolink_isdu_od_write` | 写段位置去重累计 |
-| `plan_miss` | 未命中路径 | 现行实现发布到邮箱（阶段 1 后改丢弃） |
+| `plan_miss` | 未命中路径 | 计划表已失效时的合法帧：丢弃 + 计 `isr_plan_misses`，不入邮箱 |
 | `invalid_frame` | 校验失败路径 | 坏 CKS，无应答 |
 
 场景健全性（应答长度、`isr_plan_misses`、首字节）在测量前校验一次，不一致
@@ -131,8 +131,8 @@ cmake --build build_isr_latency --parallel
 - 迭代数与基线不一致时告警（统计量不再严格可比）。
 - `p99`/`p95` 仅展示，不参与门。
 
-重构每个阶段后运行一次：只许降不许升；阶段 2（DPP1 索引化）预期
-`type0_page_read` 与 `type1_page_read_od32` 显著下降。
+重构每步后运行一次：只许降不许升；DPP1 索引化后 `type0_page_read` 与
+`type1_page_read_od32` 显著下降。
 
 ## 已知局限
 
