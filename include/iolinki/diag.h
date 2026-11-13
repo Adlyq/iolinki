@@ -20,7 +20,7 @@
  * @brief 诊断源注册表：条件 → EventCode / DeviceStatus / DetailedDeviceStatus
  * 的单一派生点。
  *
- * 设计依据见 docs/DIAGNOSTICS_DESIGN.md（P10）。三类事实严格分开：
+ * 设计依据见 docs/DIAGNOSTICS_DESIGN.md。三类事实严格分开：
  *
  *  - **ROM 注册表**（`iolink_diag_desc_t`）：每个诊断来源的 EventCode、
  *    规范 EventType、Table D.1 首选 DeviceStatus、来源类型与 PULSE 保持窗口。
@@ -265,7 +265,7 @@ void iolink_diag_rearm(iolink_events_ctx_t* events, uint8_t src_mask);
  *
  * 统计 `(present || reported)` 且非 Notification 的条件，取注册表首选状态的
  * 最高优先级（Failure > Functional-Check > Maintenance > Out-of-Spec）。
- * 该过滤条件保证 DDS 仍列出条目时 DeviceStatus 不会提前回 0（消除 D7）。
+ * 该过滤条件保证 DDS 仍列出条目时 DeviceStatus 不会提前回 0。
  *
  * @param events 事件上下文
  * @return uint8_t 0..4

@@ -8,7 +8,7 @@
 
 /**
  * @file test_workspace.c
- * @brief P8：工作区绑定与 DS 流式序列化的契约。
+ * @brief 工作区绑定与 DS 流式序列化的契约。
  */
 
 #include <setjmp.h>

@@ -27,7 +27,7 @@ void iolink_events_init(iolink_events_ctx_t* ctx)
     if (!iolink_ctx_zero(ctx, sizeof(iolink_events_ctx_t))) {
         return;
     }
-    /* P10：清空诊断来源的 RAM 缓存；注册表是 const，无需初始化。 */
+    /* 清空诊断来源的 RAM 缓存；注册表是 const，无需初始化。 */
     iolink_diag_init(ctx);
     ctx->min_appear_ms = (uint16_t) IOLINK_EVENT_MIN_APPEAR_MS;
     ctx->min_repeat_ms = (uint16_t) IOLINK_EVENT_MIN_REPEAT_MS;
@@ -70,7 +70,7 @@ static uint32_t events_now_ms(const iolink_events_ctx_t* ctx)
 
 /** @brief 由事件类型和 MODE 生成 EventQualifier（A.6.4，Figure A.24）。
  *
- * Table 58 事件存储器与 DetailedDeviceStatus 共用本函数（D10）。 */
+ * Table 58 事件存储器与 DetailedDeviceStatus 共用本函数。 */
 uint8_t iolink_event_qualifier(uint16_t code, iolink_event_type_t type, iolink_event_mode_t mode)
 {
     (void) code; /* 预留给按代码选择 INSTANCE/SOURCE 的扩展。 */
@@ -275,7 +275,7 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
 
     const uint32_t now = events_now_ms(ctx);
 
-    /* P10/D8：注册表登记的代码使用规范 EventType；未登记（厂商/应用）代码
+    /* 注册表登记的代码使用规范 EventType；未登记（厂商/应用）代码
      * 保留调用方输入，保持 iolink_event_trigger() 的兼容语义。 */
     type = (iolink_event_type_t) iolink_diag_type_for(code, (uint8_t) type);
 
@@ -316,7 +316,7 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
     p->present = true;
     if (allocated) {
         /* 10.10.2：同一 Event 的生命周期内 mode/type/instance 保持静态。
-           重触发不得改写已上报 appears 的类型（D9）。 */
+           重触发不得改写已上报 appears 的类型。 */
         p->type = type;
     }
     ctx->pending_count++;
@@ -610,7 +610,7 @@ bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event)
 
 uint8_t iolink_events_get_highest_severity(iolink_events_ctx_t* ctx)
 {
-    /* P10：Table B.13 由条件表 + 诊断注册表派生（单一片段，见 diag.c）。 */
+    /* Table B.13 由条件表 + 诊断注册表派生（单一片段，见 diag.c）。 */
     return iolink_diag_device_status(ctx);
 }
 
@@ -636,7 +636,7 @@ uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_even
 
 iolink_event_type_t iolink_event_classify(uint16_t code)
 {
-    /* P10：分类来自 ROM 注册表；保留/厂商/未知代码回落到安全的 Error。 */
+    /* 分类来自 ROM 注册表；保留/厂商/未知代码回落到安全的 Error。 */
     return (iolink_event_type_t) iolink_diag_type_for(code, (uint8_t) IOLINK_EVENT_TYPE_ERROR);
 }
 

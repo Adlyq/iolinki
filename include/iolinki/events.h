@@ -152,7 +152,7 @@ struct iolink_events_ctx
     uint8_t pending_count;                                    /**< 已锁存的条件数量 */
     uint32_t dropped_count; /**< 因队列或 pending[] 已满而丢失的事件 */
 
-    /* P6：A.6.4 的两个时间窗口是运行时能力（曾经是编译期常量）。
+    /* A.6.4 的两个时间窗口是运行时能力（曾经是编译期常量）。
      * 默认值来自构建档位（IOLINK_EVENT_MIN_APPEAR_MS / _REPEAT_MS），
      * 设备层可用 iolink_stack_config_t 的事件节覆盖。 */
     uint16_t min_appear_ms; /**< 最短“出现”窗口（ms） */
@@ -166,7 +166,7 @@ struct iolink_events_ctx
     iolink_event_t frozen_events[6]; /**< 冻结存储器中实际呈现的事件 */
     uint8_t frozen_count;            /**< frozen_events 中有效的条目数 */
 
-    /* P10：诊断注册表的 RAM 侧（ISR one-shot 脉冲、PULSE 窗口、边沿计数）。 */
+    /* 诊断注册表的 RAM 侧（ISR one-shot 脉冲、PULSE 窗口、边沿计数）。 */
     iolink_conditions_t diag;
 
     /* 由设备层绑定的应用时钟（config::time_us）。独立使用事件引擎的
@@ -190,7 +190,7 @@ struct iolink_events_ctx
 void iolink_events_init(iolink_events_ctx_t* ctx);
 
 /**
- * @brief 设置 A.6.4 的两个时间窗口（P6）。
+ * @brief 设置 A.6.4 的两个时间窗口。
  *
  * 任一参数为 0 时保留当前值（初始为构建档位默认值）。必须在
  * `iolink_events_init()` 之后调用。
@@ -370,7 +370,7 @@ bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event);
  * 占优：Failure (4) 高于 Functional-Check (3)，后者高于 Maintenance
  * (1) 和 Out of Spec (2)。
  *
- * P10：派生自条件表（`pending[]`）的 `present || reported` 条目，优先级
+ * 派生自条件表（`pending[]`）的 `present || reported` 条目，优先级
  * 值来自诊断注册表（diag.h）；与 DetailedDeviceStatus 使用同一过滤集，
  * 因此 DDS 仍列出条目时状态不会提前回 0。Notification 不提升状态。
  *

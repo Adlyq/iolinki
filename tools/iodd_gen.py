@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the supported IODD 1.1 subset.
 
-参数（Variable）的事实源是 C 对象字典表（D1/D2）：用 --od 给出包含
+参数（Variable）的事实源是 C 对象字典表：用 --od 给出包含
 IOLINK_OD_*_ENTRY 宏的 C 源文件，脚本解析表项并生成 IODD 变量。JSON 只保留
 对象字典无法表达的设备元数据（身份、过程数据、物理层、测试配置）。
 未给出 --od 时仍接受旧的 JSON "variables" 字段，用于既有调用点兼容。"""
@@ -139,7 +139,7 @@ def validate_config(config, skip_variables=False):
 
 
 # ---------------------------------------------------------------------------
-# C 对象字典 → IODD 变量（D1：C 表是事实源，IODD 是导出物）
+# C 对象字典 → IODD 变量（C 表是事实源，IODD 是导出物）
 # ---------------------------------------------------------------------------
 
 OD_DATATYPES = {

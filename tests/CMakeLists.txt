@@ -10,7 +10,7 @@ endif()
 # trip -Wunused-but-set-variable). Keep assertions active for the suite.
 add_compile_options(-UNDEBUG)
 
-# P8 external-workspace profile: a second build of the sources without the
+# External-workspace profile: a second build of the sources without the
 # embedded scratch, so the -16 rejection and the explicit-workspace path are
 # compiled and executed (not only syntax-probed). No cmocka dependency.
 add_library(iolink_workspace_fixture STATIC ${IOLINK_SOURCES})
@@ -21,12 +21,12 @@ target_link_libraries(test_workspace_external iolink_workspace_fixture)
 add_test(NAME test_workspace_external COMMAND test_workspace_external)
 
 find_package(PkgConfig QUIET)
-# P4/D1：参数事实源是 C 对象字典表；校验 IODD 导出使用表项而不是 JSON 变量。
+# 参数事实源是 C 对象字典表；校验 IODD 导出使用表项而不是 JSON 变量。
 find_package(Python3 QUIET)
 if(Python3_FOUND)
     add_test(NAME od_iodd_export
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_od_iodd_export.py)
-    # P9: the generated state-machine table, Mermaid and CSV must match the
+    # The generated state-machine table, Mermaid and CSV must match the
     # C source of truth; --check fails on drift (also run in CI).
     add_test(NAME dll_statemachine_gen_check
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/gen_dll_statemachine.py --check)
@@ -57,7 +57,7 @@ add_test(NAME test_dll_statemachine COMMAND test_dll_statemachine)
 add_executable(test_dll_statemachine_gen test_dll_statemachine_gen.c)
 target_link_libraries(test_dll_statemachine_gen iolinki)
 add_test(NAME test_dll_statemachine_gen COMMAND test_dll_statemachine_gen)
-# P5: no cmocka dependency (plain asserts over the plan table and ISR pump).
+# No cmocka dependency (plain asserts over the plan table and ISR pump).
 add_executable(test_reply_plan test_reply_plan.c)
 target_link_libraries(test_reply_plan iolinki)
 add_test(NAME test_reply_plan COMMAND test_reply_plan)
@@ -136,7 +136,7 @@ add_executable(test_tx_busy test_tx_busy.c)
 target_link_libraries(test_tx_busy iolink_tx_busy_fixture)
 add_test(NAME test_tx_busy COMMAND test_tx_busy)
 
-# PD-input path (P6): the callback and the polling API now coexist in one
+# PD-input path: the callback and the polling API now coexist in one
 # binary, so the test needs no fixture build of the sources.
 add_executable(test_app_pd_callback test_app_pd_callback.c)
 target_link_libraries(test_app_pd_callback iolinki)
@@ -189,16 +189,16 @@ if(CMOCKA_FOUND)
     add_iolink_test(test_pd test_pd.c)
     add_iolink_test(test_isdu test_isdu.c)
     add_iolink_test(test_isdu_wire test_isdu_wire.c)
-    # P4 安全网：表驱动重构前钉死强制索引/Direct Parameter/标签的线上行为。
+    # 安全网：表驱动重构前钉死强制索引/Direct Parameter/标签的线上行为。
     add_iolink_test(test_od_characterization test_od_characterization.c)
-    # P4 对象字典：一行表项新增参数 + switching_sensor 迁移 + DS 成员契约。
+    # 对象字典：一行表项新增参数 + switching_sensor 迁移 + DS 成员契约。
     add_iolink_test(test_od_app test_od_app.c)
     target_sources(test_od_app PRIVATE
         ../examples/switching_sensor/switching_sensor.c
         ../examples/switching_sensor/switching_sensor_od.c)
     target_include_directories(test_od_app PRIVATE ../examples/switching_sensor)
     add_iolink_test(test_events test_events.c)
-    # P10 诊断注册表：Table D.1 内容、电平/脉冲语义、视图一致性与复位。
+    # 诊断注册表：Table D.1 内容、电平/脉冲语义、视图一致性与复位。
     add_iolink_test(test_diag test_diag.c)
     add_iolink_test(test_ds test_ds.c)
     add_iolink_test(test_error_model test_error_model.c)
@@ -207,9 +207,9 @@ if(CMOCKA_FOUND)
     add_iolink_test(test_integration_full test_integration_full.c)
     add_iolink_test(test_workspace test_workspace.c)
     add_iolink_test(test_application test_application.c)
-    # P6 能力表：构建档位、resolve() 与运行时覆盖规则。
+    # 能力表：构建档位、resolve() 与运行时覆盖规则。
     add_iolink_test(test_capability test_capability.c)
-    # P6 链接期档位断言：正向（同档位可链接）；反向由
+    # 链接期档位断言：正向（同档位可链接）；反向由
     # tools/check_profile_abi.sh 在构建矩阵里验证。
     add_iolink_test(test_profile_abi test_profile_abi.c)
     add_iolink_test(test_m_sequence_types test_m_sequence_types.c)

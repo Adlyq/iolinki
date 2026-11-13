@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
 /*
- * PD 输入路径（P6：同一构建内的运行时选择）：
+ * PD 输入路径（同一构建内的运行时选择）：
  *  - 应用不提供 on_pd_input 时走轮询 API iolink_device_pd_input_update()；
  *  - 提供 on_pd_input 时能力位 IOLINK_CAP_PD_IN_CALLBACK 置位，DLL 每
  *    OPERATE 周期调用回调，轮询 API 被拒绝（ERR_PD_INPUT）而不是静默

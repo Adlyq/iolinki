@@ -12,7 +12,7 @@
  *
  * 这里输出的是**调用次数**（ISR 泵、rx_octet、tx_octet），用来观察路径
  * 长度是否回归，**不是 CPU 周期 WCET**。CPU 周期上界只能用目标端的 DWT
- * 周期计数器测量（docs/EVOLUTION_ROADMAP.md D8）；本工具的用途是：
+ * 周期计数器测量（见 README.md）；本工具的用途是：
  *  - 用确定性的合成 PHY 覆盖最坏帧序（最大 PD/OD、背靠背、ISDU 分块、
  *    事件诊断、SIO/fallback、无效帧）；
  *  - 把"每帧需要多少次中断泵/字节搬运"变成可比较、可设门的数字；
@@ -342,7 +342,7 @@ static void wcet_env_init(void)
     g_device_info.vendor_name = g_vendor_name;
     g_device_info.vendor_text = "vendor";
     g_device_info.product_name = "wcet-harness";
-    g_device_info.product_id = "P9-WCET";
+    g_device_info.product_id = "wcet-host";
     g_device_info.product_text = "path-length proxy harness";
     g_device_info.serial_number = "0000000000000001";
     g_device_info.hardware_revision = "1";

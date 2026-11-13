@@ -340,7 +340,7 @@ static void test_event_lifecycle_no_repeat(void** state)
     assert_int_equal(ctx.count, 1U);
 }
 
-/* P6：A.6.4 的两个时间窗口是运行时能力。零初始化的上下文回落到构建
+/* A.6.4 的两个时间窗口是运行时能力。零初始化的上下文回落到构建
  * 默认值；set_window 覆盖后，消失窗口立即按新值生效。 */
 static void test_event_window_is_runtime_configurable(void** state)
 {
@@ -558,7 +558,7 @@ static void test_notification_dedup(void** state)
 
 /* Table B.13/B.2.21.2：DeviceStatus 与 DetailedDeviceStatus 使用同一过滤集
  * （present || reported）。disappears 仍在队列中时 DeviceStatus 不得回 0；
- * 撤销发出后两者同时归零（P10 消除 D7 的不一致窗口）。 */
+ * 撤销发出后两者同时归零（消除 DeviceStatus 与 DDS 的不一致窗口）。 */
 static void test_event_device_status_drops_with_condition(void** state)
 {
     (void) state;

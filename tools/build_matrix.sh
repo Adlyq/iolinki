@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Compile matrix: build every structural configuration (roadmap P6 / DG3).
+# Compile matrix: build every structural configuration.
 #
 # The matrix is structure x platform, not one entry per switch. The table lives
 # in tools/matrix_configs.sh, shared with tools/diff_matrix.sh so the two gates

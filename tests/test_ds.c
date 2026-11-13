@@ -692,7 +692,7 @@ static void ds_assert_image_record(const uint8_t* img, size_t len, uint16_t inde
     assert_memory_equal(value, expected, strlen(expected));
 }
 
-/* P6 期望帧用例：DataStorageIndex 子索引 0 的旧式整镜像载荷是运行时
+/* 期望帧用例：DataStorageIndex 子索引 0 的旧式整镜像载荷是运行时
  * 兼容位。严格路径读拼接记录（10+3n 字节），兼容路径直接返回整镜像；
  * 写操作在严格路径被 WRITE_PROTECTED 拒绝，兼容路径被接受。
  * 这条用例取代了已退出差分门的 ds_legacy_sub0 配置。 */

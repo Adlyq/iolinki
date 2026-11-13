@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Single source of truth for the structural configuration matrix (roadmap P6).
+# Single source of truth for the structural configuration matrix.
 #
 # Both tools/build_matrix.sh and tools/diff_matrix.sh source this file. A
 # configuration exists exactly once here; the differential gate reads the

@@ -44,7 +44,7 @@ IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) >= sizeof(iolink_isdu_ctx_t) +
                                                      sizeof(iolink_events_ctx_t),
                      "the DLL context must contain the ISDU, DS and events contexts");
 
-/* P8：工作区的每个缓冲都是显式契约；任何容量变化必须同步本文件与
+/* 工作区的每个缓冲都是显式契约；任何容量变化必须同步本文件与
  * docs/MEMORY_GUIDE.md。 */
 IOLINK_STATIC_ASSERT(sizeof(((iolink_isdu_scratch_t*) 0)->request) == IOLINK_ISDU_BUFFER_SIZE + 6U,
                      "ISDU request scratch changed");
@@ -80,7 +80,7 @@ IOLINK_STATIC_ASSERT(sizeof(iolink_ds_ctx_t) == 392u, "ds ctx changed");
 IOLINK_STATIC_ASSERT(sizeof(iolink_events_ctx_t) == 504u, "events ctx changed");
 IOLINK_STATIC_ASSERT(sizeof(iolink_workspace_t) == 1289u, "workspace changed");
 
-/* 布局契约（P2）：共享区必须是主上下文的首成员，ISR 状态紧随其后。
+/* 布局契约：共享区必须是主上下文的首成员，ISR 状态紧随其后。
  * 使用显式的 typedef 名称，避免 C99 下按 __LINE__ 命名的断言在跨头文件
  * 展开时发生 typedef 重名。 */
 typedef char ctx_layout_shared_first[offsetof(struct iolink_dll_main, shared) == 0U ? 1 : -1];

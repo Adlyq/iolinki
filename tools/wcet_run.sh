@@ -11,7 +11,7 @@
 #
 # --check 还会用 --repeat 2 运行每个场景，验证同一场景重复运行指标完全一致。
 # 指标是调用次数（路径长度代理），不是 CPU 周期 WCET；周期上界见
-# tools/wcet/README.md 与 docs/EVOLUTION_ROADMAP.md D8。
+# tools/wcet/README.md。
 
 set -euo pipefail
 
@@ -31,7 +31,7 @@ usage() {
   --build-dir    指定构建目录（默认 build_wcet/）
 
 指标是路径长度代理（调用次数），不是 CPU 周期 WCET；
-周期上界见 tools/wcet/README.md 与 docs/EVOLUTION_ROADMAP.md D8。
+周期上界见 tools/wcet/README.md。
 EOF
 }
 

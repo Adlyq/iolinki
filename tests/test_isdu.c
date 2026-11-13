@@ -88,7 +88,7 @@ static void test_isdu_device_status_read(void** state)
     assert_int_equal(isdu_collect_response(&ctx, status_buf, sizeof(status_buf)), 1);
     assert_int_equal(status_buf[0], 0);
 
-    /* 2. 触发一个警告级事件并再次检查状态（P10：0x1801 的 EventType 由
+    /* 2. 触发一个警告级事件并再次检查状态（0x1801 的 EventType 由
        诊断注册表固定为 Warning，调用方传入的类型不再影响派生视图）。 */
     iolink_event_trigger(&events, IOLINK_EVENT_COMM_CRC, IOLINK_EVENT_TYPE_ERROR);
 

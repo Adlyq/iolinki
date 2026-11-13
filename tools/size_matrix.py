@@ -5,7 +5,7 @@
 #
 # This file is part of iolinki.
 # See LICENSE for details.
-"""ROM/RAM measurement matrix (roadmap P6, docs/CAPABILITY_DESIGN.md section 6).
+"""ROM/RAM measurement matrix (docs/CAPABILITY_DESIGN.md section 6).
 
 Measures a minimal device application for two delivery forms and two
 garbage-collection settings:

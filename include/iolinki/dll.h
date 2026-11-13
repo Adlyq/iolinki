@@ -39,7 +39,7 @@ typedef enum
     IOLINK_DLL_STATE_OPERATE = 4U,       /**< 循环数据交换已激活 */
     IOLINK_DLL_STATE_FALLBACK = 5U,      /**< 错误恢复 / 回退 */
     IOLINK_DLL_STATE_COMM_DISABLED = 6U, /**< Back-to-box：通信停止直至复位 */
-    IOLINK_DLL_STATE_COUNT = 7U          /**< 状态数量（P9 状态机表维度） */
+    IOLINK_DLL_STATE_COUNT = 7U          /**< 状态数量（状态机表的行维度） */
 } iolink_dll_state_t;
 
 /**
@@ -154,7 +154,7 @@ typedef struct
 /** @} */
 
 /**
- * @name 应答计划（P5）
+ * @name 应答计划
  *
  * 主泵是 M-sequence 内容语义的唯一所有者：它把"哪种请求、用哪段
  * 字节、多长、以什么方式应答"编译成一张计划表并原子发布；数据 ISR
@@ -229,7 +229,7 @@ typedef struct
     uint8_t flags;        /**< @ref IOLINK_REPLY_FLAG_PD_TAIL 等 */
     uint8_t source;       /**< @ref iolink_reply_source_t */
     uint8_t action;       /**< @ref iolink_reply_action_t */
-    uint8_t state;        /**< 编译该计划时的 DLL 状态（P9：迁移后自动失效） */
+    uint8_t state;        /**< 编译该计划时的 DLL 状态（迁移后自动失效） */
 } iolink_reply_plan_t;
 /** @} */
 
@@ -294,7 +294,7 @@ typedef struct
 } iolink_dll_stats_t;
 
 /**
- * @name 截止时间表（P7）
+ * @name 截止时间表
  *
  * DLL 的所有软件超时收敛为一张静态表：每个 timer 只保存一个绝对
  * 截止时间（微秒，来自唯一时钟源 @c shared.time_us / dll_time_us()），
@@ -305,7 +305,7 @@ typedef struct
  * 每个 timer 有一条 @ref iolink_timer_contract_t 契约（名称 + 规范
  * 条款 + 运行语义），由 @ref iolink_dll_timer_contract() 导出，测试与
  * 文档共用同一份事实源。同刻到期的执行顺序 = 枚举顺序（索引小者先
- * 执行），与 P7 之前 `dll_process_body()` 中逐项检查的顺序一致。
+ * 执行），与定时器表引入前 `dll_process_body()` 中逐项检查的顺序一致。
  *
  * `deadline == 0` 表示该 timer 未装载。所有比较都走同一处回绕安全
  * 判定（`now - deadline` 的符号位）；表内不再混用 us/ms 或 32/64 位。

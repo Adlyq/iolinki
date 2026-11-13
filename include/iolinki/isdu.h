@@ -71,7 +71,7 @@ typedef struct
 {
     isdu_state_t state; /**< 当前状态机位置 */
 
-    /* P8：传输缓冲位于 `workspace`（或上下文内嵌 fallback）中。
+    /* 传输缓冲位于 `workspace`（或上下文内嵌 fallback）中。
      * 容量随缓冲一起记录，避免运行期再出现第二份尺寸常量。 */
     uint8_t* buffer;             /**< 请求载荷缓冲区 */
     size_t buffer_size;          /**< @ref buffer 的容量 */
@@ -120,7 +120,7 @@ typedef struct
     const iolink_od_app_t* od;       /**< 应用对象字典（表 + get/set 后端；可为 NULL） */
     void* direct_param_page2;        /**< 每设备的 Direct Parameter page 2 存储 */
     iolink_workspace_t* workspace;   /**< 绑定的工作区；NULL = 使用内嵌 fallback */
-    const iolink_caps_t* caps;       /**< 实例能力位（P6）；NULL = 全开（独立使用引擎时） */
+    const iolink_caps_t* caps;       /**< 实例能力位；NULL = 全开（独立使用引擎时） */
 
     /* 系统命令标志 */
     bool reset_pending;     /**< 请求设备复位（0x80） */
@@ -140,7 +140,7 @@ typedef struct
 void iolink_isdu_init(iolink_isdu_ctx_t* ctx);
 
 /**
- * @brief 绑定外部工作区（P8）。
+ * @brief 绑定外部工作区。
  *
  * 绑定后 ISDU 传输缓冲指向 @p ws 的 `isdu` 区域，不再使用上下文内嵌的
  * fallback 存储。必须在 `iolink_isdu_init()` 之后调用；绑定不会清空
@@ -164,7 +164,7 @@ void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* ws);
 void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app);
 
 /**
- * @brief 绑定实例能力位（P6）。
+ * @brief 绑定实例能力位。
  *
  * 设备层在 `iolink_caps_resolve()` 之后调用；独立使用 ISDU 引擎
  * （单元测试）时可以跳过，此时按"全部能力可用"处理。

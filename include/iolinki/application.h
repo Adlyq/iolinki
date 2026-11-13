@@ -17,7 +17,7 @@
 #include "iolinki/dll.h"
 
 /**
- * @brief PD 输入路径（P6：运行时选择，默认值与完整说明见 config.h）。
+ * @brief PD 输入路径（运行时选择，默认值与完整说明见 config.h）。
  *
  * 两条路径不再互斥：`iolink_device_pd_input_update()` 始终可用；如果
  * `iolink_app_callbacks_t::on_pd_input` 非 NULL，DLL 会在每个 OPERATE
@@ -45,7 +45,7 @@
  * 任何字段都可以为 NULL。`on_pd_input` 非 NULL 时，它是 PD 输入的
  * 唯一来源（DLL 每周期调用它）；为 NULL 时应用改用
  * `iolink_device_pd_input_update()` 轮询。两条路径可以共存于同一份
- * 头文件，运行期按成员是否为 NULL 选择（P6）。
+ * 头文件，运行期按成员是否为 NULL 选择。
  * 每个回调都会收到以 iolink_device_config_t::user 传入的
  * 不透明 @c user 指针，因此应用无需全局变量即可
  * 访问自身状态。生命周期回调在 DLL 进入

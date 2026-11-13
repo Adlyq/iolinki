@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Link-time profile gate (roadmap P6): the compile-time layout switches must
+# Link-time profile gate: the compile-time layout switches must
 # make a mismatched application fail to link, with the direction visible in the
 # missing symbol name (iolink_profile_events_off, ...).
 #

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# Differential frame gate (roadmap P1 / H0, narrowed by P6 / DG3).
+# Differential frame gate: byte-exact transcripts across structural configs.
 #
 # Rebuilds the protocol test suite under every runnable structural
 # configuration (tools/matrix_configs.sh is the single source of truth),
 # records every device reply frame emitted through the mock PHY, and compares
 # the transcripts byte for byte against the baseline configuration.
 #
-# Scope after P6:
+# Scope:
 #   - the gate guards **structural equivalence** between the remaining
 #     configurations (layout, concurrency tier, statistics mode);
 #   - switches that became runtime capabilities (compat bits, system command,

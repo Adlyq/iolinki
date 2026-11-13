@@ -949,7 +949,7 @@ static void test_dll_startup_0x99_rejected(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 }
 
-/* P6 期望帧用例：兼容位是运行时能力。置 IOLINK_CAP_COMPAT_V10_OP 后，
+/* 期望帧用例：兼容位是运行时能力。置 IOLINK_CAP_COMPAT_V10_OP 后，
  * 同一个 STARTUP 0x99 帧不再被拒绝，而是按 V1.0 捷径进入 ESTAB_COM
  * （应答只有一个 CKS 字节）。这条用例取代了已退出差分门的 compat_v10
  * 配置：它直接断言字节序列，而不是跨配置比对。 */
@@ -1060,7 +1060,7 @@ static void test_dll_type0_dpp2_unimplemented_read_returns_zero(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 }
 
-/* 旧式主站的兼容处理（P6：运行时开关）：置
+/* 旧式主站的兼容处理（运行时开关）：置
  * IOLINK_STACK_COMPAT_TYPE0_PAGE_READ_OPERATE 后，OPERATE 期间的
  * TYPE_0 页读就地应答，链路不会重启（与 SDCI_TC_0038/0049 不符；
  * 保留给在 OPERATE 中轮询页面的主站使用）。 */

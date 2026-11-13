@@ -8,7 +8,7 @@
 
 /**
  * @file test_timer_table.c
- * @brief P7 截止时间表：契约完整性、装载/取消、回绕单点、同刻优先级。
+ * @brief 截止时间表：契约完整性、装载/取消、回绕单点、同刻优先级。
  */
 
 #include <assert.h>

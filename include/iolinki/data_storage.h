@@ -115,7 +115,7 @@ typedef struct
     uint32_t master_checksum;             /**< 主站最近校验过的校验和 */
     bool ds_upload_flag;                  /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
     bool upload_event_pending;            /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
-    /* P8：镜像不再常驻状态结构。序列化交给工作区中的暂存缓冲（上传可
+    /* 镜像不再常驻状态结构。序列化交给工作区中的暂存缓冲（上传可
      * 直接流式写入调用方缓冲），这里只保留指针与容量。 */
     uint8_t* image;        /**< 序列化/下载暂存缓冲（工作区或内嵌 fallback） */
     size_t image_size;     /**< @ref image 的容量 */
@@ -139,7 +139,7 @@ typedef struct
 void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage);
 
 /**
- * @brief 绑定外部工作区（P8）。
+ * @brief 绑定外部工作区。
  *
  * 绑定后 DS 的序列化/下载暂存使用 @p ws 的 `ds_stage` 区域，不再使用
  * 上下文内嵌的 fallback 缓冲。必须在 `iolink_ds_init()` 之后调用。
@@ -151,7 +151,7 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage);
 void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws);
 
 /**
- * @brief 流式序列化当前 DS 参数集（P8）。
+ * @brief 流式序列化当前 DS 参数集。
  *
  * 按记录 `[Index(2)][Subindex(1)][Length(1)][Data]` 逐条写入 @p out，
  * 同时更新 @ref iolink_ds_ctx_t::current_checksum。不要求上下文持有完整

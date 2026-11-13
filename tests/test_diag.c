@@ -8,7 +8,7 @@
 
 /**
  * @file test_diag.c
- * @brief 诊断注册表（P10）：注册表内容、来源语义、视图派生与线上一致性。
+ * @brief 诊断注册表：注册表内容、来源语义、视图派生与线上一致性。
  *
  * 期望值独立写在本文件里（不复用实现表），这样“实现与测试共用同一张表”
  * 的自证陷阱不会掩盖 Table D.1 的映射错误。时间全部由固定计数器驱动。
@@ -445,7 +445,7 @@ static void test_reset_clears_conditions_and_resamples(void** state)
 }
 
 /* Restore factory（0x82）：先撤消失效条件，再对仍存在的电平重新锁存
- * （D5：复位后不能把硬件故障的 DeviceStatus 永久留在 0）。 */
+ * （复位后不能把硬件故障的 DeviceStatus 永久留在 0）。 */
 static void test_clear_diagnosis_rearms_on_next_sample(void** state)
 {
     (void) state;

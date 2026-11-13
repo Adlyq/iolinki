@@ -1017,7 +1017,7 @@ static void test_0075_multi_event_order(void** state)
     iolink_events_ctx_t events;
     events_init(&events);
 
-    /* Table D.1：0x8C00 是 Error，0x8C01 是 Warning。P10 起触发类型由
+    /* Table D.1：0x8C00 是 Error，0x8C01 是 Warning。触发类型由
        注册表规范化，因此这里按规范类型触发（传错也会被规范化）。 */
     iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_ERROR);
     iolink_event_trigger(&events, 0x8C01U, IOLINK_EVENT_TYPE_WARNING);

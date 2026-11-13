@@ -5,7 +5,7 @@
 # and remember that a stale entry (unknown configuration or transcript) is a
 # hard failure in tools/diff_matrix.sh.
 #
-# P6: the compat_v10 configuration is gone. Compatibility switches are runtime
+# The compat_v10 configuration is gone. Compatibility switches are runtime
 # capability bits now, so their replies are asserted byte-for-byte by the
 # expected-frame tests in the C1 suite (tests/test_dll.c,
 # tests/test_ds.c, tests/test_system_commands.c) instead of by a cross-

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate DLL state-machine artifacts from include/iolinki/dll_sm.h (P9).
+"""Generate DLL state-machine artifacts from include/iolinki/dll_sm.h.
 
 The X-macro ``DLL_SM_ROWS`` in ``include/iolinki/dll_sm.h`` is the single
 source of truth for the state x event table. This script parses those rows

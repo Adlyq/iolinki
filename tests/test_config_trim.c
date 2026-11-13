@@ -11,8 +11,8 @@
  * @brief 编译期配置：显式容量覆盖与关闭可选功能。
  *
  * 覆盖在首次 include 之前定义，因此会像项目构建那样准确命中 config.h 中的
- * #ifndef 防护。P6 退役了 MINIMAL/TINY 组合包，最小镜像改为直接关闭
- * Data Storage 与事件（结构配置 C3）。
+ * #ifndef 防护。MINIMAL/TINY 组合包已退役，最小镜像改为直接关闭
+ * Data Storage 与事件（`target_minimal` 结构配置）。
  */
 
 #define IOLINK_FEATURE_EVENTS 0

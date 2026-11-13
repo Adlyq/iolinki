@@ -8,7 +8,7 @@
 
 /**
  * @file test_profile_abi.c
- * @brief 链接期档位断言的正向用例（P6）。
+ * @brief 链接期档位断言的正向用例。
  *
  * `IOLINK_PROFILE_ANCHOR` 引用应用侧期望的全部档位符号。库以同一组
  * 开关编译时链接成功；档位不一致时链接失败，错误信息直接给出缺失

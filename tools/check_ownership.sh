@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Ownership gate (roadmap P2): the main-context translation unit must not be
+# Ownership gate: the main-context translation unit must not be
 # able to reference data-ISR-exclusive fields.
 #
 # Two independent properties are checked:

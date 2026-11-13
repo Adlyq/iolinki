@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """对象字典 → IODD 导出契约。
 
-P4/D1：参数的事实源是 C 对象字典表，IODD 只是导出物。本测试锁定
+参数的事实源是 C 对象字典表，IODD 只是导出物。本测试锁定
 examples/switching_sensor 的 C 表与既有 IODD 描述在参数语义上一致，
 并确认生成器确实使用表项（而不是 JSON 变量）生成每个变量的完整属性。
 """

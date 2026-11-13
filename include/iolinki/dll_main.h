@@ -35,7 +35,7 @@ struct iolink_dll_main
     volatile bool master_lost; /**< 主站通信丢失（应用层提示） */
 
     uint32_t master_lost_activity_ms; /**< 上次武装 MASTER_LOST 时的活动时间戳
-                                           （P7：用于识别新活动边沿） */
+                                           （用于识别新活动边沿） */
 
     bool wakeup_seen; /**< 检测到唤醒（若 PHY 支持） */
 
@@ -49,7 +49,7 @@ struct iolink_dll_main
 
     uint8_t od_len; /**< 流式路径的 OD 长度（1 或 2 字节）。 */
 
-    /* 应答计划发布键（P5）。计划表是 {状态, M-sequence 类型, OD 宽度}
+    /* 应答计划发布键。计划表是 {状态, M-sequence 类型, OD 宽度}
      * 的纯函数；键不变时 iolink_dll_publish_reply_plans() 不写共享区，
      * 因此主泵循环不会与 ISR 读者无谓竞争。 */
     uint16_t reply_plan_key; /**< 当前已发布的计划键 */
@@ -119,7 +119,7 @@ struct iolink_dll_main
 
     uint8_t req_len; /**< 当前帧类型的期望长度 */
 
-    /* P7：截止时间表。所有软件超时只在这里保存绝对截止时间（us），
+    /* 截止时间表。所有软件超时只在这里保存绝对截止时间（us），
      * 主泵另存一个 next_deadline 用于单点比较。表项语义、规范条款与
      * 同刻优先级见 include/iolinki/dll.h 的 iolink_timer_id_t 与
      * iolink_dll_timer_contract()。 */
@@ -127,7 +127,7 @@ struct iolink_dll_main
 
     uint64_t next_deadline; /**< 所有 DEADLINE 类 timer 的最早截止时间（0 = 无） */
 
-    uint64_t t_pd_deadline_us; /**< P7 兼容入口：device.c 初始化时写入，
+    uint64_t t_pd_deadline_us; /**< 兼容入口：device.c 初始化时写入，
                                     首次 process 导入 T_PD 表项后清零 */
 
     uint32_t t_byte_limit_us; /**< 字节间超时限制，单位为微秒 */

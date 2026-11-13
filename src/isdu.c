@@ -38,7 +38,7 @@
  */
 
 /* -------------------------------------------------------------------------
- * 能力位查询（P6）
+ * 能力位查询
  * ------------------------------------------------------------------------- */
 
 /** @brief 测试"构建自带"能力位；未绑定能力表时视为开（单元测试直用引擎）。 */
@@ -384,7 +384,7 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
 /** @brief 租约开始：在覆盖成帧缓冲前，把 ISR 视图显式标记为 Busy。
  *
  * 单份成帧缓冲意味着主泵写缓冲时，ISR 不得再把它当成"当前应答"。
- * P5 的发布字已经是唯一交接点，这里在写缓冲之前先发布
+ * DLL 的发布字已经是唯一交接点，这里在写缓冲之前先发布
  * `{len=0, busy=1}`：ISR 看到 Busy/无服务后不会再读取缓冲内容，
  * 随后的完成应答由 `dll_isdu_sync_snapshot()` 连同代数字一起发布。
  * 独立引擎（`dll_ctx == NULL`）没有 ISR 读者，直接返回。
@@ -989,7 +989,7 @@ static bool isdu_system_ds(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 static void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
     IOLINK_LOG_INFO(&ctx->log, "system command 0x%02X", (unsigned) cmd);
-    /* P6：能力位关闭时，所有命令统一回 FUNC_NOTAVAIL。拒绝分支常驻，
+    /* 能力位关闭时，所有命令统一回 FUNC_NOTAVAIL。拒绝分支常驻，
      * 因此关位是运行时决定，不是构建期分裂。 */
     if (!isdu_cap_default_on(ctx, IOLINK_CAP_SYSTEM_COMMAND)) {
         (void) cmd;
@@ -1086,7 +1086,7 @@ static void handle_access_locks(iolink_isdu_ctx_t* ctx)
 #if IOLINK_FEATURE_EVENTS
 /** @brief 处理 DetailedDeviceStatus（Table B.14）：3 字节条目的 ArrayT。
  *
- * P10：条目集合与 EventQualifier 都来自诊断注册表的单一派生点
+ * 条目集合与 EventQualifier 都来自诊断注册表的单一派生点
  * （iolink_diag_dds_snapshot + iolink_event_qualifier），与 DeviceStatus
  * 使用同一条件过滤集。 */
 static void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)

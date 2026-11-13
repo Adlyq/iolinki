@@ -198,7 +198,7 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.main.min_cycle_time_us =
         (uint32_t) iolink_dll_compute_min_cycle_time(&ctx->dll.main) * 100U;
 
-    /* P6：时序强制的默认值来自构建档位，栈配置可以显式覆盖。 */
+    /* 时序强制的默认值来自构建档位，栈配置可以显式覆盖。 */
     if (stack->timing_enforce == IOLINK_STACK_TIMING_ENFORCE) {
         iolink_dll_set_timing_enforcement(&ctx->dll.main, true);
     }
@@ -320,7 +320,7 @@ static int device_config_validate(const iolink_device_config_t* config)
     }
 #endif
 
-    /* P6：能力的一致性校验。降级后的最大风险不是"位为开但没编译"
+    /* 能力的一致性校验。降级后的最大风险不是"位为开但没编译"
      * （resolve 只置位 built 支持的位，unbuilt 能力被静默屏蔽），而是
      * 运行时要求与 PHY 实际钩子不匹配：见下方 REQUIRE_ISR_TX 与 TX_BUSY。 */
     const iolink_caps_t caps =
@@ -385,12 +385,12 @@ int iolink_device_init_with_workspace(iolink_device_ctx_t* ctx,
     iolink_device_info_ctx_init(&ctx->device_info, config->device_info);
     iolink_params_ctx_init(&ctx->params, &ctx->device_info);
     iolink_dll_init(&ctx->dll.main, &ctx->dll.isr, &config->phy);
-    /* P6：实例能力在绑定 PHY 之后、任何 ISR 可能运行之前解析一次。 */
+    /* 实例能力在绑定 PHY 之后、任何 ISR 可能运行之前解析一次。 */
     ctx->dll.main.shared.caps =
         iolink_caps_resolve(&config->phy, &config->stack, config->app_callbacks, NULL);
-    /* ISDU 的传输缓冲：外部工作区（P8）或默认内嵌 fallback。 */
+    /* ISDU 的传输缓冲：外部工作区或默认内嵌 fallback。 */
     iolink_isdu_bind_workspace(&ctx->dll.main.shared.isdu, workspace);
-    /* ISDU 与事件引擎按实例能力位选运行时路径（P6）。 */
+    /* ISDU 与事件引擎按实例能力位选运行时路径。 */
     iolink_isdu_bind_caps(&ctx->dll.main.shared.isdu, &ctx->dll.main.shared.caps);
     /* 在推导任何截止时间之前绑定应用时钟。设备层
      * 要求该时钟（NULL 已在上文被拒绝）。事件引擎共享
@@ -400,7 +400,7 @@ int iolink_device_init_with_workspace(iolink_device_ctx_t* ctx,
 #if IOLINK_FEATURE_EVENTS
     ctx->dll.main.shared.events.time_us = config->time_us;
     ctx->dll.main.shared.events.time_user = config->user;
-    /* A.6.4 的两个窗口是运行时能力（P6）：栈配置非 0 时覆盖构建默认值。 */
+    /* A.6.4 的两个窗口是运行时能力：栈配置非 0 时覆盖构建默认值。 */
     iolink_events_set_window(&ctx->dll.main.shared.events, config->stack.event_min_appear_ms,
                              config->stack.event_min_repeat_ms);
 #endif

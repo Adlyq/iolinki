@@ -57,7 +57,7 @@
  *      |- dll_take_isr_master_activity       第二次采样：一帧可能已在上述步骤中
  *      |                                     完成
  *      |- dll_timer_sync_master_lost / dll_timer_sync_idle /
- *      |  dll_timers_dispatch(phase 0)        截止时间表（P7）
+ *      |  dll_timers_dispatch(phase 0)        截止时间表
  *      |- dll_check_t_pd            -- 提前返回
  *      |- dll_handle_sio_wakeup     -- 提前返回
  *      |- dll_timers_dispatch(phase 1)   t_byte 到期检查
@@ -67,7 +67,7 @@
  *      |     |- dll_frame_drop_if_stopped / dll_check_cycle_time /
  *      |     |  dll_mark_master_activity
  *      |     |- dll_frame_validate -> dll_handle_valid_frame
- *      |     |  `- 状态机骨架表 g_dll_sm[state][event]（P9，见 dll_sm.h）
+ *      |     |  `- 状态机骨架表 g_dll_sm[state][event]（见 dll_sm.h）
  *      |     |     `- dll_handle_operate_type0 / dll_handle_type0_od_write /
  *      |     |        dll_handle_operate_type1_2 -> dll_dispatch_od
  *      |     |        （页面/诊断/ISDU 通道） -> dll_send
@@ -98,7 +98,7 @@
  * ------------------------------------------------------------------------- */
 
 /* -------------------------------------------------------------------------
- * 截止时间表（P7）
+ * 截止时间表
  *
  * 所有软件超时共享一张静态表与一个 next_deadline。主泵正常路径只做
  * 一次“现在是否到达 next_deadline”的比较；装载/取消是边沿事件。
@@ -1033,7 +1033,7 @@ static void dll_poll_diagnostics(iolink_dll_main_t* ctx)
 }
 
 /* -------------------------------------------------------------------------
- * 应答计划发布（P5）
+ * 应答计划发布
  * ------------------------------------------------------------------------- */
 
 /** @brief 全零 OD 模板：过程通道读的固定应答。 */
@@ -1242,7 +1242,7 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
     ctx->last_notified_state = IOLINK_DLL_STATE_STARTUP;
     ctx->shared.phy = phy;
-    /* P6：先解析实例能力，初始线路模式依赖"PHY 能否观测唤醒"这一位。
+    /* 先解析实例能力，初始线路模式依赖"PHY 能否观测唤醒"这一位。
      * 设备层随后会用完整的 stack/app 配置重新解析一次。 */
     ctx->shared.caps = iolink_caps_resolve(phy, NULL, NULL, NULL);
     ctx->enforce_timing = (iolink_caps_build()->timing_enforce_default != 0U);
@@ -1335,12 +1335,12 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
 /**
  * @brief 为 ISR 读泵发布成帧的 ISDU 响应视图。
  *
- * 单写者交接：ctx->shared.isdu（以及双缓冲响应）由主泵
+ * 单写者交接：ctx->shared.isdu（以及响应视图槽）由主泵
  * 拥有；ISR 读取最后发布的缓冲区。{length, busy,
  * buffer} 作为一个原子字传递，因此无需临界区、无需拷贝，
  * ISR 总是读到完整、稳定的响应。
  *
- * 失效协议（P5，防"写后立刻读"返回旧值）：
+ * 失效协议（防"写后立刻读"返回旧值）：
  *  - 每份**新**应答翻转代数位（位 10）。长度与缓冲区选择完全相同的
  *    两份应答因此仍是不同的发布字，ISR 的段索引序列会被打断；
  *  - ISR 暂存 ISDU 写后置 `isr_isdu_invalidated`；在写被应用并产出
@@ -1354,7 +1354,7 @@ static void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx)
     }
     const uint8_t state = (uint8_t) ctx->shared.isdu.state;
     const bool ready = (state == (uint8_t) ISDU_STATE_RESPONSE_READY);
-    /* 新应答：引擎把成帧结果放进另一个缓冲区（resp_sel 与已发布的不同），
+    /* 新应答：引擎切换响应视图槽（resp_sel 与已发布的不同），
      * 或刚刚进入 RESPONSE_READY。两种信号都意味着"内容已换"。 */
     const bool new_response = ready && ((ctx->shared.isdu.resp_sel != ctx->shared.isdu.resp_pub) ||
                                         (ctx->isdu_pub_state != state));
@@ -1369,8 +1369,8 @@ static void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx)
         }
         count = (ctx->shared.isdu.resp_total > 255U) ? 255U : (uint8_t) ctx->shared.isdu.resp_total;
         sel = ctx->shared.isdu.resp_sel;
-        /* 完成的响应成为已发布响应；引擎将在
-         * 另一个缓冲区中构建下一个响应。 */
+        /* 完成的响应成为已发布响应；下一次应答会先以租约
+         * 占用同一成帧缓冲再重建。 */
         ctx->shared.isdu.resp_pub = sel;
     }
     /* 失效旗标的清除条件：暂存的写段已被主泵消费（环为空），
@@ -1621,7 +1621,7 @@ static bool dll_reject_startup_operate(iolink_dll_main_t* ctx, bool was_establis
 }
 
 /* -------------------------------------------------------------------------
- * 状态机骨架表（P9）
+ * 状态机骨架表
  *
  * state × event -> (进入状态, 动作)。事件分类只看帧字节与长度；动作仍是
  * 普通函数，连续条件（通道宽度、兼容开关、长度）留在函数里。
@@ -2210,7 +2210,7 @@ static void dll_consume_isr_mailbox(iolink_dll_main_t* ctx)
 }
 
 /**
- * @brief 分发一个阶段的到期 timer（P7）。
+ * @brief 分发一个阶段的到期 timer。
  *
  * 正常路径只做一次 `now >= next_deadline` 比较；只有跨过截止时间才按
  * 表序（= 同刻优先级）扫描本阶段表项。WINDOW 类 timer 不参与分发，
@@ -2263,7 +2263,7 @@ static void dll_process_body(iolink_dll_main_t* ctx)
     dll_take_isr_master_activity(ctx);
     dll_apply_isr_deadline_requests(ctx);
 
-    /* P7 兼容入口：device.c 在初始化时写 t_pd_deadline_us，首个 process
+    /* 兼容入口：device.c 在初始化时写 t_pd_deadline_us，首个 process
      * 把它导入 T_PD 表项后清空，之后表是唯一事实源。 */
     if (ctx->t_pd_deadline_us != 0U) {
         dll_timer_arm(ctx, IOLINK_TIMER_T_PD, ctx->t_pd_deadline_us);

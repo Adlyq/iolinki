@@ -137,9 +137,9 @@ typedef struct
     uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex, bool write,
                               const uint8_t* input, size_t length, uint8_t* output,
                               size_t* output_length); /**< 可选的厂商 ISDU 回调；参见 isdu.h。 */
-    iolink_workspace_t* workspace; /**< 可选的传输 scratch 工作区（P8）。NULL 表示使用
-                                        上下文内嵌的 fallback 存储；当
-                                        `IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供。 */
+    iolink_workspace_t* workspace;                    /**< 可选的传输 scratch 工作区。NULL 表示使用
+                                                           上下文内嵌的 fallback 存储；当
+                                                           `IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供。 */
 } iolink_device_config_t;
 
 /**
@@ -199,7 +199,7 @@ typedef enum
 int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config);
 
 /**
- * @brief 使用显式工作区初始化设备上下文（P8）。
+ * @brief 使用显式工作区初始化设备上下文。
  *
  * 与 `iolink_device_init()` 相同，但把 ISDU/DS 的传输 scratch 绑定到
  * @p workspace。工作区由调用方分配（可位于 DTCM 或外部 RAM），必须比
@@ -257,7 +257,7 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 /**
  * @brief 更新输入过程数据（设备 -> 主站）。
  *
- * P6：轮询 API 与 `on_pd_input` 回调在同一次构建中共存，按应用是否
+ * 轮询 API 与 `on_pd_input` 回调在同一次构建中共存，按应用是否
  * 提供回调在初始化时选择路径。已选择回调路径（能力位
  * `IOLINK_CAP_PD_IN_CALLBACK` 置位）时，本函数返回
  * `IOLINK_DEVICE_INIT_ERR_PD_INPUT`，而不是静默覆盖回调的输出。
@@ -272,14 +272,14 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
                                   bool valid);
 
 /**
- * @brief 取本实例的能力位（P6）。
+ * @brief 取本实例的能力位。
  * @param ctx 设备上下文。
  * @return 实例能力位掩码；ctx 为 NULL 时为 0。
  */
 iolink_caps_t iolink_device_capabilities(const iolink_device_ctx_t* ctx);
 
 /**
- * @brief 覆盖本实例的能力位（P6）。
+ * @brief 覆盖本实例的能力位。
  *
  * 只允许修改**运行时开关**位（兼容位、SystemCommand、访问锁）。
  * 与 PHY/构建档位绑定的位（RX/TX/WAKEUP/REQUIRE_ISR_TX 等）会被

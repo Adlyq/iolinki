@@ -3,7 +3,7 @@
 #
 # 独立小工程：在主机上直接编译 src/*.c（默认配置），用合成 PHY 驱动完整设备，
 # 输出各场景的调用次数路径长度指标。测量的是调用次数，不是 CPU 周期；周期上界
-# 必须用目标端 DWT（见 README.md 与 docs/EVOLUTION_ROADMAP.md D8）。
+# 必须用目标端 DWT（见 README.md）。
 #
 # 用法：cmake -S tools/wcet -B build_wcet && cmake --build build_wcet
 #       ./build_wcet/wcet_harness

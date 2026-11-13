@@ -8,7 +8,7 @@
 
 /**
  * @file test_workspace_external.c
- * @brief P8 外部工作区契约（`IOLINK_WORKSPACE_EMBEDDED=0`）。
+ * @brief 外部工作区契约（`IOLINK_WORKSPACE_EMBEDDED=0`）。
  *
  * 该二进制链接一份以 `IOLINK_WORKSPACE_EMBEDDED=0` 编译的协议栈：
  *  - 未提供工作区时 init 必须返回 `IOLINK_DEVICE_INIT_ERR_WORKSPACE`；

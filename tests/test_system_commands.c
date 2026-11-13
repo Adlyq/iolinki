@@ -278,7 +278,7 @@ static void test_reserved_commands_rejected(void** state)
     }
 }
 
-/* P6：SystemCommand 是运行时能力。关闭能力位后，原本合法的命令
+/* SystemCommand 是运行时能力。关闭能力位后，原本合法的命令
  * （0x80）与数据存储命令都必须回 FUNC_NOTAVAIL，而构建里仍有完整
  * 处理代码（不依赖构建矩阵）。 */
 static void test_system_command_disabled_at_runtime(void** state)

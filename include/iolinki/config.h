@@ -99,8 +99,8 @@
  * 存储，`iolink_isdu_init()` 等既有入口无需额外初始化即可使用。
  * 0：上下文只保留缓冲指针，调用方必须提供
  * `iolink_workspace_t`（设备层要求 `iolink_device_config_t::workspace`
- * 非 NULL）。该模式把 ISDU 与 DS 的 scratch 全部移出上下文，是 P8 的
- * 小 MCU 裁剪路径。
+ * 非 NULL）。该模式把 ISDU 与 DS 的 scratch 全部移出上下文，是
+ * 小 MCU 的裁剪路径。
  *
  * 该开关只影响内存归属，不改变协议行为。
  */
@@ -156,7 +156,7 @@
 #endif
 
 /**
- * @brief 协议错误类 PULSE 诊断源的保持窗口，单位毫秒（P10）。
+ * @brief 协议错误类 PULSE 诊断源的保持窗口，单位毫秒。
  *
  * 每次检测到 CRC/超时/组帧/时序错误时刷新窗口；窗口结束才发出
  * disappears，避免一次会话内的连续错误产生事件风暴（10.10.2）。
@@ -167,7 +167,7 @@
 #endif
 
 /**
- * @brief 时序强制检查的构建默认值（P6：降级为数据）。
+ * @brief 时序强制检查的构建默认值（运行时数据）。
  *
  * 1：默认强制检查 t_ren / t_cycle；0：默认仅测量并计数。默认：0
  *
@@ -215,8 +215,8 @@
 
 /* --- 3.1 功能裁剪 [可覆盖] --------------------------------------------- */
 
-/* P6：`IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` 已退役。它们是
- * 组合包而不是能力，等价物是结构配置 C3（target_minimal）：显式关闭
+/* `IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` 已退役。它们是
+ * 组合包而不是能力，等价物是 `target_minimal` 结构配置：显式关闭
  * `IOLINK_FEATURE_DATA_STORAGE` 与 `IOLINK_FEATURE_EVENTS`。
  * 需要最小镜像时请直接设置这两个开关，而不是使用组合包。 */
 
@@ -233,7 +233,7 @@
 #define IOLINK_FEATURE_EVENTS 1
 #endif
 /**
- * @brief PHY 唤醒检测（P6：已降级为运行时能力，本宏不再生效）。
+ * @brief PHY 唤醒检测（已降级为运行时能力，本宏不再生效）。
  *
  * `detect_wakeup` 现在是常驻 vtable 成员（NULL = 无能力），由
  * `iolink_caps_resolve()` 解析成 `IOLINK_CAP_WAKEUP`。宏保留只为兼容
@@ -243,7 +243,7 @@
 #define IOLINK_PHY_FEATURE_WAKEUP 1
 #endif
 /**
- * @brief PHY 手动 C/Q 推挽（P6：已降级为运行时能力，本宏不再生效）。
+ * @brief PHY 手动 C/Q 推挽（已降级为运行时能力，本宏不再生效）。
  *
  * 同 `IOLINK_PHY_FEATURE_WAKEUP`；能力位是 `IOLINK_CAP_SIO_CQ`。
  */
@@ -252,7 +252,7 @@
 #endif
 
 /**
- * @brief PD 输入路径选择（P6：已降级为运行时数据，本宏不再生效）。
+ * @brief PD 输入路径选择（已降级为运行时数据，本宏不再生效）。
  *
  * 两条路径现在同时存在：`iolink_app_callbacks_t::on_pd_input` 非 NULL
  * 时 DLL 每周期调用回调，否则应用使用
@@ -298,7 +298,7 @@
 #endif
 
 /**
- * @brief 要求 PHY 为 ISR 泵应答提供 request_service() 钩子（P6：降级）。
+ * @brief 要求 PHY 为 ISR 泵应答提供 request_service() 钩子（运行时能力）。
  *
  * 该宏只提供 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 的构建默认值。回退路径
  * 常驻；"只有 ISR 能发"是运行时能力位 `IOLINK_CAP_REQUIRE_ISR_TX`，
@@ -358,7 +358,7 @@
 #define IOLINK_STATS_MODE IOLINK_STATS_SHARED
 #endif
 
-/* --- 3.4 协议兼容 [P6：已降级，宏只提供构建默认值] --------------------- */
+/* --- 3.4 协议兼容 [运行时能力，宏只提供构建默认值] ---------------------- */
 
 /*
  * 这三个开关现在是 `iolink_stack_config_t::compat_flags`

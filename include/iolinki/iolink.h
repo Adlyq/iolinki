@@ -151,7 +151,7 @@ static inline uint8_t iolink_mseq_operate_code(uint8_t m_seq_type, uint8_t od_wi
 }
 
 /**
- * @name 协议兼容位（P6：运行时能力）
+ * @name 协议兼容位（运行时能力）
  *
  * 这些位曾经是编译期开关；现在进 `iolink_stack_config_t::compat_flags`。
  * 构建期 `-DIOLINK_COMPAT_*` / `-DIOLINK_DS_LEGACY_IMAGE_SUB0` 仍然有效，
@@ -167,7 +167,7 @@ static inline uint8_t iolink_mseq_operate_code(uint8_t m_seq_type, uint8_t od_wi
 /** @} */
 
 /**
- * @name 协议栈能力开关（P6：运行时能力）
+ * @name 协议栈能力开关（运行时能力）
  * @{
  */
 /** @brief 端口要求所有应答都由 ISR 发送；PHY 必须提供 request_service()。 */
@@ -205,7 +205,7 @@ typedef struct
     bool baudrate_set;              /**< 初始化时应用波特率；false 保持 COM2 默认值 */
     uint8_t master_lost_cycles;     /**< 触发 master_lost 前允许丢失的主站周期数；0 表示禁用 */
 
-    /* --- P6 运行时能力 ------------------------------------------------- */
+    /* --- 运行时能力 ---------------------------------------------------- */
     uint8_t compat_flags;         /**< IOLINK_STACK_COMPAT_* 位（构建期默认值按位或进来） */
     uint8_t flags;                /**< IOLINK_STACK_FLAG_* 位 */
     uint8_t timing_enforce;       /**< IOLINK_STACK_TIMING_*；DEFAULT = 构建档位默认值 */

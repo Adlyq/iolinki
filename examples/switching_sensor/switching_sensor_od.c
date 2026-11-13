@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /*
- * 对象字典迁移（P4）：应用参数的唯一描述。
+ * 对象字典：应用参数的唯一描述。
  *
  * 长度/字节序/标量范围/ErrorCode 由栈内 src/od.c 的 codec 表统一实现；
  * 这里只声明 4 个参数、两个交叉约束钩子与一个 teach 动作。新增参数 =

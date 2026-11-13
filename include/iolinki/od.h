@@ -19,7 +19,7 @@
 
 /**
  * @file od.h
- * @brief IO-Link 对象字典（OD）：参数知识的唯一事实源（P4）。
+ * @brief IO-Link 对象字典（OD）：参数知识的唯一事实源。
  *
  * 一个参数的全部已知信息只描述一次：
  *  - `index`/`subindex` 与数组上界；
@@ -91,7 +91,7 @@ typedef enum
 
 /** 表项标志：使用块（block）参数传输。 */
 #define IOLINK_OD_FLAG_BLOCK 0x01U
-/** 表项标志：值可流式读取（P8 预留）。 */
+/** 表项标志：值可流式读取（预留）。 */
 #define IOLINK_OD_FLAG_STREAM 0x02U
 
 /**

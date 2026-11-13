@@ -13,11 +13,11 @@
 
 /**
  * @file dll_sm.h
- * @brief DLL 状态机骨架表（P9）：state × event -> action。
+ * @brief DLL 状态机骨架表：state × event -> action。
  *
  * 表只描述"在哪个状态、收到哪类已校验帧、先进入哪个状态、调用哪个
  * 动作函数"。内容语义仍在动作函数里（表管骨架 + 函数管动作），因为
- * 纯表装不下长度/通道/兼容开关这类连续条件（见 roadmap D8/D16）。
+ * 纯表装不下长度/通道/兼容开关这类连续条件。
  *
  * @ref DLL_SM_ROWS 是唯一事实源：`src/dll.c` 用指定初始化器把它展开成
  * `g_dll_sm[state][event]` 常量表；`tools/gen_dll_statemachine.py`

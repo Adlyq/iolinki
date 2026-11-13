@@ -34,7 +34,7 @@ typedef struct iolink_dll_shared
 
     const iolink_phy_api_t* phy; /**< 已绑定的 PHY API 实现 */
 
-    /* P6：实例能力位。iolink_caps_resolve() 在 init 时一次性解析；
+    /* 实例能力位。iolink_caps_resolve() 在 init 时一次性解析；
      * 主上下文与 ISR 都只读它（位掩码是自然对齐的单字加载）。 */
     iolink_caps_t caps;
 
@@ -89,7 +89,7 @@ typedef struct iolink_dll_shared
     uint8_t isr_isdu_last_flowctrl; /**< 最后接受的 FlowCTRL（0xFF = 无） */
 
     /**
-     * @name 应答计划表（P5，主泵单写者 / ISR 读者）
+     * @name 应答计划表（主泵单写者 / ISR 读者）
      *
      * `reply_plan_seq` 是发布字兼 seqlock 序号：奇数表示主泵正在覆盖
      * 槽位，偶数表示计划表稳定。ISR 在拷贝命中项前后各读一次，只有

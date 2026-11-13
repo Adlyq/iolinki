@@ -10,7 +10,7 @@
  * @file test_error_model.c
  * @brief 统一结果模型（result.h）的契约测试。
  *
- * 验证 P3 的核心承诺：
+ * 验证统一错误模型的核心承诺：
  *  - 未知索引与"未处理"用负的内部码区分；无效参数返回 INVALID；
  *  - 协议层错误以正的 ISDU ErrorCode 返回，不被压缩成 IDX_NOT_AVAIL；
  *  - 参数长度边界：32 字节接受、33 字节拒绝（0x33）；

@@ -21,13 +21,14 @@
  * @file capability.h
  * @brief 能力表：构建档位（ROM 常量）+ 实例能力位（运行时）。
  *
- * 设计见 docs/CAPABILITY_DESIGN.md（P6）。三层拆分：
+ * 设计见 docs/CAPABILITY_DESIGN.md。三层拆分：
  *  1. **构建档位** `iolink_build_caps_t`：这个镜像被编译成了什么
  *     （ISR 粒度、并发/统计模式、哪些特性被编译进来）。每个镜像一份，
  *     `const`，落 `.rodata`。
  *  2. **实例能力** `iolink_caps_t`：单个设备实例在 init 时从 PHY
  *     vtable 与设备配置解析出的位掩码。主要判定点唯一。
- *  3. **操作表**：P4/P5 的产物，"函数指针 NULL = 不支持"。
+ *  3. **操作表**：可选实现表（OD 后端、应答计划、诊断源），
+ *     "函数指针 NULL = 不支持"。
  *
  * 判定点规则：
  *  - 新增能力 = 一个位 + @ref iolink_caps_resolve 里一行探测

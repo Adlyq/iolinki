@@ -442,7 +442,7 @@ static bool dll_isr_consume_isdu_write(iolink_dll_main_t* ctx, const uint8_t* fr
         record->data[i] = frame[od_off + i];
     }
     iolink_ring_publish(&ctx->shared.isr_od_ring);
-    /* 失效协议（P5）：写尚未被主泵应用，因此已发布的读视图不得继续
+    /* 失效协议：写尚未被主泵应用，因此已发布的读视图不得继续
      * 充当"当前应答"。主泵在应用该写并产出新应答前发布"无服务"，
      * 产出后清旗标。这消除"写后立刻读"读到旧值的窗口。 */
     ctx->shared.isr_isdu_invalidated = 1U;
@@ -515,7 +515,7 @@ static bool dll_isr_start_reply_byte(iolink_dll_main_t* ctx, uint8_t* base, uint
 #endif
 
 /* -------------------------------------------------------------------------
- * 应答计划执行器（P5）
+ * 应答计划执行器
  *
  * ISR 不再解读 M-sequence 内容：主泵把"哪种请求、用哪段字节、多长、
  * 是否附带 PD 尾部"编译成计划表并原子发布；这里只做 查计划 ->

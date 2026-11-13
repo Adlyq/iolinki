@@ -8,7 +8,7 @@
 
 /**
  * @file test_capability.c
- * @brief 能力表（P6）：构建档位、唯一解析点与运行时覆盖规则。
+ * @brief 能力表：构建档位、唯一解析点与运行时覆盖规则。
  *
  * 套件只在 BYTE/BYTE 结构配置下构建，因此 vtable 探测用字节钩子。
  */
