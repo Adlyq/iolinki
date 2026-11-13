@@ -71,9 +71,12 @@ The old macros remain as no-op compatibility aliases for one version.
 
 ## Retired bundles
 
-`IOLINK_MINIMAL_PROFILE` and `IOLINK_TINY_PROFILE` are retired. Defining them
-still builds (the macros are accepted for compatibility) but they trim nothing.
-Use the runtime bits above, or the retained `-DIOLINK_FEATURE_*=OFF` options.
+`IOLINK_MINIMAL_PROFILE` and `IOLINK_TINY_PROFILE` are retired. **Defining them
+is a build error** (`#error` in `config.h`, plus a CMake `FATAL_ERROR` for
+`-DIOLINK_*_PROFILE=ON`): they used to switch several subsystems off at once,
+and silently ignoring them would produce a much larger image than requested.
+Disable `IOLINK_FEATURE_DATA_STORAGE` / `IOLINK_FEATURE_EVENTS` explicitly, or
+use the runtime bits above.
 
 ## CMake options
 

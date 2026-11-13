@@ -125,7 +125,7 @@ static const iolink_phy_api_t g_phy = {
     .request_service = board_phy_request_service,
 };
 
-/* Required while IOLINK_FEATURE_DATA_STORAGE=1; see section 5. */
+/* Required while IOLINK_FEATURE_DATA_STORAGE=1; see section 7.2. */
 static const iolink_storage_api_t g_storage;
 
 static const iolink_device_config_t g_config = {
@@ -179,7 +179,7 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `tx_done` | TX BYTE 模式 | 发完最后一字节后释放线路；RX BYTE 的 gap 也会用它释放接收引擎。TX FRAME 下该成员不存在，由 PHY 自己在传输完成中断里收尾。 |
 | `tx_busy` | TX FRAME 可选 | 线路仍被占用时返回非 0；库据此推迟 ISR 应答并在主泵释放 PD-in 缓冲。为 NULL 时只能等下一次 capture 复用缓冲。 |
 | `int_active` | 必需 | 数据中断电平；用于门控 ISR 泵。 |
-| `request_service` | 推荐 | 主上下文暂存应答后唤醒数据 ISR。当 `IOLINK_PHY_FEATURE_ISR_TX_ONLY=1` 时必需。 |
+| `request_service` | 推荐 | 主上下文暂存应答后唤醒数据 ISR。设置 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX`（或构建默认 `IOLINK_PHY_FEATURE_ISR_TX_ONLY=1`）时必需，缺少会在初始化阶段被拒绝。 |
 | `response_timer_start/stop` | 可选 | 硬件 t_A 定时器。为 NULL 时使用软件时间戳。 |
 | `stack_timer_start` | 可选 | 周期性的主上下文服务窗口（Timer B 到期时调用 `iolink_dll_on_stack_tick()`）。 |
 | `detect_wakeup` | 可选 | 存在时 DLL 从 SIO 开始，并负责唤醒/SDCI 转换。 |
@@ -190,10 +190,13 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 这对自行执行唤醒握手的收发器很重要。该行为完全由运行时根据 `detect_wakeup`
 进行的推断决定，没有额外的编译期开关。
 
-当 `IOLINK_PHY_FEATURE_ISR_TX_ONLY=0` 时，没有 `request_service()` 的 PHY 会获得
-从调用者上下文直接发送的旧版回退路径。这只适用于主机测试，不适用于必须满足 t_A 的
-真实设备。把该宏设为 1 后，缺少该钩子会导致应答被丢弃，并递增
-`dll.isr_tx_dropped`。
+“所有应答只能由 ISR 发送”是运行时能力位 `IOLINK_CAP_REQUIRE_ISR_TX`，由
+`iolink_stack_config_t::flags` 的 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 打开，构建期
+`IOLINK_PHY_FEATURE_ISR_TX_ONLY=1` 只是它的默认值。该位打开而 PHY 没有
+`request_service()` 时，`iolink_device_init()` 返回 `IOLINK_DEVICE_INIT_ERR_PHY`
+（DLL 内部另有计数 `dll.isr_tx_dropped` 的防御路径，正常配置不会走到）。
+该位关闭时，没有 `request_service()` 的 PHY 会获得从调用者上下文直接发送的回退路径；
+这只适用于主机测试，不适用于必须满足 t_A 的真实设备。
 
 ## 3. 设备配置参考
 
@@ -201,14 +204,17 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 
 | 字段 | 生命周期 / 契约 |
 | --- | --- |
-| `phy` | 初始化时复制。`phy.user` 会传给每个回调。 |
+| `phy` | 初始化时复制。`phy.user` 只传给 PHY 回调；与 `user` 相互独立。 |
 | `stack` | 复制到上下文中。 |
-| `app_callbacks` | 保留指针；必须比上下文存活更久。可以为 NULL。 |
+| `app_callbacks` | 保留指针；必须比上下文存活更久。可以为 NULL；`on_pd_input` 非 NULL 时选择 PD-in 回调路径。 |
 | `device_info` | 身份来源和初始应用标签（Application Tag）。参见 8.1 节的身份限制。 |
 | `storage` | 仅在 `IOLINK_FEATURE_DATA_STORAGE=1` 时声明，且为必需项；`read`/`write` 必须非 NULL。 |
 | `time_us` | 必需的应用时钟。DLL、ISR 双泵和事件引擎都用它计时；回调必须单调、非阻塞、ISR 安全。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_TIME`。 |
-| `user` | 传给 PHY 回调和 vendor service 的透明指针。 |
+| `user` | 传给 `time_us`、`log_write`、`vendor_service` 以及全部应用回调的透明指针。 |
+| `log_write`, `log_level` | 可选运行时日志汇点与阈值；NULL / `IOLINK_LOG_LEVEL_SILENT` 表示静默。 |
+| `od` | 可选的应用对象字典表（`include/iolinki/od.h`）。声明过的设备专用索引优先于 `vendor_service`。 |
 | `vendor_service` | 可选的应用 ISDU 处理回调；参见第 6 节。 |
+| `workspace` | 可选的传输 scratch 工作区（`include/iolinki/workspace.h`）。NULL 表示使用上下文内嵌 fallback；`IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供，否则初始化返回 `IOLINK_DEVICE_INIT_ERR_WORKSPACE`。 |
 
 ### 3.2 `iolink_stack_config_t`
 
@@ -221,15 +227,23 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `od_width` | OD octet 数（1/2/8/32）；0 表示根据 M-sequence 类型推导。 |
 | `baudrate`, `baudrate_set` | 当 `baudrate_set` 为 true 时，初始化阶段应用的 COM。 |
 | `master_lost_cycles` | 判定 `master_lost` 前的丢失周期数；0 表示关闭该提示。 |
+| `compat_flags` | `IOLINK_STACK_COMPAT_*` 兼容位，与构建期默认值按位或。 |
+| `flags` | `IOLINK_STACK_FLAG_*`：`REQUIRE_ISR_TX`、`NO_SYSTEM_COMMAND`。 |
+| `timing_enforce` | `IOLINK_STACK_TIMING_*`；`DEFAULT` 表示沿用构建档位默认值。 |
+| `reserved` | 必须为 0。 |
+| `event_min_appear_ms`, `event_min_repeat_ms` | 覆盖 A.6.4 的出现/重复窗口；0 表示沿用构建默认值。 |
 
 初始化会用 `IOLINK_DEVICE_INIT_ERR_*` 拒绝非法组合（参见 `device.h`），包括
 `time_us` 为 NULL、平台临界区仍是 weak 默认实现、Data Storage 已启用但 `storage`
 缺失或 `read`/`write` 为空、PD/OD 大小超过编译期缓冲区、固定布局不匹配、
-`IOLINK_APP_PD_INPUT_CALLBACK=1` 但未提供 `on_pd_input`，以及
-`IOLINK_PHY_FEATURE_TX_BUSY=1` 但 PHY 未提供 `tx_busy`。
+`IOLINK_WORKSPACE_EMBEDDED=0` 但未提供工作区（`IOLINK_DEVICE_INIT_ERR_WORKSPACE`），
+以及能力位要求了 PHY 未提供的钩子（`IOLINK_DEVICE_INIT_ERR_PHY`：`REQUIRE_ISR_TX`
+缺少 `request_service()`，或 TX FRAME 构建设置 `IOLINK_PHY_FEATURE_TX_BUSY=1`
+但 PHY 没有 `tx_busy()`）。
 PHY `init` 的负返回值会原样向上传播。
 
-`IOLINK_M_SEQ_TYPE_1_1` 属于旧版类型，当前传输层会拒绝。
+`IOLINK_M_SEQ_TYPE_1_1` 属于旧版类型，初始化会以
+`IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE` 拒绝。
 `IOLINK_M_SEQ_TYPE_2_V` 是唯一可以通过 `iolink_device_set_pd_length()` 在运行时
 修改 PD 长度的类型。
 
@@ -239,12 +253,23 @@ PHY `init` 的负返回值会原样向上传播。
 
 ```c
 int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config);
+int iolink_device_init_with_workspace(iolink_device_ctx_t* ctx,
+                                      const iolink_device_config_t* config,
+                                      iolink_workspace_t* workspace);
+iolink_workspace_t* iolink_device_get_workspace(const iolink_device_ctx_t* ctx);
 void iolink_device_process(iolink_device_ctx_t* ctx);
 void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 ```
 
 应由且仅由一个主上下文周期性调用 `iolink_device_process()`。只能从 PHY 数据中断调用
 `iolink_device_process_isr()`。同一上下文上并发运行这两个函数是不安全的。
+
+`iolink_device_init()` 使用 `config.workspace`（可为 NULL，表示使用上下文内嵌的
+ISDU/DS scratch）。`iolink_device_init_with_workspace()` 显式绑定调用方分配的
+`iolink_workspace_t` 并忽略 `config.workspace`，适合把 scratch 放进 DTCM 或外部
+RAM；工作区必须比上下文存活更久。`iolink_device_get_workspace()` 返回当前绑定的
+工作区，使用内嵌 fallback 时返回 NULL。`IOLINK_WORKSPACE_EMBEDDED=0` 时没有
+fallback，必须提供工作区，否则初始化返回 `IOLINK_DEVICE_INIT_ERR_WORKSPACE`。
 
 ### 4.2 过程数据
 
@@ -259,9 +284,14 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx,
 
 `pd_input_update()` 发布设备到主站的数据。`valid` 决定 CKS 中的 PD-invalid 位。
 对于 `TYPE_0` 以外的固定 M-sequence 类型，长度必须等于配置的最大值；`TYPE_2_V`
-接受不超过配置最大值的任意长度；`TYPE_0` 不携带 PD，但允许调用该函数。当
-`IOLINK_APP_PD_INPUT_CALLBACK=1` 时，该函数**不会被声明**（调用会编译/链接失败），
-PD-in 路径只由 `on_pd_input()` 提供。
+接受不超过配置最大值的任意长度；`TYPE_0` 不携带 PD，但允许调用该函数。参数非法或
+所有 PD-in 缓冲区都被 ISR 占用时返回负值。
+
+两条 PD-in 路径在同一构建内共存：`on_pd_input` 非 NULL 时初始化选择回调路径并置位
+`IOLINK_CAP_PD_IN_CALLBACK`，此后 `pd_input_update()` 返回
+`IOLINK_DEVICE_INIT_ERR_PD_INPUT`（-14），避免线上 PD 在回调输出与调用方数据之间
+跳变；`on_pd_input` 为 NULL 时用轮询 API 发布。`IOLINK_APP_PD_INPUT_CALLBACK` 只是
+兼容宏，不删除任何声明。
 
 `pd_output_read()` 最多复制 `len` 字节，并返回实际复制的字节数；参数非法时返回负值。
 `pd_out` 由同一主上下文中的帧分发写入，因此该函数直接复制，不取锁，也不进入平台临界区。
@@ -277,7 +307,7 @@ ISR 中运行。
 | --- | --- |
 | `on_startup(user)` | 进入 STARTUP。 |
 | `on_preoperate(user)`, `on_operate(user)` | 进入对应状态。 |
-| `on_pd_input(user, data, len)` | 当 `IOLINK_APP_PD_INPUT_CALLBACK=1` 时，每个 OPERATE 周期调用；返回值作为 PD-valid 标志。 |
+| `on_pd_input(user, data, len)` | 提供时（非 NULL），每个 OPERATE 周期调用；填写一个 ISR 未占用的 PD-in 缓冲区，返回值作为 PD-valid 标志。未提供时改用 `iolink_device_pd_input_update()`。 |
 | `on_pd_output(user, data, len)` | 每个 OPERATE 周期调用，携带最新的主站输出数据。 |
 | `on_state_change(user, state)` | 当前 DLL 状态（电平式）：状态变化时调用一次，主上下文迁移立即投递，ISR 期间的多次迁移合并为最终状态；例外是 ISR 进入 STARTUP 的复位迁移，会先于最终状态单独投递。 |
 | `on_master_lost(user)`, `on_master_online(user)` | 主站静默提示的边沿。 |
@@ -311,7 +341,60 @@ void iolink_device_set_t_ren_limit_us(iolink_device_ctx_t* ctx, uint32_t limit_u
 `iolink_dll_stats_t` 提供 CRC、超时、帧错误、时序错误、t_ren/t_cycle/t_byte/t_pd
 违规、重试以及物理故障计数器。
 
+### 4.5 能力位
+
+```c
+iolink_caps_t iolink_device_capabilities(const iolink_device_ctx_t* ctx);
+iolink_caps_t iolink_device_set_capabilities(iolink_device_ctx_t* ctx, iolink_caps_t caps);
+
+const iolink_build_caps_t* iolink_caps_build(void);
+iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* phy, const iolink_stack_config_t* stack,
+                                  const iolink_app_callbacks_t* app,
+                                  const iolink_build_caps_t* build);
+bool iolink_caps_has(iolink_caps_t caps, iolink_caps_t bit);
+bool iolink_caps_built(const iolink_build_caps_t* caps, uint32_t mask);
+```
+
+应用通常只需要读：`iolink_device_capabilities()` 返回本实例的运行时能力位
+（`IOLINK_CAP_*`），`iolink_caps_build()` 返回只读的构建档位（`IOLINK_CAPB_*`、
+ISR 粒度、并发/统计档位、PD-in 缓冲数）。实例能力在 `iolink_device_init()` 内由
+`iolink_caps_resolve()` 一次性解析，因此运行期不需要再逐项判断 `phy->xxx != NULL`。
+
+`iolink_device_set_capabilities()` 只接受运行时开关位（兼容位、SystemCommand、
+四个访问锁位）。与 PHY vtable、构建档位或 `on_pd_input` 绑定的位会按当前配置重新
+解析，调用方无法伪造；构建时未编入的 `IOLINK_CAP_EVENTS` /
+`IOLINK_CAP_SYSTEM_COMMAND` 始终保持清零。返回实际生效的掩码。
+
+应用需要做什么：按端口实际能力设置 `stack.flags` / `stack.compat_flags`，而不是
+依赖已降级为兼容宏的编译期开关；如果端口要求“所有应答由 ISR 发送”，确保 PHY 提供
+`request_service()`，否则初始化返回 `IOLINK_DEVICE_INIT_ERR_PHY`。
+
+### 4.6 对象字典
+
+```c
+typedef struct {
+    const iolink_od_entry_t* entries;
+    size_t count;
+    iolink_od_read_fn read;
+    iolink_od_write_fn write;
+    void* user;
+} iolink_od_app_t;
+```
+
+参数只在对象字典里描述一次（索引/子索引、datatype codec、访问权限、写语义、
+storage 标志、默认值与可选钩子），ISDU 分发、Data Storage 成员判定和 IODD 导出都从
+这张表派生。标准对象（`0x0000-0x003F` 与厂商错误统计 `0x0040`）由内建 const 表提供；
+应用通过 `config.od` 绑定自己的 const 表和后端。
+
+应用需要做的是：用 `IOLINK_OD_SCALAR` / `IOLINK_OD_SCALAR_EX` / `IOLINK_OD_STRING`
+增加一行表项，并在 `read` / `write` 后端里增加对应分支（表项只保存静态知识，运行期
+取值走注册了 `IOLINK_OD_HANDLER_BACKEND` 的后端）。应用表声明的索引优先于
+`vendor_service`，标准索引不可覆盖。完整示例见
+`examples/switching_sensor/switching_sensor_od.c`。
+
 ## 5. 事件
+
+### 5.1 事件引擎
 
 ```c
 iolink_events_ctx_t* iolink_device_get_events_ctx(iolink_device_ctx_t* ctx);
@@ -338,7 +421,9 @@ iolink_event_type_t iolink_event_classify(uint16_t code);
 使用 `iolink_event_clear()` 撤销；通知事件仅发送一次。事件引擎实现
 出现/消失配对，在 `IOLINK_EVENT_MIN_APPEAR_MS`（默认 50 ms）内抑制
 消失事件，并把同一事件代码的重复上报限制为 `IOLINK_EVENT_MIN_REPEAT_MS`
-（默认 1000 ms）。
+（默认 1000 ms）。这两个值只是构建默认值，可用
+`iolink_stack_config_t::event_min_appear_ms` / `event_min_repeat_ms` 按实例覆盖
+（0 表示沿用默认值）。
 
 队列深度为 `IOLINK_EVENT_QUEUE_SIZE`（默认 4）；同时处于活动状态的错误/警告
 代码由 `IOLINK_EVENT_PENDING_MAX`（默认 8）跟踪。诊断通道事件内存（表 58）由协议栈
@@ -347,6 +432,36 @@ iolink_event_type_t iolink_event_classify(uint16_t code);
 标准化 EventCode 优先使用 `events.h` 中的 `IOLINK_EVENTCODE_*` 常量。
 `IOLINK_EVENT_COMM_*` 以及 `0x1800-0x18FF` 属于厂商特定的设备事件，
 不是编号相似的主站/端口事件。
+
+### 5.2 诊断注册表
+
+```c
+bool iolink_diag_set_level(iolink_events_ctx_t* events, iolink_diag_src_t src, bool level);
+void iolink_diag_pulse(iolink_events_ctx_t* events, iolink_diag_src_t src);
+void iolink_diag_pulse_isr(iolink_events_ctx_t* events, iolink_diag_src_t src);
+void iolink_diag_service(iolink_events_ctx_t* events, uint32_t now_ms);
+void iolink_diag_raise_code(iolink_events_ctx_t* events, uint16_t code);
+void iolink_diag_clear_code(iolink_events_ctx_t* events, uint16_t code);
+uint8_t iolink_diag_device_status(iolink_events_ctx_t* events);
+uint8_t iolink_diag_dds_snapshot(iolink_events_ctx_t* events,
+                                 iolink_diag_dds_entry_t* out, uint8_t max);
+```
+
+EventCode、`0x0024` DeviceStatus 与 `0x0025` DetailedDeviceStatus 都从同一张 const
+注册表派生，应用不需要也不应该另外维护一份状态：注册表提供规范 EventType 与表 D.1
+首选 DeviceStatus，RAM 里只缓存来源事实（ISR one-shot、PULSE 最后发生时间、边沿
+计数），条件生命周期仍由事件内存决定。`IOLINK_DIAG_SRC_PHY_*` 是电平源，用
+`iolink_diag_set_level()` 每周期采样；`IOLINK_DIAG_SRC_COMM_*` 是脉冲源，用
+`iolink_diag_pulse()` 报告，ISR 中只能用 `iolink_diag_pulse_isr()`（单字节写入），
+再由 `iolink_diag_service()` 在主上下文消费（`iolink_dll_process()` 已经代劳，
+应用无需自行调用）。应用自定义事件用
+`iolink_diag_raise_code()` / `iolink_diag_clear_code()`，它们分别包装
+`iolink_event_trigger()` / `iolink_event_clear()`。
+
+应用需要做的是：接好 PHY 的 `get_faults()`（DLL 会按边沿送入电平源）或在应用层
+直接调用上述函数；不要自己计算 DeviceStatus 或拼 DDS，直接读
+`iolink_diag_device_status()` / `iolink_diag_dds_snapshot()`，它们与线上应答
+`0x0024`/`0x0025` 完全一致。`IOLINK_FEATURE_EVENTS=0` 时整个模块消失。
 
 ## 6. ISDU、标准索引与 vendor service
 
@@ -367,7 +482,13 @@ iolink_event_type_t iolink_event_classify(uint16_t code);
 | `0x0024` | DeviceStatus | 读 |
 | `0x0025` | DetailedDeviceStatus | 读；取决于事件特性 |
 | `0x0028`, `0x0029` | ProcessDataInput/Output | 读 |
-| `0x0040-0x00FE`, `0x0100+` | 设备/厂商特定 | 路由到 `vendor_service` |
+| `0x0040-0x00FE`, `0x0100+` | 设备/厂商特定 | 应用 OD 表优先，未声明时路由到 `vendor_service` |
+
+分发顺序（`src/isdu.c` 的 `handle_standard_commands()`）：先做 DS 访问权限检查，
+再查应用 OD 表 `iolink_od_find_app()`；未命中且 `index` 属于 `0x0040-0x00FE` 或
+`>= 0x0100` 时交给 `vendor_service`；仍未命中才回落到内建标准表，最后返回
+`0x80 0x11`。因此应用表声明过的厂商索引不会到达 `vendor_service`，而 `0x0040`
+内置错误统计对象只有在应用表与 `vendor_service` 都没有接管时才可达。
 
 `0x0004-0x000B` 和 `0x001C-0x001F` 为保留区间，`0x00FF` 也为保留值
 （不会路由到 vendor service）。VendorID/DeviceID **不是** ISDU 对象；
@@ -390,7 +511,8 @@ uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex,
 ```
 
 - 注册后，`0x0040-0x00FE` 以及 `>= 0x0100` 会调用该回调。它拦截整个范围，
-  包括 `0x0040`（只有在未注册 vendor service 时，内置的错误统计对象才可达）。
+  包括 `0x0040`（只有在应用 OD 表与 vendor service 都未接管时，内置的错误统计
+  对象才可达）。
 - 进入时，`*output_length` 是输出容量。成功时应把它设置为实际写入的字节数。
   如果上报长度大于容量，服务会以 `IOLINK_ISDU_ERROR_IDX_NOT_AVAIL`（0x8011）拒绝。
 - 成功返回 0；失败返回 `IOLINK_ISDU_ERROR_*` 附加错误码。非零返回会产生
@@ -408,6 +530,9 @@ uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex,
 
 ```c
 void iolink_isdu_init(iolink_isdu_ctx_t* ctx);
+void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* ws);
+void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app);
+void iolink_isdu_bind_caps(iolink_isdu_ctx_t* ctx, const iolink_caps_t* caps);
 void iolink_isdu_process(iolink_isdu_ctx_t* ctx);
 void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl,
                           const uint8_t* od, uint8_t od_len);
@@ -421,6 +546,9 @@ uint8_t iolink_isdu_direct_param_page1_octet(iolink_isdu_ctx_t* ctx, uint8_t add
 void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd);
 ```
 
+直接使用引擎时需自行绑定工作区、应用 OD 表与能力位（设备层已在初始化时完成）；
+未绑定能力位时按“全部能力可用”处理，未绑定工作区时使用内嵌 fallback
+（`IOLINK_WORKSPACE_EMBEDDED=0` 时为未绑定状态）。
 只要调用者保证复制过程相对数据中断是原子的，`iolink_isdu_snapshot_response()`
 就是 ISR 安全的。其他函数均在主上下文调用。
 
@@ -497,6 +625,7 @@ magic/version/校验和不匹配会被视为未初始化并丢弃记录；目前
 iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx);
 
 void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage);
+void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws);
 void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx);
 void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx,
                                  iolink_ds_param_read_fn read,
@@ -514,10 +643,12 @@ int  iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd,
                               uint16_t access_locks);
 int  iolink_ds_handle_ds_command(iolink_ds_ctx_t* ctx, uint8_t command,
                                  uint16_t access_locks);
+int  iolink_ds_serialize(iolink_ds_ctx_t* ctx, uint8_t* out, size_t cap);
+void iolink_ds_refresh(iolink_ds_ctx_t* ctx);
 int  iolink_ds_build_image(iolink_ds_ctx_t* ctx);
 int  iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len);
-int  iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                           const uint8_t* data, size_t len);
+iolink_result_t iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index,
+                                      uint8_t subindex, const uint8_t* data, size_t len);
 const uint8_t* iolink_ds_get_image(iolink_ds_ctx_t* ctx, size_t* out_len);
 uint32_t iolink_ds_calc_checksum(const uint8_t* data, size_t len);
 bool iolink_ds_verify(const iolink_ds_ctx_t* ctx);
@@ -537,6 +668,12 @@ void iolink_ds_clear_upload(iolink_ds_ctx_t* ctx);
 `storage` 缺失或 `read`/`write` 为空会在初始化阶段被拒绝。启动时若不存在已持久化
 的镜像，会重新构建镜像。直接使用 `iolink_dll_*` 时才允许 `iolink_ds_init(..., NULL)`
 的 RAM-only 用法。
+
+DS 镜像不是上下文中的常驻数组：上下文只持有指向暂存缓冲的指针（
+`iolink_workspace_t::ds_stage`，或内嵌 fallback）。上传和 `Parameter_Checksum` 读取
+走流式路径 `iolink_ds_serialize()`（可直接写入 ISDU 应答缓冲，`out == NULL` 时只统计
+长度与校验和）；`iolink_ds_refresh()` 只刷新 `Data_Storage_Size`/`Parameter_Checksum`
+而不物化镜像。完整暂存缓冲只用于下载和 `iolink_ds_build_image()`。
 
 序列化记录格式为：
 
@@ -619,13 +756,28 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 | `IOLINK_FEATURE_DATA_STORAGE` | 1 | 无 DS 引擎/ISDU 索引；`0x0003` 返回索引不可用。 |
 | `IOLINK_FEATURE_SYSTEM_COMMAND` | 1 | SystemCommand 返回功能不可用。 |
 | `IOLINK_FEATURE_EVENTS` | 1 | 无事件引擎/DetailedDeviceStatus/事件标志；`0x0025` 返回索引不可用。 |
-| `IOLINK_PHY_FEATURE_WAKEUP` | 1 | 移除 `detect_wakeup` 字段。 |
-| `IOLINK_PHY_FEATURE_SIO_CQ` | 1 | 移除 `set_cq_line` 字段。 |
+| `IOLINK_WORKSPACE_EMBEDDED` | 1 | 上下文不再内嵌 ISDU/DS scratch，必须提供工作区（否则 `IOLINK_DEVICE_INIT_ERR_WORKSPACE`）。 |
 
-CMake 配置档：
+已降级为兼容宏（不再改变结构布局，也不再删除 API）：
 
-- `IOLINK_MINIMAL_PROFILE`：关闭 DS、SystemCommand、唤醒和 SIO C/Q；保留事件。
-- `IOLINK_TINY_PROFILE`：在最小配置基础上再关闭事件。
+| 宏 | 现状 |
+| --- | --- |
+| `IOLINK_PHY_FEATURE_WAKEUP` | 仅保留给旧构建脚本；`detect_wakeup` 字段常驻，能力位 `IOLINK_CAP_WAKEUP` 由 vtable 是否提供该钩子解析。 |
+| `IOLINK_PHY_FEATURE_SIO_CQ` | 仅保留给旧构建脚本；`set_cq_line` 字段常驻，能力位 `IOLINK_CAP_SIO_CQ` 同上。 |
+| `IOLINK_APP_PD_INPUT_CALLBACK` | 仅保留给旧构建脚本；PD-in 路径由 `on_pd_input` 是否为 NULL 在运行期选择。 |
+| `IOLINK_COMPAT_V10_STARTUP_OPERATE`、`IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE`、`IOLINK_DS_LEGACY_IMAGE_SUB0` | 作为镜像的兼容位默认值；实例可在 `iolink_stack_config_t::compat_flags` 中打开或关闭。 |
+
+`IOLINK_PHY_FEATURE_ISR_TX_ONLY` 仍提供 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 的构建
+默认值，`IOLINK_PHY_FEATURE_TX_BUSY` 仍决定 TX FRAME 构建是否要求 `tx_busy()`。
+
+裁剪配置：
+
+`IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` 已退役，定义它们是构建错误。
+最小镜像请显式关闭子系统，并按需在运行时关闭能力位：
+
+- 关闭 `IOLINK_FEATURE_DATA_STORAGE` 与 `IOLINK_FEATURE_EVENTS`（结构裁剪）；
+- SystemCommand / 唤醒 / SIO C-Q / PD 回调等用运行时能力位控制
+  （见 `capability.h` 与 [feature-trimming](feature-trimming.md)）。
 
 缓冲区大小宏包括 `IOLINK_PD_IN_MAX_SIZE`、`IOLINK_PD_OUT_MAX_SIZE`、
 `IOLINK_OD_MAX_SIZE`、`IOLINK_ISDU_BUFFER_SIZE`、`IOLINK_DS_IMAGE_MAX`、
@@ -644,13 +796,15 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
    `request_service`。
 3. 保证 `config`、PHY 状态和所有回调数据在上下文生命周期内有效。
 4. 身份索引或 DPP1 需要正确时，在 `config.device_info` 中提供静态身份；传 NULL 时使用内置默认身份（`k_default_info`）。
-5. 调用 `iolink_device_init()`，然后周期性调用 `iolink_device_process()`，
-   并从数据中断调用 `iolink_device_process_isr()`。
-6. PD 只能通过 `iolink_device_pd_input_update()` 或 `on_pd_input` 回调之一提供，
-   不能同时使用。
+5. 调用 `iolink_device_init()`（或 `iolink_device_init_with_workspace()`），然后周期性
+   调用 `iolink_device_process()`，并从数据中断调用 `iolink_device_process_isr()`。
+6. 选择一种 PD-in 来源：提供 `on_pd_input` 回调，或调用
+   `iolink_device_pd_input_update()`。两者同一次初始化只能选一个；选了回调后轮询调用
+   会返回 `IOLINK_DEVICE_INIT_ERR_PD_INPUT`。
 7. 在 `IOLINK_FEATURE_DATA_STORAGE=1` 时提供完整存储后端（`read`/`write` 非空），
-   并用静态断言检查 NVM 区域大小。
-8. 通过 `vendor_service` 和/或 DS 描述符集合添加厂商参数。
+   并用静态断言检查 NVM 区域大小；`IOLINK_WORKSPACE_EMBEDDED=0` 时还要提供
+   `iolink_workspace_t`。
+8. 通过 `config.od`（推荐，一行表项 + 后端分支）和/或 `vendor_service` 添加厂商参数。
 9. 使用真实主站验证时序、唤醒/SIO 行为和故障映射。
 
 ## 11. 其他公开头文件与适配器
@@ -676,6 +830,11 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
   `iolink_checksum6()` / `iolink_checksum6_from_acc()`。
 - `include/iolinki/protocol.h`：标准索引、ISDU 错误码、SystemCommand 和
   M-sequence 常量。应使用这些常量而不是数字字面量。
+- `include/iolinki/capability.h`：构建档位 `iolink_build_caps_t` 与实例能力位
+  `IOLINK_CAP_*`/`IOLINK_CAPB_*` 的查询面，见 §4.5。
+- `include/iolinki/od.h`：对象字典表项、datatype codec 与参数值访问层，见 §4.6。
+- `include/iolinki/workspace.h`：可选的 ISDU/DS 传输 scratch 工作区，见 §4.1。
+- `include/iolinki/diag.h`：诊断来源注册表与 DeviceStatus/DDS 派生，见 §5.2。
 - `include/iolinki/platform.h`：临界区。时间源通过
   `iolink_device_config_t::time_us` 提供。旧版 `iolink_nvm_*` 接口已移除；
   持久化统一通过 `config.storage` 完成。

@@ -141,7 +141,8 @@ int main(void) {
 
 **Trimming** is the only reliable way to fit a tiny MCU: reduce
 `IOLINK_ISDU_BUFFER_SIZE` (e.g. 64) and `IOLINK_DS_IMAGE_MAX`, set PD sizes to
-what the device actually uses, select `IOLINK_TINY_PROFILE`, and build with
+what the device actually uses, build with `-DIOLINK_FEATURE_DATA_STORAGE=OFF`
+(or keep DS and shrink `IOLINK_DS_IMAGE_MAX`), and use
 `IOLINK_WORKSPACE_EMBEDDED=0` plus an application-provided workspace.
 
 ## 2. Stack Usage (Call Depth)
