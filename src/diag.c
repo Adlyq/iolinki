@@ -383,7 +383,8 @@ void iolink_diag_raise_code(iolink_events_ctx_t* events, uint16_t code)
     if (events == NULL) {
         return;
     }
-    iolink_event_trigger(events, code, (iolink_event_type_t) iolink_event_classify(code));
+    iolink_event_trigger(events, code,
+                         (iolink_event_type_t) iolink_diag_type_for(code, IOLINK_EVENT_TYPE_ERROR));
 }
 
 void iolink_diag_clear_code(iolink_events_ctx_t* events, uint16_t code)

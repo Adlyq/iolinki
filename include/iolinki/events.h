@@ -387,17 +387,6 @@ uint8_t iolink_event_qualifier(uint16_t code, iolink_event_type_t type, iolink_e
 uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_events,
                               uint8_t max_count);
 
-/**
- * @brief 返回 V1.1.5 规范为某个标准 EventCode 定义的 EventType。
- *
- * 对于标准化代码（Annex D，Table D.1），返回规范定义的
- * notification/warning/error 分类。对于保留或未知代码，
- * 返回 IOLINK_EVENT_TYPE_ERROR 作为安全默认值。
- *
- * @param code 16 位 EventCode
- * @return iolink_event_type_t 规范定义的 EventType
- */
-iolink_event_type_t iolink_event_classify(uint16_t code);
 #endif /* IOLINK_FEATURE_EVENTS */
 
 /** @} */ /* end of iolinki_events */

@@ -289,7 +289,7 @@ uint8_t iolink_diag_dds_snapshot(iolink_events_ctx_t* events, iolink_diag_dds_en
 /**
  * @brief 应用级条件置位（iolink_event_trigger 的薄封装）。
  *
- * EventType 来自注册表；未登记代码按 iolink_event_classify() 的默认分类。
+ * EventType 来自注册表；未登记代码回落到 Error。
  * 与 iolink_event_trigger() 的分发规则一致：已置位条件不重复上报，
  * Notification 走单次触发。
  *

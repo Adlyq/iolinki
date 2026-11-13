@@ -174,20 +174,24 @@ static void test_event_helpers(void** state)
 static void test_event_classify(void** state)
 {
     (void) state;
-    assert_int_equal(iolink_event_classify(IOLINK_EVENTCODE_NO_MALFUNCTION),
+    assert_int_equal(iolink_diag_type_for(IOLINK_EVENTCODE_NO_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR),
                      IOLINK_EVENT_TYPE_NOTIFICATION);
-    assert_int_equal(iolink_event_classify(IOLINK_EVENTCODE_DS_UPLOAD_REQUEST),
-                     IOLINK_EVENT_TYPE_NOTIFICATION);
-    assert_int_equal(iolink_event_classify(IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN),
-                     IOLINK_EVENT_TYPE_WARNING);
-    assert_int_equal(iolink_event_classify(IOLINK_EVENTCODE_MAINTENANCE_REFILL),
-                     IOLINK_EVENT_TYPE_WARNING);
-    assert_int_equal(iolink_event_classify(IOLINK_EVENTCODE_HARDWARE_FAULT),
+    assert_int_equal(
+        iolink_diag_type_for(IOLINK_EVENTCODE_DS_UPLOAD_REQUEST, IOLINK_EVENT_TYPE_ERROR),
+        IOLINK_EVENT_TYPE_NOTIFICATION);
+    assert_int_equal(
+        iolink_diag_type_for(IOLINK_EVENTCODE_SUPPLY_VOLTAGE_OVERRUN, IOLINK_EVENT_TYPE_ERROR),
+        IOLINK_EVENT_TYPE_WARNING);
+    assert_int_equal(
+        iolink_diag_type_for(IOLINK_EVENTCODE_MAINTENANCE_REFILL, IOLINK_EVENT_TYPE_ERROR),
+        IOLINK_EVENT_TYPE_WARNING);
+    assert_int_equal(iolink_diag_type_for(IOLINK_EVENTCODE_HARDWARE_FAULT, IOLINK_EVENT_TYPE_ERROR),
                      IOLINK_EVENT_TYPE_ERROR);
-    assert_int_equal(iolink_event_classify(IOLINK_EVENTCODE_SHORT_CIRCUIT),
+    assert_int_equal(iolink_diag_type_for(IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR),
                      IOLINK_EVENT_TYPE_ERROR);
     /* 保留/未知代码默认归为 error。 */
-    assert_int_equal(iolink_event_classify(0x2222U), IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(iolink_diag_type_for(0x2222U, IOLINK_EVENT_TYPE_ERROR),
+                     IOLINK_EVENT_TYPE_ERROR);
 }
 
 static void test_event_memory_layout(void** state)
@@ -611,7 +615,8 @@ static void test_event_device_status_matrix(void** state)
     };
     for (size_t i = 0U; i < (sizeof(single) / sizeof(single[0])); i++) {
         events_init(&ctx);
-        iolink_event_trigger(&ctx, single[i].code, iolink_event_classify(single[i].code));
+        iolink_event_trigger(&ctx, single[i].code,
+                             iolink_diag_type_for(single[i].code, IOLINK_EVENT_TYPE_ERROR));
         assert_int_equal(iolink_diag_device_status(&ctx), single[i].expected);
     }
 
@@ -631,8 +636,10 @@ static void test_event_device_status_matrix(void** state)
     };
     for (size_t i = 0U; i < (sizeof(pairs) / sizeof(pairs[0])); i++) {
         events_init(&ctx);
-        iolink_event_trigger(&ctx, pairs[i].first, iolink_event_classify(pairs[i].first));
-        iolink_event_trigger(&ctx, pairs[i].second, iolink_event_classify(pairs[i].second));
+        iolink_event_trigger(&ctx, pairs[i].first,
+                             iolink_diag_type_for(pairs[i].first, IOLINK_EVENT_TYPE_ERROR));
+        iolink_event_trigger(&ctx, pairs[i].second,
+                             iolink_diag_type_for(pairs[i].second, IOLINK_EVENT_TYPE_ERROR));
         assert_int_equal(iolink_diag_device_status(&ctx), pairs[i].expected);
     }
 }

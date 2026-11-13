@@ -628,10 +628,4 @@ uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_even
     return copied;
 }
 
-iolink_event_type_t iolink_event_classify(uint16_t code)
-{
-    /* 分类来自 ROM 注册表；保留/厂商/未知代码回落到安全的 Error。 */
-    return (iolink_event_type_t) iolink_diag_type_for(code, (uint8_t) IOLINK_EVENT_TYPE_ERROR);
-}
-
 #endif /* IOLINK_FEATURE_EVENTS */

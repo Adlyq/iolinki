@@ -151,7 +151,7 @@ users, not a network device.
 
 | Requirement (10.512 ref) | Stack claim | Anchor |
 |---|---|---|
-| CR 2.8 auditable events (§7.3.5) | Security-relevant conditions are reported as protocol events with standard EventCodes (V1.1.5 Annex D constants) | `include/iolinki/events.h:34+`, `iolink_event_classify` `src/events.c:149` |
+| CR 2.8 auditable events (§7.3.5) | Security-relevant conditions are reported as protocol events with standard EventCodes (V1.1.5 Annex D constants) | `include/iolinki/events.h:34+`, `iolink_diag_type_for` `src/diag.c` |
 | CR 2.9 audit storage (§7.3.6) | Events queue until transmitted/acknowledged; bounded storage | `src/events.c`, `tests/test_events.c` |
 | CR 2.10 audit failure response (§7.3.7) | Queue overflow behavior is defined (oldest overwritten), never a crash | `src/events.c` |
 | CR 3.1 communication integrity (§7.4.2) | CRC6/checksum verified on every OPERATE frame; unintentional corruption detected | `src/dll.c`, `src/dll_isr.c`, `src/crc.c`, `tests/test_crc.c`, `tests/test_dll.c` |

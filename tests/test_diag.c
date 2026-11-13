@@ -98,7 +98,8 @@ static void test_registry_matches_table_d1(void** state)
         assert_int_equal(desc->status, k_table_d1[i].status);
         assert_int_equal(desc->flags, k_table_d1[i].flags);
         assert_int_equal(desc->hold_ms, k_table_d1[i].hold_ms);
-        assert_int_equal(iolink_event_classify(k_table_d1[i].code), k_table_d1[i].type);
+        assert_int_equal(iolink_diag_type_for(k_table_d1[i].code, IOLINK_EVENT_TYPE_ERROR),
+                         k_table_d1[i].type);
         assert_int_equal(iolink_diag_type_for(k_table_d1[i].code, 0xFFU), k_table_d1[i].type);
         assert_int_equal(iolink_diag_status_for(k_table_d1[i].code, k_table_d1[i].type),
                          k_table_d1[i].status);
@@ -342,7 +343,8 @@ static void test_status_and_dds_share_condition_set(void** state)
     for (uint8_t i = 0U; i < n; i++) {
         assert_int_equal(
             entries[i].qualifier,
-            iolink_event_qualifier(entries[i].code, iolink_event_classify(entries[i].code),
+            iolink_event_qualifier(entries[i].code,
+                                   iolink_diag_type_for(entries[i].code, IOLINK_EVENT_TYPE_ERROR),
                                    IOLINK_EVENT_MODE_APPEARS));
         if (entries[i].code == 0x5111U) {
             seen_under = true;

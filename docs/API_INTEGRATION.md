@@ -407,7 +407,6 @@ uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_even
                               uint8_t max_count);
 uint8_t iolink_events_memory_read(iolink_events_ctx_t* ctx, uint8_t addr);
 void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t value);
-iolink_event_type_t iolink_event_classify(uint16_t code);
 ```
 
 `iolink_device_process()` 会在 ISDU 传输空闲时调用 `iolink_events_process()`，
