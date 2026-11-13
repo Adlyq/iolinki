@@ -566,12 +566,6 @@ iolink_result_t iolink_params_ctx_read(const iolink_params_ctx_t* ctx, uint16_t 
 iolink_result_t iolink_params_ctx_write(iolink_params_ctx_t* ctx, uint16_t index,
                                         uint8_t subindex, const uint8_t* data,
                                         size_t len, iolink_persist_t persist);
-/* 兼容 shim（保留一个版本）：错误细节退化为 -1。 */
-int iolink_params_ctx_get(const iolink_params_ctx_t* ctx, uint16_t index,
-                          uint8_t subindex, uint8_t* buffer, size_t max_len);
-int iolink_params_ctx_set(iolink_params_ctx_t* ctx, uint16_t index,
-                          uint8_t subindex, const uint8_t* data, size_t len,
-                          iolink_persist_t persist);
 void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx);
 ```
 
@@ -584,7 +578,6 @@ void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx);
 - `code > 0`：ISDU ErrorCode（如 0x33 值长度超长），由 ISDU 应答边界原样上送。
 
 当 `persist != IOLINK_PERSIST_NONE` 时，写操作只有在存储写入成功后才应用修改。
-`get`/`set` 是保留一个版本的兼容包装；新代码应使用 `read`/`write`。
 恢复出厂设置函数返回 void，无法报告存储失败。
 
 ### 7.2 存储后端
