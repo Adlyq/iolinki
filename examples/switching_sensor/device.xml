@@ -34,35 +34,31 @@
         <StdVariableRef id="V_ProductName" />
         <StdVariableRef id="V_ApplicationSpecificTag" />
         <StdVariableRef id="V_ProductID" defaultValue="switching-sensor" />
-        <Variable id="V_SP1" index="256" accessRights="rw" defaultValue="5000">
+        <Variable id="V_OD_0100" index="256" accessRights="rw" defaultValue="5000">
           <Datatype xsi:type="UIntegerT" bitLength="16">
             <ValueRange lowerValue="0" upperValue="65535" />
           </Datatype>
-          <Name textId="T_V_SP1" />
-          <Description textId="TD_V_SP1" />
+          <Name textId="T_V_OD_0100" />
         </Variable>
-        <Variable id="V_Hysteresis" index="257" accessRights="rw" defaultValue="200">
+        <Variable id="V_OD_0101" index="257" accessRights="rw" defaultValue="200">
           <Datatype xsi:type="UIntegerT" bitLength="16">
             <ValueRange lowerValue="0" upperValue="65535" />
           </Datatype>
-          <Name textId="T_V_Hysteresis" />
-          <Description textId="TD_V_Hysteresis" />
+          <Name textId="T_V_OD_0101" />
         </Variable>
-        <Variable id="V_Inversion" index="258" accessRights="rw" defaultValue="0">
+        <Variable id="V_OD_0102" index="258" accessRights="rw" defaultValue="0">
           <Datatype xsi:type="UIntegerT" bitLength="8">
             <ValueRange lowerValue="0" upperValue="1" />
           </Datatype>
-          <Name textId="T_V_Inversion" />
-          <Description textId="TD_V_Inversion" />
+          <Name textId="T_V_OD_0102" />
         </Variable>
-        <Variable id="V_Teach" index="259" accessRights="wo">
+        <Variable id="V_OD_0103" index="259" accessRights="wo">
           <Datatype xsi:type="UIntegerT" bitLength="8">
             <SingleValue value="1">
-              <Name textId="T_V_Teach" />
+              <Name textId="T_V_OD_0103" />
             </SingleValue>
           </Datatype>
-          <Name textId="T_V_Teach" />
-          <Description textId="TD_V_Teach" />
+          <Name textId="T_V_OD_0103" />
         </Variable>
       </VariableCollection>
       <ProcessDataCollection>
@@ -95,10 +91,10 @@
           </Menu>
           <Menu id="M_Parameter">
             <Name textId="T_Menu_Parameter" />
-            <VariableRef variableId="V_SP1" />
-            <VariableRef variableId="V_Hysteresis" />
-            <VariableRef variableId="V_Inversion" />
-            <VariableRef variableId="V_Teach" />
+            <VariableRef variableId="V_OD_0100" />
+            <VariableRef variableId="V_OD_0101" />
+            <VariableRef variableId="V_OD_0102" />
+            <VariableRef variableId="V_OD_0103" />
           </Menu>
         </MenuCollection>
         <ObserverRoleMenuSet>
@@ -142,14 +138,10 @@
       <Text id="T_DeviceFamily" value="iolinki reference examples" />
       <Text id="T_ProductName" value="Switching sensor" />
       <Text id="T_Description" value="Example application; replace illustrative IDs with assigned production identifiers." />
-      <Text id="T_V_SP1" value="Switch-on threshold x100" />
-      <Text id="TD_V_SP1" value="Switch-on threshold, 0.01 units; must be &gt;= hysteresis. Volatile." />
-      <Text id="T_V_Hysteresis" value="Hysteresis x100" />
-      <Text id="TD_V_Hysteresis" value="Hysteresis, 0.01 units; must be &lt;= threshold. Volatile." />
-      <Text id="T_V_Inversion" value="Invert switching output" />
-      <Text id="TD_V_Inversion" value="0 normal, 1 inverted. Volatile." />
-      <Text id="T_V_Teach" value="Teach current value: write 1" />
-      <Text id="TD_V_Teach" value="Write 1 to teach the current valid measurement. Subindex 0 only." />
+      <Text id="T_V_OD_0100" value="Switch-on threshold x100" />
+      <Text id="T_V_OD_0101" value="Hysteresis x100" />
+      <Text id="T_V_OD_0102" value="Invert switching output" />
+      <Text id="T_V_OD_0103" value="Teach current value: write 1" />
       <Text id="T_PD_IN_1" value="Measurement x100" />
       <Text id="T_PD_IN_2" value="Valid" />
       <Text id="T_PD_IN_3" value="Switching output" />
@@ -158,7 +150,7 @@
       <Text id="T_Menu_Parameter" value="Parameter" />
     </PrimaryLanguage>
   </ExternalTextCollection>
-  <Stamp crc="271986763">
+  <Stamp crc="4088105751">
     <Checker name="iolinki-iodd-cli" version="V1.0" />
   </Stamp>
 </IODevice>

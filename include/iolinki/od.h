@@ -214,6 +214,29 @@ struct iolink_od_entry
                         def_, name_, NULL, NULL)
 
 /**
+ * @brief 带钩子的字节串表项初始化宏。
+ */
+#define IOLINK_OD_STRING_EX(index_, access_, semantics_, storage_, handler_, block_len_, name_, \
+                            validate_, change_)                                                 \
+    {.index = (index_),                                                                         \
+     .subindex = 0U,                                                                            \
+     .max_subindex = 0U,                                                                        \
+     .datatype = IOLINK_OD_DT_OCTET_STRING,                                                     \
+     .access = (access_),                                                                       \
+     .write_semantics = (semantics_),                                                           \
+     .storage = (storage_),                                                                     \
+     .flags = 0U,                                                                               \
+     .handler = (handler_),                                                                     \
+     .block_len = (block_len_),                                                                 \
+     .range_min = 0U,                                                                           \
+     .range_max = 0U,                                                                           \
+     .scalar_default = 0U,                                                                      \
+     .block_default = NULL,                                                                     \
+     .name = (name_),                                                                           \
+     .validate = (validate_),                                                                   \
+     .on_change = (change_)}
+
+/**
  * @brief 字节串表项初始化宏（新增参数的一行写法）。
  */
 #define IOLINK_OD_STRING(index_, access_, semantics_, storage_, handler_, block_len_, name_) \

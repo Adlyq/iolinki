@@ -56,41 +56,28 @@ static iolink_result_t validate_config4(void* user, const iolink_od_entry_t* ent
     return exact_length(entry, len);
 }
 
-#define CONFORMANCE_BLOCK_ENTRY(index_, block_, name_, validate_) \
-    {.index = (index_),                                           \
-     .subindex = 0U,                                              \
-     .max_subindex = 0U,                                          \
-     .datatype = IOLINK_OD_DT_OCTET_STRING,                       \
-     .access = IOLINK_OD_ACCESS_RW_LOCKED,                        \
-     .write_semantics = IOLINK_OD_WRITE_VOLATILE,                 \
-     .storage = IOLINK_OD_STORAGE_DS,                             \
-     .flags = 0U,                                                 \
-     .handler = IOLINK_OD_HANDLER_BACKEND,                        \
-     .block_len = (block_),                                       \
-     .range_min = 0U,                                             \
-     .range_max = 0U,                                             \
-     .scalar_default = 0U,                                        \
-     .block_default = NULL,                                       \
-     .name = (name_),                                             \
-     .validate = (validate_),                                     \
-     .on_change = NULL}
-
 static const iolink_od_entry_t k_conformance_od[] = {
-    CONFORMANCE_BLOCK_ENTRY(CONFORMANCE_CONFIG1_INDEX, CONFORMANCE_CONFIG1_MAX, "Config1",
-                            validate_config1),
+    IOLINK_OD_STRING_EX(CONFORMANCE_CONFIG1_INDEX, IOLINK_OD_ACCESS_RW_LOCKED,
+                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND,
+                        CONFORMANCE_CONFIG1_MAX, "Config1", validate_config1, NULL),
     IOLINK_OD_SCALAR(CONFORMANCE_CONFIG2_INDEX, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW_LOCKED,
                      IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND, 0U,
                      0xFFFFU, 0U, "Config2"),
-    CONFORMANCE_BLOCK_ENTRY(CONFORMANCE_CONFIG3_INDEX, CONFORMANCE_CONFIG3_MAX, "Config3",
-                            validate_config3),
-    CONFORMANCE_BLOCK_ENTRY(CONFORMANCE_CONFIG4_INDEX0 + 0U, CONFORMANCE_CONFIG4_SIZE, "Config4_0",
-                            validate_config4),
-    CONFORMANCE_BLOCK_ENTRY(CONFORMANCE_CONFIG4_INDEX0 + 1U, CONFORMANCE_CONFIG4_SIZE, "Config4_1",
-                            validate_config4),
-    CONFORMANCE_BLOCK_ENTRY(CONFORMANCE_CONFIG4_INDEX0 + 2U, CONFORMANCE_CONFIG4_SIZE, "Config4_2",
-                            validate_config4),
-    CONFORMANCE_BLOCK_ENTRY(CONFORMANCE_CONFIG4_INDEX0 + 3U, CONFORMANCE_CONFIG4_SIZE, "Config4_3",
-                            validate_config4),
+    IOLINK_OD_STRING_EX(CONFORMANCE_CONFIG3_INDEX, IOLINK_OD_ACCESS_RW_LOCKED,
+                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND,
+                        CONFORMANCE_CONFIG3_MAX, "Config3", validate_config3, NULL),
+    IOLINK_OD_STRING_EX(CONFORMANCE_CONFIG4_INDEX0, IOLINK_OD_ACCESS_RW_LOCKED,
+                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND,
+                        CONFORMANCE_CONFIG4_SIZE, "Config4_0", validate_config4, NULL),
+    IOLINK_OD_STRING_EX(CONFORMANCE_CONFIG4_INDEX1, IOLINK_OD_ACCESS_RW_LOCKED,
+                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND,
+                        CONFORMANCE_CONFIG4_SIZE, "Config4_1", validate_config4, NULL),
+    IOLINK_OD_STRING_EX(CONFORMANCE_CONFIG4_INDEX2, IOLINK_OD_ACCESS_RW_LOCKED,
+                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND,
+                        CONFORMANCE_CONFIG4_SIZE, "Config4_2", validate_config4, NULL),
+    IOLINK_OD_STRING_EX(CONFORMANCE_CONFIG4_INDEX3, IOLINK_OD_ACCESS_RW_LOCKED,
+                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND,
+                        CONFORMANCE_CONFIG4_SIZE, "Config4_3", validate_config4, NULL),
 };
 
 /** @brief 把一个字节串复制到调用方缓冲；容量不足仍报 0x33。 */

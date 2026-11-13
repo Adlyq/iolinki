@@ -5,7 +5,6 @@
   "productName": "Counter button LED",
   "status": "Generated; semantic, CRC and official IODD 1.1 XSD validation; genuine IODD Checker 1.1.4 business-rule validation; product certification and current Checker validation remain separate",
   "output": "examples/reference_device/device.xml",
-  "variables": [],
   "processData": [
     {
       "id": "PD_Example",

@@ -41,11 +41,10 @@ an invalid sample return negative ISDU responses without changing settings.
 Event 0x8CA0 is an example vendor notification on a rising output.
 
 `switching_sensor_od.c` is the authoritative description of the four
-parameters; `tools/iodd_gen.py --od examples/switching_sensor/switching_sensor_od.c
-examples/switching_sensor/device.json` exports an IODD from it. `device.json`
-keeps the non-OD metadata (identity, process data, physical layer, test
-configuration) and its legacy `variables` array is still used by the shipped
-`device.xml` until the IODD packaging scripts move to `--od`. These example IODDs pass the official XSD and the CLI integrity/consistency
+parameters; `tools/iodd_cli.py generate examples/switching_sensor/device.json
+--od examples/switching_sensor/switching_sensor_od.c` exports the shipped
+`device.xml` from it. `device.json` carries only the non-OD metadata (identity,
+process data, physical layer, test configuration). These example IODDs pass the official XSD and the CLI integrity/consistency
 checks. Apply your assigned identity and run the applicable official IODD
 Checker for your product definition. Schema/CLI validation does not supply
 official Checker approval. See `tools/IODD_GEN.md` for generate/inspect/validate/pack.

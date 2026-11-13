@@ -129,12 +129,15 @@ def main():
         command.add_argument('input', type=Path)
         if name in ('generate', 'pack'):
             command.add_argument('-o', '--output', type=Path, required=name == 'pack')
+        if name == 'generate':
+            command.add_argument('--od', action='append', default=[], type=Path,
+                                 help='C source with IOLINK_OD_* entries (repeatable)')
         if name in ('validate', 'pack'):
             command.add_argument('--schema', type=Path, help='Externally obtained IODD1.1.xsd; requires xmllint')
     args = parser.parse_args()
     try:
         if args.command == 'generate':
-            print(generate_iodd(json.loads(args.input.read_text()), args.output))
+            print(generate_iodd(json.loads(args.input.read_text()), args.output, args.od))
         elif args.command == 'validate':
             validate(args.input, args.schema)
             print('PASS: semantic subset and CRC' + (' and external XSD' if args.schema else ''))

@@ -14,22 +14,52 @@ ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / 'tools/iodd_cli.py'
 NS = {'i': 'http://www.io-link.com/IODD/2010/10'}
 
+sys.path.insert(0, str(ROOT / 'tools'))
+import iodd_gen  # noqa: E402
+
+# 参数只能来自 C 对象字典表；提供 OD 源的示例在此登记。
+OD_SOURCES = {
+    'switching_sensor': ROOT / 'examples/switching_sensor/switching_sensor_od.c',
+    'conformance_device': ROOT / 'examples/conformance_device/conformance_device_od.c',
+}
+
+
+def scalar(index, datatype='IOLINK_OD_DT_U16', low='0U', high='0xFFFFU', default='0U'):
+    return (f'IOLINK_OD_SCALAR({index}, {datatype}, IOLINK_OD_ACCESS_RW, '
+            f'IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, '
+            f'IOLINK_OD_HANDLER_BACKEND, {low}, {high}, {default}, "T")')
+
+
 class IoddCLI(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.xml = Path(self.tmp.name) / 'device.xml'
         self.config = json.loads((ROOT / 'examples/switching_sensor/device.json').read_text())
+        self.od = OD_SOURCES['switching_sensor']
 
     def run_cli(self, *args, success=True):
         result = subprocess.run([sys.executable, str(CLI), *map(str, args)], capture_output=True, text=True)
         self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
         return result
 
-    def generate(self, config=None):
+    def write_od(self, entries, name='od.c'):
+        path = Path(self.tmp.name) / name
+        path.write_text('#include "iolinki/od.h"\n'
+                        f'static const iolink_od_entry_t t[] = {{{entries}}};\n')
+        return path
+
+    def generate(self, config=None, od='default', ok=True):
         path = Path(self.tmp.name) / 'config.json'
-        path.write_text(json.dumps(config or self.config))
-        return self.run_cli('generate', path, '-o', self.xml)
+        path.write_text(json.dumps(self.config if config is None else config))
+        sources = [self.od] if od == 'default' else list(od or [])
+        args = ['generate', path, '-o', self.xml]
+        for source in sources:
+            args += ['--od', source]
+        return self.run_cli(*args, success=ok)
+
+    def generate_od(self, entries, config=None, ok=True):
+        return self.generate(config, od=[self.write_od(entries)], ok=ok)
 
     def test_generation_inspection_and_tamper_detection(self):
         self.generate()
@@ -44,16 +74,13 @@ class IoddCLI(unittest.TestCase):
         self.run_cli('validate', self.xml, success=False)
 
     def test_duplicate_index_and_overlapping_process_bits_rejected(self):
-        for mutate in ('index', 'bits'):
-            cfg = copy.deepcopy(self.config)
-            if mutate == 'index':
-                cfg['variables'][1]['index'] = cfg['variables'][0]['index']
-            else:
-                cfg['processData'][0]['in']['fields'][1]['bitOffset'] = 8
-            path = Path(self.tmp.name) / 'bad.json'
-            path.write_text(json.dumps(cfg))
-            self.run_cli('generate', path, '-o', self.xml, success=False)
-            self.assertFalse(self.xml.exists())
+        entry = scalar('0x0100U')
+        self.generate_od(f'{entry}, {entry}', ok=False)
+        self.assertFalse(self.xml.exists())
+        cfg = copy.deepcopy(self.config)
+        cfg['processData'][0]['in']['fields'][1]['bitOffset'] = 8
+        self.generate(cfg, od=[], ok=False)
+        self.assertFalse(self.xml.exists())
 
     def test_pack_is_reproducible_and_contains_manifest(self):
         self.generate()
@@ -81,11 +108,9 @@ class IoddCLI(unittest.TestCase):
     def test_generator_keeps_output_on_invalid_input(self):
         self.generate()
         original = self.xml.read_bytes()
-        cfg = copy.deepcopy(self.config)
-        cfg['variables'][0]['bitLength'] = 128
-        path = Path(self.tmp.name) / 'bad.json'
-        path.write_text(json.dumps(cfg))
-        self.run_cli('generate', path, '-o', self.xml, success=False)
+        bad = self.write_od(scalar('0x0100U', low='100U', high='10U'))
+        self.run_cli('generate', Path(self.tmp.name) / 'config.json', '-o', self.xml, '--od', bad,
+                     success=False)
         self.assertEqual(self.xml.read_bytes(), original)
 
     def test_wrong_datatype_reference_rejected(self):
@@ -99,7 +124,10 @@ class IoddCLI(unittest.TestCase):
 
     def test_example_maps_and_boolean_fields(self):
         for name, device_id, output_bits in [('reference_device',5678,8), ('switching_sensor',5679,0)]:
-            self.run_cli('generate', ROOT / f'examples/{name}/device.json', '-o', self.xml)
+            args = ['generate', ROOT / f'examples/{name}/device.json', '-o', self.xml]
+            if name in OD_SOURCES:
+                args += ['--od', OD_SOURCES[name]]
+            self.run_cli(*args)
             info = json.loads(self.run_cli('inspect', self.xml).stdout)
             self.assertEqual(info['deviceId'], device_id)
             self.assertEqual(info['processData'][0]['in']['fields'][0], {'bitOffset':8,'bitLength':16})
@@ -118,21 +146,20 @@ class IoddCLI(unittest.TestCase):
             cfg['testConfig'] = test
             path = Path(self.tmp.name) / 'invalid-tests.json'
             path.write_text(json.dumps(cfg))
-            self.run_cli('generate', path, '-o', self.xml, success=False)
+            self.run_cli('generate', path, '-o', self.xml, '--od', self.od, success=False)
             self.assertFalse(self.xml.exists())
 
-    def test_custom_variables_cannot_collide_with_declared_standard_indices(self):
-        for index in (18, 19, 24):
-            cfg = copy.deepcopy(self.config)
-            cfg['variables'][0]['index'] = index
-            path = Path(self.tmp.name) / 'standard-collision.json'
-            path.write_text(json.dumps(cfg))
-            self.run_cli('generate', path, '-o', self.xml, success=False)
+    def test_standard_index_collision_rejected(self):
+        for index in ('18U', '19U', '24U'):
+            self.generate_od(scalar(index), ok=False)
             self.assertFalse(self.xml.exists())
 
     def test_generated_business_rule_requirements(self):
         for name, value in [('reference_device', '0x00'), ('switching_sensor', '0x13,0x88')]:
-            self.run_cli('generate', ROOT / f'examples/{name}/device.json', '-o', self.xml)
+            args = ['generate', ROOT / f'examples/{name}/device.json', '-o', self.xml]
+            if name in OD_SOURCES:
+                args += ['--od', OD_SOURCES[name]]
+            self.run_cli(*args)
             tree = ET.parse(self.xml)
             refs = {n.get('id') for n in tree.findall('.//i:StdVariableRef', NS)}
             self.assertTrue({'V_DirectParameters_2', 'V_ProductName', 'V_ApplicationSpecificTag'} <= refs)
@@ -140,7 +167,7 @@ class IoddCLI(unittest.TestCase):
             self.assertEqual(tree.find('.//i:Config2', NS).attrib, {'index': '256', 'testValue': value})
             self.assertEqual(len(tree.find('.//i:Config3', NS).get('testValue').split(',')), 13)
             if name == 'switching_sensor':
-                dt = tree.find('.//i:Variable[@id="V_Teach"]/i:Datatype', NS)
+                dt = tree.find('.//i:Variable[@id="V_OD_0103"]/i:Datatype', NS)
                 self.assertIsNone(dt.find('i:ValueRange', NS))
                 self.assertEqual(dt.find('i:SingleValue', NS).get('value'), '1')
 
@@ -162,7 +189,10 @@ class IoddCLI(unittest.TestCase):
         checker = os.environ['IODD_CHECKER']
         for example in ('reference_device', 'switching_sensor'):
             filename = Path(self.tmp.name) / f'iolinki-{example}-20261002-IODD1.1.xml'
-            self.run_cli('generate', ROOT / f'examples/{example}/device.json', '-o', filename)
+            args = ['generate', ROOT / f'examples/{example}/device.json', '-o', filename]
+            if example in OD_SOURCES:
+                args += ['--od', OD_SOURCES[example]]
+            self.run_cli(*args)
             positive = subprocess.run([checker, str(filename)], capture_output=True, text=True, timeout=45)
             self.assertEqual(positive.returncode, 0, positive.stdout + positive.stderr)
             filename.write_bytes(filename.read_bytes().replace(b'        <StdVariableRef id="V_ProductName" />\n', b''))
@@ -172,38 +202,40 @@ class IoddCLI(unittest.TestCase):
             self.assertIn('V_ProductName is missing', negative.stdout + negative.stderr)
 
     def test_shipped_xml_matches_configuration(self):
-        for name in ('reference_device', 'switching_sensor', 'simple_device'):
+        for name, stem in (('reference_device', 'device'), ('switching_sensor', 'device'),
+                           ('conformance_device', 'device')):
             base = ROOT / 'examples' / name
-            stem = 'simple_device' if name == 'simple_device' else 'device'
-            self.run_cli('generate', base / (stem + '.json'), '-o', self.xml)
+            args = ['generate', base / (stem + '.json'), '-o', self.xml]
+            if name in OD_SOURCES:
+                args += ['--od', OD_SOURCES[name]]
+            self.run_cli(*args)
             self.assertEqual(self.xml.read_bytes(), (base / (stem + '.xml')).read_bytes(), name)
 
-    def test_invalid_scalar_ranges_and_process_types_rejected(self):
-        for mutation in ('range', 'default', 'type', 'width'):
-            cfg = copy.deepcopy(self.config)
-            if mutation == 'range':
-                cfg['variables'][0].update(lowerValue=100, upperValue=10)
-            elif mutation == 'default':
-                cfg['variables'][0]['defaultValue'] = 70000
-            elif mutation == 'type':
-                cfg['processData'][0]['in']['fields'][0]['datatype'] = 'UnknownT'
-            else:
-                cfg['variables'][0]['bitLength'] = 1
-            path = Path(self.tmp.name) / 'bad.json'
-            path.write_text(json.dumps(cfg))
-            self.run_cli('generate', path, '-o', self.xml, success=False)
+    def test_invalid_od_entries_rejected(self):
+        cases = {
+            'range': scalar('0x0100U', low='100U', high='10U'),
+            'default': scalar('0x0100U', low='0U', high='0xFFFFU', default='70000U'),
+            'type': scalar('0x0100U', datatype='IOLINK_OD_DT_UNKNOWN'),
+            'width': ('IOLINK_OD_STRING(0x0100U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE, '
+                      'IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_BACKEND, 0U, "T")'),
+        }
+        for label, entry in cases.items():
+            with self.subTest(label):
+                self.generate_od(entry, ok=False)
+                self.assertFalse(self.xml.exists(), label)
+        cfg = copy.deepcopy(self.config)
+        cfg['processData'][0]['in']['fields'][0]['datatype'] = 'UnknownT'
+        self.generate(cfg, ok=False)
+        self.assertFalse(self.xml.exists())
 
-    def test_reserved_ids_and_invalid_document_metadata_rejected(self):
-        for key, value in [('releaseDate','tomorrow'), ('version','1'), ('vendorId',True), ('variables',None)]:
+    def test_invalid_document_metadata_rejected(self):
+        for key, value in [('releaseDate','tomorrow'), ('version','1'), ('vendorId',True),
+                           ('variables', [])]:
             cfg = copy.deepcopy(self.config)
             cfg[key] = value
             path = Path(self.tmp.name) / 'bad.json'
             path.write_text(json.dumps(cfg))
-            self.run_cli('generate', path, '-o', self.xml, success=False)
-        cfg = copy.deepcopy(self.config)
-        cfg['variables'][0]['id'] = 'V_ProductID'
-        path.write_text(json.dumps(cfg))
-        self.run_cli('generate', path, '-o', self.xml, success=False)
+            self.run_cli('generate', path, '-o', self.xml, '--od', self.od, success=False)
 
     def test_sensor_c_wire_data_and_parameter_services_match_iodd(self):
         """Decode bytes from the actual application C implementation using IODD offsets."""
@@ -284,6 +316,7 @@ int shim_write(unsigned index, unsigned sub, const unsigned char* data, size_t l
             fields = info['processData'][0]['in']['fields']
             values = [(wire >> f['bitOffset']) & ((1 << f['bitLength']) - 1) for f in fields]
             self.assertEqual(values, [sample, int(valid), int(output)])
+        table = {v['index']: v['bitLength'] for v in iodd_gen.parse_od_source(self.od)}
         for variable in info['variables']:
             index = variable['index']
             if variable['accessRights'] != 'wo':
@@ -291,9 +324,7 @@ int shim_write(unsigned index, unsigned sub, const unsigned char* data, size_t l
                 length = ctypes.c_size_t(8)
                 error = lib.shim_read(index, 0, data, 8, ctypes.byref(length))
                 self.assertEqual(error, 0)
-                expected_bits = next(v['bitLength'] for v in self.config['variables']
-                                     if v['index'] == index)
-                self.assertEqual(length.value, expected_bits // 8)
+                self.assertEqual(length.value, table[index] // 8)
                 self.assertEqual(int.from_bytes(bytes(data[:length.value]), 'big'),
                                  int(variable['defaultValue']))
         lib.shim_sample(5432, 1)
@@ -304,8 +335,12 @@ int shim_write(unsigned index, unsigned sub, const unsigned char* data, size_t l
 
     @unittest.skipUnless(os.environ.get('IODD_SCHEMA'), 'set IODD_SCHEMA to an externally obtained official IODD1.1.xsd')
     def test_examples_validate_against_official_schema(self):
-        for name in ('reference_device', 'switching_sensor', 'simple_device'):
-            self.run_cli('generate', ROOT / f'examples/{name}/' / ('simple_device.json' if name == 'simple_device' else 'device.json'), '-o', self.xml)
+        for name, stem in (('reference_device', 'device'), ('switching_sensor', 'device'),
+                           ('conformance_device', 'device')):
+            args = ['generate', ROOT / f'examples/{name}/' / (stem + '.json'), '-o', self.xml]
+            if name in OD_SOURCES:
+                args += ['--od', OD_SOURCES[name]]
+            self.run_cli(*args)
             self.run_cli('validate', self.xml, '--schema', os.environ['IODD_SCHEMA'])
 
 if __name__ == '__main__':

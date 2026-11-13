@@ -98,8 +98,12 @@ library API.
 
 ## IODD and oracle
 
-- `device.json` is the synthetic test description.
-- `device.xml` is generated with `tools/iodd_gen.py`.
+- `device.json` carries the synthetic test metadata (identity, process data,
+  physical layer, test configuration).
+- `device.xml` is generated from that metadata plus the parameter table in
+  `conformance_device_od.c`:
+  `tools/iodd_cli.py generate examples/conformance_device/device.json
+  --od examples/conformance_device/conformance_device_od.c`.
 - `iodd_expected.json` is the profile oracle: PD lengths, parameter lengths,
   access modes, default values, min cycle time, M-sequence capability and the
   assigned VendorID. The oracle checks DPP1 identification values, DS

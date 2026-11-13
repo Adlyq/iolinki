@@ -2,8 +2,8 @@
 """对象字典 → IODD 导出契约。
 
 参数的事实源是 C 对象字典表，IODD 只是导出物。本测试锁定
-examples/switching_sensor 的 C 表与既有 IODD 描述在参数语义上一致，
-并确认生成器确实使用表项（而不是 JSON 变量）生成每个变量的完整属性。
+examples/switching_sensor 的 C 表与随附 IODD 在参数语义上一致，
+并确认生成器确实使用表项（而不是任何 JSON 变量）生成每个属性。
 """
 import json
 from pathlib import Path
@@ -20,12 +20,42 @@ import iodd_gen  # noqa: E402
 XSI_TYPE = '{http://www.w3.org/2001/XMLSchema-instance}type'
 
 
+def strip_namespaces(root):
+    for element in root.iter():
+        element.tag = element.tag.split('}')[-1]
+
+
 class OdIoddExport(unittest.TestCase):
     def setUp(self):
         self.od_source = ROOT / 'examples/switching_sensor/switching_sensor_od.c'
         self.config_path = ROOT / 'examples/switching_sensor/device.json'
+        self.shipped_xml = ROOT / 'examples/switching_sensor/device.xml'
         self.variables = iodd_gen.parse_od_source(self.od_source)
         self.config = json.loads(self.config_path.read_text())
+
+    def _shipped(self):
+        root = ET.fromstring(self.shipped_xml.read_bytes())
+        strip_namespaces(root)
+        texts = {node.get('id'): node.get('value') for node in root.iter('Text')}
+        variables = {}
+        for node in root.iter('Variable'):
+            datatype = node.find('Datatype')
+            entry = {
+                'accessRights': node.get('accessRights'),
+                'defaultValue': node.get('defaultValue'),
+                'datatype': datatype.get(XSI_TYPE),
+                'bitLength': int(datatype.get('bitLength')),
+                'name': texts[node.find('Name').get('textId')],
+            }
+            single = datatype.find('SingleValue')
+            if single is not None:
+                entry['lowerValue'] = entry['upperValue'] = int(single.get('value'))
+            else:
+                value_range = datatype.find('ValueRange')
+                entry['lowerValue'] = int(value_range.get('lowerValue'))
+                entry['upperValue'] = int(value_range.get('upperValue'))
+            variables[int(node.get('index'))] = entry
+        return variables
 
     def _variable(self, root, index):
         for variable in root.iter('Variable'):
@@ -33,27 +63,26 @@ class OdIoddExport(unittest.TestCase):
                 return variable
         self.fail(f'variable index {index} missing from the generated IODD')
 
-    def test_c_table_describes_the_same_parameters_as_the_iodd(self):
-        legacy = self.config['variables']
-        self.assertEqual([v['index'] for v in self.variables], [v['index'] for v in legacy])
-        for table, iodd in zip(self.variables, legacy):
+    def test_c_table_matches_the_shipped_iodd(self):
+        shipped = self._shipped()
+        self.assertEqual(sorted(shipped), [v['index'] for v in self.variables])
+        for table in self.variables:
             msg = f'index {table["index"]}'
+            iodd = shipped[table['index']]
             self.assertEqual(table['name'], iodd['name'], msg)
             self.assertEqual(table['datatype'], iodd['datatype'], msg)
             self.assertEqual(table['bitLength'], iodd['bitLength'], msg)
-            self.assertEqual(table['accessRights'], iodd.get('accessRights', 'rw'), msg)
-            self.assertEqual(table.get('defaultValue'), iodd.get('defaultValue'), msg)
+            self.assertEqual(table['accessRights'], iodd['accessRights'], msg)
+            expected_default = table.get('defaultValue')
+            expected_default = None if expected_default is None else str(expected_default)
+            self.assertEqual(expected_default, iodd['defaultValue'], msg)
             self.assertEqual(table['lowerValue'], iodd['lowerValue'], msg)
             self.assertEqual(table['upperValue'], iodd['upperValue'], msg)
 
     def test_generator_exports_table_variables(self):
-        without = json.loads(self.config_path.read_text())
-        without.pop('variables')
-        xml = iodd_gen.generate_bytes(without, iodd_gen.load_od_variables([self.od_source]))
+        xml = iodd_gen.generate_bytes(self.config, iodd_gen.load_od_variables([self.od_source]))
         root = ET.fromstring(xml)
-        # IODD 文档使用默认命名空间；去掉后按本地名遍历。
-        for element in root.iter():
-            element.tag = element.tag.split('}')[-1]
+        strip_namespaces(root)
         for table in self.variables:
             msg = f'index {table["index"]}'
             variable = self._variable(root, table['index'])
@@ -75,6 +104,10 @@ class OdIoddExport(unittest.TestCase):
                 self.assertIsNotNone(value_range, msg)
                 self.assertEqual(int(value_range.get('lowerValue')), table['lowerValue'], msg)
                 self.assertEqual(int(value_range.get('upperValue')), table['upperValue'], msg)
+
+    def test_json_variables_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'C object dictionary'):
+            iodd_gen.generate_bytes(dict(self.config, variables=[]), [])
 
     def test_duplicate_index_is_rejected(self):
         table = 'IOLINK_OD_SCALAR(%s, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RO, ' \

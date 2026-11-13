@@ -34,35 +34,35 @@
         <StdVariableRef id="V_ProductName" />
         <StdVariableRef id="V_ApplicationSpecificTag" />
         <StdVariableRef id="V_ProductID" defaultValue="conformance-full" />
-        <Variable id="V_Config1" index="256" accessRights="rw">
+        <Variable id="V_OD_0100" index="256" accessRights="rw">
           <Datatype xsi:type="OctetStringT" fixedLength="64" />
-          <Name textId="T_V_Config1" />
+          <Name textId="T_V_OD_0100" />
         </Variable>
-        <Variable id="V_Config2" index="257" accessRights="rw" defaultValue="0">
+        <Variable id="V_OD_0101" index="257" accessRights="rw" defaultValue="0">
           <Datatype xsi:type="UIntegerT" bitLength="16">
             <ValueRange lowerValue="0" upperValue="65535" />
           </Datatype>
-          <Name textId="T_V_Config2" />
+          <Name textId="T_V_OD_0101" />
         </Variable>
-        <Variable id="V_Config3" index="258" accessRights="rw">
+        <Variable id="V_OD_0102" index="258" accessRights="rw">
           <Datatype xsi:type="OctetStringT" fixedLength="200" />
-          <Name textId="T_V_Config3" />
+          <Name textId="T_V_OD_0102" />
         </Variable>
-        <Variable id="V_Config4_0" index="272" accessRights="rw">
+        <Variable id="V_OD_0110" index="272" accessRights="rw">
           <Datatype xsi:type="OctetStringT" fixedLength="32" />
-          <Name textId="T_V_Config4_0" />
+          <Name textId="T_V_OD_0110" />
         </Variable>
-        <Variable id="V_Config4_1" index="273" accessRights="rw">
+        <Variable id="V_OD_0111" index="273" accessRights="rw">
           <Datatype xsi:type="OctetStringT" fixedLength="32" />
-          <Name textId="T_V_Config4_1" />
+          <Name textId="T_V_OD_0111" />
         </Variable>
-        <Variable id="V_Config4_2" index="274" accessRights="rw">
+        <Variable id="V_OD_0112" index="274" accessRights="rw">
           <Datatype xsi:type="OctetStringT" fixedLength="32" />
-          <Name textId="T_V_Config4_2" />
+          <Name textId="T_V_OD_0112" />
         </Variable>
-        <Variable id="V_Config4_3" index="275" accessRights="rw">
+        <Variable id="V_OD_0113" index="275" accessRights="rw">
           <Datatype xsi:type="OctetStringT" fixedLength="32" />
-          <Name textId="T_V_Config4_3" />
+          <Name textId="T_V_OD_0113" />
         </Variable>
       </VariableCollection>
       <ProcessDataCollection>
@@ -100,13 +100,13 @@
           </Menu>
           <Menu id="M_Parameter">
             <Name textId="T_Menu_Parameter" />
-            <VariableRef variableId="V_Config1" />
-            <VariableRef variableId="V_Config2" />
-            <VariableRef variableId="V_Config3" />
-            <VariableRef variableId="V_Config4_0" />
-            <VariableRef variableId="V_Config4_1" />
-            <VariableRef variableId="V_Config4_2" />
-            <VariableRef variableId="V_Config4_3" />
+            <VariableRef variableId="V_OD_0100" />
+            <VariableRef variableId="V_OD_0101" />
+            <VariableRef variableId="V_OD_0102" />
+            <VariableRef variableId="V_OD_0110" />
+            <VariableRef variableId="V_OD_0111" />
+            <VariableRef variableId="V_OD_0112" />
+            <VariableRef variableId="V_OD_0113" />
           </Menu>
         </MenuCollection>
         <ObserverRoleMenuSet>
@@ -150,13 +150,13 @@
       <Text id="T_DeviceFamily" value="iolinki reference examples" />
       <Text id="T_ProductName" value="Conformance reference device" />
       <Text id="T_Description" value="Example application; replace illustrative IDs with assigned production identifiers." />
-      <Text id="T_V_Config1" value="Config1 fixed 64-octet parameter" />
-      <Text id="T_V_Config2" value="Config2 16-bit parameter" />
-      <Text id="T_V_Config3" value="Config3 variable 200-octet parameter" />
-      <Text id="T_V_Config4_0" value="Config4 block 0" />
-      <Text id="T_V_Config4_1" value="Config4 block 1" />
-      <Text id="T_V_Config4_2" value="Config4 block 2" />
-      <Text id="T_V_Config4_3" value="Config4 block 3" />
+      <Text id="T_V_OD_0100" value="Config1" />
+      <Text id="T_V_OD_0101" value="Config2" />
+      <Text id="T_V_OD_0102" value="Config3" />
+      <Text id="T_V_OD_0110" value="Config4_0" />
+      <Text id="T_V_OD_0111" value="Config4_1" />
+      <Text id="T_V_OD_0112" value="Config4_2" />
+      <Text id="T_V_OD_0113" value="Config4_3" />
       <Text id="T_PD_IN_1" value="Counter" />
       <Text id="T_PD_IN_2" value="Button" />
       <Text id="T_PD_IN" value="Process data in" />
@@ -166,7 +166,7 @@
       <Text id="T_Menu_Parameter" value="Parameter" />
     </PrimaryLanguage>
   </ExternalTextCollection>
-  <Stamp crc="84281625">
+  <Stamp crc="2807710422">
     <Checker name="iolinki-iodd-cli" version="V1.0" />
   </Stamp>
 </IODevice>

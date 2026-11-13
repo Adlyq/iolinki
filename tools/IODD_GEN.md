@@ -1,27 +1,33 @@
 # IODD command-line tools
 
-Generate an IODD 1.1 XML description from JSON, inspect its process-data and
-parameter map, validate it, and create a reproducible ZIP with a SHA-256 manifest.
+Generate an IODD 1.1 XML description from the device JSON (identity, process
+data, physical layer, test configuration) and the C object dictionary (parameters),
+inspect its process-data and parameter map, validate it, and create a reproducible
+ZIP with a SHA-256 manifest.
 Python 3.9+ and Node.js 12.22+ are required; a maintained Node.js release is
 recommended. There are no pip/npm dependencies. Tests also require a C compiler.
 
 ```sh
 python3 tools/iodd_cli.py generate examples/reference_device/device.json
-python3 tools/iodd_cli.py generate examples/switching_sensor/device.json
+python3 tools/iodd_cli.py generate examples/switching_sensor/device.json \
+  --od examples/switching_sensor/switching_sensor_od.c
 python3 tools/iodd_cli.py inspect examples/switching_sensor/device.xml
 python3 tools/iodd_cli.py validate examples/switching_sensor/device.xml
 python3 tools/iodd_cli.py generate examples/switching_sensor/device.json \
+  --od examples/switching_sensor/switching_sensor_od.c \
   -o /tmp/iolinki-SwitchingSensor-20261002-IODD1.1.xml
 python3 tools/iodd_cli.py pack /tmp/iolinki-SwitchingSensor-20261002-IODD1.1.xml \
   -o /tmp/switching-sensor-iodd.zip
 python3 tools/test_iodd_cli.py
 ```
 
-`python3 tools/iodd_gen.py config.json` remains compatible with the older entry
-point. `generate -o` overrides the JSON `output` path. Use the IODD filename
+`generate -o` overrides the JSON `output` path. Use the IODD filename
 convention `Vendor-Device-YYYYMMDD-IODD1.1.xml` when exporting for engineering tools.
 Generation is deterministic: dates come from JSON or the fixed release default,
-not the wall clock. The shipped `device.xml` files are reproducible from JSON.
+not the wall clock. The shipped `device.xml` files are reproducible from the JSON
+metadata plus the listed `--od` sources. Parameters exist only in the C table: the
+JSON `variables` key is rejected (parameters live in the C table), and a device
+without an OD source produces an IODD with no device-specific variables.
 
 ## Included descriptions
 
@@ -34,8 +40,6 @@ not the wall clock. The shipped `device.xml` files are reproducible from JSON.
   RW, range 0..1, default 0; 259: teach U8 WO, write 1. Subindex 0; threshold
   must be at least hysteresis. Parameters are volatile. Product ID
   `switching-sensor`.
-- `examples/simple_device/simple_device.json` and `.xml`: illustrative legacy
-  generator input, not a description of a validated board/application integration.
 
 Process bit offset 0 is the least significant bit of the last byte of the
 big-endian process-data record. For example `12 34 03` decodes as measurement
@@ -60,11 +64,6 @@ four-pin: L+, NC, L-, C/Q; set the JSON communication fields for your actual boa
     "bitrate": "COM2", "minCycleTime": 1000,
     "sioSupported": false, "mSequenceCapability": 11
   },
-  "variables": [{
-    "id": "V_Threshold", "index": 256, "name": "Threshold",
-    "accessRights": "rw", "datatype": "UIntegerT", "bitLength": 16,
-    "defaultValue": 5000, "lowerValue": 0, "upperValue": 65535
-  }],
   "processData": [{
     "id": "PD_Example",
     "in": { "id": "PD_IN", "bitLength": 24, "fields": [
@@ -75,8 +74,10 @@ four-pin: L+, NC, L-, C/Q; set the JSON communication fields for your actual boa
 }
 ```
 
-Supported variable datatypes: `UIntegerT`, `IntegerT`, `StringT` (UTF-8), and
-`OctetStringT`; strings/octet lengths use `bitLength`, a multiple of eight.
+The OD entry macros (`IOLINK_OD_SCALAR[_EX]`, `IOLINK_OD_STRING[_EX]`) carry the
+variable datatype, access rights, range, default and array length; the generator
+maps them to `UIntegerT`, `IntegerT`, `StringT` (UTF-8) and `OctetStringT`.
+Strings/octet lengths are whole bytes.
 Process data supports one unconditional input/output record, unsigned/signed
 integer fields and one-bit booleans. Conditional layouts, events, translations,
 custom connection types and complete IO-Link profiles require an extended IODD.
@@ -143,5 +144,4 @@ hexadecimal `testValue` octets. Both applications use writable ApplicationSpecif
 (index 24) for Config1 (one byte) and Config3 (13 bytes). The sensor Config2 writes
 threshold index 256 with 5000 (`0x13,0x88`); the counter deliberately tests unsupported
 index 256 and requires IndexNotAvailable (`0x8011`). Adapt these to actual device
-support; they are not arbitrary test indices. The legacy simple-device illustration
-has no authored ISDU test configuration and does not claim genuine Checker approval.
+support; they are not arbitrary test indices. 

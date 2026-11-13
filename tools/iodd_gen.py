@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Generate the supported IODD 1.1 subset.
 
-参数（Variable）的事实源是 C 对象字典表：用 --od 给出包含
-IOLINK_OD_*_ENTRY 宏的 C 源文件，脚本解析表项并生成 IODD 变量。JSON 只保留
-对象字典无法表达的设备元数据（身份、过程数据、物理层、测试配置）。
-未给出 --od 时仍接受旧的 JSON "variables" 字段，用于既有调用点兼容。"""
+参数（Variable）的唯一事实源是 C 对象字典表：用 --od 给出包含
+IOLINK_OD_* 宏的 C 源文件，脚本解析表项并生成 IODD 变量。JSON 只描述
+对象字典无法表达的设备元数据（身份、过程数据、物理层、测试配置）。"""
 import argparse
 import json
 import datetime
@@ -33,9 +32,11 @@ def integer(value, label, low, high):
     return value
 
 
-def validate_config(config, skip_variables=False):
+def validate_config(config, variables=None):
     if not isinstance(config, dict):
         raise ValueError('Configuration must be a JSON object')
+    if 'variables' in config:
+        raise ValueError('variables are defined by the C object dictionary (pass --od)')
     for key in ('processData',):
         if not isinstance(config.get(key, []), list):
             raise ValueError(key + ' must be an array')
@@ -52,12 +53,7 @@ def validate_config(config, skip_variables=False):
     ids = {'V_DirectParameters_1', 'V_DirectParameters_2', 'V_ProductName', 'V_ApplicationSpecificTag', 'V_ProductID', 'M_Identification', 'M_Parameter'}
     # ProductName, ProductID and ApplicationSpecificTag are declared below.
     indexes = {18, 19, 24}
-    if skip_variables:
-        variables = []
-    else:
-        variables = config.get('variables', [])
-        if not isinstance(variables, list):
-            raise ValueError('variables must be an array')
+    variables = [] if variables is None else variables
     def unique_id(value):
         if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_.-]*', value) or value in ids:
             raise ValueError(f'Invalid or duplicate id: {value}')
@@ -158,7 +154,7 @@ OD_ACCESS = {
     'IOLINK_OD_ACCESS_WO_LOCKED': 'wo',
 }
 
-OD_ENTRY_RE = re.compile(r'IOLINK_OD_(SCALAR_EX|SCALAR|STRING)\s*\(', re.S)
+OD_ENTRY_RE = re.compile(r'IOLINK_OD_(SCALAR_EX|SCALAR|STRING_EX|STRING)\s*\(', re.S)
 
 
 def _strip_c_comments(text):
@@ -250,9 +246,10 @@ def parse_od_source(path):
     for match in OD_ENTRY_RE.finditer(text):
         kind = match.group(1)
         args, _ = _split_macro_args(text, match.end())
-        if kind == 'STRING':
-            if len(args) != 7:
-                raise ValueError(f'{path}: IOLINK_OD_STRING expects 7 arguments')
+        if kind in ('STRING', 'STRING_EX'):
+            expected = 7 if kind == 'STRING' else 9
+            if len(args) != expected:
+                raise ValueError(f'{path}: IOLINK_OD_{kind} expects {expected} arguments')
             index = _resolve_int(args[0], defines)
             access = OD_ACCESS.get(args[1], None)
             datatype, bits = OD_DATATYPES['IOLINK_OD_DT_OCTET_STRING']
@@ -294,6 +291,8 @@ def parse_od_source(path):
             variable['lowerValue'], variable['upperValue'] = lower, upper
             if lower <= default <= upper:
                 variable['defaultValue'] = default
+            elif default != 0:
+                raise ValueError(f'{path}: default value {default} outside [{lower}, {upper}]')
         variables.append(variable)
     if not variables:
         raise ValueError(f'{path}: no IOLINK_OD entry found')
@@ -314,9 +313,9 @@ def load_od_variables(paths):
     return variables
 
 
-def generate_bytes(config, od_variables=None):
-    validate_config(config, skip_variables=od_variables is not None)
-    param_list = list(config.get('variables', [])) if od_variables is None else list(od_variables)
+def generate_bytes(config, od_variables):
+    validate_config(config, od_variables)
+    param_list = list(od_variables)
     root = ET.Element('{' + NS + '}IODevice', {'{' + XSI + '}schemaLocation': NS + ' IODD1.1.xsd'})
     element(root, 'DocumentInfo', {'copyright': config.get('copyright', 'iolinki-project'), 'releaseDate': config.get('releaseDate', '2026-10-02'), 'version': config.get('version', 'V1.0')})
     header = element(root, 'ProfileHeader')
@@ -431,7 +430,7 @@ def generate_bytes(config, od_variables=None):
 
 
 def generate_iodd(config, output=None, od_sources=None):
-    data = generate_bytes(config, load_od_variables(od_sources) if od_sources else None)
+    data = generate_bytes(config, load_od_variables(od_sources or []))
     path = Path(output or config.get('output', 'device.xml'))
     path.write_bytes(data)
     subprocess.run(['node', str(Path(__file__).with_name('iodd_stamp.mjs')), 'write', str(path)], check=True)
@@ -442,7 +441,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('config', type=Path, help='device JSON (identity/process data/physical)')
     parser.add_argument('--od', action='append', default=[], type=Path,
-                        help='C source with IOLINK_OD_* entries (repeatable; replaces JSON variables)')
+                        help='C source with IOLINK_OD_* entries (repeatable)')
     parser.add_argument('-o', '--output', type=Path)
     args = parser.parse_args()
     print(generate_iodd(json.loads(args.config.read_text()), args.output, args.od))

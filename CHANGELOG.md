@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (IODD single source)
+- IODD generation takes parameters only from the C object dictionary
+  (`--od`); a JSON `variables` key is rejected. `iodd_cli.py generate` accepts
+  `--od`, `IOLINK_OD_STRING_EX` exposes validate/on-change hooks to the table,
+  and the shipped switching-sensor and conformance IODDs are regenerated from
+  their OD tables (index-derived variable ids, `name` only). The illustrative
+  `simple_device` IODD pair is removed; that example is a C integration demo
+  without an OD table.
+
 ### Fixed (2026-11 code review)
 - OD write path: `iolink_od_write_value()` takes the requested subindex and
   forwards it to the params manager and the application write hook; the value
