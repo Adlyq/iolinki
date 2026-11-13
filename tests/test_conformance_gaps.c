@@ -873,21 +873,37 @@ static void test_0056_config1_write_readback(void** state)
 
 static uint8_t g_long_data[200];
 
-static uint8_t long_vendor_service(void* user, uint16_t index, uint8_t subindex, bool write,
-                                   const uint8_t* input, size_t length, uint8_t* output,
-                                   size_t* output_length)
+static iolink_result_t long_param_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+                                       size_t cap)
 {
     (void) user;
-    (void) write;
-    (void) input;
-    (void) length;
-    if ((index != 0x00E4U) || (subindex != 0U)) {
-        return 0U;
+    (void) entry;
+    if (cap < sizeof(g_long_data)) {
+        return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
     }
-    (void) memcpy(output, g_long_data, sizeof(g_long_data));
-    *output_length = sizeof(g_long_data);
-    return 0U;
+    (void) memcpy(out, g_long_data, sizeof(g_long_data));
+    return iolink_result_ok((uint16_t) sizeof(g_long_data));
 }
+
+static const iolink_od_entry_t k_long_entry[] = {
+    {.index = 0x00E4U,
+     .subindex = 0U,
+     .max_subindex = 0U,
+     .datatype = IOLINK_OD_DT_OCTET_STRING,
+     .access = IOLINK_OD_ACCESS_RO,
+     .write_semantics = IOLINK_OD_WRITE_VOLATILE,
+     .storage = IOLINK_OD_STORAGE_VOLATILE,
+     .flags = 0U,
+     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .block_len = 200U,
+     .range_min = 0U,
+     .range_max = 0U,
+     .scalar_default = 0U,
+     .block_default = NULL,
+     .name = "LongParameter",
+     .validate = NULL,
+     .on_change = NULL},
+};
 
 static void long_vendor_init(void)
 {
@@ -907,7 +923,12 @@ static void test_0055_200_byte_read(void** state)
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.vendor_service = long_vendor_service;
+    iolink_od_app_t app = {.entries = k_long_entry,
+                           .count = sizeof(k_long_entry) / sizeof(k_long_entry[0]),
+                           .read = long_param_read,
+                           .write = NULL,
+                           .user = NULL};
+    iolink_isdu_bind_od(&ctx, &app);
 
     assert_int_equal(isdu_send_read_request(&ctx, 0x00E4U, 0U), 1);
     iolink_isdu_process(&ctx);
@@ -923,7 +944,7 @@ static void test_0055_200_byte_read(void** state)
     assert_memory_equal(data, g_long_data, sizeof(g_long_data));
 }
 
-/* SDCI_TC_0055：通过一致性配置文件的厂商服务读取合成的
+/* SDCI_TC_0055：通过一致性配置文件的应用 OD 后端读取合成的
  * Config3（200 字节）对象，包括 Busy 与 COUNT 回绕。 */
 static void test_0055_config3_long_read(void** state)
 {

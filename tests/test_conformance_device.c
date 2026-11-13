@@ -81,8 +81,7 @@ static void make_isdu_ctx(conformance_device_t* app, iolink_isdu_ctx_t* ctx)
     ctx->ds_ctx = iolink_device_get_ds_ctx(&app->device);
     ctx->dll_ctx = &app->device.dll.main;
     ctx->params_ctx = &app->device.params;
-    ctx->vendor_service = app->config.vendor_service;
-    ctx->vendor_user = app->config.user;
+    ctx->od = app->config.od;
     ctx->direct_param_page2 = app->device.direct_param_page2;
 }
 
@@ -349,8 +348,7 @@ static void test_conformance_0146_illegal_download(void** state)
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
     ctx.ds_ctx = ds;
-    ctx.vendor_service = app.config.vendor_service;
-    ctx.vendor_user = app.config.user;
+    ctx.od = app.config.od;
 
     uint8_t valid[CONFORMANCE_CONFIG1_MAX];
     (void) memset(valid, 0x5A, sizeof(valid));
@@ -365,8 +363,7 @@ static void test_conformance_0146_illegal_download(void** state)
     (void) memset(illegal, 0x6B, sizeof(illegal));
     iolink_isdu_init(&ctx);
     ctx.ds_ctx = ds;
-    ctx.vendor_service = app.config.vendor_service;
-    ctx.vendor_user = app.config.user;
+    ctx.od = app.config.od;
     assert_int_equal(isdu_send_write_request(&ctx, CONFORMANCE_CONFIG1_INDEX, 0U, illegal,
                                              (uint8_t) sizeof(illegal)),
                      1);

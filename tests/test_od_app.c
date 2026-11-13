@@ -504,6 +504,127 @@ static void test_od_table_contract(void** state)
     assert_int_equal(buf[1], 0x2AU);
 }
 
+/* -------------------------------------------------------------------------
+ * 索引域路由：规范索引不可遮蔽，设备专用索引回落到内建表
+ * ------------------------------------------------------------------------- */
+
+static iolink_result_t shadow_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+                                   size_t cap)
+{
+    (void) user;
+    (void) entry;
+    if (cap < 1U) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
+    }
+    out[0] = 0x5AU;
+    return iolink_result_ok(1U);
+}
+
+static const iolink_od_entry_t k_shadow_entries[] = {
+    IOLINK_OD_SCALAR(0x0024U, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
+                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_BACKEND, 0U, 0xFFU, 0U,
+                     "ShadowDeviceStatus"),
+    IOLINK_OD_SCALAR(0x0040U, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
+                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_BACKEND, 0U, 0xFFU, 0U,
+                     "DeviceSpecificParam"),
+};
+
+static void test_od_index_domain_routing(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_dll_ctx_t dll;
+    iolink_od_app_t app = {0};
+    uint8_t buf[16] = {0U};
+
+    (void) memset(&dll, 0, sizeof(dll));
+    test_env_init(&g_od_env, NULL);
+    test_env_reset_params(&g_od_env);
+    iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx, &g_od_env);
+    ctx.dll_ctx = &dll.main;
+
+    app.entries = k_shadow_entries;
+    app.count = sizeof(k_shadow_entries) / sizeof(k_shadow_entries[0]);
+    app.read = shadow_read;
+    iolink_isdu_bind_od(&ctx, &app);
+
+    /* 规范索引 0x0024 由标准表提供，应用表不能遮蔽。 */
+    assert_int_equal(od_read(&ctx, IOLINK_IDX_DEVICE_STATUS, 0U, buf, sizeof(buf)), 1);
+    assert_int_not_equal(buf[0], 0x5AU);
+
+    /* 0x0040 属于设备专用索引：应用表优先于内建错误统计。 */
+    assert_int_equal(od_read(&ctx, IOLINK_IDX_ERROR_STATS, 0U, buf, sizeof(buf)), 1);
+    assert_int_equal(buf[0], 0x5AU);
+
+    /* 未声明的设备专用索引与保留值都返回 0x11。 */
+    const uint16_t unavailable[] = {0x0080U, 0x003FU, 0x00FFU, 0x00E4U};
+    for (size_t i = 0U; i < (sizeof(unavailable) / sizeof(unavailable[0])); i++) {
+        assert_int_equal(od_read(&ctx, unavailable[i], 0U, buf, sizeof(buf)), 2);
+        assert_int_equal(buf[0], 0x80U);
+        assert_int_equal(buf[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+    }
+}
+
+static void test_od_device_specific_fallback(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_dll_ctx_t dll;
+    uint8_t buf[16] = {0U};
+
+    (void) memset(&dll, 0, sizeof(dll));
+    dll.main.crc_errors = 0x11223344U;
+    dll.main.shared.timeout_errors = 0xAABBCCDDU;
+    dll.main.shared.framing_errors = 0x01020304U;
+    dll.main.timing_errors = 0x05060708U;
+
+    test_env_init(&g_od_env, NULL);
+    test_env_reset_params(&g_od_env);
+    iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx, &g_od_env);
+    ctx.dll_ctx = &dll.main;
+
+    /* 没有应用表时 0x0040 回落到标准表里的内建错误统计对象。 */
+    assert_int_equal(od_read(&ctx, IOLINK_IDX_ERROR_STATS, 0U, buf, sizeof(buf)), 16);
+    const uint8_t expected[16] = {0x11U, 0x22U, 0x33U, 0x44U, 0xAAU, 0xBBU, 0xCCU, 0xDDU,
+                                  0x01U, 0x02U, 0x03U, 0x04U, 0x05U, 0x06U, 0x07U, 0x08U};
+    assert_memory_equal(buf, expected, sizeof(expected));
+
+    /* 表外设备专用索引没有可回落的处理器。 */
+    assert_int_equal(od_read(&ctx, 0x0080U, 0U, buf, sizeof(buf)), 2);
+    assert_int_equal(buf[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+}
+
+/* 截断的请求不得执行任何表项：一律得到否定应答。 */
+static void test_od_truncated_requests_never_execute(void** state)
+{
+    (void) state;
+    const uint8_t requests[][4] = {
+        {0x34, 0x01, 0x35, 0x00},                           /* 缺少子索引的 16 位写。 */
+        {0xB4, 0x01, 0xB5, 0x00},                           /* 缺少子索引的 16 位读。 */
+        {0x33, 0x01, 0x32, 0x00},                           /* 缺少低索引字节/子索引的 16 位写。 */
+        {0xB3, 0x01, 0xB2, 0x00}, {0x23, 0x01, 0x22, 0x00}, /* 缺少子索引的 8 位写。 */
+        {0xA3, 0x01, 0xA2, 0x00}, {0x12, 0x12, 0x00, 0x00}, /* 缺少索引的 8 位写。 */
+        {0x92, 0x92, 0x00, 0x00}, {0x32, 0x32, 0x00, 0x00}, /* 两个索引字节都缺失的 16 位写。 */
+        {0xB2, 0xB2, 0x00, 0x00},
+    };
+    for (size_t vector = 0; vector < sizeof(requests) / sizeof(requests[0]); vector++) {
+        iolink_isdu_ctx_t ctx;
+        iolink_isdu_init(&ctx);
+        ctx.od = NULL;
+        const size_t length = (size_t) (requests[vector][0] & 0x0FU);
+        for (size_t i = 0; i < length; i++) {
+            iolink_isdu_od_write(&ctx, i == 0 ? IOLINK_FLOWCTRL_START : (uint8_t) i,
+                                 requests[vector] + i, 1);
+        }
+        iolink_isdu_process(&ctx);
+        assert_true(ctx.response_negative);
+        assert_int_equal(ctx.response_len, 2);
+        assert_int_equal(ctx.response_buf[0], 0x80U);
+    }
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -513,6 +634,10 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_od_codec_edges, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_lookup_edges, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_value_layer_edges, od_setup, od_teardown),
+        cmocka_unit_test_setup_teardown(test_od_index_domain_routing, od_setup, od_teardown),
+        cmocka_unit_test_setup_teardown(test_od_device_specific_fallback, od_setup, od_teardown),
+        cmocka_unit_test_setup_teardown(test_od_truncated_requests_never_execute, od_setup,
+                                        od_teardown),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

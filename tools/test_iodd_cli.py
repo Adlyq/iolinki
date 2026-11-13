@@ -209,8 +209,8 @@ class IoddCLI(unittest.TestCase):
         """Decode bytes from the actual application C implementation using IODD offsets."""
         library = Path(self.tmp.name) / 'sensor.so'
         shim = Path(self.tmp.name) / 'sensor_shim.c'
-        # 测试只链接示例的 OD 应用；没有供旧 vendor_service 使用的生产包装，
-        # 这里用一个测试专用垫片把 ctypes 调用接到对象字典 API。
+        # 测试只链接示例的 OD 应用；这里用一个测试专用垫片把 ctypes 调用
+        # 接到对象字典 API。
         shim.write_text(r"""
 #include "switching_sensor.h"
 #include "iolinki/od.h"

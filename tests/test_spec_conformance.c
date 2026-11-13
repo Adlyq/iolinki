@@ -96,24 +96,51 @@ static int read_object_with_dll(uint16_t index, iolink_dll_ctx_t* dll, uint8_t* 
     return isdu_collect_response(&ctx, out, out_size);
 }
 
-/* 接受所有厂商服务访问（用于验证 Parameter 锁）。 */
+/* 应用 OD 表里的设备专用参数（用于验证 Parameter 锁）。 */
 static unsigned g_vendor_calls;
 
-static uint8_t vendor_service_ok(void* user, uint16_t index, uint8_t subindex, bool write,
-                                 const uint8_t* input, size_t length, uint8_t* output,
-                                 size_t* output_length)
+static iolink_result_t vendor_param_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+                                         size_t cap)
 {
-    g_vendor_calls++;
     (void) user;
-    (void) index;
-    (void) subindex;
-    (void) write;
-    (void) input;
-    (void) length;
-    (void) output;
-    *output_length = 0U;
-    return 0U;
+    (void) entry;
+    (void) out;
+    (void) cap;
+    g_vendor_calls++;
+    return iolink_result_ok(0U);
 }
+
+static iolink_result_t vendor_param_write(void* user, const iolink_od_entry_t* entry,
+                                          uint8_t subindex, const uint8_t* data, size_t len)
+{
+    (void) user;
+    (void) entry;
+    (void) subindex;
+    (void) data;
+    (void) len;
+    g_vendor_calls++;
+    return iolink_result_ok(0U);
+}
+
+static const iolink_od_entry_t k_vendor_entries[] = {
+    {.index = 0x0041U,
+     .subindex = 0U,
+     .max_subindex = 0U,
+     .datatype = IOLINK_OD_DT_OCTET_STRING,
+     .access = IOLINK_OD_ACCESS_RW_LOCKED,
+     .write_semantics = IOLINK_OD_WRITE_VOLATILE,
+     .storage = IOLINK_OD_STORAGE_VOLATILE,
+     .flags = 0U,
+     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .block_len = 1U,
+     .range_min = 0U,
+     .range_max = 0U,
+     .scalar_default = 0U,
+     .block_default = NULL,
+     .name = "LockedVendorParam",
+     .validate = NULL,
+     .on_change = NULL},
+};
 
 /* 写入一个对象并拷贝响应；返回响应长度。 */
 static int write_object(uint16_t index, const uint8_t* data, uint8_t len, uint8_t* out,
@@ -416,7 +443,7 @@ static void test_parameter_lock_blocks_tag_write(void** state)
 }
 
 /* B.2.4：Parameter 锁同样阻止对设备特定参数的写入；读取仍会到达
- * 厂商服务。用 0x0041（标准表与应用表都未声明）只验证锁语义，
+ * 应用 OD 后端。用 0x0041（标准表与应用表都未声明）只验证锁语义，
  * 不依赖 0x0040 的归属规则。 */
 static void test_parameter_lock_blocks_vendor_write(void** state)
 {
@@ -425,11 +452,16 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
 
     iolink_device_info_ctx_set_access_locks(test_env_info(&g_test_env), IOLINK_LOCK_PARAM);
     g_vendor_calls = 0U;
+    iolink_od_app_t app = {.entries = k_vendor_entries,
+                           .count = sizeof(k_vendor_entries) / sizeof(k_vendor_entries[0]),
+                           .read = vendor_param_read,
+                           .write = vendor_param_write,
+                           .user = NULL};
 
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.vendor_service = vendor_service_ok;
+    iolink_isdu_bind_od(&ctx, &app);
     const uint8_t value = 0x5AU;
     assert_int_equal(isdu_send_write_request(&ctx, 0x0041U, 0U, &value, 1U), 1);
     iolink_isdu_process(&ctx);
@@ -439,17 +471,17 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
     assert_int_equal(n, 2);
     assert_int_equal(out[0], 0x80U);
     assert_int_equal(out[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
-    /* 锁在到达厂商服务之前就拒绝写入。 */
+    /* 锁在到达应用后端之前就拒绝写入。 */
     assert_int_equal(g_vendor_calls, 0U);
 
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.vendor_service = vendor_service_ok;
+    iolink_isdu_bind_od(&ctx, &app);
     assert_int_equal(isdu_send_read_request(&ctx, 0x0041U, 0U), 1);
     iolink_isdu_process(&ctx);
     n = isdu_collect_response(&ctx, out, sizeof(out));
     assert_int_equal(n, 0);
-    /* 读取不受 Parameter 锁影响，确实到达厂商服务。 */
+    /* 读取不受 Parameter 锁影响，确实到达应用后端。 */
     assert_int_equal(g_vendor_calls, 1U);
 }
 

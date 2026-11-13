@@ -228,13 +228,13 @@ void iolink_ds_bind_od(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app);
  * @brief 绑定统一的参数访问器、可选的恢复前校验与显式的参数描述符集合。
  *
  * 用调用方提供的描述符数组替换默认的"标准表 + 应用表"集合，
- * 并让所有 DS 读写都经由 @p read / @p write 路由。厂商参数
- * （0x0040+ / 0x0100+）正是以这种方式加入数据存储集合。当 @p params
- * 为 NULL（或 @p count 为 0）时，描述符集合保持不变。
+ * 并让所有 DS 读写都经由 @p read / @p write 路由。需要自定义
+ * 索引列表或访问路径的应用使用它。当 @p params 为 NULL（或
+ * @p count 为 0）时，描述符集合保持不变。
  *
  * 设备已经绑定了一对默认访问器，其中标准参数
- * 通过 params 上下文提供，其余参数通过
- * vendor_service 提供。仅需要不同 DS 索引列表的
+ * 通过 params 上下文提供，应用参数通过 @c config.od 的
+ * 值后端提供。仅需要不同 DS 索引列表的
  * 应用应当调用 iolink_ds_set_param_desc()，而不是替换访问器。
  *
  * @param ctx    DS 上下文
@@ -256,7 +256,7 @@ void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx, iolink_ds_param_read_fn r
  * @brief 仅替换数据存储参数描述符集合。
  *
  * 当前的读写访问器及其用户指针保持不变。已经
- * 通过 params 上下文或 vendor_service 提供参数的
+ * 通过 params 上下文或应用 OD 后端提供参数的
  * 应用只需在此提供索引列表。
  *
  * @param ctx    DS 上下文
