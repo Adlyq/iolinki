@@ -290,20 +290,24 @@ static void test_app_ds_rejects_whole_image(void** state)
 
     uint8_t tag[40] = {0U};
     uint8_t before_app_tag[40] = {0U};
-    const int before_app_len = iolink_params_ctx_get(&dev.ctx.params, IOLINK_IDX_APPLICATION_TAG,
-                                                     0U, before_app_tag, sizeof(before_app_tag));
-    assert_true(before_app_len >= 0);
+    const iolink_result_t before_app = iolink_params_ctx_read(
+        &dev.ctx.params, IOLINK_IDX_APPLICATION_TAG, 0U, before_app_tag, sizeof(before_app_tag));
+    assert_int_equal(before_app.code, 0);
+    const size_t before_app_len = before_app.len;
 
     assert_int_equal(iolink_ds_apply_image(ds, bad, pos), -2);
 
-    assert_int_equal(
-        iolink_params_ctx_get(&dev.ctx.params, IOLINK_IDX_FUNCTION_TAG, 0U, tag, sizeof(tag)), 3);
+    const iolink_result_t kept_fun =
+        iolink_params_ctx_read(&dev.ctx.params, IOLINK_IDX_FUNCTION_TAG, 0U, tag, sizeof(tag));
+    assert_int_equal(kept_fun.code, 0);
+    assert_int_equal(kept_fun.len, 3);
     assert_memory_equal(tag, "OLD", 3U);
     (void) memset(tag, 0, sizeof(tag));
-    assert_int_equal(
-        iolink_params_ctx_get(&dev.ctx.params, IOLINK_IDX_APPLICATION_TAG, 0U, tag, sizeof(tag)),
-        before_app_len);
-    assert_memory_equal(tag, before_app_tag, (size_t) before_app_len);
+    const iolink_result_t kept_app =
+        iolink_params_ctx_read(&dev.ctx.params, IOLINK_IDX_APPLICATION_TAG, 0U, tag, sizeof(tag));
+    assert_int_equal(kept_app.code, 0);
+    assert_int_equal(kept_app.len, before_app_len);
+    assert_memory_equal(tag, before_app_tag, before_app_len);
 
     /* 合法镜像仍能完整恢复。 */
     const uint8_t new_tag[3] = {'N', 'E', 'W'};
@@ -322,8 +326,10 @@ static void test_app_ds_rejects_whole_image(void** state)
         app_write_object(&dev.ctx, IOLINK_IDX_FUNCTION_TAG, reset_tag, 3U, resp, sizeof(resp)), 0);
     assert_int_equal(iolink_ds_apply_image(ds, backup, image_len), 0);
     (void) memset(tag, 0, sizeof(tag));
-    assert_int_equal(
-        iolink_params_ctx_get(&dev.ctx.params, IOLINK_IDX_FUNCTION_TAG, 0U, tag, sizeof(tag)), 3);
+    const iolink_result_t restored_fun =
+        iolink_params_ctx_read(&dev.ctx.params, IOLINK_IDX_FUNCTION_TAG, 0U, tag, sizeof(tag));
+    assert_int_equal(restored_fun.code, 0);
+    assert_int_equal(restored_fun.len, 3);
     assert_memory_equal(tag, "NEW", 3U);
 }
 

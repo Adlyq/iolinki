@@ -282,8 +282,8 @@ static void test_system_cmd_factory_restore(void** state)
 
     /* 先设置一个自定义应用标签 */
     const uint8_t test_tag[] = "TestTag123";
-    iolink_params_ctx_set(test_env_params(&g_test_env), 0x0018, 0x00, test_tag,
-                          sizeof(test_tag) - 1, false);
+    iolink_params_ctx_write(test_env_params(&g_test_env), 0x0018, 0x00, test_tag,
+                            sizeof(test_tag) - 1, false);
 
     /* 向索引 0x0002 写入 0x82 */
     uint8_t cmd_data[] = {IOLINK_CMD_RESTORE_FACTORY_SETTINGS};
@@ -297,9 +297,10 @@ static void test_system_cmd_factory_restore(void** state)
 
     /* 校验应用标签已被复位 */
     uint8_t readback[33];
-    int len = iolink_params_ctx_get(test_env_params(&g_test_env), 0x0018, 0x00, readback,
-                                    sizeof(readback));
-    assert_int_equal(len, 0); /* 恢复出厂设置后应为空 */
+    const iolink_result_t read_result = iolink_params_ctx_read(test_env_params(&g_test_env), 0x0018,
+                                                               0x00, readback, sizeof(readback));
+    assert_int_equal(read_result.code, 0);
+    assert_int_equal(read_result.len, 0); /* 恢复出厂设置后应为空 */
 }
 
 static void test_system_cmd_reserved_ds_commands(void** state)
@@ -559,9 +560,11 @@ static void test_isdu_data_storage_round_trip(void** state)
 
     /* 配置一个已知的 ApplicationTag。 */
     const char* app = "ISDU-DS";
-    assert_int_equal(iolink_params_ctx_set(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG,
-                                           0U, (const uint8_t*) app, strlen(app), true),
-                     0);
+    assert_int_equal(
+        iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
+                                (const uint8_t*) app, strlen(app), true)
+            .code,
+        0);
 
     /* 上传（读 0x0003）：主站备份序列化后的参数镜像。 */
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x00), 1);
@@ -573,9 +576,10 @@ static void test_isdu_data_storage_round_trip(void** state)
     /* 清空参数。 */
     iolink_params_ctx_factory_reset(test_env_params(&g_test_env));
     uint8_t buf[40];
-    assert_int_equal(iolink_params_ctx_get(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG,
-                                           0U, buf, sizeof(buf)),
-                     0);
+    const iolink_result_t cleared = iolink_params_ctx_read(
+        test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf));
+    assert_int_equal(cleared.code, 0);
+    assert_int_equal(cleared.len, 0);
 
     /* 下载（写 0x0003）：主站恢复已备份的镜像。 */
     iolink_isdu_init(&ctx);
@@ -586,9 +590,10 @@ static void test_isdu_data_storage_round_trip(void** state)
     iolink_isdu_process(&ctx);
 
     /* ApplicationTag 已通过总线恢复。 */
-    int len = iolink_params_ctx_get(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                    buf, sizeof(buf));
-    assert_int_equal(len, (int) strlen(app));
+    const iolink_result_t restored = iolink_params_ctx_read(
+        test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf));
+    assert_int_equal(restored.code, 0);
+    assert_int_equal(restored.len, strlen(app));
     assert_memory_equal(buf, app, strlen(app));
 #endif
 }

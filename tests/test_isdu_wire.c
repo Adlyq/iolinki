@@ -286,9 +286,10 @@ static void test_isdu_wire_write_count_wrap(void** state)
     assert_int_equal(resp[1], chkpdu(resp, 1U));
 
     uint8_t readback[16];
-    assert_int_equal(iolink_params_ctx_get(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG,
-                                           0U, readback, sizeof(readback)),
-                     11);
+    const iolink_result_t read_result = iolink_params_ctx_read(
+        test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, readback, sizeof(readback));
+    assert_int_equal(read_result.code, 0);
+    assert_int_equal(read_result.len, 11);
     assert_memory_equal(readback, &req[5], 11U);
 }
 

@@ -42,19 +42,27 @@ int main(void)
         const uint8_t replacement[] = "replacement";
         uint8_t result[32];
         write_result = 0;
-        assert(iolink_params_ctx_set(&params, indices[i], 0, original, 8, IOLINK_PERSIST_SYNC) ==
-               0);
+        assert(iolink_params_ctx_write(&params, indices[i], 0, original, 8, IOLINK_PERSIST_SYNC)
+                   .code == 0);
         int prior_writes = writes;
         write_result = -1;
-        assert(iolink_params_ctx_set(&params, indices[i], 0, replacement, 11,
-                                     IOLINK_PERSIST_SYNC) == -1);
+        /* 旧整型包装把 NVM 失败压成 -1；结果模型返回内部错误
+         * IOLINK_RESULT_IO，调用方仍可区分失败原因。 */
+        assert(iolink_params_ctx_write(&params, indices[i], 0, replacement, 11, IOLINK_PERSIST_SYNC)
+                   .code == IOLINK_RESULT_IO);
         assert(writes == prior_writes + 1);
-        assert(iolink_params_ctx_get(&params, indices[i], 0, result, sizeof(result)) == 8);
+        const iolink_result_t read_failed =
+            iolink_params_ctx_read(&params, indices[i], 0, result, sizeof(result));
+        assert(read_failed.code == 0);
+        assert(read_failed.len == 8);
         assert(memcmp(result, original, 8) == 0);
-        assert(iolink_params_ctx_set(&params, indices[i], 0, replacement, 11,
-                                     IOLINK_PERSIST_NONE) == 0);
+        assert(iolink_params_ctx_write(&params, indices[i], 0, replacement, 11, IOLINK_PERSIST_NONE)
+                   .code == 0);
         assert(writes == prior_writes + 1);
-        assert(iolink_params_ctx_get(&params, indices[i], 0, result, sizeof(result)) == 11);
+        const iolink_result_t read_volatile =
+            iolink_params_ctx_read(&params, indices[i], 0, result, sizeof(result));
+        assert(read_volatile.code == 0);
+        assert(read_volatile.len == 11);
         assert(memcmp(result, replacement, 11) == 0);
     }
     /* 当持久化标签存储拒绝写入时，真实字节传输必须产生 Write Response (-)，
@@ -84,7 +92,10 @@ int main(void)
         assert(writes == prior_writes + 1);
         assert(memcmp(response, expected, sizeof(expected)) == 0);
         uint8_t retained[32];
-        assert(iolink_params_ctx_get(&params, indices[tag], 0, retained, sizeof(retained)) == 11);
+        const iolink_result_t read_retained =
+            iolink_params_ctx_read(&params, indices[tag], 0, retained, sizeof(retained));
+        assert(read_retained.code == 0);
+        assert(read_retained.len == 11);
         assert(memcmp(retained, "replacement", 11) == 0);
     }
     puts("Persistent tag failures preserve RAM/device info; volatile writes still work");

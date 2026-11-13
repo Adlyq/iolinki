@@ -455,8 +455,9 @@ static void test_0145_download_break_by_reset(void** state)
     reset_fixture_init(&f);
 
     const uint8_t value1[] = "VALUE1";
-    assert_int_equal(iolink_params_ctx_set(&f.params, IOLINK_IDX_APPLICATION_TAG, 0U, value1,
-                                           sizeof(value1) - 1U, true),
+    assert_int_equal(iolink_params_ctx_write(&f.params, IOLINK_IDX_APPLICATION_TAG, 0U, value1,
+                                             sizeof(value1) - 1U, true)
+                         .code,
                      0);
     uint8_t readback[16] = {0U};
     assert_int_equal(reset_fixture_tag(&f, readback, sizeof(readback)),
@@ -503,8 +504,9 @@ static void test_0329_upload_break_by_reset(void** state)
     reset_fixture_init(&f);
 
     const uint8_t value1[] = "VALUE1";
-    assert_int_equal(iolink_params_ctx_set(&f.params, IOLINK_IDX_APPLICATION_TAG, 0U, value1,
-                                           sizeof(value1) - 1U, true),
+    assert_int_equal(iolink_params_ctx_write(&f.params, IOLINK_IDX_APPLICATION_TAG, 0U, value1,
+                                             sizeof(value1) - 1U, true)
+                         .code,
                      0);
 
     uint8_t response[4] = {0U};
