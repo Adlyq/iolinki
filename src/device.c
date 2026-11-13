@@ -205,6 +205,9 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     else {
         /* DEFAULT：保留 iolink_dll_init() 从能力表取的值。 */
     }
+    /* 以上赋值直接写共享区（m_seq_type / PD 长度 / od_width / 应用下限），
+     * 因此在这里统一重建一次 DPP1 映像，保证首次 ISR 页读看到的是配置值。 */
+    iolink_isdu_dp_page1_invalidate(&ctx->dll.main.shared.isdu);
 }
 
 /** @brief 一种固定的 Annex A 布局：PD 输入/输出与可接受的 OD 宽度。 */

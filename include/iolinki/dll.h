@@ -136,14 +136,12 @@ typedef struct
  *
  * 计划表通过 `reply_plan_seq` 发布（seqlock：奇数表示主泵正在写，
  * 偶数表示稳定）。ISR 在拷贝命中项前后各读一次发布字，不一致就
- * 重试；重试仍不一致则视为"计划外请求"，走延迟路径。
+ * 重试；重试仍不一致则视为"计划未命中"。
  *
- * 计划外请求的回退语义：ISR 不应答、不解释内容，关闭 t_A 看门狗并把
- * 帧连同帧结束时间戳发布到邮箱，由主泵在下一个处理窗口里按既有分发
- * 路径处理。主泵比较帧结束时间与 t_A（10 个位时间）：窗口仍打开时按
- * 既有路径应答；窗口已关时只做状态/计数处理，不再发送应答（该应答
- * 必然与主站下一帧重叠），并计入 `late_reply_dropped`。因此计划表只能
- * 删除"ISR 提前应答"，不能改变任何一帧的最终应答内容。
+ * 计划未命中的语义：ISR 不应答、不解释内容，关闭 t_A 看门狗并**丢弃**
+ * 该帧。合法帧不再交给主泵——计划表是"哪些请求可被服务"的唯一出处，
+ * 主泵只消费不立即需要应答的数据（校验失败的帧，以及由计划应答但
+ * 仍需要主泵副作用的帧）。因此计划表直接决定设备的服务范围。
  * @{
  */
 
@@ -178,6 +176,8 @@ typedef enum
 #define IOLINK_REPLY_FLAG_RESTART_TIMER_B 0x10U
 /** @brief 该帧由 ISR 完全消费，不再发布到主泵邮箱。 */
 #define IOLINK_REPLY_FLAG_CONSUME 0x08U
+/** @brief ISR 不应答但帧仍交主泵：接受/拒绝依赖帧内容（如启动期 MasterCommand）。 */
+#define IOLINK_REPLY_FLAG_DEFER 0x20U
 
 /**
  * @brief 一条应答计划：请求指纹 + 应答来源 + 时序预算。
@@ -210,15 +210,13 @@ typedef struct
  * @brief 邮箱环中的一个接收帧（数据 ISR -> 主泵）。
  *
  * 该记录携带主泵处理该帧所需的全部信息，因此没有
- * 任何逐帧状态存在于环之外：长度、ISR 是否已发送应答（eager）以及
- * 帧结束时间都随字节一同传递。
+ * 任何逐帧状态存在于环之外：长度、ISR 是否已发送应答（eager）
+ * 随字节一同传递。
  */
 typedef struct
 {
     uint8_t len;                        /**< 帧长度，以字节计 */
     uint8_t eager;                      /**< 非零表示 ISR 已应答该帧 */
-    uint32_t end_us;                    /**< 帧结束时间（微秒，0 = 未知）：主泵据此
-                                             判断 t_A 应答窗口是否仍然打开 */
     uint8_t data[IOLINK_M_SEQ_MAX_LEN]; /**< 帧字节 */
 } iolink_frame_rec_t;
 
@@ -259,10 +257,9 @@ typedef struct
     uint32_t isr_tx_dropped;       /**< 传输层无法发送的应答（主上下文与 ISR） */
     uint32_t idle_timeouts;        /**< 1 s 空闲链路诊断（不是 t_A 超时） */
     uint32_t isr_od_overruns;      /**< 上一条写请求未被主泵接管时又收到 START */
-    uint32_t isr_plan_misses;      /**< 未命中应答计划、交给主泵的帧 */
+    uint32_t isr_plan_misses;      /**< 未命中应答计划而被丢弃的合法帧 */
     uint32_t isr_mailbox_drops;    /**< 因帧邮箱满而丢弃的帧 */
     uint32_t t_pd_discards;        /**< 在 t_PD 保护窗口内丢弃的邮箱帧 */
-    uint32_t late_reply_dropped;   /**< 应答窗口已关闭而未发送的延迟应答 */
     uint32_t reply_plan_overflows; /**< 因计划槽位耗尽而未发布的计划条目 */
 } iolink_dll_stats_t;
 
@@ -381,7 +378,7 @@ void iolink_dll_process(iolink_dll_main_t* ctx);
  * 发布协议是单写者 seqlock：主泵先把 `reply_plan_seq` 变成奇数，
  * 覆盖计划槽位，再用下一次递增变回偶数；数据 ISR 只在偶数且前后
  * 两次读取相同的窗口内使用计划。因此 ISR 绝不会执行半更新的计划，
- * 最坏情况是判定为"计划外请求"并交给主泵。
+ * 最坏情况是判定为"计划未命中"并丢弃该帧。
  *
  * @param ctx DLL 上下文
  */
@@ -391,9 +388,9 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx);
  * @brief 使已发布的应答计划表失效（仅主上下文）。
  *
  * 把主上下文记录的发布键清零，并把 `reply_plan_seq` 原子写 0。从这一刻
- * 起数据 ISR 把每一帧都当作"计划外请求"：不提前应答、关闭 t_A 看门狗
- * 并把帧连同帧结束时间戳发布到邮箱；主泵只在 t_A 内应答。下一次
- * `iolink_dll_publish_reply_plans()` 必定重发完整计划表。
+ * 起数据 ISR 把每一帧都当作"计划未命中"：不应答、关闭 t_A 看门狗并丢弃
+ * 该帧（非法帧仍交给主泵做错误处理），直到下一次
+ * `iolink_dll_publish_reply_plans()` 重发完整计划表。
  *
  * 调用时机：任何**运行期**改变计划内容的器件状态之后，且必须在下一个
  * 主站帧可能到达之前。当前计划内容依赖的状态为
@@ -404,7 +401,7 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx);
  * 会在每轮结束时自动完成）。
  *
  * 本函数与发布函数都是主上下文单写者操作：ISR 只读取发布字，因此
- * `seq` 从偶数直落 0 不会产生撕裂读，最坏结果是一帧走延迟路径。
+ * `seq` 从偶数直落 0 不会产生撕裂读，最坏结果是丢弃一帧合法请求。
  *
  * @param ctx DLL 上下文
  */
@@ -427,11 +424,12 @@ uint8_t iolink_dll_expected_req_len(const iolink_dll_main_t* ctx, uint8_t mc);
  *
  * 由 PHY 数据中断处理程序调用。它通过
  * phy->rx_octet() 拉取接收到的字节，对 M 序列成帧（使用纯函数
- * iolink_dll_expected_req_len()），把完整请求发布到由
+ * iolink_dll_expected_req_len()），按应答计划直接应答，并把仍需主泵
+ * 处理的帧（校验失败，或由计划应答但需要副作用的帧）发布到由
  * iolink_dll_process() 消费的邮箱，从共享状态组装应答并
  * 通过 phy->tx_octet()/tx_done()（TX BYTE）或 phy->tx_frame()
- * （TX FRAME）喂送应答字节。它从不
- * 执行协议逻辑（ISDU / 参数 /
+ * （TX FRAME）喂送应答字节。合法帧计划未命中时不应答并丢弃。
+ * 它从不执行协议逻辑（ISDU / 参数 /
  * 事件 / 厂商相关部分）；这些仍留在主泵中。
  *
  * 无待处理数据时调用是安全的；当 INT 线未被

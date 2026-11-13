@@ -260,23 +260,22 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 应由且仅由一个主上下文周期性调用 `iolink_device_process()`。只能从 PHY 数据中断调用
 `iolink_device_process_isr()`。同一上下文上并发运行这两个函数是不安全的。
 
-节奏契约：主上下文至少每个 M-cycle 调用一次 `iolink_device_process()`；ISDU 写段和未命中
-应答计划的延迟请求都只由它搬运。应用可以阻塞（EEPROM 写入、固件升级等），但阻塞超过
-t_A（10 个位时间，A.3.5）后：
+节奏契约：主上下文至少每个 M-cycle 调用一次 `iolink_device_process()`；ISDU 写段和
+计划命中但执行失败（例如线路忙）的帧只由它搬运。合法帧的即时应答完全由数据 ISR 负责：
+**计划未命中即丢弃并计 `isr_plan_misses`**，主泵不再接手合法帧。因此应用可以长时间阻塞
+（EEPROM 写入、固件升级等），M-sequence 应答不受影响：
 
-- 主站收不到应答，按自己的重试机制重发；
-- 设备保证不发出窗口外的应答、不抢占总线：主泵在消费邮箱时比较 `now - end_us` 与
-  10 × Tbit，窗口已关时 `dll_send()` 不发送，只把该应答计入 `late_reply_dropped`；
-  该帧仍照常运行状态机与计数；
-- 延迟请求只丢弃、不迟到应答；ISDU 写请求在数据 ISR 内按 FlowCTRL 位置去重累计：
-  重发段只回 ACK、不消耗新位置，因此主站重发风暴不会耗尽缓冲。若主泵尚未接管上一条
-  已收齐的请求就收到新的 START，前一条被覆盖并计入 `isr_od_overruns`。
+- 主站收到的是 ISR 按计划表给出的应答，不依赖主泵节奏；
+- 计划未命中的合法帧被丢弃（主站按自己的重试机制重发），不会产生迟到应答；
+- ISDU 写请求在数据 ISR 内按 FlowCTRL 位置去重累计：重发段只回 ACK、不消耗新位置，
+  因此主站重发风暴不会耗尽缓冲。若主泵尚未接管上一条已收齐的请求就收到新的 START，
+  前一条被覆盖并计入 `isr_od_overruns`。
 
-排查主泵饥饿时读 `iolink_dll_get_stats()`：`isr_plan_misses`（走延迟路径的帧）、
+排查主泵饥饿时读 `iolink_dll_get_stats()`：`isr_plan_misses`（合法帧计划未命中而被丢弃）、
 `isr_mailbox_drops`（邮箱满）、`isr_od_overruns`（已收齐请求被新 START 覆盖）、
-`t_pd_discards`（t_PD 窗口内丢弃的邮箱帧）、`late_reply_dropped`（窗口已关而放弃的
-应答）、`reply_plan_overflows`（计划槽位耗尽）。`isr_od_overruns` 持续增长说明主泵长
-时间未接管已收齐的请求。
+`t_pd_discards`（t_PD 窗口内丢弃的邮箱帧）、`reply_plan_overflows`（计划槽位耗尽）。
+`isr_plan_misses` 持续增长说明计划表缺少某种合法帧形状（或计划表已失效）；`isr_od_overruns`
+持续增长说明主泵长时间未接管已收齐的请求。
 
 `iolink_device_init()` 使用 `config.workspace`（可为 NULL，表示使用上下文内嵌的
 ISDU/DS scratch）；把 scratch 放进 DTCM 或外部 RAM 时在配置里指向工作区即可，工作区
@@ -352,7 +351,7 @@ void iolink_device_set_t_ren_limit_us(iolink_device_ctx_t* ctx, uint32_t limit_u
 
 `iolink_dll_stats_t` 提供 CRC、超时、帧错误、时序错误、t_ren/t_cycle/t_byte/t_pd
 违规、重试以及物理故障计数器，并暴露 ISR 传输路径的 `isr_od_overruns`、
-`isr_plan_misses`、`isr_mailbox_drops`、`t_pd_discards`、`late_reply_dropped` 与
+`isr_plan_misses`、`isr_mailbox_drops`、`t_pd_discards` 与
 `reply_plan_overflows`（含义见 §4.1）。
 
 ### 4.5 能力位
@@ -787,7 +786,7 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 | 宏 | 默认值 | 约束与溢出的可观测计数 |
 | --- | --- | --- |
 | `IOLINK_MBX_SLOTS` | 4 | 帧邮箱深度；2 的幂且 ≥2。满时丢帧并计 `isr_mailbox_drops`。 |
-| `IOLINK_REPLY_PLAN_SLOTS` | 10 | 应答计划槽位上限。满时丢弃多余计划并计 `reply_plan_overflows`，请求退回延迟路径。 |
+| `IOLINK_REPLY_PLAN_SLOTS` | 48 | 应答计划槽位上限（4 个状态切片共用）。满时丢弃多余计划并计 `reply_plan_overflows`。 |
 
 调小深度会省 RAM，但会增加对应计数器的丢弃；`IOLINK_MBX_SLOTS` 用掩码取模，取非
 2 的幂会在编译期报错。ISDU 写请求复用现有请求缓冲（`IOLINK_ISDU_BUFFER_SIZE`），

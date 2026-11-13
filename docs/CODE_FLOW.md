@@ -293,13 +293,16 @@ flowchart TD
     M --> M1{"ISDU 写且校验通过?"}
     M1 -- 是 --> M2["dll_isr_consume_isdu_write()<br/>累计到 shared.isdu（位置去重）<br/>置 isr_isdu_invalidated"]
     M1 -- 否 --> N
-    M2 --> N{"有效帧且查计划命中?<br/>seqlock 读者"}
-    N -- 是 --> N1["dll_isr_plan_execute()<br/>动作 → 取源 → 追加 CKS → 喂字节"]
-    N -- 否 --> O["isr_plan_misses++，有效帧关 t_A 看门狗<br/>以 eager=0 + end_us 发布邮箱"]
-    N1 --> P{"计划带 CONSUME?"}
+    M2 --> N{"合法帧且当前状态切片命中?<br/>seqlock 读者"}
+    N -- 是 --> N2{"计划带 DEFER?"}
+    N2 -- 是 --> N3["以 eager=0 发布邮箱<br/>ISR 不应答"]
+    N2 -- 否 --> N1["dll_isr_plan_execute()<br/>动作 → 取源 → 追加 CKS → 喂字节"]
+    N -- 否 --> O["丢弃 + isr_plan_misses++<br/>（非法帧则 eager=0 发布邮箱）"]
+    N1 --> P{"执行成功且带 CONSUME<br/>且非 ESTAB_COM?"}
     P -- 是 --> P1["dll_mark_master_activity()<br/>本帧不再入邮箱"]
-    P -- 否 --> Q["以 eager=1 + end_us 发布邮箱"]
+    P -- 否 --> Q["以 eager=1（成功）或 eager=0（失败）发布邮箱"]
     Q --> R
+    N3 --> R
     O --> R
     P1 --> R
     F1 --> R
@@ -338,12 +341,17 @@ flowchart TD
 
 ### 5.3 关键约束
 
-- **内容语义只归主泵**：`iolink_dll_publish_reply_plans()` 把当前状态编译成计划表并用 seqlock（`reply_plan_seq` 奇偶）发布；ISR 只做查表与执行。计划内容还依赖运行时能力位（如 `IOLINK_CAP_COMPAT_T0_READ`），而发布键只有 `{状态, M-sequence 类型, OD 宽度, 波特率}`：因此 `iolink_device_set_capabilities()` 调用 `iolink_dll_invalidate_reply_plans()` 把 `reply_plan_seq` 清 0，ISR 立刻按“无计划”回退，下一轮主泵重发布。计划外请求一律不应答、不解释内容，对有效帧关闭 t_A 看门狗并把帧连同 `eager=0` 与帧结束时间戳 `end_us` 发布到邮箱，由主泵按既有分发路径处理。主泵在消费邮箱时比较 `now - end_us > 10 × Tbit`（t_A，A.3.5）：窗口仍开则正常应答，已关则 `dll_send()` 不发送、只计 `late_reply_dropped`，帧仍照常走状态机与计数；`end_us == 0` 的手工发布记录保留旧行为。因此计划表只能削弱“ISR 提前应答”，不能改变任何一帧的最终应答内容。
-- `ctx->shared.isdu` 的**写入口**（`req_buf`/`req_idx`/`req_total`/FlowCTRL 水位/`stage_state`）归数据 ISR；主泵只在 `stage_state=COMPLETE` 时于临界区内读取 `req_buf` 做 CHKPDU 校验与解析，随后执行服务。已发布的成帧应答视图（`len | busy | sel | gen`）与读 FlowCTRL 段索引仍归主泵/ISR 读路径。Page 通道的 DPP1 读取在 ISR 中只读 ISDU/DLL 状态来构建页面字节。
+- **内容语义只归主泵**：`iolink_dll_publish_reply_plans()` 一次编译出 **4 个状态切片**（STARTUP/AWAITING、PREOPERATE、ESTAB_COM、OPERATE）并用 seqlock（`reply_plan_seq` 奇偶）发布；ISR 只扫描当前状态切片。发布键只有 `{M-sequence 类型, OD 宽度, 波特率}`：状态迁移不再触发重发布。计划内容还依赖运行时能力位（如 `IOLINK_CAP_COMPAT_T0_READ`），因此 `iolink_device_set_capabilities()` 调用 `iolink_dll_invalidate_reply_plans()` 把 `reply_plan_seq` 清 0，ISR 立刻按“无计划”处理，下一轮主泵重发布。
+  - **计划未命中的合法帧：不应答、计 `isr_plan_misses` 并丢弃**——主泵不再接手合法帧。
+  - **计划命中但执行失败**（线路忙、ISDU 写尚未进入传输层）：帧以 `eager=0` 发布到邮箱，由主泵兜底。
+  - `IOLINK_REPLY_FLAG_DEFER`：计划命中但 ISR 故意不应答（例如启动期 MasterCommand 的接受/拒绝依赖命令字节与兼容模式），帧原样交主泵。
+  - ESTAB_COM 的首帧即使计划带 `CONSUME` 也仍发布给主泵，由主泵完成到 OPERATE 的迁移。
+  - 非法帧（校验/类型错误）始终发布给主泵做错误/状态处理，不计计划未命中。
+- `ctx->shared.isdu` 的**写入口**（`req_buf`/`req_idx`/`req_total`/FlowCTRL 水位/`stage_state`）归数据 ISR；主泵只在 `stage_state=COMPLETE` 时于临界区内读取 `req_buf` 做 CHKPDU 校验与解析，随后执行服务。已发布的成帧应答视图（`len | busy | sel | gen`）与读 FlowCTRL 段索引仍归主泵/ISR 读路径。DPP1 页读走主泵维护的 RAM 映像（`iolink_isdu_ctx_t::dp_page1`，seqlock 保护、`build_direct_param_page1()` 单一构建口径），ISR 只做索引，不再逐字节重建整页；主泵在配置/参数写入点调用 `iolink_isdu_dp_page1_invalidate()` 立即重建。
 - ISDU 写由 ISR 直接调用 `iolink_isdu_od_write()` 累计（按 FlowCTRL 位置去重）：只有“下一个期望段”推进位置，重发与过早的乱序段照常 ACK 但不修改缓冲，因此重发风暴不会耗尽缓冲。START 置 `isr_isdu_invalidated`；在写被主泵接管并产出新应答前，发布 `len=0`（无服务），因此“写后立刻读”不会读到旧值。上一条已收齐（`COMPLETE`）但主泵尚未接管时又来 START，前一条被覆盖并计 `isr_od_overruns`。
 - **64 位截止时间只由主上下文写**。ISR 只置一次性标志：`isr_dsio_clear`、`isr_fallback_pending`、`isr_master_activity`；诊断侧只写 `iolink_conditions_t::isr_pulse[]` 单字节 one-shot。这类标志由任一方置 1、只由主泵清 0，重复置位幂等。
-- 顺序约束：即时应答在邮箱发布**之前**启动（t_A），记录随后连同 `eager=1` 和帧结束时间戳 `end_us` 一起入环；TX BYTE 下每个中断只喂一个八位组后让出，TX FRAME 由 PHY 拥有整帧传输；重入用 `in_isr` + `isr_reentry_pending` 延迟到外层调用，保证泵状态只有一个写入者。
-- 邮箱是 `IOLINK_MBX_SLOTS` 个槽（默认 4）的 SPSC 环（`include/iolinki/ring.h`）：环满（所有槽都未消费）时新帧计入 `isr_mailbox_drops` 并被丢弃。记录携带自身长度、`eager` 标志与帧结束时间戳 `end_us`，主泵据此快照 `frame_replied_by_isr` / `frame_window_closed`，因此无需跨帧状态。
+- 顺序约束：即时应答在邮箱发布**之前**启动（t_A），记录随后连同 `eager` 标志一起入环；TX BYTE 下每个中断只喂一个八位组后让出，TX FRAME 由 PHY 拥有整帧传输；重入用 `in_isr` + `isr_reentry_pending` 延迟到外层调用，保证泵状态只有一个写入者。
+- 邮箱是 `IOLINK_MBX_SLOTS` 个槽（默认 4）的 SPSC 环（`include/iolinki/ring.h`）：环满（所有槽都未消费）时新帧计入 `isr_mailbox_drops` 并被丢弃。记录携带自身长度与 `eager` 标志，主泵据此快照 `frame_replied_by_isr`，因此无需跨帧状态。
 - 状态通知是**电平式**的：`ctx->shared.state` 立即更新（单字节写，无临界区），`iolink_dll_flush_state_callbacks()` 只在“当前状态 ≠ 上次已交付状态”时调用一次回调。主上下文迁移在 `dll_set_state()` 内立即投递；ISR 迁移只改状态，由下一次主上下文 flush 投递，多次 ISR 迁移会合并为最终状态（中间态不单独回调）。例外：ISR 进入 STARTUP 会置 `startup_notification_pending`，该复位通知优先投递，不会被后续 PREOPERATE 覆盖。flush 由 `iolink_dll_process()` 末尾执行，设备层不再重复调用。
 
 ---
@@ -487,7 +495,7 @@ flowchart LR
 | Type-1/2 WRITE | 暂存 ISDU 写；其余只回 `[PD-in]CKS` | eager 帧仍入邮箱；主泵复制 PD-out、推进状态机 |
 | FALLBACK MasterCommand（0x5A，Type-0 页写 addr 0） | 命中 MasterCommand 计划且带唤醒能力时：回 CKS、置 `isr_fallback_pending`、迁移 FALLBACK | 主泵 `dll_apply_isr_deadline_requests()` 安装 T_FBD |
 
-计划表内容随配置不同：Type-1/2 配置下 OPERATE 的 Type-0 页读只在兼容位 `IOLINK_CAP_COMPAT_T0_READ` 置位时才有普通页读计划，否则计划显式表达“消费并回 STARTUP”；Type-1/2 的页写计划固定为 `[PD-in]CKS`。Type-0 下 addr 0 由 MasterCommand 计划在 ISR 内应用并 `CONSUME`，addr 1..0x1F 的页写与诊断写由 ISR 回 CKS、帧仍交给主泵应用（DPP 写语义归主泵）。
+计划表内容随配置不同：Type-1/2 配置下 OPERATE 的 Type-0 页读只在兼容位 `IOLINK_CAP_COMPAT_T0_READ` 置位时才有普通页读计划，否则计划显式表达“消费并回 STARTUP”；Type-1/2 的页写计划固定为 `[PD-in]CKS`，同时为 OPERATE/ESTAB 的 Type-0 页写补上“回 CKS + 交主泵”的计划（MasterCommand 的状态迁移与 DPP 写语义归主泵）。Type-0 下 addr 0 由 MasterCommand 计划在 ISR 内应用并 `CONSUME`，addr 1..0x1F 的页写、诊断写与过程写由 ISR 回 CKS、帧仍交给主泵应用。STARTUP/AWAITING 的 MasterCommand 与过渡命令用 `DEFER` 计划交主泵（接受/拒绝依赖命令字节；过渡命令需要 SM 的 PREOPERATE→ESTAB_COM 完整回调路径）。
 
 ---
 
@@ -926,11 +934,11 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 | T_DSIO / T_FBD 到期 | COM1 + SIO + STARTUP | `dll_timer_expire_dsio()` / `dll_timer_expire_fbd()` |
 | 字节间超时 | `t_byte_violations` + COMM_TIMING 脉冲，`frame_index = 0` | `dll_timer_expire_t_byte()` |
 | ISR RX 超时 | `timeout_errors++`、COMM_TIMEOUT 脉冲、清 RX 组装、停响应定时器 | `iolink_dll_on_rx_timeout()` |
-| ISR 帧长/校验拒绝 | `isr_eager_rejects` 或 `framing_errors`；未命中计划、交给主泵的帧计 `isr_plan_misses` | `dll_isr_complete_frame()` / `dll_isr_frame_len_ok()` |
+| ISR 帧长/校验拒绝 | `isr_eager_rejects` 或 `framing_errors`；合法帧计划未命中计 `isr_plan_misses` 并丢弃 | `dll_isr_complete_frame()` / `dll_isr_frame_len_ok()` |
 | 已收齐请求被新 START 覆盖 | `isr_od_overruns++`（主泵未及时接管上一条 COMPLETE 请求） | `dll_isr_consume_isdu_write()` |
 | 邮箱环满 | `isr_mailbox_drops++` | `dll_isr_publish_frame()` |
 | t_PD 窗口内收到帧 | 邮箱中的帧被丢弃，`t_pd_discards` 按丢弃数累加 | `dll_drain_rx()` |
-| 延迟应答窗口已关 | `late_reply_dropped++`；帧仍走状态机与计数，不再发送应答 | `dll_send()` |
+| 计划未命中 | 合法帧：`isr_plan_misses++` 并丢弃（不应答、不入邮箱）；非法帧交主泵做错误处理 | `dll_isr_complete_frame()` |
 | 应答计划槽位耗尽 | `reply_plan_overflows++`；对应请求退回延迟路径 | `dll_plan_push()` |
 
 错误计数通过 `iolink_dll_get_stats()` 暴露；部分错误同时触发诊断脉冲，事件 flag 进入 CKS bit7。
@@ -952,7 +960,8 @@ flowchart LR
         M8["shared.isdu<br/>执行/响应状态机（主泵）"]
         M6["shared.isr_isdu_pub<br/>单一 frame + 租约"]
         M7["shared.isr_frame_ring<br/>邮箱槽环"]
-        M9["shared.reply_plan[IOLINK_REPLY_PLAN_SLOTS]<br/>+ reply_plan_seq"]
+        M9["shared.reply_plan[IOLINK_REPLY_PLAN_SLOTS]<br/>+ reply_plan_off/cnt[4] + reply_plan_seq"]
+        M11["shared.isdu.dp_page1[16]<br/>DPP1 映像（seqlock）"]
         M10["timers[IOLINK_TIMER_COUNT] + next_deadline"]
     end
     subgraph ISR["数据 ISR（dll.isr）"]
@@ -982,10 +991,11 @@ flowchart LR
 - `pd_in[IOLINK_PD_IN_BUFFERS][IOLINK_PD_REPLY_MAX]`：布局为 `[OD...][PD-in...][CKS]`，主循环填一个既不是 `pd_in_active` 也不是 `pd_in_captured` 的缓冲区，再原子发布 `pd_in_active`；ISR 在应答开始时捕获，零拷贝发送。`device_pd_in_free_index()` 负责选空闲缓冲：TX BYTE 下 ISR 在帧末释放租约，2 个缓冲即可；TX FRAME 下 DMA 完成时机对库不可见，租约保持到下次捕获（有 `tx_busy()` 时由主泵提前释放），因此保留 3 个。没有空闲缓冲时主循环保留当前 PD-in，下个周期重试并计入 `pd_in_skips`。
 - `pd_out[IOLINK_PD_OUT_MAX_SIZE]`：Type-1/2 帧处理时从 `frame_buf` 复制最新 PD-out；应用通过 `iolink_device_pd_output_read()` 读取。
 - `isr_tx_payload[IOLINK_TX_SLOTS]`（`IOLINK_TX_ISR_SLOT + 1`，默认 3）：应答暂存槽。主上下文在槽 0/1 之间交替（单写者，无 RMW）；最后一个槽（`IOLINK_TX_ISR_SLOT`，默认 2）专供 ISR 自己的即时应答，两个上下文不共享槽计数。
-- `isr_frame_slot[IOLINK_MBX_SLOTS]` + `isr_frame_ring`（默认 4 槽）：帧邮箱是 SPSC 槽环（`include/iolinki/ring.h`）。ISR 把长度、`eager` 标志、帧结束时间戳 `end_us` 和帧字节一起写入一个槽后发布 `in`；主循环 `peek` → 复制 → `release`，并用 `end_us` 判定 t_A 窗口。环满时丢帧并计 `isr_mailbox_drops`，但主循环忙时不会连带丢弃下一帧，也不需要临界区。
+- `isr_frame_slot[IOLINK_MBX_SLOTS]` + `isr_frame_ring`（默认 4 槽）：帧邮箱是 SPSC 槽环（`include/iolinki/ring.h`）。ISR 把长度、`eager` 标志和帧字节一起写入一个槽后发布 `in`；主循环 `peek` → 复制 → `release`。环满时丢帧并计 `isr_mailbox_drops`，但主循环忙时不会连带丢弃下一帧，也不需要临界区。
 - `isr_isdu_pub`（发布字）：主泵把 `{len, busy, sel, gen}` 打包成一个原子字发布；ISR 在 START 时整体采纳并自己维护 FlowCTRL 段索引。成帧应答只有**一份** `frame` 缓冲，`resp_store[0/1]` 只是两个视图槽；租约（先发布 `{len=0,busy=1}`）保证 ISR 不会读到半重建的应答，代数位保证长度/槽位相同的新应答仍会打断旧段序列。
 - `shared.isdu` 写入口：`req_buf` 复用 ISDU 请求缓冲（`IOLINK_ISDU_BUFFER_SIZE`），`req_idx`/`req_total`/FlowCTRL 水位/`stage_state` 由 ISR 单写。位置去重使重发段不占新位置；只有“新 START 覆盖未接管的 COMPLETE 请求”才计 `isr_od_overruns`。
-- `reply_plan[IOLINK_REPLY_PLAN_SLOTS]` + `reply_plan_seq`：主泵按 `{DLL 状态, M-sequence 类型, OD 宽度, 波特率}` 键编译计划，键不变时直接返回；发布是单写者 seqlock（奇数覆盖、偶数稳定），ISR 在拷贝命中项前后各读一次发布字。
+- `reply_plan[IOLINK_REPLY_PLAN_SLOTS]` + `reply_plan_off/cnt[4]` + `reply_plan_seq`：主泵按 `{M-sequence 类型, OD 宽度, 波特率}` 键一次编译 4 个状态切片，键不变时直接返回；发布是单写者 seqlock（奇数覆盖、偶数稳定），ISR 在拷贝命中项前后各读一次发布字，只扫描当前状态切片。
+- `isdu.dp_page1[16]` + `dp_page1_seq`：Direct Parameter Page 1 的 RAM 映像。主泵在配置/参数写入点重建（`iolink_isdu_dp_page1_invalidate()`）；ISR 页读只做索引 + seqlock 双读，不再逐字节构建整页。
 - `timers[IOLINK_TIMER_COUNT]` + `next_deadline`：截止时间表，见第 11 节；64 位截止时间只由主上下文写。
 - `workspace`（可选）：`iolink_isdu_scratch_t` 的 request / payload / response / frame 四个缓冲 + `ds_stage`。绑定后上下文只保留指针；`IOLINK_WORKSPACE_EMBEDDED=0` 时没有内嵌 fallback，调用方必须提供。
 - `iolink_conditions_t`：诊断来源的 RAM 缓存（`isr_pulse[]`、`quiet_since_ms[]`、`edges[]`）；条件本身仍由 `events.pending[]` 的 `present` / `reported` 唯一决定。
@@ -1052,7 +1062,7 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 
 | 对象 | 写者（可写所有权） | 读者 | 移交机制 | 租约/回收 |
 | :--- | :--- | :--- | :--- | :--- |
-| `isr_frame_slot[IOLINK_MBX_SLOTS]` + `isr_frame_ring` | ISR | 主上下文 | 槽环 `in`/`out`（各单写者）；记录含 `len` / `eager` / `end_us` | 主上下文 `release` 后归还 |
+| `isr_frame_slot[IOLINK_MBX_SLOTS]` + `isr_frame_ring` | ISR | 主上下文 | 槽环 `in`/`out`（各单写者）；记录含 `len` / `eager` | 主上下文 `release` 后归还 |
 | `isr_tx_payload[0..1]` + `isr_tx_pending` | 主上下文 | ISR | 槽索引 + `request_service()` | ISR 取走后清 pending |
 | `isr_tx_payload[IOLINK_TX_ISR_SLOT]`（ISR 专用槽） | ISR | ISR | 固定槽 | 帧末 `tx_done` |
 | `pd_in[]` + `pd_in_active` + `pd_in_captured` | 主上下文 | ISR | 索引发布 | `pd_in_captured`；TX BYTE 帧末释放，TX FRAME 保持到下次捕获或 `tx_busy()` 变空闲 |
@@ -1113,7 +1123,7 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 | `IOLINK_FEATURE_SYSTEM_COMMAND` | 是否编译 SystemCommand 处理 |
 | `IOLINK_FEATURE_EVENTS` | 是否编译事件引擎、诊断注册表、DDS、CKS 事件标志与故障轮询 |
 | `IOLINK_PD_IN_MAX_SIZE` / `IOLINK_PD_OUT_MAX_SIZE` / `IOLINK_OD_MAX_SIZE` | PD/OD 缓冲上限（运行时长度不得超过） |
-| `IOLINK_MBX_SLOTS` / `IOLINK_REPLY_PLAN_SLOTS` | 帧邮箱深度（默认 4）/ 应答计划槽位（默认 10）；满时分别计 `isr_mailbox_drops` / `reply_plan_overflows` |
+| `IOLINK_MBX_SLOTS` / `IOLINK_REPLY_PLAN_SLOTS` | 帧邮箱深度（默认 4）/ 应答计划槽位（默认 48，按 4 个状态切片使用）；满时分别计 `isr_mailbox_drops` / `reply_plan_overflows` |
 | `IOLINK_ISDU_BUFFER_SIZE` | 单次 ISDU 事务上限，同时决定 `iolink_isdu_scratch_t` 各缓冲容量 |
 | `IOLINK_DS_IMAGE_MAX` | DS 镜像上限，同时决定 storage 中 DS 分区与 workspace 的 `ds_stage` |
 | `IOLINK_EVENT_QUEUE_SIZE` / `IOLINK_EVENT_PENDING_MAX` | 事件队列深度 / 同时活动的条件数；DDS 快照容量取 `IOLINK_EVENT_PENDING_MAX`（编译期上限 64） |
@@ -1139,7 +1149,7 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 - `phy->set_cq_line` 当前没有栈内调用点（PHY 自己管理 SIO 线状态）。
 - `iolink_events_process()`、`iolink_ds_process()` 由 `iolink_device_process()` 在 ISDU 空闲时自动调度；`iolink_ds_check()` 需要应用自行调度（master 校验和来源应用自有）。
 - 本路径要求 `iolink_critical_enter/exit` 真实可用（初始化会校验），且 `ctx` 的主循环调用与 ISR 调用遵守文档约束。`IOLINK_CONCURRENCY=SINGLE` 档不需要临界区，初始化跳过校验且库不引用该符号；其余档位仍会校验。
-- 主上下文必须至少每个 M-cycle 调用一次 `iolink_device_process()` 才能及时搬运 ISDU 写段与延迟请求。应用阻塞超过 t_A 时主站会超时重发；设备不会发出窗口外应答（`late_reply_dropped` 计数），写段溢出只丢弃并计 `isr_od_overruns`，不会迟到应答。
+- 主上下文必须至少每个 M-cycle 调用一次 `iolink_device_process()` 才能及时搬运 ISDU 写段与计划命中但执行失败的帧。数据中断应答不再依赖主泵：合法帧计划未命中即丢弃并计 `isr_plan_misses`；应用阻塞（EEPROM/升级）不会产生窗口外应答。写段溢出只丢弃并计 `isr_od_overruns`。
 - 当 `phy->stack_timer_start != NULL` 时，PHY 必须在 Timer B 到期时调用 `iolink_dll_on_stack_tick()`，否则 `iolink_device_process()` 会被授权门控挡住；Timer A 超时则应调用 `iolink_dll_on_rx_timeout()`。
 - `TYPE_1_1` 在本路径初始化时被拒绝；固定 Annex A 类型必须使用匹配的 PD/OD 布局。
 - `IOLINK_PHY_FEATURE_TX_BUSY=1` 的 TX FRAME 构建在初始化时要求 PHY 提供 `tx_busy()`，否则返回 `IOLINK_DEVICE_INIT_ERR_PHY`。

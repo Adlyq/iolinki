@@ -142,6 +142,9 @@ static void deliver_expect_type0_ack(iolink_device_ctx_t* ctx)
     expect_value(mock_phy_send, len, 1);
     will_return(mock_phy_send, 0);
     deliver_frame_to_main(ctx);
+    /* 页写可能在帧处理末尾使 DPP1 映像失效：再给主泵一个窗口重建，
+     * 使紧随其后的 ISR 页读拿到新值（真实主循环每周期都会运行）。 */
+    iolink_device_process(ctx);
 }
 
 static uint8_t deliver_type0_read(iolink_device_ctx_t* ctx)
@@ -316,18 +319,9 @@ static void test_dll_wakeup_to_preoperate(void** state)
     /* 等待 t_dwu 到期 */
     usleep(200);
 
-    /* 发送合法的 Type 0 帧（空闲）以进入 PREOPERATE */
-    uint8_t mc = 0x00;
-    uint8_t ck = test_frame_checksum(mc);
-    mock_phy_feed_byte(mc);
-    mock_phy_feed_byte(ck);
-    mock_phy_feed_chk();
-
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1); /* Type-0 写仅回 CKS */
-    will_return(mock_phy_send, 0);
-
-    test_io_cycle(&dev.ctx);
+    /* 启动探测（T1）：合法的 Type-0 页读以 DPP1 字节应答并进入 PREOPERATE */
+    feed_type0_page_read(0x02U);
+    assert_int_equal(deliver_type0_read(&dev.ctx), k_dpp1_type0_com2[0x02]);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
 }
 
@@ -446,6 +440,9 @@ static void test_dll_reject_transition_in_operate(void** state)
 
     move_to_operate_ctx(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
+    const uint32_t misses_before = dev.ctx.dll.main.shared.isr_plan_misses;
+    iolink_dll_stats_t stats_before;
+    iolink_device_get_dll_stats(&dev.ctx, &stats_before);
 
     /* 主站在 OPERATE 状态下发送 0x0F（Transition）。2_V 的 WRITE 帧为
        MC、CKT、PD-out(1)、OD(2)。 */
@@ -460,11 +457,13 @@ static void test_dll_reject_transition_in_operate(void** state)
 
     test_io_cycle(&dev.ctx);
 
-    /* 不应改变状态，且应增加 framing_errors */
+    /* 该帧合法但无计划（0x0F 被排除在所有写计划之外）：ISR 不应答、
+     * 丢弃并计一次计划未命中，状态与主泵错误计数都不变。 */
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
-    iolink_dll_stats_t stats;
-    iolink_device_get_dll_stats(&dev.ctx, &stats);
-    assert_int_not_equal(stats.framing_errors, 0);
+    assert_int_equal(dev.ctx.dll.main.shared.isr_plan_misses, misses_before + 1U);
+    iolink_dll_stats_t stats_after;
+    iolink_device_get_dll_stats(&dev.ctx, &stats_after);
+    assert_int_equal(stats_after.framing_errors, stats_before.framing_errors);
 }
 
 /* 将 Type-0 设备带入 OPERATE：唤醒、PREOPERATE、Transition Command，
@@ -1761,8 +1760,7 @@ static void test_dll_main_pump_type1_2_reply(void** state)
         (iolink_frame_rec_t*) iolink_ring_claim(&dev.ctx.dll.main.shared.isr_frame_ring);
     assert_non_null(rec);
     rec->len = (uint8_t) sizeof(frame);
-    rec->eager = 0U;  /* 无 ISR 应答：必须由主循环泵回复 */
-    rec->end_us = 0U; /* 手工发布：无帧结束时间戳 */
+    rec->eager = 0U; /* 无 ISR 应答：必须由主循环泵回复 */
     (void) memcpy(rec->data, frame, sizeof(frame));
     iolink_ring_publish(&dev.ctx.dll.main.shared.isr_frame_ring);
 

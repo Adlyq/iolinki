@@ -227,6 +227,13 @@ static void init_preop_isdu_read(void)
     iolink_dll_process(&s_dll.main); /* 发布读视图快照 */
 }
 
+/** @brief PREOPERATE，但计划表已失效：任何合法帧都按"计划未命中"丢弃。 */
+static void init_preop_no_plans(void)
+{
+    init_preop();
+    s_dll.main.shared.reply_plan_seq = (IOLINK_ATOMIC_UINT_T) 0U;
+}
+
 static scenario_t s_scenarios[MAX_SCENARIOS];
 static uint32_t s_scenario_count;
 
@@ -306,8 +313,8 @@ static void build_scenarios(void)
 
     sc = &s_scenarios[6];
     sc->name = "plan_miss";
-    sc->init = init_preop;
-    sc->frame[0] = (uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_IDLE);
+    sc->init = init_preop_no_plans;
+    sc->frame[0] = (uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x01U);
     sc->frame[1] = IOLINK_MSEQ_TYPE_0;
     sc->len = 2U;
     sc->expect_tx = 0U;
@@ -321,7 +328,7 @@ static void build_scenarios(void)
     sc->frame[1] = IOLINK_MSEQ_TYPE_0;
     sc->len = 2U;
     sc->expect_tx = 0U;
-    sc->expect_miss = 1U; /* 现行实现：无效帧也走"未应答"分支计数 */
+    sc->expect_miss = 0U; /* 阶段 1 起：无效帧不计入计划未命中 */
     sc->check_first = 0U;
 
     s_scenario_count = 8U;

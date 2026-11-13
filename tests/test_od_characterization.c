@@ -232,6 +232,27 @@ static void test_char_direct_param_page1(void** state)
                             IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 }
 
+/* DPP1 的 ISDU 读与 iolink_isdu_direct_param_page1_octet() 使用同一映像。 */
+static void test_char_direct_param_page1_single_source(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    uint8_t full[16] = {0U};
+    uint8_t one[2] = {0U};
+
+    char_prepare(&ctx, &k_char_info);
+    assert_int_equal(char_read(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0U, full, sizeof(full)), 16);
+
+    for (uint8_t addr = 0U; addr < 16U; addr++) {
+        assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, addr), full[addr]);
+        assert_int_equal(char_read(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, (uint8_t) (addr + 1U), one,
+                                   sizeof(one)),
+                         1);
+        assert_int_equal(one[0], full[addr]);
+        assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, addr), one[0]);
+    }
+}
+
 /* Direct Parameter page 2：可读可写，受 Parameter 访问锁保护。 */
 static void test_char_direct_param_page2(void** state)
 {
@@ -579,6 +600,8 @@ int main(void)
                                         char_teardown),
         cmocka_unit_test_setup_teardown(test_char_device_status, char_setup, char_teardown),
         cmocka_unit_test_setup_teardown(test_char_direct_param_page1, char_setup, char_teardown),
+        cmocka_unit_test_setup_teardown(test_char_direct_param_page1_single_source, char_setup,
+                                        char_teardown),
         cmocka_unit_test_setup_teardown(test_char_direct_param_page2, char_setup, char_teardown),
         cmocka_unit_test_setup_teardown(test_char_identification_objects, char_setup,
                                         char_teardown),

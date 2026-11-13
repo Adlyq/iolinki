@@ -31,7 +31,7 @@
  * | `IOLINK_PD_OUT_MAX_SIZE`  | 32   | PD-out 缓冲上限（字节）          |
  * | `IOLINK_OD_MAX_SIZE`      | 32   | On-request Data 缓冲上限（字节） |
  * | `IOLINK_MBX_SLOTS`        | 4    | 帧邮箱深度（2 的幂，≥ 2）       |
- * | `IOLINK_REPLY_PLAN_SLOTS` | 10   | 应答计划槽位上限                 |
+ * | `IOLINK_REPLY_PLAN_SLOTS` | 48   | 应答计划槽位上限（按状态切片）   |
  * | `IOLINK_ISDU_BUFFER_SIZE` | 256  | 单次 ISDU 事务上限（字节）       |
  * | `IOLINK_DS_IMAGE_MAX`     | 256  | Data Storage 镜像上限（字节）    |
  * | `IOLINK_EVENT_QUEUE_SIZE` | 4    | 事件队列深度                     |
@@ -99,10 +99,10 @@
  * @brief 应答计划槽位上限。
  *
  * 计划表是主泵为 ISR 编译的请求指纹集合；槽位耗尽时多余计划被丢弃
- * 并计入 `reply_plan_overflows`，对应请求退回延迟路径。默认：10
+ * 并计入 `reply_plan_overflows`，对应请求按"计划未命中"丢弃。默认：12
  */
 #ifndef IOLINK_REPLY_PLAN_SLOTS
-#define IOLINK_REPLY_PLAN_SLOTS 10U
+#define IOLINK_REPLY_PLAN_SLOTS 48U
 #endif
 
 /* 环使用 uint8_t 槽数与掩码取模，因此上限为 128（256 会截断为 0）。 */

@@ -167,6 +167,8 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx)
     ctx->state = ISDU_STATE_IDLE;
     ctx->resp_sel = 0U;
     ctx->resp_pub = 0U;
+    /* 清零后的映像没有内容：标记失效，由第一次主泵读取/处理重建。 */
+    iolink_isdu_dp_page1_invalidate(ctx);
 #if IOLINK_WORKSPACE_EMBEDDED
     isdu_attach_scratch(ctx, &ctx->scratch);
 #endif
@@ -1260,16 +1262,99 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
     /* 0x0C-0x0E 保留（0）；0x0F SystemCommand（W）读出为 0。 */
 }
 
-uint8_t iolink_isdu_direct_param_page1_octet(iolink_isdu_ctx_t* ctx, uint8_t addr)
+/** @brief 当前调用是否处于可安全重建 DPP1 映像的主泵上下文。
+ *
+ * 数据 ISR 在 `iolink_dll_shared_t::in_isr` 置位期间运行；独立引擎
+ * （未绑定 DLL）没有 ISR 读者。重建因此只发生在主泵侧，ISR 侧永远
+ * 只读稳定副本。
+ */
+static bool dp_page1_main_context(const iolink_isdu_ctx_t* ctx)
+{
+    const iolink_dll_main_t* dll = (const iolink_dll_main_t*) ctx->dll_ctx;
+    return (dll == NULL) || (dll->shared.in_isr == 0U);
+}
+
+/** @brief 重建 DPP1 映像并按 seqlock 发布（主泵单写者）。
+ *
+ * 先在本地 16 字节缓冲上完成构建，再在序号奇数窗口内覆盖共享映像，
+ * 最后置偶数表示稳定。ISR 只会看到完整的旧映像或完整的新映像；
+ * 整个路径不使用动态内存。
+ */
+static void dp_page1_refresh(iolink_isdu_ctx_t* ctx)
 {
     uint8_t page[16];
 
-    if ((ctx == NULL) || (addr >= sizeof(page))) {
+    build_direct_param_page1(ctx, page);
+    ctx->dp_page1_seq = (uint8_t) (ctx->dp_page1_seq | 1U);
+    (void) memcpy(ctx->dp_page1, page, sizeof(page));
+    ctx->dp_page1_src = ctx->dll_ctx;
+    ctx->dp_page1_info = (const void*) ctx->params_ctx;
+    ctx->dp_page1_seq = (uint8_t) (ctx->dp_page1_seq + 1U);
+}
+
+/** @brief 主泵侧：映像失效时重建。
+ *
+ * 失效标记（@ref iolink_isdu_dp_page1_invalidate 、初始化）总是触发重建。
+ * MasterCycleTime 是主站运行期唯一可写的 DPP1 输入，这里额外比较一次
+ * 该字节，使主泵读路径不依赖每个写入点都记得加失效标记；其余输入
+ * （PD 长度、M-sequence 配置、设备标识）由失效标记覆盖。
+ */
+static void dp_page1_ensure(iolink_isdu_ctx_t* ctx)
+{
+    const iolink_dll_main_t* dll = (const iolink_dll_main_t*) ctx->dll_ctx;
+    bool stale = ((ctx->dp_page1_seq & 1U) != 0U);
+    if ((ctx->dp_page1_src != ctx->dll_ctx) ||
+        (ctx->dp_page1_info != (const void*) ctx->params_ctx)) {
+        stale = true; /* 绑定/重绑上下文：映像必须按新上下文重建 */
+    }
+    if ((dll != NULL) && (ctx->dp_page1[0x01] != dll->master_cycle_time)) {
+        stale = true;
+    }
+    if (stale) {
+        dp_page1_refresh(ctx);
+    }
+}
+
+void iolink_isdu_dp_page1_invalidate(iolink_isdu_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    /* 主泵上下文立即重建，保证下一次 ISR 页读看到一致的新映像；
+     * ISR 侧（理论上不会调用本函数）只标记失效，绝不重建整页。 */
+    if (dp_page1_main_context(ctx)) {
+        dp_page1_refresh(ctx);
+    }
+    else {
+        ctx->dp_page1_seq = (uint8_t) (ctx->dp_page1_seq | 1U);
+    }
+}
+
+uint8_t iolink_isdu_direct_param_page1_octet(iolink_isdu_ctx_t* ctx, uint8_t addr)
+{
+    if ((ctx == NULL) || (addr >= sizeof(ctx->dp_page1))) {
         return 0U;
     }
 
-    build_direct_param_page1(ctx, page);
-    return page[addr];
+    /* 主泵侧按需刷新映像；ISR 侧绝不重建整页。 */
+    if (dp_page1_main_context(ctx)) {
+        dp_page1_ensure(ctx);
+    }
+
+    /* seqlock 读：读序号 → 取字节 → 再读序号校验；最多 3 次。
+     * 映像字节通过 volatile 视图读取，不会被重排到序号检查之外。 */
+    const volatile uint8_t* image = ctx->dp_page1;
+    for (uint8_t attempt = 0U; attempt < 3U; attempt++) {
+        const uint8_t seq = ctx->dp_page1_seq;
+        if ((seq & 1U) != 0U) {
+            continue; /* 主泵正在更新，或映像已失效 */
+        }
+        const uint8_t value = image[addr];
+        if (ctx->dp_page1_seq == seq) {
+            return value;
+        }
+    }
+    return 0U;
 }
 
 /** @brief 读/写 Direct Parameter page 1（只读）与 page 2（设备专用）。 */
@@ -1310,6 +1395,8 @@ static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
             (void) memcpy(page, page2_storage, sizeof(page));
         }
         else {
+            /* 主泵路径直接用同一个构建器（单一口径）；RAM 映像只服务
+             * 数据 ISR 的页读快路径。 */
             build_direct_param_page1(ctx, page);
         }
 
@@ -1808,7 +1895,14 @@ static bool isdu_apply_staged_request(iolink_isdu_ctx_t* ctx)
 
 void iolink_isdu_process(iolink_isdu_ctx_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->buffer == NULL)) {
+    if (ctx == NULL) {
+        return;
+    }
+
+    /* DPP1 映像失效时由主泵在本上下文重建，ISR 只读稳定副本。 */
+    dp_page1_ensure(ctx);
+
+    if (ctx->buffer == NULL) {
         return;
     }
 

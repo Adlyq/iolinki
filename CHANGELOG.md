@@ -10,18 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added (slot sizing and diagnostics)
 - `IOLINK_MBX_SLOTS` and `IOLINK_REPLY_PLAN_SLOTS` are overridable in
   `include/iolinki/config.h` (`#ifndef` plus power-of-two/range checks).
-  Defaults: frame mailbox 4, reply-plan slots 10; `IOLINK_TX_SLOTS` is derived
-  from `IOLINK_TX_ISR_SLOT`.
+  Defaults: frame mailbox 4, reply-plan slots 48 (four state slices share one
+  table); `IOLINK_TX_SLOTS` is derived from `IOLINK_TX_ISR_SLOT`.
 - `iolink_dll_stats_t` gains `isr_od_overruns`, `isr_plan_misses`,
-  `isr_mailbox_drops`, `t_pd_discards`, `late_reply_dropped` and
-  `reply_plan_overflows`, so overwritten requests, deferred frames, plan
-  entries and replies that missed their window are all observable.
+  `isr_mailbox_drops`, `t_pd_discards` and `reply_plan_overflows`, so
+  overwritten requests, dropped plan misses, deferred frames, plan entries and
+  frames discarded inside the t_PD window are all observable.
 
-### Fixed (reply window and drop counters)
-- A deferred reply whose t_A window (10 bit times after the frame end) has
-  already expired is no longer transmitted: the main pump still processes the
-  frame's state and counters, drops the reply and counts `late_reply_dropped`,
-  so it cannot overlap the master's next frame.
+### Fixed (reply ownership and drop counters)
 - Frames discarded inside the t_PD protection window are counted in
   `t_pd_discards`; reply-plan slot exhaustion is counted in
   `reply_plan_overflows` instead of being silent.
@@ -30,6 +26,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the main pump, which applies the write without sending a second reply. This
   removes the PREOPERATE stall where a late main pump dropped the MinCycleTime
   page-write acknowledgement and the master retried it forever.
+
+### Changed (ISR owns the reply path)
+- A valid frame that matches no reply plan is now dropped and counted in
+  `isr_plan_misses`; it is no longer handed to the main pump. The main pump
+  only consumes frames that do not need an immediate reply (eager copies,
+  writes it must apply, deferred decisions and invalid frames). A plan hit
+  whose execution fails (busy line, ISDU write not yet staged) is still
+  deferred to the main pump.
+- Reply plans are published once as four state slices (STARTUP/AWAITING,
+  PREOPERATE, ESTAB_COM, OPERATE) under the key
+  `{M-sequence type, OD width, baudrate}`; state transitions no longer require
+  a main-pump republish. ESTAB_COM shares the OPERATE content but always
+  publishes its first frame so the main pump can complete the transition.
+- `IOLINK_REPLY_FLAG_DEFER` is added: a matching plan may deliberately leave
+  the frame to the main pump (startup MasterCommand acceptance depends on the
+  command byte and the compatibility mode).
+- Direct Parameter Page 1 is now a main-pump-maintained RAM image
+  (`iolink_isdu_ctx_t::dp_page1`, seqlock-protected) instead of being rebuilt
+  on every ISR read; the page-read path is an index plus checksum.
+- IDLE/IDLE2/ABORT ISDU reads get a CONSUME plan that answers `0x00` and asks
+  the main pump to reset the read transport via the one-shot
+  `isr_isdu_read_reset` handshake.
+- Type-0 process writes are planned (ACK + deliver) in every state, and
+  Type-1/2 OPERATE/ESTAB also plan Type-0 page writes, so no valid frame shape
+  falls through to the main pump.
+- Removed: `iolink_frame_rec_t::end_us`, `iolink_dll_stats_t::late_reply_dropped`,
+  `iolink_dll_main_t::late_reply_dropped`, `frame_window_closed` and
+  `dll_reply_window_closed()`. Replies are either sent by the ISR inside its
+  plan or not sent at all; there is no late-reply window to gate.
 
 ### Changed (ISDU write ingestion)
 - ISDU write requests are now accumulated in the data ISR with positional
@@ -42,9 +67,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   saves about 260 bytes and removes the ring-full overrun path. The internal
   `IOLINK_ISDU_ERROR_SEGMENTATION` constant is removed because the write path
   no longer emits it (out-of-order segments are ignored and self-heal).
-- The ISR publishes the frame-end timestamp with each mailbox record
-  (`iolink_frame_rec_t::end_us`); `isr_plan_misses` moved to the shared DLL
-  region.
+- `isr_plan_misses` lives in the shared DLL region and counts only valid plan
+  misses; invalid frames are counted as framing/eager rejects.
 
 ### Changed (IODD single source)
 - IODD generation takes parameters only from the C object dictionary

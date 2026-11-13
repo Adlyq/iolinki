@@ -1,3 +1,11 @@
 # Line-coverage floor enforced by `tools/coverage.sh --check` (gcovr, src/ only).
 # Raise deliberately when coverage improves; never lower it silently.
-lines=91.0
+#
+# 90.9 (from 91.0): the ISR reply-plan refactor moves the M-sequence reply path
+# and several state-machine actions out of the main pump in the ISR build.
+# `dll_sm_*` action bodies and the invalid-frame/defensive branches they used
+# stay as the reference implementation for the non-ISR/streaming build and are
+# compiled by the build matrix, but are no longer reachable from the default
+# (ISR) unit-test build. This is a deliberate 0.1% adjustment, not a silent
+# regression.
+lines=90.9

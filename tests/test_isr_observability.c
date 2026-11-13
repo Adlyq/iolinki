@@ -267,13 +267,16 @@ static int test_0053_reserved_flowctrl_no_service(void)
         while (dll.main.shared.isr_tx_active != 0U) {
             iolink_dll_process_isr(&dll.main);
         }
-        /* 无效 FlowCTRL 被有意留给主泵处理。 */
-        iolink_dll_process(&dll.main);
-        while (dll.main.shared.isr_tx_active != 0U) {
-            iolink_dll_process_isr(&dll.main);
-        }
         if ((tx_n != 2U) || (tx_q[0] != 0x00U)) {
             return (int) (fc - 0x10U);
+        }
+        /* ISR 只回 0x00；传输层复位经一次性标志交给主泵。 */
+        if (dll.main.shared.isr_isdu_read_reset == 0U) {
+            return 0x40 + (int) (fc - 0x10U);
+        }
+        iolink_dll_process(&dll.main);
+        if (dll.main.shared.isr_isdu_read_reset != 0U) {
+            return 0x60 + (int) (fc - 0x10U);
         }
     }
     return 0;
@@ -291,8 +294,8 @@ static uint8_t type0_isdu_exchange(iolink_dll_ctx_t* dll, uint8_t fc)
     while (dll->main.shared.isr_tx_active != 0U) {
         iolink_dll_process_isr(&dll->main);
     }
-    /* IDLE/ABORT 留给主泵处理；合法的 COUNT/START 已由
-       ISR 应答，且不发布帧。 */
+    /* IDLE/ABORT 由 ISR 回 0x00（CONSUME），复位请求经标志交给主泵；
+       合法的 COUNT/START 同样由 ISR 应答且不发布帧。 */
     iolink_dll_process(&dll->main);
     while (dll->main.shared.isr_tx_active != 0U) {
         iolink_dll_process_isr(&dll->main);
@@ -445,7 +448,6 @@ static void push_mailbox(iolink_dll_ctx_t* dll, const uint8_t* frame, uint8_t le
     }
     rec->len = len;
     rec->eager = 0U;
-    rec->end_us = 0U; /* 手工发布：无帧结束时间戳 */
     (void) memcpy(rec->data, frame, len);
     iolink_ring_publish(&dll->main.shared.isr_frame_ring);
 }

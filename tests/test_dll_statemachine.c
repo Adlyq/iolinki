@@ -177,9 +177,9 @@ static int test_phase_property(void)
         drain_tx();
         const int page_reply =
             (state == IOLINK_DLL_STATE_STARTUP) || (state == IOLINK_DLL_STATE_AWAITING_COMM) ||
-            (state == IOLINK_DLL_STATE_PREOPERATE)
+            (state == IOLINK_DLL_STATE_PREOPERATE) || (state == IOLINK_DLL_STATE_ESTAB_COM)
 #if IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE
-            || (state == IOLINK_DLL_STATE_ESTAB_COM) || (state == IOLINK_DLL_STATE_OPERATE)
+            || (state == IOLINK_DLL_STATE_OPERATE)
 #endif
             ;
         if (page_reply) {
@@ -238,21 +238,24 @@ static int test_phase_property(void)
     return 0;
 }
 
-/* 计划表携带发布状态；状态迁移后旧计划自动失效，重发布后恢复即时应答。 */
+/* 计划表按状态切片：状态迁移后 ISR 直接使用新状态切片，不需要主泵
+ * 重发布；ESTAB_COM 的首帧应答后仍交主泵完成迁移。 */
 static int test_plan_state_stamp_and_republish(void)
 {
     init_state(IOLINK_DLL_STATE_PREOPERATE);
 
-    /* 已发布计划必须全部属于当前状态。 */
-    const uint8_t count = s_dll.main.shared.reply_plan_count;
+    /* PREOPERATE 切片非空，且切片内的计划都标记为该状态。 */
+    const uint8_t off = s_dll.main.shared.reply_plan_off[IOLINK_PLAN_SLOT_PREOPERATE];
+    const uint8_t count = s_dll.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_PREOPERATE];
     if (count == 0U) {
         return 1;
     }
     for (uint8_t i = 0U; i < count; i++) {
-        if (s_dll.main.shared.reply_plan[i].state != (uint8_t) IOLINK_DLL_STATE_PREOPERATE) {
+        if (s_dll.main.shared.reply_plan[off + i].state != (uint8_t) IOLINK_DLL_STATE_PREOPERATE) {
             return 2;
         }
     }
+    const IOLINK_ATOMIC_UINT_T seq_before = s_dll.main.shared.reply_plan_seq;
 
     /* 过渡命令由 ISR 计划消费并把状态推进到 ESTAB_COM（不应答）。 */
     uint8_t frame[2];
@@ -267,46 +270,33 @@ static int test_plan_state_stamp_and_republish(void)
         return 4;
     }
 
-    /* 计划表仍是 PREOPERATE 版本：ISR 不得执行，帧必须交给主泵。
-     * Type-0 页读在 PREOPERATE 计划里是"页字节+CKS"，在 ESTAB_COM 里
-     * 语义已变；只有状态戳能让 ISR 拒绝旧计划。 */
-    const uint32_t misses_before = s_dll.main.shared.isr_plan_misses;
+    /* ESTAB_COM 有独立切片：Type-0 页读由 ISR 即时应答（页字节 + CKS），
+     * 同时帧仍进邮箱交给主泵完成到 OPERATE 的迁移。 */
     make_frame((uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), IOLINK_MSEQ_TYPE_0,
                frame, 2U);
     feed(frame, 2U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 0U) {
-        return 5;
-    }
-    if (s_dll.main.shared.isr_plan_misses != (misses_before + 1U)) {
-        return 6;
+    if (s_tx_n != 2U) {
+        return 5; /* 页字节 + CKS */
     }
     const iolink_frame_rec_t* rec =
         (const iolink_frame_rec_t*) iolink_ring_peek(&s_dll.main.shared.isr_frame_ring);
-    if ((rec == NULL) || (rec->eager != 0U)) {
-        return 7;
+    if ((rec == NULL) || (rec->eager != 1U)) {
+        return 6; /* 已应答但必须交给主泵 */
     }
 
-    /* 主泵按状态机表应答并重发布计划（ESTAB -> OPERATE）。 */
+    /* 主泵消费该帧：ESTAB -> OPERATE。计划表不重发布（键与状态无关）。 */
     iolink_dll_process(&s_dll.main);
     drain_tx();
     if (s_dll.main.shared.state != IOLINK_DLL_STATE_OPERATE) {
-        return 8;
+        return 7;
     }
-    if (s_tx_n == 0U) {
-        return 9;
-    }
-    if (s_dll.main.shared.reply_plan_count == 0U) {
-        return 10;
-    }
-    for (uint8_t i = 0U; i < s_dll.main.shared.reply_plan_count; i++) {
-        if (s_dll.main.shared.reply_plan[i].state != (uint8_t) IOLINK_DLL_STATE_OPERATE) {
-            return 11;
-        }
+    if (s_dll.main.shared.reply_plan_seq != seq_before) {
+        return 8; /* 状态迁移不触发重发布 */
     }
 
-    /* 重发布后，配置类型的过程读恢复 ISR 即时应答。 */
+    /* OPERATE 切片：配置类型的过程读由 ISR 即时应答。 */
     const uint32_t misses_after = s_dll.main.shared.isr_plan_misses;
     make_frame((uint8_t) (IOLINK_MC_CHANNEL_PROCESS | IOLINK_MC_RW_MASK), IOLINK_MSEQ_TYPE_1, frame,
                2U);
@@ -314,10 +304,10 @@ static int test_plan_state_stamp_and_republish(void)
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
     if (s_tx_n == 0U) {
-        return 12;
+        return 9;
     }
     if (s_dll.main.shared.isr_plan_misses != misses_after) {
-        return 13;
+        return 10;
     }
     return 0;
 }

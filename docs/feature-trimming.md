@@ -93,8 +93,9 @@ These are not feature switches; they size the static buffers and are validated b
 - `IOLINK_DS_IMAGE_MAX` (default 256)
 - `IOLINK_MBX_SLOTS` (default 4; power of two in `[2, 128]`) — frames the data
   ISR may queue for the main pump
-- `IOLINK_REPLY_PLAN_SLOTS` (default 10) — reply-plan entries the main pump
-  may publish to the ISR; overflow is counted in `reply_plan_overflows`
+- `IOLINK_REPLY_PLAN_SLOTS` (default 48) — reply-plan entries the main pump
+  may publish to the ISR (four state slices share one table); overflow is
+  counted in `reply_plan_overflows`
 
 `IOLINK_TX_SLOTS` is derived (`IOLINK_TX_ISR_SLOT + 1`) and must not be
 overridden on its own. The `capacity_overrides` probe in

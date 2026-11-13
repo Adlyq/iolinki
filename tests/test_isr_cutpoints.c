@@ -50,7 +50,6 @@ static bool publish_frame(iolink_dll_ctx_t* ctx, uint8_t tag, uint8_t len)
     }
     rec->len = len;
     rec->eager = (uint8_t) (tag & 1U);
-    rec->end_us = 0U; /* 手工发布：无帧结束时间戳 */
     for (uint8_t i = 0U; i < len; i++) {
         rec->data[i] = (uint8_t) (tag + i);
     }

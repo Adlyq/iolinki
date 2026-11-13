@@ -23,6 +23,16 @@
  * ISR 独占的字段在 dll_isr.h 中，主上下文独占的字段在 dll_main.h 中。
  */
 
+/** @brief 计划槽位的状态切片：ISR 只扫描当前状态的连续切片。 */
+typedef enum
+{
+    IOLINK_PLAN_SLOT_STARTUP = 0,    /**< STARTUP 与 AWAITING_COMM 共用 */
+    IOLINK_PLAN_SLOT_PREOPERATE = 1, /**< PREOPERATE */
+    IOLINK_PLAN_SLOT_ESTAB_COM = 2,  /**< 与 OPERATE 共用内容（首帧仍交主泵） */
+    IOLINK_PLAN_SLOT_OPERATE = 3,    /**< OPERATE */
+    IOLINK_PLAN_SLOT_COUNT = 4
+} iolink_reply_plan_slot_t;
+
 /**
  * @brief 主上下文与数据 ISR 共享的 DLL 状态。
  */
@@ -106,6 +116,16 @@ typedef struct iolink_dll_shared
      */
     volatile uint8_t isr_isdu_invalidated;
 
+    /**
+     * @brief ISDU 读传输层复位请求（ISR -> 主泵，一次性）。
+     *
+     * ISR 在 ISDU 读的 FlowCTRL 为 IDLE/IDLE2/ABORT（0x11..0x1F）时仍回
+     * 0x00（无服务），并置 1 请求主泵复位读传输层。Type-0 下这类读由
+     * CONSUME 计划完全消费，主泵看不到该帧，复位只能经此标志传达。
+     * 与 isr_dsio_clear 相同的一次性握手：ISR 置位幂等，只有主泵清 0。
+     */
+    volatile uint8_t isr_isdu_read_reset;
+
     uint8_t isr_isdu_last_flowctrl; /**< 最后接受的 FlowCTRL（0xFF = 无） */
 
     /**
@@ -119,7 +139,9 @@ typedef struct iolink_dll_shared
      * @{
      */
     volatile IOLINK_ATOMIC_UINT_T reply_plan_seq;            /**< seqlock 发布字 */
-    uint8_t reply_plan_count;                                /**< 有效槽位数量 */
+    uint8_t reply_plan_total;                                /**< 有效槽位总数 */
+    uint8_t reply_plan_off[4];                               /**< 每状态切片起点 */
+    uint8_t reply_plan_cnt[4];                               /**< 每状态切片长度 */
     iolink_reply_plan_t reply_plan[IOLINK_REPLY_PLAN_SLOTS]; /**< 计划槽位 */
     /** @} */
 
@@ -130,7 +152,7 @@ typedef struct iolink_dll_shared
     uint32_t isr_od_overruns; /**< 上一条写请求尚未被主泵接管时又收到 START，
                                    导致前一条被覆盖的次数 */
 
-    uint32_t isr_plan_misses; /**< ISR 未命中应答计划而交给主泵的帧 */
+    uint32_t isr_plan_misses; /**< ISR 未命中应答计划而丢弃的合法帧 */
 
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
     iolink_dll_isr_stats_t isr_stat; /**< ISR 自有的计数器组（SPLIT 模式） */

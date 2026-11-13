@@ -55,12 +55,12 @@
  *  2. 应答计划：dll_isr_plan_lookup 在 dll.c 发布的计划表中查找
  *     命中项（seqlock 读者）；dll_isr_plan_execute 按计划执行
  *     动作 -> 取源 -> 追加 CKS -> 喂字节。
- *  3. 计划外请求：不应答、不解释内容，关闭 t_A 看门狗并把帧连同帧
- *     结束时间戳以 eager=0 发布到邮箱；主泵按既有分发路径处理，
- *     但只在该时间戳仍在 t_A 窗口内时发送应答。
+ *  3. 合法帧计划未命中：不应答、不解释内容，关闭 t_A 看门狗并直接
+ *     丢弃（计划表是"哪些请求可被服务"的唯一出处）。
  *  4. 计划命中（CONSUME）的帧不再发布到邮箱，只在
  *     shared.isr_consumed_us/isr_consumed_seq 上交接帧结束时间戳，
  *     由主泵补做 T_CYCLE/T_REN 记账与 last_response_us 更新。
+ *  5. 校验失败的帧以 eager=0 发布到邮箱，由主泵完成错误/回退处理。
  *
  * 交接与顺序约束：
  *  - 即时回复在邮箱发布*之前*启动（t_A）；记录随后
@@ -187,10 +187,10 @@ static bool dll_isr_frame_valid_acc(const iolink_dll_main_t* ctx, const uint8_t*
  * 调用；当环已满时返回 false（并计入一次丢弃）。八位组
  * 在发布之前复制，因此 ISR 一返回 PHY 即可复用其接收
  * 缓冲区。@p eager 记录该 ISR 是否已
- * 发送回复（此时主泵必须保持静默）；@p end_us 是帧结束
- * 时间戳，主泵据此判断 t_A 应答窗口是否仍然打开。 */
+ * 发送回复（此时主泵必须保持静默）。只有校验失败的帧与由计划
+ * 应答但需要主泵副作用的帧会进入邮箱。 */
 static bool dll_isr_publish_frame(iolink_dll_main_t* ctx, const uint8_t* frame, uint8_t len,
-                                  uint8_t eager, uint32_t end_us)
+                                  uint8_t eager)
 {
     if ((frame == NULL) || (len > IOLINK_M_SEQ_MAX_LEN)) {
         IOLINK_LOG_ISR_DEBUG(&ctx->shared.log, "frame publish rejected: len=%u", (unsigned) len);
@@ -207,7 +207,6 @@ static bool dll_isr_publish_frame(iolink_dll_main_t* ctx, const uint8_t* frame, 
     }
     record->len = len;
     record->eager = eager;
-    record->end_us = end_us;
     (void) memcpy(record->data, frame, len);
     iolink_ring_publish(&ctx->shared.isr_frame_ring); /* 最后发布 */
     return true;
@@ -260,6 +259,15 @@ static void dll_isr_isdu_od(iolink_dll_main_t* ctx, uint8_t flowctrl, uint8_t* o
         od[i] = 0x00U;
     }
 
+    /* IDLE / IDLE2 / ABORT / 保留（0x11..0x1F）：无服务，并请求主泵
+     * 复位读传输层。这条路径不受下面的"写失效"门控影响：中止/空闲读
+     * 总是应当复位传输层。 */
+    if (flowctrl >= IOLINK_FLOWCTRL_IDLE) {
+        od[0] = 0x00U;
+        ctx->shared.isr_isdu_read_reset = 1U;
+        return;
+    }
+
     /* 失效协议：ISDU 写已暂存但尚未被主泵应用时，读视图不能继续
      * 充当"当前应答"。零填充上一步已给出 0x00（无服务），主站会重试。 */
     if (ctx->shared.isr_isdu_invalidated != 0U) {
@@ -287,10 +295,6 @@ static void dll_isr_isdu_od(iolink_dll_main_t* ctx, uint8_t flowctrl, uint8_t* o
         ctx->shared.isr->isr_isdu_idx = 0U;
         ctx->shared.isr->isr_isdu_seg_idx = 0U;
         ctx->shared.isr_isdu_last_flowctrl = IOLINK_FLOWCTRL_START;
-    }
-    else if (flowctrl >= IOLINK_FLOWCTRL_IDLE) {
-        od[0] = 0x00U; /* IDLE / IDLE2 / ABORT / 保留：无服务 */
-        return;
     }
     else {
         /* COUNT（0x00..0x0F）。已发布视图发生变化（新响应或 Busy
@@ -525,12 +529,30 @@ static bool dll_isr_start_reply_byte(iolink_dll_main_t* ctx, uint8_t* base, uint
  * 回多少字节）留在本文件，内容语义只在 dll.c。
  * ------------------------------------------------------------------------- */
 
+/** @brief 状态到计划切片的映射（FALLBACK 没有计划）。 */
+static int dll_plan_slot_of(iolink_dll_state_t state)
+{
+    switch (state) {
+        case IOLINK_DLL_STATE_STARTUP:
+        case IOLINK_DLL_STATE_AWAITING_COMM:
+            return (int) IOLINK_PLAN_SLOT_STARTUP;
+        case IOLINK_DLL_STATE_PREOPERATE:
+            return (int) IOLINK_PLAN_SLOT_PREOPERATE;
+        case IOLINK_DLL_STATE_ESTAB_COM:
+            return (int) IOLINK_PLAN_SLOT_ESTAB_COM;
+        case IOLINK_DLL_STATE_OPERATE:
+            return (int) IOLINK_PLAN_SLOT_OPERATE;
+        default:
+            return -1;
+    }
+}
+
 /**
  * @brief 在已发布的计划表中查找命中项（单写者 seqlock 读者）。
  *
  * 发布字为奇数表示主泵正在覆盖槽位，读者不得使用；拷贝命中项前后
  * 各读一次发布字，只有两次相同才接受。三次重试仍冲突时返回 false，
- * 本帧按"计划外请求"走延迟路径（交给主泵）。
+ * 本帧按"计划未命中"处理（丢弃）。
  */
 static bool dll_isr_plan_lookup(const iolink_dll_main_t* ctx, const uint8_t* frame, uint8_t len,
                                 iolink_reply_plan_t* out)
@@ -542,20 +564,28 @@ static bool dll_isr_plan_lookup(const iolink_dll_main_t* ctx, const uint8_t* fra
     const uint8_t ckt = frame[1];
     const uint8_t addr = (uint8_t) (mc & IOLINK_MC_ADDR_MASK);
 
+    const int slot = dll_plan_slot_of(ctx->shared.state);
+    if (slot < 0) {
+        return false; /* FALLBACK / 未定义状态：没有可提前应答的计划 */
+    }
     for (uint8_t attempt = 0U; attempt < 3U; attempt++) {
         const IOLINK_ATOMIC_UINT_T seq = iolink_atomic_load(&ctx->shared.reply_plan_seq);
         if ((seq == 0U) || ((seq & 1U) != 0U)) {
-            /* 0 = 计划表已失效（尚未发布或刚被主泵撤回）：本帧按计划外
-             * 请求交给主泵；奇数 = 主泵正在覆盖槽位。 */
+            /* 0 = 计划表已失效（尚未发布或刚被主泵撤回）：本帧按计划
+             * 未命中丢弃；奇数 = 主泵正在覆盖槽位。 */
             continue;
         }
         bool found = false;
-        const uint8_t count = ctx->shared.reply_plan_count;
-        const uint8_t limit = (count > IOLINK_REPLY_PLAN_SLOTS) ? IOLINK_REPLY_PLAN_SLOTS : count;
-        for (uint8_t i = 0U; i < limit; i++) {
-            const iolink_reply_plan_t* plan = &ctx->shared.reply_plan[i];
-            if ((plan->state != (uint8_t) ctx->shared.state) ||
-                ((mc & plan->match_mask) != plan->match_value) || (addr > plan->addr_max) ||
+        const uint8_t off = ctx->shared.reply_plan_off[slot];
+        const uint8_t room =
+            (off <= IOLINK_REPLY_PLAN_SLOTS) ? (uint8_t) (IOLINK_REPLY_PLAN_SLOTS - off) : 0U;
+        uint8_t count = ctx->shared.reply_plan_cnt[slot];
+        if (count > room) {
+            count = room;
+        }
+        for (uint8_t i = 0U; i < count; i++) {
+            const iolink_reply_plan_t* plan = &ctx->shared.reply_plan[off + i];
+            if (((mc & plan->match_mask) != plan->match_value) || (addr > plan->addr_max) ||
                 ((plan->req_len != 0U) && (plan->req_len != len)) ||
                 ((plan->ckt_mask != 0U) && ((ckt & plan->ckt_mask) != plan->ckt_value))) {
                 continue;
@@ -738,9 +768,10 @@ static bool dll_isr_plan_execute(iolink_dll_main_t* ctx, const iolink_reply_plan
  *
  * 消费 ISDU 写，然后按主泵发布的应答计划决定是否提前应答。
  * 计划命中项在邮箱复制之前执行，因此第一个应答八位组绝不会等待
- * 发布（t_A）；计划外请求走延迟路径：ISR 关闭 t_A 看门狗、把帧连同
- * 帧结束时间戳和 eager=0 发布到邮箱，由主泵按既有分发路径处理。
- * 主泵只在帧结束时间仍在 t_A 内时发送应答。
+ * 发布（t_A）。合法帧未命中计划时 ISR 不解释内容、关闭 t_A 看门狗
+ * 并丢弃该帧：计划表是"哪些请求可被服务"的唯一出处，主泵只消费
+ * 不立即需要应答的数据。校验失败的帧仍发布到邮箱，由主泵完成
+ * 错误/回退处理与计数。
  */
 static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t* frame, uint8_t len,
                                           bool valid)
@@ -764,13 +795,30 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
             ((frame[1] & IOLINK_MSEQ_TYPE_MASK) != IOLINK_MSEQ_TYPE_0)) {
             ctx->shared.isr->isr_eager_rejects++;
         }
+        /* 非法帧不解释内容、不计计划未命中：交给主泵做错误/状态处理。 */
+        (void) dll_isr_publish_frame(ctx, frame, len, 0U);
+        return;
     }
+
+    /* ESTAB_COM 的首帧必须让主泵看到才能完成到 OPERATE 的迁移：
+     * ISR 只负责即时应答，不消费该帧。 */
+    const bool estab_com = (ctx->shared.state == IOLINK_DLL_STATE_ESTAB_COM);
 
     iolink_reply_plan_t plan;
     bool replied = false;
-    if (valid && dll_isr_plan_lookup(ctx, frame, len, &plan)) {
+    bool planned = dll_isr_plan_lookup(ctx, frame, len, &plan);
+    if (planned) {
+        if ((plan.flags & IOLINK_REPLY_FLAG_DEFER) != 0U) {
+            /* 内容相关判定归主泵（例如启动期 MasterCommand 的接受/拒绝）：
+             * ISR 不应答、不消费、不计未命中，帧原样交给主泵。 */
+            if (ctx->shared.phy->response_timer_stop != NULL) {
+                ctx->shared.phy->response_timer_stop(ctx->shared.phy->user);
+            }
+            (void) dll_isr_publish_frame(ctx, frame, len, 0U);
+            return;
+        }
         replied = dll_isr_plan_execute(ctx, &plan, frame, len, staged);
-        if (replied && ((plan.flags & IOLINK_REPLY_FLAG_CONSUME) != 0U)) {
+        if (replied && ((plan.flags & IOLINK_REPLY_FLAG_CONSUME) != 0U) && !estab_com) {
             dll_mark_master_activity(ctx); /* 本周期由 ISR 完全处理 */
             /* 该帧不进邮箱，主泵看不到它：把帧结束时间戳交接给主泵，
              * 由它在下一轮补做 T_CYCLE/T_REN 记账。先写时间戳，再自增
@@ -780,19 +828,29 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
             return;
         }
     }
-    /* 帧结束时间戳：主泵据此判断 t_A（10 个位时间）应答窗口是否仍开。 */
-    const uint32_t end_us = (uint32_t) dll_time_us(ctx);
     if (!replied) {
+        if (planned) {
+            /* 计划命中但本次无法执行（例如线路忙、ISDU 写尚未就绪）：
+             * 不是覆盖缺口，交给主泵兜底处理（旧行为）。 */
+            if (ctx->shared.phy->response_timer_stop != NULL) {
+                ctx->shared.phy->response_timer_stop(ctx->shared.phy->user);
+            }
+            (void) dll_isr_publish_frame(ctx, frame, len, 0U);
+            return;
+        }
+        /* 合法帧计划未命中：不应答、不解释内容，关闭 t_A 看门狗并
+         * 直接丢弃。主泵不再接手计划未命中的合法帧。 */
         ctx->shared.isr_plan_misses++;
-        if (valid && (ctx->shared.phy->response_timer_stop != NULL)) {
-            /* 延迟应答：13 位时间看门狗在主上下文中总会超时，
-             * 因此在此关闭它，而不是为一个仍将到来的应答计入超时。 */
+        IOLINK_LOG_ISR_WARN(&ctx->shared.log, "no reply plan: mc=0x%02X len=%u",
+                            (unsigned) frame[0], (unsigned) len);
+        if (ctx->shared.phy->response_timer_stop != NULL) {
             ctx->shared.phy->response_timer_stop(ctx->shared.phy->user);
         }
+        return;
     }
-    /* 即使即时校验失败也发布：无效帧的错误/回退
-     * 统计由主泵负责。 */
-    (void) dll_isr_publish_frame(ctx, frame, len, replied ? 1U : 0U, end_us);
+    /* 计划已应答但帧仍需主泵副作用（例如 DPP1 写）：邮箱副本携带
+     * eager=1，主泵不得重发应答。 */
+    (void) dll_isr_publish_frame(ctx, frame, len, 1U);
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME

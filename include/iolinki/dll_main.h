@@ -65,10 +65,6 @@ struct iolink_dll_main
     volatile uint8_t frame_replied_by_isr; /**< 当前处理帧对应记录中 eager 标志的
                                        主上下文快照。 */
 
-    volatile uint8_t frame_window_closed; /**< 当前处理帧的 t_A 应答窗口
-                                               是否已关闭（消费时按帧结束
-                                               时间戳判定） */
-
     uint32_t pd_in_skips; /**< 跳过的 PD-in 发布：所有空闲缓冲区均已被租用 */
 
     volatile uint8_t startup_notification_pending; /**< ISR 进入了 STARTUP；主
@@ -150,8 +146,6 @@ struct iolink_dll_main
     uint32_t t_pd_violations; /**< t_pd 违规次数 */
 
     uint32_t t_pd_discards; /**< 在 t_PD 保护窗口内丢弃的邮箱帧数 */
-
-    uint32_t late_reply_dropped; /**< 应答窗口已关闭而未发送的延迟应答数 */
 
     uint32_t reply_plan_overflows; /**< 因计划槽位耗尽而未发布的计划条目数 */
 

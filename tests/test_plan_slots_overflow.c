@@ -34,14 +34,16 @@ int main(void)
     ctx.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     iolink_dll_publish_reply_plans(&ctx.main);
 
-    /* 计划表只容得下一条；其余 8 条（Type-2 的 8 条 + OPERATE 中的
-     * Type-0 复位计划）必须被计数。 */
-    assert(ctx.main.shared.reply_plan_count == 1U);
-    assert(ctx.main.reply_plan_overflows == 8U);
+    /* 计划表只容得下一条；按状态切片构建的其余计划必须被计数。 */
+    assert(ctx.main.shared.reply_plan_total == 1U);
+    assert(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_STARTUP] == 1U);
+    assert(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_PREOPERATE] == 0U);
+    assert(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE] == 0U);
+    assert(ctx.main.reply_plan_overflows > 0U);
 
     iolink_dll_stats_t stats;
     (void) memset(&stats, 0, sizeof(stats));
     iolink_dll_get_stats(&ctx.main, &stats);
-    assert(stats.reply_plan_overflows == 8U);
+    assert(stats.reply_plan_overflows == ctx.main.reply_plan_overflows);
     return 0;
 }

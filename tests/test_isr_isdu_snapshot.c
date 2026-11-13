@@ -231,28 +231,35 @@ static int test_request_service_staging(void)
 
     iolink_dll_init(&dll.main, &dll.isr, &phy);
     dll.main.shared.time_us = test_time_us;
-    dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
+    dll.main.shared.state = IOLINK_DLL_STATE_STARTUP;
     dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     dll.main.shared.pd_out_len_current = 0U;
     dll.main.pd_in_len_current = 0U;
     now_us = 1000000U;
     dll.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));
+    iolink_dll_publish_reply_plans(&dll.main);
 
-    uint8_t frame[2];
-    /* Type-0 过程数据写不经由 ISR 快速路径服务，因此它会在主上下文
-     * 中被暂存，并通过 request_service 报告。 */
-    make_frame(0x00U, IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));
+    uint8_t frame[3];
+    /* STARTUP 的 MasterCommand 页写带 DEFER 计划：接受/拒绝依赖命令字节，
+     * ISR 不应答，帧交主泵判定并由主上下文经 request_service 发送。 */
+    make_frame(IOLINK_MC_CHANNEL_PAGE, IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));
+    frame[2] = IOLINK_CMD_DEVICE_PREOPERATE;
+    frame[1] = IOLINK_MSEQ_TYPE_0; /* 重算 CKS 前必须清掉上一次的类型/校验位 */
+    frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | iolink_checksum6(frame, sizeof(frame)));
     tx_n = 0U;
     request_calls = 0U;
     feed(frame, sizeof(frame), 1U);
-    iolink_dll_process_isr(&dll.main); /* RX -> 邮箱（Type 0 不做即时应答） */
-    iolink_dll_process(&dll.main);     /* 主上下文 -> dll_send -> request_service */
+    iolink_dll_process_isr(&dll.main); /* DEFER：不进 ISR 应答路径 */
+    if (request_calls != 0U) {
+        return 9;
+    }
+    iolink_dll_process(&dll.main); /* 主上下文 -> dll_send -> request_service */
     if (request_calls != 1U) {
         return 10;
     }
     drain_tx(&dll);
     if (tx_n < 1U) {
-        return 11; /* Type-0 WRITE 应答：仅 CKS */
+        return 11; /* 确认：仅 CKS */
     }
 
     return 0;

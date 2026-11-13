@@ -8,12 +8,13 @@
 
 /**
  * @file test_reply_plan.c
- * @brief 应答计划：主泵发布、ISR 执行、失效与回退语义。
+ * @brief 应答计划：主泵发布、ISR 执行、失效与丢弃语义。
  *
  * 这些用例把"主泵发布计划"和"ISR 执行计划"分开驱动，覆盖：
  *  - 命中计划的即时应答（t_A 路径）；
- *  - 计划外请求的显式延迟路径（窗口仍开时主泵给出相同字节）；
- *  - 延迟到 t_A 之后才处理的帧不得发送应答，只计入 late_reply_dropped；
+ *  - 合法帧计划未命中：不应答、计数并丢弃，邮箱不接收该帧；
+ *  - 非法帧仍进入邮箱，由主泵完成错误/状态处理且不计计划未命中；
+ *  - Type-0 IDLE/ABORT 读的"无服务"应答与传输层复位握手；
  *  - ISDU 写重发风暴按 FlowCTRL 位置去重，不消耗新位置；
  *  - 未接管的 COMPLETE 请求被新 START 覆盖时计数，且不得被主泵当作有效请求执行；
  *  - t_PD 保护窗口内丢弃的邮箱帧可观测；
@@ -103,6 +104,13 @@ static const iolink_phy_api_t s_phy = {
     .int_active = plan_int_active,
 };
 
+/** @brief 只收不发的 PHY（用于"计划命中但无法执行"的兜底路径）。 */
+static const iolink_phy_api_t s_phy_rx_only = {
+    .user = &s_dll,
+    .rx_octet = plan_rx_octet,
+    .int_active = plan_int_active,
+};
+
 /** @brief 补全一条 M-sequence：CKT 承载类型位 + A.1.6 CKS。 */
 static void make_frame(uint8_t mc, uint8_t type_bits, uint8_t* frame, size_t len)
 {
@@ -169,6 +177,25 @@ static void init_preoperate(void)
     iolink_dll_publish_reply_plans(&s_dll.main);
 }
 
+/** @brief PREOPERATE / TYPE_0，但 PHY 只有接收能力。 */
+static void init_preoperate_rx_only(void)
+{
+    (void) memset(&s_dll, 0, sizeof(s_dll));
+    iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy_rx_only);
+    s_dll.main.shared.time_us = plan_time_us;
+    s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
+    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    s_dll.main.shared.od_width = 1U;
+    s_dll.main.shared.pd_in_len = 0U;
+    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.pd_in_len_current = 0U;
+    s_dll.main.pd_valid = true;
+    s_now_us = 1000000U;
+    s_tx_n = 0U;
+    s_tx_active = 0U;
+    iolink_dll_publish_reply_plans(&s_dll.main);
+}
+
 /** @brief Type-2 过程通道读（无 OD、无 PD-out）。 */
 static void feed_process_read(void)
 {
@@ -203,37 +230,56 @@ static int test_plan_hit_executes_reply(void)
     return 0;
 }
 
-/* 计划外请求：ISR 不应答，走显式延迟路径；主泵随后给出相同字节。 */
-static int test_missing_plan_defers(void)
+/* 合法帧计划未命中：ISR 不应答、计入一次未命中并丢弃（邮箱保持为空）。
+ * 主泵不再接手合法帧，因此后续处理不会补发应答。 */
+static int test_valid_miss_is_dropped(void)
 {
     init_operate();
     /* 撤回全部计划：发布字为 0 表示"没有计划表"。 */
     s_dll.main.shared.reply_plan_seq = 0U;
-    s_dll.main.shared.reply_plan_count = 0U;
 
     feed_process_read();
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
     if (s_tx_n != 0U) {
-        return 1; /* ISR 绝不应答计划外请求 */
+        return 1; /* ISR 绝不应答计划未命中帧 */
     }
     if (s_dll.main.shared.isr_plan_misses != 1U) {
         return 2;
     }
-    const iolink_frame_rec_t* rec =
-        (const iolink_frame_rec_t*) iolink_ring_peek(&s_dll.main.shared.isr_frame_ring);
-    if ((rec == NULL) || (rec->eager != 0U)) {
-        return 3;
+    if (iolink_ring_peek(&s_dll.main.shared.isr_frame_ring) != NULL) {
+        return 3; /* 合法帧不进邮箱 */
     }
 
-    /* 主泵按既有分发路径应答：与命中计划时逐字节一致。 */
+    /* 主泵一轮：不得补发应答，也不得凭空产生邮箱帧。 */
     iolink_dll_process(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 3U) {
+    if (s_tx_n != 0U) {
         return 4;
     }
-    if ((s_tx_q[0] != 0x00U) || (s_tx_q[1] != 0x5AU)) {
+    if (iolink_ring_peek(&s_dll.main.shared.isr_frame_ring) != NULL) {
         return 5;
+    }
+
+    /* 另一种确实无计划的形态：FALLBACK 状态不发布任何计划切片
+     * （T_FBD 由主泵计时），合法 Type-0 帧只能按未命中丢弃。 */
+    init_preoperate();
+    s_dll.main.shared.state = IOLINK_DLL_STATE_FALLBACK;
+    uint8_t write[2];
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x01U), IOLINK_MSEQ_TYPE_0,
+               write, sizeof(write));
+    s_tx_n = 0U;
+    feed(write, sizeof(write), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if (s_tx_n != 0U) {
+        return 6;
+    }
+    if (s_dll.main.shared.isr_plan_misses != 1U) {
+        return 7;
+    }
+    if (iolink_ring_peek(&s_dll.main.shared.isr_frame_ring) != NULL) {
+        return 8;
     }
     return 0;
 }
@@ -273,9 +319,9 @@ static int test_type0_page_write_is_answered(void)
     if (s_tx_n != 0U) {
         return 5; /* frame_replied_by_isr 必须抑制主泵的第二次应答 */
     }
-    if (s_dll.main.late_reply_dropped != 0U) {
-        return 6;
-    }
+
+    /* 页写使 DPP1 映像失效：主泵再跑一轮重建缓存。 */
+    iolink_dll_process(&s_dll.main);
 
     /* 回读：ISR 页读拿到主泵刚写入的值。 */
     uint8_t rd[2];
@@ -289,7 +335,7 @@ static int test_type0_page_write_is_answered(void)
         return 7;
     }
 
-    /* 诊断写（事件确认）同样由 ISR 确认，不再落到延迟路径。 */
+    /* 诊断写（事件确认）同样由 ISR 确认，帧仍进邮箱由主泵应用。 */
     uint8_t dw[3];
     make_frame(IOLINK_MC_CHANNEL_DIAGNOSIS, IOLINK_MSEQ_TYPE_0, dw, sizeof(dw));
     dw[2] = 0x00U;
@@ -433,40 +479,57 @@ static int test_new_start_overwrites_undrained_request(void)
     return 0;
 }
 
-/* t_A 已经过期：主泵不得发送迟到应答（否则抢总线），只计数。 */
-static int test_late_reply_is_suppressed(void)
+/* 非法帧（校验和损坏）：仍以 eager=0 发布到邮箱供主泵处理，
+ * 不计计划未命中，也不产生应答。 */
+static int test_invalid_frame_is_published(void)
 {
     init_operate();
-    /* 撤回全部计划：ISR 无法即时应答。 */
-    s_dll.main.shared.reply_plan_seq = 0U;
-    s_dll.main.shared.reply_plan_count = 0U;
 
     feed_process_read();
+    s_rx_q[1] ^= 0x01U; /* 破坏 CKT 中的 A.1.6 校验和 */
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+
+    if (s_tx_n != 0U) {
+        return 1; /* 非法帧绝不应答 */
+    }
+    if (s_dll.main.shared.isr_plan_misses != 0U) {
+        return 2; /* 非法帧不计计划未命中 */
+    }
+    const iolink_frame_rec_t* rec =
+        (const iolink_frame_rec_t*) iolink_ring_peek(&s_dll.main.shared.isr_frame_ring);
+    if ((rec == NULL) || (rec->eager != 0U)) {
+        return 3; /* 主泵必须能看到它 */
+    }
+    return 0;
+}
+
+/* 计划命中但 PHY 无法发送：不是覆盖缺口，帧以 eager=0 交主泵兜底，
+ * 且不计入 isr_plan_misses。 */
+static int test_plan_hit_without_tx_is_deferred(void)
+{
+    /* 公共入口对 NULL 上下文是空操作。 */
+    iolink_dll_publish_reply_plans(NULL);
+    iolink_dll_invalidate_reply_plans(NULL);
+
+    init_preoperate_rx_only();
+    uint8_t frame[2];
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x01U), IOLINK_MSEQ_TYPE_0,
+               frame, sizeof(frame));
+    s_tx_n = 0U;
+    feed(frame, sizeof(frame), 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
     if (s_tx_n != 0U) {
-        return 1;
+        return 1; /* 没有 TX 能力：不得应答 */
     }
-    if (s_dll.main.shared.isr_plan_misses != 1U) {
-        return 2;
+    if (s_dll.main.shared.isr_plan_misses != 0U) {
+        return 2; /* 计划命中，只是无法执行 */
     }
-
-    /* 主站请求结束后超过 10 个位时间（COM2: 260 us）才轮到主泵。 */
-    s_now_us += 1000U;
-    iolink_dll_process(&s_dll.main);
-    drain_tx();
-    if (s_tx_n != 0U) {
-        return 3;
-    }
-    if (s_dll.main.late_reply_dropped != 1U) {
-        return 4;
-    }
-
-    iolink_dll_stats_t stats;
-    (void) memset(&stats, 0, sizeof(stats));
-    iolink_dll_get_stats(&s_dll.main, &stats);
-    if (stats.late_reply_dropped != 1U) {
-        return 5;
+    const iolink_frame_rec_t* rec =
+        (const iolink_frame_rec_t*) iolink_ring_peek(&s_dll.main.shared.isr_frame_ring);
+    if ((rec == NULL) || (rec->eager != 0U)) {
+        return 3; /* 帧必须交给主泵，且主泵可应答 */
     }
     return 0;
 }
@@ -476,10 +539,11 @@ static int test_t_pd_discards_are_counted(void)
 {
     init_operate();
     s_dll.main.shared.reply_plan_seq = 0U;
-    s_dll.main.shared.reply_plan_count = 0U;
 
+    /* 非法帧仍进邮箱（合法帧计划未命中会被丢弃，无法触发该路径）。 */
     feed_process_read();
-    iolink_dll_process_isr(&s_dll.main); /* 计划外：进邮箱 */
+    s_rx_q[1] ^= 0x01U;
+    iolink_dll_process_isr(&s_dll.main);
     if (iolink_ring_count(&s_dll.main.shared.isr_frame_ring) != 1U) {
         return 1;
     }
@@ -517,6 +581,9 @@ static int test_seqlock_window_is_a_miss(void)
     }
     if (s_dll.main.shared.isr_plan_misses != 1U) {
         return 2;
+    }
+    if (iolink_ring_peek(&s_dll.main.shared.isr_frame_ring) != NULL) {
+        return 3; /* 合法帧不发布：计划未命中即丢弃 */
     }
 
     s_dll.main.shared.reply_plan_seq = stable;
@@ -613,6 +680,7 @@ static int test_startup_probe_plan(void)
     s_now_us = 1000000U;
     s_tx_n = 0U;
     s_tx_active = 0U;
+    iolink_dll_process(&s_dll.main); /* 主泵窗口：刷新 DPP1 映像与计划 */
 
     uint8_t frame[2];
     make_frame((uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), IOLINK_MSEQ_TYPE_0,
@@ -633,14 +701,64 @@ static int test_startup_probe_plan(void)
     return 0;
 }
 
+/* Type-0 IDLE 读：ISR 回 od_width 个 0x00 + CKS，帧不进邮箱，并置
+ * shared.isr_isdu_read_reset；主泵消费后清 0 并复位读传输层。 */
+static int test_type0_idle_read_resets_transport(void)
+{
+    init_preoperate();
+
+    /* 先发布一个 4 字节应答，使"无服务"与旧应答可区分。 */
+    s_dll.main.shared.isdu.state = ISDU_STATE_RESPONSE_READY;
+    s_dll.main.shared.isdu.resp_buf[0] = 0xD4U;
+    s_dll.main.shared.isdu.resp_buf[1] = 0x12U;
+    s_dll.main.shared.isdu.resp_buf[2] = 0x34U;
+    s_dll.main.shared.isdu.resp_buf[3] = 0xF2U;
+    s_dll.main.shared.isdu.resp_total = 4U;
+    iolink_dll_process(&s_dll.main); /* 发布读视图 */
+    if (IOLINK_ISDU_PUB_LEN(s_dll.main.shared.isr_isdu_pub) != 4U) {
+        return 1;
+    }
+
+    uint8_t frame[2];
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_IDLE),
+               IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));
+    s_tx_n = 0U;
+    feed(frame, sizeof(frame), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+
+    /* OD（od_width = 1，全 0）+ CKS。 */
+    if ((s_tx_n != 2U) || (s_tx_q[0] != 0x00U)) {
+        return 2;
+    }
+    if (iolink_ring_count(&s_dll.main.shared.isr_frame_ring) != 0U) {
+        return 3; /* CONSUME：帧不进邮箱 */
+    }
+    if (s_dll.main.shared.isr_isdu_read_reset == 0U) {
+        return 4;
+    }
+    if (s_dll.main.shared.isr_plan_misses != 0U) {
+        return 5;
+    }
+
+    iolink_dll_process(&s_dll.main);
+    if (s_dll.main.shared.isr_isdu_read_reset != 0U) {
+        return 6;
+    }
+    if (!iolink_isdu_is_idle(&s_dll.main.shared.isdu)) {
+        return 7;
+    }
+    return 0;
+}
+
 /* 计划携带 t_A 预算：COM2 下为 10 * 26 us = 260 us。 */
 static int test_plan_deadline_metadata(void)
 {
     init_operate();
-    if (s_dll.main.shared.reply_plan_count == 0U) {
+    if (s_dll.main.shared.reply_plan_total == 0U) {
         return 1;
     }
-    for (uint8_t i = 0U; i < s_dll.main.shared.reply_plan_count; i++) {
+    for (uint8_t i = 0U; i < s_dll.main.shared.reply_plan_total; i++) {
         if (s_dll.main.shared.reply_plan[i].deadline_us != 260U) {
             return 2;
         }
@@ -648,12 +766,16 @@ static int test_plan_deadline_metadata(void)
     return 0;
 }
 
-/** @brief 计划表中 Type-0 页读槽位的动作；未找到返回 0xFF。 */
+/** @brief OPERATE 切片中 Type-0 页读槽位的动作；未找到返回 0xFF。 */
 static uint8_t type0_page_read_action(void)
 {
-    for (uint8_t i = 0U; i < s_dll.main.shared.reply_plan_count; i++) {
-        const iolink_reply_plan_t* plan = &s_dll.main.shared.reply_plan[i];
-        if ((plan->ckt_mask == IOLINK_MSEQ_TYPE_MASK) && (plan->ckt_value == IOLINK_MSEQ_TYPE_0)) {
+    const uint8_t off = s_dll.main.shared.reply_plan_off[IOLINK_PLAN_SLOT_OPERATE];
+    const uint8_t cnt = s_dll.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE];
+    for (uint8_t i = 0U; i < cnt; i++) {
+        const iolink_reply_plan_t* plan = &s_dll.main.shared.reply_plan[off + i];
+        if ((plan->match_mask == (IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK)) &&
+            (plan->match_value == (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE)) &&
+            (plan->ckt_mask == IOLINK_MSEQ_TYPE_MASK) && (plan->ckt_value == IOLINK_MSEQ_TYPE_0)) {
             return plan->action;
         }
     }
@@ -696,7 +818,7 @@ static int test_capability_change_invalidates_plan(void)
         return 4;
     }
 
-    /* 失效：发布字清 0，ISR 把该请求当"计划外"交给主泵。 */
+    /* 失效：发布字清 0，ISR 把该请求当"计划未命中"丢弃。 */
     iolink_dll_invalidate_reply_plans(&s_dll.main);
     if (s_dll.main.shared.reply_plan_seq != 0U) {
         return 5;
@@ -781,7 +903,7 @@ int main(void)
     if (rc != 0) {
         return 10 + rc;
     }
-    rc = test_missing_plan_defers();
+    rc = test_valid_miss_is_dropped();
     if (rc != 0) {
         return 20 + rc;
     }
@@ -793,7 +915,7 @@ int main(void)
     if (rc != 0) {
         return 40 + rc;
     }
-    rc = test_late_reply_is_suppressed();
+    rc = test_invalid_frame_is_published();
     if (rc != 0) {
         return 50 + rc;
     }
@@ -813,21 +935,29 @@ int main(void)
     if (rc != 0) {
         return 90 + rc;
     }
-    rc = test_plan_deadline_metadata();
+    rc = test_type0_idle_read_resets_transport();
     if (rc != 0) {
         return 100 + rc;
     }
-    rc = test_capability_change_invalidates_plan();
+    rc = test_plan_deadline_metadata();
     if (rc != 0) {
         return 110 + rc;
     }
-    rc = test_tx_without_done_hook();
+    rc = test_capability_change_invalidates_plan();
     if (rc != 0) {
         return 120 + rc;
     }
-    rc = test_type0_page_write_is_answered();
+    rc = test_tx_without_done_hook();
     if (rc != 0) {
         return 130 + rc;
+    }
+    rc = test_type0_page_write_is_answered();
+    if (rc != 0) {
+        return 140 + rc;
+    }
+    rc = test_plan_hit_without_tx_is_deferred();
+    if (rc != 0) {
+        return 150 + rc;
     }
     return 0;
 }

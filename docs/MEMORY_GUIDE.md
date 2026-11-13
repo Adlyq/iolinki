@@ -17,9 +17,9 @@ Measured on a 64-bit host with the default buffers in
 
 | Component | Size (bytes) | Description |
 | :--- | ---: | :--- |
-| **`iolink_device_ctx_t`** | **4152** | The object the application allocates (includes everything below) |
-| `iolink_dll_ctx_t` | 3840 | DLL state, timers, reply-plan table (10×24 B), frame mailbox; embeds ISDU, Events and DS |
-| `iolink_isdu_ctx_t` | 1304 | Transport state, buffer pointers and the embedded ISDU scratch (1033 B) |
+| **`iolink_device_ctx_t`** | **5064** | The object the application allocates (includes everything below) |
+| `iolink_dll_ctx_t` | 4752 | DLL state, timers, reply-plan table (48×24 B, four state slices), frame mailbox; embeds ISDU, Events and DS |
+| `iolink_isdu_ctx_t` | 1344 | Transport state, buffer pointers, the DPP1 RAM image (16 B + seqlock) and the embedded ISDU scratch (1033 B) |
 | `iolink_events_ctx_t` | 504 | Event queue plus lifecycle records |
 | `iolink_ds_ctx_t` | 408 | DS state, buffer pointers, the OD set and the embedded download stage |
 | **PHY API** | 20-30 bytes | Function pointers (usually const/flash, but pointer storage in RAM) |
@@ -76,8 +76,8 @@ To move the scratch **out of the context entirely**, build with
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 4152 | **2856** |
-| `iolink_isdu_ctx_t` | 1304 | **264** |
+| `iolink_device_ctx_t` | 5064 | **3768** |
+| `iolink_isdu_ctx_t` | 1344 | **304** |
 | `iolink_ds_ctx_t` | 408 | **152** |
 | `iolink_workspace_t` (separate allocation) | — | 1289 |
 
@@ -121,11 +121,11 @@ You can tune these values to fit your MCU.
 | `IOLINK_PD_OUT_MAX_SIZE` | 32 | 32 bytes | Output Process Data buffer (also sizes the ISR RX buffer) |
 | `IOLINK_DS_IMAGE_MAX` | 256 | 256 bytes | DS serialization/download stage |
 | `IOLINK_MBX_SLOTS` | 4 | 304 bytes | Receive-frame mailbox depth; power of two in [2, 128], each record is 76 B |
-| `IOLINK_REPLY_PLAN_SLOTS` | 10 | 240 bytes | Reply-plan entries published to the ISR (10 × 24 B) |
+| `IOLINK_REPLY_PLAN_SLOTS` | 48 | 1152 bytes | Reply-plan entries published to the ISR (48 × 24 B, four state slices) |
 
 ### Total RAM
 
-The default `iolink_device_ctx_t` is **4152 bytes** (64-bit host, default
+The default `iolink_device_ctx_t` is **5064 bytes** (64-bit host, default
 buffers); buffer arrays dominate it. On a 32-bit target the same layout is
 smaller. To measure your own build instead of relying on the table:
 

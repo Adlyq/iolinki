@@ -267,12 +267,14 @@ static void feed_frame(const uint8_t* frame, uint8_t len)
 static void test_reply_staging_pokes_phy_outside_critical(void** state)
 {
     (void) state;
-    /* 带 FlowCTRL IDLE 的 Type-0 ISDU 读：ISR 快速路径把它留给
-     * 主泵，由主泵通过 dll_send() 应答。 */
-    uint8_t frame[2] = {
-        (uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_IDLE), 0x00U};
+    /* STARTUP 的 MasterCommand 页写带 DEFER 计划：ISR 不解析命令字节，
+     * 帧交主泵判定，由主泵通过 dll_send() 应答。 */
+    uint8_t frame[3] = {(uint8_t) IOLINK_MC_CHANNEL_PAGE, IOLINK_MSEQ_TYPE_0,
+                        IOLINK_CMD_DEVICE_PREOPERATE};
 
     reset_ctx();
+    s_ctx.main.shared.state = IOLINK_DLL_STATE_STARTUP;
+    iolink_dll_publish_reply_plans(&s_ctx.main);
     make_frame(frame, sizeof(frame));
     feed_frame(frame, sizeof(frame));
 

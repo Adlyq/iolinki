@@ -127,8 +127,20 @@ typedef struct
     iolink_params_ctx_t* params_ctx; /**< 设备本地可写参数上下文 */
     const iolink_od_app_t* od;       /**< 应用对象字典（表 + get/set 后端；可为 NULL） */
     void* direct_param_page2;        /**< 每设备的 Direct Parameter page 2 存储 */
-    iolink_workspace_t* workspace;   /**< 绑定的工作区；NULL = 使用内嵌 fallback */
-    const iolink_caps_t* caps;       /**< 实例能力位；NULL = 全开（独立使用引擎时） */
+
+    /* Direct Parameter page 1（0x00-0x0F）RAM 映像。
+     * 并发契约：主泵是唯一写者，数据 ISR 只读。
+     * `dp_page1_seq` 是 seqlock 发布字（与 dll_shared.h 中
+     * `reply_plan_seq` 同义）：奇数表示主泵正在覆盖映像或映像已失效，
+     * 偶数表示内容稳定。ISR 只做「读序号 → 读字节 → 再读序号」的校验，
+     * 绝不重建整页；整页构建只发生在主泵上下文。 */
+    uint8_t dp_page1[16];          /**< DPP1 映像（主泵写、ISR 读） */
+    volatile uint8_t dp_page1_seq; /**< 奇数 = 更新中/失效；偶数 = 稳定 */
+    const void* dp_page1_src;      /**< 上次构建映像时绑定的 DLL 上下文 */
+    const void* dp_page1_info;     /**< 上次构建映像时绑定的参数/设备信息上下文 */
+
+    iolink_workspace_t* workspace; /**< 绑定的工作区；NULL = 使用内嵌 fallback */
+    const iolink_caps_t* caps;     /**< 实例能力位；NULL = 全开（独立使用引擎时） */
 
     /* 系统命令标志 */
     bool reset_pending;     /**< 请求设备复位（0x80） */
@@ -300,15 +312,33 @@ bool iolink_isdu_is_idle(const iolink_isdu_ctx_t* ctx);
 int iolink_isdu_get_response_byte(iolink_isdu_ctx_t* ctx, uint8_t* byte);
 
 /**
+ * @brief 标记 Direct Parameter page 1 映像失效。
+ *
+ * 主泵侧在改变 DPP1 输入（MasterCycleTime、M-sequence 配置、PD 长度、
+ * 设备标识等）之后调用，使下一次主泵读取重建映像。失效期间
+ * @ref iolink_isdu_direct_param_page1_octet 对 ISR 返回 0，而不是变更前的值，
+ * 因此 ISR 绝不会发出已知过期的八位组。
+ *
+ * @note 只允许在主泵上下文调用：`dp_page1_seq` 只有一个写者。
+ *
+ * @param ctx ISDU 上下文（NULL 时不做任何事）
+ */
+void iolink_isdu_dp_page1_invalidate(iolink_isdu_ctx_t* ctx);
+
+/**
  * @brief 读取单个 Direct Parameter page 1 八位组。
  *
- * 构建当前的 Direct Parameter page 1 映像（Table B.1），并返回
- * 给定地址处的八位组。DLL 用它来应答启动时在 page
- * 通信通道上的 Type-0 读。
+ * 从主泵维护的 16 字节 RAM 映像（@ref iolink_isdu_ctx_t::dp_page1 ）取
+ * 给定地址处的八位组（Table B.1），不再重建整页。DLL 用它来应答
+ * 启动时在 page 通信通道上的 Type-0 读，数据 ISR 会对每个字节调用一次。
+ *
+ * 该函数可在 ISR 中调用：只有稳定副本会被返回。主泵正在更新映像时
+ * 有限次重试读取序号，仍不一致则返回 0；ISR 侧不会重建整页。主泵侧
+ * 在映像失效（或 MasterCycleTime 已变化）时先重建再读取。
  *
  * @param ctx ISDU 上下文
  * @param addr Direct Parameter page 地址（0x00-0x0F）
- * @return uint8_t 八位组值；地址越界或上下文为 NULL 时返回 0
+ * @return uint8_t 八位组值；地址越界、上下文为 NULL 或映像不可用时返回 0
  */
 uint8_t iolink_isdu_direct_param_page1_octet(iolink_isdu_ctx_t* ctx, uint8_t addr);
 
