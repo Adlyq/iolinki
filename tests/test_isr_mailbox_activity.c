@@ -35,7 +35,6 @@ static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t le
     }
     rec->len = len;
     rec->eager = 0U;
-    rec->flags = 0U;
     rec->end_us = 0U; /* 手工发布：无帧结束时间戳 */
     (void) memcpy(rec->data, frame, len);
     iolink_ring_publish(&ctx->main.shared.isr_frame_ring);

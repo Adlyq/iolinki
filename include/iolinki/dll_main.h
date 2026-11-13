@@ -69,15 +69,7 @@ struct iolink_dll_main
                                                是否已关闭（消费时按帧结束
                                                时间戳判定） */
 
-    volatile uint8_t frame_write_not_staged; /**< 当前处理帧的 ISDU 写段未进入
-                                                  暂存环：主泵不得确认该段 */
-
     uint32_t pd_in_skips; /**< 跳过的 PD-in 发布：所有空闲缓冲区均已被租用 */
-
-    /* ISR 侧的 ISDU 暂存 + 应答快照（单写者模型）。ISR
-     * 将写 OD 字节暂存到环中，只读取应答快照；
-     * 主泵拥有 ctx->isdu，并在其变化时刷新快照。 */
-    iolink_od_rec_t isr_od_slot[IOLINK_OD_SLOTS]; /**< 暂存写环存储 */
 
     volatile uint8_t startup_notification_pending; /**< ISR 进入了 STARTUP；主
                                                         上下文必须上报该事件 */

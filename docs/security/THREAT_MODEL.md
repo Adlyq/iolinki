@@ -93,9 +93,11 @@ or hostile traffic is *rejected safely* rather than corrupting the device.
   - ISDU payloads land in fixed-size buffers (`IOLINK_ISDU_BUFFER_SIZE`,
     `include/iolinki/isdu.h:71-74`); reads are clamped to buffer size
     (`iolink_isdu_od_read()`, `isdu_frame_response()`, `isdu_copy_payload()`);
-    segmented transfers enforce start/last/sequence-number legality and answer
-    violations with the protocol SEGMENTATION error (`isdu_decode_service()`,
-    `isdu_parse_index()`, `iolink_isdu_od_write()`).
+    segmented write transfers are de-duplicated by FlowCTRL position
+    (`iolink_isdu_od_write()`): duplicate or out-of-order segments are
+    acknowledged but ignored, and a request executes only after CHKPDU
+    validation (`iolink_isdu_process()`). Header/index parsing remains in
+    `isdu_decode_service()` / `isdu_parse_index()`.
   - Stored parameterization is integrity-checked: the Data Storage image
     carries a Fletcher-16 checksum (`iolink_ds_calc_checksum`,
     `src/data_storage.c:74`), recomputed on serialization

@@ -1761,8 +1761,7 @@ static void test_dll_main_pump_type1_2_reply(void** state)
         (iolink_frame_rec_t*) iolink_ring_claim(&dev.ctx.dll.main.shared.isr_frame_ring);
     assert_non_null(rec);
     rec->len = (uint8_t) sizeof(frame);
-    rec->eager = 0U; /* 无 ISR 应答：必须由主循环泵回复 */
-    rec->flags = 0U;
+    rec->eager = 0U;  /* 无 ISR 应答：必须由主循环泵回复 */
     rec->end_us = 0U; /* 手工发布：无帧结束时间戳 */
     (void) memcpy(rec->data, frame, sizeof(frame));
     iolink_ring_publish(&dev.ctx.dll.main.shared.isr_frame_ring);

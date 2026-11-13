@@ -317,9 +317,9 @@ static void test_isdu_wire_repeated_flowctrl(void** state)
     assert_int_equal(resp[3], 0xF2U);
 }
 
-/* 既不是 COUNT+1 也不是重复的 FlowCTRL 属于结构违规：
-   请求被丢弃，下一次读应答 No Service (0x00)。 */
-static void test_isdu_wire_flowctrl_error(void** state)
+/* 过早的 FlowCTRL（跳过 COUNT）不再报分段错误，而是被忽略；
+ * 请求保持未收齐，主站补齐缺失段后自愈。 */
+static void test_isdu_wire_flowctrl_out_of_order_self_heals(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
@@ -328,14 +328,29 @@ static void test_isdu_wire_flowctrl_error(void** state)
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
 
+    /* 跳过 COUNT1/2 直接发 COUNT3：被忽略，请求保持未收齐。 */
     iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_START, (const uint8_t[]){0x93U}, 1U);
-    iolink_isdu_od_write(&ctx, 3U, (const uint8_t[]){0x10U}, 1U); /* 跳过 1,2 */
+    iolink_isdu_od_write(&ctx, 3U, (const uint8_t[]){0x10U}, 1U);
     iolink_isdu_process(&ctx);
 
     uint8_t resp[4];
     size_t n = wire_read_response(&ctx, resp, sizeof(resp));
     assert_int_equal(n, 1U);
     assert_int_equal(resp[0], 0x00U);
+
+    /* 独立上下文重放自愈场景，避免上一段读路径改写 last_flowctrl。 */
+    iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
+    iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_START, (const uint8_t[]){0x93U}, 1U);
+    iolink_isdu_od_write(&ctx, 3U, (const uint8_t[]){0x10U}, 1U); /* 过早：忽略 */
+    iolink_isdu_od_write(&ctx, 1U, (const uint8_t[]){0x10U}, 1U);
+    iolink_isdu_od_write(&ctx, 2U, (const uint8_t[]){0x83U}, 1U);
+    iolink_isdu_process(&ctx);
+
+    n = wire_read_response(&ctx, resp, sizeof(resp));
+    assert_int_equal(n, 4U);
+    const uint8_t expected[4] = {0xD4U, 0x12U, 0x34U, 0xF2U};
+    assert_memory_equal(resp, expected, sizeof(expected));
 }
 
 /* Test Spec 10032 V1.1.4 Table 84 (SDCI_TC_0065)：CHKPDU 不正确的
@@ -468,6 +483,11 @@ static void test_isdu_wire_write_abort(void** state)
     iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_START, (const uint8_t[]){0x93U}, 1U);
     iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_ABORT, (const uint8_t[]){0x00U}, 1U);
 
+    /* ISR 只置 ABORT 相位；主泵接管后复位并回到空闲。 */
+    assert_false(iolink_isdu_is_idle(&ctx));
+    iolink_isdu_process(&ctx);
+    assert_true(iolink_isdu_is_idle(&ctx));
+
     uint8_t octet = 0xAAU;
     iolink_isdu_od_read(&ctx, IOLINK_FLOWCTRL_START, &octet, 1U);
     assert_int_equal(octet, 0x00U);
@@ -544,7 +564,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_wire_16bit_index_read, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_repeated_flowctrl, test_setup,
                                         test_teardown),
-        cmocka_unit_test_setup_teardown(test_isdu_wire_flowctrl_error, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_wire_flowctrl_out_of_order_self_heals, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_chkpdu_corrupt, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_unsupported_system_command, test_setup,
                                         test_teardown),

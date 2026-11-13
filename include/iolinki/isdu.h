@@ -63,6 +63,21 @@ typedef enum
 } isdu_state_t;
 
 /**
+ * @brief 写请求的入口暂存相位（ISR 写、主泵读）。
+ *
+ * 写方向的 FlowCTRL 序与字节累计归数据 ISR；主泵只在 COMPLETE 时接管
+ * （校验 CHKPDU + 解析 + 执行）。这是双泵共享单缓冲的握手状态，见
+ * @ref iolink_isdu_od_write 与 @ref iolink_isdu_process 的契约。
+ */
+typedef enum
+{
+    IOLINK_ISDU_STAGE_IDLE = 0U,      /**< 无请求在累计；req_buf 空闲 */
+    IOLINK_ISDU_STAGE_RECEPTION = 1U, /**< ISR 正在累计写段 */
+    IOLINK_ISDU_STAGE_COMPLETE = 2U,  /**< 请求收齐，等待主泵接管 */
+    IOLINK_ISDU_STAGE_ABORT = 3U      /**< 收到 ABORT，等待主泵复位传输层 */
+} iolink_isdu_stage_state_t;
+
+/**
  * @brief ISDU 服务上下文
  *
  * 持有非周期报文引擎的缓冲区与状态。
@@ -70,6 +85,8 @@ typedef enum
 typedef struct
 {
     isdu_state_t state; /**< 当前状态机位置 */
+
+    volatile uint8_t stage_state; /**< 写入口暂存相位（ISR 写、主泵读） */
 
     /* 传输缓冲位于 `workspace`（或上下文内嵌 fallback）中。
      * 容量随缓冲一起记录，避免运行期再出现第二份尺寸常量。 */
@@ -100,7 +117,6 @@ typedef struct
     size_t resp_total;      /**< resp_buf 中的总八位组数 */
     uint8_t last_flowctrl;  /**< 上一条 ISDU 报文的 FlowCTRL */
     bool flowctrl_seen;     /**< 自 START 以来已收到 FlowCTRL */
-    bool repeat_pending;    /**< 上一个 FlowCTRL 为重复：忽略载荷 */
     uint8_t error_code;     /**< IO-Link ISDU 错误码（0x80XX） */
 
     /* 指向外部依赖的指针 */
@@ -172,9 +188,11 @@ void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app);
 void iolink_isdu_bind_caps(iolink_isdu_ctx_t* ctx, const iolink_caps_t* caps);
 
 /**
- * @brief 处理 ISDU 引擎逻辑
+ * @brief 处理 ISDU 引擎逻辑（主上下文）。
  *
- * 请求被完整采集后执行服务分发。
+ * 若数据 ISR 已把一条写请求累计到 `IOLINK_ISDU_STAGE_COMPLETE`，本函数在
+ * 临界区内校验 CHKPDU、解析请求头并复制载荷，然后释放 `req_buf`；随后
+ * 执行服务分发并生成应答。慢速应用回调不会在临界区内运行。
  *
  * @param ctx 要处理的 ISDU 上下文
  */
@@ -193,14 +211,22 @@ void iolink_isdu_process(iolink_isdu_ctx_t* ctx);
 void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd);
 
 /**
- * @brief 送入一条在 ISDU 通道（C3）上收到的 On-request Data 报文。
+ * @brief 数据 ISR 的 ISDU 写入口：累计请求字节并判定完成。
  *
- * M 序列控制八位组的地址位携带 FlowCTRL
- * （Table 52）。START 复位请求缓冲区；随后是 COUNT 1,2,..,0,1,..；
- * 重复的 FlowCTRL 表示重复上一条报文（其载荷被忽略）；
- * 其他任何值都是 ISDUError（丢弃请求，返回 Idle）。
- * 当收到的八位组数等于 I-Service 八位组中声明的 Length
- * （或 ExtLength）时，请求完成；此时校验 CHKPDU。
+ * 本函数只做「传输」：按 FlowCTRL 位置去重、累计原始请求八位组、
+ * 判定声明长度是否收齐。它不解析头、不校验 CHKPDU、不执行服务——
+ * 这些由主泵在 @ref IOLINK_ISDU_STAGE_COMPLETE 时通过
+ * @ref iolink_isdu_process 完成。
+ *
+ * 去重是**按位置**的（借鉴 ST ministack）：仅当 FlowCTRL 等于
+ * `(last + 1) & 0x0F` 时推进写位置；重复段与过早的乱序段被忽略
+ * （载荷丢弃，已累计字节不受影响），因此主站重发风暴不会消耗新缓冲，
+ * 也不会破坏已收齐的请求。
+ *
+ * ABORT 复位传输层；IDLE/IDLE2 与保留值被忽略。START 复位并开始
+ * 新的累计；没有 START 的 COUNT 被忽略。
+ *
+ * @note 只在数据 ISR 上下文调用。主泵只读 COMPLETE 状态并接管。
  *
  * @param ctx ISDU 上下文
  * @param flowctrl FlowCTRL 值（mc & 0x1F）

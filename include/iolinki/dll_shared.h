@@ -98,11 +98,11 @@ typedef struct iolink_dll_shared
     /**
      * @brief ISDU 读取视图失效请求（ISR -> 主泵，一次性）。
      *
-     * ISR 暂存一个 ISDU 写后置 1：在写被主泵应用并重新发布应答之前，
-     * 已发布的读视图不得再被当作"当前应答"使用（防"写后立刻读"
-     * 读到旧值）。主泵重新发布新的完成应答时清 0；尚未产出新应答时
-     * 发布 len = 0（无服务）。与 isr_dsio_clear 相同的一次性握手：
-     * 任一方置 1 幂等，只有主泵清 0。
+     * ISR 在一个 ISDU 写 START（或 ABORT）后置 1：在写被主泵应用并
+     * 重新发布应答之前，已发布的读视图不得再被当作"当前应答"使用
+     * （防"写后立刻读"读到旧值）。主泵在写入口相位回到 IDLE 后清 0；
+     * 尚未产出新应答时发布 len = 0（无服务）。与 isr_dsio_clear 相同
+     * 的一次性握手：任一方置 1 幂等，只有主泵清 0。
      */
     volatile uint8_t isr_isdu_invalidated;
 
@@ -127,9 +127,8 @@ typedef struct iolink_dll_shared
 
     uint32_t isr_mailbox_drops; /**< 因邮箱已满而丢弃的帧 */
 
-    iolink_ring_t isr_od_ring; /**< 暂存的 ISDU 写入（ISR -> 主上下文） */
-
-    uint32_t isr_od_overruns; /**< 因环满而丢弃的暂存写入 */
+    uint32_t isr_od_overruns; /**< 上一条写请求尚未被主泵接管时又收到 START，
+                                   导致前一条被覆盖的次数 */
 
     uint32_t isr_plan_misses; /**< ISR 未命中应答计划而交给主泵的帧 */
 

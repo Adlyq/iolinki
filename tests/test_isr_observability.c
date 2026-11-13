@@ -419,21 +419,17 @@ static int test_type0_isdu_write_fast_path(void)
     if (tx_n != 1U) {
         return 1; /* 仅 CKS */
     }
-    /* 14d63cb：ISR 只暂存写请求；ctx->main.shared.isdu 仍归主上下文所有。 */
-    if (dll.main.shared.isdu.req_idx != 0U) {
+    /* ISR 直接在 shared.isdu 中累计写请求（ST 的 StackBaseOdWrite 分工）：
+     * 一个 Type-0 八位组只推进位置，不执行服务。 */
+    if ((dll.main.shared.isdu.req_idx != 1U) || (dll.main.shared.isdu.req_buf[0] != 0x14U) ||
+        (dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION)) {
         return 2;
     }
-    const iolink_od_rec_t* staged =
-        (const iolink_od_rec_t*) iolink_ring_peek(&dll.main.shared.isr_od_ring);
-    if ((staged == NULL) || (staged->len != 1U) || (staged->data[0] != 0x14U) ||
-        (staged->flowctrl != IOLINK_FLOWCTRL_START)) {
-        return 3;
-    }
 
-    /* 主窗口把已暂存的八位组排入 ISDU 传输层。 */
+    /* 主窗口不会重复追加：请求未收齐时保持原状。 */
     iolink_dll_process(&dll.main);
-    if (!iolink_ring_is_empty(&dll.main.shared.isr_od_ring) ||
-        (dll.main.shared.isdu.req_idx != 1U) || (dll.main.shared.isdu.req_buf[0] != 0x14U)) {
+    if ((dll.main.shared.isdu.req_idx != 1U) ||
+        (dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION)) {
         return 5;
     }
     return 0;
@@ -449,7 +445,6 @@ static void push_mailbox(iolink_dll_ctx_t* dll, const uint8_t* frame, uint8_t le
     }
     rec->len = len;
     rec->eager = 0U;
-    rec->flags = 0U;
     rec->end_us = 0U; /* 手工发布：无帧结束时间戳 */
     (void) memcpy(rec->data, frame, len);
     iolink_ring_publish(&dll->main.shared.isr_frame_ring);
@@ -597,8 +592,9 @@ static int test_isdu_write_consumed_by_isr(void)
         (IOLINK_ISDU_PUB_LEN(dll.main.shared.isr_isdu_pub) == 0U)) {
         return 3;
     }
-    if (!iolink_ring_is_empty(&dll.main.shared.isr_od_ring)) {
-        return 4; /* 主泵排空了每个已暂存的段 */
+    /* 请求收齐后主泵已接管：写入口回到空闲。 */
+    if (dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_IDLE) {
+        return 4;
     }
     return 0;
 }

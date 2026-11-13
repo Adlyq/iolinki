@@ -14,7 +14,8 @@
  *  - 命中计划的即时应答（t_A 路径）；
  *  - 计划外请求的显式延迟路径（窗口仍开时主泵给出相同字节）；
  *  - 延迟到 t_A 之后才处理的帧不得发送应答，只计入 late_reply_dropped；
- *  - 连续 ISDU 写段耗尽暂存深度：拒绝新段、计数、不应答；
+ *  - ISDU 写重发风暴按 FlowCTRL 位置去重，不消耗新位置；
+ *  - 未接管的 COMPLETE 请求被新 START 覆盖时计数，且不得被主泵当作有效请求执行；
  *  - t_PD 保护窗口内丢弃的邮箱帧可观测；
  *  - ISDU 写暂存后的读视图失效（防"写后立刻读"读到旧值）；
  *  - seqlock 发布窗口：主泵正在覆盖计划表时 ISR 不得执行半更新计划；
@@ -29,10 +30,6 @@
 #include "iolinki/iolink.h"
 #include "iolinki/isdu.h"
 #include "iolinki/protocol.h"
-
-#if IOLINK_OD_SLOTS > 15
-#error "test_reply_plan burst fixture needs FlowCTRL COUNT values (IOLINK_OD_SLOTS <= 15)"
-#endif
 
 #define RX_MAX 16U
 #define TX_MAX 32U
@@ -222,23 +219,20 @@ static int test_missing_plan_defers(void)
     return 0;
 }
 
-/* 连续 ISDU 写段、主泵完全没有排空机会：暂存深度用尽后必须
- * 拒绝新段、计数，且不对该帧应答（主站超时重发）。 */
-static int test_isdu_write_burst_overruns_without_drain(void)
+/* 主站重发风暴：同一 FlowCTRL 的重复段不消耗新位置、不丢新段，
+ * 且请求保持完整。 */
+static int test_isdu_write_retry_storm_is_deduped(void)
 {
-    /* FlowCTRL 的 COUNT 只有 4 位，本用例用段号直接当 COUNT。 */
-
     init_operate();
-    /* I-Service 0x1F：写 + 8 位索引，低半字节声明整条请求 15 字节，
-     * 因此 8 个段内不会完成传输。 */
-    static const uint8_t prefix[3] = {0x1FU, 0x10U, 0x00U};
+    /* 写索引 0x10（只读）0 字节：I-Service 0x14 / index / len / CHKPDU。 */
+    static const uint8_t octets[4] = {0x14U, 0x10U, 0x00U, 0x04U};
 
-    for (uint8_t i = 0U; i <= IOLINK_OD_SLOTS; i++) {
-        const uint8_t flowctrl = (i == 0U) ? (uint8_t) IOLINK_FLOWCTRL_START : (uint8_t) (i % 16U);
+    for (uint8_t i = 0U; i < 4U; i++) {
+        const uint8_t fc = (i == 0U) ? (uint8_t) IOLINK_FLOWCTRL_START : (uint8_t) i;
         uint8_t frame[3];
-        make_frame((uint8_t) (IOLINK_MC_CHANNEL_ISDU | flowctrl), IOLINK_MSEQ_TYPE_2, frame,
+        make_frame((uint8_t) (IOLINK_MC_CHANNEL_ISDU | fc), IOLINK_MSEQ_TYPE_2, frame,
                    sizeof(frame));
-        frame[2] = (i < sizeof(prefix)) ? prefix[i] : 0x00U;
+        frame[2] = octets[i];
         frame[1] = IOLINK_MSEQ_TYPE_2;
         frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
 
@@ -246,83 +240,106 @@ static int test_isdu_write_burst_overruns_without_drain(void)
         feed(frame, sizeof(frame), 0U);
         iolink_dll_process_isr(&s_dll.main);
         drain_tx();
-        if (i < IOLINK_OD_SLOTS) {
-            if (s_tx_n == 0U) {
-                return 1; /* 已暂存：ISR 必须立即确认（PD-in + CKS） */
+        if (s_tx_n == 0U) {
+            return 1; /* 每个有效写段都必须由 ISR 立即 ACK */
+        }
+        if (i == 1U) {
+            /* 在 COUNT1 之后连发 5 次重发（伪造载荷）：全部忽略。 */
+            for (uint8_t r = 0U; r < 5U; r++) {
+                uint8_t retry[3];
+                make_frame((uint8_t) (IOLINK_MC_CHANNEL_ISDU | 1U), IOLINK_MSEQ_TYPE_2, retry,
+                           sizeof(retry));
+                retry[2] = 0xAAU;
+                retry[1] = IOLINK_MSEQ_TYPE_2;
+                retry[1] = (uint8_t) (retry[1] | iolink_checksum6(retry, sizeof(retry)));
+                s_tx_n = 0U;
+                feed(retry, sizeof(retry), 0U);
+                iolink_dll_process_isr(&s_dll.main);
+                drain_tx();
+                if (s_tx_n == 0U) {
+                    return 2; /* 重发同样要被 ACK */
+                }
             }
         }
-        else if (s_tx_n != 0U) {
-            return 2; /* 暂存失败：不得应答 */
-        }
     }
 
-    iolink_dll_stats_t stats;
-    (void) memset(&stats, 0, sizeof(stats));
-    iolink_dll_get_stats(&s_dll.main, &stats);
-    if (stats.isr_od_overruns != 1U) {
-        return 3;
-    }
-    if (stats.isr_plan_misses != 1U) {
-        return 4;
-    }
-    if (iolink_ring_count(&s_dll.main.shared.isr_od_ring) != (uint32_t) IOLINK_OD_SLOTS) {
-        return 5;
+    if ((s_dll.main.shared.isdu.req_idx != 4U) || (s_dll.main.shared.isdu.req_buf[1] != 0x10U) ||
+        (s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE)) {
+        return 3; /* 重发没有推进位置，也没有覆盖已接受的 COUNT1 */
     }
 
-    /* 主泵恢复后一次性排空所有暂存段。 */
+    /* 主泵接管并执行：请求保持有效，产生否定应答。 */
     iolink_dll_process(&s_dll.main);
-    if (!iolink_ring_is_empty(&s_dll.main.shared.isr_od_ring)) {
-        return 6;
-    }
-    if (s_dll.main.shared.isdu.req_idx != (uint8_t) IOLINK_OD_SLOTS) {
-        return 7;
+    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_IDLE) ||
+        (s_dll.main.shared.isdu.state != ISDU_STATE_RESPONSE_READY)) {
+        return 4;
     }
     return 0;
 }
 
-/* 写段未暂存时，即使主泵仍在 t_A 窗口内也不得确认该段。 */
-static int test_unstaged_write_is_not_acknowledged(void)
+/* 上一条请求已收齐但主泵尚未接管时又收到 START：前一条被覆盖并计数。 */
+static int test_new_start_overwrites_undrained_request(void)
 {
     init_operate();
+    static const uint8_t octets[4] = {0x14U, 0x10U, 0x00U, 0x04U};
 
-    /* 手工填满暂存环（等价于主泵长时间未排空）。 */
-    for (uint8_t i = 0U; i < IOLINK_OD_SLOTS; i++) {
-        iolink_od_rec_t* rec = (iolink_od_rec_t*) iolink_ring_claim(&s_dll.main.shared.isr_od_ring);
-        if (rec == NULL) {
-            return 1;
-        }
-        rec->flowctrl = (i == 0U) ? (uint8_t) IOLINK_FLOWCTRL_START : (uint8_t) i;
-        rec->len = 1U;
-        rec->data[0] = 0x00U;
-        iolink_ring_publish(&s_dll.main.shared.isr_od_ring);
+    for (uint8_t i = 0U; i < 4U; i++) {
+        const uint8_t fc = (i == 0U) ? (uint8_t) IOLINK_FLOWCTRL_START : (uint8_t) i;
+        uint8_t frame[3];
+        make_frame((uint8_t) (IOLINK_MC_CHANNEL_ISDU | fc), IOLINK_MSEQ_TYPE_2, frame,
+                   sizeof(frame));
+        frame[2] = octets[i];
+        frame[1] = IOLINK_MSEQ_TYPE_2;
+        frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
+        s_tx_n = 0U;
+        feed(frame, sizeof(frame), 0U);
+        iolink_dll_process_isr(&s_dll.main);
+        drain_tx();
+    }
+    if (s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE) {
+        return 1;
+    }
+    if (s_dll.main.shared.isr_od_overruns != 0U) {
+        return 2;
     }
 
-    uint8_t frame[3];
-    make_frame(IOLINK_MC_CHANNEL_ISDU, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
+    /* 主泵未接管前又发 START：覆盖前一条并计数。 */
+    uint8_t next[3];
+    make_frame((uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START), IOLINK_MSEQ_TYPE_2, next,
+               sizeof(next));
+    next[2] = 0x93U;
+    next[1] = IOLINK_MSEQ_TYPE_2;
+    next[1] = (uint8_t) (next[1] | iolink_checksum6(next, sizeof(next)));
     s_tx_n = 0U;
-    feed(frame, sizeof(frame), 0U);
+    feed(next, sizeof(next), 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 0U) {
-        return 2; /* ISR 不能确认未暂存的段 */
-    }
-    if (s_dll.main.shared.isr_od_overruns != 1U) {
+    if (s_tx_n == 0U) {
         return 3;
     }
-    const iolink_frame_rec_t* rec =
-        (const iolink_frame_rec_t*) iolink_ring_peek(&s_dll.main.shared.isr_frame_ring);
-    if ((rec == NULL) || ((rec->flags & IOLINK_FRAME_FLAG_WRITE_NOT_STAGED) == 0U)) {
+    if (s_dll.main.shared.isr_od_overruns != 1U) {
         return 4;
     }
-
-    /* 主泵在 t_A 窗口内处理该帧：仍不得确认。 */
-    iolink_dll_process(&s_dll.main);
-    drain_tx();
-    if (s_tx_n != 0U) {
+    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
+        (s_dll.main.shared.isdu.req_buf[0] != 0x93U)) {
         return 5;
     }
-    if (s_dll.main.late_reply_dropped != 0U) {
-        return 6; /* 这是“未暂存”，不是“窗口已关” */
+
+    /* 相位契约：主泵只能在 COMPLETE 时接管。新请求处于 RECEPTION，
+     * iolink_isdu_process() 不得把被覆盖的旧请求当作有效请求执行。 */
+    iolink_dll_process(&s_dll.main);
+    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
+        (s_dll.main.shared.isdu.state != ISDU_STATE_IDLE) ||
+        (s_dll.main.shared.isdu.req_buf[0] != 0x93U)) {
+        return 6;
+    }
+
+    /* 公共统计映射：内部计数必须能通过 iolink_dll_get_stats() 读到。 */
+    iolink_dll_stats_t stats;
+    (void) memset(&stats, 0, sizeof(stats));
+    iolink_dll_get_stats(&s_dll.main, &stats);
+    if (stats.isr_od_overruns != 1U) {
+        return 7;
     }
     return 0;
 }
@@ -453,15 +470,20 @@ static int test_isdu_write_invalidates_read_view(void)
         return 2;
     }
 
-    /* ISDU 写（Type-2_V：PD-out 0，offset 2 处一个 OD 八位组）。 */
-    uint8_t wr[3];
-    make_frame(IOLINK_MC_CHANNEL_ISDU, IOLINK_MSEQ_TYPE_2, wr, sizeof(wr));
-    wr[2] = 0x01U;
-    wr[1] = IOLINK_MSEQ_TYPE_2;
-    wr[1] = (uint8_t) (wr[1] | iolink_checksum6(wr, sizeof(wr)));
-    feed(wr, sizeof(wr), 0U);
-    iolink_dll_process_isr(&s_dll.main);
-    drain_tx();
+    /* 完整的 ISDU 写请求（0x14 0x10 0x00 0x04）：START + 3 个 COUNT。
+     * 只发 START/COUNT 才进入写入口；单独的 COUNT 不构成请求。 */
+    static const uint8_t octets[4] = {0x14U, 0x10U, 0x00U, 0x04U};
+    for (uint8_t i = 0U; i < 4U; i++) {
+        const uint8_t fc = (i == 0U) ? (uint8_t) IOLINK_FLOWCTRL_START : (uint8_t) i;
+        uint8_t wr[3];
+        make_frame((uint8_t) (IOLINK_MC_CHANNEL_ISDU | fc), IOLINK_MSEQ_TYPE_2, wr, sizeof(wr));
+        wr[2] = octets[i];
+        wr[1] = IOLINK_MSEQ_TYPE_2;
+        wr[1] = (uint8_t) (wr[1] | iolink_checksum6(wr, sizeof(wr)));
+        feed(wr, sizeof(wr), 0U);
+        iolink_dll_process_isr(&s_dll.main);
+        drain_tx();
+    }
     if (s_dll.main.shared.isr_isdu_invalidated != 1U) {
         return 3; /* 写已暂存：主泵必须重建读视图 */
     }
@@ -674,45 +696,45 @@ int main(void)
     if (rc != 0) {
         return 20 + rc;
     }
-    rc = test_isdu_write_burst_overruns_without_drain();
-    if (rc != 0) {
-        return 25 + rc;
-    }
-    rc = test_unstaged_write_is_not_acknowledged();
-    if (rc != 0) {
-        return 22 + rc;
-    }
-    rc = test_late_reply_is_suppressed();
-    if (rc != 0) {
-        return 27 + rc;
-    }
-    rc = test_t_pd_discards_are_counted();
-    if (rc != 0) {
-        return 29 + rc;
-    }
-    rc = test_seqlock_window_is_a_miss();
+    rc = test_isdu_write_retry_storm_is_deduped();
     if (rc != 0) {
         return 30 + rc;
     }
-    rc = test_isdu_write_invalidates_read_view();
+    rc = test_new_start_overwrites_undrained_request();
     if (rc != 0) {
         return 40 + rc;
     }
-    rc = test_startup_probe_plan();
+    rc = test_late_reply_is_suppressed();
     if (rc != 0) {
         return 50 + rc;
     }
-    rc = test_plan_deadline_metadata();
+    rc = test_t_pd_discards_are_counted();
     if (rc != 0) {
         return 60 + rc;
     }
-    rc = test_capability_change_invalidates_plan();
+    rc = test_seqlock_window_is_a_miss();
     if (rc != 0) {
         return 70 + rc;
     }
-    rc = test_tx_without_done_hook();
+    rc = test_isdu_write_invalidates_read_view();
     if (rc != 0) {
         return 80 + rc;
+    }
+    rc = test_startup_probe_plan();
+    if (rc != 0) {
+        return 90 + rc;
+    }
+    rc = test_plan_deadline_metadata();
+    if (rc != 0) {
+        return 100 + rc;
+    }
+    rc = test_capability_change_invalidates_plan();
+    if (rc != 0) {
+        return 110 + rc;
+    }
+    rc = test_tx_without_done_hook();
+    if (rc != 0) {
+        return 120 + rc;
     }
     return 0;
 }

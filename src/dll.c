@@ -52,8 +52,7 @@
  *      |                                     （64 位截止时间由主上下文持有）
  *      |- [TX FRAME] pd_in 租约释放          在临界区中轮询 tx_busy
  *      |- dll_restore_operating_baudrate     撤销恢复到 COM1 的降级
- *      |- dll_drain_staged_isdu_write        排空 isr_od_ring -> ISDU 传送层
- *      |- iolink_isdu_process                执行排队的 ISDU 服务
+ *      |- iolink_isdu_process                应用 ISR 累计完成的写请求并执行 ISDU 服务
  *      |- dll_isdu_sync_snapshot             发布 ISR 读取视图
  *      |- dll_poll_diagnostics
  *      |- dll_take_isr_master_activity       第二次采样：一帧可能已在上述步骤中
@@ -92,8 +91,8 @@
  *  - 主上下文 -> ISR：isr_tx_payload[0..1] + isr_tx_pending（dll_send）、ISDU
  *    发布字 isr_isdu_pub/resp_store（dll_isdu_sync_snapshot）以及
  *    pd_in_active（PD-in 发布）。
- *  - ISR -> 主上下文：isr_frame_ring（dll_consume_isr_mailbox）、isr_od_ring
- *    （dll_drain_staged_isdu_write）、isr_master_activity、
+ *  - ISR -> 主上下文：isr_frame_ring（dll_consume_isr_mailbox）、
+ *    shared.isdu.stage_state（写请求累计完成/中止）、isr_master_activity、
  *    isr_consumed_us/isr_consumed_seq（CONSUME 帧的 T_CYCLE/T_REN 记账）
  *    以及截止时间标志。
  *
@@ -971,13 +970,6 @@ static void dll_handle_operate_type1_2(iolink_dll_main_t* ctx)
     uint8_t od_out[IOLINK_OD_MAX_SIZE];
     dll_dispatch_od_reply(ctx, write, od_offset, od_out);
 
-    if ((ctx->frame_write_not_staged != 0U) && write) {
-        /* 写段未进入暂存环（ISR 环满）：不得确认。主站会因缺少应答
-         * 或最终 CHKPDU 失败而重发，绝不把未落地的段当作已送达。 */
-        ctx->frame_write_not_staged = 0U;
-        return;
-    }
-
     if (ctx->frame_replied_by_isr &&
         ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PROCESS)) {
         /* ISR 泵已在帧结束时发送了过程通道
@@ -1327,9 +1319,6 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     /* 帧邮箱：ISR 发布到环中，主泵消费。 */
     iolink_ring_init(&ctx->shared.isr_frame_ring, (uint8_t*) ctx->isr_frame_slot, IOLINK_MBX_SLOTS,
                      (uint8_t) sizeof(iolink_frame_rec_t));
-    /* 暂存的 ISDU 写段（ISR -> 主上下文）。 */
-    iolink_ring_init(&ctx->shared.isr_od_ring, (uint8_t*) ctx->isr_od_slot, IOLINK_OD_SLOTS,
-                     (uint8_t) sizeof(iolink_od_rec_t));
 
     ctx->baudrate = IOLINK_BAUDRATE_COM2;
     if (ctx->shared.phy->set_baudrate != NULL) {
@@ -1426,18 +1415,23 @@ static void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx)
          * 占用同一成帧缓冲再重建。 */
         ctx->shared.isdu.resp_pub = sel;
     }
-    /* 失效旗标的清除条件：暂存的写段已被主泵消费（环为空），
+    /* 写入口相位：RECEPTION/COMPLETE/ABORT 表示写尚未被主泵应用，
+     * 已发布读视图必须显示"无服务"；IDLE 表示写已应用或已中止。 */
+    const uint8_t stage = ctx->shared.isdu.stage_state;
+    const bool write_pending = (stage == (uint8_t) IOLINK_ISDU_STAGE_RECEPTION) ||
+                               (stage == (uint8_t) IOLINK_ISDU_STAGE_COMPLETE) ||
+                               (stage == (uint8_t) IOLINK_ISDU_STAGE_ABORT);
+    /* 失效旗标的清除条件：写入口已回到空闲（主泵已应用或已中止），
      * 即本轮发布的是"已应用该写之后"的视图。临界区把
-     * "ISR 置旗标 + 发布写段"与"主泵检查环 + 清旗标"分开，
-     * 避免清掉一个尚未入环的失效请求。 */
-    if ((ctx->shared.isr_isdu_invalidated != 0U) &&
-        iolink_ring_is_empty(&ctx->shared.isr_od_ring)) {
+     * "ISR 置旗标"与"主泵检查相位 + 清旗标"分开，
+     * 避免清掉一个尚未被主泵接管的失效请求。 */
+    if ((ctx->shared.isr_isdu_invalidated != 0U) && !write_pending) {
         IOLINK_CRITICAL_ENTER();
         ctx->shared.isr_isdu_invalidated = 0U;
         IOLINK_CRITICAL_EXIT();
     }
-    if ((ctx->shared.isr_isdu_invalidated != 0U) && !new_response) {
-        /* 写已暂存、尚未应用：显式发布"无服务"，绝不重发旧应答。 */
+    if ((ctx->shared.isr_isdu_invalidated != 0U) && write_pending) {
+        /* 写尚未应用：显式发布"无服务"，绝不重发旧应答。 */
         count = 0U;
         sel = 0U;
     }
@@ -1857,7 +1851,6 @@ static void dll_finish_frame(iolink_dll_main_t* ctx)
     ctx->frame_index = 0U;
     ctx->frame_replied_by_isr = 0U;
     ctx->frame_window_closed = 0U;
-    ctx->frame_write_not_staged = 0U;
     /* 在下一主站帧之前，为 ISR 读泵反映任何 ISDU 状态变化
      * （例如完成的写请求）。 */
     dll_isdu_sync_snapshot(ctx);
@@ -2024,38 +2017,6 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
     if (ctx->shared.isr_dsio_clear != 0U) {
         ctx->shared.isr_dsio_clear = 0U;
         dll_timer_cancel(ctx, IOLINK_TIMER_T_DSIO);
-    }
-}
-
-/**
- * @brief 将 ISR 暂存的 ISDU 写交给传送层。
- *
- * ISR 在环中暂存完整段；主泵拥有传送层
- * 和响应缓冲区。每次迭代从环中拷贝一条记录，
- * 释放其槽位（以便 ISR 复用），然后在中断使能的情况下
- * 运行（可能较慢的）传送层。不涉及临界区。
- */
-static void dll_drain_staged_isdu_write(iolink_dll_main_t* ctx)
-{
-    for (;;) {
-        const iolink_od_rec_t* record =
-            (const iolink_od_rec_t*) iolink_ring_peek(&ctx->shared.isr_od_ring);
-        if (record == NULL) {
-            return;
-        }
-        uint8_t staged_fc = record->flowctrl;
-        uint8_t staged_len = record->len;
-        if (staged_len > IOLINK_OD_MAX_SIZE) {
-            staged_len = (uint8_t) IOLINK_OD_MAX_SIZE;
-        }
-        uint8_t staged_od[IOLINK_OD_MAX_SIZE];
-        for (uint8_t i = 0U; i < staged_len; i++) {
-            staged_od[i] = record->data[i];
-        }
-        iolink_ring_release(&ctx->shared.isr_od_ring);
-        if (staged_len > 0U) {
-            iolink_isdu_od_write(&ctx->shared.isdu, staged_fc, staged_od, staged_len);
-        }
     }
 }
 
@@ -2337,8 +2298,6 @@ static void dll_consume_isr_mailbox(iolink_dll_main_t* ctx)
      * 快照。窗口判定在消费时做一次，本次处理期间不再变化。 */
     ctx->frame_replied_by_isr = record->eager;
     ctx->frame_window_closed = dll_reply_window_closed(ctx, record->end_us) ? 1U : 0U;
-    ctx->frame_write_not_staged =
-        ((record->flags & IOLINK_FRAME_FLAG_WRITE_NOT_STAGED) != 0U) ? 1U : 0U;
     /* 拷贝后释放：ISR 随后可复用该槽位，而另一个
      * 槽位保持完整。无需临界区，因为 ISR 从不
      * 写入 'out' 处的槽位。 */
@@ -2427,7 +2386,6 @@ static void dll_process_body(iolink_dll_main_t* ctx)
      * 恢复性降级到 COM1 不能让 UART 停留在错误波特率。 */
     dll_restore_operating_baudrate(ctx);
 
-    dll_drain_staged_isdu_write(ctx);
     iolink_isdu_process(&ctx->shared.isdu);
     /* 服务可能已在此完成：刷新 ISR 响应快照。 */
     dll_isdu_sync_snapshot(ctx);

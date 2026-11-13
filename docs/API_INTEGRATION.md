@@ -268,14 +268,15 @@ t_A（10 个位时间，A.3.5）后：
 - 设备保证不发出窗口外的应答、不抢占总线：主泵在消费邮箱时比较 `now - end_us` 与
   10 × Tbit，窗口已关时 `dll_send()` 不发送，只把该应答计入 `late_reply_dropped`；
   该帧仍照常运行状态机与计数；
-- 延迟请求只丢弃、不迟到应答；ISDU 写段最多暂存 `IOLINK_OD_SLOTS`（默认 8）个，溢出时
-  该段被丢弃（`isr_od_overruns`）且不应答，由主站重发。
+- 延迟请求只丢弃、不迟到应答；ISDU 写请求在数据 ISR 内按 FlowCTRL 位置去重累计：
+  重发段只回 ACK、不消耗新位置，因此主站重发风暴不会耗尽缓冲。若主泵尚未接管上一条
+  已收齐的请求就收到新的 START，前一条被覆盖并计入 `isr_od_overruns`。
 
 排查主泵饥饿时读 `iolink_dll_get_stats()`：`isr_plan_misses`（走延迟路径的帧）、
-`isr_mailbox_drops`（邮箱满）、`isr_od_overruns`（写段暂存满）、`t_pd_discards`
-（t_PD 窗口内丢弃的邮箱帧）、`late_reply_dropped`（窗口已关而放弃的应答）、
-`reply_plan_overflows`（计划槽位耗尽）。`isr_od_overruns` 持续增长说明主泵调用不够频繁，
-或 `IOLINK_OD_SLOTS` 偏小。
+`isr_mailbox_drops`（邮箱满）、`isr_od_overruns`（已收齐请求被新 START 覆盖）、
+`t_pd_discards`（t_PD 窗口内丢弃的邮箱帧）、`late_reply_dropped`（窗口已关而放弃的
+应答）、`reply_plan_overflows`（计划槽位耗尽）。`isr_od_overruns` 持续增长说明主泵长
+时间未接管已收齐的请求。
 
 `iolink_device_init()` 使用 `config.workspace`（可为 NULL，表示使用上下文内嵌的
 ISDU/DS scratch）；把 scratch 放进 DTCM 或外部 RAM 时在配置里指向工作区即可，工作区
@@ -541,7 +542,10 @@ void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd);
 未绑定能力位时按“全部能力可用”处理，未绑定工作区时使用内嵌 fallback
 （`IOLINK_WORKSPACE_EMBEDDED=0` 时为未绑定状态）。
 只要调用者保证复制过程相对数据中断是原子的，`iolink_isdu_snapshot_response()`
-就是 ISR 安全的。其他函数均在主上下文调用。
+就是 ISR 安全的。`iolink_isdu_od_write()` 是数据 ISR 的写入口：只按 FlowCTRL 位置
+去重累计，不校验 CHKPDU、不解析、不执行；`iolink_isdu_process()` 在主上下文接管已
+收齐的请求（CHKPDU 校验 + 解析 + 执行）。直接使用引擎的测试可以在同一上下文依次
+调用两者，其余函数均在主上下文调用。
 
 ## 7. 参数、Data Storage 与持久化
 
@@ -783,11 +787,11 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 | 宏 | 默认值 | 约束与溢出的可观测计数 |
 | --- | --- | --- |
 | `IOLINK_MBX_SLOTS` | 4 | 帧邮箱深度；2 的幂且 ≥2。满时丢帧并计 `isr_mailbox_drops`。 |
-| `IOLINK_OD_SLOTS` | 8 | ISDU 写段暂存深度；2 的幂且 ≥2。满时丢段（不应答）并计 `isr_od_overruns`。 |
 | `IOLINK_REPLY_PLAN_SLOTS` | 10 | 应答计划槽位上限。满时丢弃多余计划并计 `reply_plan_overflows`，请求退回延迟路径。 |
 
-调小三者的深度会省 RAM，但会增加对应计数器的丢弃；`IOLINK_MBX_SLOTS` 与
-`IOLINK_OD_SLOTS` 的槽环用掩码取模，取非 2 的幂会在编译期报错。
+调小深度会省 RAM，但会增加对应计数器的丢弃；`IOLINK_MBX_SLOTS` 用掩码取模，取非
+2 的幂会在编译期报错。ISDU 写请求复用现有请求缓冲（`IOLINK_ISDU_BUFFER_SIZE`），
+没有独立的段数上限。
 
 传输粒度由 `IOLINK_ISR_RX_MODE` 和 `IOLINK_ISR_TX_MODE` 选择（默认 `BYTE`，
 DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检查所需的模式组合。

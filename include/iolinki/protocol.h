@@ -175,7 +175,6 @@
 #define IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL 0x36U /**< 功能暂时不可用（Table C.1）。 */
 #define IOLINK_ISDU_ERROR_PARAM_SET_INVALID 0x40U     /**< PAR_SETINVALID（Table C.1）。 */
 #define IOLINK_ISDU_ERROR_PARAM_INCONSISTENT 0x41U    /**< PAR_SETINCONSIST（Table C.1）。 */
-#define IOLINK_ISDU_ERROR_SEGMENTATION 0x81U          /**< 分段错误（内部）。 */
 #define IOLINK_ISDU_ERROR_APP_DEV_NOT_READY     \
     0x82U /**< 应用/设备未就绪（Table C.1）。 \
            */

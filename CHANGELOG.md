@@ -8,14 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added (slot sizing and diagnostics)
-- `IOLINK_MBX_SLOTS`, `IOLINK_OD_SLOTS` and `IOLINK_REPLY_PLAN_SLOTS` are
-  overridable in `include/iolinki/config.h` (`#ifndef` plus power-of-two and
-  range checks). Defaults: frame mailbox 4, staged ISDU write segments 8 and
-  reply-plan slots 10; `IOLINK_TX_SLOTS` is derived from `IOLINK_TX_ISR_SLOT`.
+- `IOLINK_MBX_SLOTS` and `IOLINK_REPLY_PLAN_SLOTS` are overridable in
+  `include/iolinki/config.h` (`#ifndef` plus power-of-two/range checks).
+  Defaults: frame mailbox 4, reply-plan slots 10; `IOLINK_TX_SLOTS` is derived
+  from `IOLINK_TX_ISR_SLOT`.
 - `iolink_dll_stats_t` gains `isr_od_overruns`, `isr_plan_misses`,
   `isr_mailbox_drops`, `t_pd_discards`, `late_reply_dropped` and
-  `reply_plan_overflows`, so discarded frames, staged writes, plan entries and
-  replies that missed their window are all observable.
+  `reply_plan_overflows`, so overwritten requests, deferred frames, plan
+  entries and replies that missed their window are all observable.
 
 ### Fixed (reply window and drop counters)
 - A deferred reply whose t_A window (10 bit times after the frame end) has
@@ -25,15 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Frames discarded inside the t_PD protection window are counted in
   `t_pd_discards`; reply-plan slot exhaustion is counted in
   `reply_plan_overflows` instead of being silent.
-- An ISDU write segment that could not be staged (staging ring full) is
-  flagged in the mailbox record (`IOLINK_FRAME_FLAG_WRITE_NOT_STAGED`); the main
-  pump does not acknowledge it even while the t_A window is still open, so a
-  dropped segment is never reported as delivered.
 
-### Changed (ISR frame hand-off)
-- The ISR publishes the frame-end timestamp and handling flags with each
-  mailbox record (`iolink_frame_rec_t::end_us` / `flags`), and
-  `isr_plan_misses` moved to the shared DLL region.
+### Changed (ISDU write ingestion)
+- ISDU write requests are now accumulated in the data ISR with positional
+  FlowCTRL de-duplication (`iolink_isdu_od_write`): a retried segment is
+  acknowledged but does not consume a new position, so a master retry storm
+  cannot overrun the staging buffer. `iolink_isdu_process()` validates CHKPDU,
+  parses and executes the completed request in the main context.
+- `IOLINK_OD_SLOTS`, `iolink_od_rec_t` and the `isr_od_ring` staging ring are
+  removed. The write request reuses the existing ISDU request buffer, which
+  saves about 260 bytes and removes the ring-full overrun path. The internal
+  `IOLINK_ISDU_ERROR_SEGMENTATION` constant is removed because the write path
+  no longer emits it (out-of-order segments are ignored and self-heal).
+- The ISR publishes the frame-end timestamp with each mailbox record
+  (`iolink_frame_rec_t::end_us`); `isr_plan_misses` moved to the shared DLL
+  region.
 
 ### Changed (IODD single source)
 - IODD generation takes parameters only from the C object dictionary

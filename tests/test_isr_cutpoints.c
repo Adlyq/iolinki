@@ -50,7 +50,6 @@ static bool publish_frame(iolink_dll_ctx_t* ctx, uint8_t tag, uint8_t len)
     }
     rec->len = len;
     rec->eager = (uint8_t) (tag & 1U);
-    rec->flags = 0U;
     rec->end_us = 0U; /* 手工发布：无帧结束时间戳 */
     for (uint8_t i = 0U; i < len; i++) {
         rec->data[i] = (uint8_t) (tag + i);
@@ -59,28 +58,10 @@ static bool publish_frame(iolink_dll_ctx_t* ctx, uint8_t tag, uint8_t len)
     return true;
 }
 
-/** @brief 完全按数据 ISR 的方式发布一个已暂存的 ISDU 写段。 */
-static bool publish_od(iolink_dll_ctx_t* ctx, uint8_t flowctrl, uint8_t tag)
-{
-    iolink_od_rec_t* rec = (iolink_od_rec_t*) iolink_ring_claim(&ctx->main.shared.isr_od_ring);
-    if (rec == NULL) {
-        ctx->main.shared.isr_od_overruns++;
-        return false;
-    }
-    rec->flowctrl = flowctrl;
-    rec->len = 2U;
-    rec->data[0] = tag;
-    rec->data[1] = (uint8_t) (tag ^ 0xFFU);
-    iolink_ring_publish(&ctx->main.shared.isr_od_ring);
-    return true;
-}
-
 static void reset_rings(iolink_dll_ctx_t* ctx)
 {
     iolink_ring_init(&ctx->main.shared.isr_frame_ring, (uint8_t*) ctx->main.isr_frame_slot,
                      IOLINK_MBX_SLOTS, (uint8_t) sizeof(iolink_frame_rec_t));
-    iolink_ring_init(&ctx->main.shared.isr_od_ring, (uint8_t*) ctx->main.isr_od_slot,
-                     IOLINK_OD_SLOTS, (uint8_t) sizeof(iolink_od_rec_t));
 }
 
 /* 生产者在消费者的每一对步骤之间发布；被消费的
@@ -165,40 +146,6 @@ static int test_frame_full_rejects(void)
     return 0;
 }
 
-/* 暂存 ISDU 写环上的同一组切点性质。 */
-static int test_od_cutpoints(void)
-{
-    iolink_dll_ctx_t ctx;
-    (void) memset(&ctx, 0, sizeof(ctx));
-    reset_rings(&ctx);
-
-    assert(publish_od(&ctx, IOLINK_FLOWCTRL_START, 0x61U));
-
-    const iolink_od_rec_t* rec =
-        (const iolink_od_rec_t*) iolink_ring_peek(&ctx.main.shared.isr_od_ring);
-    assert(rec != NULL);
-    assert(publish_od(&ctx, 1U, 0x71U)); /* peek 之后被抢占 */
-    uint8_t fc = rec->flowctrl;
-    uint8_t len = rec->len;
-    uint8_t od[IOLINK_OD_MAX_SIZE];
-    (void) memcpy(od, rec->data, len);
-    iolink_ring_release(&ctx.main.shared.isr_od_ring);
-
-    assert(fc == IOLINK_FLOWCTRL_START);
-    assert(len == 2U);
-    assert(od[0] == 0x61U);
-    assert(od[1] == (uint8_t) (0x61U ^ 0xFFU));
-
-    const iolink_od_rec_t* next =
-        (const iolink_od_rec_t*) iolink_ring_peek(&ctx.main.shared.isr_od_ring);
-    assert(next != NULL);
-    assert(next->flowctrl == 1U);
-    assert(next->data[0] == 0x71U);
-    iolink_ring_release(&ctx.main.shared.isr_od_ring);
-    assert(ctx.main.shared.isr_od_overruns == 0U);
-    return 0;
-}
-
 /* 在主泵进入 iolink_dll_process()、尚未消费邮箱时
  * 发布第二帧的 PHY 回调（挂在故障位图诊断轮询上）。 */
 static uint8_t g_publish_on_poll;
@@ -260,10 +207,6 @@ int main(void)
         return rc;
     }
     rc = test_frame_full_rejects();
-    if (rc != 0) {
-        return rc;
-    }
-    rc = test_od_cutpoints();
     if (rc != 0) {
         return rc;
     }

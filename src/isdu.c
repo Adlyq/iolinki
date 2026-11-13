@@ -237,25 +237,36 @@ static void isdu_respond_result(iolink_isdu_ctx_t* ctx, iolink_result_t result)
    完整的 ISDU 请求后执行它。 */
 static void handle_standard_commands(iolink_isdu_ctx_t* ctx);
 
-/** @brief 将 ISDU 请求传输层复位到空闲状态。 */
+/**
+ * @brief 复位写入口暂存状态（ISR 上下文安全；不触碰主泵独占字段）。
+ *
+ * 只清 req_buf 的累计位置与 FlowCTRL 水位，并把 stage_state 置回 IDLE。
+ * 主泵的 `state`/`header`/响应缓冲不在此复位，避免 ISR 与主泵争用。
+ */
+static void isdu_stage_reset(iolink_isdu_ctx_t* ctx)
+{
+    ctx->req_idx = 0U;
+    ctx->req_total = 0U;
+    ctx->flowctrl_seen = false;
+    ctx->stage_state = IOLINK_ISDU_STAGE_IDLE;
+}
+
+/** @brief 将 ISDU 请求传输层复位到空闲状态（主泵上下文）。 */
 static void isdu_transport_reset(iolink_isdu_ctx_t* ctx)
 {
     ctx->response_negative = false;
     ctx->state = ISDU_STATE_IDLE;
-    ctx->req_idx = 0U;
-    ctx->req_total = 0U;
     ctx->resp_idx = 0U;
     ctx->resp_total = 0U;
     ctx->buffer_idx = 0U;
     ctx->response_len = 0U;
     ctx->response_idx = 0U;
-    ctx->flowctrl_seen = false;
-    ctx->repeat_pending = false;
     ctx->error_code = IOLINK_ISDU_ERROR_NONE;
     ctx->header.type = IOLINK_ISDU_SERVICE_TYPE_READ;
     ctx->header.length = 0U;
     ctx->header.index = 0U;
     ctx->header.subindex = 0U;
+    isdu_stage_reset(ctx);
 }
 
 /** @brief 由最先收到的字节声明的 ISDU 总字节数（A.5.3/A.14）。
@@ -389,11 +400,6 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
     }
     isdu_copy_payload(ctx, buf, pos, total);
 
-    IOLINK_LOG_DEBUG(&ctx->log, "isdu req idx=0x%04X sub=%u len=%u write=%u",
-                     (unsigned) ctx->header.index, (unsigned) ctx->header.subindex,
-                     (unsigned) ctx->header.length,
-                     (unsigned) (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE));
-
     /* 已解析：执行由 iolink_isdu_process() 完成，从而保持
        传输层与应用分发可分离（且可测试）。 */
     ctx->state = ISDU_STATE_SERVICE_EXECUTE;
@@ -477,7 +483,7 @@ static void isdu_emit_busy(iolink_isdu_ctx_t* ctx)
 void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_t* od,
                           uint8_t od_len)
 {
-    if ((ctx == NULL) || (ctx->buffer == NULL)) {
+    if ((ctx == NULL) || (ctx->buffer == NULL) || (od == NULL)) {
         return;
     }
 
@@ -485,7 +491,8 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
        复位到空闲，与方向无关。IDLE/IDLE2 及保留值
        0x13..0x1E 不是写操作；它们由读路径处理。 */
     if (flowctrl == IOLINK_FLOWCTRL_ABORT) {
-        isdu_transport_reset(ctx);
+        isdu_stage_reset(ctx);
+        ctx->stage_state = IOLINK_ISDU_STAGE_ABORT;
         return;
     }
     if (flowctrl >= IOLINK_FLOWCTRL_IDLE) {
@@ -493,46 +500,30 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
     }
 
     if (flowctrl == IOLINK_FLOWCTRL_START) {
-        isdu_transport_reset(ctx);
+        isdu_stage_reset(ctx);
         /* 仅在上一应答已发布时才轮换组帧应答缓冲区；
-         * 否则替换尚未发布的构建结果。因此 ISR 可能仍在
-         * 服务的缓冲区永远不会被写入。 */
+         * 否则替换尚未发布的构建结果。 */
         if (ctx->resp_sel == ctx->resp_pub) {
             ctx->resp_sel = (uint8_t) (ctx->resp_sel ^ 1U);
             ctx->resp_buf = ctx->resp_store[ctx->resp_sel];
         }
+        ctx->stage_state = IOLINK_ISDU_STAGE_RECEPTION;
         ctx->flowctrl_seen = true;
         ctx->last_flowctrl = flowctrl;
-        ctx->state = ISDU_STATE_HEADER_INITIAL;
-        ctx->req_total = 0U;
     }
     else {
-        /* COUNT（0x00..0x0F）：必须跟在 START 之后。重复的 FlowCTRL 表示重发
-           上一报文，其载荷被忽略（7.3.6.2）。 */
-        if (!ctx->flowctrl_seen || (ctx->state == ISDU_STATE_IDLE)) {
-            ctx->error_code = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-            isdu_transport_reset(ctx);
-            return;
-        }
-        if (flowctrl == ctx->last_flowctrl) {
-            ctx->repeat_pending = true;
+        /* COUNT（0x00..0x0F）：只在写请求进行中、且是「下一个期望段」时
+           才接受。重复段（重发）与过早的乱序段都照常 ACK，但不修改
+           缓冲——重发不会消耗新位置，乱序也不会破坏已累计的请求；
+           主站补齐缺失段后自然恢复。 */
+        if ((ctx->stage_state != IOLINK_ISDU_STAGE_RECEPTION) || !ctx->flowctrl_seen) {
             return;
         }
         const uint8_t expected = (uint8_t) ((ctx->last_flowctrl + 1U) & IOLINK_FLOWCTRL_COUNT_MASK);
         if (flowctrl != expected) {
-            /* 结构违例：丢弃请求，进入空闲，下一次读
-               应答 No Service（0x00）（Table 54 T13）。 */
-            ctx->error_code = IOLINK_ISDU_ERROR_SEGMENTATION;
-            isdu_transport_reset(ctx);
             return;
         }
         ctx->last_flowctrl = flowctrl;
-        ctx->repeat_pending = false;
-    }
-
-    if (ctx->repeat_pending) {
-        ctx->repeat_pending = false;
-        return;
     }
 
     for (uint8_t i = 0U; i < od_len; i++) {
@@ -548,24 +539,8 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
     }
 
     if ((ctx->req_total > 0U) && (ctx->req_idx >= ctx->req_total)) {
-        /* A.5.6：当所有 ISDU 字节的异或为零时 CHKPDU 有效。 */
-        uint8_t x = 0U;
-        for (size_t i = 0U; i < ctx->req_total; i++) {
-            x ^= ctx->req_buf[i];
-        }
-        if (x != 0U) {
-            /* A.5.6 / Table 84（SDCI_TC_0065）：CHKPDU 无效会使
-               请求无效。丢弃它，返回空闲，并对下一次
-               Read 请求以 I-Service 0（"No Service"）应答。不要为
-               格式错误的请求合成否定 ISDU 应答。 */
-            ctx->error_code = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-            isdu_transport_reset(ctx);
-            return;
-        }
-        isdu_execute_request(ctx, ctx->req_total);
-        if (ctx->state == ISDU_STATE_RESPONSE_READY) {
-            isdu_frame_response(ctx);
-        }
+        /* 累计完成：主泵在 iolink_isdu_process() 中校验 CHKPDU 并执行。 */
+        ctx->stage_state = IOLINK_ISDU_STAGE_COMPLETE;
     }
 }
 
@@ -588,9 +563,10 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_o
     }
 
     if (flowctrl == IOLINK_FLOWCTRL_START) {
-        /* 应答读取开始。若某服务正在执行且
-           应用尚未应答，则应答 Busy（0x01）（Table A.14）。 */
-        if (ctx->state == ISDU_STATE_SERVICE_EXECUTE) {
+        /* 应答读取开始。若某服务正在执行（或写请求已收齐、等待主泵
+           接管），应用尚未应答，则应答 Busy（0x01）（Table A.14）。 */
+        if ((ctx->state == ISDU_STATE_SERVICE_EXECUTE) ||
+            (ctx->stage_state == IOLINK_ISDU_STAGE_COMPLETE)) {
             isdu_emit_busy(ctx);
         }
         else if (ctx->state == ISDU_STATE_RESPONSE_READY) {
@@ -1811,10 +1787,54 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
  * 公开 API
  * ------------------------------------------------------------------------- */
 
+/** @brief 校验并解析 ISR 累计完成的写请求（调用方持临界区）。 */
+static bool isdu_apply_staged_request(iolink_isdu_ctx_t* ctx)
+{
+    uint8_t x = 0U;
+    for (size_t i = 0U; i < ctx->req_total; i++) {
+        x ^= ctx->req_buf[i];
+    }
+    if (x != 0U) {
+        /* A.5.6 / Table 84：CHKPDU 无效使请求无效；丢弃请求并回到空闲。
+         * 不要为格式错误的请求合成否定 ISDU 应答。 */
+        ctx->error_code = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
+        isdu_transport_reset(ctx);
+        return false;
+    }
+    isdu_execute_request(ctx, ctx->req_total);
+    ctx->stage_state = IOLINK_ISDU_STAGE_IDLE; /* 把 req_buf 交还 ISR */
+    return true;
+}
+
 void iolink_isdu_process(iolink_isdu_ctx_t* ctx)
 {
     if ((ctx == NULL) || (ctx->buffer == NULL)) {
         return;
+    }
+
+    /* 快路径：没有待接管的写请求时不进临界区（PHY 服务钩子必须能在
+     * 区外运行）。COMPLETE/ABORT 的权威判定在临界区内重读一次，
+     * 避免 ISR 在「读到 COMPLETE」与「进入临界区」之间开始新的 START，
+     * 让主泵用被改写的 req_buf/req_total 解析一条撕裂的请求。 */
+    uint8_t stage = ctx->stage_state;
+    bool applied = false;
+    if ((stage == IOLINK_ISDU_STAGE_COMPLETE) || (stage == IOLINK_ISDU_STAGE_ABORT)) {
+        IOLINK_CRITICAL_ENTER();
+        stage = ctx->stage_state;
+        if (stage == IOLINK_ISDU_STAGE_ABORT) {
+            isdu_transport_reset(ctx);
+        }
+        else if (stage == IOLINK_ISDU_STAGE_COMPLETE) {
+            applied = isdu_apply_staged_request(ctx);
+        }
+        IOLINK_CRITICAL_EXIT();
+    }
+
+    if (applied) {
+        IOLINK_LOG_DEBUG(&ctx->log, "isdu req idx=0x%04X sub=%u len=%u write=%u",
+                         (unsigned) ctx->header.index, (unsigned) ctx->header.subindex,
+                         (unsigned) ctx->header.length,
+                         (unsigned) (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE));
     }
 
     if (ctx->state == ISDU_STATE_SERVICE_EXECUTE) {
@@ -1879,5 +1899,6 @@ uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* busy, 
 
 bool iolink_isdu_is_idle(const iolink_isdu_ctx_t* ctx)
 {
-    return (ctx != NULL) && (ctx->state == ISDU_STATE_IDLE);
+    return (ctx != NULL) && (ctx->state == ISDU_STATE_IDLE) &&
+           (ctx->stage_state == IOLINK_ISDU_STAGE_IDLE);
 }

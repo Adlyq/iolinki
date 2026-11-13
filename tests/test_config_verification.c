@@ -49,11 +49,9 @@ static void test_config_defaults(void** state)
 
     /* 验证 ISR 交接容量默认值与派生槽位数。 */
     assert_true(IOLINK_MBX_SLOTS == 4);
-    assert_true(IOLINK_OD_SLOTS == 8);
     assert_true(IOLINK_REPLY_PLAN_SLOTS == 10);
     assert_true(sizeof(dll.main.isr_frame_slot) / sizeof(dll.main.isr_frame_slot[0]) ==
                 IOLINK_MBX_SLOTS);
-    assert_true(sizeof(dll.main.isr_od_slot) / sizeof(dll.main.isr_od_slot[0]) == IOLINK_OD_SLOTS);
     assert_true(sizeof(dll.main.shared.reply_plan) / sizeof(dll.main.shared.reply_plan[0]) ==
                 IOLINK_REPLY_PLAN_SLOTS);
     assert_true(sizeof(dll.main.shared.isr_tx_payload) /

@@ -49,8 +49,9 @@
  *
  * dll_isr_complete_frame（两种 RX 粒度共用的每帧决策点，
  * 按以下顺序执行）：
- *  1. ISDU 写：dll_isr_consume_isdu_write -> 暂存到 isr_od_ring（
- *     传输本身稍后由主泵执行），并置 isr_isdu_invalidated。
+ *  1. ISDU 写：dll_isr_consume_isdu_write 直接调用
+ *     iolink_isdu_od_write（按 FlowCTRL 位置去重累计），并置
+ *     isr_isdu_invalidated；CHKPDU/解析/执行由主泵完成。
  *  2. 应答计划：dll_isr_plan_lookup 在 dll.c 发布的计划表中查找
  *     命中项（seqlock 读者）；dll_isr_plan_execute 按计划执行
  *     动作 -> 取源 -> 追加 CKS -> 喂字节。
@@ -64,8 +65,9 @@
  * 交接与顺序约束：
  *  - 即时回复在邮箱发布*之前*启动（t_A）；记录随后
  *    连同其八位组一起携带 eager=1。
- *  - ctx->shared.isdu 归主泵所有：ISR 只读取已发布的响应视图
- *    （含失效旗标与代数位）并在 isr_od_ring 中暂存写操作。
+ *  - ctx->shared.isdu 的写入口（req_buf/req_idx/req_total/FlowCTRL 水位与
+ *    stage_state）归数据 ISR；主泵只在 stage_state=COMPLETE 时于临界区
+ *    内读取 req_buf。已发布的读视图与其失效旗标仍由主泵发布。
  *  - 应答计划表同样归主泵所有：ISR 只读，绝不修改。
  *  - 64 位截止时间与 last_response_us 归主泵所有：ISR 只设置一次性
  *    标志或写 32 位时间戳，主泵用无符号差值重建 64 位绝对时间。
@@ -185,11 +187,10 @@ static bool dll_isr_frame_valid_acc(const iolink_dll_main_t* ctx, const uint8_t*
  * 调用；当环已满时返回 false（并计入一次丢弃）。八位组
  * 在发布之前复制，因此 ISR 一返回 PHY 即可复用其接收
  * 缓冲区。@p eager 记录该 ISR 是否已
- * 发送回复（此时主泵必须保持静默）；@p flags 携带
- * @ref IOLINK_FRAME_FLAG_WRITE_NOT_STAGED 等处置标志；@p end_us 是帧结束
+ * 发送回复（此时主泵必须保持静默）；@p end_us 是帧结束
  * 时间戳，主泵据此判断 t_A 应答窗口是否仍然打开。 */
 static bool dll_isr_publish_frame(iolink_dll_main_t* ctx, const uint8_t* frame, uint8_t len,
-                                  uint8_t eager, uint8_t flags, uint32_t end_us)
+                                  uint8_t eager, uint32_t end_us)
 {
     if ((frame == NULL) || (len > IOLINK_M_SEQ_MAX_LEN)) {
         IOLINK_LOG_ISR_DEBUG(&ctx->shared.log, "frame publish rejected: len=%u", (unsigned) len);
@@ -206,7 +207,6 @@ static bool dll_isr_publish_frame(iolink_dll_main_t* ctx, const uint8_t* frame, 
     }
     record->len = len;
     record->eager = eager;
-    record->flags = flags;
     record->end_us = end_us;
     (void) memcpy(record->data, frame, len);
     iolink_ring_publish(&ctx->shared.isr_frame_ring); /* 最后发布 */
@@ -402,11 +402,11 @@ static bool dll_isr_is_isdu_write(const uint8_t* frame)
            ((frame[0] & IOLINK_MC_RW_MASK) == 0U);
 }
 
-/* 直接在 ISR 中缓冲 ISDU 写请求。这里只执行传输
- * （字节收集 + FlowCTRL + CHKPDU 检查）；应用
- * 分发仍位于 iolink_isdu_process()（主窗口），与 ST 的
- * StackBaseOdWrite 与 StackISDUProcess 拆分方式一致。当某个段
- * 已暂存到环中时返回 true。 */
+/* ISDU 写请求在数据 ISR 中直接累计（按 FlowCTRL 位置去重）。
+ * FlowCTRL 序与字节累计归 ISR；CHKPDU 校验、请求解析与服务执行归
+ * 主泵（iolink_isdu_process）。与 ST 的 StackBaseOdWrite /
+ * StackISDUProcess 拆分一致。有效写段总是被消费（返回 true），
+ * 因此写计划总是回 ACK；重发段覆盖同一位置，不消耗新缓冲。 */
 static bool dll_isr_consume_isdu_write(iolink_dll_main_t* ctx, const uint8_t* frame, uint8_t len)
 {
     if ((frame == NULL) || (len < 2U)) {
@@ -434,27 +434,20 @@ static bool dll_isr_consume_isdu_write(iolink_dll_main_t* ctx, const uint8_t* fr
     if (od_n > IOLINK_OD_MAX_SIZE) {
         od_n = (uint8_t) IOLINK_OD_MAX_SIZE;
     }
-    /* 把写暂存给主泵，而不是从 ISR 触碰 ctx->shared.isdu：
-     * 这样 ctx->shared.isdu 只有一个写入者（主泵），ISDU 状态
-     * 机不再需要在关闭中断的情况下运行。IOLINK_OD_SLOTS 个槽位
-     * 决定主泵饥饿（应用长时间占用主循环）时能吸收多少个写段；
-     * 超出部分被丢弃并计数（IO-Link 段由主站节拍控制，主站会因
-     * 缺少应答而重发）。 */
-    iolink_od_rec_t* record = (iolink_od_rec_t*) iolink_ring_claim(&ctx->shared.isr_od_ring);
-    if (record == NULL) {
-        ctx->shared.isr_od_overruns++;
-        return false;
+
+    const uint8_t flowctrl = (uint8_t) (frame[0] & IOLINK_MC_ADDR_MASK);
+    if ((flowctrl == IOLINK_FLOWCTRL_START) || (flowctrl == IOLINK_FLOWCTRL_ABORT)) {
+        if ((flowctrl == IOLINK_FLOWCTRL_START) &&
+            (ctx->shared.isdu.stage_state == IOLINK_ISDU_STAGE_COMPLETE)) {
+            /* 上一条已收齐但主泵尚未接管：新 START 覆盖它。 */
+            ctx->shared.isr_od_overruns++;
+        }
+        /* 失效协议：写尚未被主泵应用，已发布的读视图不得继续
+         * 充当"当前应答"。主泵应用并发布新视图后清旗标。 */
+        ctx->shared.isr_isdu_invalidated = 1U;
     }
-    record->flowctrl = (uint8_t) (frame[0] & IOLINK_MC_ADDR_MASK);
-    record->len = od_n;
-    for (uint8_t i = 0U; i < od_n; i++) {
-        record->data[i] = frame[od_off + i];
-    }
-    iolink_ring_publish(&ctx->shared.isr_od_ring);
-    /* 失效协议：写尚未被主泵应用，因此已发布的读视图不得继续
-     * 充当"当前应答"。主泵在应用该写并产出新应答前发布"无服务"，
-     * 产出后清旗标。这消除"写后立刻读"读到旧值的窗口。 */
-    ctx->shared.isr_isdu_invalidated = 1U;
+
+    iolink_isdu_od_write(&ctx->shared.isdu, flowctrl, &frame[od_off], od_n);
     return true;
 }
 
@@ -789,12 +782,6 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
     }
     /* 帧结束时间戳：主泵据此判断 t_A（10 个位时间）应答窗口是否仍开。 */
     const uint32_t end_us = (uint32_t) dll_time_us(ctx);
-    /* 写段未进入暂存环时，主泵不得确认该段；否则主站会误以为段已送达，
-     * 直到整条服务在 CHKPDU 处失败才发现丢失。 */
-    uint8_t rec_flags = 0U;
-    if (valid && dll_isr_is_isdu_write(frame) && !staged) {
-        rec_flags = IOLINK_FRAME_FLAG_WRITE_NOT_STAGED;
-    }
     if (!replied) {
         ctx->shared.isr_plan_misses++;
         if (valid && (ctx->shared.phy->response_timer_stop != NULL)) {
@@ -805,7 +792,7 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
     }
     /* 即使即时校验失败也发布：无效帧的错误/回退
      * 统计由主泵负责。 */
-    (void) dll_isr_publish_frame(ctx, frame, len, replied ? 1U : 0U, rec_flags, end_us);
+    (void) dll_isr_publish_frame(ctx, frame, len, replied ? 1U : 0U, end_us);
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME

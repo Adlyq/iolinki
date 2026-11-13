@@ -206,29 +206,17 @@ typedef struct
 } iolink_reply_plan_t;
 /** @} */
 
-/** @brief 一个暂存的 ISDU 写段（数据 ISR -> 主泵）。 */
-typedef struct
-{
-    uint8_t flowctrl;                 /**< 请求 MC 字节中的 FlowCTRL 半字节 */
-    uint8_t len;                      /**< @ref data 中的 OD 字节 */
-    uint8_t data[IOLINK_OD_MAX_SIZE]; /**< OD 字节 */
-} iolink_od_rec_t;
-
-/** @brief 记录的 ISDU 写段未进入暂存环：主泵不得确认该段。 */
-#define IOLINK_FRAME_FLAG_WRITE_NOT_STAGED 0x01U
-
 /**
  * @brief 邮箱环中的一个接收帧（数据 ISR -> 主泵）。
  *
  * 该记录携带主泵处理该帧所需的全部信息，因此没有
- * 任何逐帧状态存在于环之外：长度、ISR 是否已发送应答（eager）、
- * 帧结束时间以及附加处置标志都随字节一同传递。
+ * 任何逐帧状态存在于环之外：长度、ISR 是否已发送应答（eager）以及
+ * 帧结束时间都随字节一同传递。
  */
 typedef struct
 {
     uint8_t len;                        /**< 帧长度，以字节计 */
     uint8_t eager;                      /**< 非零表示 ISR 已应答该帧 */
-    uint8_t flags;                      /**< @ref IOLINK_FRAME_FLAG_WRITE_NOT_STAGED 等处置标志 */
     uint32_t end_us;                    /**< 帧结束时间（微秒，0 = 未知）：主泵据此
                                              判断 t_A 应答窗口是否仍然打开 */
     uint8_t data[IOLINK_M_SEQ_MAX_LEN]; /**< 帧字节 */
@@ -270,7 +258,7 @@ typedef struct
                                        边沿计数，走旧路径时按轮询周期计数） */
     uint32_t isr_tx_dropped;       /**< 传输层无法发送的应答（主上下文与 ISR） */
     uint32_t idle_timeouts;        /**< 1 s 空闲链路诊断（不是 t_A 超时） */
-    uint32_t isr_od_overruns;      /**< 因 ISDU 写暂存环满而丢弃的写段 */
+    uint32_t isr_od_overruns;      /**< 上一条写请求未被主泵接管时又收到 START */
     uint32_t isr_plan_misses;      /**< 未命中应答计划、交给主泵的帧 */
     uint32_t isr_mailbox_drops;    /**< 因帧邮箱满而丢弃的帧 */
     uint32_t t_pd_discards;        /**< 在 t_PD 保护窗口内丢弃的邮箱帧 */
