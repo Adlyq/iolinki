@@ -208,44 +208,99 @@ class IoddCLI(unittest.TestCase):
     def test_sensor_c_wire_data_and_parameter_services_match_iodd(self):
         """Decode bytes from the actual application C implementation using IODD offsets."""
         library = Path(self.tmp.name) / 'sensor.so'
-        subprocess.run(['cc', '-shared', '-fPIC', '-I'+str(ROOT/'include'),
-                        str(ROOT/'examples/switching_sensor/switching_sensor.c'), '-o', str(library)], check=True)
-        class Sensor(ctypes.Structure):
-            _fields_ = [('threshold',ctypes.c_uint16), ('hysteresis',ctypes.c_uint16),
-                        ('sample',ctypes.c_uint16), ('inverted',ctypes.c_bool),
-                        ('active',ctypes.c_bool), ('valid',ctypes.c_bool), ('pd',ctypes.c_uint8*3)]
+        shim = Path(self.tmp.name) / 'sensor_shim.c'
+        # 测试只链接示例的 OD 应用；没有供旧 vendor_service 使用的生产包装，
+        # 这里用一个测试专用垫片把 ctypes 调用接到对象字典 API。
+        shim.write_text(r"""
+#include "switching_sensor.h"
+#include "iolinki/od.h"
+#include <stddef.h>
+
+static switching_sensor_t g_sensor;
+static iolink_od_app_t g_app;
+
+void shim_init(void)
+{
+    switching_sensor_init(&g_sensor);
+    switching_sensor_od_init(&g_app, &g_sensor);
+}
+
+const unsigned char* shim_pd(void) { return g_sensor.pd; }
+int shim_sample(unsigned value, int valid)
+{
+    return switching_sensor_sample(&g_sensor, (unsigned short) value, valid != 0) ? 1 : 0;
+}
+unsigned shim_threshold(void) { return (unsigned) g_sensor.threshold; }
+
+int shim_read(unsigned index, unsigned sub, unsigned char* out, size_t cap, size_t* len)
+{
+    iolink_od_ctx_t ctx = {0};
+    const iolink_od_entry_t* entry = iolink_od_find(&g_app, (unsigned short) index,
+                                                    (unsigned char) sub);
+    ctx.app = &g_app;
+    if (entry == 0) {
+        return -1;
+    }
+    iolink_result_t r = iolink_od_read_value(&ctx, entry, (unsigned char) sub, out, cap);
+    *len = (size_t) r.len;
+    return r.code;
+}
+
+int shim_write(unsigned index, unsigned sub, const unsigned char* data, size_t len)
+{
+    iolink_od_ctx_t ctx = {0};
+    const iolink_od_entry_t* entry = iolink_od_find(&g_app, (unsigned short) index,
+                                                    (unsigned char) sub);
+    ctx.app = &g_app;
+    if (entry == 0) {
+        return -1;
+    }
+    return iolink_od_write_value(&ctx, entry, (unsigned char) sub, data, len).code;
+}
+""")
+        subprocess.run(['cc', '-shared', '-fPIC', '-I' + str(ROOT / 'include'),
+                        '-I' + str(ROOT / 'examples/switching_sensor'),
+                        str(ROOT / 'examples/switching_sensor/switching_sensor.c'),
+                        str(ROOT / 'examples/switching_sensor/switching_sensor_od.c'),
+                        str(ROOT / 'src/od.c'), str(ROOT / 'src/params.c'),
+                        str(ROOT / 'src/device_info.c'), str(ROOT / 'src/platform.c'),
+                        str(shim), '-o', str(library)], check=True)
         lib = ctypes.CDLL(str(library))
-        lib.switching_sensor_sample.argtypes = [ctypes.POINTER(Sensor), ctypes.c_uint16, ctypes.c_bool]
-        lib.switching_sensor_sample.restype = ctypes.c_bool
-        lib.switching_sensor_service.argtypes = [ctypes.c_void_p,ctypes.c_uint16,ctypes.c_uint8,ctypes.c_bool,
-                                                ctypes.c_void_p,ctypes.c_size_t,ctypes.c_void_p,ctypes.POINTER(ctypes.c_size_t)]
-        lib.switching_sensor_service.restype = ctypes.c_uint8
-        sensor = Sensor()
-        lib.switching_sensor_init(ctypes.byref(sensor))
+        lib.shim_sample.argtypes = [ctypes.c_uint, ctypes.c_int]
+        lib.shim_sample.restype = ctypes.c_int
+        lib.shim_read.argtypes = [ctypes.c_uint, ctypes.c_uint, ctypes.c_void_p,
+                                  ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
+        lib.shim_read.restype = ctypes.c_int
+        lib.shim_write.argtypes = [ctypes.c_uint, ctypes.c_uint, ctypes.c_void_p, ctypes.c_size_t]
+        lib.shim_write.restype = ctypes.c_int
+        lib.shim_threshold.restype = ctypes.c_uint
+        lib.shim_pd.restype = ctypes.POINTER(ctypes.c_uint8 * 3)
+        lib.shim_init()
         self.generate()
         info = json.loads(self.run_cli('inspect', self.xml).stdout)
-        for sample, valid in [(5100,True),(4900,True),(4800,True),(12345,False)]:
-            output = lib.switching_sensor_sample(ctypes.byref(sensor),sample,valid)
-            wire = int.from_bytes(bytes(sensor.pd),'big')
+        for sample, valid in [(5100, True), (4900, True), (4800, True), (12345, False)]:
+            output = lib.shim_sample(sample, 1 if valid else 0)
+            wire = int.from_bytes(bytes(lib.shim_pd().contents), 'big')
             fields = info['processData'][0]['in']['fields']
-            values = [(wire >> f['bitOffset']) & ((1<<f['bitLength'])-1) for f in fields]
-            self.assertEqual(values,[sample,int(valid),int(output)])
+            values = [(wire >> f['bitOffset']) & ((1 << f['bitLength']) - 1) for f in fields]
+            self.assertEqual(values, [sample, int(valid), int(output)])
         for variable in info['variables']:
             index = variable['index']
             if variable['accessRights'] != 'wo':
-                data = (ctypes.c_uint8*8)()
+                data = (ctypes.c_uint8 * 8)()
                 length = ctypes.c_size_t(8)
-                error = lib.switching_sensor_service(ctypes.byref(sensor),index,0,False,None,0,data,ctypes.byref(length))
-                self.assertEqual(error,0)
-                expected_bits = next(v['bitLength'] for v in self.config['variables'] if v['index']==index)
-                self.assertEqual(length.value,expected_bits//8)
-                self.assertEqual(int.from_bytes(bytes(data[:length.value]),'big'),int(variable['defaultValue']))
-        lib.switching_sensor_sample(ctypes.byref(sensor),5432,True)
-        teach = (ctypes.c_uint8*1)(1)
-        length = ctypes.c_size_t(0)
-        self.assertEqual(lib.switching_sensor_service(ctypes.byref(sensor),259,0,True,teach,1,None,ctypes.byref(length)),0)
-        self.assertEqual(sensor.threshold,5432)
-        self.assertNotEqual(lib.switching_sensor_service(ctypes.byref(sensor),259,1,True,teach,1,None,ctypes.byref(length)),0)
+                error = lib.shim_read(index, 0, data, 8, ctypes.byref(length))
+                self.assertEqual(error, 0)
+                expected_bits = next(v['bitLength'] for v in self.config['variables']
+                                     if v['index'] == index)
+                self.assertEqual(length.value, expected_bits // 8)
+                self.assertEqual(int.from_bytes(bytes(data[:length.value]), 'big'),
+                                 int(variable['defaultValue']))
+        lib.shim_sample(5432, 1)
+        teach = (ctypes.c_uint8 * 1)(1)
+        self.assertEqual(lib.shim_write(259, 0, teach, 1), 0)
+        self.assertEqual(lib.shim_threshold(), 5432)
+        self.assertNotEqual(lib.shim_write(259, 1, teach, 1), 0)
 
     @unittest.skipUnless(os.environ.get('IODD_SCHEMA'), 'set IODD_SCHEMA to an externally obtained official IODD1.1.xsd')
     def test_examples_validate_against_official_schema(self):

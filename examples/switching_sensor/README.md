@@ -54,8 +54,7 @@ For an MCU integration, keep the sensor/config/device contexts alive, call
 `switching_sensor_od_init(&od_app, &sensor)`, assign `config.od = &od_app` and
 `config.user = &sensor`, configure Type 2.V with three input bytes and no output
 bytes, and publish each sample using `iolink_device_pd_input_update`.
-`switching_sensor_service()` remains as a deprecated `vendor_service` wrapper
-for integrations that have not moved to `config.od`. Sample at application cadence while
+Sample at application cadence while
 servicing `iolink_device_process` fast enough for the link. Supply the MCU/PHY,
 clock, locks and sensor acquisition as in the matching hardware reference.
 
