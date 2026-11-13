@@ -37,28 +37,32 @@ t_A = t_hw_帧结束检测 + t_soft + t_hw_TX起播 ≤ 10 × Tbit
   基线 JSON 头记录 hostname / CPU 型号 / 内核 / 编译器 / 构建类型 / git /
   governor / 调度策略；`--check` 在 hostname 或 CPU 型号不一致时直接失败。
 
-## 独占核心能做到什么程度
+## 独占/降低干扰能做到什么程度
 
-工具自身能做的：`sched_setaffinity` 钉单核（失败即退出）、验证钉核生效、
-读取 SMT 兄弟列表与 `/sys/devices/system/cpu/isolated`，并把 `smt` /
-`isolated` 写入基线 JSON；`--check` 要求基线与当前运行的机器、CPU 型号、
-**核心**三者一致。
+工具自身：`sched_setaffinity` 钉单核（失败即退出）、验证钉核生效、读取 SMT
+兄弟列表与 `/sys/devices/system/cpu/isolated` 并写入基线 JSON；`--check`
+要求机器、CPU 型号、核心三者一致。
 
-宿主/容器侧才能真正隔离（本机实测不可用）：
+宿主上可用的手段（本机实测）：
 
-| 手段 | 本机状态 |
-| :--- | :--- |
-| `isolcpus` / `nohz_full` | 未配置（`isolated` 为空），需宿主重启参数 |
-| cpuset 隔离 | `cpuset.cpus.effective = 0-15`，容器内不可写 |
-| `SCHED_FIFO` / 负 nice | 拒绝（无 `CAP_SYS_NICE`） |
-| 中断亲和性 | `/proc/irq/*/smp_affinity` 只读 |
+| 手段 | 状态 | 备注 |
+| :--- | :--- | :--- |
+| 钉核 + SMT 探测 | ✅ | 默认 cpu0（P 核，有 SMT 兄弟）；E 核实测慢约 1.5 倍且波动不降 |
+| `run_isolated.sh`（钉频/关睿频/移 IRQ/禁深 C-state） | ✅ 需 sudo | 退出时逐项恢复，含失败与 Ctrl-C |
+| `SCHED_FIFO` | ✅ 但需 root | 普通用户无 `CAP_SYS_NICE` 且 `RLIMIT_RTPRIO=0`，被拒 |
+| `isolcpus` / `nohz_full` | ❌ 需重启 | 内核命令行 + reboot，才能消除 tick 与兄弟核竞争 |
 
-实测（i5-14400，3×20k 迭代）：cpu0（P 核，SMT 兄弟 cpu1）的 min 为
-38/38/38 ns；cpu12（E 核，无 SMT 兄弟）min 为 57/57/57 ns，绝对时间慢约
-1.5 倍且相对波动不降。**默认钉 cpu0**。若宿主配置了 `isolcpus` 或独立
-cpuset，改用 `--core N` 指向独占核并重新取基线。
+真正的独占需要在宿主内核命令行加入并重启：
+
+```
+isolcpus=managed_irq,0,1 nohz_full=0,1 rcu_nocbs=0,1 irqaffinity=2-15
+```
+
+之后用 `--core 0` 并重新取基线。没有 isolcpus 时，`run_isolated.sh` 已把
+频率、设备 IRQ、深 C-state 噪声降到最低；剩余 tick 由 min 门吸收。
 
 ## 噪声指标
+
 
 输出表与 JSON 中有 `noise`（`median_ns / min_ns`）：接近 1.0 表示整轮几乎
 无干扰；明显大于 1.0 说明本轮受到抢占，`--check` 会给出告警（硬门仍只看
@@ -70,15 +74,22 @@ min）。
 cmake -S tools/isr_latency -B build_isr_latency
 cmake --build build_isr_latency --parallel
 
-# 取基线（仓库根目录执行）
-./build_isr_latency/isr_latency --json tools/isr_latency_baseline.json
+# 推荐：降低宿主干扰后取基线（需要 sudo；退出时自动恢复系统设置）
+./tools/isr_latency/run_isolated.sh
 
-# 与基线比较（门：min / call_min 不超过基线 × 1.05）
+# 降低干扰后与基线比较（门：min / call_min 不超过基线 × 1.05）
+./tools/isr_latency/run_isolated.sh --check
+
+# 不降低干扰的裸跑（仅用于快速自检）
+./build_isr_latency/isr_latency --json tools/isr_latency_baseline.json
 ./build_isr_latency/isr_latency --check
 
 # 只列场景
 ./build_isr_latency/isr_latency --list
 ```
+
+基线 JSON（`tools/isr_latency_baseline.json`）是机器相关的本地产物，已在
+`.gitignore` 中：它不进入提交，各机器各取各的基线。
 
 参数：`--core N`（默认 0）、`--iters N`（默认 100000）、`--warmup N`
 （默认 2000）、`--json PATH`、`--no-rt`、`--check [PATH]`。

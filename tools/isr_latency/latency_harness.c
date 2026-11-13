@@ -474,6 +474,8 @@ typedef struct
     int core;
     int smt;      /* 1 = 该核有 SMT 兄弟，0 = 无，-1 = 未知 */
     int isolated; /* 1 = 在 /sys/devices/system/cpu/isolated 中，-1 = 未知 */
+    long freq_min_khz;
+    long freq_max_khz;
     long freq_before_khz;
     long freq_after_khz;
     uint32_t iters;
@@ -518,6 +520,17 @@ static void read_cpu_model(char* out, size_t n)
         }
     }
     (void) fclose(fp);
+}
+
+static int read_cpu_file_int(int core, const char* leaf, long* out);
+
+/** @brief 当前频率：cpuinfo_cur_freq 不可用时退回 scaling_cur_freq。 */
+static int read_cur_freq_khz(int core, long* out)
+{
+    if (read_cpu_file_int(core, "cpuinfo_cur_freq", out) == 0) {
+        return 0;
+    }
+    return read_cpu_file_int(core, "scaling_cur_freq", out);
 }
 
 static int read_cpu_file_int(int core, const char* leaf, long* out)
@@ -669,8 +682,14 @@ static void collect_env(env_info_t* e, int core, uint32_t iters, uint32_t warmup
     read_git_describe(e->git, sizeof(e->git));
     read_topology(e, core);
     read_governor(core, e->governor, sizeof(e->governor));
-    if (read_cpu_file_int(core, "cpuinfo_cur_freq", &e->freq_before_khz) != 0) {
+    if (read_cur_freq_khz(core, &e->freq_before_khz) != 0) {
         e->freq_before_khz = -1L;
+    }
+    if (read_cpu_file_int(core, "scaling_min_freq", &e->freq_min_khz) != 0) {
+        e->freq_min_khz = -1L;
+    }
+    if (read_cpu_file_int(core, "scaling_max_freq", &e->freq_max_khz) != 0) {
+        e->freq_max_khz = -1L;
     }
     e->core = core;
     e->iters = iters;
@@ -820,6 +839,8 @@ static void write_json(const char* path, const env_info_t* e, const scenario_sta
     (void) fprintf(fp, "    \"core\": %d,\n", e->core);
     (void) fprintf(fp, "    \"smt\": %d,\n", e->smt);
     (void) fprintf(fp, "    \"isolated\": %d,\n", e->isolated);
+    (void) fprintf(fp, "    \"freq_min_khz\": %ld,\n", e->freq_min_khz);
+    (void) fprintf(fp, "    \"freq_max_khz\": %ld,\n", e->freq_max_khz);
     (void) fprintf(fp, "    \"governor\": \"%s\",\n", e->governor);
     (void) fprintf(fp, "    \"sched\": \"%s\",\n", e->sched);
     (void) fprintf(fp, "    \"git\": \"%s\",\n", e->git);
@@ -1016,7 +1037,7 @@ int main(int argc, char** argv)
     }
     if (env.freq_before_khz < 0L) {
         (void) fprintf(stderr,
-                       "warning: cpuinfo_cur_freq unavailable (container?); cannot "
+                       "warning: current CPU frequency unavailable (intel_pstate?); cannot "
                        "verify clock stability\n");
     }
     if (env.smt == 1) {
@@ -1058,7 +1079,7 @@ int main(int argc, char** argv)
             stats[i].call_median, stats[i].call_p99);
     }
 
-    if (read_cpu_file_int(core, "cpuinfo_cur_freq", &env.freq_after_khz) != 0) {
+    if (read_cur_freq_khz(core, &env.freq_after_khz) != 0) {
         env.freq_after_khz = -1L;
     }
     if ((env.freq_before_khz > 0L) && (env.freq_after_khz > 0L) &&
