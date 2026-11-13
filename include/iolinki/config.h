@@ -214,17 +214,6 @@
 
 /* --- 3.1 功能裁剪 [可覆盖] --------------------------------------------- */
 
-/* `IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` 已退役。它们是
- * 组合包而不是能力，等价物是 `target_minimal` 结构配置：显式关闭
- * `IOLINK_FEATURE_DATA_STORAGE` 与 `IOLINK_FEATURE_EVENTS`。
- * 需要最小镜像时请直接设置这两个开关，而不是使用组合包。
- *
- * 定义已退役的宏是配置错误：静默忽略会构建出比预期大得多的镜像
- * （它们曾经一次性关闭 DS/SystemCommand/唤醒/SIO C-Q/事件引擎）。 */
-#if defined(IOLINK_MINIMAL_PROFILE) || defined(IOLINK_TINY_PROFILE)
-#error "IOLINK_MINIMAL_PROFILE/TINY_PROFILE retired: disable DATA_STORAGE and EVENTS instead"
-#endif
-
 /** @brief 数据存储子系统（data_storage.c、ISDU DS 服务、ds ctx）。 */
 #ifndef IOLINK_FEATURE_DATA_STORAGE
 #define IOLINK_FEATURE_DATA_STORAGE 1
@@ -237,23 +226,6 @@
 #ifndef IOLINK_FEATURE_EVENTS
 #define IOLINK_FEATURE_EVENTS 1
 #endif
-/* 以下开关曾是编译期能力，现已由 PHY vtable 与运行时能力位取代：
- *
- *  - 唤醒检测：`iolink_phy_api_t::detect_wakeup`（NULL = 无能力），
- *    解析为 `IOLINK_CAP_WAKEUP`；
- *  - 手动 C/Q：`iolink_phy_api_t::set_cq_line`，解析为
- *    `IOLINK_CAP_SIO_CQ`；
- *  - PD 输入路径：`iolink_app_callbacks_t::on_pd_input` 是否为 NULL，
- *    解析为 `IOLINK_CAP_PD_IN_CALLBACK`。
- *
- * 定义旧宏是配置错误：它们不会再删除任何代码，静默忽略只会让人误以为
- * 裁剪生效。 */
-#if defined(IOLINK_PHY_FEATURE_WAKEUP) || defined(IOLINK_PHY_FEATURE_SIO_CQ) || \
-    defined(IOLINK_APP_PD_INPUT_CALLBACK)
-#error \
-    "PHY_FEATURE_WAKEUP/SIO_CQ and APP_PD_INPUT_CALLBACK retired: use the vtable and app callbacks"
-#endif
-
 /* --- 3.2 ISR 传输粒度 [可覆盖] ----------------------------------------- */
 
 /*

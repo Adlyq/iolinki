@@ -152,7 +152,7 @@ struct iolink_events_ctx
     uint8_t pending_count;                                    /**< 已锁存的条件数量 */
     uint32_t dropped_count; /**< 因队列或 pending[] 已满而丢失的事件 */
 
-    /* A.6.4 的两个时间窗口是运行时能力（曾经是编译期常量）。
+    /* A.6.4 的两个时间窗口是运行时能力。
      * 默认值来自构建档位（IOLINK_EVENT_MIN_APPEAR_MS / _REPEAT_MS），
      * 设备层可用 iolink_stack_config_t 的事件节覆盖。 */
     uint16_t min_appear_ms; /**< 最短“出现”窗口（ms） */

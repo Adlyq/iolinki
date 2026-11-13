@@ -153,7 +153,7 @@ static inline uint8_t iolink_mseq_operate_code(uint8_t m_seq_type, uint8_t od_wi
 /**
  * @name 协议兼容位（运行时能力）
  *
- * 这些位曾经是编译期开关；现在进 `iolink_stack_config_t::compat_flags`。
+ * 这些位由 `iolink_stack_config_t::compat_flags` 提供。
  * 构建期 `-DIOLINK_COMPAT_*` / `-DIOLINK_DS_LEGACY_IMAGE_SUB0` 仍然有效，
  * 作为镜像的默认值（见 `iolink_caps_resolve()`）。
  * @{

@@ -1386,7 +1386,7 @@ static size_t isdu_append_ds_index_list(iolink_ds_ctx_t* ds, uint8_t* buf, size_
 static void isdu_ds_write_sub0(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds)
 {
     if (isdu_cap(ctx, IOLINK_CAP_DS_LEGACY_SUB0)) {
-        /* 旧的整镜像恢复（为线上兼容而保留）。 */
+        /* V1.1 之前的整镜像载荷（兼容位 IOLINK_CAP_DS_LEGACY_SUB0）。 */
         const int rc = iolink_ds_apply_image(ds, ctx->buffer, ctx->buffer_idx);
         if (rc != 0) {
             isdu_respond_error(ctx, (rc == -1) ? IOLINK_ISDU_ERROR_PARAM_SET_INVALID

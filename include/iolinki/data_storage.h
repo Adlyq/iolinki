@@ -337,7 +337,7 @@ int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_
 /**
  * @brief 处理 DataStorageIndex DS_Command（Table B.10 subindex 01）。
  *
- * DS_Command 使用与旧版 SystemCommand Param* 集合不同的编码：
+ * DS_Command 的编码与 SystemCommand 的 Param* 集合不同：
  * 0x01 UploadStart, 0x02 UploadEnd, 0x03 DownloadStart, 0x04 DownloadEnd,
  * 0x05 DS_Break（0x06-0xFF 保留）。它驱动同一状态机，并在
  * 上传/下载序列结束时清除 DS_UPLOAD_FLAG。

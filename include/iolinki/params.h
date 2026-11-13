@@ -90,7 +90,7 @@ iolink_result_t iolink_params_ctx_write(iolink_params_ctx_t* ctx, uint16_t index
 
 /**
  * @brief 将上下文中的所有参数恢复为出厂默认值。
- * 复位 RAM 并尝试写入 NVM；该旧版 void API 无法报告存储失败。
+ * 复位 RAM 并尝试写入 NVM；存储失败不会回滚 RAM。
  * @param ctx 参数管理器上下文。
  */
 void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx);

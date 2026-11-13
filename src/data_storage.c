@@ -242,7 +242,7 @@ void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx, iolink_ds_param_read_fn r
         ctx->write_param = write;
     }
     /* NULL 表示不做恢复前预校验（与 read/write 的"保留当前访问器"不同：
-       预校验是无副作用能力，显式解绑没有兼容负担）。 */
+       预校验是无副作用能力）。 */
     ctx->check_param = check;
     /* 仅在同时提供访问器时才采用调用方的 user 指针；只更改描述符集
        不得覆盖设备已绑定的 user。 */
