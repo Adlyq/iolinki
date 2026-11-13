@@ -68,12 +68,24 @@ NEGATIVE_CASES=(
     "stats_split|-DIOLINK_STATS_MODE=IOLINK_STATS_SPLIT|iolink_profile_stats_split"
     "concurrency_single|-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE|iolink_profile_concurrency_single"
     "tx_busy|-DIOLINK_PHY_FEATURE_TX_BUSY=1|iolink_profile_tx_busy_on"
+    "workspace_external|-DIOLINK_WORKSPACE_EMBEDDED=0|iolink_profile_workspace_embedded_off"
+    "pd_in_buffers_3|-DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME|iolink_profile_pd_in_buffers_3"
 )
 
 for entry in "${NEGATIVE_CASES[@]}"; do
     IFS='|' read -r name cflags symbol <<<"$entry"
     # shellcheck disable=SC2086 # intentional word splitting of the -D list
-    if ! "$CC_BIN" "${CFLAGS_BASE[@]}" $cflags -c "$TMP/app.c" -o "$TMP/app_$name.o" \
+    # 反向探针只引用本用例的档位符号：链接器只报告第一个未定义符号，
+    # 用完整锚点会被其它缺失符号（例如 FRAME 同时改变 ISR_TX）掩盖。
+    cat >"$TMP/one.c" <<PROBE
+extern const unsigned char $symbol;
+int main(void)
+{
+    const void* const volatile anchor = (const void*) &$symbol;
+    return (anchor == 0) ? 1 : 0;
+}
+PROBE
+    if ! "$CC_BIN" "${CFLAGS_BASE[@]}" $cflags -c "$TMP/one.c" -o "$TMP/app_$name.o" \
         >"$TMP/app_$name.log" 2>&1; then
         echo "profile gate: FAIL ($name: probe did not compile)" >&2
         cat "$TMP/app_$name.log" >&2

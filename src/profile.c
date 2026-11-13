@@ -57,3 +57,15 @@ const uint8_t iolink_profile_stats_split = 1U;
 #else
 const uint8_t iolink_profile_stats_shared = 0U;
 #endif
+
+#if IOLINK_WORKSPACE_EMBEDDED
+const uint8_t iolink_profile_workspace_embedded_on = 1U;
+#else
+const uint8_t iolink_profile_workspace_embedded_off = 0U;
+#endif
+
+#if IOLINK_PD_IN_BUFFERS == 3U
+const uint8_t iolink_profile_pd_in_buffers_3 = 1U;
+#else
+const uint8_t iolink_profile_pd_in_buffers_2 = 0U;
+#endif

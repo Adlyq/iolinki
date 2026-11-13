@@ -92,6 +92,20 @@
 #define IOLINK_PROFILE_STATS_SYM iolink_profile_stats_shared
 #endif
 
+/* 工作区归属改变 ISDU/DS 上下文布局（内嵌 scratch 数组 vs 纯指针）。 */
+#if IOLINK_WORKSPACE_EMBEDDED
+#define IOLINK_PROFILE_WORKSPACE_SYM iolink_profile_workspace_embedded_on
+#else
+#define IOLINK_PROFILE_WORKSPACE_SYM iolink_profile_workspace_embedded_off
+#endif
+
+/* PD-in 槽位数改变 iolink_dll_shared_t 的数组维度（2 或 3）。 */
+#if IOLINK_PD_IN_BUFFERS == 3U
+#define IOLINK_PROFILE_PD_BUFFERS_SYM iolink_profile_pd_in_buffers_3
+#else
+#define IOLINK_PROFILE_PD_BUFFERS_SYM iolink_profile_pd_in_buffers_2
+#endif
+
 /* 库侧符号声明：只有与当前档位匹配的那个真正存在。应用必须与本文件
  * 用同一组宏编译（CMake 的 PUBLIC 定义保证了这一点）。 */
 extern const uint8_t iolink_profile_events_on;
@@ -109,6 +123,10 @@ extern const uint8_t iolink_profile_concurrency_isr;
 extern const uint8_t iolink_profile_concurrency_smp;
 extern const uint8_t iolink_profile_stats_shared;
 extern const uint8_t iolink_profile_stats_split;
+extern const uint8_t iolink_profile_workspace_embedded_on;
+extern const uint8_t iolink_profile_workspace_embedded_off;
+extern const uint8_t iolink_profile_pd_in_buffers_2;
+extern const uint8_t iolink_profile_pd_in_buffers_3;
 
 /**
  * @brief 在应用侧引用全部档位符号，使档位不匹配变成链接错误。
@@ -125,7 +143,8 @@ extern const uint8_t iolink_profile_stats_split;
         (const void*) &IOLINK_PROFILE_EVENTS_SYM,  (const void*) &IOLINK_PROFILE_DS_SYM,          \
         (const void*) &IOLINK_PROFILE_ISR_RX_SYM,  (const void*) &IOLINK_PROFILE_ISR_TX_SYM,      \
         (const void*) &IOLINK_PROFILE_TX_BUSY_SYM, (const void*) &IOLINK_PROFILE_CONCURRENCY_SYM, \
-        (const void*) &IOLINK_PROFILE_STATS_SYM,                                                  \
+        (const void*) &IOLINK_PROFILE_STATS_SYM,   (const void*) &IOLINK_PROFILE_WORKSPACE_SYM,    \
+        (const void*) &IOLINK_PROFILE_PD_BUFFERS_SYM,                                             \
     }
 
 #endif /* IOLINK_PROFILE_H */
