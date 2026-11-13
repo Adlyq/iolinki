@@ -39,6 +39,23 @@ ctest --test-dir build -R test_dll
   indices.
 - SystemCommand `Param*` codes are Table B.9 `0x01-0x06`; `0x84` is reserved.
 
+## Compatibility policy
+
+- **No backward compatibility.** There is no deprecation window, no alias, no
+  shim and no "keep it for one version" rule. Replace the old interface,
+  document, macro or data format with the new one in the same change and delete
+  the old one; do not leave a second path behind.
+- Never add a second entry point that duplicates an existing one. Extend the
+  single implementation instead (see the OD vs `vendor_service` removal).
+- A removal covers everything: public header, build option, internal wiring,
+  tests, examples, tools, data files and documentation.
+- Documentation describes the current model only. Do not keep historical
+  design/plan documents, compatibility notes or migration shims in `docs/`; git
+  history is the archive and `CHANGELOG.md` is the only place that records a
+  removal.
+- Version rule: any public-interface change bumps `MAJOR`; `MINOR` adds
+  functionality without changing existing declarations; `PATCH` fixes behaviour.
+
 ## Conventions
 
 - Public symbols `iolink_` prefix, `snake_case`, `_t` suffix, `UPPER_SNAKE`
