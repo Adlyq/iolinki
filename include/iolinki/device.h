@@ -69,7 +69,7 @@
  * iolink_device_config_t     | application     | 必须比上下文存活更久
  *  .phy (vtable)             | application/PHY | 回调在 ctx 生命周期内有效
  *  .phy.user                 | PHY driver      | 仅传给 PHY 回调
- *  .user                     | application     | 传给 time_us、vendor_service
+ *  .user                     | application     | 传给 time_us、OD 后端
  *                            |                 | 以及 app_callbacks 的 on_* 钩子
  *  .app_callbacks            | application     | 结构体与回调目标保持有效
  *  .device_info              | application     | 静态标识数据
@@ -84,9 +84,6 @@
  * PD data (on_pd_input)      | application     | 借用已填充的缓冲区；返回值是
  *                            |                 | PD 有效标志（回调 profile）
  * PD buffer (pd_output_read) | caller          | 由调用填充；调用方拥有
- * vendor_service input       | caller          | 调用期间借用
- * vendor_service output      | caller          | *output_length 表示容量；回调
- *                            |                 | 设置实际使用长度
  * rx_frame() return value    | PHY             | 借用至下一次 rx_frame()
  * tx_frame() data            | library         | 有效至传输完成
  * ------------------------------------------------------------------------- */
@@ -126,20 +123,18 @@ typedef struct
     iolink_device_time_us_fn time_us; /**< DLL、ISR 泵和事件引擎使用的应用时钟；
                                            必需（NULL 在初始化时会被
                                            拒绝）。 */
-    void* user;                       /**< 传给 iolink_device_time_us_fn、vendor_service、
+    void* user;                       /**< 传给 iolink_device_time_us_fn、OD 后端、
                                            log_write 以及每个 iolink_app_callbacks_t 钩子的
                                            应用上下文。 */
     iolink_log_write_fn log_write;    /**< 可选的运行时日志回调；NULL 表示静默。
                                            参见 iolinki/log.h。 */
     iolink_log_level_t log_level;     /**< 运行时日志阈值；IOLINK_LOG_LEVEL_SILENT（0）
                                            表示不输出。 */
-    const iolink_od_app_t* od;        /**< 应用对象字典（可选；优先于 vendor_service） */
-    uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex, bool write,
-                              const uint8_t* input, size_t length, uint8_t* output,
-                              size_t* output_length); /**< 可选的厂商 ISDU 回调；参见 isdu.h。 */
-    iolink_workspace_t* workspace;                    /**< 可选的传输 scratch 工作区。NULL 表示使用
-                                                           上下文内嵌的 fallback 存储；当
-                                                           `IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供。 */
+    const iolink_od_app_t* od;        /**< 应用对象字典（可选；设备专用索引与参数值的
+                                           唯一扩展入口）。 */
+    iolink_workspace_t* workspace;    /**< 可选的传输 scratch 工作区。NULL 表示使用
+                                           上下文内嵌的 fallback 存储；当
+                                           `IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供。 */
 } iolink_device_config_t;
 
 /**

@@ -184,7 +184,6 @@ flowchart LR
     ISDU -->|dll_ctx| MAIN
     ISDU -->|od| OD["const iolink_od_app_t *"]
     ISDU -->|direct_param_page2| P2
-    ISDU -->|vendor_service + vendor_user| VS["应用 vendor 回调"]
     ISDU -->|workspace| WS["iolink_workspace_t"]
     DS -->|workspace| WS
     DS -->|read_param / write_param| DA["device_param_read / device_param_write"]
@@ -205,14 +204,13 @@ flowchart LR
 
 - `dll.main.shared.isdu.params_ctx = &ctx->params`、`...isdu.od = config->od`、`...isdu.ds_ctx = &ctx->dll.main.ds`；
 - `dll.main.shared.isdu.direct_param_page2 = ctx->direct_param_page2`；
-- `dll.main.shared.isdu.vendor_service/vendor_user` 来自 `iolink_device_config_t`；
 - `dll.main.shared.caps = iolink_caps_resolve(&config->phy, &config->stack, config->app_callbacks, NULL)`；
 - `iolink_isdu_bind_workspace()` / `iolink_ds_bind_workspace()` 把传输 scratch 指向工作区；`iolink_isdu_bind_caps()` 让 ISDU 按实例能力位选路；
 - `dll.main.state_cb = device_state_cb`，用于把 DLL 状态变化转成应用回调；
 - `params` 与 `ds` 共用同一个 `storage` 后端；`IOLINK_FEATURE_DATA_STORAGE=1`
   时 `storage` 必须非空且具备 `read`/`write`，否则初始化返回
   `IOLINK_DEVICE_INIT_ERR_STORAGE`；
-- `ds` 绑定统一访问器 `device_param_read`/`device_param_write`/`device_param_check`：先按 `iolink_od_find()` 定位表项并交给 OD 值层（标准 Tag 经参数管理器，应用参数经应用后端）；表外索引回退 `vendor_service`。`iolink_od_find()` 按索引域决定优先级：规范索引标准表优先，设备专用索引应用表优先、标准表内建项回落。
+- `ds` 绑定统一访问器 `device_param_read`/`device_param_write`/`device_param_check`：先按 `iolink_od_find()` 定位表项并交给 OD 值层（标准 Tag 经参数管理器，应用参数经应用后端）；表外索引返回 `NOT_HANDLED`。`iolink_od_find()` 按索引域决定优先级：规范索引标准表优先，设备专用索引应用表优先、标准表内建项回落。
 
 因此以下对象必须由应用保证生命周期：`iolink_device_config_t`、`device_info`、
 `storage`（启用 DS 时）、`iolink_od_app_t`（表与 get/set 后端）、
@@ -247,7 +245,7 @@ flowchart TD
     H3 --> I
     I --> J["iolink_isdu_bind_workspace()<br/>iolink_isdu_bind_caps()"]
     J --> K["绑定 time_us；事件窗口<br/>iolink_events_set_window()"]
-    K --> L["绑定 ISDU 依赖：od / vendor_service<br/>params_ctx / direct_param_page2"]
+    K --> L["绑定 ISDU 依赖：od<br/>params_ctx / direct_param_page2"]
     L --> M["iolink_params_bind_storage()<br/>读 NVM 参数记录"]
     M --> N["iolink_ds_init(storage) + iolink_ds_bind_workspace()<br/>iolink_ds_bind_params() + iolink_ds_bind_param_access(device_param_*)<br/>无镜像时 iolink_ds_build_image()"]
     N --> O["iolink_device_set_log()<br/>把 sink 复制到 DLL/ISDU/DS/事件"]
@@ -575,9 +573,7 @@ flowchart TD
     A0 -- 否 --> B{"设备专用索引?<br/>0x0040-0x00FE 或 >= 0x0100"}
     B -- 是 --> B1{"iolink_od_find_app(od, index, sub)<br/>应用表命中?"}
     B1 -- 是 --> S["isdu_serve_entry(entry)"]
-    B1 -- 否 --> C{"vendor_service != NULL?"}
-    C -- 是 --> C1["isdu_handle_vendor_index()"]
-    C -- 否 --> D{"iolink_od_find(NULL, index, sub)<br/>内建表命中?（0x0040 回落）"}
+    B1 -- 否 --> D{"iolink_od_find(NULL, index, sub)<br/>内建表命中?（0x0040 回落）"}
     D -- 否 --> D1["0x8011 Index not available"]
     D -- 是 --> S
     B -- 否 --> B2{"iolink_od_find(NULL, index, sub)<br/>规范索引：标准表优先"}
@@ -603,7 +599,7 @@ flowchart TD
 
 索引到处理器的映射只存在于 `src/od.c` 的内建 const 表：`0x0000/0x0001` Direct Parameter、`0x0002` SystemCommand、`0x0003` DataStorage、`0x000C` DeviceAccessLocks、`0x000D` ProfileCharacteristic、`0x0010-0x0017/0x001B` 标识字符串、`0x0018-0x001A` Tag、`0x0020` ErrorCount、`0x0024` DeviceStatus、`0x0025` DetailedDeviceStatus、`0x0028/0x0029` PD 输入/输出、`0x0040` 厂商错误统计。应用参数通过 `iolink_od_app_t` 自带表项与 `IOLINK_OD_HANDLER_BACKEND`，因此新增参数 = 一行表项 + 一个 get/set 分支。
 
-索引归属按域决定：规范索引（`< 0x0040`）从内建表取，应用表不得遮蔽 `0x0002`/`0x0024` 等对象；设备专用索引先查应用表，再交给 `vendor_service`，最后才回落到内建表。`0x0040` 同时是“设备特定起始索引”和内置 error-stats 索引：**绑定 vendor_service 且应用表未声明时，0x0040 走 vendor 回调**；内置 `handle_error_stats()` 只在两者都不存在时可达。OD 值层另行校验 `max_subindex`（越界 `0x8011`）与 OctetString 的 `block_len`（超长 `0x8033`）。
+索引归属按域决定：规范索引（`< 0x0040`）从内建表取，应用表不得遮蔽 `0x0002`/`0x0024` 等对象；设备专用索引先查应用表，未声明时才回落到内建表。`0x0040` 同时是“设备特定起始索引”和内置 error-stats 索引：**应用表声明时走应用后端；未声明时由内置 `handle_error_stats()` 提供**。OD 值层另行校验 `max_subindex`（越界 `0x8011`）与 OctetString 的 `block_len`（超长 `0x8033`）。
 
 ### 7.5 SystemCommand 映射
 
@@ -815,7 +811,6 @@ sequenceDiagram
 | `on_pd_input` | `device_run_app_callbacks()` | `IOLINK_CAP_PD_IN_CALLBACK` 置位时，OPERATE 每周期 |
 | `reset_handler` | `device_dispatch_resets()` | 0x80/0x81 请求后 |
 | `od.read` / `od.write` | `iolink_od_read_value()` / `iolink_od_write_value()` | 应用参数值后端；标准 Tag 走参数管理器 |
-| `vendor_service` | 应用 OD 表未命中的 device-specific 索引；DS 表外参数读写 | 参数 `input/output/output_length` 契约见 `isdu.h` |
 | `storage->read/write` | params 加载/保存、DS 加载/保存 | 持久化只使用 read/write |
 | `iolink_device_time_us_fn time_us` | DLL、ISR 双泵、事件引擎、诊断窗口 | 必需；初始化时绑定，NULL 返回 `IOLINK_DEVICE_INIT_ERR_TIME`；必须单调/非阻塞/ISR 安全 |
 | `phy.get_faults` | `dll_poll_diagnostics()` | 电平源，触发/清除 Table D.1 事件；NULL 时诊断静默 |
@@ -1020,7 +1015,7 @@ flowchart LR
 
 ISR 还允许调用以下只读/时序 helper：`iolink_dll_expected_req_len()`、`iolink_checksum6_from_acc()`、`iolink_isdu_direct_param_page1_octet()`、已绑定的时间源（`iolink_device_config_t::time_us` 回调）、`iolink_events_flag()`、`iolink_events_memory_read()`、`iolink_ring_claim/publish`。
 
-禁止在 ISR 分区调用：`iolink_isdu_process()`、事件写路径（`iolink_event_trigger()`、`iolink_events_process()`、`iolink_event_clear()`）、诊断服务/派生（`iolink_diag_service()` 等）、`iolink_dll_flush_state_callbacks()`、应用回调（`state_cb`、`vendor_service`、`od.read/write` 等）。
+禁止在 ISR 分区调用：`iolink_isdu_process()`、事件写路径（`iolink_event_trigger()`、`iolink_events_process()`、`iolink_event_clear()`）、诊断服务/派生（`iolink_diag_service()` 等）、`iolink_dll_flush_state_callbacks()`、应用回调（`state_cb`、`od.read/write` 等）。
 
 例外：`dll_set_state(STARTUP)` 会在 ISR 内调用 `iolink_events_reset()`。该函数自带临界区，是当前 ISR 路径唯一的事件写操作；修改事件层时不要移除其重入保护。
 

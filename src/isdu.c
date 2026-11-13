@@ -84,7 +84,7 @@ static uint16_t isdu_locks_implemented(const iolink_isdu_ctx_t* ctx)
  *  - 访问锁、详细状态、错误统计与直接参数：
  *    handle_access_locks ... handle_direct_parameters
  *  - 数据存储服务：isdu_append_ds_index_list ... isdu_reject_ds_access
- *  - 索引路由与标准分发：isdu_handle_vendor_index ...
+ *  - 索引路由与标准分发：handle_standard_commands ...
  *  - 末尾公开 API：iolink_isdu_process、iolink_isdu_get_response_byte、
  *    iolink_isdu_snapshot_response
  * ------------------------------------------------------------------------- */
@@ -1557,62 +1557,12 @@ static bool isdu_reject_ds_access(iolink_isdu_ctx_t* ctx)
  * 索引路由与标准分发
  * ------------------------------------------------------------------------- */
 
-/** @brief 通过应用钩子处理设备专用（厂商）索引。 */
-static void isdu_handle_vendor_index(iolink_isdu_ctx_t* ctx)
-{
-    if ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) &&
-        ((isdu_access_locks(ctx) & IOLINK_LOCK_PARAM) != 0U)) {
-        /* B.2.4：Parameter 锁禁止每个读/写设备参数
-           （读仍然可用）。 */
-        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
-        return;
-    }
-#if IOLINK_FEATURE_DATA_STORAGE
-    if ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) && (ctx->ds_ctx != NULL) &&
-        iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx)) {
-        const iolink_result_t staged =
-            iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, ctx->header.index,
-                                  ctx->header.subindex, ctx->buffer, ctx->buffer_idx);
-        if (iolink_result_succeeded(staged)) {
-            ctx->response_len = 0U;
-            ctx->response_idx = 0U;
-            ctx->state = ISDU_STATE_RESPONSE_READY;
-        }
-        else {
-            isdu_respond_result(ctx, staged);
-        }
-        return;
-    }
-#endif
-#if IOLINK_ISDU_BUFFER_SIZE > 238U
-    size_t length = 235U;
-#else
-    size_t length = IOLINK_ISDU_BUFFER_SIZE;
-#endif
-    const size_t capacity = length;
-    const uint8_t error =
-        ctx->vendor_service(ctx->vendor_user, ctx->header.index, ctx->header.subindex,
-                            ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE, ctx->buffer,
-                            ctx->buffer_idx, ctx->response_buf, &length);
-    if ((length > capacity) || (error != 0U)) {
-        isdu_respond_error(ctx, (length > capacity) ? IOLINK_ISDU_ERROR_IDX_NOT_AVAIL : error);
-        return;
-    }
-    ctx->response_len = (uint8_t) length;
-    ctx->response_idx = 0U;
-    ctx->state = ISDU_STATE_RESPONSE_READY;
-}
-
-/** @brief SystemCommand 索引：只写的命令字节。 */
+/** @brief SystemCommand 索引：只写的命令字节。
+ *
+ * 读请求由表项访问标志在 @ref isdu_entry_allowed 中拒绝，因此这里只
+ * 处理写入。 */
 static void isdu_handle_system_command_index(iolink_isdu_ctx_t* ctx)
 {
-    if (ctx->header.type != IOLINK_ISDU_SERVICE_TYPE_WRITE) {
-        /* SystemCommand（Table B.8）为只写；读请求以
-           IDX_NOT_ACCESSIBLE 应答（Table C.1）。事件通过
-           诊断通道的事件存储读取（Table 58）。 */
-        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_NOT_ACCESSIBLE);
-        return;
-    }
     if (ctx->buffer_idx == 0U) {
         isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
         return;
@@ -1825,8 +1775,8 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
 {
     ctx->response_negative = false;
     /* B.2.27：Preferred Indices 0x0040-0x00FE 与从 0x0100 开始的
-       Extended Index 范围属于设备专用；未在应用 OD 表中声明时到达
-       厂商服务。0x00FF 本身为保留值。 */
+       Extended Index 范围属于设备专用；未在应用 OD 表中声明时回落到
+       标准表内建项。0x00FF 本身为保留值。 */
     const uint16_t index = ctx->header.index;
 #if IOLINK_FEATURE_DATA_STORAGE
     if (isdu_reject_ds_access(ctx)) {
@@ -1836,24 +1786,15 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
     /* 索引归属由一处决定：
      *  - 规范固定索引（< 0x0040）：标准表优先，应用表不得遮蔽
      *    0x0002/0x0024 等对象；
-     *  - 设备专用索引（0x0040-0x00FE、0x0100+）：应用表优先，其次
-     *    厂商服务，最后才是标准表里的内建厂商扩展（0x0040 错误统计）。
-     * 这样既保住规范索引，又让厂商服务继续拥有它惯用的 Preferred 区间。 */
+     *  - 设备专用索引（0x0040-0x00FE、0x0100+）：应用表优先，未声明时
+     *    回落到标准表里的内建厂商扩展（0x0040 错误统计）。 */
     const bool device_specific = ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
     const iolink_od_entry_t* entry = NULL;
 
     if (device_specific) {
         entry = iolink_od_find_app(ctx->od, index, ctx->header.subindex);
-        if ((entry == NULL) && (ctx->vendor_service != NULL)) {
-            isdu_handle_vendor_index(ctx);
-            return;
-        }
         if (entry == NULL) {
             entry = iolink_od_find(NULL, index, ctx->header.subindex);
-        }
-        if (entry == NULL) {
-            IOLINK_LOG_DEBUG(&ctx->log, "vendor index 0x%04X ignored: no vendor_service",
-                             (unsigned) index);
         }
     }
     else {

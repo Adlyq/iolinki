@@ -49,22 +49,27 @@ static int test_teardown(void** state)
     return 0;
 }
 
-/** @brief 返回成功（空响应）的厂商桩；端到端用例在 DS 分支即返回，
- * 该桩不会被执行。 */
-static uint8_t test_vendor_service(void* user, uint16_t index, uint8_t subindex, bool write,
-                                   const uint8_t* input, size_t length, uint8_t* output,
-                                   size_t* output_length)
-{
-    (void) user;
-    (void) index;
-    (void) subindex;
-    (void) write;
-    (void) input;
-    (void) length;
-    (void) output;
-    (void) output_length;
-    return 0U;
-}
+/* DS 下载期间写入的 DS 参数：表项声明 storage=DS 后由 ISDU 层暂存，
+   长度上限来自绑定的描述符集合。 */
+static const iolink_od_entry_t k_ds_param_entry[] = {
+    {.index = 0x0100U,
+     .subindex = 0U,
+     .max_subindex = 0U,
+     .datatype = IOLINK_OD_DT_OCTET_STRING,
+     .access = IOLINK_OD_ACCESS_RW,
+     .write_semantics = IOLINK_OD_WRITE_VOLATILE,
+     .storage = IOLINK_OD_STORAGE_DS,
+     .flags = 0U,
+     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .block_len = 2U,
+     .range_min = 0U,
+     .range_max = 0U,
+     .scalar_default = 0U,
+     .block_default = NULL,
+     .name = "DsParameter",
+     .validate = NULL,
+     .on_change = NULL},
+};
 
 /* 未处理的索引不得伪装成协议错误：调用方据此回退到下一层。
    0x0100 不是保留索引，也不属于 params 管理的标签集。 */
@@ -212,8 +217,12 @@ static void test_isdu_reports_positive_error_code(void** state)
     ds_download_begin(&ds, set, 1U);
     iolink_isdu_init(&isdu);
     isdu.ds_ctx = &ds;
-    isdu.vendor_service = test_vendor_service;
-    isdu.vendor_user = NULL;
+    iolink_od_app_t app = {.entries = k_ds_param_entry,
+                           .count = sizeof(k_ds_param_entry) / sizeof(k_ds_param_entry[0]),
+                           .read = NULL,
+                           .write = NULL,
+                           .user = NULL};
+    iolink_isdu_bind_od(&isdu, &app);
 
     assert_int_equal(isdu_send_write_request(&isdu, 0x0100U, 0U, data, sizeof(data)), 1);
     iolink_isdu_process(&isdu);

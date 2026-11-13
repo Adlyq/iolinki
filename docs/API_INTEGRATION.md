@@ -12,7 +12,7 @@ IO-Link V1.1.5 PDF 为准。
 
 ```
 Application
-  app callbacks, PD update/read, events, vendor ISDU
+  app callbacks, PD update/read, events, application OD
         |
 iolink_device_*                  include/iolinki/device.h
         |
@@ -210,10 +210,9 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | `device_info` | 身份来源和初始应用标签（Application Tag）。参见 8.1 节的身份限制。 |
 | `storage` | 仅在 `IOLINK_FEATURE_DATA_STORAGE=1` 时声明，且为必需项；`read`/`write` 必须非 NULL。 |
 | `time_us` | 必需的应用时钟。DLL、ISR 双泵和事件引擎都用它计时；回调必须单调、非阻塞、ISR 安全。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_TIME`。 |
-| `user` | 传给 `time_us`、`log_write`、`vendor_service` 以及全部应用回调的透明指针。 |
+| `user` | 传给 `time_us`、`log_write`、OD 后端以及全部应用回调的透明指针。 |
 | `log_write`, `log_level` | 可选运行时日志汇点与阈值；NULL / `IOLINK_LOG_LEVEL_SILENT` 表示静默。 |
-| `od` | 可选的应用对象字典表（`include/iolinki/od.h`）。声明过的设备专用索引优先于 `vendor_service`。 |
-| `vendor_service` | 可选的应用 ISDU 处理回调；参见第 6 节。 |
+| `od` | 可选的设备专用参数入口（`include/iolinki/od.h`）：const 表 + get/set 后端，ISDU 与 Data Storage 共用。 |
 | `workspace` | 可选的传输 scratch 工作区（`include/iolinki/workspace.h`）。NULL 表示使用上下文内嵌 fallback；`IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供，否则初始化返回 `IOLINK_DEVICE_INIT_ERR_WORKSPACE`。 |
 
 ### 3.2 `iolink_stack_config_t`
@@ -384,7 +383,8 @@ storage 标志、默认值与可选钩子），ISDU 分发、Data Storage 成员
 应用需要做的是：用 `IOLINK_OD_SCALAR` / `IOLINK_OD_SCALAR_EX` / `IOLINK_OD_STRING`
 增加一行表项，并在 `read` / `write` 后端里增加对应分支（表项只保存静态知识，运行期
 取值走注册了 `IOLINK_OD_HANDLER_BACKEND` 的后端）。索引归属按域决定：规范索引（`< 0x0040`）由标准表提供、不可被应用表覆盖；设备专用索引
-（`0x0040-0x00FE`、`0x0100+`）应用表优先，未声明时才交给 `vendor_service`。完整示例见
+（`0x0040-0x00FE`、`0x0100+`）应用表优先，未声明时回落到内建标准表项（`0x0040` 错误统计），
+仍未命中返回 `0x80 0x11`。完整示例见
 `examples/switching_sensor/switching_sensor_od.c`。
 
 ## 5. 事件
@@ -457,7 +457,7 @@ EventCode、`0x0024` DeviceStatus 与 `0x0025` DetailedDeviceStatus 都从同一
 `iolink_diag_device_status()` / `iolink_diag_dds_snapshot()`，它们与线上应答
 `0x0024`/`0x0025` 完全一致。`IOLINK_FEATURE_EVENTS=0` 时整个模块消失。
 
-## 6. ISDU、标准索引与 vendor service
+## 6. ISDU、标准索引与应用 OD 参数
 
 ### 6.1 协议栈支持的标准对象
 
@@ -476,19 +476,18 @@ EventCode、`0x0024` DeviceStatus 与 `0x0025` DetailedDeviceStatus 都从同一
 | `0x0024` | DeviceStatus | 读 |
 | `0x0025` | DetailedDeviceStatus | 读；取决于事件特性 |
 | `0x0028`, `0x0029` | ProcessDataInput/Output | 读 |
-| `0x0040-0x00FE`, `0x0100+` | 设备/厂商特定 | 应用 OD 表优先，未声明时路由到 `vendor_service` |
+| `0x0040-0x00FE`, `0x0100+` | 设备/厂商特定 | 应用 OD 表优先，未声明时回落到内建标准表项 |
 
 分发顺序（`src/isdu.c` 的 `handle_standard_commands()`）：先做 DS 访问权限检查，然后按索引域分流。
 
 - 规范索引（`< 0x0040`）：内建标准表优先，应用表只在内建表未命中时才生效，因此
   应用表无法遮蔽 `0x0002`/`0x0024` 等对象。
 - 设备专用索引（`0x0040-0x00FE`、`0x0100+`）：应用 OD 表 `iolink_od_find_app()` 优先；
-  未声明时交给 `vendor_service`；仍未命中才回落到内建标准表（`0x0040` 错误统计），
-  最后返回 `0x80 0x11`。因此应用表声明过的厂商索引不会到达 `vendor_service`，而
-  `0x0040` 内置错误统计对象只有在应用表与 `vendor_service` 都没有接管时才可达。
+  未声明时回落到内建标准表（`0x0040` 错误统计），最后返回 `0x80 0x11`。因此
+  `0x0040` 内置错误统计对象只有在应用表未接管时才可达。
 
 `0x0004-0x000B` 和 `0x001C-0x001F` 为保留区间，`0x00FF` 也为保留值
-（不会路由到 vendor service）。VendorID/DeviceID **不是** ISDU 对象；
+（不会路由到应用表）。VendorID/DeviceID **不是** ISDU 对象；
 它们位于 DPP1 的 `0x07-0x0B` 字节。
 
 字符串应答按对象限制长度（通常为 64 字节，SerialNumber 为 16，ProductURI 为 100）。
@@ -498,29 +497,7 @@ EventCode、`0x0024` DeviceStatus 与 `0x0025` DetailedDeviceStatus 都从同一
 当 `IOLINK_FEATURE_DATA_STORAGE=0` 时，索引 `0x0003` 返回 `0x80 0x11`。
 当 `IOLINK_FEATURE_EVENTS=0` 时，索引 `0x0025` 返回 `0x80 0x11`。
 
-### 6.2 vendor service 契约
-
-```c
-uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex,
-                          bool write, const uint8_t* input, size_t length,
-                          uint8_t* output, size_t* output_length);
-```
-
-- 注册后，`0x0040-0x00FE` 以及 `>= 0x0100` 中未被应用 OD 表声明的索引会调用该回调
-  （应用表优先）；`0x0040` 也走同一规则，内置错误统计对象只在应用表与该回调都
-  未接管时可达。
-- 进入时，`*output_length` 是输出容量。成功时应把它设置为实际写入的字节数。
-  如果上报长度大于容量，服务会以 `IOLINK_ISDU_ERROR_IDX_NOT_AVAIL`（0x8011）拒绝。
-- 成功返回 0；失败返回 `IOLINK_ISDU_ERROR_*` 附加错误码。非零返回会产生
-  `0x80 <code>`。
-- 写操作中，`input`/`length` 是收到的负载。读操作中 `length` 为 0；
-  `input` 可能仍是内部缓冲区的非 NULL 指针（Data Storage 桥接路径会传 NULL），
-  因此 `length == 0` 时绝不能解引用它。ISDU 读操作中 `output` 通常非 NULL，
-  但 Data Storage 写路径会以 `output == NULL` 调用回调，需要兼容。
-- 回调在主上下文运行，必须有界，并且不能保留 `input`/`output` 指针。
-- 设置参数锁后，该范围内的写操作会在调用回调前被拒绝。
-
-### 6.3 底层 ISDU 传输
+### 6.2 底层 ISDU 传输
 
 以下接口用于测试和自定义传输；正常应用应使用设备层：
 
@@ -678,10 +655,10 @@ Data Storage，无需再手工维护描述符；`IOLINK_OD_STORAGE_VOLATILE` 项
 [Index:2 大端][Subindex:1][Length:1][Data:Length]
 ```
 
-`IOLINK_DS_IMAGE_MAX`（默认 256）限制镜像和持久化 DS 区域的大小。添加厂商参数有两种
-方式：用 `iolink_ds_set_param_desc()` 替换描述符列表（默认访问器已经把未知索引路由到
-`vendor_service`），或用 `iolink_ds_bind_param_access()` 安装完全自定义的访问器对。
-描述符数组必须比上下文存活更久。
+`IOLINK_DS_IMAGE_MAX`（默认 256）限制镜像和持久化 DS 区域的大小。设备专用参数只要在
+`config.od` 中声明 `IOLINK_OD_STORAGE_DS` 就进入 DS 集合，值由应用后端提供；需要不同
+索引列表时用 `iolink_ds_set_param_desc()`，需要完全自定义访问路径时用
+`iolink_ds_bind_param_access()` 安装访问器对。描述符数组必须比上下文存活更久。
 
 `iolink_device_process()` 会在 ISDU 空闲时调用 `iolink_ds_process()`。块下载通过
 `iolink_ds_stage_param()` 暂存写操作，并在 `ParamDownloadEnd` 先对整份镜像做无副作用
@@ -737,7 +714,7 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 ### 8.4 回调与缓冲区生命周期
 
 除非契约明确说明，回调不得保留指向协议栈内部缓冲区的指针（`rx_frame` 的有效期到下一次
-调用；DS 描述符数组和 `config` 必须保持存活）。应用回调和 `vendor_service` 在主上下文
+调用；DS 描述符数组和 `config` 必须保持存活）。应用回调和 OD 后端在主上下文
 运行；不要阻塞，也不要递归回调同一上下文。
 
 ### 8.5 关闭的特性
@@ -802,7 +779,7 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 7. 在 `IOLINK_FEATURE_DATA_STORAGE=1` 时提供完整存储后端（`read`/`write` 非空），
    并用静态断言检查 NVM 区域大小；`IOLINK_WORKSPACE_EMBEDDED=0` 时还要提供
    `iolink_workspace_t`。
-8. 通过 `config.od`（推荐，一行表项 + 后端分支）和/或 `vendor_service` 添加厂商参数。
+8. 通过 `config.od`（一行表项 + 后端分支）添加设备专用参数。
 9. 使用真实主站验证时序、唤醒/SIO 行为和故障映射。
 
 ## 11. 其他公开头文件与适配器

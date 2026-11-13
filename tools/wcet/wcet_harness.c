@@ -159,33 +159,57 @@ static const iolink_storage_api_t g_storage = {
     .write = wcet_storage_write,
 };
 
-/** @brief 应用层厂商服务：索引 0x0040 是 64 字节可读写记录。 */
-static uint8_t wcet_vendor_service(void* user, uint16_t index, uint8_t subindex, bool write,
-                                   const uint8_t* input, size_t length, uint8_t* output,
-                                   size_t* output_length)
+/** @brief 应用参数值后端：索引 0x0040 是 64 字节可读写记录。 */
+static iolink_result_t wcet_param_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+                                       size_t cap)
 {
     (void) user;
-    if ((index != WCET_VENDOR_PARAM_INDEX) || (subindex != 0U)) {
-        return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
+    (void) entry;
+    if ((out == NULL) || (cap < g_vendor_param_len)) {
+        return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
     }
-    if (write) {
-        if ((input == NULL) || (length > sizeof(g_vendor_param))) {
-            return IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN;
-        }
-        (void) memcpy(g_vendor_param, input, length);
-        g_vendor_param_len = length;
-        if (output_length != NULL) {
-            *output_length = 0U;
-        }
-        return 0U;
-    }
-    if ((output == NULL) || (output_length == NULL) || (*output_length < g_vendor_param_len)) {
-        return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-    }
-    (void) memcpy(output, g_vendor_param, g_vendor_param_len);
-    *output_length = g_vendor_param_len;
-    return 0U;
+    (void) memcpy(out, g_vendor_param, g_vendor_param_len);
+    return iolink_result_ok((uint16_t) g_vendor_param_len);
 }
+
+static iolink_result_t wcet_param_write(void* user, const iolink_od_entry_t* entry,
+                                        uint8_t subindex, const uint8_t* data, size_t len)
+{
+    (void) user;
+    (void) entry;
+    (void) subindex;
+    (void) memcpy(g_vendor_param, data, len);
+    g_vendor_param_len = len;
+    return iolink_result_ok(0U);
+}
+
+static const iolink_od_entry_t k_wcet_od_entries[] = {
+    {.index = WCET_VENDOR_PARAM_INDEX,
+     .subindex = 0U,
+     .max_subindex = 0U,
+     .datatype = IOLINK_OD_DT_OCTET_STRING,
+     .access = IOLINK_OD_ACCESS_RW,
+     .write_semantics = IOLINK_OD_WRITE_VOLATILE,
+     .storage = IOLINK_OD_STORAGE_VOLATILE,
+     .flags = 0U,
+     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .block_len = WCET_VENDOR_PARAM_LEN,
+     .range_min = 0U,
+     .range_max = 0U,
+     .scalar_default = 0U,
+     .block_default = NULL,
+     .name = "VendorParameter",
+     .validate = NULL,
+     .on_change = NULL},
+};
+
+static iolink_od_app_t g_wcet_od = {
+    .entries = k_wcet_od_entries,
+    .count = sizeof(k_wcet_od_entries) / sizeof(k_wcet_od_entries[0]),
+    .read = wcet_param_read,
+    .write = wcet_param_write,
+    .user = NULL,
+};
 
 /* --- 合成 PHY 实现 ------------------------------------------------------ */
 
@@ -396,7 +420,7 @@ static int wcet_device_setup(iolink_m_seq_type_t type, uint8_t pd_in_len, uint8_
     g_dev.cfg.storage = &g_storage;
     g_dev.cfg.time_us = wcet_time_us;
     g_dev.cfg.user = NULL;
-    g_dev.cfg.vendor_service = wcet_vendor_service;
+    g_dev.cfg.od = &g_wcet_od;
 
     const int rc = iolink_device_init(&g_dev.ctx, &g_dev.cfg);
     if (rc != 0) {

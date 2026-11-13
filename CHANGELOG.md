@@ -15,9 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Index routing by domain: normative indices stay standard-table-first (an
   application table cannot shadow `0x0002`/`0x0024`), while device-specific
   indices (`0x0040`-`0x00FE`, `0x0100+`) try the application OD table, then the
-  vendor service, then the built-in entry. `iolink_od_find()` follows the same
-  split, so DS access to an application parameter in the Preferred range
-  resolves correctly.
+  built-in entry. `iolink_od_find()` follows the same split, so DS access to an
+  application parameter in the Preferred range resolves correctly.
 - Data Storage membership includes application OD entries with
   `IOLINK_OD_STORAGE_DS` (`iolink_ds_bind_od()`); `ParamDownloadEnd` validates
   every known record before applying any of them, and the "atomic" wording was
@@ -38,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `tools/size_matrix.py` gates `.rodata` as well (with `--selftest` proof).
 
 ### Removed (no compatibility layer)
+- `iolink_device_config_t::vendor_service` / `iolink_isdu_ctx_t::vendor_service`
+  and `vendor_user`. Device-specific ISDU indices and parameter values now have
+  a single implementation path: `iolink_device_config_t::od` (const table +
+  read/write backend). The conformance example, the WCET harness and the tests
+  use OD entries; undeclared device-specific indices fall through to the
+  built-in table (`0x0040`) and then answer `0x80 0x11`.
 - The integer parameter wrappers (see below), the retired capability build
   switches and their CMake options, the internal T_PD hand-off (the device arms
   T_PD directly), and the example's vendor-service wrapper.

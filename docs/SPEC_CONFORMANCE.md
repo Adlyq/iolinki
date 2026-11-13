@@ -63,8 +63,8 @@ in [`tests/conformance_audit.csv`](../tests/conformance_audit.csv). The detailed
 | DS parameter serialization/apply, Fletcher-32 checksum, locks, recovery | PASS | `test_ds`, `test_system_commands` |
 | DS block-download error classification (0x8040 malformed vs 0x8041 rejected parameter) | PASS | `test_ds` |
 | Unified NVM backend (callback-only), fixed region layout, magic/version, record checksum | PASS | `test_ds`, `test_params_persistence` |
-| DS parameter access: default params+vendor_service, `set_param_desc`, `max_len` | PASS | `test_ds` |
-| DS bindable parameter set incl. vendor parameters (0x0040+/0x0100+) | PASS | `test_ds` |
+| DS parameter access: default params + OD backend, `set_param_desc`, `max_len` | PASS | `test_ds` |
+| DS bindable parameter set incl. device-specific parameters (0x0040+/0x0100+) | PASS | `test_ds` |
 | DS Index_List / Size / State_Property (incl. DS_UPLOAD_FLAG) / Checksum subindices | PASS | `test_isdu` |
 | DS_Command (0x0003 sub 01) upload/download/break sequence | PASS | `test_isdu` |
 | Block-parameter download buffering + atomic commit + ParamBreak rollback | PASS | `test_system_commands` |

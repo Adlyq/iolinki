@@ -336,6 +336,35 @@ static void test_app_ds_rejects_whole_image(void** state)
     assert_memory_equal(tag, "NEW", 3U);
 }
 
+/* 显式 DS 描述符引用了 OD 表未声明的索引：读取按空记录处理，
+ * 恢复时预校验/写入都返回 NOT_HANDLED，不会伪装成成功。 */
+static void test_app_ds_descriptor_without_od_entry(void** state)
+{
+    (void) state;
+    iolink_test_device_t dev;
+    static const iolink_ds_param_desc_t descs[] = {
+        {APP_DS_IDX, 0U, 0U},
+        {0x0190U, 0U, 4U},
+    };
+    static const uint8_t image[] = {0x01U, 0x90U, 0x00U, 0x01U, 0x5AU};
+
+    init_device_with_app(&dev);
+    iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&dev.ctx);
+    assert_non_null(ds);
+    iolink_ds_set_param_desc(ds, descs, sizeof(descs) / sizeof(descs[0]));
+
+    /* 读路径：未知索引没有值，记录长度退化为 0。 */
+    assert_true(iolink_ds_build_image(ds) >= 0);
+
+    /* 默认访问器的预校验拒绝未知索引，整份镜像不写入。 */
+    assert_int_equal(iolink_ds_apply_image(ds, image, sizeof(image)), IOLINK_RESULT_INVALID);
+
+    /* 关闭预校验后写入路径同样返回 NOT_HANDLED。 */
+    iolink_ds_bind_param_access(ds, NULL, NULL, NULL, NULL, NULL, 0U);
+    assert_int_equal(iolink_ds_apply_image(ds, image, sizeof(image)), IOLINK_RESULT_INVALID);
+    assert_int_equal(g_app_state.ds_value, 0x1111U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -345,6 +374,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_app_ds_apply_image_restores, ds_app_setup,
                                         ds_app_teardown),
         cmocka_unit_test_setup_teardown(test_app_ds_rejects_whole_image, ds_app_setup,
+                                        ds_app_teardown),
+        cmocka_unit_test_setup_teardown(test_app_ds_descriptor_without_od_entry, ds_app_setup,
                                         ds_app_teardown),
     };
 

@@ -63,9 +63,6 @@ typedef struct {
     iolink_log_write_fn log_write;           /* optional runtime log sink; NULL is silent */
     iolink_log_level_t log_level;            /* runtime log threshold; SILENT (0) disables */
     const iolink_od_app_t* od;               /* optional application object dictionary */
-    uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex,
-                              bool write, const uint8_t* input, size_t length,
-                              uint8_t* output, size_t* output_length);
     iolink_workspace_t* workspace;           /* optional scratch; NULL = embedded fallback */
 } iolink_device_config_t;
 ```
@@ -368,29 +365,12 @@ static const iolink_od_app_t g_od = {
 `IOLINK_OD_SCALAR_EX` adds the hooks. Index ownership follows the index domain:
 normative indices (below `0x0040`) are served from the standard table and cannot
 be overridden, while device-specific indices (`0x0040-0x00FE`, `0x0100+`) try
-the application table first. `iolink_od_write_value()` receives the requested
-subindex, enforces `max_subindex`, and rejects OctetString payloads above
-`block_len` with `0x33`. See
+the application table first and fall back to the built-in standard entry
+(`0x0040` error statistics) when undeclared. `iolink_od_write_value()` receives
+the requested subindex, enforces `max_subindex`, and rejects OctetString payloads
+above `block_len` with `0x33`. See
 `examples/switching_sensor/switching_sensor_od.c` for a complete table with
 validation and trigger semantics.
-
-## Vendor ISDU service
-
-Device-specific indices (`0x0040-0x00FE`, `0x0100+`) are routed to
-`iolink_device_config_t.vendor_service` when the application object dictionary
-does not declare them. The built-in standard table also carries one entry in
-that range (`0x0040` vendor error statistics); with a bound `vendor_service` the
-callback wins, and the built-in entry is only the fallback when no application
-entry and no callback exist.
-
-```c
-uint8_t vendor_service(void* user, uint16_t index, uint8_t subindex, bool write,
-                       const uint8_t* input, size_t length,
-                       uint8_t* output, size_t* output_length);
-```
-
-Return `0` on success (set `*output_length` for reads) or an IO-Link
-`IOLINK_ISDU_ERROR_*` additional code on failure.
 
 ## Event API
 

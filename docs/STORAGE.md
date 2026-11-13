@@ -44,22 +44,33 @@ Each record carries `magic + version` (layout) and a Fletcher-32 checksum
 
 ## 2. How DS parameters are read
 
-The device binds a default accessor pair:
+The device binds a default accessor pair that is driven by the object dictionary:
 
 1. standard parameters (0x0018/0x0019/0x001A) through the params context;
-2. everything else (vendor 0x0040+ / 0x0100+) through `vendor_service`.
+2. device-specific parameters (0x0040+ / 0x0100+) through the `config.od`
+   read/write backends.
 
-So **if a parameter is already served by the params context or
-`vendor_service`, DS can read/write it without any extra callback.**
+So **if a parameter is already served by the params context or declared in the
+application object dictionary, DS can read/write it without any extra callback.**
 
 ## 3. Customising the DS parameter set
+
+Declare the parameter in the application object dictionary; `IOLINK_OD_STORAGE_DS`
+puts it in the DS set automatically:
+
+```c
+static const iolink_od_entry_t my_entries[] = {
+    IOLINK_OD_STRING(0x0050, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                     IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND, 8, "VendorParam"),
+};
+```
 
 Only the index list usually needs to change:
 
 ```c
 static const iolink_ds_param_desc_t my_ds[] = {
     { IOLINK_IDX_APPLICATION_TAG, 0, 0 },  /* max_len 0 = unbounded */
-    { 0x0050, 0, 8 },                      /* vendor param, handled by vendor_service */
+    { 0x0050, 0, 8 },                      /* vendor param, declared in config.od */
 };
 
 iolink_ds_set_param_desc(iolink_device_get_ds_ctx(dev), my_ds,
@@ -76,7 +87,7 @@ iolink_ds_set_param_desc(iolink_device_get_ds_ctx(dev), my_ds,
   the image for that record.
 
 Provide custom accessors only when a parameter does not live in the params
-context or `vendor_service` (e.g. read directly from a sensor):
+context or the object dictionary (e.g. read directly from a sensor):
 
 ```c
 int my_ds_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out, size_t cap);

@@ -17,9 +17,9 @@ Measured on a 64-bit host with the default buffers in
 
 | Component | Size (bytes) | Description |
 | :--- | ---: | :--- |
-| **`iolink_device_ctx_t`** | **4088** | The object the application allocates (includes everything below) |
-| `iolink_dll_ctx_t` | 3776 | DLL state, timers, reply-plan table (10×24 B), ISR staging; embeds ISDU, Events and DS |
-| `iolink_isdu_ctx_t` | 1328 | Transport state, buffer pointers and the embedded ISDU scratch (1033 B) |
+| **`iolink_device_ctx_t`** | **4064** | The object the application allocates (includes everything below) |
+| `iolink_dll_ctx_t` | 3752 | DLL state, timers, reply-plan table (10×24 B), ISR staging; embeds ISDU, Events and DS |
+| `iolink_isdu_ctx_t` | 1304 | Transport state, buffer pointers and the embedded ISDU scratch (1033 B) |
 | `iolink_events_ctx_t` | 504 | Event queue plus lifecycle records |
 | `iolink_ds_ctx_t` | 408 | DS state, buffer pointers, the OD set and the embedded download stage |
 | **PHY API** | 20-30 bytes | Function pointers (usually const/flash, but pointer storage in RAM) |
@@ -76,8 +76,8 @@ To move the scratch **out of the context entirely**, build with
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 4088 | **2792** |
-| `iolink_isdu_ctx_t` | 1328 | **288** |
+| `iolink_device_ctx_t` | 4064 | **2768** |
+| `iolink_isdu_ctx_t` | 1304 | **264** |
 | `iolink_ds_ctx_t` | 408 | **152** |
 | `iolink_workspace_t` (separate allocation) | — | 1289 |
 
@@ -87,7 +87,7 @@ instead of carrying it inside the main context. One measured example (`IOLINK_IS
 
 | Component | Embedded | External workspace |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 3128 | **2792** |
+| `iolink_device_ctx_t` | 3104 | **2768** |
 | `iolink_workspace_t` | — | 329 |
 
 > **Lease rule (ISDU response).** There is exactly one framed-response buffer.

@@ -360,8 +360,8 @@ const iolink_od_entry_t* iolink_od_find(const iolink_od_app_t* app, uint16_t ind
 /**
  * @brief 只在应用表中查找表项。
  *
- * ISDU 分发用它把"应用声明的索引"置于厂商服务之前。标准索引的
- * 分发不再使用它：@ref iolink_od_find 保证标准表优先。
+ * ISDU 分发用它把"应用声明的设备专用索引"置于内建回落项之前。
+ * 标准索引的分发不使用它：@ref iolink_od_find 保证标准表优先。
  */
 const iolink_od_entry_t* iolink_od_find_app(const iolink_od_app_t* app, uint16_t index,
                                             uint8_t subindex);

@@ -6,99 +6,6 @@
 #include "iolinki/protocol.h"
 #include <time.h>
 
-static int copy_out(uint8_t* output, size_t* output_length, const uint8_t* src, size_t len)
-{
-    if ((output == NULL) || (output_length == NULL)) {
-        return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-    }
-    if (*output_length < len) {
-        return IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN;
-    }
-    if (len > 0U) {
-        (void) memcpy(output, src, len);
-    }
-    *output_length = len;
-    return 0;
-}
-
-static int check_length(size_t length, size_t minimum, size_t maximum)
-{
-    if (length > maximum) {
-        return IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN;
-    }
-    if (length < minimum) {
-        return IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN;
-    }
-    return 0;
-}
-
-static uint8_t conformance_vendor_service(void* user, uint16_t index, uint8_t subindex, bool write,
-                                          const uint8_t* input, size_t length, uint8_t* output,
-                                          size_t* output_length)
-{
-    conformance_device_t* app = (conformance_device_t*) user;
-    if (app == NULL) {
-        return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-    }
-    if (subindex != 0U) {
-        return IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL;
-    }
-
-    if (index == CONFORMANCE_CONFIG1_INDEX) {
-        if (write) {
-            const int err = check_length(length, CONFORMANCE_CONFIG1_MAX, CONFORMANCE_CONFIG1_MAX);
-            if (err != 0) {
-                return (uint8_t) err;
-            }
-            (void) memcpy(app->config1, input, CONFORMANCE_CONFIG1_MAX);
-            app->config1_len = CONFORMANCE_CONFIG1_MAX;
-            return 0;
-        }
-        return (uint8_t) copy_out(output, output_length, app->config1, app->config1_len);
-    }
-    if (index == CONFORMANCE_CONFIG2_INDEX) {
-        if (write) {
-            const int err = check_length(length, 2U, 2U);
-            if (err != 0) {
-                return (uint8_t) err;
-            }
-            app->config2 = (uint16_t) (((uint16_t) input[0] << 8) | input[1]);
-            return 0;
-        }
-        const uint8_t value[2] = {(uint8_t) (app->config2 >> 8), (uint8_t) app->config2};
-        return (uint8_t) copy_out(output, output_length, value, sizeof(value));
-    }
-    if (index == CONFORMANCE_CONFIG3_INDEX) {
-        if (write) {
-            const int err = check_length(length, 1U, CONFORMANCE_CONFIG3_MAX);
-            if (err != 0) {
-                return (uint8_t) err;
-            }
-            (void) memcpy(app->config3, input, length);
-            app->config3_len = length;
-            return 0;
-        }
-        return (uint8_t) copy_out(output, output_length, app->config3, app->config3_len);
-    }
-    if ((index >= CONFORMANCE_CONFIG4_INDEX0) &&
-        (index < (CONFORMANCE_CONFIG4_INDEX0 + CONFORMANCE_CONFIG4_COUNT))) {
-        const size_t slot = (size_t) (index - CONFORMANCE_CONFIG4_INDEX0);
-        if (write) {
-            const int err =
-                check_length(length, CONFORMANCE_CONFIG4_SIZE, CONFORMANCE_CONFIG4_SIZE);
-            if (err != 0) {
-                return (uint8_t) err;
-            }
-            (void) memcpy(app->config4[slot], input, CONFORMANCE_CONFIG4_SIZE);
-            app->config4_len[slot] = CONFORMANCE_CONFIG4_SIZE;
-            return 0;
-        }
-        return (uint8_t) copy_out(output, output_length, app->config4[slot],
-                                  app->config4_len[slot]);
-    }
-    return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-}
-
 static void conformance_defaults(conformance_device_t* app)
 {
     (void) memset(app->config1, 0x49, sizeof(app->config1));
@@ -232,7 +139,8 @@ int conformance_device_init(conformance_device_t* app, const conformance_profile
 #if IOLINK_FEATURE_DATA_STORAGE
     app->config.storage = &app->storage.api;
 #endif
-    app->config.vendor_service = conformance_vendor_service;
+    conformance_od_init(&app->od, app);
+    app->config.od = &app->od;
     app->config.user = app;
 
     const int rc = iolink_device_init(&app->device, &app->config);
@@ -422,8 +330,21 @@ int conformance_device_read_param(conformance_device_t* app, uint16_t index, uin
     if ((app == NULL) || (output_length == NULL)) {
         return -1;
     }
-    return (int) conformance_vendor_service(app, index, subindex, false, NULL, 0U, output,
-                                            output_length);
+    if (output == NULL) {
+        return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
+    }
+    const iolink_od_entry_t* entry = iolink_od_find(&app->od, index, subindex);
+    if (entry == NULL) {
+        return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
+    }
+    iolink_od_ctx_t od = {.app = &app->od, .params = NULL};
+    const iolink_result_t result =
+        iolink_od_read_value(&od, entry, subindex, output, *output_length);
+    if (!iolink_result_succeeded(result)) {
+        return (result.code > 0) ? (int) result.code : -1;
+    }
+    *output_length = result.len;
+    return 0;
 }
 
 int conformance_device_write_param(conformance_device_t* app, uint16_t index, uint8_t subindex,
@@ -432,5 +353,14 @@ int conformance_device_write_param(conformance_device_t* app, uint16_t index, ui
     if (app == NULL) {
         return -1;
     }
-    return (int) conformance_vendor_service(app, index, subindex, true, input, length, NULL, NULL);
+    const iolink_od_entry_t* entry = iolink_od_find(&app->od, index, subindex);
+    if (entry == NULL) {
+        return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
+    }
+    iolink_od_ctx_t od = {.app = &app->od, .params = NULL};
+    const iolink_result_t result = iolink_od_write_value(&od, entry, subindex, input, length);
+    if (!iolink_result_succeeded(result)) {
+        return (result.code > 0) ? (int) result.code : -1;
+    }
+    return 0;
 }

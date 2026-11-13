@@ -59,8 +59,7 @@ static void device_state_cb(void* user, iolink_dll_state_t state)
 /** @brief 统一的参数读取：先按 OD 表定位表项，再交给该表项的后端。
  *
  * 标准标签由参数管理器提供值，应用参数由应用 OD 后端提供值；两者
- * 走同一条路径，不再用厂商服务的"读探测"来推断某个索引是否属于
- * DS 集合。未知索引返回 NOT_HANDLED。 */
+ * 走同一条路径。未知索引返回 NOT_HANDLED。 */
 static iolink_result_t device_param_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out,
                                          size_t cap)
 {
@@ -71,18 +70,7 @@ static iolink_result_t device_param_read(void* user, uint16_t index, uint8_t sub
     }
     const iolink_od_entry_t* entry = iolink_od_find(ctx->config->od, index, subindex);
     if (entry == NULL) {
-        /* 未在 OD 表中声明、但仍列在显式 DS 描述符集合里的厂商参数：
-           其值由声明的厂商后端提供（成员判定已由描述符完成）。 */
-        if (ctx->config->vendor_service == NULL) {
-            return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
-        }
-        size_t out_len = cap;
-        const uint8_t err = ctx->config->vendor_service(ctx->config->user, index, subindex, false,
-                                                        NULL, 0U, out, &out_len);
-        if (err != 0U) {
-            return iolink_result_error((int16_t) err);
-        }
-        return iolink_result_ok((uint16_t) out_len);
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
     iolink_od_ctx_t od;
     od.app = ctx->config->od;
@@ -92,8 +80,8 @@ static iolink_result_t device_param_read(void* user, uint16_t index, uint8_t sub
 
 /** @brief 恢复 DS 镜像前的无副作用校验：OD 表项的线长/范围/钩子检查。
  *
- * 未在 OD 表中声明的厂商参数没有可供预校验的元数据，由实际写入时的
- * vendor_service 拒绝；这里放行，保持"未知索引可跳过"的既有恢复语义。 */
+ * 未知索引没有可供预校验的元数据，返回 NOT_HANDLED；DS 侧会跳过
+ * 不在自身集合内的参数。 */
 static iolink_result_t device_param_check(void* user, uint16_t index, uint8_t subindex,
                                           const uint8_t* data, size_t len)
 {
@@ -104,7 +92,7 @@ static iolink_result_t device_param_check(void* user, uint16_t index, uint8_t su
     }
     const iolink_od_entry_t* entry = iolink_od_find(ctx->config->od, index, subindex);
     if (entry == NULL) {
-        return iolink_result_ok(0U);
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
     void* hook_user = (ctx->config->od != NULL) ? ctx->config->od->user : NULL;
     return iolink_od_check_value(entry, hook_user, data, len);
@@ -125,16 +113,7 @@ static iolink_result_t device_param_write(void* user, uint16_t index, uint8_t su
     }
     const iolink_od_entry_t* entry = iolink_od_find(ctx->config->od, index, subindex);
     if (entry == NULL) {
-        if (ctx->config->vendor_service == NULL) {
-            return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
-        }
-        size_t out_len = 0U;
-        const uint8_t err = ctx->config->vendor_service(ctx->config->user, index, subindex, true,
-                                                        data, len, NULL, &out_len);
-        if (err != 0U) {
-            return iolink_result_error((int16_t) err);
-        }
-        return iolink_result_ok(0U);
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
     iolink_od_ctx_t od;
     od.app = ctx->config->od;
@@ -428,8 +407,6 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     ctx->dll.main.shared.isdu.direct_param_page2 = ctx->direct_param_page2;
     ctx->dll.main.shared.isdu.params_ctx = &ctx->params;
     ctx->dll.main.shared.isdu.od = config->od;
-    ctx->dll.main.shared.isdu.vendor_service = config->vendor_service;
-    ctx->dll.main.shared.isdu.vendor_user = config->user;
     ctx->dll.main.state_cb = device_state_cb;
     ctx->dll.main.state_cb_user = ctx;
     /* 一个后端同时服务标准参数与数据存储镜像。 */

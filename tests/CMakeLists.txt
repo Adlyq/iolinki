@@ -39,9 +39,6 @@ target_include_directories(test_switching_sensor PRIVATE ../examples/switching_s
 # OD 后端链接协议栈（表项编解码在 src/od.c）。
 target_link_libraries(test_switching_sensor iolinki)
 add_test(NAME test_switching_sensor COMMAND test_switching_sensor)
-add_executable(test_vendor_isdu test_vendor_isdu.c)
-target_link_libraries(test_vendor_isdu iolinki)
-add_test(NAME test_vendor_isdu COMMAND test_vendor_isdu)
 add_executable(test_params_persistence test_params_persistence.c)
 target_link_libraries(test_params_persistence iolinki)
 add_test(NAME test_params_persistence COMMAND test_params_persistence)
@@ -183,6 +180,7 @@ if(CMOCKA_FOUND)
         add_iolink_test(test_conformance_device test_conformance_device.c)
         target_sources(test_conformance_device PRIVATE
             ../examples/conformance_device/conformance_device.c
+            ../examples/conformance_device/conformance_device_od.c
             ../examples/conformance_device/conformance_profiles.c
             ../examples/conformance_device/conformance_storage.c)
         target_include_directories(test_conformance_device PRIVATE
@@ -254,6 +252,7 @@ if(CMOCKA_FOUND)
         add_iolink_test(test_conformance_gaps test_conformance_gaps.c)
         target_sources(test_conformance_gaps PRIVATE
             ../examples/conformance_device/conformance_device.c
+            ../examples/conformance_device/conformance_device_od.c
             ../examples/conformance_device/conformance_profiles.c
             ../examples/conformance_device/conformance_storage.c)
         target_include_directories(test_conformance_gaps PRIVATE
@@ -261,6 +260,7 @@ if(CMOCKA_FOUND)
         add_iolink_test(test_conformance_untested test_conformance_untested.c)
         target_sources(test_conformance_untested PRIVATE
             ../examples/conformance_device/conformance_device.c
+            ../examples/conformance_device/conformance_device_od.c
             ../examples/conformance_device/conformance_profiles.c
             ../examples/conformance_device/conformance_storage.c)
         target_include_directories(test_conformance_untested PRIVATE

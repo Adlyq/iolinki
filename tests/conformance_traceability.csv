@@ -5,7 +5,7 @@ SDCI_TC_0052,tests/test_isdu.c,test_isdu_direct_parameters_page1; test_isdu_mseq
 SDCI_TC_0053,tests/test_isr_observability.c,test_0053_reserved_flowctrl_no_service,direct,Strong: all reserved FlowCTRL values and exact No Service byte.,library-core,full,none
 SDCI_TC_0054,tests/test_isdu_wire.c,test_isdu_wire_read_figure_a20; test_isdu_wire_busy_polling,direct,"Synthetic vendor name {0x12,0x34} or default 'iolinki'; no IODD content oracle and no M-sequence/DLL read path.",library-core,full,none
 SDCI_TC_0055,tests/test_isdu_wire.c,test_isdu_wire_extlength_read; test_0055_200_byte_read,direct,No M-sequence COUNT/busy check; no Config3 from IODD.,library-core,full,none
-SDCI_TC_0057,tests/test_vendor_isdu.c,preferred_index_routing,direct,"Spec is an 8-bit request on 0xFF; test uses 16-bit 0x00FF, so 8-bit decoding is not exercised.",library-core,full,none
+SDCI_TC_0057,tests/test_od_app.c,test_od_index_domain_routing,direct,"Spec is an 8-bit request on 0xFF; test uses 16-bit 0x00FF, so 8-bit decoding is not exercised.",library-core,full,none
 SDCI_TC_0058,tests/test_isdu.c,test_isdu_subindexed_objects,direct,Exact error code.,library-core,full,none
 SDCI_TC_0059,tests/test_isdu_wire.c,test_isdu_wire_16bit_index_read,direct,Byte-exact 16-bit read; no Config2/IODD but exercises the specified addressing.,library-core,full,none
 SDCI_TC_0060,tests/test_isdu_wire.c,test_isdu_wire_write_count_wrap,direct,Strong: wrap plus write response plus readback.,library-core,full,none

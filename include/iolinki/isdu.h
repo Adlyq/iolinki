@@ -104,14 +104,6 @@ typedef struct
     uint8_t error_code;     /**< IO-Link ISDU 错误码（0x80XX） */
 
     /* 指向外部依赖的指针 */
-    /* 用于设备专用索引 0x0040-0x00FE（Preferred Index）
-     * 和 >= 0x0100（Extended Index）的可选应用服务。输出长度以容量
-     * 传入；成功时返回零，或返回 ISDU 附加错误码。
-     * 回调必须有界，且不得保留缓冲区指针。 */
-    uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex, bool write,
-                              const uint8_t* input, size_t length, uint8_t* output,
-                              size_t* output_length);
-    void* vendor_user;
     bool response_negative; /**< 由 isdu_respond_error 设置；用于区分 0x80 两八位组载荷。 */
     void* event_ctx;        /**< 诊断主机反向链接 */
     void* ds_ctx;           /**< 用于系统命令的 Data Storage 上下文 */
@@ -160,9 +152,8 @@ void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* ws);
 /**
  * @brief 绑定应用对象字典。
  *
- * 分发顺序固定为：标准 OD 表、应用表项、厂商服务。应用表不能遮蔽
- * 规范固定索引；未在两张表中命中的设备专用索引回退到
- * @ref iolink_isdu_ctx_t::vendor_service 后端。
+ * 分发顺序固定为：规范索引走标准表，设备专用索引先查应用表、再回落到
+ * 标准表内建项。应用表不能遮蔽规范固定索引。
  *
  * @param ctx ISDU 上下文
  * @param app 应用表（必须在使用期间保持有效；NULL 解除绑定）

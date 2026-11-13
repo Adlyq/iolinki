@@ -29,7 +29,7 @@ typedef struct
     uint16_t len; /**< 成功时传输的字节数，否则为 0。 */
 } iolink_result_t;
 
-/** 该后端不拥有此索引：调用方应回退到下一层（例如厂商服务）。 */
+/** 该后端不拥有此索引：调用方应回退到下一层（例如内建表或下一张表）。 */
 #define IOLINK_RESULT_NOT_HANDLED (-1)
 /** 参数无效或内部故障。 */
 #define IOLINK_RESULT_INVALID (-2)
