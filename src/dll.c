@@ -2357,13 +2357,6 @@ static void dll_process_body(iolink_dll_main_t* ctx)
     dll_apply_isr_consumed_frame(ctx);
     dll_apply_isr_deadline_requests(ctx);
 
-    /* 兼容入口：device.c 在初始化时写 t_pd_deadline_us，首个 process
-     * 把它导入 T_PD 表项后清空，之后表是唯一事实源。 */
-    if (ctx->t_pd_deadline_us != 0U) {
-        dll_timer_arm(ctx, IOLINK_TIMER_T_PD, ctx->t_pd_deadline_us);
-        ctx->t_pd_deadline_us = 0U;
-    }
-
     /* 捕获的 PD-in 缓冲区在应答完成时由 TX BYTE 泵释放。
      * TX FRAME 类型的 PHY 可通过 tx_busy() 报告传输结束；
      * 没有该钩子时，库无法区分“仍在线上”与

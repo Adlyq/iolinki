@@ -129,9 +129,6 @@ struct iolink_dll_main
 
     uint64_t next_deadline; /**< 所有 DEADLINE 类 timer 的最早截止时间（0 = 无） */
 
-    uint64_t t_pd_deadline_us; /**< 兼容入口：device.c 初始化时写入，
-                                    首次 process 导入 T_PD 表项后清零 */
-
     uint32_t t_byte_limit_us; /**< 字节间超时限制，单位为微秒 */
 
     uint8_t pd_out[IOLINK_PD_OUT_MAX_SIZE]; /**< 输出 PD 缓冲区（主站 -> 设备） */

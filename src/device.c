@@ -178,11 +178,9 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.main.master_lost_cycles = stack->master_lost_cycles;
     ctx->dll.main.t_pd_delay_us = stack->t_pd_us;
     if (ctx->dll.main.t_pd_delay_us > 0U) {
-        ctx->dll.main.t_pd_deadline_us =
-            dll_time_us(&ctx->dll.main) + (uint64_t) ctx->dll.main.t_pd_delay_us;
-    }
-    else {
-        ctx->dll.main.t_pd_deadline_us = 0U;
+        /* 时钟已在上文绑定：直接装载 T_PD 表项，deadline 是唯一事实源。 */
+        dll_timer_arm(&ctx->dll.main, IOLINK_TIMER_T_PD,
+                      dll_time_us(&ctx->dll.main) + (uint64_t) ctx->dll.main.t_pd_delay_us);
     }
 
     /* Table A.10：TYPE_2_1/TYPE_2_2 携带一个 On-request Data 字节；TYPE_2_V 是

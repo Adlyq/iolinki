@@ -220,17 +220,16 @@ static void test_t_byte_rearm_and_cancel(void)
     assert(!iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_T_BYTE));
 }
 
-/* t_PD 兼容入口：device.c 写入的字段在首个 process 导入表项。 */
-static void test_t_pd_legacy_import(void)
+/* t_PD 到期由截止时间表驱动（device 层在初始化时装载）。 */
+static void test_t_pd_deadline(void)
 {
     iolink_dll_ctx_t ctx;
     init_ctx(&ctx);
     ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
-    ctx.main.t_pd_deadline_us = g_now + 500U;
+    dll_timer_arm(&ctx.main, IOLINK_TIMER_T_PD, g_now + 500U);
 
     iolink_dll_process(&ctx.main);
-    assert(ctx.main.t_pd_deadline_us == 0U);
     assert(iolink_dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_PD) == g_now + 500U);
     assert(ctx.main.timing_errors == 0U);
 
@@ -274,7 +273,7 @@ int main(void)
     test_next_deadline_wrap_safe();
     test_same_instant_priority();
     test_t_byte_rearm_and_cancel();
-    test_t_pd_legacy_import();
+    test_t_pd_deadline();
     test_millisecond_wrap();
     return 0;
 }
