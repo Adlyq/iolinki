@@ -405,6 +405,10 @@ iolink_result_t iolink_od_default(const iolink_od_entry_t* entry, uint8_t* out, 
 iolink_result_t iolink_od_read_value(const iolink_od_ctx_t* ctx, const iolink_od_entry_t* entry,
                                      uint8_t subindex, uint8_t* out, size_t cap)
 {
+    /* 子索引契约由 OD 层自己保证：调用方不必先查 max_subindex。 */
+    if ((entry != NULL) && (subindex > entry->max_subindex)) {
+        return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+    }
     if ((ctx == NULL) || (entry == NULL) || (out == NULL)) {
         return iolink_result_error(IOLINK_RESULT_INVALID);
     }
@@ -443,6 +447,9 @@ iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entr
 {
     if ((ctx == NULL) || (entry == NULL)) {
         return iolink_result_error(IOLINK_RESULT_INVALID);
+    }
+    if (subindex > entry->max_subindex) {
+        return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
     }
 
     void* user = (ctx->app != NULL) ? ctx->app->user : NULL;

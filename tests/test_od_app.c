@@ -213,6 +213,15 @@ static void test_od_switching_sensor(void** state)
     /* 子索引越界。 */
     assert_int_equal(od_read(&ctx, SWITCHING_SENSOR_IDX_THRESHOLD, 1U, buf, sizeof(buf)), 2);
     assert_int_equal(buf[1], IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+
+    /* OD 层自己也守住 max_subindex：直接调用值层（不经 ISDU）同样拒绝。 */
+    const iolink_od_entry_t* threshold = iolink_od_find(&app, SWITCHING_SENSOR_IDX_THRESHOLD, 0U);
+    iolink_od_ctx_t od = {.app = &app, .params = NULL};
+    assert_non_null(threshold);
+    assert_int_equal(iolink_od_read_value(&od, threshold, 1U, buf, sizeof(buf)).code,
+                     IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+    assert_int_equal(iolink_od_write_value(&od, threshold, 1U, buf, 2U).code,
+                     IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
 }
 
 /* -------------------------------------------------------------------------
