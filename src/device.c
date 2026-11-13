@@ -801,6 +801,9 @@ iolink_caps_t iolink_device_set_capabilities(iolink_device_ctx_t* ctx, iolink_ca
         caps &= (iolink_caps_t) ~IOLINK_CAP_SYSTEM_COMMAND;
     }
     ctx->dll.main.shared.caps = caps;
+    /* 应答计划的内容依赖能力位（例如 IOLINK_CAP_COMPAT_T0_READ），
+     * 而发布键不包含能力位；必须先失效，下一轮主泵才会重发布。 */
+    iolink_dll_invalidate_reply_plans(&ctx->dll.main);
     return caps;
 }
 
