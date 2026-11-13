@@ -719,6 +719,30 @@ static int test_type0_idle_read_resets_transport(void)
         return 1;
     }
 
+    /* 先走 START + COUNT1，让 ISR 真正接管 4 字节应答（否则 COUNT 的
+     * "无服务"断言在修复前后都成立，无法捕获重放旧段的回归）。 */
+    uint8_t start[2];
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START),
+               IOLINK_MSEQ_TYPE_0, start, sizeof(start));
+    s_tx_n = 0U;
+    feed(start, sizeof(start), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if ((s_tx_n != 2U) || (s_tx_q[0] != 0xD4U)) {
+        return 2; /* START 采纳已发布应答的第一段 */
+    }
+
+    uint8_t count1[2];
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | 0x01U), IOLINK_MSEQ_TYPE_0,
+               count1, sizeof(count1));
+    s_tx_n = 0U;
+    feed(count1, sizeof(count1), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if ((s_tx_n != 2U) || (s_tx_q[0] != 0x12U)) {
+        return 3; /* COUNT1 推进到第二段 */
+    }
+
     uint8_t frame[2];
     make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_IDLE),
                IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));
@@ -729,24 +753,24 @@ static int test_type0_idle_read_resets_transport(void)
 
     /* OD（od_width = 1，全 0）+ CKS。 */
     if ((s_tx_n != 2U) || (s_tx_q[0] != 0x00U)) {
-        return 2;
-    }
-    if (iolink_ring_count(&s_dll.main.shared.isr_frame_ring) != 0U) {
-        return 3; /* CONSUME：帧不进邮箱 */
-    }
-    if (s_dll.main.shared.isr_isdu_read_reset == 0U) {
         return 4;
     }
+    if (iolink_ring_count(&s_dll.main.shared.isr_frame_ring) != 0U) {
+        return 5; /* CONSUME：帧不进邮箱 */
+    }
+    if (s_dll.main.shared.isr_isdu_read_reset == 0U) {
+        return 6;
+    }
     if (s_dll.main.shared.isr_plan_misses != 0U) {
-        return 5;
+        return 7;
     }
 
-    /* IDLE 之后紧跟 COUNT：不得重放旧段，只能回"无服务"（0x00 + CKS）。 */
-    uint8_t count[2];
-    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | 0x01U), IOLINK_MSEQ_TYPE_0,
-               count, sizeof(count));
+    /* IDLE 之后紧跟 COUNT2：不得重放旧段（0x34），只能回"无服务"。 */
+    uint8_t count2[2];
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | 0x02U), IOLINK_MSEQ_TYPE_0,
+               count2, sizeof(count2));
     s_tx_n = 0U;
-    feed(count, sizeof(count), 0U);
+    feed(count2, sizeof(count2), 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
     if ((s_tx_n != 2U) || (s_tx_q[0] != 0x00U)) {
@@ -755,10 +779,10 @@ static int test_type0_idle_read_resets_transport(void)
 
     iolink_dll_process(&s_dll.main);
     if (s_dll.main.shared.isr_isdu_read_reset != 0U) {
-        return 6;
+        return 9;
     }
     if (!iolink_isdu_is_idle(&s_dll.main.shared.isdu)) {
-        return 7;
+        return 10;
     }
     return 0;
 }

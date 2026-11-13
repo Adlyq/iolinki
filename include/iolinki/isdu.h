@@ -340,9 +340,10 @@ void iolink_isdu_dp_page1_invalidate(iolink_isdu_ctx_t* ctx);
  *
  * @note 一致性粒度是**单个八位组**。一次多字节页读（例如 od_width=32）
  * 会逐字节调用本函数；若主泵恰好在两次调用之间刷新映像，同一应答帧可能
- * 混入新旧两代字节。运行期可变的字节是 0x01（MasterCycleTime，主站写入）
- * 以及 TYPE_2_V 的 0x05/0x02（`iolink_device_pd_input_update()` 改变宽度时
- * 触发重建）；它们的变化频率远低于页读频率，因此该窗口在实践中可忽略。
+ * 混入新旧两代字节。运行期可变的字节是 0x01（MasterCycleTime，主站写入），
+ * 以及 TYPE_2_V 的 0x05/0x06/0x02（`iolink_device_pd_input_update()` 或
+ * `iolink_device_set_pd_length()` 改变宽度、或波特率变化时触发重建）；
+ * 它们的变化频率远低于页读频率，因此该窗口在实践中可忽略。
  * 若将来需要整帧同代，应改为一次取序号后复制整段。
  *
  * @param ctx ISDU 上下文

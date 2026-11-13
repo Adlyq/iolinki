@@ -297,16 +297,19 @@ static void test_pd_input_update_refreshes_dpp1(void** state)
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
 
     iolink_isdu_ctx_t* isdu = &dev.ctx.dll.main.shared.isdu;
-    /* 8 字节 PD-in -> DPP1 0x05 = 0x87（BYTE=1，Length=octets-1 = 7）。 */
+    /* 8 字节 PD-in -> DPP1 0x05 = 0x87（BYTE=1，Length=octets-1 = 7）；
+     * MinCycleTime：COM2/OD2 下 73 个 0.1 ms 单位 -> 0x43。 */
     assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x05U), 0x87U);
-    const uint8_t min_before = iolink_isdu_direct_param_page1_octet(isdu, 0x02U);
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x02U), 0x43U);
 
     uint8_t pd[1] = {0x5AU};
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), true), 0);
-    /* 1 字节 PD-in -> 0x08；宽度已变，MinCycleTime 编码必须跟随。 */
+    /* 主泵上下文立即重建：先切到 ISR 视角读取，确保不是读取时懒重建。 */
+    dev.ctx.dll.main.shared.in_isr = 1U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x05U), 0x08U);
-    assert_true(iolink_isdu_direct_param_page1_octet(isdu, 0x02U) != min_before);
-    assert_int_equal((isdu->dp_page1_seq & 1U), 0U); /* 重建完成，映像稳定 */
+    /* 1 字节 PD-in -> 48 个 0.1 ms 单位 -> 0x30。 */
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x02U), 0x30U);
+    dev.ctx.dll.main.shared.in_isr = 0U;
 }
 
 int main(void)
