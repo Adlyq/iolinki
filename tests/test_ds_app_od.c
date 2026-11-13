@@ -12,7 +12,7 @@
  *
  * 覆盖：
  *  - `config->od` 被设备层绑定到 DS，`IOLINK_OD_STORAGE_DS` 应用项进入
- *    描述符集合（标准表在前、应用表按表序）；
+ *    集合（标准表在前、应用表按表序）；
  *  - 下载态写入应用 DS 参数被暂存，ParamDownloadEnd 后才生效；
  *  - `iolink_ds_serialize()` 输出应用项，VOLATILE 项不进入 DS；
  *  - `iolink_ds_apply_image()` 能恢复应用参数；
@@ -128,8 +128,8 @@ static void init_device_with_app(iolink_test_device_t* dev)
     assert_int_equal(iolink_test_device_init_with_od(dev, NULL, NULL, &g_app_od), 0);
 }
 
-/* 应用 DS 项进入描述符集合，VOLATILE 项不进入。 */
-static void test_app_ds_descriptor_set(void** state)
+/* 应用 DS 项进入集合，VOLATILE 项不进入。 */
+static void test_app_ds_membership(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
@@ -303,7 +303,7 @@ static void test_app_ds_rejects_whole_image(void** state)
 int main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test_setup_teardown(test_app_ds_descriptor_set, ds_app_setup, ds_app_teardown),
+        cmocka_unit_test_setup_teardown(test_app_ds_membership, ds_app_setup, ds_app_teardown),
         cmocka_unit_test_setup_teardown(test_app_ds_download_stages_then_commits, ds_app_setup,
                                         ds_app_teardown),
         cmocka_unit_test_setup_teardown(test_app_ds_apply_image_restores, ds_app_setup,

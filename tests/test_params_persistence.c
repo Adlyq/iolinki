@@ -92,7 +92,15 @@ int main(void)
     iolink_device_info_ctx_init(&info, NULL);
     iolink_params_ctx_init(&params, &info);
     bind_device(&params, &ds);
-    assert(iolink_ds_load_persistent(&ds) <= 0); /* 空 NVM：保持默认值。 */
+    /* 擦除的 NVM（0xFF）视为无镜像：默认值保持不变。 */
+    uint8_t baseline[32] = {0U};
+    const iolink_result_t before =
+        iolink_params_ctx_read(&params, IOLINK_IDX_APPLICATION_TAG, 0U, baseline, sizeof(baseline));
+    assert(before.code == 0);
+    assert(iolink_ds_load_persistent(&ds) == -1);
+    assert(iolink_params_ctx_read(&params, IOLINK_IDX_APPLICATION_TAG, 0U, result, sizeof(result))
+               .len == before.len);
+    assert(memcmp(result, baseline, before.len) == 0);
 
     const iolink_od_entry_t* tag = iolink_od_find(NULL, IOLINK_IDX_APPLICATION_TAG, 0U);
     assert(tag != NULL);
@@ -102,8 +110,10 @@ int main(void)
     /* 成功写入：值生效且镜像落盘。 */
     g_fail_write = 0;
     assert(iolink_od_write_value(&od, tag, 0U, original, sizeof(original) - 1U).code == 0);
-    const int writes_after_ok = g_writes;
-    assert(writes_after_ok > 0);
+    /* 镜像确实写到偏移 0，且是本栈的 magic（不钉内部写次数）。 */
+    assert(g_writes >= 1);
+    assert(g_nvm[0] == (uint8_t) (IOLINK_STORAGE_MAGIC >> 24));
+    assert(g_nvm[3] == (uint8_t) IOLINK_STORAGE_MAGIC);
 
     /* NVM 失败：返回 IO，RAM 回滚到写前值。 */
     g_fail_write = 1;
