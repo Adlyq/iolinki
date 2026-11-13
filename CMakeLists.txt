@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
-# Version 2.2.0
-project(iolinki VERSION 2.2.0 LANGUAGES C)
+# Version 3.0.0
+project(iolinki VERSION 3.0.0 LANGUAGES C)
 
 # No default CMAKE_BUILD_TYPE: the toolchain default applies (GCC = -O0), so
 # static helpers stay out of line. Do not judge ISR code size or timing from a

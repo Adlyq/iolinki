@@ -99,7 +99,7 @@ typedef enum
  *
  * 标准对象与厂商错误统计需要设备上下文（事件/DLL/标识/直接参数），
  * 由 ISDU 层内建处理器执行；表项只保存处理器 ID，因此表保持 const
- * 且不依赖任何上下文。应用参数使用 @ref IOLINK_OD_HANDLER_NONE，并由
+ * 且不依赖任何上下文。应用参数使用 @ref IOLINK_OD_HANDLER_NONE ，并由
  * 表项自己的 @ref iolink_od_entry_t::backend 取值。
  */
 typedef enum
@@ -160,7 +160,7 @@ typedef iolink_result_t (*iolink_od_change_fn)(void* user, const iolink_od_entry
 /**
  * @brief 读取一个参数值的后端（HANDLER 表项）。
  *
- * @param user  应用不透明指针（@ref iolink_od_app_t::user）。
+ * @param user  应用不透明指针（@ref iolink_od_app_t::user ）。
  * @param entry 命中的表项。
  * @param out   接收线上字节的缓冲区。
  * @param cap   @p out 的容量。
@@ -240,7 +240,7 @@ struct iolink_od_entry
     uint8_t storage;         /**< IOLINK_OD_STORAGE_*。 */
     uint8_t flags;           /**< IOLINK_OD_FLAG_*。 */
     uint8_t handler;         /**< 内建处理器 ID；应用表项为 NONE。 */
-    uint8_t backend;         /**< @ref iolink_od_backend_t（仅 handler == NONE）。 */
+    uint8_t backend;         /**< @ref iolink_od_backend_t （仅 handler == NONE）。 */
     union
     {
         struct
@@ -388,7 +388,7 @@ struct iolink_od_entry
  *
  * `buf_` 必须是数组左值：`sizeof(buf_) >= block_len_` 在编译期检查。
  * `len_ptr_` 指向当前长度变量，写入后更新；读取返回该长度。指针型缓冲
- * （malloc/外部内存）请改用 @ref IOLINK_OD_BYTES_HANDLER。
+ * （malloc/外部内存）请改用 @ref IOLINK_OD_BYTES_HANDLER 。
  */
 #define IOLINK_OD_BYTES_STORAGE_EX(index_, access_, semantics_, storage_, block_len_, name_, buf_, \
                                    len_ptr_, validate_, change_)                                   \

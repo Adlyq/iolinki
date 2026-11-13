@@ -1069,6 +1069,122 @@ static void test_ds_0374_upload_flag_power_cycle(void** state)
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
 }
 
+/* 持久化错误路径：无后端、写失败、坏记录、恢复/复位分支。 */
+static int failing_write(void* user, uint32_t offset, const uint8_t* data, size_t len)
+{
+    (void) user;
+    (void) offset;
+    (void) data;
+    (void) len;
+    return -1;
+}
+
+static int failing_read(void* user, uint32_t offset, uint8_t* data, size_t len)
+{
+    (void) user;
+    (void) offset;
+    (void) data;
+    (void) len;
+    return -1;
+}
+
+static const iolink_storage_api_t g_failing_storage = {
+    .user = NULL, .read = failing_read, .write = failing_write};
+
+static uint16_t g_reset_scalar;
+static uint8_t g_reset_bytes[4];
+static uint8_t g_reset_len;
+static const uint8_t g_reset_default[] = {'A', 'B', 'C', 'D'};
+
+static void test_ds_persistence_error_paths(void** state)
+{
+    (void) state;
+    iolink_ds_ctx_t ds;
+    static const iolink_od_entry_t reset_entries[] = {
+        IOLINK_OD_SCALAR_STORAGE_EX(0x01A1U, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
+                                    IOLINK_OD_WRITE_STORE,
+                                    IOLINK_OD_STORAGE_DS | IOLINK_OD_STORAGE_PERSIST, 0U, 0xFFFFU,
+                                    7U, "ResetScalar", &g_reset_scalar, NULL, NULL),
+        {.index = 0x01A2U,
+         .datatype = IOLINK_OD_DT_OCTET_STRING,
+         .access = IOLINK_OD_ACCESS_RW,
+         .write_semantics = IOLINK_OD_WRITE_VOLATILE,
+         .storage = IOLINK_OD_STORAGE_DS | IOLINK_OD_STORAGE_PERSIST,
+         .handler = IOLINK_OD_HANDLER_NONE,
+         .backend = IOLINK_OD_BACKEND_STORAGE,
+         .u.storage = {.value = g_reset_bytes, .str_len = &g_reset_len},
+         .block_len = sizeof(g_reset_bytes),
+         .block_default = g_reset_default,
+         .name = "ResetBytes"},
+    };
+    static const iolink_od_app_t reset_app = {
+        .entries = reset_entries,
+        .count = sizeof(reset_entries) / sizeof(reset_entries[0]),
+        .user = NULL,
+    };
+
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
+    iolink_ds_mock_reset();
+
+    assert_int_equal(iolink_ds_save_persistent(NULL), -1);
+    assert_int_equal(iolink_ds_load_persistent(NULL), -1);
+    assert_int_equal(iolink_ds_factory_reset(NULL), -1);
+
+    iolink_ds_init(&ds, NULL);
+    iolink_ds_bind_sources(&ds, NULL, test_env_params(&g_test_env));
+    assert_int_equal(iolink_ds_save_persistent(&ds), -1); /* 无后端 */
+    assert_int_equal(iolink_ds_load_persistent(&ds), -1);
+    assert_int_equal(iolink_ds_factory_reset(&ds), 0); /* RAM-only：复位成功但不落盘 */
+
+    iolink_ds_init(&ds, &g_failing_storage);
+    iolink_ds_bind_sources(&ds, NULL, test_env_params(&g_test_env));
+    assert_int_equal(iolink_ds_save_persistent(&ds), -1); /* 写失败 */
+    assert_int_equal(iolink_ds_load_persistent(&ds), -1); /* 读失败 */
+    assert_int_equal(iolink_ds_factory_reset(&ds), -1);
+
+    /* 记录长度越界：头/校验和正确，但记录声称 5 字节而只有 2 字节。 */
+    iolink_ds_mock_reset();
+    uint8_t* nvm = iolink_ds_mock_get_buf();
+    const uint8_t payload[] = {0x00U, 0x18U, 0x00U, 0x05U, 0xAAU, 0xBBU};
+    const uint32_t checksum = iolink_storage_checksum(payload, sizeof(payload));
+    nvm[0] = (uint8_t) (IOLINK_STORAGE_MAGIC >> 24);
+    nvm[1] = (uint8_t) (IOLINK_STORAGE_MAGIC >> 16);
+    nvm[2] = (uint8_t) (IOLINK_STORAGE_MAGIC >> 8);
+    nvm[3] = (uint8_t) IOLINK_STORAGE_MAGIC;
+    nvm[4] = (uint8_t) (IOLINK_STORAGE_VERSION & 0xFFU);
+    nvm[5] = (uint8_t) (IOLINK_STORAGE_VERSION >> 8);
+    nvm[6] = 0U;
+    nvm[7] = (uint8_t) sizeof(payload);
+    nvm[8] = (uint8_t) (checksum >> 24);
+    nvm[9] = (uint8_t) (checksum >> 16);
+    nvm[10] = (uint8_t) (checksum >> 8);
+    nvm[11] = (uint8_t) checksum;
+    (void) memcpy(&nvm[IOLINK_STORAGE_HDR_SIZE], payload, sizeof(payload));
+
+    iolink_ds_init(&ds, &g_ds_storage_mock);
+    iolink_ds_bind_sources(&ds, NULL, test_env_params(&g_test_env));
+    assert_int_equal(iolink_ds_load_persistent(&ds), -1);
+
+    /* 应用写失败：值已应用，但保存镜像失败时 apply 返回 -1。 */
+    iolink_ds_init(&ds, &g_failing_storage);
+    iolink_ds_bind_sources(&ds, NULL, test_env_params(&g_test_env));
+    const uint8_t image[] = {0x00U, 0x18U, 0x00U, 0x01U, 'X'};
+    assert_int_equal(iolink_ds_apply_image(&ds, image, sizeof(image)), -1);
+
+    /* 出厂复位：标量写入默认值，字节串写入 block_default。 */
+    iolink_ds_mock_reset();
+    iolink_ds_init(&ds, &g_ds_storage_mock);
+    iolink_ds_bind_sources(&ds, &reset_app, test_env_params(&g_test_env));
+    g_reset_scalar = 0U;
+    g_reset_len = 0U;
+    (void) memset(g_reset_bytes, 0, sizeof(g_reset_bytes));
+    assert_int_equal(iolink_ds_factory_reset(&ds), 0);
+    assert_int_equal(g_reset_scalar, 7U);
+    assert_int_equal(g_reset_len, sizeof(g_reset_default));
+    assert_memory_equal(g_reset_bytes, g_reset_default, sizeof(g_reset_default));
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -1087,6 +1203,7 @@ int main(void)
         cmocka_unit_test(test_ds_download_end_error_classification),
         cmocka_unit_test(test_ds_download_recovery),
         cmocka_unit_test(test_ds_download_survives_persist_only_write),
+        cmocka_unit_test(test_ds_persistence_error_paths),
         cmocka_unit_test(test_ds_legacy_sub0_is_runtime_compat),
         cmocka_unit_test(test_ds_0077_full_upload_via_index_list),
         cmocka_unit_test(test_ds_0078_upload_set2_after_store),

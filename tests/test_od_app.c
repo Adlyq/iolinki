@@ -715,6 +715,210 @@ static void test_od_storage_scalar_rollback(void** state)
     assert_int_equal(value, 5U);
 }
 
+/* 字节串的 on_change 拒绝不回滚内容：拒绝应放在 validate。 */
+static void test_od_storage_string_on_change_keeps_value(void** state)
+{
+    (void) state;
+    static uint8_t buffer[8];
+    static uint8_t length;
+    static const iolink_od_entry_t entries[] = {
+        IOLINK_OD_BYTES_STORAGE_EX(0x0212U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                                   IOLINK_OD_STORAGE_VOLATILE, 8U, "StringHook", buffer, &length,
+                                   NULL, reject_change),
+    };
+    iolink_od_app_t app = {.entries = entries, .count = 1U, .user = NULL};
+    iolink_od_ctx_t ctx = {.app = &app, .params = NULL};
+    const uint8_t wire[6] = {'L', 'O', 'N', 'G', 'E', 'R'};
+    uint8_t out[8] = {0U};
+
+    assert_int_equal(iolink_od_write_value(&ctx, &entries[0], 0U, wire, sizeof(wire)).code,
+                     IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG);
+    assert_int_equal(length, sizeof(wire));
+    const iolink_result_t read = iolink_od_read_value(&ctx, &entries[0], 0U, out, sizeof(out));
+    assert_int_equal(read.len, sizeof(wire));
+    assert_memory_equal(out, wire, sizeof(wire));
+}
+
+/* 恢复路径绕过 validate/on_change/flush，只写后端。 */
+static iolink_result_t restore_handler_write(void* user, const iolink_od_entry_t* entry,
+                                             uint8_t subindex, const uint8_t* data, size_t len)
+{
+    uint16_t* value = user;
+    uint32_t raw = 0U;
+    const iolink_result_t decoded = iolink_od_decode(entry, data, len, &raw);
+
+    (void) subindex;
+    if (!iolink_result_succeeded(decoded)) {
+        return decoded;
+    }
+    *value = (uint16_t) raw;
+    return iolink_result_ok(0U);
+}
+
+static void test_od_restore_value_paths(void** state)
+{
+    (void) state;
+    static uint16_t storage_value;
+    static uint16_t handler_value;
+    static uint8_t string_buffer[8];
+    static uint8_t string_length;
+    static const iolink_od_entry_t entries[] = {
+        IOLINK_OD_SCALAR_STORAGE(0x0210U, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
+                                 IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_VOLATILE, 0U, 0xFFFFU, 0U,
+                                 "RestoreStorage", &storage_value),
+        IOLINK_OD_SCALAR_HANDLER(0x0211U, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
+                                 IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_VOLATILE, 0U, 0xFFFFU, 0U,
+                                 "RestoreHandler", NULL, restore_handler_write),
+        IOLINK_OD_SCALAR_HANDLER(0x0213U, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RW,
+                                 IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U, 1U, 0U,
+                                 "NoWriter", NULL, NULL),
+        IOLINK_OD_BYTES_STORAGE(0x0214U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                                IOLINK_OD_STORAGE_VOLATILE, 4U, "RestoreBytes", string_buffer,
+                                &string_length),
+    };
+    iolink_od_app_t app = {.entries = entries, .count = 4U, .user = &handler_value};
+    iolink_od_ctx_t ctx = {.app = &app, .params = test_env_params(&g_od_env)};
+    const uint8_t wire[2] = {0x12U, 0x34U};
+    const uint8_t too_long[5] = {0U};
+
+    assert_int_equal(iolink_od_restore_value(NULL, &entries[0], 0U, wire, 2U).code,
+                     IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_restore_value(&ctx, NULL, 0U, wire, 2U).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_restore_value(&ctx, &entries[0], 1U, wire, 2U).code,
+                     IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+
+    assert_true(iolink_result_succeeded(iolink_od_restore_value(&ctx, &entries[0], 0U, wire, 2U)));
+    assert_int_equal(storage_value, 0x1234U);
+    assert_true(iolink_result_succeeded(iolink_od_restore_value(&ctx, &entries[1], 0U, wire, 2U)));
+    assert_int_equal(handler_value, 0x1234U);
+
+    assert_int_equal(iolink_od_restore_value(&ctx, &entries[2], 0U, wire, 2U).code,
+                     IOLINK_RESULT_NOT_HANDLED);
+    assert_int_equal(
+        iolink_od_restore_value(&ctx, &entries[3], 0U, too_long, sizeof(too_long)).code,
+        IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+    assert_int_equal(iolink_od_restore_value(&ctx, &entries[0], 0U, wire, 1U).code,
+                     IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+
+    /* 内建处理器与无效上下文：恢复路径不处理。 */
+    const iolink_od_entry_t* builtin = iolink_od_find(NULL, IOLINK_IDX_SYSTEM_COMMAND, 0U);
+    assert_non_null(builtin);
+    assert_int_equal(iolink_od_restore_value(&ctx, builtin, 0U, wire, 1U).code,
+                     IOLINK_RESULT_NOT_HANDLED);
+    assert_int_equal(
+        iolink_od_read_value(&ctx, builtin, 0U, string_buffer, sizeof(string_buffer)).code,
+        IOLINK_RESULT_NOT_HANDLED);
+
+    /* TAG 恢复走标签存储，不经过持久化/hook。 */
+    const iolink_od_entry_t* tag = iolink_od_find(NULL, IOLINK_IDX_APPLICATION_TAG, 0U);
+    assert_non_null(tag);
+    assert_true(iolink_result_succeeded(iolink_od_restore_value(&ctx, tag, 0U, wire, 2U)));
+    assert_int_equal(iolink_params_ctx_read(test_env_params(&g_od_env), IOLINK_IDX_APPLICATION_TAG,
+                                            0U, string_buffer, sizeof(string_buffer))
+                         .len,
+                     2U);
+}
+
+/* STORAGE 后端的防御分支：空指针、缺失长度、截断、无效 datatype。 */
+static iolink_result_t failing_flush(void* user)
+{
+    (void) user;
+    return iolink_result_error(IOLINK_RESULT_IO);
+}
+
+static void test_od_storage_backend_edges(void** state)
+{
+    (void) state;
+    static uint8_t block[4] = {1U, 2U, 3U, 4U};
+    static uint8_t block_len = 8U;
+    static uint16_t flushed_value = 5U;
+    static const iolink_od_entry_t entries[] = {
+        {.index = 0x0220U,
+         .datatype = IOLINK_OD_DT_U8,
+         .access = IOLINK_OD_ACCESS_RW,
+         .write_semantics = IOLINK_OD_WRITE_VOLATILE,
+         .storage = IOLINK_OD_STORAGE_VOLATILE,
+         .handler = IOLINK_OD_HANDLER_NONE,
+         .backend = IOLINK_OD_BACKEND_STORAGE,
+         .u.storage = {.value = NULL, .str_len = NULL},
+         .range_max = 0xFFU,
+         .name = "NoValue"},
+        {.index = 0x0221U,
+         .datatype = IOLINK_OD_DT_OCTET_STRING,
+         .access = IOLINK_OD_ACCESS_RW,
+         .write_semantics = IOLINK_OD_WRITE_VOLATILE,
+         .storage = IOLINK_OD_STORAGE_VOLATILE,
+         .handler = IOLINK_OD_HANDLER_NONE,
+         .backend = IOLINK_OD_BACKEND_STORAGE,
+         .u.storage = {.value = block, .str_len = NULL},
+         .block_len = sizeof(block),
+         .name = "NoLength"},
+        {.index = 0x0222U,
+         .datatype = IOLINK_OD_DT_OCTET_STRING,
+         .access = IOLINK_OD_ACCESS_RW,
+         .write_semantics = IOLINK_OD_WRITE_VOLATILE,
+         .storage = IOLINK_OD_STORAGE_VOLATILE,
+         .handler = IOLINK_OD_HANDLER_NONE,
+         .backend = IOLINK_OD_BACKEND_STORAGE,
+         .u.storage = {.value = block, .str_len = &block_len},
+         .block_len = sizeof(block),
+         .name = "Clamped"},
+        {.index = 0x0223U,
+         .datatype = 0xFFU,
+         .access = IOLINK_OD_ACCESS_RW,
+         .write_semantics = IOLINK_OD_WRITE_VOLATILE,
+         .storage = IOLINK_OD_STORAGE_VOLATILE,
+         .handler = IOLINK_OD_HANDLER_NONE,
+         .backend = IOLINK_OD_BACKEND_STORAGE,
+         .u.storage = {.value = block, .str_len = &block_len},
+         .name = "BadCodec"},
+    };
+    static const iolink_od_entry_t flush_entries[] = {
+        IOLINK_OD_SCALAR_STORAGE_EX(0x0224U, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
+                                    IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_PERSIST, 0U, 0xFFFFU,
+                                    0U, "FlushFails", &flushed_value, NULL, NULL),
+    };
+    iolink_od_app_t app = {.entries = entries, .count = 4U, .user = NULL};
+    iolink_od_ctx_t ctx = {.app = &app, .params = NULL};
+    uint8_t out[8] = {0U};
+    const uint8_t wire[2] = {0x00U, 0x07U};
+
+    assert_int_equal(iolink_od_read_value(&ctx, &entries[0], 0U, out, sizeof(out)).code,
+                     IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_write_value(&ctx, &entries[0], 0U, wire, 1U).code,
+                     IOLINK_RESULT_INVALID);
+
+    assert_int_equal(iolink_od_read_value(&ctx, &entries[1], 0U, out, sizeof(out)).code,
+                     IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_restore_value(&ctx, &entries[1], 0U, wire, 1U).code,
+                     IOLINK_RESULT_INVALID);
+
+    /* 长度变量超过 block_len：读取按 block_len 截断，容量不足报 0x33。 */
+    const iolink_result_t clamped = iolink_od_read_value(&ctx, &entries[2], 0U, out, sizeof(out));
+    assert_int_equal(clamped.len, (size_t) entries[2].block_len);
+    assert_memory_equal(out, block, entries[2].block_len);
+    assert_int_equal(iolink_od_read_value(&ctx, &entries[2], 0U, out, 2U).code,
+                     IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+    const uint8_t too_long[5] = {0U};
+    assert_int_equal(
+        iolink_od_restore_value(&ctx, &entries[2], 0U, too_long, sizeof(too_long)).code,
+        IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+
+    /* 无效 datatype：读取与恢复都拒绝。 */
+    assert_int_equal(iolink_od_read_value(&ctx, &entries[3], 0U, out, sizeof(out)).code,
+                     IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_restore_value(&ctx, &entries[3], 0U, wire, 1U).code,
+                     IOLINK_RESULT_INVALID);
+
+    /* PERSIST 写后 flush 失败：标量回滚，错误上送。 */
+    iolink_od_app_t flush_app = {.entries = flush_entries, .count = 1U, .user = NULL};
+    iolink_od_ctx_t flush_ctx = {
+        .app = &flush_app, .params = NULL, .flush = failing_flush, .flush_user = NULL};
+    assert_int_equal(iolink_od_write_value(&flush_ctx, &flush_entries[0], 0U, wire, 2U).code,
+                     IOLINK_RESULT_IO);
+    assert_int_equal(flushed_value, 5U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -727,6 +931,10 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_od_storage_scalar_round_trip, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_storage_string_round_trip, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_storage_scalar_rollback, od_setup, od_teardown),
+        cmocka_unit_test_setup_teardown(test_od_storage_string_on_change_keeps_value, od_setup,
+                                        od_teardown),
+        cmocka_unit_test_setup_teardown(test_od_restore_value_paths, od_setup, od_teardown),
+        cmocka_unit_test_setup_teardown(test_od_storage_backend_edges, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_index_domain_routing, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_device_specific_fallback, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_truncated_requests_never_execute, od_setup,

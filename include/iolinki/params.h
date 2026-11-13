@@ -23,7 +23,7 @@
  *
  * 标签是唯一需要栈内 RAM 存储的标准参数；它们的持久化与其它
  * `IOLINK_OD_STORAGE_PERSIST` 表项一起由参数镜像统一完成
- * （@ref iolink_ds_save_persistent）。本模块不再持有存储后端，
+ * （`iolink_ds_save_persistent()`）。本模块不再持有存储后端，
  * 也不定义独立的 NVM 记录格式。
  */
 
