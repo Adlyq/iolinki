@@ -442,6 +442,47 @@ static int test_capability_change_invalidates_plan(void)
     return 0;
 }
 
+/* tx_done 只是可选的帧结束通知：只有 tx_octet 的 PHY 仍应置位 CAP_TX 并能发送。 */
+static int test_tx_without_done_hook(void)
+{
+    iolink_phy_api_t phy = s_phy;
+    phy.tx_done = NULL; /* 变体：去掉可选完成回调 */
+
+    (void) memset(&s_dll, 0, sizeof(s_dll));
+    iolink_dll_init(&s_dll.main, &s_dll.isr, &phy);
+    s_dll.main.shared.time_us = plan_time_us;
+    s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    s_dll.main.shared.od_width = 1U;
+    s_dll.main.shared.pd_in_len = 1U;
+    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.pd_in_len_current = 1U;
+    s_dll.main.pd_valid = true;
+    s_dll.main.shared.pd_in_active = 0U;
+    s_dll.main.shared.pd_in[0][1] = 0x5AU;
+    s_now_us = 1000000U;
+    s_tx_n = 0U;
+    s_tx_active = 0U;
+
+    if (!iolink_caps_has(s_dll.main.shared.caps, IOLINK_CAP_TX)) {
+        return 1;
+    }
+    iolink_dll_publish_reply_plans(&s_dll.main);
+    feed_process_read();
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if (s_tx_n != 3U) {
+        return 2; /* OD 占位 + PD-in 1 + CKS */
+    }
+    if ((s_tx_q[0] != 0x00U) || (s_tx_q[1] != 0x5AU)) {
+        return 3;
+    }
+    if (s_dll.isr.isr_plan_misses != 0U) {
+        return 4;
+    }
+    return 0;
+}
+
 int main(void)
 {
     int rc = test_plan_hit_executes_reply();
@@ -468,5 +509,9 @@ int main(void)
     if (rc != 0) {
         return 60 + rc;
     }
-    return test_capability_change_invalidates_plan();
+    rc = test_capability_change_invalidates_plan();
+    if (rc != 0) {
+        return 70 + rc;
+    }
+    return test_tx_without_done_hook();
 }

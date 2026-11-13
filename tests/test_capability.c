@@ -107,6 +107,13 @@ static void test_resolve_probes_the_built_vtable(void** state)
     assert_true(iolink_caps_has(caps_no_tx, IOLINK_CAP_RX));
     assert_false(iolink_caps_has(caps_no_tx, IOLINK_CAP_TX));
 
+    /* tx_done 只是可选的帧结束通知：缺少它不改变 TX 能力，
+     * 与 dll_isr_tx_step 只依赖 tx_octet 的实现一致。 */
+    iolink_phy_api_t no_done = g_phy_mock;
+    no_done.tx_done = NULL;
+    const iolink_caps_t caps_no_done = iolink_caps_resolve(&no_done, NULL, NULL, NULL);
+    assert_true(iolink_caps_has(caps_no_done, IOLINK_CAP_TX));
+
     /* PHY 为 NULL：只有构建/配置能力。 */
     const iolink_caps_t null_phy = iolink_caps_resolve(NULL, NULL, NULL, NULL);
     assert_false(iolink_caps_has(null_phy, IOLINK_CAP_RX));

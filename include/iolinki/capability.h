@@ -101,7 +101,11 @@ typedef uint32_t iolink_caps_t;
 
 /** @brief PHY 提供了构建档位所选的接收钩子。 */
 #define IOLINK_CAP_RX (((iolink_caps_t) 1U) << 0)
-/** @brief PHY 提供了构建档位所选的发送钩子。 */
+/** @brief PHY 提供了构建档位所选的发送钩子。
+ *
+ * TX BYTE：`tx_octet` 非 NULL 即置位；`tx_done` 是可选的帧结束通知。
+ * TX FRAME：`tx_frame` 非 NULL 即置位。
+ */
 #define IOLINK_CAP_TX (((iolink_caps_t) 1U) << 1)
 /** @brief PHY 能观察 C/Q 唤醒脉冲（detect_wakeup 非 NULL）。 */
 #define IOLINK_CAP_WAKEUP (((iolink_caps_t) 1U) << 2)
