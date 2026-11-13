@@ -290,8 +290,8 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx,
 两条 PD-in 路径在同一构建内共存：`on_pd_input` 非 NULL 时初始化选择回调路径并置位
 `IOLINK_CAP_PD_IN_CALLBACK`，此后 `pd_input_update()` 返回
 `IOLINK_DEVICE_INIT_ERR_PD_INPUT`（-14），避免线上 PD 在回调输出与调用方数据之间
-跳变；`on_pd_input` 为 NULL 时用轮询 API 发布。`IOLINK_APP_PD_INPUT_CALLBACK` 只是
-兼容宏，不删除任何声明。
+跳变；`on_pd_input` 为 NULL 时用轮询 API 发布。`IOLINK_APP_PD_INPUT_CALLBACK` 已退役：
+路径只由 `on_pd_input` 是否存在决定，定义该宏是构建错误。
 
 `pd_output_read()` 最多复制 `len` 字节，并返回实际复制的字节数；参数非法时返回负值。
 `pd_out` 由同一主上下文中的帧分发写入，因此该函数直接复制，不取锁，也不进入平台临界区。
@@ -388,8 +388,8 @@ storage 标志、默认值与可选钩子），ISDU 分发、Data Storage 成员
 
 应用需要做的是：用 `IOLINK_OD_SCALAR` / `IOLINK_OD_SCALAR_EX` / `IOLINK_OD_STRING`
 增加一行表项，并在 `read` / `write` 后端里增加对应分支（表项只保存静态知识，运行期
-取值走注册了 `IOLINK_OD_HANDLER_BACKEND` 的后端）。应用表声明的索引优先于
-`vendor_service`，标准索引不可覆盖。完整示例见
+取值走注册了 `IOLINK_OD_HANDLER_BACKEND` 的后端）。索引归属按域决定：规范索引（`< 0x0040`）由标准表提供、不可被应用表覆盖；设备专用索引
+（`0x0040-0x00FE`、`0x0100+`）应用表优先，未声明时才交给 `vendor_service`。完整示例见
 `examples/switching_sensor/switching_sensor_od.c`。
 
 ## 5. 事件
@@ -484,11 +484,14 @@ EventCode、`0x0024` DeviceStatus 与 `0x0025` DetailedDeviceStatus 都从同一
 | `0x0028`, `0x0029` | ProcessDataInput/Output | 读 |
 | `0x0040-0x00FE`, `0x0100+` | 设备/厂商特定 | 应用 OD 表优先，未声明时路由到 `vendor_service` |
 
-分发顺序（`src/isdu.c` 的 `handle_standard_commands()`）：先做 DS 访问权限检查，
-再查应用 OD 表 `iolink_od_find_app()`；未命中且 `index` 属于 `0x0040-0x00FE` 或
-`>= 0x0100` 时交给 `vendor_service`；仍未命中才回落到内建标准表，最后返回
-`0x80 0x11`。因此应用表声明过的厂商索引不会到达 `vendor_service`，而 `0x0040`
-内置错误统计对象只有在应用表与 `vendor_service` 都没有接管时才可达。
+分发顺序（`src/isdu.c` 的 `handle_standard_commands()`）：先做 DS 访问权限检查，然后按索引域分流。
+
+- 规范索引（`< 0x0040`）：内建标准表优先，应用表只在内建表未命中时才生效，因此
+  应用表无法遮蔽 `0x0002`/`0x0024` 等对象。
+- 设备专用索引（`0x0040-0x00FE`、`0x0100+`）：应用 OD 表 `iolink_od_find_app()` 优先；
+  未声明时交给 `vendor_service`；仍未命中才回落到内建标准表（`0x0040` 错误统计），
+  最后返回 `0x80 0x11`。因此应用表声明过的厂商索引不会到达 `vendor_service`，而
+  `0x0040` 内置错误统计对象只有在应用表与 `vendor_service` 都没有接管时才可达。
 
 `0x0004-0x000B` 和 `0x001C-0x001F` 为保留区间，`0x00FF` 也为保留值
 （不会路由到 vendor service）。VendorID/DeviceID **不是** ISDU 对象；
@@ -510,9 +513,9 @@ uint8_t (*vendor_service)(void* user, uint16_t index, uint8_t subindex,
                           uint8_t* output, size_t* output_length);
 ```
 
-- 注册后，`0x0040-0x00FE` 以及 `>= 0x0100` 会调用该回调。它拦截整个范围，
-  包括 `0x0040`（只有在应用 OD 表与 vendor service 都未接管时，内置的错误统计
-  对象才可达）。
+- 注册后，`0x0040-0x00FE` 以及 `>= 0x0100` 中未被应用 OD 表声明的索引会调用该回调
+  （应用表优先）；`0x0040` 也走同一规则，内置错误统计对象只在应用表与该回调都
+  未接管时可达。
 - 进入时，`*output_length` 是输出容量。成功时应把它设置为实际写入的字节数。
   如果上报长度大于容量，服务会以 `IOLINK_ISDU_ERROR_IDX_NOT_AVAIL`（0x8011）拒绝。
 - 成功返回 0；失败返回 `IOLINK_ISDU_ERROR_*` 附加错误码。非零返回会产生
@@ -761,13 +764,18 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 | `IOLINK_FEATURE_EVENTS` | 1 | 无事件引擎/DetailedDeviceStatus/事件标志；`0x0025` 返回索引不可用。 |
 | `IOLINK_WORKSPACE_EMBEDDED` | 1 | 上下文不再内嵌 ISDU/DS scratch，必须提供工作区（否则 `IOLINK_DEVICE_INIT_ERR_WORKSPACE`）。 |
 
-已降级为兼容宏（不再改变结构布局，也不再删除 API）：
+已退役的编译期能力宏（定义即构建错误，`config.h` 有 `#error`）：
 
 | 宏 | 现状 |
 | --- | --- |
-| `IOLINK_PHY_FEATURE_WAKEUP` | 仅保留给旧构建脚本；`detect_wakeup` 字段常驻，能力位 `IOLINK_CAP_WAKEUP` 由 vtable 是否提供该钩子解析。 |
-| `IOLINK_PHY_FEATURE_SIO_CQ` | 仅保留给旧构建脚本；`set_cq_line` 字段常驻，能力位 `IOLINK_CAP_SIO_CQ` 同上。 |
-| `IOLINK_APP_PD_INPUT_CALLBACK` | 仅保留给旧构建脚本；PD-in 路径由 `on_pd_input` 是否为 NULL 在运行期选择。 |
+| `IOLINK_PHY_FEATURE_WAKEUP` | 能力位 `IOLINK_CAP_WAKEUP` 由 `detect_wakeup` 是否为 NULL 解析。 |
+| `IOLINK_PHY_FEATURE_SIO_CQ` | 能力位 `IOLINK_CAP_SIO_CQ` 由 `set_cq_line` 是否为 NULL 解析。 |
+| `IOLINK_APP_PD_INPUT_CALLBACK` | PD-in 路径由 `on_pd_input` 是否为 NULL 在运行期选择。 |
+
+仍作为运行时能力“构建默认值”的宏：
+
+| 宏 | 现状 |
+| --- | --- |
 | `IOLINK_COMPAT_V10_STARTUP_OPERATE`、`IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE`、`IOLINK_DS_LEGACY_IMAGE_SUB0` | 作为镜像的兼容位默认值；实例可在 `iolink_stack_config_t::compat_flags` 中打开或关闭。 |
 
 `IOLINK_PHY_FEATURE_ISR_TX_ONLY` 仍提供 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 的构建

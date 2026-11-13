@@ -53,6 +53,11 @@ syntax-only probes.
 
 ## Runtime capability bits (demoted in P6)
 
+The "Former switch" column is historical: those three retired macros
+(`IOLINK_PHY_FEATURE_WAKEUP`, `IOLINK_PHY_FEATURE_SIO_CQ`,
+`IOLINK_APP_PD_INPUT_CALLBACK`) are build errors if defined. The PHY vtable and
+`on_pd_input` are the only selectors.
+
 | Capability | Former switch | Runtime knob |
 | --- | --- | --- |
 | `IOLINK_CAP_SYSTEM_COMMAND` | `IOLINK_FEATURE_SYSTEM_COMMAND` | `stack.flags` / `iolink_device_set_capabilities()` |

@@ -28,24 +28,47 @@ The `iolink_phy_api_t` (defined in `phy.h`) is the only point of contact with th
 - Byte-level or buffer-level transmission/reception
 
 ### 1.2 Data Link Layer (DLL)
-The DLL (`dll.c`) implements the IO-Link state machine:
+The DLL (`dll.c`) owns the main pump: frame validation, the IO-Link state
+machine, timing enforcement and channel dispatch. The state machine is a
+7-state × 8-event skeleton table (`include/iolinki/dll_sm.h`, expanded into
+`g_dll_sm[state][event]`), and every software timeout lives in one deadline
+table (`iolink_timer_id_t` + `iolink_timer_contract_t`).
+
+States:
 - **STARTUP**: Initial state, power-on synchronization.
 - **AWAITING_COMM**: Wake-up detected, waiting for the first valid frame.
 - **PREOPERATE**: Parameter exchange and identification (On-request Data / ISDU).
 - **ESTAB_COM**: Communication established, transitioning to OPERATE.
 - **OPERATE**: Cyclic Process Data (PD) exchange.
 - **FALLBACK**: Error recovery toward SIO/STARTUP.
+- **COMM_DISABLED**: Back-to-box; communication stops until the next power-on.
 
-The data-interrupt two-pump transport (request framing, eager replies, ISDU
-snapshot reads, staged TX) lives in `dll_isr.c`; `dll.c` owns the main pump and
-frame dispatch. The ISR/main-context boundary is declared in the private
-`src/dll_internal.h`.
+The data-interrupt two-pump transport lives in `dll_isr.c`: request framing,
+ISDU snapshot reads and staged TX, plus execution of the **reply plans** the
+main pump compiles and publishes (`iolink_reply_plan_t`, seqlock). The ISR never
+interprets M-sequence content; unrecognised requests go back to the main pump.
+The ISR/main-context boundary is declared in the private `src/dll_internal.h`;
+`dll.c` only sees `dll_main.h` (enforced by `tools/check_ownership.sh`).
 
 ### 1.3 Application Layer (AL)
 The AL (`application.h`) provides the interface for the user application to interact with the stack without knowing protocol details.
-- **Process Data API**: Cyclic data access (`iolink_device_pd_input_update` / `iolink_device_pd_output_read`).
+- **Process Data API**: Cyclic data access (`iolink_device_pd_input_update` / `iolink_device_pd_output_read`). The polling API and the `on_pd_input` callback coexist in one build; `on_pd_input != NULL` selects the callback path at init.
 - **Lifecycle & PD callbacks**: Optional `iolink_app_callbacks_t` hooks (`on_startup`/`on_preoperate`/`on_operate`, PD in/out) supplied via `iolink_device_config_t.app_callbacks`.
-- **ISDU**: Indexed Service Data Unit for parameters, identification, and Data Storage (`isdu.c`, implemented). Device-specific indices are routed to `iolink_device_config_t.vendor_service`.
+- **ISDU**: Indexed Service Data Unit for parameters, identification, and Data Storage (`isdu.c`). Dispatch is table-driven from the object dictionary. Index ownership follows the index domain: normative indices are served from the standard table and cannot be overridden, while device-specific indices (`0x0040-0x00FE`, `0x0100+`) try the application table (`iolink_device_config_t.od`) first, then `iolink_device_config_t.vendor_service`, then the built-in entry.
+
+### 1.4 Shared data model
+Four modules hold the declarative tables the rest of the stack derives from:
+- `od.c` / `od.h` — the object dictionary: index, datatype codec, access,
+  write semantics, storage membership, defaults and optional hooks.
+- `diag.c` / `diag.h` — the diagnostics registry: EventCode, mandatory
+  EventType, preferred DeviceStatus, PULSE/LEVEL source semantics. DeviceStatus
+  (0x0024), DetailedDeviceStatus (0x0025) and EventCode 0x1800 are all derived
+  from it.
+- `capability.c` / `capability.h` — build profile (`iolink_build_caps_t`) plus
+  the per-instance runtime bits resolved once by `iolink_caps_resolve()`.
+- `workspace.h` — optional transport scratch (ISDU buffers and the DS staging
+  area) that the application may place in DTCM or external RAM.
+
 
 ## 2. Design Principles & MISRA Compliance
 
@@ -63,7 +86,12 @@ The stack is built "test-first". Every layer is verified using CMocka mocks.
 - `phy_virtual`: Enables host-based E2E protocol testing.
 
 ### 2.4 Error Handling
-All API functions return error codes (negative integers). Return values must be checked by the caller.
+Public API functions return negative `iolink_device_init_result_t` codes or PHY
+error codes. Internal operations that carry a length plus an error use
+`iolink_result_t` (`include/iolinki/result.h`): `code == 0` succeeds (`len` is
+the transferred size), `code < 0` is an internal error, and `code > 0` is an
+IO-Link ISDU ErrorCode (Table C.1) that is passed to the wire unchanged. Return
+values must be checked by the caller.
 
 ## 3. Processing Model
 The stack uses a non-blocking, periodic processing model. The user application must call `iolink_device_process(ctx)` at a regular interval (typically 1ms) to drive the internal state machines and timers, while `iolink_device_process_isr(ctx)` is called from the PHY data interrupt.

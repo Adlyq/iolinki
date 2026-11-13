@@ -255,8 +255,8 @@ contexts:
 | `SPLIT` | the ISR keeps its own copy (`ctx->isr_stat`), `iolink_dll_get_stats()` returns the sum; no update is lost | a few bytes of RAM |
 
 Neither mode takes a critical section for the counters. `SPLIT` is verified by
-`tests/test_stats_split.c` and by the `stats_split` matrix configuration, which
-runs the whole suite with the split counters.
+`tests/test_stats_split.c` and by the `host_smp_split` matrix configuration,
+which runs the whole suite with split counters and SMP barriers.
 
 ### 2.3 Measuring the interrupt-off window
 

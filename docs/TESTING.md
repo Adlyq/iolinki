@@ -27,17 +27,22 @@ Verify code against warnings and static analysis tools.
 ```
 
 ### 3. Run the Compile Matrix
-Every supported compile-time configuration must build. The matrix covers the
-feature toggles (`IOLINK_FEATURE_*`, `IOLINK_PHY_FEATURE_*`), all four ISR
-granularity combinations, the minimal/tiny profiles, the compatibility switches
-and the bare-metal platform. Configurations marked tests=yes (default, release,
-single_profile, smp_profile and stats_split) also run the unit suite; the others
-are build-only because the host tests drive the BYTE-only virtual PHY.
+Every supported structural configuration must build. The matrix is defined once
+in `tools/matrix_configs.sh`: four structural configurations (`host_default`,
+its Release variant `host_default_release`, `host_frame` and
+`target_minimal`, plus `host_smp_split`), seven syntax-only combination probes,
+the link-time profile probes and the bare-metal platform. The retired
+MINIMAL/TINY bundles are gone; feature trimming is expressed with the individual
+`IOLINK_FEATURE_*` switches. Configurations marked tests=yes (`host_default`,
+`host_default_release`, `host_smp_split`) also run the unit suite; `host_frame`
+is build-only because the host tests drive BYTE-only PHY vtables, and demoted
+runtime switches are covered by expected-frame tests in the default suite.
 
 ```bash
-./tools/build_matrix.sh                 # everything (~1-2 min)
-./tools/build_matrix.sh --filter isr_   # one group
-./tools/build_matrix.sh --list          # configuration names
+./tools/build_matrix.sh                    # everything (~1-2 min)
+./tools/build_matrix.sh --filter host      # names containing "host"
+./tools/build_matrix.sh --list             # configuration names
+./tools/build_matrix.sh --probes-only      # compile-only probes
 ```
 
 **Delivery rule:** a change that touches any `#if`, a `IOLINK_*` switch, or a
@@ -66,10 +71,16 @@ The CI workflow (`.github/workflows/ci.yml`) runs on every push and PR to
     `test_conformance_error_injection`, `test_conformance_isdu`,
     `test_conformance_state_machine`, `test_conformance_timing`).
 2.  **release-build**: strict `-Werror` build and `ctest` at `-O3`.
-3.  **build-matrix**: every compile-time configuration builds
+3.  **build-matrix**: every structural configuration builds, plus the
+    syntax-only probes and the link-time profile gate
     (`tools/build_matrix.sh`).
-4.  **stm32g0-example**: STM32G0/TIOL112 firmware built with `arm-none-eabi`.
-5.  **lint-scripts** and **sbom-tools**: shellcheck and Python tool tests.
+4.  **differential gate**: `tools/diff_matrix.sh` compares the frame transcripts
+    of the runnable configurations byte for byte.
+5.  **coverage / size / WCET**: `tools/coverage.sh --check`,
+    `tools/size_matrix.py --check --selftest` and `tools/wcet_run.sh --check`
+    enforce the floors and the host-side path-length proxy.
+6.  **stm32g0-example**: STM32G0/TIOL112 firmware built with `arm-none-eabi`.
+7.  **lint-scripts** and **sbom-tools**: shellcheck and Python tool tests.
 
 The release workflow (tag push) builds Debug with coverage, runs `ctest` with
 JUnit output, validates the IODDs and the IAR project, generates SBOMs, packages
