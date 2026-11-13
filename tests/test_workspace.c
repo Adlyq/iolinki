@@ -184,7 +184,7 @@ static void test_ds_null_api_contracts(void** state)
     assert_false(iolink_ds_verify(NULL));
     assert_null(iolink_ds_get_image(NULL, NULL));
     assert_int_equal(iolink_ds_param_count(NULL), 0U);
-    iolink_ds_bind_params(NULL, NULL);
+    iolink_ds_bind_sources(NULL, NULL, NULL);
 }
 
 int main(void)

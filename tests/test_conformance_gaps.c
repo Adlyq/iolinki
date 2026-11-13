@@ -400,8 +400,6 @@ static void test_0323_no_ds_record_marker(void** state)
 
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds, NULL);
-    ds.params = NULL;
-    ds.param_count = 0U;
 
     /* Test Spec 0323（不支持 DS 的设备）：Sub1 长 1，Sub2 长 1 且
        位 0 与位 3..6 为 0，Sub3 长 4 值 0，Sub4 长 4，Sub5 长 2 值 0。 */

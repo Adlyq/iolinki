@@ -151,12 +151,6 @@ int conformance_device_init(conformance_device_t* app, const conformance_profile
     iolink_device_set_reset_handler(&app->device, conformance_reset_handler);
     g_reset_observer = app;
 
-#if IOLINK_FEATURE_DATA_STORAGE
-    iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&app->device);
-    if ((ds != NULL) && (profile->ds_params != NULL) && (profile->ds_param_count > 0U)) {
-        iolink_ds_set_param_desc(ds, profile->ds_params, profile->ds_param_count);
-    }
-#endif
     return 0;
 }
 

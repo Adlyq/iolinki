@@ -63,7 +63,7 @@ in [`tests/conformance_audit.csv`](../tests/conformance_audit.csv). The detailed
 | DS parameter serialization/apply, Fletcher-32 checksum, locks, recovery | PASS | `test_ds`, `test_system_commands` |
 | DS block-download error classification (0x8040 malformed vs 0x8041 rejected parameter) | PASS | `test_ds` |
 | Unified NVM backend (callback-only), fixed region layout, magic/version, record checksum | PASS | `test_ds`, `test_params_persistence` |
-| DS parameter access: default params + OD backend, `set_param_desc`, `max_len` | PASS | `test_ds` |
+| DS parameter access: OD-derived set (`IOLINK_OD_STORAGE_DS`), entry backend, `block_len` | PASS | `test_ds`, `test_ds_app_od` |
 | DS bindable parameter set incl. device-specific parameters (0x0040+/0x0100+) | PASS | `test_ds` |
 | DS Index_List / Size / State_Property (incl. DS_UPLOAD_FLAG) / Checksum subindices | PASS | `test_isdu` |
 | DS_Command (0x0003 sub 01) upload/download/break sequence | PASS | `test_isdu` |
@@ -119,9 +119,10 @@ previously missing:
   exposed through State_Property bit 7.
 - **DS parameter set defaults to the three tags.** `ApplicationSpecificTag`
   (0x0018, optional), `FunctionTag` (0x0019) and `LocationTag` (0x001A) are the
-  profile-conditional tags. Applications that do not want Data Storage can bind
-  an empty descriptor set via `iolink_ds_set_param_desc()` / `iolink_ds_bind_param_access()`, which makes
-  Index_List report the 0x0000 terminator (10.4.5).
+  profile-conditional tags declared `IOLINK_OD_STORAGE_DS` in the standard
+  table, so they are always serialized. A build that must publish an empty
+  `Index_List` (10.4.5) omits `IOLINK_FEATURE_DATA_STORAGE`, which also removes
+  the mandatory 0x0003 object and is therefore non-conformant.
 
 ## Spec-mandated corrections
 

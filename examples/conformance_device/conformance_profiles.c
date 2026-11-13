@@ -68,25 +68,6 @@ static const iolink_device_info_t g_minimal_identity = {
     .revision_id = 0x0111U,
 };
 
-static const iolink_ds_param_desc_t g_full_ds_params[] = {
-    {0x0018U, 0U, 32U}, /* ApplicationSpecificTag */
-    {0x0019U, 0U, 32U}, /* FunctionTag */
-    {0x001AU, 0U, 32U}, /* LocationTag */
-    {CONFORMANCE_CONFIG1_INDEX, 0U, 64U},
-    {CONFORMANCE_CONFIG2_INDEX, 0U, 2U},
-    {CONFORMANCE_CONFIG3_INDEX, 0U, 200U},
-    {CONFORMANCE_CONFIG4_INDEX0 + 0U, 0U, 32U},
-    {CONFORMANCE_CONFIG4_INDEX0 + 1U, 0U, 32U},
-    {CONFORMANCE_CONFIG4_INDEX0 + 2U, 0U, 32U},
-    {CONFORMANCE_CONFIG4_INDEX0 + 3U, 0U, 32U},
-};
-
-static const iolink_ds_param_desc_t g_minimal_ds_params[] = {
-    {0x0018U, 0U, 32U},
-    {0x0019U, 0U, 32U},
-    {0x001AU, 0U, 32U},
-};
-
 static const conformance_profile_t g_profiles[] = {
     {
         .name = "full",
@@ -95,8 +76,6 @@ static const conformance_profile_t g_profiles[] = {
                   .pd_in_len = 3U,
                   .pd_out_len = 1U,
                   .min_cycle_time = 10U},
-        .ds_params = g_full_ds_params,
-        .ds_param_count = sizeof(g_full_ds_params) / sizeof(g_full_ds_params[0]),
         .has_pd_in = true,
         .has_pd_out = true,
     },
@@ -107,8 +86,6 @@ static const conformance_profile_t g_profiles[] = {
                   .pd_in_len = 1U,
                   .pd_out_len = 1U,
                   .min_cycle_time = 10U},
-        .ds_params = g_full_ds_params,
-        .ds_param_count = sizeof(g_full_ds_params) / sizeof(g_full_ds_params[0]),
         .has_pd_in = true,
         .has_pd_out = true,
     },
@@ -119,8 +96,6 @@ static const conformance_profile_t g_profiles[] = {
                   .pd_in_len = 0U,
                   .pd_out_len = 1U,
                   .min_cycle_time = 10U},
-        .ds_params = g_minimal_ds_params,
-        .ds_param_count = sizeof(g_minimal_ds_params) / sizeof(g_minimal_ds_params[0]),
         .has_pd_in = false,
         .has_pd_out = true,
     },
@@ -131,8 +106,6 @@ static const conformance_profile_t g_profiles[] = {
                   .pd_in_len = 0U,
                   .pd_out_len = 0U,
                   .min_cycle_time = 10U},
-        .ds_params = g_minimal_ds_params,
-        .ds_param_count = sizeof(g_minimal_ds_params) / sizeof(g_minimal_ds_params[0]),
         .has_pd_in = false,
         .has_pd_out = false,
     },
@@ -143,8 +116,6 @@ static const conformance_profile_t g_profiles[] = {
                   .pd_in_len = 3U,
                   .pd_out_len = 1U,
                   .min_cycle_time = 10U},
-        .ds_params = g_full_ds_params,
-        .ds_param_count = sizeof(g_full_ds_params) / sizeof(g_full_ds_params[0]),
         .has_pd_in = false,
         .has_pd_out = false,
     },

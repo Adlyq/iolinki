@@ -55,8 +55,10 @@ application object dictionary, DS can read/write it without any extra callback.*
 
 ## 3. Customising the DS parameter set
 
-Declare the parameter in the application object dictionary; `IOLINK_OD_STORAGE_DS`
-puts it in the DS set automatically:
+The DS set is derived from the object dictionary: every standard or
+application entry whose `storage` is `IOLINK_OD_STORAGE_DS` is serialized, in
+standard-table order followed by application-table order. Declaring the
+parameter is the only step:
 
 ```c
 static const iolink_od_entry_t my_entries[] = {
@@ -65,35 +67,15 @@ static const iolink_od_entry_t my_entries[] = {
 };
 ```
 
-Only the index list usually needs to change:
-
-```c
-static const iolink_ds_param_desc_t my_ds[] = {
-    { IOLINK_IDX_APPLICATION_TAG, 0, 0 },  /* max_len 0 = unbounded */
-    { 0x0050, 0, 8 },                      /* vendor param, declared in config.od */
-};
-
-iolink_ds_set_param_desc(iolink_device_get_ds_ctx(dev), my_ds,
-                         sizeof(my_ds) / sizeof(my_ds[0]));
-```
-
-- `iolink_ds_set_param_desc()` replaces only the list and keeps the current
-  accessors and user pointer.
-- `iolink_ds_bind_param_access(read, write, check, user, desc, count)` also
-  installs custom accessors and an optional restore-time pre-check. Passing
-  `NULL` for `read`/`write` keeps the current ones and their `user`; `NULL`
-  for `check` disables pre-checking.
-- `iolink_ds_param_desc_t::max_len` (0 = unbounded) bounds the value stored in
-  the image for that record.
-
-Provide custom accessors only when a parameter does not live in the params
-context or the object dictionary (e.g. read directly from a sensor):
-
-```c
-int my_ds_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out, size_t cap);
-int my_ds_write(void* user, uint16_t index, uint8_t subindex,
-                const uint8_t* data, size_t len, bool persist);
-```
+- `block_len` bounds the value stored in the image for that record (0 =
+  unbounded).
+- Values are read and written through the same table-entry backend that serves
+  ISDU, so DS needs no separate accessor pair.
+- A restore runs the table entry's `validate` hook for every known record
+  before writing any of them; a rejected record aborts the whole restore.
+- The three tags are always members because the standard table declares them
+  `IOLINK_OD_STORAGE_DS`. To publish an empty `Index_List` a device needs a
+  build without `IOLINK_FEATURE_DATA_STORAGE` (see `docs/feature-trimming.md`).
 
 ## 4. What is persisted by the stack
 

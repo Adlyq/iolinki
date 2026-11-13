@@ -618,16 +618,8 @@ iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx);
 
 void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage);
 void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws);
-void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx);
-void iolink_ds_bind_od(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app);
-void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx,
-                                 iolink_ds_param_read_fn read,
-                                 iolink_ds_param_write_fn write,
-                                 iolink_ds_param_check_fn check, void* user,
-                                 const iolink_ds_param_desc_t* params, size_t count);
-/* read/write/check 回调返回 iolink_result_t（见 §7.1 的结果语义）。 */
-void iolink_ds_set_param_desc(iolink_ds_ctx_t* ctx,
-                              const iolink_ds_param_desc_t* params, size_t count);
+void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app,
+                            iolink_params_ctx_t* params_ctx);
 void iolink_ds_process(iolink_ds_ctx_t* ctx);
 void iolink_ds_check(iolink_ds_ctx_t* ctx, uint32_t master_checksum);
 int  iolink_ds_abort(iolink_ds_ctx_t* ctx);
@@ -649,8 +641,7 @@ uint8_t iolink_ds_state_property(const iolink_ds_ctx_t* ctx);
 uint32_t iolink_ds_size(const iolink_ds_ctx_t* ctx);
 uint32_t iolink_ds_checksum(const iolink_ds_ctx_t* ctx);
 size_t iolink_ds_param_count(const iolink_ds_ctx_t* ctx);
-bool iolink_ds_param_at(const iolink_ds_ctx_t* ctx, size_t i,
-                        iolink_ds_param_desc_t* out);
+const iolink_od_entry_t* iolink_ds_param_entry(const iolink_ds_ctx_t* ctx, size_t i);
 void iolink_ds_request_upload(iolink_ds_ctx_t* ctx);
 void iolink_ds_clear_upload(iolink_ds_ctx_t* ctx);
 ```
@@ -669,9 +660,9 @@ DS 镜像不是上下文中的常驻数组：上下文只持有指向暂存缓�
 
 默认 DS 参数集由 OD 表派生：标准表中 storage 为 `IOLINK_OD_STORAGE_DS` 的表项
 在前，设备 `config.od` 应用表中同类项按表序追加（设备层自动调用
-`iolink_ds_bind_od()`）。因此应用参数只要声明 `IOLINK_OD_STORAGE_DS` 就进入
+`iolink_ds_bind_sources()`）。因此应用参数只要声明 `IOLINK_OD_STORAGE_DS` 就进入
 Data Storage，无需再手工维护描述符；`IOLINK_OD_STORAGE_VOLATILE` 项不进入。
-描述符的 `max_len` 取表项 `block_len`。
+长度上限取表项的 `block_len`。
 
 序列化记录格式为：
 
@@ -680,13 +671,12 @@ Data Storage，无需再手工维护描述符；`IOLINK_OD_STORAGE_VOLATILE` 项
 ```
 
 `IOLINK_DS_IMAGE_MAX`（默认 256）限制镜像和持久化 DS 区域的大小。设备专用参数只要在
-`config.od` 中声明 `IOLINK_OD_STORAGE_DS` 就进入 DS 集合，值由应用后端提供；需要不同
-索引列表时用 `iolink_ds_set_param_desc()`，需要完全自定义访问路径时用
-`iolink_ds_bind_param_access()` 安装访问器对。描述符数组必须比上下文存活更久。
+`config.od` 中声明 `IOLINK_OD_STORAGE_DS` 就进入 DS 集合，值由表项后端提供；集合顺序
+固定为标准表在前、应用表按表序，不存在可替换的描述符列表或访问器对。
 
 `iolink_device_process()` 会在 ISDU 空闲时调用 `iolink_ds_process()`。块下载通过
 `iolink_ds_stage_param()` 暂存写操作，并在 `ParamDownloadEnd` 先对整份镜像做无副作用
-预校验（`check` 回调），全部通过后再逐条写入并持久化；预校验失败时不会写入任何参数。
+预校验（表项 `validate` 钩子），全部通过后再逐条写入并持久化；预校验失败时不会写入任何参数。
 这不是跨参数事务，NVM 写入失败仍可能留下已生效的前缀记录。
 `iolink_ds_downloading()` 暴露该状态。`DS_UPLOAD_FLAG`/`State_Property` 以及
 `DS_UPLOAD_REQ` 通知用于告知主站：本地参数已变化，应进行备份。

@@ -127,43 +127,23 @@ static void ds_storage_load_image(iolink_ds_ctx_t* ctx)
 
 #define DS_RECORD_HEADER 4U /* index(2) + subindex(1) + length(1) */
 
-/* DS 参数集不再单独维护：未绑定显式描述符时，集合 = OD 表中
-   storage 标志为 DS 的表项。应用仍可通过
-   iolink_ds_bind_param_access() 提供自己的描述符数组。 */
+/* DS 参数集不单独维护：集合 = 标准表 + 应用表中 storage 为 DS 的表项。 */
 
-/** @brief DS 集合中的描述符数量（显式集合优先，否则由标准表 + 应用表派生）。 */
-static size_t ds_desc_count(const iolink_ds_ctx_t* ctx)
+/** @brief DS 集合中的表项数量。 */
+static size_t ds_param_count_internal(const iolink_ds_ctx_t* ctx)
 {
-    if ((ctx != NULL) && (ctx->params != NULL) && (ctx->param_count > 0U)) {
-        return ctx->param_count;
-    }
     const size_t app = (ctx != NULL) ? iolink_od_ds_count_app(ctx->od_app) : 0U;
     return iolink_od_ds_count() + app;
 }
 
-/** @brief 取 DS 集合中第 @p i 个描述符（标准表在前，应用表按表序）。 */
-static bool ds_desc_at(const iolink_ds_ctx_t* ctx, size_t i, iolink_ds_param_desc_t* out)
+/** @brief 取 DS 集合中第 @p i 个表项（标准表在前，应用表按表序）。 */
+static const iolink_od_entry_t* ds_param_at_internal(const iolink_ds_ctx_t* ctx, size_t i)
 {
-    if ((ctx == NULL) || (out == NULL)) {
-        return false;
-    }
-    if ((ctx->params != NULL) && (ctx->param_count > 0U)) {
-        if (i >= ctx->param_count) {
-            return false;
-        }
-        *out = ctx->params[i];
-        return true;
-    }
     const size_t std_count = iolink_od_ds_count();
-    const iolink_od_entry_t* entry =
-        (i < std_count) ? iolink_od_ds_at(i) : iolink_od_ds_at_app(ctx->od_app, i - std_count);
-    if (entry == NULL) {
-        return false;
+    if (i < std_count) {
+        return iolink_od_ds_at(i);
     }
-    out->index = entry->index;
-    out->subindex = entry->subindex;
-    out->max_len = entry->block_len;
-    return true;
+    return iolink_od_ds_at_app((ctx != NULL) ? ctx->od_app : NULL, i - std_count);
 }
 
 /** @brief 把暂存缓冲接到上下文（唯一设置 image 指针的位置）。 */
@@ -204,9 +184,6 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage)
     }
     ctx->storage = storage;
     ctx->state = IOLINK_DS_STATE_IDLE;
-    /* 未绑定显式描述符：DS 集合由 OD 表派生（storage == DS）。 */
-    ctx->params = NULL;
-    ctx->param_count = 0U;
 #if IOLINK_WORKSPACE_EMBEDDED
     ds_attach_image(ctx, ctx->scratch, sizeof(ctx->scratch));
 #endif
@@ -214,90 +191,53 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage)
     ds_storage_load_flag(ctx);
 }
 
-void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx)
-{
-    if (ctx != NULL) {
-        ctx->params_ctx = params_ctx;
-    }
-}
-
-void iolink_ds_bind_od(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app)
-{
-    if (ctx != NULL) {
-        ctx->od_app = app;
-    }
-}
-
-void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx, iolink_ds_param_read_fn read,
-                                 iolink_ds_param_write_fn write, iolink_ds_param_check_fn check,
-                                 void* user, const iolink_ds_param_desc_t* params, size_t count)
+void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app,
+                            iolink_params_ctx_t* params_ctx)
 {
     if (ctx == NULL) {
         return;
     }
-    if (read != NULL) {
-        ctx->read_param = read;
-    }
-    if (write != NULL) {
-        ctx->write_param = write;
-    }
-    /* NULL 表示不做恢复前预校验（与 read/write 的"保留当前访问器"不同：
-       预校验是无副作用能力）。 */
-    ctx->check_param = check;
-    /* 仅在同时提供访问器时才采用调用方的 user 指针；只更改描述符集
-       不得覆盖设备已绑定的 user。 */
-    if ((read != NULL) || (write != NULL)) {
-        ctx->param_user = user;
-    }
-    if ((params != NULL) && (count > 0U)) {
-        ctx->params = params;
-        ctx->param_count = count;
-    }
+    ctx->od_app = app;
+    ctx->params_ctx = params_ctx;
 }
 
-void iolink_ds_set_param_desc(iolink_ds_ctx_t* ctx, const iolink_ds_param_desc_t* params,
-                              size_t count)
+/** @brief 组合表项的值访问上下文（应用表 + 标准标签后端）。 */
+static iolink_od_ctx_t ds_od_ctx(iolink_ds_ctx_t* ctx)
 {
-    if ((ctx == NULL) || (params == NULL) || (count == 0U)) {
-        return;
-    }
-    ctx->params = params;
-    ctx->param_count = count;
+    iolink_od_ctx_t od;
+    od.app = ctx->od_app;
+    od.params = ctx->params_ctx;
+    return od;
 }
 
-/** @brief 通过绑定的访问器或 params 上下文读取参数。 */
-static iolink_result_t ds_params_get(const iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
+/** @brief 读取参数：集合成员与值后端都来自对象字典。 */
+static iolink_result_t ds_params_get(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
                                      uint8_t* buffer, size_t max_len)
 {
-    if ((ctx != NULL) && (ctx->read_param != NULL)) {
-        return ctx->read_param(ctx->param_user, index, subindex, buffer, max_len);
+    if (ctx == NULL) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
     }
-    if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
-        return iolink_params_ctx_read(ctx->params_ctx, index, subindex, buffer, max_len);
+    const iolink_od_entry_t* entry = iolink_od_find(ctx->od_app, index, subindex);
+    if (entry == NULL) {
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
-    (void) index;
-    (void) subindex;
-    (void) buffer;
-    (void) max_len;
-    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
+    const iolink_od_ctx_t od = ds_od_ctx(ctx);
+    return iolink_od_read_value(&od, entry, subindex, buffer, max_len);
 }
 
-/** @brief 通过绑定的访问器或 params 上下文写入参数。 */
+/** @brief 写入参数：是否持久化由表项的写语义决定。 */
 static iolink_result_t ds_params_set(iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                                     const uint8_t* data, size_t len, bool persist)
+                                     const uint8_t* data, size_t len)
 {
-    if ((ctx != NULL) && (ctx->write_param != NULL)) {
-        return ctx->write_param(ctx->param_user, index, subindex, data, len, persist);
+    if (ctx == NULL) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
     }
-    if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
-        return iolink_params_ctx_write(ctx->params_ctx, index, subindex, data, len, persist);
+    const iolink_od_entry_t* entry = iolink_od_find(ctx->od_app, index, subindex);
+    if (entry == NULL) {
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
-    (void) index;
-    (void) subindex;
-    (void) data;
-    (void) len;
-    (void) persist;
-    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
+    iolink_od_ctx_t od = ds_od_ctx(ctx);
+    return iolink_od_write_value(&od, entry, subindex, data, len);
 }
 
 uint32_t iolink_ds_calc_checksum(const uint8_t* data, size_t len)
@@ -340,29 +280,31 @@ int iolink_ds_serialize(iolink_ds_ctx_t* ctx, uint8_t* out, size_t cap)
     size_t pos = 0U;
     uint32_t sum1 = 0U;
     uint32_t sum2 = 0U;
-    const size_t count = ds_desc_count(ctx);
+    const size_t count = ds_param_count_internal(ctx);
     for (size_t i = 0U; i < count; ++i) {
-        iolink_ds_param_desc_t desc;
-        if (!ds_desc_at(ctx, i, &desc)) {
+        const iolink_od_entry_t* entry = ds_param_at_internal(ctx, i);
+        if (entry == NULL) {
             break;
         }
+        const uint16_t index = entry->index;
+        const uint8_t subindex = entry->subindex;
         if ((pos + DS_RECORD_HEADER) > limit) {
             return -1; /* 镜像放不下 */
         }
         size_t value_cap = limit - pos - DS_RECORD_HEADER;
-        if ((desc.max_len != 0U) && (value_cap > (size_t) desc.max_len)) {
-            value_cap = (size_t) desc.max_len;
+        if ((entry->block_len != 0U) && (value_cap > (size_t) entry->block_len)) {
+            value_cap = (size_t) entry->block_len;
         }
 
         uint8_t header[DS_RECORD_HEADER];
-        header[0] = (uint8_t) (desc.index >> 8);
-        header[1] = (uint8_t) (desc.index & 0xFFU);
-        header[2] = desc.subindex;
+        header[0] = (uint8_t) (index >> 8);
+        header[1] = (uint8_t) (index & 0xFFU);
+        header[2] = subindex;
 
         if (out != NULL) {
             /* 直接把值读入输出缓冲尾部，再补记录头：无额外镜像副本。 */
-            const iolink_result_t read_res = ds_params_get(ctx, desc.index, desc.subindex,
-                                                           &out[pos + DS_RECORD_HEADER], value_cap);
+            const iolink_result_t read_res =
+                ds_params_get(ctx, index, subindex, &out[pos + DS_RECORD_HEADER], value_cap);
             size_t n = iolink_result_succeeded(read_res) ? (size_t) read_res.len : 0U;
             if (n > value_cap) {
                 n = value_cap;
@@ -380,8 +322,7 @@ int iolink_ds_serialize(iolink_ds_ctx_t* ctx, uint8_t* out, size_t cap)
             if (chunk_cap > sizeof(chunk)) {
                 chunk_cap = sizeof(chunk);
             }
-            const iolink_result_t read_res =
-                ds_params_get(ctx, desc.index, desc.subindex, chunk, chunk_cap);
+            const iolink_result_t read_res = ds_params_get(ctx, index, subindex, chunk, chunk_cap);
             size_t n = iolink_result_succeeded(read_res) ? (size_t) read_res.len : 0U;
             if (n > chunk_cap) {
                 n = chunk_cap;
@@ -428,23 +369,13 @@ void iolink_ds_refresh(iolink_ds_ctx_t* ctx)
     ctx->image_valid = false;
 }
 
-/** @brief 当 index/subindex 属于已配置的 DS 集合时返回真。 */
+/** @brief 当 index/subindex 属于 DS 集合（OD 表 storage == DS）时返回真。 */
 static bool ds_param_known(const iolink_ds_ctx_t* ctx, uint16_t index, uint8_t subindex)
 {
     if (ctx == NULL) {
         return false;
     }
-    const size_t count = ds_desc_count(ctx);
-    for (size_t i = 0U; i < count; ++i) {
-        iolink_ds_param_desc_t desc;
-        if (!ds_desc_at(ctx, i, &desc)) {
-            break;
-        }
-        if ((desc.index == index) && (desc.subindex == subindex)) {
-            return true;
-        }
-    }
-    return false;
+    return iolink_od_is_ds(ctx->od_app, index, subindex);
 }
 
 int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
@@ -469,15 +400,19 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
 
     /* 第一阶段：已知参数的无副作用预校验。必须在写入任何参数之前完成，
        这样一条非法记录不会留下"前面已生效、后面失败"的半恢复状态。 */
-    if (ctx->check_param != NULL) {
+    {
+        void* hook_user = (ctx->od_app != NULL) ? ctx->od_app->user : NULL;
         pos = 0U;
         while (pos < len) {
             uint16_t index = (uint16_t) (((uint16_t) data[pos] << 8) | (uint16_t) data[pos + 1U]);
             uint8_t subindex = data[pos + 2U];
             size_t rlen = (size_t) data[pos + 3U];
-            if (ds_param_known(ctx, index, subindex) &&
-                !iolink_result_succeeded(ctx->check_param(ctx->param_user, index, subindex,
-                                                          &data[pos + DS_RECORD_HEADER], rlen))) {
+            const iolink_od_entry_t* entry = NULL;
+            if (ds_param_known(ctx, index, subindex)) {
+                entry = iolink_od_find(ctx->od_app, index, subindex);
+            }
+            if ((entry != NULL) && !iolink_result_succeeded(iolink_od_check_value(
+                                       entry, hook_user, &data[pos + DS_RECORD_HEADER], rlen))) {
                 return -2; /* 已知参数拒绝了该值：尚未写入任何参数 */
             }
             pos += DS_RECORD_HEADER + rlen;
@@ -493,8 +428,8 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
         uint8_t subindex = data[pos + 2U];
         size_t rlen = (size_t) data[pos + 3U];
         if (ds_param_known(ctx, index, subindex)) {
-            if (!iolink_result_succeeded(ds_params_set(
-                    ctx, index, subindex, &data[pos + DS_RECORD_HEADER], rlen, true))) {
+            if (!iolink_result_succeeded(
+                    ds_params_set(ctx, index, subindex, &data[pos + DS_RECORD_HEADER], rlen))) {
                 return -2; /* 已知参数拒绝了该值（预校验未覆盖的写入期失败） */
             }
         }
@@ -809,24 +744,16 @@ iolink_result_t iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint
     if ((len > 0U) && !iolink_buf_is_valid(data, len)) {
         return iolink_result_error(IOLINK_RESULT_INVALID);
     }
-    const size_t n = iolink_ds_param_count(ctx);
-    bool found = false;
-    for (size_t i = 0U; i < n; i++) {
-        iolink_ds_param_desc_t d;
-        if (!iolink_ds_param_at(ctx, i, &d)) {
-            break;
-        }
-        if ((d.index == index) && (d.subindex == subindex)) {
-            found = true;
-            if ((d.max_len > 0U) && (len > (size_t) d.max_len)) {
-                ctx->download_invalid = true;
-                return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
-            }
-            break;
-        }
+    const iolink_od_entry_t* entry = NULL;
+    if (iolink_od_is_ds(ctx->od_app, index, subindex)) {
+        entry = iolink_od_find(ctx->od_app, index, subindex);
     }
-    if (!found) {
+    if (entry == NULL) {
         return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
+    }
+    if ((entry->block_len > 0U) && (len > (size_t) entry->block_len)) {
+        ctx->download_invalid = true;
+        return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
     }
     if ((ctx->image == NULL) || ((ctx->image_len + DS_RECORD_HEADER + len) > ctx->image_size)) {
         ctx->download_invalid = true;
@@ -893,15 +820,15 @@ size_t iolink_ds_param_count(const iolink_ds_ctx_t* ctx)
     if (ctx == NULL) {
         return 0U;
     }
-    return ds_desc_count(ctx);
+    return ds_param_count_internal(ctx);
 }
 
-bool iolink_ds_param_at(const iolink_ds_ctx_t* ctx, size_t i, iolink_ds_param_desc_t* out)
+const iolink_od_entry_t* iolink_ds_param_entry(const iolink_ds_ctx_t* ctx, size_t i)
 {
-    if ((ctx == NULL) || (out == NULL)) {
-        return false;
+    if ((ctx == NULL) || (i >= ds_param_count_internal(ctx))) {
+        return NULL;
     }
-    return ds_desc_at(ctx, i, out);
+    return ds_param_at_internal(ctx, i);
 }
 
 void iolink_ds_request_upload(iolink_ds_ctx_t* ctx)

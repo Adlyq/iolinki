@@ -249,8 +249,8 @@ static void test_ds_bound_params_restore_device_context_only(void** state)
     ds_a.params_ctx = test_env_params(&g_test_env);
     iolink_ds_init(&ds_b, NULL);
     ds_b.params_ctx = test_env_params(&g_test_env);
-    iolink_ds_bind_params(&ds_a, &params_a);
-    iolink_ds_bind_params(&ds_b, &params_b);
+    iolink_ds_bind_sources(&ds_a, NULL, &params_a);
+    iolink_ds_bind_sources(&ds_b, NULL, &params_b);
 
     assert_int_equal(iolink_params_ctx_write(&params_a, IOLINK_IDX_APPLICATION_TAG, 0U, tag_a,
                                              sizeof(tag_a) - 1U, true)
@@ -293,65 +293,63 @@ static void test_ds_apply_rejects_truncated(void** state)
     assert_int_equal(iolink_ds_apply_image(&ds, bad, sizeof(bad)), -1);
 }
 
-/* 由静态缓冲区支撑的厂商参数（0x0050），通过绑定的
- * 访问器进行验证，以证明厂商参数可以加入 DS 集合。 */
+/* 由静态缓冲区支撑的厂商参数（0x0050）：进入 DS 集合的路径是表项的
+ * storage 标志，值由应用 OD 后端提供。 */
 #define VENDOR_PARAM_IDX 0x0050U
 static uint8_t g_vendor_param[8];
 static size_t g_vendor_param_len;
 
-static iolink_result_t vendor_ds_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out,
+static iolink_result_t vendor_od_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
                                       size_t cap)
 {
     (void) user;
-    if ((index == IOLINK_IDX_APPLICATION_TAG) && (subindex == 0U)) {
-        return iolink_params_ctx_read(test_env_params(&g_test_env), index, subindex, out, cap);
+    if (entry->index != VENDOR_PARAM_IDX) {
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
-    if ((index == VENDOR_PARAM_IDX) && (subindex == 0U)) {
-        if (g_vendor_param_len > cap) {
-            return iolink_result_error(IOLINK_RESULT_INVALID);
-        }
-        (void) memcpy(out, g_vendor_param, g_vendor_param_len);
-        return iolink_result_ok((uint16_t) g_vendor_param_len);
-    }
-    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
+    const size_t n = (g_vendor_param_len < cap) ? g_vendor_param_len : cap;
+    (void) memcpy(out, g_vendor_param, n);
+    return iolink_result_ok((uint16_t) n);
 }
 
-static iolink_result_t vendor_ds_write(void* user, uint16_t index, uint8_t subindex,
-                                       const uint8_t* data, size_t len, bool persist)
+static iolink_result_t vendor_od_write(void* user, const iolink_od_entry_t* entry, uint8_t subindex,
+                                       const uint8_t* data, size_t len)
 {
     (void) user;
-    (void) persist;
-    if ((index == IOLINK_IDX_APPLICATION_TAG) && (subindex == 0U)) {
-        return iolink_params_ctx_write(test_env_params(&g_test_env), index, subindex, data, len,
-                                       true);
+    (void) subindex;
+    if (entry->index != VENDOR_PARAM_IDX) {
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
-    if ((index == VENDOR_PARAM_IDX) && (subindex == 0U)) {
-        if (len > sizeof(g_vendor_param)) {
-            return iolink_result_error(IOLINK_RESULT_INVALID);
-        }
-        (void) memcpy(g_vendor_param, data, len);
-        g_vendor_param_len = len;
-        return iolink_result_ok(0U);
+    if (len > sizeof(g_vendor_param)) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
     }
-    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
+    (void) memcpy(g_vendor_param, data, len);
+    g_vendor_param_len = len;
+    return iolink_result_ok(0U);
 }
+
+static const iolink_od_entry_t k_vendor_entries[] = {
+    IOLINK_OD_STRING(VENDOR_PARAM_IDX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                     IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND, 8U, "VendorParam"),
+};
+
+static iolink_od_app_t k_vendor_app = {
+    .entries = k_vendor_entries,
+    .count = sizeof(k_vendor_entries) / sizeof(k_vendor_entries[0]),
+    .read = vendor_od_read,
+    .write = vendor_od_write,
+    .user = NULL,
+};
 
 static void test_ds_vendor_param_set_round_trip(void** state)
 {
     (void) state;
     iolink_ds_ctx_t ds;
-    static const iolink_ds_param_desc_t set[] = {
-        {IOLINK_IDX_APPLICATION_TAG, 0U, 0U},
-        {VENDOR_PARAM_IDX, 0U, 0U},
-    };
     static const uint8_t vend[] = {0xDEU, 0xADU, 0xBEU, 0xEFU};
 
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_ds_init(&ds, NULL);
-    ds.params_ctx = test_env_params(&g_test_env);
-    iolink_ds_bind_param_access(&ds, vendor_ds_read, vendor_ds_write, NULL, NULL, set,
-                                sizeof(set) / sizeof(set[0]));
+    iolink_ds_bind_sources(&ds, &k_vendor_app, test_env_params(&g_test_env));
 
     assert_int_equal(
         iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
@@ -432,28 +430,28 @@ static void test_ds_download_recovery(void** state)
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOAD_REQ);
 }
 
-static iolink_result_t ds_rejecting_write(void* user, uint16_t index, uint8_t subindex,
-                                          const uint8_t* data, size_t len, bool persist)
+static iolink_result_t rejecting_od_write(void* user, const iolink_od_entry_t* entry,
+                                          uint8_t subindex, const uint8_t* data, size_t len)
 {
     (void) user;
-    (void) index;
+    (void) entry;
     (void) subindex;
     (void) data;
     (void) len;
-    (void) persist;
     return iolink_result_error(IOLINK_RESULT_INVALID);
 }
 
-static iolink_result_t ds_zero_read(void* user, uint16_t index, uint8_t subindex, uint8_t* out,
-                                    size_t cap)
-{
-    (void) user;
-    (void) index;
-    (void) subindex;
-    (void) out;
-    (void) cap;
-    return iolink_result_ok(0U);
-}
+static const iolink_od_entry_t k_reject_entries[] = {
+    IOLINK_OD_STRING(VENDOR_PARAM_IDX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                     IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND, 8U, "Rejected"),
+};
+
+static iolink_od_app_t k_reject_app = {
+    .entries = k_reject_entries,
+    .count = sizeof(k_reject_entries) / sizeof(k_reject_entries[0]),
+    .write = rejecting_od_write,
+    .user = NULL,
+};
 
 /* ParamDownloadEnd 将格式错误的镜像（PAR_SETINVALID 0x8040）与
  * 设备拒绝的已知参数（PAR_SETINCONSIST 0x8041）区分开。 */
@@ -473,11 +471,9 @@ static void test_ds_download_end_error_classification(void** state)
 
     /* 已知参数被拒绝 -> -2 -> PAR_SETINCONSIST。 */
     iolink_ds_init(&ds, NULL);
-    ds.params_ctx = test_env_params(&g_test_env);
-    static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U, 0U}};
-    iolink_ds_bind_param_access(&ds, ds_zero_read, ds_rejecting_write, NULL, NULL, set, 1U);
+    iolink_ds_bind_sources(&ds, &k_reject_app, test_env_params(&g_test_env));
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
-    uint8_t img[] = {0x00U, 0x18U, 0x00U, 0x03U, 'A', 'B', 'C'};
+    uint8_t img[] = {0x00U, 0x50U, 0x00U, 0x03U, 'A', 'B', 'C'};
     (void) memcpy(ds.image, img, sizeof(img));
     ds.image_len = sizeof(img);
     assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -4);
@@ -509,84 +505,48 @@ static void test_ds_image_checksum_rejects_corruption(void** state)
     assert_int_equal(ds.image_len, 0U);
 }
 
-static iolink_result_t ds_param_read_mock(void* user, uint16_t index, uint8_t subindex,
-                                          uint8_t* out, size_t cap)
-{
-    static const uint8_t value[] = "ABCDEFGH";
-    (void) user;
-    (void) index;
-    (void) subindex;
-    size_t n = (sizeof(value) - 1U < cap) ? sizeof(value) - 1U : cap;
-    (void) memcpy(out, value, n);
-    return iolink_result_ok((uint16_t) n);
-}
-
-static iolink_result_t ds_param_write_mock(void* user, uint16_t index, uint8_t subindex,
-                                           const uint8_t* data, size_t len, bool persist)
-{
-    (void) user;
-    (void) index;
-    (void) subindex;
-    (void) data;
-    (void) len;
-    (void) persist;
-    return iolink_result_ok(0U);
-}
-
-/* 传入 NULL 访问器时必须保留设备绑定的访问器与用户指针。 */
-static void test_ds_bind_null_keeps_accessors(void** state)
+/* 表项的 block_len 限制存入镜像的值。 */
+static void test_ds_entry_block_len_bounds_value(void** state)
 {
     (void) state;
     iolink_ds_ctx_t ds;
-    int marker = 0;
+    static const iolink_od_entry_t bounded_entries[] = {
+        IOLINK_OD_STRING(VENDOR_PARAM_IDX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                         IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND, 4U, "Bounded"),
+    };
+    static iolink_od_app_t bounded_app = {
+        .entries = bounded_entries,
+        .count = sizeof(bounded_entries) / sizeof(bounded_entries[0]),
+        .read = vendor_od_read,
+        .write = vendor_od_write,
+        .user = NULL,
+    };
+
     iolink_ds_init(&ds, NULL);
-    ds.params_ctx = test_env_params(&g_test_env);
-    iolink_ds_bind_param_access(&ds, ds_param_read_mock, ds_param_write_mock, NULL, &marker, NULL,
-                                0U);
-    assert_ptr_equal(ds.param_user, &marker);
-
-    static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U, 0U}};
-    iolink_ds_bind_param_access(&ds, NULL, NULL, NULL, NULL, set, 1U);
-    assert_ptr_equal(ds.param_user, &marker);
-    assert_ptr_equal(ds.read_param, ds_param_read_mock);
-    assert_ptr_equal(ds.write_param, ds_param_write_mock);
-    assert_int_equal(ds.param_count, 1U);
-}
-
-/* set_param_desc 只替换描述符集合。 */
-static void test_ds_set_param_desc_keeps_accessors(void** state)
-{
-    (void) state;
-    iolink_ds_ctx_t ds;
-    int marker = 0;
-    iolink_ds_init(&ds, NULL);
-    ds.params_ctx = test_env_params(&g_test_env);
-    iolink_ds_bind_param_access(&ds, ds_param_read_mock, ds_param_write_mock, NULL, &marker, NULL,
-                                0U);
-
-    static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U, 0U}};
-    iolink_ds_set_param_desc(&ds, set, 1U);
-    assert_ptr_equal(ds.param_user, &marker);
-    assert_ptr_equal(ds.read_param, ds_param_read_mock);
-    assert_int_equal(ds.param_count, 1U);
-}
-
-/* 描述符的 max_len 限制存入镜像的值。 */
-static void test_ds_desc_max_len_bounds_value(void** state)
-{
-    (void) state;
-    iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
-    ds.params_ctx = test_env_params(&g_test_env);
-    static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U, 4U}};
-    iolink_ds_bind_param_access(&ds, ds_param_read_mock, ds_param_write_mock, NULL, NULL, set, 1U);
+    iolink_ds_bind_sources(&ds, &bounded_app, test_env_params(&g_test_env));
+    g_vendor_param_len = 8U;
+    (void) memcpy(g_vendor_param, "ABCDEFGH", 8U);
 
     assert_true(iolink_ds_build_image(&ds) > 0);
     size_t len = 0U;
     const uint8_t* img = iolink_ds_get_image(&ds, &len);
     assert_non_null(img);
-    assert_int_equal(img[3], 4U); /* 长度字节被限制为 max_len */
-    assert_memory_equal(&img[4], "ABCD", 4U);
+
+    /* 集合里标准标签在前：定位厂商记录，不假设固定偏移。 */
+    size_t pos = 0U;
+    bool found = false;
+    while ((pos + 4U) <= len) {
+        const uint16_t index = (uint16_t) (((uint16_t) img[pos] << 8) | (uint16_t) img[pos + 1U]);
+        const size_t record_len = (size_t) img[pos + 3U];
+        if (index == VENDOR_PARAM_IDX) {
+            assert_int_equal(img[pos + 3U], 4U); /* 长度字节被限制为 block_len */
+            assert_memory_equal(&img[pos + 4U], "ABCD", 4U);
+            found = true;
+            break;
+        }
+        pos += 4U + record_len;
+    }
+    assert_true(found);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -609,7 +569,7 @@ static void ds_fixture_init(ds_fixture_t* f, const iolink_storage_api_t* storage
         iolink_params_bind_storage(&f->params, storage);
     }
     iolink_ds_init(&f->ds, storage);
-    iolink_ds_bind_params(&f->ds, &f->params);
+    iolink_ds_bind_sources(&f->ds, NULL, &f->params);
     iolink_events_init(&f->events);
 }
 
@@ -1065,9 +1025,7 @@ int main(void)
         cmocka_unit_test(test_ds_apply_rejects_truncated),
         cmocka_unit_test(test_ds_vendor_param_set_round_trip),
         cmocka_unit_test(test_ds_image_checksum_rejects_corruption),
-        cmocka_unit_test(test_ds_bind_null_keeps_accessors),
-        cmocka_unit_test(test_ds_set_param_desc_keeps_accessors),
-        cmocka_unit_test(test_ds_desc_max_len_bounds_value),
+        cmocka_unit_test(test_ds_entry_block_len_bounds_value),
         cmocka_unit_test(test_ds_download_end_error_classification),
         cmocka_unit_test(test_ds_download_recovery),
         cmocka_unit_test(test_ds_legacy_sub0_is_runtime_compat),

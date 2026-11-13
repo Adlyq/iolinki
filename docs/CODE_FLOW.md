@@ -247,7 +247,7 @@ flowchart TD
     J --> K["绑定 time_us；事件窗口<br/>iolink_events_set_window()"]
     K --> L["绑定 ISDU 依赖：od<br/>params_ctx / direct_param_page2"]
     L --> M["iolink_params_bind_storage()<br/>读 NVM 参数记录"]
-    M --> N["iolink_ds_init(storage) + iolink_ds_bind_workspace()<br/>iolink_ds_bind_params() + iolink_ds_bind_param_access(device_param_*)<br/>无镜像时 iolink_ds_build_image()"]
+    M --> N["iolink_ds_init(storage) + iolink_ds_bind_workspace()<br/>iolink_ds_bind_sources(config.od, params)<br/>无镜像时 iolink_ds_build_image()"]
     N --> O["iolink_device_set_log()<br/>把 sink 复制到 DLL/ISDU/DS/事件"]
     O --> P["device_apply_stack_config()<br/>PD/OD 长度、t_pd、工作 COM、MinCycleTime<br/>timing_enforce 覆盖"]
     P --> T["调用 on_startup()"]
@@ -672,7 +672,7 @@ FLAG 区域:
 - `iolink_ds_serialize(ctx, out, cap)`：按 DS 描述符顺序**流式**序列化当前参数集，同时累加 Fletcher-32。`out` 可以是 ISDU 应答缓冲、调用方缓冲，或 `NULL`（只统计长度/校验和）；此时用 `IOLINK_DS_STREAM_CHUNK` 大小的小栈块读取参数，不建常驻镜像。
 - `iolink_ds_build_image()`：只是“写入绑定暂存缓冲”的包装（`workspace.ds_stage` 或内嵌 fallback）；`iolink_ds_refresh()` 只刷新 `image_len` 与 `current_checksum`，不建立快照。
 - `iolink_ds_apply_image()`：先完整校验记录结构，再对每个已知参数调用 `check` 回调做无副作用预校验（任一失败返回 `-2`，此时不写任何参数）；全部通过后逐条应用并持久化，未知索引跳过；最后重新序列化，保证镜像与设备真实参数一致。NVM 写入失败仍可能留下已生效的前缀记录（不是跨参数事务）。
-- DS 成员判定由 OD 表项的 `storage == IOLINK_OD_STORAGE_DS` 与绑定的描述符集合共同决定；默认集合即 `ApplicationTag/FunctionTag/LocationTag`，应用可用 `iolink_ds_bind_param_access()` / `iolink_ds_set_param_desc()` 扩展。
+- DS 成员判定只看 OD 表项的 `storage == IOLINK_OD_STORAGE_DS`：标准表在前、应用表按表序，没有独立的描述符集合或可替换访问器。
 
 DS 状态机（`iolink_ds_process()`）：
 

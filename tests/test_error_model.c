@@ -71,6 +71,39 @@ static const iolink_od_entry_t k_ds_param_entry[] = {
      .on_change = NULL},
 };
 
+static const iolink_od_app_t k_ds_app = {
+    .entries = k_ds_param_entry,
+    .count = sizeof(k_ds_param_entry) / sizeof(k_ds_param_entry[0]),
+    .user = NULL,
+};
+
+/* 无长度上限的 DS 参数（block_len 0）：只用于镜像容量边界。 */
+static const iolink_od_entry_t k_ds_param_unbounded[] = {
+    {.index = 0x0101U,
+     .subindex = 0U,
+     .max_subindex = 0U,
+     .datatype = IOLINK_OD_DT_OCTET_STRING,
+     .access = IOLINK_OD_ACCESS_RW,
+     .write_semantics = IOLINK_OD_WRITE_VOLATILE,
+     .storage = IOLINK_OD_STORAGE_DS,
+     .flags = 0U,
+     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .block_len = 0U,
+     .range_min = 0U,
+     .range_max = 0U,
+     .scalar_default = 0U,
+     .block_default = NULL,
+     .name = "DsUnbounded",
+     .validate = NULL,
+     .on_change = NULL},
+};
+
+static const iolink_od_app_t k_ds_app_unbounded = {
+    .entries = k_ds_param_unbounded,
+    .count = sizeof(k_ds_param_unbounded) / sizeof(k_ds_param_unbounded[0]),
+    .user = NULL,
+};
+
 /* 未处理的索引不得伪装成协议错误：调用方据此回退到下一层。
    0x0100 不是保留索引，也不属于 params 管理的标签集。 */
 static void test_unknown_index_is_not_handled(void** state)
@@ -151,11 +184,11 @@ static void test_round_trip_reports_length(void** state)
     assert_memory_equal(readback, tag, sizeof(tag));
 }
 
-/** @brief 初始化一个处于下载状态的 DS 上下文（描述符由调用方提供）。 */
-static void ds_download_begin(iolink_ds_ctx_t* ds, const iolink_ds_param_desc_t* set, size_t count)
+/** @brief 初始化一个处于下载状态的 DS 上下文（参数来源为 OD 表）。 */
+static void ds_download_begin(iolink_ds_ctx_t* ds, const iolink_od_app_t* app)
 {
     iolink_ds_init(ds, NULL);
-    iolink_ds_bind_param_access(ds, NULL, NULL, NULL, NULL, set, count);
+    iolink_ds_bind_sources(ds, app, NULL);
     /* 0x03 同时是 ParamDownloadStart ISDU 命令与 DS_DownloadStart 命令。 */
     assert_int_equal(iolink_ds_handle_ds_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0U), 0);
 }
@@ -165,10 +198,9 @@ static void test_ds_stage_accepts_within_limit(void** state)
 {
     (void) state;
     iolink_ds_ctx_t ds;
-    static const iolink_ds_param_desc_t set[] = {{0x0100U, 0U, 2U}};
     static const uint8_t data[2] = {0xAAU, 0x55U};
 
-    ds_download_begin(&ds, set, 1U);
+    ds_download_begin(&ds, &k_ds_app);
     const iolink_result_t result = iolink_ds_stage_param(&ds, 0x0100U, 0U, data, sizeof(data));
     assert_int_equal(result.code, 0);
     assert_int_equal(result.len, 0U);
@@ -180,10 +212,9 @@ static void test_ds_stage_length_overrun_is_protocol_error(void** state)
 {
     (void) state;
     iolink_ds_ctx_t ds;
-    static const iolink_ds_param_desc_t set[] = {{0x0100U, 0U, 2U}};
     static const uint8_t data[3] = {0x01U, 0x02U, 0x03U};
 
-    ds_download_begin(&ds, set, 1U);
+    ds_download_begin(&ds, &k_ds_app);
     const iolink_result_t result = iolink_ds_stage_param(&ds, 0x0100U, 0U, data, sizeof(data));
     assert_int_equal(result.code, IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
     assert_int_equal(result.len, 0U);
@@ -194,11 +225,10 @@ static void test_ds_stage_rejects_when_image_is_full(void** state)
 {
     (void) state;
     iolink_ds_ctx_t ds;
-    static const iolink_ds_param_desc_t set[] = {{0x0101U, 0U, 0U}};
     uint8_t data[253];
     (void) memset(data, 0x5AU, sizeof(data));
 
-    ds_download_begin(&ds, set, 1U);
+    ds_download_begin(&ds, &k_ds_app_unbounded);
     const iolink_result_t result = iolink_ds_stage_param(&ds, 0x0101U, 0U, data, sizeof(data));
     assert_int_equal(result.code, IOLINK_RESULT_INVALID);
     assert_int_equal(result.len, 0U);
@@ -210,11 +240,10 @@ static void test_isdu_reports_positive_error_code(void** state)
     (void) state;
     iolink_ds_ctx_t ds;
     iolink_isdu_ctx_t isdu;
-    static const iolink_ds_param_desc_t set[] = {{0x0100U, 0U, 2U}};
     static const uint8_t data[3] = {0x01U, 0x02U, 0x03U};
     uint8_t response[4];
 
-    ds_download_begin(&ds, set, 1U);
+    ds_download_begin(&ds, &k_ds_app);
     iolink_isdu_init(&isdu);
     isdu.ds_ctx = &ds;
     iolink_od_app_t app = {.entries = k_ds_param_entry,

@@ -109,11 +109,10 @@ the context (see docs/MEMORY_GUIDE.md).
 ## Caveats
 
 - `DataStorageIndex` (index `0x0003`) is mandatory (Table B.8). Trimming Data
-  Storage removes it, so the device is non-conformant. To stay conformant
-  without DS-backed parameters, keep the subsystem and publish an empty
-  `Index_List` (see `iolink_ds_bind_param_access()` with an empty descriptor
-  set); the library still answers a negative response instead of silently
-  accepting the request.
+  Storage removes it, so the device is non-conformant. The DS set always
+  contains the three standard tags; an empty `Index_List` is only available by
+  omitting `IOLINK_FEATURE_DATA_STORAGE` entirely, which has the same
+  non-conformance caveat.
 - `SystemCommand` (index `0x0002`) is conditional (Table B.8, B.2.2) and is now
   a runtime capability. Disabling it is conformant only when no conveyed
   functionality requires it: block parameterization needs `0x01`-`0x06` (all or

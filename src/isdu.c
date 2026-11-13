@@ -1462,16 +1462,16 @@ static size_t isdu_append_ds_index_list(iolink_ds_ctx_t* ds, uint8_t* buf, size_
 {
     const size_t n = iolink_ds_param_count(ds);
     for (size_t i = 0U; i < n; i++) {
-        iolink_ds_param_desc_t d;
-        if (!iolink_ds_param_at(ds, i, &d)) {
+        const iolink_od_entry_t* entry = iolink_ds_param_entry(ds, i);
+        if (entry == NULL) {
             break;
         }
         if ((pos + 3U) > IOLINK_ISDU_BUFFER_SIZE) {
             break;
         }
-        buf[pos++] = (uint8_t) (d.index >> 8);
-        buf[pos++] = (uint8_t) (d.index & 0xFFU);
-        buf[pos++] = d.subindex;
+        buf[pos++] = (uint8_t) (entry->index >> 8);
+        buf[pos++] = (uint8_t) (entry->index & 0xFFU);
+        buf[pos++] = entry->subindex;
     }
     if ((pos + 2U) <= IOLINK_ISDU_BUFFER_SIZE) {
         buf[pos++] = 0x00U; /* 终止标记 */
@@ -1700,30 +1700,6 @@ static bool isdu_entry_allowed(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t* 
     return true;
 }
 
-#if IOLINK_FEATURE_DATA_STORAGE
-/** @brief 该 index/subindex 是否真的在 DS 引擎的参数集内。
- *
- * 表项的 storage 标志只描述"值得备份"；是否被 DS 引擎序列化取决于
- * 绑定的描述符集合（默认由 OD 表派生）。只有真正在集合内的写入才
- * 暂存，避免"暂存了但从不序列化"的校验和不一致。 */
-static bool isdu_ds_param_known(const iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex)
-{
-    const iolink_ds_ctx_t* ds = (const iolink_ds_ctx_t*) ctx->ds_ctx;
-    const size_t count = iolink_ds_param_count(ds);
-
-    for (size_t i = 0U; i < count; i++) {
-        iolink_ds_param_desc_t desc;
-        if (!iolink_ds_param_at(ds, i, &desc)) {
-            break;
-        }
-        if ((desc.index == index) && (desc.subindex == subindex)) {
-            return true;
-        }
-    }
-    return false;
-}
-#endif
-
 /** @brief 通过表项读/写一个参数值（标签对象或应用后端）。 */
 static void isdu_serve_od_value(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t* entry)
 {
@@ -1737,8 +1713,7 @@ static void isdu_serve_od_value(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t*
            无副作用预校验，全部通过后再逐条写入并持久化（10.3.2）。
            这不是跨参数事务：NVM 写入失败仍可能留下已生效的前缀记录。 */
         if ((entry->storage == IOLINK_OD_STORAGE_DS) && (ctx->ds_ctx != NULL) &&
-            iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx) &&
-            isdu_ds_param_known(ctx, entry->index, ctx->header.subindex)) {
+            iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx)) {
             const iolink_result_t staged =
                 iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, entry->index,
                                       ctx->header.subindex, ctx->buffer, ctx->buffer_idx);

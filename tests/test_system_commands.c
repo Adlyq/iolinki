@@ -68,7 +68,7 @@ static void ds_block_fixture_init(ds_block_fixture_t* f)
     iolink_device_info_ctx_init(&f->info, NULL);
     iolink_params_ctx_init(&f->params, &f->info);
     iolink_ds_init(&f->ds, NULL);
-    iolink_ds_bind_params(&f->ds, &f->params);
+    iolink_ds_bind_sources(&f->ds, NULL, &f->params);
     iolink_events_init(&f->events);
 }
 

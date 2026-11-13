@@ -55,87 +55,21 @@ typedef enum
 } iolink_ds_state_t;
 
 /**
- * @brief 一个由数据存储支持的参数（索引 + 子索引）。
- *
- * DS 参数集由这些描述符组成的数组描述。默认集合是
- * 三个可写的标识标签；应用可以替换或扩展它（例如加入厂商
- * 参数 0x0040+ / 0x0100+）。
- */
-typedef struct
-{
-    uint16_t index;   /**< 参数索引。 */
-    uint8_t subindex; /**< 参数子索引。 */
-    uint8_t max_len;  /**< 值长度上限（0 = 无上限）。 */
-} iolink_ds_param_desc_t;
-
-/**
- * @brief 将单个 DS 参数读入缓冲区。
- *
- * @param user     参数访问的不透明用户指针。
- * @param index    参数索引。
- * @param subindex 参数子索引。
- * @param out      接收参数值的缓冲区。
- * @param cap      @p out 的容量（字节）。
- * @return 结果模型：成功 `{0, len}`；未知索引
- *         ::IOLINK_RESULT_NOT_HANDLED；协议层错误以正 ISDU ErrorCode 返回。
- */
-typedef iolink_result_t (*iolink_ds_param_read_fn)(void* user, uint16_t index, uint8_t subindex,
-                                                   uint8_t* out, size_t cap);
-
-/**
- * @brief 写入单个 DS 参数。
- *
- * @param user     参数访问的不透明用户指针。
- * @param index    参数索引。
- * @param subindex 参数子索引。
- * @param data     参数值字节。
- * @param len      @p data 的长度（字节）。
- * @param persist  写入是否必须提交到非易失性存储器。
- * @return 结果模型：成功 `{0, 0}`；未知索引
- *         ::IOLINK_RESULT_NOT_HANDLED；协议层错误以正 ISDU ErrorCode 返回。
- */
-typedef iolink_result_t (*iolink_ds_param_write_fn)(void* user, uint16_t index, uint8_t subindex,
-                                                    const uint8_t* data, size_t len, bool persist);
-
-/**
- * @brief 恢复前预校验单个 DS 参数记录（无副作用）。
- *
- * `iolink_ds_apply_image()` 在写入任何参数之前，对镜像中每个"已知参数"
- * 记录调用本回调。任何一条被拒绝都会让整次恢复失败，此时尚无参数被
- * 修改、也没有镜像落盘。回调不得修改设备状态。
- *
- * @param user     参数访问的不透明用户指针。
- * @param index    参数索引。
- * @param subindex 参数子索引。
- * @param data     参数值字节。
- * @param len      @p data 的长度（字节）。
- * @return 结果模型：成功 `{0, 0}`；拒绝时返回错误（正 ISDU ErrorCode
- *         或负的 ::IOLINK_RESULT_*）。
- */
-typedef iolink_result_t (*iolink_ds_param_check_fn)(void* user, uint16_t index, uint8_t subindex,
-                                                    const uint8_t* data, size_t len);
-
-/**
  * @brief 数据存储引擎上下文
  *
- * 跟踪 DS 同步过程的状态与校验和。
+ * 跟踪 DS 同步过程的状态与校验和。参数集合与值访问都来自对象
+ * 字典：标准表 + 应用 OD 表中 storage 为 `IOLINK_OD_STORAGE_DS` 的项。
  */
 typedef struct
 {
-    iolink_ds_state_t state;              /**< 当前 DS 状态机位置 */
-    const iolink_storage_api_t* storage;  /**< 绑定的存储实现 API */
-    iolink_params_ctx_t* params_ctx;      /**< 设备本地可写参数上下文（绑定后使用） */
-    void* param_user;                     /**< 参数回调使用的不透明用户指针 */
-    iolink_ds_param_read_fn read_param;   /**< 统一的参数读取访问器 */
-    iolink_ds_param_write_fn write_param; /**< 统一的参数写入访问器 */
-    iolink_ds_param_check_fn check_param; /**< 恢复前的无副作用预校验（可为 NULL） */
-    const iolink_ds_param_desc_t* params; /**< DS 参数描述符数组 */
-    size_t param_count;                   /**< @ref params 中的条目数 */
-    const iolink_od_app_t* od_app;        /**< 提供额外 DS 参数的应用 OD 表（可为 NULL） */
-    uint32_t current_checksum;            /**< 最近一次计算的本地参数校验和 */
-    uint32_t master_checksum;             /**< 主站最近校验过的校验和 */
-    bool ds_upload_flag;                  /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
-    bool upload_event_pending;            /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
+    iolink_ds_state_t state;             /**< 当前 DS 状态机位置 */
+    const iolink_storage_api_t* storage; /**< 绑定的存储实现 API */
+    iolink_params_ctx_t* params_ctx;     /**< 标准标签对象的值后端（可为 NULL） */
+    const iolink_od_app_t* od_app;       /**< 应用 OD 表（可为 NULL，表示只有标准表） */
+    uint32_t current_checksum;           /**< 最近一次计算的本地参数校验和 */
+    uint32_t master_checksum;            /**< 主站最近校验过的校验和 */
+    bool ds_upload_flag;                 /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
+    bool upload_event_pending;           /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
     /* 镜像不再常驻状态结构。序列化交给工作区中的暂存缓冲（上传可
      * 直接流式写入调用方缓冲），这里只保留指针与容量。 */
     uint8_t* image;        /**< 序列化/下载暂存缓冲（工作区或内嵌 fallback） */
@@ -204,67 +138,21 @@ int iolink_ds_serialize(iolink_ds_ctx_t* ctx, uint8_t* out, size_t cap);
 void iolink_ds_refresh(iolink_ds_ctx_t* ctx);
 
 /**
- * @brief 绑定用作 DS 参数源的可写参数上下文。
+ * @brief 绑定 DS 的参数来源。
  *
- * @param ctx DS 上下文
- * @param params_ctx 要序列化/恢复的设备本地参数管理器上下文
+ * DS 的参数集合与值访问都来自对象字典：
+ *  - 标准表（三个标识标签）通过 @p params_ctx 取值；
+ *  - 应用表 @p app 中 storage 为 `IOLINK_OD_STORAGE_DS` 的项自动进入
+ *    集合，值由表项后端提供。
+ *
+ * 集合顺序固定为"标准表在前，应用表按表序"，不接受显式描述符列表。
+ *
+ * @param ctx        DS 上下文
+ * @param app        应用 OD 表（可为 NULL，表示只有标准表）
+ * @param params_ctx 标准标签对象的值后端（可为 NULL）
  */
-void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx);
-
-/**
- * @brief 绑定参与 DS 集合的应用对象字典表。
- *
- * 未安装显式描述符集合时，DS 参数集 = 标准 OD 表中 storage 为
- * `IOLINK_OD_STORAGE_DS` 的表项 + 本应用表中 storage 为
- * `IOLINK_OD_STORAGE_DS` 的表项（标准表在前，应用表按表序）。
- * 描述符的 `max_len` 取表项的 `block_len`。
- *
- * @param ctx DS 上下文
- * @param app 应用 OD 表（可为 NULL，表示只有标准表）
- */
-void iolink_ds_bind_od(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app);
-
-/**
- * @brief 绑定统一的参数访问器、可选的恢复前校验与显式的参数描述符集合。
- *
- * 用调用方提供的描述符数组替换默认的"标准表 + 应用表"集合，
- * 并让所有 DS 读写都经由 @p read / @p write 路由。需要自定义
- * 索引列表或访问路径的应用使用它。当 @p params 为 NULL（或
- * @p count 为 0）时，描述符集合保持不变。
- *
- * 设备已经绑定了一对默认访问器，其中标准参数
- * 通过 params 上下文提供，应用参数通过 @c config.od 的
- * 值后端提供。仅需要不同 DS 索引列表的
- * 应用应当调用 iolink_ds_set_param_desc()，而不是替换访问器。
- *
- * @param ctx    DS 上下文
- * @param read   参数读取访问器（可为 NULL，表示保留当前访问器）
- * @param write  参数写入访问器（可为 NULL，表示保留当前访问器）
- * @param check  恢复前预校验访问器（NULL = 不做预校验）；不使用预校验
- *               时 `iolink_ds_apply_image()` 仍可能部分应用后才发现拒绝
- * @param user   传回访问器的不透明指针。仅当
- *               @p read 或 @p write 非 NULL 时更新，因此传入 NULL 访问器会
- *               保留现有的用户指针。
- * @param params 描述符数组（可为 NULL）
- * @param count  @p params 中的描述符数量
- */
-void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx, iolink_ds_param_read_fn read,
-                                 iolink_ds_param_write_fn write, iolink_ds_param_check_fn check,
-                                 void* user, const iolink_ds_param_desc_t* params, size_t count);
-
-/**
- * @brief 仅替换数据存储参数描述符集合。
- *
- * 当前的读写访问器及其用户指针保持不变。已经
- * 通过 params 上下文或应用 OD 后端提供参数的
- * 应用只需在此提供索引列表。
- *
- * @param ctx    DS 上下文
- * @param params 描述符数组（在 DS 的整个生命周期内必须保持有效）
- * @param count  @p params 中的描述符数量
- */
-void iolink_ds_set_param_desc(iolink_ds_ctx_t* ctx, const iolink_ds_param_desc_t* params,
-                              size_t count);
+void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app,
+                            iolink_params_ctx_t* params_ctx);
 
 /**
  * @brief 计算参数块的标准 32 位校验和（Fletcher-32）
@@ -365,7 +253,7 @@ iolink_result_t iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index, uint
 /**
  * @brief 将设备中由 DS 支持的参数序列化到映像缓冲区。
  *
- * 从参数管理器读取 DS 集合中的每个参数，并将其打包
+ * 从对象字典读取 DS 集合中的每个参数，并将其打包
  * 到 @ref iolink_ds_ctx_t::image 中。同时更新 @ref iolink_ds_ctx_t::current_checksum。
  *
  * @param ctx DS 上下文
@@ -376,9 +264,8 @@ int iolink_ds_build_image(iolink_ds_ctx_t* ctx);
 /**
  * @brief 应用从主站接收的参数映像（恢复）。
  *
- * 解析序列化的记录，先对全部"已知参数"调用绑定的
- * @ref iolink_ds_param_check_fn（无副作用），全部通过后再逐条通过参数
- * 管理器写回并持久化到 NVM。
+ * 解析序列化的记录，先对全部"已知参数"调用表项的 validate 钩子
+ * （无副作用），全部通过后再逐条通过对象字典写回。
  *
  * 这不是跨参数的事务：预校验覆盖值本身与长度，但 NVM 写入失败仍可能
  * 留下已经生效的前缀记录。预校验失败时不会写入任何参数，也不会改动
@@ -436,22 +323,24 @@ uint32_t iolink_ds_size(const iolink_ds_ctx_t* ctx);
 uint32_t iolink_ds_checksum(const iolink_ds_ctx_t* ctx);
 
 /**
- * @brief DS 参数描述符集合中的条目数。
+ * @brief DS 集合中的表项数量。
+ *
+ * 集合由对象字典派生：标准表中 storage 为 DS 的项在前，应用表中
+ * storage 为 DS 的项按表序追加。
  *
  * @param ctx DS 上下文
- * @return size_t 描述符数量。
+ * @return size_t 表项数量。
  */
 size_t iolink_ds_param_count(const iolink_ds_ctx_t* ctx);
 
 /**
- * @brief 将描述符 @p i 复制到 @p out。
+ * @brief 取 DS 集合中第 @p i 个表项。
  *
  * @param ctx DS 上下文
- * @param i   描述符索引
- * @param out [out] 接收描述符（索引 + 子索引）
- * @return 当 @p i 在范围内时返回 true，否则返回 false。
+ * @param i   集合索引
+ * @return const iolink_od_entry_t* 表项指针；越界或未绑定时返回 NULL。
  */
-bool iolink_ds_param_at(const iolink_ds_ctx_t* ctx, size_t i, iolink_ds_param_desc_t* out);
+const iolink_od_entry_t* iolink_ds_param_entry(const iolink_ds_ctx_t* ctx, size_t i);
 
 /**
  * @brief 发起数据存储上传请求（置位 DS_UPLOAD_FLAG，10.4.2）。

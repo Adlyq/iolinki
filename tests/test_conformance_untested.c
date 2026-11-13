@@ -414,13 +414,13 @@ static void reset_fixture_init(reset_fixture_t* f)
     iolink_device_info_ctx_init(&f->info, NULL);
     iolink_params_ctx_init(&f->params, &f->info);
     iolink_ds_init(&f->ds, NULL);
-    iolink_ds_bind_params(&f->ds, &f->params);
+    iolink_ds_bind_sources(&f->ds, NULL, &f->params);
 }
 
 static void reset_fixture_power_cycle(reset_fixture_t* f)
 {
     iolink_ds_init(&f->ds, NULL);
-    iolink_ds_bind_params(&f->ds, &f->params);
+    iolink_ds_bind_sources(&f->ds, NULL, &f->params);
 }
 
 static int reset_fixture_isdu(reset_fixture_t* f, bool write, uint16_t index, uint8_t sub,

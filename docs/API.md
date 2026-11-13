@@ -454,12 +454,8 @@ iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx);
 
 void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage);
 void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws);
-void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx);
-void iolink_ds_bind_od(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app);
-void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx,
-                                 iolink_ds_param_read_fn read, iolink_ds_param_write_fn write,
-                                 iolink_ds_param_check_fn check, void* user,
-                                 const iolink_ds_param_desc_t* params, size_t count);
+void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app,
+                            iolink_params_ctx_t* params_ctx);
 void iolink_ds_process(iolink_ds_ctx_t* ctx);                  /* driven by iolink_device_process */
 void iolink_ds_check(iolink_ds_ctx_t* ctx, uint32_t master_checksum);
 int  iolink_ds_handle_param_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_locks);
@@ -474,10 +470,10 @@ The DS context is initialized by `iolink_device_init()` from the required
 use `iolink_device_get_ds_ctx()` to reach it.
 
 The DS parameter set is derived from the standard OD table plus the application
-table bound with `iolink_ds_bind_od()` (the device layer binds
+table bound with `iolink_ds_bind_sources()` (the device layer binds
 `iolink_device_config_t.od`): entries marked `IOLINK_OD_STORAGE_DS` are
 serialized, `IOLINK_OD_STORAGE_VOLATILE` entries are not. `iolink_ds_apply_image()`
-validates every known record through the optional check callback before it
+validates every known record through the table entry's `validate` hook before it
 writes any of them; a rejected record leaves the previous parameter set intact.
 This is not a cross-parameter transaction: an NVM write failure during the apply
 phase can still leave a prefix of the records stored.

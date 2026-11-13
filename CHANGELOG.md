@@ -95,9 +95,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   built-in entry. `iolink_od_find()` follows the same split, so DS access to an
   application parameter in the Preferred range resolves correctly.
 - Data Storage membership includes application OD entries with
-  `IOLINK_OD_STORAGE_DS` (`iolink_ds_bind_od()`); `ParamDownloadEnd` validates
-  every known record before applying any of them, and the "atomic" wording was
-  corrected (NVM failures are still not a cross-parameter transaction).
+  `IOLINK_OD_STORAGE_DS` (`iolink_ds_bind_sources()`); `ParamDownloadEnd`
+  validates every known record before applying any of them, and the "atomic"
+  wording was corrected (NVM failures are still not a cross-parameter
+  transaction).
 - Unbinding an external workspace clears the ISDU/DS buffer pointers instead of
   leaving dangling references when `IOLINK_WORKSPACE_EMBEDDED=0`.
 - Runtime capability overrides invalidate the published reply plans
@@ -114,6 +115,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `tools/size_matrix.py` gates `.rodata` as well (with `--selftest` proof).
 
 ### Removed (no compatibility layer)
+- The Data Storage descriptor/accessor override: `iolink_ds_param_desc_t`,
+  `iolink_ds_param_read_fn`/`write_fn`/`check_fn`, `iolink_ds_bind_params()`,
+  `iolink_ds_bind_od()`, `iolink_ds_bind_param_access()`,
+  `iolink_ds_set_param_desc()`, `iolink_ds_param_at()` and
+  `iolink_params_ctx_factory_reset`-era descriptor plumbing. The DS set is now
+  derived from the object dictionary only (`IOLINK_OD_STORAGE_DS`), values come
+  from the table entry backend, and the restore pre-check reuses the entry's
+  `validate` hook. `iolink_ds_bind_sources()` replaces the three bind entry
+  points; `iolink_ds_param_count()`/`iolink_ds_param_entry()` expose the
+  derived set. `IOLINK_PERSIST_ASYNC` and
+  `iolink_ds_start_upload()`/`start_download()` (duplicates of the command
+  path) are gone as well.
 - `iolink_device_config_t::vendor_service` / `iolink_isdu_ctx_t::vendor_service`
   and `vendor_user`. Device-specific ISDU indices and parameter values now have
   a single implementation path: `iolink_device_config_t::od` (const table +
