@@ -1286,9 +1286,11 @@ static void dp_page1_refresh(iolink_isdu_ctx_t* ctx)
 
     build_direct_param_page1(ctx, page);
     ctx->dp_page1_seq = (uint8_t) (ctx->dp_page1_seq | 1U);
+    IOLINK_FENCE(); /* 先标记"更新中"，再写映像 */
     (void) memcpy(ctx->dp_page1, page, sizeof(page));
     ctx->dp_page1_src = ctx->dll_ctx;
     ctx->dp_page1_info = (const void*) ctx->params_ctx;
+    IOLINK_FENCE(); /* 映像写完后才发布为稳定 */
     ctx->dp_page1_seq = (uint8_t) (ctx->dp_page1_seq + 1U);
 }
 
@@ -1899,8 +1901,11 @@ void iolink_isdu_process(iolink_isdu_ctx_t* ctx)
         return;
     }
 
-    /* DPP1 映像失效时由主泵在本上下文重建，ISR 只读稳定副本。 */
-    dp_page1_ensure(ctx);
+    /* DPP1 映像失效时由主泵在本上下文重建；ISR 侧只读稳定副本，
+     * 因此这里与查询/失效入口一样按上下文门控。 */
+    if (dp_page1_main_context(ctx)) {
+        dp_page1_ensure(ctx);
+    }
 
     if (ctx->buffer == NULL) {
         return;

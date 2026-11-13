@@ -142,9 +142,6 @@ static void deliver_expect_type0_ack(iolink_device_ctx_t* ctx)
     expect_value(mock_phy_send, len, 1);
     will_return(mock_phy_send, 0);
     deliver_frame_to_main(ctx);
-    /* 页写可能在帧处理末尾使 DPP1 映像失效：再给主泵一个窗口重建，
-     * 使紧随其后的 ISR 页读拿到新值（真实主循环每周期都会运行）。 */
-    iolink_device_process(ctx);
 }
 
 static uint8_t deliver_type0_read(iolink_device_ctx_t* ctx)

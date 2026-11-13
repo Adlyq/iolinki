@@ -265,6 +265,11 @@ static void dll_isr_isdu_od(iolink_dll_main_t* ctx, uint8_t flowctrl, uint8_t* o
     if (flowctrl >= IOLINK_FLOWCTRL_IDLE) {
         od[0] = 0x00U;
         ctx->shared.isr_isdu_read_reset = 1U;
+        /* 在读传输层被主泵复位之前，主站不得继续旧段序列：清掉段索引，
+         * 使后续 COUNT 只能得到"无服务"，直到新的 START 重新采纳视图。 */
+        ctx->shared.isr_isdu_last_flowctrl = 0xFFU;
+        ctx->shared.isr->isr_isdu_idx = 0U;
+        ctx->shared.isr->isr_isdu_seg_idx = 0U;
         return;
     }
 
@@ -841,8 +846,10 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
         /* 合法帧计划未命中：不应答、不解释内容，关闭 t_A 看门狗并
          * 直接丢弃。主泵不再接手计划未命中的合法帧。 */
         ctx->shared.isr_plan_misses++;
-        IOLINK_LOG_ISR_WARN(&ctx->shared.log, "no reply plan: mc=0x%02X len=%u",
-                            (unsigned) frame[0], (unsigned) len);
+        /* 计数是主信号；逐帧 WARN 在 FALLBACK 等"无计划"状态下会刷屏，
+         * 因此只记 DEBUG（ISR 日志默认编译关闭）。 */
+        IOLINK_LOG_ISR_DEBUG(&ctx->shared.log, "no reply plan: mc=0x%02X len=%u",
+                             (unsigned) frame[0], (unsigned) len);
         if (ctx->shared.phy->response_timer_stop != NULL) {
             ctx->shared.phy->response_timer_stop(ctx->shared.phy->user);
         }

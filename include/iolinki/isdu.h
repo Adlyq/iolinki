@@ -315,11 +315,12 @@ int iolink_isdu_get_response_byte(iolink_isdu_ctx_t* ctx, uint8_t* byte);
  * @brief 标记 Direct Parameter page 1 映像失效。
  *
  * 主泵侧在改变 DPP1 输入（MasterCycleTime、M-sequence 配置、PD 长度、
- * 设备标识等）之后调用，使下一次主泵读取重建映像。失效期间
- * @ref iolink_isdu_direct_param_page1_octet 对 ISR 返回 0，而不是变更前的值，
- * 因此 ISR 绝不会发出已知过期的八位组。
+ * 设备标识等）之后调用。在主泵上下文里会**立即**重建映像；ISR 上下文
+ * 只把序号置为奇数（当前 src/ 中没有 ISR 调用者），使
+ * @ref iolink_isdu_direct_param_page1_octet 在重建前返回 0，而不是变更前
+ * 的值，因此 ISR 绝不会发出已知过期的八位组。
  *
- * @note 只允许在主泵上下文调用：`dp_page1_seq` 只有一个写者。
+ * @note 重建只允许主泵侧执行：`dp_page1_seq` 只有一个写者。
  *
  * @param ctx ISDU 上下文（NULL 时不做任何事）
  */
@@ -335,6 +336,12 @@ void iolink_isdu_dp_page1_invalidate(iolink_isdu_ctx_t* ctx);
  * 该函数可在 ISR 中调用：只有稳定副本会被返回。主泵正在更新映像时
  * 有限次重试读取序号，仍不一致则返回 0；ISR 侧不会重建整页。主泵侧
  * 在映像失效（或 MasterCycleTime 已变化）时先重建再读取。
+ *
+ * @note 一致性粒度是**单个八位组**。一次多字节页读（例如 od_width=32）
+ * 会逐字节调用本函数；若主泵恰好在两次调用之间刷新映像，同一应答帧可能
+ * 混入新旧两代字节。DPP1 中运行期唯一可变的字节是 MasterCycleTime
+ * （0x01），其余输入只在重新配置时改变，因此该窗口在实践中可忽略；
+ * 若将来需要整帧同代，应改为一次取序号后复制整段。
  *
  * @param ctx ISDU 上下文
  * @param addr Direct Parameter page 地址（0x00-0x0F）

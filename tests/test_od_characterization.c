@@ -232,24 +232,25 @@ static void test_char_direct_param_page1(void** state)
                             IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 }
 
-/* DPP1 的 ISDU 读与 iolink_isdu_direct_param_page1_octet() 使用同一映像。 */
-static void test_char_direct_param_page1_single_source(void** state)
+/* DPP1 映像访问器与规范字面量一致：期望值来自 B.1 的独立向量，
+ * 不调用构建器生成。 */
+static void test_char_direct_param_page1_image(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    uint8_t full[16] = {0U};
-    uint8_t one[2] = {0U};
 
     char_prepare(&ctx, &k_char_info);
-    assert_int_equal(char_read(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0U, full, sizeof(full)), 16);
-
-    for (uint8_t addr = 0U; addr < 16U; addr++) {
-        assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, addr), full[addr]);
-        assert_int_equal(char_read(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, (uint8_t) (addr + 1U), one,
-                                   sizeof(one)),
-                         1);
-        assert_int_equal(one[0], full[addr]);
-        assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, addr), one[0]);
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x00U), 0x00U);
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x00U);
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x02U), 0x00U);
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x04U), 0x11U);
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x07U), 0x04U);
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x08U), 0xD2U);
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x09U), 0x00U);
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x0AU), 0x16U);
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x0BU), 0x2FU);
+    for (uint8_t addr = 0x0CU; addr < 16U; addr++) {
+        assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, addr), 0x00U);
     }
 }
 
@@ -600,7 +601,7 @@ int main(void)
                                         char_teardown),
         cmocka_unit_test_setup_teardown(test_char_device_status, char_setup, char_teardown),
         cmocka_unit_test_setup_teardown(test_char_direct_param_page1, char_setup, char_teardown),
-        cmocka_unit_test_setup_teardown(test_char_direct_param_page1_single_source, char_setup,
+        cmocka_unit_test_setup_teardown(test_char_direct_param_page1_image, char_setup,
                                         char_teardown),
         cmocka_unit_test_setup_teardown(test_char_direct_param_page2, char_setup, char_teardown),
         cmocka_unit_test_setup_teardown(test_char_identification_objects, char_setup,

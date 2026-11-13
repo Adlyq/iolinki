@@ -716,6 +716,7 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
      * 捕获 pd_in_active，因此既非活动也未被捕获的缓冲区
      * 不会被它读取。只有发布（长度、有效性、索引）必须
      * 对 ISR 是原子的。 */
+    const bool len_changed = (ctx->dll.main.pd_in_len_current != (uint8_t) len);
     (void) memcpy(&ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.od_width], data, len);
     IOLINK_CRITICAL_ENTER();
     ctx->dll.main.shared.pd_in_len = (uint8_t) len;
@@ -723,6 +724,11 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     ctx->dll.main.pd_valid = valid;
     ctx->dll.main.shared.pd_in_active = inactive;
     IOLINK_CRITICAL_EXIT();
+    if (len_changed) {
+        /* TYPE_2_V 允许运行期改变 PD-in 宽度：DPP1 的 0x05/0x02 必须跟着
+         * 失效重建（失效在临界区外执行，整页构建不占用关中断区间）。 */
+        iolink_isdu_dp_page1_invalidate(&ctx->dll.main.shared.isdu);
+    }
 
     return 0;
 }

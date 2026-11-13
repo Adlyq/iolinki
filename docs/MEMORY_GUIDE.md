@@ -87,7 +87,7 @@ instead of carrying it inside the main context. One measured example (`IOLINK_IS
 
 | Component | Embedded | External workspace |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 3192 | **2856** |
+| `iolink_device_ctx_t` | 4104 | **3768** |
 | `iolink_workspace_t` | — | 329 |
 
 > **Lease rule (ISDU response).** There is exactly one framed-response buffer.
@@ -120,7 +120,7 @@ You can tune these values to fit your MCU.
 | `IOLINK_PD_IN_MAX_SIZE` | 32 | 195 bytes | Three reply buffers of `od_max + pd_in + 1` (65 each) |
 | `IOLINK_PD_OUT_MAX_SIZE` | 32 | 32 bytes | Output Process Data buffer (also sizes the ISR RX buffer) |
 | `IOLINK_DS_IMAGE_MAX` | 256 | 256 bytes | DS serialization/download stage |
-| `IOLINK_MBX_SLOTS` | 4 | 304 bytes | Receive-frame mailbox depth; power of two in [2, 128], each record is 76 B |
+| `IOLINK_MBX_SLOTS` | 4 | 272 bytes | Receive-frame mailbox depth; power of two in [2, 128], each record is 68 B |
 | `IOLINK_REPLY_PLAN_SLOTS` | 48 | 1152 bytes | Reply-plan entries published to the ISR (48 × 24 B, four state slices) |
 
 ### Total RAM

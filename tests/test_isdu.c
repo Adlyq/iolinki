@@ -993,10 +993,9 @@ static void test_isdu_mseq_capability_codes(void** state)
     assert_int_equal(page1_octet3(IOLINK_M_SEQ_TYPE_0, 0, 0) & 0x30U, 0x00U);
 }
 
-/* DPP1 映像：初始化后逐字节读取与构建器输出一致。 */
+/* DPP1 映像：初始化后逐字节读取与规范字面量一致。 */
 static void test_isdu_dp_page1_image_octets(void** state)
 {
-    IOLINK_CONFORMANCE_CASE("SDCI_TC_0052");
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_dll_ctx_t dll;
@@ -1005,6 +1004,7 @@ static void test_isdu_dp_page1_image_octets(void** state)
 
     (void) memset(&dll, 0, sizeof(dll));
     dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
+    dll.main.shared.od_width = 1U; /* TYPE_2_1 的 Annex A 固定布局 */
     dll.main.baudrate = IOLINK_BAUDRATE_COM2;
     dll.main.master_cycle_time = 0x1AU;
     test_env_init(&g_test_env, NULL);
@@ -1022,7 +1022,7 @@ static void test_isdu_dp_page1_image_octets(void** state)
 
     assert_int_equal(page[0x00], 0x00U); /* MasterCommand 读出为 0 */
     assert_int_equal(page[0x01], 0x1AU); /* MasterCycleTime */
-    assert_int_equal(page[0x02], 0x16U); /* MinCycleTime = 2.2 ms（COM2、PDin 2/PDout 1） */
+    assert_int_equal(page[0x02], 0x1AU); /* MinCycleTime = 2.6 ms（COM2、OD1、PDin 2/PDout 1） */
     assert_int_equal(page[0x03], 0x01U); /* TYPE_2_1 + OD1 -> OPERATE 编码 0 */
     assert_int_equal(page[0x04], 0x11U); /* RevisionID 低字节 */
     assert_int_equal(page[0x05], 0x10U); /* PDIn 2 字节（位长度） */
@@ -1112,9 +1112,11 @@ static void test_isdu_dp_page1_invalidate(void** state)
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x33U);
     assert_int_equal((ctx.dp_page1_seq & 1U), 0U);
 
-    /* 主泵处理轮次同样会重建失效映像。 */
+    /* 主泵处理轮次重建"ISR 侧失效"的映像（直接置奇数序号模拟，
+     * 避免 invalidate 在主泵上下文立即重建而让断言恒真）。 */
     dll.main.master_cycle_time = 0x44U;
-    iolink_isdu_dp_page1_invalidate(&ctx);
+    dll.main.shared.in_isr = 0U;
+    ctx.dp_page1_seq = (uint8_t) (ctx.dp_page1_seq | 1U);
     iolink_isdu_process(&ctx);
     dll.main.shared.in_isr = 1U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x44U);

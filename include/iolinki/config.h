@@ -99,7 +99,7 @@
  * @brief 应答计划槽位上限。
  *
  * 计划表是主泵为 ISR 编译的请求指纹集合；槽位耗尽时多余计划被丢弃
- * 并计入 `reply_plan_overflows`，对应请求按"计划未命中"丢弃。默认：12
+ * 并计入 `reply_plan_overflows`，对应请求按"计划未命中"丢弃。默认：48
  */
 #ifndef IOLINK_REPLY_PLAN_SLOTS
 #define IOLINK_REPLY_PLAN_SLOTS 48U

@@ -1319,11 +1319,8 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
                       IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 2U,
                       IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_PAGE, 1U,
                       IOLINK_REPLY_FLAG_CONSUME, IOLINK_REPLY_ACT_NONE, NULL);
-        /* Type-0 页写（含 MasterCommand）：ISR 以 CKS 确认，帧交主泵应用。 */
-        dll_plan_push(ctx, &count, (uint8_t) IOLINK_DLL_STATE_ESTAB_COM, 0xFFU,
-                      IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 3U, IOLINK_MSEQ_TYPE_MASK,
-                      IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_NONE, 0U, 0U, IOLINK_REPLY_ACT_NONE,
-                      NULL);
+        /* Type-0 页写：ISR 以 CKS 确认，帧交主泵应用（通用页写行同时覆盖
+         * MasterCommand 地址 0，无需单独一行）。 */
         dll_plan_push(ctx, &count, (uint8_t) IOLINK_DLL_STATE_ESTAB_COM,
                       IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK, IOLINK_MC_CHANNEL_PAGE,
                       IOLINK_MC_ADDR_MASK, 3U, IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0,
@@ -1367,12 +1364,8 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
                           IOLINK_REPLY_FLAG_CLOSE_WINDOW | IOLINK_REPLY_FLAG_CONSUME,
                           IOLINK_REPLY_ACT_RESET_STARTUP, NULL);
         }
-        /* Type-0 页写（含 MasterCommand）：ISR 以 CKS 确认，帧交主泵应用
-         * （MasterCommand 的状态迁移与 DPP 写语义归主泵）。 */
-        dll_plan_push(ctx, &count, (uint8_t) IOLINK_DLL_STATE_OPERATE, 0xFFU,
-                      IOLINK_MC_CHANNEL_PAGE, IOLINK_MC_ADDR_MASK, 3U, IOLINK_MSEQ_TYPE_MASK,
-                      IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_NONE, 0U, 0U, IOLINK_REPLY_ACT_NONE,
-                      NULL);
+        /* Type-0 页写：ISR 以 CKS 确认，帧交主泵应用（通用页写行同时覆盖
+         * MasterCommand 地址 0，无需单独一行）。 */
         dll_plan_push(ctx, &count, (uint8_t) IOLINK_DLL_STATE_OPERATE,
                       IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK, IOLINK_MC_CHANNEL_PAGE,
                       IOLINK_MC_ADDR_MASK, 3U, IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0,

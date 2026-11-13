@@ -591,7 +591,7 @@ static int test_seqlock_window_is_a_miss(void)
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
     if (s_tx_n != 3U) {
-        return 3;
+        return 4;
     }
     return 0;
 }
@@ -680,7 +680,7 @@ static int test_startup_probe_plan(void)
     s_now_us = 1000000U;
     s_tx_n = 0U;
     s_tx_active = 0U;
-    iolink_dll_process(&s_dll.main); /* 主泵窗口：刷新 DPP1 映像与计划 */
+    iolink_dll_process(&s_dll.main); /* 主泵窗口：按当前配置发布计划切片 */
 
     uint8_t frame[2];
     make_frame((uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), IOLINK_MSEQ_TYPE_0,

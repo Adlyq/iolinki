@@ -202,7 +202,7 @@ typedef struct
     uint8_t flags;        /**< @ref IOLINK_REPLY_FLAG_PD_TAIL 等 */
     uint8_t source;       /**< @ref iolink_reply_source_t */
     uint8_t action;       /**< @ref iolink_reply_action_t */
-    uint8_t state;        /**< 编译该计划时的 DLL 状态（迁移后自动失效） */
+    uint8_t state;        /**< 编译该计划时的 DLL 状态（仅记录/调试；匹配范围由切片决定） */
 } iolink_reply_plan_t;
 /** @} */
 

@@ -328,7 +328,7 @@ static void build_scenarios(void)
     sc->frame[1] = IOLINK_MSEQ_TYPE_0;
     sc->len = 2U;
     sc->expect_tx = 0U;
-    sc->expect_miss = 0U; /* 阶段 1 起：无效帧不计入计划未命中 */
+    sc->expect_miss = 0U; /* 无效帧不计入计划未命中 */
     sc->check_first = 0U;
 
     s_scenario_count = 8U;

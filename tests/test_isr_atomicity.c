@@ -282,15 +282,13 @@ static void test_reply_staging_pokes_phy_outside_critical(void** state)
 
     /* dll_send() 中的暂存路径（槽位选择、载荷复制、发布）归主上下文
      * 所有，不得被平台临界区包裹：互斥属于直接发送的回退路径，
-     * 而不属于这里的一次发布。通过在应答该 ISDU 读的那一趟
-     * 前后统计进入次数来固定这一点；这样即使 request_service() 仍在
-     * 该段已释放的情况下运行，重新在复制前后加入
-     * IOLINK_CRITICAL_ENTER/EXIT 的回归也会暴露出来。
-     * 这一趟没有其它临界区：mock PHY 没有诊断钩子，
-     * ISDU FlowCTRL IDLE 读只复位传输，时序强制关闭
-     * （不产生 t_CYCLE 事件），DLL 状态不变，且
-     * 邮箱消费不取锁。本套件在 BYTE/BYTE 配置下运行该测试；
-     * FRAME 粒度仅做编译验证。 */
+     * 而不属于这里的一次发布。通过在应答该 DEFER 帧（STARTUP 的
+     * MasterCommand 页写）前后统计进入次数来固定这一点；这样即使
+     * request_service() 仍在该段已释放的情况下运行，重新在复制前后
+     * 加入 IOLINK_CRITICAL_ENTER/EXIT 的回归也会暴露出来。
+     * 这一趟没有其它临界区：mock PHY 没有诊断钩子，DEFER 帧由主泵
+     * 应用命令，时序强制关闭（不产生 t_CYCLE 事件），且邮箱消费不取锁。
+     * 本套件在 BYTE/BYTE 配置下运行该测试；FRAME 粒度仅做编译验证。 */
 #if IOLINK_NEED_CRITICAL
     const uint32_t crit_before = s_crit_enters;
 #endif
