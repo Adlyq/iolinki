@@ -63,9 +63,9 @@ static const iolink_od_entry_t k_od_table[] = {
      .name = "DirectParameters_2"},
 
     /* 0x0002：只写命令对象；写入是触发语义，值不保存。 */
-    IOLINK_OD_SCALAR(IOLINK_IDX_SYSTEM_COMMAND, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_WO,
-                     IOLINK_OD_WRITE_TRIGGER, IOLINK_OD_STORAGE_VOLATILE,
-                     IOLINK_OD_HANDLER_SYSTEM_COMMAND, 0U, 0xFFU, 0U, "SystemCommand"),
+    IOLINK_OD_BUILTIN_SCALAR(IOLINK_IDX_SYSTEM_COMMAND, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_WO,
+                             IOLINK_OD_WRITE_TRIGGER, IOLINK_OD_STORAGE_VOLATILE,
+                             IOLINK_OD_HANDLER_SYSTEM_COMMAND, 0U, 0xFFU, 0U, "SystemCommand"),
 
     /* 0x0003：DataStorage 记录；子索引由处理器校验（0..5）。 */
     {.index = IOLINK_IDX_DATA_STORAGE,
@@ -81,9 +81,9 @@ static const iolink_od_entry_t k_od_table[] = {
      .name = "DataStorage"},
 
     /* 0x000C：访问锁本身不受 Parameter 锁保护。 */
-    IOLINK_OD_SCALAR(IOLINK_IDX_DEVICE_ACCESS_LOCKS, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
-                     IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
-                     IOLINK_OD_HANDLER_ACCESS_LOCKS, 0U, 0xFFFFU, 0U, "DeviceAccessLocks"),
+    IOLINK_OD_BUILTIN_SCALAR(IOLINK_IDX_DEVICE_ACCESS_LOCKS, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
+                             IOLINK_OD_HANDLER_ACCESS_LOCKS, 0U, 0xFFFFU, 0U, "DeviceAccessLocks"),
 
     /* 0x000D：ProfileCharacteristic 为 UIntegerT16 的 ArrayT（sub 0/1）。
        子索引边界由处理器校验：未配置 Profile 时优先回答 IDX_NOT_AVAIL。 */
@@ -101,50 +101,56 @@ static const iolink_od_entry_t k_od_table[] = {
      .name = "ProfileCharacteristic"},
 
     /* 0x0010-0x0017：只读标识字符串。 */
-    IOLINK_OD_STRING(IOLINK_IDX_VENDOR_NAME, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 64U, "VendorName"),
-    IOLINK_OD_STRING(IOLINK_IDX_VENDOR_TEXT, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 64U, "VendorText"),
-    IOLINK_OD_STRING(IOLINK_IDX_PRODUCT_NAME, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 64U,
-                     "ProductName"),
-    IOLINK_OD_STRING(IOLINK_IDX_PRODUCT_ID, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 64U, "ProductID"),
-    IOLINK_OD_STRING(IOLINK_IDX_PRODUCT_TEXT, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 64U,
-                     "ProductText"),
-    IOLINK_OD_STRING(IOLINK_IDX_SERIAL_NUMBER, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 16U,
-                     "SerialNumber"),
-    IOLINK_OD_STRING(IOLINK_IDX_HARDWARE_REVISION, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 64U,
-                     "HardwareRevision"),
-    IOLINK_OD_STRING(IOLINK_IDX_FIRMWARE_REVISION, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 64U,
-                     "FirmwareRevision"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_VENDOR_NAME, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 64U,
+                             "VendorName"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_VENDOR_TEXT, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 64U,
+                             "VendorText"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_PRODUCT_NAME, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 64U,
+                             "ProductName"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_PRODUCT_ID, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 64U,
+                             "ProductID"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_PRODUCT_TEXT, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 64U,
+                             "ProductText"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_SERIAL_NUMBER, IOLINK_OD_ACCESS_RO,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
+                             IOLINK_OD_HANDLER_IDENT_STRING, 16U, "SerialNumber"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_HARDWARE_REVISION, IOLINK_OD_ACCESS_RO,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
+                             IOLINK_OD_HANDLER_IDENT_STRING, 64U, "HardwareRevision"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_FIRMWARE_REVISION, IOLINK_OD_ACCESS_RO,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
+                             IOLINK_OD_HANDLER_IDENT_STRING, 64U, "FirmwareRevision"),
 
     /* 0x0018-0x001A：可写标签，属于 DS 参数集并由参数管理器持久化。 */
-    IOLINK_OD_STRING(IOLINK_IDX_APPLICATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
-                     IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_TAG, 32U, "ApplicationSpecificTag"),
-    IOLINK_OD_STRING(IOLINK_IDX_FUNCTION_TAG, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
-                     IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_TAG, 32U, "FunctionTag"),
-    IOLINK_OD_STRING(IOLINK_IDX_LOCATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
-                     IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_TAG, 32U, "LocationTag"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_APPLICATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED,
+                             IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_TAG,
+                             32U, "ApplicationSpecificTag"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_FUNCTION_TAG, IOLINK_OD_ACCESS_RW_LOCKED,
+                             IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_TAG,
+                             32U, "FunctionTag"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_LOCATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED,
+                             IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_TAG,
+                             32U, "LocationTag"),
 
     /* 0x001B：ProductURI 可选，取决于 Profile。 */
-    IOLINK_OD_STRING(IOLINK_IDX_PRODUCT_URI, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 100U,
-                     "ProductURI"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_PRODUCT_URI, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 100U,
+                             "ProductURI"),
 
     /* 0x0020：ErrorCount（自复位以来的错误计数，2 字节）。 */
-    IOLINK_OD_SCALAR(IOLINK_IDX_ERROR_COUNT, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RO,
-                     IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
-                     IOLINK_OD_HANDLER_ERROR_COUNT, 0U, 0xFFFFU, 0U, "ErrorCount"),
+    IOLINK_OD_BUILTIN_SCALAR(IOLINK_IDX_ERROR_COUNT, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RO,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
+                             IOLINK_OD_HANDLER_ERROR_COUNT, 0U, 0xFFFFU, 0U, "ErrorCount"),
 
     /* 0x0024：DeviceStatus（单字节）。 */
-    IOLINK_OD_SCALAR(IOLINK_IDX_DEVICE_STATUS, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RO,
-                     IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
-                     IOLINK_OD_HANDLER_DEVICE_STATUS, 0U, 0xFFU, 0U, "DeviceStatus"),
+    IOLINK_OD_BUILTIN_SCALAR(IOLINK_IDX_DEVICE_STATUS, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RO,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
+                             IOLINK_OD_HANDLER_DEVICE_STATUS, 0U, 0xFFU, 0U, "DeviceStatus"),
 
     /* 0x0025：DetailedDeviceStatus（3 字节条目的 ArrayT，子索引由处理器校验）。 */
     {.index = IOLINK_IDX_DETAILED_DEVICE_STATUS,
@@ -160,17 +166,17 @@ static const iolink_od_entry_t k_od_table[] = {
      .name = "DetailedDeviceStatus"},
 
     /* 0x0028/0x0029：最近一次有效的过程数据快照。 */
-    IOLINK_OD_STRING(IOLINK_IDX_PROCESS_DATA_INPUT, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_PD_INPUT, 32U,
-                     "ProcessDataInput"),
-    IOLINK_OD_STRING(IOLINK_IDX_PROCESS_DATA_OUTPUT, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_PD_OUTPUT, 32U,
-                     "ProcessDataOutput"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_PROCESS_DATA_INPUT, IOLINK_OD_ACCESS_RO,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
+                             IOLINK_OD_HANDLER_PD_INPUT, 32U, "ProcessDataInput"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_PROCESS_DATA_OUTPUT, IOLINK_OD_ACCESS_RO,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
+                             IOLINK_OD_HANDLER_PD_OUTPUT, 32U, "ProcessDataOutput"),
 
     /* 0x0040：厂商错误统计（4 个大端计数器）。 */
-    IOLINK_OD_STRING(IOLINK_IDX_ERROR_STATS, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_ERROR_STATS, 16U,
-                     "VendorErrorStatistics"),
+    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_ERROR_STATS, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_ERROR_STATS, 16U,
+                             "VendorErrorStatistics"),
 };
 
 #define OD_TABLE_COUNT (sizeof(k_od_table) / sizeof(k_od_table[0]))
@@ -420,6 +426,112 @@ iolink_result_t iolink_od_default(const iolink_od_entry_t* entry, uint8_t* out, 
     return iolink_od_encode(entry, entry->scalar_default, out, cap);
 }
 
+/** @brief 从 STORAGE 表项的应用变量复制线上字节。 */
+static iolink_result_t od_storage_read(const iolink_od_entry_t* entry, uint8_t* out, size_t cap)
+{
+    const void* value = entry->u.storage.value;
+
+    if (value == NULL) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
+    }
+    if (entry->datatype == (uint8_t) IOLINK_OD_DT_OCTET_STRING) {
+        if (entry->u.storage.str_len == NULL) {
+            return iolink_result_error(IOLINK_RESULT_INVALID);
+        }
+        size_t n = (size_t) *entry->u.storage.str_len;
+        if ((entry->block_len > 0U) && (n > (size_t) entry->block_len)) {
+            n = (size_t) entry->block_len;
+        }
+        if (n > cap) {
+            return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+        }
+        if (n > 0U) {
+            (void) memcpy(out, value, n);
+        }
+        return iolink_result_ok((uint16_t) n);
+    }
+    const iolink_od_codec_t* codec = iolink_od_codec(entry->datatype);
+    if ((codec == NULL) || (cap < (size_t) codec->len)) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
+    }
+    uint32_t raw = 0U;
+    (void) memcpy(&raw, value, codec->len);
+    return iolink_od_encode(entry, raw, out, cap);
+}
+
+/** @brief 把已校验的线上字节写入 STORAGE 表项的应用变量。 */
+static iolink_result_t od_storage_apply(const iolink_od_entry_t* entry, const uint8_t* data,
+                                        size_t len)
+{
+    if (entry->datatype == (uint8_t) IOLINK_OD_DT_OCTET_STRING) {
+        if (entry->u.storage.str_len == NULL) {
+            return iolink_result_error(IOLINK_RESULT_INVALID);
+        }
+        if ((entry->block_len > 0U) && (len > (size_t) entry->block_len)) {
+            return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+        }
+        if (len > 0U) {
+            (void) memcpy((void*) entry->u.storage.value, data, len);
+        }
+        *entry->u.storage.str_len = (uint8_t) len;
+        return iolink_result_ok(0U);
+    }
+    uint32_t raw = 0U;
+    const iolink_result_t decoded = iolink_od_decode(entry, data, len, &raw);
+    if (!iolink_result_succeeded(decoded)) {
+        return decoded;
+    }
+    const iolink_od_codec_t* codec = iolink_od_codec(entry->datatype);
+    if (codec == NULL) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
+    }
+    (void) memcpy((void*) entry->u.storage.value, &raw, codec->len);
+    return iolink_result_ok(0U);
+}
+
+/**
+ * @brief 写入 STORAGE 表项，并在 on_change 拒绝时回滚标量。
+ *
+ * 标量保存写前的原生字节（≤4 B），失败时恢复；OctetString 不做回滚
+ * （避免在主泵栈上复制最多 255 字节），拒绝语义应由 `validate` 钩子
+ * 在写入前完成。
+ */
+static iolink_result_t od_storage_write(const iolink_od_entry_t* entry, void* user,
+                                        const uint8_t* data, size_t len)
+{
+    const bool is_string = entry->datatype == (uint8_t) IOLINK_OD_DT_OCTET_STRING;
+    const iolink_od_codec_t* codec = NULL;
+    uint8_t old_bytes[4] = {0U};
+
+    if (entry->u.storage.value == NULL) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
+    }
+    if (is_string) {
+        if (entry->u.storage.str_len == NULL) {
+            return iolink_result_error(IOLINK_RESULT_INVALID);
+        }
+    }
+    else {
+        codec = iolink_od_codec(entry->datatype);
+        if (codec == NULL) {
+            return iolink_result_error(IOLINK_RESULT_INVALID);
+        }
+        (void) memcpy(old_bytes, entry->u.storage.value, codec->len);
+    }
+
+    iolink_result_t result = od_storage_apply(entry, data, len);
+    if (!iolink_result_succeeded(result)) {
+        return result;
+    }
+    if (entry->on_change != NULL) {
+        result = entry->on_change(user, entry, data, len);
+        if (!iolink_result_succeeded(result) && !is_string) {
+            (void) memcpy((void*) entry->u.storage.value, old_bytes, codec->len);
+        }
+    }
+    return result;
+}
+
 iolink_result_t iolink_od_read_value(const iolink_od_ctx_t* ctx, const iolink_od_entry_t* entry,
                                      uint8_t subindex, uint8_t* out, size_t cap)
 {
@@ -438,11 +550,21 @@ iolink_result_t iolink_od_read_value(const iolink_od_ctx_t* ctx, const iolink_od
         }
         result = iolink_params_ctx_read(ctx->params, entry->index, subindex, out, cap);
     }
-    else {
-        if ((ctx->app == NULL) || (ctx->app->read == NULL)) {
+    else if (entry->handler == (uint8_t) IOLINK_OD_HANDLER_NONE) {
+        if (entry->backend == (uint8_t) IOLINK_OD_BACKEND_STORAGE) {
+            result = od_storage_read(entry, out, cap);
+        }
+        else if ((entry->backend == (uint8_t) IOLINK_OD_BACKEND_HANDLER) && (ctx->app != NULL) &&
+                 (entry->u.handler.read != NULL)) {
+            result = entry->u.handler.read(ctx->app->user, entry, out, cap);
+        }
+        else {
             return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
         }
-        result = ctx->app->read(ctx->app->user, entry, out, cap);
+    }
+    else {
+        /* 内建处理器（事件/诊断/标识/直接参数）由 ISDU 层执行。 */
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
     if (!iolink_result_succeeded(result)) {
         return result;
@@ -494,11 +616,20 @@ iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entr
                                              : IOLINK_PERSIST_NONE;
         result = iolink_params_ctx_write(ctx->params, entry->index, subindex, data, len, persist);
     }
-    else {
-        if ((ctx->app == NULL) || (ctx->app->write == NULL)) {
+    else if (entry->handler == (uint8_t) IOLINK_OD_HANDLER_NONE) {
+        if (entry->backend == (uint8_t) IOLINK_OD_BACKEND_STORAGE) {
+            /* STORAGE 自己处理 on_change 与回滚。 */
+            return od_storage_write(entry, user, data, len);
+        }
+        if ((entry->backend != (uint8_t) IOLINK_OD_BACKEND_HANDLER) || (ctx->app == NULL) ||
+            (entry->u.handler.write == NULL)) {
             return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
         }
-        result = ctx->app->write(ctx->app->user, entry, subindex, data, len);
+        result = entry->u.handler.write(ctx->app->user, entry, subindex, data, len);
+    }
+    else {
+        /* 内建处理器（SystemCommand/DataStorage/事件/诊断）由 ISDU 层执行。 */
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
     if (!iolink_result_succeeded(result)) {
         return result;

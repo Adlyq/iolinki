@@ -110,9 +110,9 @@ class OdIoddExport(unittest.TestCase):
             iodd_gen.generate_bytes(dict(self.config, variables=[]), [])
 
     def test_duplicate_index_is_rejected(self):
-        table = 'IOLINK_OD_SCALAR(%s, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RO, ' \
+        table = 'IOLINK_OD_SCALAR_STORAGE(%s, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RO, ' \
                 'IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, ' \
-                'IOLINK_OD_HANDLER_BACKEND, 0U, 1U, 0U, "%s"),\n'
+                '0U, 1U, 0U, "%s", NULL),\n'
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'duplicate.c'
             path.write_text('#define IDX 0x0100U\n' + table % ('IDX', 'A') + table % ('IDX', 'B'))

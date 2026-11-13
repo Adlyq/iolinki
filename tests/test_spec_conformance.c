@@ -131,7 +131,9 @@ static const iolink_od_entry_t k_vendor_entries[] = {
      .write_semantics = IOLINK_OD_WRITE_VOLATILE,
      .storage = IOLINK_OD_STORAGE_VOLATILE,
      .flags = 0U,
-     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .handler = IOLINK_OD_HANDLER_NONE,
+     .backend = IOLINK_OD_BACKEND_HANDLER,
+     .u.handler = {.read = vendor_param_read, .write = vendor_param_write},
      .block_len = 1U,
      .range_min = 0U,
      .range_max = 0U,
@@ -454,8 +456,6 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
     g_vendor_calls = 0U;
     iolink_od_app_t app = {.entries = k_vendor_entries,
                            .count = sizeof(k_vendor_entries) / sizeof(k_vendor_entries[0]),
-                           .read = vendor_param_read,
-                           .write = vendor_param_write,
                            .user = NULL};
 
     iolink_isdu_ctx_t ctx;

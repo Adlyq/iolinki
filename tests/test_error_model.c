@@ -50,25 +50,10 @@ static int test_teardown(void** state)
 }
 
 /* DS 下载期间写入的 DS 参数：表项声明 storage=DS 后由 ISDU 层暂存，
-   长度上限来自绑定的描述符集合。 */
+   长度上限来自表项的 block_len。这里没有值后端（只测暂存与镜像）。 */
 static const iolink_od_entry_t k_ds_param_entry[] = {
-    {.index = 0x0100U,
-     .subindex = 0U,
-     .max_subindex = 0U,
-     .datatype = IOLINK_OD_DT_OCTET_STRING,
-     .access = IOLINK_OD_ACCESS_RW,
-     .write_semantics = IOLINK_OD_WRITE_VOLATILE,
-     .storage = IOLINK_OD_STORAGE_DS,
-     .flags = 0U,
-     .handler = IOLINK_OD_HANDLER_BACKEND,
-     .block_len = 2U,
-     .range_min = 0U,
-     .range_max = 0U,
-     .scalar_default = 0U,
-     .block_default = NULL,
-     .name = "DsParameter",
-     .validate = NULL,
-     .on_change = NULL},
+    IOLINK_OD_STRING_HANDLER(0x0100U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_DS, 2U, "DsParameter", NULL, NULL),
 };
 
 static const iolink_od_app_t k_ds_app = {
@@ -79,23 +64,8 @@ static const iolink_od_app_t k_ds_app = {
 
 /* 无长度上限的 DS 参数（block_len 0）：只用于镜像容量边界。 */
 static const iolink_od_entry_t k_ds_param_unbounded[] = {
-    {.index = 0x0101U,
-     .subindex = 0U,
-     .max_subindex = 0U,
-     .datatype = IOLINK_OD_DT_OCTET_STRING,
-     .access = IOLINK_OD_ACCESS_RW,
-     .write_semantics = IOLINK_OD_WRITE_VOLATILE,
-     .storage = IOLINK_OD_STORAGE_DS,
-     .flags = 0U,
-     .handler = IOLINK_OD_HANDLER_BACKEND,
-     .block_len = 0U,
-     .range_min = 0U,
-     .range_max = 0U,
-     .scalar_default = 0U,
-     .block_default = NULL,
-     .name = "DsUnbounded",
-     .validate = NULL,
-     .on_change = NULL},
+    IOLINK_OD_STRING_HANDLER(0x0101U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_DS, 0U, "DsUnbounded", NULL, NULL),
 };
 
 static const iolink_od_app_t k_ds_app_unbounded = {
@@ -248,8 +218,6 @@ static void test_isdu_reports_positive_error_code(void** state)
     isdu.ds_ctx = &ds;
     iolink_od_app_t app = {.entries = k_ds_param_entry,
                            .count = sizeof(k_ds_param_entry) / sizeof(k_ds_param_entry[0]),
-                           .read = NULL,
-                           .write = NULL,
                            .user = NULL};
     iolink_isdu_bind_od(&isdu, &app);
 

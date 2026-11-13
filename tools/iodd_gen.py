@@ -154,7 +154,11 @@ OD_ACCESS = {
     'IOLINK_OD_ACCESS_WO_LOCKED': 'wo',
 }
 
-OD_ENTRY_RE = re.compile(r'IOLINK_OD_(SCALAR_EX|SCALAR|STRING_EX|STRING)\s*\(', re.S)
+OD_ENTRY_RE = re.compile(
+    r'IOLINK_OD_(SCALAR_STORAGE_EX|SCALAR_STORAGE|SCALAR_HANDLER_EX|SCALAR_HANDLER|'
+    r'STRING_STORAGE_EX|STRING_STORAGE|STRING_HANDLER_EX|STRING_HANDLER)\s*\(',
+    re.S,
+)
 
 
 def _strip_c_comments(text):
@@ -246,27 +250,32 @@ def parse_od_source(path):
     for match in OD_ENTRY_RE.finditer(text):
         kind = match.group(1)
         args, _ = _split_macro_args(text, match.end())
-        if kind in ('STRING', 'STRING_EX'):
-            expected = 7 if kind == 'STRING' else 9
+        if kind.startswith('STRING'):
+            expected = 10 if kind.endswith('_EX') else 8
             if len(args) != expected:
                 raise ValueError(f'{path}: IOLINK_OD_{kind} expects {expected} arguments')
             index = _resolve_int(args[0], defines)
             access = OD_ACCESS.get(args[1], None)
             datatype, bits = OD_DATATYPES['IOLINK_OD_DT_OCTET_STRING']
-            bits = _resolve_int(args[5], defines) * 8
+            bits = _resolve_int(args[4], defines) * 8
             lower = upper = None
             default = None
-            name = _str_arg(args[6])
+            name = _str_arg(args[5])
         else:
-            expected = 10 if kind == 'SCALAR' else 12
+            expected = {
+                'SCALAR_STORAGE': 10,
+                'SCALAR_STORAGE_EX': 12,
+                'SCALAR_HANDLER': 11,
+                'SCALAR_HANDLER_EX': 13,
+            }[kind]
             if len(args) != expected:
                 raise ValueError(f'{path}: IOLINK_OD_{kind} expects {expected} arguments')
             index = _resolve_int(args[0], defines)
             datatype, bits = OD_DATATYPES.get(args[1], (None, None))
             access = OD_ACCESS.get(args[2], None)
-            lower, upper = _resolve_int(args[6], defines), _resolve_int(args[7], defines)
-            default = _resolve_int(args[8], defines)
-            name = _str_arg(args[9])
+            lower, upper = _resolve_int(args[5], defines), _resolve_int(args[6], defines)
+            default = _resolve_int(args[7], defines)
+            name = _str_arg(args[8])
         if datatype is None:
             raise ValueError(f'{path}: unsupported datatype {args[1]}')
         if access is None:

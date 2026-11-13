@@ -56,28 +56,40 @@ static iolink_result_t validate_config4(void* user, const iolink_od_entry_t* ent
     return exact_length(entry, len);
 }
 
+static iolink_result_t conformance_od_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+                                           size_t cap);
+static iolink_result_t conformance_od_write(void* user, const iolink_od_entry_t* entry,
+                                            uint8_t subindex, const uint8_t* data, size_t len);
+
 static const iolink_od_entry_t k_conformance_od[] = {
-    IOLINK_OD_STRING_EX(CONFORMANCE_CONFIG1_INDEX, IOLINK_OD_ACCESS_RW_LOCKED,
-                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND,
-                        CONFORMANCE_CONFIG1_MAX, "Config1", validate_config1, NULL),
-    IOLINK_OD_SCALAR(CONFORMANCE_CONFIG2_INDEX, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW_LOCKED,
-                     IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND, 0U,
-                     0xFFFFU, 0U, "Config2"),
-    IOLINK_OD_STRING_EX(CONFORMANCE_CONFIG3_INDEX, IOLINK_OD_ACCESS_RW_LOCKED,
-                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND,
-                        CONFORMANCE_CONFIG3_MAX, "Config3", validate_config3, NULL),
-    IOLINK_OD_STRING_EX(CONFORMANCE_CONFIG4_INDEX0, IOLINK_OD_ACCESS_RW_LOCKED,
-                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND,
-                        CONFORMANCE_CONFIG4_SIZE, "Config4_0", validate_config4, NULL),
-    IOLINK_OD_STRING_EX(CONFORMANCE_CONFIG4_INDEX1, IOLINK_OD_ACCESS_RW_LOCKED,
-                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND,
-                        CONFORMANCE_CONFIG4_SIZE, "Config4_1", validate_config4, NULL),
-    IOLINK_OD_STRING_EX(CONFORMANCE_CONFIG4_INDEX2, IOLINK_OD_ACCESS_RW_LOCKED,
-                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND,
-                        CONFORMANCE_CONFIG4_SIZE, "Config4_2", validate_config4, NULL),
-    IOLINK_OD_STRING_EX(CONFORMANCE_CONFIG4_INDEX3, IOLINK_OD_ACCESS_RW_LOCKED,
-                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND,
-                        CONFORMANCE_CONFIG4_SIZE, "Config4_3", validate_config4, NULL),
+    IOLINK_OD_STRING_HANDLER_EX(CONFORMANCE_CONFIG1_INDEX, IOLINK_OD_ACCESS_RW_LOCKED,
+                                IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS,
+                                CONFORMANCE_CONFIG1_MAX, "Config1", conformance_od_read,
+                                conformance_od_write, validate_config1, NULL),
+    IOLINK_OD_SCALAR_HANDLER(CONFORMANCE_CONFIG2_INDEX, IOLINK_OD_DT_U16,
+                             IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_DS, 0U, 0xFFFFU, 0U, "Config2", conformance_od_read,
+                             conformance_od_write),
+    IOLINK_OD_STRING_HANDLER_EX(CONFORMANCE_CONFIG3_INDEX, IOLINK_OD_ACCESS_RW_LOCKED,
+                                IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS,
+                                CONFORMANCE_CONFIG3_MAX, "Config3", conformance_od_read,
+                                conformance_od_write, validate_config3, NULL),
+    IOLINK_OD_STRING_HANDLER_EX(CONFORMANCE_CONFIG4_INDEX0, IOLINK_OD_ACCESS_RW_LOCKED,
+                                IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS,
+                                CONFORMANCE_CONFIG4_SIZE, "Config4_0", conformance_od_read,
+                                conformance_od_write, validate_config4, NULL),
+    IOLINK_OD_STRING_HANDLER_EX(CONFORMANCE_CONFIG4_INDEX1, IOLINK_OD_ACCESS_RW_LOCKED,
+                                IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS,
+                                CONFORMANCE_CONFIG4_SIZE, "Config4_1", conformance_od_read,
+                                conformance_od_write, validate_config4, NULL),
+    IOLINK_OD_STRING_HANDLER_EX(CONFORMANCE_CONFIG4_INDEX2, IOLINK_OD_ACCESS_RW_LOCKED,
+                                IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS,
+                                CONFORMANCE_CONFIG4_SIZE, "Config4_2", conformance_od_read,
+                                conformance_od_write, validate_config4, NULL),
+    IOLINK_OD_STRING_HANDLER_EX(CONFORMANCE_CONFIG4_INDEX3, IOLINK_OD_ACCESS_RW_LOCKED,
+                                IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS,
+                                CONFORMANCE_CONFIG4_SIZE, "Config4_3", conformance_od_read,
+                                conformance_od_write, validate_config4, NULL),
 };
 
 /** @brief 把一个字节串复制到调用方缓冲；容量不足仍报 0x33。 */
@@ -169,7 +181,5 @@ void conformance_od_init(iolink_od_app_t* app, conformance_device_t* device)
     }
     app->entries = k_conformance_od;
     app->count = sizeof(k_conformance_od) / sizeof(k_conformance_od[0]);
-    app->read = conformance_od_read;
-    app->write = conformance_od_write;
     app->user = device;
 }

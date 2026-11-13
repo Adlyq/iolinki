@@ -892,7 +892,9 @@ static const iolink_od_entry_t k_long_entry[] = {
      .write_semantics = IOLINK_OD_WRITE_VOLATILE,
      .storage = IOLINK_OD_STORAGE_VOLATILE,
      .flags = 0U,
-     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .handler = IOLINK_OD_HANDLER_NONE,
+     .backend = IOLINK_OD_BACKEND_HANDLER,
+     .u.handler = {.read = long_param_read, .write = NULL},
      .block_len = 200U,
      .range_min = 0U,
      .range_max = 0U,
@@ -923,8 +925,6 @@ static void test_0055_200_byte_read(void** state)
     test_isdu_bind_params(&ctx, &g_test_env);
     iolink_od_app_t app = {.entries = k_long_entry,
                            .count = sizeof(k_long_entry) / sizeof(k_long_entry[0]),
-                           .read = long_param_read,
-                           .write = NULL,
                            .user = NULL};
     iolink_isdu_bind_od(&ctx, &app);
 

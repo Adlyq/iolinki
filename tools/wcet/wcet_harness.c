@@ -111,7 +111,7 @@ static uint8_t g_pd_in[IOLINK_PD_IN_MAX_SIZE];
 static char g_vendor_name[WCET_VENDOR_NAME_LEN + 1U];
 static iolink_device_info_t g_device_info;
 static uint8_t g_vendor_param[WCET_VENDOR_PARAM_LEN];
-static size_t g_vendor_param_len;
+static uint8_t g_vendor_param_len;
 static uint8_t g_nvm[IOLINK_STORAGE_TOTAL_SIZE];
 
 #define WCET_CHECK(cond, message)                                                        \
@@ -159,55 +159,15 @@ static const iolink_storage_api_t g_storage = {
     .write = wcet_storage_write,
 };
 
-/** @brief 应用参数值后端：索引 0x0040 是 64 字节可读写记录。 */
-static iolink_result_t wcet_param_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
-                                       size_t cap)
-{
-    (void) user;
-    (void) entry;
-    if ((out == NULL) || (cap < g_vendor_param_len)) {
-        return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
-    }
-    (void) memcpy(out, g_vendor_param, g_vendor_param_len);
-    return iolink_result_ok((uint16_t) g_vendor_param_len);
-}
-
-static iolink_result_t wcet_param_write(void* user, const iolink_od_entry_t* entry,
-                                        uint8_t subindex, const uint8_t* data, size_t len)
-{
-    (void) user;
-    (void) entry;
-    (void) subindex;
-    (void) memcpy(g_vendor_param, data, len);
-    g_vendor_param_len = len;
-    return iolink_result_ok(0U);
-}
-
 static const iolink_od_entry_t k_wcet_od_entries[] = {
-    {.index = WCET_VENDOR_PARAM_INDEX,
-     .subindex = 0U,
-     .max_subindex = 0U,
-     .datatype = IOLINK_OD_DT_OCTET_STRING,
-     .access = IOLINK_OD_ACCESS_RW,
-     .write_semantics = IOLINK_OD_WRITE_VOLATILE,
-     .storage = IOLINK_OD_STORAGE_VOLATILE,
-     .flags = 0U,
-     .handler = IOLINK_OD_HANDLER_BACKEND,
-     .block_len = WCET_VENDOR_PARAM_LEN,
-     .range_min = 0U,
-     .range_max = 0U,
-     .scalar_default = 0U,
-     .block_default = NULL,
-     .name = "VendorParameter",
-     .validate = NULL,
-     .on_change = NULL},
+    IOLINK_OD_STRING_STORAGE(WCET_VENDOR_PARAM_INDEX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_VOLATILE, WCET_VENDOR_PARAM_LEN, "VendorParameter",
+                             g_vendor_param, &g_vendor_param_len),
 };
 
 static iolink_od_app_t g_wcet_od = {
     .entries = k_wcet_od_entries,
     .count = sizeof(k_wcet_od_entries) / sizeof(k_wcet_od_entries[0]),
-    .read = wcet_param_read,
-    .write = wcet_param_write,
     .user = NULL,
 };
 

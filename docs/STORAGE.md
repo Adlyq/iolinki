@@ -44,14 +44,14 @@ Each record carries `magic + version` (layout) and a Fletcher-32 checksum
 
 ## 2. How DS parameters are read
 
-The device binds a default accessor pair that is driven by the object dictionary:
+The device reads and writes DS records through the object dictionary:
 
 1. standard parameters (0x0018/0x0019/0x001A) through the params context;
-2. device-specific parameters (0x0040+ / 0x0100+) through the `config.od`
-   read/write backends.
+2. device-specific parameters (0x0040+ / 0x0100+) through the table entry's
+   `STORAGE` variable or `HANDLER` callbacks.
 
-So **if a parameter is already served by the params context or declared in the
-application object dictionary, DS can read/write it without any extra callback.**
+So **if a parameter is declared in the application object dictionary with
+`IOLINK_OD_STORAGE_DS`, DS reads and writes it without any extra callback.**
 
 ## 3. Customising the DS parameter set
 
@@ -61,9 +61,13 @@ standard-table order followed by application-table order. Declaring the
 parameter is the only step:
 
 ```c
+static uint8_t g_vendor_param[8];
+static uint8_t g_vendor_param_len;
+
 static const iolink_od_entry_t my_entries[] = {
-    IOLINK_OD_STRING(0x0050, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND, 8, "VendorParam"),
+    IOLINK_OD_STRING_STORAGE(0x0050, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_DS, 8, "VendorParam", g_vendor_param,
+                             &g_vendor_param_len),
 };
 ```
 

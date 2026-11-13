@@ -328,15 +328,14 @@ static iolink_result_t vendor_od_write(void* user, const iolink_od_entry_t* entr
 }
 
 static const iolink_od_entry_t k_vendor_entries[] = {
-    IOLINK_OD_STRING(VENDOR_PARAM_IDX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND, 8U, "VendorParam"),
+    IOLINK_OD_STRING_HANDLER(VENDOR_PARAM_IDX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_DS, 8U, "VendorParam", vendor_od_read,
+                             vendor_od_write),
 };
 
 static iolink_od_app_t k_vendor_app = {
     .entries = k_vendor_entries,
     .count = sizeof(k_vendor_entries) / sizeof(k_vendor_entries[0]),
-    .read = vendor_od_read,
-    .write = vendor_od_write,
     .user = NULL,
 };
 
@@ -442,14 +441,13 @@ static iolink_result_t rejecting_od_write(void* user, const iolink_od_entry_t* e
 }
 
 static const iolink_od_entry_t k_reject_entries[] = {
-    IOLINK_OD_STRING(VENDOR_PARAM_IDX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND, 8U, "Rejected"),
+    IOLINK_OD_STRING_HANDLER(VENDOR_PARAM_IDX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                             IOLINK_OD_STORAGE_DS, 8U, "Rejected", NULL, rejecting_od_write),
 };
 
 static iolink_od_app_t k_reject_app = {
     .entries = k_reject_entries,
     .count = sizeof(k_reject_entries) / sizeof(k_reject_entries[0]),
-    .write = rejecting_od_write,
     .user = NULL,
 };
 
@@ -511,14 +509,13 @@ static void test_ds_entry_block_len_bounds_value(void** state)
     (void) state;
     iolink_ds_ctx_t ds;
     static const iolink_od_entry_t bounded_entries[] = {
-        IOLINK_OD_STRING(VENDOR_PARAM_IDX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
-                         IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND, 4U, "Bounded"),
+        IOLINK_OD_STRING_HANDLER(VENDOR_PARAM_IDX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                                 IOLINK_OD_STORAGE_DS, 4U, "Bounded", vendor_od_read,
+                                 vendor_od_write),
     };
     static iolink_od_app_t bounded_app = {
         .entries = bounded_entries,
         .count = sizeof(bounded_entries) / sizeof(bounded_entries[0]),
-        .read = vendor_od_read,
-        .write = vendor_od_write,
         .user = NULL,
     };
 

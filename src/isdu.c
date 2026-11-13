@@ -1834,7 +1834,7 @@ static void isdu_serve_entry(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t* en
             return;
 
         case IOLINK_OD_HANDLER_TAG:
-        case IOLINK_OD_HANDLER_BACKEND:
+        case IOLINK_OD_HANDLER_NONE:
             isdu_serve_od_value(ctx, entry);
             return;
 

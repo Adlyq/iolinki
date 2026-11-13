@@ -339,37 +339,40 @@ iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entr
 Standard objects (`0x0000-0x003F` plus the vendor error statistics at `0x0040`)
 live in a built-in `const` table served by stack handlers; applications add
 their own parameters through `config.od`. Table entries are plain values so the
-whole table can stay `const` in ROM; runtime values come from the `read`/`write`
-backend (or the parameter manager for tag objects).
+whole table can stay `const` in ROM. Each application entry carries exactly one
+value backend: `STORAGE` (points at an application variable, zero shadow) or
+`HANDLER` (per-entry read/write function pointers for computed values).
 
-**Adding a parameter** takes one table row plus one branch in your backend:
+**Adding a parameter** takes one table row. Storage-bound scalar:
 
 ```c
+static uint16_t g_threshold = 500U;
+
 static const iolink_od_entry_t g_od_entries[] = {
-    IOLINK_OD_SCALAR(0x0050, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_STORE,
-                     IOLINK_OD_STORAGE_NVM, IOLINK_OD_HANDLER_BACKEND, 0U, 1000U, 500U,
-                     "Threshold"),
+    IOLINK_OD_SCALAR_STORAGE(0x0050, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
+                             IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_NVM, 0U, 1000U, 500U,
+                             "Threshold", &g_threshold),
 };
 
 static const iolink_od_app_t g_od = {
     .entries = g_od_entries,
     .count = sizeof(g_od_entries) / sizeof(g_od_entries[0]),
-    .read = my_od_read,
-    .write = my_od_write,
-    .user = &app_state,
+    .user = NULL, /* passed to hooks and HANDLER backends */
 };
 /* ... .od = &g_od in iolink_device_config_t ... */
 ```
 
-`IOLINK_OD_SCALAR` / `IOLINK_OD_SCALAR_EX` / `IOLINK_OD_STRING` build the rows;
-`IOLINK_OD_SCALAR_EX` adds the hooks. Index ownership follows the index domain:
-normative indices (below `0x0040`) are served from the standard table and cannot
-be overridden, while device-specific indices (`0x0040-0x00FE`, `0x0100+`) try
-the application table first and fall back to the built-in standard entry
-(`0x0040` error statistics) when undeclared. `iolink_od_write_value()` receives
-the requested subindex, enforces `max_subindex`, and rejects OctetString payloads
-above `block_len` with `0x33`. See
-`examples/switching_sensor/switching_sensor_od.c` for a complete table with
+`IOLINK_OD_SCALAR_STORAGE` / `IOLINK_OD_STRING_STORAGE` bind an application
+variable and check its width at compile time; the `_HANDLER` variants take a
+`read`/`write` pair instead, and the `_EX` suffix adds `validate`/`on_change`
+hooks. Strings need an array and a `uint8_t` length variable. Index ownership
+follows the index domain: normative indices (below `0x0040`) are served from the
+standard table and cannot be overridden, while device-specific indices
+(`0x0040-0x00FE`, `0x0100+`) try the application table first and fall back to the
+built-in standard entry (`0x0040` error statistics) when undeclared.
+`iolink_od_write_value()` receives the requested subindex, enforces
+`max_subindex`, and rejects OctetString payloads above `block_len` with `0x33`.
+See `examples/switching_sensor/switching_sensor_od.c` for a complete table with
 validation and trigger semantics.
 
 ## Event API

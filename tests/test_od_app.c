@@ -97,9 +97,9 @@ static iolink_result_t single_write(void* user, const iolink_od_entry_t* entry, 
 
 /* 一行表项新增一个 ISDU 参数 0x0200。 */
 static const iolink_od_entry_t k_single_entry[] = {
-    IOLINK_OD_SCALAR(0x0200U, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_BACKEND, 0U, 0xFFFFU, 42U,
-                     "TestOnlyParameter"),
+    IOLINK_OD_SCALAR_HANDLER(0x0200U, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U, 0xFFFFU, 42U,
+                             "TestOnlyParameter", single_read, single_write),
 };
 
 static void test_od_single_entry_parameter(void** state)
@@ -117,8 +117,6 @@ static void test_od_single_entry_parameter(void** state)
 
     app.entries = k_single_entry;
     app.count = sizeof(k_single_entry) / sizeof(k_single_entry[0]);
-    app.read = single_read;
-    app.write = single_write;
     app.user = &cell;
     iolink_isdu_bind_od(&ctx, &app);
 
@@ -236,7 +234,8 @@ static const iolink_od_entry_t k_octet_entry[] = {
      .access = IOLINK_OD_ACCESS_RW,
      .write_semantics = IOLINK_OD_WRITE_VOLATILE,
      .storage = IOLINK_OD_STORAGE_VOLATILE,
-     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .handler = IOLINK_OD_HANDLER_NONE,
+     .backend = IOLINK_OD_BACKEND_HANDLER,
      .block_len = 4U,
      .block_default = k_block_default,
      .name = "OctetParameter"},
@@ -249,16 +248,17 @@ static const iolink_od_entry_t k_trigger_no_hook[] = {
      .access = IOLINK_OD_ACCESS_WO,
      .write_semantics = IOLINK_OD_WRITE_TRIGGER,
      .storage = IOLINK_OD_STORAGE_VOLATILE,
-     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .handler = IOLINK_OD_HANDLER_NONE,
+     .backend = IOLINK_OD_BACKEND_HANDLER,
      .range_max = 1U,
      .name = "TriggerWithoutHook"},
 };
 
 /* 0..1 的小范围，用于验证 codec 的越界错误码。 */
 static const iolink_od_entry_t k_range_entry[] = {
-    IOLINK_OD_SCALAR(0x0302U, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_BACKEND, 0U, 1U, 0U,
-                     "RangeOnly"),
+    IOLINK_OD_SCALAR_HANDLER(0x0302U, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RW,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U, 1U, 0U,
+                             "RangeOnly", NULL, NULL),
 };
 
 static int g_od_change_calls;
@@ -276,9 +276,9 @@ static iolink_result_t track_change(void* user, const iolink_od_entry_t* entry, 
 
 /* STORE/VOLATILE 写后仍要执行 on_change。 */
 static const iolink_od_entry_t k_change_entry[] = {
-    IOLINK_OD_SCALAR_EX(0x0303U, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
-                        IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_BACKEND, 0U, 1U, 0U,
-                        "WriteWithHook", NULL, track_change),
+    IOLINK_OD_SCALAR_HANDLER_EX(0x0303U, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RW,
+                                IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U, 1U, 0U,
+                                "WriteWithHook", single_read, single_write, NULL, track_change),
 };
 
 static iolink_result_t failing_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
@@ -400,28 +400,30 @@ static void test_od_value_layer_edges(void** state)
     iolink_od_ctx_t ctx = {0};
     assert_int_equal(iolink_od_read_value(NULL, scalar, 0U, buf, sizeof(buf)).code,
                      IOLINK_RESULT_INVALID);
-    assert_int_equal(iolink_od_read_value(&ctx, scalar, 0U, buf, sizeof(buf)).code,
-                     IOLINK_RESULT_NOT_HANDLED);
-
-    iolink_od_app_t failing_app = {0};
-    failing_app.entries = k_single_entry;
-    failing_app.count = 1U;
-    failing_app.read = failing_read;
-    ctx.app = &failing_app;
-    assert_int_equal(iolink_od_read_value(&ctx, scalar, 0U, buf, sizeof(buf)).code,
-                     IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL);
-
-    iolink_od_app_t short_app = failing_app;
-    short_app.read = short_read;
-    ctx.app = &short_app;
-    assert_int_equal(iolink_od_read_value(&ctx, scalar, 0U, buf, sizeof(buf)).code,
+    single_cell_t read_cell = {.value = 0U};
+    iolink_od_ctx_t handler_ctx = {0};
+    iolink_od_app_t app_cell = {.entries = k_single_entry, .count = 1U, .user = &read_cell};
+    handler_ctx.app = &app_cell;
+    assert_int_equal(
+        iolink_od_read_value(&handler_ctx, &k_range_entry[0], 0U, buf, sizeof(buf)).code,
+        IOLINK_RESULT_NOT_HANDLED);
+    assert_int_equal(iolink_od_read_value(&handler_ctx, scalar, 0U, buf, 1U).code,
                      IOLINK_RESULT_INVALID);
 
-    iolink_od_app_t long_app = failing_app;
-    long_app.read = long_read;
-    long_app.entries = k_octet_entry;
-    ctx.app = &long_app;
-    assert_int_equal(iolink_od_read_value(&ctx, octet, 0U, buf, 4U).code, IOLINK_RESULT_INVALID);
+    iolink_od_entry_t failing_entry = k_single_entry[0];
+    failing_entry.u.handler.read = failing_read;
+    assert_int_equal(iolink_od_read_value(&handler_ctx, &failing_entry, 0U, buf, sizeof(buf)).code,
+                     IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL);
+
+    iolink_od_entry_t short_entry = k_single_entry[0];
+    short_entry.u.handler.read = short_read;
+    assert_int_equal(iolink_od_read_value(&handler_ctx, &short_entry, 0U, buf, sizeof(buf)).code,
+                     IOLINK_RESULT_INVALID);
+
+    iolink_od_entry_t long_entry = k_octet_entry[0];
+    long_entry.u.handler.read = long_read;
+    assert_int_equal(iolink_od_read_value(&handler_ctx, &long_entry, 0U, buf, 4U).code,
+                     IOLINK_RESULT_INVALID);
 
     /* write_value：空参数、TRIGGER 无钩子、TAG 无 params、缺后端、写后钩子。 */
     assert_int_equal(iolink_od_write_value(NULL, scalar, 0U, &one, 1U).code, IOLINK_RESULT_INVALID);
@@ -443,7 +445,6 @@ static void test_od_value_layer_edges(void** state)
     iolink_od_app_t app = {0};
     app.entries = k_change_entry;
     app.count = 1U;
-    app.write = single_write;
     app.user = &cell;
     iolink_od_ctx_t change_ctx = {.app = &app, .params = NULL};
     g_od_change_calls = 0;
@@ -521,12 +522,12 @@ static iolink_result_t shadow_read(void* user, const iolink_od_entry_t* entry, u
 }
 
 static const iolink_od_entry_t k_shadow_entries[] = {
-    IOLINK_OD_SCALAR(0x0024U, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_BACKEND, 0U, 0xFFU, 0U,
-                     "ShadowDeviceStatus"),
-    IOLINK_OD_SCALAR(0x0040U, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
-                     IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_BACKEND, 0U, 0xFFU, 0U,
-                     "DeviceSpecificParam"),
+    IOLINK_OD_SCALAR_HANDLER(0x0024U, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RO,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U, 0xFFU, 0U,
+                             "ShadowDeviceStatus", shadow_read, NULL),
+    IOLINK_OD_SCALAR_HANDLER(0x0040U, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RO,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U, 0xFFU, 0U,
+                             "DeviceSpecificParam", shadow_read, NULL),
 };
 
 static void test_od_index_domain_routing(void** state)
@@ -546,7 +547,6 @@ static void test_od_index_domain_routing(void** state)
 
     app.entries = k_shadow_entries;
     app.count = sizeof(k_shadow_entries) / sizeof(k_shadow_entries[0]);
-    app.read = shadow_read;
     iolink_isdu_bind_od(&ctx, &app);
 
     /* 规范索引 0x0024 由标准表提供，应用表不能遮蔽。 */
@@ -625,6 +625,96 @@ static void test_od_truncated_requests_never_execute(void** state)
     }
 }
 
+/* STORAGE 标量：读写同一块应用变量，应用本地改值立即可见。 */
+static void test_od_storage_scalar_round_trip(void** state)
+{
+    (void) state;
+    static uint16_t value = 0x1111U;
+    static const iolink_od_entry_t entries[] = {
+        IOLINK_OD_SCALAR_STORAGE(0x0200U, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
+                                 IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U, 0xFFFFU,
+                                 0U, "StorageScalar", &value),
+    };
+    iolink_od_app_t app = {.entries = entries, .count = 1U, .user = NULL};
+    iolink_od_ctx_t ctx = {.app = &app, .params = NULL};
+    const uint8_t wire[2] = {0x12U, 0x34U};
+    uint8_t out[2] = {0U};
+
+    assert_true(iolink_result_succeeded(iolink_od_write_value(&ctx, &entries[0], 0U, wire, 2U)));
+    assert_int_equal(value, 0x1234U);
+
+    const iolink_result_t read = iolink_od_read_value(&ctx, &entries[0], 0U, out, sizeof(out));
+    assert_int_equal(read.code, 0);
+    assert_int_equal(read.len, 2U);
+    assert_memory_equal(out, wire, sizeof(wire));
+
+    /* 单一事实源：应用本地改值，主站下一次读取即为新值。 */
+    value = 0xBEEFU;
+    assert_true(
+        iolink_result_succeeded(iolink_od_read_value(&ctx, &entries[0], 0U, out, sizeof(out))));
+    assert_int_equal(out[0], 0xBEU);
+    assert_int_equal(out[1], 0xEFU);
+}
+
+/* STORAGE 字节串：写入更新缓冲与长度；超过 block_len 返回 0x33。 */
+static void test_od_storage_string_round_trip(void** state)
+{
+    (void) state;
+    static uint8_t buffer[8];
+    static uint8_t length;
+    static const iolink_od_entry_t entries[] = {
+        IOLINK_OD_STRING_STORAGE(0x0201U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                                 IOLINK_OD_STORAGE_VOLATILE, 8U, "StorageString", buffer, &length),
+    };
+    iolink_od_app_t app = {.entries = entries, .count = 1U, .user = NULL};
+    iolink_od_ctx_t ctx = {.app = &app, .params = NULL};
+    const uint8_t wire[3] = {'A', 'B', 'C'};
+    uint8_t out[8] = {0U};
+
+    assert_true(iolink_result_succeeded(iolink_od_write_value(&ctx, &entries[0], 0U, wire, 3U)));
+    assert_int_equal(length, 3U);
+    assert_memory_equal(buffer, wire, sizeof(wire));
+
+    const iolink_result_t read = iolink_od_read_value(&ctx, &entries[0], 0U, out, sizeof(out));
+    assert_int_equal(read.code, 0);
+    assert_int_equal(read.len, 3U);
+    assert_memory_equal(out, wire, sizeof(wire));
+
+    const uint8_t too_long[9] = {0U};
+    assert_int_equal(iolink_od_write_value(&ctx, &entries[0], 0U, too_long, sizeof(too_long)).code,
+                     IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+    assert_int_equal(length, 3U);
+}
+
+/* on_change 拒绝时 STORAGE 标量回滚到写前值。 */
+static iolink_result_t reject_change(void* user, const iolink_od_entry_t* entry,
+                                     const uint8_t* data, size_t len)
+{
+    (void) user;
+    (void) entry;
+    (void) data;
+    (void) len;
+    return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG);
+}
+
+static void test_od_storage_scalar_rollback(void** state)
+{
+    (void) state;
+    static uint16_t value = 5U;
+    static const iolink_od_entry_t entries[] = {
+        IOLINK_OD_SCALAR_STORAGE_EX(0x0202U, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
+                                    IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U,
+                                    0xFFFFU, 0U, "RollbackScalar", &value, NULL, reject_change),
+    };
+    iolink_od_app_t app = {.entries = entries, .count = 1U, .user = NULL};
+    iolink_od_ctx_t ctx = {.app = &app, .params = NULL};
+    const uint8_t wire[2] = {0x00U, 0x07U};
+
+    assert_int_equal(iolink_od_write_value(&ctx, &entries[0], 0U, wire, 2U).code,
+                     IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG);
+    assert_int_equal(value, 5U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -634,6 +724,9 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_od_codec_edges, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_lookup_edges, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_value_layer_edges, od_setup, od_teardown),
+        cmocka_unit_test_setup_teardown(test_od_storage_scalar_round_trip, od_setup, od_teardown),
+        cmocka_unit_test_setup_teardown(test_od_storage_string_round_trip, od_setup, od_teardown),
+        cmocka_unit_test_setup_teardown(test_od_storage_scalar_rollback, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_index_domain_routing, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_device_specific_fallback, od_setup, od_teardown),
         cmocka_unit_test_setup_teardown(test_od_truncated_requests_never_execute, od_setup,

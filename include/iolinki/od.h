@@ -99,11 +99,12 @@ typedef enum
  *
  * 标准对象与厂商错误统计需要设备上下文（事件/DLL/标识/直接参数），
  * 由 ISDU 层内建处理器执行；表项只保存处理器 ID，因此表保持 const
- * 且不依赖任何上下文。应用参数使用 @ref IOLINK_OD_HANDLER_BACKEND 处理器。
+ * 且不依赖任何上下文。应用参数使用 @ref IOLINK_OD_HANDLER_NONE，并由
+ * 表项自己的 @ref iolink_od_entry_t::backend 取值。
  */
 typedef enum
 {
-    IOLINK_OD_HANDLER_BACKEND = 0U,         /**< 应用 get/set 后端。 */
+    IOLINK_OD_HANDLER_NONE = 0U,            /**< 非内建：使用表项的应用后端。 */
     IOLINK_OD_HANDLER_TAG = 1U,             /**< 应用/功能/位置标签（参数管理器）。 */
     IOLINK_OD_HANDLER_SYSTEM_COMMAND = 2U,  /**< 0x0002 SystemCommand。 */
     IOLINK_OD_HANDLER_DATA_STORAGE = 3U,    /**< 0x0003 DataStorage。 */
@@ -144,6 +145,8 @@ typedef iolink_result_t (*iolink_od_validate_fn)(void* user, const iolink_od_ent
  * @brief 写后动作钩子（TRIGGER 写语义的唯一动作，或 STORE/VOLATILE 写后通知）。
  *
  * 与 @ref iolink_od_validate_fn 一样只看到表项，不接收请求的子索引。
+ * 对 STORAGE 标量，钩子返回错误时变量回滚到写前值；OctetString 不做
+ * 回滚（避免在栈上复制整块），需要在写入前拒绝时使用 validate。
  *
  * @param user  绑定后端的不透明指针。
  * @param entry 被写入的表项。
@@ -155,23 +158,102 @@ typedef iolink_result_t (*iolink_od_change_fn)(void* user, const iolink_od_entry
                                                const uint8_t* data, size_t len);
 
 /**
+ * @brief 读取一个参数值的后端（HANDLER 表项）。
+ *
+ * @param user  应用不透明指针（@ref iolink_od_app_t::user）。
+ * @param entry 命中的表项。
+ * @param out   接收线上字节的缓冲区。
+ * @param cap   @p out 的容量。
+ * @return 结果模型：成功时 `len` 为写出的字节数。
+ */
+typedef iolink_result_t (*iolink_od_read_fn)(void* user, const iolink_od_entry_t* entry,
+                                             uint8_t* out, size_t cap);
+
+/**
+ * @brief 写入一个参数值的后端（HANDLER 表项）。
+ *
+ * 输入已经通过线长/范围/validate 校验，后端只负责应用取值。
+ *
+ * @param user     应用不透明指针。
+ * @param entry    命中的表项（其 @c subindex 是表项声明的元素，
+ *                 不一定等于请求的子索引）。
+ * @param subindex 请求的子索引；多元素对象用它区分元素。
+ * @param data     已校验的线上字节。
+ * @param len      @p data 的字节数。
+ * @return 结果模型：成功时 `len` 为 0。
+ */
+typedef iolink_result_t (*iolink_od_write_fn)(void* user, const iolink_od_entry_t* entry,
+                                              uint8_t subindex, const uint8_t* data, size_t len);
+
+/**
+ * @brief 应用表项的值后端。
+ *
+ * 每个应用表项恰好选择一种：
+ *  - STORAGE：直接读写应用变量（零 shadow，单一事实源）；
+ *  - HANDLER：调用表项自己的 read/write 函数指针（计算型对象）。
+ *
+ * 内建表项（@ref iolink_od_handler_t 非 NONE）不使用本字段。
+ */
+typedef enum
+{
+    IOLINK_OD_BACKEND_STORAGE = 0U, /**< 绑定应用变量。 */
+    IOLINK_OD_BACKEND_HANDLER = 1U  /**< 逐表项函数指针。 */
+} iolink_od_backend_t;
+
+/**
+ * @brief 标量 codec 的线上长度（编译期常量）。
+ *
+ * 只用于表项初始化的自检；OctetString 返回 0（长度由 `block_len` 与
+ * 当前长度变量决定）。
+ */
+#define IOLINK_OD_DT_LEN(datatype_)            \
+    (((datatype_) == IOLINK_OD_DT_U8)     ? 1U \
+     : ((datatype_) == IOLINK_OD_DT_U16)  ? 2U \
+     : ((datatype_) == IOLINK_OD_DT_U32)  ? 4U \
+     : ((datatype_) == IOLINK_OD_DT_BOOL) ? 1U \
+                                          : 0U)
+
+/**
+ * @brief 可放进初始化器表达式的编译期断言（结果为 0）。
+ *
+ * 条件不成立时匿名位段宽度为负，编译立即失败；条件成立时整个表达式
+ * 的值为 0。用于表项宏里的 `flags` 初始化位置。
+ */
+#define IOLINK_OD_ASSERT_EXPR(condition_) \
+    (0U * sizeof(struct { int iolink_od_check_ : ((condition_) ? 1 : -1); }))
+
+/**
  * @brief 一个对象字典表项。
  *
  * 设计约束：表示静态知识的字段全部为值语义，使整张表可以是 `const`
- * 并放在 ROM。运行期取值由 @ref iolink_od_app_t 的 get/set 后端或
- * 内建处理器完成。
+ * 并放在 ROM。运行期取值由表项的 @ref iolink_od_entry_t::backend 或
+ * 内建处理器完成；应用表项只有一种后端（STORAGE 或 HANDLER）。
  */
 struct iolink_od_entry
 {
-    uint16_t index;                 /**< ISDU 索引。 */
-    uint8_t subindex;               /**< 表项描述的子索引（单元素对象为 0）。 */
-    uint8_t max_subindex;           /**< 可接受的最大子索引（0 = 仅 sub 0）。 */
-    uint8_t datatype;               /**< @ref iolink_od_datatype_t codec ID。 */
-    uint8_t access;                 /**< IOLINK_OD_ACCESS_* 位掩码。 */
-    uint8_t write_semantics;        /**< IOLINK_OD_WRITE_*。 */
-    uint8_t storage;                /**< IOLINK_OD_STORAGE_*。 */
-    uint8_t flags;                  /**< IOLINK_OD_FLAG_*。 */
-    uint8_t handler;                /**< @ref iolink_od_handler_t 处理器 ID。 */
+    uint16_t index;          /**< ISDU 索引。 */
+    uint8_t subindex;        /**< 表项描述的子索引（单元素对象为 0）。 */
+    uint8_t max_subindex;    /**< 可接受的最大子索引（0 = 仅 sub 0）。 */
+    uint8_t datatype;        /**< @ref iolink_od_datatype_t codec ID。 */
+    uint8_t access;          /**< IOLINK_OD_ACCESS_* 位掩码。 */
+    uint8_t write_semantics; /**< IOLINK_OD_WRITE_*。 */
+    uint8_t storage;         /**< IOLINK_OD_STORAGE_*。 */
+    uint8_t flags;           /**< IOLINK_OD_FLAG_*。 */
+    uint8_t handler;         /**< 内建处理器 ID；应用表项为 NONE。 */
+    uint8_t backend;         /**< @ref iolink_od_backend_t（仅 handler == NONE）。 */
+    union
+    {
+        struct
+        {
+            const void* value; /**< 应用变量地址（标量或字节串缓冲）。 */
+            uint8_t* str_len;  /**< OctetString 当前长度（标量置 NULL）。 */
+        } storage;
+        struct
+        {
+            iolink_od_read_fn read;   /**< 读值函数。 */
+            iolink_od_write_fn write; /**< 写值函数（只读对象可为 NULL）。 */
+        } handler;
+    } u;
     uint8_t block_len;              /**< OctetString 长度上限/IODD fixedLength。 */
     uint32_t range_min;             /**< 标量下限（含）。 */
     uint32_t range_max;             /**< 标量上限（含）。 */
@@ -185,117 +267,238 @@ struct iolink_od_entry
 /**
  * @brief 带钩子的标量表项初始化宏。
  */
-#define IOLINK_OD_SCALAR_EX(index_, datatype_, access_, semantics_, storage_, handler_, low_, \
-                            high_, def_, name_, validate_, change_)                           \
-    {.index = (index_),                                                                       \
-     .subindex = 0U,                                                                          \
-     .max_subindex = 0U,                                                                      \
-     .datatype = (datatype_),                                                                 \
-     .access = (access_),                                                                     \
-     .write_semantics = (semantics_),                                                         \
-     .storage = (storage_),                                                                   \
-     .flags = 0U,                                                                             \
-     .handler = (handler_),                                                                   \
-     .block_len = 0U,                                                                         \
-     .range_min = (low_),                                                                     \
-     .range_max = (high_),                                                                    \
-     .scalar_default = (def_),                                                                \
-     .block_default = NULL,                                                                   \
-     .name = (name_),                                                                         \
-     .validate = (validate_),                                                                 \
-     .on_change = (change_)}
-
-/**
- * @brief 标量表项初始化宏（新增参数的一行写法）。
- */
-#define IOLINK_OD_SCALAR(index_, datatype_, access_, semantics_, storage_, handler_, low_, high_, \
-                         def_, name_)                                                             \
-    IOLINK_OD_SCALAR_EX(index_, datatype_, access_, semantics_, storage_, handler_, low_, high_,  \
-                        def_, name_, NULL, NULL)
-
-/**
- * @brief 带钩子的字节串表项初始化宏。
- */
-#define IOLINK_OD_STRING_EX(index_, access_, semantics_, storage_, handler_, block_len_, name_, \
-                            validate_, change_)                                                 \
+#define IOLINK_OD_BUILTIN_SCALAR_EX(index_, datatype_, access_, semantics_, storage_, handler_, \
+                                    low_, high_, def_, name_, validate_, change_)               \
     {.index = (index_),                                                                         \
      .subindex = 0U,                                                                            \
      .max_subindex = 0U,                                                                        \
-     .datatype = IOLINK_OD_DT_OCTET_STRING,                                                     \
+     .datatype = (datatype_),                                                                   \
      .access = (access_),                                                                       \
      .write_semantics = (semantics_),                                                           \
      .storage = (storage_),                                                                     \
      .flags = 0U,                                                                               \
      .handler = (handler_),                                                                     \
-     .block_len = (block_len_),                                                                 \
-     .range_min = 0U,                                                                           \
-     .range_max = 0U,                                                                           \
-     .scalar_default = 0U,                                                                      \
+     .backend = IOLINK_OD_BACKEND_HANDLER,                                                      \
+     .block_len = 0U,                                                                           \
+     .range_min = (low_),                                                                       \
+     .range_max = (high_),                                                                      \
+     .scalar_default = (def_),                                                                  \
      .block_default = NULL,                                                                     \
      .name = (name_),                                                                           \
      .validate = (validate_),                                                                   \
      .on_change = (change_)}
 
 /**
+ * @brief 标量表项初始化宏（新增参数的一行写法）。
+ */
+#define IOLINK_OD_BUILTIN_SCALAR(index_, datatype_, access_, semantics_, storage_, handler_, low_, \
+                                 high_, def_, name_)                                               \
+    IOLINK_OD_BUILTIN_SCALAR_EX(index_, datatype_, access_, semantics_, storage_, handler_, low_,  \
+                                high_, def_, name_, NULL, NULL)
+
+/**
+ * @brief 带钩子的字节串表项初始化宏。
+ */
+#define IOLINK_OD_BUILTIN_STRING_EX(index_, access_, semantics_, storage_, handler_, block_len_, \
+                                    name_, validate_, change_)                                   \
+    {.index = (index_),                                                                          \
+     .subindex = 0U,                                                                             \
+     .max_subindex = 0U,                                                                         \
+     .datatype = IOLINK_OD_DT_OCTET_STRING,                                                      \
+     .access = (access_),                                                                        \
+     .write_semantics = (semantics_),                                                            \
+     .storage = (storage_),                                                                      \
+     .flags = 0U,                                                                                \
+     .handler = (handler_),                                                                      \
+     .backend = IOLINK_OD_BACKEND_HANDLER,                                                       \
+     .block_len = (block_len_),                                                                  \
+     .range_min = 0U,                                                                            \
+     .range_max = 0U,                                                                            \
+     .scalar_default = 0U,                                                                       \
+     .block_default = NULL,                                                                      \
+     .name = (name_),                                                                            \
+     .validate = (validate_),                                                                    \
+     .on_change = (change_)}
+
+/**
  * @brief 字节串表项初始化宏（新增参数的一行写法）。
  */
-#define IOLINK_OD_STRING(index_, access_, semantics_, storage_, handler_, block_len_, name_) \
-    {.index = (index_),                                                                      \
-     .subindex = 0U,                                                                         \
-     .max_subindex = 0U,                                                                     \
-     .datatype = IOLINK_OD_DT_OCTET_STRING,                                                  \
-     .access = (access_),                                                                    \
-     .write_semantics = (semantics_),                                                        \
-     .storage = (storage_),                                                                  \
-     .flags = 0U,                                                                            \
-     .handler = (handler_),                                                                  \
-     .block_len = (block_len_),                                                              \
-     .range_min = 0U,                                                                        \
-     .range_max = 0U,                                                                        \
-     .scalar_default = 0U,                                                                   \
-     .block_default = NULL,                                                                  \
-     .name = (name_),                                                                        \
-     .validate = NULL,                                                                       \
+#define IOLINK_OD_BUILTIN_STRING(index_, access_, semantics_, storage_, handler_, block_len_, \
+                                 name_)                                                       \
+    {.index = (index_),                                                                       \
+     .subindex = 0U,                                                                          \
+     .max_subindex = 0U,                                                                      \
+     .datatype = IOLINK_OD_DT_OCTET_STRING,                                                   \
+     .access = (access_),                                                                     \
+     .write_semantics = (semantics_),                                                         \
+     .storage = (storage_),                                                                   \
+     .flags = 0U,                                                                             \
+     .handler = (handler_),                                                                   \
+     .backend = IOLINK_OD_BACKEND_HANDLER,                                                    \
+     .block_len = (block_len_),                                                               \
+     .range_min = 0U,                                                                         \
+     .range_max = 0U,                                                                         \
+     .scalar_default = 0U,                                                                    \
+     .block_default = NULL,                                                                   \
+     .name = (name_),                                                                         \
+     .validate = NULL,                                                                        \
      .on_change = NULL}
 
-/**
- * @brief 读取一个参数值的后端。
- *
- * @param user  应用不透明指针
- * @param entry 命中的表项
- * @param out   接收线上字节的缓冲区
- * @param cap   @p out 的容量
- * @return 结果模型：成功时 `len` 为写出的字节数。
- */
-typedef iolink_result_t (*iolink_od_read_fn)(void* user, const iolink_od_entry_t* entry,
-                                             uint8_t* out, size_t cap);
+/* --- 应用表项：直接绑定应用变量（零 shadow） --- */
 
 /**
- * @brief 写入一个参数值的后端。
+ * @brief 标量表项绑定应用变量（带钩子）。
  *
- * 输入已经通过线长/范围/validate 校验，后端只负责应用取值。
- *
- * @param user     应用不透明指针
- * @param entry    命中的表项（其 @c subindex 是表项声明的元素，
- *                 不一定等于请求的子索引）
- * @param subindex 请求的子索引；多元素对象用它区分元素
- * @param data     已校验的线上字节
- * @param len      @p data 的字节数
- * @return 结果模型：成功时 `len` 为 0。
+ * `ptr_` 指向应用变量，宽度在编译期与 `datatype_` 的 codec 长度比较；
+ * 不一致直接编译失败。标量写入使用 codec 解码后按原生宽度存储，应用
+ * 本地写同一个变量即可被主站读到。
  */
-typedef iolink_result_t (*iolink_od_write_fn)(void* user, const iolink_od_entry_t* entry,
-                                              uint8_t subindex, const uint8_t* data, size_t len);
+#define IOLINK_OD_SCALAR_STORAGE_EX(index_, datatype_, access_, semantics_, storage_, low_, high_, \
+                                    def_, name_, ptr_, validate_, change_)                         \
+    {.index = (index_),                                                                            \
+     .subindex = 0U,                                                                               \
+     .max_subindex = 0U,                                                                           \
+     .datatype = (datatype_),                                                                      \
+     .access = (access_),                                                                          \
+     .write_semantics = (semantics_),                                                              \
+     .storage = (storage_),                                                                        \
+     .flags = (uint8_t) IOLINK_OD_ASSERT_EXPR(sizeof(*(ptr_)) == IOLINK_OD_DT_LEN(datatype_)),     \
+     .handler = IOLINK_OD_HANDLER_NONE,                                                            \
+     .backend = IOLINK_OD_BACKEND_STORAGE,                                                         \
+     .u.storage = {.value = (const void*) (ptr_), .str_len = NULL},                                \
+     .block_len = 0U,                                                                              \
+     .range_min = (low_),                                                                          \
+     .range_max = (high_),                                                                         \
+     .scalar_default = (def_),                                                                     \
+     .block_default = NULL,                                                                        \
+     .name = (name_),                                                                              \
+     .validate = (validate_),                                                                      \
+     .on_change = (change_)}
 
 /**
- * @brief 应用对象字典：const 表 + get/set 后端。
+ * @brief 标量表项绑定应用变量（无钩子）。
+ */
+#define IOLINK_OD_SCALAR_STORAGE(index_, datatype_, access_, semantics_, storage_, low_, high_, \
+                                 def_, name_, ptr_)                                             \
+    IOLINK_OD_SCALAR_STORAGE_EX(index_, datatype_, access_, semantics_, storage_, low_, high_,  \
+                                def_, name_, ptr_, NULL, NULL)
+
+/**
+ * @brief 字节串表项绑定应用缓冲（带钩子）。
+ *
+ * `buf_` 必须是数组左值：`sizeof(buf_) >= block_len_` 在编译期检查。
+ * `len_ptr_` 指向当前长度变量，写入后更新；读取返回该长度。指针型缓冲
+ * （malloc/外部内存）请改用 @ref IOLINK_OD_STRING_HANDLER。
+ */
+#define IOLINK_OD_STRING_STORAGE_EX(index_, access_, semantics_, storage_, block_len_, name_, \
+                                    buf_, len_ptr_, validate_, change_)                       \
+    {.index = (index_),                                                                       \
+     .subindex = 0U,                                                                          \
+     .max_subindex = 0U,                                                                      \
+     .datatype = IOLINK_OD_DT_OCTET_STRING,                                                   \
+     .access = (access_),                                                                     \
+     .write_semantics = (semantics_),                                                         \
+     .storage = (storage_),                                                                   \
+     .flags = (uint8_t) IOLINK_OD_ASSERT_EXPR(sizeof(buf_) >= (block_len_)),                  \
+     .handler = IOLINK_OD_HANDLER_NONE,                                                       \
+     .backend = IOLINK_OD_BACKEND_STORAGE,                                                    \
+     .u.storage = {.value = (const void*) (buf_), .str_len = (len_ptr_)},                     \
+     .block_len = (block_len_),                                                               \
+     .range_min = 0U,                                                                         \
+     .range_max = 0U,                                                                         \
+     .scalar_default = 0U,                                                                    \
+     .block_default = NULL,                                                                   \
+     .name = (name_),                                                                         \
+     .validate = (validate_),                                                                 \
+     .on_change = (change_)}
+
+/**
+ * @brief 字节串表项绑定应用缓冲（无钩子）。
+ */
+#define IOLINK_OD_STRING_STORAGE(index_, access_, semantics_, storage_, block_len_, name_, buf_, \
+                                 len_ptr_)                                                       \
+    IOLINK_OD_STRING_STORAGE_EX(index_, access_, semantics_, storage_, block_len_, name_, buf_,  \
+                                len_ptr_, NULL, NULL)
+
+/* --- 应用表项：每项函数指针（计算型对象） --- */
+
+/**
+ * @brief 标量表项使用表项自己的 read/write 函数（带钩子）。
+ */
+#define IOLINK_OD_SCALAR_HANDLER_EX(index_, datatype_, access_, semantics_, storage_, low_, high_, \
+                                    def_, name_, read_, write_, validate_, change_)                \
+    {.index = (index_),                                                                            \
+     .subindex = 0U,                                                                               \
+     .max_subindex = 0U,                                                                           \
+     .datatype = (datatype_),                                                                      \
+     .access = (access_),                                                                          \
+     .write_semantics = (semantics_),                                                              \
+     .storage = (storage_),                                                                        \
+     .flags = 0U,                                                                                  \
+     .handler = IOLINK_OD_HANDLER_NONE,                                                            \
+     .backend = IOLINK_OD_BACKEND_HANDLER,                                                         \
+     .u.handler = {.read = (read_), .write = (write_)},                                            \
+     .block_len = 0U,                                                                              \
+     .range_min = (low_),                                                                          \
+     .range_max = (high_),                                                                         \
+     .scalar_default = (def_),                                                                     \
+     .block_default = NULL,                                                                        \
+     .name = (name_),                                                                              \
+     .validate = (validate_),                                                                      \
+     .on_change = (change_)}
+
+/**
+ * @brief 标量表项使用表项自己的 read/write 函数（无钩子）。
+ */
+#define IOLINK_OD_SCALAR_HANDLER(index_, datatype_, access_, semantics_, storage_, low_, high_, \
+                                 def_, name_, read_, write_)                                    \
+    IOLINK_OD_SCALAR_HANDLER_EX(index_, datatype_, access_, semantics_, storage_, low_, high_,  \
+                                def_, name_, read_, write_, NULL, NULL)
+
+/**
+ * @brief 字节串表项使用表项自己的 read/write 函数（带钩子）。
+ */
+#define IOLINK_OD_STRING_HANDLER_EX(index_, access_, semantics_, storage_, block_len_, name_, \
+                                    read_, write_, validate_, change_)                        \
+    {.index = (index_),                                                                       \
+     .subindex = 0U,                                                                          \
+     .max_subindex = 0U,                                                                      \
+     .datatype = IOLINK_OD_DT_OCTET_STRING,                                                   \
+     .access = (access_),                                                                     \
+     .write_semantics = (semantics_),                                                         \
+     .storage = (storage_),                                                                   \
+     .flags = 0U,                                                                             \
+     .handler = IOLINK_OD_HANDLER_NONE,                                                       \
+     .backend = IOLINK_OD_BACKEND_HANDLER,                                                    \
+     .u.handler = {.read = (read_), .write = (write_)},                                       \
+     .block_len = (block_len_),                                                               \
+     .range_min = 0U,                                                                         \
+     .range_max = 0U,                                                                         \
+     .scalar_default = 0U,                                                                    \
+     .block_default = NULL,                                                                   \
+     .name = (name_),                                                                         \
+     .validate = (validate_),                                                                 \
+     .on_change = (change_)}
+
+/**
+ * @brief 字节串表项使用表项自己的 read/write 函数（无钩子）。
+ */
+#define IOLINK_OD_STRING_HANDLER(index_, access_, semantics_, storage_, block_len_, name_, read_, \
+                                 write_)                                                          \
+    IOLINK_OD_STRING_HANDLER_EX(index_, access_, semantics_, storage_, block_len_, name_, read_,  \
+                                write_, NULL, NULL)
+
+/**
+ * @brief 应用对象字典：const 表 + 钩子用户指针。
+ *
+ * 表项自己携带值后端（STORAGE/HANDLER）；`user` 只传给钩子与 HANDLER
+ * 函数指针。
  */
 typedef struct
 {
     const iolink_od_entry_t* entries; /**< 应用表项数组。 */
     size_t count;                     /**< 表项数量。 */
-    iolink_od_read_fn read;           /**< 读值后端（可为 NULL）。 */
-    iolink_od_write_fn write;         /**< 写值后端（可为 NULL）。 */
-    void* user;                       /**< 传回后端与钩子的不透明指针。 */
+    void* user;                       /**< 传给钩子与 HANDLER 后端的不透明指针。 */
 } iolink_od_app_t;
 
 /**

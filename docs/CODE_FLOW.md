@@ -606,7 +606,7 @@ flowchart TD
     E -- "TAG / BACKEND" --> E11["isdu_serve_od_value()"]
 ```
 
-索引到处理器的映射只存在于 `src/od.c` 的内建 const 表：`0x0000/0x0001` Direct Parameter、`0x0002` SystemCommand、`0x0003` DataStorage、`0x000C` DeviceAccessLocks、`0x000D` ProfileCharacteristic、`0x0010-0x0017/0x001B` 标识字符串、`0x0018-0x001A` Tag、`0x0020` ErrorCount、`0x0024` DeviceStatus、`0x0025` DetailedDeviceStatus、`0x0028/0x0029` PD 输入/输出、`0x0040` 厂商错误统计。应用参数通过 `iolink_od_app_t` 自带表项与 `IOLINK_OD_HANDLER_BACKEND`，因此新增参数 = 一行表项 + 一个 get/set 分支。
+索引到处理器的映射只存在于 `src/od.c` 的内建 const 表：`0x0000/0x0001` Direct Parameter、`0x0002` SystemCommand、`0x0003` DataStorage、`0x000C` DeviceAccessLocks、`0x000D` ProfileCharacteristic、`0x0010-0x0017/0x001B` 标识字符串、`0x0018-0x001A` Tag、`0x0020` ErrorCount、`0x0024` DeviceStatus、`0x0025` DetailedDeviceStatus、`0x0028/0x0029` PD 输入/输出、`0x0040` 厂商错误统计。应用参数在 `iolink_od_app_t` 表里选择唯一后端：`IOLINK_OD_SCALAR_STORAGE` / `IOLINK_OD_STRING_STORAGE` 绑定应用变量，`_HANDLER` 变体提供逐表项 `read`/`write` 函数；新增参数 = 一行表项。
 
 索引归属按域决定：规范索引（`< 0x0040`）从内建表取，应用表不得遮蔽 `0x0002`/`0x0024` 等对象；设备专用索引先查应用表，未声明时才回落到内建表。`0x0040` 同时是“设备特定起始索引”和内置 error-stats 索引：**应用表声明时走应用后端；未声明时由内置 `handle_error_stats()` 提供**。OD 值层另行校验 `max_subindex`（越界 `0x8011`）与 OctetString 的 `block_len`（超长 `0x8033`）。
 

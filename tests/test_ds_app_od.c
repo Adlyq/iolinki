@@ -48,54 +48,20 @@ static app_state_t g_app_state;
 /* 设备配置保存的是指针：应用表必须比设备上下文存活更久。 */
 static iolink_od_app_t g_app_od;
 
-static iolink_result_t app_od_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
-                                   size_t cap)
-{
-    const app_state_t* state = user;
-    const uint32_t value = (entry->index == APP_DS_IDX) ? state->ds_value : state->volatile_value;
-
-    return iolink_od_encode(entry, value, out, cap);
-}
-
-static iolink_result_t app_od_write(void* user, const iolink_od_entry_t* entry, uint8_t subindex,
-                                    const uint8_t* data, size_t len)
-{
-    app_state_t* state = user;
-    uint32_t value = 0U;
-    const iolink_result_t decoded = iolink_od_decode(entry, data, len, &value);
-
-    (void) subindex;
-    if (!iolink_result_succeeded(decoded)) {
-        return decoded;
-    }
-    if (entry->index == APP_DS_IDX) {
-        state->ds_value = (uint16_t) value;
-    }
-    else if (entry->index == APP_VOLATILE_IDX) {
-        state->volatile_value = (uint16_t) value;
-    }
-    else {
-        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
-    }
-    return iolink_result_ok(0U);
-}
-
-/* 0x0180 属于 DS；0x0181 只是普通可写参数。 */
+/* 0x0180 属于 DS；0x0181 只是普通可写参数。值直接绑定应用变量。 */
 static const iolink_od_entry_t k_app_entries[] = {
-    IOLINK_OD_SCALAR(APP_DS_IDX, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_STORE,
-                     IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_BACKEND, 0U, 0xFFFFU, 0U,
-                     "AppStoredParameter"),
-    IOLINK_OD_SCALAR(APP_VOLATILE_IDX, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
-                     IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
-                     IOLINK_OD_HANDLER_BACKEND, 0U, 0xFFFFU, 0U, "AppVolatileParameter"),
+    IOLINK_OD_SCALAR_STORAGE(APP_DS_IDX, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
+                             IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_DS, 0U, 0xFFFFU, 0U,
+                             "AppStoredParameter", &g_app_state.ds_value),
+    IOLINK_OD_SCALAR_STORAGE(APP_VOLATILE_IDX, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U, 0xFFFFU, 0U,
+                             "AppVolatileParameter", &g_app_state.volatile_value),
 };
 
 static void app_od_init(iolink_od_app_t* app)
 {
     app->entries = k_app_entries;
     app->count = sizeof(k_app_entries) / sizeof(k_app_entries[0]);
-    app->read = app_od_read;
-    app->write = app_od_write;
     app->user = &g_app_state;
 }
 

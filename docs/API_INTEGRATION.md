@@ -393,20 +393,19 @@ ISR 粒度、并发/统计档位、PD-in 缓冲数）。实例能力在 `iolink_
 typedef struct {
     const iolink_od_entry_t* entries;
     size_t count;
-    iolink_od_read_fn read;
-    iolink_od_write_fn write;
-    void* user;
+    void* user; /* 传给钩子与 HANDLER 函数指针 */
 } iolink_od_app_t;
 ```
 
 参数只在对象字典里描述一次（索引/子索引、datatype codec、访问权限、写语义、
 storage 标志、默认值与可选钩子），ISDU 分发、Data Storage 成员判定和 IODD 导出都从
 这张表派生。标准对象（`0x0000-0x003F` 与厂商错误统计 `0x0040`）由内建 const 表提供；
-应用通过 `config.od` 绑定自己的 const 表和后端。
+应用通过 `config.od` 绑定自己的 const 表。
 
-应用需要做的是：用 `IOLINK_OD_SCALAR` / `IOLINK_OD_SCALAR_EX` / `IOLINK_OD_STRING`
-增加一行表项，并在 `read` / `write` 后端里增加对应分支（表项只保存静态知识，运行期
-取值走注册了 `IOLINK_OD_HANDLER_BACKEND` 的后端）。索引归属按域决定：规范索引（`< 0x0040`）由标准表提供、不可被应用表覆盖；设备专用索引
+应用需要做的是：用 `IOLINK_OD_SCALAR_STORAGE[_EX]` / `IOLINK_OD_STRING_STORAGE[_EX]`
+绑定应用变量，或用 `IOLINK_OD_SCALAR_HANDLER[_EX]` / `IOLINK_OD_STRING_HANDLER[_EX]`
+提供逐表项 `read`/`write` 函数（计算型对象）。表项只保存静态知识，运行期取值由
+表项自己的后端完成，`iolink_od_app_t::user` 只传给钩子与 HANDLER 函数。索引归属按域决定：规范索引（`< 0x0040`）由标准表提供、不可被应用表覆盖；设备专用索引
 （`0x0040-0x00FE`、`0x0100+`）应用表优先，未声明时回落到内建标准表项（`0x0040` 错误统计），
 仍未命中返回 `0x80 0x11`。完整示例见
 `examples/switching_sensor/switching_sensor_od.c`。

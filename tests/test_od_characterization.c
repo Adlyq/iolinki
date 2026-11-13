@@ -465,9 +465,9 @@ static iolink_result_t char_shadow_write(void* user, const iolink_od_entry_t* en
 
 /* 应用表刻意声明规范固定的 0x0024：分发必须仍走内建处理器。 */
 static const iolink_od_entry_t k_char_shadow_entries[] = {
-    IOLINK_OD_SCALAR(IOLINK_IDX_DEVICE_STATUS, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RW,
-                     IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
-                     IOLINK_OD_HANDLER_BACKEND, 0U, 0xFFU, 0U, "ShadowDeviceStatus"),
+    IOLINK_OD_SCALAR_HANDLER(IOLINK_IDX_DEVICE_STATUS, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RW,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U, 0xFFU, 0U,
+                             "ShadowDeviceStatus", char_shadow_read, char_shadow_write),
 };
 
 typedef struct
@@ -509,7 +509,9 @@ static const iolink_od_entry_t k_char_multi_entries[] = {
      .write_semantics = IOLINK_OD_WRITE_VOLATILE,
      .storage = IOLINK_OD_STORAGE_VOLATILE,
      .flags = 0U,
-     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .handler = IOLINK_OD_HANDLER_NONE,
+     .backend = IOLINK_OD_BACKEND_HANDLER,
+     .u.handler = {.read = char_multi_read, .write = char_multi_write},
      .block_len = 0U,
      .range_min = 0U,
      .range_max = 0xFFFFU,
@@ -526,8 +528,6 @@ static void test_char_standard_index_wins_over_app(void** state)
     char_prepare(&ctx, &k_char_info);
     app.entries = k_char_shadow_entries;
     app.count = sizeof(k_char_shadow_entries) / sizeof(k_char_shadow_entries[0]);
-    app.read = char_shadow_read;
-    app.write = char_shadow_write;
     iolink_isdu_bind_od(&ctx, &app);
 
     g_char_app_reads = 0;
@@ -551,8 +551,6 @@ static void test_char_subindex_reaches_app_write(void** state)
     char_prepare(&ctx, &k_char_info);
     app.entries = k_char_multi_entries;
     app.count = sizeof(k_char_multi_entries) / sizeof(k_char_multi_entries[0]);
-    app.read = char_multi_read;
-    app.write = char_multi_write;
     app.user = &cell;
     iolink_isdu_bind_od(&ctx, &app);
 

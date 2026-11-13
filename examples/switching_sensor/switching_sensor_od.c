@@ -82,23 +82,26 @@ static iolink_result_t ss_od_write(void* user, const iolink_od_entry_t* entry, u
     return iolink_result_ok(0U);
 }
 
-/* 4 个参数 = 4 行表项。 */
+/* 4 个参数 = 4 行表项。值存放在运行期的 switching_sensor_t 实例里，
+ * 因此使用逐表项函数指针（STORAGE 只能绑定静态地址的变量）。 */
 static const iolink_od_entry_t k_switching_sensor_od[] = {
-    IOLINK_OD_SCALAR_EX(SWITCHING_SENSOR_IDX_THRESHOLD, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
-                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
-                        IOLINK_OD_HANDLER_BACKEND, 0U, 0xFFFFU, SWITCHING_SENSOR_DEFAULT_THRESHOLD,
-                        "Switch-on threshold x100", ss_validate, NULL),
-    IOLINK_OD_SCALAR_EX(SWITCHING_SENSOR_IDX_HYSTERESIS, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
-                        IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
-                        IOLINK_OD_HANDLER_BACKEND, 0U, 0xFFFFU, SWITCHING_SENSOR_DEFAULT_HYSTERESIS,
-                        "Hysteresis x100", ss_validate, NULL),
-    IOLINK_OD_SCALAR(SWITCHING_SENSOR_IDX_INVERSION, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RW,
-                     IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
-                     IOLINK_OD_HANDLER_BACKEND, 0U, 1U, 0U, "Invert switching output"),
-    IOLINK_OD_SCALAR_EX(SWITCHING_SENSOR_IDX_TEACH, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_WO,
-                        IOLINK_OD_WRITE_TRIGGER, IOLINK_OD_STORAGE_VOLATILE,
-                        IOLINK_OD_HANDLER_BACKEND, 1U, 1U, 0U, "Teach current value: write 1", NULL,
-                        ss_teach),
+    IOLINK_OD_SCALAR_HANDLER_EX(SWITCHING_SENSOR_IDX_THRESHOLD, IOLINK_OD_DT_U16,
+                                IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                                IOLINK_OD_STORAGE_VOLATILE, 0U, 0xFFFFU,
+                                SWITCHING_SENSOR_DEFAULT_THRESHOLD, "Switch-on threshold x100",
+                                ss_od_read, ss_od_write, ss_validate, NULL),
+    IOLINK_OD_SCALAR_HANDLER_EX(SWITCHING_SENSOR_IDX_HYSTERESIS, IOLINK_OD_DT_U16,
+                                IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                                IOLINK_OD_STORAGE_VOLATILE, 0U, 0xFFFFU,
+                                SWITCHING_SENSOR_DEFAULT_HYSTERESIS, "Hysteresis x100", ss_od_read,
+                                ss_od_write, ss_validate, NULL),
+    IOLINK_OD_SCALAR_HANDLER(SWITCHING_SENSOR_IDX_INVERSION, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_RW,
+                             IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U, 1U, 0U,
+                             "Invert switching output", ss_od_read, ss_od_write),
+    IOLINK_OD_SCALAR_HANDLER_EX(SWITCHING_SENSOR_IDX_TEACH, IOLINK_OD_DT_U8, IOLINK_OD_ACCESS_WO,
+                                IOLINK_OD_WRITE_TRIGGER, IOLINK_OD_STORAGE_VOLATILE, 1U, 1U, 0U,
+                                "Teach current value: write 1", ss_od_read, ss_od_write, NULL,
+                                ss_teach),
 };
 
 #define SS_OD_COUNT (sizeof(k_switching_sensor_od) / sizeof(k_switching_sensor_od[0]))
@@ -118,7 +121,5 @@ void switching_sensor_od_init(iolink_od_app_t* app, switching_sensor_t* sensor)
     }
     app->entries = k_switching_sensor_od;
     app->count = SS_OD_COUNT;
-    app->read = ss_od_read;
-    app->write = ss_od_write;
     app->user = sensor;
 }

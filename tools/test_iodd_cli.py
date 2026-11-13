@@ -25,9 +25,9 @@ OD_SOURCES = {
 
 
 def scalar(index, datatype='IOLINK_OD_DT_U16', low='0U', high='0xFFFFU', default='0U'):
-    return (f'IOLINK_OD_SCALAR({index}, {datatype}, IOLINK_OD_ACCESS_RW, '
+    return (f'IOLINK_OD_SCALAR_STORAGE({index}, {datatype}, IOLINK_OD_ACCESS_RW, '
             f'IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, '
-            f'IOLINK_OD_HANDLER_BACKEND, {low}, {high}, {default}, "T")')
+            f'{low}, {high}, {default}, "T", NULL)')
 
 
 class IoddCLI(unittest.TestCase):
@@ -216,8 +216,8 @@ class IoddCLI(unittest.TestCase):
             'range': scalar('0x0100U', low='100U', high='10U'),
             'default': scalar('0x0100U', low='0U', high='0xFFFFU', default='70000U'),
             'type': scalar('0x0100U', datatype='IOLINK_OD_DT_UNKNOWN'),
-            'width': ('IOLINK_OD_STRING(0x0100U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE, '
-                      'IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_BACKEND, 0U, "T")'),
+            'width': ('IOLINK_OD_STRING_STORAGE(0x0100U, IOLINK_OD_ACCESS_RW, '
+                      'IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U, "T", NULL, NULL)'),
         }
         for label, entry in cases.items():
             with self.subTest(label):

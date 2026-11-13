@@ -61,6 +61,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dll_reply_window_closed()`. Replies are either sent by the ISR inside its
   plan or not sent at all; there is no late-reply window to gate.
 
+### Changed (object dictionary value backends)
+- `iolink_od_entry_t` now carries exactly one application backend:
+  `IOLINK_OD_BACKEND_STORAGE` (`const void* value` + `uint8_t* str_len`) or
+  `IOLINK_OD_BACKEND_HANDLER` (per-entry `read`/`write`). The tagged union adds
+  12 bytes per entry on a 32-bit target (80 vs 56 bytes on a 64-bit host).
+  Built-in entries keep the `handler` selector; the two are mutually exclusive.
+- New table macros: `IOLINK_OD_SCALAR_STORAGE[_EX]`,
+  `IOLINK_OD_STRING_STORAGE[_EX]`, `IOLINK_OD_SCALAR_HANDLER[_EX]`,
+  `IOLINK_OD_STRING_HANDLER[_EX]`. The `_STORAGE` variants bind an application
+  variable and check its width (or `sizeof(buf) >= block_len`) at compile time;
+  the `_EX` suffix adds `validate`/`on_change` hooks.
+- Completed writes: `validate` may reject before the value changes; a failing
+  `on_change` rolls a STORAGE scalar back to its previous value. OctetString
+  writes are not rolled back (avoid copying up to `block_len` on the main-pump
+  stack), so reject those in `validate`.
+- `iolink_od_app_t` is now `{entries, count, user}`; `user` goes to hooks and
+  HANDLER callbacks. The built-in standard table uses internal
+  `IOLINK_OD_BUILTIN_*` macros, and "not a built-in" is
+  `IOLINK_OD_HANDLER_NONE`.
+
 ### Changed (ISDU write ingestion)
 - ISDU write requests are now accumulated in the data ISR with positional
   FlowCTRL de-duplication (`iolink_isdu_od_write`): a retried segment is
@@ -115,6 +135,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `tools/size_matrix.py` gates `.rodata` as well (with `--selftest` proof).
 
 ### Removed (no compatibility layer)
+- `iolink_od_app_t::read`/`write` and `IOLINK_OD_HANDLER_BACKEND`.
+  `IOLINK_OD_SCALAR[_EX]`/`IOLINK_OD_STRING[_EX]` are no longer application
+  macros: every application entry uses one of the `_STORAGE`/`_HANDLER`
+  variants, and the standard table uses the internal `IOLINK_OD_BUILTIN_*`.
 - The Data Storage descriptor/accessor override: `iolink_ds_param_desc_t`,
   `iolink_ds_param_read_fn`/`write_fn`/`check_fn`, `iolink_ds_bind_params()`,
   `iolink_ds_bind_od()`, `iolink_ds_bind_param_access()`,
