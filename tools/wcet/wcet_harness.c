@@ -300,7 +300,6 @@ static void wcet_phy_request_service(void* user)
     g_phy.service_pending = 1U;
 }
 
-#if IOLINK_PHY_FEATURE_WAKEUP
 static int wcet_phy_detect_wakeup(void* user)
 {
     (void) user;
@@ -310,7 +309,6 @@ static int wcet_phy_detect_wakeup(void* user)
     }
     return 0;
 }
-#endif
 
 static const iolink_phy_api_t g_phy_api = {
     .user = NULL,
@@ -322,9 +320,7 @@ static const iolink_phy_api_t g_phy_api = {
     .tx_done = wcet_phy_tx_done,
     .int_active = wcet_phy_int_active,
     .request_service = wcet_phy_request_service,
-#if IOLINK_PHY_FEATURE_WAKEUP
     .detect_wakeup = wcet_phy_detect_wakeup,
-#endif
 };
 
 static const iolink_app_callbacks_t g_app_callbacks = {0};
@@ -486,9 +482,8 @@ static void wcet_send_no_main(const uint8_t* frame, size_t len, bool gap)
 
 static void wcet_publish_pd(void)
 {
-#if !IOLINK_APP_PD_INPUT_CALLBACK
+    /* harness 不注册 on_pd_input，因此走轮询 API。 */
     (void) iolink_device_pd_input_update(&g_dev.ctx, g_pd_in, g_pd_in_len, true);
-#endif
 }
 
 /* --- 帧构造 ------------------------------------------------------------- */

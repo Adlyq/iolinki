@@ -21,18 +21,25 @@ endif()
 # Include directories
 include_directories(include)
 
+# The retired profile bundles: passing them must not silently build a full image.
+foreach(retired_bundle IOLINK_MINIMAL_PROFILE IOLINK_TINY_PROFILE)
+    if(DEFINED ${retired_bundle} AND ${retired_bundle})
+        message(FATAL_ERROR
+            "${retired_bundle} was retired. Disable IOLINK_FEATURE_DATA_STORAGE "
+            "and IOLINK_FEATURE_EVENTS explicitly instead (config.h rejects the "
+            "retired macro as well).")
+    endif()
+endforeach()
+
 # Feature trimming. The MINIMAL/TINY bundles are retired: a trimmed image is the
 # structural configuration C3 (Data Storage and events off) expressed directly
 # with the individual options below. All default to the full stack.
 option(IOLINK_FEATURE_DATA_STORAGE "Compile Data Storage" ON)
 option(IOLINK_FEATURE_SYSTEM_COMMAND "Enable SystemCommand (runtime bit; the handler is always resident)" ON)
 option(IOLINK_FEATURE_EVENTS "Compile the diagnostic event engine" ON)
-option(IOLINK_PHY_FEATURE_WAKEUP "Deprecated: wake-up is a vtable capability" ON)
-option(IOLINK_PHY_FEATURE_SIO_CQ "Deprecated: C/Q control is a vtable capability" ON)
-# PD-input path selection is a runtime capability (on_pd_input != NULL).
-# The option is kept so old build scripts do not fail; it no longer changes the
-# API or the struct layout.
-option(IOLINK_APP_PD_INPUT_CALLBACK "Deprecated: PD path is runtime-selected" OFF)
+# Wake-up, SIO C/Q and the PD-input path are resolved from the PHY vtable and
+# the app callbacks; their old build options are gone (config.h rejects the
+# retired macros).
 
 # Absolute paths so a subdirectory can build the same sources under a different
 # ISR granularity (see tests/CMakeLists.txt: TX FRAME fixture).

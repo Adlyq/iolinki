@@ -116,9 +116,9 @@ typedef struct
                                                       PHY vtable 的驱动上下文；它与下面的
                                                       @ref user 相互独立。 */
     iolink_stack_config_t stack;                 /**< 协议栈行为配置。 */
-    const iolink_app_callbacks_t* app_callbacks; /**< 应用生命周期/PD 回调（可以为 NULL，
-                                                    除非 IOLINK_APP_PD_INPUT_CALLBACK=1，
-                                                    此时需要 on_pd_input）。 */
+    const iolink_app_callbacks_t* app_callbacks; /**< 应用生命周期/PD 回调（可以为 NULL；
+                                                    提供 on_pd_input 时 DLL 走回调路径，
+                                                    否则使用轮询 API）。 */
     const iolink_device_info_t* device_info;     /**< 静态设备标识数据。 */
 #if IOLINK_FEATURE_DATA_STORAGE
     const iolink_storage_api_t* storage; /**< 用于参数、DS 映像和标志的统一 NVM 后端（必需）。 */

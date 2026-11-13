@@ -63,10 +63,11 @@ one-octet OD. Its trimmed configuration is:
 #define IOLINK_OD_MAX_SIZE     1
 #define IOLINK_ISDU_BUFFER_SIZE 64   /* strings are 64 octets; no ProductURI/DS */
 
-/* Feature profile: no Data Storage, no SystemCommand, no events/diagnostics */
-#define IOLINK_MINIMAL_PROFILE 1
+/* Feature profile: no Data Storage, no SystemCommand, no events/diagnostics.
+   The MINIMAL/TINY bundles are retired (defining them is a build error), so the
+   structural trim is spelled out. */
+#define IOLINK_FEATURE_DATA_STORAGE 0
 #define IOLINK_FEATURE_EVENTS 0
-#define IOLINK_PHY_FEATURE_WAKEUP 1
 #define IOLINK_PHY_FEATURE_ISR_TX_ONLY 1
 #define IOLINK_ISR_RX_MODE IOLINK_ISR_RX_FRAME
 #define IOLINK_ISR_TX_MODE IOLINK_ISR_TX_FRAME

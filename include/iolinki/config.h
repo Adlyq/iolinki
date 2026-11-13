@@ -34,7 +34,6 @@
  * | `IOLINK_DS_IMAGE_MAX`     | 256  | Data Storage 镜像上限（字节）    |
  * | `IOLINK_EVENT_QUEUE_SIZE` | 4    | 事件队列深度                     |
  * | `IOLINK_EVENT_PENDING_MAX`| 8    | 同时活动的事件数上限             |
- * | `IOLINK_APP_PD_INPUT_CALLBACK` | 0 | 1=PD-in 走 on_pd_input 回调；0=轮询 API |
  * | `IOLINK_TIMING_ENFORCE_DEFAULT` | 0 | 1=强制检查 t_ren/t_cycle，0=仅测量 |
  *
  * 运行时配置（PD 长度、最小周期、日志 sink 等）不在这里，见
@@ -218,7 +217,13 @@
 /* `IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` 已退役。它们是
  * 组合包而不是能力，等价物是 `target_minimal` 结构配置：显式关闭
  * `IOLINK_FEATURE_DATA_STORAGE` 与 `IOLINK_FEATURE_EVENTS`。
- * 需要最小镜像时请直接设置这两个开关，而不是使用组合包。 */
+ * 需要最小镜像时请直接设置这两个开关，而不是使用组合包。
+ *
+ * 定义已退役的宏是配置错误：静默忽略会构建出比预期大得多的镜像
+ * （它们曾经一次性关闭 DS/SystemCommand/唤醒/SIO C-Q/事件引擎）。 */
+#if defined(IOLINK_MINIMAL_PROFILE) || defined(IOLINK_TINY_PROFILE)
+#error "IOLINK_MINIMAL_PROFILE / IOLINK_TINY_PROFILE were retired; disable IOLINK_FEATURE_DATA_STORAGE and IOLINK_FEATURE_EVENTS explicitly"
+#endif
 
 /** @brief 数据存储子系统（data_storage.c、ISDU DS 服务、ds ctx）。 */
 #ifndef IOLINK_FEATURE_DATA_STORAGE
@@ -232,37 +237,20 @@
 #ifndef IOLINK_FEATURE_EVENTS
 #define IOLINK_FEATURE_EVENTS 1
 #endif
-/**
- * @brief PHY 唤醒检测（已降级为运行时能力，本宏不再生效）。
+/* 以下开关曾是编译期能力，现已由 PHY vtable 与运行时能力位取代：
  *
- * `detect_wakeup` 现在是常驻 vtable 成员（NULL = 无能力），由
- * `iolink_caps_resolve()` 解析成 `IOLINK_CAP_WAKEUP`。宏保留只为兼容
- * 旧构建脚本。
- */
-#ifndef IOLINK_PHY_FEATURE_WAKEUP
-#define IOLINK_PHY_FEATURE_WAKEUP 1
-#endif
-/**
- * @brief PHY 手动 C/Q 推挽（已降级为运行时能力，本宏不再生效）。
+ *  - 唤醒检测：`iolink_phy_api_t::detect_wakeup`（NULL = 无能力），
+ *    解析为 `IOLINK_CAP_WAKEUP`；
+ *  - 手动 C/Q：`iolink_phy_api_t::set_cq_line`，解析为
+ *    `IOLINK_CAP_SIO_CQ`；
+ *  - PD 输入路径：`iolink_app_callbacks_t::on_pd_input` 是否为 NULL，
+ *    解析为 `IOLINK_CAP_PD_IN_CALLBACK`。
  *
- * 同 `IOLINK_PHY_FEATURE_WAKEUP`；能力位是 `IOLINK_CAP_SIO_CQ`。
- */
-#ifndef IOLINK_PHY_FEATURE_SIO_CQ
-#define IOLINK_PHY_FEATURE_SIO_CQ 1
-#endif
-
-/**
- * @brief PD 输入路径选择（已降级为运行时数据，本宏不再生效）。
- *
- * 两条路径现在同时存在：`iolink_app_callbacks_t::on_pd_input` 非 NULL
- * 时 DLL 每周期调用回调，否则应用使用
- * `iolink_device_pd_input_update()`。选择结果是实例能力位
- * `IOLINK_CAP_PD_IN_CALLBACK`，不再改变任何结构体布局。
- *
- * 宏保留只为兼容旧的构建脚本；定义它不会删除任何 API。
- */
-#ifndef IOLINK_APP_PD_INPUT_CALLBACK
-#define IOLINK_APP_PD_INPUT_CALLBACK 0
+ * 定义旧宏是配置错误：它们不会再删除任何代码，静默忽略只会让人误以为
+ * 裁剪生效。 */
+#if defined(IOLINK_PHY_FEATURE_WAKEUP) || defined(IOLINK_PHY_FEATURE_SIO_CQ) || \
+    defined(IOLINK_APP_PD_INPUT_CALLBACK)
+#error "IOLINK_PHY_FEATURE_WAKEUP / SIO_CQ / IOLINK_APP_PD_INPUT_CALLBACK were retired; capability is resolved from the PHY vtable and app callbacks"
 #endif
 
 /* --- 3.2 ISR 传输粒度 [可覆盖] ----------------------------------------- */
