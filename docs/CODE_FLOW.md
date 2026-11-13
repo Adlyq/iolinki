@@ -679,10 +679,10 @@ DS 状态机（`iolink_ds_process()`）：
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE
-    IDLE --> UPLOAD_REQ: ds_check(master=0) / iolink_ds_start_upload()
+    IDLE --> UPLOAD_REQ: ds_check(master=0) / ParamUploadStart
     UPLOAD_REQ --> UPLOADING: iolink_ds_process()
     UPLOADING --> IDLE: UploadEnd / ParamBreak / 复位
-    IDLE --> DOWNLOAD_REQ: ds_check(校验和不匹配) / iolink_ds_start_download()
+    IDLE --> DOWNLOAD_REQ: ds_check(校验和不匹配) / ParamDownloadStart
     DOWNLOAD_REQ --> DOWNLOADING: iolink_ds_process()
     DOWNLOADING --> IDLE: DownloadEnd / DownloadStore 应用镜像
     DOWNLOADING --> IDLE: ParamBreak

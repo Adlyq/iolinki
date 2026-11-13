@@ -959,7 +959,7 @@ static bool isdu_system_ds(iolink_isdu_ctx_t* ctx, uint8_t cmd)
         }
         else if ((ds->state == IOLINK_DS_STATE_DOWNLOADING) ||
                  (ds->state == IOLINK_DS_STATE_DOWNLOAD_REQ)) {
-            ret = iolink_ds_handle_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_END, locks);
+            ret = iolink_ds_handle_param_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_END, locks);
         }
         else if ((ds->state == IOLINK_DS_STATE_UPLOADING) ||
                  (ds->state == IOLINK_DS_STATE_UPLOAD_REQ)) {
@@ -967,7 +967,7 @@ static bool isdu_system_ds(iolink_isdu_ctx_t* ctx, uint8_t cmd)
         }
     }
     else {
-        ret = iolink_ds_handle_command(ds, cmd, locks);
+        ret = iolink_ds_handle_param_command(ds, cmd, locks);
     }
 
     if (ret != 0) {

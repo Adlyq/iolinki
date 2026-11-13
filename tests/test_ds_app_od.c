@@ -203,7 +203,7 @@ static void test_app_ds_download_stages_then_commits(void** state)
     iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&dev.ctx);
     assert_non_null(ds);
 
-    assert_int_equal(iolink_ds_handle_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0U), 0);
+    assert_int_equal(iolink_ds_handle_param_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0U), 0);
     assert_true(iolink_ds_downloading(ds));
     const size_t staged_before = ds->image_len;
 
@@ -220,7 +220,7 @@ static void test_app_ds_download_stages_then_commits(void** state)
     assert_int_equal(g_app_state.volatile_value, 0x3344U);
     assert_int_equal(ds->image_len, image_after_ds);
 
-    assert_int_equal(iolink_ds_handle_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), 0);
+    assert_int_equal(iolink_ds_handle_param_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), 0);
     assert_int_equal(g_app_state.ds_value, 0xABCDU);
 
     /* 序列化映像包含应用 DS 记录，且不包含 VOLATILE 参数。 */

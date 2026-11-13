@@ -462,7 +462,7 @@ void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx,
                                  const iolink_ds_param_desc_t* params, size_t count);
 void iolink_ds_process(iolink_ds_ctx_t* ctx);                  /* driven by iolink_device_process */
 void iolink_ds_check(iolink_ds_ctx_t* ctx, uint32_t master_checksum);
-int  iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_locks);
+int  iolink_ds_handle_param_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_locks);
 int  iolink_ds_serialize(iolink_ds_ctx_t* ctx, uint8_t* out, size_t cap);
 void iolink_ds_refresh(iolink_ds_ctx_t* ctx);
 int  iolink_ds_build_image(iolink_ds_ctx_t* ctx);

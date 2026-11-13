@@ -301,22 +301,6 @@ void iolink_ds_process(iolink_ds_ctx_t* ctx);
 void iolink_ds_check(iolink_ds_ctx_t* ctx, uint32_t master_checksum);
 
 /**
- * @brief 开始向主站上传参数（ParamUploadStart，0x01）
- *
- * @param ctx DS 上下文
- * @return int 成功时返回 0，DS 未初始化时返回负值
- */
-int iolink_ds_start_upload(iolink_ds_ctx_t* ctx);
-
-/**
- * @brief 开始从主站下载参数（ParamDownloadStart，0x03）
- *
- * @param ctx DS 上下文
- * @return int 成功时返回 0，DS 未初始化时返回负值
- */
-int iolink_ds_start_download(iolink_ds_ctx_t* ctx);
-
-/**
  * @brief 中止任何进行中的 DS 上传/下载并返回空闲状态。
  *
  * @param ctx DS 上下文
@@ -325,14 +309,17 @@ int iolink_ds_start_download(iolink_ds_ctx_t* ctx);
 int iolink_ds_abort(iolink_ds_ctx_t* ctx);
 
 /**
- * @brief 处理标准 DS 系统命令
+ * @brief 处理 Table B.9 SystemCommand 的 Param* 编码。
+ *
+ * 0x01 UploadStart … 0x06 ParamBreak；驱动与
+ * @ref iolink_ds_handle_ds_command 相同的状态机。
  *
  * @param ctx DS 上下文
- * @param cmd 系统命令（0x05-0x08）
+ * @param cmd 系统命令（0x01-0x06）
  * @param access_locks 当前访问锁状态（索引 0x000C）
  * @return int 0：成功，-1：忙，-2：访问被拒绝，-3：未知
  */
-int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_locks);
+int iolink_ds_handle_param_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_locks);
 
 /**
  * @brief 处理 DataStorageIndex DS_Command（Table B.10 subindex 01）。

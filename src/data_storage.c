@@ -612,36 +612,6 @@ void iolink_ds_process(iolink_ds_ctx_t* ctx)
     }
 }
 
-int iolink_ds_start_upload(iolink_ds_ctx_t* ctx)
-{
-    if (ctx == NULL) {
-        return -1;
-    }
-
-    if (ctx->state != IOLINK_DS_STATE_IDLE) {
-        return -1; /* 忙 */
-    }
-
-    iolink_ds_refresh(ctx);
-    ctx->state = IOLINK_DS_STATE_UPLOAD_REQ;
-    return 0;
-}
-
-int iolink_ds_start_download(iolink_ds_ctx_t* ctx)
-{
-    if (ctx == NULL) {
-        return -1;
-    }
-
-    if (ctx->state != IOLINK_DS_STATE_IDLE) {
-        return -1; /* 忙 */
-    }
-
-    ctx->image_len = 0U; /* 清除之前暂存的镜像 */
-    ctx->state = IOLINK_DS_STATE_DOWNLOAD_REQ;
-    return 0;
-}
-
 int iolink_ds_abort(iolink_ds_ctx_t* ctx)
 {
     if (ctx == NULL) {
@@ -755,7 +725,7 @@ static int ds_cmd_break(iolink_ds_ctx_t* ctx)
     return iolink_ds_abort(ctx);
 }
 
-int iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_locks)
+int iolink_ds_handle_param_command(iolink_ds_ctx_t* ctx, uint8_t cmd, uint16_t access_locks)
 {
     if (ctx == NULL) {
         return -1;
@@ -793,7 +763,7 @@ int iolink_ds_handle_ds_command(iolink_ds_ctx_t* ctx, uint8_t command, uint16_t 
         return -1;
     }
 
-    /* 将 Table B.10 的 DS_Command 编码映射为 iolink_ds_handle_command()
+    /* 将 Table B.10 的 DS_Command 编码映射为 iolink_ds_handle_param_command()
        理解的传统 Param* 编码（DS_Command 0x05 = DS_Break）。 */
     switch (command) {
         case 0x01U: /* DS_UploadStart */
@@ -815,7 +785,7 @@ int iolink_ds_handle_ds_command(iolink_ds_ctx_t* ctx, uint8_t command, uint16_t 
             return -3; /* 保留 */
     }
 
-    int ret = iolink_ds_handle_command(ctx, param_cmd, access_locks);
+    int ret = iolink_ds_handle_param_command(ctx, param_cmd, access_locks);
 
     /* DS_UPLOAD_FLAG 在每次上传/下载序列结束时复位
        （Table B.10）。 */

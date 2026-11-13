@@ -97,7 +97,18 @@ int my_ds_write(void* user, uint16_t index, uint8_t subindex,
 
 ## 4. What is persisted by the stack
 
-- the params record (three tags) on `persist` writes and parameter changes;
-- the DS image (magic + version + length + checksum + data) after a download or
-  a parameter change;
-- the DS_UPLOAD_FLAG (one byte, `1` = pending).
+| Trigger | Region written | Notes |
+|---|---|---|
+| Tag write (0x0018/0x0019/0x001A, `WRITE_STORE`) | params record | A failed write is reported as `IOLINK_RESULT_IO` and leaves RAM/read-back unchanged |
+| Factory reset / Back-to-box | params record | Unconditional; a storage failure is ignored because the RAM reset already happened |
+| DS download finished | params record per stored parameter, then the DS image | Every `WRITE_STORE` parameter (including the three tags) is persisted once by the OD write and once more inside the image |
+| DS upload requested | DS_UPLOAD_FLAG (`1`), then the DS image | Flag survives reboot so the master sees a pending upload |
+| DS upload/download finished | DS_UPLOAD_FLAG (`0`) | Also cleared on factory reset |
+| Boot | reads the params record and the DS image | `magic + version + Fletcher-32` mismatch falls back to defaults / an invalid image |
+
+The params record and the DS image can both hold the same tag values; that
+double write is a known redundancy and will be removed when both are serialized
+from the object dictionary.
+
+The DS image layout is `magic(4) + version(2) + length(2) + checksum(4) +
+records`, where a record is `[Index(2)][Subindex(1)][Length(1)][Data]`.

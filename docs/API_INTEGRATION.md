@@ -630,11 +630,9 @@ void iolink_ds_set_param_desc(iolink_ds_ctx_t* ctx,
                               const iolink_ds_param_desc_t* params, size_t count);
 void iolink_ds_process(iolink_ds_ctx_t* ctx);
 void iolink_ds_check(iolink_ds_ctx_t* ctx, uint32_t master_checksum);
-int  iolink_ds_start_upload(iolink_ds_ctx_t* ctx);
-int  iolink_ds_start_download(iolink_ds_ctx_t* ctx);
 int  iolink_ds_abort(iolink_ds_ctx_t* ctx);
-int  iolink_ds_handle_command(iolink_ds_ctx_t* ctx, uint8_t cmd,
-                              uint16_t access_locks);
+int  iolink_ds_handle_param_command(iolink_ds_ctx_t* ctx, uint8_t cmd,
+                                    uint16_t access_locks);
 int  iolink_ds_handle_ds_command(iolink_ds_ctx_t* ctx, uint8_t command,
                                  uint16_t access_locks);
 int  iolink_ds_serialize(iolink_ds_ctx_t* ctx, uint8_t* out, size_t cap);

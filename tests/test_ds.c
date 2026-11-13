@@ -73,7 +73,7 @@ static void test_ds_state_transitions(void** state)
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOADING);
     iolink_ds_process(&ds); /* 保持 Downloading 直到 DownloadEnd */
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOADING);
-    assert_int_equal(iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0), 0);
+    assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0), 0);
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
 
     /* 2. 触发 Upload（主站为 0x0000——空） */
@@ -82,7 +82,7 @@ static void test_ds_state_transitions(void** state)
     assert_int_equal(ds.state, IOLINK_DS_STATE_UPLOADING);
     iolink_ds_process(&ds); /* 保持 Uploading 直到 UploadEnd */
     assert_int_equal(ds.state, IOLINK_DS_STATE_UPLOADING);
-    assert_int_equal(iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_UPLOAD_END, 0), 0);
+    assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_UPLOAD_END, 0), 0);
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
 }
 
@@ -101,7 +101,8 @@ static void test_ds_auto_processed_by_device_pump(void** state)
     /* 繁忙的 ISDU 传输会阻塞 DS 服务。HEADER_INITIAL 是
      * iolink_isdu_process() 不会改变的状态，因此它在
      * 泵调用期间保持繁忙。 */
-    assert_int_equal(iolink_ds_start_upload(&dev.ctx.dll.main.ds), 0);
+    assert_int_equal(
+        iolink_ds_handle_param_command(&dev.ctx.dll.main.ds, IOLINK_CMD_PARAM_UPLOAD_START, 0U), 0);
     dev.ctx.dll.main.shared.isdu.state = ISDU_STATE_HEADER_INITIAL;
     iolink_device_process(&dev.ctx);
     assert_int_equal(dev.ctx.dll.main.ds.state, IOLINK_DS_STATE_UPLOAD_REQ);
@@ -121,7 +122,7 @@ static void test_ds_commands_locked(void** state)
     ds.params_ctx = test_env_params(&g_test_env);
 
     /* 1. 在锁定状态下尝试 Download Start（写） */
-    int ret = iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, IOLINK_LOCK_DS);
+    int ret = iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, IOLINK_LOCK_DS);
     assert_int_equal(ret, -2); /* 访问被拒绝 */
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
 
@@ -130,7 +131,7 @@ static void test_ds_commands_locked(void** state)
        Data Storage 上传是从设备读取，因此或许允许？
        我们实现的代码只对 Download（写）检查锁定。
     */
-    ret = iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_UPLOAD_START, IOLINK_LOCK_DS);
+    ret = iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_UPLOAD_START, IOLINK_LOCK_DS);
     assert_int_equal(ret, 0); /* 成功 */
     assert_int_equal(ds.state, IOLINK_DS_STATE_UPLOAD_REQ);
 }
@@ -143,12 +144,12 @@ static void test_ds_commands_unlocked(void** state)
     ds.params_ctx = test_env_params(&g_test_env);
 
     /* 1. Download Start（写）未锁定 */
-    int ret = iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0);
+    int ret = iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0);
     assert_int_equal(ret, 0);
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOADING);
 
     /* 2. 结束 Download */
-    ret = iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0);
+    ret = iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0);
     assert_int_equal(ret, 0);
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
 }
@@ -468,7 +469,7 @@ static void test_ds_download_end_error_classification(void** state)
     uint8_t bad[] = {0x00U, 0x18U, 0x00U, 0x05U, 0xAAU}; /* 声称 5 字节，实际为 1 */
     (void) memcpy(ds.image, bad, sizeof(bad));
     ds.image_len = sizeof(bad);
-    assert_int_equal(iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -5);
+    assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -5);
 
     /* 已知参数被拒绝 -> -2 -> PAR_SETINCONSIST。 */
     iolink_ds_init(&ds, NULL);
@@ -479,7 +480,7 @@ static void test_ds_download_end_error_classification(void** state)
     uint8_t img[] = {0x00U, 0x18U, 0x00U, 0x03U, 'A', 'B', 'C'};
     (void) memcpy(ds.image, img, sizeof(img));
     ds.image_len = sizeof(img);
-    assert_int_equal(iolink_ds_handle_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -4);
+    assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -4);
 }
 
 /* 损坏的 DS 镜像（位翻转/写撕裂）必须在加载时被丢弃。 */

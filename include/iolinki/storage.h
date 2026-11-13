@@ -27,8 +27,7 @@
 typedef enum
 {
     IOLINK_PERSIST_NONE = 0U, /**< 仅 RAM。 */
-    IOLINK_PERSIST_SYNC = 1U, /**< 在调用返回前提交。 */
-    IOLINK_PERSIST_ASYNC = 2U /**< 排队提交；由回调负责复制缓冲区。 */
+    IOLINK_PERSIST_SYNC = 1U  /**< 在调用返回前提交。 */
 } iolink_persist_t;
 
 /**
