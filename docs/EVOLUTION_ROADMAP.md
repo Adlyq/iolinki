@@ -22,13 +22,14 @@ P0 基线硬化 → P1 差分测试门(H₀) → P2 所有权分区(C) → P3 �
 一句话：**先建账目和安全网（P0/P1），再定边界（P2/P3），再做两次大语义搬迁（P4/P5），
 再收敛配置与时间（P6/P7），最后做内存、证据与收尾（P8/P9/P10）。**
 
-执行记录（2026-11，全部阶段完成）：P0–P10 已全部本地合并到 `own_dev`（无 PR）。
-最终数据（64 位主机、默认缓冲）：device 4072 B、DLL 3760 B、ISDU 1328 B、
-workspace 1289 B（外置后 device 2776 B）；82 项 ctest、4 个结构配置 + 7 个组合探针；
-差分门 2 配置逐字节一致、0 allowlist；覆盖率下限 90.6%；P9 宿主层 WCET 门与
-size/profile 门在 CI；`src/` `#if` 88、`include/` 119。P6 能力表化的 ROM 成本
-（最小应用 +972 B / +4.5%）由 DG3 记录为待产品决策。每阶段执行细节与验收记录见
-各阶段小节。
+执行记录（2026-11，全部阶段完成）：P0–P10 已全部本地合并到 `own_dev`（无 PR），
+随后按第三方 CR（`docs/CR_EVOLUTION_2026-11-12.md`）修正 M1–M9 并删除全部
+向后兼容层。最终数据（64 位主机、默认缓冲）：device 4088 B、DLL 3776 B、
+ISDU 1328 B、DS 408 B、events 504 B、workspace 1289 B（外置后 device 2792 B）；
+84 项 ctest、4 个结构配置 + 7 个组合探针；差分门 2 配置逐字节一致、0 allowlist；
+覆盖率下限 90.9%；P9 宿主层 WCET 门与 size/profile 门在 CI；`src/` `#if` 91、
+`include/` 120。P6 能力表化的 ROM 成本（最小应用 +972 B / +4.5%）由 DG3 决议
+**接受**。每阶段执行细节与验收记录见各阶段小节。
 
 ## 2. 背景：四类结构性债
 
@@ -39,7 +40,7 @@ size/profile 门在 CI；`src/` `#if` 88、`include/` 119。P6 能力表化的 R
 | 位置 | 内容 |
 |---|---|
 | `src/isdu.c` `handle_mandatory_indices()` | 64 个硬编码 case，各自带长度/子索引规则 |
-| 应用 vendor_service | 手写长度校验、大端转换、范围检查、ErrorCode（典型：`examples/switching_sensor/switching_sensor.c` `switching_sensor_service()`，约 80 行只实现 4 个参数） |
+| 应用 vendor_service | 手写长度校验、大端转换、范围检查、ErrorCode（改造前典型：`switching_sensor_service()`，约 80 行只实现 4 个参数；该包装已在本次清理中删除，示例只保留 OD 表） |
 | `iolink_ds_param_desc_t` | DS 可持久化参数列表（`include/iolinki/data_storage.h`） |
 | `tools/iodd_gen.py` + device.json | IODD 的第四份描述 |
 
@@ -279,7 +280,7 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 - **风险**：API 破坏（用户已接受工程量）。vendor_service 返回 ErrorCode 语义保留
   （即结果码正域）。
 
-### P4 对象字典 A（XL，3–4 周）——状态：已完成（本地合并；全量验证中）
+### P4 对象字典 A（XL，3–4 周）——状态：已完成（本地合并；全量验证通过）
 
 - **目标**：参数知识只有一份事实源（const OD 表）；ISDU/DS/IODD/文档全部派生；
   新增参数不改协议栈代码。
@@ -294,7 +295,8 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
   - [x] 定义 `iolink_od_entry_t` + datatype codec 表（长度/字节序/范围/错误码唯一实现）；
   - [x] 内建处理器（SystemCommand/Profile/DeviceStatus/DPP1/2/强制索引），表留 hook 位；
   - [x] `handle_mandatory_indices()` 强制索引规则迁入表驱动（od.c），isdu.c 保留传输与
-        内建触发器（实际 1842 行，−21；行数下降有限，规则已单源化）；
+        内建触发器（迁移后 1916 行；CR 修正后 1944 行，净增；规则已单源化，
+        行数不是有效指标）；
   - [x] DS 成员判断改表/描述符集合，删除"用 vendor_service 读探测"的 hack；
   - [x] IODD 生成反转：C 表 → IODD；device.json 仅作兼容输出；
   - [x] 迁移 switching_sensor（4 参数 → 4 行表项 + 2 个语义钩子）。
@@ -303,7 +305,7 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 - **风险**：写触发语义（teach 类参数）必须靠 characterization tests 钉死；表占 ROM
   → size CI 观察。
 
-### P5 reply plan + ISR 执行器 B（XL，3–4 周）——状态：已完成（本地合并；全量验证中）
+### P5 reply plan + ISR 执行器 B（XL，3–4 周）——状态：已完成（本地合并；全量验证通过）
 
 - **目标**：M-sequence 解读只存在一份（主泵）；ISR 收敛为执行器，可独立 WCET 分析。
 - **依赖**：P4。
@@ -328,18 +330,21 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 - **实现结果**：`iolink_build_caps_t` / `iolink_caps_t` + `iolink_caps_resolve()`
   单一解析点；12 项开关降级为运行时能力位；矩阵 22→4 结构配置
   （`tools/matrix_configs.sh` 单一事实源）+ 7 个语法探针 + profile 链接探针；
-  `IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` 退役为兼容别名。
+  `IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` 退役（定义它们是构建错误）。
 - **实测**：`#if` src/ 94→84、include/ 117→116，`dll.c` 13→8；ROM 最小应用
   Cortex-M0+ `-Os` text 21812→22784（**+972 B，+4.5%**）、rodata +20 B；
-  源码集成与 `.a`（非 LTO）差 0–4 B。**超出设计稿 3% 预算，DG3 需决定：
-  接受、逐项申报，或恢复部分编译期开关**。
+  源码集成与 `.a`（非 LTO）差 0–4 B。**超出设计稿 3% 预算，DG3 决议接受**
+  （2026-11 用户确认；能力表的可维护性收益优先于该 ROM 增量）。
 - **验证**：79/79 测试、4 结构配置矩阵 + 7 探针、差分门 2 配置 0 allowlist、
   质量门、覆盖率 90.4%、WCET、size_matrix、profile ABI 全部通过；顺带修复
   `tools/coverage.sh` 复用旧构建树导致 gcovr 行归属错乱（假覆盖率回归）的问题。
 - **CR 修正**：`IOLINK_DEVICE_INIT_ERR_PROFILE`（-17）在全部特性运行时化后不可达，
   已移除并保留 `REQUIRE_ISR_TX`/`TX_BUSY` → `ERR_PHY` 的可达校验。
 - **剩余项**：ISR `isr_ops` 折叠（P5/P9 交叉）、`IOLINK_CAP_BUILD_*` 单变量
-  测量开关、嵌入式链接脚本锚点、C2（FRAME）行为等价门、组合探针仅编译不链接。
+  测量开关（DG3 接受总额，故不实施）、嵌入式示例链接脚本的
+  `KEEP(*(.iolink_profile_anchor))`、C2（FRAME）行为等价门、组合探针只编译不链接。
+  profile 锚点本身已补齐 `IOLINK_WORKSPACE_EMBEDDED` 与 `IOLINK_PD_IN_BUFFERS`
+  （9 个反向档位）。
 
 - **目标**：22 配置矩阵收敛为 3–4 个结构配置；特性开关降级为数据。
 - **依赖**：P5。**出口决策 DG3**。
@@ -351,11 +356,16 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
         ISR_TX_ONLY/3×compat/事件时间/时序强制/访问锁）；
   - [x] matrix 收敛为 4 结构配置 + 探针；差分门改为 C1 vs C1r + 期望帧测试；
   - [x] `IOLINK_APP_PD_INPUT_CALLBACK` 运行时化；DS/事件删除契约改链接期断言；
-  - [x] ROM 实测（源码 vs `.a`）；**+972 B（+4.5%）超预算，DG3 待决**。
-- **完成标志**：`#if` 从 198 降到核心文件个位数；matrix 22→3–4；ROM 实测数据入档。
+  - [x] ROM 实测（源码 vs `.a`）；**+972 B（+4.5%）超预算，DG3 已接受**。
+- **完成标志（实测复核）**：`src/` + `include/` 的 `#if/#ifdef/#ifndef/#elif` 总量
+  195（P6 前，00b07ef）→ 202（P6 合并，dfcd3c3）→ 207（P10 后）；本次 CR 清理后
+  211（`src/` 91 + `include/` 120），仅 `#if` 为 133。核心文件里只有 `dll.c` 达到
+  个位数；`isdu.c` 20、`dll_isr.c` 15、`device.c` 14 属结构布局/ISR 粒度守卫。
+  **该量化目标未达成**，保留能力表化的收益（单一判定点、12 项运行时化），
+  不再以 `#if` 数量作为验收条件。matrix 22→4；ROM 实测数据入档。
 - **风险**：ROM 可能增长；`.a` 静态库非 LTO 下 gc-sections 基本失效 → 预期管理靠实测。
 
-### P7 截止时间表 F（M，1–2 周）——状态：已完成（本地合并；全量验证中）
+### P7 截止时间表 F（M，1–2 周）——状态：已完成（本地合并；全量验证通过）
 
 - **目标**：定时器收敛为单表 + 单点比较；时序契约可枚举、可测试、可导出文档。
 - **依赖**：P5。
@@ -369,7 +379,7 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
   测试；差分绿。
 - **风险**：ISR 读取 deadline 的原子性——复用 P2/P5 的发布字机制。
 
-### P8 工作区分离 G（L，2–3 周）——状态：已完成（本地合并；全量验证中）
+### P8 工作区分离 G（L，2–3 周）——状态：已完成（本地合并；全量验证通过）
 
 - **目标**：状态与缓冲分离；内存数字可预测、全进 CI；小 MCU 可精确裁剪。
 - **依赖**：P4、P5。**出口决策 DG4**。
@@ -377,11 +387,12 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
   `src/data_storage.c`（DS image 流式化）、`src/device.c`（composition root）、
   `docs/MEMORY_GUIDE.md`（重写）。
 - **步骤**：
-  - [ ] `iolink_workspace_t` 由调用方提供（DTCM/外部 RAM）；
-  - [ ] ISDU response 路径试点租约模型，消灭 `resp_store[2]` 双缓冲副本；
-  - [ ] DS image 流式序列化（依赖 P4 storage 标志），不再常驻 256B；
-  - [ ] 内存 CI：所有缓冲尺寸进断言，文档数字与代码同步；
-  - [ ] 裁剪配置的尺寸打印进矩阵日志（仅记录，不设门）。
+  - [x] `iolink_workspace_t` 由调用方提供（DTCM/外部 RAM），内嵌 fallback 保持兼容；
+  - [x] ISDU response 路径租约模型，消灭 `resp_store[2]` 双缓冲副本（单一 frame + Busy 租约）；
+  - [x] DS image 流式序列化（`iolink_ds_serialize`/`iolink_ds_refresh`），不再常驻 256 B；
+  - [x] 内存 CI：尺寸契约与 MEMORY_GUIDE 同步（device 4088，外置 workspace 2792）；
+  - [ ] 裁剪配置的尺寸打印进矩阵日志（仅记录，不设门）——由 `test_ctx_sizes`
+        打印与 MEMORY_GUIDE 记录替代，未实现单独的矩阵日志行。
 - **完成标志**：小 MCU 裁剪演示；差分绿；内存数字全进 CI。
 - **风险**：MISRA 零拷贝证明 → 租约所有权规则文档化 + 静态断言辅助。
 
@@ -399,7 +410,7 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 - **完成标志**：重构安全网完整；WCET 回归门工作；状态机表与 traceability 联动。
 - **风险**：纯表装不下连续条件 → 表管骨架 + 函数管动作 + 性质测试管不变量。
 
-### P10 小项收尾 + 审计 I（S，~1 周）——状态：诊断设计稿已完成（docs/DIAGNOSTICS_DESIGN.md，14 个问题 + 10 步迁移）；实现待 P4/P5
+### P10 小项收尾 + 审计 I（S，~1 周）——状态：已完成（本地合并；全量验证通过）
 
 - **依赖**：全部。
 - **涉及文件**：`include/iolinki/device.h`（不透明上下文）、`src/events.c`、
@@ -441,13 +452,34 @@ P5/P7/P9 2 MAJOR；P6/P8 1 BLOCKER + 5 MAJOR），修复后 re-CR 三组全部 P
 - C2（FRAME）仍无行为等价门，只有编译矩阵 + 语法探针；
 - 状态机生成门禁覆盖 `state/event/enter_state`，动作函数或 clause 漂移由差分门兜底。
 
+第三方 CR（`docs/CR_EVOLUTION_2026-11-12.md`）复核结论：9 个 MAJOR 全部属实，
+已逐条修复；1 项 MINOR/TEST GAP 的推论不成立（`test_deadline_rollover.c` 虽只用
+`assert`，但 `tests/CMakeLists.txt` 的 `-UNDEBUG` 让断言在 Release 配置下仍生效）。
+
+| CR 项 | 处置 |
+|---|---|
+| M1 OD 写路径/索引契约 | 写路径透传 subindex；OD 层校验 `max_subindex`；OCTET_STRING 按 `block_len` 返回 0x33；索引按规范域/设备域分流（规范域标准优先，设备域应用表 → 厂商服务 → 内建扩展） |
+| M2 应用 DS 成员 | `iolink_ds_bind_od()` + 标准表/应用表联合描述符集，`config->od` 自动纳入 |
+| M3 workspace 解绑悬空 | `EMBEDDED=0` 时解绑清零全部指针与容量（ISDU/DS） |
+| M4 DS 恢复非原子 | 两阶段：先对全部已知记录做无副作用校验，再逐条应用；注释与文档改为如实描述（NVM 失败仍可能部分生效） |
+| M5 caps 变更旧计划 | `iolink_dll_invalidate_reply_plans()`；`iolink_device_set_capabilities()` 调用它 |
+| M6 profile 锚点缺布局开关 | 增加 `workspace_embedded_*`、`pd_in_buffers_2/3`；反向探针精确到单个符号（9 档） |
+| M7 退役组合包静默 | `config.h` `#error` + CMake `FATAL_ERROR`；文档与示例不再教用户定义 |
+| M8 CONSUME 帧计时簿记 | 共享区 `isr_consumed_us/seq` 交接，主泵按帧时间补做 T_CYCLE/T_REN 与 `last_response_us` |
+| M9 验收记录不可靠 | 本文件与 CHANGELOG/MEMORY_GUIDE/DIAGNOSTICS_DESIGN 按实测重写；`#if` 目标如实标注未达成 |
+| MINOR | `diff_matrix` 失败即红、`build_matrix` 缺归档即红、`size_matrix` 增加 `.rodata` 门、timer 比较改回绕安全、CAP_TX 契约为 `tx_octet` 必选、`diag.c` 去重 include |
+
+同时按“只保留最新 API”删除了兼容层：`iolink_params_ctx_get/set`、
+`IOLINK_PHY_FEATURE_WAKEUP`/`_SIO_CQ`/`IOLINK_APP_PD_INPUT_CALLBACK`、
+内部 `t_pd_deadline_us` 交接、示例的 `switching_sensor_service()`。
+
 ## 9. 决策门
 
 | # | 时机 | 决策 | 倾向 |
 |---|---|---|---|
-| DG1 | P3 入口 | vendor_service API 破坏策略：兼容 shim vs 2.0 断代 | 保留兼容 shim 一个版本，examples 全量迁移 |
+| DG1 | P3 入口 | vendor_service API 破坏策略：兼容 shim vs 2.0 断代 | 曾保留一版 shim；2026-11 用户要求“不做向后兼容”，shim 已删除，examples 只保留 OD 路径 |
 | DG2 | P4 出口 | 事实源格式：C 表 vs JSON 生成 | C 头为源，脚本导出 IODD |
-| DG3 | P6 出口 | 结构配置清单定稿；是否接受能力表 ROM 成本 | 已定为 4 配置；**ROM 实测 +972 B（+4.5%）超 3% 预算，需决定接受/逐项申报/部分回退** |
+| DG3 | P6 出口 | 结构配置清单定稿；是否接受能力表 ROM 成本 | 已定为 4 配置；**ROM 实测 +972 B（+4.5%）超 3% 预算，决议接受**（`IOLINK_CAP_BUILD_*` 逐项申报不执行） |
 | DG4 | P8 出口 | 静态库交付形态下 GC 效果 | 实测数据定论 |
 
 ## 10. 里程碑

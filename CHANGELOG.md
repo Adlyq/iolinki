@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (2026-11 code review)
+- OD write path: `iolink_od_write_value()` takes the requested subindex and
+  forwards it to the params manager and the application write hook; the value
+  layer rejects `subindex > max_subindex` on its own; OctetString writes over
+  `block_len` answer `0x33` instead of silently truncating tags.
+- Index routing by domain: normative indices stay standard-table-first (an
+  application table cannot shadow `0x0002`/`0x0024`), while device-specific
+  indices (`0x0040`-`0x00FE`, `0x0100+`) try the application OD table, then the
+  vendor service, then the built-in entry. `iolink_od_find()` follows the same
+  split, so DS access to an application parameter in the Preferred range
+  resolves correctly.
+- Data Storage membership includes application OD entries with
+  `IOLINK_OD_STORAGE_DS` (`iolink_ds_bind_od()`); `ParamDownloadEnd` validates
+  every known record before applying any of them, and the "atomic" wording was
+  corrected (NVM failures are still not a cross-parameter transaction).
+- Unbinding an external workspace clears the ISDU/DS buffer pointers instead of
+  leaving dangling references when `IOLINK_WORKSPACE_EMBEDDED=0`.
+- Runtime capability overrides invalidate the published reply plans
+  (`iolink_dll_invalidate_reply_plans()`), so a compat-bit change cannot leave
+  the ISR executing the previous plan.
+- Frames answered by the ISR under a `CONSUME` plan now report back through a
+  shared timestamp and take part in T_CYCLE/T_REN bookkeeping and
+  `last_response_us`.
+- The profile anchor covers `IOLINK_WORKSPACE_EMBEDDED` and
+  `IOLINK_PD_IN_BUFFERS`; the negative probes reference one symbol each, so a
+  mismatch cannot mask the expected failure.
+- `tools/diff_matrix.sh` fails when a test binary exits non-zero,
+  `tools/build_matrix.sh` fails when the critical-section archive is missing,
+  and `tools/size_matrix.py` gates `.rodata` as well (with `--selftest` proof).
+
+### Removed (no compatibility layer)
+- `iolink_params_ctx_get/set` wrappers (see below), the
+  `IOLINK_PHY_FEATURE_WAKEUP` / `_SIO_CQ` / `IOLINK_APP_PD_INPUT_CALLBACK`
+  no-op macros and CMake options, the internal `t_pd_deadline_us` hand-off
+  (the device arms T_PD directly), and the `switching_sensor_service()`
+  vendor-service wrapper in the example.
+
 ### Added
 - Capability-table design for roadmap P6: `docs/CAPABILITY_DESIGN.md`
   classifies all 37 compile-time knobs (23 stay compile-time, 12 become
@@ -43,7 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Data Storage membership is resolved from the OD table / descriptor set and
   no longer probes `vendor_service` with a read. `examples/switching_sensor`
   is the first OD application and `tools/iodd_gen.py` exports the IODD from
-  the table. ISDU context grows by 8 bytes (device context 3720 bytes).
+  the table. ISDU context grows by 8 bytes.
 
 ### Added (reply plan)
 - Reply-plan table in `iolink_dll_ctx_t` (10 slots × 24 B) published by the
@@ -51,15 +88,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bytes, appends the checksum and feeds the PHY; unrecognised requests return
   to the main pump instead of being interpreted in the ISR. An ISDU generation
   bit plus staged-write invalidation keep write-then-read consistent, and the
-  ISR-side M-sequence content constants roughly halve (27 vs 54). The device
-  context grows by 256 bytes (3976 B on a 64-bit host).
+  ISR-side M-sequence content constants roughly halve (27 vs 54).
 
 ### Added (diagnostics registry)
 - One condition registry (`include/iolinki/diag.h`) drives DeviceStatus
   (0x0024), DetailedDeviceStatus (0x0025) and EventCode 0x1800 with latch/edge
   semantics; sources are PHY faults, the event queue, data-path errors, mapped
   local parameter writes and DS state. Missing DDS mappings report 0xFF.
-  `iolink_event_trigger` semantics are unchanged.
+  For codes registered in the table `iolink_event_trigger()` now uses the
+  normative EventType; unregistered application/vendor codes keep the caller
+  supplied type.
 
 ### Added (capability model)
 - `iolink_build_caps_t` / `iolink_caps_t` and `iolink_caps_resolve()` are the
@@ -92,7 +130,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ISDU responses now use one frame buffer with a lease (published as Busy
   while being rebuilt) instead of two full copies; DS uploads and checksums
   are serialized incrementally instead of keeping a resident 256 B image.
-  Device context drops to 3816 B (2520 B with the workspace externalized).
+  The device context is 4088 B on a 64-bit host (2792 B with the workspace
+  externalized).
 
 ### Changed
 - DLL ownership split: `iolink_dll_ctx_t` packs `iolink_dll_main_t` (with the
@@ -100,7 +139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `src/dll.c` includes only the main header, so referencing ISR-exclusive
   fields is a compile error. DLL public functions now take `iolink_dll_main_t*`
   and `iolink_dll_init()` takes the main and ISR objects; the packed container
-  remains the only object the application allocates (device context is 3712
+  remains the only object the application allocates (device context is 4088
   bytes on a 64-bit host, same single-allocation model).
 - `iolink_device_ctx_t` no longer carries a `stack_config` copy; the caller
   configuration (`ctx->config->stack`) is the single source of truth
@@ -138,12 +177,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ordered by value.
 - `iolink_app_callbacks_t`: every hook takes `void* user`
   (`iolink_device_config_t.user`), so callbacks need no global state.
-- `IOLINK_APP_PD_INPUT_CALLBACK` is a compile-time API selector
-  (`-DIOLINK_APP_PD_INPUT_CALLBACK=ON`): the polling function and the callback
-  member are mutually exclusive at compile time. Init rejects a callback
-  profile without `on_pd_input` (`IOLINK_DEVICE_INIT_ERR_PD_INPUT`, -14) and a
-  `IOLINK_PHY_FEATURE_TX_BUSY=1` build without `tx_busy`
-  (`IOLINK_DEVICE_INIT_ERR_PHY`, -15).
+- `on_pd_input` and the polling API coexist; the path is selected at init by
+  member presence. Init still rejects a `IOLINK_PHY_FEATURE_TX_BUSY=1` build
+  without `tx_busy` (`IOLINK_DEVICE_INIT_ERR_PHY`, -15).
 - `phy->get_faults()` is polled: edge-triggered Table D.1 events
   (under/overvoltage, over-temperature, short circuit); a PHY without the hook
   produces no physical diagnostics.
@@ -154,12 +190,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed (configuration surface)
 - `config.h` is now the single source of default values, grouped into
   overridable buffers, spec-fixed values, build/porting tiers and logging.
-- `IOLINK_MINIMAL_PROFILE` requires a non-zero value: `-D...=0` genuinely
-  disables the bundle (it used to trim because of the old `#ifdef` form). In
-  non-CMake builds a bare definition or `=ON` also evaluates to 0, so write
-  `=1`. `IOLINK_TINY_PROFILE` is a CMake-only bundle option (`config.h` does
-  not read it).
-- `IOLINK_APP_PD_INPUT_CALLBACK` moved from `application.h` to `config.h`.
+- `IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` are retired: defining them
+  is a build error (`#error` in `config.h`, CMake `FATAL_ERROR` for
+  `-DIOLINK_*_PROFILE=ON`). Trim the individual subsystems instead.
 
 ### Removed
 - `iolink_params_ctx_get/set`: the integer compatibility wrappers that collapsed

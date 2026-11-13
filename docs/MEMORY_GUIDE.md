@@ -17,11 +17,11 @@ Measured on a 64-bit host with the default buffers in
 
 | Component | Size (bytes) | Description |
 | :--- | ---: | :--- |
-| **`iolink_device_ctx_t`** | **4072** | The object the application allocates (includes everything below) |
-| `iolink_dll_ctx_t` | 3760 | DLL state, timers, reply-plan table (10×24 B), ISR staging; embeds ISDU, Events and DS |
+| **`iolink_device_ctx_t`** | **4088** | The object the application allocates (includes everything below) |
+| `iolink_dll_ctx_t` | 3776 | DLL state, timers, reply-plan table (10×24 B), ISR staging; embeds ISDU, Events and DS |
 | `iolink_isdu_ctx_t` | 1328 | Transport state, buffer pointers and the embedded ISDU scratch (1033 B) |
 | `iolink_events_ctx_t` | 504 | Event queue plus lifecycle records |
-| `iolink_ds_ctx_t` | 392 | DS state, buffer pointers and the embedded download stage |
+| `iolink_ds_ctx_t` | 408 | DS state, buffer pointers, the OD set and the embedded download stage |
 | **PHY API** | 20-30 bytes | Function pointers (usually const/flash, but pointer storage in RAM) |
 
 `IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 16 bytes (two counter sets plus padding).
@@ -76,9 +76,9 @@ To move the scratch **out of the context entirely**, build with
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 4072 | **2776** |
-| `iolink_isdu_ctx_t` | 1328 | **280** |
-| `iolink_ds_ctx_t` | 392 | **136** |
+| `iolink_device_ctx_t` | 4088 | **2792** |
+| `iolink_isdu_ctx_t` | 1328 | **288** |
+| `iolink_ds_ctx_t` | 408 | **152** |
 | `iolink_workspace_t` (separate allocation) | — | 1289 |
 
 The trimmed build is the small-MCU path: place the 1289-byte workspace in
@@ -87,11 +87,11 @@ instead of carrying it inside the main context. One measured example (`IOLINK_IS
 
 | Component | Embedded | External workspace |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 3008 | **2672** |
+| `iolink_device_ctx_t` | 3128 | **2792** |
 | `iolink_workspace_t` | — | 329 |
 
 > **Lease rule (ISDU response).** There is exactly one framed-response buffer.
-> Before writing it, the main pump publishes `{len=0, busy=1}` through the P5
+> Before writing it, the main pump publishes `{len=0, busy=1}` through the reply-plan
 > publish word (`dll_isdu_sync_snapshot`); the data ISR reacts to Busy/No
 > Service and never reads the buffer while it is being rebuilt. A completed
 > response is published together with its generation bit, so a "write then
@@ -123,7 +123,7 @@ You can tune these values to fit your MCU.
 
 ### Total RAM
 
-The default `iolink_device_ctx_t` is **4072 bytes** (64-bit host, default
+The default `iolink_device_ctx_t` is **4088 bytes** (64-bit host, default
 buffers); buffer arrays dominate it. On a 32-bit target the same layout is
 smaller. To measure your own build instead of relying on the table:
 
