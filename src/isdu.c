@@ -1840,8 +1840,7 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
      *  - 设备专用索引（0x0040-0x00FE、0x0100+）：应用表优先，其次
      *    厂商服务，最后才是标准表里的内建厂商扩展（0x0040 错误统计）。
      * 这样既保住规范索引，又让厂商服务继续拥有它惯用的 Preferred 区间。 */
-    const bool device_specific =
-        ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
+    const bool device_specific = ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
     const iolink_od_entry_t* entry = NULL;
 
     if (device_specific) {
