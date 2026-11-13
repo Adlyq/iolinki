@@ -19,7 +19,6 @@
 
 #include "iolinki/diag.h"
 
-#include "iolinki/diag.h"
 #include "iolinki/events.h"
 #include "iolinki/platform.h"
 #include "iolinki/utils.h"
