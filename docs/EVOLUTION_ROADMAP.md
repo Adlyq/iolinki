@@ -330,7 +330,7 @@ typedef struct { /* scratch/缓冲，租约模型 */ } iolink_workspace_t;
 - **实现结果**：`iolink_build_caps_t` / `iolink_caps_t` + `iolink_caps_resolve()`
   单一解析点；12 项开关降级为运行时能力位；矩阵 22→4 结构配置
   （`tools/matrix_configs.sh` 单一事实源）+ 7 个语法探针 + profile 链接探针；
-  `IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` 退役（定义它们是构建错误）。
+  旧组合包配置已移除（库中不再存在这些开关）。
 - **实测**：`#if` src/ 94→84、include/ 117→116，`dll.c` 13→8；ROM 最小应用
   Cortex-M0+ `-Os` text 21812→22784（**+972 B，+4.5%**）、rodata +20 B；
   源码集成与 `.a`（非 LTO）差 0–4 B。**超出设计稿 3% 预算，DG3 决议接受**
@@ -464,14 +464,14 @@ P5/P7/P9 2 MAJOR；P6/P8 1 BLOCKER + 5 MAJOR），修复后 re-CR 三组全部 P
 | M4 DS 恢复非原子 | 两阶段：先对全部已知记录做无副作用校验，再逐条应用；注释与文档改为如实描述（NVM 失败仍可能部分生效） |
 | M5 caps 变更旧计划 | `iolink_dll_invalidate_reply_plans()`；`iolink_device_set_capabilities()` 调用它 |
 | M6 profile 锚点缺布局开关 | 增加 `workspace_embedded_*`、`pd_in_buffers_2/3`；反向探针精确到单个符号（9 档） |
-| M7 退役组合包静默 | `config.h` `#error` + CMake `FATAL_ERROR`；文档与示例不再教用户定义 |
+| M7 旧组合包静默 | 组合包与对应 CMake 选项直接删除；文档与示例改为显式关闭子系统 |
 | M8 CONSUME 帧计时簿记 | 共享区 `isr_consumed_us/seq` 交接，主泵按帧时间补做 T_CYCLE/T_REN 与 `last_response_us` |
 | M9 验收记录不可靠 | 本文件与 CHANGELOG/MEMORY_GUIDE/DIAGNOSTICS_DESIGN 按实测重写；`#if` 目标如实标注未达成 |
 | MINOR | `diff_matrix` 失败即红、`build_matrix` 缺归档即红、`size_matrix` 增加 `.rodata` 门、timer 比较改回绕安全、CAP_TX 契约为 `tx_octet` 必选、`diag.c` 去重 include |
 
-同时按“只保留最新 API”删除了兼容层：`iolink_params_ctx_get/set`、
-`IOLINK_PHY_FEATURE_WAKEUP`/`_SIO_CQ`/`IOLINK_APP_PD_INPUT_CALLBACK`、
-内部 `t_pd_deadline_us` 交接、示例的 `switching_sensor_service()`。
+同时按“只保留最新 API”删除了兼容层：整数参数包装、三个退役的能力宏及其 CMake
+选项、内部 T_PD 交接、示例的 vendor-service 包装。这些名字在代码、构建脚本与
+当前文档中都不再存在（本文只作为审计记录保留说明）。
 
 ## 9. 决策门
 

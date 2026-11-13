@@ -38,11 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `tools/size_matrix.py` gates `.rodata` as well (with `--selftest` proof).
 
 ### Removed (no compatibility layer)
-- `iolink_params_ctx_get/set` wrappers (see below), the
-  `IOLINK_PHY_FEATURE_WAKEUP` / `_SIO_CQ` / `IOLINK_APP_PD_INPUT_CALLBACK`
-  no-op macros and CMake options, the internal `t_pd_deadline_us` hand-off
-  (the device arms T_PD directly), and the `switching_sensor_service()`
-  vendor-service wrapper in the example.
+- The integer parameter wrappers (see below), the retired capability build
+  switches and their CMake options, the internal T_PD hand-off (the device arms
+  T_PD directly), and the example's vendor-service wrapper.
 
 ### Added
 - Capability-table design for roadmap P6: `docs/CAPABILITY_DESIGN.md`
@@ -109,8 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structural matrix converged to four configurations with one source of truth
   (`tools/matrix_configs.sh`), syntax-only combination probes, profile
   link-probes and a ROM size baseline (`tools/size_matrix.py`).
-  `IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` are retired as no-op
-  aliases. Measured minimal-app cost: +972 B text (+4.5%), +20 B rodata.
+  Measured minimal-app cost: +972 B text (+4.5%), +20 B rodata.
 
 ### Added (timers and state machine)
 - Software timeouts converge onto one deadline table (t_A/t_ren/t_cycle/t_PD/
@@ -190,9 +187,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed (configuration surface)
 - `config.h` is now the single source of default values, grouped into
   overridable buffers, spec-fixed values, build/porting tiers and logging.
-- `IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` are retired: defining them
-  is a build error (`#error` in `config.h`, CMake `FATAL_ERROR` for
-  `-DIOLINK_*_PROFILE=ON`). Trim the individual subsystems instead.
+- The bundle profile switches are gone; trimming uses the individual
+  `IOLINK_FEATURE_*` options.
 
 ### Removed
 - `iolink_params_ctx_get/set`: the integer compatibility wrappers that collapsed

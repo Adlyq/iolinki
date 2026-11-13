@@ -720,8 +720,7 @@ flowchart TD
   `iolink_diag_set_level()`，按“当前电平 vs 条件锁存”产生边沿
   （UNDERVOLTAGE→0x5111、OVERVOLTAGE→0x5110、OVERTEMP→0x4000、
   SHORT_CIRCUIT→0x7710）；1→0 只清条件。复位清空条件表后，
-  仍存在的故障由下一轮采样重新上报。`get_faults()` 为 NULL 时诊断静默
-  （没有 legacy 电压/短路回退）。
+  仍存在的故障由下一轮采样重新上报。`get_faults()` 为 NULL 时诊断静默。
 - 协议错误（CRC/超时/组帧/时序）是 PULSE 源（0x1801/0x1802/0x1803/0x1804）：
   ISR 只写 `isr_pulse[]` one-shot，主泵 `iolink_diag_service()`（由
   `dll_poll_diagnostics()` 调用）消费并刷新 `IOLINK_DIAG_PULSE_HOLD_MS`
@@ -1120,16 +1119,16 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 | `IOLINK_DIAG_PULSE_HOLD_MS` | PULSE 诊断源的保持窗口 |
 | `IOLINK_TIMING_ENFORCE_DEFAULT` | `iolink_build_caps_t::timing_enforce_default` 的初值 |
 
-已降级为**运行期能力**的开关（宏已退役，定义它们是构建错误）：
+运行期能力位（没有对应的编译期开关）：
 
-| 宏 | 现状 |
+| 能力位 | 解析来源 |
 | :--- | :--- |
-| `IOLINK_PHY_FEATURE_WAKEUP` | 能力位 `IOLINK_CAP_WAKEUP`（由 `detect_wakeup` 是否为 NULL 解析） |
-| `IOLINK_PHY_FEATURE_SIO_CQ` | 能力位 `IOLINK_CAP_SIO_CQ`（由 `set_cq_line` 是否为 NULL 解析） |
-| `IOLINK_APP_PD_INPUT_CALLBACK` | 能力位 `IOLINK_CAP_PD_IN_CALLBACK`（由 `on_pd_input` 是否为 NULL 解析），两条 PD-in 路径共存 |
-| `IOLINK_COMPAT_V10_STARTUP_OPERATE` / `IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE` / `IOLINK_DS_LEGACY_IMAGE_SUB0` | `iolink_stack_config_t::compat_flags` 的构建默认值，判定点是 `IOLINK_CAP_COMPAT_*` |
+| `IOLINK_CAP_WAKEUP` | `detect_wakeup` 是否为 NULL |
+| `IOLINK_CAP_SIO_CQ` | `set_cq_line` 是否为 NULL |
+| `IOLINK_CAP_PD_IN_CALLBACK` | `on_pd_input` 是否为 NULL（两条 PD-in 路径共存） |
+| `IOLINK_CAP_COMPAT_*` | `iolink_stack_config_t::compat_flags` |
 
-`IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` 已退役，定义它们是构建错误（`config.h` 的 `#error`，CMake 侧同样拒绝）；最小镜像请直接关闭 `IOLINK_FEATURE_DATA_STORAGE` 与 `IOLINK_FEATURE_EVENTS`。
+最小镜像直接关闭 `IOLINK_FEATURE_DATA_STORAGE` 与 `IOLINK_FEATURE_EVENTS`。
 
 集成注意（按当前代码实际调用点）：
 

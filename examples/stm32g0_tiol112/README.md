@@ -118,12 +118,12 @@ without a millisecond sleep; application sampling alone runs at 10ms cadence.
 This example deliberately implements **no persistence**: both NVM hooks return
 -1, so flash erase/program and data-storage retention are unsupported.
 Persistent tag writes return an ISDU error and retain their previous values.
-The legacy void factory-reset API cannot report a failed storage write.
+The void factory-reset API cannot report a failed storage write.
 `board_phy_fault` exposes aggregate NFAULT in the debugger; it does not infer
 whether the cause is a short circuit, undervoltage or temperature.
 Persistent tag setters report failure and preserve the previous RAM/device-info
-values when NVM rejects a write. The legacy `void` factory-reset API clears RAM
-but cannot report an NVM failure; a reset must not be treated as retained across
+values when NVM rejects a write. The `void` factory-reset API clears RAM but
+cannot report an NVM failure; a reset must not be treated as retained across
 power loss on this target.
 
 Host-only buffer verification:

@@ -51,37 +51,24 @@ The matrix uses four structural configurations, defined once in
 The full unit suite runs on C1, C1r and C4; cross-combinations are covered by
 syntax-only probes.
 
-## Runtime capability bits (demoted in P6)
+## Runtime capability bits
 
-The "Former switch" column is historical: those three retired macros
-(`IOLINK_PHY_FEATURE_WAKEUP`, `IOLINK_PHY_FEATURE_SIO_CQ`,
-`IOLINK_APP_PD_INPUT_CALLBACK`) are build errors if defined. The PHY vtable and
-`on_pd_input` are the only selectors.
-
-| Capability | Former switch | Runtime knob |
+| Capability | Resolved from | Override |
 | --- | --- | --- |
-| `IOLINK_CAP_SYSTEM_COMMAND` | `IOLINK_FEATURE_SYSTEM_COMMAND` | `stack.flags` / `iolink_device_set_capabilities()` |
-| `IOLINK_CAP_WAKEUP` | `IOLINK_PHY_FEATURE_WAKEUP` | PHY vtable |
-| `IOLINK_CAP_SIO_CQ` | `IOLINK_PHY_FEATURE_SIO_CQ` | PHY vtable |
-| `IOLINK_CAP_PD_IN_CALLBACK` | `IOLINK_APP_PD_INPUT_CALLBACK` | `app_callbacks->on_pd_input != NULL` |
-| `IOLINK_CAP_REQUIRE_ISR_TX` | `IOLINK_PHY_FEATURE_ISR_TX_ONLY` | `stack.flags` + `phy->request_service` |
-| `IOLINK_CAP_COMPAT_V10_OP` | `IOLINK_COMPAT_V10_STARTUP_OPERATE` | `stack.compat_flags` |
-| `IOLINK_CAP_COMPAT_T0_READ` | `IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE` | `stack.compat_flags` |
-| `IOLINK_CAP_DS_LEGACY_SUB0` | `IOLINK_DS_LEGACY_IMAGE_SUB0` | `stack.compat_flags` |
-| event timing | `IOLINK_EVENT_MIN_APPEAR_MS` / `_REPEAT_MS` | `stack.event_min_appear_ms` / `_repeat_ms` (0 = build default) |
-| timing enforcement | `IOLINK_TIMING_ENFORCE_DEFAULT` | `stack.timing_enforce` (`DEFAULT` = build profile) |
-| access locks | `IOLINK_ACCESS_LOCKS_IMPLEMENTED` | `IOLINK_CAP_LOCK_*` |
+| `IOLINK_CAP_SYSTEM_COMMAND` | build profile | `stack.flags` / `iolink_device_set_capabilities()` |
+| `IOLINK_CAP_WAKEUP` | PHY vtable (`detect_wakeup`) | hardware bound |
+| `IOLINK_CAP_SIO_CQ` | PHY vtable (`set_cq_line`) | hardware bound |
+| `IOLINK_CAP_PD_IN_CALLBACK` | `app_callbacks->on_pd_input` | application |
+| `IOLINK_CAP_REQUIRE_ISR_TX` | build profile | `stack.flags` + `phy->request_service` |
+| `IOLINK_CAP_COMPAT_V10_OP` | `compat_defaults` | `stack.compat_flags` |
+| `IOLINK_CAP_COMPAT_T0_READ` | `compat_defaults` | `stack.compat_flags` |
+| `IOLINK_CAP_DS_LEGACY_SUB0` | `compat_defaults` | `stack.compat_flags` |
+| event timing | build profile | `stack.event_min_appear_ms` / `_repeat_ms` (0 = build default) |
+| timing enforcement | build profile | `stack.timing_enforce` (`DEFAULT` = build profile) |
+| access locks | manifest | `IOLINK_CAP_LOCK_*` |
 
-The old macros remain as no-op compatibility aliases for one version.
-
-## Retired bundles
-
-`IOLINK_MINIMAL_PROFILE` and `IOLINK_TINY_PROFILE` are retired. **Defining them
-is a build error** (`#error` in `config.h`, plus a CMake `FATAL_ERROR` for
-`-DIOLINK_*_PROFILE=ON`): they used to switch several subsystems off at once,
-and silently ignoring them would produce a much larger image than requested.
-Disable `IOLINK_FEATURE_DATA_STORAGE` / `IOLINK_FEATURE_EVENTS` explicitly, or
-use the runtime bits above.
+All of them are resolved once per instance by `iolink_caps_resolve()`; no
+compile-time switch selects a behaviour.
 
 ## CMake options
 

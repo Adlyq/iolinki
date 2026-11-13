@@ -107,9 +107,10 @@ cmake -B build && cmake --build build
 # IOLINKI_MISRA_ENFORCE=1 env var)
 ./check_quality.sh
 
-# trimmed profiles only build the library (the unit suite is skipped)
-cmake -B build_tiny -DIOLINK_TINY_PROFILE=ON -DBUILD_TESTING=OFF
-cmake --build build_tiny
+# trimmed builds only build the library (the unit suite is skipped)
+cmake -B build_trim -DIOLINK_FEATURE_DATA_STORAGE=OFF -DIOLINK_FEATURE_EVENTS=OFF \
+  -DBUILD_TESTING=OFF
+cmake --build build_trim
 
 # ISR granularity variants are compile definitions, not CMake options
 cmake -B build_frame \

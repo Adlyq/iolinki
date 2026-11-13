@@ -31,9 +31,8 @@ Every supported structural configuration must build. The matrix is defined once
 in `tools/matrix_configs.sh`: four structural configurations (`host_default`,
 its Release variant `host_default_release`, `host_frame` and
 `target_minimal`, plus `host_smp_split`), seven syntax-only combination probes,
-the link-time profile probes and the bare-metal platform. The retired
-MINIMAL/TINY bundles are gone; feature trimming is expressed with the individual
-`IOLINK_FEATURE_*` switches. Configurations marked tests=yes (`host_default`,
+the link-time profile probes and the bare-metal platform. Feature trimming is
+expressed with the individual `IOLINK_FEATURE_*` switches. Configurations marked tests=yes (`host_default`,
 `host_default_release`, `host_smp_split`) also run the unit suite; `host_frame`
 is build-only because the host tests drive BYTE-only PHY vtables, and demoted
 runtime switches are covered by expected-frame tests in the default suite.

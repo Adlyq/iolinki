@@ -290,8 +290,7 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx,
 两条 PD-in 路径在同一构建内共存：`on_pd_input` 非 NULL 时初始化选择回调路径并置位
 `IOLINK_CAP_PD_IN_CALLBACK`，此后 `pd_input_update()` 返回
 `IOLINK_DEVICE_INIT_ERR_PD_INPUT`（-14），避免线上 PD 在回调输出与调用方数据之间
-跳变；`on_pd_input` 为 NULL 时用轮询 API 发布。`IOLINK_APP_PD_INPUT_CALLBACK` 已退役：
-路径只由 `on_pd_input` 是否存在决定，定义该宏是构建错误。
+跳变；`on_pd_input` 为 NULL 时用轮询 API 发布。路径只由 `on_pd_input` 是否存在决定。
 
 `pd_output_read()` 最多复制 `len` 字节，并返回实际复制的字节数；参数非法时返回负值。
 `pd_out` 由同一主上下文中的帧分发写入，因此该函数直接复制，不取锁，也不进入平台临界区。
@@ -495,8 +494,7 @@ EventCode、`0x0024` DeviceStatus 与 `0x0025` DetailedDeviceStatus 都从同一
 
 `0x0004-0x000B` 和 `0x001C-0x001F` 为保留区间，`0x00FF` 也为保留值
 （不会路由到 vendor service）。VendorID/DeviceID **不是** ISDU 对象；
-它们位于 DPP1 的 `0x07-0x0B` 字节；库不再暴露旧版
-`IOLINK_IDX_VENDOR_ID`/`IOLINK_IDX_DEVICE_ID` 常量。
+它们位于 DPP1 的 `0x07-0x0B` 字节。
 
 字符串应答按对象限制长度（通常为 64 字节，SerialNumber 为 16，ProductURI 为 100）。
 未知索引返回 `0x80 0x11`（索引不可用）；对已知只读对象的写请求返回
@@ -764,31 +762,25 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 | `IOLINK_FEATURE_EVENTS` | 1 | 无事件引擎/DetailedDeviceStatus/事件标志；`0x0025` 返回索引不可用。 |
 | `IOLINK_WORKSPACE_EMBEDDED` | 1 | 上下文不再内嵌 ISDU/DS scratch，必须提供工作区（否则 `IOLINK_DEVICE_INIT_ERR_WORKSPACE`）。 |
 
-已退役的编译期能力宏（定义即构建错误，`config.h` 有 `#error`）：
+运行期能力的解析来源：
 
-| 宏 | 现状 |
+| 能力位 | 解析来源 |
 | --- | --- |
-| `IOLINK_PHY_FEATURE_WAKEUP` | 能力位 `IOLINK_CAP_WAKEUP` 由 `detect_wakeup` 是否为 NULL 解析。 |
-| `IOLINK_PHY_FEATURE_SIO_CQ` | 能力位 `IOLINK_CAP_SIO_CQ` 由 `set_cq_line` 是否为 NULL 解析。 |
-| `IOLINK_APP_PD_INPUT_CALLBACK` | PD-in 路径由 `on_pd_input` 是否为 NULL 在运行期选择。 |
-
-仍作为运行时能力“构建默认值”的宏：
-
-| 宏 | 现状 |
-| --- | --- |
-| `IOLINK_COMPAT_V10_STARTUP_OPERATE`、`IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE`、`IOLINK_DS_LEGACY_IMAGE_SUB0` | 作为镜像的兼容位默认值；实例可在 `iolink_stack_config_t::compat_flags` 中打开或关闭。 |
+| `IOLINK_CAP_WAKEUP` | `detect_wakeup` 是否为 NULL |
+| `IOLINK_CAP_SIO_CQ` | `set_cq_line` 是否为 NULL |
+| `IOLINK_CAP_PD_IN_CALLBACK` | `on_pd_input` 是否为 NULL |
+| `IOLINK_CAP_REQUIRE_ISR_TX` | 构建档位 + `request_service` |
+| `IOLINK_CAP_COMPAT_*` | 构建档位的兼容位默认值，实例可在 `iolink_stack_config_t::compat_flags` 覆盖 |
 
 `IOLINK_PHY_FEATURE_ISR_TX_ONLY` 仍提供 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 的构建
 默认值，`IOLINK_PHY_FEATURE_TX_BUSY` 仍决定 TX FRAME 构建是否要求 `tx_busy()`。
 
 裁剪配置：
 
-`IOLINK_MINIMAL_PROFILE` / `IOLINK_TINY_PROFILE` 已退役，定义它们是构建错误。
-最小镜像请显式关闭子系统，并按需在运行时关闭能力位：
+裁剪只通过两条正交的途径：
 
-- 关闭 `IOLINK_FEATURE_DATA_STORAGE` 与 `IOLINK_FEATURE_EVENTS`（结构裁剪）；
-- SystemCommand / 唤醒 / SIO C-Q / PD 回调等用运行时能力位控制
-  （见 `capability.h` 与 [feature-trimming](feature-trimming.md)）。
+- 结构裁剪：显式关闭 `IOLINK_FEATURE_DATA_STORAGE` / `IOLINK_FEATURE_EVENTS`；
+- 行为裁剪：运行时能力位（见 `capability.h` 与 [feature-trimming](feature-trimming.md)）。
 
 缓冲区大小宏包括 `IOLINK_PD_IN_MAX_SIZE`、`IOLINK_PD_OUT_MAX_SIZE`、
 `IOLINK_OD_MAX_SIZE`、`IOLINK_ISDU_BUFFER_SIZE`、`IOLINK_DS_IMAGE_MAX`、
@@ -847,8 +839,8 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 - `include/iolinki/workspace.h`：可选的 ISDU/DS 传输 scratch 工作区，见 §4.1。
 - `include/iolinki/diag.h`：诊断来源注册表与 DeviceStatus/DDS 派生，见 §5.2。
 - `include/iolinki/platform.h`：临界区。时间源通过
-  `iolink_device_config_t::time_us` 提供。旧版 `iolink_nvm_*` 接口已移除；
-  持久化统一通过 `config.storage` 完成。
+  `iolink_device_config_t::time_us` 提供；持久化统一通过 `config.storage`
+  完成。
 
 ## 12. 参考资料
 

@@ -180,9 +180,7 @@ CKS PD-invalid bit). Both PD-in paths exist in the same build: a non-NULL
 `IOLINK_CAP_PD_IN_CALLBACK`; otherwise the application polls with this function.
 Once the callback path is selected, `pd_input_update` returns
 `IOLINK_DEVICE_INIT_ERR_PD_INPUT` instead of silently overwriting the callback
-output. `IOLINK_APP_PD_INPUT_CALLBACK` is retired: defining it is a build error,
-because the path is chosen at init from `on_pd_input`. `pd_output_read` returns
-the latest Master-to-Device data.
+output. `pd_output_read` returns the latest Master-to-Device data.
 
 ### Capabilities
 
@@ -536,7 +534,7 @@ typedef enum {
     IOLINK_DEVICE_INIT_ERR_OD_WIDTH = -5,
     IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6,
     IOLINK_DEVICE_INIT_ERR_BAUDRATE = -7,
-    /* -8 was the lock-pair error; retired with the application thread lock. */
+    /* -8 is unused (numbering kept stable). */
     IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -9,
     IOLINK_DEVICE_INIT_ERR_TIME = -10,      /* time_us is NULL */
     IOLINK_DEVICE_INIT_ERR_CRITICAL = -11,  /* weak critical-section default in use */
@@ -574,10 +572,8 @@ The protocol-compatibility switches `IOLINK_COMPAT_V10_STARTUP_OPERATE`,
 build-time defaults for runtime bits: the behaviour is selected per instance
 through `iolink_stack_config_t::compat_flags`. `IOLINK_FEATURE_*`,
 `IOLINK_PHY_FEATURE_ISR_TX_ONLY` and `IOLINK_PHY_FEATURE_TX_BUSY` act at compile
-time. `IOLINK_PHY_FEATURE_WAKEUP`, `IOLINK_PHY_FEATURE_SIO_CQ` and
-`IOLINK_APP_PD_INPUT_CALLBACK` are retired: the PHY vtable and the presence of
-`on_pd_input` are the only selectors, and defining one of those macros is a
-build error.
+time. Wake-up detection, SIO C/Q and the PD-input path have no build switch:
+the PHY vtable and the presence of `on_pd_input` are the only selectors.
 
 ## Logging
 
