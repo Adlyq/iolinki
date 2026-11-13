@@ -184,7 +184,9 @@ int main(void)
     assert(iolink_isdu_snapshot_response(isdu, NULL, snapshot, sizeof(snapshot)) == 0U);
 
     assert(iolink_ds_get_image(ds, NULL) == NULL);
-    assert(iolink_ds_build_image(ds) >= 0);
+    const int built = iolink_ds_build_image(ds);
+    assert(built > 0);
+    assert(built <= (int) IOLINK_DS_IMAGE_MAX);
     assert(iolink_ds_get_image(ds, NULL) == NULL);
     return 0;
 }

@@ -85,7 +85,22 @@ int main(void)
     return (anchor == 0) ? 1 : 0;
 }
 PROBE
-    if ! "$CC_BIN" "${CFLAGS_BASE[@]}" $cflags -c "$TMP/one.c" -o "$TMP/app_$name.o" \
+    # 先证明该方向确实存在：用反向档位编译 profile.c，符号必须被定义。
+    # 否则符号名写错或两个档位都不定义它时，链接同样失败，门禁会假通过。
+    # shellcheck disable=SC2086 # intentional word splitting of the -D list
+    if ! "$CC_BIN" "${CFLAGS_BASE[@]}" $cflags -c "$ROOT/src/profile.c" \
+            -o "$TMP/profile_$name.o" >"$TMP/profile_$name.log" 2>&1; then
+        echo "profile gate: FAIL ($name: mismatched profile did not compile)" >&2
+        cat "$TMP/profile_$name.log" >&2
+        fail=1
+        continue
+    fi
+    if ! nm -g --defined-only "$TMP/profile_$name.o" 2>/dev/null | grep -q " $symbol\$"; then
+        echo "profile gate: FAIL ($name: '$symbol' is not defined by the mismatched profile)" >&2
+        fail=1
+        continue
+    fi
+    if ! "$CC_BIN" "${CFLAGS_BASE[@]}" -c "$TMP/one.c" -o "$TMP/app_$name.o" \
         >"$TMP/app_$name.log" 2>&1; then
         echo "profile gate: FAIL ($name: probe did not compile)" >&2
         cat "$TMP/app_$name.log" >&2

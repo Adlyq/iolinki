@@ -97,10 +97,13 @@ static int read_object_with_dll(uint16_t index, iolink_dll_ctx_t* dll, uint8_t* 
 }
 
 /* 接受所有厂商服务访问（用于验证 Parameter 锁）。 */
+static unsigned g_vendor_calls;
+
 static uint8_t vendor_service_ok(void* user, uint16_t index, uint8_t subindex, bool write,
                                  const uint8_t* input, size_t length, uint8_t* output,
                                  size_t* output_length)
 {
+    g_vendor_calls++;
     (void) user;
     (void) index;
     (void) subindex;
@@ -412,15 +415,16 @@ static void test_parameter_lock_blocks_tag_write(void** state)
     assert_memory_equal(readback, overwrite, sizeof(overwrite));
 }
 
-/* B.2.4：Parameter 锁同样阻止对设备特定参数的写入；
- * 读取仍会到达厂商服务。用 0x0041（不在标准 OD 表中）以避免与
- * 内建的厂商错误统计对象 0x0040 冲突。 */
+/* B.2.4：Parameter 锁同样阻止对设备特定参数的写入；读取仍会到达
+ * 厂商服务。用 0x0041（标准表与应用表都未声明）只验证锁语义，
+ * 不依赖 0x0040 的归属规则。 */
 static void test_parameter_lock_blocks_vendor_write(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0156");
     (void) state;
 
     iolink_device_info_ctx_set_access_locks(test_env_info(&g_test_env), IOLINK_LOCK_PARAM);
+    g_vendor_calls = 0U;
 
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
@@ -435,6 +439,8 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
     assert_int_equal(n, 2);
     assert_int_equal(out[0], 0x80U);
     assert_int_equal(out[1], IOLINK_ISDU_ERROR_WRITE_PROTECTED);
+    /* 锁在到达厂商服务之前就拒绝写入。 */
+    assert_int_equal(g_vendor_calls, 0U);
 
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -443,6 +449,8 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
     iolink_isdu_process(&ctx);
     n = isdu_collect_response(&ctx, out, sizeof(out));
     assert_int_equal(n, 0);
+    /* 读取不受 Parameter 锁影响，确实到达厂商服务。 */
+    assert_int_equal(g_vendor_calls, 1U);
 }
 
 /* B.2.8-B.2.19：标识字符串在读取时按对象的 fixedLength 截断

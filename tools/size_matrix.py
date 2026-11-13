@@ -400,8 +400,11 @@ def check(current: list[dict[str, str]], baseline: list[dict[str, str]], base_to
                 file=sys.stderr,
             )
             failures += 1
-        # 旧基线没有 rodata_tol 列：按同样的 0.5% 规则推导，保持向后兼容。
-        rodata_tol = int(old.get("rodata_tol") or max(16, (int(old["rodata"]) * 5) // 1000))
+        # 旧基线没有 rodata_tol 列：按同一配置 source|on 行的 0.5% 规则推导，
+        # 与 write_baseline() 的算法一致（逐行自身推导会差 1 B）。
+        source_on = base.get(f"{row['config']}|source|on")
+        fallback_src = int(source_on["rodata"]) if source_on else int(old["rodata"])
+        rodata_tol = int(old.get("rodata_tol") or max(16, (fallback_src * 5) // 1000))
         rdelta = int(row["rodata"]) - int(old["rodata"])
         if rdelta > rodata_tol:
             print(
@@ -427,8 +430,8 @@ def check(current: list[dict[str, str]], baseline: list[dict[str, str]], base_to
 def selftest(current: list[dict[str, str]], baseline: list[dict[str, str]]) -> int:
     forged = [dict(r) for r in baseline]
     # Forge the baseline *downwards* so the real measurement looks like a
-    # +1024 B regression. Forging it upwards makes the current value look
-    # smaller, and a smaller image always passes.
+    # +1024 B regression (text and .rodata). Forging it upwards makes the
+    # current value look smaller, and a smaller image always passes.
     forged[0]["text"] = str(int(forged[0]["text"]) - 1024)
     forged[0]["text_tol"] = "64"
     old = baseline[0]["text"]

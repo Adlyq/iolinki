@@ -22,6 +22,7 @@
 
 #include "iolinki/capability.h"
 #include "iolinki/device.h"
+#include "iolinki/dll.h"
 #include "test_helpers.h"
 
 static void test_build_profile_matches_macros(void** state)
@@ -225,6 +226,29 @@ static void test_require_isr_tx_needs_request_service(void** state)
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), IOLINK_DEVICE_INIT_ERR_PHY);
 }
 
+/* 设备层的接线：iolink_device_set_capabilities() 必须让已发布的应答计划
+ * 失效，否则计划键（状态/类型/宽度/波特率）不变时 ISR 会继续执行旧计划。 */
+static void test_capability_override_invalidates_plans(void** state)
+{
+    (void) state;
+    iolink_test_device_t dev;
+    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0};
+
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
+
+    iolink_dll_publish_reply_plans(&dev.ctx.dll.main);
+    assert_true(iolink_atomic_load(&dev.ctx.dll.main.shared.reply_plan_seq) != 0U);
+
+    iolink_device_set_capabilities(
+        &dev.ctx, iolink_device_capabilities(&dev.ctx) | IOLINK_CAP_COMPAT_T0_READ);
+    assert_int_equal(iolink_atomic_load(&dev.ctx.dll.main.shared.reply_plan_seq), 0U);
+
+    iolink_dll_publish_reply_plans(&dev.ctx.dll.main);
+    assert_true(iolink_atomic_load(&dev.ctx.dll.main.shared.reply_plan_seq) != 0U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -233,6 +257,7 @@ int main(void)
         cmocka_unit_test(test_resolve_merges_runtime_switches),
         cmocka_unit_test(test_resolve_uses_build_override),
         cmocka_unit_test(test_instance_caps_cannot_forge_hardware),
+        cmocka_unit_test(test_capability_override_invalidates_plans),
         cmocka_unit_test(test_require_isr_tx_needs_request_service),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);

@@ -220,8 +220,9 @@ static void test_t_byte_rearm_and_cancel(void)
     assert(!iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_T_BYTE));
 }
 
-/* t_PD 到期由截止时间表驱动（device 层在初始化时装载）。 */
-static void test_t_pd_deadline(void)
+/* t_PD 保护窗口：窗口内到达的帧被丢弃并计入 t_pd_violations，
+ * 窗口结束后同一帧不再因此被丢弃。 */
+static void test_t_pd_window_drops_frames(void)
 {
     iolink_dll_ctx_t ctx;
     init_ctx(&ctx);
@@ -229,13 +230,33 @@ static void test_t_pd_deadline(void)
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     dll_timer_arm(&ctx.main, IOLINK_TIMER_T_PD, g_now + 500U);
 
-    iolink_dll_process(&ctx.main);
-    assert(iolink_dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_PD) == g_now + 500U);
-    assert(ctx.main.timing_errors == 0U);
+    iolink_frame_rec_t* rec =
+        (iolink_frame_rec_t*) iolink_ring_claim(&ctx.main.shared.isr_frame_ring);
+    assert(rec != NULL);
+    rec->len = 3U;
+    rec->eager = 0U;
+    rec->data[0] = 0x40U;
+    rec->data[1] = 0x40U;
+    rec->data[2] = 0x00U;
+    iolink_ring_publish(&ctx.main.shared.isr_frame_ring);
 
-    g_now += 500U;
     iolink_dll_process(&ctx.main);
-    assert(dll_time_reached(g_now, iolink_dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_PD)));
+    assert(ctx.main.t_pd_violations == 1U);
+    assert(iolink_ring_is_empty(&ctx.main.shared.isr_frame_ring));
+
+    /* 窗口结束：同一帧不再被 T_PD 丢弃。 */
+    g_now += 500U;
+    rec = (iolink_frame_rec_t*) iolink_ring_claim(&ctx.main.shared.isr_frame_ring);
+    assert(rec != NULL);
+    rec->len = 3U;
+    rec->eager = 0U;
+    rec->data[0] = 0x40U;
+    rec->data[1] = 0x40U;
+    rec->data[2] = 0x00U;
+    iolink_ring_publish(&ctx.main.shared.isr_frame_ring);
+
+    iolink_dll_process(&ctx.main);
+    assert(ctx.main.t_pd_violations == 1U);
 }
 
 /* 超过 2^32 ms（约 49.7 天）后，32 位毫秒时间戳回绕不得误触发。 */
@@ -273,7 +294,7 @@ int main(void)
     test_next_deadline_wrap_safe();
     test_same_instant_priority();
     test_t_byte_rearm_and_cancel();
-    test_t_pd_deadline();
+    test_t_pd_window_drops_frames();
     test_millisecond_wrap();
     return 0;
 }

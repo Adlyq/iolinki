@@ -183,6 +183,9 @@ static void test_app_ds_descriptor_set(void** state)
     assert_true(iolink_ds_param_at(ds, 3U, &desc));
     assert_int_equal(desc.index, APP_DS_IDX);
     assert_int_equal(desc.subindex, 0U);
+    /* 标量表项的 block_len 为 0：线长由 OD codec/校验钩子决定，
+       max_len 只对 OctetString 生效。 */
+    assert_int_equal(desc.max_len, 0U);
     assert_false(iolink_ds_param_at(ds, 4U, &desc));
 
     assert_true(iolink_od_is_ds(&g_app_od, APP_DS_IDX, 0U));
@@ -295,7 +298,7 @@ static void test_app_ds_rejects_whole_image(void** state)
     assert_int_equal(before_app.code, 0);
     const size_t before_app_len = before_app.len;
 
-    assert_int_equal(iolink_ds_apply_image(ds, bad, pos), -2);
+    assert_int_equal(iolink_ds_apply_image(ds, bad, pos), IOLINK_RESULT_INVALID);
 
     const iolink_result_t kept_fun =
         iolink_params_ctx_read(&dev.ctx.params, IOLINK_IDX_FUNCTION_TAG, 0U, tag, sizeof(tag));

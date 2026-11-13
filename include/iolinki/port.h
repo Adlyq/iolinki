@@ -285,8 +285,14 @@ static inline void iolink_atomic_store(volatile IOLINK_ATOMIC_UINT_T* word,
 #else
 #define IOLINK_STATIC_ASSERT_JOIN_(a, b) a##b
 #define IOLINK_STATIC_ASSERT_JOIN(a, b) IOLINK_STATIC_ASSERT_JOIN_(a, b)
+#if defined(__COUNTER__)
+/* 唯一计数器：同一 TU 内头文件与调用方撞在同一行号时也不会重名。 */
+#define IOLINK_STATIC_ASSERT(cond, msg) \
+    typedef char IOLINK_STATIC_ASSERT_JOIN(iolink_static_assert_, __COUNTER__)[(cond) ? 1 : -1]
+#else
 #define IOLINK_STATIC_ASSERT(cond, msg) \
     typedef char IOLINK_STATIC_ASSERT_JOIN(iolink_static_assert_, __LINE__)[(cond) ? 1 : -1]
+#endif
 #endif
 
 #if IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_ISR

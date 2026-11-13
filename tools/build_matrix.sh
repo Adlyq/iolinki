@@ -230,8 +230,9 @@ if [ "$RUN_GATES" -eq 1 ]; then
         else
             echo "$crit_cfg   no critical-section dependency"
         fi
-    else
+    elif [ "$STOP" -eq 0 ]; then
         # 归档缺失说明该配置没有真正构建，跳过会把门禁变成空操作。
+        # --fail-fast 下前序失败已经让配置没有产出，不重复计一次失败。
         echo "$crit_cfg   missing libiolinki.a (critical-section gate not run)"
         RESULTS+=("$crit_cfg|dependency|fail")
     fi

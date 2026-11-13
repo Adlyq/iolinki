@@ -513,5 +513,9 @@ int main(void)
     if (rc != 0) {
         return 70 + rc;
     }
-    return test_tx_without_done_hook();
+    rc = test_tx_without_done_hook();
+    if (rc != 0) {
+        return 80 + rc;
+    }
+    return 0;
 }
