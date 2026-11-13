@@ -27,7 +27,7 @@ P0 基线硬化 → P1 差分测试门(H₀) → P2 所有权分区(C) → P3 �
 向后兼容层。最终数据（64 位主机、默认缓冲）：device 4088 B、DLL 3776 B、
 ISDU 1328 B、DS 408 B、events 504 B、workspace 1289 B（外置后 device 2792 B）；
 84 项 ctest、4 个结构配置 + 7 个组合探针；差分门 2 配置逐字节一致、0 allowlist；
-覆盖率下限 90.9%；P9 宿主层 WCET 门与 size/profile 门在 CI；`src/` `#if` 91、
+覆盖率下限 91.0%；P9 宿主层 WCET 门与 size/profile 门在 CI；`src/` `#if` 91、
 `include/` 120。P6 能力表化的 ROM 成本（最小应用 +972 B / +4.5%）由 DG3 决议
 **接受**。每阶段执行细节与验收记录见各阶段小节。
 
