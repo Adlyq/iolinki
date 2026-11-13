@@ -303,12 +303,20 @@ static void test_pd_input_update_refreshes_dpp1(void** state)
     assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x02U), 0x43U);
 
     uint8_t pd[1] = {0x5AU};
+    /* 该用例在启动阶段（尚未进入 OPERATE）改变宽度：符合 V1.1.5 §10.6.2
+     * 的"启动阶段可改通信参数"约束；OPERATE 期间改变宽度不符合规范。 */
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), true), 0);
     /* 主泵上下文立即重建：先切到 ISR 视角读取，确保不是读取时懒重建。 */
     dev.ctx.dll.main.shared.in_isr = 1U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x05U), 0x08U);
     /* 1 字节 PD-in -> 48 个 0.1 ms 单位 -> 0x30。 */
     assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x02U), 0x30U);
+    dev.ctx.dll.main.shared.in_isr = 0U;
+
+    /* DPP1 0x06（PDOut）同样跟随运行期宽度变化：8 -> 2 字节 = 0x10。 */
+    assert_int_equal(iolink_device_set_pd_length(&dev.ctx, 1, 2), 0);
+    dev.ctx.dll.main.shared.in_isr = 1U;
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x06U), 0x10U);
     dev.ctx.dll.main.shared.in_isr = 0U;
 }
 

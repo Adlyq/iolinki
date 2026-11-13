@@ -299,6 +299,11 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx,
 接受不超过配置最大值的任意长度；`TYPE_0` 不携带 PD，但允许调用该函数。参数非法或
 所有 PD-in 缓冲区都被 ISR 占用时返回负值。
 
+> **规范的宽度约束（V1.1.5 §10.6.2 / A.14）**：`TYPE_2_V` 的 n/k 是设备配置属性，
+> 由 DPP1 0x05/0x06 在启动阶段通告。设备只允许在**启动阶段**（例如 DeviceID 兼容
+> 切换）改变通信参数；**OPERATE 期间改变 PD 宽度不符合规范**（主站按 DPP1/IODD
+> 固定周期布局）。需要改变宽度时，应先让通信回到启动阶段或重启端口。
+
 两条 PD-in 路径在同一构建内共存：`on_pd_input` 非 NULL 时初始化选择回调路径并置位
 `IOLINK_CAP_PD_IN_CALLBACK`，此后 `pd_input_update()` 返回
 `IOLINK_DEVICE_INIT_ERR_PD_INPUT`（-14），避免线上 PD 在回调输出与调用方数据之间

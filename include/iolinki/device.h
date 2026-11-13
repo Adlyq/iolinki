@@ -240,8 +240,10 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
  * `IOLINK_CAP_PD_IN_CALLBACK` 置位）时，本函数返回
  * `IOLINK_DEVICE_INIT_ERR_PD_INPUT`，而不是静默覆盖回调的输出。
  *
- * @note 若允许运行期改变 PD-in 宽度（TYPE_2_V），必须从主泵上下文调用：
- * 宽度变化会重建 DPP1 映像；固定布局类型不受影响。
+ * @note 宽度只应在**启动/重新参数化阶段**改变（V1.1.5 §10.6.2 允许启动期
+ * 切换通信参数；OPERATE 期间改变 PD 宽度不符合规范）。允许这种阶段变化时
+ * 必须从主泵上下文调用：宽度变化会重建 DPP1 映像；固定布局类型
+ * （TYPE_1_x/TYPE_2_x）的宽度变更会被拒绝，TYPE_0 不携带 PD。
  *
  * @param ctx    设备上下文。
  * @param data   要发布的输入过程数据字节。
