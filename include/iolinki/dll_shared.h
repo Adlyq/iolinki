@@ -131,6 +131,8 @@ typedef struct iolink_dll_shared
 
     uint32_t isr_od_overruns; /**< 因环满而丢弃的暂存写入 */
 
+    uint32_t isr_plan_misses; /**< ISR 未命中应答计划而交给主泵的帧 */
+
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
     iolink_dll_isr_stats_t isr_stat; /**< ISR 自有的计数器组（SPLIT 模式） */
 #endif

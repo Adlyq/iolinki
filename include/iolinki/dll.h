@@ -67,23 +67,10 @@ typedef void (*iolink_dll_state_cb_t)(void* user, iolink_dll_state_t state);
 /* PD 应答发送缓冲区：[OD][PD-in][CKS]。按运行时 PD-in 长度
  * 加上 OD 头与尾部校验和来确定尺寸。 */
 #define IOLINK_PD_REPLY_MAX (IOLINK_OD_MAX_SIZE + IOLINK_PD_IN_MAX_SIZE + 1U)
-/** 接收帧邮箱深度（数据 ISR -> 主泵）。取 2 的幂；2
- * 个槽位可在主泵仍在处理上一帧时吸收一帧，
- * 因此繁忙的主循环窗口不再丢弃下一个请求。 */
-#define IOLINK_MBX_SLOTS 2U
-/** 暂存 ISDU 写入深度（数据 ISR -> 主泵）；同样取 2 的幂。 */
-#define IOLINK_OD_SLOTS 2U
-
-IOLINK_STATIC_ASSERT((IOLINK_MBX_SLOTS >= 2U) &&
-                         ((IOLINK_MBX_SLOTS & (IOLINK_MBX_SLOTS - 1U)) == 0U),
-                     "IOLINK_MBX_SLOTS must be a power of two >= 2");
-IOLINK_STATIC_ASSERT((IOLINK_OD_SLOTS >= 2U) && ((IOLINK_OD_SLOTS & (IOLINK_OD_SLOTS - 1U)) == 0U),
-                     "IOLINK_OD_SLOTS must be a power of two >= 2");
 
 /** 应答暂存槽位：0/1 供主泵使用（交替），2 供 ISR 使用。 */
-#define IOLINK_TX_SLOTS 3U
-/** 数据 ISR 用于自身立即应答的槽位。 */
 #define IOLINK_TX_ISR_SLOT 2U
+#define IOLINK_TX_SLOTS (IOLINK_TX_ISR_SLOT + 1U)
 IOLINK_STATIC_ASSERT(IOLINK_TX_SLOTS == IOLINK_TX_ISR_SLOT + 1U,
                      "the ISR reply slot must be the last reply slot");
 
@@ -151,15 +138,14 @@ typedef struct
  * 偶数表示稳定）。ISR 在拷贝命中项前后各读一次发布字，不一致就
  * 重试；重试仍不一致则视为"计划外请求"，走延迟路径。
  *
- * 计划外请求的回退语义：ISR 不应答、不解释内容，关闭 t_A 窗口并把
- * 帧发布到邮箱，由主泵在下一个处理窗口里按既有分发路径应答
- * （或按规范有意不应答）。因此计划表只能删除"ISR 提前应答"，
- * 不能改变任何一帧的最终应答内容。
+ * 计划外请求的回退语义：ISR 不应答、不解释内容，关闭 t_A 看门狗并把
+ * 帧连同帧结束时间戳发布到邮箱，由主泵在下一个处理窗口里按既有分发
+ * 路径处理。主泵比较帧结束时间与 t_A（10 个位时间）：窗口仍打开时按
+ * 既有路径应答；窗口已关时只做状态/计数处理，不再发送应答（该应答
+ * 必然与主站下一帧重叠），并计入 `late_reply_dropped`。因此计划表只能
+ * 删除"ISR 提前应答"，不能改变任何一帧的最终应答内容。
  * @{
  */
-
-/** @brief 计划表槽位上限（按最复杂状态的全集计算）。 */
-#define IOLINK_REPLY_PLAN_SLOTS 10U
 
 /** @brief 计划命中后的应答来源。 */
 typedef enum
@@ -228,17 +214,23 @@ typedef struct
     uint8_t data[IOLINK_OD_MAX_SIZE]; /**< OD 字节 */
 } iolink_od_rec_t;
 
+/** @brief 记录的 ISDU 写段未进入暂存环：主泵不得确认该段。 */
+#define IOLINK_FRAME_FLAG_WRITE_NOT_STAGED 0x01U
+
 /**
  * @brief 邮箱环中的一个接收帧（数据 ISR -> 主泵）。
  *
  * 该记录携带主泵处理该帧所需的全部信息，因此没有
- * 任何逐帧状态存在于环之外：长度以及 ISR
- * 是否已发送应答（eager）都随字节一同传递。
+ * 任何逐帧状态存在于环之外：长度、ISR 是否已发送应答（eager）、
+ * 帧结束时间以及附加处置标志都随字节一同传递。
  */
 typedef struct
 {
     uint8_t len;                        /**< 帧长度，以字节计 */
     uint8_t eager;                      /**< 非零表示 ISR 已应答该帧 */
+    uint8_t flags;                      /**< @ref IOLINK_FRAME_FLAG_WRITE_NOT_STAGED 等处置标志 */
+    uint32_t end_us;                    /**< 帧结束时间（微秒，0 = 未知）：主泵据此
+                                             判断 t_A 应答窗口是否仍然打开 */
     uint8_t data[IOLINK_M_SEQ_MAX_LEN]; /**< 帧字节 */
 } iolink_frame_rec_t;
 
@@ -261,23 +253,29 @@ typedef struct iolink_dll_ctx iolink_dll_ctx_t;
  */
 typedef struct
 {
-    uint32_t crc_errors;         /**< 累计 CRC 错误数 */
-    uint32_t timeout_errors;     /**< 累计超时数 */
-    uint32_t framing_errors;     /**< 累计成帧错误数 */
-    uint32_t timing_errors;      /**< 累计定时违规次数 */
-    uint32_t t_ren_violations;   /**< t_ren 违规次数 */
-    uint32_t t_cycle_violations; /**< t_cycle 违规次数 */
-    uint32_t t_byte_violations;  /**< 字节间定时违规次数 */
-    uint32_t t_pd_violations;    /**< t_pd 违规次数 */
-    uint32_t total_retries;      /**< 累计重试次数 */
-    uint32_t voltage_faults;     /**< 累计电压故障数（走 get_faults() 时按故障
-                                     边沿计数，走旧路径时按轮询周期计数） */
-    uint32_t overtemp_faults;    /**< 累计过温故障数（走 get_faults() 时按故障
-                                     边沿计数，走旧路径时为 0） */
-    uint32_t short_circuits;     /**< 累计短路次数（走 get_faults() 时按故障
-                                     边沿计数，走旧路径时按轮询周期计数） */
-    uint32_t isr_tx_dropped;     /**< 传输层无法发送的应答（主上下文与 ISR） */
-    uint32_t idle_timeouts;      /**< 1 s 空闲链路诊断（不是 t_A 超时） */
+    uint32_t crc_errors;           /**< 累计 CRC 错误数 */
+    uint32_t timeout_errors;       /**< 累计超时数 */
+    uint32_t framing_errors;       /**< 累计成帧错误数 */
+    uint32_t timing_errors;        /**< 累计定时违规次数 */
+    uint32_t t_ren_violations;     /**< t_ren 违规次数 */
+    uint32_t t_cycle_violations;   /**< t_cycle 违规次数 */
+    uint32_t t_byte_violations;    /**< 字节间定时违规次数 */
+    uint32_t t_pd_violations;      /**< t_pd 违规次数 */
+    uint32_t total_retries;        /**< 累计重试次数 */
+    uint32_t voltage_faults;       /**< 累计电压故障数（走 get_faults() 时按故障
+                                       边沿计数，走旧路径时按轮询周期计数） */
+    uint32_t overtemp_faults;      /**< 累计过温故障数（走 get_faults() 时按故障
+                                       边沿计数，走旧路径时为 0） */
+    uint32_t short_circuits;       /**< 累计短路次数（走 get_faults() 时按故障
+                                       边沿计数，走旧路径时按轮询周期计数） */
+    uint32_t isr_tx_dropped;       /**< 传输层无法发送的应答（主上下文与 ISR） */
+    uint32_t idle_timeouts;        /**< 1 s 空闲链路诊断（不是 t_A 超时） */
+    uint32_t isr_od_overruns;      /**< 因 ISDU 写暂存环满而丢弃的写段 */
+    uint32_t isr_plan_misses;      /**< 未命中应答计划、交给主泵的帧 */
+    uint32_t isr_mailbox_drops;    /**< 因帧邮箱满而丢弃的帧 */
+    uint32_t t_pd_discards;        /**< 在 t_PD 保护窗口内丢弃的邮箱帧 */
+    uint32_t late_reply_dropped;   /**< 应答窗口已关闭而未发送的延迟应答 */
+    uint32_t reply_plan_overflows; /**< 因计划槽位耗尽而未发布的计划条目 */
 } iolink_dll_stats_t;
 
 /**
@@ -405,8 +403,8 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx);
  * @brief 使已发布的应答计划表失效（仅主上下文）。
  *
  * 把主上下文记录的发布键清零，并把 `reply_plan_seq` 原子写 0。从这一刻
- * 起数据 ISR 把每一帧都当作"计划外请求"：不提前应答、关闭 t_A 并发布
- * 到邮箱，由主泵在下一个处理窗口按既有分发路径应答。下一次
+ * 起数据 ISR 把每一帧都当作"计划外请求"：不提前应答、关闭 t_A 看门狗
+ * 并把帧连同帧结束时间戳发布到邮箱；主泵只在 t_A 内应答。下一次
  * `iolink_dll_publish_reply_plans()` 必定重发完整计划表。
  *
  * 调用时机：任何**运行期**改变计划内容的器件状态之后，且必须在下一个

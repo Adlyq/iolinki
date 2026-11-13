@@ -58,6 +58,15 @@ add_test(NAME test_dll_statemachine_gen COMMAND test_dll_statemachine_gen)
 add_executable(test_reply_plan test_reply_plan.c)
 target_link_libraries(test_reply_plan iolinki)
 add_test(NAME test_reply_plan COMMAND test_reply_plan)
+
+# Reply-plan overflow: the stock library has 10 slots, so the small-table
+# behaviour needs its own build of the sources with the capacity overridden.
+add_library(iolink_plan_slots_fixture STATIC ${IOLINK_SOURCES})
+target_include_directories(iolink_plan_slots_fixture PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_compile_definitions(iolink_plan_slots_fixture PUBLIC IOLINK_REPLY_PLAN_SLOTS=1)
+add_executable(test_plan_slots_overflow test_plan_slots_overflow.c)
+target_link_libraries(test_plan_slots_overflow iolink_plan_slots_fixture)
+add_test(NAME test_plan_slots_overflow COMMAND test_plan_slots_overflow)
 # CONSUME 计划帧不进邮箱：ISR 交接帧时间戳，主泵补做 T_CYCLE/T_REN 记账。
 add_executable(test_isr_consumed_timing test_isr_consumed_timing.c)
 target_link_libraries(test_isr_consumed_timing iolinki)

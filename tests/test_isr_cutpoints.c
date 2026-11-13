@@ -50,6 +50,8 @@ static bool publish_frame(iolink_dll_ctx_t* ctx, uint8_t tag, uint8_t len)
     }
     rec->len = len;
     rec->eager = (uint8_t) (tag & 1U);
+    rec->flags = 0U;
+    rec->end_us = 0U; /* 手工发布：无帧结束时间戳 */
     for (uint8_t i = 0U; i < len; i++) {
         rec->data[i] = (uint8_t) (tag + i);
     }
@@ -142,13 +144,14 @@ static int test_frame_full_rejects(void)
     (void) memset(&ctx, 0, sizeof(ctx));
     reset_rings(&ctx);
 
-    assert(publish_frame(&ctx, 0x30U, 2U));
-    assert(publish_frame(&ctx, 0x40U, 2U));
+    for (uint8_t i = 0U; i < IOLINK_MBX_SLOTS; i++) {
+        assert(publish_frame(&ctx, (uint8_t) (0x30U + i), 2U));
+    }
     assert(!publish_frame(&ctx, 0x50U, 2U));
     assert(ctx.main.shared.isr_mailbox_drops == 1U);
     assert(iolink_ring_count(&ctx.main.shared.isr_frame_ring) == IOLINK_MBX_SLOTS);
 
-    /* 两条排队记录保持不变。 */
+    /* 排队记录按 FIFO 保持完整。 */
     const iolink_frame_rec_t* first =
         (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.main.shared.isr_frame_ring);
     assert(first != NULL);
@@ -157,7 +160,7 @@ static int test_frame_full_rejects(void)
     const iolink_frame_rec_t* second =
         (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.main.shared.isr_frame_ring);
     assert(second != NULL);
-    assert(second->data[0] == 0x40U);
+    assert(second->data[0] == 0x31U);
     iolink_ring_release(&ctx.main.shared.isr_frame_ring);
     return 0;
 }

@@ -332,6 +332,7 @@ def write_baseline(rows: list[dict[str, str]]) -> None:
                 "text_tol",
                 "rodata_tol",
             ],
+            lineterminator="\n",
         )
         writer.writeheader()
         writer.writerows(rows)

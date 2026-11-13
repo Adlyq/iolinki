@@ -422,6 +422,13 @@ static void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
     if (len > sizeof(ctx->shared.isr_tx_payload[0])) {
         return;
     }
+    /* 延迟应答门控：该帧的 t_A 窗口已关闭时，主泵无论何时处理它都
+     * 不得再发字节——此时发送会与主站下一帧重叠并抢总线。帧仍参与
+     * 状态机与计数。 */
+    if (ctx->frame_window_closed != 0U) {
+        ctx->late_reply_dropped++;
+        return;
+    }
     /* 应答开始边沿：关闭 t_A 软件镜像（PHY 的 response_timer_stop 另行停止）。 */
     dll_timer_cancel(ctx, IOLINK_TIMER_T_A);
     /* 仅主上下文槽位：ISR 有自己的槽位，因此该计数器只有
@@ -536,11 +543,14 @@ static bool dll_drain_rx(iolink_dll_main_t* ctx)
         return false;
     }
     /* ISR 泵填充邮箱；排空它会丢弃在 t_pd 保护窗口
-     * 有效期间到达的帧。 */
+     * 有效期间到达的帧。丢弃数量必须可观测：现场用它区分
+     * “主泵被阻塞”与“暂存环满”。 */
     if (!iolink_ring_is_empty(&ctx->shared.isr_frame_ring)) {
+        const uint32_t dropped = iolink_ring_count(&ctx->shared.isr_frame_ring);
         while (iolink_ring_peek(&ctx->shared.isr_frame_ring) != NULL) {
             iolink_ring_release(&ctx->shared.isr_frame_ring);
         }
+        ctx->t_pd_discards += dropped;
         return true;
     }
     return false;
@@ -961,6 +971,13 @@ static void dll_handle_operate_type1_2(iolink_dll_main_t* ctx)
     uint8_t od_out[IOLINK_OD_MAX_SIZE];
     dll_dispatch_od_reply(ctx, write, od_offset, od_out);
 
+    if ((ctx->frame_write_not_staged != 0U) && write) {
+        /* 写段未进入暂存环（ISR 环满）：不得确认。主站会因缺少应答
+         * 或最终 CHKPDU 失败而重发，绝不把未落地的段当作已送达。 */
+        ctx->frame_write_not_staged = 0U;
+        return;
+    }
+
     if (ctx->frame_replied_by_isr &&
         ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PROCESS)) {
         /* ISR 泵已在帧结束时发送了过程通道
@@ -1064,7 +1081,13 @@ static void dll_plan_push(iolink_dll_main_t* ctx, uint8_t* count, uint8_t match_
                           uint8_t ckt_value, uint8_t source, uint8_t len, uint8_t flags,
                           uint8_t action, const uint8_t* data)
 {
-    if ((count == NULL) || (*count >= IOLINK_REPLY_PLAN_SLOTS)) {
+    if (count == NULL) {
+        return;
+    }
+    if (*count >= IOLINK_REPLY_PLAN_SLOTS) {
+        /* 计划表被截断时必须可观测：对应请求会退回延迟路径，
+         * 而延迟应答受窗口门控，主站只能超时重发。 */
+        ctx->reply_plan_overflows++;
         return;
     }
     iolink_reply_plan_t* plan = &ctx->shared.reply_plan[*count];
@@ -1833,6 +1856,8 @@ static void dll_finish_frame(iolink_dll_main_t* ctx)
 {
     ctx->frame_index = 0U;
     ctx->frame_replied_by_isr = 0U;
+    ctx->frame_window_closed = 0U;
+    ctx->frame_write_not_staged = 0U;
     /* 在下一主站帧之前，为 ISR 读泵反映任何 ISDU 状态变化
      * （例如完成的写请求）。 */
     dll_isdu_sync_snapshot(ctx);
@@ -2266,12 +2291,33 @@ static bool dll_wakeup_window_active(iolink_dll_main_t* ctx)
 }
 
 /**
+ * @brief 判断一帧的 t_A 应答窗口是否已关闭。
+ *
+ * t_A 是主站请求最后一帧结束到设备首帧开始之间的时间，上限为
+ * 10 个位时间（A.3.5 / 式 A.5）。主泵拿到 ISR 延迟的帧时可能已经被
+ * 应用阻塞；超过该窗口后再发送会与主站下一帧重叠，必须放弃。
+ *
+ * @param ctx          DLL 上下文
+ * @param frame_end_us ISR 记录的帧结束时间（0 = 未知，保持既有行为）
+ * @return 窗口已关返回 true
+ */
+static bool dll_reply_window_closed(const iolink_dll_main_t* ctx, uint32_t frame_end_us)
+{
+    if (frame_end_us == 0U) {
+        return false;
+    }
+    const uint32_t limit_us = 10U * dll_get_t_bit_us(ctx);
+    const uint32_t elapsed_us = (uint32_t) dll_time_us(ctx) - frame_end_us;
+    return elapsed_us > limit_us;
+}
+
+/**
  * @brief 将 ISR 发布的帧移入主上下文并分发。
  *
  * 帧通过 SPSC 邮箱环到达：拷贝最旧的记录，
  * 释放其槽位，然后运行校验/分发。无需临界区
  * （ISR 从不写入消费者正在读取的槽位），
- * 且记录携带自身的长度和 eager 标志。
+ * 且记录携带自身的长度、eager 标志与帧结束时间戳。
  */
 static void dll_consume_isr_mailbox(iolink_dll_main_t* ctx)
 {
@@ -2287,9 +2333,12 @@ static void dll_consume_isr_mailbox(iolink_dll_main_t* ctx)
     (void) memcpy(ctx->frame_buf, record->data, count);
     ctx->frame_index = count;
     ctx->req_len = count;
-    /* 记录随其字节携带 eager 标志，因此无需跨帧
-     * 快照。 */
+    /* 记录随其字节携带 eager 与帧结束时间戳，因此无需跨帧
+     * 快照。窗口判定在消费时做一次，本次处理期间不再变化。 */
     ctx->frame_replied_by_isr = record->eager;
+    ctx->frame_window_closed = dll_reply_window_closed(ctx, record->end_us) ? 1U : 0U;
+    ctx->frame_write_not_staged =
+        ((record->flags & IOLINK_FRAME_FLAG_WRITE_NOT_STAGED) != 0U) ? 1U : 0U;
     /* 拷贝后释放：ISR 随后可复用该槽位，而另一个
      * 槽位保持完整。无需临界区，因为 ISR 从不
      * 写入 'out' 处的槽位。 */
@@ -2584,6 +2633,12 @@ void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_
     out_stats->overtemp_faults = ctx->overtemp_faults;
     out_stats->short_circuits = ctx->short_circuits;
     out_stats->isr_tx_dropped = IOLINK_STAT_TOTAL(ctx, isr_tx_dropped);
+    out_stats->isr_od_overruns = ctx->shared.isr_od_overruns;
+    out_stats->isr_plan_misses = ctx->shared.isr_plan_misses;
+    out_stats->isr_mailbox_drops = ctx->shared.isr_mailbox_drops;
+    out_stats->t_pd_discards = ctx->t_pd_discards;
+    out_stats->late_reply_dropped = ctx->late_reply_dropped;
+    out_stats->reply_plan_overflows = ctx->reply_plan_overflows;
 }
 
 void iolink_dll_reset_error_counters(iolink_dll_main_t* ctx)

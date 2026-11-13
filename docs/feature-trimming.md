@@ -91,6 +91,17 @@ These are not feature switches; they size the static buffers and are validated b
 - `IOLINK_PD_IN_MAX_SIZE` / `IOLINK_PD_OUT_MAX_SIZE` (default 32)
 - `IOLINK_OD_MAX_SIZE` (default 32)
 - `IOLINK_DS_IMAGE_MAX` (default 256)
+- `IOLINK_MBX_SLOTS` (default 4; power of two in `[2, 128]`) — frames the data
+  ISR may queue for the main pump
+- `IOLINK_OD_SLOTS` (default 8; power of two in `[2, 128]`) — ISDU write
+  segments the ISR may stage before an overrun
+- `IOLINK_REPLY_PLAN_SLOTS` (default 10) — reply-plan entries the main pump
+  may publish to the ISR; overflow is counted in `reply_plan_overflows`
+
+`IOLINK_TX_SLOTS` is derived (`IOLINK_TX_ISR_SLOT + 1`) and must not be
+overridden on its own. The `capacity_overrides` probe in
+`tools/matrix_configs.sh` compiles a build with all three slot counts changed,
+so the `#ifndef` guards are exercised outside the unit test too.
 
 Since P8 the ISDU buffers live in `iolink_workspace_t` (1033 B at the default
 256-byte buffer); lowering `IOLINK_ISDU_BUFFER_SIZE` shrinks the workspace, not

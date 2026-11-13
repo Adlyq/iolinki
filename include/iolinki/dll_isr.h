@@ -44,8 +44,6 @@ struct iolink_dll_isr
     uint32_t isr_eager_rejects; /**< eager 路径拒绝的帧
                                      （校验和/类型错误） */
 
-    uint32_t isr_plan_misses; /**< 未命中应答计划而交给主泵的帧 */
-
     volatile uint8_t stack_tick_pending; /**< Timer B 节拍已授权一个
                                               主上下文服务窗口 */
 

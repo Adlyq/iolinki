@@ -449,6 +449,8 @@ static void push_mailbox(iolink_dll_ctx_t* dll, const uint8_t* frame, uint8_t le
     }
     rec->len = len;
     rec->eager = 0U;
+    rec->flags = 0U;
+    rec->end_us = 0U; /* 手工发布：无帧结束时间戳 */
     (void) memcpy(rec->data, frame, len);
     iolink_ring_publish(&dll->main.shared.isr_frame_ring);
 }
@@ -462,9 +464,10 @@ static int test_mailbox_drop(void)
     uint8_t frame[2];
     make_type2_process_read(frame, sizeof(frame));
 
-    /* 填满两个槽位：此前的帧尚未被消费。 */
-    push_mailbox(&dll, frame, (uint8_t) sizeof(frame));
-    push_mailbox(&dll, frame, (uint8_t) sizeof(frame));
+    /* 填满全部槽位：此前的帧尚未被消费。 */
+    for (uint8_t i = 0U; i < IOLINK_MBX_SLOTS; i++) {
+        push_mailbox(&dll, frame, (uint8_t) sizeof(frame));
+    }
     feed(frame, sizeof(frame));
     iolink_dll_process_isr(&dll.main);
     while (dll.main.shared.isr_tx_active != 0U) {

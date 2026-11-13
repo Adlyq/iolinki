@@ -260,6 +260,23 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 应由且仅由一个主上下文周期性调用 `iolink_device_process()`。只能从 PHY 数据中断调用
 `iolink_device_process_isr()`。同一上下文上并发运行这两个函数是不安全的。
 
+节奏契约：主上下文至少每个 M-cycle 调用一次 `iolink_device_process()`；ISDU 写段和未命中
+应答计划的延迟请求都只由它搬运。应用可以阻塞（EEPROM 写入、固件升级等），但阻塞超过
+t_A（10 个位时间，A.3.5）后：
+
+- 主站收不到应答，按自己的重试机制重发；
+- 设备保证不发出窗口外的应答、不抢占总线：主泵在消费邮箱时比较 `now - end_us` 与
+  10 × Tbit，窗口已关时 `dll_send()` 不发送，只把该应答计入 `late_reply_dropped`；
+  该帧仍照常运行状态机与计数；
+- 延迟请求只丢弃、不迟到应答；ISDU 写段最多暂存 `IOLINK_OD_SLOTS`（默认 8）个，溢出时
+  该段被丢弃（`isr_od_overruns`）且不应答，由主站重发。
+
+排查主泵饥饿时读 `iolink_dll_get_stats()`：`isr_plan_misses`（走延迟路径的帧）、
+`isr_mailbox_drops`（邮箱满）、`isr_od_overruns`（写段暂存满）、`t_pd_discards`
+（t_PD 窗口内丢弃的邮箱帧）、`late_reply_dropped`（窗口已关而放弃的应答）、
+`reply_plan_overflows`（计划槽位耗尽）。`isr_od_overruns` 持续增长说明主泵调用不够频繁，
+或 `IOLINK_OD_SLOTS` 偏小。
+
 `iolink_device_init()` 使用 `config.workspace`（可为 NULL，表示使用上下文内嵌的
 ISDU/DS scratch）；把 scratch 放进 DTCM 或外部 RAM 时在配置里指向工作区即可，工作区
 必须比上下文存活更久。`iolink_device_get_workspace()` 返回当前绑定的工作区，使用
@@ -333,7 +350,9 @@ void iolink_device_set_t_ren_limit_us(iolink_device_ctx_t* ctx, uint32_t limit_u
 提示，不会改变 DLL 状态或波特率。
 
 `iolink_dll_stats_t` 提供 CRC、超时、帧错误、时序错误、t_ren/t_cycle/t_byte/t_pd
-违规、重试以及物理故障计数器。
+违规、重试以及物理故障计数器，并暴露 ISR 传输路径的 `isr_od_overruns`、
+`isr_plan_misses`、`isr_mailbox_drops`、`t_pd_discards`、`late_reply_dropped` 与
+`reply_plan_overflows`（含义见 §4.1）。
 
 ### 4.5 能力位
 
@@ -759,6 +778,17 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 必须足够容纳最大字符串以及组帧余量；raw octet 传输会为请求额外增加 6 字节，为应答额外
 增加 3 字节。
 
+队列与暂存深度宏同样在 `config.h` 中用 `#ifndef` 保护，按需调整：
+
+| 宏 | 默认值 | 约束与溢出的可观测计数 |
+| --- | --- | --- |
+| `IOLINK_MBX_SLOTS` | 4 | 帧邮箱深度；2 的幂且 ≥2。满时丢帧并计 `isr_mailbox_drops`。 |
+| `IOLINK_OD_SLOTS` | 8 | ISDU 写段暂存深度；2 的幂且 ≥2。满时丢段（不应答）并计 `isr_od_overruns`。 |
+| `IOLINK_REPLY_PLAN_SLOTS` | 10 | 应答计划槽位上限。满时丢弃多余计划并计 `reply_plan_overflows`，请求退回延迟路径。 |
+
+调小三者的深度会省 RAM，但会增加对应计数器的丢弃；`IOLINK_MBX_SLOTS` 与
+`IOLINK_OD_SLOTS` 的槽环用掩码取模，取非 2 的幂会在编译期报错。
+
 传输粒度由 `IOLINK_ISR_RX_MODE` 和 `IOLINK_ISR_TX_MODE` 选择（默认 `BYTE`，
 DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检查所需的模式组合。
 
@@ -770,8 +800,8 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
    `request_service`。
 3. 保证 `config`、PHY 状态和所有回调数据在上下文生命周期内有效。
 4. 身份索引或 DPP1 需要正确时，在 `config.device_info` 中提供静态身份；传 NULL 时使用内置默认身份（`k_default_info`）。
-5. 调用 `iolink_device_init()`，然后周期性
-   调用 `iolink_device_process()`，并从数据中断调用 `iolink_device_process_isr()`。
+5. 调用 `iolink_device_init()`，然后至少每个 M-cycle 调用一次
+   `iolink_device_process()`，并从数据中断调用 `iolink_device_process_isr()`。
 6. 选择一种 PD-in 来源：提供 `on_pd_input` 回调，或调用
    `iolink_device_pd_input_update()`。两者同一次初始化只能选一个；选了回调后轮询调用
    会返回 `IOLINK_DEVICE_INIT_ERR_PD_INPUT`。

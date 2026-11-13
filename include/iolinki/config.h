@@ -30,6 +30,9 @@
  * | `IOLINK_PD_IN_MAX_SIZE`   | 32   | PD-in 缓冲上限（字节）           |
  * | `IOLINK_PD_OUT_MAX_SIZE`  | 32   | PD-out 缓冲上限（字节）          |
  * | `IOLINK_OD_MAX_SIZE`      | 32   | On-request Data 缓冲上限（字节） |
+ * | `IOLINK_MBX_SLOTS`        | 4    | 帧邮箱深度（2 的幂，≥ 2）       |
+ * | `IOLINK_OD_SLOTS`         | 8    | ISDU 写段暂存深度（2 的幂，≥ 2）|
+ * | `IOLINK_REPLY_PLAN_SLOTS` | 10   | 应答计划槽位上限                 |
  * | `IOLINK_ISDU_BUFFER_SIZE` | 256  | 单次 ISDU 事务上限（字节）       |
  * | `IOLINK_DS_IMAGE_MAX`     | 256  | Data Storage 镜像上限（字节）    |
  * | `IOLINK_EVENT_QUEUE_SIZE` | 4    | 事件队列深度                     |
@@ -80,6 +83,51 @@
  */
 #ifndef IOLINK_OD_MAX_SIZE
 #define IOLINK_OD_MAX_SIZE 32U
+#endif
+
+/**
+ * @brief 接收帧邮箱深度（数据 ISR -> 主泵），单位槽。
+ *
+ * 必须为 2 的幂且至少为 2（SPSC 环用掩码取模）。槽位吸收主泵处理
+ * 上一帧期间到达的请求；环满时新帧被丢弃并计入 `isr_mailbox_drops`。
+ * 默认：4
+ */
+#ifndef IOLINK_MBX_SLOTS
+#define IOLINK_MBX_SLOTS 4U
+#endif
+
+/**
+ * @brief ISDU 写段暂存深度（数据 ISR -> 主泵），单位槽。
+ *
+ * 必须为 2 的幂且至少为 2。每个槽保存一个写段；主泵饥饿（应用长
+ * 时间占用主循环）时该深度决定能吸收多少个段，超出部分计入
+ * `isr_od_overruns`，主站会因缺少应答而重发。默认：8
+ */
+#ifndef IOLINK_OD_SLOTS
+#define IOLINK_OD_SLOTS 8U
+#endif
+
+/**
+ * @brief 应答计划槽位上限。
+ *
+ * 计划表是主泵为 ISR 编译的请求指纹集合；槽位耗尽时多余计划被丢弃
+ * 并计入 `reply_plan_overflows`，对应请求退回延迟路径。默认：10
+ */
+#ifndef IOLINK_REPLY_PLAN_SLOTS
+#define IOLINK_REPLY_PLAN_SLOTS 10U
+#endif
+
+/* 环使用 uint8_t 槽数与掩码取模，因此上限为 128（256 会截断为 0）。 */
+#if (IOLINK_MBX_SLOTS < 2) || (IOLINK_MBX_SLOTS > 128) || \
+    ((IOLINK_MBX_SLOTS & (IOLINK_MBX_SLOTS - 1)) != 0)
+#error "IOLINK_MBX_SLOTS must be a power of two in [2, 128]"
+#endif
+#if (IOLINK_OD_SLOTS < 2) || (IOLINK_OD_SLOTS > 128) || \
+    ((IOLINK_OD_SLOTS & (IOLINK_OD_SLOTS - 1)) != 0)
+#error "IOLINK_OD_SLOTS must be a power of two in [2, 128]"
+#endif
+#if (IOLINK_REPLY_PLAN_SLOTS < 1) || (IOLINK_REPLY_PLAN_SLOTS > 255)
+#error "IOLINK_REPLY_PLAN_SLOTS must be in [1, 255]"
 #endif
 
 /**

@@ -270,7 +270,7 @@ static int test_plan_state_stamp_and_republish(void)
     /* 计划表仍是 PREOPERATE 版本：ISR 不得执行，帧必须交给主泵。
      * Type-0 页读在 PREOPERATE 计划里是"页字节+CKS"，在 ESTAB_COM 里
      * 语义已变；只有状态戳能让 ISR 拒绝旧计划。 */
-    const uint32_t misses_before = s_dll.isr.isr_plan_misses;
+    const uint32_t misses_before = s_dll.main.shared.isr_plan_misses;
     make_frame((uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), IOLINK_MSEQ_TYPE_0,
                frame, 2U);
     feed(frame, 2U);
@@ -279,7 +279,7 @@ static int test_plan_state_stamp_and_republish(void)
     if (s_tx_n != 0U) {
         return 5;
     }
-    if (s_dll.isr.isr_plan_misses != (misses_before + 1U)) {
+    if (s_dll.main.shared.isr_plan_misses != (misses_before + 1U)) {
         return 6;
     }
     const iolink_frame_rec_t* rec =
@@ -307,7 +307,7 @@ static int test_plan_state_stamp_and_republish(void)
     }
 
     /* 重发布后，配置类型的过程读恢复 ISR 即时应答。 */
-    const uint32_t misses_after = s_dll.isr.isr_plan_misses;
+    const uint32_t misses_after = s_dll.main.shared.isr_plan_misses;
     make_frame((uint8_t) (IOLINK_MC_CHANNEL_PROCESS | IOLINK_MC_RW_MASK), IOLINK_MSEQ_TYPE_1, frame,
                2U);
     feed(frame, 2U);
@@ -316,7 +316,7 @@ static int test_plan_state_stamp_and_republish(void)
     if (s_tx_n == 0U) {
         return 12;
     }
-    if (s_dll.isr.isr_plan_misses != misses_after) {
+    if (s_dll.main.shared.isr_plan_misses != misses_after) {
         return 13;
     }
     return 0;

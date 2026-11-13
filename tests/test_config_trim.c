@@ -18,6 +18,9 @@
 #define IOLINK_FEATURE_EVENTS 0
 #define IOLINK_ISDU_BUFFER_SIZE 64
 #define IOLINK_EVENT_QUEUE_SIZE 2
+#define IOLINK_MBX_SLOTS 8
+#define IOLINK_OD_SLOTS 16
+#define IOLINK_REPLY_PLAN_SLOTS 12
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -26,6 +29,7 @@
 #include <stdint.h>
 
 #include "iolinki/config.h"
+#include "iolinki/dll_ctx.h"
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
 
@@ -45,6 +49,24 @@ static void test_capacity_overrides(void** state)
 
     assert_int_equal(IOLINK_ISDU_BUFFER_SIZE, 64);
     assert_int_equal(IOLINK_EVENT_QUEUE_SIZE, 2);
+    assert_int_equal(IOLINK_MBX_SLOTS, 8);
+    assert_int_equal(IOLINK_OD_SLOTS, 16);
+    assert_int_equal(IOLINK_REPLY_PLAN_SLOTS, 12);
+
+    /* 覆盖值必须真正进入 DLL 布局，而不只是宏层生效。 */
+    iolink_dll_ctx_t dll;
+    (void) dll;
+    assert_int_equal(sizeof(dll.main.isr_frame_slot) / sizeof(dll.main.isr_frame_slot[0]),
+                     IOLINK_MBX_SLOTS);
+    assert_int_equal(sizeof(dll.main.isr_od_slot) / sizeof(dll.main.isr_od_slot[0]),
+                     IOLINK_OD_SLOTS);
+    assert_int_equal(sizeof(dll.main.shared.reply_plan) / sizeof(dll.main.shared.reply_plan[0]),
+                     IOLINK_REPLY_PLAN_SLOTS);
+    /* 主泵槽位 0/1 + ISR 槽位：派生量不允许被单独覆盖。 */
+    assert_int_equal(
+        sizeof(dll.main.shared.isr_tx_payload) / sizeof(dll.main.shared.isr_tx_payload[0]),
+        IOLINK_TX_SLOTS);
+    assert_int_equal(IOLINK_TX_SLOTS, IOLINK_TX_ISR_SLOT + 1);
 
     iolink_isdu_ctx_t isdu;
     (void) isdu;

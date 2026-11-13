@@ -17,14 +17,14 @@ Measured on a 64-bit host with the default buffers in
 
 | Component | Size (bytes) | Description |
 | :--- | ---: | :--- |
-| **`iolink_device_ctx_t`** | **4064** | The object the application allocates (includes everything below) |
-| `iolink_dll_ctx_t` | 3752 | DLL state, timers, reply-plan table (10×24 B), ISR staging; embeds ISDU, Events and DS |
+| **`iolink_device_ctx_t`** | **4456** | The object the application allocates (includes everything below) |
+| `iolink_dll_ctx_t` | 4144 | DLL state, timers, reply-plan table (10×24 B), ISR staging; embeds ISDU, Events and DS |
 | `iolink_isdu_ctx_t` | 1304 | Transport state, buffer pointers and the embedded ISDU scratch (1033 B) |
 | `iolink_events_ctx_t` | 504 | Event queue plus lifecycle records |
 | `iolink_ds_ctx_t` | 408 | DS state, buffer pointers, the OD set and the embedded download stage |
 | **PHY API** | 20-30 bytes | Function pointers (usually const/flash, but pointer storage in RAM) |
 
-`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 16 bytes (two counter sets plus padding).
+`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 8 bytes (two counter sets plus padding).
 32-bit targets are smaller because pointers are 4 bytes.
 
 The DLL state is owned by two sibling structures inside `iolink_dll_ctx_t`:
@@ -40,7 +40,7 @@ ISR-exclusive fields.
 > the test and this table are updated together. Use that test as the authority
 > instead of trusting arithmetic.
 
-### Workspace (P8)
+### Workspace
 
 Transport scratch is no longer mixed into long-lived state. The optional
 `iolink_workspace_t` (`include/iolinki/workspace.h`) holds:
@@ -76,7 +76,7 @@ To move the scratch **out of the context entirely**, build with
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 4064 | **2768** |
+| `iolink_device_ctx_t` | 4456 | **3160** |
 | `iolink_isdu_ctx_t` | 1304 | **264** |
 | `iolink_ds_ctx_t` | 408 | **152** |
 | `iolink_workspace_t` (separate allocation) | — | 1289 |
@@ -87,7 +87,7 @@ instead of carrying it inside the main context. One measured example (`IOLINK_IS
 
 | Component | Embedded | External workspace |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 3104 | **2768** |
+| `iolink_device_ctx_t` | 3496 | **3160** |
 | `iolink_workspace_t` | — | 329 |
 
 > **Lease rule (ISDU response).** There is exactly one framed-response buffer.
@@ -120,10 +120,13 @@ You can tune these values to fit your MCU.
 | `IOLINK_PD_IN_MAX_SIZE` | 32 | 195 bytes | Three reply buffers of `od_max + pd_in + 1` (65 each) |
 | `IOLINK_PD_OUT_MAX_SIZE` | 32 | 32 bytes | Output Process Data buffer (also sizes the ISR RX buffer) |
 | `IOLINK_DS_IMAGE_MAX` | 256 | 256 bytes | DS serialization/download stage |
+| `IOLINK_MBX_SLOTS` | 4 | 304 bytes | Receive-frame mailbox depth; power of two in [2, 128], each record is 76 B |
+| `IOLINK_OD_SLOTS` | 8 | 272 bytes | Staged ISDU write segments; power of two in [2, 128], each record is 34 B |
+| `IOLINK_REPLY_PLAN_SLOTS` | 10 | 240 bytes | Reply-plan entries published to the ISR (10 × 24 B) |
 
 ### Total RAM
 
-The default `iolink_device_ctx_t` is **4088 bytes** (64-bit host, default
+The default `iolink_device_ctx_t` is **4456 bytes** (64-bit host, default
 buffers); buffer arrays dominate it. On a 32-bit target the same layout is
 smaller. To measure your own build instead of relying on the table:
 

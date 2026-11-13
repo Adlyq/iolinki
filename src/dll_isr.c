@@ -54,8 +54,9 @@
  *  2. 应答计划：dll_isr_plan_lookup 在 dll.c 发布的计划表中查找
  *     命中项（seqlock 读者）；dll_isr_plan_execute 按计划执行
  *     动作 -> 取源 -> 追加 CKS -> 喂字节。
- *  3. 计划外请求：不应答、不解释内容，关闭 t_A 窗口并把帧以
- *     eager=0 发布到邮箱，由主泵按既有分发路径处理。
+ *  3. 计划外请求：不应答、不解释内容，关闭 t_A 看门狗并把帧连同帧
+ *     结束时间戳以 eager=0 发布到邮箱；主泵按既有分发路径处理，
+ *     但只在该时间戳仍在 t_A 窗口内时发送应答。
  *  4. 计划命中（CONSUME）的帧不再发布到邮箱，只在
  *     shared.isr_consumed_us/isr_consumed_seq 上交接帧结束时间戳，
  *     由主泵补做 T_CYCLE/T_REN 记账与 last_response_us 更新。
@@ -184,9 +185,11 @@ static bool dll_isr_frame_valid_acc(const iolink_dll_main_t* ctx, const uint8_t*
  * 调用；当环已满时返回 false（并计入一次丢弃）。八位组
  * 在发布之前复制，因此 ISR 一返回 PHY 即可复用其接收
  * 缓冲区。@p eager 记录该 ISR 是否已
- * 发送回复（此时主泵必须保持静默）。 */
+ * 发送回复（此时主泵必须保持静默）；@p flags 携带
+ * @ref IOLINK_FRAME_FLAG_WRITE_NOT_STAGED 等处置标志；@p end_us 是帧结束
+ * 时间戳，主泵据此判断 t_A 应答窗口是否仍然打开。 */
 static bool dll_isr_publish_frame(iolink_dll_main_t* ctx, const uint8_t* frame, uint8_t len,
-                                  uint8_t eager)
+                                  uint8_t eager, uint8_t flags, uint32_t end_us)
 {
     if ((frame == NULL) || (len > IOLINK_M_SEQ_MAX_LEN)) {
         IOLINK_LOG_ISR_DEBUG(&ctx->shared.log, "frame publish rejected: len=%u", (unsigned) len);
@@ -203,6 +206,8 @@ static bool dll_isr_publish_frame(iolink_dll_main_t* ctx, const uint8_t* frame, 
     }
     record->len = len;
     record->eager = eager;
+    record->flags = flags;
+    record->end_us = end_us;
     (void) memcpy(record->data, frame, len);
     iolink_ring_publish(&ctx->shared.isr_frame_ring); /* 最后发布 */
     return true;
@@ -431,9 +436,10 @@ static bool dll_isr_consume_isdu_write(iolink_dll_main_t* ctx, const uint8_t* fr
     }
     /* 把写暂存给主泵，而不是从 ISR 触碰 ctx->shared.isdu：
      * 这样 ctx->shared.isdu 只有一个写入者（主泵），ISDU 状态
-     * 机不再需要在关闭中断的情况下运行。两个环槽位
-     * 可吸收在排空之前到达的第二个段；第三个会被
-     * 丢弃并计数（IO-Link 段由主站节拍控制）。 */
+     * 机不再需要在关闭中断的情况下运行。IOLINK_OD_SLOTS 个槽位
+     * 决定主泵饥饿（应用长时间占用主循环）时能吸收多少个写段；
+     * 超出部分被丢弃并计数（IO-Link 段由主站节拍控制，主站会因
+     * 缺少应答而重发）。 */
     iolink_od_rec_t* record = (iolink_od_rec_t*) iolink_ring_claim(&ctx->shared.isr_od_ring);
     if (record == NULL) {
         ctx->shared.isr_od_overruns++;
@@ -739,8 +745,9 @@ static bool dll_isr_plan_execute(iolink_dll_main_t* ctx, const iolink_reply_plan
  *
  * 消费 ISDU 写，然后按主泵发布的应答计划决定是否提前应答。
  * 计划命中项在邮箱复制之前执行，因此第一个应答八位组绝不会等待
- * 发布（t_A）；计划外请求走显式延迟路径：ISR 关闭 t_A 窗口、
- * 把帧连同 eager=0 发布到邮箱，由主泵按既有分发路径应答。
+ * 发布（t_A）；计划外请求走延迟路径：ISR 关闭 t_A 看门狗、把帧连同
+ * 帧结束时间戳和 eager=0 发布到邮箱，由主泵按既有分发路径处理。
+ * 主泵只在帧结束时间仍在 t_A 内时发送应答。
  */
 static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t* frame, uint8_t len,
                                           bool valid)
@@ -780,8 +787,16 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
             return;
         }
     }
+    /* 帧结束时间戳：主泵据此判断 t_A（10 个位时间）应答窗口是否仍开。 */
+    const uint32_t end_us = (uint32_t) dll_time_us(ctx);
+    /* 写段未进入暂存环时，主泵不得确认该段；否则主站会误以为段已送达，
+     * 直到整条服务在 CHKPDU 处失败才发现丢失。 */
+    uint8_t rec_flags = 0U;
+    if (valid && dll_isr_is_isdu_write(frame) && !staged) {
+        rec_flags = IOLINK_FRAME_FLAG_WRITE_NOT_STAGED;
+    }
     if (!replied) {
-        ctx->shared.isr->isr_plan_misses++;
+        ctx->shared.isr_plan_misses++;
         if (valid && (ctx->shared.phy->response_timer_stop != NULL)) {
             /* 延迟应答：13 位时间看门狗在主上下文中总会超时，
              * 因此在此关闭它，而不是为一个仍将到来的应答计入超时。 */
@@ -790,7 +805,7 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
     }
     /* 即使即时校验失败也发布：无效帧的错误/回退
      * 统计由主泵负责。 */
-    (void) dll_isr_publish_frame(ctx, frame, len, replied ? 1U : 0U);
+    (void) dll_isr_publish_frame(ctx, frame, len, replied ? 1U : 0U, rec_flags, end_us);
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
