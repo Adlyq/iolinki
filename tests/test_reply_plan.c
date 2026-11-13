@@ -356,6 +356,133 @@ static int test_plan_deadline_metadata(void)
     return 0;
 }
 
+/** @brief 计划表中 Type-0 页读槽位的动作；未找到返回 0xFF。 */
+static uint8_t type0_page_read_action(void)
+{
+    for (uint8_t i = 0U; i < s_dll.main.shared.reply_plan_count; i++) {
+        const iolink_reply_plan_t* plan = &s_dll.main.shared.reply_plan[i];
+        if ((plan->ckt_mask == IOLINK_MSEQ_TYPE_MASK) && (plan->ckt_value == IOLINK_MSEQ_TYPE_0)) {
+            return plan->action;
+        }
+    }
+    return 0xFFU;
+}
+
+/** @brief OPERATE Type-0 页读请求（2 字节，无 OD）。 */
+static void feed_type0_page_read(void)
+{
+    uint8_t frame[2];
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x02U), IOLINK_MSEQ_TYPE_0,
+               frame, sizeof(frame));
+    feed(frame, sizeof(frame), 0U);
+}
+
+/* 运行期能力位变化必须使计划失效：键不含能力位，不失效就会继续用旧计划。 */
+static int test_capability_change_invalidates_plan(void)
+{
+    init_operate();
+    /* 非兼容模式：OPERATE 中的 Type-0 页读是复位请求（不应答）。 */
+    s_dll.main.shared.caps &= (iolink_caps_t) ~IOLINK_CAP_COMPAT_T0_READ;
+    iolink_dll_invalidate_reply_plans(&s_dll.main);
+    iolink_dll_publish_reply_plans(&s_dll.main);
+    if (type0_page_read_action() != IOLINK_REPLY_ACT_RESET_STARTUP) {
+        return 1;
+    }
+    const IOLINK_ATOMIC_UINT_T seq_before = s_dll.main.shared.reply_plan_seq;
+    if ((seq_before == 0U) || ((seq_before & 1U) != 0U)) {
+        return 2;
+    }
+
+    /* 模拟 iolink_device_set_capabilities()：只改 caps。键不变，
+     * 未发失效请求时发布必须提前返回，表内容保持旧语义。 */
+    s_dll.main.shared.caps |= IOLINK_CAP_COMPAT_T0_READ;
+    iolink_dll_publish_reply_plans(&s_dll.main);
+    if (type0_page_read_action() != IOLINK_REPLY_ACT_RESET_STARTUP) {
+        return 3;
+    }
+    if (s_dll.main.shared.reply_plan_seq != seq_before) {
+        return 4;
+    }
+
+    /* 失效：发布字清 0，ISR 把该请求当"计划外"交给主泵。 */
+    iolink_dll_invalidate_reply_plans(&s_dll.main);
+    if (s_dll.main.shared.reply_plan_seq != 0U) {
+        return 5;
+    }
+    if (s_dll.main.reply_plan_key != 0U) {
+        return 6;
+    }
+    s_tx_n = 0U;
+    feed_type0_page_read();
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if (s_tx_n != 0U) {
+        return 7; /* 失效期间没有即时应答 */
+    }
+    if (s_dll.isr.isr_plan_misses != 1U) {
+        return 8;
+    }
+
+    /* 重发布：计划表随新能力位改变，ISR 恢复即时应答。 */
+    iolink_dll_publish_reply_plans(&s_dll.main);
+    if (type0_page_read_action() != IOLINK_REPLY_ACT_NONE) {
+        return 9; /* 兼容模式：普通页读应答 */
+    }
+    const IOLINK_ATOMIC_UINT_T seq_after = s_dll.main.shared.reply_plan_seq;
+    if ((seq_after == 0U) || ((seq_after & 1U) != 0U)) {
+        return 10;
+    }
+    s_tx_n = 0U;
+    feed_type0_page_read();
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if (s_tx_n != 2U) {
+        return 11; /* 页字节 + CKS */
+    }
+    return 0;
+}
+
+/* tx_done 只是可选的帧结束通知：只有 tx_octet 的 PHY 仍应置位 CAP_TX 并能发送。 */
+static int test_tx_without_done_hook(void)
+{
+    iolink_phy_api_t phy = s_phy;
+    phy.tx_done = NULL; /* 变体：去掉可选完成回调 */
+
+    (void) memset(&s_dll, 0, sizeof(s_dll));
+    iolink_dll_init(&s_dll.main, &s_dll.isr, &phy);
+    s_dll.main.shared.time_us = plan_time_us;
+    s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    s_dll.main.shared.od_width = 1U;
+    s_dll.main.shared.pd_in_len = 1U;
+    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.pd_in_len_current = 1U;
+    s_dll.main.pd_valid = true;
+    s_dll.main.shared.pd_in_active = 0U;
+    s_dll.main.shared.pd_in[0][1] = 0x5AU;
+    s_now_us = 1000000U;
+    s_tx_n = 0U;
+    s_tx_active = 0U;
+
+    if (!iolink_caps_has(s_dll.main.shared.caps, IOLINK_CAP_TX)) {
+        return 1;
+    }
+    iolink_dll_publish_reply_plans(&s_dll.main);
+    feed_process_read();
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if (s_tx_n != 3U) {
+        return 2; /* OD 占位 + PD-in 1 + CKS */
+    }
+    if ((s_tx_q[0] != 0x00U) || (s_tx_q[1] != 0x5AU)) {
+        return 3;
+    }
+    if (s_dll.isr.isr_plan_misses != 0U) {
+        return 4;
+    }
+    return 0;
+}
+
 int main(void)
 {
     int rc = test_plan_hit_executes_reply();
@@ -378,5 +505,13 @@ int main(void)
     if (rc != 0) {
         return 50 + rc;
     }
-    return test_plan_deadline_metadata();
+    rc = test_plan_deadline_metadata();
+    if (rc != 0) {
+        return 60 + rc;
+    }
+    rc = test_capability_change_invalidates_plan();
+    if (rc != 0) {
+        return 70 + rc;
+    }
+    return test_tx_without_done_hook();
 }

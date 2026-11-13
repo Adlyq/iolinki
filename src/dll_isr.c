@@ -56,7 +56,9 @@
  *     动作 -> 取源 -> 追加 CKS -> 喂字节。
  *  3. 计划外请求：不应答、不解释内容，关闭 t_A 窗口并把帧以
  *     eager=0 发布到邮箱，由主泵按既有分发路径处理。
- *  4. 计划命中（CONSUME）的帧不再发布到邮箱。
+ *  4. 计划命中（CONSUME）的帧不再发布到邮箱，只在
+ *     shared.isr_consumed_us/isr_consumed_seq 上交接帧结束时间戳，
+ *     由主泵补做 T_CYCLE/T_REN 记账与 last_response_us 更新。
  *
  * 交接与顺序约束：
  *  - 即时回复在邮箱发布*之前*启动（t_A）；记录随后
@@ -64,7 +66,8 @@
  *  - ctx->shared.isdu 归主泵所有：ISR 只读取已发布的响应视图
  *    （含失效旗标与代数位）并在 isr_od_ring 中暂存写操作。
  *  - 应答计划表同样归主泵所有：ISR 只读，绝不修改。
- *  - 64 位截止时间归主泵所有：ISR 只设置一次性标志。
+ *  - 64 位截止时间与 last_response_us 归主泵所有：ISR 只设置一次性
+ *    标志或写 32 位时间戳，主泵用无符号差值重建 64 位绝对时间。
  */
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
@@ -543,7 +546,9 @@ static bool dll_isr_plan_lookup(const iolink_dll_main_t* ctx, const uint8_t* fra
     for (uint8_t attempt = 0U; attempt < 3U; attempt++) {
         const IOLINK_ATOMIC_UINT_T seq = iolink_atomic_load(&ctx->shared.reply_plan_seq);
         if ((seq == 0U) || ((seq & 1U) != 0U)) {
-            continue; /* 尚未发布，或主泵正在覆盖槽位 */
+            /* 0 = 计划表已失效（尚未发布或刚被主泵撤回）：本帧按计划外
+             * 请求交给主泵；奇数 = 主泵正在覆盖槽位。 */
+            continue;
         }
         bool found = false;
         const uint8_t count = ctx->shared.reply_plan_count;
@@ -767,6 +772,11 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
         replied = dll_isr_plan_execute(ctx, &plan, frame, len, staged);
         if (replied && ((plan.flags & IOLINK_REPLY_FLAG_CONSUME) != 0U)) {
             dll_mark_master_activity(ctx); /* 本周期由 ISR 完全处理 */
+            /* 该帧不进邮箱，主泵看不到它：把帧结束时间戳交接给主泵，
+             * 由它在下一轮补做 T_CYCLE/T_REN 记账。先写时间戳，再自增
+             * 序号作为发布边沿（单字对齐存储，无撕裂读）。 */
+            ctx->shared.isr_consumed_us = (uint32_t) dll_time_us(ctx);
+            ctx->shared.isr_consumed_seq = (uint8_t) (ctx->shared.isr_consumed_seq + 1U);
             return;
         }
     }

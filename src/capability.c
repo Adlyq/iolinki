@@ -171,7 +171,10 @@ iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* phy, const iolink_stac
             caps |= IOLINK_CAP_TX_BUSY;
         }
 #else
-        if ((phy->tx_octet != NULL) && (phy->tx_done != NULL)) {
+        /* TX BYTE 泵只需要 tx_octet()：它逐字节喂送并以自身状态判断完成，
+         * tx_done() 只是可选的"帧结束"通知（库不依赖它释放 PD-in 租约，
+         * 见 dll_isr_tx_step）。 */
+        if (phy->tx_octet != NULL) {
             caps |= IOLINK_CAP_TX;
         }
 #endif

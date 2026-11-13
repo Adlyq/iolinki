@@ -396,8 +396,14 @@ void iolink_dll_process(iolink_dll_main_t* ctx);
  *
  * 只允许在**主上下文**中调用（`iolink_dll_init()` 与
  * `iolink_dll_process()` 会自动调用）。计划表是
- * {DLL 状态, M-sequence 类型, OD 宽度} 的纯函数：键未变化时本函数
- * 直接返回，不做任何写入。
+ * {DLL 状态, M-sequence 类型, OD 宽度, 波特率} 的纯函数：键未变化时
+ * 本函数直接返回，不做任何写入。
+ *
+ * 键只覆盖上述四项，**不覆盖**实例能力位。因此凡是运行期会改变计划
+ * 内容的器件状态（当前只有 `IOLINK_CAP_COMPAT_T0_READ`：OPERATE 中的
+ * Type-0 页读是兼容应答还是复位请求），都必须在修改后调用
+ * `iolink_dll_invalidate_reply_plans()`，再由本函数重发布；否则键
+ * 匹配会让本次调用提前返回，数据 ISR 继续执行旧计划。
  *
  * 发布协议是单写者 seqlock：主泵先把 `reply_plan_seq` 变成奇数，
  * 覆盖计划槽位，再用下一次递增变回偶数；数据 ISR 只在偶数且前后
@@ -407,6 +413,29 @@ void iolink_dll_process(iolink_dll_main_t* ctx);
  * @param ctx DLL 上下文
  */
 void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx);
+
+/**
+ * @brief 使已发布的应答计划表失效（仅主上下文）。
+ *
+ * 把主上下文记录的发布键清零，并把 `reply_plan_seq` 原子写 0。从这一刻
+ * 起数据 ISR 把每一帧都当作"计划外请求"：不提前应答、关闭 t_A 并发布
+ * 到邮箱，由主泵在下一个处理窗口按既有分发路径应答。下一次
+ * `iolink_dll_publish_reply_plans()` 必定重发完整计划表。
+ *
+ * 调用时机：任何**运行期**改变计划内容的器件状态之后，且必须在下一个
+ * 主站帧可能到达之前。当前计划内容依赖的状态为
+ * {DLL 状态, M-sequence 类型, OD 宽度, 波特率}（由发布键自动跟踪）
+ * 与 `IOLINK_CAP_COMPAT_T0_READ`（本函数所覆盖的运行时能力位）。
+ * `iolink_device_set_capabilities()` 的调用方必须在本函数之后尽快让主泵
+ * 再调用一次 `iolink_dll_publish_reply_plans()`（`iolink_dll_process()`
+ * 会在每轮结束时自动完成）。
+ *
+ * 本函数与发布函数都是主上下文单写者操作：ISR 只读取发布字，因此
+ * `seq` 从偶数直落 0 不会产生撕裂读，最坏结果是一帧走延迟路径。
+ *
+ * @param ctx DLL 上下文
+ */
+void iolink_dll_invalidate_reply_plans(iolink_dll_main_t* ctx);
 
 /**
  * @brief MC 字节为 @p mc 的主站请求的期望长度（字节）。
