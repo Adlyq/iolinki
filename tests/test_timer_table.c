@@ -106,6 +106,41 @@ static void test_rollover_single_point(void)
     assert(dll_time_passed(0x101ULL, 0xFFFFFFFFFFFFFF00ULL));
 }
 
+/* 最早截止时间必须用回绕安全判定：跨 2^63 的绝对时间不能按裸 < 比较。 */
+static void test_next_deadline_wrap_safe(void)
+{
+    iolink_dll_ctx_t ctx;
+    init_ctx(&ctx);
+
+    /* near = 2^64 - 256；small = 0x100 = 256。按回绕关系 small 落在 near 之后
+     * （相差 512 us），裸 `<` 会错选 small 作为最早项。 */
+    const uint64_t near = 0xFFFFFFFFFFFFFF00ULL;
+    const uint64_t small = 0x100ULL;
+
+    dll_timer_arm(&ctx.main, IOLINK_TIMER_IDLE, near);
+    assert(ctx.main.next_deadline == near);
+    dll_timer_arm(&ctx.main, IOLINK_TIMER_T_DSIO, small);
+    assert(ctx.main.next_deadline == near);
+
+    /* 与到期判定一致：在 near 时刻表头已到达，而 small 尚未到达。 */
+    assert(dll_time_reached(near, ctx.main.next_deadline));
+    assert(!dll_time_reached(near, small));
+
+    /* 重算路径（取消表头）同样回绕安全：near + 10 才是新的最早项。 */
+    dll_timer_arm(&ctx.main, IOLINK_TIMER_T_FBD, (uint64_t) (small + 100U));
+    dll_timer_arm(&ctx.main, IOLINK_TIMER_T_DSIO, (uint64_t) (near + 10U));
+    assert(ctx.main.next_deadline == near);
+    dll_timer_cancel(&ctx.main, IOLINK_TIMER_IDLE);
+    assert(ctx.main.next_deadline == (uint64_t) (near + 10U));
+    assert(dll_time_reached((uint64_t) (near + 20U), ctx.main.next_deadline));
+    assert(!dll_time_reached((uint64_t) (near + 20U), (uint64_t) (small + 100U)));
+
+    /* deadline == 0 仍表示未装载：不参与比较，也不算"最早"。 */
+    dll_timer_cancel(&ctx.main, IOLINK_TIMER_T_DSIO);
+    dll_timer_cancel(&ctx.main, IOLINK_TIMER_T_FBD);
+    assert(ctx.main.next_deadline == 0U);
+}
+
 /* 同刻到期：按表序执行，且一次主循环内全部服务完。 */
 static void test_same_instant_priority(void)
 {
@@ -236,6 +271,7 @@ int main(void)
     test_contract_table();
     test_next_deadline_is_minimum();
     test_rollover_single_point();
+    test_next_deadline_wrap_safe();
     test_same_instant_priority();
     test_t_byte_rearm_and_cancel();
     test_t_pd_legacy_import();

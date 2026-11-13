@@ -143,6 +143,17 @@ bool dll_time_passed(uint64_t now_us, uint64_t deadline_us)
     return (int64_t) (now_us - deadline_us) > 0;
 }
 
+/**
+ * @brief 回绕安全的“早于”判定：@p a 早于 @p b 返回 true。
+ *
+ * 与 @ref dll_time_reached 同源：只比较差值的符号位，因此跨 2^63 的
+ * 绝对时间仍保持先后关系。相等时返回 false。
+ */
+static bool dll_time_before(uint64_t a, uint64_t b)
+{
+    return (int64_t) (a - b) < 0;
+}
+
 /** @brief 重算 next_deadline：只考虑 DEADLINE 类 timer。 */
 static void dll_next_deadline_recompute(iolink_dll_main_t* ctx)
 {
@@ -150,7 +161,7 @@ static void dll_next_deadline_recompute(iolink_dll_main_t* ctx)
     for (uint8_t i = 0U; i < (uint8_t) IOLINK_TIMER_COUNT; i++) {
         const uint64_t deadline = ctx->timers[i].deadline;
         if ((deadline != 0U) && (g_timer_contract[i].kind == IOLINK_TIMER_KIND_DEADLINE) &&
-            ((next == 0U) || (deadline < next))) {
+            ((next == 0U) || dll_time_before(deadline, next))) {
             next = deadline;
         }
     }
@@ -169,10 +180,10 @@ void dll_timer_arm(iolink_dll_main_t* ctx, iolink_timer_id_t id, uint64_t deadli
     if (g_timer_contract[index].kind != IOLINK_TIMER_KIND_DEADLINE) {
         return;
     }
-    if ((ctx->next_deadline == 0U) || (deadline_us < ctx->next_deadline)) {
+    if ((ctx->next_deadline == 0U) || dll_time_before(deadline_us, ctx->next_deadline)) {
         ctx->next_deadline = deadline_us;
     }
-    else if ((previous == ctx->next_deadline) && (deadline_us > previous)) {
+    else if ((previous == ctx->next_deadline) && dll_time_passed(deadline_us, previous)) {
         /* 把表头推后：只有这种情况需要重新扫描。 */
         dll_next_deadline_recompute(ctx);
     }
