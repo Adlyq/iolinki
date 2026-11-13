@@ -246,8 +246,8 @@ flowchart TD
     I --> J["iolink_isdu_bind_workspace()<br/>iolink_isdu_bind_caps()"]
     J --> K["绑定 time_us；事件窗口<br/>iolink_events_set_window()"]
     K --> L["绑定 ISDU 依赖：od<br/>params_ctx / direct_param_page2"]
-    L --> M["iolink_params_bind_storage()<br/>读 NVM 参数记录"]
-    M --> N["iolink_ds_init(storage) + iolink_ds_bind_workspace()<br/>iolink_ds_bind_sources(config.od, params)<br/>无镜像时 iolink_ds_build_image()"]
+    L --> M["iolink_params_ctx_init()<br/>标签值取 device_info 默认值"]
+    M --> N["iolink_ds_init(storage) + iolink_ds_bind_workspace()<br/>iolink_ds_bind_sources(config.od, params)<br/>iolink_ds_load_persistent() + iolink_ds_refresh()"]
     N --> O["iolink_device_set_log()<br/>把 sink 复制到 DLL/ISDU/DS/事件"]
     O --> P["device_apply_stack_config()<br/>PD/OD 长度、t_pd、工作 COM、MinCycleTime<br/>timing_enforce 覆盖"]
     P --> T["调用 on_startup()"]
@@ -606,7 +606,7 @@ flowchart TD
     E -- "TAG / BACKEND" --> E11["isdu_serve_od_value()"]
 ```
 
-索引到处理器的映射只存在于 `src/od.c` 的内建 const 表：`0x0000/0x0001` Direct Parameter、`0x0002` SystemCommand、`0x0003` DataStorage、`0x000C` DeviceAccessLocks、`0x000D` ProfileCharacteristic、`0x0010-0x0017/0x001B` 标识字符串、`0x0018-0x001A` Tag、`0x0020` ErrorCount、`0x0024` DeviceStatus、`0x0025` DetailedDeviceStatus、`0x0028/0x0029` PD 输入/输出、`0x0040` 厂商错误统计。应用参数在 `iolink_od_app_t` 表里选择唯一后端：`IOLINK_OD_SCALAR_STORAGE` / `IOLINK_OD_STRING_STORAGE` 绑定应用变量，`_HANDLER` 变体提供逐表项 `read`/`write` 函数；新增参数 = 一行表项。
+索引到处理器的映射只存在于 `src/od.c` 的内建 const 表：`0x0000/0x0001` Direct Parameter、`0x0002` SystemCommand、`0x0003` DataStorage、`0x000C` DeviceAccessLocks、`0x000D` ProfileCharacteristic、`0x0010-0x0017/0x001B` 标识字符串、`0x0018-0x001A` Tag、`0x0020` ErrorCount、`0x0024` DeviceStatus、`0x0025` DetailedDeviceStatus、`0x0028/0x0029` PD 输入/输出、`0x0040` 厂商错误统计。应用参数在 `iolink_od_app_t` 表里选择唯一后端：`IOLINK_OD_SCALAR_STORAGE` / `IOLINK_OD_BYTES_STORAGE` 绑定应用变量，`_HANDLER` 变体提供逐表项 `read`/`write` 函数；新增参数 = 一行表项。
 
 索引归属按域决定：规范索引（`< 0x0040`）从内建表取，应用表不得遮蔽 `0x0002`/`0x0024` 等对象；设备专用索引先查应用表，未声明时才回落到内建表。`0x0040` 同时是“设备特定起始索引”和内置 error-stats 索引：**应用表声明时走应用后端；未声明时由内置 `handle_error_stats()` 提供**。OD 值层另行校验 `max_subindex`（越界 `0x8011`）与 OctetString 的 `block_len`（超长 `0x8033`）。
 
@@ -640,26 +640,24 @@ DPP1 地址 `0x0F` 的 SystemCommand 走 `iolink_isdu_execute_system_command()`�
 参数记录布局（`include/iolinki/storage.h`）：
 
 ```text
-PARAMS 区域:
-  magic(4) | version(2) | reserved(2) |
-  application_tag[33] | function_tag[33] | location_tag[33] |
-  fletcher32_checksum(4)
-
-DS 区域:
+PARAMS 区域（PERSIST 表项的参数镜像）:
   magic(4) | version(2) | length(2) | fletcher32(4) |
-  image[IOLINK_DS_IMAGE_MAX]
+  [Index(2) | Subindex(1) | Length(1) | Data] * n
 
 FLAG 区域:
   DS_UPLOAD_FLAG(1) + 3 字节对齐保留
 ```
 
-区域偏移由 `include/iolinki/storage.h` 的区域偏移宏（`IOLINK_STORAGE_PARAMS_BASE`、`IOLINK_STORAGE_DS_BASE`、`IOLINK_STORAGE_FLAG_BASE` 及其 `_SIZE`）在编译期固定，应用在 `read`/`write` 回调里加自己的物理基址。
+Data Storage 映像不落盘：`Data_Storage_Size`、`Parameter_Checksum` 与上传内容都按当前参数集实时生成。
+
+区域偏移由 `include/iolinki/storage.h` 的区域偏移宏（`IOLINK_STORAGE_PARAMS_BASE`、`IOLINK_STORAGE_FLAG_BASE` 及其 `_SIZE`）在编译期固定，应用在 `read`/`write` 回调里加自己的物理基址。
 
 关键流程：
 
-- `iolink_params_bind_storage()` → `params_ctx_load()`：magic/version/checksum 任一失败则忽略 NVM，保留 RAM 默认值。
-- `iolink_params_ctx_write()`：先改候选副本，按 `persist` 写 NVM，成功后才提交 RAM 并同步 AppTag 到 device_info；失败以 `iolink_result_t` 返回（NVM 失败为 `IOLINK_RESULT_IO`），不会留下“已接受”的 RAM 状态。
-- `iolink_params_ctx_factory_reset()`：清空三个 Tag，写 NVM，并清 device_info 的 AppTag。
+- `iolink_ds_load_persistent()`：magic/version/length/checksum 任一失败则忽略 NVM，保留 RAM 默认值；成功则通过 `iolink_od_restore_value()` 逐条恢复（不跑钩子、不回写）。
+- `iolink_ds_save_persistent()`：序列化所有 `IOLINK_OD_STORAGE_PERSIST` 表项，先写头再写记录；ISDU 写路径经 `iolink_od_ctx_t::flush` 调用它，失败时写路径回滚并返回 `IOLINK_RESULT_IO`。
+- `iolink_params_ctx_write()`：只改 RAM 并同步 AppTag 到 device_info；不再自行写 NVM。
+- `iolink_ds_factory_reset()`：清空标签后把每个 PERSIST 表项恢复为表默认值，并写一次参数镜像。
 
 ### 8.2 Data Storage 镜像
 
@@ -1127,7 +1125,7 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 | `IOLINK_PD_IN_MAX_SIZE` / `IOLINK_PD_OUT_MAX_SIZE` / `IOLINK_OD_MAX_SIZE` | PD/OD 缓冲上限（运行时长度不得超过） |
 | `IOLINK_MBX_SLOTS` / `IOLINK_REPLY_PLAN_SLOTS` | 帧邮箱深度（默认 4）/ 应答计划槽位（默认 48，按 4 个状态切片使用）；满时分别计 `isr_mailbox_drops` / `reply_plan_overflows` |
 | `IOLINK_ISDU_BUFFER_SIZE` | 单次 ISDU 事务上限，同时决定 `iolink_isdu_scratch_t` 各缓冲容量 |
-| `IOLINK_DS_IMAGE_MAX` | DS 镜像上限，同时决定 storage 中 DS 分区与 workspace 的 `ds_stage` |
+| `IOLINK_DS_IMAGE_MAX` | 一次序列化（DS 上传/校验和或参数镜像）的上限，同时决定 workspace 的 `ds_stage` 容量 |
 | `IOLINK_EVENT_QUEUE_SIZE` / `IOLINK_EVENT_PENDING_MAX` | 事件队列深度 / 同时活动的条件数；DDS 快照容量取 `IOLINK_EVENT_PENDING_MAX`（编译期上限 64） |
 | `IOLINK_EVENT_MIN_APPEAR_MS` / `IOLINK_EVENT_MIN_REPEAT_MS` | A.6.4 两个窗口的构建默认值（可被 `stack.event_min_*_ms` 覆盖） |
 | `IOLINK_DIAG_PULSE_HOLD_MS` | PULSE 诊断源的保持窗口 |

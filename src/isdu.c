@@ -195,9 +195,18 @@ static void isdu_params_factory_reset(iolink_isdu_ctx_t* ctx)
        通过 ctx->params_ctx 所做的那样）；未绑定时没有全局回退。
        必须使用绑定的上下文，否则每个设备的应用标签会在
        Restore Factory Settings 命令之后仍然存在。 */
-    if ((ctx != NULL) && (ctx->params_ctx != NULL)) {
+    if (ctx == NULL) {
+        return;
+    }
+    if (ctx->params_ctx != NULL) {
         iolink_params_ctx_factory_reset(ctx->params_ctx);
     }
+#if IOLINK_FEATURE_DATA_STORAGE
+    /* 应用参数恢复默认值，并一次性重写参数镜像（含标签）。 */
+    if (ctx->ds_ctx != NULL) {
+        (void) iolink_ds_factory_reset((iolink_ds_ctx_t*) ctx->ds_ctx);
+    }
+#endif
 }
 
 /** @brief 绑定到该 ISDU 上下文的设备信息上下文（若有）。 */
@@ -1700,19 +1709,45 @@ static bool isdu_entry_allowed(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t* 
     return true;
 }
 
+#if IOLINK_FEATURE_DATA_STORAGE
+/** @brief OD 写后持久化：把 PERSIST 表项写成参数镜像。 */
+static iolink_result_t isdu_persist_flush(void* user)
+{
+    iolink_ds_ctx_t* ds = (iolink_ds_ctx_t*) user;
+
+    if ((ds == NULL) || (ds->storage == NULL)) {
+        return iolink_result_ok(0U); /* RAM-only：没有需要保存的镜像。 */
+    }
+    if (iolink_ds_downloading(ds)) {
+        /* 下载暂存与参数镜像共用 workspace 缓冲；ParamDownloadEnd 会
+           在应用后统一保存，这里不能覆盖暂存镜像。 */
+        return iolink_result_ok(0U);
+    }
+    return (iolink_ds_save_persistent(ds) == 0) ? iolink_result_ok(0U)
+                                                : iolink_result_error(IOLINK_RESULT_IO);
+}
+#endif
+
 /** @brief 通过表项读/写一个参数值（标签对象或应用后端）。 */
 static void isdu_serve_od_value(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t* entry)
 {
     iolink_od_ctx_t od;
     od.app = ctx->od;
     od.params = ctx->params_ctx;
+#if IOLINK_FEATURE_DATA_STORAGE
+    od.flush = (ctx->ds_ctx != NULL) ? isdu_persist_flush : NULL;
+    od.flush_user = ctx->ds_ctx;
+#else
+    od.flush = NULL;
+    od.flush_user = NULL;
+#endif
 
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
 #if IOLINK_FEATURE_DATA_STORAGE
         /* 块下载期间 DS 参数先暂存；ParamDownloadEnd 先对整份镜像做
            无副作用预校验，全部通过后再逐条写入并持久化（10.3.2）。
            这不是跨参数事务：NVM 写入失败仍可能留下已生效的前缀记录。 */
-        if ((entry->storage == IOLINK_OD_STORAGE_DS) && (ctx->ds_ctx != NULL) &&
+        if (((entry->storage & IOLINK_OD_STORAGE_DS) != 0U) && (ctx->ds_ctx != NULL) &&
             iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx)) {
             const iolink_result_t staged =
                 iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, entry->index,

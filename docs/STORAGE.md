@@ -3,7 +3,7 @@
 This note explains how application data is persisted and how the Data Storage
 (DS) parameter set is read/written.
 
-## 1. One storage backend
+## 1. One storage backend, two regions
 
 When `IOLINK_FEATURE_DATA_STORAGE` is enabled (the default), the stack talks to
 NVM through exactly one callback-only backend supplied in
@@ -23,15 +23,14 @@ typedef struct {
 - `offset` is **relative** to the application's storage area; add the physical
   base inside the callbacks (`eeprom_read(BASE + offset, ...)`).
 - Return `0` on success, negative on failure.
-- A `write` must complete synchronously or copy the buffer before returning.
+- A `write` must complete before returning, or copy the buffer if it queues.
 
 The region layout is fixed at compile time (`storage.h`):
 
 | Region | Offset | Size |
 |---|---|---|
-| params | `IOLINK_STORAGE_PARAMS_BASE` (0) | `IOLINK_STORAGE_PARAMS_SIZE` |
-| DS image | `IOLINK_STORAGE_DS_BASE` | `IOLINK_STORAGE_DS_SIZE` |
-| DS flag | `IOLINK_STORAGE_FLAG_BASE` | `IOLINK_STORAGE_FLAG_SIZE` |
+| parameter image | `IOLINK_STORAGE_PARAMS_BASE` (0) | `IOLINK_STORAGE_PARAMS_SIZE` |
+| DS upload flag | `IOLINK_STORAGE_FLAG_BASE` | `IOLINK_STORAGE_FLAG_SIZE` |
 
 Use `IOLINK_STORAGE_TOTAL_SIZE` for a static assertion in the application:
 
@@ -39,62 +38,72 @@ Use `IOLINK_STORAGE_TOTAL_SIZE` for a static assertion in the application:
 _Static_assert(sizeof(nvm_region) >= IOLINK_STORAGE_TOTAL_SIZE, "NVM too small");
 ```
 
-Each record carries `magic + version` (layout) and a Fletcher-32 checksum
-(content integrity). A mismatch/corruption falls back to defaults.
+The parameter image carries `magic + version + length + Fletcher-32`, followed
+by the same `[Index(2)][Subindex(1)][Length(1)][Data]` records the DS set uses.
+A mismatch or corruption falls back to table defaults.
 
-## 2. How DS parameters are read
+There is no stored Data Storage image: `Data_Storage_Size`,
+`Parameter_Checksum` and the upload payload are regenerated from the current
+values. Only values and the `DS_UPLOAD_FLAG` occupy NVM.
 
-The device reads and writes DS records through the object dictionary:
+## 2. One flag controls persistence
 
-1. standard parameters (0x0018/0x0019/0x001A) through the params context;
-2. device-specific parameters (0x0040+ / 0x0100+) through the table entry's
-   `STORAGE` variable or `HANDLER` callbacks.
+Each object dictionary entry has a `storage` bitmask:
 
-So **if a parameter is declared in the application object dictionary with
-`IOLINK_OD_STORAGE_DS`, DS reads and writes it without any extra callback.**
+| Bit | Meaning |
+|---|---|
+| `IOLINK_OD_STORAGE_VOLATILE` (0) | never persisted, not in the DS set |
+| `IOLINK_OD_STORAGE_DS` | member of the Data Storage parameter set |
+| `IOLINK_OD_STORAGE_PERSIST` | value is written to the parameter image |
 
-## 3. Customising the DS parameter set
+The two bits combine freely:
 
-The DS set is derived from the object dictionary: every standard or
-application entry whose `storage` is `IOLINK_OD_STORAGE_DS` is serialized, in
-standard-table order followed by application-table order. Declaring the
-parameter is the only step:
+- `DS | PERSIST` — normal parameter (master backup + local NVM).
+- `DS` — RAM-only parameter; the master restores it after a reboot (a device
+  without NVM uses this for everything by leaving `config.storage` NULL).
+- `PERSIST` — locally stored but not part of the master's backup set.
+
+A `WRITE_STORE` write to a `PERSIST` entry serializes the whole persisted set
+once and writes it through the backend. If that write fails, the ISDU write
+answers with an error and a STORAGE scalar is rolled back to its previous value
+(OctetString content is not rolled back; reject those in `validate`).
+
+## 3. Customising the DS / persistence set
+
+Declare the parameter; the bits do the rest:
 
 ```c
 static uint8_t g_vendor_param[8];
 static uint8_t g_vendor_param_len;
 
 static const iolink_od_entry_t my_entries[] = {
-    IOLINK_OD_STRING_STORAGE(0x0050, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
-                             IOLINK_OD_STORAGE_DS, 8, "VendorParam", g_vendor_param,
-                             &g_vendor_param_len),
+    IOLINK_OD_BYTES_STORAGE(0x0050, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_STORE,
+                             IOLINK_OD_STORAGE_DS | IOLINK_OD_STORAGE_PERSIST, 8,
+                             "VendorParam", g_vendor_param, &g_vendor_param_len),
 };
 ```
 
 - `block_len` bounds the value stored in the image for that record (0 =
   unbounded).
 - Values are read and written through the same table-entry backend that serves
-  ISDU, so DS needs no separate accessor pair.
+  ISDU, so DS and persistence need no separate accessor pair.
 - A restore runs the table entry's `validate` hook for every known record
   before writing any of them; a rejected record aborts the whole restore.
-- The three tags are always members because the standard table declares them
-  `IOLINK_OD_STORAGE_DS`. To publish an empty `Index_List` a device needs a
-  build without `IOLINK_FEATURE_DATA_STORAGE` (see `docs/feature-trimming.md`).
+- The three tags are always DS members because the standard table declares them
+  `DS | PERSIST`. To publish an empty `Index_List` a device needs a build
+  without `IOLINK_FEATURE_DATA_STORAGE` (see `docs/feature-trimming.md`).
 
-## 4. What is persisted by the stack
+## 4. When NVM is written
 
 | Trigger | Region written | Notes |
 |---|---|---|
-| Tag write (0x0018/0x0019/0x001A, `WRITE_STORE`) | params record | A failed write is reported as `IOLINK_RESULT_IO` and leaves RAM/read-back unchanged |
-| Factory reset / Back-to-box | params record | Unconditional; a storage failure is ignored because the RAM reset already happened |
-| DS download finished | params record per stored parameter, then the DS image | Every `WRITE_STORE` parameter (including the three tags) is persisted once by the OD write and once more inside the image |
-| DS upload requested | DS_UPLOAD_FLAG (`1`), then the DS image | Flag survives reboot so the master sees a pending upload |
+| Any `WRITE_STORE` write to a `PERSIST` entry | parameter image | One image write for the whole persisted set; a failure answers with an error and rolls back a STORAGE scalar |
+| Factory reset / Back-to-box | parameter image | Tags are cleared, then every `PERSIST` entry is restored from its table default; one image write |
+| DS download finished | parameter image | Every applied value is persisted once after the batch, not per record |
+| DS upload requested | DS_UPLOAD_FLAG (`1`) | Flag survives reboot so the master sees a pending upload |
 | DS upload/download finished | DS_UPLOAD_FLAG (`0`) | Also cleared on factory reset |
-| Boot | reads the params record and the DS image | `magic + version + Fletcher-32` mismatch falls back to defaults / an invalid image |
+| Boot | reads the parameter image and the flag | `magic + version + Fletcher-32` mismatch means "use defaults"; values are restored without running hooks |
 
-The params record and the DS image can both hold the same tag values; that
-double write is a known redundancy and will be removed when both are serialized
-from the object dictionary.
-
-The DS image layout is `magic(4) + version(2) + length(2) + checksum(4) +
-records`, where a record is `[Index(2)][Subindex(1)][Length(1)][Data]`.
+Application-local value changes (writes to a STORAGE variable outside ISDU) are
+not observed by the stack. Call `iolink_ds_save_persistent()` after such a
+change if it must survive a reboot.

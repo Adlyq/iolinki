@@ -283,7 +283,7 @@ static void test_system_cmd_factory_restore(void** state)
     /* 先设置一个自定义应用标签 */
     const uint8_t test_tag[] = "TestTag123";
     iolink_params_ctx_write(test_env_params(&g_test_env), 0x0018, 0x00, test_tag,
-                            sizeof(test_tag) - 1, false);
+                            sizeof(test_tag) - 1);
 
     /* 向索引 0x0002 写入 0x82 */
     uint8_t cmd_data[] = {IOLINK_CMD_RESTORE_FACTORY_SETTINGS};
@@ -562,7 +562,7 @@ static void test_isdu_data_storage_round_trip(void** state)
     const char* app = "ISDU-DS";
     assert_int_equal(
         iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                (const uint8_t*) app, strlen(app), true)
+                                (const uint8_t*) app, strlen(app))
             .code,
         0);
 

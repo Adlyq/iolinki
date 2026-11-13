@@ -160,9 +160,9 @@ static const iolink_storage_api_t g_storage = {
 };
 
 static const iolink_od_entry_t k_wcet_od_entries[] = {
-    IOLINK_OD_STRING_STORAGE(WCET_VENDOR_PARAM_INDEX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
-                             IOLINK_OD_STORAGE_VOLATILE, WCET_VENDOR_PARAM_LEN, "VendorParameter",
-                             g_vendor_param, &g_vendor_param_len),
+    IOLINK_OD_BYTES_STORAGE(WCET_VENDOR_PARAM_INDEX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                            IOLINK_OD_STORAGE_VOLATILE, WCET_VENDOR_PARAM_LEN, "VendorParameter",
+                            g_vendor_param, &g_vendor_param_len),
 };
 
 static iolink_od_app_t g_wcet_od = {

@@ -362,7 +362,7 @@ static const iolink_od_app_t g_od = {
 /* ... .od = &g_od in iolink_device_config_t ... */
 ```
 
-`IOLINK_OD_SCALAR_STORAGE` / `IOLINK_OD_STRING_STORAGE` bind an application
+`IOLINK_OD_SCALAR_STORAGE` / `IOLINK_OD_BYTES_STORAGE` bind an application
 variable and check its width at compile time; the `_HANDLER` variants take a
 `read`/`write` pair instead, and the `_EX` suffix adds `validate`/`on_change`
 hooks. Strings need an array and a `uint8_t` length variable. Index ownership
@@ -466,6 +466,9 @@ int  iolink_ds_serialize(iolink_ds_ctx_t* ctx, uint8_t* out, size_t cap);
 void iolink_ds_refresh(iolink_ds_ctx_t* ctx);
 int  iolink_ds_build_image(iolink_ds_ctx_t* ctx);
 int  iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len);
+int  iolink_ds_save_persistent(iolink_ds_ctx_t* ctx);
+int  iolink_ds_load_persistent(iolink_ds_ctx_t* ctx);
+int  iolink_ds_factory_reset(iolink_ds_ctx_t* ctx);
 ```
 
 The DS context is initialized by `iolink_device_init()` from the required
@@ -474,12 +477,16 @@ use `iolink_device_get_ds_ctx()` to reach it.
 
 The DS parameter set is derived from the standard OD table plus the application
 table bound with `iolink_ds_bind_sources()` (the device layer binds
-`iolink_device_config_t.od`): entries marked `IOLINK_OD_STORAGE_DS` are
-serialized, `IOLINK_OD_STORAGE_VOLATILE` entries are not. `iolink_ds_apply_image()`
-validates every known record through the table entry's `validate` hook before it
-writes any of them; a rejected record leaves the previous parameter set intact.
-This is not a cross-parameter transaction: an NVM write failure during the apply
-phase can still leave a prefix of the records stored.
+`iolink_device_config_t.od`): entries with the `IOLINK_OD_STORAGE_DS` bit are
+serialized, `IOLINK_OD_STORAGE_VOLATILE` entries are not.
+`IOLINK_OD_STORAGE_PERSIST` independently selects the entries written to the
+parameter image by `iolink_ds_save_persistent()`; `iolink_ds_load_persistent()`
+restores them through `iolink_od_restore_value()` without running hooks.
+`iolink_ds_apply_image()` validates every known record through the table entry's
+`validate` hook before it writes any of them; a rejected record leaves the
+previous parameter set intact. This is not a cross-parameter transaction: an NVM
+write failure during the apply phase can still leave a prefix of the records
+applied in RAM.
 
 The serialized image is **not** resident state: the context only holds a pointer
 to a staging buffer (`iolink_workspace_t::ds_stage`, or the embedded fallback).
@@ -487,7 +494,9 @@ Uploads and `Parameter_Checksum` reads stream through `iolink_ds_serialize()`,
 which can write into the ISDU response buffer or with `out == NULL` just compute
 length and checksum. `iolink_ds_refresh()` updates only
 `Data_Storage_Size`/`Parameter_Checksum` without materialising the image; the
-full staging buffer is used by downloads and by `iolink_ds_build_image()`.
+full staging buffer is used by downloads, `iolink_ds_build_image()` and the
+parameter image serializer. There is no separately persisted DS image: both the
+size/checksum and the backup are regenerated from the current values.
 
 ## Storage backend
 

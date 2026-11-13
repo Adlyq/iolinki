@@ -216,7 +216,7 @@ class IoddCLI(unittest.TestCase):
             'range': scalar('0x0100U', low='100U', high='10U'),
             'default': scalar('0x0100U', low='0U', high='0xFFFFU', default='70000U'),
             'type': scalar('0x0100U', datatype='IOLINK_OD_DT_UNKNOWN'),
-            'width': ('IOLINK_OD_STRING_STORAGE(0x0100U, IOLINK_OD_ACCESS_RW, '
+            'width': ('IOLINK_OD_BYTES_STORAGE(0x0100U, IOLINK_OD_ACCESS_RW, '
                       'IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U, "T", NULL, NULL)'),
         }
         for label, entry in cases.items():

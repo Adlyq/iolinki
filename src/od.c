@@ -126,16 +126,19 @@ static const iolink_od_entry_t k_od_table[] = {
                              IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
                              IOLINK_OD_HANDLER_IDENT_STRING, 64U, "FirmwareRevision"),
 
-    /* 0x0018-0x001A：可写标签，属于 DS 参数集并由参数管理器持久化。 */
+    /* 0x0018-0x001A：可写标签，属于 DS 参数集并写进参数镜像。 */
     IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_APPLICATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED,
-                             IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_TAG,
-                             32U, "ApplicationSpecificTag"),
+                             IOLINK_OD_WRITE_STORE,
+                             IOLINK_OD_STORAGE_DS | IOLINK_OD_STORAGE_PERSIST,
+                             IOLINK_OD_HANDLER_TAG, 32U, "ApplicationSpecificTag"),
     IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_FUNCTION_TAG, IOLINK_OD_ACCESS_RW_LOCKED,
-                             IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_TAG,
-                             32U, "FunctionTag"),
+                             IOLINK_OD_WRITE_STORE,
+                             IOLINK_OD_STORAGE_DS | IOLINK_OD_STORAGE_PERSIST,
+                             IOLINK_OD_HANDLER_TAG, 32U, "FunctionTag"),
     IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_LOCATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED,
-                             IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_TAG,
-                             32U, "LocationTag"),
+                             IOLINK_OD_WRITE_STORE,
+                             IOLINK_OD_STORAGE_DS | IOLINK_OD_STORAGE_PERSIST,
+                             IOLINK_OD_HANDLER_TAG, 32U, "LocationTag"),
 
     /* 0x001B：ProductURI 可选，取决于 Profile。 */
     IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_PRODUCT_URI, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
@@ -262,7 +265,7 @@ size_t iolink_od_ds_count(void)
     size_t n = 0U;
 
     for (size_t i = 0U; i < OD_TABLE_COUNT; i++) {
-        if (k_od_table[i].storage == IOLINK_OD_STORAGE_DS) {
+        if ((k_od_table[i].storage & IOLINK_OD_STORAGE_DS) != 0U) {
             n++;
         }
     }
@@ -274,7 +277,7 @@ const iolink_od_entry_t* iolink_od_ds_at(size_t i)
     size_t seen = 0U;
 
     for (size_t j = 0U; j < OD_TABLE_COUNT; j++) {
-        if (k_od_table[j].storage != IOLINK_OD_STORAGE_DS) {
+        if ((k_od_table[j].storage & IOLINK_OD_STORAGE_DS) == 0U) {
             continue;
         }
         if (seen == i) {
@@ -293,7 +296,7 @@ size_t iolink_od_ds_count_app(const iolink_od_app_t* app)
     size_t n = 0U;
 
     for (size_t i = 0U; i < app->count; i++) {
-        if (app->entries[i].storage == IOLINK_OD_STORAGE_DS) {
+        if ((app->entries[i].storage & IOLINK_OD_STORAGE_DS) != 0U) {
             n++;
         }
     }
@@ -308,7 +311,7 @@ const iolink_od_entry_t* iolink_od_ds_at_app(const iolink_od_app_t* app, size_t 
         return NULL;
     }
     for (size_t j = 0U; j < app->count; j++) {
-        if (app->entries[j].storage != IOLINK_OD_STORAGE_DS) {
+        if ((app->entries[j].storage & IOLINK_OD_STORAGE_DS) == 0U) {
             continue;
         }
         if (seen == i) {
@@ -326,7 +329,7 @@ bool iolink_od_is_ds(const iolink_od_app_t* app, uint16_t index, uint8_t subinde
     if (entry == NULL) {
         entry = iolink_od_find_app(app, index, subindex);
     }
-    return (entry != NULL) && (entry->storage == IOLINK_OD_STORAGE_DS) &&
+    return (entry != NULL) && ((entry->storage & IOLINK_OD_STORAGE_DS) != 0U) &&
            (entry->subindex == subindex);
 }
 
@@ -489,15 +492,21 @@ static iolink_result_t od_storage_apply(const iolink_od_entry_t* entry, const ui
     return iolink_result_ok(0U);
 }
 
+/** @brief 该表项写入成功后是否需要保存参数镜像。 */
+static bool od_needs_flush(const iolink_od_ctx_t* ctx, const iolink_od_entry_t* entry)
+{
+    return (ctx->flush != NULL) && ((entry->storage & IOLINK_OD_STORAGE_PERSIST) != 0U) &&
+           (entry->write_semantics == (uint8_t) IOLINK_OD_WRITE_STORE);
+}
+
 /**
- * @brief 写入 STORAGE 表项，并在 on_change 拒绝时回滚标量。
+ * @brief 写入 STORAGE 表项，在 on_change 或持久化失败时回滚标量。
  *
- * 标量保存写前的原生字节（≤4 B），失败时恢复；OctetString 不做回滚
- * （避免在主泵栈上复制最多 255 字节），拒绝语义应由 `validate` 钩子
- * 在写入前完成。
+ * 标量保存写前的原生字节（≤4 B）；OctetString 不做回滚（避免在主泵
+ * 栈上复制最多 255 字节），拒绝语义应由 `validate` 钩子完成。
  */
-static iolink_result_t od_storage_write(const iolink_od_entry_t* entry, void* user,
-                                        const uint8_t* data, size_t len)
+static iolink_result_t od_storage_write(iolink_od_ctx_t* ctx, const iolink_od_entry_t* entry,
+                                        void* user, const uint8_t* data, size_t len)
 {
     const bool is_string = entry->datatype == (uint8_t) IOLINK_OD_DT_OCTET_STRING;
     const iolink_od_codec_t* codec = NULL;
@@ -525,8 +534,54 @@ static iolink_result_t od_storage_write(const iolink_od_entry_t* entry, void* us
     }
     if (entry->on_change != NULL) {
         result = entry->on_change(user, entry, data, len);
+        if (!iolink_result_succeeded(result)) {
+            if (!is_string) {
+                (void) memcpy((void*) entry->u.storage.value, old_bytes, codec->len);
+            }
+            return result;
+        }
+    }
+    if (od_needs_flush(ctx, entry)) {
+        result = ctx->flush(ctx->flush_user);
         if (!iolink_result_succeeded(result) && !is_string) {
             (void) memcpy((void*) entry->u.storage.value, old_bytes, codec->len);
+        }
+    }
+    return result;
+}
+
+/** @brief 标签写路径：快照 → 写 RAM → on_change → 持久化（失败回滚）。 */
+static iolink_result_t od_tag_write(iolink_od_ctx_t* ctx, const iolink_od_entry_t* entry,
+                                    uint8_t subindex, const uint8_t* data, size_t len, void* user)
+{
+    uint8_t old[33] = {0U};
+    size_t old_len = 0U;
+    const bool flush = od_needs_flush(ctx, entry);
+
+    if (flush) {
+        const iolink_result_t saved =
+            iolink_params_ctx_read(ctx->params, entry->index, subindex, old, sizeof(old));
+        if (!iolink_result_succeeded(saved)) {
+            return saved;
+        }
+        old_len = (size_t) saved.len;
+    }
+
+    iolink_result_t result =
+        iolink_params_ctx_write(ctx->params, entry->index, subindex, data, len);
+    if (!iolink_result_succeeded(result)) {
+        return result;
+    }
+    if (entry->on_change != NULL) {
+        result = entry->on_change(user, entry, data, len);
+        if (!iolink_result_succeeded(result)) {
+            return result;
+        }
+    }
+    if (flush) {
+        result = ctx->flush(ctx->flush_user);
+        if (!iolink_result_succeeded(result)) {
+            (void) iolink_params_ctx_write(ctx->params, entry->index, subindex, old, old_len);
         }
     }
     return result;
@@ -611,15 +666,11 @@ iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entr
         if (ctx->params == NULL) {
             return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
         }
-        const iolink_persist_t persist = (entry->write_semantics == (uint8_t) IOLINK_OD_WRITE_STORE)
-                                             ? IOLINK_PERSIST_SYNC
-                                             : IOLINK_PERSIST_NONE;
-        result = iolink_params_ctx_write(ctx->params, entry->index, subindex, data, len, persist);
+        return od_tag_write(ctx, entry, subindex, data, len, user);
     }
-    else if (entry->handler == (uint8_t) IOLINK_OD_HANDLER_NONE) {
+    if (entry->handler == (uint8_t) IOLINK_OD_HANDLER_NONE) {
         if (entry->backend == (uint8_t) IOLINK_OD_BACKEND_STORAGE) {
-            /* STORAGE 自己处理 on_change 与回滚。 */
-            return od_storage_write(entry, user, data, len);
+            return od_storage_write(ctx, entry, user, data, len);
         }
         if ((entry->backend != (uint8_t) IOLINK_OD_BACKEND_HANDLER) || (ctx->app == NULL) ||
             (entry->u.handler.write == NULL)) {
@@ -635,7 +686,42 @@ iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entr
         return result;
     }
     if (entry->on_change != NULL) {
-        return entry->on_change(user, entry, data, len);
+        result = entry->on_change(user, entry, data, len);
+        if (!iolink_result_succeeded(result)) {
+            return result;
+        }
+    }
+    if (od_needs_flush(ctx, entry)) {
+        /* HANDLER 无法回滚（后端语义由应用掌握）；错误仍上送。 */
+        return ctx->flush(ctx->flush_user);
     }
     return iolink_result_ok(0U);
+}
+
+iolink_result_t iolink_od_restore_value(iolink_od_ctx_t* ctx, const iolink_od_entry_t* entry,
+                                        uint8_t subindex, const uint8_t* data, size_t len)
+{
+    if ((ctx == NULL) || (entry == NULL)) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
+    }
+    if (subindex > entry->max_subindex) {
+        return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
+    }
+    if (entry->handler == (uint8_t) IOLINK_OD_HANDLER_TAG) {
+        if (ctx->params == NULL) {
+            return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
+        }
+        return iolink_params_ctx_write(ctx->params, entry->index, subindex, data, len);
+    }
+    if (entry->handler != (uint8_t) IOLINK_OD_HANDLER_NONE) {
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
+    }
+    if (entry->backend == (uint8_t) IOLINK_OD_BACKEND_STORAGE) {
+        return od_storage_apply(entry, data, len);
+    }
+    if ((entry->backend == (uint8_t) IOLINK_OD_BACKEND_HANDLER) && (ctx->app != NULL) &&
+        (entry->u.handler.write != NULL)) {
+        return entry->u.handler.write(ctx->app->user, entry, subindex, data, len);
+    }
+    return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
 }

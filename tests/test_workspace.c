@@ -31,9 +31,9 @@ static void fill_env(void)
     test_env_init(&g_env, NULL);
     test_env_reset_params(&g_env);
     (void) iolink_params_ctx_write(test_env_params(&g_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                   (const uint8_t*) "WS", 2U, true);
+                                   (const uint8_t*) "WS", 2U);
     (void) iolink_params_ctx_write(test_env_params(&g_env), IOLINK_IDX_FUNCTION_TAG, 0U,
-                                   (const uint8_t*) "FLOW", 4U, true);
+                                   (const uint8_t*) "FLOW", 4U);
 }
 
 static void device_config_defaults(iolink_test_device_t* dev)
@@ -123,7 +123,6 @@ static void test_ds_serialize_matches_stored_image(void** state)
 #if IOLINK_WORKSPACE_EMBEDDED
     assert_int_equal(iolink_ds_build_image(&ds), n);
     assert_memory_equal(ds.image, serialized, (size_t) n);
-    assert_true(iolink_ds_verify(&ds));
 #endif
 
     /* 容量不足必须被拒绝，而不是截断。 */
@@ -181,7 +180,6 @@ static void test_ds_null_api_contracts(void** state)
     assert_int_equal(iolink_ds_serialize(NULL, NULL, 0U), -1);
     assert_int_equal(iolink_ds_build_image(NULL), -1);
     iolink_ds_refresh(NULL);
-    assert_false(iolink_ds_verify(NULL));
     assert_null(iolink_ds_get_image(NULL, NULL));
     assert_int_equal(iolink_ds_param_count(NULL), 0U);
     iolink_ds_bind_sources(NULL, NULL, NULL);

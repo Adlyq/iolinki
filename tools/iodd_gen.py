@@ -156,7 +156,7 @@ OD_ACCESS = {
 
 OD_ENTRY_RE = re.compile(
     r'IOLINK_OD_(SCALAR_STORAGE_EX|SCALAR_STORAGE|SCALAR_HANDLER_EX|SCALAR_HANDLER|'
-    r'STRING_STORAGE_EX|STRING_STORAGE|STRING_HANDLER_EX|STRING_HANDLER)\s*\(',
+    r'BYTES_STORAGE_EX|BYTES_STORAGE|BYTES_HANDLER_EX|BYTES_HANDLER)\s*\(',
     re.S,
 )
 
@@ -250,7 +250,7 @@ def parse_od_source(path):
     for match in OD_ENTRY_RE.finditer(text):
         kind = match.group(1)
         args, _ = _split_macro_args(text, match.end())
-        if kind.startswith('STRING'):
+        if kind.startswith('BYTES'):
             expected = 10 if kind.endswith('_EX') else 8
             if len(args) != expected:
                 raise ValueError(f'{path}: IOLINK_OD_{kind} expects {expected} arguments')

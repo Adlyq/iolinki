@@ -288,12 +288,37 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
 const uint8_t* iolink_ds_get_image(iolink_ds_ctx_t* ctx, size_t* out_len);
 
 /**
- * @brief 校验已存储的映像与其记录的校验和是否一致。
+ * @brief 把带 `IOLINK_OD_STORAGE_PERSIST` 位的表项写成参数镜像。
+ *
+ * 这是库内唯一的持久化写入口：ISDU 写成功后由 OD flush 钩子调用，
+ * DS 下载完成后由 @ref iolink_ds_apply_image 调用一次。序列化使用
+ * 绑定的暂存缓冲，因此与上传/校验和计算互斥（都在主泵上下文）。
  *
  * @param ctx DS 上下文
- * @return checksum(image) == current_checksum 时返回 true，否则返回 false。
+ * @return int 0 成功；-1 表示无后端、缓冲不足或 NVM 写入失败。
  */
-bool iolink_ds_verify(const iolink_ds_ctx_t* ctx);
+int iolink_ds_save_persistent(iolink_ds_ctx_t* ctx);
+
+/**
+ * @brief 从参数镜像恢复值（不执行钩子、不回写 NVM）。
+ *
+ * 在 `iolink_ds_bind_sources()` 之后、计算 DS 校验和之前调用。
+ * 未初始化、版本不符或校验和错误时返回 -1，所有参数保持默认值。
+ *
+ * @param ctx DS 上下文
+ * @return int 0 成功；-1 无后端或镜像损坏。
+ */
+int iolink_ds_load_persistent(iolink_ds_ctx_t* ctx);
+
+/**
+ * @brief 把 PERSIST 表项恢复为表项默认值并重写参数镜像。
+ *
+ * 标签（0x0018-0x001A）由参数上下文复位，本函数跳过它们。
+ *
+ * @param ctx DS 上下文
+ * @return int 0 成功；-1 无后端或 NVM 写入失败。
+ */
+int iolink_ds_factory_reset(iolink_ds_ctx_t* ctx);
 
 /**
  * @brief 读取 State_Property 八位组（Table B.10 subindex 02）。

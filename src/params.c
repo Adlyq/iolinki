@@ -8,18 +8,15 @@
 
 /**
  * @file params.c
- * @brief 参数管理器：支持 NVM 持久化的可写设备标签。
+ * @brief 标签值存储：应用/功能/位置标签的 RAM 读写与出厂复位。
  * @ingroup iolinki_params
  *
- * 管理应用/功能/位置标签参数，通过平台 NVM 接口加载并
- * 持久化这些参数，并将应用标签同步到设备信息
- * 上下文。同时为无上下文的调用方提供
- * 旧的单例封装。
+ * 持久化不属于本模块：标签表项带 `IOLINK_OD_STORAGE_PERSIST`，
+ * 写成功后由 ISDU/DS 层保存统一的参数镜像。
  */
 
 #include "iolinki/config.h"
 #include "iolinki/params.h"
-#include "iolinki/port.h"
 #include "iolinki/protocol.h"
 #include "iolinki/utils.h"
 #include <string.h>
@@ -59,32 +56,6 @@ static int read_tag(const char* tag, uint8_t* buffer, size_t max_len)
     return (int) len;
 }
 
-/** @brief 将有效标签序列化到 NVM 记录并写入存储。 */
-static int params_ctx_write_nvm(const iolink_params_ctx_t* ctx)
-{
-    iolink_params_nvm_t nvm;
-
-    if ((ctx == NULL) || (ctx->storage == NULL) || (ctx->storage->write == NULL)) {
-        return 0; /* 无后端：纯 RAM 设备，接受该写入。 */
-    }
-    (void) memset(&nvm, 0, sizeof(nvm));
-    nvm.magic = IOLINK_STORAGE_MAGIC;
-    nvm.version = IOLINK_STORAGE_VERSION;
-    if (ctx->application_tag_valid) {
-        (void) memcpy(nvm.application_tag, ctx->application_tag, sizeof(nvm.application_tag));
-    }
-    if (ctx->function_tag_valid) {
-        (void) memcpy(nvm.function_tag, ctx->function_tag, sizeof(nvm.function_tag));
-    }
-    if (ctx->location_tag_valid) {
-        (void) memcpy(nvm.location_tag, ctx->location_tag, sizeof(nvm.location_tag));
-    }
-    nvm.checksum =
-        iolink_storage_checksum((const uint8_t*) &nvm, offsetof(iolink_params_nvm_t, checksum));
-    return ctx->storage->write(ctx->storage->user, IOLINK_STORAGE_PARAMS_BASE,
-                               (const uint8_t*) &nvm, sizeof(nvm));
-}
-
 static void params_ctx_apply_defaults(iolink_params_ctx_t* ctx)
 {
     if ((ctx != NULL) && (ctx->device_info != NULL)) {
@@ -97,32 +68,6 @@ static void params_ctx_apply_defaults(iolink_params_ctx_t* ctx)
     }
 }
 
-static void params_ctx_load(iolink_params_ctx_t* ctx)
-{
-    iolink_params_nvm_t nvm;
-
-    if ((ctx == NULL) || (ctx->storage == NULL) || (ctx->storage->read == NULL)) {
-        return;
-    }
-    if ((ctx->storage->read(ctx->storage->user, IOLINK_STORAGE_PARAMS_BASE, (uint8_t*) &nvm,
-                            sizeof(nvm)) != 0) ||
-        (nvm.magic != IOLINK_STORAGE_MAGIC) || (nvm.version != IOLINK_STORAGE_VERSION) ||
-        (nvm.checksum !=
-         iolink_storage_checksum((const uint8_t*) &nvm, offsetof(iolink_params_nvm_t, checksum)))) {
-        return; /* 未初始化、布局不同或已损坏。 */
-    }
-    copy_tag(ctx->application_tag, &ctx->application_tag_valid,
-             (const uint8_t*) nvm.application_tag, bounded_tag_len(nvm.application_tag));
-    copy_tag(ctx->function_tag, &ctx->function_tag_valid, (const uint8_t*) nvm.function_tag,
-             bounded_tag_len(nvm.function_tag));
-    copy_tag(ctx->location_tag, &ctx->location_tag_valid, (const uint8_t*) nvm.location_tag,
-             bounded_tag_len(nvm.location_tag));
-    if (ctx->device_info != NULL) {
-        (void) iolink_device_info_ctx_set_application_tag(ctx->device_info, ctx->application_tag,
-                                                          (uint8_t) strlen(ctx->application_tag));
-    }
-}
-
 void iolink_params_ctx_init(iolink_params_ctx_t* ctx, iolink_device_info_ctx_t* device_info)
 {
     if (ctx == NULL) {
@@ -131,15 +76,6 @@ void iolink_params_ctx_init(iolink_params_ctx_t* ctx, iolink_device_info_ctx_t* 
     (void) memset(ctx, 0, sizeof(*ctx));
     ctx->device_info = device_info;
     params_ctx_apply_defaults(ctx);
-}
-
-void iolink_params_bind_storage(iolink_params_ctx_t* ctx, const iolink_storage_api_t* storage)
-{
-    if (ctx == NULL) {
-        return;
-    }
-    ctx->storage = storage;
-    params_ctx_load(ctx);
 }
 
 iolink_result_t iolink_params_ctx_read(const iolink_params_ctx_t* ctx, uint16_t index,
@@ -171,7 +107,7 @@ iolink_result_t iolink_params_ctx_read(const iolink_params_ctx_t* ctx, uint16_t 
 }
 
 iolink_result_t iolink_params_ctx_write(iolink_params_ctx_t* ctx, uint16_t index, uint8_t subindex,
-                                        const uint8_t* data, size_t len, iolink_persist_t persist)
+                                        const uint8_t* data, size_t len)
 {
     if ((ctx == NULL) || !iolink_buf_is_valid(data, len)) {
         return iolink_result_error(IOLINK_RESULT_INVALID);
@@ -191,10 +127,6 @@ iolink_result_t iolink_params_ctx_write(iolink_params_ctx_t* ctx, uint16_t index
     }
     else {
         return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
-    }
-    /* 被拒绝的持久化写入不得在 RAM/回读中表现为已接受。 */
-    if ((persist != IOLINK_PERSIST_NONE) && (params_ctx_write_nvm(&candidate) != 0)) {
-        return iolink_result_error(IOLINK_RESULT_IO);
     }
     if ((index == IOLINK_IDX_APPLICATION_TAG) && candidate.device_info != NULL) {
         if (iolink_device_info_ctx_set_application_tag(
@@ -223,7 +155,4 @@ void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx)
     if (ctx->device_info != NULL) {
         (void) iolink_device_info_ctx_set_application_tag(ctx->device_info, "", 0U);
     }
-    /* 旧的 void API：即使存储不支持或失败而无法
-     * 保留复位结果，也要复位 RAM。集成方不能从该调用推断持久化。 */
-    (void) params_ctx_write_nvm(ctx);
 }

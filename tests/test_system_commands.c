@@ -76,15 +76,15 @@ static void ds_block_set_tags(ds_block_fixture_t* f, const char* app, const char
                               const char* loc)
 {
     assert_int_equal(iolink_params_ctx_write(&f->params, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                             (const uint8_t*) app, strlen(app), true)
+                                             (const uint8_t*) app, strlen(app))
                          .code,
                      0);
     assert_int_equal(iolink_params_ctx_write(&f->params, IOLINK_IDX_FUNCTION_TAG, 0U,
-                                             (const uint8_t*) fun, strlen(fun), true)
+                                             (const uint8_t*) fun, strlen(fun))
                          .code,
                      0);
     assert_int_equal(iolink_params_ctx_write(&f->params, IOLINK_IDX_LOCATION_TAG, 0U,
-                                             (const uint8_t*) loc, strlen(loc), true)
+                                             (const uint8_t*) loc, strlen(loc))
                          .code,
                      0);
 }
@@ -171,11 +171,10 @@ static void test_back_to_box_restores_defaults(void** state)
     test_isdu_bind_params(&ctx, &g_test_env);
 
     const uint8_t tag[] = "BoxTag";
-    assert_int_equal(
-        iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, tag,
-                                sizeof(tag) - 1U, true)
-            .code,
-        0);
+    assert_int_equal(iolink_params_ctx_write(test_env_params(&g_test_env),
+                                             IOLINK_IDX_APPLICATION_TAG, 0U, tag, sizeof(tag) - 1U)
+                         .code,
+                     0);
 
     assert_int_equal(send_system_command(&ctx, IOLINK_CMD_BACK_TO_BOX), 1);
     iolink_isdu_process(&ctx);
@@ -420,7 +419,7 @@ static void test_block_param_download_buffered(void** state)
 
     assert_int_equal(
         iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                (const uint8_t*) "OLD", 3U, true)
+                                (const uint8_t*) "OLD", 3U)
             .code,
         0);
 
@@ -478,7 +477,7 @@ static void test_block_param_download_break(void** state)
 
     assert_int_equal(
         iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                (const uint8_t*) "OLD", 3U, true)
+                                (const uint8_t*) "OLD", 3U)
             .code,
         0);
 
@@ -543,7 +542,7 @@ static void test_param_download_store_raises_ds_upload_req(void** state)
 
     assert_int_equal(
         iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                (const uint8_t*) "OLD", 3U, true)
+                                (const uint8_t*) "OLD", 3U)
             .code,
         0);
 
@@ -611,7 +610,7 @@ static void test_ds_checksum_stable_across_store(void** state)
 
     assert_int_equal(
         iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                (const uint8_t*) "DS-SET2", 7U, false)
+                                (const uint8_t*) "DS-SET2", 7U)
             .code,
         0);
 
@@ -806,7 +805,7 @@ static void test_0147_double_download_start(void** state)
 
     assert_int_equal(
         iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                (const uint8_t*) "SET1", 4U, true)
+                                (const uint8_t*) "SET1", 4U)
             .code,
         0);
 
@@ -908,7 +907,7 @@ static void test_0330_upload_discards_download(void** state)
 
     assert_int_equal(
         iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                (const uint8_t*) "SET1", 4U, true)
+                                (const uint8_t*) "SET1", 4U)
             .code,
         0);
 
@@ -980,12 +979,12 @@ static void test_0082_download_after_modification(void** state)
 
     assert_int_equal(
         iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                (const uint8_t*) "SET1", 4U, true)
+                                (const uint8_t*) "SET1", 4U)
             .code,
         0);
     assert_int_equal(
         iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                (const uint8_t*) "MOD", 3U, true)
+                                (const uint8_t*) "MOD", 3U)
             .code,
         0);
 
@@ -1032,7 +1031,7 @@ static void test_0083_download_after_factory_reset(void** state)
 
     assert_int_equal(
         iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                (const uint8_t*) "SET1", 4U, true)
+                                (const uint8_t*) "SET1", 4U)
             .code,
         0);
 
@@ -1344,7 +1343,7 @@ static void test_0082_restore_after_direct_change(void** state)
 
     /* 块下载之外的直接修改。 */
     assert_int_equal(iolink_params_ctx_write(&f.params, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                             (const uint8_t*) "MOD", 3U, true)
+                                             (const uint8_t*) "MOD", 3U)
                          .code,
                      0);
     iolink_ds_process(&f.ds);

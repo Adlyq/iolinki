@@ -17,7 +17,7 @@ Measured on a 64-bit host with the default buffers in
 
 | Component | Size (bytes) | Description |
 | :--- | ---: | :--- |
-| **`iolink_device_ctx_t`** | **5016** | The object the application allocates (includes everything below) |
+| **`iolink_device_ctx_t`** | **5008** | The object the application allocates (includes everything below) |
 | `iolink_dll_ctx_t` | 4704 | DLL state, timers, reply-plan table (48×24 B, four state slices), frame mailbox; embeds ISDU, Events and DS |
 | `iolink_isdu_ctx_t` | 1344 | Transport state, buffer pointers, the DPP1 RAM image (16 B + seqlock) and the embedded ISDU scratch (1033 B) |
 | `iolink_events_ctx_t` | 504 | Event queue plus lifecycle records |
@@ -76,7 +76,7 @@ To move the scratch **out of the context entirely**, build with
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 5016 | **3720** |
+| `iolink_device_ctx_t` | 5008 | **3712** |
 | `iolink_isdu_ctx_t` | 1344 | **304** |
 | `iolink_ds_ctx_t` | 360 | **104** |
 | `iolink_workspace_t` (separate allocation) | — | 1289 |
@@ -87,7 +87,7 @@ instead of carrying it inside the main context. One measured example (`IOLINK_IS
 
 | Component | Embedded | External workspace |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 4056 | **3720** |
+| `iolink_device_ctx_t` | 4048 | **3712** |
 | `iolink_workspace_t` | — | 329 |
 
 > **Lease rule (ISDU response).** There is exactly one framed-response buffer.
@@ -125,7 +125,7 @@ You can tune these values to fit your MCU.
 
 ### Total RAM
 
-The default `iolink_device_ctx_t` is **5016 bytes** (64-bit host, default
+The default `iolink_device_ctx_t` is **5008 bytes** (64-bit host, default
 buffers); buffer arrays dominate it. On a 32-bit target the same layout is
 smaller. To measure your own build instead of relying on the table:
 

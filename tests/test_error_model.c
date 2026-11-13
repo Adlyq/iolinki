@@ -52,8 +52,8 @@ static int test_teardown(void** state)
 /* DS 下载期间写入的 DS 参数：表项声明 storage=DS 后由 ISDU 层暂存，
    长度上限来自表项的 block_len。这里没有值后端（只测暂存与镜像）。 */
 static const iolink_od_entry_t k_ds_param_entry[] = {
-    IOLINK_OD_STRING_HANDLER(0x0100U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
-                             IOLINK_OD_STORAGE_DS, 2U, "DsParameter", NULL, NULL),
+    IOLINK_OD_BYTES_HANDLER(0x0100U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                            IOLINK_OD_STORAGE_DS, 2U, "DsParameter", NULL, NULL),
 };
 
 static const iolink_od_app_t k_ds_app = {
@@ -64,8 +64,8 @@ static const iolink_od_app_t k_ds_app = {
 
 /* 无长度上限的 DS 参数（block_len 0）：只用于镜像容量边界。 */
 static const iolink_od_entry_t k_ds_param_unbounded[] = {
-    IOLINK_OD_STRING_HANDLER(0x0101U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
-                             IOLINK_OD_STORAGE_DS, 0U, "DsUnbounded", NULL, NULL),
+    IOLINK_OD_BYTES_HANDLER(0x0101U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                            IOLINK_OD_STORAGE_DS, 0U, "DsUnbounded", NULL, NULL),
 };
 
 static const iolink_od_app_t k_ds_app_unbounded = {
@@ -87,7 +87,7 @@ static void test_unknown_index_is_not_handled(void** state)
     assert_int_equal(read_result.len, 0U);
 
     const iolink_result_t write_result =
-        iolink_params_ctx_write(&g_env.params, 0x0100U, 0U, buffer, 1U, IOLINK_PERSIST_NONE);
+        iolink_params_ctx_write(&g_env.params, 0x0100U, 0U, buffer, 1U);
     assert_int_equal(write_result.code, IOLINK_RESULT_NOT_HANDLED);
     assert_int_equal(write_result.len, 0U);
 }
@@ -101,12 +101,12 @@ static void test_invalid_arguments_are_invalid(void** state)
         iolink_params_ctx_read(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, NULL, 0U);
     assert_int_equal(read_result.code, IOLINK_RESULT_INVALID);
 
-    const iolink_result_t write_result = iolink_params_ctx_write(
-        &g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, NULL, 1U, IOLINK_PERSIST_NONE);
+    const iolink_result_t write_result =
+        iolink_params_ctx_write(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, NULL, 1U);
     assert_int_equal(write_result.code, IOLINK_RESULT_INVALID);
 
-    const iolink_result_t null_ctx_result = iolink_params_ctx_write(
-        NULL, IOLINK_IDX_APPLICATION_TAG, 0U, data, 1U, IOLINK_PERSIST_NONE);
+    const iolink_result_t null_ctx_result =
+        iolink_params_ctx_write(NULL, IOLINK_IDX_APPLICATION_TAG, 0U, data, 1U);
     assert_int_equal(null_ctx_result.code, IOLINK_RESULT_INVALID);
 }
 
@@ -118,8 +118,8 @@ static void test_tag_length_boundary(void** state)
     uint8_t readback[33];
     (void) memset(data, 'B', sizeof(data));
 
-    const iolink_result_t write_ok = iolink_params_ctx_write(
-        &g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, data, 32U, IOLINK_PERSIST_NONE);
+    const iolink_result_t write_ok =
+        iolink_params_ctx_write(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, data, 32U);
     assert_int_equal(write_ok.code, 0);
     assert_int_equal(write_ok.len, 0U);
 
@@ -129,8 +129,8 @@ static void test_tag_length_boundary(void** state)
     assert_int_equal(read_ok.len, 32U);
     assert_memory_equal(readback, data, 32U);
 
-    const iolink_result_t write_overrun = iolink_params_ctx_write(
-        &g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, data, 33U, IOLINK_PERSIST_NONE);
+    const iolink_result_t write_overrun =
+        iolink_params_ctx_write(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, data, 33U);
     assert_int_equal(write_overrun.code, IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
     assert_int_equal(write_overrun.len, 0U);
 }
@@ -142,8 +142,8 @@ static void test_round_trip_reports_length(void** state)
     static const uint8_t tag[] = {'O', 'K'};
     uint8_t readback[8];
 
-    const iolink_result_t write_result = iolink_params_ctx_write(
-        &g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, tag, sizeof(tag), IOLINK_PERSIST_NONE);
+    const iolink_result_t write_result =
+        iolink_params_ctx_write(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, tag, sizeof(tag));
     assert_int_equal(write_result.code, 0);
     assert_int_equal(write_result.len, 0U);
 

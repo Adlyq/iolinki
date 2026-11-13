@@ -663,8 +663,8 @@ static void test_od_storage_string_round_trip(void** state)
     static uint8_t buffer[8];
     static uint8_t length;
     static const iolink_od_entry_t entries[] = {
-        IOLINK_OD_STRING_STORAGE(0x0201U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
-                                 IOLINK_OD_STORAGE_VOLATILE, 8U, "StorageString", buffer, &length),
+        IOLINK_OD_BYTES_STORAGE(0x0201U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
+                                IOLINK_OD_STORAGE_VOLATILE, 8U, "StorageString", buffer, &length),
     };
     iolink_od_app_t app = {.entries = entries, .count = 1U, .user = NULL};
     iolink_od_ctx_t ctx = {.app = &app, .params = NULL};

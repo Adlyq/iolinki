@@ -81,11 +81,11 @@ static void test_parameter_contexts_keep_writable_tags_isolated(void** state)
     iolink_params_ctx_init(&params_b, &info_b);
 
     assert_int_equal(iolink_params_ctx_write(&params_a, IOLINK_IDX_APPLICATION_TAG, 0U, tag_a,
-                                             sizeof(tag_a) - 1U, true)
+                                             sizeof(tag_a) - 1U)
                          .code,
                      0);
     assert_int_equal(iolink_params_ctx_write(&params_b, IOLINK_IDX_APPLICATION_TAG, 0U, tag_b,
-                                             sizeof(tag_b) - 1U, true)
+                                             sizeof(tag_b) - 1U)
                          .code,
                      0);
     const iolink_result_t read_a =

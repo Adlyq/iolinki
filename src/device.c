@@ -345,25 +345,21 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     ctx->dll.main.shared.isdu.od = config->od;
     ctx->dll.main.state_cb = device_state_cb;
     ctx->dll.main.state_cb_user = ctx;
-    /* 一个后端同时服务标准参数与数据存储镜像。 */
+    /* 一个 NVM 后端服务参数镜像与 DS_UPLOAD_FLAG。 */
 #if IOLINK_FEATURE_DATA_STORAGE
-    iolink_params_bind_storage(&ctx->params, config->storage);
     if (config->storage != NULL) {
         iolink_ds_init(&ctx->dll.main.ds, config->storage);
         iolink_ds_bind_workspace(&ctx->dll.main.ds, workspace);
         ctx->dll.main.shared.isdu.ds_ctx = &ctx->dll.main.ds;
     }
-    /* DS 参数访问统一走 OD 表：标准标签经参数管理器，应用参数经应用
-       后端。DS 成员由表项 storage 标志决定（标准表 + config->od）。 */
+    /* DS 参数访问统一走 OD 表：标准标签经参数上下文，应用参数经表项
+       后端。DS 成员由表项 storage 位掩码决定（标准表 + config->od）。 */
     iolink_ds_bind_sources(&ctx->dll.main.ds, config->od, &ctx->params);
-    /* 启动时若不存在持久化镜像，则建立 DS 镜像/校验和，
-       使 Data_Storage_Size 与 Parameter_Checksum 在首次
-       上传之前就已有效。 */
-    if (ctx->dll.main.ds.image_len == 0U) {
-        (void) iolink_ds_build_image(&ctx->dll.main.ds);
-    }
+    /* 恢复 PERSIST 参数值；然后按当前参数集刷新 Size/Checksum，
+       使 0x0003 在首次上传之前就已有效。 */
+    (void) iolink_ds_load_persistent(&ctx->dll.main.ds);
+    iolink_ds_refresh(&ctx->dll.main.ds);
 #else
-    iolink_params_bind_storage(&ctx->params, NULL);
     ctx->dll.main.shared.isdu.ds_ctx = NULL;
 #endif
     /* 运行时日志 sink：一个配置被复制到所有会打印的子系统。

@@ -68,8 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   12 bytes per entry on a 32-bit target (80 vs 56 bytes on a 64-bit host).
   Built-in entries keep the `handler` selector; the two are mutually exclusive.
 - New table macros: `IOLINK_OD_SCALAR_STORAGE[_EX]`,
-  `IOLINK_OD_STRING_STORAGE[_EX]`, `IOLINK_OD_SCALAR_HANDLER[_EX]`,
-  `IOLINK_OD_STRING_HANDLER[_EX]`. The `_STORAGE` variants bind an application
+  `IOLINK_OD_BYTES_STORAGE[_EX]`, `IOLINK_OD_SCALAR_HANDLER[_EX]`,
+  `IOLINK_OD_BYTES_HANDLER[_EX]`. The `_STORAGE` variants bind an application
   variable and check its width (or `sizeof(buf) >= block_len`) at compile time;
   the `_EX` suffix adds `validate`/`on_change` hooks.
 - Completed writes: `validate` may reject before the value changes; a failing
@@ -80,6 +80,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   HANDLER callbacks. The built-in standard table uses internal
   `IOLINK_OD_BUILTIN_*` macros, and "not a built-in" is
   `IOLINK_OD_HANDLER_NONE`.
+
+### Changed (single parameter image)
+- Persistence now has one answer: every entry whose `storage` has
+  `IOLINK_OD_STORAGE_PERSIST` is serialized into the PARAMS region, and the
+  whole set is rewritten once per `WRITE_STORE` write (via
+  `iolink_od_ctx_t::flush`). A failed image write answers with
+  `IOLINK_RESULT_IO` and rolls a STORAGE scalar back.
+- `IOLINK_OD_STORAGE_NVM` becomes the bitmask
+  `IOLINK_OD_STORAGE_DS | IOLINK_OD_STORAGE_PERSIST` (independent bits:
+  DS-only parameters are restored by the master, PERSIST-only ones are local).
+- The separately stored Data Storage image is gone: `Data_Storage_Size`,
+  `Parameter_Checksum`, uploads and the backup are regenerated from the current
+  values. NVM holds only the parameter image and `DS_UPLOAD_FLAG`;
+  `iolink_ds_verify()` and the `IOLINK_STORAGE_DS_*` macros are removed.
+- `iolink_ds_save_persistent()` / `iolink_ds_load_persistent()` /
+  `iolink_ds_factory_reset()` are the persistence entry points. Boot restores
+  values through `iolink_od_restore_value()` (no hooks, no write-back); factory
+  reset clears the tags and restores every PERSIST entry from its table default.
+- Startup no longer builds a DS image; it loads the parameter image and calls
+  `iolink_ds_refresh()`. A RAM-only context (`storage == NULL`) still serves DS
+  but never persists.
+- `iolink_params_ctx_t` loses its storage binding and the `persist` argument:
+  the tag context is a RAM value store, not a second persistence path.
+- Storage layout is now `PARAMS | DS_UPLOAD_FLAG`, with a new magic
+  (`IOL3`). Existing NVM contents are discarded and parameters fall back to
+  defaults (no migration by policy).
 
 ### Changed (ISDU write ingestion)
 - ISDU write requests are now accumulated in the data ISR with positional
@@ -139,6 +165,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `IOLINK_OD_SCALAR[_EX]`/`IOLINK_OD_STRING[_EX]` are no longer application
   macros: every application entry uses one of the `_STORAGE`/`_HANDLER`
   variants, and the standard table uses the internal `IOLINK_OD_BUILTIN_*`.
+- `iolink_persist_t`, `IOLINK_PERSIST_*`, `iolink_params_bind_storage()` and
+  the `persist` argument of `iolink_params_ctx_write()`. Persistence is decided
+  by the table entry's `PERSIST` bit and triggered by the write path, so a
+  second "should I persist?" argument is gone.
+- `iolink_params_nvm_t`, the stored Data Storage image and the
+  `IOLINK_STORAGE_DS_BASE`/`IOLINK_STORAGE_DS_SIZE` macros; the NVM layout is
+  `PARAMS | DS_UPLOAD_FLAG`. `iolink_ds_verify()` is removed with the image it
+  verified.
 - The Data Storage descriptor/accessor override: `iolink_ds_param_desc_t`,
   `iolink_ds_param_read_fn`/`write_fn`/`check_fn`, `iolink_ds_bind_params()`,
   `iolink_ds_bind_od()`, `iolink_ds_bind_param_access()`,

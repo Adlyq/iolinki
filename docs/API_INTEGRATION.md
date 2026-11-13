@@ -402,8 +402,8 @@ storage 标志、默认值与可选钩子），ISDU 分发、Data Storage 成员
 这张表派生。标准对象（`0x0000-0x003F` 与厂商错误统计 `0x0040`）由内建 const 表提供；
 应用通过 `config.od` 绑定自己的 const 表。
 
-应用需要做的是：用 `IOLINK_OD_SCALAR_STORAGE[_EX]` / `IOLINK_OD_STRING_STORAGE[_EX]`
-绑定应用变量，或用 `IOLINK_OD_SCALAR_HANDLER[_EX]` / `IOLINK_OD_STRING_HANDLER[_EX]`
+应用需要做的是：用 `IOLINK_OD_SCALAR_STORAGE[_EX]` / `IOLINK_OD_BYTES_STORAGE[_EX]`
+绑定应用变量，或用 `IOLINK_OD_SCALAR_HANDLER[_EX]` / `IOLINK_OD_BYTES_HANDLER[_EX]`
 提供逐表项 `read`/`write` 函数（计算型对象）。表项只保存静态知识，运行期取值由
 表项自己的后端完成，`iolink_od_app_t::user` 只传给钩子与 HANDLER 函数。索引归属按域决定：规范索引（`< 0x0040`）由标准表提供、不可被应用表覆盖；设备专用索引
 （`0x0040-0x00FE`、`0x0100+`）应用表优先，未声明时回落到内建标准表项（`0x0040` 错误统计），
@@ -557,13 +557,11 @@ void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd);
 ```c
 void iolink_params_ctx_init(iolink_params_ctx_t* ctx,
                             iolink_device_info_ctx_t* device_info);
-void iolink_params_bind_storage(iolink_params_ctx_t* ctx,
-                                const iolink_storage_api_t* storage);
 iolink_result_t iolink_params_ctx_read(const iolink_params_ctx_t* ctx, uint16_t index,
                                        uint8_t subindex, uint8_t* buffer, size_t max_len);
 iolink_result_t iolink_params_ctx_write(iolink_params_ctx_t* ctx, uint16_t index,
                                         uint8_t subindex, const uint8_t* data,
-                                        size_t len, iolink_persist_t persist);
+                                        size_t len);
 void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx);
 ```
 
@@ -575,8 +573,9 @@ void iolink_params_ctx_factory_reset(iolink_params_ctx_t* ctx);
   `INVALID` / `IO`）；
 - `code > 0`：ISDU ErrorCode（如 0x33 值长度超长），由 ISDU 应答边界原样上送。
 
-当 `persist != IOLINK_PERSIST_NONE` 时，写操作只有在存储写入成功后才应用修改。
-恢复出厂设置函数返回 void，无法报告存储失败。
+写操作只改 RAM；持久化由表项的 `IOLINK_OD_STORAGE_PERSIST` 位决定，统一在
+主泵写路径（ISDU 或 `iolink_ds_save_persistent()`）完成。恢复出厂设置函数
+返回 void，应用参数默认值由 `iolink_ds_factory_reset()` 一并写回。
 
 ### 7.2 存储后端
 
@@ -591,12 +590,12 @@ typedef struct {
 - 通过 `config.storage` 只提供一个后端。
 - offset 相对于应用拥有的存储区域；物理基址应在回调内部自行加上。
 - 成功返回 0，失败返回非零。持久化只使用 `read`/`write`。
-- `ASYNC` 表示回调自行负责必要的缓冲区复制；`SYNC` 必须在返回前完成提交。
+- `write` 必须在返回前完成提交（或自行复制缓冲）；需要异步/分块时由回调内部排队。
 
 区域布局（`include/iolinki/storage.h`）：
 
 ```
-PARAMS | DS image | DS upload flag
+PARAMS（PERSIST 参数镜像） | DS upload flag
 ```
 
 `IOLINK_STORAGE_TOTAL_SIZE` 是所需大小。用静态断言确定 NVM 大小：
@@ -606,8 +605,9 @@ static uint8_t g_nvm[IOLINK_STORAGE_TOTAL_SIZE];
 _Static_assert(sizeof(g_nvm) >= IOLINK_STORAGE_TOTAL_SIZE, "NVM too small");
 ```
 
-记录包含 `IOLINK_STORAGE_MAGIC`、`IOLINK_STORAGE_VERSION` 和 Fletcher-32 校验和。
+参数镜像包含 `IOLINK_STORAGE_MAGIC`、`IOLINK_STORAGE_VERSION` 和 Fletcher-32 校验和。
 magic/version/校验和不匹配会被视为未初始化并丢弃记录；目前没有迁移回调。
+Data Storage 映像与校验和按当前参数集实时生成，不单独占用 NVM 区域。
 布局变更必须提升 magic 或 version。
 
 ### 7.3 Data Storage
@@ -634,7 +634,9 @@ iolink_result_t iolink_ds_stage_param(iolink_ds_ctx_t* ctx, uint16_t index,
                                       uint8_t subindex, const uint8_t* data, size_t len);
 const uint8_t* iolink_ds_get_image(iolink_ds_ctx_t* ctx, size_t* out_len);
 uint32_t iolink_ds_calc_checksum(const uint8_t* data, size_t len);
-bool iolink_ds_verify(const iolink_ds_ctx_t* ctx);
+int  iolink_ds_save_persistent(iolink_ds_ctx_t* ctx);
+int  iolink_ds_load_persistent(iolink_ds_ctx_t* ctx);
+int  iolink_ds_factory_reset(iolink_ds_ctx_t* ctx);
 bool iolink_ds_downloading(const iolink_ds_ctx_t* ctx);
 uint8_t iolink_ds_state_property(const iolink_ds_ctx_t* ctx);
 uint32_t iolink_ds_size(const iolink_ds_ctx_t* ctx);
@@ -646,21 +648,22 @@ void iolink_ds_clear_upload(iolink_ds_ctx_t* ctx);
 ```
 
 当 `IOLINK_FEATURE_DATA_STORAGE=1` 时，`iolink_device_init()` 会用必需的
-`config.storage` 初始化 DS 上下文、加载已持久化的镜像/标志并重新绑定默认访问器。
-`storage` 缺失或 `read`/`write` 为空会在初始化阶段被拒绝。启动时若不存在已持久化
-的镜像，会重新构建镜像。直接使用 `iolink_dll_*` 时才允许 `iolink_ds_init(..., NULL)`
-的 RAM-only 用法。
+`config.storage` 初始化 DS 上下文、恢复 `PERSIST` 参数值/标志并绑定参数来源。
+`storage` 缺失或 `read`/`write` 为空会在初始化阶段被拒绝。启动时按当前参数集
+刷新 `Data_Storage_Size`/`Parameter_Checksum`，不读取独立的 DS 镜像。直接使用
+`iolink_dll_*` 时才允许 `iolink_ds_init(..., NULL)` 的 RAM-only 用法（写入不持久化）。
 
-DS 镜像不是上下文中的常驻数组：上下文只持有指向暂存缓冲的指针（
+DS 映像不是常驻状态：上下文只持有指向暂存缓冲的指针（
 `iolink_workspace_t::ds_stage`，或内嵌 fallback）。上传和 `Parameter_Checksum` 读取
 走流式路径 `iolink_ds_serialize()`（可直接写入 ISDU 应答缓冲，`out == NULL` 时只统计
 长度与校验和）；`iolink_ds_refresh()` 只刷新 `Data_Storage_Size`/`Parameter_Checksum`
-而不物化镜像。完整暂存缓冲只用于下载和 `iolink_ds_build_image()`。
+而不物化镜像。完整暂存缓冲只用于下载、`iolink_ds_build_image()` 与参数镜像序列化。
 
-默认 DS 参数集由 OD 表派生：标准表中 storage 为 `IOLINK_OD_STORAGE_DS` 的表项
+默认 DS 参数集由 OD 表派生：标准表中带 `IOLINK_OD_STORAGE_DS` 位的表项
 在前，设备 `config.od` 应用表中同类项按表序追加（设备层自动调用
 `iolink_ds_bind_sources()`）。因此应用参数只要声明 `IOLINK_OD_STORAGE_DS` 就进入
 Data Storage，无需再手工维护描述符；`IOLINK_OD_STORAGE_VOLATILE` 项不进入。
+`IOLINK_OD_STORAGE_PERSIST` 单独控制是否写进参数镜像；两个位可以按需组合。
 长度上限取表项的 `block_len`。
 
 序列化记录格式为：
@@ -669,13 +672,13 @@ Data Storage，无需再手工维护描述符；`IOLINK_OD_STORAGE_VOLATILE` 项
 [Index:2 大端][Subindex:1][Length:1][Data:Length]
 ```
 
-`IOLINK_DS_IMAGE_MAX`（默认 256）限制镜像和持久化 DS 区域的大小。设备专用参数只要在
+`IOLINK_DS_IMAGE_MAX`（默认 256）限制一次序列化（DS 映像或参数镜像）的大小。设备专用参数只要在
 `config.od` 中声明 `IOLINK_OD_STORAGE_DS` 就进入 DS 集合，值由表项后端提供；集合顺序
 固定为标准表在前、应用表按表序，不存在可替换的描述符列表或访问器对。
 
 `iolink_device_process()` 会在 ISDU 空闲时调用 `iolink_ds_process()`。块下载通过
 `iolink_ds_stage_param()` 暂存写操作，并在 `ParamDownloadEnd` 先对整份镜像做无副作用
-预校验（表项 `validate` 钩子），全部通过后再逐条写入并持久化；预校验失败时不会写入任何参数。
+预校验（表项 `validate` 钩子），全部通过后再逐条写入并保存一次参数镜像；预校验失败时不会写入任何参数。
 这不是跨参数事务，NVM 写入失败仍可能留下已生效的前缀记录。
 `iolink_ds_downloading()` 暴露该状态。`DS_UPLOAD_FLAG`/`State_Property` 以及
 `DS_UPLOAD_REQ` 通知用于告知主站：本地参数已变化，应进行备份。
