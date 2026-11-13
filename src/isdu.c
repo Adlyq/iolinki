@@ -1359,6 +1359,40 @@ uint8_t iolink_isdu_direct_param_page1_octet(iolink_isdu_ctx_t* ctx, uint8_t add
     return 0U;
 }
 
+bool iolink_isdu_dp_page1_read_range(iolink_isdu_ctx_t* ctx, uint8_t addr, uint8_t* out,
+                                     uint8_t len)
+{
+    if ((ctx == NULL) || (out == NULL)) {
+        return false;
+    }
+    if (len == 0U) {
+        return true;
+    }
+    /* 主泵侧按需刷新；ISR 侧绝不重建整页。 */
+    if (dp_page1_main_context(ctx)) {
+        dp_page1_ensure(ctx);
+    }
+
+    const volatile uint8_t* image = ctx->dp_page1;
+    for (uint8_t attempt = 0U; attempt < 3U; attempt++) {
+        const uint8_t seq = ctx->dp_page1_seq;
+        if ((seq & 1U) != 0U) {
+            continue; /* 主泵正在更新，或映像已失效 */
+        }
+        for (uint8_t i = 0U; i < len; i++) {
+            const uint16_t a = (uint16_t) addr + (uint16_t) i;
+            out[i] = (a < (uint16_t) sizeof(ctx->dp_page1)) ? image[a] : 0U;
+        }
+        if (ctx->dp_page1_seq == seq) {
+            return true; /* 整段来自同一代 */
+        }
+    }
+    for (uint8_t i = 0U; i < len; i++) {
+        out[i] = 0U;
+    }
+    return false;
+}
+
 /** @brief 读/写 Direct Parameter page 1（只读）与 page 2（设备专用）。 */
 static void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
 {

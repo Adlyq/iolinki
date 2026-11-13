@@ -107,7 +107,7 @@ cmake --build build_isr_latency --parallel
 
 | 场景 | ISR 路径 | 说明 |
 | :--- | :--- | :--- |
-| `type0_page_read` | `IOLINK_REPLY_SRC_PAGE` | DPP1 逐字节查找（RAM 映像索引 + seqlock 双读） |
+| `type0_page_read` | `IOLINK_REPLY_SRC_PAGE` | DPP1 整段复制（RAM 映像 + 单次 seqlock 窗口） |
 | `type0_page_write_cks` | `SRC_NONE` + 短应答 | CKS-only 页写确认 |
 | `type0_isdu_read_start` | `SRC_ISDU_SEG` | 读视图采纳 + 1 字节 OD |
 | `type12_pd_read_tail` | `SRC_TEMPLATE` + `PD_TAIL` | OD 头 + 32B PD-in 长应答 |

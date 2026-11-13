@@ -1043,6 +1043,64 @@ static void test_isdu_dp_page1_image_octets(void** state)
     assert_memory_equal(isdu_page, page, sizeof(page));
 }
 
+/* 整段读取：一次 seqlock 窗口；越界补 0；重建期间（ISR 视角）返回 false
+ * 且清零。期望值是 B.1 的独立字面量，不调用构建器生成。 */
+static void test_isdu_dp_page1_read_range(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_dll_ctx_t dll;
+    uint8_t range[20];
+
+    (void) memset(&dll, 0, sizeof(dll));
+    dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
+    dll.main.shared.od_width = 1U;
+    dll.main.baudrate = IOLINK_BAUDRATE_COM2;
+    dll.main.master_cycle_time = 0x1AU;
+    test_env_init(&g_test_env, NULL);
+    test_env_reset_params(&g_test_env);
+    assert_int_equal(iolink_dll_set_pd_length(&dll.main, 2, 1), 0);
+    iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
+    ctx.dll_ctx = &dll.main;
+
+    const iolink_device_info_t* info = iolink_device_info_ctx_get(test_env_info(&g_test_env));
+    (void) memset(range, 0xAA, sizeof(range));
+    assert_true(iolink_isdu_dp_page1_read_range(&ctx, 0U, range, 16U));
+    assert_int_equal(range[0x00], 0x00U);
+    assert_int_equal(range[0x01], 0x1AU);
+    assert_int_equal(range[0x02], 0x1AU);
+    assert_int_equal(range[0x03], 0x01U);
+    assert_int_equal(range[0x04], 0x11U);
+    assert_int_equal(range[0x05], 0x10U);
+    assert_int_equal(range[0x06], 0x08U);
+    assert_int_equal(range[0x07], (uint8_t) (info->vendor_id >> 8));
+    assert_int_equal(range[0x0A], (uint8_t) ((info->device_id >> 8) & 0xFFU));
+    assert_int_equal(range[0x0F], 0x00U);
+
+    /* 跨过 16 字节边界：14..15 有效，16..19 必须补 0。 */
+    (void) memset(range, 0xAA, sizeof(range));
+    assert_true(iolink_isdu_dp_page1_read_range(&ctx, 14U, range, 6U));
+    assert_int_equal(range[0], 0x00U);
+    assert_int_equal(range[1], 0x00U);
+    for (uint8_t i = 2U; i < 6U; i++) {
+        assert_int_equal(range[i], 0x00U);
+    }
+
+    /* 重建期间：ISR 视角不返回半更新/旧值。 */
+    ctx.dp_page1_seq = (uint8_t) (ctx.dp_page1_seq | 1U);
+    dll.main.shared.in_isr = 1U;
+    (void) memset(range, 0xAA, sizeof(range));
+    assert_false(iolink_isdu_dp_page1_read_range(&ctx, 0U, range, 4U));
+    assert_int_equal(range[0], 0x00U);
+    assert_int_equal(range[3], 0x00U);
+    dll.main.shared.in_isr = 0U;
+
+    /* 主泵侧读取先重建，恢复稳定的一代。 */
+    assert_true(iolink_isdu_dp_page1_read_range(&ctx, 0U, range, 2U));
+    assert_int_equal(range[0x01], 0x1AU);
+}
+
 /* 主泵输入变化后，下一次读取重建映像。 */
 static void test_isdu_dp_page1_refresh_tracks_inputs(void** state)
 {
@@ -1554,6 +1612,7 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_mseq_capability_codes, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_dp_page1_image_octets, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_dp_page1_read_range, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_dp_page1_refresh_tracks_inputs, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_dp_page1_invalidate, test_setup, test_teardown),

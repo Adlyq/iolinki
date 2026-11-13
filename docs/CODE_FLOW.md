@@ -347,7 +347,7 @@ flowchart TD
   - `IOLINK_REPLY_FLAG_DEFER`：计划命中但 ISR 故意不应答（例如启动期 MasterCommand 的接受/拒绝依赖命令字节与兼容模式），帧原样交主泵。
   - ESTAB_COM 的首帧即使计划带 `CONSUME` 也仍发布给主泵，由主泵完成到 OPERATE 的迁移。
   - 非法帧（校验/类型错误）始终发布给主泵做错误/状态处理，不计计划未命中。
-- `ctx->shared.isdu` 的**写入口**（`req_buf`/`req_idx`/`req_total`/FlowCTRL 水位/`stage_state`）归数据 ISR；主泵只在 `stage_state=COMPLETE` 时于临界区内读取 `req_buf` 做 CHKPDU 校验与解析，随后执行服务。已发布的成帧应答视图（`len | busy | sel | gen`）与读 FlowCTRL 段索引仍归主泵/ISR 读路径。DPP1 页读走主泵维护的 RAM 映像（`iolink_isdu_ctx_t::dp_page1`，seqlock 保护、`build_direct_param_page1()` 单一构建口径），ISR 只做索引，不再逐字节重建整页；主泵在配置/参数写入点调用 `iolink_isdu_dp_page1_invalidate()` 立即重建。
+- `ctx->shared.isdu` 的**写入口**（`req_buf`/`req_idx`/`req_total`/FlowCTRL 水位/`stage_state`）归数据 ISR；主泵只在 `stage_state=COMPLETE` 时于临界区内读取 `req_buf` 做 CHKPDU 校验与解析，随后执行服务。已发布的成帧应答视图（`len | busy | sel | gen`）与读 FlowCTRL 段索引仍归主泵/ISR 读路径。DPP1 页读走主泵维护的 RAM 映像（`iolink_isdu_ctx_t::dp_page1`，seqlock 保护、`build_direct_param_page1()` 单一构建口径）；ISR 用 `iolink_isdu_dp_page1_read_range()` 在**单个序号窗口**内复制整段载荷（整帧同代，不逐字节重建/双读），主泵在配置/参数写入点调用 `iolink_isdu_dp_page1_invalidate()` 立即重建。
 - ISDU 写由 ISR 直接调用 `iolink_isdu_od_write()` 累计（按 FlowCTRL 位置去重）：只有“下一个期望段”推进位置，重发与过早的乱序段照常 ACK 但不修改缓冲，因此重发风暴不会耗尽缓冲。START 置 `isr_isdu_invalidated`；在写被主泵接管并产出新应答前，发布 `len=0`（无服务），因此“写后立刻读”不会读到旧值。上一条已收齐（`COMPLETE`）但主泵尚未接管时又来 START，前一条被覆盖并计 `isr_od_overruns`。
 - **64 位截止时间只由主上下文写**。ISR 只置一次性标志：`isr_dsio_clear`、`isr_fallback_pending`、`isr_master_activity`、`isr_isdu_read_reset`；诊断侧只写 `iolink_conditions_t::isr_pulse[]` 单字节 one-shot。这类标志由任一方置 1、只由主泵清 0，重复置位幂等。
 - 顺序约束：即时应答在邮箱发布**之前**启动（t_A），记录随后连同 `eager` 标志一起入环；TX BYTE 下每个中断只喂一个八位组后让出，TX FRAME 由 PHY 拥有整帧传输；重入用 `in_isr` + `isr_reentry_pending` 延迟到外层调用，保证泵状态只有一个写入者。
@@ -482,7 +482,7 @@ flowchart LR
 | :--- | :--- | :--- |
 | Type-0 启动探测（STARTUP/AWAITING 的 Page READ） | 计划动作 `IOLINK_REPLY_ACT_ENTER_PREOPERATE` + `IOLINK_REPLY_SRC_PAGE`；回 DPP1 字节并置 `isr_dsio_clear` | `CONSUME` 帧不入邮箱；状态由下次 flush 以电平方式通知 |
 | Type-0 transition command（PREOPERATE） | 计划动作 `IOLINK_REPLY_ACT_ENTER_ESTAB_COM`，带 `CLOSE_WINDOW \| RESTART_TIMER_B \| CONSUME`：不应答 | 帧不入邮箱 |
-| Type-0 Page/Diag/Process READ | `IOLINK_REPLY_SRC_PAGE` / `EVENT_MEM` / `TEMPLATE`，`CONSUME` | 帧不入邮箱 |
+| Type-0 Page/Diag/Process READ | `IOLINK_REPLY_SRC_PAGE`（单窗口整段复制）/ `EVENT_MEM` / `TEMPLATE`，`CONSUME` | 帧不入邮箱 |
 | Type-0 ISDU READ（FlowCTRL 为 START/COUNT） | `IOLINK_REPLY_SRC_ISDU_SEG`，ISR 自己推进段索引；`CONSUME` | 帧不入邮箱 |
 | Type-0 ISDU READ（IDLE/IDLE2/ABORT） | 计划命中：ISR 回 `0x00` 并置 `isr_isdu_read_reset`；`CONSUME` | 主泵消费该一次性标志后 `iolink_isdu_od_read()` 复位读传输层并刷新快照 |
 | Type-0 Page WRITE addr 0 | 计划动作 `IOLINK_REPLY_ACT_MASTER_COMMAND`：ISR 应用命令并回 CKS | `CONSUME` 帧不入邮箱 |

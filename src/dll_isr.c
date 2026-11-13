@@ -627,10 +627,9 @@ static bool dll_isr_plan_source(iolink_dll_main_t* ctx, const iolink_reply_plan_
             }
             return true;
         case IOLINK_REPLY_SRC_PAGE:
-            for (uint8_t i = 0U; i < plan->len; i++) {
-                out[i] =
-                    iolink_isdu_direct_param_page1_octet(&ctx->shared.isdu, (uint8_t) (addr + i));
-            }
+            /* 单次 seqlock 窗口复制整段：页读载荷整帧同代，且避免逐字节
+             * 访问器的函数调用与序号双读（M0+ 上尤其明显）。 */
+            (void) iolink_isdu_dp_page1_read_range(&ctx->shared.isdu, addr, out, plan->len);
             return true;
         case IOLINK_REPLY_SRC_EVENT_MEM:
             for (uint8_t i = 0U; i < plan->len; i++) {

@@ -338,21 +338,37 @@ void iolink_isdu_dp_page1_invalidate(iolink_isdu_ctx_t* ctx);
  * 有限次重试读取序号，仍不一致则返回 0；ISR 侧不会重建整页。主泵侧
  * 在映像失效（或 MasterCycleTime 已变化）时先重建再读取。
  *
- * @note 一致性粒度是**单个八位组**。一次多字节页读（例如 od_width=32）
- * 会逐字节调用本函数；若主泵恰好在两次调用之间刷新映像，同一应答帧可能
- * 混入新旧两代字节。DPP1 输入只允许在**启动/重新参数化阶段**改变
- * （V1.1.5 §10.6.2：启动期 DeviceID 兼容切换可改通信参数；OPERATE 期间
- * 改变 PD 宽度不符合规范）。受影响的字节：0x01（MasterCycleTime，主站
- * 写入）、TYPE_2_V 的 0x05/0x06、以及 0x02（宽度或波特率变化时重建，
- * 适用于所有类型）；它们的变化频率远低于页读频率，因此该窗口在实践中
- * 可忽略。
- * 若将来需要整帧同代，应改为一次取序号后复制整段。
+ * @note 一致性粒度是**单个八位组**。多字节页读请使用
+ * @ref iolink_isdu_dp_page1_read_range （单次序号窗口内复制整段）。
+ * DPP1 输入只允许在**启动/重新参数化阶段**改变（V1.1.5 §10.6.2：启动期
+ * DeviceID 兼容切换可改通信参数；OPERATE 期间改变 PD 宽度不符合规范）。
+ * 受影响的字节：0x01（MasterCycleTime，主站写入）、TYPE_2_V 的
+ * 0x05/0x06、以及 0x02（宽度或波特率变化时重建，适用于所有类型）。
  *
  * @param ctx ISDU 上下文
  * @param addr Direct Parameter page 地址（0x00-0x0F）
  * @return uint8_t 八位组值；地址越界、上下文为 NULL 或映像不可用时返回 0
  */
 uint8_t iolink_isdu_direct_param_page1_octet(iolink_isdu_ctx_t* ctx, uint8_t addr);
+
+/**
+ * @brief 读取 Direct Parameter page 1 的一段字节（单次 seqlock 窗口）。
+ *
+ * 与逐字节访问器不同，整段在**同一个序号窗口**内复制；主泵在复制期间
+ * 刷新映像时重试，因此返回的字节来自同一代，不会混入新旧两代。数据 ISR
+ * 用它一次填充页读应答的全部载荷；主泵侧调用时同样先按需重建。
+ *
+ * 越界地址（addr + i >= 16）填 0。序号持续为奇数（主泵正在重建）或三次
+ * 重试都冲突时，@p out 被清零并返回 false。
+ *
+ * @param ctx ISDU 上下文
+ * @param addr 起始地址
+ * @param out  输出缓冲（至少 @p len 字节）
+ * @param len  字节数（0 时不做任何事）
+ * @return true = 读到稳定的一代；false = 映像不可用（@p out 已清零）
+ */
+bool iolink_isdu_dp_page1_read_range(iolink_isdu_ctx_t* ctx, uint8_t addr, uint8_t* out,
+                                     uint8_t len);
 
 /** @} */ /* end of iolinki_isdu */
 

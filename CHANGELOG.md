@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `isr_mailbox_drops`, `t_pd_discards` and `reply_plan_overflows`, so
   overwritten requests, dropped plan misses, deferred frames, plan entries and
   frames discarded inside the t_PD window are all observable.
+- `iolink_isdu_dp_page1_read_range()` reads a DPP1 range in one seqlock
+  window; the ISR page-read plan uses it, so a multi-byte page reply is a
+  single generation and needs one loop instead of per-byte accessor calls
+  (the 32-byte path drops from about 2500 to about 450 Thumb instructions on
+  Cortex-M0+).
 
 ### Fixed (reply ownership and drop counters)
 - Frames discarded inside the t_PD protection window are counted in
