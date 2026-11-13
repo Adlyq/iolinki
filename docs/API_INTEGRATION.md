@@ -627,11 +627,13 @@ iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx);
 void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage);
 void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws);
 void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx);
+void iolink_ds_bind_od(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app);
 void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx,
                                  iolink_ds_param_read_fn read,
-                                 iolink_ds_param_write_fn write, void* user,
+                                 iolink_ds_param_write_fn write,
+                                 iolink_ds_param_check_fn check, void* user,
                                  const iolink_ds_param_desc_t* params, size_t count);
-/* read/write 回调返回 iolink_result_t（见 §7.1 的结果语义）。 */
+/* read/write/check 回调返回 iolink_result_t（见 §7.1 的结果语义）。 */
 void iolink_ds_set_param_desc(iolink_ds_ctx_t* ctx,
                               const iolink_ds_param_desc_t* params, size_t count);
 void iolink_ds_process(iolink_ds_ctx_t* ctx);
@@ -675,6 +677,12 @@ DS 镜像不是上下文中的常驻数组：上下文只持有指向暂存缓�
 长度与校验和）；`iolink_ds_refresh()` 只刷新 `Data_Storage_Size`/`Parameter_Checksum`
 而不物化镜像。完整暂存缓冲只用于下载和 `iolink_ds_build_image()`。
 
+默认 DS 参数集由 OD 表派生：标准表中 storage 为 `IOLINK_OD_STORAGE_DS` 的表项
+在前，设备 `config.od` 应用表中同类项按表序追加（设备层自动调用
+`iolink_ds_bind_od()`）。因此应用参数只要声明 `IOLINK_OD_STORAGE_DS` 就进入
+Data Storage，无需再手工维护描述符；`IOLINK_OD_STORAGE_VOLATILE` 项不进入。
+描述符的 `max_len` 取表项 `block_len`。
+
 序列化记录格式为：
 
 ```
@@ -687,7 +695,9 @@ DS 镜像不是上下文中的常驻数组：上下文只持有指向暂存缓�
 描述符数组必须比上下文存活更久。
 
 `iolink_device_process()` 会在 ISDU 空闲时调用 `iolink_ds_process()`。块下载通过
-`iolink_ds_stage_param()` 暂存写操作，并在 `ParamDownloadEnd` 原子提交；
+`iolink_ds_stage_param()` 暂存写操作，并在 `ParamDownloadEnd` 先对整份镜像做无副作用
+预校验（`check` 回调），全部通过后再逐条写入并持久化；预校验失败时不会写入任何参数。
+这不是跨参数事务，NVM 写入失败仍可能留下已生效的前缀记录。
 `iolink_ds_downloading()` 暴露该状态。`DS_UPLOAD_FLAG`/`State_Property` 以及
 `DS_UPLOAD_REQ` 通知用于告知主站：本地参数已变化，应进行备份。
 

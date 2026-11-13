@@ -326,13 +326,9 @@ uint32_t iolink_test_time_ms(void)
 
 iolink_device_time_us_fn g_iolink_test_time_us_override = NULL;
 
-int iolink_test_device_init(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
-                            const iolink_app_callbacks_t* callbacks)
+static void test_device_fill_config(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
+                                    const iolink_app_callbacks_t* callbacks)
 {
-    if (dev == NULL) {
-        return -1;
-    }
-
     (void) memset(dev, 0, sizeof(*dev));
     dev->cfg.phy = g_phy_mock;
     dev->cfg.time_us = (g_iolink_test_time_us_override != NULL) ? g_iolink_test_time_us_override
@@ -348,7 +344,29 @@ int iolink_test_device_init(iolink_test_device_t* dev, const iolink_stack_config
         dev->cfg.stack.min_cycle_time = 0U;
     }
     dev->cfg.app_callbacks = callbacks;
+}
 
+int iolink_test_device_init(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
+                            const iolink_app_callbacks_t* callbacks)
+{
+    if (dev == NULL) {
+        return -1;
+    }
+
+    test_device_fill_config(dev, stack, callbacks);
+    return iolink_device_init(&dev->ctx, &dev->cfg);
+}
+
+int iolink_test_device_init_with_od(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
+                                    const iolink_app_callbacks_t* callbacks,
+                                    const iolink_od_app_t* od)
+{
+    if (dev == NULL) {
+        return -1;
+    }
+
+    test_device_fill_config(dev, stack, callbacks);
+    dev->cfg.od = od;
     return iolink_device_init(&dev->ctx, &dev->cfg);
 }
 

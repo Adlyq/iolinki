@@ -80,13 +80,14 @@ static iolink_result_t single_read(void* user, const iolink_od_entry_t* entry, u
     return iolink_od_encode(entry, cell->value, out, cap);
 }
 
-static iolink_result_t single_write(void* user, const iolink_od_entry_t* entry, const uint8_t* data,
-                                    size_t len)
+static iolink_result_t single_write(void* user, const iolink_od_entry_t* entry, uint8_t subindex,
+                                    const uint8_t* data, size_t len)
 {
     single_cell_t* cell = user;
     uint32_t value = 0U;
     const iolink_result_t decoded = iolink_od_decode(entry, data, len, &value);
 
+    (void) subindex;
     if (!iolink_result_succeeded(decoded)) {
         return decoded;
     }
@@ -339,6 +340,16 @@ static void test_od_codec_edges(void** state)
     assert_int_equal(iolink_od_check_value(NULL, NULL, buf, 1U).code, IOLINK_RESULT_INVALID);
     assert_int_equal(iolink_od_check_value(scalar, NULL, NULL, 1U).code, IOLINK_RESULT_INVALID);
     assert_true(iolink_result_succeeded(iolink_od_check_value(octet, NULL, NULL, 0U)));
+    /* OctetString 的 block_len 是写上限；block_len == 0 才表示不限制。 */
+    const uint8_t block_ok[4] = {0U};
+    const uint8_t block_too_long[5] = {0U};
+    assert_true(iolink_result_succeeded(iolink_od_check_value(octet, NULL, block_ok, 4U)));
+    assert_int_equal(iolink_od_check_value(octet, NULL, block_too_long, 5U).code,
+                     IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+    const iolink_od_entry_t* detailed = iolink_od_find(NULL, IOLINK_IDX_DETAILED_DEVICE_STATUS, 0U);
+    assert_non_null(detailed);
+    assert_int_equal(detailed->block_len, 0U);
+    assert_true(iolink_result_succeeded(iolink_od_check_value(detailed, NULL, buf, 8U)));
 }
 
 static void test_od_lookup_edges(void** state)
@@ -354,6 +365,12 @@ static void test_od_lookup_edges(void** state)
     /* DS 表尾越界。 */
     assert_null(iolink_od_ds_at(iolink_od_ds_count()));
     assert_non_null(iolink_od_ds_at(iolink_od_ds_count() - 1U));
+
+    /* 应用侧 DS 查询的空表边界。 */
+    assert_int_equal(iolink_od_ds_count_app(NULL), 0U);
+    assert_null(iolink_od_ds_at_app(NULL, 0U));
+    assert_null(iolink_od_ds_at_app(&empty, 0U));
+    assert_false(iolink_od_is_ds(&empty, 0x0300U, 0U));
 }
 
 static void test_od_value_layer_edges(void** state)
@@ -398,19 +415,19 @@ static void test_od_value_layer_edges(void** state)
     assert_int_equal(iolink_od_read_value(&ctx, octet, 0U, buf, 4U).code, IOLINK_RESULT_INVALID);
 
     /* write_value：空参数、TRIGGER 无钩子、TAG 无 params、缺后端、写后钩子。 */
-    assert_int_equal(iolink_od_write_value(NULL, scalar, &one, 1U).code, IOLINK_RESULT_INVALID);
-    assert_int_equal(iolink_od_write_value(&ctx, &k_trigger_no_hook[0], &one, 1U).code,
+    assert_int_equal(iolink_od_write_value(NULL, scalar, 0U, &one, 1U).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_write_value(&ctx, &k_trigger_no_hook[0], 0U, &one, 1U).code,
                      IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
 
     iolink_od_ctx_t tag_ctx = {0};
     const iolink_od_entry_t* tag = iolink_od_find(NULL, IOLINK_IDX_APPLICATION_TAG, 0U);
     assert_non_null(tag);
-    assert_int_equal(iolink_od_write_value(&tag_ctx, tag, &one, 1U).code,
+    assert_int_equal(iolink_od_write_value(&tag_ctx, tag, 0U, &one, 1U).code,
                      IOLINK_RESULT_NOT_HANDLED);
 
     iolink_od_ctx_t no_app = {0};
     const uint8_t two_bytes[2] = {0U, 1U};
-    assert_int_equal(iolink_od_write_value(&no_app, scalar, two_bytes, 2U).code,
+    assert_int_equal(iolink_od_write_value(&no_app, scalar, 0U, two_bytes, 2U).code,
                      IOLINK_RESULT_NOT_HANDLED);
 
     single_cell_t cell = {.value = 0U};
@@ -421,8 +438,8 @@ static void test_od_value_layer_edges(void** state)
     app.user = &cell;
     iolink_od_ctx_t change_ctx = {.app = &app, .params = NULL};
     g_od_change_calls = 0;
-    assert_true(
-        iolink_result_succeeded(iolink_od_write_value(&change_ctx, &k_change_entry[0], &one, 1U)));
+    assert_true(iolink_result_succeeded(
+        iolink_od_write_value(&change_ctx, &k_change_entry[0], 0U, &one, 1U)));
     assert_int_equal(g_od_change_calls, 1);
 }
 
@@ -437,11 +454,11 @@ static void test_od_table_contract(void** state)
 
     /* DS 成员只由 storage 标志决定：三个标签，其余不是。 */
     assert_int_equal(iolink_od_ds_count(), 3U);
-    assert_true(iolink_od_is_ds(IOLINK_IDX_APPLICATION_TAG, 0U));
-    assert_true(iolink_od_is_ds(IOLINK_IDX_FUNCTION_TAG, 0U));
-    assert_true(iolink_od_is_ds(IOLINK_IDX_LOCATION_TAG, 0U));
-    assert_false(iolink_od_is_ds(IOLINK_IDX_VENDOR_NAME, 0U));
-    assert_false(iolink_od_is_ds(SWITCHING_SENSOR_IDX_THRESHOLD, 0U));
+    assert_true(iolink_od_is_ds(NULL, IOLINK_IDX_APPLICATION_TAG, 0U));
+    assert_true(iolink_od_is_ds(NULL, IOLINK_IDX_FUNCTION_TAG, 0U));
+    assert_true(iolink_od_is_ds(NULL, IOLINK_IDX_LOCATION_TAG, 0U));
+    assert_false(iolink_od_is_ds(NULL, IOLINK_IDX_VENDOR_NAME, 0U));
+    assert_false(iolink_od_is_ds(NULL, SWITCHING_SENSOR_IDX_THRESHOLD, 0U));
 
     /* 强制索引与厂商错误统计都在标准表内。 */
     const uint16_t present[] = {IOLINK_IDX_DIRECT_PARAMETERS_1,

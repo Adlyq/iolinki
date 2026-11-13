@@ -102,7 +102,8 @@ static void assert_negative_service_not_available(const iolink_isdu_ctx_t* ctx)
 }
 
 /* B.2.27：Preferred Indices 0x0040-0x00FE 属于设备专用范围并到达
-   应用厂商服务，与 Extended Index 范围完全一样。 */
+   应用厂商服务，与 Extended Index 范围完全一样。已在标准 OD 表中
+   定义的对象（如 0x0040 厂商错误统计）例外：标准表优先。 */
 static void preferred_index_routing(void)
 {
     iolink_isdu_ctx_t ctx;
@@ -115,21 +116,21 @@ static void preferred_index_routing(void)
     assert(spy.calls == 1 && spy.last_index == 0x0080U);
     assert(ctx.response_len == 1 && ctx.response_buf[0] == 0x6A);
 
-    /* 厂商处理器拥有整个设备专用范围：一旦注册了处理器，
-       连 0x0040 也会到达它（内置的错误统计对象
-       仅在没有注册处理器时才提供服务）。 */
+    /* 0x0040 是内建的厂商错误统计对象：标准 OD 表优先于厂商服务，
+       因此注册厂商处理器也不会改变 0x0040 的归属。该测试没有绑定
+       DLL，错误统计对象按 IDX_NOT_AVAIL（0x11）应答。 */
     read_index(&ctx, 0x0040U);
-    assert(spy.calls == 2 && spy.last_index == 0x0040U);
-    assert(ctx.response_len == 1 && ctx.response_buf[0] == 0x6A);
+    assert(spy.calls == 1);
+    assert_negative_service_not_available(&ctx);
 
     /* 0x00FF 为保留值，0x003F 为配置文件保留：两者都
        不得到达厂商服务，主站得到 0x11。 */
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0057");
     read_index(&ctx, 0x00FFU);
-    assert(spy.calls == 2);
+    assert(spy.calls == 1);
     assert_negative_service_not_available(&ctx);
     read_index(&ctx, 0x003FU);
-    assert(spy.calls == 2);
+    assert(spy.calls == 1);
     assert_negative_service_not_available(&ctx);
 
     /* 应用拒绝的 Preferred Index 保持 0x11 错误。 */

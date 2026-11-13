@@ -90,6 +90,26 @@ static iolink_result_t device_param_read(void* user, uint16_t index, uint8_t sub
     return iolink_od_read_value(&od, entry, subindex, out, cap);
 }
 
+/** @brief 恢复 DS 镜像前的无副作用校验：OD 表项的线长/范围/钩子检查。
+ *
+ * 未在 OD 表中声明的厂商参数没有可供预校验的元数据，由实际写入时的
+ * vendor_service 拒绝；这里放行，保持"未知索引可跳过"的既有恢复语义。 */
+static iolink_result_t device_param_check(void* user, uint16_t index, uint8_t subindex,
+                                          const uint8_t* data, size_t len)
+{
+    iolink_device_ctx_t* ctx = (iolink_device_ctx_t*) user;
+
+    if ((ctx == NULL) || (ctx->config == NULL)) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
+    }
+    const iolink_od_entry_t* entry = iolink_od_find(ctx->config->od, index, subindex);
+    if (entry == NULL) {
+        return iolink_result_ok(0U);
+    }
+    void* hook_user = (ctx->config->od != NULL) ? ctx->config->od->user : NULL;
+    return iolink_od_check_value(entry, hook_user, data, len);
+}
+
 /** @brief 统一的参数写入：与 @ref device_param_read 使用同一条表驱动路径。
  *
  * 写语义与持久化由表项决定（STORE/VOLATILE/TRIGGER + storage），
@@ -119,7 +139,7 @@ static iolink_result_t device_param_write(void* user, uint16_t index, uint8_t su
     iolink_od_ctx_t od;
     od.app = ctx->config->od;
     od.params = &ctx->params;
-    return iolink_od_write_value(&od, entry, data, len);
+    return iolink_od_write_value(&od, entry, subindex, data, len);
 }
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
@@ -423,9 +443,10 @@ int iolink_device_init_with_workspace(iolink_device_ctx_t* ctx,
     }
     iolink_ds_bind_params(&ctx->dll.main.ds, &ctx->params);
     /* DS 参数访问统一走 OD 表：标准标签经参数管理器，应用参数经应用
-       后端。DS 成员由表项 storage 标志决定（data_storage.c）。 */
-    iolink_ds_bind_param_access(&ctx->dll.main.ds, device_param_read, device_param_write, ctx, NULL,
-                                0U);
+       后端。DS 成员由表项 storage 标志决定（标准表 + config->od）。 */
+    iolink_ds_bind_od(&ctx->dll.main.ds, config->od);
+    iolink_ds_bind_param_access(&ctx->dll.main.ds, device_param_read, device_param_write,
+                                device_param_check, ctx, NULL, 0U);
     /* 启动时若不存在持久化镜像，则建立 DS 镜像/校验和，
        使 Data_Storage_Size 与 Parameter_Checksum 在首次
        上传之前就已有效。 */

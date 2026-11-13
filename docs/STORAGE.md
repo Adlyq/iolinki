@@ -68,9 +68,10 @@ iolink_ds_set_param_desc(iolink_device_get_ds_ctx(dev), my_ds,
 
 - `iolink_ds_set_param_desc()` replaces only the list and keeps the current
   accessors and user pointer.
-- `iolink_ds_bind_param_access(read, write, user, desc, count)` also installs
-  custom accessors. Passing `NULL` for `read`/`write` keeps the current ones and
-  their `user`.
+- `iolink_ds_bind_param_access(read, write, check, user, desc, count)` also
+  installs custom accessors and an optional restore-time pre-check. Passing
+  `NULL` for `read`/`write` keeps the current ones and their `user`; `NULL`
+  for `check` disables pre-checking.
 - `iolink_ds_param_desc_t::max_len` (0 = unbounded) bounds the value stored in
   the image for that record.
 

@@ -10,6 +10,7 @@
 #define IOLINK_DATA_STORAGE_H
 
 #include "iolinki/config.h"
+#include "iolinki/od.h"
 #include "iolinki/result.h"
 #include "iolinki/storage.h"
 #include "iolinki/workspace.h"
@@ -97,6 +98,24 @@ typedef iolink_result_t (*iolink_ds_param_write_fn)(void* user, uint16_t index, 
                                                     const uint8_t* data, size_t len, bool persist);
 
 /**
+ * @brief 恢复前预校验单个 DS 参数记录（无副作用）。
+ *
+ * `iolink_ds_apply_image()` 在写入任何参数之前，对镜像中每个"已知参数"
+ * 记录调用本回调。任何一条被拒绝都会让整次恢复失败，此时尚无参数被
+ * 修改、也没有镜像落盘。回调不得修改设备状态。
+ *
+ * @param user     参数访问的不透明用户指针。
+ * @param index    参数索引。
+ * @param subindex 参数子索引。
+ * @param data     参数值字节。
+ * @param len      @p data 的长度（字节）。
+ * @return 结果模型：成功 `{0, 0}`；拒绝时返回错误（正 ISDU ErrorCode
+ *         或负的 ::IOLINK_RESULT_*）。
+ */
+typedef iolink_result_t (*iolink_ds_param_check_fn)(void* user, uint16_t index, uint8_t subindex,
+                                                    const uint8_t* data, size_t len);
+
+/**
  * @brief 数据存储引擎上下文
  *
  * 跟踪 DS 同步过程的状态与校验和。
@@ -109,8 +128,10 @@ typedef struct
     void* param_user;                     /**< 参数回调使用的不透明用户指针 */
     iolink_ds_param_read_fn read_param;   /**< 统一的参数读取访问器 */
     iolink_ds_param_write_fn write_param; /**< 统一的参数写入访问器 */
+    iolink_ds_param_check_fn check_param; /**< 恢复前的无副作用预校验（可为 NULL） */
     const iolink_ds_param_desc_t* params; /**< DS 参数描述符数组 */
     size_t param_count;                   /**< @ref params 中的条目数 */
+    const iolink_od_app_t* od_app;        /**< 提供额外 DS 参数的应用 OD 表（可为 NULL） */
     uint32_t current_checksum;            /**< 最近一次计算的本地参数校验和 */
     uint32_t master_checksum;             /**< 主站最近校验过的校验和 */
     bool ds_upload_flag;                  /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
@@ -145,8 +166,13 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage);
  * 上下文内嵌的 fallback 缓冲。必须在 `iolink_ds_init()` 之后调用。
  * 设备层由 `iolink_device_init_with_workspace()` 自动完成。
  *
+ * @p ws 为 NULL 表示解绑：没有内嵌 fallback 的构建（`IOLINK_WORKSPACE_EMBEDDED=0`）
+ * 会把镜像指针与容量显式清零并丢弃 `image_valid`，之后
+ * `iolink_ds_get_image()`/`iolink_ds_build_image()` 不会再访问旧工作区。
+ * 内嵌构建则回到上下文自带的 scratch 缓冲。
+ *
  * @param ctx DS 上下文
- * @param ws  工作区（必须比 ctx 存活更久）；NULL 表示回到内嵌 fallback
+ * @param ws  工作区（必须比 ctx 存活更久）；NULL 表示解绑或回到内嵌 fallback
  */
 void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws);
 
@@ -186,9 +212,22 @@ void iolink_ds_refresh(iolink_ds_ctx_t* ctx);
 void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx);
 
 /**
- * @brief 绑定统一的参数访问器与显式的参数描述符集合。
+ * @brief 绑定参与 DS 集合的应用对象字典表。
  *
- * 用调用方提供的描述符数组替换默认的仅标签集合，
+ * 未安装显式描述符集合时，DS 参数集 = 标准 OD 表中 storage 为
+ * `IOLINK_OD_STORAGE_DS` 的表项 + 本应用表中 storage 为
+ * `IOLINK_OD_STORAGE_DS` 的表项（标准表在前，应用表按表序）。
+ * 描述符的 `max_len` 取表项的 `block_len`。
+ *
+ * @param ctx DS 上下文
+ * @param app 应用 OD 表（可为 NULL，表示只有标准表）
+ */
+void iolink_ds_bind_od(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app);
+
+/**
+ * @brief 绑定统一的参数访问器、可选的恢复前校验与显式的参数描述符集合。
+ *
+ * 用调用方提供的描述符数组替换默认的"标准表 + 应用表"集合，
  * 并让所有 DS 读写都经由 @p read / @p write 路由。厂商参数
  * （0x0040+ / 0x0100+）正是以这种方式加入数据存储集合。当 @p params
  * 为 NULL（或 @p count 为 0）时，描述符集合保持不变。
@@ -201,6 +240,8 @@ void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx
  * @param ctx    DS 上下文
  * @param read   参数读取访问器（可为 NULL，表示保留当前访问器）
  * @param write  参数写入访问器（可为 NULL，表示保留当前访问器）
+ * @param check  恢复前预校验访问器（NULL = 不做预校验）；不使用预校验
+ *               时 `iolink_ds_apply_image()` 仍可能部分应用后才发现拒绝
  * @param user   传回访问器的不透明指针。仅当
  *               @p read 或 @p write 非 NULL 时更新，因此传入 NULL 访问器会
  *               保留现有的用户指针。
@@ -208,8 +249,8 @@ void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx
  * @param count  @p params 中的描述符数量
  */
 void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx, iolink_ds_param_read_fn read,
-                                 iolink_ds_param_write_fn write, void* user,
-                                 const iolink_ds_param_desc_t* params, size_t count);
+                                 iolink_ds_param_write_fn write, iolink_ds_param_check_fn check,
+                                 void* user, const iolink_ds_param_desc_t* params, size_t count);
 
 /**
  * @brief 仅替换数据存储参数描述符集合。
@@ -321,7 +362,7 @@ bool iolink_ds_downloading(const iolink_ds_ctx_t* ctx);
  *
  * 在块下载期间（ParamDownloadStart 之后、ParamDownloadEnd 之前），
  * 参数写入会先缓冲到映像中，而不是立即
- * 生效；ParamDownloadEnd 会原子地提交这些写入。
+ * 生效；ParamDownloadEnd 先对整份镜像做校验，全部通过后再逐条应用。
  *
  * @param ctx      DS 上下文
  * @param index    参数索引
@@ -348,13 +389,18 @@ int iolink_ds_build_image(iolink_ds_ctx_t* ctx);
 /**
  * @brief 应用从主站接收的参数映像（恢复）。
  *
- * 解析序列化的记录，并通过参数管理器将每个参数写回
- * （持久化到 NVM）。同时更新 @ref iolink_ds_ctx_t::current_checksum。
+ * 解析序列化的记录，先对全部"已知参数"调用绑定的
+ * @ref iolink_ds_param_check_fn（无副作用），全部通过后再逐条通过参数
+ * 管理器写回并持久化到 NVM。
+ *
+ * 这不是跨参数的事务：预校验覆盖值本身与长度，但 NVM 写入失败仍可能
+ * 留下已经生效的前缀记录。预校验失败时不会写入任何参数，也不会改动
+ * 持久化镜像。
  *
  * @param ctx DS 上下文
  * @param data 序列化的映像字节
  * @param len  映像字节数
- * @return int 成功时返回 0，映像格式错误或被拒绝时返回负值。
+ * @return int 成功时返回 0，映像格式错误返回 -1，已知参数被拒绝返回 -2。
  */
 int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len);
 

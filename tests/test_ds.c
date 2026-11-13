@@ -336,7 +336,7 @@ static void test_ds_vendor_param_set_round_trip(void** state)
     test_env_reset_params(&g_test_env);
     iolink_ds_init(&ds, NULL);
     ds.params_ctx = test_env_params(&g_test_env);
-    iolink_ds_bind_param_access(&ds, vendor_ds_read, vendor_ds_write, NULL, set,
+    iolink_ds_bind_param_access(&ds, vendor_ds_read, vendor_ds_write, NULL, NULL, set,
                                 sizeof(set) / sizeof(set[0]));
 
     assert_int_equal(iolink_params_ctx_set(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG,
@@ -457,7 +457,7 @@ static void test_ds_download_end_error_classification(void** state)
     iolink_ds_init(&ds, NULL);
     ds.params_ctx = test_env_params(&g_test_env);
     static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U, 0U}};
-    iolink_ds_bind_param_access(&ds, ds_zero_read, ds_rejecting_write, NULL, set, 1U);
+    iolink_ds_bind_param_access(&ds, ds_zero_read, ds_rejecting_write, NULL, NULL, set, 1U);
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
     uint8_t img[] = {0x00U, 0x18U, 0x00U, 0x03U, 'A', 'B', 'C'};
     (void) memcpy(ds.image, img, sizeof(img));
@@ -523,11 +523,12 @@ static void test_ds_bind_null_keeps_accessors(void** state)
     int marker = 0;
     iolink_ds_init(&ds, NULL);
     ds.params_ctx = test_env_params(&g_test_env);
-    iolink_ds_bind_param_access(&ds, ds_param_read_mock, ds_param_write_mock, &marker, NULL, 0U);
+    iolink_ds_bind_param_access(&ds, ds_param_read_mock, ds_param_write_mock, NULL, &marker, NULL,
+                                0U);
     assert_ptr_equal(ds.param_user, &marker);
 
     static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U, 0U}};
-    iolink_ds_bind_param_access(&ds, NULL, NULL, NULL, set, 1U);
+    iolink_ds_bind_param_access(&ds, NULL, NULL, NULL, NULL, set, 1U);
     assert_ptr_equal(ds.param_user, &marker);
     assert_ptr_equal(ds.read_param, ds_param_read_mock);
     assert_ptr_equal(ds.write_param, ds_param_write_mock);
@@ -542,7 +543,8 @@ static void test_ds_set_param_desc_keeps_accessors(void** state)
     int marker = 0;
     iolink_ds_init(&ds, NULL);
     ds.params_ctx = test_env_params(&g_test_env);
-    iolink_ds_bind_param_access(&ds, ds_param_read_mock, ds_param_write_mock, &marker, NULL, 0U);
+    iolink_ds_bind_param_access(&ds, ds_param_read_mock, ds_param_write_mock, NULL, &marker, NULL,
+                                0U);
 
     static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U, 0U}};
     iolink_ds_set_param_desc(&ds, set, 1U);
@@ -559,7 +561,7 @@ static void test_ds_desc_max_len_bounds_value(void** state)
     iolink_ds_init(&ds, NULL);
     ds.params_ctx = test_env_params(&g_test_env);
     static const iolink_ds_param_desc_t set[] = {{IOLINK_IDX_APPLICATION_TAG, 0U, 4U}};
-    iolink_ds_bind_param_access(&ds, ds_param_read_mock, ds_param_write_mock, NULL, set, 1U);
+    iolink_ds_bind_param_access(&ds, ds_param_read_mock, ds_param_write_mock, NULL, NULL, set, 1U);
 
     assert_true(iolink_ds_build_image(&ds) > 0);
     size_t len = 0U;

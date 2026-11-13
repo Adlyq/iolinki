@@ -131,29 +131,32 @@ static void ds_storage_load_image(iolink_ds_ctx_t* ctx)
    storage 标志为 DS 的表项。应用仍可通过
    iolink_ds_bind_param_access() 提供自己的描述符数组。 */
 
-/** @brief DS 集合中的描述符数量（显式集合优先，否则由 OD 表派生）。 */
+/** @brief DS 集合中的描述符数量（显式集合优先，否则由标准表 + 应用表派生）。 */
 static size_t ds_desc_count(const iolink_ds_ctx_t* ctx)
 {
     if ((ctx != NULL) && (ctx->params != NULL) && (ctx->param_count > 0U)) {
         return ctx->param_count;
     }
-    return iolink_od_ds_count();
+    const size_t app = (ctx != NULL) ? iolink_od_ds_count_app(ctx->od_app) : 0U;
+    return iolink_od_ds_count() + app;
 }
 
-/** @brief 取 DS 集合中第 @p i 个描述符。 */
+/** @brief 取 DS 集合中第 @p i 个描述符（标准表在前，应用表按表序）。 */
 static bool ds_desc_at(const iolink_ds_ctx_t* ctx, size_t i, iolink_ds_param_desc_t* out)
 {
-    if (out == NULL) {
+    if ((ctx == NULL) || (out == NULL)) {
         return false;
     }
-    if ((ctx != NULL) && (ctx->params != NULL) && (ctx->param_count > 0U)) {
+    if ((ctx->params != NULL) && (ctx->param_count > 0U)) {
         if (i >= ctx->param_count) {
             return false;
         }
         *out = ctx->params[i];
         return true;
     }
-    const iolink_od_entry_t* entry = iolink_od_ds_at(i);
+    const size_t std_count = iolink_od_ds_count();
+    const iolink_od_entry_t* entry =
+        (i < std_count) ? iolink_od_ds_at(i) : iolink_od_ds_at_app(ctx->od_app, i - std_count);
     if (entry == NULL) {
         return false;
     }
@@ -168,6 +171,7 @@ static void ds_attach_image(iolink_ds_ctx_t* ctx, uint8_t* buffer, size_t size)
 {
     ctx->image = buffer;
     ctx->image_size = size;
+    ctx->image_len = 0U;
     ctx->image_valid = false;
 }
 
@@ -182,8 +186,10 @@ void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws)
     else {
 #if IOLINK_WORKSPACE_EMBEDDED
         ds_attach_image(ctx, ctx->scratch, sizeof(ctx->scratch));
+#else
+        /* 无内嵌兜底：解绑必须清空指针与容量，不能留下旧工作区的悬空指针。 */
+        ds_attach_image(ctx, NULL, 0U);
 #endif
-        /* 无内嵌兜底：保持未绑定状态（image 已在 init 中清零）。 */
     }
     /* 绑定发生在初始化之后：把持久化镜像重新读入新的暂存缓冲。 */
     if (ctx->storage != NULL) {
@@ -215,9 +221,16 @@ void iolink_ds_bind_params(iolink_ds_ctx_t* ctx, iolink_params_ctx_t* params_ctx
     }
 }
 
+void iolink_ds_bind_od(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app)
+{
+    if (ctx != NULL) {
+        ctx->od_app = app;
+    }
+}
+
 void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx, iolink_ds_param_read_fn read,
-                                 iolink_ds_param_write_fn write, void* user,
-                                 const iolink_ds_param_desc_t* params, size_t count)
+                                 iolink_ds_param_write_fn write, iolink_ds_param_check_fn check,
+                                 void* user, const iolink_ds_param_desc_t* params, size_t count)
 {
     if (ctx == NULL) {
         return;
@@ -228,6 +241,9 @@ void iolink_ds_bind_param_access(iolink_ds_ctx_t* ctx, iolink_ds_param_read_fn r
     if (write != NULL) {
         ctx->write_param = write;
     }
+    /* NULL 表示不做恢复前预校验（与 read/write 的"保留当前访问器"不同：
+       预校验是无副作用能力，显式解绑没有兼容负担）。 */
+    ctx->check_param = check;
     /* 仅在同时提供访问器时才采用调用方的 user 指针；只更改描述符集
        不得覆盖设备已绑定的 user。 */
     if ((read != NULL) || (write != NULL)) {
@@ -451,7 +467,24 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
         pos += DS_RECORD_HEADER + rlen;
     }
 
-    /* 应用每条记录。未知索引会被跳过（替换设备可能未实现所有
+    /* 第一阶段：已知参数的无副作用预校验。必须在写入任何参数之前完成，
+       这样一条非法记录不会留下"前面已生效、后面失败"的半恢复状态。 */
+    if (ctx->check_param != NULL) {
+        pos = 0U;
+        while (pos < len) {
+            uint16_t index = (uint16_t) (((uint16_t) data[pos] << 8) | (uint16_t) data[pos + 1U]);
+            uint8_t subindex = data[pos + 2U];
+            size_t rlen = (size_t) data[pos + 3U];
+            if (ds_param_known(ctx, index, subindex) &&
+                !iolink_result_succeeded(ctx->check_param(ctx->param_user, index, subindex,
+                                                          &data[pos + DS_RECORD_HEADER], rlen))) {
+                return -2; /* 已知参数拒绝了该值：尚未写入任何参数 */
+            }
+            pos += DS_RECORD_HEADER + rlen;
+        }
+    }
+
+    /* 第二阶段：应用每条记录。未知索引会被跳过（替换设备可能未实现所有
        已备份的参数），而不是让恢复失败。*已知* 参数若拒绝该值，
        则使集合不一致。 */
     pos = 0U;
@@ -462,7 +495,7 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
         if (ds_param_known(ctx, index, subindex)) {
             if (!iolink_result_succeeded(ds_params_set(
                     ctx, index, subindex, &data[pos + DS_RECORD_HEADER], rlen, true))) {
-                return -2; /* 已知参数拒绝了该值 */
+                return -2; /* 已知参数拒绝了该值（预校验未覆盖的写入期失败） */
             }
         }
         pos += DS_RECORD_HEADER + rlen;

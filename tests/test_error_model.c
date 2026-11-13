@@ -150,7 +150,7 @@ static void test_round_trip_reports_length(void** state)
 static void ds_download_begin(iolink_ds_ctx_t* ds, const iolink_ds_param_desc_t* set, size_t count)
 {
     iolink_ds_init(ds, NULL);
-    iolink_ds_bind_param_access(ds, NULL, NULL, NULL, set, count);
+    iolink_ds_bind_param_access(ds, NULL, NULL, NULL, NULL, set, count);
     /* 0x03 同时是 ParamDownloadStart ISDU 命令与 DS_DownloadStart 命令。 */
     assert_int_equal(iolink_ds_handle_ds_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0U), 0);
 }

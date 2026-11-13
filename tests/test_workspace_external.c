@@ -23,7 +23,9 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "iolinki/data_storage.h"
 #include "iolinki/device.h"
+#include "iolinki/isdu.h"
 #include "iolinki/storage.h"
 #include "iolinki/workspace.h"
 
@@ -141,5 +143,48 @@ int main(void)
     /* 显式提供工作区后初始化成功，并回读同一个指针。 */
     assert(iolink_device_init_with_workspace(&ctx, &config, &workspace) == IOLINK_DEVICE_INIT_OK);
     assert(iolink_device_get_workspace(&ctx) == &workspace);
+
+    iolink_isdu_ctx_t* isdu = &ctx.dll.main.shared.isdu;
+    iolink_ds_ctx_t* ds = &ctx.dll.main.ds;
+
+    /* 绑定后所有缓冲都指向工作区。 */
+    assert(isdu->buffer == workspace.isdu.payload);
+    assert(isdu->response_buf == workspace.isdu.response);
+    assert(isdu->req_buf == workspace.isdu.request);
+    assert(isdu->resp_frame == workspace.isdu.frame);
+    assert(isdu->resp_store[0] == workspace.isdu.frame);
+    assert(isdu->resp_store[1] == workspace.isdu.frame);
+    assert(ds->image == workspace.ds_stage);
+    assert(ds->image_size == sizeof(workspace.ds_stage));
+
+    /* 解绑必须清零全部指针与容量：不得保留旧工作区地址。 */
+    iolink_isdu_bind_workspace(isdu, NULL);
+    iolink_ds_bind_workspace(ds, NULL);
+
+    assert(iolink_device_get_workspace(&ctx) == NULL);
+    assert(isdu->buffer == NULL);
+    assert(isdu->buffer_size == 0U);
+    assert(isdu->response_buf == NULL);
+    assert(isdu->response_size == 0U);
+    assert(isdu->req_buf == NULL);
+    assert(isdu->req_size == 0U);
+    assert(isdu->resp_frame == NULL);
+    assert(isdu->resp_store[0] == NULL);
+    assert(isdu->resp_store[1] == NULL);
+    assert(isdu->resp_buf == NULL);
+    assert(ds->image == NULL);
+    assert(ds->image_size == 0U);
+    assert(ds->image_len == 0U);
+
+    /* 解绑后访问返回合理结果而不是解引用旧指针。 */
+    const uint8_t service = 0xB5U;
+    iolink_isdu_od_write(isdu, IOLINK_FLOWCTRL_START, &service, 1);
+    iolink_isdu_process(isdu);
+    uint8_t snapshot[8] = {0U};
+    assert(iolink_isdu_snapshot_response(isdu, NULL, snapshot, sizeof(snapshot)) == 0U);
+
+    assert(iolink_ds_get_image(ds, NULL) == NULL);
+    assert(iolink_ds_build_image(ds) >= 0);
+    assert(iolink_ds_get_image(ds, NULL) == NULL);
     return 0;
 }
