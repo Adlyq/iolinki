@@ -31,8 +31,8 @@ Usage:
     ./tools/size_matrix.py --check    # rebuild and compare against the baseline
     ./tools/size_matrix.py --table    # human-readable table (CD artefact)
     ./tools/size_matrix.py --check --selftest
-                                      # inject a forged +1024 B entry and require
-                                      # --check to return non-zero
+                                      # inject forged text/.rodata entries and
+                                      # require --check to return non-zero
 
 Environment:
     ARM_GCC        toolchain prefix (default: arm-none-eabi-)
