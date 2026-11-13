@@ -98,7 +98,7 @@ static void read_index(iolink_isdu_ctx_t* ctx, uint16_t index)
 
 /* 设备专用索引（0x0040）也可以在应用 OD 表中声明：声明优先于厂商服务。 */
 static iolink_result_t device_entry_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
-                                        size_t cap)
+                                         size_t cap)
 {
     (void) user;
     (void) entry;
