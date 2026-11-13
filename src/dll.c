@@ -46,6 +46,8 @@
  *   iolink_dll_process
  *   `- dll_process_body
  *      |- dll_take_isr_master_activity       消费 ISR 帧结束时间戳
+ *      |- dll_apply_isr_consumed_frame       消费 CONSUME 帧的交接时间戳
+ *      |                                     （补做 T_CYCLE/T_REN 记账）
  *      |- dll_apply_isr_deadline_requests    设置/清除 T_FBD 与 T_DSIO
  *      |                                     （64 位截止时间由主上下文持有）
  *      |- [TX FRAME] pd_in 租约释放          在临界区中轮询 tx_busy
@@ -91,7 +93,9 @@
  *    发布字 isr_isdu_pub/resp_store（dll_isdu_sync_snapshot）以及
  *    pd_in_active（PD-in 发布）。
  *  - ISR -> 主上下文：isr_frame_ring（dll_consume_isr_mailbox）、isr_od_ring
- *    （dll_drain_staged_isdu_write）、isr_master_activity 以及截止时间标志。
+ *    （dll_drain_staged_isdu_write）、isr_master_activity、
+ *    isr_consumed_us/isr_consumed_seq（CONSUME 帧的 T_CYCLE/T_REN 记账）
+ *    以及截止时间标志。
  *
  * ISR 双泵传送层位于 dll_isr.c；完整上下文契约与缓冲区归属表见
  * docs/CODE_FLOW.md。
@@ -1516,23 +1520,29 @@ static bool dll_frame_drop_if_stopped(iolink_dll_main_t* ctx)
     return false;
 }
 
-/** @brief T_CYCLE 监控：统计过短的 MasterCycle 并重新开始。 */
-static void dll_check_cycle_time(iolink_dll_main_t* ctx)
+/** @brief T_CYCLE 监控：统计过短的 MasterCycle 并重新开始。
+ *
+ * @param ctx      DLL 上下文
+ * @param frame_us 该 MasterCycle 的请求结束时间（微秒绝对时间）。
+ *
+ * ISR 立即应答（CONSUME）的帧由主泵用交接来的帧时间戳调用本函数，
+ * 因此 MinCycleTime/T_REN 的参考点始终是帧结束，而不是主泵轮询时刻。
+ */
+static void dll_check_cycle_time_at(iolink_dll_main_t* ctx, uint64_t frame_us)
 {
-    const uint64_t now_us = dll_time_us(ctx);
     const uint64_t cycle_deadline = dll_timer_deadline(ctx, IOLINK_TIMER_T_CYCLE);
     if (ctx->enforce_timing && (ctx->min_cycle_time_us > 0U) && (cycle_deadline != 0U) &&
-        !dll_time_reached(now_us, cycle_deadline)) {
+        !dll_time_reached(frame_us, cycle_deadline)) {
         ctx->timing_errors++;
         ctx->t_cycle_violations++;
         DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_TIMING);
     }
     /* 与原实现一致：时间戳为 0（未绑定时钟）的第一拍没有参考点，不装载。 */
-    if (ctx->enforce_timing && (ctx->min_cycle_time_us > 0U) && (now_us != 0U)) {
-        dll_timer_arm(ctx, IOLINK_TIMER_T_CYCLE, now_us + ctx->min_cycle_time_us);
+    if (ctx->enforce_timing && (ctx->min_cycle_time_us > 0U) && (frame_us != 0U)) {
+        dll_timer_arm(ctx, IOLINK_TIMER_T_CYCLE, frame_us + ctx->min_cycle_time_us);
         const uint32_t ren_limit = dll_get_t_ren_limit_us(ctx);
         if (ren_limit > 0U) {
-            dll_timer_arm(ctx, IOLINK_TIMER_T_REN, now_us + ren_limit);
+            dll_timer_arm(ctx, IOLINK_TIMER_T_REN, frame_us + ren_limit);
         }
         else {
             dll_timer_cancel(ctx, IOLINK_TIMER_T_REN);
@@ -1542,6 +1552,12 @@ static void dll_check_cycle_time(iolink_dll_main_t* ctx)
         dll_timer_cancel(ctx, IOLINK_TIMER_T_CYCLE);
         dll_timer_cancel(ctx, IOLINK_TIMER_T_REN);
     }
+}
+
+/** @brief 主上下文路径的 T_CYCLE 检查：参考点即当前轮询时刻。 */
+static void dll_check_cycle_time(iolink_dll_main_t* ctx)
+{
+    dll_check_cycle_time_at(ctx, dll_time_us(ctx));
 }
 
 /**
@@ -1878,6 +1894,57 @@ static void dll_take_isr_master_activity(iolink_dll_main_t* ctx)
          * dll_process_complete_frame 中用于主上下文应答的帧）。 */
         dll_mark_master_activity_ts(ctx);
     }
+}
+
+/**
+ * @brief 取 ISR 完全消费（CONSUME 计划）帧的交接时间戳。
+ *
+ * 单写者交接：ISR 先写 32 位时间戳，再自增序号作为发布边沿。这里做
+ * seq -> us -> seq 双读，只有两次序号相同才采纳时间戳；序号已变化说明
+ * ISR 在读取过程中又发布了一帧，重试（最多 3 次），失败则留给下一轮。
+ *
+ * @param ctx      DLL 上下文
+ * @param[out] stamp_us ISR 记录的帧结束时间低 32 位
+ * @return 有新交接时返回 true
+ */
+static bool dll_take_isr_consumed_frame(iolink_dll_main_t* ctx, uint32_t* stamp_us)
+{
+    bool taken = false;
+    for (uint8_t attempt = 0U; (attempt < 3U) && !taken; attempt++) {
+        const uint8_t seq = ctx->shared.isr_consumed_seq;
+        if (seq == ctx->isr_consumed_seq_seen) {
+            break; /* 没有新帧 */
+        }
+        const uint32_t stamp = ctx->shared.isr_consumed_us;
+        if (ctx->shared.isr_consumed_seq == seq) {
+            ctx->isr_consumed_seq_seen = seq;
+            *stamp_us = stamp;
+            taken = true;
+        }
+        /* 否则：读取期间 ISR 又消费了一帧，重读（最多 3 次）。 */
+    }
+    return taken;
+}
+
+/**
+ * @brief 把 ISR 消费帧的交接时间戳折算成主泵的 T_CYCLE/T_REN 记账。
+ *
+ * CONSUME 帧不进邮箱，主泵看不到它们，但每个 MasterCycle 都必须经过
+ * MinCycleTime/T_REN 检查并刷新 `last_response_us`。32 位时间戳用无符号
+ * 差值重建 64 位绝对时间：`now - (uint32_t) (now - stamp)`。该重建依赖
+ * "主泵两次运行间隔 < 2^31 us"（约 35 分钟），与 `last_byte_us` 的既有
+ * uint32 假设同级；超时未运行主泵时链路本就已按主站丢失处理。
+ */
+static void dll_apply_isr_consumed_frame(iolink_dll_main_t* ctx)
+{
+    uint32_t stamp = 0U;
+    if (!dll_take_isr_consumed_frame(ctx, &stamp)) {
+        return;
+    }
+    const uint64_t now_us = dll_time_us(ctx);
+    const uint64_t frame_us = now_us - (uint64_t) ((uint32_t) now_us - stamp);
+    dll_check_cycle_time_at(ctx, frame_us);
+    ctx->last_response_us = frame_us;
 }
 
 /**
@@ -2276,6 +2343,7 @@ static void dll_timers_dispatch(iolink_dll_main_t* ctx, uint8_t phase)
 static void dll_process_body(iolink_dll_main_t* ctx)
 {
     dll_take_isr_master_activity(ctx);
+    dll_apply_isr_consumed_frame(ctx);
     dll_apply_isr_deadline_requests(ctx);
 
     /* 兼容入口：device.c 在初始化时写 t_pd_deadline_us，首个 process
@@ -2313,6 +2381,7 @@ static void dll_process_body(iolink_dll_main_t* ctx)
     dll_poll_diagnostics(ctx);
     /* 在上述步骤期间，ISR 中可能已完成一帧。 */
     dll_take_isr_master_activity(ctx);
+    dll_apply_isr_consumed_frame(ctx);
 
     /* 在延迟活动刷新之后采样，使下面的经过时间减法
      * 不会看到比 now_ms 更新的时间戳。单次时钟采样保持

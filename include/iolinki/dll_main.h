@@ -171,7 +171,11 @@ struct iolink_dll_main
     uint8_t sio_fallback_threshold; /**< 进入 SIO 模式的回退阈值（默认 3） */
 
     /* 定时统计 */
-    uint64_t last_response_us; /**< 最后应答的微秒时间戳 */
+    uint64_t last_response_us; /**< 最后应答（或 ISR 完全消费）的帧的
+                                    微秒时间戳 */
+
+    uint8_t isr_consumed_seq_seen; /**< 已消费的 ISR 消费帧序号
+                                        （与 shared.isr_consumed_seq 对应） */
 
     uint32_t response_time_us; /**< 实测协议栈应答时间（t2） */
 

@@ -50,6 +50,26 @@ typedef struct iolink_dll_shared
 
     volatile uint8_t isr_master_activity; /**< ISR 观察到帧结束；由主上下文清除 */
 
+    /**
+     * @brief ISR 完全消费（CONSUME 计划）的帧结束时间戳（ISR -> 主泵）。
+     *
+     * 这类帧不进邮箱，主泵因此看不到它们；但 T_CYCLE/T_REN 记账与
+     * `last_response_us` 仍须覆盖每一个 MasterCycle。ISR 先写
+     * `isr_consumed_us`（32 位微秒，单字对齐存储），再自增
+     * `isr_consumed_seq` 作为发布边沿。主泵读 seq -> us -> seq 做双读
+     * 校验，两次 seq 相同才采纳该时间戳，并在
+     * `iolink_dll_main_t::isr_consumed_seq_seen` 记录已消费的序号。
+     *
+     * 原子性：两步写都在同一次数据中断内完成，主上下文只能在最外层
+     * 中断返回后运行，因此读侧永远不会把新时间戳归到旧序号上；双读的
+     * 作用是检测"读取期间 ISR 又交接了一帧"（seq 变化即重试）。8 位
+     * 序号是自由计数、永不清零；主泵两次运行之间恰好消费 256 帧时会
+     * 漏掉一次更新，只影响一次 T_CYCLE 检查。
+     */
+    volatile uint32_t isr_consumed_us; /**< ISR 消费帧的时间戳低 32 位 */
+
+    volatile uint8_t isr_consumed_seq; /**< 消费帧发布序号（自由计数） */
+
     /* 一次性握手标志，由任一上下文置位、由主泵消费；
      * 64 位截止时间始终由主上下文拥有。每个标志由任一上下文置 1，
      * 且只能由主泵清 0；与消费竞争的一次置位是幂等的
