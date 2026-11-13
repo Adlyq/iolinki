@@ -553,7 +553,7 @@ ISR and event timing. There is no separate platform time API; direct DLL users
 must bind `ctx->shared.time_us`/`shared.time_user` after `iolink_dll_init()`
 (the DLL context is split into a main view and an ISR view). Critical sections are
 `iolink_critical_enter()` / `iolink_critical_exit()` from
-`include/iolinki/platform.h`; `iolink_device_init()` rejects the library's weak
+`include/iolinki/port.h`; `iolink_device_init()` rejects the library's weak
 no-op default with `IOLINK_DEVICE_INIT_ERR_CRITICAL`.
 
 ## Build configuration

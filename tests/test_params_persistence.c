@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "iolinki/params.h"
-#include "iolinki/platform.h"
+#include "iolinki/port.h"
 #include "iolinki/protocol.h"
 #include "iolinki/isdu.h"
 #include <assert.h>

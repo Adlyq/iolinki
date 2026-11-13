@@ -11,7 +11,7 @@
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
 #include "iolinki/utils.h"
-#include "iolinki/platform.h"
+#include "iolinki/port.h"
 #include "dll_internal.h"
 #include <string.h>
 

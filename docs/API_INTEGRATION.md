@@ -832,7 +832,7 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 - `include/iolinki/od.h`：对象字典表项、datatype codec 与参数值访问层，见 §4.6。
 - `include/iolinki/workspace.h`：可选的 ISDU/DS 传输 scratch 工作区，见 §4.1。
 - `include/iolinki/diag.h`：诊断来源注册表与 DeviceStatus/DDS 派生，见 §5.2。
-- `include/iolinki/platform.h`：临界区。时间源通过
+- `include/iolinki/port.h`：临界区与屏障原语。时间源通过
   `iolink_device_config_t::time_us` 提供；持久化统一通过 `config.storage`
   完成。
 

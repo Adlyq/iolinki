@@ -23,7 +23,7 @@
 #include "iolinki/crc.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/iolink.h"
-#include "iolinki/platform.h"
+#include "iolinki/port.h"
 #include "iolinki/protocol.h"
 
 static iolink_dll_ctx_t s_ctx;

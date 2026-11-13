@@ -328,7 +328,7 @@ your own. For a physical target exclude `phy_virtual.c` and the Linux sources;
 if you supply strong platform hooks, exclude `platform.c` too and provide
 `iolink_platform_critical_sections_ready()` returning 0. Provide the time source
 through `config.time_us`, the critical-section symbols declared in
-`include/iolinki/platform.h`, and the storage backend through
+`include/iolinki/port.h`, and the storage backend through
 `iolink_device_config_t::storage` when Data Storage is enabled. Keep every
 library and application unit on the same configuration defines and make the
 startup/linker files match the actual MCU; a successful GCC build is not evidence

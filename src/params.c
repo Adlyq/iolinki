@@ -19,7 +19,7 @@
 
 #include "iolinki/config.h"
 #include "iolinki/params.h"
-#include "iolinki/platform.h"
+#include "iolinki/port.h"
 #include "iolinki/protocol.h"
 #include "iolinki/utils.h"
 #include <string.h>

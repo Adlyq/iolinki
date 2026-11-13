@@ -23,7 +23,7 @@
 #include <time.h>
 #include "iolinki/crc.h"
 #include "iolinki/protocol.h"
-#include "iolinki/platform.h"
+#include "iolinki/port.h"
 
 /* 测试缓冲区 */
 uint8_t g_tx_buf[1024];

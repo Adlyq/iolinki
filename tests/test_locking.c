@@ -12,7 +12,7 @@
 #include <stdint.h>
 #include <cmocka.h>
 #include "iolinki/events.h"
-#include "iolinki/platform.h"
+#include "iolinki/port.h"
 
 /* Mock 计数器 */
 static int g_enter_count = 0;

@@ -77,7 +77,7 @@ flowchart TB
 
     subgraph PLAT["平台层"]
         T1["config.time_us<br/>应用微秒时钟"]
-        T2["platform.h / port.h<br/>临界区、屏障、原子字"]
+        T2["port.h<br/>临界区、屏障、原子字"]
         S1["storage.h<br/>read/write 回调"]
         W1["workspace.h<br/>ISDU scratch + DS 暂存"]
     end

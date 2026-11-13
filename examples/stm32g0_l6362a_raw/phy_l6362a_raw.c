@@ -28,7 +28,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "phy_l6362a_raw.h"
 #include "main.h"
-#include "iolinki/platform.h"
+#include "iolinki/port.h"
 
 /* Private defines -----------------------------------------------------------*/
 

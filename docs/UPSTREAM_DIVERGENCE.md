@@ -56,7 +56,7 @@
 | 行为 | 上游（`upstream/develop`） | 我们（`own_dev`） | 分类 |
 | :--- | :--- | :--- | :---: |
 | 保留索引 `0x0004-0x000B`、`0x001C-0x001F` | 无显式保留，未知索引落 default `0x11` | `isdu.c:545` 注释 + default IDX_NOTAVAIL | `PR#1` |
-| `VendorID/DeviceID` 当 ISDU 索引 | `protocol.h:101-102` 仍为 `0x000A/0x000B` 并服务（`isdu.c:458/466`） | `protocol.h:108-109` 标 legacy 待删，不服务 | `PR#1` |
+| `VendorID/DeviceID` 当 ISDU 索引 | `protocol.h:101-102` 仍为 `0x000A/0x000B` 并服务（`isdu.c:458/466`） | 常量已删除，不服务 | `PR#1` |
 | `ErrorCount 0x0020` | 常量有（`protocol.h:116`）但无 case；仅在 `ERROR_STATS=0x0040` 服务（`isdu.c:852`） | `8b793d3` + `isdu.c:567` | `PR#1` |
 | `ProductURI 0x001B` | 无 | `c797f78` + `isdu.c:611` | `PR#1` |
 | `ProcessDataOutput 0x0029` | 无常量、无 case | `b5c3711` + `isdu.c:732` | `PR#3` |
@@ -143,7 +143,7 @@
 - ISR 双泵 transport（`feat(dll): shared transmit seam + opt-in ISR two-pump` 系列，`src/dll.c`、`phy.h`、`dll.h`）。
 - 分级异步原语契约（`include/iolinki/port.h`，`IOLINK_CONCURRENCY` 档位 +
   `IOLINK_NEED_*` 推导 + 屏障等级）与 `IOLINK_STATS_MODE` 分上下文统计；
-  `platform.h` 变为兼容入口。
+  `platform.h` 已并入 `port.h`（单一平台头）。
 - 并发模型定为“单主上下文调用者”：库不取应用线程锁，并发档位只有
   `SINGLE`/`ISR`/`SMP`；CPU 级 `iolink_critical_*` 与 per-instance 线程锁是两层，
   互不替代。

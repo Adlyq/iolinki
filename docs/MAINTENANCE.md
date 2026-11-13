@@ -59,8 +59,9 @@ git push origin vX.Y.Z
 
 There is no `main` promotion step and no back-merge.
 
-Versioning is SemVer: `MAJOR` for incompatible API changes, `MINOR` for new
-functionality, `PATCH` for fixes. Release candidates are tagged `vX.Y.Z-rcN`
+Versioning: any public-interface change bumps `MAJOR` (there is no
+compatibility window), `MINOR` adds functionality without changing existing
+declarations, and `PATCH` fixes behaviour. Release candidates are tagged `vX.Y.Z-rcN`
 from a `release/X.Y.Z` branch cut from `own_dev`; the final tag is pushed from
 `own_dev` once CI is green. The release workflow builds **Debug with coverage**
 and publishes source, example binaries, SBOMs (CycloneDX + SPDX) and SHA256

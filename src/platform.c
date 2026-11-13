@@ -16,7 +16,7 @@
  * 覆盖临界区符号。
  */
 
-#include "iolinki/platform.h"
+#include "iolinki/port.h"
 
 /* 弱定义使应用能够覆盖它们而不会产生链接错误。下面的探针仅在
  * 所选并发配置需要临界区（IOLINK_NEED_CRITICAL）时才会被

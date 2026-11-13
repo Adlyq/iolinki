@@ -15,7 +15,7 @@
 #include "iolinki/device_info.h"
 #include "iolinki/params.h"
 #include "iolinki/data_storage.h"
-#include "iolinki/platform.h"
+#include "iolinki/port.h"
 #include "iolinki/utils.h"
 #include <string.h>
 #include <stdint.h>

@@ -16,7 +16,7 @@
  */
 
 #include "iolinki/events.h"
-#include "iolinki/platform.h"
+#include "iolinki/port.h"
 #include "iolinki/utils.h"
 #include <string.h>
 

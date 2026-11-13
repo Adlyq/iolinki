@@ -21,7 +21,7 @@
 #endif
 
 #include "iolinki/device.h"
-#include "iolinki/platform.h"
+#include "iolinki/port.h"
 #include "iolinki/phy.h"
 #include <stdbool.h>
 #include <string.h>

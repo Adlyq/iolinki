@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "board.h"
 #include "stm32g0xx.h"
-#include "iolinki/platform.h"
+#include "iolinki/port.h"
 
 rx_queue_t board_rx;
 volatile uint32_t board_tx_timeouts;
