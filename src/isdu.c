@@ -1834,21 +1834,34 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
         return;
     }
 #endif
-    /* 单一查找入口：标准表优先，应用表只在标准表未命中时才生效，
-       因此应用表无法遮蔽 0x0002/0x0024 等规范固定索引。声明过的设备
-       专用索引仍走统一的值层，不再需要厂商服务里的手写编解码。 */
-    const iolink_od_entry_t* entry = iolink_od_find(ctx->od, index, ctx->header.subindex);
-    if (entry == NULL) {
-        const bool device_specific =
-            ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
-        if (device_specific && (ctx->vendor_service != NULL)) {
+    /* 索引归属由一处决定：
+     *  - 规范固定索引（< 0x0040）：标准表优先，应用表不得遮蔽
+     *    0x0002/0x0024 等对象；
+     *  - 设备专用索引（0x0040-0x00FE、0x0100+）：应用表优先，其次
+     *    厂商服务，最后才是标准表里的内建厂商扩展（0x0040 错误统计）。
+     * 这样既保住规范索引，又让厂商服务继续拥有它惯用的 Preferred 区间。 */
+    const bool device_specific =
+        ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
+    const iolink_od_entry_t* entry = NULL;
+
+    if (device_specific) {
+        entry = iolink_od_find_app(ctx->od, index, ctx->header.subindex);
+        if ((entry == NULL) && (ctx->vendor_service != NULL)) {
             isdu_handle_vendor_index(ctx);
             return;
         }
-        if (device_specific) {
+        if (entry == NULL) {
+            entry = iolink_od_find(NULL, index, ctx->header.subindex);
+        }
+        if (entry == NULL) {
             IOLINK_LOG_DEBUG(&ctx->log, "vendor index 0x%04X ignored: no vendor_service",
                              (unsigned) index);
         }
+    }
+    else {
+        entry = iolink_od_find(ctx->od, index, ctx->header.subindex);
+    }
+    if (entry == NULL) {
         isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
         return;
     }

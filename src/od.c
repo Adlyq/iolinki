@@ -222,13 +222,31 @@ const iolink_od_entry_t* iolink_od_find_app(const iolink_od_app_t* app, uint16_t
     return (app != NULL) ? od_find_in(app->entries, app->count, index, subindex) : NULL;
 }
 
+/** @brief 索引是否属于设备专用范围（B.2.27 Preferred / Extended Index）。 */
+static bool od_index_is_device_specific(uint16_t index)
+{
+    return ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
+}
+
 const iolink_od_entry_t* iolink_od_find(const iolink_od_app_t* app, uint16_t index,
                                         uint8_t subindex)
 {
-    const iolink_od_entry_t* entry = od_find_in(k_od_table, OD_TABLE_COUNT, index, subindex);
+    const iolink_od_entry_t* entry;
 
-    if (entry == NULL) {
+    if (od_index_is_device_specific(index)) {
+        /* 设备专用索引由产品定义：应用表优先，标准表里同索引的内建
+         * 厂商扩展（如 0x0040 错误统计）只作回落。 */
         entry = iolink_od_find_app(app, index, subindex);
+        if (entry == NULL) {
+            entry = od_find_in(k_od_table, OD_TABLE_COUNT, index, subindex);
+        }
+    }
+    else {
+        /* 规范固定索引不允许被应用表覆盖。 */
+        entry = od_find_in(k_od_table, OD_TABLE_COUNT, index, subindex);
+        if (entry == NULL) {
+            entry = iolink_od_find_app(app, index, subindex);
+        }
     }
     return entry;
 }

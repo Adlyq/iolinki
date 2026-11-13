@@ -67,19 +67,6 @@ typedef void (*iolink_dll_state_cb_t)(void* user, iolink_dll_state_t state);
 /* PD 应答发送缓冲区：[OD][PD-in][CKS]。按运行时 PD-in 长度
  * 加上 OD 头与尾部校验和来确定尺寸。 */
 #define IOLINK_PD_REPLY_MAX (IOLINK_OD_MAX_SIZE + IOLINK_PD_IN_MAX_SIZE + 1U)
-/* PD-in 应答缓冲区：活动的、正在填充的，以及被 ISR 持有的。
- *
- * TX BYTE 在库内部结束传输，会在帧结束时释放 ISR 持有的
- * 缓冲区（pd_in_captured = 0xFF），因此两个缓冲区就够用。
- * TX FRAME 把缓冲区交给 DMA，除非 PHY 提供 tx_busy()，否则库无法
- * 观察到传输状态：提供该钩子时，一旦线路空闲就释放租约
- * （两个缓冲区）；不提供时该槽位会一直保持租约直到下一次
- * 捕获，因此用第三个缓冲区吸收主泵的更新。 */
-#if (IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME) && !IOLINK_PHY_FEATURE_TX_BUSY
-#define IOLINK_PD_IN_BUFFERS 3U
-#else
-#define IOLINK_PD_IN_BUFFERS 2U
-#endif
 /** 接收帧邮箱深度（数据 ISR -> 主泵）。取 2 的幂；2
  * 个槽位可在主泵仍在处理上一帧时吸收一帧，
  * 因此繁忙的主循环窗口不再丢弃下一个请求。 */

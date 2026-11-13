@@ -69,4 +69,3 @@ bool switching_sensor_value_set(switching_sensor_t* sensor, uint16_t index, uint
             return false;
     }
 }
-

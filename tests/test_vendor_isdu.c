@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "iolinki/isdu.h"
 #include "iolinki/protocol.h"
+#include "iolinki/od.h"
 #include <assert.h>
 #include <string.h>
 #include "conformance_test.h"
@@ -95,6 +96,35 @@ static void read_index(iolink_isdu_ctx_t* ctx, uint16_t index)
     iolink_isdu_process(ctx);
 }
 
+/* 设备专用索引（0x0040）也可以在应用 OD 表中声明：声明优先于厂商服务。 */
+static iolink_result_t device_entry_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+                                        size_t cap)
+{
+    (void) user;
+    (void) entry;
+    if (cap < 1U) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
+    }
+    out[0] = 0x5AU;
+    return iolink_result_ok(1U);
+}
+
+static const iolink_od_entry_t k_device_entry[] = {
+    {.index = 0x0040U,
+     .subindex = 0U,
+     .max_subindex = 0U,
+     .datatype = IOLINK_OD_DT_U8,
+     .access = IOLINK_OD_ACCESS_RO,
+     .write_semantics = IOLINK_OD_WRITE_VOLATILE,
+     .storage = IOLINK_OD_STORAGE_VOLATILE,
+     .flags = 0U,
+     .handler = IOLINK_OD_HANDLER_BACKEND,
+     .block_len = 0U,
+     .range_min = 0U,
+     .range_max = 0xFFU,
+     .name = "DeviceSpecificParam"},
+};
+
 static void assert_negative_service_not_available(const iolink_isdu_ctx_t* ctx)
 {
     assert(ctx->response_len == 2 && ctx->response_buf[0] == 0x80);
@@ -102,8 +132,8 @@ static void assert_negative_service_not_available(const iolink_isdu_ctx_t* ctx)
 }
 
 /* B.2.27：Preferred Indices 0x0040-0x00FE 属于设备专用范围并到达
-   应用厂商服务，与 Extended Index 范围完全一样。已在标准 OD 表中
-   定义的对象（如 0x0040 厂商错误统计）例外：标准表优先。 */
+   应用厂商服务，与 Extended Index 范围完全一样；标准表里的内建厂商
+   扩展（0x0040 错误统计）只在没有厂商服务时作为回落。 */
 static void preferred_index_routing(void)
 {
     iolink_isdu_ctx_t ctx;
@@ -116,21 +146,20 @@ static void preferred_index_routing(void)
     assert(spy.calls == 1 && spy.last_index == 0x0080U);
     assert(ctx.response_len == 1 && ctx.response_buf[0] == 0x6A);
 
-    /* 0x0040 是内建的厂商错误统计对象：标准 OD 表优先于厂商服务，
-       因此注册厂商处理器也不会改变 0x0040 的归属。该测试没有绑定
-       DLL，错误统计对象按 IDX_NOT_AVAIL（0x11）应答。 */
+    /* 0x0040 属于 Preferred 区间：厂商服务优先于标准表里的内建错误
+       统计对象（后者只在没有厂商服务时使用）。 */
     read_index(&ctx, 0x0040U);
-    assert(spy.calls == 1);
-    assert_negative_service_not_available(&ctx);
+    assert(spy.calls == 2 && spy.last_index == 0x0040U);
+    assert(ctx.response_len == 1 && ctx.response_buf[0] == 0x6A);
 
     /* 0x00FF 为保留值，0x003F 为配置文件保留：两者都
        不得到达厂商服务，主站得到 0x11。 */
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0057");
     read_index(&ctx, 0x00FFU);
-    assert(spy.calls == 1);
+    assert(spy.calls == 2);
     assert_negative_service_not_available(&ctx);
     read_index(&ctx, 0x003FU);
-    assert(spy.calls == 1);
+    assert(spy.calls == 2);
     assert_negative_service_not_available(&ctx);
 
     /* 应用拒绝的 Preferred Index 保持 0x11 错误。 */
@@ -142,6 +171,24 @@ static void preferred_index_routing(void)
     ctx.vendor_service = NULL;
     read_index(&ctx, 0x0041U);
     assert_negative_service_not_available(&ctx);
+
+    /* 应用 OD 表声明 0x0040 时优先于厂商服务（设备专用索引由产品定义）。 */
+    {
+        iolink_od_app_t app = {.entries = k_device_entry,
+                               .count = sizeof(k_device_entry) / sizeof(k_device_entry[0]),
+                               .read = device_entry_read,
+                               .write = NULL,
+                               .user = NULL};
+        preferred_spy_t app_spy = {0U, 0U};
+        ctx.vendor_service = preferred_spy;
+        ctx.vendor_user = &app_spy;
+        iolink_isdu_bind_od(&ctx, &app);
+        read_index(&ctx, 0x0040U);
+        assert(app_spy.calls == 0U);
+        assert(ctx.response_len == 1 && ctx.response_buf[0] == 0x5AU);
+        iolink_isdu_bind_od(&ctx, NULL);
+        ctx.vendor_service = NULL;
+    }
 }
 
 static void truncated_requests_never_execute(void)

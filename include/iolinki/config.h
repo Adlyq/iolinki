@@ -222,7 +222,7 @@
  * 定义已退役的宏是配置错误：静默忽略会构建出比预期大得多的镜像
  * （它们曾经一次性关闭 DS/SystemCommand/唤醒/SIO C-Q/事件引擎）。 */
 #if defined(IOLINK_MINIMAL_PROFILE) || defined(IOLINK_TINY_PROFILE)
-#error "IOLINK_MINIMAL_PROFILE / IOLINK_TINY_PROFILE were retired; disable IOLINK_FEATURE_DATA_STORAGE and IOLINK_FEATURE_EVENTS explicitly"
+#error "IOLINK_MINIMAL_PROFILE/TINY_PROFILE retired: disable DATA_STORAGE and EVENTS instead"
 #endif
 
 /** @brief 数据存储子系统（data_storage.c、ISDU DS 服务、ds ctx）。 */
@@ -250,7 +250,8 @@
  * 裁剪生效。 */
 #if defined(IOLINK_PHY_FEATURE_WAKEUP) || defined(IOLINK_PHY_FEATURE_SIO_CQ) || \
     defined(IOLINK_APP_PD_INPUT_CALLBACK)
-#error "IOLINK_PHY_FEATURE_WAKEUP / SIO_CQ / IOLINK_APP_PD_INPUT_CALLBACK were retired; capability is resolved from the PHY vtable and app callbacks"
+#error \
+    "PHY_FEATURE_WAKEUP/SIO_CQ and APP_PD_INPUT_CALLBACK retired: use the vtable and app callbacks"
 #endif
 
 /* --- 3.2 ISR 传输粒度 [可覆盖] ----------------------------------------- */
@@ -380,6 +381,27 @@
  */
 #ifndef IOLINK_DS_LEGACY_IMAGE_SUB0
 #define IOLINK_DS_LEGACY_IMAGE_SUB0 0
+#endif
+
+/* =========================================================================
+ * 3.5 PD-in 缓冲区数量（派生，勿覆盖）
+ *
+ * 由 ISR 发送粒度与 TX_BUSY 钩子决定；放在 config.h 以保证只包含
+ * config.h 的翻译单元（profile 档位符号、组合探针）也能看到它。
+ * ========================================================================= */
+
+/* PD-in 应答缓冲区：活动的、正在填充的，以及被 ISR 持有的。
+ *
+ * TX BYTE 在库内部结束传输，会在帧结束时释放 ISR 持有的
+ * 缓冲区（pd_in_captured = 0xFF），因此两个缓冲区就够用。
+ * TX FRAME 把缓冲区交给 DMA，除非 PHY 提供 tx_busy()，否则库无法
+ * 观察到传输状态：提供该钩子时，一旦线路空闲就释放租约
+ * （两个缓冲区）；不提供时该槽位会一直保持租约直到下一次
+ * 捕获，因此用第三个缓冲区吸收主泵的更新。 */
+#if (IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME) && !IOLINK_PHY_FEATURE_TX_BUSY
+#define IOLINK_PD_IN_BUFFERS 3U
+#else
+#define IOLINK_PD_IN_BUFFERS 2U
 #endif
 
 /* =========================================================================

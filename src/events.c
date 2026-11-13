@@ -276,7 +276,7 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
     const uint32_t now = events_now_ms(ctx);
 
     /* 注册表登记的代码使用规范 EventType；未登记（厂商/应用）代码
-     * 保留调用方输入，保持 iolink_event_trigger() 的兼容语义。 */
+     * 保留调用方输入，应用事件的自定义类型因此不受影响。 */
     type = (iolink_event_type_t) iolink_diag_type_for(code, (uint8_t) type);
 
     if (type == IOLINK_EVENT_TYPE_NOTIFICATION) {

@@ -138,13 +138,18 @@ extern const uint8_t iolink_profile_pd_in_buffers_3;
  *
  * @param name 锚点对象名（仅用于链接映射/调试）
  */
-#define IOLINK_PROFILE_ANCHOR(name)                                                               \
-    IOLINK_PROFILE_ROOT static const void* const name[] IOLINK_PROFILE_SECTION_ATTR = {           \
-        (const void*) &IOLINK_PROFILE_EVENTS_SYM,  (const void*) &IOLINK_PROFILE_DS_SYM,          \
-        (const void*) &IOLINK_PROFILE_ISR_RX_SYM,  (const void*) &IOLINK_PROFILE_ISR_TX_SYM,      \
-        (const void*) &IOLINK_PROFILE_TX_BUSY_SYM, (const void*) &IOLINK_PROFILE_CONCURRENCY_SYM, \
-        (const void*) &IOLINK_PROFILE_STATS_SYM,   (const void*) &IOLINK_PROFILE_WORKSPACE_SYM,    \
-        (const void*) &IOLINK_PROFILE_PD_BUFFERS_SYM,                                             \
+#define IOLINK_PROFILE_ANCHOR(name)                                                   \
+    IOLINK_PROFILE_ROOT static const void* const name[] IOLINK_PROFILE_SECTION_ATTR = \
+        {                                                                             \
+            (const void*) &IOLINK_PROFILE_EVENTS_SYM,                                 \
+            (const void*) &IOLINK_PROFILE_DS_SYM,                                     \
+            (const void*) &IOLINK_PROFILE_ISR_RX_SYM,                                 \
+            (const void*) &IOLINK_PROFILE_ISR_TX_SYM,                                 \
+            (const void*) &IOLINK_PROFILE_TX_BUSY_SYM,                                \
+            (const void*) &IOLINK_PROFILE_CONCURRENCY_SYM,                            \
+            (const void*) &IOLINK_PROFILE_STATS_SYM,                                  \
+            (const void*) &IOLINK_PROFILE_WORKSPACE_SYM,                              \
+            (const void*) &IOLINK_PROFILE_PD_BUFFERS_SYM,                             \
     }
 
 #endif /* IOLINK_PROFILE_H */

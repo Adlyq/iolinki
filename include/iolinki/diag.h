@@ -172,7 +172,7 @@ uint16_t iolink_diag_src_code(iolink_diag_src_t src);
  * @brief 规范化 EventType：注册表命中时返回规范值，否则返回 @p fallback。
  *
  * @param code     16 位 EventCode
- * @param fallback 未登记代码使用的类型（兼容入口的调用方输入）
+ * @param fallback 未登记代码使用的类型（调用方输入，仅作回落）
  * @return uint8_t EventType
  */
 uint8_t iolink_diag_type_for(uint16_t code, uint8_t fallback);
@@ -290,7 +290,7 @@ uint8_t iolink_diag_dds_snapshot(iolink_events_ctx_t* events, iolink_diag_dds_en
  * @brief 应用级条件置位（iolink_event_trigger 的薄封装）。
  *
  * EventType 来自注册表；未登记代码按 iolink_event_classify() 的默认分类。
- * 保留 iolink_event_trigger() 的兼容语义：已置位条件不重复上报，
+ * 与 iolink_event_trigger() 的分发规则一致：已置位条件不重复上报，
  * Notification 走单次触发。
  *
  * @param events 事件上下文
