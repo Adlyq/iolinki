@@ -115,13 +115,14 @@ Every registered test binary is a cmocka program:
 
 A reply that no case asserts is a failure, not a silent extra. The shared mock
 (`tests/test_helpers.c`) counts delivered and asserted replies and every group
-whose binary includes it passes `test_tx_all_asserted` as the group teardown, so
-a case that neither calls `assert_tx_*` nor `assert_no_tx()` fails there. The
-counters are cumulative across cases (`setup_mock_phy()` no longer clears them);
-`mock_phy_clear_tx()` is the explicit "this reply is known and irrelevant" opt
-out. Binaries with a local PHY mock (`test_reply_plan`, `test_isr_*`,
-`test_dll_statemachine`, `test_tx_busy`) keep the same delivered/asserted
-bookkeeping in their own group teardown.
+whose binary includes it passes `test_tx_all_asserted` as the group teardown.
+The counters are cumulative across cases (`setup_mock_phy()` no longer clears
+them), and a reply may not be erased: `mock_phy_clear_tx()` counts any pending
+unasserted reply as a discard and the teardown fails on it. Use
+`mock_phy_ignore_tx()` where a reply is deliberately irrelevant. Binaries with a
+local PHY mock (`test_reply_plan`, `test_isr_*`, `test_dll_statemachine`,
+`test_tx_busy`) keep the same delivered/asserted bookkeeping in their own group
+teardown.
 
 CMocka is a hard requirement for the suite: a configure without it fails
 instead of silently registering no tests. Use `-DBUILD_TESTING=OFF` for a

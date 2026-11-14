@@ -61,6 +61,7 @@ static uint8_t g_txq[1024];
 static size_t g_txq_len;
 static uint64_t g_tx_seq;
 static uint64_t g_tx_asserted;
+static uint64_t g_tx_discarded; /* frames dropped by mock_phy_clear_tx() */
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
 static size_t g_chk_pending;
 static uint8_t g_tx_active;
@@ -243,9 +244,22 @@ void mock_phy_clear_rx(void)
 }
 void mock_phy_clear_tx(void)
 {
+    /* 清空观察窗口。窗口里若还有未断言的帧，这就是一次静默丢弃：
+     * teardown 会看到 g_tx_discarded 非零并失败。确实不关心的帧用
+     * mock_phy_ignore_tx()。 */
+    g_tx_discarded += g_tx_seq - g_tx_asserted;
+    g_tx_asserted = g_tx_seq;
     g_txq_len = 0U;
-    g_tx_seq = 0U;
-    g_tx_asserted = 0U;
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    g_tx_pending = NULL;
+    g_tx_pending_len = 0U;
+#endif
+}
+
+void mock_phy_ignore_tx(void)
+{
+    g_tx_asserted = g_tx_seq;
+    g_txq_len = 0U;
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     g_tx_pending = NULL;
     g_tx_pending_len = 0U;
@@ -337,6 +351,7 @@ int test_tx_all_asserted(void** state)
         print_hex_frame("unasserted", g_txq, g_txq_len);
     }
     assert_int_equal(g_tx_seq, g_tx_asserted);
+    assert_int_equal(g_tx_discarded, 0U);
     g_tx_asserted = g_tx_seq;
     return 0;
 }

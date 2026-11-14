@@ -29,6 +29,7 @@
 static uint64_t now_us;
 static unsigned tx_octets;
 static unsigned tx_frames;
+static uint8_t tx_active;
 /* 交付给用例的应答数与用例已经查看过的应答数：group teardown 要求相等。 */
 static uint64_t tx_delivered;
 static uint64_t tx_asserted;
@@ -86,6 +87,7 @@ static int tx_octet(void* user, uint8_t data)
 {
     (void) user;
     (void) data;
+    tx_active = 1U;
     tx_octets++;
     return 0;
 }
@@ -93,8 +95,11 @@ static int tx_octet(void* user, uint8_t data)
 static void tx_done(void* user)
 {
     (void) user;
-    tx_frames++;
-    tx_delivered++;
+    if (tx_active != 0U) {
+        tx_active = 0U;
+        tx_frames++;
+        tx_delivered++;
+    }
 }
 #endif
 

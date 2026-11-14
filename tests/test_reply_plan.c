@@ -749,7 +749,9 @@ static int test_isdu_write_invalidates_read_view(void)
         feed(wr, sizeof(wr), 0U);
         iolink_dll_process_isr(&s_dll.main);
         drain_tx();
-        (void) tx_observed_len();
+        if (tx_observed_len() != 2U) {
+            return 7;
+        }
         /* 每个写段都必须被 ISR 以恰好一个应答立即确认。 */
         if (s_tx_delivered != (delivered_before + 1U)) {
             return 7;

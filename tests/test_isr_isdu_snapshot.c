@@ -42,6 +42,7 @@ static uint8_t rx_q[RX_MAX];
 static size_t rx_n;
 static size_t rx_i;
 static uint8_t tx_q[TX_MAX];
+static uint8_t tx_active;
 static size_t tx_n;
 /* 交付给用例的应答数与用例已经查看过的应答数：group teardown 要求相等。 */
 static uint64_t tx_delivered;
@@ -113,6 +114,10 @@ static int tx_frame(void* user, const uint8_t* data, size_t len)
 static int tx_octet(void* user, uint8_t data)
 {
     (void) user;
+    if (tx_active == 0U) {
+        tx_n = 0U;
+        tx_active = 1U;
+    }
     if (tx_n < sizeof(tx_q)) {
         tx_q[tx_n++] = data;
     }
@@ -122,7 +127,10 @@ static int tx_octet(void* user, uint8_t data)
 static void tx_done(void* user)
 {
     (void) user;
-    tx_delivered++;
+    if (tx_active != 0U) {
+        tx_active = 0U;
+        tx_delivered++;
+    }
 }
 #endif
 

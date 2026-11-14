@@ -64,6 +64,8 @@ void mock_phy_feed_chk(void);
 void mock_phy_feed_error(void);
 void mock_phy_clear_rx(void);
 void mock_phy_clear_tx(void);
+/* 显式忽略当前未断言的交付（不算失败）。 */
+void mock_phy_ignore_tx(void);
 const uint8_t* mock_phy_tx(size_t* len);
 
 /* 应答捕获断言：每次断言消费自上次断言（或 mock_phy_clear_tx()）以来的
