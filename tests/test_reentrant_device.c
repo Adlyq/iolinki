@@ -66,8 +66,8 @@ static void test_parameter_contexts_keep_writable_tags_isolated(void** state)
     (void) state;
     iolink_device_info_ctx_t info_a;
     iolink_device_info_ctx_t info_b;
-    iolink_params_ctx_t params_a;
-    iolink_params_ctx_t params_b;
+    iolink_test_params_t params_a;
+    iolink_test_params_t params_b;
     const uint8_t tag_a[] = "DeviceA";
     const uint8_t tag_b[] = "DeviceB";
     uint8_t out_a[32] = {0};
@@ -75,21 +75,21 @@ static void test_parameter_contexts_keep_writable_tags_isolated(void** state)
 
     iolink_device_info_ctx_init(&info_a, NULL);
     iolink_device_info_ctx_init(&info_b, NULL);
-    iolink_params_ctx_init(&params_a, &info_a);
-    iolink_params_ctx_init(&params_b, &info_b);
+    test_params_init(&params_a, &info_a);
+    test_params_init(&params_b, &info_b);
 
-    assert_int_equal(iolink_params_ctx_write(&params_a, IOLINK_IDX_APPLICATION_TAG, 0U, tag_a,
-                                             sizeof(tag_a) - 1U)
-                         .code,
-                     0);
-    assert_int_equal(iolink_params_ctx_write(&params_b, IOLINK_IDX_APPLICATION_TAG, 0U, tag_b,
-                                             sizeof(tag_b) - 1U)
-                         .code,
-                     0);
+    assert_int_equal(
+        test_params_write(&params_a, IOLINK_IDX_APPLICATION_TAG, 0U, tag_a, sizeof(tag_a) - 1U)
+            .code,
+        0);
+    assert_int_equal(
+        test_params_write(&params_b, IOLINK_IDX_APPLICATION_TAG, 0U, tag_b, sizeof(tag_b) - 1U)
+            .code,
+        0);
     const iolink_result_t read_a =
-        iolink_params_ctx_read(&params_a, IOLINK_IDX_APPLICATION_TAG, 0U, out_a, sizeof(out_a));
+        test_params_read(&params_a, IOLINK_IDX_APPLICATION_TAG, 0U, out_a, sizeof(out_a));
     const iolink_result_t read_b =
-        iolink_params_ctx_read(&params_b, IOLINK_IDX_APPLICATION_TAG, 0U, out_b, sizeof(out_b));
+        test_params_read(&params_b, IOLINK_IDX_APPLICATION_TAG, 0U, out_b, sizeof(out_b));
     assert_int_equal(read_a.code, 0);
     assert_int_equal(read_a.len, sizeof(tag_a) - 1U);
     assert_int_equal(read_b.code, 0);

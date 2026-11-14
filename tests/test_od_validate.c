@@ -124,7 +124,7 @@ static void test_handler_none(void)
 {
     iolink_od_entry_t entry = k_valid_table[IDX_SCALAR];
 
-    entry.handler = (uint8_t) IOLINK_OD_HANDLER_TAG;
+    entry.handler = (uint8_t) IOLINK_OD_HANDLER_SYSTEM_COMMAND;
     assert(validate_one(&entry) == OD_VALIDATE_ERR_HANDLER_NONE);
 }
 

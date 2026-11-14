@@ -45,7 +45,6 @@ set(IOLINK_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/events.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/diag.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/platform.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/params.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/data_storage.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/device_info.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/device.c

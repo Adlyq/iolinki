@@ -62,6 +62,16 @@ static iolink_result_t conformance_od_write(void* user, const iolink_od_entry_t*
                                             uint8_t subindex, const uint8_t* data, size_t len);
 
 static const iolink_od_entry_t k_conformance_od[] = {
+    IOLINK_OD_BYTES_HANDLER_EX(IOLINK_IDX_APPLICATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED,
+                               IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_DS, 32U,
+                               "ApplicationSpecificTag", conformance_od_read, conformance_od_write,
+                               NULL, NULL),
+    IOLINK_OD_BYTES_HANDLER_EX(IOLINK_IDX_FUNCTION_TAG, IOLINK_OD_ACCESS_RW_LOCKED,
+                               IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_DS, 32U, "FunctionTag",
+                               conformance_od_read, conformance_od_write, NULL, NULL),
+    IOLINK_OD_BYTES_HANDLER_EX(IOLINK_IDX_LOCATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED,
+                               IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_DS, 32U, "LocationTag",
+                               conformance_od_read, conformance_od_write, NULL, NULL),
     IOLINK_OD_BYTES_HANDLER_EX(CONFORMANCE_CONFIG1_INDEX, IOLINK_OD_ACCESS_RW_LOCKED,
                                IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_DS,
                                CONFORMANCE_CONFIG1_MAX, "Config1", conformance_od_read,
@@ -117,6 +127,12 @@ static iolink_result_t conformance_od_read(void* user, const iolink_od_entry_t* 
         return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
     }
     switch (entry->index) {
+        case IOLINK_IDX_APPLICATION_TAG:
+            return copy_block(out, cap, app->tags[0], app->tag_len[0]);
+        case IOLINK_IDX_FUNCTION_TAG:
+            return copy_block(out, cap, app->tags[1], app->tag_len[1]);
+        case IOLINK_IDX_LOCATION_TAG:
+            return copy_block(out, cap, app->tags[2], app->tag_len[2]);
         case CONFORMANCE_CONFIG1_INDEX:
             return copy_block(out, cap, app->config1, app->config1_len);
         case CONFORMANCE_CONFIG2_INDEX:
@@ -134,6 +150,22 @@ static iolink_result_t conformance_od_read(void* user, const iolink_od_entry_t* 
     return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
 }
 
+static iolink_result_t conformance_write_tag(conformance_device_t* app, size_t slot,
+                                             const uint8_t* data, size_t len)
+{
+    if ((data == NULL) && (len > 0U)) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
+    }
+    if (len > sizeof(app->tags[slot])) {
+        return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+    }
+    if (len > 0U) {
+        (void) memcpy(app->tags[slot], data, len);
+    }
+    app->tag_len[slot] = (uint8_t) len;
+    return iolink_result_ok(0U);
+}
+
 static iolink_result_t conformance_od_write(void* user, const iolink_od_entry_t* entry,
                                             uint8_t subindex, const uint8_t* data, size_t len)
 {
@@ -144,6 +176,12 @@ static iolink_result_t conformance_od_write(void* user, const iolink_od_entry_t*
         return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
     }
     switch (entry->index) {
+        case IOLINK_IDX_APPLICATION_TAG:
+            return conformance_write_tag(app, 0U, data, len);
+        case IOLINK_IDX_FUNCTION_TAG:
+            return conformance_write_tag(app, 1U, data, len);
+        case IOLINK_IDX_LOCATION_TAG:
+            return conformance_write_tag(app, 2U, data, len);
         case CONFORMANCE_CONFIG1_INDEX:
             if ((data == NULL) || (len != CONFORMANCE_CONFIG1_MAX)) {
                 return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);

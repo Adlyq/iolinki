@@ -57,7 +57,7 @@ static void make_isdu_ctx(conformance_device_t* app, iolink_isdu_ctx_t* ctx)
     ctx->event_ctx = iolink_device_get_events_ctx(&app->device);
     ctx->ds_ctx = iolink_device_get_ds_ctx(&app->device);
     ctx->dll_ctx = &app->device.dll.main;
-    ctx->params_ctx = &app->device.params;
+    ctx->device_info = &app->device.device_info;
     ctx->od = app->config.od;
     ctx->direct_param_page2 = app->device.direct_param_page2;
 }

@@ -10,7 +10,6 @@
 #define IOLINK_OD_H
 
 #include "iolinki/config.h"
-#include "iolinki/params.h"
 #include "iolinki/result.h"
 
 #include <stdbool.h>
@@ -103,7 +102,6 @@ typedef enum
 typedef enum
 {
     IOLINK_OD_HANDLER_NONE = 0U,            /**< 非内建：使用表项的应用后端。 */
-    IOLINK_OD_HANDLER_TAG = 1U,             /**< 应用/功能/位置标签（参数管理器）。 */
     IOLINK_OD_HANDLER_SYSTEM_COMMAND = 2U,  /**< 0x0002 SystemCommand。 */
     IOLINK_OD_HANDLER_DATA_STORAGE = 3U,    /**< 0x0003 DataStorage。 */
     IOLINK_OD_HANDLER_ACCESS_LOCKS = 4U,    /**< 0x000C DeviceAccessLocks。 */
@@ -517,12 +515,11 @@ typedef struct
 } iolink_od_app_t;
 
 /**
- * @brief 值访问上下文：标准标签与应用表。
+ * @brief 值访问上下文：应用表。
  */
 typedef struct
 {
-    const iolink_od_app_t* app;  /**< 应用表与后端（可为 NULL）。 */
-    iolink_params_ctx_t* params; /**< 标签对象的值存储（可为 NULL）。 */
+    const iolink_od_app_t* app; /**< 应用表与后端（可为 NULL）。 */
 } iolink_od_ctx_t;
 
 /**

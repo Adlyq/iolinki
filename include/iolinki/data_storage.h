@@ -15,7 +15,6 @@
 #include "iolinki/workspace.h"
 
 #include "iolinki/protocol.h"
-#include "iolinki/params.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -61,13 +60,12 @@ typedef enum
  */
 typedef struct
 {
-    iolink_ds_state_t state;         /**< 当前 DS 状态机位置 */
-    iolink_params_ctx_t* params_ctx; /**< 标准标签对象的值后端（可为 NULL） */
-    const iolink_od_app_t* od_app;   /**< 应用 OD 表（可为 NULL，表示只有标准表） */
-    uint32_t current_checksum;       /**< 最近一次计算的本地参数校验和 */
-    uint32_t master_checksum;        /**< 主站最近校验过的校验和 */
-    bool ds_upload_flag;             /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
-    bool upload_event_pending;       /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
+    iolink_ds_state_t state;       /**< 当前 DS 状态机位置 */
+    const iolink_od_app_t* od_app; /**< 应用 OD 表（可为 NULL，表示只有标准表） */
+    uint32_t current_checksum;     /**< 最近一次计算的本地参数校验和 */
+    uint32_t master_checksum;      /**< 主站最近校验过的校验和 */
+    bool ds_upload_flag;           /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
+    bool upload_event_pending;     /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
     /* 镜像不再常驻状态结构。序列化交给工作区中的暂存缓冲（上传可
      * 直接流式写入调用方缓冲），这里只保留指针与容量。 */
     uint8_t* image;        /**< 序列化/下载暂存缓冲（工作区或内嵌 fallback） */
@@ -136,19 +134,16 @@ void iolink_ds_refresh(iolink_ds_ctx_t* ctx);
 /**
  * @brief 绑定 DS 的参数来源。
  *
- * DS 的参数集合与值访问都来自对象字典：
- *  - 标准表（三个标识标签）通过 @p params_ctx 取值；
- *  - 应用表 @p app 中 storage 为 `IOLINK_OD_STORAGE_DS` 的项自动进入
- *    集合，值由表项后端提供。
+ * DS 的参数集合与值访问都来自对象字典：应用表 @p app 中 storage 为
+ * `IOLINK_OD_STORAGE_DS` 的项自动进入集合，值由表项后端提供（三个标签
+ * 也由应用以 STORAGE 表项提供）。
  *
  * 集合顺序固定为"标准表在前，应用表按表序"，不接受显式描述符列表。
  *
- * @param ctx        DS 上下文
- * @param app        应用 OD 表（可为 NULL，表示只有标准表）
- * @param params_ctx 标准标签对象的值后端（可为 NULL）
+ * @param ctx DS 上下文
+ * @param app 应用 OD 表（可为 NULL，表示没有 DS 参数）
  */
-void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app,
-                            iolink_params_ctx_t* params_ctx);
+void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app);
 
 /**
  * @brief 计算参数块的标准 32 位校验和（Fletcher-32）

@@ -29,7 +29,6 @@
 #include "iolinki/dll_ctx.h"
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
-#include "iolinki/params.h"
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 

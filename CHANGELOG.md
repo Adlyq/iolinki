@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed (tag parameter manager)
+- `include/iolinki/params.h` and `src/params.c`. The three writable tags
+  (`0x0018`-`0x001A`) are now application-provided
+  `IOLINK_OD_BYTES_STORAGE[_EX]` entries; the library routes them like any
+  other entry and no longer owns a tag store or a `HANDLER_TAG` backend.
+- `iolink_od_ctx_t::params`, `iolink_params_ctx_t`, the `iolink_ds_ctx_t`
+  tag binding and the tag branch of the ISDU factory reset. Factory reset
+  restores the DS set in RAM; the application supplies tag defaults and
+  persistence.
+
 ### Removed (library-owned NVM and persistence)
 - `include/iolinki/storage.h`, `iolink_storage_api_t`, the `storage` backend
   of `iolink_device_config_t`, `IOLINK_STORAGE_*`, `IOLINK_OD_STORAGE_PERSIST`,

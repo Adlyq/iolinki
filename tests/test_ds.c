@@ -19,7 +19,6 @@
 #include <string.h>
 
 #include "iolinki/data_storage.h"
-#include "iolinki/params.h"
 #include "iolinki/device_info.h"
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
@@ -49,7 +48,7 @@ static void test_ds_state_transitions(void** state)
     (void) state;
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds);
-    ds.params_ctx = test_env_params(&g_test_env);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
 
     /* 1. 触发 Download（主站数据更新） */
     iolink_ds_check(&ds, 0xABCD);
@@ -102,7 +101,7 @@ static void test_ds_commands_locked(void** state)
     (void) state;
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds);
-    ds.params_ctx = test_env_params(&g_test_env);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
 
     /* 1. 在锁定状态下尝试 Download Start（写） */
     int ret = iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, IOLINK_LOCK_DS);
@@ -124,7 +123,7 @@ static void test_ds_commands_unlocked(void** state)
     (void) state;
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds);
-    ds.params_ctx = test_env_params(&g_test_env);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
 
     /* 1. Download Start（写）未锁定 */
     int ret = iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0);
@@ -144,23 +143,22 @@ static void test_ds_param_round_trip(void** state)
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_ds_init(&ds);
-    ds.params_ctx = test_env_params(&g_test_env);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
 
     /* 配置已知的参数值。 */
     const char* app = "APP-TAG-1";
     const char* fun = "FLOW";
     const char* loc = "TANK-7";
-    assert_int_equal(
-        iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                (const uint8_t*) app, strlen(app))
-            .code,
-        0);
-    assert_int_equal(iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_FUNCTION_TAG,
-                                             0U, (const uint8_t*) fun, strlen(fun))
+    assert_int_equal(test_params_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
+                                       (const uint8_t*) app, strlen(app))
                          .code,
                      0);
-    assert_int_equal(iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_LOCATION_TAG,
-                                             0U, (const uint8_t*) loc, strlen(loc))
+    assert_int_equal(test_params_write(test_env_params(&g_test_env), IOLINK_IDX_FUNCTION_TAG, 0U,
+                                       (const uint8_t*) fun, strlen(fun))
+                         .code,
+                     0);
+    assert_int_equal(test_params_write(test_env_params(&g_test_env), IOLINK_IDX_LOCATION_TAG, 0U,
+                                       (const uint8_t*) loc, strlen(loc))
                          .code,
                      0);
 
@@ -177,11 +175,11 @@ static void test_ds_param_round_trip(void** state)
     assert_int_not_equal(backup_cs, 0);
 
     /* 清除设备参数。 */
-    iolink_params_ctx_factory_reset(test_env_params(&g_test_env));
+    test_params_factory_reset(test_env_params(&g_test_env));
     uint8_t buf[40];
-    const iolink_result_t cleared_app = iolink_params_ctx_read(
+    const iolink_result_t cleared_app = test_params_read(
         test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf));
-    const iolink_result_t cleared_fun = iolink_params_ctx_read(
+    const iolink_result_t cleared_fun = test_params_read(
         test_env_params(&g_test_env), IOLINK_IDX_FUNCTION_TAG, 0U, buf, sizeof(buf));
     assert_int_equal(cleared_app.code, 0);
     assert_int_equal(cleared_app.len, 0);
@@ -193,17 +191,17 @@ static void test_ds_param_round_trip(void** state)
     assert_int_equal(ds.current_checksum, backup_cs);
 
     /* 参数被逐字节恢复。 */
-    const iolink_result_t app_read = iolink_params_ctx_read(
+    const iolink_result_t app_read = test_params_read(
         test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf));
     assert_int_equal(app_read.code, 0);
     assert_int_equal(app_read.len, strlen(app));
     assert_memory_equal(buf, app, strlen(app));
-    const iolink_result_t fun_read = iolink_params_ctx_read(
+    const iolink_result_t fun_read = test_params_read(
         test_env_params(&g_test_env), IOLINK_IDX_FUNCTION_TAG, 0U, buf, sizeof(buf));
     assert_int_equal(fun_read.code, 0);
     assert_int_equal(fun_read.len, strlen(fun));
     assert_memory_equal(buf, fun, strlen(fun));
-    const iolink_result_t loc_read = iolink_params_ctx_read(
+    const iolink_result_t loc_read = test_params_read(
         test_env_params(&g_test_env), IOLINK_IDX_LOCATION_TAG, 0U, buf, sizeof(buf));
     assert_int_equal(loc_read.code, 0);
     assert_int_equal(loc_read.len, strlen(loc));
@@ -215,8 +213,8 @@ static void test_ds_bound_params_restore_device_context_only(void** state)
     (void) state;
     iolink_device_info_ctx_t info_a;
     iolink_device_info_ctx_t info_b;
-    iolink_params_ctx_t params_a;
-    iolink_params_ctx_t params_b;
+    iolink_test_params_t params_a;
+    iolink_test_params_t params_b;
     iolink_ds_ctx_t ds_a;
     iolink_ds_ctx_t ds_b;
     static const uint8_t tag_a[] = "CtxA";
@@ -226,38 +224,38 @@ static void test_ds_bound_params_restore_device_context_only(void** state)
 
     iolink_device_info_ctx_init(&info_a, NULL);
     iolink_device_info_ctx_init(&info_b, NULL);
-    iolink_params_ctx_init(&params_a, &info_a);
-    iolink_params_ctx_init(&params_b, &info_b);
+    test_params_init(&params_a, &info_a);
+    test_params_init(&params_b, &info_b);
     iolink_ds_init(&ds_a);
     iolink_ds_init(&ds_b);
-    iolink_ds_bind_sources(&ds_a, NULL, &params_a);
-    iolink_ds_bind_sources(&ds_b, NULL, &params_b);
+    iolink_ds_bind_sources(&ds_a, test_params_od(&params_a));
+    iolink_ds_bind_sources(&ds_b, test_params_od(&params_b));
 
-    assert_int_equal(iolink_params_ctx_write(&params_a, IOLINK_IDX_APPLICATION_TAG, 0U, tag_a,
-                                             sizeof(tag_a) - 1U)
-                         .code,
-                     0);
-    assert_int_equal(iolink_params_ctx_write(&params_b, IOLINK_IDX_APPLICATION_TAG, 0U, tag_b,
-                                             sizeof(tag_b) - 1U)
-                         .code,
-                     0);
+    assert_int_equal(
+        test_params_write(&params_a, IOLINK_IDX_APPLICATION_TAG, 0U, tag_a, sizeof(tag_a) - 1U)
+            .code,
+        0);
+    assert_int_equal(
+        test_params_write(&params_b, IOLINK_IDX_APPLICATION_TAG, 0U, tag_b, sizeof(tag_b) - 1U)
+            .code,
+        0);
 
     assert_true(iolink_ds_build_image(&ds_a) > 0);
     assert_true(ds_a.image_len <= sizeof(backup));
     memcpy(backup, ds_a.image, ds_a.image_len);
 
-    iolink_params_ctx_factory_reset(&params_a);
+    test_params_factory_reset(&params_a);
     assert_int_equal(iolink_ds_apply_image(&ds_a, backup, ds_a.image_len), 0);
 
     const iolink_result_t read_a =
-        iolink_params_ctx_read(&params_a, IOLINK_IDX_APPLICATION_TAG, 0U, out, sizeof(out));
+        test_params_read(&params_a, IOLINK_IDX_APPLICATION_TAG, 0U, out, sizeof(out));
     assert_int_equal(read_a.code, 0);
     assert_int_equal(read_a.len, sizeof(tag_a) - 1U);
     assert_memory_equal(out, tag_a, sizeof(tag_a) - 1U);
 
     memset(out, 0, sizeof(out));
     const iolink_result_t read_b =
-        iolink_params_ctx_read(&params_b, IOLINK_IDX_APPLICATION_TAG, 0U, out, sizeof(out));
+        test_params_read(&params_b, IOLINK_IDX_APPLICATION_TAG, 0U, out, sizeof(out));
     assert_int_equal(read_b.code, 0);
     assert_int_equal(read_b.len, sizeof(tag_b) - 1U);
     assert_memory_equal(out, tag_b, sizeof(tag_b) - 1U);
@@ -268,7 +266,7 @@ static void test_ds_apply_rejects_truncated(void** state)
     (void) state;
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds);
-    ds.params_ctx = test_env_params(&g_test_env);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
     /* 头部声称有 5 字节值，但后面只有 2 个数据字节 -> 被拒绝。 */
     uint8_t bad[] = {0x00, 0x18, 0x00, 0x05, 0xAA, 0xBB};
     assert_int_equal(iolink_ds_apply_image(&ds, bad, sizeof(bad)), -1);
@@ -329,13 +327,13 @@ static void test_ds_vendor_param_set_round_trip(void** state)
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, &k_vendor_app, test_env_params(&g_test_env));
+    iolink_ds_bind_sources(&ds,
+                           test_od_with_tags_static(&k_vendor_app, test_env_params(&g_test_env)));
 
-    assert_int_equal(
-        iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                (const uint8_t*) "TAG", 3U)
-            .code,
-        0);
+    assert_int_equal(test_params_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
+                                       (const uint8_t*) "TAG", 3U)
+                         .code,
+                     0);
     g_vendor_param_len = sizeof(vend);
     (void) memcpy(g_vendor_param, vend, sizeof(vend));
 
@@ -351,13 +349,13 @@ static void test_ds_vendor_param_set_round_trip(void** state)
     /* 清除两个来源并从镜像恢复。 */
     g_vendor_param_len = 0U;
     (void) memset(g_vendor_param, 0, sizeof(g_vendor_param));
-    iolink_params_ctx_factory_reset(test_env_params(&g_test_env));
+    test_params_factory_reset(test_env_params(&g_test_env));
     assert_int_equal(iolink_ds_apply_image(&ds, backup, len), 0);
 
     assert_int_equal(g_vendor_param_len, sizeof(vend));
     assert_memory_equal(g_vendor_param, vend, sizeof(vend));
     uint8_t tag[8] = {0U};
-    const iolink_result_t tag_read = iolink_params_ctx_read(
+    const iolink_result_t tag_read = test_params_read(
         test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, tag, sizeof(tag));
     assert_int_equal(tag_read.code, 0);
     assert_int_equal(tag_read.len, 3);
@@ -371,7 +369,7 @@ static void test_ds_download_recovery(void** state)
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_ds_init(&ds);
-    ds.params_ctx = test_env_params(&g_test_env);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
 
     /* 构造一个镜像，包含已知参数（ApplicationTag 0x18 = "X"）以及
        设备无法存储的未知索引（0x9999）。 */
@@ -393,7 +391,7 @@ static void test_ds_download_recovery(void** state)
 
     /* 已知参数已被应用。 */
     uint8_t buf[8];
-    const iolink_result_t applied = iolink_params_ctx_read(
+    const iolink_result_t applied = test_params_read(
         test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf));
     assert_int_equal(applied.code, 0);
     assert_int_equal(applied.len, 1);
@@ -439,7 +437,7 @@ static void test_ds_download_end_error_classification(void** state)
 
     /* 格式错误的暂存镜像 -> -1 -> PAR_SETINVALID。 */
     iolink_ds_init(&ds);
-    ds.params_ctx = test_env_params(&g_test_env);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
     uint8_t bad[] = {0x00U, 0x18U, 0x00U, 0x05U, 0xAAU}; /* 声称 5 字节，实际为 1 */
     (void) memcpy(ds.image, bad, sizeof(bad));
@@ -448,7 +446,8 @@ static void test_ds_download_end_error_classification(void** state)
 
     /* 已知参数被拒绝 -> -2 -> PAR_SETINCONSIST。 */
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, &k_reject_app, test_env_params(&g_test_env));
+    iolink_ds_bind_sources(&ds,
+                           test_od_with_tags_static(&k_reject_app, test_env_params(&g_test_env)));
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
     uint8_t img[] = {0x00U, 0x50U, 0x00U, 0x03U, 'A', 'B', 'C'};
     (void) memcpy(ds.image, img, sizeof(img));
@@ -473,7 +472,8 @@ static void test_ds_entry_block_len_bounds_value(void** state)
     };
 
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, &bounded_app, test_env_params(&g_test_env));
+    iolink_ds_bind_sources(&ds,
+                           test_od_with_tags_static(&bounded_app, test_env_params(&g_test_env)));
     g_vendor_param_len = 8U;
     (void) memcpy(g_vendor_param, "ABCDEFGH", 8U);
 
@@ -506,7 +506,7 @@ static void test_ds_entry_block_len_bounds_value(void** state)
 typedef struct
 {
     iolink_device_info_ctx_t info;
-    iolink_params_ctx_t params;
+    iolink_test_params_t params;
     iolink_ds_ctx_t ds;
     iolink_events_ctx_t events;
 } ds_fixture_t;
@@ -514,24 +514,24 @@ typedef struct
 static void ds_fixture_init(ds_fixture_t* f)
 {
     iolink_device_info_ctx_init(&f->info, NULL);
-    iolink_params_ctx_init(&f->params, &f->info);
+    test_params_init(&f->params, &f->info);
     iolink_ds_init(&f->ds);
-    iolink_ds_bind_sources(&f->ds, NULL, &f->params);
+    iolink_ds_bind_sources(&f->ds, test_params_od(&f->params));
     iolink_events_init(&f->events);
 }
 
 static void ds_fixture_set_tags(ds_fixture_t* f, const char* app, const char* fun, const char* loc)
 {
-    assert_int_equal(iolink_params_ctx_write(&f->params, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                             (const uint8_t*) app, strlen(app))
+    assert_int_equal(test_params_write(&f->params, IOLINK_IDX_APPLICATION_TAG, 0U,
+                                       (const uint8_t*) app, strlen(app))
                          .code,
                      0);
-    assert_int_equal(iolink_params_ctx_write(&f->params, IOLINK_IDX_FUNCTION_TAG, 0U,
-                                             (const uint8_t*) fun, strlen(fun))
+    assert_int_equal(test_params_write(&f->params, IOLINK_IDX_FUNCTION_TAG, 0U,
+                                       (const uint8_t*) fun, strlen(fun))
                          .code,
                      0);
-    assert_int_equal(iolink_params_ctx_write(&f->params, IOLINK_IDX_LOCATION_TAG, 0U,
-                                             (const uint8_t*) loc, strlen(loc))
+    assert_int_equal(test_params_write(&f->params, IOLINK_IDX_LOCATION_TAG, 0U,
+                                       (const uint8_t*) loc, strlen(loc))
                          .code,
                      0);
 }
@@ -543,7 +543,8 @@ static int ds_fixture_isdu_read(ds_fixture_t* f, uint16_t index, uint8_t sub, ui
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &f->ds;
-    ctx.params_ctx = &f->params;
+    ctx.od = test_params_od(&f->params);
+    ctx.device_info = &f->info;
     ctx.event_ctx = &f->events;
     assert_int_equal(isdu_send_read_request(&ctx, index, sub), 1);
     iolink_isdu_process(&ctx);
@@ -557,7 +558,8 @@ static int ds_fixture_isdu_write(ds_fixture_t* f, uint16_t index, uint8_t sub, c
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &f->ds;
-    ctx.params_ctx = &f->params;
+    ctx.od = test_params_od(&f->params);
+    ctx.device_info = &f->info;
     ctx.event_ctx = &f->events;
     assert_int_equal(isdu_send_write_request(&ctx, index, sub, data, len), 1);
     iolink_isdu_process(&ctx);
@@ -586,8 +588,7 @@ static void ds_fixture_assert_tag(ds_fixture_t* f, uint16_t index, const char* e
 {
     uint8_t buf[40] = {0U};
     const size_t expected_len = strlen(expected);
-    const iolink_result_t read_result =
-        iolink_params_ctx_read(&f->params, index, 0U, buf, sizeof(buf));
+    const iolink_result_t read_result = test_params_read(&f->params, index, 0U, buf, sizeof(buf));
     assert_int_equal(read_result.code, 0);
     assert_int_equal(read_result.len, expected_len);
     assert_memory_equal(buf, expected, expected_len);
@@ -635,7 +636,8 @@ static int ds_fixture_read_sub0_with_caps(ds_fixture_t* f, const iolink_caps_t* 
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &f->ds;
-    ctx.params_ctx = &f->params;
+    ctx.od = test_params_od(&f->params);
+    ctx.device_info = &f->info;
     ctx.event_ctx = &f->events;
     iolink_isdu_bind_caps(&ctx, caps);
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0U), 1);
@@ -651,7 +653,8 @@ static int ds_fixture_write_sub0_with_caps(ds_fixture_t* f, const iolink_caps_t*
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &f->ds;
-    ctx.params_ctx = &f->params;
+    ctx.od = test_params_od(&f->params);
+    ctx.device_info = &f->info;
     ctx.event_ctx = &f->events;
     iolink_isdu_bind_caps(&ctx, caps);
     assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0U, data, len), 1);
@@ -949,7 +952,7 @@ static void test_ds_apply_precheck_rejects_before_write(void** state)
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, &app, test_env_params(&g_test_env));
+    iolink_ds_bind_sources(&ds, test_od_with_tags_static(&app, test_env_params(&g_test_env)));
 
     g_validate_user = NULL;
     assert_int_equal(iolink_ds_apply_image(&ds, image, sizeof(image)), -2);
@@ -957,8 +960,8 @@ static void test_ds_apply_precheck_rejects_before_write(void** state)
     assert_ptr_equal(g_validate_user, &marker);
     /* 预校验在写入任何参数之前：前面的合法记录也不得生效。 */
     uint8_t out[4] = {0U};
-    assert_int_equal(iolink_params_ctx_read(test_env_params(&g_test_env), IOLINK_IDX_FUNCTION_TAG,
-                                            0U, out, sizeof(out))
+    assert_int_equal(test_params_read(test_env_params(&g_test_env), IOLINK_IDX_FUNCTION_TAG, 0U,
+                                      out, sizeof(out))
                          .len,
                      0U);
 }

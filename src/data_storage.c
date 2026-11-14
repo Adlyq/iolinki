@@ -21,7 +21,6 @@
 #include "iolinki/config.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/od.h"
-#include "iolinki/params.h"
 #include "iolinki/utils.h"
 #include <string.h>
 
@@ -133,22 +132,19 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx)
 #endif
 }
 
-void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app,
-                            iolink_params_ctx_t* params_ctx)
+void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app)
 {
     if (ctx == NULL) {
         return;
     }
     ctx->od_app = app;
-    ctx->params_ctx = params_ctx;
 }
 
-/** @brief 组合表项的值访问上下文（应用表 + 标准标签后端）。 */
+/** @brief 组合表项的值访问上下文。 */
 static iolink_od_ctx_t ds_od_ctx(iolink_ds_ctx_t* ctx)
 {
     iolink_od_ctx_t od;
     od.app = ctx->od_app;
-    od.params = ctx->params_ctx;
     return od;
 }
 
@@ -344,7 +340,6 @@ int iolink_ds_factory_reset(iolink_ds_ctx_t* ctx)
     }
     iolink_od_ctx_t od;
     od.app = ctx->od_app;
-    od.params = ctx->params_ctx;
 
     /* 复位 DS 集合：它是主站可备份/恢复的参数集，也是库当前唯一持有的
        集合标记。纯应用持久化参数由应用自行复位。 */

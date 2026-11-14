@@ -149,10 +149,11 @@ class IoddCLI(unittest.TestCase):
             self.run_cli('generate', path, '-o', self.xml, '--od', self.od, success=False)
             self.assertFalse(self.xml.exists())
 
-    def test_standard_index_collision_rejected(self):
+    def test_app_tag_indices_accepted(self):
+        # 0x0012/0x0013/0x0018 由 IODD 生成器作为标准识别变量单独声明；应用
+        # OD 现在也提供 0x0018-0x001A 标签，生成器接受但不重复输出。
         for index in ('18U', '19U', '24U'):
-            self.generate_od(scalar(index), ok=False)
-            self.assertFalse(self.xml.exists())
+            self.generate_od(scalar(index))
 
     def test_generated_business_rule_requirements(self):
         for name, value in [('reference_device', '0x00'), ('switching_sensor', '0x13,0x88')]:
@@ -294,7 +295,7 @@ int shim_write(unsigned index, unsigned sub, const unsigned char* data, size_t l
                         '-I' + str(ROOT / 'examples/switching_sensor'),
                         str(ROOT / 'examples/switching_sensor/switching_sensor.c'),
                         str(ROOT / 'examples/switching_sensor/switching_sensor_od.c'),
-                        str(ROOT / 'src/od.c'), str(ROOT / 'src/params.c'),
+                        str(ROOT / 'src/od.c'),
                         str(ROOT / 'src/device_info.c'), str(ROOT / 'src/platform.c'),
                         str(shim), '-o', str(library)], check=True)
         lib = ctypes.CDLL(str(library))

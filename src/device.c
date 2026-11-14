@@ -318,7 +318,6 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     }
 
     iolink_device_info_ctx_init(&ctx->device_info, config->device_info);
-    iolink_params_ctx_init(&ctx->params, &ctx->device_info);
     iolink_dll_init(&ctx->dll.main, &ctx->dll.isr, &config->phy);
     /* 实例能力在绑定 PHY 之后、任何 ISR 可能运行之前解析一次。 */
     ctx->dll.main.shared.caps =
@@ -342,7 +341,7 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     /* iolink_dll_init() 在时钟绑定之前已采样了平台时钟。 */
     ctx->dll.main.master_last_activity_ms = dll_time_ms(&ctx->dll.main);
     ctx->dll.main.shared.isdu.direct_param_page2 = ctx->direct_param_page2;
-    ctx->dll.main.shared.isdu.params_ctx = &ctx->params;
+    ctx->dll.main.shared.isdu.device_info = &ctx->device_info;
     ctx->dll.main.shared.isdu.od = config->od;
     ctx->dll.main.state_cb = device_state_cb;
     ctx->dll.main.state_cb_user = ctx;
@@ -352,7 +351,7 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     ctx->dll.main.shared.isdu.ds_ctx = &ctx->dll.main.ds;
     /* DS 参数访问统一走 OD 表：标准标签经参数上下文，应用参数经表项
        后端。DS 成员由表项 storage 位掩码决定（标准表 + config->od）。 */
-    iolink_ds_bind_sources(&ctx->dll.main.ds, config->od, &ctx->params);
+    iolink_ds_bind_sources(&ctx->dll.main.ds, config->od);
     /* 按当前参数集刷新 Size/Checksum，使 0x0003 在首次上传前有效。 */
     iolink_ds_refresh(&ctx->dll.main.ds);
 #else

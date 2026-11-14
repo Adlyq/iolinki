@@ -13,7 +13,6 @@
 #include "iolinki/crc.h"
 #include "iolinki/events.h"
 #include "iolinki/device_info.h"
-#include "iolinki/params.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/port.h"
 #include "iolinki/utils.h"
@@ -188,21 +187,14 @@ void iolink_isdu_bind_caps(iolink_isdu_ctx_t* ctx, const iolink_caps_t* caps)
     }
 }
 
-/** @brief 对绑定的参数上下文执行恢复出厂设置；未绑定则不做任何事。 */
-static void isdu_params_factory_reset(iolink_isdu_ctx_t* ctx)
+/** @brief 对绑定的 DS 上下文执行恢复出厂设置；未绑定则不做任何事。 */
+static void isdu_factory_reset(iolink_isdu_ctx_t* ctx)
 {
-    /* 绑定时复位设备自身的参数上下文（如 device.c
-       通过 ctx->params_ctx 所做的那样）；未绑定时没有全局回退。
-       必须使用绑定的上下文，否则每个设备的应用标签会在
-       Restore Factory Settings 命令之后仍然存在。 */
     if (ctx == NULL) {
         return;
     }
-    if (ctx->params_ctx != NULL) {
-        iolink_params_ctx_factory_reset(ctx->params_ctx);
-    }
 #if IOLINK_FEATURE_DATA_STORAGE
-    /* 应用参数恢复默认值，并一次性重写参数镜像（含标签）。 */
+    /* 应用参数恢复默认值（三个标签也由应用的 DS 表项承担）。 */
     if (ctx->ds_ctx != NULL) {
         (void) iolink_ds_factory_reset((iolink_ds_ctx_t*) ctx->ds_ctx);
     }
@@ -212,22 +204,20 @@ static void isdu_params_factory_reset(iolink_isdu_ctx_t* ctx)
 /** @brief 绑定到该 ISDU 上下文的设备信息上下文（若有）。 */
 static iolink_device_info_ctx_t* isdu_info_ctx(iolink_isdu_ctx_t* ctx)
 {
-    return ((ctx != NULL) && (ctx->params_ctx != NULL)) ? ctx->params_ctx->device_info : NULL;
+    return (ctx != NULL) ? ctx->device_info : NULL;
 }
 
 /** @brief 该 ISDU 上下文的有效标识。 */
 static const iolink_device_info_t* isdu_info(const iolink_isdu_ctx_t* ctx)
 {
-    const iolink_device_info_ctx_t* info_ctx =
-        ((ctx != NULL) && (ctx->params_ctx != NULL)) ? ctx->params_ctx->device_info : NULL;
+    const iolink_device_info_ctx_t* info_ctx = (ctx != NULL) ? ctx->device_info : NULL;
     return (info_ctx != NULL) ? iolink_device_info_ctx_get(info_ctx) : NULL;
 }
 
 /** @brief 该 ISDU 上下文的有效访问锁。 */
 static uint16_t isdu_access_locks(const iolink_isdu_ctx_t* ctx)
 {
-    const iolink_device_info_ctx_t* info_ctx =
-        ((ctx != NULL) && (ctx->params_ctx != NULL)) ? ctx->params_ctx->device_info : NULL;
+    const iolink_device_info_ctx_t* info_ctx = (ctx != NULL) ? ctx->device_info : NULL;
     return (info_ctx != NULL) ? iolink_device_info_ctx_get_access_locks(info_ctx) : 0U;
 }
 
@@ -899,7 +889,7 @@ static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                "Clear"：ErrorCount 被复位，且每个活动的 Error/Warning
                都以 "event disappears" 撤销，使主站可将其
                从诊断中移除。 */
-            isdu_params_factory_reset(ctx);
+            isdu_factory_reset(ctx);
             isdu_clear_ds_upload_req(ctx);
             isdu_reset_error_counters(ctx);
 #if IOLINK_FEATURE_EVENTS
@@ -917,7 +907,7 @@ static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                通信（10.7.5）。Table 178 还要求
                DS_UPLOAD_FLAG = 0；Table 101 将诊断与状态置为
                "0"。 */
-            isdu_params_factory_reset(ctx);
+            isdu_factory_reset(ctx);
             isdu_clear_ds_upload_req(ctx);
             if (ctx->dll_ctx != NULL) {
                 iolink_dll_request_back_to_box((iolink_dll_main_t*) ctx->dll_ctx);
@@ -1298,7 +1288,7 @@ static void dp_page1_refresh(iolink_isdu_ctx_t* ctx)
     IOLINK_FENCE(); /* 先标记"更新中"，再写映像 */
     (void) memcpy(ctx->dp_page1, page, sizeof(page));
     ctx->dp_page1_src = ctx->dll_ctx;
-    ctx->dp_page1_info = (const void*) ctx->params_ctx;
+    ctx->dp_page1_info = (const void*) ctx->device_info;
     IOLINK_FENCE(); /* 映像写完后才发布为稳定 */
     ctx->dp_page1_seq = (uint8_t) (ctx->dp_page1_seq + 1U);
 }
@@ -1315,7 +1305,7 @@ static void dp_page1_ensure(iolink_isdu_ctx_t* ctx)
     const iolink_dll_main_t* dll = (const iolink_dll_main_t*) ctx->dll_ctx;
     bool stale = ((ctx->dp_page1_seq & 1U) != 0U);
     if ((ctx->dp_page1_src != ctx->dll_ctx) ||
-        (ctx->dp_page1_info != (const void*) ctx->params_ctx)) {
+        (ctx->dp_page1_info != (const void*) ctx->device_info)) {
         stale = true; /* 绑定/重绑上下文：映像必须按新上下文重建 */
     }
     if ((dll != NULL) && (ctx->dp_page1[0x01] != dll->master_cycle_time)) {
@@ -1714,7 +1704,6 @@ static void isdu_serve_od_value(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t*
 {
     iolink_od_ctx_t od;
     od.app = ctx->od;
-    od.params = ctx->params_ctx;
 
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -1842,7 +1831,6 @@ static void isdu_serve_entry(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t* en
             handle_error_stats(ctx);
             return;
 
-        case IOLINK_OD_HANDLER_TAG:
         case IOLINK_OD_HANDLER_NONE:
             isdu_serve_od_value(ctx, entry);
             return;

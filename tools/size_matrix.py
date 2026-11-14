@@ -69,7 +69,6 @@ SOURCES = [
     "src/events.c",
     "src/diag.c",
     "src/platform.c",
-    "src/params.c",
     "src/data_storage.c",
     "src/device_info.c",
     "src/device.c",

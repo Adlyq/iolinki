@@ -164,7 +164,7 @@ int main(void)
 
     assert(iolink_ds_get_image(ds, NULL) == NULL);
     const int built = iolink_ds_build_image(ds);
-    assert(built > 0);
+    assert(built >= 0);
     assert(built <= (int) IOLINK_DS_IMAGE_MAX);
     assert(iolink_ds_get_image(ds, NULL) == NULL);
     return 0;

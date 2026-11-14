@@ -71,6 +71,9 @@ typedef struct
     uint8_t config4[CONFORMANCE_CONFIG4_COUNT][CONFORMANCE_CONFIG4_SIZE];
     size_t config4_len[CONFORMANCE_CONFIG4_COUNT];
 
+    uint8_t tags[3][32];
+    uint8_t tag_len[3];
+
     conformance_reset_observation_t reset_observation;
     uint32_t local_change_count;
     uint8_t default_config1[CONFORMANCE_CONFIG1_MAX];

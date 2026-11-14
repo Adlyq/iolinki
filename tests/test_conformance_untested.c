@@ -23,7 +23,6 @@
 #include "iolinki/dll_ctx.h"
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
-#include "iolinki/params.h"
 #include "iolinki/protocol.h"
 #include "conformance_test.h"
 #include "test_helpers.h"
@@ -104,13 +103,12 @@ static void make_isdu_ctx(conformance_device_t* app, iolink_isdu_ctx_t* ctx)
     ctx->event_ctx = iolink_device_get_events_ctx(&app->device);
     ctx->ds_ctx = iolink_device_get_ds_ctx(&app->device);
     ctx->dll_ctx = &app->device.dll.main;
-    ctx->params_ctx = &app->device.params;
     ctx->od = app->config.od;
     ctx->direct_param_page2 = app->device.direct_param_page2;
 }
 
 /* 调用方负责准备上下文（make_isdu_ctx() 或显式 init）；不要
-   在此重新初始化，否则已绑定的 device/params/DS 指针会丢失。 */
+   在此重新初始化，否则已绑定的 device/OD/DS 指针会丢失。 */
 static int isdu_read(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex, uint8_t* out,
                      size_t out_len)
 {
@@ -354,22 +352,22 @@ static void test_0131_detailed_device_status_active_after_restart(void** state)
 typedef struct
 {
     iolink_device_info_ctx_t info;
-    iolink_params_ctx_t params;
+    iolink_test_params_t params;
     iolink_ds_ctx_t ds;
 } reset_fixture_t;
 
 static void reset_fixture_init(reset_fixture_t* f)
 {
     iolink_device_info_ctx_init(&f->info, NULL);
-    iolink_params_ctx_init(&f->params, &f->info);
+    test_params_init(&f->params, &f->info);
     iolink_ds_init(&f->ds);
-    iolink_ds_bind_sources(&f->ds, NULL, &f->params);
+    iolink_ds_bind_sources(&f->ds, test_params_od(&f->params));
 }
 
 static void reset_fixture_power_cycle(reset_fixture_t* f)
 {
     iolink_ds_init(&f->ds);
-    iolink_ds_bind_sources(&f->ds, NULL, &f->params);
+    iolink_ds_bind_sources(&f->ds, test_params_od(&f->params));
 }
 
 static int reset_fixture_isdu(reset_fixture_t* f, bool write, uint16_t index, uint8_t sub,
@@ -379,7 +377,8 @@ static int reset_fixture_isdu(reset_fixture_t* f, bool write, uint16_t index, ui
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &f->ds;
-    ctx.params_ctx = &f->params;
+    ctx.od = test_params_od(&f->params);
+    ctx.device_info = &f->info;
     if (write) {
         assert_int_equal(isdu_send_write_request(&ctx, index, sub, data, len), 1);
     }
@@ -403,10 +402,10 @@ static void test_0145_download_break_by_reset(void** state)
     reset_fixture_init(&f);
 
     const uint8_t value1[] = "VALUE1";
-    assert_int_equal(iolink_params_ctx_write(&f.params, IOLINK_IDX_APPLICATION_TAG, 0U, value1,
-                                             sizeof(value1) - 1U)
-                         .code,
-                     0);
+    assert_int_equal(
+        test_params_write(&f.params, IOLINK_IDX_APPLICATION_TAG, 0U, value1, sizeof(value1) - 1U)
+            .code,
+        0);
     uint8_t readback[16] = {0U};
     assert_int_equal(reset_fixture_tag(&f, readback, sizeof(readback)),
                      (int) (sizeof(value1) - 1U));
@@ -452,10 +451,10 @@ static void test_0329_upload_break_by_reset(void** state)
     reset_fixture_init(&f);
 
     const uint8_t value1[] = "VALUE1";
-    assert_int_equal(iolink_params_ctx_write(&f.params, IOLINK_IDX_APPLICATION_TAG, 0U, value1,
-                                             sizeof(value1) - 1U)
-                         .code,
-                     0);
+    assert_int_equal(
+        test_params_write(&f.params, IOLINK_IDX_APPLICATION_TAG, 0U, value1, sizeof(value1) - 1U)
+            .code,
+        0);
 
     uint8_t response[4] = {0U};
     const uint8_t upload_start = IOLINK_CMD_PARAM_UPLOAD_START;

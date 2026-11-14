@@ -242,6 +242,133 @@ const iolink_phy_api_t g_phy_mock = {.user = NULL,
                                      .int_active = mock_int_active};
 
 /* 显式测试环境（替代进程级单例）。调用方拥有存储并负责初始化。 */
+void test_params_init(iolink_test_params_t* params, iolink_device_info_ctx_t* info)
+{
+    if (params == NULL) {
+        return;
+    }
+    (void) memset(params, 0, sizeof(*params));
+    const iolink_device_info_t* def = (info != NULL) ? iolink_device_info_ctx_get(info) : NULL;
+    if ((def != NULL) && (def->application_tag != NULL)) {
+        size_t n = strlen(def->application_tag);
+        if (n > 32U) {
+            n = 32U;
+        }
+        (void) memcpy(params->app, def->application_tag, n);
+        params->app_len = (uint8_t) n;
+    }
+    params->entries[0] = (iolink_od_entry_t) IOLINK_OD_BYTES_STORAGE(
+        IOLINK_IDX_APPLICATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
+        IOLINK_OD_STORAGE_DS, 32U, "ApplicationSpecificTag", params->app, &params->app_len);
+    params->entries[1] = (iolink_od_entry_t) IOLINK_OD_BYTES_STORAGE(
+        IOLINK_IDX_FUNCTION_TAG, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
+        IOLINK_OD_STORAGE_DS, 32U, "FunctionTag", params->fun, &params->fun_len);
+    params->entries[2] = (iolink_od_entry_t) IOLINK_OD_BYTES_STORAGE(
+        IOLINK_IDX_LOCATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
+        IOLINK_OD_STORAGE_DS, 32U, "LocationTag", params->loc, &params->loc_len);
+    params->od.entries = params->entries;
+    params->od.count = 3U;
+    params->od.user = NULL;
+}
+
+void test_params_factory_reset(iolink_test_params_t* params)
+{
+    if (params == NULL) {
+        return;
+    }
+    params->app_len = 0U;
+    params->fun_len = 0U;
+    params->loc_len = 0U;
+}
+
+iolink_result_t test_params_read(const iolink_test_params_t* params, uint16_t index,
+                                 uint8_t subindex, uint8_t* buffer, size_t max_len)
+{
+    if (params == NULL) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
+    }
+    const iolink_od_ctx_t ctx = {.app = &params->od};
+    const iolink_od_entry_t* entry = iolink_od_find(&params->od, index, subindex);
+    if (entry == NULL) {
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
+    }
+    return iolink_od_read_value(&ctx, entry, subindex, buffer, max_len);
+}
+
+iolink_result_t test_params_write(iolink_test_params_t* params, uint16_t index, uint8_t subindex,
+                                  const uint8_t* data, size_t len)
+{
+    if (params == NULL) {
+        return iolink_result_error(IOLINK_RESULT_INVALID);
+    }
+    iolink_od_ctx_t ctx = {.app = &params->od};
+    const iolink_od_entry_t* entry = iolink_od_find(&params->od, index, subindex);
+    if (entry == NULL) {
+        return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
+    }
+    return iolink_od_write_value(&ctx, entry, subindex, data, len);
+}
+
+iolink_od_app_t* test_params_od(iolink_test_params_t* params)
+{
+    return (params != NULL) ? &params->od : NULL;
+}
+
+static iolink_test_params_t g_device_params;
+
+iolink_od_app_t* test_default_tag_od(void)
+{
+    if (g_device_params.od.count == 0U) {
+        iolink_device_info_ctx_t info;
+        iolink_device_info_ctx_init(&info, NULL);
+        test_params_init(&g_device_params, &info);
+    }
+    return &g_device_params.od;
+}
+
+iolink_od_app_t test_od_with_tags(const iolink_od_app_t* app, iolink_od_entry_t* storage,
+                                  size_t capacity)
+{
+    iolink_od_app_t merged;
+    const iolink_od_app_t* tags = test_default_tag_od();
+    size_t n = 0U;
+
+    if (app != NULL) {
+        for (size_t i = 0U; (i < app->count) && (n < capacity); i++) {
+            storage[n++] = app->entries[i];
+        }
+    }
+    for (size_t i = 0U; (i < tags->count) && (n < capacity); i++) {
+        storage[n++] = tags->entries[i];
+    }
+    merged.entries = storage;
+    merged.count = n;
+    merged.user = (app != NULL) ? app->user : NULL;
+    return merged;
+}
+
+iolink_od_app_t* test_od_with_tags_static(const iolink_od_app_t* app,
+                                          const iolink_test_params_t* params)
+{
+    static iolink_od_entry_t storage[64];
+    static iolink_od_app_t merged;
+    const iolink_od_app_t* tags = (params != NULL) ? &params->od : test_default_tag_od();
+    size_t n = 0U;
+
+    if (app != NULL) {
+        for (size_t i = 0U; (i < app->count) && (n < 64U); i++) {
+            storage[n++] = app->entries[i];
+        }
+    }
+    for (size_t i = 0U; (i < tags->count) && (n < 64U); i++) {
+        storage[n++] = tags->entries[i];
+    }
+    merged.entries = storage;
+    merged.count = n;
+    merged.user = (app != NULL) ? app->user : NULL;
+    return &merged;
+}
+
 void test_env_init(iolink_test_env_t* env, const iolink_device_info_t* info)
 {
     if (env == NULL) {
@@ -249,13 +376,13 @@ void test_env_init(iolink_test_env_t* env, const iolink_device_info_t* info)
     }
     (void) memset(env, 0, sizeof(*env));
     iolink_device_info_ctx_init(&env->info, info);
-    iolink_params_ctx_init(&env->params, &env->info);
+    test_params_init(&env->params, &env->info);
 }
 
 void test_env_reset_params(iolink_test_env_t* env)
 {
     if (env != NULL) {
-        iolink_params_ctx_init(&env->params, &env->info);
+        test_params_init(&env->params, &env->info);
     }
 }
 
@@ -264,7 +391,7 @@ iolink_device_info_ctx_t* test_env_info(iolink_test_env_t* env)
     return (env != NULL) ? &env->info : NULL;
 }
 
-iolink_params_ctx_t* test_env_params(iolink_test_env_t* env)
+iolink_test_params_t* test_env_params(iolink_test_env_t* env)
 {
     return (env != NULL) ? &env->params : NULL;
 }
@@ -272,7 +399,8 @@ iolink_params_ctx_t* test_env_params(iolink_test_env_t* env)
 void test_isdu_bind_params(iolink_isdu_ctx_t* ctx, iolink_test_env_t* env)
 {
     if ((ctx != NULL) && (env != NULL)) {
-        ctx->params_ctx = &env->params;
+        ctx->od = &env->params.od;
+        ctx->device_info = &env->info;
     }
 }
 
@@ -333,6 +461,12 @@ static void test_device_fill_config(iolink_test_device_t* dev, const iolink_stac
     dev->cfg.phy = g_phy_mock;
     dev->cfg.time_us = (g_iolink_test_time_us_override != NULL) ? g_iolink_test_time_us_override
                                                                 : iolink_test_time_us;
+    /* 设备默认带三个标签（应用以 STORAGE 表项提供）；用库的默认
+       device_info 生成 "DefaultTag" 标签初值。 */
+    iolink_device_info_ctx_t info;
+    iolink_device_info_ctx_init(&info, NULL);
+    test_params_init(&g_device_params, &info);
+    dev->cfg.od = &g_device_params.od;
     if (stack != NULL) {
         dev->cfg.stack = *stack;
     }

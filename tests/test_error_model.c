@@ -29,7 +29,6 @@
 
 #include "iolinki/data_storage.h"
 #include "iolinki/isdu.h"
-#include "iolinki/params.h"
 #include "iolinki/protocol.h"
 #include "iolinki/result.h"
 #include "test_helpers.h"
@@ -82,12 +81,11 @@ static void test_unknown_index_is_not_handled(void** state)
     uint8_t buffer[8] = {0U};
 
     const iolink_result_t read_result =
-        iolink_params_ctx_read(&g_env.params, 0x0100U, 0U, buffer, sizeof(buffer));
+        test_params_read(&g_env.params, 0x0100U, 0U, buffer, sizeof(buffer));
     assert_int_equal(read_result.code, IOLINK_RESULT_NOT_HANDLED);
     assert_int_equal(read_result.len, 0U);
 
-    const iolink_result_t write_result =
-        iolink_params_ctx_write(&g_env.params, 0x0100U, 0U, buffer, 1U);
+    const iolink_result_t write_result = test_params_write(&g_env.params, 0x0100U, 0U, buffer, 1U);
     assert_int_equal(write_result.code, IOLINK_RESULT_NOT_HANDLED);
     assert_int_equal(write_result.len, 0U);
 }
@@ -98,15 +96,15 @@ static void test_invalid_arguments_are_invalid(void** state)
     (void) state;
     static const uint8_t data[1] = {0U};
     const iolink_result_t read_result =
-        iolink_params_ctx_read(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, NULL, 0U);
+        test_params_read(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, NULL, 0U);
     assert_int_equal(read_result.code, IOLINK_RESULT_INVALID);
 
     const iolink_result_t write_result =
-        iolink_params_ctx_write(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, NULL, 1U);
+        test_params_write(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, NULL, 1U);
     assert_int_equal(write_result.code, IOLINK_RESULT_INVALID);
 
     const iolink_result_t null_ctx_result =
-        iolink_params_ctx_write(NULL, IOLINK_IDX_APPLICATION_TAG, 0U, data, 1U);
+        test_params_write(NULL, IOLINK_IDX_APPLICATION_TAG, 0U, data, 1U);
     assert_int_equal(null_ctx_result.code, IOLINK_RESULT_INVALID);
 }
 
@@ -119,18 +117,18 @@ static void test_tag_length_boundary(void** state)
     (void) memset(data, 'B', sizeof(data));
 
     const iolink_result_t write_ok =
-        iolink_params_ctx_write(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, data, 32U);
+        test_params_write(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, data, 32U);
     assert_int_equal(write_ok.code, 0);
     assert_int_equal(write_ok.len, 0U);
 
-    const iolink_result_t read_ok = iolink_params_ctx_read(
-        &g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, readback, sizeof(readback));
+    const iolink_result_t read_ok =
+        test_params_read(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, readback, sizeof(readback));
     assert_int_equal(read_ok.code, 0);
     assert_int_equal(read_ok.len, 32U);
     assert_memory_equal(readback, data, 32U);
 
     const iolink_result_t write_overrun =
-        iolink_params_ctx_write(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, data, 33U);
+        test_params_write(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, data, 33U);
     assert_int_equal(write_overrun.code, IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
     assert_int_equal(write_overrun.len, 0U);
 }
@@ -143,12 +141,12 @@ static void test_round_trip_reports_length(void** state)
     uint8_t readback[8];
 
     const iolink_result_t write_result =
-        iolink_params_ctx_write(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, tag, sizeof(tag));
+        test_params_write(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, tag, sizeof(tag));
     assert_int_equal(write_result.code, 0);
     assert_int_equal(write_result.len, 0U);
 
-    const iolink_result_t read_result = iolink_params_ctx_read(
-        &g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, readback, sizeof(readback));
+    const iolink_result_t read_result =
+        test_params_read(&g_env.params, IOLINK_IDX_APPLICATION_TAG, 0U, readback, sizeof(readback));
     assert_int_equal(read_result.code, 0);
     assert_int_equal(read_result.len, sizeof(tag));
     assert_memory_equal(readback, tag, sizeof(tag));
@@ -158,7 +156,7 @@ static void test_round_trip_reports_length(void** state)
 static void ds_download_begin(iolink_ds_ctx_t* ds, const iolink_od_app_t* app)
 {
     iolink_ds_init(ds);
-    iolink_ds_bind_sources(ds, app, NULL);
+    iolink_ds_bind_sources(ds, app);
     /* 0x03 同时是 ParamDownloadStart ISDU 命令与 DS_DownloadStart 命令。 */
     assert_int_equal(iolink_ds_handle_ds_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0U), 0);
 }

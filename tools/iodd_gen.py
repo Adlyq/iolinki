@@ -52,8 +52,11 @@ def validate_config(config, variables=None):
         raise ValueError('vendorName and productName must be nonempty')
     ids = {'V_DirectParameters_1', 'V_DirectParameters_2', 'V_ProductName', 'V_ApplicationSpecificTag', 'V_ProductID', 'M_Identification', 'M_Parameter'}
     # ProductName, ProductID and ApplicationSpecificTag are declared below.
-    indexes = {18, 19, 24}
+    indexes = {18, 19, 24, 25, 26}
     variables = [] if variables is None else variables
+    # 0x0012/0x0013 是标准识别变量，0x0018-0x001A 是三个标签，均由 IODD 生成器
+    # 单独声明。应用 OD 现在也会提供标签表项，先把这些索引从参数列表剔除。
+    variables[:] = [v for v in variables if v.get('index') not in indexes]
     def unique_id(value):
         if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_.-]*', value) or value in ids:
             raise ValueError(f'Invalid or duplicate id: {value}')

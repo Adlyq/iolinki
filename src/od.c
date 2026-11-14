@@ -127,17 +127,6 @@ static const iolink_od_entry_t k_od_table[] = {
                              IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE,
                              IOLINK_OD_HANDLER_IDENT_STRING, 64U, "FirmwareRevision"),
 
-    /* 0x0018-0x001A：可写标签，属于 DS 参数集并写进参数镜像。 */
-    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_APPLICATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED,
-                             IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_TAG,
-                             32U, "ApplicationSpecificTag"),
-    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_FUNCTION_TAG, IOLINK_OD_ACCESS_RW_LOCKED,
-                             IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_TAG,
-                             32U, "FunctionTag"),
-    IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_LOCATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED,
-                             IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_DS, IOLINK_OD_HANDLER_TAG,
-                             32U, "LocationTag"),
-
     /* 0x001B：ProductURI 可选，取决于 Profile。 */
     IOLINK_OD_BUILTIN_STRING(IOLINK_IDX_PRODUCT_URI, IOLINK_OD_ACCESS_RO, IOLINK_OD_WRITE_VOLATILE,
                              IOLINK_OD_STORAGE_VOLATILE, IOLINK_OD_HANDLER_IDENT_STRING, 100U,
@@ -235,14 +224,20 @@ static bool od_index_is_device_specific(uint16_t index)
     return ((index >= 0x0040U) && (index <= 0x00FEU)) || (index >= 0x0100U);
 }
 
+/** @brief 应用可提供的标准数据索引（三个标签 0x0018-0x001A）。 */
+static bool od_index_is_app_owned(uint16_t index)
+{
+    return (index >= IOLINK_IDX_APPLICATION_TAG) && (index <= IOLINK_IDX_LOCATION_TAG);
+}
+
 const iolink_od_entry_t* iolink_od_find(const iolink_od_app_t* app, uint16_t index,
                                         uint8_t subindex)
 {
     const iolink_od_entry_t* entry;
 
-    if (od_index_is_device_specific(index)) {
-        /* 设备专用索引由产品定义：应用表优先，标准表里同索引的内建
-         * 厂商扩展（如 0x0040 错误统计）只作回落。 */
+    if (od_index_is_device_specific(index) || od_index_is_app_owned(index)) {
+        /* 设备专用索引由产品定义，标签数据也归应用：应用表优先，标准表里
+         * 同索引的内建厂商扩展（如 0x0040 错误统计）只作回落。 */
         entry = iolink_od_find_app(app, index, subindex);
         if (entry == NULL) {
             entry = od_find_in(k_od_table, OD_TABLE_COUNT, index, subindex);
@@ -534,21 +529,6 @@ static iolink_result_t od_storage_write(const iolink_od_entry_t* entry, void* us
     return result;
 }
 
-/** @brief 标签写路径：写 RAM → on_change 通知。 */
-static iolink_result_t od_tag_write(iolink_od_ctx_t* ctx, const iolink_od_entry_t* entry,
-                                    uint8_t subindex, const uint8_t* data, size_t len, void* user)
-{
-    iolink_result_t result =
-        iolink_params_ctx_write(ctx->params, entry->index, subindex, data, len);
-    if (!iolink_result_succeeded(result)) {
-        return result;
-    }
-    if (entry->on_change != NULL) {
-        result = entry->on_change(user, entry, data, len);
-    }
-    return result;
-}
-
 iolink_result_t iolink_od_read_value(const iolink_od_ctx_t* ctx, const iolink_od_entry_t* entry,
                                      uint8_t subindex, uint8_t* out, size_t cap)
 {
@@ -561,13 +541,7 @@ iolink_result_t iolink_od_read_value(const iolink_od_ctx_t* ctx, const iolink_od
     }
 
     iolink_result_t result;
-    if (entry->handler == (uint8_t) IOLINK_OD_HANDLER_TAG) {
-        if (ctx->params == NULL) {
-            return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
-        }
-        result = iolink_params_ctx_read(ctx->params, entry->index, subindex, out, cap);
-    }
-    else if (entry->handler == (uint8_t) IOLINK_OD_HANDLER_NONE) {
+    if (entry->handler == (uint8_t) IOLINK_OD_HANDLER_NONE) {
         if (entry->backend == (uint8_t) IOLINK_OD_BACKEND_STORAGE) {
             result = od_storage_read(entry, out, cap);
         }
@@ -624,12 +598,6 @@ iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entr
         return entry->on_change(user, entry, data, len);
     }
 
-    if (entry->handler == (uint8_t) IOLINK_OD_HANDLER_TAG) {
-        if (ctx->params == NULL) {
-            return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
-        }
-        return od_tag_write(ctx, entry, subindex, data, len, user);
-    }
     if (entry->handler == (uint8_t) IOLINK_OD_HANDLER_NONE) {
         if (entry->backend == (uint8_t) IOLINK_OD_BACKEND_STORAGE) {
             return od_storage_write(entry, user, data, len);
@@ -664,12 +632,6 @@ iolink_result_t iolink_od_restore_value(iolink_od_ctx_t* ctx, const iolink_od_en
     }
     if (subindex > entry->max_subindex) {
         return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
-    }
-    if (entry->handler == (uint8_t) IOLINK_OD_HANDLER_TAG) {
-        if (ctx->params == NULL) {
-            return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
-        }
-        return iolink_params_ctx_write(ctx->params, entry->index, subindex, data, len);
     }
     if (entry->handler != (uint8_t) IOLINK_OD_HANDLER_NONE) {
         return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
@@ -769,8 +731,9 @@ int od_validate_app(const iolink_od_app_t* app)
         const iolink_od_entry_t* entry = &app->entries[i];
         const int rc = od_validate_entry(entry);
 
-        if (entry->index < 0x0040U) {
-            /* 规范固定索引不允许被应用表占用；应用项在那里不可达。 */
+        if ((entry->index < 0x0040U) && !od_index_is_app_owned(entry->index)) {
+            /* 规范固定索引不允许被应用表占用；应用项在那里不可达。
+               例外：三个标签（0x0018-0x001A）的数据归应用。 */
             return OD_VALIDATE_ERR_STD_INDEX;
         }
         if (rc != OD_VALIDATE_OK) {

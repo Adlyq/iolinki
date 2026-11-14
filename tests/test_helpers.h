@@ -68,7 +68,39 @@ void test_io_cycle(iolink_device_ctx_t* ctx);
 /* mock PHY 驱动 API */
 extern const iolink_phy_api_t g_phy_mock;
 
-/* 显式的测试环境：设备标识 + 参数上下文。
+/* 测试专用参数 shim：库已删除 params 上下文；这里用应用标签 OD 表项
+ * 复刻旧的 `iolink_params_ctx_*` 读写语义，让既有测试最小改动迁移。 */
+typedef struct
+{
+    uint8_t app[33];
+    uint8_t app_len;
+    uint8_t fun[33];
+    uint8_t fun_len;
+    uint8_t loc[33];
+    uint8_t loc_len;
+    iolink_od_entry_t entries[3];
+    iolink_od_app_t od;
+} iolink_test_params_t;
+
+void test_params_init(iolink_test_params_t* params, iolink_device_info_ctx_t* info);
+void test_params_factory_reset(iolink_test_params_t* params);
+iolink_result_t test_params_read(const iolink_test_params_t* params, uint16_t index,
+                                 uint8_t subindex, uint8_t* buffer, size_t max_len);
+iolink_result_t test_params_write(iolink_test_params_t* params, uint16_t index, uint8_t subindex,
+                                  const uint8_t* data, size_t len);
+iolink_od_app_t* test_params_od(iolink_test_params_t* params);
+
+/* 进程级默认标签表（惰性初始化，三个标签绑定到全局缓冲）。 */
+iolink_od_app_t* test_default_tag_od(void);
+/* 把 app 的表项与默认标签表项合并到调用方提供的 storage；返回合并表。 */
+iolink_od_app_t test_od_with_tags(const iolink_od_app_t* app, iolink_od_entry_t* storage,
+                                  size_t capacity);
+/* 同上，使用进程级静态缓冲；标签来自 params（NULL 表示进程默认标签表）。
+ * 测试串行使用；不要同时持有两个结果。 */
+iolink_od_app_t* test_od_with_tags_static(const iolink_od_app_t* app,
+                                          const iolink_test_params_t* params);
+
+/* 显式的测试环境：设备标识 + 标签参数（测试 shim）。
  *
  * 每个测试文件持有自己的实例（文件级 static），并在用例或 setup 中
  * 显式初始化。不再有 test_helpers.c 内的进程级单例，因此不存在
@@ -76,13 +108,13 @@ extern const iolink_phy_api_t g_phy_mock;
 typedef struct
 {
     iolink_device_info_ctx_t info;
-    iolink_params_ctx_t params;
+    iolink_test_params_t params;
 } iolink_test_env_t;
 
 void test_env_init(iolink_test_env_t* env, const iolink_device_info_t* info);
 void test_env_reset_params(iolink_test_env_t* env);
 iolink_device_info_ctx_t* test_env_info(iolink_test_env_t* env);
-iolink_params_ctx_t* test_env_params(iolink_test_env_t* env);
+iolink_test_params_t* test_env_params(iolink_test_env_t* env);
 void test_isdu_bind_params(iolink_isdu_ctx_t* ctx, iolink_test_env_t* env);
 
 /* 用于设置 mock 期望的辅助函数 */

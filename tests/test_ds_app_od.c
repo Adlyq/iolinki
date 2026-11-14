@@ -31,7 +31,6 @@
 #include "iolinki/device.h"
 #include "iolinki/isdu.h"
 #include "iolinki/od.h"
-#include "iolinki/params.h"
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 
@@ -47,6 +46,10 @@ typedef struct
 static app_state_t g_app_state;
 /* 设备配置保存的是指针：应用表必须比设备上下文存活更久。 */
 static iolink_od_app_t g_app_od;
+/* 设备还内置三个标签（0x0018-0x001A），由测试 shim 提供；合并表在设备
+ * 初始化前填入，同样必须比设备上下文存活更久。 */
+static iolink_od_entry_t g_app_od_storage[64];
+static iolink_od_app_t g_merged_od;
 
 /* 0x0180 属于 DS；0x0181 只是普通可写参数。值直接绑定应用变量。 */
 static const iolink_od_entry_t k_app_entries[] = {
@@ -88,6 +91,16 @@ static int app_write_object(iolink_device_ctx_t* ctx, uint16_t index, const uint
     return isdu_collect_response(isdu, out, out_size);
 }
 
+/** @brief 通过 ISDU 读一个参数并返回数据长度。 */
+static int app_read_object(iolink_device_ctx_t* ctx, uint16_t index, uint8_t* out, size_t out_size)
+{
+    iolink_isdu_ctx_t* isdu = &ctx->dll.main.shared.isdu;
+
+    assert_int_equal(isdu_send_read_request(isdu, index, 0U), 1);
+    iolink_isdu_process(isdu);
+    return isdu_collect_response(isdu, out, out_size);
+}
+
 /** @brief 在序列化映像中定位一个记录。 */
 static bool image_find_record(const uint8_t* image, size_t len, uint16_t index, uint8_t subindex,
                               const uint8_t** data, size_t* data_len)
@@ -121,10 +134,11 @@ static void init_device_with_app(iolink_test_device_t* dev)
     g_app_state.ds_value = 0x1111U;
     g_app_state.volatile_value = 0x2222U;
     app_od_init(&g_app_od);
+    g_merged_od = test_od_with_tags(&g_app_od, g_app_od_storage, 64U);
 
     setup_mock_phy();
     will_return(mock_phy_init, 0);
-    assert_int_equal(iolink_test_device_init_with_od(dev, NULL, NULL, &g_app_od), 0);
+    assert_int_equal(iolink_test_device_init_with_od(dev, NULL, NULL, &g_merged_od), 0);
 }
 
 /* 应用 DS 项进入集合，VOLATILE 项不进入。 */
@@ -137,17 +151,17 @@ static void test_app_ds_membership(void** state)
 
     iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&dev.ctx);
     assert_non_null(ds);
-    assert_int_equal(iolink_od_ds_count(), 3U);
-    assert_int_equal(iolink_od_ds_count_app(&g_app_od), 1U);
+    assert_int_equal(iolink_od_ds_count(), 0U);
+    assert_int_equal(iolink_od_ds_count_app(&g_merged_od), 4U);
     assert_int_equal(iolink_ds_param_count(ds), 4U);
 
-    /* 标准表在前（标签），应用表按表序追加。 */
+    /* 应用表按表序：应用 DS 项在前，三个标签由测试 shim 追加。 */
     const iolink_od_entry_t* entry = iolink_ds_param_entry(ds, 0U);
     assert_non_null(entry);
-    assert_int_equal(entry->index, IOLINK_IDX_APPLICATION_TAG);
+    assert_int_equal(entry->index, APP_DS_IDX);
     entry = iolink_ds_param_entry(ds, 3U);
     assert_non_null(entry);
-    assert_int_equal(entry->index, APP_DS_IDX);
+    assert_int_equal(entry->index, IOLINK_IDX_LOCATION_TAG);
     assert_int_equal(entry->subindex, 0U);
     assert_null(iolink_ds_param_entry(ds, 4U));
 
@@ -256,24 +270,20 @@ static void test_app_ds_rejects_whole_image(void** state)
 
     uint8_t tag[40] = {0U};
     uint8_t before_app_tag[40] = {0U};
-    const iolink_result_t before_app = iolink_params_ctx_read(
-        &dev.ctx.params, IOLINK_IDX_APPLICATION_TAG, 0U, before_app_tag, sizeof(before_app_tag));
-    assert_int_equal(before_app.code, 0);
-    const size_t before_app_len = before_app.len;
+    const size_t before_app_cap = sizeof(before_app_tag);
+    const int before_app_len =
+        app_read_object(&dev.ctx, IOLINK_IDX_APPLICATION_TAG, before_app_tag, before_app_cap);
+    assert_true(before_app_len > 0);
 
     assert_int_equal(iolink_ds_apply_image(ds, bad, pos), IOLINK_RESULT_INVALID);
 
-    const iolink_result_t kept_fun =
-        iolink_params_ctx_read(&dev.ctx.params, IOLINK_IDX_FUNCTION_TAG, 0U, tag, sizeof(tag));
-    assert_int_equal(kept_fun.code, 0);
-    assert_int_equal(kept_fun.len, 3);
+    const int kept_fun = app_read_object(&dev.ctx, IOLINK_IDX_FUNCTION_TAG, tag, sizeof(tag));
+    assert_int_equal(kept_fun, 3);
     assert_memory_equal(tag, "OLD", 3U);
     (void) memset(tag, 0, sizeof(tag));
-    const iolink_result_t kept_app =
-        iolink_params_ctx_read(&dev.ctx.params, IOLINK_IDX_APPLICATION_TAG, 0U, tag, sizeof(tag));
-    assert_int_equal(kept_app.code, 0);
-    assert_int_equal(kept_app.len, before_app_len);
-    assert_memory_equal(tag, before_app_tag, before_app_len);
+    const int kept_app = app_read_object(&dev.ctx, IOLINK_IDX_APPLICATION_TAG, tag, sizeof(tag));
+    assert_int_equal(kept_app, before_app_len);
+    assert_memory_equal(tag, before_app_tag, (size_t) before_app_len);
 
     /* 合法镜像仍能完整恢复。 */
     const uint8_t new_tag[3] = {'N', 'E', 'W'};
@@ -292,10 +302,8 @@ static void test_app_ds_rejects_whole_image(void** state)
         app_write_object(&dev.ctx, IOLINK_IDX_FUNCTION_TAG, reset_tag, 3U, resp, sizeof(resp)), 0);
     assert_int_equal(iolink_ds_apply_image(ds, backup, image_len), 0);
     (void) memset(tag, 0, sizeof(tag));
-    const iolink_result_t restored_fun =
-        iolink_params_ctx_read(&dev.ctx.params, IOLINK_IDX_FUNCTION_TAG, 0U, tag, sizeof(tag));
-    assert_int_equal(restored_fun.code, 0);
-    assert_int_equal(restored_fun.len, 3);
+    const int restored_fun = app_read_object(&dev.ctx, IOLINK_IDX_FUNCTION_TAG, tag, sizeof(tag));
+    assert_int_equal(restored_fun, 3);
     assert_memory_equal(tag, "NEW", 3U);
 }
 

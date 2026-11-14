@@ -323,7 +323,7 @@ int conformance_device_read_param(conformance_device_t* app, uint16_t index, uin
     if (entry == NULL) {
         return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
     }
-    iolink_od_ctx_t od = {.app = &app->od, .params = NULL};
+    iolink_od_ctx_t od = {.app = &app->od};
     const iolink_result_t result =
         iolink_od_read_value(&od, entry, subindex, output, *output_length);
     if (!iolink_result_succeeded(result)) {
@@ -343,7 +343,7 @@ int conformance_device_write_param(conformance_device_t* app, uint16_t index, ui
     if (entry == NULL) {
         return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
     }
-    iolink_od_ctx_t od = {.app = &app->od, .params = NULL};
+    iolink_od_ctx_t od = {.app = &app->od};
     const iolink_result_t result = iolink_od_write_value(&od, entry, subindex, input, length);
     if (!iolink_result_succeeded(result)) {
         return (result.code > 0) ? (int) result.code : -1;

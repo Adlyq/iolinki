@@ -22,7 +22,6 @@
 
 #include "iolinki/isdu.h"
 #include "iolinki/device_info.h"
-#include "iolinki/params.h"
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 

@@ -15,7 +15,7 @@
 #include "iolinki/capability.h"
 #include "iolinki/config.h"
 #include "iolinki/od.h"
-#include "iolinki/params.h"
+#include "iolinki/device_info.h"
 #include "iolinki/workspace.h"
 
 /**
@@ -124,9 +124,9 @@ typedef struct
     void* event_ctx;        /**< 诊断主机反向链接 */
     void* ds_ctx;           /**< 用于系统命令的 Data Storage 上下文 */
     void* dll_ctx;          /**< 用于统计访问的 DLL 上下文 */
-    iolink_params_ctx_t* params_ctx; /**< 设备本地可写参数上下文 */
-    const iolink_od_app_t* od;       /**< 应用对象字典（表 + get/set 后端；可为 NULL） */
-    void* direct_param_page2;        /**< 每设备的 Direct Parameter page 2 存储 */
+    iolink_device_info_ctx_t* device_info; /**< 设备标识上下文（可为 NULL） */
+    const iolink_od_app_t* od;             /**< 应用对象字典（表 + get/set 后端；可为 NULL） */
+    void* direct_param_page2;              /**< 每设备的 Direct Parameter page 2 存储 */
 
     /* Direct Parameter page 1（0x00-0x0F）RAM 映像。
      * 并发契约：主泵是唯一写者，数据 ISR 只读。

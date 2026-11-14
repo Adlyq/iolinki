@@ -323,6 +323,7 @@ static void test_device_init_builds_ds_image(void** state)
     dev.cfg.phy = g_phy_mock;
     dev.cfg.time_us = iolink_test_time_us;
     dev.cfg.stack = stack;
+    dev.cfg.od = test_default_tag_od();
     assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), IOLINK_DEVICE_INIT_OK);
 
     iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&dev.ctx);

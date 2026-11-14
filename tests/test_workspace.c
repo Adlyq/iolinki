@@ -30,10 +30,10 @@ static void fill_env(void)
 {
     test_env_init(&g_env, NULL);
     test_env_reset_params(&g_env);
-    (void) iolink_params_ctx_write(test_env_params(&g_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                   (const uint8_t*) "WS", 2U);
-    (void) iolink_params_ctx_write(test_env_params(&g_env), IOLINK_IDX_FUNCTION_TAG, 0U,
-                                   (const uint8_t*) "FLOW", 4U);
+    (void) test_params_write(test_env_params(&g_env), IOLINK_IDX_APPLICATION_TAG, 0U,
+                             (const uint8_t*) "WS", 2U);
+    (void) test_params_write(test_env_params(&g_env), IOLINK_IDX_FUNCTION_TAG, 0U,
+                             (const uint8_t*) "FLOW", 4U);
 }
 
 static void device_config_defaults(iolink_test_device_t* dev)
@@ -104,7 +104,7 @@ static void test_ds_serialize_matches_stored_image(void** state)
 
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds);
-    ds.params_ctx = test_env_params(&g_env);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_env)));
 
     uint8_t serialized[IOLINK_DS_IMAGE_MAX];
     const int n = iolink_ds_serialize(&ds, serialized, sizeof(serialized));
@@ -138,7 +138,7 @@ static void test_ds_refresh_without_image_buffer(void** state)
 
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds);
-    ds.params_ctx = test_env_params(&g_env);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_env)));
 
     uint8_t serialized[IOLINK_DS_IMAGE_MAX];
     const int expected = iolink_ds_serialize(&ds, serialized, sizeof(serialized));
@@ -175,7 +175,7 @@ static void test_ds_null_api_contracts(void** state)
     iolink_ds_refresh(NULL);
     assert_null(iolink_ds_get_image(NULL, NULL));
     assert_int_equal(iolink_ds_param_count(NULL), 0U);
-    iolink_ds_bind_sources(NULL, NULL, NULL);
+    iolink_ds_bind_sources(NULL, NULL);
 }
 
 int main(void)

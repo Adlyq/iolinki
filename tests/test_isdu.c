@@ -21,7 +21,6 @@
 
 #include "iolinki/isdu.h"
 #include "iolinki/events.h"
-#include "iolinki/params.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/protocol.h"
 #include "iolinki/dll_ctx.h"
@@ -275,15 +274,18 @@ static void test_system_cmd_factory_restore(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0155");
     (void) state;
     iolink_isdu_ctx_t ctx;
+    iolink_ds_ctx_t ds;
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
+    iolink_ds_init(&ds);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
+    ctx.ds_ctx = &ds;
 
     /* 先设置一个自定义应用标签 */
     const uint8_t test_tag[] = "TestTag123";
-    iolink_params_ctx_write(test_env_params(&g_test_env), 0x0018, 0x00, test_tag,
-                            sizeof(test_tag) - 1);
+    test_params_write(test_env_params(&g_test_env), 0x0018, 0x00, test_tag, sizeof(test_tag) - 1);
 
     /* 向索引 0x0002 写入 0x82 */
     uint8_t cmd_data[] = {IOLINK_CMD_RESTORE_FACTORY_SETTINGS};
@@ -297,8 +299,8 @@ static void test_system_cmd_factory_restore(void** state)
 
     /* 校验应用标签已被复位 */
     uint8_t readback[33];
-    const iolink_result_t read_result = iolink_params_ctx_read(test_env_params(&g_test_env), 0x0018,
-                                                               0x00, readback, sizeof(readback));
+    const iolink_result_t read_result =
+        test_params_read(test_env_params(&g_test_env), 0x0018, 0x00, readback, sizeof(readback));
     assert_int_equal(read_result.code, 0);
     assert_int_equal(read_result.len, 0); /* 恢复出厂设置后应为空 */
 }
@@ -556,15 +558,15 @@ static void test_isdu_data_storage_round_trip(void** state)
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     iolink_ds_init(&ds);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
     ctx.ds_ctx = &ds;
 
     /* 配置一个已知的 ApplicationTag。 */
     const char* app = "ISDU-DS";
-    assert_int_equal(
-        iolink_params_ctx_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                                (const uint8_t*) app, strlen(app))
-            .code,
-        0);
+    assert_int_equal(test_params_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
+                                       (const uint8_t*) app, strlen(app))
+                         .code,
+                     0);
 
     /* 上传（读 0x0003）：主站备份序列化后的参数镜像。 */
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x00), 1);
@@ -574,9 +576,9 @@ static void test_isdu_data_storage_round_trip(void** state)
     assert_true(img_len > 0);
 
     /* 清空参数。 */
-    iolink_params_ctx_factory_reset(test_env_params(&g_test_env));
+    test_params_factory_reset(test_env_params(&g_test_env));
     uint8_t buf[40];
-    const iolink_result_t cleared = iolink_params_ctx_read(
+    const iolink_result_t cleared = test_params_read(
         test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf));
     assert_int_equal(cleared.code, 0);
     assert_int_equal(cleared.len, 0);
@@ -590,7 +592,7 @@ static void test_isdu_data_storage_round_trip(void** state)
     iolink_isdu_process(&ctx);
 
     /* ApplicationTag 已通过总线恢复。 */
-    const iolink_result_t restored = iolink_params_ctx_read(
+    const iolink_result_t restored = test_params_read(
         test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, buf, sizeof(buf));
     assert_int_equal(restored.code, 0);
     assert_int_equal(restored.len, strlen(app));
@@ -612,6 +614,7 @@ static void test_isdu_data_storage_subindices(void** state)
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     iolink_ds_init(&ds);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
     ctx.ds_ctx = &ds;
 
     assert_true(iolink_ds_build_image(&ds) >= 0);
@@ -872,7 +875,7 @@ static void test_isdu_reserved_indices_negative(void** state)
     assert_int_equal(byte, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
 }
 
-/* 未绑定 params/device_info 时：身份索引返回 IDX_NOT_AVAIL，但与身份无关的
+/* 未绑定 device_info 时：身份索引返回 IDX_NOT_AVAIL，但与身份无关的
  * 强制索引（0x0020/0x0024/0x0028）仍必须可用。 */
 static void test_isdu_unbound_identity_scope(void** state)
 {
@@ -922,7 +925,7 @@ static void test_isdu_unbound_identity_scope(void** state)
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 0);
 
-    /* 0x0018 ApplicationTag：参数上下文未绑定 -> 否定应答，而不是静默丢弃。 */
+    /* 0x0018 ApplicationTag：应用表未绑定 -> 否定应答，而不是静默丢弃。 */
     iolink_isdu_init(&ctx);
     ctx.dll_ctx = &dll_ctx.main;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0x00), 1);
