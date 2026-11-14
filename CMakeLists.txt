@@ -81,6 +81,10 @@ endif()
 
 # Testing
 option(BUILD_TESTING "Build unit tests" ON)
+# ISR transport the suite (and the PTY host examples, which talk through the
+# byte-stream iolink_phy_virtual) is exercised on: BYTE or FRAME.
+set(IOLINK_TEST_TRANSPORT "BYTE" CACHE STRING "ISR transport the tests exercise: BYTE or FRAME")
+set_property(CACHE IOLINK_TEST_TRANSPORT PROPERTY STRINGS BYTE FRAME)
 if(BUILD_TESTING)
     enable_testing()
     add_subdirectory(tests)
@@ -125,7 +129,9 @@ if(BUILD_TESTING AND Python3_FOUND)
     add_test(NAME iodd_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/test_iodd_cli.py)
     add_test(NAME conformance_traceability
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/check_conformance_traceability.py)
-    if(IOLINK_PLATFORM STREQUAL "LINUX")
+    if(IOLINK_PLATFORM STREQUAL "LINUX" AND IOLINK_TEST_TRANSPORT STREQUAL "BYTE")
+        # These drive the host example through its PTY, i.e. the byte-stream
+        # iolink_phy_virtual: its get() returns NULL in FRAME builds.
         add_test(NAME conformance_device_smoke
                  COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/test_conformance_device_smoke.py
                          $<TARGET_FILE:conformance_device>)
