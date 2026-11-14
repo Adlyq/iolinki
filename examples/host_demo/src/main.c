@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include "iolinki/device.h"
 #include "iolinki/phy_virtual.h"
@@ -38,6 +39,31 @@ static void pump_isr(iolink_device_ctx_t* ctx)
     while (ctx->dll.main.shared.isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
     }
+}
+
+static uint8_t g_tags[3][32];
+static uint8_t g_tag_len[3];
+static iolink_od_entry_t g_tag_entries[3];
+static iolink_od_app_t g_tag_od;
+
+/* 三个标签是应用数据：以 STORAGE 表项提供，默认应用标签 "DefaultTag"。 */
+static void host_tags_init(void)
+{
+    static const char default_tag[] = "DefaultTag";
+    (void) memcpy(g_tags[0], default_tag, sizeof(default_tag) - 1U);
+    g_tag_len[0] = (uint8_t) (sizeof(default_tag) - 1U);
+    g_tag_entries[0] = (iolink_od_entry_t) IOLINK_OD_BYTES_STORAGE(
+        IOLINK_IDX_APPLICATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
+        IOLINK_OD_STORAGE_DS, 32U, "ApplicationSpecificTag", g_tags[0], &g_tag_len[0]);
+    g_tag_entries[1] = (iolink_od_entry_t) IOLINK_OD_BYTES_STORAGE(
+        IOLINK_IDX_FUNCTION_TAG, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
+        IOLINK_OD_STORAGE_DS, 32U, "FunctionTag", g_tags[1], &g_tag_len[1]);
+    g_tag_entries[2] = (iolink_od_entry_t) IOLINK_OD_BYTES_STORAGE(
+        IOLINK_IDX_LOCATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
+        IOLINK_OD_STORAGE_DS, 32U, "LocationTag", g_tags[2], &g_tag_len[2]);
+    g_tag_od.entries = g_tag_entries;
+    g_tag_od.count = 3U;
+    g_tag_od.user = NULL;
 }
 
 int main(int argc, char* argv[])
@@ -124,6 +150,8 @@ int main(int argc, char* argv[])
         .stack = config,
         .time_us = host_time_us,
     };
+    host_tags_init();
+    dev_config.od = &g_tag_od;
 
     if (iolink_device_init(&ctx, &dev_config) != 0) {
         printf("ERROR: Failed to initialize IO-Link stack\n");

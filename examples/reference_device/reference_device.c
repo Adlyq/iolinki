@@ -27,6 +27,23 @@ int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy,
     app->config.phy = *phy;
     app->config.time_us = time_us;
     app->config.device_info = &identity;
+    /* 三个标签是应用数据：以 STORAGE 表项提供，默认应用标签 "DefaultTag"。 */
+    static const char default_tag[] = "DefaultTag";
+    (void) memcpy(app->tags[0], default_tag, sizeof(default_tag) - 1U);
+    app->tag_len[0] = (uint8_t) (sizeof(default_tag) - 1U);
+    app->od_entries[0] = (iolink_od_entry_t) IOLINK_OD_BYTES_STORAGE(
+        IOLINK_IDX_APPLICATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
+        IOLINK_OD_STORAGE_DS, 32U, "ApplicationSpecificTag", app->tags[0], &app->tag_len[0]);
+    app->od_entries[1] = (iolink_od_entry_t) IOLINK_OD_BYTES_STORAGE(
+        IOLINK_IDX_FUNCTION_TAG, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
+        IOLINK_OD_STORAGE_DS, 32U, "FunctionTag", app->tags[1], &app->tag_len[1]);
+    app->od_entries[2] = (iolink_od_entry_t) IOLINK_OD_BYTES_STORAGE(
+        IOLINK_IDX_LOCATION_TAG, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
+        IOLINK_OD_STORAGE_DS, 32U, "LocationTag", app->tags[2], &app->tag_len[2]);
+    app->od.entries = app->od_entries;
+    app->od.count = 3U;
+    app->od.user = app;
+    app->config.od = &app->od;
     app->config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     app->config.stack.pd_in_len = sizeof(app->input);
     app->config.stack.pd_out_len = 1;

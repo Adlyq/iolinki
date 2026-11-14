@@ -13,6 +13,10 @@ typedef struct
     uint8_t input[3];
     bool button;
     bool led;
+    uint8_t tags[3][32];
+    uint8_t tag_len[3];
+    iolink_od_entry_t od_entries[3];
+    iolink_od_app_t od;
 } reference_device_t;
 
 int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy,

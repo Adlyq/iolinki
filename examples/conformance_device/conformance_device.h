@@ -88,7 +88,7 @@ int conformance_device_init(conformance_device_t* app, const conformance_profile
 void conformance_od_init(iolink_od_app_t* app, conformance_device_t* device);
 int conformance_device_power_cycle(conformance_device_t* app, const iolink_phy_api_t* phy,
                                    const char* nvm_path);
-void conformance_device_close(conformance_device_t* app);
+void conformance_device_close(const conformance_device_t* app);
 int conformance_device_tick(conformance_device_t* app, bool button);
 void conformance_device_process(conformance_device_t* app);
 int conformance_device_inject_event(conformance_device_t* app, uint16_t code,

@@ -192,12 +192,42 @@ static void test_device_access_locks_round_trip(void** state)
     assert_int_equal(iolink_device_info_ctx_get_access_locks(test_env_info(&g_test_env)), 0U);
 }
 
+static void test_device_info_ctx_edges(void** state)
+{
+    (void) state;
+    iolink_device_info_t info = make_info();
+    iolink_device_info_ctx_t ctx;
+
+    /* NULL 上下文：初始化/访问器都应安全返回。 */
+    iolink_device_info_ctx_init(NULL, &info);
+    assert_null(iolink_device_info_ctx_get(NULL));
+    assert_int_equal(iolink_device_info_ctx_get_access_locks(NULL), 0U);
+    iolink_device_info_ctx_set_access_locks(NULL, 0x1234U);
+
+    /* 超长 application tag 截断到 32 字节。 */
+    char long_tag[40];
+    (void) memset(long_tag, 'A', sizeof(long_tag) - 1U);
+    long_tag[sizeof(long_tag) - 1U] = '\0';
+    info.application_tag = long_tag;
+    iolink_device_info_ctx_init(&ctx, &info);
+    assert_int_equal((int) strlen(iolink_device_info_ctx_get(&ctx)->application_tag), 32);
+
+    /* set_application_tag：非法参数、超长、合法更新。 */
+    assert_int_equal(iolink_device_info_ctx_set_application_tag(NULL, "x", 1U), -1);
+    assert_int_equal(iolink_device_info_ctx_set_application_tag(&ctx, NULL, 0U), -1);
+    assert_int_equal(iolink_device_info_ctx_set_application_tag(&ctx, "x", 33U), -1);
+    assert_int_equal(iolink_device_info_ctx_set_application_tag(&ctx, "ABC", 3U), 0);
+    assert_string_equal(iolink_device_info_ctx_get(&ctx)->application_tag, "ABC");
+    assert_int_equal(iolink_device_info_ctx_get_access_locks(&ctx), info.access_locks);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_profile_characteristic_read, setup, teardown),
         cmocka_unit_test_setup_teardown(test_identification_strings, setup, teardown),
         cmocka_unit_test_setup_teardown(test_device_access_locks_round_trip, setup, teardown),
+        cmocka_unit_test(test_device_info_ctx_edges),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

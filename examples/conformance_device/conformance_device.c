@@ -169,7 +169,7 @@ int conformance_device_power_cycle(conformance_device_t* app, const iolink_phy_a
     return rc;
 }
 
-void conformance_device_close(conformance_device_t* app)
+void conformance_device_close(const conformance_device_t* app)
 {
     if (app != NULL) {
         if (g_reset_observer == app) {
