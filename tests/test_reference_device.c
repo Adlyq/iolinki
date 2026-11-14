@@ -26,7 +26,6 @@ static void test_reference_device_payload(void** state)
         mock_phy_feed_byte(frame[i]);
     }
     mock_phy_feed_chk();
-    mock_phy_set_send_result(6);
     test_io_cycle(&app.device);
     assert_tx_len(6);
     assert_int_equal(reference_device_tick(&app, true), 0);

@@ -1111,6 +1111,7 @@ static void test_dll_startup_operate_type_no_response(void** state)
     frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_2 | iolink_checksum6(frame, sizeof(frame)));
     feed_frame_bytes(frame, sizeof(frame));
     deliver_frame_to_main(&dev.ctx);
+    assert_no_tx();
     assert_true((iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_AWAITING_COMM) ||
                 (iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_STARTUP));
 }
@@ -1196,6 +1197,7 @@ static void test_dll_preoperate_truncated_write(void** state)
     truncated[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | iolink_checksum6(truncated, sizeof(truncated)));
     feed_frame_bytes(truncated, sizeof(truncated));
     deliver_frame_to_dll(&dev.ctx);
+    assert_no_tx();
 
     uint8_t write[3] = {(uint8_t) (IOLINK_MC_CHANNEL_PAGE | 0x01U), 0x00U, 0x4FU};
     write[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | iolink_checksum6(write, sizeof(write)));
@@ -1629,8 +1631,7 @@ static void test_min_cycle_time_from_m_sequence(void** state)
     assert_true(iolink_dll_compute_min_cycle_time(&dll.main) > 35U);
 }
 
-/* Back-to-box（10.7.5）：约 3 个主站周期后 DLL 停止通信。
- * 通过 mock_phy_send 以流式方式发送应答，因此也覆盖了流式传输路径。 */
+/* Back-to-box（10.7.5）：约 3 个主站周期后 DLL 停止通信。 */
 /* ISR 传输：每个被处理的帧必须让 Back-to-box 计数恰好
  * 前进一次（数据 ISR 也会记录主站活动，但那只是刷新时间戳）。
  * 重复计数会让设备提前一个 MasterCycle 停止。 */
@@ -1661,6 +1662,7 @@ static void test_dll_isr_back_to_box_counts_each_frame_once(void** state)
         }
         mock_phy_feed_chk();
         test_io_cycle(&dev.ctx);
+        assert_tx_len(2);
         assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
     }
 

@@ -43,7 +43,6 @@ void iolink_critical_exit(void)
 static int g_mock_wakeup = 0;
 static uint8_t g_mock_cq_state = 0U;
 static uint32_t g_mock_send_delay_us = 0U;
-static int g_mock_send_result = -1; /* < 0: 返回 len */
 
 /* 传输适配层：接收队列与应答捕获都汇聚到 mock_phy_send。
  *
@@ -166,7 +165,7 @@ int mock_phy_send(void* user, const uint8_t* data, size_t len)
             usleep(g_mock_send_delay_us);
         }
     }
-    return (g_mock_send_result >= 0) ? g_mock_send_result : (int) len;
+    return (int) len;
 }
 
 int mock_phy_detect_wakeup(void* user)
@@ -261,11 +260,6 @@ const uint8_t* mock_phy_tx(size_t* len)
     return g_txq;
 }
 
-void mock_phy_set_send_result(int result)
-{
-    g_mock_send_result = result;
-}
-
 static void print_hex_frame(const char* label, const uint8_t* data, size_t len)
 {
     print_message("%s (len=%u):", label, (unsigned) len);
@@ -275,25 +269,27 @@ static void print_hex_frame(const char* label, const uint8_t* data, size_t len)
     print_message("\n");
 }
 
-/* 断言点只能消费一帧，因此“未发送”与“发送了错误内容”都会失败。 */
-static bool tx_frame_pending(void)
+/* 断言点恰好消费一帧：多帧未消费（重复应答）与零帧都失败。 */
+static void tx_expect_one_delivery(const char* what)
 {
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     /* 观察点即为帧结束：库写入的 CKS 已就位。 */
     mock_tx_finish(NULL);
 #endif
-    const bool pending = (g_tx_seq > g_tx_asserted);
+    const uint64_t pending = g_tx_seq - g_tx_asserted;
+    if (pending == 0U) {
+        print_message("%s: no frame was delivered\n", what);
+    }
+    else if (pending > 1U) {
+        print_message("%s: %u frames delivered, only one asserted\n", what, (unsigned) pending);
+    }
+    assert_int_equal(pending, 1U);
     g_tx_asserted = g_tx_seq;
-    return pending;
 }
 
 void assert_tx_frame(const uint8_t* expected, size_t len)
 {
-    const bool pending = tx_frame_pending();
-    if (!pending) {
-        print_message("assert_tx_frame: no frame was delivered\n");
-    }
-    assert_true(pending);
+    tx_expect_one_delivery("assert_tx_frame");
     if ((g_txq_len != len) || (memcmp(g_txq, expected, len) != 0)) {
         print_hex_frame("expected", expected, len);
         print_hex_frame("actual  ", g_txq, g_txq_len);
@@ -304,11 +300,7 @@ void assert_tx_frame(const uint8_t* expected, size_t len)
 
 void assert_tx_len(size_t len)
 {
-    const bool pending = tx_frame_pending();
-    if (!pending) {
-        print_message("assert_tx_len: no frame was delivered\n");
-    }
-    assert_true(pending);
+    tx_expect_one_delivery("assert_tx_len");
     if (g_txq_len != len) {
         print_hex_frame("actual", g_txq, g_txq_len);
     }
@@ -630,7 +622,6 @@ void setup_mock_phy(void)
     g_mock_wakeup = 0;
     g_mock_cq_state = 0U;
     g_mock_send_delay_us = 0U;
-    g_mock_send_result = -1;
     g_txq_len = 0U;
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     g_tx_pending = NULL;

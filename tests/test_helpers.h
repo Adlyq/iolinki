@@ -72,9 +72,6 @@ void assert_tx_frame(const uint8_t* expected, size_t len);
 void assert_tx_len(size_t len);
 void assert_no_tx(void);
 
-/* 注入 mock_phy_send 的返回值；默认返回 len。 */
-void mock_phy_set_send_result(int result);
-
 /* 在生效的传输上驱动一个完整的请求/应答周期。 */
 void test_io_cycle(iolink_device_ctx_t* ctx);
 

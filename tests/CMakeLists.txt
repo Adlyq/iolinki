@@ -1,10 +1,3 @@
-# The full suite exercises the untrimmed stack. Skip it for a trimmed build;
-# build the library target (or configure with -DBUILD_TESTING=OFF) instead.
-if(NOT IOLINK_FEATURE_DATA_STORAGE OR NOT IOLINK_FEATURE_EVENTS)
-    message(STATUS "Feature-trimmed build: skipping the unit suite")
-    return()
-endif()
-
 # Transport the suite is built against (defined by the top-level CMakeLists).
 # The mock PHY and the expected-frame assertions are transport neutral; only
 # the targets that pin a BYTE transport contract (see iolink_test(BYTE_ONLY))
@@ -12,6 +5,14 @@ endif()
 if(NOT IOLINK_TEST_TRANSPORT STREQUAL "BYTE" AND NOT IOLINK_TEST_TRANSPORT STREQUAL "FRAME")
     message(FATAL_ERROR "IOLINK_TEST_TRANSPORT must be BYTE or FRAME")
 endif()
+
+# The full suite exercises the untrimmed stack. Skip it for a trimmed build;
+# build the library target (or configure with -DBUILD_TESTING=OFF) instead.
+if(NOT IOLINK_FEATURE_DATA_STORAGE OR NOT IOLINK_FEATURE_EVENTS)
+    message(STATUS "Feature-trimmed build: skipping the unit suite")
+    return()
+endif()
+
 message(STATUS "Unit suite transport: ${IOLINK_TEST_TRANSPORT}")
 
 # The suite is built from the same library sources, so the transport comes from
@@ -40,7 +41,7 @@ function(iolink_test)
         message(FATAL_ERROR "iolink_test: NAME and SOURCES are required")
     endif()
     if(T_BYTE_ONLY AND NOT IOLINK_TEST_TRANSPORT STREQUAL "BYTE")
-        message(STATUS "test ${T_NAME}: not built on the ${IOLINK_TEST_TRANSPORT} transport")
+        set_property(GLOBAL APPEND PROPERTY IOLINK_TEST_BYTE_ONLY_SKIPPED ${T_NAME})
         return()
     endif()
 
@@ -304,4 +305,12 @@ if(CMOCKA_FOUND)
     iolink_test(NAME test_isr_window SOURCES test_isr_window.c CMOCKA)
 else()
     message(WARNING "CMocka not found, unit tests will be skipped. Install libcmocka-dev to enable them.")
+endif()
+
+get_property(skipped_targets GLOBAL PROPERTY IOLINK_TEST_BYTE_ONLY_SKIPPED)
+if(skipped_targets)
+    list(LENGTH skipped_targets skipped_count)
+    message(STATUS
+        "${IOLINK_TEST_TRANSPORT} transport: ${skipped_count} BYTE-only target(s) not built: "
+        "${skipped_targets}")
 endif()
