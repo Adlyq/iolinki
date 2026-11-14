@@ -42,20 +42,27 @@ neutral: `tests/test_helpers.c` implements both PHY contracts — the BYTE hooks
 `tools/build_matrix.sh` passes `-DIOLINK_TEST_TRANSPORT=<BYTE|FRAME>` to CMake
 so the suite is built and run against the layout of that row.
 
-FRAME coverage has three explicit gaps, all BYTE-contract facts rather than
+`iolink_test_transport_probe` compiles the suite's transport label against the
+compiled-in `IOLINK_ISR_*_MODE`, so a build that claims FRAME without the FRAME
+definitions fails instead of silently running BYTE tests.
+
+FRAME coverage has two explicit gaps, both BYTE-contract facts rather than
 untested code:
 
-- `test_ctx_sizes` pins exact context sizes, and `IOLINK_PD_IN_BUFFERS` is 3 on
-  FRAME/FRAME without `tx_busy`; the target is therefore not built.
 - Individual cases that need a half-frame or a receive error from the PHY (a
   BYTE intermediate state that a FRAME PHY never delivers), the optional
   `tx_done` hook, timer B re-arm on frame end (the PHY's DMA completion in TX
-  FRAME), or the 2-buffer PD-in lease are guarded with `#if IOLINK_ISR_*_MODE`
-  and reported as skipped.
+  FRAME), or the 2-buffer PD-in lease are guarded with `#if IOLINK_ISR_*_MODE`.
+  `test_pd_lease` becomes a whole-file skip, reported by ctest as `Skipped`
+  through `SKIP_RETURN_CODE`; the in-binary cases print `SKIPPED` in the cmocka
+  output.
 - The PTY host examples (`conformance_device_smoke`, `conformance_device_master`,
   `conformance_device_iodd_oracle`) are registered only for the BYTE transport:
   `iolink_phy_virtual` is a byte stream and its `get()` returns NULL in a FRAME
   build, so the example cannot initialise.
+
+`test_ctx_sizes` pins both layouts: 4704/4896 bytes on BYTE and 4696/4888 bytes
+on FRAME/FRAME for the DLL and device contexts.
 
 Mixed-granularity layouts (`FRAME_BYTE`, `BYTE_FRAME`) remain compile-only: they
 have no test transport contract, so their rows stay tests=no.

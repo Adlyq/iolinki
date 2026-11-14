@@ -15,6 +15,13 @@ endif()
 
 message(STATUS "Unit suite transport: ${IOLINK_TEST_TRANSPORT}")
 
+# The transport label must match the ISR granularity the sources were actually
+# compiled with; a mismatch would run BYTE tests under a "FRAME" row. The probe
+# only has to compile.
+add_executable(iolink_test_transport_probe transport_probe.c)
+target_compile_definitions(iolink_test_transport_probe PRIVATE
+    IOLINK_TEST_EXPECT_${IOLINK_TEST_TRANSPORT}=1)
+
 # The suite is built from the same library sources, so the transport comes from
 # the compile definitions (IOLINK_ISR_RX_MODE/IOLINK_ISR_TX_MODE) of the build.
 # test_capability/test_profile_abi pin the compiled-in profile, so a mismatched
@@ -152,7 +159,7 @@ iolink_test(NAME test_ring SOURCES test_ring.c)
 # assertions (and docs/MEMORY_GUIDE.md) explicitly. The exact sizes are a BYTE
 # transport contract: IOLINK_PD_IN_BUFFERS is 3 on FRAME/FRAME without tx_busy,
 # so the pinned numbers do not describe that layout.
-iolink_test(NAME test_ctx_sizes SOURCES test_ctx_sizes.c BYTE_ONLY)
+iolink_test(NAME test_ctx_sizes SOURCES test_ctx_sizes.c)
 
 # Log sink contract: runtime level filter, forwarding, default silence, ISR switch.
 iolink_test(NAME test_log SOURCES test_log.c test_log_isr_on.c)
@@ -269,6 +276,7 @@ if(CMOCKA_FOUND)
     iolink_test(NAME test_phy_tiol112 SOURCES test_phy_tiol112.c CMOCKA)
     iolink_test(NAME test_app_pd SOURCES test_app_pd.c CMOCKA)
     iolink_test(NAME test_pd_lease SOURCES test_pd_lease.c CMOCKA)
+set_tests_properties(test_pd_lease PROPERTIES SKIP_RETURN_CODE 77)
     iolink_test(NAME test_isdu_buffers SOURCES test_isdu_buffers.c)
     iolink_test(NAME test_sio_fallback SOURCES test_sio_fallback.c CMOCKA)
     iolink_test(NAME test_master_lost SOURCES test_master_lost.c CMOCKA)

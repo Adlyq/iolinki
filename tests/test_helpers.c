@@ -200,7 +200,10 @@ static void mock_tx_finish(void* user)
     if (len > sizeof(g_txq)) {
         len = sizeof(g_txq);
     }
-    (void) memcpy(g_txq, data, len);
+    /* 帧尾字节由库在 tx_frame() 返回后写入，这里补齐。 */
+    if (len > 0U) {
+        g_txq[len - 1U] = data[len - 1U];
+    }
     g_txq_len = len;
     (void) mock_phy_send(user, g_txq, g_txq_len);
 }
@@ -216,9 +219,8 @@ void mock_phy_feed_byte(uint8_t b)
 void mock_phy_feed_chk(void)
 {
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
-    if (g_rxq_frame_head < MOCK_RX_FRAMES) {
-        g_rxq_frame_end[g_rxq_frame_head++] = g_rxq_head;
-    }
+    assert_true(g_rxq_frame_head < MOCK_RX_FRAMES);
+    g_rxq_frame_end[g_rxq_frame_head++] = g_rxq_head;
 #else
     g_chk_pending++;
 #endif
@@ -365,8 +367,9 @@ static const uint8_t* mock_rx_frame(void* user, uint8_t* status, uint8_t* len)
     const size_t start = g_rxq_tail;
     g_rxq_tail = end;
     const size_t n = (end > start) ? (end - start) : 0U;
-    if (n == 0U) {
-        return NULL; /* 空帧：只有间隔，没有内容 */
+    if ((n == 0U) || (n > UINT8_MAX)) {
+        /* 空帧（只有间隔）或超出 PHY len 字段的帧都不能交付。 */
+        return NULL;
     }
     if (status != NULL) {
         *status = (uint8_t) (IOLINK_PHY_STATUS_DATA_READY | IOLINK_PHY_STATUS_CHK);
@@ -410,6 +413,11 @@ static int mock_tx_frame(void* user, const uint8_t* data, size_t len)
     }
     /* 上一帧在本帧开始前已传输完毕。 */
     mock_tx_finish(user);
+    /* 立即复制除尾字节外的内容：库在 tx_frame() 返回之后才写入帧尾 CKS，
+     * 因此捕获结果不依赖库的缓冲区在观察点之前保持不变。 */
+    const size_t head = (len > 1U) ? (len - 1U) : 0U;
+    (void) memcpy(g_txq, data, head);
+    g_txq_len = len;
     g_tx_pending = data;
     g_tx_pending_len = len;
     return 0;
