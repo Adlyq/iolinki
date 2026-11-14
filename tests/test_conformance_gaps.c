@@ -95,14 +95,12 @@ static const iolink_phy_api_t k_gap_noop_phy = {
 static int test_setup(void** state)
 {
     (void) state;
-    iolink_ds_mock_reset();
     return 0;
 }
 
 static int test_teardown(void** state)
 {
     (void) state;
-    iolink_ds_mock_reset();
     return 0;
 }
 
@@ -399,7 +397,7 @@ static void test_0323_no_ds_record_marker(void** state)
     test_env_reset_params(&g_test_env);
 
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
 
     /* Test Spec 0323（不支持 DS 的设备）：Sub1 长 1，Sub2 长 1 且
        位 0 与位 3..6 为 0，Sub3 长 4 值 0，Sub4 长 4，Sub5 长 2 值 0。 */
@@ -471,7 +469,7 @@ static void test_0080_local_change_requests_upload(void** state)
     (void) state;
 
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     assert_int_equal((iolink_ds_state_property(&ds) & 0x80U), 0U);
 
     iolink_ds_request_upload(&ds);
@@ -481,38 +479,6 @@ static void test_0080_local_change_requests_upload(void** state)
     iolink_ds_clear_upload(&ds);
     assert_int_equal((iolink_ds_state_property(&ds) & 0x80U), 0U);
 }
-
-/* ------------------------------------------------------------------------- */
-/* SDCI_TC_0374：DS_UPLOAD_FLAG 具有非易失性                                  */
-/* ------------------------------------------------------------------------- */
-
-static void test_0374_upload_flag_non_volatile(void** state)
-{
-    (void) state;
-    IOLINK_CONFORMANCE_CASE("SDCI_TC_0374");
-
-    iolink_ds_ctx_t first;
-    iolink_ds_init(&first, &g_ds_storage_mock);
-    iolink_ds_request_upload(&first);
-    assert_true(first.ds_upload_flag);
-
-    iolink_ds_ctx_t second;
-    iolink_ds_init(&second, &g_ds_storage_mock);
-    assert_true(second.ds_upload_flag);
-
-    /* DS_UploadStart/UploadEnd 必须清除该标志并将其持久化。 */
-    assert_int_equal(iolink_ds_handle_ds_command(&second, 0x01U, 0U), 0);
-    iolink_ds_process(&second);
-    assert_int_equal(second.state, IOLINK_DS_STATE_UPLOADING);
-    assert_int_equal(iolink_ds_handle_ds_command(&second, 0x02U, 0U), 0);
-    assert_false(second.ds_upload_flag);
-
-    iolink_ds_ctx_t third;
-    iolink_ds_init(&third, &g_ds_storage_mock);
-    assert_false(third.ds_upload_flag);
-}
-
-/* ------------------------------------------------------------------------- */
 
 /* ------------------------------------------------------------------------- */
 /* SDCI_TC_0073：冷重启不会重放过期的消失事件                                 */
@@ -711,7 +677,7 @@ static void test_0104_system_command_ranges(void** state)
 
     for (unsigned value = 0U; value <= 0xFFU; value++) {
         iolink_ds_ctx_t ds;
-        iolink_ds_init(&ds, NULL);
+        iolink_ds_init(&ds);
 
         uint8_t response[8] = {0};
         const int n = gap_write_system_command(&ds, (uint8_t) value, response, sizeof(response));
@@ -1094,8 +1060,6 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_0072_comm_interruption_event_persists, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_0080_local_change_requests_upload, test_setup,
-                                        test_teardown),
-        cmocka_unit_test_setup_teardown(test_0374_upload_flag_non_volatile, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_0073_event_power_interruption, test_setup,
                                         test_teardown),

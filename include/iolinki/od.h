@@ -75,19 +75,17 @@ typedef enum
 /** 只写对象，写操作受 Parameter 访问锁保护。 */
 #define IOLINK_OD_ACCESS_WO_LOCKED (IOLINK_OD_ACCESS_WO | IOLINK_OD_ACCESS_LOCK_PARAM)
 
-/** 写语义：写入落到后端，并在 storage 为 NVM 时持久化。 */
+/** 写语义：写入落到后端；持久化由表项的 on_change 通知应用负责。 */
 #define IOLINK_OD_WRITE_STORE 0U
-/** 写语义：写入只改 RAM，不触发持久化。 */
+/** 写语义：写入只改 RAM。 */
 #define IOLINK_OD_WRITE_VOLATILE 1U
 /** 写语义：写入是动作触发（如 teach），值本身不保存。 */
 #define IOLINK_OD_WRITE_TRIGGER 2U
 
-/** storage 位掩码：写入不影响任何持久化集合。 */
+/** storage 位掩码：不属于 Data Storage 参数集。 */
 #define IOLINK_OD_STORAGE_VOLATILE 0U
 /** storage 位掩码：属于 Data Storage 参数集（10.3）。 */
 #define IOLINK_OD_STORAGE_DS (1U << 0U)
-/** storage 位掩码：值变化后写进设备 NVM 的参数镜像。 */
-#define IOLINK_OD_STORAGE_PERSIST (1U << 1U)
 
 /** 表项标志：使用块（block）参数传输。 */
 #define IOLINK_OD_FLAG_BLOCK 0x01U
@@ -225,15 +223,12 @@ typedef enum
 /**
  * @brief 表项语义/storage 交叉关系的编译期一致性。
  *
- * - TRIGGER 只执行动作、不保存值，因此不能声明任何 storage 位；
- * - PERSIST 表示写后保存，必须搭配 STORE 语义。
+ * TRIGGER 只执行动作、不保存值，因此不能声明任何 storage 位。
  *
  * 只比较常量宏参数，可放进 @ref IOLINK_OD_ASSERT_EXPR 的位段宽度。
  */
-#define IOLINK_OD_ASSERT_SEMANTICS(semantics_, storage_)                                          \
-    ((((semantics_) != IOLINK_OD_WRITE_TRIGGER) || ((storage_) == IOLINK_OD_STORAGE_VOLATILE)) && \
-     (((semantics_) == IOLINK_OD_WRITE_STORE) ||                                                  \
-      (((storage_) & IOLINK_OD_STORAGE_PERSIST) == 0U)))
+#define IOLINK_OD_ASSERT_SEMANTICS(semantics_, storage_) \
+    (((semantics_) != IOLINK_OD_WRITE_TRIGGER) || ((storage_) == IOLINK_OD_STORAGE_VOLATILE))
 
 /** @brief 可写字节串必须给出长度上限（否则 STORAGE 写入会越过应用缓冲）。 */
 #define IOLINK_OD_ASSERT_BYTES_BOUND(access_, block_len_) \
@@ -522,24 +517,12 @@ typedef struct
 } iolink_od_app_t;
 
 /**
- * @brief 写后持久化钩子：把 `IOLINK_OD_STORAGE_PERSIST` 表项写成参数镜像。
- *
- * 由写路径在值已生效（含 on_change）之后调用；返回错误时写路径按
- * 后端能力回滚并上送错误。
- *
- * @param user 调用方提供的上下文（设备层为 DS 上下文）。
- */
-typedef iolink_result_t (*iolink_od_flush_fn)(void* user);
-
-/**
- * @brief 值访问上下文：标准标签、应用表与写后持久化。
+ * @brief 值访问上下文：标准标签与应用表。
  */
 typedef struct
 {
     const iolink_od_app_t* app;  /**< 应用表与后端（可为 NULL）。 */
     iolink_params_ctx_t* params; /**< 标签对象的值存储（可为 NULL）。 */
-    iolink_od_flush_fn flush;    /**< 写后保存参数镜像（可为 NULL）。 */
-    void* flush_user;            /**< 传给 @ref flush 的上下文。 */
 } iolink_od_ctx_t;
 
 /**

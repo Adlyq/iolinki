@@ -31,7 +31,6 @@ static void test_device_context_api_initializes_two_configs(void** state)
     iolink_device_config_t cfg_a = {
         .phy = phy,
         .time_us = iolink_test_time_us,
-        .storage = &g_ds_storage_mock,
         .stack =
             {
                 .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
@@ -44,7 +43,6 @@ static void test_device_context_api_initializes_two_configs(void** state)
     iolink_device_config_t cfg_b = {
         .phy = phy,
         .time_us = iolink_test_time_us,
-        .storage = &g_ds_storage_mock,
         .stack =
             {
                 .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,

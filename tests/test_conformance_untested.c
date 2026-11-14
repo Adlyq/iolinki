@@ -64,14 +64,12 @@ static const char* unique_nvm_path(const char* tag)
 static int test_setup(void** state)
 {
     (void) state;
-    iolink_ds_mock_reset();
     return 0;
 }
 
 static int test_teardown(void** state)
 {
     (void) state;
-    iolink_ds_mock_reset();
     return 0;
 }
 
@@ -203,55 +201,6 @@ static void test_0063_0064_length_errors_preserve_config1(void** state)
 /* ------------------------------------------------------------------------- */
 /* SDCI_TC_0122 / 0123：OPERATE 状态下的 ApplicationSpecificTag               */
 /* ------------------------------------------------------------------------- */
-
-static void test_0122_application_tag_valid_persists(void** state)
-{
-    IOLINK_CONFORMANCE_CASE("SDCI_TC_0122");
-    (void) state;
-    const char* nvm = unique_nvm_path("0122");
-    (void) remove(nvm);
-
-    setup_mock_phy();
-    will_return(mock_phy_init, 0);
-    /* 下面的断电重启会再次初始化 PHY。 */
-    will_return(mock_phy_init, 0);
-
-    conformance_device_t app;
-    assert_int_equal(conformance_device_init(
-                         &app, conformance_profile_get(CONFORMANCE_PROFILE_FULL), &g_phy_mock, nvm),
-                     0);
-    move_to_operate_ctx(&app.device);
-    assert_int_equal(iolink_device_get_state(&app.device), IOLINK_DLL_STATE_OPERATE);
-
-    const uint8_t tag[] = "0123456789ABCDEF01234567"; /* 24 字节，小于固定长度 */
-    const uint8_t tag_len = (uint8_t) (sizeof(tag) - 1U);
-    iolink_isdu_ctx_t ctx;
-    make_isdu_ctx(&app, &ctx);
-    uint8_t response[4] = {0U};
-    assert_int_equal(
-        isdu_write(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, tag, tag_len, response, sizeof(response)),
-        0);
-
-    make_isdu_ctx(&app, &ctx);
-    uint8_t readback[33] = {0U};
-    assert_int_equal(isdu_read(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, readback, sizeof(readback)),
-                     tag_len);
-    assert_memory_equal(readback, tag, tag_len);
-
-    const conformance_reset_observation_t* obs = conformance_device_reset_observation(&app);
-    const uint32_t startups_before = obs->startup_count;
-    assert_int_equal(conformance_device_power_cycle(&app, &g_phy_mock, nvm), 0);
-    assert_int_equal(obs->startup_count, startups_before + 1U);
-
-    make_isdu_ctx(&app, &ctx);
-    uint8_t after_power[33] = {0U};
-    assert_int_equal(
-        isdu_read(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, after_power, sizeof(after_power)), tag_len);
-    assert_memory_equal(after_power, tag, tag_len);
-
-    conformance_device_close(&app);
-    (void) remove(nvm);
-}
 
 static void test_0123_application_tag_overlong_preserves_value(void** state)
 {
@@ -413,13 +362,13 @@ static void reset_fixture_init(reset_fixture_t* f)
 {
     iolink_device_info_ctx_init(&f->info, NULL);
     iolink_params_ctx_init(&f->params, &f->info);
-    iolink_ds_init(&f->ds, NULL);
+    iolink_ds_init(&f->ds);
     iolink_ds_bind_sources(&f->ds, NULL, &f->params);
 }
 
 static void reset_fixture_power_cycle(reset_fixture_t* f)
 {
-    iolink_ds_init(&f->ds, NULL);
+    iolink_ds_init(&f->ds);
     iolink_ds_bind_sources(&f->ds, NULL, &f->params);
 }
 
@@ -782,8 +731,6 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_0063_0064_length_errors_preserve_config1, test_setup,
-                                        test_teardown),
-        cmocka_unit_test_setup_teardown(test_0122_application_tag_valid_persists, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_0123_application_tag_overlong_preserves_value,
                                         test_setup, test_teardown),

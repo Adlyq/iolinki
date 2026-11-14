@@ -122,7 +122,6 @@ static void init_device_with_app(iolink_test_device_t* dev)
     g_app_state.volatile_value = 0x2222U;
     app_od_init(&g_app_od);
 
-    iolink_ds_mock_reset();
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init_with_od(dev, NULL, NULL, &g_app_od), 0);

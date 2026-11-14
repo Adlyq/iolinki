@@ -43,28 +43,12 @@ static void test_ds_checksum(void** state)
     assert_int_not_equal(cs1, cs3);
 }
 
-static void test_ds_storage_integration(void** state)
-{
-    (void) state;
-    iolink_ds_ctx_t ds;
-    iolink_ds_mock_reset();
-    iolink_ds_init(&ds, &g_ds_storage_mock);
-    ds.params_ctx = test_env_params(&g_test_env);
-
-    uint8_t write_data[] = {0x11, 0x22, 0x33, 0x44};
-    uint8_t read_buf[4] = {0};
-
-    assert_int_equal(ds.storage->write(ds.storage->user, 0, write_data, 4), 0);
-    assert_int_equal(ds.storage->read(ds.storage->user, 0, read_buf, 4), 0);
-    assert_memory_equal(read_buf, write_data, 4);
-}
-
 static void test_ds_state_transitions(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0077");
     (void) state;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
 
     /* 1. 触发 Download（主站数据更新） */
@@ -93,7 +77,6 @@ static void test_ds_auto_processed_by_device_pump(void** state)
     (void) state;
     iolink_test_device_t dev;
 
-    iolink_ds_mock_reset();
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, NULL, NULL), 0);
@@ -118,7 +101,7 @@ static void test_ds_commands_locked(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0156");
     (void) state;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
 
     /* 1. 在锁定状态下尝试 Download Start（写） */
@@ -140,7 +123,7 @@ static void test_ds_commands_unlocked(void** state)
 {
     (void) state;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
 
     /* 1. Download Start（写）未锁定 */
@@ -160,7 +143,7 @@ static void test_ds_param_round_trip(void** state)
     iolink_ds_ctx_t ds;
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
 
     /* 配置已知的参数值。 */
@@ -245,8 +228,8 @@ static void test_ds_bound_params_restore_device_context_only(void** state)
     iolink_device_info_ctx_init(&info_b, NULL);
     iolink_params_ctx_init(&params_a, &info_a);
     iolink_params_ctx_init(&params_b, &info_b);
-    iolink_ds_init(&ds_a, NULL);
-    iolink_ds_init(&ds_b, NULL);
+    iolink_ds_init(&ds_a);
+    iolink_ds_init(&ds_b);
     iolink_ds_bind_sources(&ds_a, NULL, &params_a);
     iolink_ds_bind_sources(&ds_b, NULL, &params_b);
 
@@ -284,7 +267,7 @@ static void test_ds_apply_rejects_truncated(void** state)
 {
     (void) state;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     /* 头部声称有 5 字节值，但后面只有 2 个数据字节 -> 被拒绝。 */
     uint8_t bad[] = {0x00, 0x18, 0x00, 0x05, 0xAA, 0xBB};
@@ -345,7 +328,7 @@ static void test_ds_vendor_param_set_round_trip(void** state)
 
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     iolink_ds_bind_sources(&ds, &k_vendor_app, test_env_params(&g_test_env));
 
     assert_int_equal(
@@ -387,7 +370,7 @@ static void test_ds_download_recovery(void** state)
     iolink_ds_ctx_t ds;
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
 
     /* 构造一个镜像，包含已知参数（ApplicationTag 0x18 = "X"）以及
@@ -455,7 +438,7 @@ static void test_ds_download_end_error_classification(void** state)
     iolink_ds_ctx_t ds;
 
     /* 格式错误的暂存镜像 -> -1 -> PAR_SETINVALID。 */
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
     uint8_t bad[] = {0x00U, 0x18U, 0x00U, 0x05U, 0xAAU}; /* 声称 5 字节，实际为 1 */
@@ -464,126 +447,13 @@ static void test_ds_download_end_error_classification(void** state)
     assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -5);
 
     /* 已知参数被拒绝 -> -2 -> PAR_SETINCONSIST。 */
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     iolink_ds_bind_sources(&ds, &k_reject_app, test_env_params(&g_test_env));
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
     uint8_t img[] = {0x00U, 0x50U, 0x00U, 0x03U, 'A', 'B', 'C'};
     (void) memcpy(ds.image, img, sizeof(img));
     ds.image_len = sizeof(img);
     assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -4);
-}
-
-/* 损坏的参数镜像（位翻转/写撕裂）必须在加载时被丢弃。 */
-static void test_ds_params_image_checksum_rejects_corruption(void** state)
-{
-    (void) state;
-    iolink_ds_ctx_t ds;
-
-    test_env_init(&g_test_env, NULL);
-    test_env_reset_params(&g_test_env);
-    iolink_ds_mock_reset();
-    iolink_ds_init(&ds, &g_ds_storage_mock);
-    iolink_ds_bind_sources(&ds, NULL, test_env_params(&g_test_env));
-
-    const uint8_t tag[] = "A";
-    assert_int_equal(iolink_params_ctx_write(test_env_params(&g_test_env),
-                                             IOLINK_IDX_APPLICATION_TAG, 0U, tag, 1U)
-                         .code,
-                     0);
-    assert_int_equal(iolink_ds_save_persistent(&ds), 0);
-
-    /* 翻转参数镜像中的第一个记录数据字节（不是索引，避免变成未知索引
-       而被自然跳过）。 */
-    uint8_t* buf = iolink_ds_mock_get_buf();
-    buf[IOLINK_STORAGE_PARAMS_BASE + IOLINK_STORAGE_HDR_SIZE + 4U] ^= 0xFFU;
-
-    /* 重新加载：校验和不匹配时必须丢弃该镜像（不应用任何值）。 */
-    test_env_reset_params(&g_test_env);
-    uint8_t baseline[16] = {0U};
-    const iolink_result_t before = iolink_params_ctx_read(
-        test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, baseline, sizeof(baseline));
-    assert_int_equal(before.code, 0);
-
-    iolink_ds_ctx_t reloaded;
-    iolink_ds_init(&reloaded, &g_ds_storage_mock);
-    iolink_ds_bind_sources(&reloaded, NULL, test_env_params(&g_test_env));
-    assert_int_equal(iolink_ds_load_persistent(&reloaded), -1);
-
-    uint8_t out[8] = {0U};
-    const iolink_result_t read = iolink_params_ctx_read(
-        test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, out, sizeof(out));
-    assert_int_equal(read.code, 0);
-    assert_int_equal(read.len, before.len);
-    assert_memory_equal(out, baseline, before.len);
-}
-
-/* 下载暂存期间写 PERSIST-only 参数不得覆盖暂存镜像（两者共用 ds_stage）。 */
-static void test_ds_download_survives_persist_only_write(void** state)
-{
-    (void) state;
-    iolink_ds_ctx_t ds;
-    iolink_isdu_ctx_t isdu;
-    static uint16_t local_value;
-    static const iolink_od_entry_t local_entries[] = {
-        IOLINK_OD_SCALAR_STORAGE(0x01A0U, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
-                                 IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_PERSIST, 0U, 0xFFFFU, 0U,
-                                 "LocalOnly", &local_value),
-    };
-    static const iolink_od_app_t local_app = {
-        .entries = local_entries,
-        .count = sizeof(local_entries) / sizeof(local_entries[0]),
-        .user = NULL,
-    };
-    uint8_t response[4] = {0U};
-
-    test_env_init(&g_test_env, NULL);
-    test_env_reset_params(&g_test_env);
-    iolink_ds_mock_reset();
-    iolink_ds_init(&ds, &g_ds_storage_mock);
-    iolink_ds_bind_sources(&ds, &local_app, test_env_params(&g_test_env));
-    assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0U), 0);
-
-    const uint8_t staged[] = {'A'};
-    assert_int_equal(iolink_ds_stage_param(&ds, IOLINK_IDX_APPLICATION_TAG, 0U, staged, 1U).code,
-                     0);
-    const size_t staged_len = ds.image_len;
-    uint8_t snapshot[IOLINK_DS_IMAGE_MAX];
-    assert_true(staged_len <= sizeof(snapshot));
-    (void) memcpy(snapshot, ds.image, staged_len);
-
-    iolink_isdu_init(&isdu);
-    isdu.ds_ctx = &ds;
-    isdu.od = &local_app;
-    isdu.params_ctx = test_env_params(&g_test_env);
-    const uint8_t wire[2] = {0x12U, 0x34U};
-    assert_int_equal(isdu_send_write_request(&isdu, 0x01A0U, 0U, wire, sizeof(wire)), 1);
-    iolink_isdu_process(&isdu);
-    assert_int_equal(isdu_collect_response(&isdu, response, sizeof(response)), 0);
-    assert_int_equal(local_value, 0x1234U);
-
-    /* 暂存镜像必须原样保留，下载可以在下一帧继续。 */
-    assert_int_equal(ds.image_len, staged_len);
-    assert_memory_equal(ds.image, snapshot, staged_len);
-
-    /* DownloadEnd 统一保存：新上下文恢复暂存的标签与 PERSIST-only 参数。 */
-    assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), 0);
-    assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
-
-    iolink_device_info_ctx_t info2;
-    iolink_params_ctx_t params2;
-    iolink_ds_ctx_t ds2;
-    iolink_device_info_ctx_init(&info2, NULL);
-    iolink_params_ctx_init(&params2, &info2);
-    local_value = 0U;
-    iolink_ds_init(&ds2, &g_ds_storage_mock);
-    iolink_ds_bind_sources(&ds2, &local_app, &params2);
-    assert_int_equal(iolink_ds_load_persistent(&ds2), 0);
-    assert_int_equal(local_value, 0x1234U);
-    uint8_t tag_out[4] = {0U};
-    const iolink_result_t tag_read =
-        iolink_params_ctx_read(&params2, IOLINK_IDX_APPLICATION_TAG, 0U, tag_out, sizeof(tag_out));
-    assert_int_equal(tag_read.len, 1U);
-    assert_int_equal(tag_out[0], 'A');
 }
 
 /* 表项的 block_len 限制存入镜像的值。 */
@@ -602,7 +472,7 @@ static void test_ds_entry_block_len_bounds_value(void** state)
         .user = NULL,
     };
 
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     iolink_ds_bind_sources(&ds, &bounded_app, test_env_params(&g_test_env));
     g_vendor_param_len = 8U;
     (void) memcpy(g_vendor_param, "ABCDEFGH", 8U);
@@ -630,7 +500,7 @@ static void test_ds_entry_block_len_bounds_value(void** state)
 }
 
 /* ------------------------------------------------------------------------- */
-/* 数据存储一致性用例 0077-0081、0374 的共享 fixture。                       */
+/* 数据存储一致性用例 0077-0081 的共享 fixture。                             */
 /* ------------------------------------------------------------------------- */
 
 typedef struct
@@ -641,11 +511,11 @@ typedef struct
     iolink_events_ctx_t events;
 } ds_fixture_t;
 
-static void ds_fixture_init(ds_fixture_t* f, const iolink_storage_api_t* storage)
+static void ds_fixture_init(ds_fixture_t* f)
 {
     iolink_device_info_ctx_init(&f->info, NULL);
     iolink_params_ctx_init(&f->params, &f->info);
-    iolink_ds_init(&f->ds, storage);
+    iolink_ds_init(&f->ds);
     iolink_ds_bind_sources(&f->ds, NULL, &f->params);
     iolink_events_init(&f->events);
 }
@@ -793,7 +663,7 @@ static void test_ds_legacy_sub0_is_runtime_compat(void** state)
 {
     (void) state;
     ds_fixture_t f;
-    ds_fixture_init(&f, NULL);
+    ds_fixture_init(&f);
     ds_fixture_set_tags(&f, "APP1", "FLOW", "TANK");
     assert_true(iolink_ds_build_image(&f.ds) > 0);
     assert_true(f.ds.image_len > 0U);
@@ -833,7 +703,7 @@ static void test_ds_0077_full_upload_via_index_list(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0077");
     (void) state;
     ds_fixture_t f;
-    ds_fixture_init(&f, NULL);
+    ds_fixture_init(&f);
     ds_fixture_set_tags(&f, "APP1", "FLOW", "TANK");
     iolink_ds_clear_upload(&f.ds);
     assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
@@ -899,7 +769,7 @@ static void test_ds_0078_upload_set2_after_store(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0078");
     (void) state;
     ds_fixture_t f;
-    ds_fixture_init(&f, NULL);
+    ds_fixture_init(&f);
     ds_fixture_set_tags(&f, "S1A", "S1B", "S1C");
     iolink_ds_clear_upload(&f.ds);
     f.ds.upload_event_pending = false;
@@ -951,7 +821,7 @@ static void test_ds_0079_no_write_store_timeout(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0079");
     (void) state;
     ds_fixture_t f;
-    ds_fixture_init(&f, NULL);
+    ds_fixture_init(&f);
     ds_fixture_set_tags(&f, "OLD", "OLD", "OLD");
     iolink_ds_clear_upload(&f.ds);
     f.ds.upload_event_pending = false;
@@ -982,7 +852,7 @@ static void test_ds_0080_local_change_upload(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0080");
     (void) state;
     ds_fixture_t f;
-    ds_fixture_init(&f, NULL);
+    ds_fixture_init(&f);
     ds_fixture_set_tags(&f, "OLD", "OLD", "OLD");
     iolink_ds_clear_upload(&f.ds);
     f.ds.upload_event_pending = false;
@@ -1013,7 +883,7 @@ static void test_ds_0081_upload_abort_points(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0081");
     (void) state;
     ds_fixture_t f;
-    ds_fixture_init(&f, NULL);
+    ds_fixture_init(&f);
     ds_fixture_set_tags(&f, "SET1", "SET1", "SET1");
     iolink_ds_clear_upload(&f.ds);
     const uint32_t checksum = ds_fixture_read_u32(&f, 4U);
@@ -1041,216 +911,6 @@ static void test_ds_0081_upload_abort_points(void** state)
         assert_int_equal(ds_fixture_read_u32(&f, 4U), checksum);
         ds_fixture_assert_tag(&f, IOLINK_IDX_APPLICATION_TAG, "SET1");
     }
-}
-
-/* 0374：DS_UPLOAD_FLAG 是非易失的；DS_UploadEnd 会清除并持久化它。
- * 带存储的重新初始化用于模拟库级别的断电重启。 */
-static void test_ds_0374_upload_flag_power_cycle(void** state)
-{
-    IOLINK_CONFORMANCE_CASE("SDCI_TC_0374");
-    (void) state;
-    iolink_ds_mock_reset();
-
-    ds_fixture_t f;
-    ds_fixture_init(&f, &g_ds_storage_mock);
-    ds_fixture_set_tags(&f, "PC", "PC", "PC");
-    iolink_ds_clear_upload(&f.ds);
-    f.ds.upload_event_pending = false;
-
-    /* 块下载之后的 ParamDownloadStore 会置起并持久化该标志。 */
-    uint8_t resp[2] = {0U};
-    assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_START, resp, sizeof(resp)),
-                     0);
-    assert_int_equal(ds_fixture_isdu_write(&f, IOLINK_IDX_APPLICATION_TAG, 0U,
-                                           (const uint8_t*) "PC2", 3U, resp, sizeof(resp)),
-                     0);
-    assert_int_equal(ds_fixture_command(&f, IOLINK_CMD_PARAM_DOWNLOAD_STORE, resp, sizeof(resp)),
-                     0);
-    assert_true(f.ds.upload_event_pending);
-    assert_true(f.ds.ds_upload_flag);
-
-    /* 断电重启：新上下文从存储中读回该标志。 */
-    ds_fixture_init(&f, &g_ds_storage_mock);
-    assert_true(f.ds.ds_upload_flag);
-    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0x80U);
-
-    /* DS_UploadStart/UploadEnd 清除并持久化该标志。 */
-    assert_int_equal(ds_fixture_ds_command(&f, 0x01U, resp, sizeof(resp)), 0);
-    iolink_ds_process(&f.ds);
-    assert_int_equal(f.ds.state, IOLINK_DS_STATE_UPLOADING);
-    assert_int_equal(ds_fixture_ds_command(&f, 0x02U, resp, sizeof(resp)), 0);
-    assert_false(f.ds.ds_upload_flag);
-    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
-
-    /* 再次断电重启仍能看到已清除的标志。 */
-    ds_fixture_init(&f, &g_ds_storage_mock);
-    assert_false(f.ds.ds_upload_flag);
-    assert_int_equal(iolink_ds_state_property(&f.ds) & 0x80U, 0U);
-}
-
-/* 持久化错误路径：无后端、写失败、坏记录、恢复/复位分支。 */
-static int failing_write(void* user, uint32_t offset, const uint8_t* data, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) data;
-    (void) len;
-    return -1;
-}
-
-static int failing_read(void* user, uint32_t offset, uint8_t* data, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) data;
-    (void) len;
-    return -1;
-}
-
-static const iolink_storage_api_t g_failing_storage = {
-    .user = NULL, .read = failing_read, .write = failing_write};
-
-static uint16_t g_reset_scalar;
-static uint8_t g_reset_bytes[4];
-static uint8_t g_reset_len;
-static const uint8_t g_reset_default[] = {'A', 'B', 'C', 'D'};
-
-/* 把一组记录写进 mock NVM（头 + payload，校验和覆盖 payload）。 */
-static void ds_mock_write_image(const uint8_t* payload, size_t len)
-{
-    uint8_t* nvm = iolink_ds_mock_get_buf();
-    const uint32_t checksum = iolink_storage_checksum(payload, len);
-
-    nvm[0] = (uint8_t) (IOLINK_STORAGE_MAGIC >> 24);
-    nvm[1] = (uint8_t) (IOLINK_STORAGE_MAGIC >> 16);
-    nvm[2] = (uint8_t) (IOLINK_STORAGE_MAGIC >> 8);
-    nvm[3] = (uint8_t) IOLINK_STORAGE_MAGIC;
-    nvm[4] = (uint8_t) (IOLINK_STORAGE_VERSION & 0xFFU);
-    nvm[5] = (uint8_t) (IOLINK_STORAGE_VERSION >> 8);
-    nvm[6] = (uint8_t) (len >> 8);
-    nvm[7] = (uint8_t) (len & 0xFFU);
-    nvm[8] = (uint8_t) (checksum >> 24);
-    nvm[9] = (uint8_t) (checksum >> 16);
-    nvm[10] = (uint8_t) (checksum >> 8);
-    nvm[11] = (uint8_t) checksum;
-    if (len > 0U) {
-        (void) memcpy(&nvm[IOLINK_STORAGE_HDR_SIZE], payload, len);
-    }
-}
-
-static void test_ds_persistence_error_paths(void** state)
-{
-    (void) state;
-    iolink_ds_ctx_t ds;
-    static const iolink_od_entry_t reset_entries[] = {
-        IOLINK_OD_SCALAR_STORAGE_EX(0x01A1U, IOLINK_OD_DT_U16, IOLINK_OD_ACCESS_RW,
-                                    IOLINK_OD_WRITE_STORE,
-                                    IOLINK_OD_STORAGE_DS | IOLINK_OD_STORAGE_PERSIST, 0U, 0xFFFFU,
-                                    7U, "ResetScalar", &g_reset_scalar, NULL, NULL),
-        {.index = 0x01A2U,
-         .datatype = IOLINK_OD_DT_OCTET_STRING,
-         .access = IOLINK_OD_ACCESS_RW,
-         .write_semantics = IOLINK_OD_WRITE_VOLATILE,
-         .storage = IOLINK_OD_STORAGE_DS | IOLINK_OD_STORAGE_PERSIST,
-         .handler = IOLINK_OD_HANDLER_NONE,
-         .backend = IOLINK_OD_BACKEND_STORAGE,
-         .u.storage = {.value = g_reset_bytes, .str_len = &g_reset_len},
-         .block_len = sizeof(g_reset_bytes),
-         .block_default = g_reset_default,
-         .name = "ResetBytes"},
-    };
-    static const iolink_od_app_t reset_app = {
-        .entries = reset_entries,
-        .count = sizeof(reset_entries) / sizeof(reset_entries[0]),
-        .user = NULL,
-    };
-
-    test_env_init(&g_test_env, NULL);
-    test_env_reset_params(&g_test_env);
-    iolink_ds_mock_reset();
-
-    assert_int_equal(iolink_ds_save_persistent(NULL), -1);
-    assert_int_equal(iolink_ds_load_persistent(NULL), -1);
-    assert_int_equal(iolink_ds_factory_reset(NULL), -1);
-
-    iolink_ds_init(&ds, NULL);
-    iolink_ds_bind_sources(&ds, NULL, test_env_params(&g_test_env));
-    assert_int_equal(iolink_ds_save_persistent(&ds), -1); /* 无后端 */
-    assert_int_equal(iolink_ds_load_persistent(&ds), -1);
-    assert_int_equal(iolink_ds_factory_reset(&ds), 0); /* RAM-only：复位成功但不落盘 */
-
-    iolink_ds_init(&ds, &g_failing_storage);
-    iolink_ds_bind_sources(&ds, NULL, test_env_params(&g_test_env));
-    assert_int_equal(iolink_ds_save_persistent(&ds), -1); /* 写失败 */
-    assert_int_equal(iolink_ds_load_persistent(&ds), -1); /* 读失败 */
-    assert_int_equal(iolink_ds_factory_reset(&ds), -1);
-
-    /* 控制组：完整且校验正确的记录必须能加载。 */
-    iolink_ds_mock_reset();
-    const uint8_t good[] = {0x00U, 0x18U, 0x00U, 0x01U, 'A'};
-    ds_mock_write_image(good, sizeof(good));
-    iolink_ds_init(&ds, &g_ds_storage_mock);
-    iolink_ds_bind_sources(&ds, NULL, test_env_params(&g_test_env));
-    assert_int_equal(iolink_ds_load_persistent(&ds), 0);
-    uint8_t applied[4] = {0U};
-    const iolink_result_t applied_read = iolink_params_ctx_read(
-        test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, applied, sizeof(applied));
-    assert_int_equal(applied_read.len, 1U);
-    assert_int_equal(applied[0], 'A');
-
-    /* 记录长度越界：头/校验和正确，但记录声称 5 字节而只有 2 字节。 */
-    test_env_reset_params(&g_test_env);
-    uint8_t baseline[16] = {0U};
-    const iolink_result_t baseline_read = iolink_params_ctx_read(
-        test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, baseline, sizeof(baseline));
-    assert_int_equal(baseline_read.code, 0);
-    iolink_ds_mock_reset();
-    const uint8_t truncated[] = {0x00U, 0x18U, 0x00U, 0x05U, 0xAAU, 0xBBU};
-    ds_mock_write_image(truncated, sizeof(truncated));
-
-    iolink_ds_init(&ds, &g_ds_storage_mock);
-    iolink_ds_bind_sources(&ds, NULL, test_env_params(&g_test_env));
-    assert_int_equal(iolink_ds_load_persistent(&ds), -1);
-    uint8_t tag_out[16] = {0U};
-    const iolink_result_t after = iolink_params_ctx_read(
-        test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, tag_out, sizeof(tag_out));
-    assert_int_equal(after.len, baseline_read.len);
-    assert_memory_equal(tag_out, baseline, baseline_read.len);
-
-    /* 应用写失败：值已应用，但保存镜像失败时 apply 返回 -1。 */
-    iolink_ds_init(&ds, &g_failing_storage);
-    iolink_ds_bind_sources(&ds, NULL, test_env_params(&g_test_env));
-    const uint8_t image[] = {0x00U, 0x18U, 0x00U, 0x01U, 'X'};
-    assert_int_equal(iolink_ds_apply_image(&ds, image, sizeof(image)), -1);
-    assert_int_equal(
-        iolink_params_ctx_read(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
-                               tag_out, sizeof(tag_out))
-            .len,
-        1U);
-    assert_int_equal(tag_out[0], 'X');
-
-    /* 出厂复位：标量写入默认值，字节串写入 block_default，并重写镜像。 */
-    iolink_ds_mock_reset();
-    iolink_ds_init(&ds, &g_ds_storage_mock);
-    iolink_ds_bind_sources(&ds, &reset_app, test_env_params(&g_test_env));
-    g_reset_scalar = 0U;
-    g_reset_len = 0U;
-    (void) memset(g_reset_bytes, 0, sizeof(g_reset_bytes));
-    assert_int_equal(iolink_ds_factory_reset(&ds), 0);
-    assert_int_equal(g_reset_scalar, 7U);
-    assert_int_equal(g_reset_len, sizeof(g_reset_default));
-    assert_memory_equal(g_reset_bytes, g_reset_default, sizeof(g_reset_default));
-
-    /* 复位后的镜像必须可重新加载（证明已落盘，而不是只改 RAM）。 */
-    g_reset_scalar = 0U;
-    g_reset_len = 0U;
-    (void) memset(g_reset_bytes, 0, sizeof(g_reset_bytes));
-    iolink_ds_init(&ds, &g_ds_storage_mock);
-    iolink_ds_bind_sources(&ds, &reset_app, test_env_params(&g_test_env));
-    assert_int_equal(iolink_ds_load_persistent(&ds), 0);
-    assert_int_equal(g_reset_scalar, 7U);
-    assert_int_equal(g_reset_len, sizeof(g_reset_default));
-    assert_memory_equal(g_reset_bytes, g_reset_default, sizeof(g_reset_default));
 }
 
 static void* g_validate_user;
@@ -1288,8 +948,7 @@ static void test_ds_apply_precheck_rejects_before_write(void** state)
 
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
-    iolink_ds_mock_reset();
-    iolink_ds_init(&ds, &g_ds_storage_mock);
+    iolink_ds_init(&ds);
     iolink_ds_bind_sources(&ds, &app, test_env_params(&g_test_env));
 
     g_validate_user = NULL;
@@ -1304,45 +963,10 @@ static void test_ds_apply_precheck_rejects_before_write(void** state)
                      0U);
 }
 
-/* 设备启动时恢复参数镜像（device.c 的 load_persistent 调用点）。 */
-static void test_ds_device_boot_restores_params(void** state)
-{
-    (void) state;
-    iolink_test_device_t dev;
-    iolink_test_device_t reboot;
-
-    iolink_ds_mock_reset();
-    setup_mock_phy();
-    will_return(mock_phy_init, 0);
-    will_return(mock_phy_init, 0);
-    assert_int_equal(iolink_test_device_init(&dev, NULL, NULL), 0);
-    iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&dev.ctx);
-    assert_non_null(ds);
-
-    const uint8_t tag[] = "BOOT";
-    assert_int_equal(iolink_params_ctx_write(&dev.ctx.params, IOLINK_IDX_APPLICATION_TAG, 0U, tag,
-                                             sizeof(tag) - 1U)
-                         .code,
-                     0);
-    assert_int_equal(iolink_ds_save_persistent(ds), 0);
-    iolink_ds_refresh(ds);
-    const uint32_t saved_checksum = iolink_ds_checksum(ds);
-
-    /* 重启：新设备上下文从同一 NVM 恢复。 */
-    assert_int_equal(iolink_test_device_init(&reboot, NULL, NULL), 0);
-    uint8_t out[8] = {0U};
-    const iolink_result_t restored = iolink_params_ctx_read(
-        &reboot.ctx.params, IOLINK_IDX_APPLICATION_TAG, 0U, out, sizeof(out));
-    assert_int_equal(restored.len, sizeof(tag) - 1U);
-    assert_memory_equal(out, tag, sizeof(tag) - 1U);
-    assert_int_equal(iolink_ds_checksum(iolink_device_get_ds_ctx(&reboot.ctx)), saved_checksum);
-}
-
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_ds_checksum),
-        cmocka_unit_test(test_ds_storage_integration),
         cmocka_unit_test(test_ds_state_transitions),
         cmocka_unit_test(test_ds_auto_processed_by_device_pump),
         cmocka_unit_test(test_ds_commands_locked),
@@ -1351,21 +975,16 @@ int main(void)
         cmocka_unit_test(test_ds_bound_params_restore_device_context_only),
         cmocka_unit_test(test_ds_apply_rejects_truncated),
         cmocka_unit_test(test_ds_vendor_param_set_round_trip),
-        cmocka_unit_test(test_ds_params_image_checksum_rejects_corruption),
         cmocka_unit_test(test_ds_entry_block_len_bounds_value),
         cmocka_unit_test(test_ds_download_end_error_classification),
         cmocka_unit_test(test_ds_download_recovery),
-        cmocka_unit_test(test_ds_download_survives_persist_only_write),
-        cmocka_unit_test(test_ds_persistence_error_paths),
         cmocka_unit_test(test_ds_apply_precheck_rejects_before_write),
-        cmocka_unit_test(test_ds_device_boot_restores_params),
         cmocka_unit_test(test_ds_legacy_sub0_is_runtime_compat),
         cmocka_unit_test(test_ds_0077_full_upload_via_index_list),
         cmocka_unit_test(test_ds_0078_upload_set2_after_store),
         cmocka_unit_test(test_ds_0079_no_write_store_timeout),
         cmocka_unit_test(test_ds_0080_local_change_upload),
         cmocka_unit_test(test_ds_0081_upload_abort_points),
-        cmocka_unit_test(test_ds_0374_upload_flag_power_cycle),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

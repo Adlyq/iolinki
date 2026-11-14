@@ -39,9 +39,6 @@ static iolink_device_config_t make_device_config(void)
 
     (void) memset(&config, 0, sizeof(config));
     config.time_us = iolink_test_time_us;
-#if IOLINK_FEATURE_DATA_STORAGE
-    config.storage = &g_ds_storage_mock;
-#endif
     config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     config.stack.pd_in_len = 2U;
     config.stack.pd_out_len = 2U;
@@ -306,8 +303,8 @@ static void test_device_config_baudrate(void** state)
     assert_int_equal(dev.ctx.dll.main.operating_baudrate, IOLINK_BAUDRATE_COM1);
 }
 
-/* 当绑定了存储后端且不存在已持久化的镜像时，DS 镜像和校验和会在
- * 初始化时建立，因此 Data_Storage_Size (0x0003/3) 与
+/* 初始化时即建立 DS 镜像和校验和，即使没有已持久化的镜像也是如此，
+ * 因此 Data_Storage_Size (0x0003/3) 与
  * Parameter_Checksum (0x0003/4) 在首次上传之前就已有效。 */
 static void test_device_init_builds_ds_image(void** state)
 {
@@ -319,7 +316,6 @@ static void test_device_init_builds_ds_image(void** state)
     stack.pd_out_len = 2U;
     stack.od_width = 1U;
 
-    iolink_ds_mock_reset();
     setup_mock_phy();
     will_return(mock_phy_init, 0);
 
@@ -327,7 +323,6 @@ static void test_device_init_builds_ds_image(void** state)
     dev.cfg.phy = g_phy_mock;
     dev.cfg.time_us = iolink_test_time_us;
     dev.cfg.stack = stack;
-    dev.cfg.storage = &g_ds_storage_mock;
     assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), IOLINK_DEVICE_INIT_OK);
 
     iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&dev.ctx);

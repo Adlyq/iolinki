@@ -106,12 +106,6 @@ int iolink_test_device_init_with_od(iolink_test_device_t* dev, const iolink_stac
                                     const iolink_od_app_t* od);
 void move_to_operate_ctx(iolink_device_ctx_t* ctx);
 
-/* 用于数据存储（DS）测试的 mock 存储 */
-#include "iolinki/data_storage.h"
-extern const iolink_storage_api_t g_ds_storage_mock;
-void iolink_ds_mock_reset(void);
-uint8_t* iolink_ds_mock_get_buf(void);
-
 /* ISDU V1.1.5 交织格式辅助函数 */
 #include "iolinki/isdu.h"
 

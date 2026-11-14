@@ -31,24 +31,23 @@
 typedef enum
 {
     OD_VALIDATE_OK = 0,
-    OD_VALIDATE_ERR_TABLE = -1,             /**< entries 为 NULL 但 count 非 0。 */
-    OD_VALIDATE_ERR_HANDLER_NONE = -2,      /**< 应用表项 handler 非 NONE。 */
-    OD_VALIDATE_ERR_DATATYPE = -3,          /**< datatype 越界。 */
-    OD_VALIDATE_ERR_ACCESS = -4,            /**< 既不可读也不可写。 */
-    OD_VALIDATE_ERR_SEMANTICS = -5,         /**< write_semantics 取值非法。 */
-    OD_VALIDATE_ERR_STORAGE_BITS = -6,      /**< storage 含未知位。 */
-    OD_VALIDATE_ERR_PERSIST_SEMANTICS = -7, /**< PERSIST 未配 STORE 语义。 */
-    OD_VALIDATE_ERR_TRIGGER_STORAGE = -8,   /**< TRIGGER 带了 storage 位。 */
-    OD_VALIDATE_ERR_BYTES_UNBOUNDED = -9,   /**< 可写字节串未给长度上限。 */
-    OD_VALIDATE_ERR_RO_HOOK = -10,          /**< 只读项带写钩子（永不触发）。 */
-    OD_VALIDATE_ERR_RANGE = -11,            /**< range_min > range_max。 */
-    OD_VALIDATE_ERR_DEFAULT_RANGE = -12,    /**< 默认值越界。 */
-    OD_VALIDATE_ERR_BACKEND = -13,          /**< backend 取值非法。 */
-    OD_VALIDATE_ERR_STORAGE_NULL = -14,     /**< STORAGE 后端缺变量/长度指针。 */
-    OD_VALIDATE_ERR_HANDLER_READ = -15,     /**< 可读 HANDLER 缺 read。 */
-    OD_VALIDATE_ERR_HANDLER_WRITE = -16,    /**< 可写 HANDLER 缺 write。 */
-    OD_VALIDATE_ERR_DUPLICATE = -17,        /**< 重复 index/subindex。 */
-    OD_VALIDATE_ERR_STD_INDEX = -18         /**< 应用表占用标准索引（< 0x40）。 */
+    OD_VALIDATE_ERR_TABLE = -1,           /**< entries 为 NULL 但 count 非 0。 */
+    OD_VALIDATE_ERR_HANDLER_NONE = -2,    /**< 应用表项 handler 非 NONE。 */
+    OD_VALIDATE_ERR_DATATYPE = -3,        /**< datatype 越界。 */
+    OD_VALIDATE_ERR_ACCESS = -4,          /**< 既不可读也不可写。 */
+    OD_VALIDATE_ERR_SEMANTICS = -5,       /**< write_semantics 取值非法。 */
+    OD_VALIDATE_ERR_STORAGE_BITS = -6,    /**< storage 含未知位。 */
+    OD_VALIDATE_ERR_TRIGGER_STORAGE = -7, /**< TRIGGER 带了 storage 位。 */
+    OD_VALIDATE_ERR_BYTES_UNBOUNDED = -8, /**< 可写字节串未给长度上限。 */
+    OD_VALIDATE_ERR_RO_HOOK = -9,         /**< 只读项带写钩子（永不触发）。 */
+    OD_VALIDATE_ERR_RANGE = -10,          /**< range_min > range_max。 */
+    OD_VALIDATE_ERR_DEFAULT_RANGE = -11,  /**< 默认值越界。 */
+    OD_VALIDATE_ERR_BACKEND = -12,        /**< backend 取值非法。 */
+    OD_VALIDATE_ERR_STORAGE_NULL = -13,   /**< STORAGE 后端缺变量/长度指针。 */
+    OD_VALIDATE_ERR_HANDLER_READ = -14,   /**< 可读 HANDLER 缺 read。 */
+    OD_VALIDATE_ERR_HANDLER_WRITE = -15,  /**< 可写 HANDLER 缺 write。 */
+    OD_VALIDATE_ERR_DUPLICATE = -16,      /**< 重复 index/subindex。 */
+    OD_VALIDATE_ERR_STD_INDEX = -17       /**< 应用表占用标准索引（< 0x40）。 */
 } od_validate_result_t;
 
 /**

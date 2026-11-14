@@ -67,7 +67,7 @@ static void ds_block_fixture_init(ds_block_fixture_t* f)
 {
     iolink_device_info_ctx_init(&f->info, NULL);
     iolink_params_ctx_init(&f->params, &f->info);
-    iolink_ds_init(&f->ds, NULL);
+    iolink_ds_init(&f->ds);
     iolink_ds_bind_sources(&f->ds, NULL, &f->params);
     iolink_events_init(&f->events);
 }
@@ -330,7 +330,7 @@ static void test_ds_download_rejected_by_access_lock(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -362,7 +362,7 @@ static void test_ds_command_busy(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -388,7 +388,7 @@ static void test_param_lock_does_not_block_ds_download(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -411,7 +411,7 @@ static void test_block_param_download_buffered(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -469,7 +469,7 @@ static void test_block_param_download_break(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -532,7 +532,7 @@ static void test_param_download_store_raises_ds_upload_req(void** state)
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
     iolink_events_ctx_t events;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_events_init(&events);
     iolink_isdu_init(&ctx);
@@ -602,7 +602,7 @@ static void test_ds_checksum_stable_across_store(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -645,7 +645,7 @@ static void test_0081_upload_abort_points(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -689,7 +689,7 @@ static void test_0324_unexpected_end_in_idle(void** state)
     for (size_t i = 0U; i < sizeof(cmds); i++) {
         iolink_isdu_ctx_t ctx;
         iolink_ds_ctx_t ds;
-        iolink_ds_init(&ds, NULL);
+        iolink_ds_init(&ds);
         ds.params_ctx = test_env_params(&g_test_env);
         iolink_isdu_init(&ctx);
         test_isdu_bind_params(&ctx, &g_test_env);
@@ -711,7 +711,7 @@ static void test_0325_write_during_upload(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -751,7 +751,7 @@ static void test_0326_read_during_download(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -796,7 +796,7 @@ static void test_0147_double_download_start(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -861,7 +861,7 @@ static void test_0328_switch_upload_download(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -897,7 +897,7 @@ static void test_0330_upload_discards_download(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -969,7 +969,7 @@ static void test_0082_download_after_modification(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -1021,7 +1021,7 @@ static void test_0083_download_after_factory_reset(void** state)
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);

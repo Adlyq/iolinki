@@ -41,9 +41,6 @@ static void device_config_defaults(iolink_test_device_t* dev)
     (void) memset(dev, 0, sizeof(*dev));
     dev->cfg.phy = g_phy_mock;
     dev->cfg.time_us = iolink_test_time_us;
-#if IOLINK_FEATURE_DATA_STORAGE
-    dev->cfg.storage = &g_ds_storage_mock;
-#endif
     dev->cfg.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
 }
 
@@ -51,7 +48,6 @@ static void test_device_binds_external_workspace(void** state)
 {
     (void) state;
     iolink_phy_mock_reset();
-    iolink_ds_mock_reset();
     setup_mock_phy();
     will_return(mock_phy_init, 0);
 
@@ -80,7 +76,6 @@ static void test_device_falls_back_to_embedded_scratch(void** state)
 {
     (void) state;
     iolink_phy_mock_reset();
-    iolink_ds_mock_reset();
     setup_mock_phy();
     will_return(mock_phy_init, 0);
 
@@ -106,10 +101,9 @@ static void test_ds_serialize_matches_stored_image(void** state)
 {
     (void) state;
     fill_env();
-    iolink_ds_mock_reset();
 
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_env);
 
     uint8_t serialized[IOLINK_DS_IMAGE_MAX];
@@ -141,10 +135,9 @@ static void test_ds_refresh_without_image_buffer(void** state)
 {
     (void) state;
     fill_env();
-    iolink_ds_mock_reset();
 
     iolink_ds_ctx_t ds;
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ds.params_ctx = test_env_params(&g_env);
 
     uint8_t serialized[IOLINK_DS_IMAGE_MAX];

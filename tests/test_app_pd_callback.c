@@ -32,26 +32,6 @@ static uint64_t test_time_us(void* user)
     return 1000000ULL;
 }
 
-static int storage_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) buf;
-    (void) len;
-    return 0;
-}
-
-static int storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) buf;
-    (void) len;
-    return 0;
-}
-
-static const iolink_storage_api_t g_storage = {.read = storage_read, .write = storage_write};
-
 static int phy_init(void* user)
 {
     (void) user;
@@ -97,9 +77,6 @@ static void make_config(iolink_device_config_t* cfg, const iolink_app_callbacks_
     cfg->stack.pd_in_len = 2U;
     cfg->stack.pd_out_len = 0U;
     cfg->app_callbacks = cbs;
-#if IOLINK_FEATURE_DATA_STORAGE
-    cfg->storage = &g_storage;
-#endif
     cfg->time_us = test_time_us;
 }
 

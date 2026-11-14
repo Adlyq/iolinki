@@ -39,9 +39,6 @@ target_include_directories(test_switching_sensor PRIVATE ../examples/switching_s
 # OD 后端链接协议栈（表项编解码在 src/od.c）。
 target_link_libraries(test_switching_sensor iolinki)
 add_test(NAME test_switching_sensor COMMAND test_switching_sensor)
-add_executable(test_params_persistence test_params_persistence.c)
-target_link_libraries(test_params_persistence iolinki)
-add_test(NAME test_params_persistence COMMAND test_params_persistence)
 add_executable(test_deadline_rollover test_deadline_rollover.c)
 target_link_libraries(test_deadline_rollover iolinki)
 add_test(NAME test_deadline_rollover COMMAND test_deadline_rollover)
@@ -77,9 +74,6 @@ add_test(NAME test_device_time_source COMMAND test_device_time_source)
 add_executable(test_device_requires_critical test_device_requires_critical.c)
 target_link_libraries(test_device_requires_critical iolinki)
 add_test(NAME test_device_requires_critical COMMAND test_device_requires_critical)
-add_executable(test_device_requires_storage test_device_requires_storage.c)
-target_link_libraries(test_device_requires_storage iolinki)
-add_test(NAME test_device_requires_storage COMMAND test_device_requires_storage)
 add_executable(test_phy_l6362a test_phy_l6362a.c)
 target_link_libraries(test_phy_l6362a iolinki)
 add_test(NAME test_phy_l6362a COMMAND test_phy_l6362a)
@@ -198,8 +192,7 @@ if(CMOCKA_FOUND)
         target_sources(test_conformance_device PRIVATE
             ../examples/conformance_device/conformance_device.c
             ../examples/conformance_device/conformance_device_od.c
-            ../examples/conformance_device/conformance_profiles.c
-            ../examples/conformance_device/conformance_storage.c)
+            ../examples/conformance_device/conformance_profiles.c)
         target_include_directories(test_conformance_device PRIVATE
             ../examples/conformance_device)
     endif()
@@ -270,16 +263,14 @@ if(CMOCKA_FOUND)
         target_sources(test_conformance_gaps PRIVATE
             ../examples/conformance_device/conformance_device.c
             ../examples/conformance_device/conformance_device_od.c
-            ../examples/conformance_device/conformance_profiles.c
-            ../examples/conformance_device/conformance_storage.c)
+            ../examples/conformance_device/conformance_profiles.c)
         target_include_directories(test_conformance_gaps PRIVATE
             ../examples/conformance_device)
         add_iolink_test(test_conformance_untested test_conformance_untested.c)
         target_sources(test_conformance_untested PRIVATE
             ../examples/conformance_device/conformance_device.c
             ../examples/conformance_device/conformance_device_od.c
-            ../examples/conformance_device/conformance_profiles.c
-            ../examples/conformance_device/conformance_storage.c)
+            ../examples/conformance_device/conformance_profiles.c)
         target_include_directories(test_conformance_untested PRIVATE
             ../examples/conformance_device)
     endif()

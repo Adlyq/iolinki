@@ -33,14 +33,13 @@ static void test_full_stack_lifecycle(void** state)
 {
     (void) state;
     iolink_phy_mock_reset();
-    iolink_ds_mock_reset();
 
-    /* 用 mock PHY 和 mock 存储初始化协议栈 */
+    /* 用 mock PHY 初始化协议栈 */
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, NULL, NULL);
-    iolink_ds_init(iolink_device_get_ds_ctx(&dev.ctx), &g_ds_storage_mock);
+    iolink_ds_init(iolink_device_get_ds_ctx(&dev.ctx));
 
     /*** 步骤 1：STARTUP -> PREOPERATE ***/
 

@@ -18,27 +18,6 @@
 
 #include "iolinki/device.h"
 
-static int test_storage_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) buf;
-    (void) len;
-    return -1;
-}
-
-static int test_storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) buf;
-    (void) len;
-    return 0;
-}
-
-static const iolink_storage_api_t g_test_storage = {.read = test_storage_read,
-                                                    .write = test_storage_write};
-
 static uint64_t test_time_us(void* user)
 {
     (void) user;
@@ -52,7 +31,6 @@ int main(void)
 
     (void) memset(&config, 0, sizeof(config));
     config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    config.storage = &g_test_storage;
     config.time_us = test_time_us;
 
     /* 不含异步上下文的配置文件（SINGLE）从不引用

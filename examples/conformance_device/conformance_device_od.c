@@ -145,6 +145,9 @@ static iolink_result_t conformance_od_write(void* user, const iolink_od_entry_t*
     }
     switch (entry->index) {
         case CONFORMANCE_CONFIG1_INDEX:
+            if ((data == NULL) || (len != CONFORMANCE_CONFIG1_MAX)) {
+                return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+            }
             (void) memcpy(app->config1, data, CONFORMANCE_CONFIG1_MAX);
             app->config1_len = CONFORMANCE_CONFIG1_MAX;
             return iolink_result_ok(0U);
@@ -158,7 +161,12 @@ static iolink_result_t conformance_od_write(void* user, const iolink_od_entry_t*
             return iolink_result_ok(0U);
         }
         case CONFORMANCE_CONFIG3_INDEX:
-            (void) memcpy(app->config3, data, len);
+            if ((data == NULL) && (len > 0U)) {
+                return iolink_result_error(IOLINK_RESULT_INVALID);
+            }
+            if (len > 0U) {
+                (void) memcpy(app->config3, data, len);
+            }
             app->config3_len = len;
             return iolink_result_ok(0U);
         default:
@@ -167,6 +175,9 @@ static iolink_result_t conformance_od_write(void* user, const iolink_od_entry_t*
     if ((entry->index >= CONFORMANCE_CONFIG4_INDEX0) &&
         (entry->index < (CONFORMANCE_CONFIG4_INDEX0 + CONFORMANCE_CONFIG4_COUNT))) {
         const size_t slot = (size_t) (entry->index - CONFORMANCE_CONFIG4_INDEX0);
+        if ((data == NULL) || (len != CONFORMANCE_CONFIG4_SIZE)) {
+            return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
+        }
         (void) memcpy(app->config4[slot], data, CONFORMANCE_CONFIG4_SIZE);
         app->config4_len[slot] = CONFORMANCE_CONFIG4_SIZE;
         return iolink_result_ok(0U);

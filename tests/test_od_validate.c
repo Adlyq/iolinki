@@ -15,7 +15,6 @@
 #include <stddef.h>
 
 #include "od_internal.h"
-#include "data_storage_internal.h"
 
 /* --- 合法的应用值与后端 ------------------------------------------------ */
 
@@ -161,15 +160,6 @@ static void test_storage_bits(void)
     assert(validate_one(&entry) == OD_VALIDATE_ERR_STORAGE_BITS);
 }
 
-static void test_persist_semantics(void)
-{
-    iolink_od_entry_t entry = k_valid_table[IDX_SCALAR];
-
-    entry.write_semantics = (uint8_t) IOLINK_OD_WRITE_VOLATILE;
-    entry.storage = (uint8_t) IOLINK_OD_STORAGE_PERSIST;
-    assert(validate_one(&entry) == OD_VALIDATE_ERR_PERSIST_SEMANTICS);
-}
-
 static void test_trigger_storage(void)
 {
     iolink_od_entry_t entry = k_valid_table[IDX_SCALAR];
@@ -267,48 +257,6 @@ static void test_std_index(void)
     assert(validate_one(&entry) == OD_VALIDATE_ERR_STD_INDEX);
 }
 
-/* --- PERSIST 参数镜像容量 ------------------------------------------------ */
-
-static uint8_t g_cap_buf[255];
-static uint8_t g_cap_len;
-static iolink_od_entry_t g_cap_entries[64];
-
-#define CAP_BLOCK_LEN 255U
-#define CAP_RECORD_BYTES (4U + CAP_BLOCK_LEN) /* 记录头 + 值 */
-#define CAP_ENTRIES_MAX 64U
-
-static void test_ds_capacity(void)
-{
-    iolink_od_app_t app;
-    const iolink_od_entry_t base = IOLINK_OD_BYTES_STORAGE(
-        0x0110U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_STORE, IOLINK_OD_STORAGE_PERSIST,
-        CAP_BLOCK_LEN, "CapParam", g_cap_buf, &g_cap_len);
-
-    app.entries = g_cap_entries;
-    app.user = NULL;
-
-    /* 标准 PERSIST 集是 3 个 32 字节标签；补足够多的大项必然超过上限。 */
-    const size_t need = ((size_t) IOLINK_DS_IMAGE_MAX / CAP_RECORD_BYTES) + 1U;
-    assert(need <= CAP_ENTRIES_MAX);
-    for (size_t i = 0U; i < need; i++) {
-        g_cap_entries[i] = base;
-        g_cap_entries[i].index = (uint16_t) (0x0110U + i);
-    }
-    app.count = need;
-    assert(ds_validate_persist(&app) == DS_VALIDATE_ERR_IMAGE);
-
-    /* 一条小项放得下。 */
-    g_cap_entries[0] = base;
-    g_cap_entries[0].block_len = 16U;
-    g_cap_entries[0].index = 0x0110U;
-    app.count = 1U;
-    assert(ds_validate_persist(&app) == DS_VALIDATE_OK);
-
-    /* PERSIST 字节串没有上限：容量无法确定。 */
-    g_cap_entries[0].block_len = 0U;
-    assert(ds_validate_persist(&app) == DS_VALIDATE_ERR_IMAGE);
-}
-
 int main(void)
 {
     test_null_and_empty();
@@ -319,7 +267,6 @@ int main(void)
     test_access();
     test_semantics();
     test_storage_bits();
-    test_persist_semantics();
     test_trigger_storage();
     test_bytes_unbounded();
     test_ro_hooks();
@@ -329,6 +276,5 @@ int main(void)
     test_handler_functions();
     test_duplicate();
     test_std_index();
-    test_ds_capacity();
     return 0;
 }

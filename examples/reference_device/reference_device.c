@@ -17,35 +17,6 @@ static const iolink_device_info_t identity = {
     .revision_id = 0x0111,
 };
 
-#if IOLINK_FEATURE_DATA_STORAGE
-static uint8_t g_storage[IOLINK_STORAGE_TOTAL_SIZE];
-
-static int storage_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
-{
-    (void) user;
-    if ((offset > sizeof(g_storage)) || (len > sizeof(g_storage) - offset)) {
-        return -1;
-    }
-    (void) memcpy(buf, &g_storage[offset], len);
-    return 0;
-}
-
-static int storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
-{
-    (void) user;
-    if ((offset > sizeof(g_storage)) || (len > sizeof(g_storage) - offset)) {
-        return -1;
-    }
-    (void) memcpy(&g_storage[offset], buf, len);
-    return 0;
-}
-
-static const iolink_storage_api_t g_storage_api = {
-    .read = storage_read,
-    .write = storage_write,
-};
-#endif
-
 int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy,
                           iolink_device_time_us_fn time_us)
 {
@@ -55,9 +26,6 @@ int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy,
     memset(app, 0, sizeof(*app));
     app->config.phy = *phy;
     app->config.time_us = time_us;
-#if IOLINK_FEATURE_DATA_STORAGE
-    app->config.storage = &g_storage_api;
-#endif
     app->config.device_info = &identity;
     app->config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     app->config.stack.pd_in_len = sizeof(app->input);

@@ -87,37 +87,10 @@ static uint64_t fake_time_us(void* user)
     return 1000U;
 }
 
-static int fake_storage_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) buf;
-    (void) len;
-    return -1; /* no persisted data */
-}
-
-static int fake_storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) buf;
-    (void) len;
-    return 0;
-}
-
-static const iolink_storage_api_t g_fake_storage = {
-    NULL,
-    fake_storage_read,
-    fake_storage_write,
-};
-
 static void make_minimal_config(iolink_device_config_t* config)
 {
     (void) memset(config, 0, sizeof(*config));
     config->time_us = fake_time_us;
-#if IOLINK_FEATURE_DATA_STORAGE
-    config->storage = &g_fake_storage;
-#endif
     config->stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     config->stack.pd_in_len = 2U;
     config->stack.pd_out_len = 2U;

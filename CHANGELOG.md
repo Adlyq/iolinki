@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed (library-owned NVM and persistence)
+- `include/iolinki/storage.h`, `iolink_storage_api_t`, the `storage` backend
+  of `iolink_device_config_t`, `IOLINK_STORAGE_*`, `IOLINK_OD_STORAGE_PERSIST`,
+  `iolink_od_ctx_t::flush`/`iolink_od_flush_fn`, `iolink_ds_save_persistent()`
+  and `iolink_ds_load_persistent()`. The stack no longer writes NVM or owns a
+  persistence format; applications persist through each entry's `on_change`.
+- `IOLINK_DEVICE_INIT_ERR_STORAGE` and `IOLINK_DEVICE_INIT_ERR_PERSIST_CAPACITY`.
+  `iolink_ds_init()` no longer takes a storage backend.
+- `DS_UPLOAD_FLAG` is RAM-only; `iolink_ds_factory_reset()` restores the DS
+  set in RAM only and never calls into a storage backend.
+
 ### Added (init-time configuration self-check)
 - `iolink_device_init()` now validates the configuration once, before binding
   any subsystem, and rejects the first problem with

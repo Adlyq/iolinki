@@ -12,7 +12,6 @@
 #include "iolinki/config.h"
 #include "iolinki/od.h"
 #include "iolinki/result.h"
-#include "iolinki/storage.h"
 #include "iolinki/workspace.h"
 
 #include "iolinki/protocol.h"
@@ -62,14 +61,13 @@ typedef enum
  */
 typedef struct
 {
-    iolink_ds_state_t state;             /**< 当前 DS 状态机位置 */
-    const iolink_storage_api_t* storage; /**< 绑定的存储实现 API */
-    iolink_params_ctx_t* params_ctx;     /**< 标准标签对象的值后端（可为 NULL） */
-    const iolink_od_app_t* od_app;       /**< 应用 OD 表（可为 NULL，表示只有标准表） */
-    uint32_t current_checksum;           /**< 最近一次计算的本地参数校验和 */
-    uint32_t master_checksum;            /**< 主站最近校验过的校验和 */
-    bool ds_upload_flag;                 /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
-    bool upload_event_pending;           /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
+    iolink_ds_state_t state;         /**< 当前 DS 状态机位置 */
+    iolink_params_ctx_t* params_ctx; /**< 标准标签对象的值后端（可为 NULL） */
+    const iolink_od_app_t* od_app;   /**< 应用 OD 表（可为 NULL，表示只有标准表） */
+    uint32_t current_checksum;       /**< 最近一次计算的本地参数校验和 */
+    uint32_t master_checksum;        /**< 主站最近校验过的校验和 */
+    bool ds_upload_flag;             /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
+    bool upload_event_pending;       /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
     /* 镜像不再常驻状态结构。序列化交给工作区中的暂存缓冲（上传可
      * 直接流式写入调用方缓冲），这里只保留指针与容量。 */
     uint8_t* image;        /**< 序列化/下载暂存缓冲（工作区或内嵌 fallback） */
@@ -87,11 +85,9 @@ typedef struct
  * @brief 初始化数据存储引擎
  *
  * @param ctx 要初始化的 DS 上下文
- * @param storage 存储钩子；仅在直接使用 DS 时可以为 NULL。设备
- *                层在编译启用 DS 时要求完整的后端。
  */
 #if IOLINK_FEATURE_DATA_STORAGE
-void iolink_ds_init(iolink_ds_ctx_t* ctx, const iolink_storage_api_t* storage);
+void iolink_ds_init(iolink_ds_ctx_t* ctx);
 
 /**
  * @brief 绑定外部工作区。
@@ -267,9 +263,8 @@ int iolink_ds_build_image(iolink_ds_ctx_t* ctx);
  * 解析序列化的记录，先对全部"已知参数"调用表项的 validate 钩子
  * （无副作用），全部通过后再逐条通过对象字典写回。
  *
- * 这不是跨参数的事务：预校验覆盖值本身与长度，但 NVM 写入失败仍可能
- * 留下已经生效的前缀记录。预校验失败时不会写入任何参数，也不会改动
- * 持久化镜像。
+ * 这不是跨参数的事务：预校验覆盖值本身与长度，预校验失败时不会写入
+ * 任何参数。应用通过各表项的 `on_change` 收到落盘通知，库不写 NVM。
  *
  * @param ctx DS 上下文
  * @param data 序列化的映像字节
@@ -288,35 +283,13 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
 const uint8_t* iolink_ds_get_image(iolink_ds_ctx_t* ctx, size_t* out_len);
 
 /**
- * @brief 把带 `IOLINK_OD_STORAGE_PERSIST` 位的表项写成参数镜像。
+ * @brief 把 PERSIST 表项恢复为表项默认值（仅 RAM）。
  *
- * 这是库内唯一的持久化写入口：ISDU 写成功后由 OD flush 钩子调用，
- * DS 下载完成后由 @ref iolink_ds_apply_image 调用一次。序列化使用
- * 绑定的暂存缓冲，因此与上传/校验和计算互斥（都在主泵上下文）。
- *
- * @param ctx DS 上下文
- * @return int 0 成功；-1 表示无后端、缓冲不足或 NVM 写入失败。
- */
-int iolink_ds_save_persistent(iolink_ds_ctx_t* ctx);
-
-/**
- * @brief 从参数镜像恢复值（不执行钩子、不回写 NVM）。
- *
- * 在 `iolink_ds_bind_sources()` 之后、计算 DS 校验和之前调用。
- * 未初始化、版本不符或校验和错误时返回 -1，所有参数保持默认值。
+ * 标签（0x0018-0x001A）由参数上下文复位，本函数跳过它们。持久化由应用
+ * 在 reset 后自行决定；库不写 NVM。
  *
  * @param ctx DS 上下文
- * @return int 0 成功；-1 无后端或镜像损坏。
- */
-int iolink_ds_load_persistent(iolink_ds_ctx_t* ctx);
-
-/**
- * @brief 把 PERSIST 表项恢复为表项默认值并重写参数镜像。
- *
- * 标签（0x0018-0x001A）由参数上下文复位，本函数跳过它们。
- *
- * @param ctx DS 上下文
- * @return int 0 成功；-1 无后端或 NVM 写入失败。
+ * @return int 0 成功。
  */
 int iolink_ds_factory_reset(iolink_ds_ctx_t* ctx);
 

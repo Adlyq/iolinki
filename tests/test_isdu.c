@@ -314,7 +314,7 @@ static void test_system_cmd_reserved_ds_commands(void** state)
         iolink_ds_ctx_t ds;
         test_env_init(&g_test_env, NULL);
         test_env_reset_params(&g_test_env);
-        iolink_ds_init(&ds, NULL);
+        iolink_ds_init(&ds);
         iolink_isdu_init(&ctx);
         test_isdu_bind_params(&ctx, &g_test_env);
         ctx.ds_ctx = &ds;
@@ -340,7 +340,7 @@ static void test_system_cmd_param_break(void** state)
     iolink_ds_ctx_t ds;
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     ctx.ds_ctx = &ds;
@@ -555,7 +555,7 @@ static void test_isdu_data_storage_round_trip(void** state)
     test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ctx.ds_ctx = &ds;
 
     /* 配置一个已知的 ApplicationTag。 */
@@ -611,7 +611,7 @@ static void test_isdu_data_storage_subindices(void** state)
     test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ctx.ds_ctx = &ds;
 
     assert_true(iolink_ds_build_image(&ds) >= 0);
@@ -712,7 +712,7 @@ static void test_isdu_ds_command_sequence(void** state)
     test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    iolink_ds_init(&ds, NULL);
+    iolink_ds_init(&ds);
     ctx.ds_ctx = &ds;
 
     uint8_t r[4];

@@ -26,7 +26,6 @@
 #include "iolinki/data_storage.h"
 #include "iolinki/device.h"
 #include "iolinki/isdu.h"
-#include "iolinki/storage.h"
 #include "iolinki/workspace.h"
 
 /* 默认构建需要真实的临界区实现（test_helpers.c 也提供同一对空实现）。 */
@@ -88,26 +87,6 @@ static uint8_t test_int_active(void* user)
     return 0U;
 }
 
-static int storage_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) memset(buf, 0, len);
-    return 0;
-}
-
-static int storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) buf;
-    (void) len;
-    return 0;
-}
-
-static const iolink_storage_api_t g_storage = {
-    .user = NULL, .read = storage_read, .write = storage_write};
-
 int main(void)
 {
     iolink_device_ctx_t ctx;
@@ -133,7 +112,6 @@ int main(void)
 #endif
     config.phy.int_active = test_int_active;
     config.time_us = test_time_us;
-    config.storage = &g_storage;
     config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     config.stack.od_width = 1U;
 

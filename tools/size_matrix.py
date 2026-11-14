@@ -107,26 +107,6 @@ static void app_phy_set_baudrate(void* user, iolink_baudrate_t baudrate)
     (void) baudrate;
 }
 
-static int app_storage_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) buf;
-    (void) len;
-    return 0;
-}
-
-static int app_storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) buf;
-    (void) len;
-    return 0;
-}
-
-static const iolink_storage_api_t g_storage = {.read = app_storage_read,
-                                                .write = app_storage_write};
 static iolink_device_ctx_t g_ctx;
 static iolink_device_config_t g_cfg;
 
@@ -167,9 +147,6 @@ void reset_handler(void)
     g_cfg.phy.set_baudrate = app_phy_set_baudrate;
     g_cfg.stack.m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
     g_cfg.stack.od_width = 8U;
-#if IOLINK_FEATURE_DATA_STORAGE
-    g_cfg.storage = &g_storage;
-#endif
     g_cfg.time_us = app_time_us;
     if (iolink_device_init(&g_ctx, &g_cfg) != 0) {
         for (;;) {

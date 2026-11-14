@@ -37,7 +37,6 @@
 #include "iolinki/iolink.h"
 #include "iolinki/phy.h"
 #include "iolinki/protocol.h"
-#include "iolinki/storage.h"
 
 /* --- 场景参数 ----------------------------------------------------------- */
 
@@ -112,7 +111,6 @@ static char g_vendor_name[WCET_VENDOR_NAME_LEN + 1U];
 static iolink_device_info_t g_device_info;
 static uint8_t g_vendor_param[WCET_VENDOR_PARAM_LEN];
 static uint8_t g_vendor_param_len;
-static uint8_t g_nvm[IOLINK_STORAGE_TOTAL_SIZE];
 
 #define WCET_CHECK(cond, message)                                                        \
     do {                                                                                 \
@@ -132,32 +130,6 @@ void iolink_critical_enter(void)
 void iolink_critical_exit(void)
 {
 }
-
-static int wcet_storage_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
-{
-    (void) user;
-    if ((offset > sizeof(g_nvm)) || (len > (sizeof(g_nvm) - (size_t) offset))) {
-        return -1;
-    }
-    (void) memcpy(buf, &g_nvm[offset], len);
-    return 0;
-}
-
-static int wcet_storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
-{
-    (void) user;
-    if ((offset > sizeof(g_nvm)) || (len > (sizeof(g_nvm) - (size_t) offset))) {
-        return -1;
-    }
-    (void) memcpy(&g_nvm[offset], buf, len);
-    return 0;
-}
-
-static const iolink_storage_api_t g_storage = {
-    .user = NULL,
-    .read = wcet_storage_read,
-    .write = wcet_storage_write,
-};
 
 static const iolink_od_entry_t k_wcet_od_entries[] = {
     IOLINK_OD_BYTES_STORAGE(WCET_VENDOR_PARAM_INDEX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
@@ -354,7 +326,6 @@ static int wcet_device_setup(iolink_m_seq_type_t type, uint8_t pd_in_len, uint8_
     g_now_us = 0U;
     g_vendor_param_len = 0U;
     (void) memset(g_vendor_param, 0, sizeof(g_vendor_param));
-    (void) memset(g_nvm, 0, sizeof(g_nvm));
 
     g_type = type;
     g_pd_in_len = pd_in_len;
@@ -377,7 +348,6 @@ static int wcet_device_setup(iolink_m_seq_type_t type, uint8_t pd_in_len, uint8_
     g_dev.cfg.stack.master_lost_cycles = 0U;
     g_dev.cfg.app_callbacks = &g_app_callbacks;
     g_dev.cfg.device_info = &g_device_info;
-    g_dev.cfg.storage = &g_storage;
     g_dev.cfg.time_us = wcet_time_us;
     g_dev.cfg.user = NULL;
     g_dev.cfg.od = &g_wcet_od;

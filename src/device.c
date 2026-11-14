@@ -20,7 +20,6 @@
 #include "iolinki/port.h"
 #include "dll_internal.h"
 #include "od_internal.h"
-#include "data_storage_internal.h"
 #include <string.h>
 
 /** @brief DLL 状态变化回调：分发到应用的 startup/preoperate/operate 钩子。 */
@@ -235,12 +234,6 @@ static int device_config_validate(const iolink_device_config_t* config)
         return IOLINK_DEVICE_INIT_ERR_OD;
     }
 #endif
-#if IOLINK_FEATURE_DATA_STORAGE && IOLINK_FEATURE_VALIDATE
-    /* PERSIST 参数镜像必须放得进固定大小的镜像缓冲。 */
-    if (ds_validate_persist(config->od) != DS_VALIDATE_OK) {
-        return IOLINK_DEVICE_INIT_ERR_PERSIST_CAPACITY;
-    }
-#endif
 
     {
         const int layout_err = device_validate_fixed_mseq(stack, od);
@@ -258,13 +251,6 @@ static int device_config_validate(const iolink_device_config_t* config)
      * 真正的临界区；SINGLE profile 从不引用这些钩子。 */
     if (iolink_platform_critical_sections_ready() != 0) {
         return IOLINK_DEVICE_INIT_ERR_CRITICAL;
-    }
-#endif
-
-#if IOLINK_FEATURE_DATA_STORAGE
-    if ((config->storage == NULL) || (config->storage->read == NULL) ||
-        (config->storage->write == NULL)) {
-        return IOLINK_DEVICE_INIT_ERR_STORAGE;
     }
 #endif
 
@@ -360,19 +346,14 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     ctx->dll.main.shared.isdu.od = config->od;
     ctx->dll.main.state_cb = device_state_cb;
     ctx->dll.main.state_cb_user = ctx;
-    /* 一个 NVM 后端服务参数镜像与 DS_UPLOAD_FLAG。 */
 #if IOLINK_FEATURE_DATA_STORAGE
-    if (config->storage != NULL) {
-        iolink_ds_init(&ctx->dll.main.ds, config->storage);
-        iolink_ds_bind_workspace(&ctx->dll.main.ds, workspace);
-        ctx->dll.main.shared.isdu.ds_ctx = &ctx->dll.main.ds;
-    }
+    iolink_ds_init(&ctx->dll.main.ds);
+    iolink_ds_bind_workspace(&ctx->dll.main.ds, workspace);
+    ctx->dll.main.shared.isdu.ds_ctx = &ctx->dll.main.ds;
     /* DS 参数访问统一走 OD 表：标准标签经参数上下文，应用参数经表项
        后端。DS 成员由表项 storage 位掩码决定（标准表 + config->od）。 */
     iolink_ds_bind_sources(&ctx->dll.main.ds, config->od, &ctx->params);
-    /* 恢复 PERSIST 参数值；然后按当前参数集刷新 Size/Checksum，
-       使 0x0003 在首次上传之前就已有效。 */
-    (void) iolink_ds_load_persistent(&ctx->dll.main.ds);
+    /* 按当前参数集刷新 Size/Checksum，使 0x0003 在首次上传前有效。 */
     iolink_ds_refresh(&ctx->dll.main.ds);
 #else
     ctx->dll.main.shared.isdu.ds_ctx = NULL;

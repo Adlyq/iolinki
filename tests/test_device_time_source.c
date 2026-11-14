@@ -19,27 +19,6 @@
 #include "iolinki/device.h"
 #include "iolinki/events.h"
 
-static int test_storage_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) buf;
-    (void) len;
-    return -1;
-}
-
-static int test_storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) buf;
-    (void) len;
-    return 0;
-}
-
-static const iolink_storage_api_t g_test_storage = {.read = test_storage_read,
-                                                    .write = test_storage_write};
-
 static uint64_t g_app_time_us;
 
 void iolink_critical_enter(void)
@@ -62,7 +41,6 @@ static void init_device(iolink_device_ctx_t* ctx, iolink_device_time_us_fn time_
 
     (void) memset(&config, 0, sizeof(config));
     config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    config.storage = &g_test_storage;
     config.stack.t_pd_us = 500U;
     config.time_us = time_us;
 

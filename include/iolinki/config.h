@@ -143,7 +143,7 @@
  * @brief Data Storage 序列化镜像的最大长度，单位字节。
  *
  * 记录布局为 [Index(2,大端)][Subindex(1)][Length(1)][Data(Length)]；
- * 该值同时决定 storage.h 中 DS 分区的大小。默认：256
+ * 该值决定 workspace 下载暂存与 DS 镜像缓冲的上限。默认：256
  */
 #ifndef IOLINK_DS_IMAGE_MAX
 #define IOLINK_DS_IMAGE_MAX 256U
@@ -262,13 +262,10 @@
  * @brief 设备初始化期的配置自检（总开关）。
  *
  * 打开时，@ref iolink_device_init 在绑定任何子系统之前检查应用配置：
- *  - 对象字典表项的自相矛盾（缺后端指针、只读项带写钩子、`PERSIST` 未配
- *    `STORE`、可写字节串无长度上限等）；
- *  - 由对象字典派生的 PERSIST 集合能否放进 `IOLINK_DS_IMAGE_MAX` 的参数
- *    镜像缓冲。
+ *  - 对象字典表项的自相矛盾（缺后端指针、只读项带写钩子、可写字节串
+ *    无长度上限、重复索引等）。
  *
- * 命中时返回 ::IOLINK_DEVICE_INIT_ERR_OD 或
- * ::IOLINK_DEVICE_INIT_ERR_PERSIST_CAPACITY，而不是拖到首次 ISDU/DS 访问才
+ * 命中时返回 ::IOLINK_DEVICE_INIT_ERR_OD，而不是拖到首次 ISDU 访问才
  * 失败。常量之间的同类检查已经在表项宏里于编译期完成。本开关只影响
  * 初始化期自检，协议期数据校验始终生效；表稳定后可以关掉以省下这段
  * `.text`。

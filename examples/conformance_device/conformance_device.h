@@ -7,7 +7,6 @@
 #include <stdint.h>
 
 #include "conformance_profiles.h"
-#include "conformance_storage.h"
 #include "iolinki/device.h"
 #include "iolinki/events.h"
 
@@ -55,7 +54,6 @@ typedef struct
 {
     iolink_device_ctx_t device;
     const conformance_profile_t* profile;
-    conformance_file_storage_t storage;
     iolink_device_config_t config;
     iolink_od_app_t od;
 

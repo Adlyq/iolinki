@@ -195,26 +195,6 @@ static uint64_t device_time_us(void* user)
     return 1000000ULL;
 }
 
-static int storage_read(void* user, uint32_t offset, uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) buf;
-    (void) len;
-    return 0;
-}
-
-static int storage_write(void* user, uint32_t offset, const uint8_t* buf, size_t len)
-{
-    (void) user;
-    (void) offset;
-    (void) buf;
-    (void) len;
-    return 0;
-}
-
-static const iolink_storage_api_t g_dev_storage = {.read = storage_read, .write = storage_write};
-
 static void test_device_init_requires_tx_busy(void)
 {
     iolink_device_ctx_t ctx;
@@ -223,9 +203,6 @@ static void test_device_init_requires_tx_busy(void)
     (void) memset(&cfg, 0, sizeof(cfg));
     cfg.phy = g_phy;
     cfg.phy.tx_busy = NULL;
-#if IOLINK_FEATURE_DATA_STORAGE
-    cfg.storage = &g_dev_storage;
-#endif
     cfg.time_us = device_time_us;
     assert(iolink_device_init(&ctx, &cfg) == IOLINK_DEVICE_INIT_ERR_PHY);
 

@@ -1709,38 +1709,12 @@ static bool isdu_entry_allowed(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t* 
     return true;
 }
 
-#if IOLINK_FEATURE_DATA_STORAGE
-/** @brief OD 写后持久化：把 PERSIST 表项写成参数镜像。 */
-static iolink_result_t isdu_persist_flush(void* user)
-{
-    iolink_ds_ctx_t* ds = (iolink_ds_ctx_t*) user;
-
-    if ((ds == NULL) || (ds->storage == NULL)) {
-        return iolink_result_ok(0U); /* RAM-only：没有需要保存的镜像。 */
-    }
-    if (iolink_ds_downloading(ds)) {
-        /* 下载暂存与参数镜像共用 workspace 缓冲；ParamDownloadEnd 会
-           在应用后统一保存，这里不能覆盖暂存镜像。 */
-        return iolink_result_ok(0U);
-    }
-    return (iolink_ds_save_persistent(ds) == 0) ? iolink_result_ok(0U)
-                                                : iolink_result_error(IOLINK_RESULT_IO);
-}
-#endif
-
 /** @brief 通过表项读/写一个参数值（标签对象或应用后端）。 */
 static void isdu_serve_od_value(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t* entry)
 {
     iolink_od_ctx_t od;
     od.app = ctx->od;
     od.params = ctx->params_ctx;
-#if IOLINK_FEATURE_DATA_STORAGE
-    od.flush = (ctx->ds_ctx != NULL) ? isdu_persist_flush : NULL;
-    od.flush_user = ctx->ds_ctx;
-#else
-    od.flush = NULL;
-    od.flush_user = NULL;
-#endif
 
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
 #if IOLINK_FEATURE_DATA_STORAGE

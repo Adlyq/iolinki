@@ -119,6 +119,7 @@ int conformance_device_init(conformance_device_t* app, const conformance_profile
     if ((app == NULL) || (profile == NULL) || (phy == NULL)) {
         return -1;
     }
+    (void) nvm_path;
     (void) memset(app, 0, sizeof(*app));
     app->profile = profile;
     app->pd_valid = true;
@@ -128,24 +129,16 @@ int conformance_device_init(conformance_device_t* app, const conformance_profile
     conformance_defaults(app);
     conformance_capture_defaults(app);
 
-    if (conformance_file_storage_init(&app->storage, nvm_path) != 0) {
-        return -1;
-    }
-
     app->config.phy = *phy;
     app->config.time_us = conformance_time_us;
     app->config.stack = profile->stack;
     app->config.device_info = profile->identity;
-#if IOLINK_FEATURE_DATA_STORAGE
-    app->config.storage = &app->storage.api;
-#endif
     conformance_od_init(&app->od, app);
     app->config.od = &app->od;
     app->config.user = app;
 
     const int rc = iolink_device_init(&app->device, &app->config);
     if (rc != 0) {
-        conformance_file_storage_close(&app->storage);
         return rc;
     }
     iolink_device_set_reset_handler(&app->device, conformance_reset_handler);
@@ -182,7 +175,6 @@ void conformance_device_close(conformance_device_t* app)
         if (g_reset_observer == app) {
             g_reset_observer = NULL;
         }
-        conformance_file_storage_close(&app->storage);
     }
 }
 

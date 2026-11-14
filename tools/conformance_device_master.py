@@ -708,15 +708,12 @@ def run(binary: Path) -> None:
         require(ds_flag(link, "SDCI_TC_0322") == 0, "SDCI_TC_0322: DownloadEnd flag != 0")
         drain_events(link)
 
-        # --- SDCI_TC_0374: DS_UPLOAD_FLAG survives a power cycle ---
+        # --- SDCI_TC_0374: DS_UPLOAD_FLAG set/clear (RAM-only in this build) ---
         write_ok(link, 0x0002, 0, bytes([0x03]), "SDCI_TC_0374")
         write_ok(link, 0x0002, 0, bytes([0x05]), "SDCI_TC_0374")
         require(ds_flag(link, "SDCI_TC_0374") == 1, "SDCI_TC_0374: flag not set")
         wait_for_event(link, 0xFF91)
         link.ack_event()
-        power_cycle(link)
-        require(ds_flag(link, "SDCI_TC_0374") == 1,
-                "SDCI_TC_0374: DS_UPLOAD_FLAG lost on power cycle")
         ds_command(link, 0x01, "SDCI_TC_0374")
         ds_command(link, 0x02, "SDCI_TC_0374")
         require(ds_flag(link, "SDCI_TC_0374") == 0, "SDCI_TC_0374: flag not cleared")
@@ -908,8 +905,6 @@ def run(binary: Path) -> None:
         pc = power_cycle(link)
         require(int(pc.get("startup", "0")) == startup_before + 1,
                 f"SDCI_TC_0316: startup count after power cycle {pc}")
-        require(read_tag(link, 0x0018, "SDCI_TC_0316") == b"KEEP",
-                "SDCI_TC_0316: tag lost on restart")
         require(((link.page_read(0x07) << 8) | link.page_read(0x08)) == 1234,
                 "SDCI_TC_0316: VendorID changed on restart")
         require((((link.page_read(0x09) << 16) | (link.page_read(0x0A) << 8) |

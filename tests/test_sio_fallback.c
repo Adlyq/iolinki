@@ -170,7 +170,6 @@ static void test_fallback_command_ignored_without_wakeup(void** state)
     dev.cfg.phy = g_phy_mock;
     dev.cfg.phy.detect_wakeup = NULL;
     dev.cfg.time_us = iolink_test_time_us;
-    dev.cfg.storage = &g_ds_storage_mock;
     dev.cfg.stack = config;
     assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), 0);
 

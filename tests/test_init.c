@@ -47,9 +47,6 @@ static iolink_device_config_t make_device_config(void)
     (void) memset(&config, 0, sizeof(config));
     config.phy = local_phy_mock;
     config.time_us = iolink_test_time_us;
-#if IOLINK_FEATURE_DATA_STORAGE
-    config.storage = &g_ds_storage_mock;
-#endif
     return config;
 }
 

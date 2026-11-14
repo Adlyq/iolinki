@@ -1,8 +1,7 @@
 add_library(conformance_device_app STATIC
     conformance_device.c
     conformance_device_od.c
-    conformance_profiles.c
-    conformance_storage.c)
+    conformance_profiles.c)
 target_include_directories(conformance_device_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(conformance_device_app PUBLIC iolinki)
 

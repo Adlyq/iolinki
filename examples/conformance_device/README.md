@@ -12,7 +12,7 @@ application supplies the required configuration:
 - full identification and DPP1 values;
 - Data Storage and block-parameter descriptors;
 - Config1/2/3/4 test objects;
-- events, PDIn/PDOut and NVM;
+- events and PDIn/PDOut;
 - selectable test profiles for different Test Spec scenarios.
 
 Product-specific IODD values, local UI behaviour and hardware certification stay
@@ -90,8 +90,8 @@ quit
 requests a Data Storage upload. `resetinfo` reports the application-level
 startup count, observed reset reason and whether the parameter snapshot is at
 its default; `factoryreset`/`backtobox` apply the application defaults and
-record the reason. `powercycle` preserves the observation counters and reloads
-the file-backed NVM.
+record the reason. `powercycle` preserves the observation counters and
+re-initialises the stack.
 
 These hooks are application-level test controls; they are not part of the
 library API.
@@ -124,9 +124,9 @@ Implemented:
 - Config2 16-bit parameter;
 - Config3 200-octet variable parameter;
 - four Config4 block parameters;
-- Data Storage descriptors and NVM-backed storage;
+- Data Storage descriptors;
 - event injection, PD-valid control and local-change hook;
-- `powercycle` re-initialisation with file-backed NVM.
+- `powercycle` stack re-initialisation.
 
 Still to add:
 

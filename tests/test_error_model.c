@@ -157,7 +157,7 @@ static void test_round_trip_reports_length(void** state)
 /** @brief 初始化一个处于下载状态的 DS 上下文（参数来源为 OD 表）。 */
 static void ds_download_begin(iolink_ds_ctx_t* ds, const iolink_od_app_t* app)
 {
-    iolink_ds_init(ds, NULL);
+    iolink_ds_init(ds);
     iolink_ds_bind_sources(ds, app, NULL);
     /* 0x03 同时是 ParamDownloadStart ISDU 命令与 DS_DownloadStart 命令。 */
     assert_int_equal(iolink_ds_handle_ds_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0U), 0);

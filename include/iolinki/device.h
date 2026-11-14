@@ -73,7 +73,6 @@
  *                            |                 | 以及 app_callbacks 的 on_* 钩子
  *  .app_callbacks            | application     | 结构体与回调目标保持有效
  *  .device_info              | application     | 静态标识数据
- *  .storage                  | application     | 读/写函数在 ctx 生命周期内有效
  *  .time_us                  | application     | 单调递增、非阻塞、ISR 安全
  *  .log_write                | application     | 主服务上下文调用；启用
  *                            |                 | IOLINK_LOG_ENABLE_ISR 时须 ISR 安全
@@ -117,24 +116,21 @@ typedef struct
                                                     提供 on_pd_input 时 DLL 走回调路径，
                                                     否则使用轮询 API）。 */
     const iolink_device_info_t* device_info;     /**< 静态设备标识数据。 */
-#if IOLINK_FEATURE_DATA_STORAGE
-    const iolink_storage_api_t* storage; /**< 用于参数、DS 映像和标志的统一 NVM 后端（必需）。 */
-#endif
-    iolink_device_time_us_fn time_us; /**< DLL、ISR 泵和事件引擎使用的应用时钟；
-                                           必需（NULL 在初始化时会被
-                                           拒绝）。 */
-    void* user;                       /**< 传给 iolink_device_time_us_fn、OD 后端、
-                                           log_write 以及每个 iolink_app_callbacks_t 钩子的
-                                           应用上下文。 */
-    iolink_log_write_fn log_write;    /**< 可选的运行时日志回调；NULL 表示静默。
-                                           参见 iolinki/log.h。 */
-    iolink_log_level_t log_level;     /**< 运行时日志阈值；IOLINK_LOG_LEVEL_SILENT（0）
-                                           表示不输出。 */
-    const iolink_od_app_t* od;        /**< 应用对象字典（可选；设备专用索引与参数值的
-                                           唯一扩展入口）。 */
-    iolink_workspace_t* workspace;    /**< 可选的传输 scratch 工作区。NULL 表示使用
-                                           上下文内嵌的 fallback 存储；当
-                                           `IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供。 */
+    iolink_device_time_us_fn time_us;            /**< DLL、ISR 泵和事件引擎使用的应用时钟；
+                                                      必需（NULL 在初始化时会被
+                                                      拒绝）。 */
+    void* user;                                  /**< 传给 iolink_device_time_us_fn、OD 后端、
+                                                      log_write 以及每个 iolink_app_callbacks_t 钩子的
+                                                      应用上下文。 */
+    iolink_log_write_fn log_write;               /**< 可选的运行时日志回调；NULL 表示静默。
+                                                      参见 iolinki/log.h。 */
+    iolink_log_level_t log_level;                /**< 运行时日志阈值；IOLINK_LOG_LEVEL_SILENT（0）
+                                                      表示不输出。 */
+    const iolink_od_app_t* od;                   /**< 应用对象字典（可选；设备专用索引与参数值的
+                                                      唯一扩展入口）。 */
+    iolink_workspace_t* workspace;               /**< 可选的传输 scratch 工作区。NULL 表示使用
+                                                      上下文内嵌的 fallback 存储；当
+                                                      `IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供。 */
 } iolink_device_config_t;
 
 /**
@@ -175,15 +171,12 @@ typedef enum
     IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -9, /**< PD/OD 长度与 M-sequence 类型不兼容 */
     IOLINK_DEVICE_INIT_ERR_TIME = -10,       /**< time_us 回调为 NULL */
     IOLINK_DEVICE_INIT_ERR_CRITICAL = -11,   /**< 平台临界区为弱默认实现 */
-    IOLINK_DEVICE_INIT_ERR_STORAGE = -12,    /**< storage 后端为 NULL 或不完整 */
     IOLINK_DEVICE_INIT_ERR_PD_INPUT =
         -14, /**< PD 回调路径与轮询调用混用（能力位已置位时调用轮询 API） */
     IOLINK_DEVICE_INIT_ERR_PHY = -15,       /**< 构建配置所需的某个 PHY 钩子为 NULL */
     IOLINK_DEVICE_INIT_ERR_WORKSPACE = -16, /**< `IOLINK_WORKSPACE_EMBEDDED=0` 但没有提供工作区 */
     IOLINK_DEVICE_INIT_ERR_OD = -17,        /**< 应用对象字典表存在未定义/自相矛盾的配置 */
-    IOLINK_DEVICE_INIT_ERR_PERSIST_CAPACITY =
-        -18, /**< 由对象字典派生的 PERSIST 集合超出 IOLINK_DS_IMAGE_MAX */
-    /* -8 与 -13 未使用（保持编号稳定）。 */
+    /* -8、-12、-13、-18 未使用（保持编号稳定）。 */
 } iolink_device_init_result_t;
 
 /**

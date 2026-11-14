@@ -333,9 +333,6 @@ static void test_device_fill_config(iolink_test_device_t* dev, const iolink_stac
     dev->cfg.phy = g_phy_mock;
     dev->cfg.time_us = (g_iolink_test_time_us_override != NULL) ? g_iolink_test_time_us_override
                                                                 : iolink_test_time_us;
-#if IOLINK_FEATURE_DATA_STORAGE
-    dev->cfg.storage = &g_ds_storage_mock;
-#endif
     if (stack != NULL) {
         dev->cfg.stack = *stack;
     }
@@ -472,40 +469,6 @@ uint8_t iolink_phy_mock_get_cq_state(void)
 void iolink_phy_mock_set_send_delay_us(uint32_t delay_us)
 {
     g_mock_send_delay_us = delay_us;
-}
-
-/* 用于数据存储（DS）测试的 mock 存储 */
-#include "iolinki/data_storage.h"
-#define DS_MOCK_SIZE ((size_t) IOLINK_STORAGE_TOTAL_SIZE)
-static uint8_t g_ds_mock_buf[DS_MOCK_SIZE];
-
-int ds_mock_read(void* user, uint32_t addr, uint8_t* buf, size_t len)
-{
-    (void) user;
-    if (addr + len > DS_MOCK_SIZE) return -1;
-    memcpy(buf, &g_ds_mock_buf[addr], len);
-    return 0;
-}
-
-int ds_mock_write(void* user, uint32_t addr, const uint8_t* buf, size_t len)
-{
-    (void) user;
-    if (addr + len > DS_MOCK_SIZE) return -1;
-    memcpy(&g_ds_mock_buf[addr], buf, len);
-    return 0;
-}
-
-const iolink_storage_api_t g_ds_storage_mock = {
-    .user = NULL, .read = ds_mock_read, .write = ds_mock_write};
-
-void iolink_ds_mock_reset(void)
-{
-    memset(g_ds_mock_buf, 0, DS_MOCK_SIZE);
-}
-
-uint8_t* iolink_ds_mock_get_buf(void)
-{
-    return g_ds_mock_buf;
 }
 
 /* ISDU V1.1.5 交织格式辅助函数 */

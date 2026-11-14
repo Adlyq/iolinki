@@ -1433,7 +1433,7 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     DLL_EVENTS_INIT(&ctx->shared.events);
     iolink_isdu_init(&ctx->shared.isdu);
 #if IOLINK_FEATURE_DATA_STORAGE
-    iolink_ds_init(&ctx->ds, NULL);
+    iolink_ds_init(&ctx->ds);
 #endif
 #if IOLINK_FEATURE_EVENTS
     ctx->shared.isdu.event_ctx = &ctx->shared.events;
