@@ -12,7 +12,7 @@
  *        DLL 和事件引擎使用，而不使用平台时钟。
  */
 
-#include <assert.h>
+#include <cmocka.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -44,23 +44,26 @@ static void init_device(iolink_device_ctx_t* ctx, iolink_device_time_us_fn time_
     config.stack.t_pd_us = 500U;
     config.time_us = time_us;
 
-    assert(iolink_device_init(ctx, &config) == 0);
+    assert_int_equal(iolink_device_init(ctx, &config), 0);
 }
 
-static void test_initialization_uses_app_clock(void)
+static void test_initialization_uses_app_clock(void** state)
 {
+    (void) state;
     iolink_device_ctx_t ctx;
 
     g_app_time_us = 1000000ULL;
     init_device(&ctx, app_time_us);
 
     /* T_PD 截止时间与主站活动种子都来自应用时钟。 */
-    assert(iolink_dll_timer_deadline(&ctx.dll.main, IOLINK_TIMER_T_PD) == (1000000ULL + 500ULL));
-    assert(ctx.dll.main.master_last_activity_ms == 1000U);
+    assert_int_equal(iolink_dll_timer_deadline(&ctx.dll.main, IOLINK_TIMER_T_PD),
+                     (1000000ULL + 500ULL));
+    assert_int_equal(ctx.dll.main.master_last_activity_ms, 1000U);
 }
 
-static void test_event_engine_uses_app_clock(void)
+static void test_event_engine_uses_app_clock(void** state)
 {
+    (void) state;
     iolink_device_ctx_t ctx;
 
     g_app_time_us = 1234000ULL;
@@ -69,26 +72,29 @@ static void test_event_engine_uses_app_clock(void)
     iolink_event_trigger(&ctx.dll.main.shared.events, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD,
                          IOLINK_EVENT_TYPE_ERROR);
 
-    assert(ctx.dll.main.shared.events.pending[0].active);
-    assert(ctx.dll.main.shared.events.pending[0].appears_valid);
-    assert(ctx.dll.main.shared.events.pending[0].last_appears_ms == 1234U);
+    assert_true(ctx.dll.main.shared.events.pending[0].active);
+    assert_true(ctx.dll.main.shared.events.pending[0].appears_valid);
+    assert_int_equal(ctx.dll.main.shared.events.pending[0].last_appears_ms, 1234U);
 }
 
-static void test_null_clock_is_rejected_at_init(void)
+static void test_null_clock_is_rejected_at_init(void** state)
 {
+    (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t config;
 
     (void) memset(&config, 0, sizeof(config));
     config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
 
-    assert(iolink_device_init(&ctx, &config) == IOLINK_DEVICE_INIT_ERR_TIME);
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_TIME);
 }
 
 int main(void)
 {
-    test_initialization_uses_app_clock();
-    test_event_engine_uses_app_clock();
-    test_null_clock_is_rejected_at_init();
-    return 0;
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_initialization_uses_app_clock),
+        cmocka_unit_test(test_event_engine_uses_app_clock),
+        cmocka_unit_test(test_null_clock_is_rejected_at_init),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

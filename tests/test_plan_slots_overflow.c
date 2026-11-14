@@ -16,7 +16,7 @@
  * 计数保持不变，测试失败。
  */
 
-#include <assert.h>
+#include <cmocka.h>
 #include <string.h>
 
 #include "iolinki/dll_ctx.h"
@@ -24,8 +24,9 @@
 
 static const iolink_phy_api_t s_phy = {.user = NULL};
 
-int main(void)
+static void test_plan_slot_overflow_is_counted(void** state)
 {
+    (void) state;
     iolink_dll_ctx_t ctx;
     (void) memset(&ctx, 0, sizeof(ctx));
     iolink_dll_init(&ctx.main, &ctx.isr, &s_phy);
@@ -37,18 +38,25 @@ int main(void)
     iolink_dll_publish_reply_plans(&ctx.main);
 
     /* 计划表只容得下一条；按状态切片构建的其余计划必须被计数。 */
-    assert(ctx.main.shared.reply_plan_total == 1U);
-    assert(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_STARTUP] == 1U);
-    assert(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_PREOPERATE] == 0U);
-    assert(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE] == 0U);
+    assert_int_equal(ctx.main.shared.reply_plan_total, 1U);
+    assert_int_equal(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_STARTUP], 1U);
+    assert_int_equal(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_PREOPERATE], 0U);
+    assert_int_equal(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE], 0U);
     /* Type-1/2 配置共 42 条切片行（STARTUP 11 + PREOPERATE 11 + ESTAB 10 +
      * OPERATE 10），只容下 1 条，其余 41 条必须逐条计数。 */
-    assert(ctx.main.reply_plan_overflows == overflows_before + 41U);
-    assert(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM] == 0U);
+    assert_int_equal(ctx.main.reply_plan_overflows, overflows_before + 41U);
+    assert_int_equal(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM], 0U);
 
     iolink_dll_stats_t stats;
     (void) memset(&stats, 0, sizeof(stats));
     iolink_dll_get_stats(&ctx.main, &stats);
-    assert(stats.reply_plan_overflows == ctx.main.reply_plan_overflows);
-    return 0;
+    assert_int_equal(stats.reply_plan_overflows, ctx.main.reply_plan_overflows);
+}
+
+int main(void)
+{
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_plan_slot_overflow_is_counted),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

@@ -25,7 +25,10 @@
  * MEMORY_GUIDE.md。这正是本测试存在的目的：尺寸变化必须是有意识的决定。
  */
 
+#include <stdarg.h>
 #include <stddef.h>
+#include <setjmp.h>
+#include <cmocka.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -95,10 +98,18 @@ typedef char
                                                                                              : -1];
 #endif
 
-int main(void)
+static void test_context_sizes(void** state)
 {
+    (void) state;
     printf("ctx sizes: dll=%zu device=%zu isdu=%zu ds=%zu events=%zu workspace=%zu\n",
            sizeof(iolink_dll_ctx_t), sizeof(iolink_device_ctx_t), sizeof(iolink_isdu_ctx_t),
            sizeof(iolink_ds_ctx_t), sizeof(iolink_events_ctx_t), sizeof(iolink_workspace_t));
-    return 0;
+}
+
+int main(void)
+{
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_context_sizes),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

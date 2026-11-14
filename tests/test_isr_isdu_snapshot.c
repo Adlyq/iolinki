@@ -15,11 +15,14 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <cmocka.h>
+
 #include "iolinki/crc.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/iolink.h"
 #include "iolinki/isdu.h"
 #include "iolinki/protocol.h"
+#include "test_case.h"
 
 static uint64_t now_us;
 
@@ -380,15 +383,16 @@ static int test_type0_diagnosis_read_isr(void)
     return 0;
 }
 
+IOLINK_TEST_RC(test_eager_isdu_snapshot)
+IOLINK_TEST_RC(test_type0_diagnosis_read_isr)
+IOLINK_TEST_RC(test_request_service_staging)
+
 int main(void)
 {
-    int rc = test_eager_isdu_snapshot();
-    if (rc != 0) {
-        return rc;
-    }
-    rc = test_type0_diagnosis_read_isr();
-    if (rc != 0) {
-        return rc;
-    }
-    return test_request_service_staging();
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(iolink_case_test_eager_isdu_snapshot),
+        cmocka_unit_test(iolink_case_test_type0_diagnosis_read_isr),
+        cmocka_unit_test(iolink_case_test_request_service_staging),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

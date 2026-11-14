@@ -17,7 +17,7 @@
  * setter propagates the sink to every subsystem.
  */
 
-#include <assert.h>
+#include <cmocka.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -97,8 +97,9 @@ static void make_minimal_config(iolink_device_config_t* config)
     config->stack.od_width = 1U;
 }
 
-static void test_device_init_binds_config_sink(void)
+static void test_device_init_binds_config_sink(void** state)
 {
+    (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t config;
     int token;
@@ -109,23 +110,23 @@ static void test_device_init_binds_config_sink(void)
     config.log_level = IOLINK_LOG_LEVEL_INFO;
 
     reset_capture();
-    assert(iolink_device_init(&ctx, &config) == 0);
+    assert_int_equal(iolink_device_init(&ctx, &config), 0);
 
     /* The init summary is emitted through the config sink, with config.user. */
-    assert(g_calls >= 1);
-    assert(g_last_level == IOLINK_LOG_LEVEL_INFO);
-    assert(g_last_user == &token);
-    assert(strstr(g_last_msg, "device init") != NULL);
+    assert_true(g_calls >= 1);
+    assert_int_equal(g_last_level, IOLINK_LOG_LEVEL_INFO);
+    assert_ptr_equal(g_last_user, &token);
+    assert_non_null(strstr(g_last_msg, "device init"));
 
-    assert(ctx.dll.main.shared.log.write == log_capture);
-    assert(ctx.dll.main.shared.log.user == &token);
-    assert(ctx.dll.main.shared.log.level == IOLINK_LOG_LEVEL_INFO);
-    assert(ctx.dll.main.shared.isdu.log.write == log_capture);
+    assert_true(ctx.dll.main.shared.log.write == log_capture);
+    assert_ptr_equal(ctx.dll.main.shared.log.user, &token);
+    assert_int_equal(ctx.dll.main.shared.log.level, IOLINK_LOG_LEVEL_INFO);
+    assert_true(ctx.dll.main.shared.isdu.log.write == log_capture);
 #if IOLINK_FEATURE_DATA_STORAGE
-    assert(ctx.dll.main.ds.log.write == log_capture);
+    assert_true(ctx.dll.main.ds.log.write == log_capture);
 #endif
 #if IOLINK_FEATURE_EVENTS
-    assert(ctx.dll.main.shared.events.log.write == log_capture);
+    assert_true(ctx.dll.main.shared.events.log.write == log_capture);
 #endif
 
     /* The runtime switch silences an initialized device immediately. */
@@ -134,11 +135,12 @@ static void test_device_init_binds_config_sink(void)
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_check(&ctx.dll.main.ds, 0U); /* would log an upload request */
 #endif
-    assert(g_calls == 0);
+    assert_int_equal(g_calls, 0);
 }
 
-static void test_device_init_failure_logs_through_config(void)
+static void test_device_init_failure_logs_through_config(void** state)
 {
+    (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t config;
     int token;
@@ -150,30 +152,32 @@ static void test_device_init_failure_logs_through_config(void)
     config.log_level = IOLINK_LOG_LEVEL_DEBUG;
 
     reset_capture();
-    assert(iolink_device_init(&ctx, &config) == IOLINK_DEVICE_INIT_ERR_TIME);
-    assert(g_calls == 1);
-    assert(g_last_level == IOLINK_LOG_LEVEL_ERROR);
-    assert(g_last_user == &token);
-    assert(strstr(g_last_msg, "init rejected") != NULL);
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_TIME);
+    assert_int_equal(g_calls, 1);
+    assert_int_equal(g_last_level, IOLINK_LOG_LEVEL_ERROR);
+    assert_ptr_equal(g_last_user, &token);
+    assert_non_null(strstr(g_last_msg, "init rejected"));
 }
 
-static void test_zero_sink_is_silent(void)
+static void test_zero_sink_is_silent(void** state)
 {
+    (void) state;
     iolink_log_sink_t sink;
 
     (void) memset(&sink, 0, sizeof(sink));
     reset_capture();
     IOLINK_LOG_ERROR(&sink, "never %d", 1);
     IOLINK_LOG_WARN(&sink, "never %d", 2);
-    assert(g_calls == 0);
+    assert_int_equal(g_calls, 0);
 
     /* A missing sink is equally harmless. */
     IOLINK_LOG_INFO(NULL, "never %d", 3);
-    assert(g_calls == 0);
+    assert_int_equal(g_calls, 0);
 }
 
-static void test_level_filter(void)
+static void test_level_filter(void** state)
 {
+    (void) state;
     iolink_log_sink_t sink;
     iolink_log_sink_init(&sink, log_capture, NULL, IOLINK_LOG_LEVEL_WARN);
 
@@ -182,40 +186,42 @@ static void test_level_filter(void)
     IOLINK_LOG_WARN(&sink, "warn");
     IOLINK_LOG_INFO(&sink, "info");
     IOLINK_LOG_DEBUG(&sink, "debug");
-    assert(g_calls == 2);
-    assert(g_last_level == IOLINK_LOG_LEVEL_WARN);
-    assert(strcmp(g_last_msg, "warn") == 0);
+    assert_int_equal(g_calls, 2);
+    assert_int_equal(g_last_level, IOLINK_LOG_LEVEL_WARN);
+    assert_string_equal(g_last_msg, "warn");
 
     sink.level = IOLINK_LOG_LEVEL_DEBUG;
     reset_capture();
     IOLINK_LOG_DEBUG(&sink, "debug %lu", 7UL);
-    assert(g_calls == 1);
-    assert(g_last_level == IOLINK_LOG_LEVEL_DEBUG);
-    assert(strcmp(g_last_msg, "debug 7") == 0);
+    assert_int_equal(g_calls, 1);
+    assert_int_equal(g_last_level, IOLINK_LOG_LEVEL_DEBUG);
+    assert_string_equal(g_last_msg, "debug 7");
 
     /* SILENT is the runtime off switch, even with a live callback. */
     sink.level = IOLINK_LOG_LEVEL_SILENT;
     reset_capture();
     IOLINK_LOG_ERROR(&sink, "error");
-    assert(g_calls == 0);
+    assert_int_equal(g_calls, 0);
 }
 
-static void test_forwarding_and_user(void)
+static void test_forwarding_and_user(void** state)
 {
+    (void) state;
     iolink_log_sink_t sink;
     int token;
 
     iolink_log_sink_init(&sink, log_capture, &token, IOLINK_LOG_LEVEL_DEBUG);
     reset_capture();
     IOLINK_LOG_INFO(&sink, "idx=0x%04X sub=%u", 0x0042U, 3U);
-    assert(g_calls == 1);
-    assert(g_last_level == IOLINK_LOG_LEVEL_INFO);
-    assert(g_last_user == &token);
-    assert(strcmp(g_last_msg, "idx=0x0042 sub=3") == 0);
+    assert_int_equal(g_calls, 1);
+    assert_int_equal(g_last_level, IOLINK_LOG_LEVEL_INFO);
+    assert_ptr_equal(g_last_user, &token);
+    assert_string_equal(g_last_msg, "idx=0x0042 sub=3");
 }
 
-static void test_arguments_not_evaluated_when_filtered(void)
+static void test_arguments_not_evaluated_when_filtered(void** state)
 {
+    (void) state;
     iolink_log_sink_t sink;
     iolink_log_sink_init(&sink, log_capture, NULL, IOLINK_LOG_LEVEL_ERROR);
 
@@ -223,16 +229,17 @@ static void test_arguments_not_evaluated_when_filtered(void)
     reset_capture();
     IOLINK_LOG_DEBUG(&sink, "filtered %d", side_effect());
     IOLINK_LOG_INFO(&sink, "filtered %d", side_effect());
-    assert(g_calls == 0);
-    assert(g_side_effects == 0);
+    assert_int_equal(g_calls, 0);
+    assert_int_equal(g_side_effects, 0);
 
     IOLINK_LOG_ERROR(&sink, "kept %d", side_effect());
-    assert(g_calls == 1);
-    assert(g_side_effects == 1);
+    assert_int_equal(g_calls, 1);
+    assert_int_equal(g_side_effects, 1);
 }
 
-static void test_isr_family_is_off_by_default(void)
+static void test_isr_family_is_off_by_default(void** state)
 {
+    (void) state;
     iolink_log_sink_t sink;
     iolink_log_sink_init(&sink, log_capture, NULL, IOLINK_LOG_LEVEL_DEBUG);
 
@@ -241,17 +248,18 @@ static void test_isr_family_is_off_by_default(void)
     IOLINK_LOG_ISR_WARN(&sink, "isr %d", 2);
     IOLINK_LOG_ISR_INFO(&sink, "isr %d", 3);
     IOLINK_LOG_ISR_DEBUG(&sink, "isr %d", 4);
-    assert(g_calls == 0);
+    assert_int_equal(g_calls, 0);
 
     /* The enabled translation unit reaches the same callback. */
     reset_capture();
     test_log_isr_on_run();
-    assert(g_calls == 1);
-    assert(strcmp(g_last_msg, "isr on 7") == 0);
+    assert_int_equal(g_calls, 1);
+    assert_string_equal(g_last_msg, "isr on 7");
 }
 
-static void test_device_setter_propagates(void)
+static void test_device_setter_propagates(void** state)
 {
+    (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t config;
     int token;
@@ -263,39 +271,41 @@ static void test_device_setter_propagates(void)
 
     iolink_device_set_log(&ctx, log_capture, IOLINK_LOG_LEVEL_INFO);
 
-    assert(ctx.dll.main.shared.log.write == log_capture);
-    assert(ctx.dll.main.shared.log.user == &token);
-    assert(ctx.dll.main.shared.log.level == IOLINK_LOG_LEVEL_INFO);
-    assert(ctx.dll.main.shared.isdu.log.write == log_capture);
-    assert(ctx.dll.main.shared.isdu.log.user == &token);
+    assert_true(ctx.dll.main.shared.log.write == log_capture);
+    assert_ptr_equal(ctx.dll.main.shared.log.user, &token);
+    assert_int_equal(ctx.dll.main.shared.log.level, IOLINK_LOG_LEVEL_INFO);
+    assert_true(ctx.dll.main.shared.isdu.log.write == log_capture);
+    assert_ptr_equal(ctx.dll.main.shared.isdu.log.user, &token);
 #if IOLINK_FEATURE_DATA_STORAGE
-    assert(ctx.dll.main.ds.log.write == log_capture);
-    assert(ctx.dll.main.ds.log.user == &token);
+    assert_true(ctx.dll.main.ds.log.write == log_capture);
+    assert_ptr_equal(ctx.dll.main.ds.log.user, &token);
 #endif
 #if IOLINK_FEATURE_EVENTS
-    assert(ctx.dll.main.shared.events.log.write == log_capture);
-    assert(ctx.dll.main.shared.events.log.user == &token);
+    assert_true(ctx.dll.main.shared.events.log.write == log_capture);
+    assert_ptr_equal(ctx.dll.main.shared.events.log.user, &token);
 #endif
 
     /* Logging through a propagated subsystem sink works. */
     reset_capture();
     IOLINK_LOG_INFO(&ctx.dll.main.shared.isdu.log, "from isdu");
-    assert((g_calls == 1) && (strcmp(g_last_msg, "from isdu") == 0));
+    assert_true((g_calls == 1) && (strcmp(g_last_msg, "from isdu") == 0));
 
     iolink_device_set_log(&ctx, NULL, IOLINK_LOG_LEVEL_SILENT);
-    assert(ctx.dll.main.shared.log.write == NULL);
-    assert(ctx.dll.main.shared.log.level == IOLINK_LOG_LEVEL_SILENT);
+    assert_true(ctx.dll.main.shared.log.write == NULL);
+    assert_int_equal(ctx.dll.main.shared.log.level, IOLINK_LOG_LEVEL_SILENT);
 }
 
 int main(void)
 {
-    test_zero_sink_is_silent();
-    test_level_filter();
-    test_forwarding_and_user();
-    test_arguments_not_evaluated_when_filtered();
-    test_isr_family_is_off_by_default();
-    test_device_setter_propagates();
-    test_device_init_binds_config_sink();
-    test_device_init_failure_logs_through_config();
-    return 0;
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_zero_sink_is_silent),
+        cmocka_unit_test(test_level_filter),
+        cmocka_unit_test(test_forwarding_and_user),
+        cmocka_unit_test(test_arguments_not_evaluated_when_filtered),
+        cmocka_unit_test(test_isr_family_is_off_by_default),
+        cmocka_unit_test(test_device_setter_propagates),
+        cmocka_unit_test(test_device_init_binds_config_sink),
+        cmocka_unit_test(test_device_init_failure_logs_through_config),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

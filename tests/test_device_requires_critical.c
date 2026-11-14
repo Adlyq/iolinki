@@ -12,7 +12,7 @@
  *        本可执行文件有意不链接强覆盖实现。
  */
 
-#include <assert.h>
+#include <cmocka.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -24,8 +24,9 @@ static uint64_t test_time_us(void* user)
     return 1000000ULL;
 }
 
-int main(void)
+static void test_device_init_critical_hook(void** state)
 {
+    (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t config;
 
@@ -36,9 +37,16 @@ int main(void)
     /* 不含异步上下文的配置文件（SINGLE）从不引用
      * 临界区钩子，因此那里缺少 port 不再是致命错误。 */
 #if IOLINK_NEED_CRITICAL
-    assert(iolink_device_init(&ctx, &config) == IOLINK_DEVICE_INIT_ERR_CRITICAL);
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_CRITICAL);
 #else
-    assert(iolink_device_init(&ctx, &config) != IOLINK_DEVICE_INIT_ERR_CRITICAL);
+    assert_int_not_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_CRITICAL);
 #endif
-    return 0;
+}
+
+int main(void)
+{
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_device_init_critical_hook),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

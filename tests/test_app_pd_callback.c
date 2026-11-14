@@ -11,7 +11,10 @@
  * 两条路径现在编进同一个二进制，不再需要独立的 fixture 库。
  */
 
-#include <assert.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
+#include <cmocka.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -61,7 +64,7 @@ static void* g_expected_user;
 
 static bool on_pd_input(void* user, uint8_t* data, uint8_t len)
 {
-    assert(user == g_expected_user);
+    assert_ptr_equal(user, g_expected_user);
     g_pd_calls++;
     (void) memset(data, g_pd_pattern, len);
     return true;
@@ -80,30 +83,33 @@ static void make_config(iolink_device_config_t* cfg, const iolink_app_callbacks_
     cfg->time_us = test_time_us;
 }
 
-static void test_polling_path_without_callback(void)
+static void test_polling_path_without_callback(void** state)
 {
+    (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t cfg;
     const uint8_t data[2] = {0x11U, 0x22U};
 
     make_config(&cfg, NULL);
-    assert(iolink_device_init(&ctx, &cfg) == 0);
+    assert_int_equal(iolink_device_init(&ctx, &cfg), 0);
 
     const iolink_caps_t caps = iolink_device_capabilities(&ctx);
-    assert(!iolink_caps_has(caps, IOLINK_CAP_PD_IN_CALLBACK));
+    assert_false(iolink_caps_has(caps, IOLINK_CAP_PD_IN_CALLBACK));
 
-    assert(iolink_device_pd_input_update(&ctx, data, sizeof(data), true) == 0);
-    assert(ctx.dll.main.pd_valid);
-    assert(ctx.dll.main.shared.pd_in_len == 2U);
-    assert(
-        ctx.dll.main.shared.pd_in[ctx.dll.main.shared.pd_in_active][ctx.dll.main.shared.od_width] ==
+    assert_int_equal(iolink_device_pd_input_update(&ctx, data, sizeof(data), true), 0);
+    assert_true(ctx.dll.main.pd_valid);
+    assert_int_equal(ctx.dll.main.shared.pd_in_len, 2U);
+    assert_int_equal(
+        ctx.dll.main.shared.pd_in[ctx.dll.main.shared.pd_in_active][ctx.dll.main.shared.od_width],
         0x11U);
-    assert(ctx.dll.main.shared.pd_in[ctx.dll.main.shared.pd_in_active]
-                                    [ctx.dll.main.shared.od_width + 1U] == 0x22U);
+    assert_int_equal(ctx.dll.main.shared.pd_in[ctx.dll.main.shared.pd_in_active]
+                                              [ctx.dll.main.shared.od_width + 1U],
+                     0x22U);
 }
 
-static void test_callback_path_selected_by_presence(void)
+static void test_callback_path_selected_by_presence(void** state)
 {
+    (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t cfg;
     const uint8_t data[2] = {0x33U, 0x44U};
@@ -114,50 +120,54 @@ static void test_callback_path_selected_by_presence(void)
     g_expected_user = &user_sentinel;
     make_config(&cfg, &g_cbs);
     cfg.user = g_expected_user;
-    assert(iolink_device_init(&ctx, &cfg) == 0);
+    assert_int_equal(iolink_device_init(&ctx, &cfg), 0);
 
     const iolink_caps_t caps = iolink_device_capabilities(&ctx);
-    assert(iolink_caps_has(caps, IOLINK_CAP_PD_IN_CALLBACK));
+    assert_true(iolink_caps_has(caps, IOLINK_CAP_PD_IN_CALLBACK));
 
     /* 混用被显式拒绝：轮询 API 返回 PD 输入错误码。 */
-    assert(iolink_device_pd_input_update(&ctx, data, sizeof(data), true) ==
-           IOLINK_DEVICE_INIT_ERR_PD_INPUT);
+    assert_int_equal(iolink_device_pd_input_update(&ctx, data, sizeof(data), true),
+                     IOLINK_DEVICE_INIT_ERR_PD_INPUT);
 
     /* 在 OPERATE 下驱动一次主循环：回调发布 PD-in。 */
     ctx.dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     iolink_device_process(&ctx);
 
-    assert(g_pd_calls == 1);
-    assert(ctx.dll.main.pd_valid);
-    assert(ctx.dll.main.shared.pd_in_len == 2U);
-    assert(
-        ctx.dll.main.shared.pd_in[ctx.dll.main.shared.pd_in_active][ctx.dll.main.shared.od_width] ==
+    assert_int_equal(g_pd_calls, 1);
+    assert_true(ctx.dll.main.pd_valid);
+    assert_int_equal(ctx.dll.main.shared.pd_in_len, 2U);
+    assert_int_equal(
+        ctx.dll.main.shared.pd_in[ctx.dll.main.shared.pd_in_active][ctx.dll.main.shared.od_width],
         0xA5U);
-    assert(ctx.dll.main.shared.pd_in[ctx.dll.main.shared.pd_in_active]
-                                    [ctx.dll.main.shared.od_width + 1U] == 0xA5U);
+    assert_int_equal(ctx.dll.main.shared.pd_in[ctx.dll.main.shared.pd_in_active]
+                                              [ctx.dll.main.shared.od_width + 1U],
+                     0xA5U);
 }
 
-static void test_build_profile_is_consistent(void)
+static void test_build_profile_is_consistent(void** state)
 {
+    (void) state;
     const iolink_build_caps_t* build = iolink_caps_build();
 
-    assert(build->abi == IOLINK_CAP_ABI);
+    assert_int_equal(build->abi, IOLINK_CAP_ABI);
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
-    assert(build->isr_rx == IOLINK_CAP_ISR_RX_FRAME);
+    assert_int_equal(build->isr_rx, IOLINK_CAP_ISR_RX_FRAME);
 #else
-    assert(build->isr_rx == IOLINK_CAP_ISR_RX_BYTE);
+    assert_int_equal(build->isr_rx, IOLINK_CAP_ISR_RX_BYTE);
 #endif
-    assert(build->concurrency == (uint8_t) IOLINK_CONCURRENCY);
-    assert(build->stats == (uint8_t) IOLINK_STATS_MODE);
-    assert(build->pd_in_buffers == (uint8_t) IOLINK_PD_IN_BUFFERS);
-    assert(build->event_min_appear_ms == IOLINK_EVENT_MIN_APPEAR_MS);
-    assert(build->event_min_repeat_ms == IOLINK_EVENT_MIN_REPEAT_MS);
+    assert_int_equal(build->concurrency, (uint8_t) IOLINK_CONCURRENCY);
+    assert_int_equal(build->stats, (uint8_t) IOLINK_STATS_MODE);
+    assert_int_equal(build->pd_in_buffers, (uint8_t) IOLINK_PD_IN_BUFFERS);
+    assert_int_equal(build->event_min_appear_ms, IOLINK_EVENT_MIN_APPEAR_MS);
+    assert_int_equal(build->event_min_repeat_ms, IOLINK_EVENT_MIN_REPEAT_MS);
 }
 
 int main(void)
 {
-    test_build_profile_is_consistent();
-    test_polling_path_without_callback();
-    test_callback_path_selected_by_presence();
-    return 0;
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_build_profile_is_consistent),
+        cmocka_unit_test(test_polling_path_without_callback),
+        cmocka_unit_test(test_callback_path_selected_by_presence),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

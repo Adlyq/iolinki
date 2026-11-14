@@ -150,7 +150,7 @@ def render_test(rows: list[Row]) -> str:
 
 /* clang-format off */
 
-#include <assert.h>
+#include <cmocka.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -168,30 +168,48 @@ static const gen_cell_t g_expected[] = {{
 {cells}
 }};
 
-int main(void)
+static void test_grid_dimensions(void** state)
 {{
+    (void) state;
     const uint8_t states = (uint8_t) IOLINK_DLL_STATE_COUNT;
     const uint8_t events = (uint8_t) DLL_EV_COUNT;
-    assert(states == {len(EXPECTED_STATES)}U);
-    assert(events == {len(EXPECTED_EVENTS)}U);
-    assert(sizeof(g_expected) / sizeof(g_expected[0]) == (size_t) states * (size_t) events);
+    assert_int_equal(states, {len(EXPECTED_STATES)}U);
+    assert_int_equal(events, {len(EXPECTED_EVENTS)}U);
+    assert_int_equal(sizeof(g_expected) / sizeof(g_expected[0]), (size_t) states * (size_t) events);
+}}
 
-    /* 每个生成行都必须在运行时常量表中找到非 NULL 动作，且进入状态合法。 */
+/* 每个生成行都必须在运行时常量表中找到非 NULL 动作，且进入状态合法。 */
+static void test_rows_match_runtime_table(void** state)
+{{
+    (void) state;
     for (size_t i = 0U; i < sizeof(g_expected) / sizeof(g_expected[0]); i++) {{
         const iolink_dll_sm_cell_t* cell =
             iolink_dll_sm_cell((iolink_dll_state_t) g_expected[i].state,
                                (iolink_dll_event_t) g_expected[i].event);
-        assert(cell != NULL);
-        assert(cell->action != NULL);
-        assert(cell->enter_state == g_expected[i].enter_state);
-        assert((cell->enter_state == DLL_SM_STATE_KEEP) ||
-               (cell->enter_state < (uint8_t) IOLINK_DLL_STATE_COUNT));
+        assert_non_null(cell);
+        assert_true(cell->action != NULL);
+        assert_int_equal(cell->enter_state, g_expected[i].enter_state);
+        assert_true((cell->enter_state == DLL_SM_STATE_KEEP) ||
+                    (cell->enter_state < (uint8_t) IOLINK_DLL_STATE_COUNT));
     }}
+}}
 
-    /* 越界查询必须安全返回 NULL。 */
-    assert(iolink_dll_sm_cell((iolink_dll_state_t) states, DLL_EV_TRANSITION) == NULL);
-    assert(iolink_dll_sm_cell(IOLINK_DLL_STATE_STARTUP, (iolink_dll_event_t) events) == NULL);
-    return 0;
+/* 越界查询必须安全返回 NULL。 */
+static void test_out_of_range_query_returns_null(void** state)
+{{
+    (void) state;
+    assert_null(iolink_dll_sm_cell((iolink_dll_state_t) IOLINK_DLL_STATE_COUNT, DLL_EV_TRANSITION));
+    assert_null(iolink_dll_sm_cell(IOLINK_DLL_STATE_STARTUP, (iolink_dll_event_t) DLL_EV_COUNT));
+}}
+
+int main(void)
+{{
+    const struct CMUnitTest tests[] = {{
+        cmocka_unit_test(test_grid_dimensions),
+        cmocka_unit_test(test_rows_match_runtime_table),
+        cmocka_unit_test(test_out_of_range_query_returns_null),
+    }};
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }}
 
 /* clang-format on */

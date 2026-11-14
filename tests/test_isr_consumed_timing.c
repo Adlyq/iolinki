@@ -18,9 +18,12 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <cmocka.h>
+
 #include "iolinki/crc.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/protocol.h"
+#include "test_case.h"
 
 #define RX_MAX 8U
 #define TX_MAX 32U
@@ -217,7 +220,7 @@ static void run_main_pass(void)
     iolink_dll_process(&s_dll.main);
 }
 
-int main(void)
+static int run_all(void)
 {
     init_operate_type0();
     const uint64_t t0 = s_now_us;
@@ -306,4 +309,14 @@ int main(void)
         return 20;
     }
     return 0;
+}
+
+IOLINK_TEST_RC(run_all)
+
+int main(void)
+{
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(iolink_case_run_all),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

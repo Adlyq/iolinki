@@ -13,9 +13,12 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <cmocka.h>
+
 #include "iolinki/crc.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/protocol.h"
+#include "test_case.h"
 
 static uint64_t now_us;
 
@@ -47,7 +50,7 @@ static void make_type0_frame(uint8_t mc, uint8_t frame[2])
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 2U));
 }
 
-int main(void)
+static int run_all(void)
 {
     const iolink_phy_api_t phy = {0};
     iolink_dll_ctx_t ctx;
@@ -78,4 +81,14 @@ int main(void)
     }
 
     return 0;
+}
+
+IOLINK_TEST_RC(run_all)
+
+int main(void)
+{
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(iolink_case_run_all),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

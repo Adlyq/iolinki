@@ -18,11 +18,14 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <cmocka.h>
+
 #include "iolinki/crc.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/dll_sm.h"
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
+#include "test_case.h"
 
 #define RX_MAX 16U
 #define TX_MAX 32U
@@ -397,15 +400,16 @@ static int test_table_accessors(void)
     return 0;
 }
 
+IOLINK_TEST_RC(test_table_accessors)
+IOLINK_TEST_RC(test_phase_property)
+IOLINK_TEST_RC(test_plan_state_stamp_and_republish)
+
 int main(void)
 {
-    int rc = test_table_accessors();
-    if (rc != 0) {
-        return rc;
-    }
-    rc = test_phase_property();
-    if (rc != 0) {
-        return rc;
-    }
-    return test_plan_state_stamp_and_republish();
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(iolink_case_test_table_accessors),
+        cmocka_unit_test(iolink_case_test_phase_property),
+        cmocka_unit_test(iolink_case_test_plan_state_stamp_and_republish),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

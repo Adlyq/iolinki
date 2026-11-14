@@ -16,9 +16,12 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <cmocka.h>
+
 #include "iolinki/crc.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/protocol.h"
+#include "test_case.h"
 
 static uint64_t now_us;
 static unsigned tx_octets;
@@ -136,7 +139,7 @@ static int run_cycles(iolink_dll_ctx_t* ctx, unsigned cycles, uint64_t step_us)
     return 0;
 }
 
-int main(void)
+static int run_all(void)
 {
     iolink_dll_ctx_t ctx;
     const iolink_phy_api_t phy = {
@@ -192,4 +195,14 @@ int main(void)
     }
 
     return 0;
+}
+
+IOLINK_TEST_RC(run_all)
+
+int main(void)
+{
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(iolink_case_run_all),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

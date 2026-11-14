@@ -93,7 +93,27 @@ number, because `tools/coverage_baseline.txt` is calibrated on the BYTE build.
 public header is not ready while `tools/build_matrix.sh` is red. Add a
 configuration to the script when you introduce a new build switch.
 
-### 4. Docker Environment
+### 4. Test conventions
+
+Every registered test binary is a cmocka program:
+
+- one `static void test_x(void** state)` per case, cmocka assertion macros, and
+  `cmocka_run_group_tests()` as the entry point. A failing case aborts only
+  itself, so one broken expectation does not hide the rest of the binary;
+- test bodies that report the first failing step as an integer keep that shape
+  and are exposed through `IOLINK_TEST_RC(fn)` (`tests/test_case.h`), which
+  turns `int fn(void)` into a case asserting `fn() == 0`. The macro is a
+  definition, so it takes no trailing semicolon;
+- `assert()` from `<assert.h>` is not used, so the suite does not depend on
+  `-UNDEBUG` to keep its checks alive.
+
+CMocka is a hard requirement for the suite: a configure without it fails
+instead of silently registering no tests. Configure with
+`-DBUILD_TESTING=OFF` for a library-only build. `tests/transport_probe.c` is
+the one plain `main()` left: it is a compile-time check that the suite's
+`IOLINK_TEST_TRANSPORT` label matches the compiled ISR granularity, not a test.
+
+### 5. Docker Environment
 To ensure a reproducible environment matching CI, run tests inside Docker:
 
 ```bash

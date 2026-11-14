@@ -12,7 +12,10 @@
  * IOLINK_PHY_FEATURE_TX_BUSY=1（见 tests/CMakeLists.txt）。
  */
 
-#include <assert.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
+#include <cmocka.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -130,8 +133,9 @@ static void init_ctx(iolink_dll_ctx_t* dll)
 
 /* 繁忙的线路不得被覆盖：ISR 放弃处理，由主泵接管
  * 该帧，待线路空闲后再发送。 */
-static void test_busy_defers_eager_reply(void)
+static void test_busy_defers_eager_reply(void** state)
 {
+    (void) state;
     iolink_dll_ctx_t dll;
 
     init_ctx(&dll);
@@ -139,39 +143,40 @@ static void test_busy_defers_eager_reply(void)
     feed_process_read();
 
     iolink_dll_process_isr(&dll.main);
-    assert(g_tx_calls == 0U);                     /* 即时应答被放弃 */
-    assert(dll.main.shared.isr_tx_pending == 0U); /* ISR 未暂存任何内容 */
-    assert(dll.main.shared.pd_in_captured == 0xFFU);
+    assert_int_equal(g_tx_calls, 0U);                     /* 即时应答被放弃 */
+    assert_int_equal(dll.main.shared.isr_tx_pending, 0U); /* ISR 未暂存任何内容 */
+    assert_int_equal(dll.main.shared.pd_in_captured, 0xFFU);
 
-    iolink_dll_process(&dll.main);                /* 主泵应答该帧 */
-    assert(dll.main.shared.isr_tx_pending == 1U); /* 已暂存，等待 ISR */
+    iolink_dll_process(&dll.main);                        /* 主泵应答该帧 */
+    assert_int_equal(dll.main.shared.isr_tx_pending, 1U); /* 已暂存，等待 ISR */
 
     g_line_busy = 0U;
     iolink_dll_process_isr(&dll.main); /* 排空已暂存的应答 */
-    assert(g_tx_calls == 1U);
-    assert(dll.main.shared.isr_tx_pending == 0U);
+    assert_int_equal(g_tx_calls, 1U);
+    assert_int_equal(dll.main.shared.isr_tx_pending, 0U);
 }
 
 /* 传输仍在线路上时，应答缓冲区的租约保持占用；一旦 tx_busy()
  * 报告线路空闲，就由主泵释放。 */
-static void test_lease_released_when_line_free(void)
+static void test_lease_released_when_line_free(void** state)
 {
+    (void) state;
     iolink_dll_ctx_t dll;
 
     init_ctx(&dll);
     feed_process_read();
 
     iolink_dll_process_isr(&dll.main); /* 由 ISR 发出即时应答 */
-    assert(g_tx_calls == 1U);
-    assert(dll.main.shared.pd_in_captured != 0xFFU);
+    assert_int_equal(g_tx_calls, 1U);
+    assert_int_not_equal(dll.main.shared.pd_in_captured, 0xFFU);
 
     g_line_busy = 1U; /* 仍在线路上 */
     iolink_dll_process(&dll.main);
-    assert(dll.main.shared.pd_in_captured != 0xFFU);
+    assert_int_not_equal(dll.main.shared.pd_in_captured, 0xFFU);
 
     g_line_busy = 0U; /* PHY 观察到传输完成 */
     iolink_dll_process(&dll.main);
-    assert(dll.main.shared.pd_in_captured == 0xFFU);
+    assert_int_equal(dll.main.shared.pd_in_captured, 0xFFU);
 }
 
 /* 没有该钩子时，库无法观测 TX FRAME 传输的结束，
@@ -195,8 +200,9 @@ static uint64_t device_time_us(void* user)
     return 1000000ULL;
 }
 
-static void test_device_init_requires_tx_busy(void)
+static void test_device_init_requires_tx_busy(void** state)
 {
+    (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t cfg;
 
@@ -204,16 +210,18 @@ static void test_device_init_requires_tx_busy(void)
     cfg.phy = g_phy;
     cfg.phy.tx_busy = NULL;
     cfg.time_us = device_time_us;
-    assert(iolink_device_init(&ctx, &cfg) == IOLINK_DEVICE_INIT_ERR_PHY);
+    assert_int_equal(iolink_device_init(&ctx, &cfg), IOLINK_DEVICE_INIT_ERR_PHY);
 
     cfg.phy.tx_busy = mock_tx_busy;
-    assert(iolink_device_init(&ctx, &cfg) == 0);
+    assert_int_equal(iolink_device_init(&ctx, &cfg), 0);
 }
 
 int main(void)
 {
-    test_busy_defers_eager_reply();
-    test_lease_released_when_line_free();
-    test_device_init_requires_tx_busy();
-    return 0;
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_busy_defers_eager_reply),
+        cmocka_unit_test(test_lease_released_when_line_free),
+        cmocka_unit_test(test_device_init_requires_tx_busy),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

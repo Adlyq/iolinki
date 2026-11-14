@@ -15,7 +15,7 @@
  * 读取缓冲；`resp_sel`/`resp_pub` 仍交替，保证发布字能区分新旧应答。
  */
 
-#include <assert.h>
+#include <cmocka.h>
 #include <stdint.h>
 
 #include "iolinki/dll.h"
@@ -31,46 +31,76 @@ static void send_start(iolink_isdu_ctx_t* isdu)
     iolink_isdu_od_write(isdu, IOLINK_FLOWCTRL_START, req, sizeof(req));
 }
 
-int main(void)
+static void test_init_shares_one_frame_buffer(void** state)
 {
+    (void) state;
     iolink_isdu_ctx_t isdu;
     iolink_isdu_init(&isdu);
-    assert(isdu.resp_sel == isdu.resp_pub);
-    assert(isdu.resp_frame != NULL);
+    assert_int_equal(isdu.resp_sel, isdu.resp_pub);
+    assert_non_null(isdu.resp_frame);
     /* 租约模型：两个视图槽指向同一份成帧缓冲。 */
-    assert(isdu.resp_store[0] == isdu.resp_frame);
-    assert(isdu.resp_store[1] == isdu.resp_frame);
-    assert(isdu.resp_buf == isdu.resp_frame);
+    assert_ptr_equal(isdu.resp_store[0], isdu.resp_frame);
+    assert_ptr_equal(isdu.resp_store[1], isdu.resp_frame);
+    assert_ptr_equal(isdu.resp_buf, isdu.resp_frame);
+}
 
-    /* 第一个请求：视图索引切换，发布字因此能与上一份应答区分。 */
+/* 第一个请求：视图索引切换，发布字因此能与上一份应答区分。 */
+static void test_request_toggles_view_index(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t isdu;
+    iolink_isdu_init(&isdu);
+
     send_start(&isdu);
-    assert(isdu.resp_sel != isdu.resp_pub);
-    const uint8_t published = isdu.resp_pub;
+    assert_int_not_equal(isdu.resp_sel, isdu.resp_pub);
 
     /* 在发布之前再次 START：仍使用同一视图（不会无谓切换），
      * 但绝不会丢掉已经发布的应答——因为视图指向同一缓冲，发布字
      * 才是唯一的交接协议。 */
     send_start(&isdu);
-    assert(isdu.resp_sel != isdu.resp_pub);
+    assert_int_not_equal(isdu.resp_sel, isdu.resp_pub);
+}
 
-    /* 一旦发布，下一个请求切换到另一个视图索引。 */
+/* 一旦发布，下一个请求切换到另一个视图索引。 */
+static void test_published_view_switches_on_next_request(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t isdu;
+    iolink_isdu_init(&isdu);
+    send_start(&isdu);
+
     isdu.resp_pub = isdu.resp_sel;
     const uint8_t previous = isdu.resp_sel;
     send_start(&isdu);
-    assert(isdu.resp_sel != previous);
+    assert_int_not_equal(isdu.resp_sel, previous);
+}
 
-    /* 外部工作区：绑定后所有缓冲都位于 workspace 内。 */
+/* 外部工作区：绑定后所有缓冲都位于 workspace 内。 */
+static void test_workspace_binding_moves_buffers(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t isdu;
     iolink_workspace_t ws;
-    iolink_isdu_bind_workspace(&isdu, &ws);
-    assert(isdu.buffer == ws.isdu.payload);
-    assert(isdu.response_buf == ws.isdu.response);
-    assert(isdu.req_buf == ws.isdu.request);
-    assert(isdu.resp_frame == ws.isdu.frame);
-    assert(isdu.resp_store[0] == ws.isdu.frame);
-    assert(isdu.resp_store[1] == ws.isdu.frame);
-    assert(isdu.buffer_size == sizeof(ws.isdu.payload));
-    assert(isdu.req_size == sizeof(ws.isdu.request));
-    (void) published;
 
-    return 0;
+    iolink_isdu_init(&isdu);
+    iolink_isdu_bind_workspace(&isdu, &ws);
+    assert_ptr_equal(isdu.buffer, ws.isdu.payload);
+    assert_ptr_equal(isdu.response_buf, ws.isdu.response);
+    assert_ptr_equal(isdu.req_buf, ws.isdu.request);
+    assert_ptr_equal(isdu.resp_frame, ws.isdu.frame);
+    assert_ptr_equal(isdu.resp_store[0], ws.isdu.frame);
+    assert_ptr_equal(isdu.resp_store[1], ws.isdu.frame);
+    assert_int_equal(isdu.buffer_size, sizeof(ws.isdu.payload));
+    assert_int_equal(isdu.req_size, sizeof(ws.isdu.request));
+}
+
+int main(void)
+{
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_init_shares_one_frame_buffer),
+        cmocka_unit_test(test_request_toggles_view_index),
+        cmocka_unit_test(test_published_view_switches_on_next_request),
+        cmocka_unit_test(test_workspace_binding_moves_buffers),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

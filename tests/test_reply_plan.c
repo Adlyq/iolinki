@@ -26,11 +26,14 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <cmocka.h>
+
 #include "iolinki/crc.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/iolink.h"
 #include "iolinki/isdu.h"
 #include "iolinki/protocol.h"
+#include "test_case.h"
 
 #define RX_MAX 16U
 #define TX_MAX 32U
@@ -1001,69 +1004,44 @@ static int test_tx_without_done_hook(void)
 }
 #endif /* IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE */
 
+IOLINK_TEST_RC(test_plan_hit_executes_reply)
+IOLINK_TEST_RC(test_valid_miss_is_dropped)
+IOLINK_TEST_RC(test_isdu_write_retry_storm_is_deduped)
+IOLINK_TEST_RC(test_new_start_overwrites_undrained_request)
+IOLINK_TEST_RC(test_invalid_frame_is_published)
+IOLINK_TEST_RC(test_t_pd_discards_are_counted)
+IOLINK_TEST_RC(test_seqlock_window_is_a_miss)
+IOLINK_TEST_RC(test_isdu_write_invalidates_read_view)
+IOLINK_TEST_RC(test_startup_probe_plan)
+IOLINK_TEST_RC(test_type0_idle_read_resets_transport)
+IOLINK_TEST_RC(test_plan_deadline_metadata)
+IOLINK_TEST_RC(test_capability_change_invalidates_plan)
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+IOLINK_TEST_RC(test_tx_without_done_hook)
+#endif
+IOLINK_TEST_RC(test_type0_page_write_is_answered)
+IOLINK_TEST_RC(test_plan_hit_without_tx_is_deferred)
+
 int main(void)
 {
-    int rc = test_plan_hit_executes_reply();
-    if (rc != 0) {
-        return 10 + rc;
-    }
-    rc = test_valid_miss_is_dropped();
-    if (rc != 0) {
-        return 20 + rc;
-    }
-    rc = test_isdu_write_retry_storm_is_deduped();
-    if (rc != 0) {
-        return 30 + rc;
-    }
-    rc = test_new_start_overwrites_undrained_request();
-    if (rc != 0) {
-        return 40 + rc;
-    }
-    rc = test_invalid_frame_is_published();
-    if (rc != 0) {
-        return 50 + rc;
-    }
-    rc = test_t_pd_discards_are_counted();
-    if (rc != 0) {
-        return 60 + rc;
-    }
-    rc = test_seqlock_window_is_a_miss();
-    if (rc != 0) {
-        return 70 + rc;
-    }
-    rc = test_isdu_write_invalidates_read_view();
-    if (rc != 0) {
-        return 80 + rc;
-    }
-    rc = test_startup_probe_plan();
-    if (rc != 0) {
-        return 90 + rc;
-    }
-    rc = test_type0_idle_read_resets_transport();
-    if (rc != 0) {
-        return 100 + rc;
-    }
-    rc = test_plan_deadline_metadata();
-    if (rc != 0) {
-        return 110 + rc;
-    }
-    rc = test_capability_change_invalidates_plan();
-    if (rc != 0) {
-        return 120 + rc;
-    }
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(iolink_case_test_plan_hit_executes_reply),
+        cmocka_unit_test(iolink_case_test_valid_miss_is_dropped),
+        cmocka_unit_test(iolink_case_test_isdu_write_retry_storm_is_deduped),
+        cmocka_unit_test(iolink_case_test_new_start_overwrites_undrained_request),
+        cmocka_unit_test(iolink_case_test_invalid_frame_is_published),
+        cmocka_unit_test(iolink_case_test_t_pd_discards_are_counted),
+        cmocka_unit_test(iolink_case_test_seqlock_window_is_a_miss),
+        cmocka_unit_test(iolink_case_test_isdu_write_invalidates_read_view),
+        cmocka_unit_test(iolink_case_test_startup_probe_plan),
+        cmocka_unit_test(iolink_case_test_type0_idle_read_resets_transport),
+        cmocka_unit_test(iolink_case_test_plan_deadline_metadata),
+        cmocka_unit_test(iolink_case_test_capability_change_invalidates_plan),
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
-    rc = test_tx_without_done_hook();
-    if (rc != 0) {
-        return 130 + rc;
-    }
+        cmocka_unit_test(iolink_case_test_tx_without_done_hook),
 #endif
-    rc = test_type0_page_write_is_answered();
-    if (rc != 0) {
-        return 140 + rc;
-    }
-    rc = test_plan_hit_without_tx_is_deferred();
-    if (rc != 0) {
-        return 150 + rc;
-    }
-    return 0;
+        cmocka_unit_test(iolink_case_test_type0_page_write_is_answered),
+        cmocka_unit_test(iolink_case_test_plan_hit_without_tx_is_deferred),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

@@ -12,11 +12,14 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <cmocka.h>
+
 #include "iolinki/crc.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
 #include "conformance_test.h"
+#include "test_case.h"
 
 static uint64_t now_us;
 
@@ -958,79 +961,52 @@ static int test_byte_gap_incomplete(void)
 }
 #endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
 
+IOLINK_TEST_RC(test_mailbox_drop)
+IOLINK_TEST_RC(test_eager_reject)
+IOLINK_TEST_RC(test_valid_eager)
+IOLINK_TEST_RC(test_isdu_write_consumed_by_isr)
+IOLINK_TEST_RC(test_isdu_write_bad_crc_not_consumed)
+IOLINK_TEST_RC(test_type0_isdu_read_fast_path)
+IOLINK_TEST_RC(test_0053_reserved_flowctrl_no_service)
+IOLINK_TEST_RC(test_0309_isdu_segment_repeat)
+IOLINK_TEST_RC(test_0068_aborted_read_response)
+IOLINK_TEST_RC(test_type0_page_read_fast_path)
+IOLINK_TEST_RC(test_type0_isdu_write_fast_path)
+IOLINK_TEST_RC(test_type0_commands_fast_path)
+IOLINK_TEST_RC(test_timer_interlock)
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+IOLINK_TEST_RC(test_rx_timeout)
+#endif
+IOLINK_TEST_RC(test_stack_tick_window)
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+IOLINK_TEST_RC(test_byte_gap_incomplete)
+#endif
+IOLINK_TEST_RC(test_fallback_clear_is_staged)
+
 int main(void)
 {
-    int rc = test_mailbox_drop();
-    if (rc != 0) {
-        return 10 + rc;
-    }
-    rc = test_eager_reject();
-    if (rc != 0) {
-        return 20 + rc;
-    }
-    rc = test_valid_eager();
-    if (rc != 0) {
-        return 30 + rc;
-    }
-    rc = test_isdu_write_consumed_by_isr();
-    if (rc != 0) {
-        return 40 + rc;
-    }
-    rc = test_isdu_write_bad_crc_not_consumed();
-    if (rc != 0) {
-        return 50 + rc;
-    }
-    rc = test_type0_isdu_read_fast_path();
-    if (rc != 0) {
-        return 60 + rc;
-    }
-    rc = test_0053_reserved_flowctrl_no_service();
-    if (rc != 0) {
-        return 62 + rc;
-    }
-    rc = test_0309_isdu_segment_repeat();
-    if (rc != 0) {
-        return 63 + rc;
-    }
-    rc = test_0068_aborted_read_response();
-    if (rc != 0) {
-        return 65 + rc;
-    }
-    rc = test_type0_page_read_fast_path();
-    if (rc != 0) {
-        return 70 + rc;
-    }
-    rc = test_type0_isdu_write_fast_path();
-    if (rc != 0) {
-        return 80 + rc;
-    }
-    rc = test_type0_commands_fast_path();
-    if (rc != 0) {
-        return 85 + rc;
-    }
-    rc = test_timer_interlock();
-    if (rc != 0) {
-        return 90 + rc;
-    }
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(iolink_case_test_mailbox_drop),
+        cmocka_unit_test(iolink_case_test_eager_reject),
+        cmocka_unit_test(iolink_case_test_valid_eager),
+        cmocka_unit_test(iolink_case_test_isdu_write_consumed_by_isr),
+        cmocka_unit_test(iolink_case_test_isdu_write_bad_crc_not_consumed),
+        cmocka_unit_test(iolink_case_test_type0_isdu_read_fast_path),
+        cmocka_unit_test(iolink_case_test_0053_reserved_flowctrl_no_service),
+        cmocka_unit_test(iolink_case_test_0309_isdu_segment_repeat),
+        cmocka_unit_test(iolink_case_test_0068_aborted_read_response),
+        cmocka_unit_test(iolink_case_test_type0_page_read_fast_path),
+        cmocka_unit_test(iolink_case_test_type0_isdu_write_fast_path),
+        cmocka_unit_test(iolink_case_test_type0_commands_fast_path),
+        cmocka_unit_test(iolink_case_test_timer_interlock),
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
-    rc = test_rx_timeout();
-    if (rc != 0) {
-        return 100 + rc;
-    }
+        cmocka_unit_test(iolink_case_test_rx_timeout),
 #endif
-    rc = test_stack_tick_window();
-    if (rc != 0) {
-        return 110 + rc;
-    }
+        cmocka_unit_test(iolink_case_test_stack_tick_window),
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
-    rc = test_byte_gap_incomplete();
-    if (rc != 0) {
-        return 120 + rc;
-    }
+        cmocka_unit_test(iolink_case_test_byte_gap_incomplete),
 #endif
-    rc = test_fallback_clear_is_staged();
-    if (rc != 0) {
-        return 130 + rc;
-    }
-    return 0;
+        cmocka_unit_test(iolink_case_test_fallback_clear_is_staged),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

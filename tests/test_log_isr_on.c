@@ -12,7 +12,7 @@
  * propagation and lazy argument evaluation included).
  */
 
-#include <assert.h>
+#include <cmocka.h>
 #include <string.h>
 
 #define IOLINK_LOG_ENABLE_ISR 1
@@ -44,11 +44,11 @@ void test_log_isr_on_run(void)
     g_last_user = NULL;
     g_side_effects = 0;
     IOLINK_LOG_ISR_DEBUG(&sink, "filtered %d", side_effect());
-    assert(g_calls == 0);
-    assert(g_side_effects == 0);
+    assert_int_equal(g_calls, 0);
+    assert_int_equal(g_side_effects, 0);
 
     IOLINK_LOG_ISR_INFO(&sink, "isr on %d", 7);
-    assert(g_calls == 1);
-    assert(g_last_user == &token);
-    assert(strcmp(g_last_msg, "isr on 7") == 0);
+    assert_int_equal(g_calls, 1);
+    assert_ptr_equal(g_last_user, &token);
+    assert_string_equal(g_last_msg, "isr on 7");
 }
