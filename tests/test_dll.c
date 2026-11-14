@@ -1158,6 +1158,7 @@ static void test_dll_operate_to_startup_0x97(void** state)
  * 也会以 TYPE_0 帧到达；该路径已在上文覆盖。 */
 static void test_dll_operate_type_master_command_0x97_restarts(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0037");
     (void) state;
     iolink_stack_config_t config = {
         .m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .pd_in_len = 1, .pd_out_len = 0};

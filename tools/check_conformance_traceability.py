@@ -36,8 +36,28 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-def function_body(text: str, name: str) -> str | None:
-    """Return the body of the first definition of `name`, or None."""
+def skip_ws_and_comments(text: str, index: int) -> int:
+    """Skip whitespace and comments starting at `index`."""
+    while index < len(text):
+        if text[index] in " \t\r\n":
+            index += 1
+        elif text.startswith("/*", index):
+            end = text.find("*/", index + 2)
+            if end < 0:
+                return len(text)
+            index = end + 2
+        elif text.startswith("//", index):
+            end = text.find("\n", index + 2)
+            if end < 0:
+                return len(text)
+            index = end + 1
+        else:
+            break
+    return index
+
+
+def function_body(text: str, name: str) -> tuple[str | None, int]:
+    """Return (body, line) of the first definition of `name`."""
     for match in re.finditer(r"\b" + re.escape(name) + r"\s*\(", text):
         i = match.end() - 1
         depth = 0
@@ -49,11 +69,8 @@ def function_body(text: str, name: str) -> str | None:
                 if depth == 0:
                     break
             i += 1
-        j = i + 1
-        while j < len(text) and text[j] in " \t\r\n":
-            j += 1
-        if j < len(text) and text[j] == "{":
-            start = j
+        start = skip_ws_and_comments(text, i + 1)
+        if start < len(text) and text[start] == "{":
             depth = 0
             for k in range(start, len(text)):
                 if text[k] == "{":
@@ -61,27 +78,27 @@ def function_body(text: str, name: str) -> str | None:
                 elif text[k] == "}":
                     depth -= 1
                     if depth == 0:
-                        return text[start : k + 1]
-    return None
+                        line = text.count("\n", 0, match.start()) + 1
+                        return text[start : k + 1], line
+    return None, 0
 
 
 def check_c_evidence(row: dict[str, str]) -> None:
-    """A C test row must name functions that exist and carry the TC annotation."""
+    """A C test row must name functions that exist and each carry the case id."""
     case_id = row["case_id"]
     path = ROOT / row["unit_test_file"]
     text = path.read_text(errors="replace")
-    bodies = []
-    for name in (n.strip() for n in row["unit_test_function"].split(";") if n.strip()):
-        body = function_body(text, name)
-        if body is None:
-            fail(f"{case_id}: {row['unit_test_file']} has no function {name!r}")
-        bodies.append(body)
     marker = f'IOLINK_CONFORMANCE_CASE("{case_id}")'
-    if not any(marker in body for body in bodies):
-        fail(
-            f"{case_id}: none of the listed functions in {row['unit_test_file']} "
-            f"carries {marker}"
-        )
+    for name in (n.strip() for n in row["unit_test_function"].split(";") if n.strip()):
+        body, line = function_body(text, name)
+        if body is None:
+            where = f"{row['unit_test_file']}:{line}" if line else row["unit_test_file"]
+            fail(f"{case_id}: {where} has no function {name!r}")
+        if marker not in body:
+            fail(
+                f"{case_id}: {row['unit_test_file']}:{line} function {name!r} "
+                f"does not carry {marker}"
+            )
 
 
 def main() -> int:

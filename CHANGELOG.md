@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed (stale traceability duplicate)
+- `tests/conformance_traceability.csv`: it still pointed at renamed tests and
+  no tool validated it; `tests/conformance_audit.csv` is the single matrix.
+
 ### Changed (test effectiveness)
 - `skip_known_gap()` is gone: the conformance cases now assert the behaviour the
   stack actually produces (`0x8030` for reserved access-lock bits, `0x8033` for

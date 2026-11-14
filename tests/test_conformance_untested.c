@@ -229,6 +229,7 @@ static void test_0123_application_tag_overlong_preserves_value(void** state)
     uint8_t before[33] = {0U};
     const int before_len = isdu_read(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, before, sizeof(before));
     assert_int_equal(before_len, (int) (sizeof(tag) - 1U));
+    assert_memory_equal(before, tag, sizeof(tag) - 1U);
 
     uint8_t too_long[33];
     (void) memset(too_long, 'B', sizeof(too_long));

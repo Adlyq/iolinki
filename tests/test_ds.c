@@ -1022,16 +1022,26 @@ static void test_ds_0374_upload_flag_non_volatile(void** state)
     g_flag_persist_calls = 0;
     g_flag_persist_last = false;
 
+    assert_int_equal(iolink_ds_state_property(&ds) & 0x80U, 0U);
     iolink_ds_request_upload(&ds);
     assert_int_equal(g_flag_persist_calls, 1);
     assert_true(g_flag_persist_last);
+    assert_int_equal(iolink_ds_state_property(&ds) & 0x80U, 0x80U);
 
     /* 掉电：库不拥有 NVM，应用把保存的值写回新上下文。 */
     iolink_ds_ctx_t restored;
     iolink_ds_init(&restored);
+    iolink_ds_set_flag_persist(&restored, flag_persist_cb, NULL);
     assert_int_equal(iolink_ds_state_property(&restored) & 0x80U, 0U);
     restored.ds_upload_flag = g_flag_persist_last;
     assert_int_equal(iolink_ds_state_property(&restored) & 0x80U, 0x80U);
+
+    /* 恢复后的上传结束时，库再次通知应用清除持久化值。 */
+    g_flag_persist_calls = 0;
+    iolink_ds_clear_upload(&restored);
+    assert_int_equal(g_flag_persist_calls, 1);
+    assert_false(g_flag_persist_last);
+    assert_int_equal(iolink_ds_state_property(&restored) & 0x80U, 0U);
 }
 
 int main(void)
