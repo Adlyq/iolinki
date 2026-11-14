@@ -62,12 +62,20 @@ while [ $# -gt 0 ]; do
         --html) HTML=1 ;;
         --check) CHECK=1 ;;
         --filter)
-            FILTER="${1:-}"
-            if [ $# -gt 0 ]; then shift; fi
+            if [ $# -eq 0 ]; then
+                echo "--filter needs a value" >&2
+                exit 2
+            fi
+            FILTER="$1"
+            shift
             ;;
         --transport)
-            TRANSPORT="${1:-}"
-            if [ $# -gt 0 ]; then shift; fi
+            if [ $# -eq 0 ]; then
+                echo "--transport needs a value (BYTE, FRAME or both)" >&2
+                exit 2
+            fi
+            TRANSPORT="$1"
+            shift
             ;;
         -h|--help) usage 0 ;;
         *) echo "unknown option: $opt" >&2; usage 2 ;;
@@ -117,8 +125,12 @@ if [ -n "$FILTER" ]; then
     filter="$ROOT/src/.*$FILTER"
 fi
 
+if [ -n "$BUILD_DIR" ]; then
+    BUILD_DIR="$(realpath -m -- "$BUILD_DIR")"
+    FRAME_DIR="$BUILD_DIR/frame"
+fi
 case "$BUILD_DIR" in
-    "" | "/" | "$ROOT" | "$HOME")
+    "" | "/" | "$ROOT" | "${HOME:-/nonexistent}")
         echo "refusing to use '$BUILD_DIR' as the coverage tree" >&2
         exit 2
         ;;

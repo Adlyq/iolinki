@@ -1,5 +1,6 @@
 # Build artifacts
 build/
+build_*/
 build_quality/
 build_quality_release/
 build_docker/

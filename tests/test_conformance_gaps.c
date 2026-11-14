@@ -445,14 +445,13 @@ static void test_0072_comm_interruption_event_persists(void** state)
 
     iolink_events_ctx_t events;
     events_init(&events);
-    test_clock_install();
-    events.time_us = iolink_test_time_us;
     iolink_event_trigger(&events, 0x8C00U, IOLINK_EVENT_TYPE_WARNING);
     assert_true(iolink_events_flag(&events));
 
-    /* DTU 复位/暂停：时间流逝后，只要原因未被移除，设备不会清除
-       活动事件。 */
+    /* DTU 复位/暂停：时间流逝并跑一次事件处理，只要原因未被移除，
+       设备不会清除活动事件。 */
     test_clock_advance_ms(2U);
+    iolink_events_process(&events);
     assert_true(iolink_events_flag(&events));
 
     iolink_event_t ev;

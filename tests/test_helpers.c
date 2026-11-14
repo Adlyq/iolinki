@@ -367,10 +367,11 @@ static const uint8_t* mock_rx_frame(void* user, uint8_t* status, uint8_t* len)
     const size_t start = g_rxq_tail;
     g_rxq_tail = end;
     const size_t n = (end > start) ? (end - start) : 0U;
-    if ((n == 0U) || (n > UINT8_MAX)) {
-        /* 空帧（只有间隔）或超出 PHY len 字段的帧都不能交付。 */
-        return NULL;
+    if (n == 0U) {
+        return NULL; /* 空帧：只有间隔，没有内容 */
     }
+    /* PHY 的 len 字段只有一个八位字节；更长的帧是无法表达的测试错误。 */
+    assert_true(n <= UINT8_MAX);
     if (status != NULL) {
         *status = (uint8_t) (IOLINK_PHY_STATUS_DATA_READY | IOLINK_PHY_STATUS_CHK);
     }
