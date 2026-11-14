@@ -347,6 +347,7 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     ctx->dll.main.state_cb_user = ctx;
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_init(&ctx->dll.main.ds);
+    iolink_ds_set_flag_persist(&ctx->dll.main.ds, config->ds_flag_persist, config->user);
     iolink_ds_bind_workspace(&ctx->dll.main.ds, workspace);
     ctx->dll.main.shared.isdu.ds_ctx = &ctx->dll.main.ds;
     /* DS 参数访问统一走 OD 表：标准标签经参数上下文，应用参数经表项

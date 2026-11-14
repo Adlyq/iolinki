@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (DS_UPLOAD_FLAG persistence hook)
+- `iolink_ds_flag_persist_fn`, `iolink_ds_set_flag_persist()` and
+  `iolink_device_config_t::ds_flag_persist` let the application persist
+  `DS_UPLOAD_FLAG` in its own NVM. The library keeps the RAM state and calls
+  the hook whenever the flag changes (NULL = RAM-only).
+
 ### Removed (tag parameter manager)
 - `include/iolinki/params.h` and `src/params.c`. The three writable tags
   (`0x0018`-`0x001A`) are now application-provided

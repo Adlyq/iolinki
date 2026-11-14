@@ -53,6 +53,16 @@ typedef enum
 } iolink_ds_state_t;
 
 /**
+ * @brief DS_UPLOAD_FLAG 持久化钩子（10.4.2）。
+ *
+ * 标志变化时由库调用；应用把它写进自己的 NVM。NULL 表示 RAM-only。
+ *
+ * @param user 应用上下文（设备层传 `iolink_device_config_t::user`）。
+ * @param flag 新的标志值。
+ */
+typedef void (*iolink_ds_flag_persist_fn)(void* user, bool flag);
+
+/**
  * @brief 数据存储引擎上下文
  *
  * 跟踪 DS 同步过程的状态与校验和。参数集合与值访问都来自对象
@@ -60,12 +70,14 @@ typedef enum
  */
 typedef struct
 {
-    iolink_ds_state_t state;       /**< 当前 DS 状态机位置 */
-    const iolink_od_app_t* od_app; /**< 应用 OD 表（可为 NULL，表示只有标准表） */
-    uint32_t current_checksum;     /**< 最近一次计算的本地参数校验和 */
-    uint32_t master_checksum;      /**< 主站最近校验过的校验和 */
-    bool ds_upload_flag;           /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
-    bool upload_event_pending;     /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
+    iolink_ds_state_t state;                /**< 当前 DS 状态机位置 */
+    const iolink_od_app_t* od_app;          /**< 应用 OD 表（可为 NULL，表示只有标准表） */
+    uint32_t current_checksum;              /**< 最近一次计算的本地参数校验和 */
+    uint32_t master_checksum;               /**< 主站最近校验过的校验和 */
+    bool ds_upload_flag;                    /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
+    bool upload_event_pending;              /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
+    iolink_ds_flag_persist_fn flag_persist; /**< 标志变化通知（可为 NULL）。 */
+    void* flag_user;                        /**< 传给 @ref flag_persist 的上下文。 */
     /* 镜像不再常驻状态结构。序列化交给工作区中的暂存缓冲（上传可
      * 直接流式写入调用方缓冲），这里只保留指针与容量。 */
     uint8_t* image;        /**< 序列化/下载暂存缓冲（工作区或内嵌 fallback） */
@@ -86,6 +98,9 @@ typedef struct
  */
 #if IOLINK_FEATURE_DATA_STORAGE
 void iolink_ds_init(iolink_ds_ctx_t* ctx);
+
+/** @brief 绑定 DS_UPLOAD_FLAG 持久化钩子（NULL 解除绑定）。 */
+void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn fn, void* user);
 
 /**
  * @brief 绑定外部工作区。

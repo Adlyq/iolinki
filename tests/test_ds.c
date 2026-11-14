@@ -966,6 +966,38 @@ static void test_ds_apply_precheck_rejects_before_write(void** state)
                      0U);
 }
 
+static int g_flag_persist_calls;
+static bool g_flag_persist_last;
+
+static void flag_persist_cb(void* user, bool flag)
+{
+    (void) user;
+    g_flag_persist_calls++;
+    g_flag_persist_last = flag;
+}
+
+static void test_ds_flag_persist_callback(void** state)
+{
+    (void) state;
+    iolink_ds_ctx_t ds;
+    iolink_ds_init(&ds);
+    iolink_ds_set_flag_persist(&ds, flag_persist_cb, NULL);
+    g_flag_persist_calls = 0;
+    g_flag_persist_last = false;
+
+    iolink_ds_request_upload(&ds);
+    assert_int_equal(g_flag_persist_calls, 1);
+    assert_true(g_flag_persist_last);
+
+    iolink_ds_clear_upload(&ds);
+    assert_int_equal(g_flag_persist_calls, 2);
+    assert_false(g_flag_persist_last);
+
+    /* 已经是 0 时再次清除不重复通知。 */
+    iolink_ds_clear_upload(&ds);
+    assert_int_equal(g_flag_persist_calls, 2);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -988,6 +1020,7 @@ int main(void)
         cmocka_unit_test(test_ds_0079_no_write_store_timeout),
         cmocka_unit_test(test_ds_0080_local_change_upload),
         cmocka_unit_test(test_ds_0081_upload_abort_points),
+        cmocka_unit_test(test_ds_flag_persist_callback),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

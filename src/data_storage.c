@@ -30,11 +30,16 @@
  * 的持久化加载；设备构建总会绑定 workspace，因此不会限制实际参数长度。 */
 #define IOLINK_DS_STREAM_CHUNK 32U
 
-/** @brief 清除挂起的上传请求（RAM-only；落盘由应用负责）。 */
+/** @brief 清除挂起的上传请求；标志变化时通知应用落盘。 */
 static void ds_clear_upload_flag(iolink_ds_ctx_t* ctx)
 {
-    if (ctx != NULL) {
-        ctx->ds_upload_flag = false;
+    if (ctx == NULL) {
+        return;
+    }
+    const bool changed = ctx->ds_upload_flag;
+    ctx->ds_upload_flag = false;
+    if (changed && (ctx->flag_persist != NULL)) {
+        ctx->flag_persist(ctx->flag_user, false);
     }
 }
 
@@ -130,6 +135,15 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx)
 #if IOLINK_WORKSPACE_EMBEDDED
     ds_attach_image(ctx, ctx->scratch, sizeof(ctx->scratch));
 #endif
+}
+
+void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn fn, void* user)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    ctx->flag_persist = fn;
+    ctx->flag_user = user;
 }
 
 void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app)
@@ -703,7 +717,7 @@ int iolink_ds_handle_ds_command(iolink_ds_ctx_t* ctx, uint8_t command, uint16_t 
     /* DS_UPLOAD_FLAG 在每次上传/下载序列结束时复位
        （Table B.10）。 */
     if ((ret == 0) && ((command == 0x02U) || (command == 0x04U))) {
-        ctx->ds_upload_flag = false;
+        ds_clear_upload_flag(ctx);
     }
     return ret;
 }
@@ -813,6 +827,9 @@ void iolink_ds_request_upload(iolink_ds_ctx_t* ctx)
 {
     if (ctx != NULL) {
         ctx->ds_upload_flag = true;
+        if (ctx->flag_persist != NULL) {
+            ctx->flag_persist(ctx->flag_user, true);
+        }
         /* 尺寸/校验和按当前参数集重建；没有独立的 DS 镜像需要落盘。 */
         iolink_ds_refresh(ctx);
         /* 该通知由设备泵在 ISDU 传输空闲后发布（10.4.2），
@@ -824,7 +841,7 @@ void iolink_ds_request_upload(iolink_ds_ctx_t* ctx)
 void iolink_ds_clear_upload(iolink_ds_ctx_t* ctx)
 {
     if (ctx != NULL) {
-        ctx->ds_upload_flag = false;
+        ds_clear_upload_flag(ctx);
     }
 }
 

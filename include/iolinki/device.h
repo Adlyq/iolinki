@@ -115,21 +115,24 @@ typedef struct
                                                     提供 on_pd_input 时 DLL 走回调路径，
                                                     否则使用轮询 API）。 */
     const iolink_device_info_t* device_info;     /**< 静态设备标识数据。 */
-    iolink_device_time_us_fn time_us;            /**< DLL、ISR 泵和事件引擎使用的应用时钟；
-                                                      必需（NULL 在初始化时会被
-                                                      拒绝）。 */
-    void* user;                                  /**< 传给 iolink_device_time_us_fn、OD 后端、
-                                                      log_write 以及每个 iolink_app_callbacks_t 钩子的
-                                                      应用上下文。 */
-    iolink_log_write_fn log_write;               /**< 可选的运行时日志回调；NULL 表示静默。
-                                                      参见 iolinki/log.h。 */
-    iolink_log_level_t log_level;                /**< 运行时日志阈值；IOLINK_LOG_LEVEL_SILENT（0）
-                                                      表示不输出。 */
-    const iolink_od_app_t* od;                   /**< 应用对象字典（可选；设备专用索引与参数值的
-                                                      唯一扩展入口）。 */
-    iolink_workspace_t* workspace;               /**< 可选的传输 scratch 工作区。NULL 表示使用
-                                                      上下文内嵌的 fallback 存储；当
-                                                      `IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供。 */
+#if IOLINK_FEATURE_DATA_STORAGE
+    iolink_ds_flag_persist_fn ds_flag_persist; /**< 持久化 DS_UPLOAD_FLAG（NULL = RAM-only）。 */
+#endif
+    iolink_device_time_us_fn time_us; /**< DLL、ISR 泵和事件引擎使用的应用时钟；
+                                           必需（NULL 在初始化时会被
+                                           拒绝）。 */
+    void* user;                       /**< 传给 iolink_device_time_us_fn、OD 后端、
+                                           log_write 以及每个 iolink_app_callbacks_t 钩子的
+                                           应用上下文。 */
+    iolink_log_write_fn log_write;    /**< 可选的运行时日志回调；NULL 表示静默。
+                                           参见 iolinki/log.h。 */
+    iolink_log_level_t log_level;     /**< 运行时日志阈值；IOLINK_LOG_LEVEL_SILENT（0）
+                                           表示不输出。 */
+    const iolink_od_app_t* od;        /**< 应用对象字典（可选；设备专用索引与参数值的
+                                           唯一扩展入口）。 */
+    iolink_workspace_t* workspace;    /**< 可选的传输 scratch 工作区。NULL 表示使用
+                                           上下文内嵌的 fallback 存储；当
+                                           `IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供。 */
 } iolink_device_config_t;
 
 /**
