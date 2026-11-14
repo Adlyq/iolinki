@@ -8,7 +8,7 @@
 # Usage:
 #   ./tools/coverage.sh                       # BYTE transport: text report + summary
 #   ./tools/coverage.sh --transport FRAME     # FRAME transport only
-#   ./tools/coverage.sh --transport both      # BYTE + FRAME + the merged report
+#   ./tools/coverage.sh --transport both      # BYTE + FRAME summaries + merged report
 #   ./tools/coverage.sh --html                # also write build_coverage/coverage/
 #   ./tools/coverage.sh --check               # fail when line coverage < tools/coverage_baseline.txt
 #   ./tools/coverage.sh --filter dll          # only files whose path contains "dll"
@@ -56,15 +56,22 @@ usage() {
 }
 
 while [ $# -gt 0 ]; do
-    case "$1" in
+    opt="$1"
+    shift
+    case "$opt" in
         --html) HTML=1 ;;
         --check) CHECK=1 ;;
-        --filter) shift; FILTER="${1:-}" ;;
-        --transport) shift; TRANSPORT="${1:-}" ;;
+        --filter)
+            FILTER="${1:-}"
+            if [ $# -gt 0 ]; then shift; fi
+            ;;
+        --transport)
+            TRANSPORT="${1:-}"
+            if [ $# -gt 0 ]; then shift; fi
+            ;;
         -h|--help) usage 0 ;;
-        *) echo "unknown option: $1" >&2; usage 2 ;;
+        *) echo "unknown option: $opt" >&2; usage 2 ;;
     esac
-    shift
 done
 
 wants_byte=0
@@ -110,6 +117,13 @@ if [ -n "$FILTER" ]; then
     filter="$ROOT/src/.*$FILTER"
 fi
 
+case "$BUILD_DIR" in
+    "" | "/" | "$ROOT" | "$HOME")
+        echo "refusing to use '$BUILD_DIR' as the coverage tree" >&2
+        exit 2
+        ;;
+esac
+
 # A reused tree keeps .gcno/.gcda from older source layouts; gcovr then
 # attributes lines to the wrong file and reports false regressions. Always
 # start from a clean coverage tree. FRAME lives inside the BYTE tree, so a
@@ -140,14 +154,18 @@ build_transport() {
     (cd "$dir" && ctest --output-on-failure)
 }
 
-# Report from one build tree. gcovr collects from the working directory, so it
-# runs inside the tree: with both trees present a BYTE run from the repository
-# root would silently absorb the FRAME objects.
+# Report from one build tree. gcovr's search path is passed explicitly: `-r
+# $ROOT` on its own scans every build tree below the repository and would merge
+# the transports into one trace.
 report_transport() {
     local dir="$1" json="$2"
     shift 2
-    (cd "$dir" && gcovr -r "$ROOT" --filter "$filter" "${gcovr_opts[@]}" \
-        --json "$json" "$@" --print-summary)
+    if [ -z "$(find "$dir" -name '*.gcda' -print -quit)" ]; then
+        echo "no coverage data in $dir (build or tests did not run)" >&2
+        exit 2
+    fi
+    gcovr "$dir" -r "$ROOT" --filter "$filter" "${gcovr_opts[@]}" \
+        --json "$json" "$@" --print-summary
 }
 
 byte_out=""
@@ -161,6 +179,8 @@ if [ "$wants_byte" -eq 1 ]; then
     if [ "$wants_frame" -eq 1 ]; then
         byte_out="$(report_transport "$BYTE_DIR" "$BYTE_JSON")"
         echo "== BYTE transport ($BYTE_DIR) =="
+    elif [ "$CHECK" -eq 1 ]; then
+        byte_out="$(report_transport "$BYTE_DIR" "$BYTE_JSON")"
     else
         byte_out="$(report_transport "$BYTE_DIR" "$BYTE_JSON" --txt)"
     fi
