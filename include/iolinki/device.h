@@ -184,7 +184,7 @@ typedef enum
  * @brief 根据配置初始化设备上下文。
  * @param ctx     要初始化的设备上下文。
  * @param config  要应用的配置（在 ctx 生命周期内必须保持有效）。
- * @return 成功时为 0；配置无效时为负的 ::iolink_device_init_result_t，
+ * @return 成功时为 0；配置无效时为负的 ::iolink_device_init_result_t 值，
  *         或 PHY 初始化回调返回的负错误码。
  */
 int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config);
@@ -200,8 +200,8 @@ iolink_workspace_t* iolink_device_get_workspace(const iolink_device_ctx_t* ctx);
 /**
  * @brief 在运行时更换日志回调或阈值。
  *
- * 更新 DLL、ISDU、DS 和事件子系统共用的汇点；`user` 仍为
- * ::iolink_device_config_t::user。传入 `write == NULL` 或
+ * 更新 DLL、ISDU、DS 和事件子系统共用的汇点；`user` 仍取
+ * ::iolink_device_config_t::user 字段。传入 `write == NULL` 或
  * `level == IOLINK_LOG_LEVEL_SILENT` 可立即静默。
  *
  * @param ctx   由 iolink_device_init() 初始化的设备上下文。

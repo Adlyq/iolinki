@@ -4,11 +4,19 @@
 static reference_device_t app;
 static iolink_tiol112_ctx_t tiol112;
 volatile int board_phy_fault;
+
+static uint64_t board_time_us_callback(void* user)
+{
+    (void) user;
+    return board_time_us();
+}
+
 int main(void)
 {
     board_init();
     if (iolink_phy_tiol112_init(&tiol112, board_tiol112_io()) != 0 ||
-        reference_device_init(&app, iolink_phy_tiol112_get(&tiol112), board_time_us) != 0) {
+        reference_device_init(&app, iolink_phy_tiol112_get(&tiol112), board_time_us_callback) !=
+            0) {
         for (;;) {
         } /* EN remains low on initialization failure */
     }

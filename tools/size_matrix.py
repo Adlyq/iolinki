@@ -37,6 +37,12 @@ Usage:
 Environment:
     ARM_GCC        toolchain prefix (default: arm-none-eabi-)
     IOLINKI_SIZE_DIR  build root (default: <repo>/build_size)
+
+The baseline records the toolchain that produced it. With a matching toolchain
+the per-row 0.5% budget applies. A different toolchain is compared with the
+wider cross-toolchain budget (see CROSS_TOOLCHAIN_*_PERMILLE), because register
+allocation and string merging differ between GCC releases; regenerate the
+baseline with `--update` after an intentional change.
 """
 
 from __future__ import annotations
@@ -53,6 +59,12 @@ ROOT = Path(__file__).resolve().parent.parent
 BUILD = Path(os.environ.get("IOLINKI_SIZE_DIR", ROOT / "build_size"))
 BASELINE = ROOT / "tools" / "size_baseline.csv"
 PREFIX = os.environ.get("ARM_GCC", "arm-none-eabi-")
+
+# 跨工具链比较的预算（‰ of the baseline）。工具链与基线一致时使用基线里
+# 逐行记录的 0.5% 容差；不一致时（CI 的 apt 工具链 vs 本地发布的
+# Arm GNU Toolchain）改用这两项，见 check()。
+CROSS_TOOLCHAIN_TEXT_PERMILLE = 20
+CROSS_TOOLCHAIN_RODATA_PERMILLE = 80
 
 # Cortex-M0+ without LTO: the STM32G0 examples' target and options.
 CPU_FLAGS = ["-mcpu=cortex-m0plus", "-mthumb", "-std=c99", "-Os", "-g0", "-ffreestanding"]
@@ -350,10 +362,21 @@ def print_table(current: list[dict[str, str]], baseline: list[dict[str, str]] | 
 
 
 def check(current: list[dict[str, str]], baseline: list[dict[str, str]], base_toolchain: str) -> int:
-    if base_toolchain and base_toolchain != toolchain_version():
+    # 不同 GCC 版本的寄存器分配、内联与字符串合并策略不同，同一份源码的
+    # .text 会整体偏移约 1-1.5%，.rodata 约 6-7%（实测 15.3.1 vs 14.2.1）。
+    # 严格的 0.5% 门禁只在工具链与基线一致时成立；不一致时按下面的
+    # 跨工具链预算比较，避免把编译器差异当成回归。
+    cross = bool(base_toolchain) and base_toolchain != toolchain_version()
+    if cross:
         print(
             "warning: toolchain differs from the baseline "
-            f"({base_toolchain} != {toolchain_version()}); comparing anyway",
+            f"({base_toolchain} != {toolchain_version()})",
+            file=sys.stderr,
+        )
+        print(
+            "note: cross-toolchain budget: text "
+            f"{CROSS_TOOLCHAIN_TEXT_PERMILLE / 10:.1f}%, .rodata "
+            f"{CROSS_TOOLCHAIN_RODATA_PERMILLE / 10:.1f}%",
             file=sys.stderr,
         )
     base = {key(r): r for r in baseline}
@@ -370,10 +393,14 @@ def check(current: list[dict[str, str]], baseline: list[dict[str, str]], base_to
             failures += 1
             continue
         delta = int(row["text"]) - int(old["text"])
-        if delta > int(old["text_tol"]):
+        text_tol = int(old["text_tol"])
+        if cross:
+            text_tol = max(
+                text_tol, int(old["text"]) * CROSS_TOOLCHAIN_TEXT_PERMILLE // 1000
+            )
+        if delta > text_tol:
             print(
-                f"FAIL {key(row)}: text grew by {delta} B "
-                f"(tolerance {old['text_tol']} B)",
+                f"FAIL {key(row)}: text grew by {delta} B (tolerance {text_tol} B)",
                 file=sys.stderr,
             )
             failures += 1
@@ -382,6 +409,10 @@ def check(current: list[dict[str, str]], baseline: list[dict[str, str]], base_to
         source_on = base.get(f"{row['config']}|source|on")
         fallback_src = int(source_on["rodata"]) if source_on else int(old["rodata"])
         rodata_tol = int(old.get("rodata_tol") or max(16, (fallback_src * 5) // 1000))
+        if cross:
+            rodata_tol = max(
+                rodata_tol, int(old["rodata"]) * CROSS_TOOLCHAIN_RODATA_PERMILLE // 1000
+            )
         rdelta = int(row["rodata"]) - int(old["rodata"])
         if rdelta > rodata_tol:
             print(
@@ -422,8 +453,11 @@ def selftest(current: list[dict[str, str]], baseline: list[dict[str, str]]) -> i
         return 1
 
     # Same proof for .rodata: forge it down so the measured value looks larger.
+    # The forgery must exceed the widest budget the check can apply, i.e. the
+    # cross-toolchain .rodata budget (CROSS_TOOLCHAIN_RODATA_PERMILLE), so the
+    # selftest proves the gate on a matching toolchain as well as on CI.
     forged_ro = dict(baseline[0])
-    forged_ro["rodata"] = str(max(0, int(forged_ro["rodata"]) - 256))
+    forged_ro["rodata"] = str(max(0, int(forged_ro["rodata"]) - 512))
     forged_ro["rodata_tol"] = "16"
     old_ro = baseline[0]["rodata"]
     old_tol = baseline[0].get("rodata_tol")
