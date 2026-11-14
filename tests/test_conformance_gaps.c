@@ -3,10 +3,7 @@
  * 现有单元测试套件尚未覆盖的一致性条目。
  *
  * 断言依据 IO-Link Test Specification 10032 V1.1.4 和
- * IO-Link Interface and System Specification V1.1.5。对于 DUT/库
- * 行为仍不符合一致性要求的用例，通过 skip() 有意标记为 "known gap"，
- * 以便在生产修复获批前保持回归套件通过。
- * 对应修复落地后请删除 skip()。
+ * IO-Link Interface and System Specification V1.1.5。
  */
 
 #include <stdarg.h>
@@ -123,13 +120,6 @@ static int write_object(iolink_isdu_ctx_t* ctx, uint16_t index, uint8_t subindex
     return isdu_collect_response(ctx, out, out_len);
 }
 
-static void skip_known_gap(const char* case_id, const char* reason)
-{
-    (void) fprintf(stderr, "[known-gap] %s: %s\n", case_id, reason);
-    (void) fflush(stderr);
-    skip();
-}
-
 /* ------------------------------------------------------------------------- */
 /* SDCI_TC_0063 / SDCI_TC_0123：ApplicationTag 长度超限                       */
 /* ------------------------------------------------------------------------- */
@@ -187,11 +177,9 @@ static void test_0123_application_tag_overlong(void** state)
 
     int n = write_object(&ctx, IOLINK_IDX_APPLICATION_TAG, 0U, too_long, sizeof(too_long), response,
                          sizeof(response));
-    if ((n != 2) || (response[0] != 0x80U) || (response[1] != IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN)) {
-        skip_known_gap("SDCI_TC_0123",
-                       "expected 0x8033 VAL_LENOVRRUN; current stack returns a different "
-                       "ErrorCode for an overlong ApplicationSpecificTag");
-    }
+    assert_int_equal(n, 2);
+    assert_int_equal(response[0], 0x80U);
+    assert_int_equal(response[1], IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -293,12 +281,9 @@ static void test_0110_access_locks_reserved_bits(void** state)
 
         int n = write_object(&ctx, IOLINK_IDX_DEVICE_ACCESS_LOCKS, 0U, value, sizeof(value),
                              response, sizeof(response));
-        if ((n != 2) || (response[0] != 0x80U) ||
-            (response[1] != IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG)) {
-            skip_known_gap("SDCI_TC_0110",
-                           "reserved DeviceAccessLocks bits are accepted; expected 0x8030 "
-                           "and a zero readback");
-        }
+        assert_int_equal(n, 2);
+        assert_int_equal(response[0], 0x80U);
+        assert_int_equal(response[1], IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG);
 
         uint8_t readback[2] = {0};
         assert_int_equal(
@@ -410,13 +395,9 @@ static void test_0323_no_ds_record_marker(void** state)
         assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DATA_STORAGE, sub), 1);
         iolink_isdu_process(&ctx);
         int n = isdu_collect_response(&ctx, data, sizeof(data));
-        if (n != (int) expected_len[sub]) {
-            skip_known_gap("SDCI_TC_0323",
-                           "the current DS-enabled stack does not expose the no-DS "
-                           "DataStorageIndex record lengths");
-        }
-        if ((sub == 1U) && (data[0] > 5U)) {
-            skip_known_gap("SDCI_TC_0323", "Sub1 value is outside 0..5");
+        assert_int_equal(n, (int) expected_len[sub]);
+        if (sub == 1U) {
+            assert_true(data[0] <= 5U);
         }
         if (sub == 2U) {
             assert_int_equal((uint8_t) (data[0] & 0x79U), 0x00U);
@@ -466,6 +447,7 @@ static void test_0072_comm_interruption_event_persists(void** state)
 
 static void test_0080_local_change_requests_upload(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0080");
     (void) state;
 
     iolink_ds_ctx_t ds;
@@ -529,7 +511,7 @@ static void test_0101_reserved_dpp1_write(void** state)
         frame[0] = (uint8_t) (IOLINK_MC_CHANNEL_PAGE | 0x0EU);
         frame[1] = IOLINK_MSEQ_TYPE_0;
         frame[2] = (uint8_t) value;
-        frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
+        frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, sizeof(frame)));
 
         mock_phy_feed_byte(frame[0]);
         mock_phy_feed_byte(frame[1]);
@@ -1043,9 +1025,8 @@ static int group_setup(void** state)
 
 static int group_teardown(void** state)
 {
-    (void) state;
     test_clock_uninstall();
-    return 0;
+    return test_tx_all_asserted(state);
 }
 
 int main(void)

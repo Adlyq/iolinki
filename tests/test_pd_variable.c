@@ -24,7 +24,7 @@
 #include "iolinki/device.h"
 #include "iolinki/dll.h"
 #include "iolinki/application.h"
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "test_helpers.h"
 
 #include "conformance_test.h"
@@ -46,7 +46,7 @@ static void test_pd_variable_lengths(void** state)
     memset(frame, 0, sizeof(frame));
     frame[0] = 0x00;
     frame[1] = IOLINK_MSEQ_TYPE_2;
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, sizeof(frame)));
 
     for (size_t i = 0; i < sizeof(frame); i++) {
         mock_phy_feed_byte(frame[i]);
@@ -78,17 +78,39 @@ static void test_pd_invalid_flag(void** state)
 
     /* TYPE_2_V WRITE：MC、CKT、PD-out(1)、OD(2)。 */
     uint8_t frame[5] = {0x00, IOLINK_MSEQ_TYPE_2, 0x00, 0x00, 0x00};
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, sizeof(frame)));
 
     for (size_t i = 0; i < sizeof(frame); i++) {
         mock_phy_feed_byte(frame[i]);
     }
     mock_phy_feed_chk();
 
-    /* WRITE 应答：PD-in(1) + CKS（PD 无效标志位于 CKS 第 6 位）。 */
-
+    /* WRITE 应答：PD-in(1) + CKS。该用例把 PD-in 标记为无效，因此
+     * CKS 第 6 位为 1，PD-in 载荷本身仍是调用方送入的字节；CKS 的低 6 位
+     * 覆盖整个应答（含置位后的状态位）。 */
     test_io_cycle(&dev.ctx);
     assert_tx_len(2);
+    size_t tx_len = 0U;
+    const uint8_t* tx = mock_phy_tx(&tx_len);
+    assert_int_equal(tx_len, 2U);
+    const uint8_t invalid_resp[2] = {dummy, 0x40U};
+    assert_int_equal(tx[0], invalid_resp[0]);
+    assert_int_equal(tx[1], (uint8_t) (0x40U | test_expected_checksum6(invalid_resp, 2U)));
+
+    /* 把 PD-in 标记为有效后重发同一 WRITE：CKS 第 6 位必须清零。 */
+    const uint8_t valid_pd[1] = {0xA5U};
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, valid_pd, 1U, true), 0);
+    for (size_t i = 0; i < sizeof(frame); i++) {
+        mock_phy_feed_byte(frame[i]);
+    }
+    mock_phy_feed_chk();
+    test_io_cycle(&dev.ctx);
+    assert_tx_len(2);
+    tx = mock_phy_tx(&tx_len);
+    assert_int_equal(tx_len, 2U);
+    const uint8_t valid_resp[2] = {valid_pd[0], 0x00U};
+    assert_int_equal(tx[0], valid_resp[0]);
+    assert_int_equal(tx[1], test_expected_checksum6(valid_resp, 2U));
 }
 
 static void test_pd_runtime_negotiation(void** state)
@@ -163,7 +185,7 @@ static void run_pd_roundtrip(iolink_test_device_t* dev, uint8_t pd_in_len, uint8
     frame[0] = 0x00U; /* 过程通道上的 OPERATE WRITE */
     frame[1] = IOLINK_MSEQ_TYPE_2;
     (void) memcpy(&frame[2], pd_out, pd_out_len);
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, frame_len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, frame_len));
 
     for (size_t i = 0U; i < frame_len; i++) {
         mock_phy_feed_byte(frame[i]);
@@ -172,7 +194,7 @@ static void run_pd_roundtrip(iolink_test_device_t* dev, uint8_t pd_in_len, uint8
 
     /* 应答：PD-in + CKS。 */
     (void) memcpy(expected, pd_in, pd_in_len);
-    expected[pd_in_len] = iolink_checksum6(expected, pd_in_len);
+    expected[pd_in_len] = test_expected_checksum6(expected, pd_in_len);
 
     test_io_cycle(&dev->ctx);
     assert_tx_frame(expected, (size_t) pd_in_len + 1U);
@@ -327,5 +349,5 @@ int main(void)
         cmocka_unit_test(test_variable_pd_length_limits),
         cmocka_unit_test(test_pd_input_update_refreshes_dpp1),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

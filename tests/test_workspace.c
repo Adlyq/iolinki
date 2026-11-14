@@ -188,5 +188,5 @@ int main(void)
         cmocka_unit_test(test_bind_null_is_ignored),
         cmocka_unit_test(test_ds_null_api_contracts),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

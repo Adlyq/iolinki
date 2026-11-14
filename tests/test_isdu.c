@@ -390,6 +390,7 @@ static void test_system_cmd_invalid(void** state)
 
 static void test_isdu_function_tag_read_write(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0056");
     (void) state;
     iolink_isdu_ctx_t ctx;
     test_env_init(&g_test_env, NULL);
@@ -770,6 +771,8 @@ static void test_isdu_ds_command_sequence(void** state)
 static void test_isdu_direct_parameters_page1(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0052");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0095");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0096");
     (void) state;
     iolink_isdu_ctx_t ctx;
     test_env_init(&g_test_env, NULL);
@@ -983,6 +986,7 @@ static uint8_t page1_octet3(uint8_t m_seq_type, uint8_t pd_in, uint8_t pd_out)
 
 static void test_isdu_mseq_capability_codes(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0091");
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0052");
     (void) state;
     test_env_init(&g_test_env, NULL);
@@ -1664,5 +1668,5 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_snapshot_response, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_is_idle, test_setup, test_teardown),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

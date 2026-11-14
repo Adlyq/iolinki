@@ -101,6 +101,7 @@ typedef char
 static void test_context_sizes(void** state)
 {
     (void) state;
+    /* 尺寸契约由本文件的编译期 IOLINK_STATIC_ASSERT 承担。 */
     printf("ctx sizes: dll=%zu device=%zu isdu=%zu ds=%zu events=%zu workspace=%zu\n",
            sizeof(iolink_dll_ctx_t), sizeof(iolink_device_ctx_t), sizeof(iolink_isdu_ctx_t),
            sizeof(iolink_ds_ctx_t), sizeof(iolink_events_ctx_t), sizeof(iolink_workspace_t));

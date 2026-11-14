@@ -45,8 +45,9 @@ iolink_matrix_emit()
     "$cb" target_minimal BYTE_BYTE Release no \
         "-DIOLINK_FEATURE_DATA_STORAGE=OFF -DIOLINK_FEATURE_EVENTS=OFF -DIOLINK_PLATFORM=BAREMETAL" \
         "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE"
-    "$cb" host_smp_split BYTE_BYTE Debug yes "" \
-        "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SMP -DIOLINK_FENCE_LEVEL=IOLINK_FENCE_SMP -DIOLINK_FENCE_SMP_IMPL=__sync_synchronize -DIOLINK_STATS_MODE=IOLINK_STATS_SPLIT"
+    "$cb" host_smp_split BYTE_BYTE Debug yes \
+        "-DIOLINK_STATS_MODE=IOLINK_STATS_SPLIT" \
+        "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SMP -DIOLINK_FENCE_LEVEL=IOLINK_FENCE_SMP -DIOLINK_FENCE_SMP_IMPL=__sync_synchronize"
 }
 
 # Configurations the differential gate rebuilds. It compares protocol reply

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (test effectiveness)
+- `skip_known_gap()` is gone: the conformance cases now assert the behaviour the
+  stack actually produces (`0x8030` for reserved access-lock bits, `0x8033` for
+  an overlong tag, the no-DS DataStorageIndex record lengths), so a regression
+  fails instead of silently skipping.
+- The conformance audit matrix now names functions that exist and carry the
+  matching `IOLINK_CONFORMANCE_CASE` id; `check_conformance_traceability.py`
+  enforces both.
+- Every test binary fails when a captured reply was never asserted (shared
+  harness group teardown, and an equivalent counter in the local PHY mocks).
+- Expected frames no longer compute their checksum with the code under test:
+  `tests/crc_oracle.h` implements A.1.6 independently of `src/crc.c`.
+- `IOLINK_STATS_MODE` is a real CMake variable, and the SPLIT statistics
+  expectations are literal instead of `IOLINK_STAT_TOTAL` self-mirrors.
+
 ### Changed (test suite)
 - Every unit test now runs through cmocka. 21 files that used `<assert.h>` and
   7 whose `main()` returned a step number (`IOLINK_TEST_RC` in

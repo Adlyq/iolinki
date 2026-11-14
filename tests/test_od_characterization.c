@@ -615,5 +615,5 @@ int main(void)
                                         char_teardown),
     };
 
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

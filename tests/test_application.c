@@ -152,5 +152,5 @@ int main(void)
         cmocka_unit_test(test_pd_output_read_flow),
         cmocka_unit_test(test_app_callbacks_lifecycle),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

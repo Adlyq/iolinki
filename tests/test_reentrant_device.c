@@ -104,5 +104,5 @@ int main(void)
         cmocka_unit_test(test_device_context_api_initializes_two_configs),
         cmocka_unit_test(test_parameter_contexts_keep_writable_tags_isolated),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

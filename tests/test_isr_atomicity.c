@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/iolink.h"
 #include "iolinki/port.h"
@@ -244,7 +244,7 @@ static void reset_ctx(void)
 static void make_frame(uint8_t* frame, uint8_t len)
 {
     frame[1] = (uint8_t) (frame[1] & IOLINK_MSEQ_TYPE_MASK);
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, len));
 }
 
 static void feed_frame(const uint8_t* frame, uint8_t len)

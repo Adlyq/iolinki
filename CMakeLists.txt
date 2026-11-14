@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.12)
 # Version 4.0.0
 project(iolinki VERSION 4.0.0 LANGUAGES C)
 
@@ -28,6 +28,24 @@ option(IOLINK_FEATURE_DATA_STORAGE "Compile Data Storage" ON)
 option(IOLINK_FEATURE_SYSTEM_COMMAND "Enable SystemCommand (runtime bit; the handler is always resident)" ON)
 option(IOLINK_FEATURE_EVENTS "Compile the diagnostic event engine" ON)
 option(IOLINK_FEATURE_VALIDATE "Run the init-time configuration self-checks" ON)
+
+# Statistics counter model: IOLINK_STATS_SPLIT gives the data ISR its own
+# counter set (the public stats then sum both); empty keeps the config.h
+# default, IOLINK_STATS_SHARED. The macro must be identical for the library and
+# the tests, so it is set once for the whole build instead of via CMAKE_C_FLAGS.
+set(IOLINK_STATS_MODE "" CACHE STRING "IOLINK_STATS_SHARED or IOLINK_STATS_SPLIT; empty = config.h default")
+set_property(CACHE IOLINK_STATS_MODE PROPERTY STRINGS "" IOLINK_STATS_SHARED IOLINK_STATS_SPLIT)
+if(IOLINK_STATS_MODE STREQUAL "")
+    message(STATUS "Statistics mode: config.h default (IOLINK_STATS_SHARED)")
+elseif(IOLINK_STATS_MODE STREQUAL "IOLINK_STATS_SHARED" OR
+       IOLINK_STATS_MODE STREQUAL "IOLINK_STATS_SPLIT")
+    add_compile_definitions(IOLINK_STATS_MODE=${IOLINK_STATS_MODE})
+    message(STATUS "Statistics mode: ${IOLINK_STATS_MODE} (IOLINK_STATS_MODE cache variable)")
+else()
+    message(FATAL_ERROR
+            "IOLINK_STATS_MODE must be IOLINK_STATS_SHARED, IOLINK_STATS_SPLIT or empty, got '${IOLINK_STATS_MODE}'")
+endif()
+
 # Absolute paths so a subdirectory can build the same sources under a different
 # ISR granularity (see tests/CMakeLists.txt: TX FRAME fixture).
 set(IOLINK_SOURCES

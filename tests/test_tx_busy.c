@@ -19,7 +19,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "iolinki/device.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/iolink.h"
@@ -38,6 +38,10 @@ static uint8_t g_frame[8];
 static uint8_t g_frame_len;
 static uint8_t g_frame_ready;
 static unsigned g_tx_calls;
+/* 交付给用例的应答数与用例已经查看过的应答数：group teardown 要求相等。 */
+static uint64_t g_tx_delivered;
+static uint64_t g_tx_asserted;
+static uint64_t g_tx_leaked; /* 开始新捕获时仍未查看的交付 */
 static uint8_t g_line_busy;
 
 static const uint8_t* mock_rx_frame(void* user, uint8_t* status, uint8_t* len)
@@ -60,7 +64,28 @@ static int mock_tx_frame(void* user, const uint8_t* data, size_t len)
     (void) data;
     (void) len;
     g_tx_calls++;
+    g_tx_delivered++;
     return 0;
+}
+
+/* 开始新一次捕获。上一帧若还没被查看，说明用例漏了断言：记入泄漏。 */
+static void tx_reset(void)
+{
+    if (g_tx_asserted != g_tx_delivered) {
+        g_tx_leaked += g_tx_delivered - g_tx_asserted;
+        g_tx_asserted = g_tx_delivered;
+    }
+    g_tx_calls = 0U;
+}
+
+/* 读取发送计数即算一次查看：每次读取消费一次尚未查看的交付，
+ * group teardown 核对"交付 == 查看"。 */
+static unsigned tx_calls(void)
+{
+    if (g_tx_asserted < g_tx_delivered) {
+        g_tx_asserted++;
+    }
+    return g_tx_calls;
 }
 
 static uint8_t mock_tx_busy(void* user)
@@ -106,7 +131,7 @@ static void feed_process_read(void)
 {
     g_frame[0] = (uint8_t) (IOLINK_MC_CHANNEL_PROCESS | IOLINK_MC_RW_MASK);
     g_frame[1] = IOLINK_MSEQ_TYPE_2;
-    g_frame[1] = (uint8_t) (g_frame[1] | iolink_checksum6(g_frame, 2U));
+    g_frame[1] = (uint8_t) (g_frame[1] | test_expected_checksum6(g_frame, 2U));
     g_frame_len = 2U;
     g_frame_ready = 1U;
 }
@@ -126,7 +151,7 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     /* 主泵按当前状态发布应答计划；直接改状态后必须重发一次。 */
     iolink_dll_publish_reply_plans(&dll->main);
     g_frame_ready = 0U;
-    g_tx_calls = 0U;
+    tx_reset();
     g_line_busy = 0U;
     now_us = 1000000U;
 }
@@ -143,7 +168,7 @@ static void test_busy_defers_eager_reply(void** state)
     feed_process_read();
 
     iolink_dll_process_isr(&dll.main);
-    assert_int_equal(g_tx_calls, 0U);                     /* 即时应答被放弃 */
+    assert_int_equal(tx_calls(), 0U);                     /* 即时应答被放弃 */
     assert_int_equal(dll.main.shared.isr_tx_pending, 0U); /* ISR 未暂存任何内容 */
     assert_int_equal(dll.main.shared.pd_in_captured, 0xFFU);
 
@@ -152,7 +177,7 @@ static void test_busy_defers_eager_reply(void** state)
 
     g_line_busy = 0U;
     iolink_dll_process_isr(&dll.main); /* 排空已暂存的应答 */
-    assert_int_equal(g_tx_calls, 1U);
+    assert_int_equal(tx_calls(), 1U);
     assert_int_equal(dll.main.shared.isr_tx_pending, 0U);
 }
 
@@ -167,7 +192,7 @@ static void test_lease_released_when_line_free(void** state)
     feed_process_read();
 
     iolink_dll_process_isr(&dll.main); /* 由 ISR 发出即时应答 */
-    assert_int_equal(g_tx_calls, 1U);
+    assert_int_equal(tx_calls(), 1U);
     assert_int_not_equal(dll.main.shared.pd_in_captured, 0xFFU);
 
     g_line_busy = 1U; /* 仍在线路上 */
@@ -216,6 +241,19 @@ static void test_device_init_requires_tx_busy(void** state)
     assert_int_equal(iolink_device_init(&ctx, &cfg), 0);
 }
 
+static int group_teardown(void** state)
+{
+    (void) state;
+    if ((g_tx_asserted != g_tx_delivered) || (g_tx_leaked != 0U)) {
+        print_message("test_tx_busy: %llu replies delivered, %llu asserted, %llu discarded\n",
+                      (unsigned long long) g_tx_delivered, (unsigned long long) g_tx_asserted,
+                      (unsigned long long) g_tx_leaked);
+    }
+    assert_int_equal(g_tx_asserted, g_tx_delivered);
+    assert_int_equal(g_tx_leaked, 0U);
+    return 0;
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -223,5 +261,5 @@ int main(void)
         cmocka_unit_test(test_lease_released_when_line_free),
         cmocka_unit_test(test_device_init_requires_tx_busy),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, group_teardown);
 }

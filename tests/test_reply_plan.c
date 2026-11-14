@@ -31,7 +31,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/iolink.h"
 #include "iolinki/isdu.h"
@@ -52,6 +52,10 @@ static uint8_t s_chk_pending;
 static uint8_t s_tx_q[TX_MAX];
 static size_t s_tx_n;
 static uint8_t s_tx_active;
+/* 交付给用例的应答数与用例已经查看过的应答数：group teardown 要求相等。 */
+static uint64_t s_tx_delivered;
+static uint64_t s_tx_asserted;
+static uint64_t s_tx_leaked; /* 开始新捕获时仍未查看的交付（一律算失败） */
 
 static uint64_t plan_time_us(void* user)
 {
@@ -108,6 +112,7 @@ static void plan_tx_frame_sync(void)
     (void) memcpy(s_tx_q, s_tx_pending, s_tx_n);
     s_tx_pending = NULL;
     s_tx_pending_n = 0U;
+    s_tx_delivered++;
 }
 
 static int plan_tx_frame(void* user, const uint8_t* data, size_t len)
@@ -135,9 +140,36 @@ static int plan_tx_octet(void* user, uint8_t data)
 static void plan_tx_done(void* user)
 {
     (void) user;
-    s_tx_active = 0U;
+    if (s_tx_active != 0U) {
+        s_tx_active = 0U;
+        s_tx_delivered++;
+    }
 }
 #endif
+
+/* 开始新一次捕获。上一帧若还没被查看，说明用例漏了断言：记入泄漏，
+ * group teardown 失败。 */
+static void tx_reset(void)
+{
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    plan_tx_frame_sync();
+#endif
+    if (s_tx_asserted != s_tx_delivered) {
+        s_tx_leaked += s_tx_delivered - s_tx_asserted;
+        s_tx_asserted = s_tx_delivered;
+    }
+    s_tx_n = 0U;
+}
+
+/* 读取捕获长度即算一次查看：每次读取消费一次尚未查看的交付，
+ * group teardown 核对"交付 == 查看"。 */
+static size_t tx_observed_len(void)
+{
+    if (s_tx_asserted < s_tx_delivered) {
+        s_tx_asserted++;
+    }
+    return s_tx_n;
+}
 
 static uint8_t plan_int_active(void* user)
 {
@@ -188,7 +220,7 @@ static void make_frame(uint8_t mc, uint8_t type_bits, uint8_t* frame, size_t len
     for (size_t i = 2U; i < len; i++) {
         frame[i] = 0x00U;
     }
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, len));
 }
 
 static void feed(const uint8_t* frame, size_t len, uint8_t chk)
@@ -225,7 +257,7 @@ static void init_operate(void)
     s_dll.main.shared.pd_in_active = 0U;
     s_dll.main.shared.pd_in[0][1] = 0x5AU; /* PD-in 槽位（OD 头之后） */
     s_now_us = 1000000U;
-    s_tx_n = 0U;
+    tx_reset();
     s_tx_active = 0U;
     iolink_dll_publish_reply_plans(&s_dll.main);
 }
@@ -244,7 +276,7 @@ static void init_preoperate(void)
     s_dll.main.pd_in_len_current = 0U;
     s_dll.main.pd_valid = true;
     s_now_us = 1000000U;
-    s_tx_n = 0U;
+    tx_reset();
     s_tx_active = 0U;
     iolink_dll_publish_reply_plans(&s_dll.main);
 }
@@ -263,7 +295,7 @@ static void init_preoperate_rx_only(void)
     s_dll.main.pd_in_len_current = 0U;
     s_dll.main.pd_valid = true;
     s_now_us = 1000000U;
-    s_tx_n = 0U;
+    tx_reset();
     s_tx_active = 0U;
     iolink_dll_publish_reply_plans(&s_dll.main);
 }
@@ -285,7 +317,7 @@ static int test_plan_hit_executes_reply(void)
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
 
-    if (s_tx_n != 3U) {
+    if (tx_observed_len() != 3U) {
         return 1; /* OD 占位 + PD-in 1 + CKS */
     }
     if ((s_tx_q[0] != 0x00U) || (s_tx_q[1] != 0x5AU)) {
@@ -313,7 +345,7 @@ static int test_valid_miss_is_dropped(void)
     feed_process_read();
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 0U) {
+    if (tx_observed_len() != 0U) {
         return 1; /* ISR 绝不应答计划未命中帧 */
     }
     if (s_dll.main.shared.isr_plan_misses != 1U) {
@@ -326,7 +358,7 @@ static int test_valid_miss_is_dropped(void)
     /* 主泵一轮：不得补发应答，也不得凭空产生邮箱帧。 */
     iolink_dll_process(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 0U) {
+    if (tx_observed_len() != 0U) {
         return 4;
     }
     if (iolink_ring_peek(&s_dll.main.shared.isr_frame_ring) != NULL) {
@@ -340,11 +372,11 @@ static int test_valid_miss_is_dropped(void)
     uint8_t write[2];
     make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x01U), IOLINK_MSEQ_TYPE_0,
                write, sizeof(write));
-    s_tx_n = 0U;
+    tx_reset();
     feed(write, sizeof(write), 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 0U) {
+    if (tx_observed_len() != 0U) {
         return 6;
     }
     if (s_dll.main.shared.isr_plan_misses != 1U) {
@@ -365,11 +397,11 @@ static int test_type0_page_write_is_answered(void)
 
     /* 与现场一致：MC=0x21（页写地址 1），CKT=0x00（Type-0，CKS=0），OD=0x4F。 */
     const uint8_t wr[3] = {0x21U, 0x00U, 0x4FU};
-    s_tx_n = 0U;
+    tx_reset();
     feed(wr, sizeof(wr), 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 1U) {
+    if (tx_observed_len() != 1U) {
         return 1; /* 仅 CKS */
     }
     if (s_dll.main.shared.isr_plan_misses != 0U) {
@@ -382,13 +414,13 @@ static int test_type0_page_write_is_answered(void)
     }
 
     /* 主泵应用写入，不重发应答。 */
-    s_tx_n = 0U;
+    tx_reset();
     iolink_dll_process(&s_dll.main);
     drain_tx();
     if (s_dll.main.master_cycle_time != 0x4FU) {
         return 4;
     }
-    if (s_tx_n != 0U) {
+    if (tx_observed_len() != 0U) {
         return 5; /* frame_replied_by_isr 必须抑制主泵的第二次应答 */
     }
 
@@ -399,12 +431,12 @@ static int test_type0_page_write_is_answered(void)
     uint8_t rd[2];
     make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x01U), IOLINK_MSEQ_TYPE_0,
                rd, sizeof(rd));
-    s_tx_n = 0U;
+    tx_reset();
     feed(rd, sizeof(rd), 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if ((s_tx_n != 2U) || (s_tx_q[0] != 0x4FU)) {
-        return 7;
+    if ((tx_observed_len() != 2U) || (s_tx_q[0] != 0x4FU)) {
+        return 6;
     }
 
     /* 诊断写（事件确认）同样由 ISR 确认，帧仍进邮箱由主泵应用。 */
@@ -412,16 +444,16 @@ static int test_type0_page_write_is_answered(void)
     make_frame(IOLINK_MC_CHANNEL_DIAGNOSIS, IOLINK_MSEQ_TYPE_0, dw, sizeof(dw));
     dw[2] = 0x00U;
     dw[1] = IOLINK_MSEQ_TYPE_0; /* 重算 CKS 前清掉 make_frame 写入的校验位 */
-    dw[1] = (uint8_t) (dw[1] | iolink_checksum6(dw, sizeof(dw)));
-    s_tx_n = 0U;
+    dw[1] = (uint8_t) (dw[1] | test_expected_checksum6(dw, sizeof(dw)));
+    tx_reset();
     feed(dw, sizeof(dw), 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 1U) {
-        return 8;
+    if (tx_observed_len() != 1U) {
+        return 7;
     }
     if (s_dll.main.shared.isr_plan_misses != 0U) {
-        return 9;
+        return 8;
     }
     return 0;
 }
@@ -441,13 +473,13 @@ static int test_isdu_write_retry_storm_is_deduped(void)
                    sizeof(frame));
         frame[2] = octets[i];
         frame[1] = IOLINK_MSEQ_TYPE_2;
-        frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
+        frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, sizeof(frame)));
 
-        s_tx_n = 0U;
+        tx_reset();
         feed(frame, sizeof(frame), 0U);
         iolink_dll_process_isr(&s_dll.main);
         drain_tx();
-        if (s_tx_n == 0U) {
+        if (tx_observed_len() == 0U) {
             return 1; /* 每个有效写段都必须由 ISR 立即 ACK */
         }
         if (i == 1U) {
@@ -458,12 +490,12 @@ static int test_isdu_write_retry_storm_is_deduped(void)
                            sizeof(retry));
                 retry[2] = 0xAAU;
                 retry[1] = IOLINK_MSEQ_TYPE_2;
-                retry[1] = (uint8_t) (retry[1] | iolink_checksum6(retry, sizeof(retry)));
-                s_tx_n = 0U;
+                retry[1] = (uint8_t) (retry[1] | test_expected_checksum6(retry, sizeof(retry)));
+                tx_reset();
                 feed(retry, sizeof(retry), 0U);
                 iolink_dll_process_isr(&s_dll.main);
                 drain_tx();
-                if (s_tx_n == 0U) {
+                if (tx_observed_len() == 0U) {
                     return 2; /* 重发同样要被 ACK */
                 }
             }
@@ -497,11 +529,15 @@ static int test_new_start_overwrites_undrained_request(void)
                    sizeof(frame));
         frame[2] = octets[i];
         frame[1] = IOLINK_MSEQ_TYPE_2;
-        frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
-        s_tx_n = 0U;
+        frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, sizeof(frame)));
+        tx_reset();
         feed(frame, sizeof(frame), 0U);
         iolink_dll_process_isr(&s_dll.main);
         drain_tx();
+        /* 每个写段都必须被 ISR 立即确认（捕获长度非零）。 */
+        if (tx_observed_len() == 0U) {
+            return 8;
+        }
     }
     if (s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE) {
         return 1;
@@ -516,12 +552,12 @@ static int test_new_start_overwrites_undrained_request(void)
                sizeof(next));
     next[2] = 0x93U;
     next[1] = IOLINK_MSEQ_TYPE_2;
-    next[1] = (uint8_t) (next[1] | iolink_checksum6(next, sizeof(next)));
-    s_tx_n = 0U;
+    next[1] = (uint8_t) (next[1] | test_expected_checksum6(next, sizeof(next)));
+    tx_reset();
     feed(next, sizeof(next), 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n == 0U) {
+    if (tx_observed_len() == 0U) {
         return 3;
     }
     if (s_dll.main.shared.isr_od_overruns != 1U) {
@@ -562,7 +598,7 @@ static int test_invalid_frame_is_published(void)
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
 
-    if (s_tx_n != 0U) {
+    if (tx_observed_len() != 0U) {
         return 1; /* 非法帧绝不应答 */
     }
     if (s_dll.main.shared.isr_plan_misses != 0U) {
@@ -588,11 +624,11 @@ static int test_plan_hit_without_tx_is_deferred(void)
     uint8_t frame[2];
     make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x01U), IOLINK_MSEQ_TYPE_0,
                frame, sizeof(frame));
-    s_tx_n = 0U;
+    tx_reset();
     feed(frame, sizeof(frame), 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 0U) {
+    if (tx_observed_len() != 0U) {
         return 1; /* 没有 TX 能力：不得应答 */
     }
     if (s_dll.main.shared.isr_plan_misses != 0U) {
@@ -648,7 +684,7 @@ static int test_seqlock_window_is_a_miss(void)
     feed_process_read();
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 0U) {
+    if (tx_observed_len() != 0U) {
         return 1;
     }
     if (s_dll.main.shared.isr_plan_misses != 1U) {
@@ -662,7 +698,7 @@ static int test_seqlock_window_is_a_miss(void)
     feed_process_read();
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 3U) {
+    if (tx_observed_len() != 3U) {
         return 4;
     }
     return 0;
@@ -689,12 +725,12 @@ static int test_isdu_write_invalidates_read_view(void)
     uint8_t frame[3];
     make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START),
                IOLINK_MSEQ_TYPE_2, frame, 2U);
-    s_tx_n = 0U;
+    tx_reset();
     feed(frame, 2U, 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
     /* OPERATE 长应答：[OD][PD-in]CKS。 */
-    if ((s_tx_n != 3U) || (s_tx_q[0] != 0xD4U) || (s_tx_q[1] != 0x5AU)) {
+    if ((tx_observed_len() != 3U) || (s_tx_q[0] != 0xD4U) || (s_tx_q[1] != 0x5AU)) {
         return 2;
     }
 
@@ -707,23 +743,30 @@ static int test_isdu_write_invalidates_read_view(void)
         make_frame((uint8_t) (IOLINK_MC_CHANNEL_ISDU | fc), IOLINK_MSEQ_TYPE_2, wr, sizeof(wr));
         wr[2] = octets[i];
         wr[1] = IOLINK_MSEQ_TYPE_2;
-        wr[1] = (uint8_t) (wr[1] | iolink_checksum6(wr, sizeof(wr)));
+        wr[1] = (uint8_t) (wr[1] | test_expected_checksum6(wr, sizeof(wr)));
+        const uint64_t delivered_before = s_tx_delivered;
+
         feed(wr, sizeof(wr), 0U);
         iolink_dll_process_isr(&s_dll.main);
         drain_tx();
+        (void) tx_observed_len();
+        /* 每个写段都必须被 ISR 以恰好一个应答立即确认。 */
+        if (s_tx_delivered != (delivered_before + 1U)) {
+            return 7;
+        }
     }
     if (s_dll.main.shared.isr_isdu_invalidated != 1U) {
         return 3; /* 写已暂存：主泵必须重建读视图 */
     }
 
     /* 主泵尚未应用该写：START 只能读到"无服务"（0x00）。 */
-    s_tx_n = 0U;
+    tx_reset();
     make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START),
                IOLINK_MSEQ_TYPE_2, frame, 2U);
     feed(frame, 2U, 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if ((s_tx_n != 3U) || (s_tx_q[0] != 0x00U)) {
+    if ((tx_observed_len() != 3U) || (s_tx_q[0] != 0x00U)) {
         return 4; /* 不得再返回 0xD4（旧应答） */
     }
 
@@ -750,7 +793,7 @@ static int test_startup_probe_plan(void)
     s_dll.main.shared.pd_out_len_current = 0U;
     s_dll.main.pd_in_len_current = 1U;
     s_now_us = 1000000U;
-    s_tx_n = 0U;
+    tx_reset();
     s_tx_active = 0U;
     iolink_dll_process(&s_dll.main); /* 主泵窗口：按当前配置发布计划切片 */
 
@@ -767,7 +810,7 @@ static int test_startup_probe_plan(void)
     if (s_dll.main.shared.isr_dsio_clear == 0U) {
         return 2;
     }
-    if (s_tx_n != 2U) {
+    if (tx_observed_len() != 2U) {
         return 3; /* 页字节 + CKS */
     }
     return 0;
@@ -796,35 +839,35 @@ static int test_type0_idle_read_resets_transport(void)
     uint8_t start[2];
     make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START),
                IOLINK_MSEQ_TYPE_0, start, sizeof(start));
-    s_tx_n = 0U;
+    tx_reset();
     feed(start, sizeof(start), 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if ((s_tx_n != 2U) || (s_tx_q[0] != 0xD4U)) {
+    if ((tx_observed_len() != 2U) || (s_tx_q[0] != 0xD4U)) {
         return 2; /* START 采纳已发布应答的第一段 */
     }
 
     uint8_t count1[2];
     make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | 0x01U), IOLINK_MSEQ_TYPE_0,
                count1, sizeof(count1));
-    s_tx_n = 0U;
+    tx_reset();
     feed(count1, sizeof(count1), 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if ((s_tx_n != 2U) || (s_tx_q[0] != 0x12U)) {
+    if ((tx_observed_len() != 2U) || (s_tx_q[0] != 0x12U)) {
         return 3; /* COUNT1 推进到第二段 */
     }
 
     uint8_t frame[2];
     make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_IDLE),
                IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));
-    s_tx_n = 0U;
+    tx_reset();
     feed(frame, sizeof(frame), 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
 
     /* OD（od_width = 1，全 0）+ CKS。 */
-    if ((s_tx_n != 2U) || (s_tx_q[0] != 0x00U)) {
+    if ((tx_observed_len() != 2U) || (s_tx_q[0] != 0x00U)) {
         return 4;
     }
     if (iolink_ring_count(&s_dll.main.shared.isr_frame_ring) != 0U) {
@@ -841,11 +884,11 @@ static int test_type0_idle_read_resets_transport(void)
     uint8_t count2[2];
     make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | 0x02U), IOLINK_MSEQ_TYPE_0,
                count2, sizeof(count2));
-    s_tx_n = 0U;
+    tx_reset();
     feed(count2, sizeof(count2), 0U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if ((s_tx_n != 2U) || (s_tx_q[0] != 0x00U)) {
+    if ((tx_observed_len() != 2U) || (s_tx_q[0] != 0x00U)) {
         return 8; /* 旧段索引必须已被 IDLE 清零 */
     }
 
@@ -934,11 +977,11 @@ static int test_capability_change_invalidates_plan(void)
     if (s_dll.main.reply_plan_key != 0U) {
         return 6;
     }
-    s_tx_n = 0U;
+    tx_reset();
     feed_type0_page_read();
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 0U) {
+    if (tx_observed_len() != 0U) {
         return 7; /* 失效期间没有即时应答 */
     }
     if (s_dll.main.shared.isr_plan_misses != 1U) {
@@ -954,11 +997,11 @@ static int test_capability_change_invalidates_plan(void)
     if ((seq_after == 0U) || ((seq_after & 1U) != 0U)) {
         return 10;
     }
-    s_tx_n = 0U;
+    tx_reset();
     feed_type0_page_read();
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 2U) {
+    if (tx_observed_len() != 2U) {
         return 11; /* 页字节 + CKS */
     }
     return 0;
@@ -984,7 +1027,7 @@ static int test_tx_without_done_hook(void)
     s_dll.main.shared.pd_in_active = 0U;
     s_dll.main.shared.pd_in[0][1] = 0x5AU;
     s_now_us = 1000000U;
-    s_tx_n = 0U;
+    tx_reset();
     s_tx_active = 0U;
 
     if (!iolink_caps_has(s_dll.main.shared.caps, IOLINK_CAP_TX)) {
@@ -994,7 +1037,7 @@ static int test_tx_without_done_hook(void)
     feed_process_read();
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 3U) {
+    if (tx_observed_len() != 3U) {
         return 2; /* OD 占位 + PD-in 1 + CKS */
     }
     if ((s_tx_q[0] != 0x00U) || (s_tx_q[1] != 0x5AU)) {
@@ -1025,6 +1068,22 @@ IOLINK_TEST_RC(test_tx_without_done_hook)
 IOLINK_TEST_RC(test_type0_page_write_is_answered)
 IOLINK_TEST_RC(test_plan_hit_without_tx_is_deferred)
 
+static int group_teardown(void** state)
+{
+    (void) state;
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    plan_tx_frame_sync();
+#endif
+    if ((s_tx_asserted != s_tx_delivered) || (s_tx_leaked != 0U)) {
+        print_message("test_reply_plan: %llu replies delivered, %llu asserted, %llu discarded\n",
+                      (unsigned long long) s_tx_delivered, (unsigned long long) s_tx_asserted,
+                      (unsigned long long) s_tx_leaked);
+    }
+    assert_int_equal(s_tx_asserted, s_tx_delivered);
+    assert_int_equal(s_tx_leaked, 0U);
+    return 0;
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -1046,5 +1105,5 @@ int main(void)
         cmocka_unit_test(iolink_case_test_type0_page_write_is_answered),
         cmocka_unit_test(iolink_case_test_plan_hit_without_tx_is_deferred),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, group_teardown);
 }

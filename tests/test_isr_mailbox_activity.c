@@ -18,7 +18,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/protocol.h"
 #include "test_case.h"
@@ -50,7 +50,7 @@ static void make_type0_frame(uint8_t mc, uint8_t frame[2])
 {
     frame[0] = mc;
     frame[1] = 0x00U; /* Type 0；校验和占用 bit 0-5。 */
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 2U));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, 2U));
 }
 
 static int run_all(void)

@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "iolinki/dll_ctx.h"
+#include "crc_oracle.h"
 
 static uint64_t g_now;
 
@@ -230,7 +231,7 @@ static void test_t_byte_rearm_and_cancel(void** state)
 }
 
 /* t_PD 保护窗口：窗口内到达的帧被丢弃并计入 t_pd_violations，
- * 窗口结束后同一帧不再因此被丢弃。 */
+ * 窗口结束后同一帧被正常处理。 */
 static void test_t_pd_window_drops_frames(void** state)
 {
     (void) state;
@@ -254,19 +255,26 @@ static void test_t_pd_window_drops_frames(void** state)
     assert_int_equal(ctx.main.t_pd_violations, 1U);
     assert_true(iolink_ring_is_empty(&ctx.main.shared.isr_frame_ring));
 
-    /* 窗口结束：同一帧不再被 T_PD 丢弃。 */
+    /* 窗口结束：送入一条校验和正确的 Type-0 页写（地址 0，命令
+     * PDOperate 0x98）。它必须被真正处理：状态保持 OPERATE、PD 标记为
+     * 有效并发出应答，而不只是"违规计数不变"。 */
     g_now += 500U;
+    uint8_t frame[3] = {IOLINK_MC_CHANNEL_PAGE, 0x00U, IOLINK_CMD_PROCESS_DATA_OPERATE};
+    frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | test_expected_checksum6(frame, sizeof(frame)));
     rec = (iolink_frame_rec_t*) iolink_ring_claim(&ctx.main.shared.isr_frame_ring);
     assert_non_null(rec);
-    rec->len = 3U;
+    rec->len = (uint8_t) sizeof(frame);
     rec->eager = 0U;
-    rec->data[0] = 0x40U;
-    rec->data[1] = 0x40U;
-    rec->data[2] = 0x00U;
+    (void) memcpy(rec->data, frame, sizeof(frame));
     iolink_ring_publish(&ctx.main.shared.isr_frame_ring);
 
+    ctx.main.pd_valid = false;
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.t_pd_violations, 1U);
+    assert_int_equal(ctx.main.shared.state, IOLINK_DLL_STATE_OPERATE);
+    assert_true(ctx.main.pd_valid);
+    assert_int_equal(ctx.main.last_valid_frame_ms, (uint32_t) (g_now / 1000U));
+    assert_int_equal(ctx.main.last_response_us, g_now);
 }
 
 /* 超过 2^32 ms（约 49.7 天）后，32 位毫秒时间戳回绕不得误触发。 */
@@ -297,6 +305,29 @@ static void test_millisecond_wrap(void** state)
     assert_false(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_MASTER_LOST));
 }
 
+/* 1 s 空闲诊断的 1 ms 边界：elapsed == 1000 差 1 ms，1001 立即到期。 */
+static void test_idle_deadline_boundary(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t ctx;
+    init_ctx(&ctx);
+    g_now = 4000000U;
+    ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
+    ctx.main.master_lost_cycles = 0U;
+
+    ctx.main.shared.last_activity_ms = (uint32_t) (g_now / 1000U) - 1000U;
+    iolink_dll_process(&ctx.main);
+    assert_int_equal(iolink_dll_timer_deadline(&ctx.main, IOLINK_TIMER_IDLE), g_now + 1000U);
+    assert_true(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
+    assert_int_equal(ctx.main.idle_timeouts, 0U);
+
+    g_now += 1000U;
+    iolink_dll_process(&ctx.main);
+    assert_int_equal(ctx.main.idle_timeouts, 1U);
+    assert_false(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -308,6 +339,7 @@ int main(void)
         cmocka_unit_test(test_t_byte_rearm_and_cancel),
         cmocka_unit_test(test_t_pd_window_drops_frames),
         cmocka_unit_test(test_millisecond_wrap),
+        cmocka_unit_test(test_idle_deadline_boundary),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

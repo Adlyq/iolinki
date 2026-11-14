@@ -20,7 +20,7 @@
 
 #include "iolinki/device.h"
 #include "iolinki/application.h"
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "test_helpers.h"
 
 static void test_pd_input_output(void** state)
@@ -47,7 +47,7 @@ static void test_pd_input_output(void** state)
        Table A.10：TYPE_2_2 携带一个 OD 八位字节且无 PD-out（A.10）。 */
     uint8_t frame[2] = {0x80, IOLINK_MSEQ_TYPE_2};
     const int frame_len = 2;
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, (size_t) frame_len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, (size_t) frame_len));
 
     for (int i = 0; i < frame_len; i++) {
         mock_phy_feed_byte(frame[i]);
@@ -65,5 +65,5 @@ int main(void)
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_pd_input_output),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

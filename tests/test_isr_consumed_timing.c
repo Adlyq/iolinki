@@ -23,7 +23,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/protocol.h"
 #include "test_case.h"
@@ -41,6 +41,10 @@ static size_t s_rx_i;
 static uint8_t s_tx_q[TX_MAX];
 static size_t s_tx_n;
 static uint8_t s_tx_active;
+/* 交付给用例的应答数与用例已经查看过的应答数：group teardown 要求相等。 */
+static uint64_t s_tx_delivered;
+static uint64_t s_tx_asserted;
+static uint64_t s_tx_leaked; /* 开始新捕获时仍未查看的交付 */
 
 static uint64_t test_time_us(void* user)
 {
@@ -91,6 +95,7 @@ static void test_tx_frame_sync(void)
     (void) memcpy(s_tx_q, s_tx_pending, s_tx_n);
     s_tx_pending = NULL;
     s_tx_pending_n = 0U;
+    s_tx_delivered++;
 }
 
 static int test_tx_frame(void* user, const uint8_t* data, size_t len)
@@ -118,6 +123,9 @@ static int test_tx_octet(void* user, uint8_t data)
 static void test_tx_done(void* user)
 {
     (void) user;
+    if (s_tx_active) {
+        s_tx_delivered++;
+    }
     s_tx_active = 0U;
 }
 #endif
@@ -157,7 +165,21 @@ static void make_frame(uint8_t mc, uint8_t type_bits, uint8_t* frame, size_t len
     for (size_t i = 2U; i < len; i++) {
         frame[i] = 0x00U;
     }
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, len));
+}
+
+/* 开始新一次捕获。上一帧若还没被查看，说明用例漏了断言：记入泄漏，
+ * group teardown 失败。 */
+static void s_tx_reset(void)
+{
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    test_tx_frame_sync();
+#endif
+    if (s_tx_asserted != s_tx_delivered) {
+        s_tx_leaked += s_tx_delivered - s_tx_asserted;
+        s_tx_asserted = s_tx_delivered;
+    }
+    s_tx_n = 0U;
 }
 
 static void feed(const uint8_t* frame, size_t len)
@@ -165,7 +187,7 @@ static void feed(const uint8_t* frame, size_t len)
     (void) memcpy(s_rx_q, frame, len);
     s_rx_n = len;
     s_rx_i = 0U;
-    s_tx_n = 0U;
+    s_tx_reset();
     s_tx_active = 0U;
 }
 
@@ -177,6 +199,16 @@ static void drain_tx(void)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     test_tx_frame_sync();
 #endif
+}
+
+/* 读取捕获长度即算一次查看：每次读取消费一次尚未查看的交付，
+ * group teardown 核对"交付 == 查看"。 */
+static size_t tx_observed_len(void)
+{
+    if (s_tx_asserted < s_tx_delivered) {
+        s_tx_asserted++;
+    }
+    return s_tx_n;
 }
 
 /**
@@ -193,7 +225,9 @@ static bool run_consumed_page_read(void)
     const uint8_t seq_before = s_dll.main.shared.isr_consumed_seq;
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    return (s_tx_n == 2U) && (s_dll.main.shared.isr_consumed_seq == (uint8_t) (seq_before + 1U)) &&
+    /* 读取捕获长度即算一次查看：teardown 要求每次交付都被查看过。 */
+    const size_t tx_len = tx_observed_len();
+    return (tx_len == 2U) && (s_dll.main.shared.isr_consumed_seq == (uint8_t) (seq_before + 1U)) &&
            iolink_ring_is_empty(&s_dll.main.shared.isr_frame_ring);
 }
 
@@ -316,10 +350,24 @@ static int run_all(void)
 
 IOLINK_TEST_RC(run_all)
 
+static int group_teardown(void** state)
+{
+    (void) state;
+    if ((s_tx_asserted != s_tx_delivered) || (s_tx_leaked != 0U)) {
+        print_message(
+            "test_isr_consumed_timing: %llu replies delivered, %llu asserted, %llu discarded\n",
+            (unsigned long long) s_tx_delivered, (unsigned long long) s_tx_asserted,
+            (unsigned long long) s_tx_leaked);
+    }
+    assert_int_equal(s_tx_asserted, s_tx_delivered);
+    assert_int_equal(s_tx_leaked, 0U);
+    return 0;
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(iolink_case_run_all),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, group_teardown);
 }

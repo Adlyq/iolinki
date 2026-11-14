@@ -37,17 +37,42 @@ static void prepare_ctx(iolink_dll_ctx_t* ctx)
 #endif
 }
 
+/* Counts a known event sequence into the counter slots and asserts the totals
+ * as literals: neither IOLINK_STAT_TOTAL nor IOLINK_STAT_ISR takes part in the
+ * expected value, so a wrong summation in dll.h cannot pass silently. */
 static void test_public_stats_mirror_the_totals(void** state)
 {
     (void) state;
     iolink_dll_ctx_t ctx;
     iolink_dll_stats_t stats;
 
-    prepare_ctx(&ctx);
+    (void) memset(&ctx, 0, sizeof(ctx));
+
+    /* Main-context events. */
+    ctx.main.shared.framing_errors = 3U;
+    ctx.main.shared.timeout_errors = 2U;
+    ctx.main.shared.isr_tx_dropped = 1U;
+
+#if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
+    /* ISR-side events in the ISR-owned counter set. */
+    ctx.main.shared.isr_stat.framing_errors = 2U;
+    ctx.main.shared.isr_stat.timeout_errors = 4U;
+    ctx.main.shared.isr_stat.isr_tx_dropped = 5U;
+#endif
+
     iolink_dll_get_stats(&ctx.main, &stats);
-    assert_int_equal(stats.framing_errors, IOLINK_STAT_TOTAL(&ctx.main, framing_errors));
-    assert_int_equal(stats.timeout_errors, IOLINK_STAT_TOTAL(&ctx.main, timeout_errors));
-    assert_int_equal(stats.isr_tx_dropped, IOLINK_STAT_TOTAL(&ctx.main, isr_tx_dropped));
+
+#if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
+    /* SPLIT: both sets are reported, summed. */
+    assert_int_equal(stats.framing_errors, 5U); /* 3 + 2 */
+    assert_int_equal(stats.timeout_errors, 6U); /* 2 + 4 */
+    assert_int_equal(stats.isr_tx_dropped, 6U); /* 1 + 5 */
+#else
+    /* SHARED: a single set; the ISR increments the same fields. */
+    assert_int_equal(stats.framing_errors, 3U);
+    assert_int_equal(stats.timeout_errors, 2U);
+    assert_int_equal(stats.isr_tx_dropped, 1U);
+#endif
 }
 
 static void test_stats_totals_per_mode(void** state)

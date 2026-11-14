@@ -158,6 +158,7 @@ static int write_object(uint16_t index, const uint8_t* data, uint8_t len, uint8_
 /* Table B.8：0x0004-0x000B 为保留索引；VendorID/DeviceID 位于 DPP1。 */
 static void test_vendor_device_id_indices_reserved(void** state)
 {
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0057");
     (void) state;
 
     const uint16_t reserved[] = {
@@ -563,5 +564,5 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_parameter_lock_blocks_vendor_write, setup, teardown),
         cmocka_unit_test_setup_teardown(test_identification_string_length_limits, setup, teardown),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

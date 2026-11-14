@@ -25,7 +25,7 @@
 #include "iolinki/device.h"
 #include "iolinki/dll.h"
 #include "iolinki/application.h"
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "test_helpers.h"
 
 #include "conformance_test.h"
@@ -62,7 +62,7 @@ static void feed_request(uint8_t* frame, size_t len, uint8_t type_bits)
 {
     /* CKT 类型位是参与校验和计算的报文的一部分。 */
     frame[1] = type_bits;
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, len));
     for (size_t i = 0U; i < len; i++) {
         mock_phy_feed_byte(frame[i]);
     }
@@ -108,7 +108,7 @@ static void run_fixed_case(const fixed_case_t* c)
     pos += c->od; /* 过程通道 OD 八位组读作零 */
     (void) memcpy(&expected[pos], pd_in, c->pd_in);
     pos += c->pd_in;
-    expected[pos] = iolink_checksum6(expected, pos);
+    expected[pos] = test_expected_checksum6(expected, pos);
     pos++;
 
     test_io_cycle(&dev.ctx);
@@ -123,7 +123,7 @@ static void run_fixed_case(const fixed_case_t* c)
 
     (void) memset(expected, 0, sizeof(expected));
     (void) memcpy(expected, pd_in, c->pd_in);
-    expected[c->pd_in] = iolink_checksum6(expected, c->pd_in);
+    expected[c->pd_in] = test_expected_checksum6(expected, c->pd_in);
 
     test_io_cycle(&dev.ctx);
     assert_tx_frame(expected, (size_t) c->pd_in + 1U);
@@ -183,5 +183,5 @@ int main(void)
         cmocka_unit_test(test_type_1_1_rejected),
         cmocka_unit_test(test_fixed_layout_mismatch_rejected),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

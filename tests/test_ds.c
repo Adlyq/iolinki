@@ -1011,6 +1011,29 @@ static void test_ds_flag_persist_callback(void** state)
     assert_int_equal(g_flag_persist_calls, 2);
 }
 
+/* DS_UPLOAD_FLAG 由应用持久化：库只通知变化，应用把保存的值写回新上下文。 */
+static void test_ds_0374_upload_flag_non_volatile(void** state)
+{
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0374");
+    (void) state;
+    iolink_ds_ctx_t ds;
+    iolink_ds_init(&ds);
+    iolink_ds_set_flag_persist(&ds, flag_persist_cb, NULL);
+    g_flag_persist_calls = 0;
+    g_flag_persist_last = false;
+
+    iolink_ds_request_upload(&ds);
+    assert_int_equal(g_flag_persist_calls, 1);
+    assert_true(g_flag_persist_last);
+
+    /* 掉电：库不拥有 NVM，应用把保存的值写回新上下文。 */
+    iolink_ds_ctx_t restored;
+    iolink_ds_init(&restored);
+    assert_int_equal(iolink_ds_state_property(&restored) & 0x80U, 0U);
+    restored.ds_upload_flag = g_flag_persist_last;
+    assert_int_equal(iolink_ds_state_property(&restored) & 0x80U, 0x80U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -1034,6 +1057,7 @@ int main(void)
         cmocka_unit_test(test_ds_0080_local_change_upload),
         cmocka_unit_test(test_ds_0081_upload_abort_points),
         cmocka_unit_test(test_ds_flag_persist_callback),
+        cmocka_unit_test(test_ds_0374_upload_flag_non_volatile),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

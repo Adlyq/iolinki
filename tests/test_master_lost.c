@@ -172,7 +172,7 @@ static void test_isr_frame_counts_as_master_activity(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 
     /* 一次周期性 Type-2 WRITE，仅由 ISR 完成组帧与应答。 */
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, sizeof(frame)));
     mock_phy_feed_byte(frame[0]);
     mock_phy_feed_byte(frame[1]);
     mock_phy_feed_byte(frame[2]);
@@ -206,5 +206,5 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isr_frame_counts_as_master_activity, test_setup,
                                         test_teardown),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

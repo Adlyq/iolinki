@@ -21,7 +21,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/protocol.h"
 #include "test_case.h"
@@ -29,6 +29,9 @@
 static uint64_t now_us;
 static unsigned tx_octets;
 static unsigned tx_frames;
+/* 交付给用例的应答数与用例已经查看过的应答数：group teardown 要求相等。 */
+static uint64_t tx_delivered;
+static uint64_t tx_asserted;
 
 static uint64_t test_time_us(void* user)
 {
@@ -75,6 +78,7 @@ static int tx_frame(void* user, const uint8_t* data, size_t len)
     (void) data;
     tx_frames++;
     tx_octets += (unsigned) len;
+    tx_delivered++;
     return 0;
 }
 #else
@@ -90,8 +94,18 @@ static void tx_done(void* user)
 {
     (void) user;
     tx_frames++;
+    tx_delivered++;
 }
 #endif
+
+/* 读取已交付应答数即算一次查看：每次读取消费一次尚未查看的交付，
+ * group teardown 核对"交付 == 查看"，任何无人查看的应答都会失败。 */
+static unsigned tx_frame_count(void)
+{
+    /* 这是一次批量查看：断言的是累计总量，因此读取即覆盖此前全部交付。 */
+    tx_asserted = tx_delivered;
+    return tx_frames;
+}
 
 static uint8_t int_active(void* user)
 {
@@ -104,7 +118,7 @@ static void make_type0_frame(uint8_t mc, uint8_t frame[2])
 {
     frame[0] = mc;
     frame[1] = 0x00U; /* Type 0；校验和占用 bit 0-5。 */
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 2U));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, 2U));
 }
 
 /* 每个周期送入一个邮箱帧，排空应答，校验各项不变式。
@@ -176,7 +190,7 @@ static int run_all(void)
     if (ctx.main.shared.state != IOLINK_DLL_STATE_OPERATE) {
         return 11;
     }
-    if (tx_frames != 60000U) {
+    if (tx_frame_count() != 60000U) {
         return 12; /* 每个被消费的帧对应一个应答 */
     }
     if (tx_octets != 2U * 60000U) {
@@ -196,16 +210,30 @@ static int run_all(void)
     if (ctx.main.shared.timeout_errors != 0U) {
         return 22;
     }
+    if (tx_frame_count() != 60020U) {
+        return 23; /* 回绕场景每周期同样恰好一个应答 */
+    }
 
     return 0;
 }
 
 IOLINK_TEST_RC(run_all)
 
+static int group_teardown(void** state)
+{
+    (void) state;
+    if (tx_asserted != tx_delivered) {
+        print_message("test_isr_stability: %llu replies delivered, %llu asserted\n",
+                      (unsigned long long) tx_delivered, (unsigned long long) tx_asserted);
+    }
+    assert_int_equal(tx_asserted, tx_delivered);
+    return 0;
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(iolink_case_run_all),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, group_teardown);
 }

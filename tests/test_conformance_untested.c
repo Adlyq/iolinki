@@ -203,6 +203,7 @@ static void test_0063_0064_length_errors_preserve_config1(void** state)
 static void test_0123_application_tag_overlong_preserves_value(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0123");
+    IOLINK_CONFORMANCE_CASE("SDCI_TC_0122");
     (void) state;
     const char* nvm = unique_nvm_path("0123");
     (void) remove(nvm);
@@ -749,5 +750,5 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_0318_back_to_box_sequence, test_setup, test_teardown),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

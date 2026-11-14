@@ -1475,5 +1475,5 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_0084_download_abort_points, test_setup, test_teardown),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

@@ -292,6 +292,51 @@ static void test_isdu_wire_write_count_wrap(void** state)
     assert_memory_equal(readback, &req[5], 11U);
 }
 
+/* Table B.8 / B.2.16：ApplicationSpecificTag (0x0018) 上限 32 字节。
+ * 33 字节的写在线上以 VAL_LEN_OVRRUN 拒绝，且不得写入任何字节。 */
+static void test_isdu_wire_application_tag_overlong(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    wire_device_info_init();
+    test_env_reset_params(&g_test_env);
+    iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
+
+    /* 写 16 位索引 + ExtLength + 33 个数据八位组：共 39 个八位组。 */
+    uint8_t req[39];
+    req[0] = 0x31U;
+    req[1] = (uint8_t) sizeof(req);
+    req[2] = (uint8_t) (IOLINK_IDX_APPLICATION_TAG >> 8);
+    req[3] = (uint8_t) (IOLINK_IDX_APPLICATION_TAG & 0xFFU);
+    req[4] = 0x00U; /* 子索引 0。 */
+    for (size_t i = 0U; i < 33U; i++) {
+        req[5U + i] = (uint8_t) ('A' + (i % 26U));
+    }
+    req[38] = chkpdu(req, 38U);
+    assert_int_equal(chkpdu(req, sizeof(req)), 0U);
+
+    uint8_t before[40];
+    const iolink_result_t before_result = test_params_read(
+        test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, before, sizeof(before));
+    assert_int_equal(before_result.code, 0);
+
+    wire_write_request(&ctx, req, sizeof(req));
+
+    const uint8_t expected[4] = {0x44U, 0x80U, IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN, 0xF7U};
+    uint8_t resp[8];
+    assert_int_equal(wire_read_response(&ctx, resp, sizeof(resp)), sizeof(expected));
+    assert_memory_equal(resp, expected, sizeof(expected));
+
+    /* 原值未被覆盖：读回的仍是写入前的标签。 */
+    uint8_t after[40];
+    const iolink_result_t after_result = test_params_read(
+        test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U, after, sizeof(after));
+    assert_int_equal(after_result.code, 0);
+    assert_int_equal(after_result.len, before_result.len);
+    assert_memory_equal(after, before, before_result.len);
+}
+
 /* 重复的 FlowCTRL 重发上一条报文：其载荷被忽略。 */
 static void test_isdu_wire_repeated_flowctrl(void** state)
 {
@@ -573,8 +618,10 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_wire_abort, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_write_abort, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_write_count_wrap, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_wire_application_tag_overlong, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_read_count_wrap, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_wire_extlength_read, test_setup, test_teardown),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

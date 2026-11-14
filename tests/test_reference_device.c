@@ -5,7 +5,7 @@
 #include <cmocka.h>
 #include "reference_device.h"
 #include "test_helpers.h"
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "iolinki/protocol.h"
 
 static void test_reference_device_payload(void** state)
@@ -21,7 +21,7 @@ static void test_reference_device_payload(void** state)
     /* TYPE_2 过程通道 READ：MC + CKT + PD-out（OD 宽度 2 不参与读请求）。
        请求长度由配置决定，整帧传输下多送字节会被判为成帧错误。 */
     uint8_t frame[3] = {0x80, IOLINK_MSEQ_TYPE_2, 1};
-    frame[1] |= iolink_checksum6(frame, sizeof(frame));
+    frame[1] |= test_expected_checksum6(frame, sizeof(frame));
     for (size_t i = 0; i < sizeof(frame); i++) {
         mock_phy_feed_byte(frame[i]);
     }
@@ -56,5 +56,5 @@ int main(void)
         cmocka_unit_test(test_reference_device_payload),
         cmocka_unit_test(test_reference_device_rejects_missing_transport),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

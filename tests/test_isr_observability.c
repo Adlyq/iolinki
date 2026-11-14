@@ -17,7 +17,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
@@ -40,6 +40,13 @@ static size_t rx_n;
 static size_t rx_i;
 static uint8_t tx_q[TX_MAX];
 static size_t tx_n;
+/* 交付给用例的应答数与用例已经查看过的应答数：group teardown 要求相等。 */
+static uint64_t tx_delivered;
+static uint64_t tx_asserted;
+static uint64_t tx_leaked; /* 开始新捕获时仍未查看的交付 */
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+static uint8_t tx_active; /* 一个应答正在发送（tx_done 交付） */
+#endif
 static uint8_t chk_pending;
 static unsigned timer_a_starts;
 static unsigned timer_a_stops;
@@ -95,6 +102,7 @@ static void tx_frame_sync(void)
     (void) memcpy(tx_q, tx_pending, tx_n);
     tx_pending = NULL;
     tx_pending_n = 0U;
+    tx_delivered++;
 }
 
 static int tx_frame(void* user, const uint8_t* data, size_t len)
@@ -109,6 +117,7 @@ static int tx_frame(void* user, const uint8_t* data, size_t len)
 static int tx_octet(void* user, uint8_t data)
 {
     (void) user;
+    tx_active = 1U;
     if (tx_n < sizeof(tx_q)) {
         tx_q[tx_n++] = data;
     }
@@ -119,8 +128,36 @@ static void tx_done(void* user)
 {
     (void) user;
     tx_done_calls++;
+    if (tx_active != 0U) {
+        tx_active = 0U;
+        tx_delivered++;
+    }
 }
 #endif
+
+/* 开始新一次捕获。上一帧若还没被查看，说明用例漏了断言：记入泄漏，
+ * group teardown 失败。 */
+static void tx_reset(void)
+{
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    tx_frame_sync();
+#endif
+    if (tx_asserted != tx_delivered) {
+        tx_leaked += tx_delivered - tx_asserted;
+        tx_asserted = tx_delivered;
+    }
+    tx_n = 0U;
+}
+
+/* 读取捕获长度即算一次查看：每次读取消费一次尚未查看的交付，
+ * group teardown 核对"交付 == 查看"。 */
+static size_t tx_observed_len(void)
+{
+    if (tx_asserted < tx_delivered) {
+        tx_asserted++;
+    }
+    return tx_n;
+}
 
 static void timer_a_start(void* user)
 {
@@ -184,7 +221,7 @@ static void make_type2_process_read(uint8_t* frame, size_t len)
     for (size_t i = 2U; i < len; i++) {
         frame[i] = 0x00U;
     }
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, len));
 }
 
 static iolink_phy_api_t g_phy;
@@ -222,7 +259,10 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     now_us = 1000000U;
     rx_n = 0U;
     rx_i = 0U;
-    tx_n = 0U;
+    tx_reset();
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+    tx_active = 0U;
+#endif
 }
 
 static void exchange(iolink_dll_ctx_t* dll, const uint8_t* frame, size_t len)
@@ -250,7 +290,7 @@ static void make_isdu_write(const uint8_t mc, uint8_t od, uint8_t* frame, size_t
     for (size_t i = 3U; i < len; i++) {
         frame[i] = 0x00U;
     }
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, len));
 }
 
 static void make_type0(uint8_t mc, uint8_t* frame, size_t len)
@@ -260,7 +300,7 @@ static void make_type0(uint8_t mc, uint8_t* frame, size_t len)
     for (size_t i = 2U; i < len; i++) {
         frame[i] = 0x00U;
     }
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, len));
 }
 
 static void init_type0_ctx(iolink_dll_ctx_t* dll)
@@ -299,7 +339,10 @@ static void init_type0_ctx(iolink_dll_ctx_t* dll)
     rx_n = 0U;
     rx_i = 0U;
     chk_pending = 0U;
-    tx_n = 0U;
+    tx_reset();
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+    tx_active = 0U;
+#endif
     iolink_dll_process(&dll->main); /* 同步 ISDU 快照 */
 }
 
@@ -324,7 +367,7 @@ static int test_type0_isdu_read_fast_path(void)
     tx_frame_sync();
 #endif
 
-    if ((tx_n != 2U) || (tx_q[0] != 0x11U)) {
+    if ((tx_observed_len() != 2U) || (tx_q[0] != 0x11U)) {
         return 2;
     }
     if (!iolink_ring_is_empty(&dll.main.shared.isr_frame_ring)) {
@@ -343,7 +386,7 @@ static int test_0053_reserved_flowctrl_no_service(void)
         uint8_t frame[2];
         make_type0((uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_MC_RW_MASK | fc), frame,
                    sizeof(frame));
-        tx_n = 0U;
+        tx_reset();
         feed_chk(frame, sizeof(frame));
         iolink_dll_process_isr(&dll.main);
         while (dll.main.shared.isr_tx_active != 0U) {
@@ -352,7 +395,7 @@ static int test_0053_reserved_flowctrl_no_service(void)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
         tx_frame_sync();
 #endif
-        if ((tx_n != 2U) || (tx_q[0] != 0x00U)) {
+        if ((tx_observed_len() != 2U) || (tx_q[0] != 0x00U)) {
             return (int) (fc - 0x10U);
         }
         /* ISR 只回 0x00；传输层复位经一次性标志交给主泵。 */
@@ -373,7 +416,7 @@ static uint8_t type0_isdu_exchange(iolink_dll_ctx_t* dll, uint8_t fc)
 {
     uint8_t frame[2];
     make_type0((uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_MC_RW_MASK | fc), frame, sizeof(frame));
-    tx_n = 0U;
+    tx_reset();
     feed_chk(frame, sizeof(frame));
     iolink_dll_process_isr(&dll->main);
     while (dll->main.shared.isr_tx_active != 0U) {
@@ -391,6 +434,8 @@ static uint8_t type0_isdu_exchange(iolink_dll_ctx_t* dll, uint8_t fc)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     tx_frame_sync();
 #endif
+    /* 返回首字节即为查看该应答：把交付标记为已断言。 */
+    (void) tx_observed_len();
     return tx_q[0];
 }
 
@@ -490,7 +535,7 @@ static int test_type0_page_read_fast_path(void)
 #endif
 
     const uint8_t expected = iolink_isdu_direct_param_page1_octet(&dll.main.shared.isdu, 0U);
-    if ((tx_n != 2U) || (tx_q[0] != expected)) {
+    if ((tx_observed_len() != 2U) || (tx_q[0] != expected)) {
         return 1;
     }
     return 0;
@@ -506,7 +551,7 @@ static int test_type0_isdu_write_fast_path(void)
     frame[0] = (uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START);
     frame[1] = IOLINK_MSEQ_TYPE_0;
     frame[2] = 0x14U; /* ISDU 服务八位组 */
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, sizeof(frame)));
     feed_chk(frame, sizeof(frame));
     iolink_dll_process_isr(&dll.main);
     while (dll.main.shared.isr_tx_active != 0U) {
@@ -516,7 +561,7 @@ static int test_type0_isdu_write_fast_path(void)
     tx_frame_sync();
 #endif
 
-    if (tx_n != 1U) {
+    if (tx_observed_len() != 1U) {
         return 1; /* 仅 CKS */
     }
     /* ISR 直接在 shared.isdu 中累计写请求（ST 的 StackBaseOdWrite 分工）：
@@ -576,7 +621,7 @@ static int test_mailbox_drop(void)
     }
     /* 即时应答不再依赖邮箱：邮箱满只会丢弃主泵的副本，
      * 不得抑制应答。 */
-    if (tx_n != 2U) {
+    if (tx_observed_len() != 2U) {
         return 2;
     }
     return 0;
@@ -598,7 +643,7 @@ static int test_eager_reject(void)
     if (dll.isr.isr_eager_rejects != 1U) {
         return 1;
     }
-    if (tx_n != 0U) {
+    if (tx_observed_len() != 0U) {
         return 2; /* 损坏的帧不会得到即时应答 */
     }
     if (iolink_ring_count(&dll.main.shared.isr_frame_ring) != 1U) {
@@ -635,7 +680,7 @@ static int test_valid_eager(void)
         return 2;
     }
     /* 过程数据 READ 应答：OD 占位 + CKS。 */
-    if (tx_n != 2U) {
+    if (tx_observed_len() != 2U) {
         return 3;
     }
     return 0;
@@ -681,8 +726,23 @@ static int test_isdu_write_consumed_by_isr(void)
 
     for (uint8_t i = 0U; i < 4U; i++) {
         const uint8_t mc = (uint8_t) (IOLINK_MC_CHANNEL_ISDU | flowctrl[i]);
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+        /* BYTE 传输按八位组累积，因此比较增量。 */
+        const size_t len_before = tx_n;
+#endif
+
         make_isdu_write(mc, isdu_octets[i], frame, sizeof(frame));
         exchange(&dll, frame, sizeof(frame));
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+        const size_t ack_len = tx_observed_len() - len_before;
+#else
+        /* FRAME 传输每次交付覆盖捕获缓冲区。 */
+        const size_t ack_len = tx_observed_len();
+#endif
+        /* 每个写段都被 ISR 以一个 CKS 八位组确认。 */
+        if (ack_len != 1U) {
+            return 5;
+        }
     }
 
     /* ISR 恰好缓冲了每个八位组一次（主泵中不会重复追加）。 */
@@ -713,7 +773,7 @@ static int test_type0_commands_fast_path(void)
 
     /* 迁移命令（PREOP -> ESTAB_COM），无应答。 */
     make_type0(IOLINK_MC_TRANSITION_COMMAND, frame, 2U);
-    tx_n = 0U;
+    tx_reset();
     feed_chk(frame, 2U);
     iolink_dll_process_isr(&dll.main);
     while (dll.main.shared.isr_tx_active != 0U) {
@@ -722,7 +782,7 @@ static int test_type0_commands_fast_path(void)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     tx_frame_sync();
 #endif
-    if ((dll.main.shared.state != IOLINK_DLL_STATE_ESTAB_COM) || (tx_n != 0U)) {
+    if ((dll.main.shared.state != IOLINK_DLL_STATE_ESTAB_COM) || (tx_observed_len() != 0U)) {
         return 1;
     }
 
@@ -732,8 +792,8 @@ static int test_type0_commands_fast_path(void)
     frame[0] = IOLINK_MC_CHANNEL_PAGE;
     frame[1] = IOLINK_MSEQ_TYPE_0;
     frame[2] = IOLINK_CMD_DEVICE_OPERATE;
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 3U));
-    tx_n = 0U;
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, 3U));
+    tx_reset();
     feed_chk(frame, 3U);
     iolink_dll_process_isr(&dll.main);
     while (dll.main.shared.isr_tx_active != 0U) {
@@ -742,7 +802,7 @@ static int test_type0_commands_fast_path(void)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     tx_frame_sync();
 #endif
-    if ((dll.main.shared.state != IOLINK_DLL_STATE_ESTAB_COM) || (tx_n != 1U)) {
+    if ((dll.main.shared.state != IOLINK_DLL_STATE_ESTAB_COM) || (tx_observed_len() != 1U)) {
         return 2;
     }
 
@@ -752,8 +812,8 @@ static int test_type0_commands_fast_path(void)
     iolink_dll_publish_reply_plans(&dll.main);
     frame[2] = IOLINK_CMD_FALLBACK;
     frame[1] = IOLINK_MSEQ_TYPE_0;
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 3U));
-    tx_n = 0U;
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, 3U));
+    tx_reset();
     dll_timer_cancel(&dll.main, IOLINK_TIMER_T_FBD);
     feed_chk(frame, 3U);
     iolink_dll_process_isr(&dll.main);
@@ -763,7 +823,7 @@ static int test_type0_commands_fast_path(void)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     tx_frame_sync();
 #endif
-    if ((dll.main.shared.state != IOLINK_DLL_STATE_FALLBACK) || (tx_n != 1U) ||
+    if ((dll.main.shared.state != IOLINK_DLL_STATE_FALLBACK) || (tx_observed_len() != 1U) ||
         (dll.main.shared.isr_fallback_pending == 0U) ||
         iolink_dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD)) {
         return 3;
@@ -778,7 +838,7 @@ static int test_type0_commands_fast_path(void)
     dll.main.shared.state = IOLINK_DLL_STATE_STARTUP;
     iolink_dll_publish_reply_plans(&dll.main);
     make_type0((uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), frame, 2U);
-    tx_n = 0U;
+    tx_reset();
     feed_chk(frame, 2U);
     iolink_dll_process_isr(&dll.main);
     while (dll.main.shared.isr_tx_active != 0U) {
@@ -787,7 +847,7 @@ static int test_type0_commands_fast_path(void)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     tx_frame_sync();
 #endif
-    if ((dll.main.shared.state != IOLINK_DLL_STATE_PREOPERATE) || (tx_n != 2U)) {
+    if ((dll.main.shared.state != IOLINK_DLL_STATE_PREOPERATE) || (tx_observed_len() != 2U)) {
         return 4;
     }
     return 0;
@@ -805,8 +865,8 @@ static int test_fallback_clear_is_staged(void)
     frame[0] = IOLINK_MC_CHANNEL_PAGE;
     frame[1] = IOLINK_MSEQ_TYPE_0;
     frame[2] = IOLINK_CMD_DEVICE_OPERATE;
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, 3U));
-    tx_n = 0U;
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, 3U));
+    tx_reset();
     feed_chk(frame, 3U);
     iolink_dll_process_isr(&dll.main);
 
@@ -818,6 +878,12 @@ static int test_fallback_clear_is_staged(void)
     if (iolink_dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD) ||
         (dll.main.fallback_clear_request != 0U)) {
         return 2; /* 主泵未实施已暂存的清除 */
+    }
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    tx_frame_sync();
+#endif
+    if (tx_observed_len() != 1U) {
+        return 3; /* ISR 仍以仅 CKS 确认该命令 */
     }
     return 0;
 }
@@ -844,6 +910,9 @@ static int test_timer_interlock(void)
     tx_frame_sync();
 #endif
 
+    if (tx_observed_len() != 2U) {
+        return 2; /* ISDU 读应答：第一个响应八位组 + CKS */
+    }
     if ((timer_a_starts == 0U) ||
         (timer_a_stops == 0U)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
@@ -986,6 +1055,20 @@ IOLINK_TEST_RC(test_byte_gap_incomplete)
 #endif
 IOLINK_TEST_RC(test_fallback_clear_is_staged)
 
+static int group_teardown(void** state)
+{
+    (void) state;
+    if ((tx_asserted != tx_delivered) || (tx_leaked != 0U)) {
+        print_message(
+            "test_isr_observability: %llu replies delivered, %llu asserted, %llu discarded\n",
+            (unsigned long long) tx_delivered, (unsigned long long) tx_asserted,
+            (unsigned long long) tx_leaked);
+    }
+    assert_int_equal(tx_asserted, tx_delivered);
+    assert_int_equal(tx_leaked, 0U);
+    return 0;
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -1011,5 +1094,5 @@ int main(void)
 #endif
         cmocka_unit_test(iolink_case_test_fallback_clear_is_staged),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, group_teardown);
 }

@@ -20,7 +20,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/iolink.h"
 #include "iolinki/isdu.h"
@@ -43,6 +43,10 @@ static size_t rx_n;
 static size_t rx_i;
 static uint8_t tx_q[TX_MAX];
 static size_t tx_n;
+/* 交付给用例的应答数与用例已经查看过的应答数：group teardown 要求相等。 */
+static uint64_t tx_delivered;
+static uint64_t tx_asserted;
+static uint64_t tx_leaked; /* 开始新捕获时仍未查看的交付 */
 static unsigned request_calls;
 static uint8_t chk_pending;
 
@@ -94,6 +98,7 @@ static void tx_frame_sync(void)
     (void) memcpy(tx_q, tx_pending, tx_n);
     tx_pending = NULL;
     tx_pending_n = 0U;
+    tx_delivered++;
 }
 
 static int tx_frame(void* user, const uint8_t* data, size_t len)
@@ -117,8 +122,33 @@ static int tx_octet(void* user, uint8_t data)
 static void tx_done(void* user)
 {
     (void) user;
+    tx_delivered++;
 }
 #endif
+
+/* 开始新一次捕获。上一帧若还没被查看，说明用例漏了断言：记入泄漏，
+ * group teardown 失败。 */
+static void tx_reset(void)
+{
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    tx_frame_sync();
+#endif
+    if (tx_asserted != tx_delivered) {
+        tx_leaked += tx_delivered - tx_asserted;
+        tx_asserted = tx_delivered;
+    }
+    tx_n = 0U;
+}
+
+/* 读取捕获长度即算一次查看：每次读取消费一次尚未查看的交付，
+ * group teardown 核对"交付 == 查看"。 */
+static size_t tx_observed_len(void)
+{
+    if (tx_asserted < tx_delivered) {
+        tx_asserted++;
+    }
+    return tx_n;
+}
 
 static uint8_t int_active(void* user)
 {
@@ -164,7 +194,7 @@ static void make_frame(uint8_t mc, uint8_t type_bits, uint8_t* frame, size_t len
     for (size_t i = 2U; i < len; i++) {
         frame[i] = 0x00U;
     }
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, len));
 }
 
 /* 让一个请求走完 ISR，排空应答，然后让主泵
@@ -224,9 +254,9 @@ static int test_eager_isdu_snapshot(void)
     /* START 读：MC = RW | ISDU | FlowCTRL START = 0xF0。 */
     uint8_t frame[4];
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
-    tx_n = 0U;
+    tx_reset();
     exchange(&dll, frame, sizeof(frame), 0U);
-    if (tx_n != 3U) {
+    if (tx_observed_len() != 3U) {
         return 2; /* 两个 OD 八位组 + CKS */
     }
     if ((tx_q[0] != 0xD4U) || (tx_q[1] != 0x12U)) {
@@ -235,9 +265,9 @@ static int test_eager_isdu_snapshot(void)
 
     /* COUNT 1 读：MC = RW | ISDU | COUNT 1 = 0xE1 -> 接下来的两个八位组。 */
     make_frame(0xE1U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
-    tx_n = 0U;
+    tx_reset();
     exchange(&dll, frame, sizeof(frame), 0U);
-    if (tx_n != 3U) {
+    if (tx_observed_len() != 3U) {
         return 4;
     }
     if ((tx_q[0] != 0x34U) || (tx_q[1] != 0xF2U)) {
@@ -246,35 +276,35 @@ static int test_eager_isdu_snapshot(void)
 
     /* 重复的 COUNT 会重发前一段（相同的两个八位组）。 */
     make_frame(0xE1U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
-    tx_n = 0U;
+    tx_reset();
     exchange(&dll, frame, sizeof(frame), 0U);
-    if ((tx_n != 3U) || (tx_q[0] != 0x34U) || (tx_q[1] != 0xF2U)) {
+    if ((tx_observed_len() != 3U) || (tx_q[0] != 0x34U) || (tx_q[1] != 0xF2U)) {
         return 8;
     }
 
     /* 乱序的 COUNT 属于分段错误 -> No Service（0x00）。 */
     make_frame(0xE3U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
-    tx_n = 0U;
+    tx_reset();
     exchange(&dll, frame, sizeof(frame), 0U);
-    if ((tx_n < 1U) || (tx_q[0] != 0x00U)) {
+    if ((tx_observed_len() < 1U) || (tx_q[0] != 0x00U)) {
         return 9;
     }
 
     /* Busy START。 */
     dll.main.shared.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 1U, 0U);
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
-    tx_n = 0U;
+    tx_reset();
     exchange(&dll, frame, sizeof(frame), 0U);
-    if ((tx_n < 1U) || (tx_q[0] != 0x01U)) {
+    if ((tx_observed_len() < 1U) || (tx_q[0] != 0x01U)) {
         return 6;
     }
 
     /* No Service START（没有已暂存的响应）。 */
     dll.main.shared.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 0U, 0U);
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
-    tx_n = 0U;
+    tx_reset();
     exchange(&dll, frame, sizeof(frame), 0U);
-    if ((tx_n < 1U) || (tx_q[0] != 0x00U)) {
+    if ((tx_observed_len() < 1U) || (tx_q[0] != 0x00U)) {
         return 7;
     }
 
@@ -319,8 +349,8 @@ static int test_request_service_staging(void)
     make_frame(IOLINK_MC_CHANNEL_PAGE, IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));
     frame[2] = IOLINK_CMD_DEVICE_PREOPERATE;
     frame[1] = IOLINK_MSEQ_TYPE_0; /* 重算 CKS 前必须清掉上一次的类型/校验位 */
-    frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | iolink_checksum6(frame, sizeof(frame)));
-    tx_n = 0U;
+    frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | test_expected_checksum6(frame, sizeof(frame)));
+    tx_reset();
     request_calls = 0U;
     feed(frame, sizeof(frame), 1U);
     iolink_dll_process_isr(&dll.main); /* DEFER：不进 ISR 应答路径 */
@@ -332,7 +362,7 @@ static int test_request_service_staging(void)
         return 10;
     }
     drain_tx(&dll);
-    if (tx_n < 1U) {
+    if (tx_observed_len() < 1U) {
         return 11; /* 确认：仅 CKS */
     }
 
@@ -374,13 +404,13 @@ static int test_type0_diagnosis_read_isr(void)
 
     uint8_t frame[2];
     make_frame(0xC0U, IOLINK_MSEQ_TYPE_0, frame, sizeof(frame));
-    tx_n = 0U;
+    tx_reset();
     request_calls = 0U;
     exchange(&dll, frame, sizeof(frame), 1U);
     if (request_calls != 0U) {
         return 12;
     }
-    if (tx_n != 2U) {
+    if (tx_observed_len() != 2U) {
         return 13; /* Type-0 READ 应答：OD + CKS */
     }
     return 0;
@@ -390,6 +420,20 @@ IOLINK_TEST_RC(test_eager_isdu_snapshot)
 IOLINK_TEST_RC(test_type0_diagnosis_read_isr)
 IOLINK_TEST_RC(test_request_service_staging)
 
+static int group_teardown(void** state)
+{
+    (void) state;
+    if ((tx_asserted != tx_delivered) || (tx_leaked != 0U)) {
+        print_message(
+            "test_isr_isdu_snapshot: %llu replies delivered, %llu asserted, %llu discarded\n",
+            (unsigned long long) tx_delivered, (unsigned long long) tx_asserted,
+            (unsigned long long) tx_leaked);
+    }
+    assert_int_equal(tx_asserted, tx_delivered);
+    assert_int_equal(tx_leaked, 0U);
+    return 0;
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -397,5 +441,5 @@ int main(void)
         cmocka_unit_test(iolink_case_test_type0_diagnosis_read_isr),
         cmocka_unit_test(iolink_case_test_request_service_staging),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, group_teardown);
 }

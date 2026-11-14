@@ -402,9 +402,8 @@ static int group_setup(void** state)
 
 static int group_teardown(void** state)
 {
-    (void) state;
     test_clock_uninstall();
-    return 0;
+    return test_tx_all_asserted(state);
 }
 
 int main(void)

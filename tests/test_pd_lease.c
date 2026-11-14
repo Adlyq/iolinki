@@ -75,7 +75,7 @@ int main(void)
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_lease_recovery_and_skip_counter),
     };
-    const int rc = cmocka_run_group_tests(tests, NULL, NULL);
+    const int rc = cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     /* 本文件只有两缓冲区 TX BYTE 才可达的场景；让 ctest 报告 Skipped
      * （CMake 侧 SKIP_RETURN_CODE 77）而不是一个什么都没断言的 Passed。 */

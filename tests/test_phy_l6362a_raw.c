@@ -714,6 +714,8 @@ static void test_ol_irq_during_mode_change(void** state)
 static void test_platform_hooks(void** state)
 {
     (void) state;
+    uint32_t i;
+
     mock_stm32g0_reset();
 
     /* 由 SysTick 派生的微秒时基。 */
@@ -728,23 +730,44 @@ static void test_platform_hooks(void** state)
     assert_int_equal(phy_l6362a_time_us(), 5000ULL);
     assert_int_equal(phy_l6362a_time_ms(), 5U);
 
-    /* 临界区可嵌套，并在深度归零时恢复保存的 PRIMASK。 */
-    mock_primask = 0U;
-    iolink_critical_enter();
-    assert_int_equal(mock_primask, 1U);
-    iolink_critical_enter();
-    mock_primask = 0U;
-    iolink_critical_exit();
-    assert_int_equal(mock_primask, 0U);
-    iolink_critical_exit();
-    assert_int_equal(mock_primask, 0U);
+    /* s_crit_depth 是驱动 static，mock_stm32g0_reset() 不归零：先平衡到 0。 */
+    for (i = 0U; i < 8U; i++) {
+        mock_primask = 1U;
+        iolink_critical_enter();
+        mock_primask = 0U;
+        iolink_critical_exit();
+        if (mock_primask == 1U) {
+            break;
+        }
+        iolink_critical_exit();
+    }
 
+    /* 最外层退出必须写回进入时保存的 PRIMASK，而非退出前的值。 */
     mock_primask = 1U;
     iolink_critical_enter();
+    assert_int_equal(mock_primask, 1U);
+    mock_primask = 0U;
     iolink_critical_exit();
     assert_int_equal(mock_primask, 1U);
-    iolink_critical_exit(); /* 不平衡的退出不得下溢 */
+
+    /* 嵌套：只有最外层退出恢复，内层退出保持屏蔽。 */
+    mock_primask = 1U;
+    iolink_critical_enter();
+    iolink_critical_enter();
+    mock_primask = 0U;
+    iolink_critical_exit();
+    assert_int_equal(mock_primask, 0U);
+    iolink_critical_exit();
     assert_int_equal(mock_primask, 1U);
+
+    /* 不平衡的退出不得下溢，其后的配对仍保存并恢复。 */
+    iolink_critical_exit();
+    assert_int_equal(mock_primask, 1U);
+    mock_primask = 0U;
+    iolink_critical_enter();
+    mock_primask = 1U;
+    iolink_critical_exit();
+    assert_int_equal(mock_primask, 0U);
 }
 
 int main(void)

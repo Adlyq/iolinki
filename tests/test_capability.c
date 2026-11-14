@@ -271,5 +271,5 @@ int main(void)
         cmocka_unit_test(test_capability_override_invalidates_plans),
         cmocka_unit_test(test_require_isr_tx_needs_request_service),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

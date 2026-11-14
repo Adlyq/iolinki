@@ -19,8 +19,8 @@
 #include "iolinki/iolink.h"
 #include "iolinki/device.h"
 #include "iolinki/phy.h"
-#include "iolinki/crc.h"
 #include "iolinki/protocol.h"
+#include "crc_oracle.h"
 
 /* 测试缓冲区 */
 extern uint8_t g_tx_buf[1024];
@@ -42,7 +42,7 @@ void test_clock_uninstall(void);
 static inline uint8_t test_frame_checksum(uint8_t octet)
 {
     uint8_t frame[2] = {octet, 0x00U};
-    return iolink_checksum6(frame, 2U);
+    return test_expected_checksum6(frame, 2U);
 }
 
 /* mock 实现（导出以供 CMocka 符号使用） */
@@ -71,6 +71,10 @@ const uint8_t* mock_phy_tx(size_t* len);
 void assert_tx_frame(const uint8_t* expected, size_t len);
 void assert_tx_len(size_t len);
 void assert_no_tx(void);
+
+/* group teardown：整组用例结束后仍有未断言的应答即失败。
+ * 所有使用本 harness 的测试都以它作为 cmocka group teardown。 */
+int test_tx_all_asserted(void** state);
 
 /* 在生效的传输上驱动一个完整的请求/应答周期。 */
 void test_io_cycle(iolink_device_ctx_t* ctx);

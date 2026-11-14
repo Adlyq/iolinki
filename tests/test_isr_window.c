@@ -66,5 +66,5 @@ int main(void)
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_main_window_gated_by_tick),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

@@ -67,6 +67,12 @@ on FRAME/FRAME for the DLL and device contexts.
 Mixed-granularity layouts (`FRAME_BYTE`, `BYTE_FRAME`) remain compile-only: they
 have no test transport contract, so their rows stay tests=no.
 
+`IOLINK_STATS_MODE` is a CMake cache variable, not a `CMAKE_C_FLAGS` macro:
+leave it empty for the `config.h` default (`IOLINK_STATS_SHARED`), or set
+`-DIOLINK_STATS_MODE=IOLINK_STATS_SPLIT` to build the per-context counters that
+`test_stats_split` exercises. The value is applied build-wide, so the library and
+the test always agree, and the configure log prints the effective mode.
+
 A single FRAME row locally:
 
 ```bash
@@ -107,6 +113,16 @@ Every registered test binary is a cmocka program:
 - `assert()` from `<assert.h>` is not used, so the suite does not depend on
   `-UNDEBUG` to keep its checks alive.
 
+A reply that no case asserts is a failure, not a silent extra. The shared mock
+(`tests/test_helpers.c`) counts delivered and asserted replies and every group
+whose binary includes it passes `test_tx_all_asserted` as the group teardown, so
+a case that neither calls `assert_tx_*` nor `assert_no_tx()` fails there. The
+counters are cumulative across cases (`setup_mock_phy()` no longer clears them);
+`mock_phy_clear_tx()` is the explicit "this reply is known and irrelevant" opt
+out. Binaries with a local PHY mock (`test_reply_plan`, `test_isr_*`,
+`test_dll_statemachine`, `test_tx_busy`) keep the same delivered/asserted
+bookkeeping in their own group teardown.
+
 CMocka is a hard requirement for the suite: a configure without it fails
 instead of silently registering no tests. Use `-DBUILD_TESTING=OFF` for a
 library-only build, or trim `IOLINK_FEATURE_DATA_STORAGE`/`IOLINK_FEATURE_EVENTS`
@@ -114,7 +130,21 @@ library-only build, or trim `IOLINK_FEATURE_DATA_STORAGE`/`IOLINK_FEATURE_EVENTS
 the one plain `main()` left: it is a compile-time check that the suite's
 `IOLINK_TEST_TRANSPORT` label matches the compiled ISR granularity, not a test.
 
-### 5. Docker Environment
+### 5. Mutation spot checks
+
+A small set of deliberate defects that the suite must catch. They are checked by
+hand (in a `/tmp` copy of the tree, reverting each one) whenever the related
+area changes; a survivor is a real coverage gap, not a warning.
+
+| Mutant | Injected defect | Must be killed by |
+|---|---|---|
+| M1 | drop `__set_PRIMASK(saved)` in `examples/stm32g0_l6362a_raw/phy_l6362a_raw.c` | `test_phy_l6362a_raw::test_platform_hooks` (and four ISR cases) |
+| M2 | `IOLINK_STAT_TOTAL` SPLIT branch ignores the ISR fields | `test_stats_split::test_public_stats_mirror_the_totals` in a `-DIOLINK_STATS_MODE=IOLINK_STATS_SPLIT` build |
+| M3 | idle deadline constant `1001U` -> `1000U` in `src/dll.c` | `test_timer_table::test_idle_deadline_boundary` |
+| M4 | `IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN` -> `VAL_LEN_UNDRUN` in `src/od.c` | `test_conformance_gaps::test_0123_application_tag_overlong` and the ISDU wire test |
+| M5 | DS checksum comparison replaced by a no-op | `test_ds::test_ds_state_transitions` |
+
+### 6. Docker Environment
 To ensure a reproducible environment matching CI, run tests inside Docker:
 
 ```bash

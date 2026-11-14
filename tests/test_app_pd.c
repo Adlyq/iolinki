@@ -20,7 +20,7 @@
 
 #include "iolinki/device.h"
 #include "iolinki/application.h"
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 
@@ -43,7 +43,7 @@ static void test_reply_layout_od_first_no_status_octet(void** state)
 
     uint8_t frame[2] = {0x80, IOLINK_MSEQ_TYPE_2};
     const int frame_len = 2;
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, (size_t) frame_len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, (size_t) frame_len));
 
     uint8_t input[2] = {0x11, 0x22};
     iolink_device_pd_input_update(&dev.ctx, input, 2, true);
@@ -75,7 +75,7 @@ static void test_reply_flags_pd_invalid(void** state)
 
     uint8_t frame[2] = {0x80, IOLINK_MSEQ_TYPE_2};
     const int frame_len = 2;
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, (size_t) frame_len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, (size_t) frame_len));
 
     /* 将输入过程数据标记为无效；CKS 位 6 必须置位。 */
     iolink_device_pd_input_update(&dev.ctx, (const uint8_t*) "\x11\x22", 2, false);
@@ -98,5 +98,5 @@ int main(void)
         cmocka_unit_test(test_reply_layout_od_first_no_status_octet),
         cmocka_unit_test(test_reply_flags_pd_invalid),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

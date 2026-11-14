@@ -105,5 +105,5 @@ int main(void)
         cmocka_unit_test(test_fake_clock_advances),
     };
 
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

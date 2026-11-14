@@ -17,7 +17,7 @@
 #include "iolinki/device.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/phy.h"
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "test_helpers.h"
 
 static void test_crc_errors_do_not_enter_sio(void** state)
@@ -134,7 +134,7 @@ static void test_fallback_command_switches_to_sio_after_t_fbd(void** state)
 
     /* Page 通道 Type-0 写 MasterCommand FALLBACK（0x5A，Table B.2）。 */
     uint8_t frame[3] = {0x20U, 0x00U, IOLINK_CMD_FALLBACK};
-    frame[1] = iolink_checksum6(frame, 3U);
+    frame[1] = test_expected_checksum6(frame, 3U);
     for (size_t i = 0U; i < sizeof(frame); i++) {
         mock_phy_feed_byte(frame[i]);
     }
@@ -175,7 +175,7 @@ static void test_fallback_command_ignored_without_wakeup(void** state)
 
     /* Page 通道 Type-0 写 MasterCommand FALLBACK（0x5A，Table B.2）。 */
     uint8_t frame[3] = {0x20U, 0x00U, IOLINK_CMD_FALLBACK};
-    frame[1] = iolink_checksum6(frame, 3U);
+    frame[1] = test_expected_checksum6(frame, 3U);
     for (size_t i = 0U; i < sizeof(frame); i++) {
         mock_phy_feed_byte(frame[i]);
     }
@@ -203,9 +203,8 @@ static int group_setup(void** state)
 
 static int group_teardown(void** state)
 {
-    (void) state;
     test_clock_uninstall();
-    return 0;
+    return test_tx_all_asserted(state);
 }
 
 int main(void)

@@ -21,7 +21,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <time.h>
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "iolinki/protocol.h"
 #include "iolinki/port.h"
 
@@ -320,6 +320,25 @@ void assert_no_tx(void)
     }
     assert_int_equal(g_tx_seq, g_tx_asserted);
     g_tx_asserted = g_tx_seq;
+}
+
+/* group teardown：整组用例结束后仍有未断言的应答即失败。
+ *
+ * 计数器跨用例累积（setup_mock_phy 不再清零），因此任何一个用例
+ * "既不 assert_tx_*、也不 assert_no_tx()"都会被这里发现；用例之间
+ * 显式 mock_phy_clear_tx() 表示"这一帧已知且不关心"。 */
+int test_tx_all_asserted(void** state)
+{
+    (void) state;
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    mock_tx_finish(NULL);
+#endif
+    if (g_tx_seq != g_tx_asserted) {
+        print_hex_frame("unasserted", g_txq, g_txq_len);
+    }
+    assert_int_equal(g_tx_seq, g_tx_asserted);
+    g_tx_asserted = g_tx_seq;
+    return 0;
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
@@ -638,8 +657,8 @@ void setup_mock_phy(void)
 #else
     g_tx_active = 0U;
 #endif
-    g_tx_seq = 0U;
-    g_tx_asserted = 0U;
+    /* g_tx_seq / g_tx_asserted 不清零：它们跨用例累积，由 group teardown
+     * （test_tx_all_asserted）统一核对；用例显式 mock_phy_clear_tx() 时清零。 */
     mock_phy_clear_rx();
 }
 
@@ -793,7 +812,7 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
             frame[1] = IOLINK_MSEQ_TYPE_0;
             break;
     }
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, frame_len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, frame_len));
 
     for (uint8_t i = 0U; i < frame_len; i++) {
         mock_phy_feed_byte(frame[i]);

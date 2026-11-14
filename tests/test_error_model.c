@@ -244,5 +244,5 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_isdu_reports_positive_error_code, test_setup,
                                         test_teardown),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

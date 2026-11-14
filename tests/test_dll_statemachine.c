@@ -23,7 +23,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 
-#include "iolinki/crc.h"
+#include "crc_oracle.h"
 #include "iolinki/dll_ctx.h"
 #include "iolinki/dll_sm.h"
 #include "iolinki/iolink.h"
@@ -43,6 +43,10 @@ static uint8_t s_chk_pending;
 
 static uint8_t s_tx_q[TX_MAX];
 static size_t s_tx_n;
+/* 交付给用例的应答数与用例已经查看过的应答数：group teardown 要求相等。 */
+static uint64_t s_tx_delivered;
+static uint64_t s_tx_asserted;
+static uint64_t s_tx_leaked; /* 开始新捕获时仍未查看的交付 */
 static uint8_t s_tx_active;
 
 static uint64_t sm_time_us(void* user)
@@ -98,6 +102,7 @@ static void sm_tx_frame_sync(void)
     (void) memcpy(s_tx_q, s_tx_pending, s_tx_n);
     s_tx_pending = NULL;
     s_tx_pending_n = 0U;
+    s_tx_delivered++;
 }
 
 static int sm_tx_frame(void* user, const uint8_t* data, size_t len)
@@ -125,9 +130,36 @@ static int sm_tx_octet(void* user, uint8_t data)
 static void sm_tx_done(void* user)
 {
     (void) user;
-    s_tx_active = 0U;
+    if (s_tx_active != 0U) {
+        s_tx_active = 0U;
+        s_tx_delivered++;
+    }
 }
 #endif
+
+/* 开始新一次捕获。上一帧若还没被查看，说明用例漏了断言：记入泄漏，
+ * group teardown 失败。 */
+static void s_tx_reset(void)
+{
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    sm_tx_frame_sync();
+#endif
+    if (s_tx_asserted != s_tx_delivered) {
+        s_tx_leaked += s_tx_delivered - s_tx_asserted;
+        s_tx_asserted = s_tx_delivered;
+    }
+    s_tx_n = 0U;
+}
+
+/* 读取捕获长度即算一次查看：每次读取消费一次尚未查看的交付，
+ * group teardown 核对"交付 == 查看"。 */
+static size_t tx_observed_len(void)
+{
+    if (s_tx_asserted < s_tx_delivered) {
+        s_tx_asserted++;
+    }
+    return s_tx_n;
+}
 
 static uint8_t sm_int_active(void* user)
 {
@@ -165,7 +197,7 @@ static void make_frame(uint8_t mc, uint8_t type_bits, uint8_t* frame, size_t len
     for (size_t i = 2U; i < len; i++) {
         frame[i] = 0x00U;
     }
-    frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, len));
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, len));
 }
 
 static void feed(const uint8_t* frame, size_t len)
@@ -174,7 +206,7 @@ static void feed(const uint8_t* frame, size_t len)
     s_rx_n = len;
     s_rx_i = 0U;
     s_chk_pending = 1U;
-    s_tx_n = 0U;
+    s_tx_reset();
     s_tx_active = 0U;
 }
 
@@ -249,11 +281,11 @@ static int test_phase_property(void)
 #endif
             ;
         if (page_reply) {
-            if (s_tx_n == 0U) {
+            if (tx_observed_len() == 0U) {
                 return 10 + (int) state;
             }
         }
-        else if (s_tx_n != 0U) {
+        else if (tx_observed_len() != 0U) {
             return 20 + (int) state;
         }
 
@@ -266,7 +298,9 @@ static int test_phase_property(void)
         drain_tx();
         iolink_dll_process(&s_dll.main);
         drain_tx();
-        if (!type0_process_allowed(state) && (s_tx_n != 0U)) {
+        /* 无论该相位是否合法都消费这次捕获：不合法时必须没有应答。 */
+        const size_t type0_len = tx_observed_len();
+        if (!type0_process_allowed(state) && (type0_len != 0U)) {
             return 30 + (int) state;
         }
 
@@ -280,11 +314,11 @@ static int test_phase_property(void)
         iolink_dll_process(&s_dll.main);
         drain_tx();
         if (type1_allowed(state)) {
-            if (s_tx_n == 0U) {
+            if (tx_observed_len() == 0U) {
                 return 40 + (int) state;
             }
         }
-        else if (s_tx_n != 0U) {
+        else if (tx_observed_len() != 0U) {
             return 50 + (int) state;
         }
 
@@ -297,7 +331,7 @@ static int test_phase_property(void)
         drain_tx();
         iolink_dll_process(&s_dll.main);
         drain_tx();
-        if (s_tx_n != 0U) {
+        if (tx_observed_len() != 0U) {
             return 60 + (int) state;
         }
     }
@@ -332,7 +366,7 @@ static int test_plan_state_stamp_and_republish(void)
     if (s_dll.main.shared.state != IOLINK_DLL_STATE_ESTAB_COM) {
         return 3;
     }
-    if (s_tx_n != 0U) {
+    if (tx_observed_len() != 0U) {
         return 4;
     }
 
@@ -343,7 +377,7 @@ static int test_plan_state_stamp_and_republish(void)
     feed(frame, 2U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n != 2U) {
+    if (tx_observed_len() != 2U) {
         return 5; /* 页字节 + CKS */
     }
     const iolink_frame_rec_t* rec =
@@ -369,7 +403,7 @@ static int test_plan_state_stamp_and_republish(void)
     feed(frame, 2U);
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
-    if (s_tx_n == 0U) {
+    if (tx_observed_len() == 0U) {
         return 9;
     }
     if (s_dll.main.shared.isr_plan_misses != misses_after) {
@@ -407,6 +441,23 @@ IOLINK_TEST_RC(test_table_accessors)
 IOLINK_TEST_RC(test_phase_property)
 IOLINK_TEST_RC(test_plan_state_stamp_and_republish)
 
+static int group_teardown(void** state)
+{
+    (void) state;
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    sm_tx_frame_sync();
+#endif
+    if ((s_tx_asserted != s_tx_delivered) || (s_tx_leaked != 0U)) {
+        print_message(
+            "test_dll_statemachine: %llu replies delivered, %llu asserted, %llu discarded\n",
+            (unsigned long long) s_tx_delivered, (unsigned long long) s_tx_asserted,
+            (unsigned long long) s_tx_leaked);
+    }
+    assert_int_equal(s_tx_asserted, s_tx_delivered);
+    assert_int_equal(s_tx_leaked, 0U);
+    return 0;
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -414,5 +465,5 @@ int main(void)
         cmocka_unit_test(iolink_case_test_phase_property),
         cmocka_unit_test(iolink_case_test_plan_state_stamp_and_republish),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, group_teardown);
 }

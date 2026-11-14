@@ -104,5 +104,5 @@ int main(void)
         cmocka_unit_test(test_expected_req_len_operate),
         cmocka_unit_test(test_isr_entries_without_binding_are_safe),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

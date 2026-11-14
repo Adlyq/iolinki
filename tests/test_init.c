@@ -89,5 +89,5 @@ int main(void)
         cmocka_unit_test(test_iolink_init_fail_null),
         cmocka_unit_test(test_iolink_init_fail_driver),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }
