@@ -180,6 +180,9 @@ typedef enum
         -14, /**< PD 回调路径与轮询调用混用（能力位已置位时调用轮询 API） */
     IOLINK_DEVICE_INIT_ERR_PHY = -15,       /**< 构建配置所需的某个 PHY 钩子为 NULL */
     IOLINK_DEVICE_INIT_ERR_WORKSPACE = -16, /**< `IOLINK_WORKSPACE_EMBEDDED=0` 但没有提供工作区 */
+    IOLINK_DEVICE_INIT_ERR_OD = -17,        /**< 应用对象字典表存在未定义/自相矛盾的配置 */
+    IOLINK_DEVICE_INIT_ERR_PERSIST_CAPACITY =
+        -18, /**< 由对象字典派生的 PERSIST 集合超出 IOLINK_DS_IMAGE_MAX */
     /* -8 与 -13 未使用（保持编号稳定）。 */
 } iolink_device_init_result_t;
 

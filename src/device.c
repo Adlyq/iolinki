@@ -19,6 +19,8 @@
 #include "iolinki/device.h"
 #include "iolinki/port.h"
 #include "dll_internal.h"
+#include "od_internal.h"
+#include "data_storage_internal.h"
 #include <string.h>
 
 /** @brief DLL 状态变化回调：分发到应用的 startup/preoperate/operate 钩子。 */
@@ -226,6 +228,19 @@ static int device_config_validate(const iolink_device_config_t* config)
     if ((od != 1U) && (od != 2U) && (od != 8U) && (od != 32U)) {
         return IOLINK_DEVICE_INIT_ERR_OD_WIDTH;
     }
+
+    /* 宏只能校验常量交叉关系；指针与后端一致性在这里一次走表拒绝。 */
+#if IOLINK_FEATURE_VALIDATE
+    if (od_validate_app(config->od) != OD_VALIDATE_OK) {
+        return IOLINK_DEVICE_INIT_ERR_OD;
+    }
+#endif
+#if IOLINK_FEATURE_DATA_STORAGE && IOLINK_FEATURE_VALIDATE
+    /* PERSIST 参数镜像必须放得进固定大小的镜像缓冲。 */
+    if (ds_validate_persist(config->od) != DS_VALIDATE_OK) {
+        return IOLINK_DEVICE_INIT_ERR_PERSIST_CAPACITY;
+    }
+#endif
 
     {
         const int layout_err = device_validate_fixed_mseq(stack, od);

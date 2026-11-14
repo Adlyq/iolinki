@@ -77,6 +77,7 @@ iolink_matrix_emit_probes()
     "$cb" frame_three_buffers "-DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME"
     "$cb" no_data_storage "-DIOLINK_FEATURE_DATA_STORAGE=0"
     "$cb" no_events "-DIOLINK_FEATURE_EVENTS=0"
+    "$cb" no_validate "-DIOLINK_FEATURE_VALIDATE=0"
     "$cb" workspace_external "-DIOLINK_WORKSPACE_EMBEDDED=0"
     "$cb" single_no_critical "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE"
     "$cb" capacity_overrides "-DIOLINK_MBX_SLOTS=8 -DIOLINK_REPLY_PLAN_SLOTS=12"

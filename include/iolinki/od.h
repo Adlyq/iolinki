@@ -223,6 +223,23 @@ typedef enum
     (0U * sizeof(struct { int iolink_od_check_ : ((condition_) ? 1 : -1); }))
 
 /**
+ * @brief 表项语义/storage 交叉关系的编译期一致性。
+ *
+ * - TRIGGER 只执行动作、不保存值，因此不能声明任何 storage 位；
+ * - PERSIST 表示写后保存，必须搭配 STORE 语义。
+ *
+ * 只比较常量宏参数，可放进 @ref IOLINK_OD_ASSERT_EXPR 的位段宽度。
+ */
+#define IOLINK_OD_ASSERT_SEMANTICS(semantics_, storage_)                                          \
+    ((((semantics_) != IOLINK_OD_WRITE_TRIGGER) || ((storage_) == IOLINK_OD_STORAGE_VOLATILE)) && \
+     (((semantics_) == IOLINK_OD_WRITE_STORE) ||                                                  \
+      (((storage_) & IOLINK_OD_STORAGE_PERSIST) == 0U)))
+
+/** @brief 可写字节串必须给出长度上限（否则 STORAGE 写入会越过应用缓冲）。 */
+#define IOLINK_OD_ASSERT_BYTES_BOUND(access_, block_len_) \
+    (!(((access_) & IOLINK_OD_ACCESS_WRITE) != 0U) || ((block_len_) > 0U))
+
+/**
  * @brief 一个对象字典表项。
  *
  * 设计约束：表示静态知识的字段全部为值语义，使整张表可以是 `const`
@@ -267,25 +284,25 @@ struct iolink_od_entry
 /**
  * @brief 带钩子的标量表项初始化宏。
  */
-#define IOLINK_OD_BUILTIN_SCALAR_EX(index_, datatype_, access_, semantics_, storage_, handler_, \
-                                    low_, high_, def_, name_, validate_, change_)               \
-    {.index = (index_),                                                                         \
-     .subindex = 0U,                                                                            \
-     .max_subindex = 0U,                                                                        \
-     .datatype = (datatype_),                                                                   \
-     .access = (access_),                                                                       \
-     .write_semantics = (semantics_),                                                           \
-     .storage = (storage_),                                                                     \
-     .flags = 0U,                                                                               \
-     .handler = (handler_),                                                                     \
-     .backend = IOLINK_OD_BACKEND_HANDLER,                                                      \
-     .block_len = 0U,                                                                           \
-     .range_min = (low_),                                                                       \
-     .range_max = (high_),                                                                      \
-     .scalar_default = (def_),                                                                  \
-     .block_default = NULL,                                                                     \
-     .name = (name_),                                                                           \
-     .validate = (validate_),                                                                   \
+#define IOLINK_OD_BUILTIN_SCALAR_EX(index_, datatype_, access_, semantics_, storage_, handler_,  \
+                                    low_, high_, def_, name_, validate_, change_)                \
+    {.index = (index_),                                                                          \
+     .subindex = 0U,                                                                             \
+     .max_subindex = 0U,                                                                         \
+     .datatype = (datatype_),                                                                    \
+     .access = (access_),                                                                        \
+     .write_semantics = (semantics_),                                                            \
+     .storage = (storage_),                                                                      \
+     .flags = (uint8_t) IOLINK_OD_ASSERT_EXPR(IOLINK_OD_ASSERT_SEMANTICS(semantics_, storage_)), \
+     .handler = (handler_),                                                                      \
+     .backend = IOLINK_OD_BACKEND_HANDLER,                                                       \
+     .block_len = 0U,                                                                            \
+     .range_min = (low_),                                                                        \
+     .range_max = (high_),                                                                       \
+     .scalar_default = (def_),                                                                   \
+     .block_default = NULL,                                                                      \
+     .name = (name_),                                                                            \
+     .validate = (validate_),                                                                    \
      .on_change = (change_)}
 
 /**
@@ -308,7 +325,7 @@ struct iolink_od_entry
      .access = (access_),                                                                        \
      .write_semantics = (semantics_),                                                            \
      .storage = (storage_),                                                                      \
-     .flags = 0U,                                                                                \
+     .flags = (uint8_t) IOLINK_OD_ASSERT_EXPR(IOLINK_OD_ASSERT_SEMANTICS(semantics_, storage_)), \
      .handler = (handler_),                                                                      \
      .backend = IOLINK_OD_BACKEND_HANDLER,                                                       \
      .block_len = (block_len_),                                                                  \
@@ -323,25 +340,25 @@ struct iolink_od_entry
 /**
  * @brief 字节串表项初始化宏（新增参数的一行写法）。
  */
-#define IOLINK_OD_BUILTIN_STRING(index_, access_, semantics_, storage_, handler_, block_len_, \
-                                 name_)                                                       \
-    {.index = (index_),                                                                       \
-     .subindex = 0U,                                                                          \
-     .max_subindex = 0U,                                                                      \
-     .datatype = IOLINK_OD_DT_OCTET_STRING,                                                   \
-     .access = (access_),                                                                     \
-     .write_semantics = (semantics_),                                                         \
-     .storage = (storage_),                                                                   \
-     .flags = 0U,                                                                             \
-     .handler = (handler_),                                                                   \
-     .backend = IOLINK_OD_BACKEND_HANDLER,                                                    \
-     .block_len = (block_len_),                                                               \
-     .range_min = 0U,                                                                         \
-     .range_max = 0U,                                                                         \
-     .scalar_default = 0U,                                                                    \
-     .block_default = NULL,                                                                   \
-     .name = (name_),                                                                         \
-     .validate = NULL,                                                                        \
+#define IOLINK_OD_BUILTIN_STRING(index_, access_, semantics_, storage_, handler_, block_len_,    \
+                                 name_)                                                          \
+    {.index = (index_),                                                                          \
+     .subindex = 0U,                                                                             \
+     .max_subindex = 0U,                                                                         \
+     .datatype = IOLINK_OD_DT_OCTET_STRING,                                                      \
+     .access = (access_),                                                                        \
+     .write_semantics = (semantics_),                                                            \
+     .storage = (storage_),                                                                      \
+     .flags = (uint8_t) IOLINK_OD_ASSERT_EXPR(IOLINK_OD_ASSERT_SEMANTICS(semantics_, storage_)), \
+     .handler = (handler_),                                                                      \
+     .backend = IOLINK_OD_BACKEND_HANDLER,                                                       \
+     .block_len = (block_len_),                                                                  \
+     .range_min = 0U,                                                                            \
+     .range_max = 0U,                                                                            \
+     .scalar_default = 0U,                                                                       \
+     .block_default = NULL,                                                                      \
+     .name = (name_),                                                                            \
+     .validate = NULL,                                                                           \
      .on_change = NULL}
 
 /* --- 应用表项：直接绑定应用变量（零 shadow） --- */
@@ -362,7 +379,8 @@ struct iolink_od_entry
      .access = (access_),                                                                          \
      .write_semantics = (semantics_),                                                              \
      .storage = (storage_),                                                                        \
-     .flags = (uint8_t) IOLINK_OD_ASSERT_EXPR(sizeof(*(ptr_)) == IOLINK_OD_DT_LEN(datatype_)),     \
+     .flags = (uint8_t) IOLINK_OD_ASSERT_EXPR((sizeof(*(ptr_)) == IOLINK_OD_DT_LEN(datatype_)) &&  \
+                                              IOLINK_OD_ASSERT_SEMANTICS(semantics_, storage_)),   \
      .handler = IOLINK_OD_HANDLER_NONE,                                                            \
      .backend = IOLINK_OD_BACKEND_STORAGE,                                                         \
      .u.storage = {.value = (const void*) (ptr_), .str_len = NULL},                                \
@@ -399,7 +417,9 @@ struct iolink_od_entry
      .access = (access_),                                                                          \
      .write_semantics = (semantics_),                                                              \
      .storage = (storage_),                                                                        \
-     .flags = (uint8_t) IOLINK_OD_ASSERT_EXPR(sizeof(buf_) >= (block_len_)),                       \
+     .flags = (uint8_t) IOLINK_OD_ASSERT_EXPR((sizeof(buf_) >= (block_len_)) &&                    \
+                                              IOLINK_OD_ASSERT_SEMANTICS(semantics_, storage_) &&  \
+                                              IOLINK_OD_ASSERT_BYTES_BOUND(access_, block_len_)),  \
      .handler = IOLINK_OD_HANDLER_NONE,                                                            \
      .backend = IOLINK_OD_BACKEND_STORAGE,                                                         \
      .u.storage = {.value = (const void*) (buf_), .str_len = (len_ptr_)},                          \
@@ -434,7 +454,7 @@ struct iolink_od_entry
      .access = (access_),                                                                          \
      .write_semantics = (semantics_),                                                              \
      .storage = (storage_),                                                                        \
-     .flags = 0U,                                                                                  \
+     .flags = (uint8_t) IOLINK_OD_ASSERT_EXPR(IOLINK_OD_ASSERT_SEMANTICS(semantics_, storage_)),   \
      .handler = IOLINK_OD_HANDLER_NONE,                                                            \
      .backend = IOLINK_OD_BACKEND_HANDLER,                                                         \
      .u.handler = {.read = (read_), .write = (write_)},                                            \
@@ -458,26 +478,26 @@ struct iolink_od_entry
 /**
  * @brief 字节串表项使用表项自己的 read/write 函数（带钩子）。
  */
-#define IOLINK_OD_BYTES_HANDLER_EX(index_, access_, semantics_, storage_, block_len_, name_, \
-                                   read_, write_, validate_, change_)                        \
-    {.index = (index_),                                                                      \
-     .subindex = 0U,                                                                         \
-     .max_subindex = 0U,                                                                     \
-     .datatype = IOLINK_OD_DT_OCTET_STRING,                                                  \
-     .access = (access_),                                                                    \
-     .write_semantics = (semantics_),                                                        \
-     .storage = (storage_),                                                                  \
-     .flags = 0U,                                                                            \
-     .handler = IOLINK_OD_HANDLER_NONE,                                                      \
-     .backend = IOLINK_OD_BACKEND_HANDLER,                                                   \
-     .u.handler = {.read = (read_), .write = (write_)},                                      \
-     .block_len = (block_len_),                                                              \
-     .range_min = 0U,                                                                        \
-     .range_max = 0U,                                                                        \
-     .scalar_default = 0U,                                                                   \
-     .block_default = NULL,                                                                  \
-     .name = (name_),                                                                        \
-     .validate = (validate_),                                                                \
+#define IOLINK_OD_BYTES_HANDLER_EX(index_, access_, semantics_, storage_, block_len_, name_,     \
+                                   read_, write_, validate_, change_)                            \
+    {.index = (index_),                                                                          \
+     .subindex = 0U,                                                                             \
+     .max_subindex = 0U,                                                                         \
+     .datatype = IOLINK_OD_DT_OCTET_STRING,                                                      \
+     .access = (access_),                                                                        \
+     .write_semantics = (semantics_),                                                            \
+     .storage = (storage_),                                                                      \
+     .flags = (uint8_t) IOLINK_OD_ASSERT_EXPR(IOLINK_OD_ASSERT_SEMANTICS(semantics_, storage_)), \
+     .handler = IOLINK_OD_HANDLER_NONE,                                                          \
+     .backend = IOLINK_OD_BACKEND_HANDLER,                                                       \
+     .u.handler = {.read = (read_), .write = (write_)},                                          \
+     .block_len = (block_len_),                                                                  \
+     .range_min = 0U,                                                                            \
+     .range_max = 0U,                                                                            \
+     .scalar_default = 0U,                                                                       \
+     .block_default = NULL,                                                                      \
+     .name = (name_),                                                                            \
+     .validate = (validate_),                                                                    \
      .on_change = (change_)}
 
 /**

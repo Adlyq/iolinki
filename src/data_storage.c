@@ -23,6 +23,7 @@
 #include "iolinki/od.h"
 #include "iolinki/params.h"
 #include "iolinki/utils.h"
+#include "data_storage_internal.h"
 #include <string.h>
 
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -1000,5 +1001,71 @@ void iolink_ds_clear_upload(iolink_ds_ctx_t* ctx)
         ds_storage_save_flag(ctx, 0U);
     }
 }
+
+#if IOLINK_FEATURE_VALIDATE
+/** @brief 单个表项的最坏值长度；无法确定时返回 false。 */
+static bool ds_entry_value_len(const iolink_od_entry_t* entry, size_t* out)
+{
+    if (entry->datatype == (uint8_t) IOLINK_OD_DT_OCTET_STRING) {
+        if (entry->block_len == 0U) {
+            return false; /* 变长且无上限：容量不可确定。 */
+        }
+        *out = (size_t) entry->block_len;
+        return true;
+    }
+    const iolink_od_codec_t* codec = iolink_od_codec(entry->datatype);
+    if ((codec == NULL) || (codec->len == 0U)) {
+        return false;
+    }
+    *out = (size_t) codec->len;
+    return true;
+}
+
+/** @brief 某个 storage 掩码集合的最坏序列化长度。 */
+static bool ds_required_size(const iolink_od_app_t* app, uint8_t mask, size_t* out)
+{
+    size_t total = 0U;
+
+    for (size_t i = 0U; i < iolink_od_count(); i++) {
+        const iolink_od_entry_t* entry = iolink_od_at(i);
+        size_t vlen = 0U;
+
+        if ((entry == NULL) || ((entry->storage & mask) == 0U)) {
+            continue;
+        }
+        if (!ds_entry_value_len(entry, &vlen)) {
+            return false;
+        }
+        total += DS_RECORD_HEADER + vlen;
+    }
+    if (app != NULL) {
+        for (size_t i = 0U; i < app->count; i++) {
+            const iolink_od_entry_t* entry = &app->entries[i];
+            size_t vlen = 0U;
+
+            if ((entry->storage & mask) == 0U) {
+                continue;
+            }
+            if (!ds_entry_value_len(entry, &vlen)) {
+                return false;
+            }
+            total += DS_RECORD_HEADER + vlen;
+        }
+    }
+    *out = total;
+    return true;
+}
+
+int ds_validate_persist(const iolink_od_app_t* app)
+{
+    size_t need = 0U;
+
+    if (!ds_required_size(app, (uint8_t) IOLINK_OD_STORAGE_PERSIST, &need) ||
+        (need > (size_t) IOLINK_DS_IMAGE_MAX)) {
+        return DS_VALIDATE_ERR_IMAGE;
+    }
+    return DS_VALIDATE_OK;
+}
+#endif /* IOLINK_FEATURE_VALIDATE */
 
 #endif /* IOLINK_FEATURE_DATA_STORAGE */

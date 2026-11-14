@@ -14,6 +14,7 @@
 
 #include "iolinki/od.h"
 #include "iolinki/protocol.h"
+#include "od_internal.h"
 
 #include <string.h>
 
@@ -725,3 +726,111 @@ iolink_result_t iolink_od_restore_value(iolink_od_ctx_t* ctx, const iolink_od_en
     }
     return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
 }
+
+/* -------------------------------------------------------------------------
+ * 应用表自检：宏只能查常量交叉关系，指针关系在这里一次走表检查
+ * ------------------------------------------------------------------------- */
+
+#if IOLINK_FEATURE_VALIDATE
+
+/** @brief 单个应用表项的自检；返回 0 或第一个问题。 */
+static int od_validate_entry(const iolink_od_entry_t* entry)
+{
+    const bool writable = (entry->access & IOLINK_OD_ACCESS_WRITE) != 0U;
+
+    if (entry->handler != (uint8_t) IOLINK_OD_HANDLER_NONE) {
+        /* 应用表项只能使用自己的后端，不能复用内建处理器。 */
+        return OD_VALIDATE_ERR_HANDLER_NONE;
+    }
+    if (entry->datatype >= (uint8_t) IOLINK_OD_DT_COUNT) {
+        return OD_VALIDATE_ERR_DATATYPE;
+    }
+    if ((entry->access & (IOLINK_OD_ACCESS_READ | IOLINK_OD_ACCESS_WRITE)) == 0U) {
+        return OD_VALIDATE_ERR_ACCESS;
+    }
+    if ((entry->write_semantics != (uint8_t) IOLINK_OD_WRITE_STORE) &&
+        (entry->write_semantics != (uint8_t) IOLINK_OD_WRITE_VOLATILE) &&
+        (entry->write_semantics != (uint8_t) IOLINK_OD_WRITE_TRIGGER)) {
+        return OD_VALIDATE_ERR_SEMANTICS;
+    }
+    if ((entry->storage & (uint8_t) (~(IOLINK_OD_STORAGE_DS | IOLINK_OD_STORAGE_PERSIST))) != 0U) {
+        return OD_VALIDATE_ERR_STORAGE_BITS;
+    }
+    if (((entry->storage & (uint8_t) IOLINK_OD_STORAGE_PERSIST) != 0U) &&
+        (entry->write_semantics != (uint8_t) IOLINK_OD_WRITE_STORE)) {
+        return OD_VALIDATE_ERR_PERSIST_SEMANTICS;
+    }
+    if ((entry->write_semantics == (uint8_t) IOLINK_OD_WRITE_TRIGGER) && (entry->storage != 0U)) {
+        return OD_VALIDATE_ERR_TRIGGER_STORAGE;
+    }
+    if (writable && (entry->datatype == (uint8_t) IOLINK_OD_DT_OCTET_STRING) &&
+        (entry->backend == (uint8_t) IOLINK_OD_BACKEND_STORAGE) && (entry->block_len == 0U)) {
+        /* STORAGE 字节串的写入直接落到应用缓冲，没有上限会越界。 */
+        return OD_VALIDATE_ERR_BYTES_UNBOUNDED;
+    }
+    if (!writable && ((entry->on_change != NULL) || (entry->validate != NULL))) {
+        /* 只读对象永远走不到写路径，钩子是死配置。 */
+        return OD_VALIDATE_ERR_RO_HOOK;
+    }
+    if (entry->datatype != (uint8_t) IOLINK_OD_DT_OCTET_STRING) {
+        if (entry->range_min > entry->range_max) {
+            return OD_VALIDATE_ERR_RANGE;
+        }
+        if ((entry->scalar_default < entry->range_min) ||
+            (entry->scalar_default > entry->range_max)) {
+            return OD_VALIDATE_ERR_DEFAULT_RANGE;
+        }
+    }
+    if (entry->backend == (uint8_t) IOLINK_OD_BACKEND_STORAGE) {
+        if (entry->u.storage.value == NULL) {
+            return OD_VALIDATE_ERR_STORAGE_NULL;
+        }
+        if ((entry->datatype == (uint8_t) IOLINK_OD_DT_OCTET_STRING) &&
+            (entry->u.storage.str_len == NULL)) {
+            return OD_VALIDATE_ERR_STORAGE_NULL;
+        }
+    }
+    else if (entry->backend == (uint8_t) IOLINK_OD_BACKEND_HANDLER) {
+        if (((entry->access & IOLINK_OD_ACCESS_READ) != 0U) && (entry->u.handler.read == NULL)) {
+            return OD_VALIDATE_ERR_HANDLER_READ;
+        }
+        if (writable && (entry->u.handler.write == NULL)) {
+            return OD_VALIDATE_ERR_HANDLER_WRITE;
+        }
+    }
+    else {
+        return OD_VALIDATE_ERR_BACKEND;
+    }
+    return OD_VALIDATE_OK;
+}
+
+int od_validate_app(const iolink_od_app_t* app)
+{
+    if (app == NULL) {
+        return OD_VALIDATE_OK;
+    }
+    if ((app->entries == NULL) && (app->count > 0U)) {
+        return OD_VALIDATE_ERR_TABLE;
+    }
+    for (size_t i = 0U; i < app->count; i++) {
+        const iolink_od_entry_t* entry = &app->entries[i];
+        const int rc = od_validate_entry(entry);
+
+        if (entry->index < 0x0040U) {
+            /* 规范固定索引不允许被应用表占用；应用项在那里不可达。 */
+            return OD_VALIDATE_ERR_STD_INDEX;
+        }
+        if (rc != OD_VALIDATE_OK) {
+            return rc;
+        }
+        for (size_t j = 0U; j < i; j++) {
+            if ((app->entries[j].index == entry->index) &&
+                (app->entries[j].subindex == entry->subindex)) {
+                return OD_VALIDATE_ERR_DUPLICATE;
+            }
+        }
+    }
+    return OD_VALIDATE_OK;
+}
+
+#endif /* IOLINK_FEATURE_VALIDATE */

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
-# Version 3.0.0
-project(iolinki VERSION 3.0.0 LANGUAGES C)
+# Version 3.1.0
+project(iolinki VERSION 3.1.0 LANGUAGES C)
 
 # No default CMAKE_BUILD_TYPE: the toolchain default applies (GCC = -O0), so
 # static helpers stay out of line. Do not judge ISR code size or timing from a
@@ -27,6 +27,7 @@ include_directories(include)
 option(IOLINK_FEATURE_DATA_STORAGE "Compile Data Storage" ON)
 option(IOLINK_FEATURE_SYSTEM_COMMAND "Enable SystemCommand (runtime bit; the handler is always resident)" ON)
 option(IOLINK_FEATURE_EVENTS "Compile the diagnostic event engine" ON)
+option(IOLINK_FEATURE_VALIDATE "Run the init-time configuration self-checks" ON)
 # Absolute paths so a subdirectory can build the same sources under a different
 # ISR granularity (see tests/CMakeLists.txt: TX FRAME fixture).
 set(IOLINK_SOURCES
@@ -55,7 +56,8 @@ add_library(iolinki STATIC ${IOLINK_SOURCES})
 foreach(_iolink_feature
     IOLINK_FEATURE_DATA_STORAGE
     IOLINK_FEATURE_SYSTEM_COMMAND
-    IOLINK_FEATURE_EVENTS)
+    IOLINK_FEATURE_EVENTS
+    IOLINK_FEATURE_VALIDATE)
     if(NOT ${_iolink_feature})
         target_compile_definitions(iolinki PUBLIC ${_iolink_feature}=0)
     endif()

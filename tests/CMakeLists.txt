@@ -152,6 +152,14 @@ add_executable(test_app_pd_callback test_app_pd_callback.c)
 target_link_libraries(test_app_pd_callback iolinki)
 add_test(NAME test_app_pd_callback COMMAND test_app_pd_callback)
 
+# 应用 OD 表自检：非法配置在设备初始化前被拒绝（库内部 API）。
+if(IOLINK_FEATURE_VALIDATE)
+    add_executable(test_od_validate test_od_validate.c)
+    target_link_libraries(test_od_validate iolinki)
+    target_include_directories(test_od_validate PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    add_test(NAME test_od_validate COMMAND test_od_validate)
+endif()
+
 
 if(PkgConfig_FOUND)
     pkg_check_modules(CMOCKA QUIET cmocka)
