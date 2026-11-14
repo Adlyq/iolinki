@@ -293,10 +293,11 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
 const uint8_t* iolink_ds_get_image(iolink_ds_ctx_t* ctx, size_t* out_len);
 
 /**
- * @brief 把 PERSIST 表项恢复为表项默认值（仅 RAM）。
+ * @brief 把 DS 集合的表项恢复为表项默认值（仅 RAM）。
  *
- * 标签（0x0018-0x001A）由参数上下文复位，本函数跳过它们。持久化由应用
- * 在 reset 后自行决定；库不写 NVM。
+ * 三个标签（0x0018-0x001A）也是应用的 DS 表项，按普通表项复位。复位走统一
+ * 写路径，应用通过各表项的 `on_change` 收到“已复位、请落盘”通知；库本身
+ * 不写 NVM。
  *
  * @param ctx DS 上下文
  * @return int 0 成功。

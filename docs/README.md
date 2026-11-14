@@ -14,7 +14,7 @@ stack is [iolinki-master](https://github.com/w1ne/iolinki-master).
 ## Integration
 
 - **[PORTING](PORTING.md)** — platform, bare-IDE and RTOS porting contract
-- **[STORAGE](STORAGE.md)** — NVM backend and Data Storage parameters
+- **[STORAGE](STORAGE.md)** — application-owned persistence, the tag entries and Data Storage
 - **[MEMORY_GUIDE](MEMORY_GUIDE.md)** — RAM/ROM sizing and workspace placement
 - **[feature-trimming](feature-trimming.md)** — structural switches, runtime
   capability bits and capacity overrides

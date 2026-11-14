@@ -369,14 +369,15 @@ int iolink_ds_factory_reset(iolink_ds_ctx_t* ctx)
         if (entry->datatype == (uint8_t) IOLINK_OD_DT_OCTET_STRING) {
             const uint8_t* def = entry->block_default;
             const size_t def_len = (def != NULL) ? (size_t) entry->block_len : 0U;
-            (void) iolink_od_restore_value(&od, entry, entry->subindex, def, def_len);
+            /* 走统一写路径，让应用通过 on_change 收到“已复位，请落盘”。 */
+            (void) iolink_od_write_value(&od, entry, entry->subindex, def, def_len);
             continue;
         }
         uint8_t wire[4] = {0U};
         const iolink_result_t encoded =
             iolink_od_encode(entry, entry->scalar_default, wire, sizeof(wire));
         if (iolink_result_succeeded(encoded)) {
-            (void) iolink_od_restore_value(&od, entry, entry->subindex, wire, encoded.len);
+            (void) iolink_od_write_value(&od, entry, entry->subindex, wire, encoded.len);
         }
     }
     return 0;

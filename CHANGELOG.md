@@ -32,28 +32,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `IOLINK_DEVICE_INIT_ERR_STORAGE` and `IOLINK_DEVICE_INIT_ERR_PERSIST_CAPACITY`.
   `iolink_ds_init()` no longer takes a storage backend.
 - `DS_UPLOAD_FLAG` is RAM-only; `iolink_ds_factory_reset()` restores the DS
-  set in RAM only and never calls into a storage backend.
+  set in RAM only and never calls into a storage backend. Restored entries go
+  through the normal write path, so the application receives `on_change` and
+  can persist the defaults.
 
 ### Added (init-time configuration self-check)
 - `iolink_device_init()` now validates the configuration once, before binding
   any subsystem, and rejects the first problem with
   `IOLINK_DEVICE_INIT_ERR_OD` instead of failing at the first ISDU access.
   Covered: a missing backend pointer, a read/write HANDLER without the
-  corresponding callback, `PERSIST` without `STORE`, `TRIGGER` with `storage`
-  bits, a writable STORAGE OctetString without `block_len`, read-only entries
-  carrying `on_change`/`validate`, out-of-range defaults, duplicate
+  corresponding callback, `TRIGGER` with `storage` bits, a writable STORAGE
+  OctetString without `block_len`, read-only entries carrying
+  `on_change`/`validate`, out-of-range defaults, duplicate
   `(index, subindex)` and application entries occupying a standard index
-  (`< 0x0040`).
-- The same pass checks that the OD-derived `PERSIST` set fits
-  `IOLINK_DS_IMAGE_MAX` (`IOLINK_DEVICE_INIT_ERR_PERSIST_CAPACITY`), so an
-  oversized parameter image fails at init instead of being silently truncated
-  on the first NVM write.
-- Both checks compile behind `IOLINK_FEATURE_VALIDATE` (default on). Set it to
+  (`< 0x0040`, except the tags 0x0018-0x001A).
+- The check compiles behind `IOLINK_FEATURE_VALIDATE` (default on). Set it to
   `0` once the configuration is stable to drop the self-check `.text`; the
   compile-time macro checks stay active either way.
 - The table macros now reject integer cross-field mistakes at compile time:
-  `TRIGGER` with a `storage` bit, `PERSIST` with non-`STORE` write semantics,
-  and a writable `IOLINK_OD_BYTES_STORAGE` with `block_len == 0`.
+  `TRIGGER` with a `storage` bit and a writable `IOLINK_OD_BYTES_STORAGE` with
+  `block_len == 0`.
 
 ### Added (slot sizing and diagnostics)
 - `IOLINK_MBX_SLOTS` and `IOLINK_REPLY_PLAN_SLOTS` are overridable in

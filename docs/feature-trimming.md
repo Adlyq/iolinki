@@ -32,6 +32,7 @@ source of "why did my build not behave as configured" reports.
 | --- | --- | --- |
 | `IOLINK_FEATURE_DATA_STORAGE` | 1 | `src/data_storage.c` body and the `ds` context field are removed; index `0x0003` and the DS SystemCommands answer `FUNC_NOTAVAIL`/`IDX_NOTAVAIL`. The `iolink_ds_*` symbols stay exported: the reduction is a **link-time contract** (negative link probes in `tools/check_profile_abi.sh`) |
 | `IOLINK_FEATURE_EVENTS` | 1 | `src/events.c` is replaced by inert stubs (no queue, no classification); DetailedDeviceStatus reports no events. Same link-time contract |
+| `IOLINK_FEATURE_VALIDATE` | 1 | Compiles the init-time OD self-check (`od_validate_app`); `IOLINK_DEVICE_INIT_ERR_OD` is only produced when enabled. A `.text`-only switch, no link-time contract |
 | `IOLINK_ISR_RX_MODE` / `IOLINK_ISR_TX_MODE` | BYTE/BYTE | FRAME transports: different PHY vtable and ISR buffering |
 | `IOLINK_PHY_FEATURE_TX_BUSY` | 0 | TX-FRAME line-state hook (two vs three PD-in slots) |
 | `IOLINK_CONCURRENCY` | ISR | SINGLE / SMP synchronisation primitives |

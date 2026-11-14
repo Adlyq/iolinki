@@ -38,10 +38,11 @@
 1. 传输是**双泵**：数据中断里的 `iolink_dll_process_isr()` 只做传输——收帧、校验、暂存 ISDU 写，然后**执行主泵编译好的应答计划**（查计划 → 取源字节 → 追加 CKS → 喂字节）。请求内容语义（哪条通道、回什么、多长）只由主循环的 `iolink_dll_process()` 决定：它运行 DLL 状态机、ISDU 服务、诊断与定时，并在每次调用结束时发布新计划。
 2. `iolink_device_process()` 是主循环唯一需要周期调用的入口；PHY 数据中断还要调用 `iolink_device_process_isr()`。主循环负责 DLL 协议处理，并把 ISR 延迟的状态回调、master-lost 边沿、reset 请求、PD 回调分发给应用。
 3. 数据按 **MC 通信通道**分流：Process、Page、Diagnosis、ISDU；按 **CKT M-sequence 类型**决定 Type-0 还是 Type-1/2 的帧长与应答布局。已校验帧经 `dll_sm_classify()` 归类，再由 `DLL_SM_ROWS` 展开的 `g_dll_sm[state][event]` 骨架表分发到动作函数。
-4. 参数知识只有一份：`src/od.c` 的 const 对象字典描述索引、数据类型、访问权限、写语义、storage 标志与默认值。ISDU 分发、DS 成员判定与内建处理器选择都从这张表派生。
+4. 参数知识只有一份：`src/od.c` 的 const 对象字典描述索引、数据类型、访问权限、写语义、`storage` 位与默认值。ISDU 分发、DS 成员判定与内建处理器选择都从这张表派生；三个标签也由应用以普通表项提供。
 5. ISDU 写请求和读应答是分离的：写请求由 ISR 按 FlowCTRL 位置去重累计到 `shared.isdu`，`iolink_isdu_process()` 在后续主循环校验 CHKPDU、解析并执行服务；读请求从已发布的成帧应答视图读取（单一 `frame` 缓冲 + 租约 + 代数位）。
 6. Event 的 “appears” 会立即入队并冻结事件内存、置 CKS bit7；“disappears” 由 `iolink_device_process()` 在 ISDU 传输空闲时自动调用 `iolink_events_process()` 发出（见 `device_service_events_and_ds()`）。DeviceStatus（0x0024）与 DetailedDeviceStatus（0x0025）由 `src/diag.c` 从同一条件集派生。
 7. `master_lost` 只是应用提示，**不改变 DLL 状态和波特率**；真正回到 SIO/STARTUP 的是 T_DSIO、T_FBD、DeviceStartup 等路径。
+8. 库不拥有 NVM：所有参数写入只改 RAM 并调用表项 `on_change`，持久化由应用在钩子里完成；DS 只维护 `DS_UPLOAD_FLAG` 的 RAM 值，并经 `config.ds_flag_persist` 通知应用落盘。
 
 ---
 
@@ -52,16 +53,16 @@ flowchart TB
     subgraph APP["应用层"]
         A1["应用代码<br/>按钮/传感器/执行器"]
         A2["device.h / application.h<br/>生命周期、PD、回调声明"]
-        A3["od.h<br/>应用 OD 表 + get/set 后端"]
+        A3["od.h<br/>应用 OD 表 + 值后端/hooks"]
+        A4["应用 NVM<br/>on_change / ds_flag_persist"]
     end
 
     subgraph CORE["协议核心"]
-        D1["device.c<br/>顶层编排、回调分发、参数访问适配"]
+        D1["device.c<br/>顶层编排、回调分发、DS 来源绑定"]
         D2["dll.c<br/>主泵：状态机表、计划编译/发布、截止时间表、通道分发"]
         D2I["dll_isr.c<br/>ISR：计划执行器、收帧、ISDU 快照读、暂存 TX"]
         D3["isdu.c<br/>ISDU 传输状态机、表驱动的索引/系统命令服务"]
-        D4["data_storage.c<br/>DS 流式序列化/恢复、DS 命令"]
-        D5["params.c<br/>可写参数（Tag）管理、NVM"]
+        D4["data_storage.c<br/>DS 流式序列化、下载暂存/应用、DS 命令"]
         D6["device_info.c<br/>身份信息、访问锁"]
         D7["events.c<br/>事件队列、事件内存、严重度"]
         D8["diag.c<br/>诊断注册表、条件缓存、DeviceStatus/DDS 派生"]
@@ -78,20 +79,20 @@ flowchart TB
     subgraph PLAT["平台层"]
         T1["config.time_us<br/>应用微秒时钟"]
         T2["port.h<br/>临界区、屏障、原子字"]
-        S1["storage.h<br/>read/write 回调"]
         W1["workspace.h<br/>ISDU scratch + DS 暂存"]
     end
 
     A1 --> A2
+    A1 --> A4
     A2 --> D1
     A3 --> D9
+    A3 --> A4
     D1 --> D2
     D1 --> D2I
     D1 --> D9
     D1 --> D10
     D2 --> D2I
     D2I --> D2
-    D1 --> D5
     D1 --> D6
     D1 --> D4
     D2 --> D3
@@ -103,17 +104,13 @@ flowchart TB
     D2 --> D11
     D2I --> D11
     D3 --> D9
-    D3 --> D5
     D3 --> D6
     D3 --> D4
     D3 --> D8
     D3 --> W1
     D4 --> D9
-    D4 --> D5
-    D4 --> S1
     D4 --> W1
-    D5 --> S1
-    D9 --> D5
+    D9 -->|"on_change"| A4
     D2 --> P1
     D2I --> P1
     D3 --> P1
@@ -129,13 +126,12 @@ flowchart TB
 
 | 文件 | 职责 | 是否在设备运行数据路径 |
 | :--- | :--- | :--- |
-| `src/device.c` | `iolink_device_init/process`、PD API、应用回调、reset、能力位查询、统一参数访问适配 | 是 |
+| `src/device.c` | `iolink_device_init/process`、PD API、应用回调、reset、能力位查询、DS 来源绑定 | 是 |
 | `src/dll.c` | 主泵：M-sequence 内容语义、状态机骨架表分发、应答计划编译/发布（seqlock）、截止时间表、PHY 模式/波特率、通道分流 | 是（主上下文） |
 | `src/dll_isr.c` | ISR 传输：重入保护、收帧与校验、ISDU 写暂存、计划查表/执行、ISDU 快照读、暂存 TX 的字节喂送 | 是（中断上下文） |
 | `src/isdu.c` | ISDU 请求收集、索引解析、OD 表分发、标准对象/系统命令/DS 服务、响应组帧 | 是 |
 | `src/od.c` | 对象字典（内建 const 表 + 应用表）、datatype codec、值校验/编解码/读写、DS 集合判定 | 是（每次 ISDU 参数访问） |
-| `src/data_storage.c` | DS 参数集流式序列化/恢复、DS 状态与 DS_Command | 是（启用 DS 时） |
-| `src/params.c` | 三个可写 Tag 的 RAM/NVM 读写、出厂复位 | 是 |
+| `src/data_storage.c` | DS 参数集流式序列化、下载暂存/应用、DS 状态与 DS_Command | 是（启用 DS 时） |
 | `src/device_info.c` | VendorID/DeviceID/字符串身份、Access Locks | 是 |
 | `src/events.c` | 事件队列、appears/disappears、Table 58 事件内存 | 是（启用事件时） |
 | `src/diag.c` | 诊断源注册表、条件缓存、PULSE 保持窗口、DeviceStatus/DDS 派生 | 是（启用事件时） |
@@ -158,7 +154,6 @@ flowchart LR
     CFG["const iolink_device_config_t *<br/>必须比 ctx 活得久"] --> DEV["iolink_device_ctx_t"]
     DEV --> DLL["iolink_dll_ctx_t"]
     DEV --> DI["device_info ctx"]
-    DEV --> PA["params ctx"]
     DEV --> RH["reset_handler"]
     DEV --> P2["direct_param_page2[16]"]
 
@@ -178,43 +173,36 @@ flowchart LR
     MAIN --> TMR["timers[] + next_deadline"]
     EV --> COND["diag<br/>iolink_conditions_t"]
 
-    ISDU -->|params_ctx| PA
     ISDU -->|ds_ctx| DS
     ISDU -->|event_ctx| EV
     ISDU -->|dll_ctx| MAIN
     ISDU -->|od| OD["const iolink_od_app_t *"]
+    ISDU -->|device_info| DI
     ISDU -->|direct_param_page2| P2
     ISDU -->|workspace| WS["iolink_workspace_t"]
     DS -->|workspace| WS
-    DS -->|read_param / write_param| DA["device_param_read / device_param_write"]
-    DA --> OD
-    DA --> PA
-    DS -->|params_ctx| PA
-    DS -->|storage| ST["iolink_storage_api_t"]
-    PA -->|storage| ST
-    PA -->|device_info| DI
+    DS -->|"iolink_od_read_value / write_value"| OD
+    OD -->|"on_change"| NVM["应用 NVM（应用自行落盘）"]
+    DS -->|flag_persist| NVM
 ```
 
 `iolink_dll_ctx_t` 只是 `{ iolink_dll_main_t main; iolink_dll_isr_t isr; }` 的单次分配容器（`include/iolinki/dll_ctx.h`）。两者是**兄弟结构**：`main.shared` 是 `iolink_dll_main_t` 的首成员，`shared.isr` 反向指向 `isr`。因此字段访问路径是 `ctx->dll.main.<field>` 与 `ctx->dll.main.shared.<field>`，`dll.c` 只包含 `dll_main.h`、看不到 ISR 独占字段（`tools/check_ownership.sh` 机械校验）。
 
 绑定分两处：`iolink_dll_init()` 建立 ISDU ↔ DLL/事件的内部反向链接
-（`isdu.dll_ctx = &ctx->dll.main`、`isdu.event_ctx = &shared.events`），
-`iolink_device_init()`（按 `config.workspace` 绑定工作区）
-绑定外部依赖：
+（`isdu.dll_ctx = &ctx->dll.main`、`isdu.event_ctx = &shared.events`）；
+`iolink_device_init()` 按 `config.workspace` 绑定工作区并绑定外部依赖：
 
-- `dll.main.shared.isdu.params_ctx = &ctx->params`、`...isdu.od = config->od`、`...isdu.ds_ctx = &ctx->dll.main.ds`；
+- `dll.main.shared.isdu.od = config->od`、`...isdu.ds_ctx = &ctx->dll.main.ds`、`...isdu.device_info = &ctx->device_info`；
 - `dll.main.shared.isdu.direct_param_page2 = ctx->direct_param_page2`；
 - `dll.main.shared.caps = iolink_caps_resolve(&config->phy, &config->stack, config->app_callbacks, NULL)`；
 - `iolink_isdu_bind_workspace()` / `iolink_ds_bind_workspace()` 把传输 scratch 指向工作区；`iolink_isdu_bind_caps()` 让 ISDU 按实例能力位选路；
 - `dll.main.state_cb = device_state_cb`，用于把 DLL 状态变化转成应用回调；
-- `params` 与 `ds` 共用同一个 `storage` 后端；`IOLINK_FEATURE_DATA_STORAGE=1`
-  时 `storage` 必须非空且具备 `read`/`write`，否则初始化返回
-  `IOLINK_DEVICE_INIT_ERR_STORAGE`；
-- `ds` 绑定统一访问器 `device_param_read`/`device_param_write`/`device_param_check`：先按 `iolink_od_find()` 定位表项并交给 OD 值层（标准 Tag 经参数管理器，应用参数经应用后端）；表外索引返回 `NOT_HANDLED`。`iolink_od_find()` 按索引域决定优先级：规范索引标准表优先，设备专用索引应用表优先、标准表内建项回落。
+- `ds` 只绑定 OD 表：`iolink_ds_bind_sources(ctx, config->od)`。集合成员（`storage` 含 `IOLINK_OD_STORAGE_DS` 的表项）与取值、写回都经 `iolink_od_find()` + OD 值层完成，没有独立的参数访问器或存储后端；表外索引返回 `NOT_HANDLED`。`iolink_od_find()` 按索引域决定优先级：规范索引标准表优先；设备专用索引（`0x0040-0x00FE`、`0x0100+`）与应用拥有的标签索引（`0x0018-0x001A`）应用表优先、标准表内建项回落；
+- `config.ds_flag_persist` 经 `iolink_ds_set_flag_persist()` 绑定，标志变化时以 `config.user` 为上下文回调应用。
 
 因此以下对象必须由应用保证生命周期：`iolink_device_config_t`、`device_info`、
-`storage`（启用 DS 时）、`iolink_od_app_t`（表与 get/set 后端）、
-`iolink_workspace_t`（提供时）、DS 参数描述数组、PHY 上下文。
+`iolink_od_app_t`（表、值后端与钩子）、`iolink_workspace_t`（提供时）、
+PHY 上下文，以及 `on_change`/`ds_flag_persist` 访问的应用 NVM。
 
 > `iolink_dll_ctx_t` 只能原地初始化与使用。按值拷贝会让 `main.shared.isr`
 > 继续指向原对象；`dll_ctx.h` 用布局断言锁定了这一点。
@@ -230,13 +218,13 @@ flowchart TD
     B -- 是 --> B2{"IOLINK_WORKSPACE_EMBEDDED=0<br/>且 workspace == NULL?"}
     B2 -- 是 --> E4["返回 IOLINK_DEVICE_INIT_ERR_WORKSPACE"]
     B2 -- 否 --> C["device_config_validate()"]
-    C --> C1{"time_us / M-seq 类型 / PD 长度 / OD 宽度<br/>固定布局 / 波特率 / 临界区 / storage<br/>能力位与 PHY 钩子一致?"}
+    C --> C1{"time_us / M-seq 类型 / PD 长度 / OD 宽度<br/>固定布局 / 波特率 / 临界区 / 应用 OD 表<br/>能力位与 PHY 钩子一致?"}
     C1 -- 否 --> E2["返回对应负错误码"]
     C1 -- 是 --> D["清零 ctx，保存 config 指针"]
     D --> F["phy->init(user)"]
     F --> F1{"返回 0?"}
     F1 -- 否 --> E3["原样返回 PHY 错误"]
-    F1 -- 是 --> G["iolink_device_info_ctx_init()<br/>iolink_params_ctx_init()"]
+    F1 -- 是 --> G["iolink_device_info_ctx_init()<br/>身份与访问锁"]
     G --> H["iolink_dll_init(main, isr, phy)<br/>状态 STARTUP、COM2、绑定 shared.isr"]
     H --> H1{"PHY 有 detect_wakeup?"}
     H1 -- 是 --> H2["set_mode(SIO)<br/>等待唤醒"]
@@ -245,10 +233,9 @@ flowchart TD
     H3 --> I
     I --> J["iolink_isdu_bind_workspace()<br/>iolink_isdu_bind_caps()"]
     J --> K["绑定 time_us；事件窗口<br/>iolink_events_set_window()"]
-    K --> L["绑定 ISDU 依赖：od<br/>params_ctx / direct_param_page2"]
-    L --> M["iolink_params_ctx_init()<br/>标签值取 device_info 默认值"]
-    M --> N["iolink_ds_init(storage) + iolink_ds_bind_workspace()<br/>iolink_ds_bind_sources(config.od, params)<br/>iolink_ds_load_persistent() + iolink_ds_refresh()"]
-    N --> O["iolink_device_set_log()<br/>把 sink 复制到 DLL/ISDU/DS/事件"]
+    K --> L["绑定 ISDU 依赖：od / device_info<br/>direct_param_page2 / state_cb"]
+    L --> M["启用 DS 时：iolink_ds_init()<br/>iolink_ds_set_flag_persist(config.ds_flag_persist)<br/>iolink_ds_bind_workspace()<br/>iolink_ds_bind_sources(config.od) + iolink_ds_refresh()"]
+    M --> O["iolink_device_set_log()<br/>把 sink 复制到 DLL/ISDU/DS/事件"]
     O --> P["device_apply_stack_config()<br/>PD/OD 长度、t_pd、工作 COM、MinCycleTime<br/>timing_enforce 覆盖"]
     P --> T["调用 on_startup()"]
 ```
@@ -256,6 +243,7 @@ flowchart TD
 要点：
 
 - 初始化校验在 `device_config_validate()` 完成；本路径还会在 `device_validate_fixed_mseq()` 拒绝 `TYPE_1_1` 和与 Annex A 固定布局不一致的 PD/OD 长度。
+- `IOLINK_FEATURE_VALIDATE=1`（默认）时，同一处调用 `od_validate_app()` 走一遍应用 OD 表：缺失后端指针/回调、`TRIGGER` 带 storage 位、可写 STORAGE 字节串缺少 `block_len`、只读表项带钩子、默认值越界、`(index, subindex)` 重复、应用表占用规范索引（标签 `0x0018-0x001A` 除外）等都在这里被拒绝并返回 `IOLINK_DEVICE_INIT_ERR_OD`，不会拖到首次 ISDU 访问。表宏的常量交叉检查始终生效。
 - 能力位只在 `iolink_caps_resolve()` 解析，且必须在绑定 PHY 之后、任何 ISR 可能运行之前。校验阶段用同一函数做一致性检查：`IOLINK_CAP_REQUIRE_ISR_TX` 缺 `request_service()`、或 `IOLINK_PHY_FEATURE_TX_BUSY` 开启但 PHY 无 `tx_busy()`，都返回 `IOLINK_DEVICE_INIT_ERR_PHY`。
 - `iolink_dll_init()` 默认 COM2；若 `stack.baudrate_set`，`device_apply_stack_config()` 会通过 `iolink_dll_set_operating_baudrate()` 再设置工作 COM。
 - `iolink_dll_init()` 结束时已发布 STARTUP 状态的应答计划，因此第一个启动探测可由 ISR 提前应答。
@@ -585,10 +573,8 @@ flowchart TD
     B1 -- 否 --> D{"iolink_od_find(NULL, index, sub)<br/>内建表命中?（0x0040 回落）"}
     D -- 否 --> D1["0x8011 Index not available"]
     D -- 是 --> S
-    B -- 否 --> B2{"iolink_od_find(NULL, index, sub)<br/>规范索引：标准表优先"}
-    B2 -- 否 --> B3{"iolink_od_find_app(od, index, sub)<br/>应用表命中?"}
-    B3 -- 否 --> D1
-    B3 -- 是 --> S
+    B -- 否 --> B2{"iolink_od_find(od, index, sub)<br/>规范索引：标签 0x0018-0x001A 应用优先，<br/>其余标准表优先"}
+    B2 -- 否 --> D1
     B2 -- 是 --> S
     S --> P["isdu_entry_allowed()<br/>方向 / 访问锁 / max_subindex"]
     P --> E{"entry->handler"}
@@ -603,12 +589,12 @@ flowchart TD
     E -- "DETAILED_STATUS" --> E8["handle_detailed_device_status()"]
     E -- "PD_INPUT / PD_OUTPUT" --> E9["isdu_read_process_data()"]
     E -- "ERROR_STATS" --> E10["handle_error_stats()"]
-    E -- "TAG / BACKEND" --> E11["isdu_serve_od_value()"]
+    E -- "NONE（应用表项）" --> E11["isdu_serve_od_value()"]
 ```
 
-索引到处理器的映射只存在于 `src/od.c` 的内建 const 表：`0x0000/0x0001` Direct Parameter、`0x0002` SystemCommand、`0x0003` DataStorage、`0x000C` DeviceAccessLocks、`0x000D` ProfileCharacteristic、`0x0010-0x0017/0x001B` 标识字符串、`0x0018-0x001A` Tag、`0x0020` ErrorCount、`0x0024` DeviceStatus、`0x0025` DetailedDeviceStatus、`0x0028/0x0029` PD 输入/输出、`0x0040` 厂商错误统计。应用参数在 `iolink_od_app_t` 表里选择唯一后端：`IOLINK_OD_SCALAR_STORAGE` / `IOLINK_OD_BYTES_STORAGE` 绑定应用变量，`_HANDLER` 变体提供逐表项 `read`/`write` 函数；新增参数 = 一行表项。
+索引到处理器的映射只存在于 `src/od.c` 的内建 const 表：`0x0000/0x0001` Direct Parameter、`0x0002` SystemCommand、`0x0003` DataStorage、`0x000C` DeviceAccessLocks、`0x000D` ProfileCharacteristic、`0x0010-0x0017/0x001B` 标识字符串、`0x0020` ErrorCount、`0x0024` DeviceStatus、`0x0025` DetailedDeviceStatus、`0x0028/0x0029` PD 输入/输出、`0x0040` 厂商错误统计。三个标签 `0x0018-0x001A` 不在内建表中：应用用 `IOLINK_OD_BYTES_STORAGE[_EX]` 提供缓冲，库按普通应用表项读写。应用参数在 `iolink_od_app_t` 表里选择唯一后端：`IOLINK_OD_SCALAR_STORAGE` / `IOLINK_OD_BYTES_STORAGE` 绑定应用变量，`_HANDLER` 变体提供逐表项 `read`/`write` 函数；新增参数 = 一行表项。
 
-索引归属按域决定：规范索引（`< 0x0040`）从内建表取，应用表不得遮蔽 `0x0002`/`0x0024` 等对象；设备专用索引先查应用表，未声明时才回落到内建表。`0x0040` 同时是“设备特定起始索引”和内置 error-stats 索引：**应用表声明时走应用后端；未声明时由内置 `handle_error_stats()` 提供**。OD 值层另行校验 `max_subindex`（越界 `0x8011`）与 OctetString 的 `block_len`（超长 `0x8033`）。
+索引归属按域决定：规范索引（`< 0x0040`）中标准表优先，应用表不得遮蔽 `0x0002`/`0x0024` 等对象；唯一例外是标签 `0x0018-0x001A`，其数据归应用，应用表声明时优先命中。设备专用索引（`0x0040-0x00FE`、`0x0100+`）先查应用表，未声明时才回落到内建表。`0x0040` 同时是“设备特定起始索引”和内置 error-stats 索引：**应用表声明时走应用后端；未声明时由内置 `handle_error_stats()` 提供**。标签未在应用表声明时没有内建回落，读取返回 `0x8011`。OD 值层另行校验 `max_subindex`（越界 `0x8011`）与 OctetString 的 `block_len`（超长 `0x8033`）。
 
 ### 7.5 SystemCommand 映射
 
@@ -618,10 +604,10 @@ flowchart TD
 | :--- | :--- |
 | `0x80` Device Reset | `iolink_dll_reset_diagnostics()`（诊断置 0）+ `isdu.reset_pending`，由 `iolink_device_process()` 调用 reset handler |
 | `0x81` Application Reset | `app_reset_pending = true`，并触发 DS_UPLOAD_REQ |
-| `0x82` Restore Factory Settings | `iolink_params_ctx_factory_reset()` + 清 DS_UPLOAD_FLAG + 复位 ErrorCount + `iolink_events_clear_diagnosis()`（Table 101 的 Clear）；不请求上传 |
-| `0x83` Back-to-box | 恢复出厂值 + 清 DS_UPLOAD_FLAG + `iolink_dll_request_back_to_box()`，3 个 MasterCycle 后停止通信 + 复位诊断 |
+| `0x82` Restore Factory Settings | `iolink_ds_factory_reset()`（DS 集合恢复表默认值，仅 RAM）+ 清 DS_UPLOAD_FLAG + 复位 ErrorCount + `iolink_events_clear_diagnosis()`（Table 101 的 Clear）；不请求上传，也不写 NVM |
+| `0x83` Back-to-box | 同上恢复 RAM 默认值 + 清 DS_UPLOAD_FLAG + `iolink_dll_request_back_to_box()`，3 个 MasterCycle 后停止通信 + 复位诊断 |
 | `0x01/0x02` ParamUploadStart/End | DS 上传 |
-| `0x03/0x04` ParamDownloadStart/End | DS 下载；下载期间 DS 参数写入先暂存，End 时先整份校验再逐条应用（非跨参数事务） |
+| `0x03/0x04` ParamDownloadStart/End | DS 下载；下载期间 DS 参数写入先暂存到 `ds_stage`，End 时先整份预校验再逐条写入（每条经 `on_change` 通知应用落盘；非跨参数事务） |
 | `0x05` ParamDownloadStore | 完成下载（等价 DownloadEnd）并触发 DS_UPLOAD_REQ |
 | `0x06` ParamBreak | 中止 DS；空闲时返回 `0x8036`（Function temporarily unavailable） |
 | `0x84-0x9F` | 保留值（Table B.9），返回 `0x8035` |
@@ -635,31 +621,31 @@ DPP1 地址 `0x0F` 的 SystemCommand 走 `iolink_isdu_execute_system_command()`�
 
 ## 8. Data Storage、参数与事件
 
-### 8.1 参数持久化
+### 8.1 参数写入与持久化边界
 
-参数记录布局（`include/iolinki/storage.h`）：
+库不拥有 NVM，也不定义持久化格式。参数写入只有一条路径：
 
-```text
-PARAMS 区域（PERSIST 表项的参数镜像）:
-  magic(4) | version(2) | length(2) | fletcher32(4) |
-  [Index(2) | Subindex(1) | Length(1) | Data] * n
-
-FLAG 区域:
-  DS_UPLOAD_FLAG(1) + 3 字节对齐保留
+```mermaid
+flowchart LR
+    A["ISDU 写请求<br/>iolink_isdu_process()"] --> B["isdu_serve_od_value()"]
+    B --> C["iolink_od_write_value()"]
+    C --> V["线长 / 范围 / validate<br/>subindex 上界"]
+    V --> D{"表项 backend / 语义"}
+    D -- "STORAGE" --> E["od_storage_write()<br/>直接写应用变量"]
+    D -- "HANDLER" --> F["entry->u.handler.write()"]
+    D -- "TRIGGER" --> G
+    E --> G["entry->on_change()<br/>应用在此落盘"]
+    F --> G
 ```
 
-Data Storage 映像不落盘：`Data_Storage_Size`、`Parameter_Checksum` 与上传内容都按当前参数集实时生成。
+- `iolink_od_write_value()` 先做线长、范围和 `validate` 校验，再按写语义改 RAM：`STORAGE` 直接写应用变量，`HANDLER` 调用表项自己的 `write`，`TRIGGER` 不保存值、只执行 `on_change`。成功后再调用 `on_change`；只有 `STORAGE` 标量在钩子返回错误时回滚到写前值，`HANDLER` 与 OctetString 不回滚（需要在写入前用 `validate` 拒绝）。
+- 持久化完全由应用在 `on_change` 中决定；库不写 NVM、不提供存储后端、不做启动恢复。重启后的初值由应用自己装载，或由应用调用 `iolink_ds_factory_reset()` 把 DS 集合恢复为表默认值。
+- `iolink_ds_factory_reset()` 只把 DS 集合（`storage` 含 `IOLINK_OD_STORAGE_DS` 的表项）恢复为表默认值，仅改 RAM；内建处理器表项跳过。三个标签 `0x0018-0x001A` 由应用以 `IOLINK_OD_BYTES_STORAGE[_EX]` 表项提供，按普通应用表项读写并由应用自行复位。
+- `DS_UPLOAD_FLAG` 只保存在 RAM。`config.ds_flag_persist`（`iolink_ds_flag_persist_fn`）在标志变化时以 `config.user` 为上下文回调应用，应用在回调里落盘；NULL 表示 RAM-only。
 
-区域偏移由 `include/iolinki/storage.h` 的区域偏移宏（`IOLINK_STORAGE_PARAMS_BASE`、`IOLINK_STORAGE_FLAG_BASE` 及其 `_SIZE`）在编译期固定，应用在 `read`/`write` 回调里加自己的物理基址。
+### 8.2 DS 序列化与下载暂存
 
-关键流程：
-
-- `iolink_ds_load_persistent()`：magic/version/length/checksum 任一失败则忽略 NVM，保留 RAM 默认值；成功则通过 `iolink_od_restore_value()` 逐条恢复（不跑钩子、不回写）。
-- `iolink_ds_save_persistent()`：序列化所有 `IOLINK_OD_STORAGE_PERSIST` 表项，先写头再写记录；ISDU 写路径经 `iolink_od_ctx_t::flush` 调用它，失败时写路径回滚并返回 `IOLINK_RESULT_IO`。
-- `iolink_params_ctx_write()`：只改 RAM 并同步 AppTag 到 device_info；不再自行写 NVM。
-- `iolink_ds_factory_reset()`：清空标签后把每个 PERSIST 表项恢复为表默认值，并写一次参数镜像。
-
-### 8.2 Data Storage 镜像
+`iolink_ds_init(ctx)` 只初始化状态与暂存指针，不接收任何存储后端；来源与工作区分别由 `iolink_ds_bind_sources()` / `iolink_ds_bind_workspace()` 绑定。
 
 记录格式（`iolink_ds_serialize()` / `iolink_ds_calc_checksum()`）：
 
@@ -667,10 +653,11 @@ Data Storage 映像不落盘：`Data_Storage_Size`、`Parameter_Checksum` 与上
 [Index(2, big-endian)][Subindex(1)][Length(1)][Data(Length)] ...
 ```
 
-- `iolink_ds_serialize(ctx, out, cap)`：按 DS 描述符顺序**流式**序列化当前参数集，同时累加 Fletcher-32。`out` 可以是 ISDU 应答缓冲、调用方缓冲，或 `NULL`（只统计长度/校验和）；此时用 `IOLINK_DS_STREAM_CHUNK` 大小的小栈块读取参数，不建常驻镜像。
-- `iolink_ds_build_image()`：只是“写入绑定暂存缓冲”的包装（`workspace.ds_stage` 或内嵌 fallback）；`iolink_ds_refresh()` 只刷新 `image_len` 与 `current_checksum`，不建立快照。
-- `iolink_ds_apply_image()`：先完整校验记录结构，再对每个已知参数调用 `check` 回调做无副作用预校验（任一失败返回 `-2`，此时不写任何参数）；全部通过后逐条应用并持久化，未知索引跳过；最后重新序列化，保证镜像与设备真实参数一致。NVM 写入失败仍可能留下已生效的前缀记录（不是跨参数事务）。
-- DS 成员判定只看 OD 表项的 `storage == IOLINK_OD_STORAGE_DS`：标准表在前、应用表按表序，没有独立的描述符集合或可替换访问器。
+- `iolink_ds_serialize(ctx, out, cap)`：按 DS 集合顺序（标准表在前、应用表按表序）**流式**序列化当前参数集，同时累加 Fletcher-32。`out` 可以是 ISDU 应答缓冲、调用方缓冲，或 `NULL`（只统计长度/校验和）；`NULL` 时用 `IOLINK_DS_STREAM_CHUNK` 大小的小栈块读取参数，不建常驻镜像。
+- `iolink_ds_build_image()`：把序列化结果写入绑定暂存缓冲（`workspace.ds_stage` 或内嵌 fallback）；没有暂存缓冲时只统计长度与校验和。`iolink_ds_refresh()` 用同一缓冲重建 `image_len` 与 `current_checksum` 后把快照标记为无效，因此上传、`Data_Storage_Size` 与 `Parameter_Checksum` 始终反映当前参数集。
+- `iolink_ds_stage_param()`：下载期间把写请求按记录格式追加到 `ds_stage`，不立即生效。
+- `iolink_ds_apply_image()`：先完整校验记录结构，再用 `iolink_od_check_value()` 对每个已知参数做无副作用预校验（任一失败返回 `-2`，此时不写任何参数）；全部通过后经 `iolink_od_write_value()` 逐条写入（每条触发 `on_change`，应用在此落盘），未知索引跳过；最后重新序列化，保证镜像与设备真实参数一致。应用落盘失败仍可能留下已生效的前缀记录（不是跨参数事务）。
+- DS 参数集是 OD 表项的投影：判定只看 `storage` 是否含 `IOLINK_OD_STORAGE_DS`，顺序为标准表在前、应用表按表序；没有独立描述符集合或可替换访问器。
 
 DS 状态机（`iolink_ds_process()`）：
 
@@ -742,11 +729,11 @@ flowchart TD
 
 | 顺序 | 调用 | 来源 |
 | :--- | :--- | :--- |
-| 1 | `phy->init()` | `iolink_device_init()` |
-| 2 | `phy->set_baudrate(COM2)` | `iolink_dll_init()` |
-| 3 | `phy->set_mode(SIO/SDCI)` | `iolink_dll_init()` 依据 `IOLINK_CAP_WAKEUP` |
-| 4 | `storage->read()` | `params_ctx_load()`、`iolink_ds_init()` |
-| 5 | `od.read`（经 `device_param_read`） | 无持久镜像时的 `iolink_ds_build_image()` |
+| 1 | `od_validate_app()`（`IOLINK_FEATURE_VALIDATE=1`） | `device_config_validate()`；失败返回 `IOLINK_DEVICE_INIT_ERR_OD` |
+| 2 | `phy->init()` | `iolink_device_init()` |
+| 3 | `phy->set_baudrate(COM2)` | `iolink_dll_init()` |
+| 4 | `phy->set_mode(SIO/SDCI)` | `iolink_dll_init()` 依据 `IOLINK_CAP_WAKEUP` |
+| 5 | OD 表项读取（`iolink_od_read_value()`） | `iolink_ds_refresh()` 计算 `Data_Storage_Size`/`Parameter_Checksum`；`HANDLER` 表项调到应用 `read` |
 | 6 | `phy->set_baudrate(工作 COM)` | `device_apply_stack_config()` 可选 |
 | 7 | `on_startup()` | `iolink_device_init()` 末尾 |
 
@@ -817,8 +804,9 @@ sequenceDiagram
 | `on_pd_output` | `device_run_app_callbacks()` | OPERATE 每周期，报告最新 PD-out |
 | `on_pd_input` | `device_run_app_callbacks()` | `IOLINK_CAP_PD_IN_CALLBACK` 置位时，OPERATE 每周期 |
 | `reset_handler` | `device_dispatch_resets()` | 0x80/0x81 请求后 |
-| `od.read` / `od.write` | `iolink_od_read_value()` / `iolink_od_write_value()` | 应用参数值后端；标准 Tag 走参数管理器 |
-| `storage->read/write` | params 加载/保存、DS 加载/保存 | 持久化只使用 read/write |
+| `od` 值后端（`STORAGE` 变量或 `HANDLER` `read`/`write`） | `iolink_od_read_value()` / `iolink_od_write_value()` | 所有应用参数与三个标签共用同一路径 |
+| 表项 `validate` / `on_change` | `iolink_od_write_value()` | 主上下文；`on_change` 是应用落盘与状态同步的唯一通知点 |
+| `config.ds_flag_persist` | `iolink_ds_request_upload()` / `iolink_ds_clear_upload()` | 主上下文；`DS_UPLOAD_FLAG` 变化时回调，应用在此写 NVM |
 | `iolink_device_time_us_fn time_us` | DLL、ISR 双泵、事件引擎、诊断窗口 | 必需；初始化时绑定，NULL 返回 `IOLINK_DEVICE_INIT_ERR_TIME`；必须单调/非阻塞/ISR 安全 |
 | `phy.get_faults` | `dll_poll_diagnostics()` | 电平源，触发/清除 Table D.1 事件；NULL 时诊断静默 |
 | `phy.set_cq_line` | 无 | SIO 线状态由 PHY/应用自行管理 |
@@ -838,6 +826,7 @@ sequenceDiagram
 
 - `iolink_events_process()`（有待处理事件时）与 `iolink_ds_process()`（DS 状态非 IDLE 时）由 `iolink_device_process()` 在 ISDU 传输空闲时自动调用，见 `device_service_events_and_ds()`。
 - `iolink_ds_check()` 需应用自行调用：它需要应用提供的 master 校验和，栈无法自行获取。
+- 参数持久化没有独立的后台步骤：`on_change` 在 ISDU 写（或 `iolink_ds_apply_image()` 恢复）执行时同步调用，应用若需要异步写 NVM 应自行排队。`DS_UPLOAD_FLAG` 的落盘同理，由 `config.ds_flag_persist` 回调承担。
 - `iolink_device_process_isr()` 设计为在 PHY 数据中断中调用；host 模拟可用主循环驱动，但真实设备不要在 `ctx` 已并发进入主循环时从另一上下文调用。
 
 ---
@@ -999,9 +988,14 @@ flowchart LR
 - `iolink_conditions_t`：诊断来源的 RAM 缓存（`isr_pulse[]`、`quiet_since_ms[]`、`edges[]`）；条件本身仍由 `events.pending[]` 的 `present` / `reported` 唯一决定。
 - `last_notified_state`：主上下文记录“已交付给应用的状态”，配合 `shared.state` 做电平式通知；`startup_notification_pending` 保留 ISR 触发的 STARTUP 边沿，避免快速进入 PREOPERATE 时丢失复位通知。
 
+上下文尺寸契约（默认缓冲、64 位主机，由 `tests/test_ctx_sizes.c` 断言）：
+`iolink_device_ctx_t` 4896 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4912 B），内嵌
+`iolink_dll_ctx_t` 4704/4720 B、`iolink_isdu_ctx_t` 1344 B、`iolink_events_ctx_t` 504 B、
+`iolink_ds_ctx_t` 360 B；`iolink_workspace_t` 1289 B。
+
 并发边界：
 
-- `shared.isdu`、`shared.events`（含 `diag` 条件缓存）、`params`、`ds`、`reply_plan`、`timers` 的主要状态由主循环修改。
+- `shared.isdu`、`shared.events`（含 `diag` 条件缓存）、`ds`、`reply_plan`、`timers` 的主要状态由主循环修改；应用参数变量、`on_change` 与 `ds_flag_persist` 也只在主上下文被访问。
 - 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（事件队列、诊断条件表、PD-in 索引发布、`set_pd_length`、计数器清零、日志 sink），以及仅在直发回退（PHY 无 `request_service()` 且非 `IOLINK_CAP_REQUIRE_ISR_TX`）里驱动 PHY 的那一段；状态迁移不再需要临界区。
 - 库不取线程锁：API 只有一个主上下文调用者；共享标量由平台临界区保护，数据交接无锁。
 - 平台默认临界区是 weak 空实现（`src/platform.c`）；`iolink_device_init()` 通过
@@ -1120,12 +1114,13 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 | `IOLINK_PHY_FEATURE_ISR_TX_ONLY` | 只提供 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 的构建默认值；运行时判定点是 `IOLINK_CAP_REQUIRE_ISR_TX` |
 | `IOLINK_PHY_FEATURE_TX_BUSY` | TX FRAME 下是否要求 `tx_busy()`（否则 PD-in 租约保持到下次捕获） |
 | `IOLINK_FEATURE_DATA_STORAGE` | 是否编译 DS 引擎与 ISDU 0x0003 |
+| `IOLINK_FEATURE_VALIDATE` | 1=初始化时走一遍应用 OD 表自检并返回 `IOLINK_DEVICE_INIT_ERR_OD`；0=省掉该自检 `.text`，表宏的编译期检查仍生效 |
 | `IOLINK_FEATURE_SYSTEM_COMMAND` | 是否编译 SystemCommand 处理 |
 | `IOLINK_FEATURE_EVENTS` | 是否编译事件引擎、诊断注册表、DDS、CKS 事件标志与故障轮询 |
 | `IOLINK_PD_IN_MAX_SIZE` / `IOLINK_PD_OUT_MAX_SIZE` / `IOLINK_OD_MAX_SIZE` | PD/OD 缓冲上限（运行时长度不得超过） |
 | `IOLINK_MBX_SLOTS` / `IOLINK_REPLY_PLAN_SLOTS` | 帧邮箱深度（默认 4）/ 应答计划槽位（默认 48，按 4 个状态切片使用）；满时分别计 `isr_mailbox_drops` / `reply_plan_overflows` |
 | `IOLINK_ISDU_BUFFER_SIZE` | 单次 ISDU 事务上限，同时决定 `iolink_isdu_scratch_t` 各缓冲容量 |
-| `IOLINK_DS_IMAGE_MAX` | 一次序列化（DS 上传/校验和或参数镜像）的上限，同时决定 workspace 的 `ds_stage` 容量 |
+| `IOLINK_DS_IMAGE_MAX` | 一次序列化（DS 上传/校验和）与下载暂存的上限，同时决定 workspace 的 `ds_stage` 容量 |
 | `IOLINK_EVENT_QUEUE_SIZE` / `IOLINK_EVENT_PENDING_MAX` | 事件队列深度 / 同时活动的条件数；DDS 快照容量取 `IOLINK_EVENT_PENDING_MAX`（编译期上限 64） |
 | `IOLINK_EVENT_MIN_APPEAR_MS` / `IOLINK_EVENT_MIN_REPEAT_MS` | A.6.4 两个窗口的构建默认值（可被 `stack.event_min_*_ms` 覆盖） |
 | `IOLINK_DIAG_PULSE_HOLD_MS` | PULSE 诊断源的保持窗口 |
@@ -1153,6 +1148,8 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 - 当 `phy->stack_timer_start != NULL` 时，PHY 必须在 Timer B 到期时调用 `iolink_dll_on_stack_tick()`，否则 `iolink_device_process()` 会被授权门控挡住；Timer A 超时则应调用 `iolink_dll_on_rx_timeout()`。
 - `TYPE_1_1` 在本路径初始化时被拒绝；固定 Annex A 类型必须使用匹配的 PD/OD 布局。
 - `IOLINK_PHY_FEATURE_TX_BUSY=1` 的 TX FRAME 构建在初始化时要求 PHY 提供 `tx_busy()`，否则返回 `IOLINK_DEVICE_INIT_ERR_PHY`。
+- 参数持久化由应用负责：写路径只改 RAM 并调用表项 `on_change`，库不提供 NVM 后端、启动恢复或存储布局宏。`DS_UPLOAD_FLAG` 只保 RAM，经 `config.ds_flag_persist` 通知应用落盘。
+- `IOLINK_FEATURE_VALIDATE=1`（默认）时，初始化会拒绝自相矛盾或不可达的应用 OD 表并返回 `IOLINK_DEVICE_INIT_ERR_OD`；稳定构建可设 0 去掉该自检。
 - `dll.c` 只包含 `dll_main.h`，看不到 ISR 独占字段；新增跨上下文访问必须走 `shared` 或既有 API，否则 `tools/check_ownership.sh` 失败。
 
 ---
@@ -1180,12 +1177,13 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 | ISDU 索引分发 | `handle_standard_commands()`、`isdu_serve_entry()` |
 | 对象字典 | `iolink_od_find()`、`iolink_od_find_app()`、`iolink_od_read_value()`、`iolink_od_write_value()` |
 | SystemCommand | `handle_system_command()`、`iolink_isdu_execute_system_command()` |
-| Data Storage 服务 | `handle_data_storage()`、`iolink_ds_serialize()`、`iolink_ds_apply_image()` |
-| 参数持久化 | `iolink_params_ctx_write()`、`params_ctx_load()` |
+| Data Storage 服务 | `handle_data_storage()`、`iolink_ds_serialize()`、`iolink_ds_stage_param()`、`iolink_ds_apply_image()` |
+| DS 初始化/来源绑定 | `iolink_ds_init()`、`iolink_ds_bind_sources()` |
+| 参数写入/持久化通知 | `iolink_od_write_value()`、表项 `validate`/`on_change` |
+| DS_UPLOAD_FLAG 持久化 | `iolink_ds_request_upload()`、`iolink_ds_clear_upload()`、`iolink_ds_set_flag_persist()` |
 | 事件 | `iolink_event_trigger()`、`iolink_events_process()`、`iolink_events_reset()` |
 | 诊断派生视图 | `iolink_diag_set_level()`、`iolink_diag_service()`、`iolink_diag_device_status()`、`iolink_diag_dds_snapshot()` |
 | 能力位 | `iolink_caps_resolve()`、`iolink_caps_has()`、`iolink_device_set_capabilities()` |
 | 工作区绑定 | `iolink_isdu_bind_workspace()`、`iolink_ds_bind_workspace()` |
 | 校验 | `iolink_checksum6()` |
-| 存储布局 | `include/iolinki/storage.h` |
 | 编译期开关 | `include/iolinki/config.h` |

@@ -273,16 +273,21 @@ Budget: the data interrupt must start the reply within t_A, about 43 us at
 COM3 (one bit ~ 4.3 us). Keep the worst case well below that, and re-measure
 after adding a call inside the section.
 
-### 3. Persistent Storage (Required with Data Storage)
+### 3. 参数持久化（应用负责）
 
-`iolink_device_config_t::storage` is declared and required when
-`IOLINK_FEATURE_DATA_STORAGE` is 1; `iolink_device_init()` rejects a NULL or
-incomplete backend with `IOLINK_DEVICE_INIT_ERR_STORAGE`. Offsets are relative to
-the stack's fixed region layout, so add the physical base address inside the
-callbacks.
+库不提供 NVM 后端，也不规定记录格式或区域布局：`iolink_device_config_t` 中没有
+存储回调。参数通过 OD 表项直接绑定应用变量，库在每次写入生效后调用表项的
+`on_change`，应用据此决定是否以及何时写自己的 NVM（立即、合并或延迟）。上电时
+应用先把 NVM 中的值填回这些变量（包括标签缓冲），再调用 `iolink_device_init()`；
+库不读取 NVM。
 
-The backend interface, region layout, sizing (`IOLINK_STORAGE_TOTAL_SIZE`) and a
-complete EEPROM example are in [STORAGE.md](STORAGE.md).
+DS 是 `IOLINK_OD_STORAGE_DS` 表项的投影：上传内容由当前值实时序列化，不占用
+NVM。`DS_UPLOAD_FLAG` 的掉电保存由 `iolink_device_config_t::ds_flag_persist`
+交给应用，传 NULL 表示该标志只存 RAM。三个标签 0x0018-0x001A 也由应用以
+`IOLINK_OD_BYTES_STORAGE[_EX]` 表项提供。
+
+`on_change` 的返回值、标量回滚规则、DS 下载的两阶段语义和 flag 钩子的触发时机
+见 [STORAGE.md](STORAGE.md)。
 
 ## CMake Integration
 
@@ -328,9 +333,9 @@ your own. For a physical target exclude `phy_virtual.c` and the Linux sources;
 if you supply strong platform hooks, exclude `platform.c` too and provide
 `iolink_platform_critical_sections_ready()` returning 0. Provide the time source
 through `config.time_us`, the critical-section symbols declared in
-`include/iolinki/port.h`, and the storage backend through
-`iolink_device_config_t::storage` when Data Storage is enabled. Keep every
-library and application unit on the same configuration defines and make the
+`include/iolinki/port.h`, and the parameter persistence hooks (`on_change` on the
+OD entries and `iolink_device_config_t::ds_flag_persist`) in the application. Keep
+every library and application unit on the same configuration defines and make the
 startup/linker files match the actual MCU; a successful GCC build is not evidence
 of IAR compatibility.
 
