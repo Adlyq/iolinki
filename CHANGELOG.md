@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (test suite)
+- Every unit test now runs through cmocka. 21 files that used `<assert.h>` and
+  7 whose `main()` returned a step number (`IOLINK_TEST_RC` in
+  `tests/test_case.h`) were converted, so one failing case no longer hides the
+  rest of the binary.
+- cmocka is a hard requirement for the suite: a configure without it fails
+  instead of printing a warning and registering no tests. `-UNDEBUG` is gone
+  with the last `assert()`.
+
 ### Added (DS_UPLOAD_FLAG persistence hook)
 - `iolink_ds_flag_persist_fn`, `iolink_ds_set_flag_persist()` and
   `iolink_device_config_t::ds_flag_persist` let the application persist

@@ -17,12 +17,10 @@
  * setter propagates the sink to every subsystem.
  */
 
-#include <stdarg.h>
-#include <stddef.h>
 #include <setjmp.h>
-#include <cmocka.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <cmocka.h>
 #include <stdio.h>
 #include <string.h>
 

@@ -28,9 +28,8 @@ target_compile_definitions(iolink_test_transport_probe PRIVATE
 # -DIOLINK_TEST_TRANSPORT fails there instead of silently testing the wrong one.
 
 # One test target: executable, link line and ctest registration in a single
-# place. LIBS defaults to iolinki. CMOCKA adds test_helpers.c and links the
-# cmocka library; the assert()-only tests stay without that dependency, and
-# NO_HELPERS keeps it off the cmocka tests that do not use the helper unit.
+# place. LIBS defaults to iolinki. CMOCKA links the cmocka runtime and, unless
+# NO_HELPERS is given, also compiles test_helpers.c into the target.
 # BYTE_ONLY marks a target whose assertions pin a BYTE transport contract; it
 # is not built when the suite runs on the FRAME transport.
 function(iolink_test)
@@ -83,7 +82,7 @@ endfunction()
 
 # External-workspace profile: a second build of the sources without the
 # embedded scratch, so the -16 rejection and the explicit-workspace path are
-# compiled and executed (not only syntax-probed). No cmocka dependency.
+# compiled and executed (not only syntax-probed).
 add_library(iolink_workspace_fixture STATIC ${IOLINK_SOURCES})
 target_include_directories(iolink_workspace_fixture PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_compile_definitions(iolink_workspace_fixture PUBLIC IOLINK_WORKSPACE_EMBEDDED=0)
@@ -108,8 +107,14 @@ if(CMOCKA_FOUND)
     include_directories(${CMOCKA_INCLUDE_DIRS})
     # cmocka >= 2.0 marks the legacy type-generic macros (check_expected,
     # expect_value, ...) deprecated. The suite still supports older cmocka, so
-    # keep the portable macros and silence the warning in the test targets only.
+    # keep the portable macros. The option is directory-wide, so it also covers
+    # the fixture libraries built below.
     add_compile_options(-Wno-deprecated-declarations)
+else()
+    message(FATAL_ERROR
+        "CMocka is required for the unit suite. Install libcmocka-dev (Debian) "
+        "or cmocka (Arch), configure with -DBUILD_TESTING=OFF for a library-only "
+        "build, or trim a feature to skip the suite.")
 endif()
 
 iolink_test(NAME test_workspace_external
@@ -143,7 +148,7 @@ iolink_test(NAME test_dll_statemachine SOURCES test_dll_statemachine.c
         CMOCKA NO_HELPERS)
 iolink_test(NAME test_dll_statemachine_gen SOURCES test_dll_statemachine_gen.c
         CMOCKA NO_HELPERS)
-# No cmocka dependency (plain asserts over the plan table and ISR pump).
+# Reply-plan table and ISR pump, with a local PHY mock (no test_helpers.c).
 iolink_test(NAME test_reply_plan SOURCES test_reply_plan.c
         CMOCKA NO_HELPERS)
 
@@ -232,115 +237,110 @@ if(IOLINK_FEATURE_VALIDATE)
 endif()
 
 
-if(CMOCKA_FOUND)
-    # Initial tests
-    iolink_test(NAME test_init SOURCES test_init.c CMOCKA)
-    iolink_test(NAME test_reference_device
-        SOURCES test_reference_device.c ../examples/reference_device/reference_device.c
-        INCLUDES ../examples/reference_device
+# Initial tests
+iolink_test(NAME test_init SOURCES test_init.c CMOCKA)
+iolink_test(NAME test_reference_device
+    SOURCES test_reference_device.c ../examples/reference_device/reference_device.c
+    INCLUDES ../examples/reference_device
+    CMOCKA)
+if(IOLINK_PLATFORM STREQUAL "LINUX")
+    # Host conformance example, shared by three test binaries: build it once
+    # as a library instead of recompiling its sources per target.
+    add_library(conformance_device_example STATIC
+        ../examples/conformance_device/conformance_device.c
+        ../examples/conformance_device/conformance_device_od.c
+        ../examples/conformance_device/conformance_profiles.c)
+    target_include_directories(conformance_device_example PUBLIC
+        ../examples/conformance_device)
+    target_link_libraries(conformance_device_example PUBLIC iolinki)
+    iolink_test(NAME test_conformance_device
+        SOURCES test_conformance_device.c
+        LIBS conformance_device_example
         CMOCKA)
-    if(IOLINK_PLATFORM STREQUAL "LINUX")
-        # Host conformance example, shared by three test binaries: build it once
-        # as a library instead of recompiling its sources per target.
-        add_library(conformance_device_example STATIC
-            ../examples/conformance_device/conformance_device.c
-            ../examples/conformance_device/conformance_device_od.c
-            ../examples/conformance_device/conformance_profiles.c)
-        target_include_directories(conformance_device_example PUBLIC
-            ../examples/conformance_device)
-        target_link_libraries(conformance_device_example PUBLIC iolinki)
-        iolink_test(NAME test_conformance_device
-            SOURCES test_conformance_device.c
-            LIBS conformance_device_example
-            CMOCKA)
-    endif()
-    iolink_test(NAME test_crc SOURCES test_crc.c CMOCKA)
-    iolink_test(NAME test_dll SOURCES test_dll.c CMOCKA)
-    iolink_test(NAME test_pd SOURCES test_pd.c CMOCKA)
-    iolink_test(NAME test_isdu SOURCES test_isdu.c CMOCKA)
-    iolink_test(NAME test_isdu_wire SOURCES test_isdu_wire.c CMOCKA)
-    # 安全网：表驱动重构前钉死强制索引/Direct Parameter/标签的线上行为。
-    iolink_test(NAME test_od_characterization SOURCES test_od_characterization.c CMOCKA)
-    # 对象字典：一行表项新增参数 + switching_sensor 迁移 + DS 成员契约。
-    iolink_test(NAME test_od_app
-        SOURCES test_od_app.c
-            ../examples/switching_sensor/switching_sensor.c
-            ../examples/switching_sensor/switching_sensor_od.c
-        INCLUDES ../examples/switching_sensor
-        CMOCKA)
-    # 应用 OD 表参与 DS 集合（设备层接线、暂存/序列化/恢复、整份预校验）。
-    iolink_test(NAME test_ds_app_od SOURCES test_ds_app_od.c CMOCKA)
-    iolink_test(NAME test_events SOURCES test_events.c CMOCKA)
-    # 诊断注册表：Table D.1 内容、电平/脉冲语义、视图一致性与复位。
-    iolink_test(NAME test_diag SOURCES test_diag.c CMOCKA)
-    iolink_test(NAME test_ds SOURCES test_ds.c CMOCKA)
-    iolink_test(NAME test_error_model SOURCES test_error_model.c CMOCKA)
-    iolink_test(NAME test_error_recovery SOURCES test_error_recovery.c CMOCKA)
-    iolink_test(NAME test_timing SOURCES test_timing.c CMOCKA)
-    iolink_test(NAME test_integration_full SOURCES test_integration_full.c CMOCKA)
-    iolink_test(NAME test_workspace SOURCES test_workspace.c CMOCKA)
-    iolink_test(NAME test_application SOURCES test_application.c CMOCKA)
-    # 能力表：构建档位、resolve() 与运行时覆盖规则。
-    iolink_test(NAME test_capability SOURCES test_capability.c CMOCKA)
-    # 链接期档位断言：正向（同档位可链接）；反向由
-    # tools/check_profile_abi.sh 在构建矩阵里验证。
-    iolink_test(NAME test_profile_abi SOURCES test_profile_abi.c CMOCKA)
-    iolink_test(NAME test_m_sequence_types SOURCES test_m_sequence_types.c CMOCKA)
-    iolink_test(NAME test_reentrant_device SOURCES test_reentrant_device.c CMOCKA)
-
-    # Portability Verification
-    iolink_test(NAME test_locking SOURCES test_locking.c CMOCKA NO_HELPERS)
-    iolink_test(NAME test_config SOURCES test_config_verification.c CMOCKA)
-    iolink_test(NAME test_pd_variable SOURCES test_pd_variable.c CMOCKA)
-    iolink_test(NAME test_baudrate SOURCES test_baudrate.c CMOCKA)
-    iolink_test(NAME test_phy_diagnostics SOURCES test_phy_diagnostics.c CMOCKA)
-    iolink_test(NAME test_phy_tiol112 SOURCES test_phy_tiol112.c CMOCKA)
-    iolink_test(NAME test_app_pd SOURCES test_app_pd.c CMOCKA)
-    iolink_test(NAME test_pd_lease SOURCES test_pd_lease.c CMOCKA)
-    set_tests_properties(test_pd_lease PROPERTIES SKIP_RETURN_CODE 77)
-    iolink_test(NAME test_isdu_buffers SOURCES test_isdu_buffers.c CMOCKA NO_HELPERS)
-    iolink_test(NAME test_sio_fallback SOURCES test_sio_fallback.c CMOCKA)
-    iolink_test(NAME test_master_lost SOURCES test_master_lost.c CMOCKA)
-
-    # Specification-table and identification coverage (IO-Link V1.1.5)
-    iolink_test(NAME test_protocol_tables SOURCES test_protocol_tables.c CMOCKA)
-    iolink_test(NAME test_crc_vectors SOURCES test_crc_vectors.c CMOCKA)
-    iolink_test(NAME test_device SOURCES test_device.c CMOCKA)
-    iolink_test(NAME test_ident_indices SOURCES test_ident_indices.c CMOCKA)
-    iolink_test(NAME test_protocol_constants SOURCES test_protocol_constants.c CMOCKA)
-    iolink_test(NAME test_system_commands SOURCES test_system_commands.c CMOCKA)
-    iolink_test(NAME test_config_trim SOURCES test_config_trim.c CMOCKA)
-    # Spec-conformance assertions for known stack gaps (expected to fail until fixed)
-    iolink_test(NAME test_spec_conformance SOURCES test_spec_conformance.c CMOCKA)
-    if(IOLINK_PLATFORM STREQUAL "LINUX")
-        # New Test Spec cases and known-gap xfails, annotated with SDCI_TC_xxxx IDs.
-        # They link the host conformance-device example, so they are host-only.
-        iolink_test(NAME test_conformance_gaps
-            SOURCES test_conformance_gaps.c
-            LIBS conformance_device_example
-            CMOCKA)
-        iolink_test(NAME test_conformance_untested
-            SOURCES test_conformance_untested.c
-            LIBS conformance_device_example
-            CMOCKA)
-    endif()
-    # ISR-pump transport internals
-    iolink_test(NAME test_dll_isr SOURCES test_dll_isr.c CMOCKA)
-    iolink_test(NAME test_isr_atomicity SOURCES test_isr_atomicity.c CMOCKA NO_HELPERS)
-    iolink_test(NAME test_isr_mailbox_activity SOURCES test_isr_mailbox_activity.c
-        CMOCKA NO_HELPERS)
-    iolink_test(NAME test_isr_stability SOURCES test_isr_stability.c
-        CMOCKA NO_HELPERS)
-    iolink_test(NAME test_isr_isdu_snapshot SOURCES test_isr_isdu_snapshot.c
-        CMOCKA NO_HELPERS)
-    iolink_test(NAME test_isr_observability SOURCES test_isr_observability.c
-        CMOCKA NO_HELPERS)
-    iolink_test(NAME test_isr_window SOURCES test_isr_window.c CMOCKA)
-else()
-    message(FATAL_ERROR
-        "CMocka is required for the unit suite. Install libcmocka-dev (Debian) "
-        "or cmocka (Arch), or configure with -DBUILD_TESTING=OFF for a library-only build.")
 endif()
+iolink_test(NAME test_crc SOURCES test_crc.c CMOCKA)
+iolink_test(NAME test_dll SOURCES test_dll.c CMOCKA)
+iolink_test(NAME test_pd SOURCES test_pd.c CMOCKA)
+iolink_test(NAME test_isdu SOURCES test_isdu.c CMOCKA)
+iolink_test(NAME test_isdu_wire SOURCES test_isdu_wire.c CMOCKA)
+# 安全网：表驱动重构前钉死强制索引/Direct Parameter/标签的线上行为。
+iolink_test(NAME test_od_characterization SOURCES test_od_characterization.c CMOCKA)
+# 对象字典：一行表项新增参数 + switching_sensor 迁移 + DS 成员契约。
+iolink_test(NAME test_od_app
+    SOURCES test_od_app.c
+        ../examples/switching_sensor/switching_sensor.c
+        ../examples/switching_sensor/switching_sensor_od.c
+    INCLUDES ../examples/switching_sensor
+    CMOCKA)
+# 应用 OD 表参与 DS 集合（设备层接线、暂存/序列化/恢复、整份预校验）。
+iolink_test(NAME test_ds_app_od SOURCES test_ds_app_od.c CMOCKA)
+iolink_test(NAME test_events SOURCES test_events.c CMOCKA)
+# 诊断注册表：Table D.1 内容、电平/脉冲语义、视图一致性与复位。
+iolink_test(NAME test_diag SOURCES test_diag.c CMOCKA)
+iolink_test(NAME test_ds SOURCES test_ds.c CMOCKA)
+iolink_test(NAME test_error_model SOURCES test_error_model.c CMOCKA)
+iolink_test(NAME test_error_recovery SOURCES test_error_recovery.c CMOCKA)
+iolink_test(NAME test_timing SOURCES test_timing.c CMOCKA)
+iolink_test(NAME test_integration_full SOURCES test_integration_full.c CMOCKA)
+iolink_test(NAME test_workspace SOURCES test_workspace.c CMOCKA)
+iolink_test(NAME test_application SOURCES test_application.c CMOCKA)
+# 能力表：构建档位、resolve() 与运行时覆盖规则。
+iolink_test(NAME test_capability SOURCES test_capability.c CMOCKA)
+# 链接期档位断言：正向（同档位可链接）；反向由
+# tools/check_profile_abi.sh 在构建矩阵里验证。
+iolink_test(NAME test_profile_abi SOURCES test_profile_abi.c CMOCKA)
+iolink_test(NAME test_m_sequence_types SOURCES test_m_sequence_types.c CMOCKA)
+iolink_test(NAME test_reentrant_device SOURCES test_reentrant_device.c CMOCKA)
+
+# Portability Verification
+iolink_test(NAME test_locking SOURCES test_locking.c CMOCKA NO_HELPERS)
+iolink_test(NAME test_config SOURCES test_config_verification.c CMOCKA)
+iolink_test(NAME test_pd_variable SOURCES test_pd_variable.c CMOCKA)
+iolink_test(NAME test_baudrate SOURCES test_baudrate.c CMOCKA)
+iolink_test(NAME test_phy_diagnostics SOURCES test_phy_diagnostics.c CMOCKA)
+iolink_test(NAME test_phy_tiol112 SOURCES test_phy_tiol112.c CMOCKA)
+iolink_test(NAME test_app_pd SOURCES test_app_pd.c CMOCKA)
+iolink_test(NAME test_pd_lease SOURCES test_pd_lease.c CMOCKA)
+set_tests_properties(test_pd_lease PROPERTIES SKIP_RETURN_CODE 77)
+iolink_test(NAME test_isdu_buffers SOURCES test_isdu_buffers.c CMOCKA NO_HELPERS)
+iolink_test(NAME test_sio_fallback SOURCES test_sio_fallback.c CMOCKA)
+iolink_test(NAME test_master_lost SOURCES test_master_lost.c CMOCKA)
+
+# Specification-table and identification coverage (IO-Link V1.1.5)
+iolink_test(NAME test_protocol_tables SOURCES test_protocol_tables.c CMOCKA)
+iolink_test(NAME test_crc_vectors SOURCES test_crc_vectors.c CMOCKA)
+iolink_test(NAME test_device SOURCES test_device.c CMOCKA)
+iolink_test(NAME test_ident_indices SOURCES test_ident_indices.c CMOCKA)
+iolink_test(NAME test_protocol_constants SOURCES test_protocol_constants.c CMOCKA)
+iolink_test(NAME test_system_commands SOURCES test_system_commands.c CMOCKA)
+iolink_test(NAME test_config_trim SOURCES test_config_trim.c CMOCKA)
+# Spec-conformance assertions for known stack gaps (expected to fail until fixed)
+iolink_test(NAME test_spec_conformance SOURCES test_spec_conformance.c CMOCKA)
+if(IOLINK_PLATFORM STREQUAL "LINUX")
+    # New Test Spec cases and known-gap xfails, annotated with SDCI_TC_xxxx IDs.
+    # They link the host conformance-device example, so they are host-only.
+    iolink_test(NAME test_conformance_gaps
+        SOURCES test_conformance_gaps.c
+        LIBS conformance_device_example
+        CMOCKA)
+    iolink_test(NAME test_conformance_untested
+        SOURCES test_conformance_untested.c
+        LIBS conformance_device_example
+        CMOCKA)
+endif()
+# ISR-pump transport internals
+iolink_test(NAME test_dll_isr SOURCES test_dll_isr.c CMOCKA)
+iolink_test(NAME test_isr_atomicity SOURCES test_isr_atomicity.c CMOCKA NO_HELPERS)
+iolink_test(NAME test_isr_mailbox_activity SOURCES test_isr_mailbox_activity.c
+    CMOCKA NO_HELPERS)
+iolink_test(NAME test_isr_stability SOURCES test_isr_stability.c
+    CMOCKA NO_HELPERS)
+iolink_test(NAME test_isr_isdu_snapshot SOURCES test_isr_isdu_snapshot.c
+    CMOCKA NO_HELPERS)
+iolink_test(NAME test_isr_observability SOURCES test_isr_observability.c
+    CMOCKA NO_HELPERS)
+iolink_test(NAME test_isr_window SOURCES test_isr_window.c CMOCKA)
+
 
 get_property(skipped_targets GLOBAL PROPERTY IOLINK_TEST_BYTE_ONLY_SKIPPED)
 if(skipped_targets)

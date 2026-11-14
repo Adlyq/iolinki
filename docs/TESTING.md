@@ -108,8 +108,9 @@ Every registered test binary is a cmocka program:
   `-UNDEBUG` to keep its checks alive.
 
 CMocka is a hard requirement for the suite: a configure without it fails
-instead of silently registering no tests. Configure with
-`-DBUILD_TESTING=OFF` for a library-only build. `tests/transport_probe.c` is
+instead of silently registering no tests. Use `-DBUILD_TESTING=OFF` for a
+library-only build, or trim `IOLINK_FEATURE_DATA_STORAGE`/`IOLINK_FEATURE_EVENTS`
+— a trimmed build skips the suite before cmocka is looked for. `tests/transport_probe.c` is
 the one plain `main()` left: it is a compile-time check that the suite's
 `IOLINK_TEST_TRANSPORT` label matches the compiled ISR granularity, not a test.
 
