@@ -450,7 +450,6 @@ static void test_0072_comm_interruption_event_persists(void** state)
 
     /* DTU 复位/暂停：由于原因未被移除，设备不会清除
        活动事件。 */
-    usleep(2000U);
     assert_true(iolink_events_flag(&events));
 
     iolink_event_t ev;
@@ -535,10 +534,8 @@ static void test_0101_reserved_dpp1_write(void** state)
         mock_phy_feed_byte(frame[2]);
         mock_phy_feed_chk();
 
-        expect_any(mock_phy_send, data);
-        expect_value(mock_phy_send, len, 1);
-        will_return(mock_phy_send, 0);
         test_io_cycle(&dev.ctx);
+        assert_tx_len(1);
 
         assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
         assert_false(iolink_events_pending(&dev.ctx.dll.main.shared.events));
@@ -1029,10 +1026,24 @@ static void test_0076_short_event(void** state)
     assert_true(iolink_events_pop(&events, &event));
     assert_int_equal(event.mode, IOLINK_EVENT_MODE_APPEARS);
 
-    usleep(60000U);
+    test_clock_advance_ms(60U);
     iolink_events_process(&events);
     assert_true(iolink_events_pop(&events, &event));
     assert_int_equal(event.mode, IOLINK_EVENT_MODE_DISAPPEARS);
+}
+
+static int group_setup(void** state)
+{
+    (void) state;
+    test_clock_install();
+    return 0;
+}
+
+static int group_teardown(void** state)
+{
+    (void) state;
+    test_clock_uninstall();
+    return 0;
 }
 
 int main(void)
@@ -1085,5 +1096,5 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_0075_multi_event_order, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_0076_short_event, test_setup, test_teardown),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, group_setup, group_teardown);
 }

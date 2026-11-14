@@ -134,7 +134,7 @@ static void init_device_with_app(iolink_test_device_t* dev)
     g_app_state.ds_value = 0x1111U;
     g_app_state.volatile_value = 0x2222U;
     app_od_init(&g_app_od);
-    g_merged_od = test_od_with_tags(&g_app_od, g_app_od_storage, 64U);
+    g_merged_od = test_od_with_tags(&g_app_od, NULL, g_app_od_storage, 64U);
 
     setup_mock_phy();
     will_return(mock_phy_init, 0);

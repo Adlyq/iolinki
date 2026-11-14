@@ -17,7 +17,6 @@
 #include <cmocka.h>
 #include <stdint.h>
 #include <string.h>
-#include <unistd.h>
 #include <stdio.h>
 
 #include "iolinki/device.h"
@@ -46,7 +45,7 @@ static void test_full_stack_lifecycle(void** state)
     /* 1. 注入 WakeUp（状态从 SIO 迁移到 AWAITING_COMM） */
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(&dev.ctx);
-    usleep(200);
+    test_clock_advance_ms(1);
 
     /* 注意：我们依赖 STEP 2（ISDU 读）的第一个字节完成
        AWAITING_COMM -> PREOPERATE 的迁移并被立即处理。 */
@@ -61,10 +60,8 @@ static void test_full_stack_lifecycle(void** state)
     mock_phy_feed_chk();
 
     /* 设备响应：OD + CK = 2 字节 */
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2);
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(2);
 
     /*** 步骤 3：事件触发 ***/
     iolink_events_ctx_t* evt_ctx = iolink_device_get_events_ctx(&dev.ctx);
@@ -79,12 +76,24 @@ static void test_full_stack_lifecycle(void** state)
     mock_phy_feed_chk();
 
     /* 设备发送带 Event 位设置的响应（Type-0 写：仅 CKS） */
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1);
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(1);
 
     assert_true(iolink_events_pending(evt_ctx));
+}
+
+static int group_setup(void** state)
+{
+    (void) state;
+    test_clock_install();
+    return 0;
+}
+
+static int group_teardown(void** state)
+{
+    (void) state;
+    test_clock_uninstall();
+    return 0;
 }
 
 int main(void)
@@ -92,5 +101,5 @@ int main(void)
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_full_stack_lifecycle),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, group_setup, group_teardown);
 }

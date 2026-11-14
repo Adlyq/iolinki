@@ -12,7 +12,6 @@
 #include <cmocka.h>
 #include <stdint.h>
 #include <string.h>
-#include <unistd.h>
 #include <stdio.h>
 
 #include "iolinki/device.h"
@@ -88,10 +87,8 @@ static void test_valid_frame_after_crc_errors(void** state)
     mock_phy_feed_byte(idle_ck);
     mock_phy_feed_chk();
 
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1); /* Type-0 写只回复 CKS */
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(1); /* Type-0 写只回复 CKS */
 
     /* 仍为 SDCI：未发生 SIO 回退。 */
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
@@ -115,7 +112,7 @@ static void test_t_dsio_returns_to_sio_without_message(void** state)
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 
     /* 在 T_DSIO（Table 47 T10）内没有合法报文到达：返回 SIO。 */
-    usleep((IOLINK_T_DSIO_MS + 50U) * 1000U);
+    test_clock_advance_ms(IOLINK_T_DSIO_MS + 50U);
     test_io_cycle(&dev.ctx);
 
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
@@ -142,14 +139,12 @@ static void test_fallback_command_switches_to_sio_after_t_fbd(void** state)
         mock_phy_feed_byte(frame[i]);
     }
     mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1); /* Type-0 写只回复 CKS */
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(1); /* Type-0 写只回复 CKS */
 
     /* 在 T_FBD 到期之前仍处于 SDCI（设备等待 3 个 MasterCycleTimes）。 */
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
-    usleep(10U * 1000U);
+    test_clock_advance_ms(10U);
     test_io_cycle(&dev.ctx);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
 }
@@ -185,20 +180,32 @@ static void test_fallback_command_ignored_without_wakeup(void** state)
         mock_phy_feed_byte(frame[i]);
     }
     mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1); /* Type-0 写只回复 CKS */
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(1); /* Type-0 写只回复 CKS */
 
     /* 无唤醒时不支持该命令：会确认应答，但 DL 模式/状态不变。 */
     assert_false(iolink_dll_timer_armed(&dev.ctx.dll.main, IOLINK_TIMER_T_FBD));
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 
-    usleep(10U * 1000U);
+    test_clock_advance_ms(10U);
     test_io_cycle(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
+}
+
+static int group_setup(void** state)
+{
+    (void) state;
+    test_clock_install();
+    return 0;
+}
+
+static int group_teardown(void** state)
+{
+    (void) state;
+    test_clock_uninstall();
+    return 0;
 }
 
 int main(void)
@@ -210,5 +217,5 @@ int main(void)
         cmocka_unit_test(test_fallback_command_switches_to_sio_after_t_fbd),
         cmocka_unit_test(test_fallback_command_ignored_without_wakeup),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, group_setup, group_teardown);
 }

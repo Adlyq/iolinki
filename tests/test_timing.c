@@ -80,6 +80,21 @@ static void test_t_ren_single_value_for_every_baudrate(void** state)
     assert_int_equal(dev.ctx.dll.main.t_ren_limit_us, 1234U);
 }
 
+static void test_fake_clock_advances(void** state)
+{
+    (void) state;
+    test_clock_install();
+    const uint64_t t0 = test_clock_now_us();
+    test_clock_advance_ms(10U);
+
+    assert_int_equal(test_clock_now_us(), t0 + 10000ULL);
+    assert_int_equal(iolink_test_time_us(NULL), t0 + 10000ULL);
+    assert_int_equal(iolink_test_time_ms(), (uint32_t) ((t0 + 10000ULL) / 1000ULL));
+
+    test_clock_uninstall();
+    assert_null(g_iolink_test_time_us_override);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -87,6 +102,7 @@ int main(void)
         cmocka_unit_test(test_time_get_us),
         cmocka_unit_test(test_timing_constants),
         cmocka_unit_test(test_t_ren_single_value_for_every_baudrate),
+        cmocka_unit_test(test_fake_clock_advances),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

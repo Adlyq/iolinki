@@ -322,13 +322,16 @@ static void test_ds_vendor_param_set_round_trip(void** state)
 {
     (void) state;
     iolink_ds_ctx_t ds;
+    iolink_od_entry_t merged_storage[64];
+    iolink_od_app_t merged;
     static const uint8_t vend[] = {0xDEU, 0xADU, 0xBEU, 0xEFU};
 
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds,
-                           test_od_with_tags_static(&k_vendor_app, test_env_params(&g_test_env)));
+    merged = test_od_with_tags(&k_vendor_app, test_params_od(test_env_params(&g_test_env)),
+                               merged_storage, 64U);
+    iolink_ds_bind_sources(&ds, &merged);
 
     assert_int_equal(test_params_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
                                        (const uint8_t*) "TAG", 3U)
@@ -434,6 +437,8 @@ static void test_ds_download_end_error_classification(void** state)
 {
     (void) state;
     iolink_ds_ctx_t ds;
+    iolink_od_entry_t merged_storage[64];
+    iolink_od_app_t merged;
 
     /* 格式错误的暂存镜像 -> -1 -> PAR_SETINVALID。 */
     iolink_ds_init(&ds);
@@ -446,8 +451,9 @@ static void test_ds_download_end_error_classification(void** state)
 
     /* 已知参数被拒绝 -> -2 -> PAR_SETINCONSIST。 */
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds,
-                           test_od_with_tags_static(&k_reject_app, test_env_params(&g_test_env)));
+    merged = test_od_with_tags(&k_reject_app, test_params_od(test_env_params(&g_test_env)),
+                               merged_storage, 64U);
+    iolink_ds_bind_sources(&ds, &merged);
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
     uint8_t img[] = {0x00U, 0x50U, 0x00U, 0x03U, 'A', 'B', 'C'};
     (void) memcpy(ds.image, img, sizeof(img));
@@ -460,6 +466,8 @@ static void test_ds_entry_block_len_bounds_value(void** state)
 {
     (void) state;
     iolink_ds_ctx_t ds;
+    iolink_od_entry_t merged_storage[64];
+    iolink_od_app_t merged;
     static const iolink_od_entry_t bounded_entries[] = {
         IOLINK_OD_BYTES_HANDLER(VENDOR_PARAM_IDX, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
                                 IOLINK_OD_STORAGE_DS, 4U, "Bounded", vendor_od_read,
@@ -472,8 +480,9 @@ static void test_ds_entry_block_len_bounds_value(void** state)
     };
 
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds,
-                           test_od_with_tags_static(&bounded_app, test_env_params(&g_test_env)));
+    merged = test_od_with_tags(&bounded_app, test_params_od(test_env_params(&g_test_env)),
+                               merged_storage, 64U);
+    iolink_ds_bind_sources(&ds, &merged);
     g_vendor_param_len = 8U;
     (void) memcpy(g_vendor_param, "ABCDEFGH", 8U);
 
@@ -933,6 +942,8 @@ static void test_ds_apply_precheck_rejects_before_write(void** state)
 {
     (void) state;
     iolink_ds_ctx_t ds;
+    iolink_od_entry_t merged_storage[64];
+    iolink_od_app_t merged;
     static int marker;
     static uint16_t value;
     static const iolink_od_entry_t entries[] = {
@@ -952,7 +963,9 @@ static void test_ds_apply_precheck_rejects_before_write(void** state)
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, test_od_with_tags_static(&app, test_env_params(&g_test_env)));
+    merged =
+        test_od_with_tags(&app, test_params_od(test_env_params(&g_test_env)), merged_storage, 64U);
+    iolink_ds_bind_sources(&ds, &merged);
 
     g_validate_user = NULL;
     assert_int_equal(iolink_ds_apply_image(&ds, image, sizeof(image)), -2);

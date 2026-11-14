@@ -54,11 +54,9 @@ static void test_pd_variable_lengths(void** state)
     mock_phy_feed_chk();
 
     /* WRITE 应答：PD-in(8) + CKS。 */
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 9);
-    will_return(mock_phy_send, 0);
 
     test_io_cycle(&dev.ctx);
+    assert_tx_len(9);
 }
 
 static void test_pd_invalid_flag(void** state)
@@ -88,11 +86,9 @@ static void test_pd_invalid_flag(void** state)
     mock_phy_feed_chk();
 
     /* WRITE 应答：PD-in(1) + CKS（PD 无效标志位于 CKS 第 6 位）。 */
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2);
-    will_return(mock_phy_send, 0);
 
     test_io_cycle(&dev.ctx);
+    assert_tx_len(2);
 }
 
 static void test_pd_runtime_negotiation(void** state)
@@ -178,10 +174,8 @@ static void run_pd_roundtrip(iolink_test_device_t* dev, uint8_t pd_in_len, uint8
     (void) memcpy(expected, pd_in, pd_in_len);
     expected[pd_in_len] = iolink_checksum6(expected, pd_in_len);
 
-    expect_memory(mock_phy_send, data, expected, (size_t) pd_in_len + 1U);
-    expect_value(mock_phy_send, len, (size_t) pd_in_len + 1U);
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev->ctx);
+    assert_tx_frame(expected, (size_t) pd_in_len + 1U);
 
     assert_int_equal(iolink_device_pd_output_read(&dev->ctx, readback, pd_out_len), pd_out_len);
     assert_memory_equal(readback, pd_out, pd_out_len);

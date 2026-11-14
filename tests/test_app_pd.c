@@ -57,10 +57,8 @@ static void test_reply_layout_od_first_no_status_octet(void** state)
        0x00 0x11 0x22 0x2D。过程通道读不提供 OD 八位组
        (0x00)；因为 PD 有效，CKS 位 6 为 0（A.1.6）。 */
     uint8_t expected[] = {0x00, 0x11, 0x22, 0x2D};
-    expect_memory(mock_phy_send, data, expected, sizeof(expected));
-    expect_value(mock_phy_send, len, sizeof(expected));
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_frame(expected, sizeof(expected));
 }
 
 static void test_reply_flags_pd_invalid(void** state)
@@ -90,10 +88,8 @@ static void test_reply_flags_pd_invalid(void** state)
     /* 相同的 READ 应答布局，PD 无效标志位于 CKS 位 6：
        0x40 | 0x35 = 0x75。 */
     uint8_t expected[] = {0x00, 0x11, 0x22, 0x75};
-    expect_memory(mock_phy_send, data, expected, sizeof(expected));
-    expect_value(mock_phy_send, len, sizeof(expected));
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_frame(expected, sizeof(expected));
 }
 
 int main(void)

@@ -55,11 +55,9 @@ static void test_pd_input_output(void** state)
     mock_phy_feed_chk();
 
     /* 响应：TYPE_2_2 为 PD_IN(2)、OD(1)、CKS(1) = 4 字节（A.1.5） */
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 4);
-    will_return(mock_phy_send, 0);
 
     test_io_cycle(&dev.ctx);
+    assert_tx_len(4);
 }
 
 int main(void)

@@ -17,7 +17,6 @@
 #include <cmocka.h>
 #include <stdint.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "iolinki/device.h"
 #include "iolinki/dll_ctx.h"
@@ -29,12 +28,14 @@
 static int test_setup(void** state)
 {
     (void) state;
+    test_clock_install();
     return 0;
 }
 
 static int test_teardown(void** state)
 {
     (void) state;
+    test_clock_uninstall();
     return 0;
 }
 
@@ -96,7 +97,7 @@ static void wake_device(iolink_device_ctx_t* ctx)
 {
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(ctx);
-    usleep(200);
+    test_clock_advance_ms(1);
 }
 
 static void feed_type0_page_read(uint8_t addr)
@@ -138,18 +139,14 @@ static void feed_isdu_idle_with_type(uint8_t type_bits)
 
 static void deliver_expect_type0_ack(iolink_device_ctx_t* ctx)
 {
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1);
-    will_return(mock_phy_send, 0);
     deliver_frame_to_main(ctx);
+    assert_tx_len(1);
 }
 
 static uint8_t deliver_type0_read(iolink_device_ctx_t* ctx)
 {
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2);
-    will_return(mock_phy_send, 0);
     deliver_frame_to_main(ctx);
+    assert_tx_len(2);
 
     size_t tx_len = 0U;
     const uint8_t* tx = mock_phy_tx(&tx_len);
@@ -216,10 +213,8 @@ static void establish_operate_type21(iolink_device_ctx_t* ctx)
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
     feed_frame_bytes(frame, sizeof(frame));
     mock_phy_clear_tx();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2); /* PD-in 1 + CKS */
-    will_return(mock_phy_send, 0);
     deliver_frame_to_main(ctx);
+    assert_tx_len(2); /* PD-in 1 + CKS */
     assert_int_equal(iolink_device_get_state(ctx), IOLINK_DLL_STATE_OPERATE);
 }
 
@@ -241,10 +236,8 @@ static void establish_operate_type2v(iolink_device_ctx_t* ctx)
     uint8_t frame[6] = {0x00U, IOLINK_MSEQ_TYPE_2, 0x00U, 0x00U, 0x00U, 0x00U};
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
     feed_frame_bytes(frame, sizeof(frame));
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 3); /* PD-in 2 + CKS */
-    will_return(mock_phy_send, 0);
     deliver_frame_to_main(ctx);
+    assert_tx_len(3); /* PD-in 2 + CKS */
     assert_int_equal(iolink_device_get_state(ctx), IOLINK_DLL_STATE_OPERATE);
 }
 
@@ -255,10 +248,8 @@ static uint8_t read_dpp1_type2v(iolink_device_ctx_t* ctx, uint8_t addr)
                         IOLINK_MSEQ_TYPE_2, 0x00U, 0x00U};
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
     feed_frame_bytes(frame, sizeof(frame));
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 5); /* OD 2 + PD-in 2 + CKS */
-    will_return(mock_phy_send, 0);
     deliver_frame_to_main(ctx);
+    assert_tx_len(5); /* OD 2 + PD-in 2 + CKS */
 
     size_t tx_len = 0U;
     const uint8_t* tx = mock_phy_tx(&tx_len);
@@ -276,10 +267,8 @@ static void deliver_type21_page_write(iolink_device_ctx_t* ctx, uint8_t addr, ui
     frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_2 | iolink_checksum6(frame, sizeof(frame)));
     feed_frame_bytes(frame, sizeof(frame));
     mock_phy_clear_tx();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2); /* PD-in 1 + CKS */
-    will_return(mock_phy_send, 0);
     deliver_frame_to_main(ctx);
+    assert_tx_len(2); /* PD-in 1 + CKS */
 
     size_t tx_len = 0U;
     const uint8_t* tx = mock_phy_tx(&tx_len);
@@ -314,7 +303,7 @@ static void test_dll_wakeup_to_preoperate(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_AWAITING_COMM);
 
     /* 等待 t_dwu 到期 */
-    usleep(200);
+    test_clock_advance_ms(1);
 
     /* 启动探测（T1）：合法的 Type-0 页读以 DPP1 字节应答并进入 PREOPERATE */
     feed_type0_page_read(0x02U);
@@ -336,7 +325,7 @@ static void test_dll_preoperate_to_operate(void** state)
     /* 唤醒 */
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(&dev.ctx);
-    usleep(200);
+    test_clock_advance_ms(1);
 
     /* PREOPERATE -> ESTAB_COM */
     uint8_t trans_mc = IOLINK_MC_TRANSITION_COMMAND;
@@ -357,11 +346,8 @@ static void test_dll_preoperate_to_operate(void** state)
     }
     mock_phy_feed_chk();
 
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 3);
-    will_return(mock_phy_send, 0);
-
     test_io_cycle(&dev.ctx);
+    assert_tx_len(3);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 }
 
@@ -379,7 +365,7 @@ static void test_dll_crc_error_keeps_operate(void** state)
     /* 唤醒 */
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(&dev.ctx);
-    usleep(200);
+    test_clock_advance_ms(1);
 
     /* PREOPERATE -> ESTAB_COM */
     uint8_t mc = IOLINK_MC_TRANSITION_COMMAND;
@@ -397,10 +383,8 @@ static void test_dll_crc_error_keeps_operate(void** state)
         mock_phy_feed_byte(ok_frame[i]);
     }
     mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 3);
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(3);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
     const uint32_t baud_before = iolink_device_get_baudrate(&dev.ctx);
 
@@ -469,7 +453,7 @@ static void move_type0_to_operate(iolink_device_ctx_t* ctx)
 {
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(ctx);
-    usleep(200);
+    test_clock_advance_ms(1);
 
     uint8_t mc = IOLINK_MC_TRANSITION_COMMAND;
     uint8_t ck = test_frame_checksum(mc);
@@ -483,10 +467,8 @@ static void move_type0_to_operate(iolink_device_ctx_t* ctx)
     mock_phy_feed_byte(idle);
     mock_phy_feed_byte(idle_ck);
     mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1); /* Type-0 写仅回 CKS */
-    will_return(mock_phy_send, 0);
     test_io_cycle(ctx);
+    assert_tx_len(1); /* Type-0 写仅回 CKS */
 }
 
 /* ST rc=2：在 OPERATE 中，与已配置 M-sequence 类型不匹配的 CKT 类型
@@ -548,10 +530,8 @@ static void test_dll_isdu_channel_idle(void** state)
     }
     mock_phy_feed_chk();
 
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2);
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(2);
 
     iolink_dll_stats_t after;
     iolink_device_get_dll_stats(&dev.ctx, &after);
@@ -585,10 +565,8 @@ static void test_dll_diagnosis_channel(void** state)
     }
     mock_phy_feed_chk();
 
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2);
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(2);
 
     iolink_dll_stats_t after;
     iolink_device_get_dll_stats(&dev.ctx, &after);
@@ -622,10 +600,8 @@ static void test_dll_event_flag_in_cks(void** state)
     }
     mock_phy_feed_chk();
 
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2);
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(2);
 
     /* 清空通道：标志保持置位，直到 StatusCode 写入得到确认。 */
     uint8_t mc_write = (uint8_t) (IOLINK_MC_CHANNEL_DIAGNOSIS); /* WRITE，地址 0 */
@@ -635,10 +611,8 @@ static void test_dll_event_flag_in_cks(void** state)
         mock_phy_feed_byte(wframe[i]);
     }
     mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1); /* Type-0 写仅回 CKS */
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(1); /* Type-0 写仅回 CKS */
 
     assert_false(iolink_events_flag(iolink_device_get_events_ctx(&dev.ctx)));
 }
@@ -660,7 +634,7 @@ static void test_dll_preoperate_type0_od_write_ignores_operate_widths(void** sta
 
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(&dev.ctx);
-    usleep(200);
+    test_clock_advance_ms(1);
 
     /* 启动探测：以 Type-0 READ 读取 MinCycleTime（MC 0xA2）-> PREOPERATE。 */
     uint8_t probe[2] = {0xA2U, 0x00U};
@@ -668,10 +642,8 @@ static void test_dll_preoperate_type0_od_write_ignores_operate_widths(void** sta
     mock_phy_feed_byte(probe[0]);
     mock_phy_feed_byte(probe[1]);
     mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2); /* OD + CKS */
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(2); /* OD + CKS */
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
 
     /* PREOPERATE 中的 ISDU 写 START：MC 0x70（W、ISDU、START）、CKT、OD 0xB5。 */
@@ -681,10 +653,8 @@ static void test_dll_preoperate_type0_od_write_ignores_operate_widths(void** sta
         mock_phy_feed_byte(req[i]);
     }
     mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1); /* Figure A.5：Type-0 写 -> 仅回 CKS */
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(1); /* Figure A.5：Type-0 写 -> 仅回 CKS */
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
 }
 
@@ -705,17 +675,15 @@ static void test_dll_type0_write_is_three_octets_with_two_octet_od(void** state)
 
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(&dev.ctx);
-    usleep(200);
+    test_clock_advance_ms(1);
 
     uint8_t probe[2] = {0xA2U, 0x00U};
     probe[1] = (uint8_t) (probe[1] | iolink_checksum6(probe, 2U));
     mock_phy_feed_byte(probe[0]);
     mock_phy_feed_byte(probe[1]);
     mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2);
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(2);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
 
     /* DeviceOperate：MC 0x20、CKT、OD 0x99 -> 仅回 CKS，进入 ESTAB_COM。 */
@@ -725,10 +693,8 @@ static void test_dll_type0_write_is_three_octets_with_two_octet_od(void** state)
         mock_phy_feed_byte(op[i]);
     }
     mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1);
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(1);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_ESTAB_COM);
 }
 /* Test Spec 0039：通过 0x9A 从 STARTUP 进入 PREOPERATE，然后
@@ -938,10 +904,8 @@ static void test_dll_startup_0x99_rejected(void** state)
     uint8_t frame[3] = {0x00U, IOLINK_MSEQ_TYPE_2, 0x00U};
     frame[1] = (uint8_t) (frame[1] | iolink_checksum6(frame, sizeof(frame)));
     feed_frame_bytes(frame, sizeof(frame));
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2);
-    will_return(mock_phy_send, 0);
     deliver_frame_to_main(&dev.ctx);
+    assert_tx_len(2);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 }
 
@@ -1139,7 +1103,7 @@ static void test_dll_startup_operate_type_no_response(void** state)
 
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(&dev.ctx);
-    usleep(200);
+    test_clock_advance_ms(1);
     assert_true((iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_AWAITING_COMM) ||
                 (iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_STARTUP));
 
@@ -1236,10 +1200,8 @@ static void test_dll_preoperate_truncated_write(void** state)
     uint8_t write[3] = {(uint8_t) (IOLINK_MC_CHANNEL_PAGE | 0x01U), 0x00U, 0x4FU};
     write[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | iolink_checksum6(write, sizeof(write)));
     feed_frame_bytes(write, sizeof(write));
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1);
-    will_return(mock_phy_send, 0);
     deliver_frame_to_dll(&dev.ctx);
+    assert_tx_len(1);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
 }
 
@@ -1252,13 +1214,14 @@ static bool preoperate_read_with_type(iolink_device_ctx_t* ctx, uint8_t type_bit
     frame[1] = (uint8_t) (type_bits | iolink_checksum6(frame, sizeof(frame)));
     feed_frame_bytes(frame, sizeof(frame));
 
-    if (expect_reply) {
-        expect_any(mock_phy_send, data);
-        expect_value(mock_phy_send, len, 2);
-        will_return(mock_phy_send, 0);
-    }
     mock_phy_clear_tx();
     deliver_frame_to_dll(ctx);
+    if (expect_reply) {
+        assert_tx_len(2);
+    }
+    else {
+        assert_no_tx();
+    }
     size_t tx_len = 0U;
     const uint8_t* tx = mock_phy_tx(&tx_len);
     if (tx_len == 0U) {
@@ -1532,10 +1495,8 @@ static void test_dll_pdout_only_status_valid(void** state)
     uint8_t read[2] = {(uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), 0x00U};
     read[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | iolink_checksum6(read, sizeof(read)));
     feed_frame_bytes(read, sizeof(read));
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2);
-    will_return(mock_phy_send, 0);
     deliver_frame_to_dll(&dev.ctx);
+    assert_tx_len(2);
     size_t tx_len = 0U;
     const uint8_t* tx = mock_phy_tx(&tx_len);
     assert_int_equal(tx_len, 2U);
@@ -1545,16 +1506,12 @@ static void test_dll_pdout_only_status_valid(void** state)
     pd_operate[1] =
         (uint8_t) (IOLINK_MSEQ_TYPE_0 | iolink_checksum6(pd_operate, sizeof(pd_operate)));
     feed_frame_bytes(pd_operate, sizeof(pd_operate));
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 1);
-    will_return(mock_phy_send, 0);
     deliver_frame_to_dll(&dev.ctx);
+    assert_tx_len(1);
 
     feed_frame_bytes(read, sizeof(read));
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2);
-    will_return(mock_phy_send, 0);
     deliver_frame_to_dll(&dev.ctx);
+    assert_tx_len(2);
     tx = mock_phy_tx(&tx_len);
     assert_int_equal(tx_len, 2U);
     assert_int_equal((tx[1] & 0x40U), 0U);
@@ -1565,10 +1522,8 @@ static uint8_t dll_test_page_read(iolink_device_ctx_t* ctx, uint8_t addr)
     uint8_t frame[2] = {(uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | addr), 0x00U};
     frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | iolink_checksum6(frame, sizeof(frame)));
     feed_frame_bytes(frame, sizeof(frame));
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2);
-    will_return(mock_phy_send, 0);
     deliver_frame_to_main(ctx);
+    assert_tx_len(2);
     size_t tx_len = 0U;
     const uint8_t* tx = mock_phy_tx(&tx_len);
     assert_int_equal(tx_len, 2U);
@@ -1599,10 +1554,8 @@ static void test_dll_device_id_override_rejected(void** state)
                             (uint8_t) (0xF0U + addr)};
         write[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | iolink_checksum6(write, sizeof(write)));
         feed_frame_bytes(write, sizeof(write));
-        expect_any(mock_phy_send, data);
-        expect_value(mock_phy_send, len, 1);
-        will_return(mock_phy_send, 0);
         deliver_frame_to_main(&dev.ctx);
+        assert_tx_len(1);
     }
 
     for (uint8_t addr = 0x09U; addr <= 0x0BU; addr++) {
@@ -1619,6 +1572,9 @@ static void test_dll_device_id_override_rejected(void** state)
     }
 }
 
+/* RX BYTE 专有：半帧 + 接收错误是字节传输的中间状态；RX FRAME 的 PHY
+ * 只交付完整帧，状态字节也不携带接收错误，因此该路径在 FRAME 下不存在。 */
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
 static void test_dll_receive_error_discards_partial_frame(void** state)
 {
     (void) state;
@@ -1642,13 +1598,12 @@ static void test_dll_receive_error_discards_partial_frame(void** state)
         mock_phy_feed_byte(frame[i]);
     }
     mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2);
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_len(2);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
     assert_int_equal(dev.ctx.dll.main.frame_index, 0);
 }
+#endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
 
 static void test_min_cycle_time_from_m_sequence(void** state)
 {
@@ -1705,9 +1660,6 @@ static void test_dll_isr_back_to_box_counts_each_frame_once(void** state)
             mock_phy_feed_byte(frame[j]);
         }
         mock_phy_feed_chk();
-        expect_any(mock_phy_send, data);
-        expect_any(mock_phy_send, len);
-        will_return(mock_phy_send, 0);
         test_io_cycle(&dev.ctx);
         assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
     }
@@ -1717,9 +1669,6 @@ static void test_dll_isr_back_to_box_counts_each_frame_once(void** state)
         mock_phy_feed_byte(frame[j]);
     }
     mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_any(mock_phy_send, len);
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
     assert_false(dev.ctx.dll.main.back_to_box_pending);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_COMM_DISABLED);
@@ -1761,13 +1710,11 @@ static void test_dll_main_pump_type1_2_reply(void** state)
     (void) memcpy(rec->data, frame, sizeof(frame));
     iolink_ring_publish(&dev.ctx.dll.main.shared.isr_frame_ring);
 
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 5); /* OD 2 + PD-in 2 + CKS */
-    will_return(mock_phy_send, 0);
     iolink_device_process(&dev.ctx);
     while (dev.ctx.dll.main.shared.isr_tx_active != 0U) {
         iolink_device_process_isr(&dev.ctx);
     }
+    assert_tx_len(5); /* OD 2 + PD-in 2 + CKS */
 
     size_t tx_len = 0U;
     const uint8_t* tx = mock_phy_tx(&tx_len);
@@ -1793,8 +1740,10 @@ static void test_dll_main_pump_type1_2_reply(void** state)
 int main(void)
 {
     const struct CMUnitTest tests[] = {
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
         cmocka_unit_test_setup_teardown(test_dll_receive_error_discards_partial_frame, test_setup,
                                         test_teardown),
+#endif
         cmocka_unit_test_setup_teardown(test_dll_wakeup_to_preoperate, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_preoperate_to_operate, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_startup_to_preoperate_read_dpp1, test_setup,
@@ -1856,7 +1805,8 @@ int main(void)
                                         test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_main_pump_type1_2_reply, test_setup,
                                         test_teardown),
-        cmocka_unit_test(test_min_cycle_time_from_m_sequence),
+        cmocka_unit_test_setup_teardown(test_min_cycle_time_from_m_sequence, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_isr_back_to_box_counts_each_frame_once, test_setup,
                                         test_teardown),
     };

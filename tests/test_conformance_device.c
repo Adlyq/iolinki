@@ -5,7 +5,6 @@
 #include <cmocka.h>
 #include <stdint.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "conformance_device.h"
 #include "conformance_profiles.h"
@@ -167,6 +166,11 @@ static void test_conformance_event_device_status(void** state)
                                 &k_noop_phy, NULL),
         0);
 
+    /* 事件窗口由假时钟推进；设备其余时间戳仍用应用时钟。 */
+    iolink_events_ctx_t* events = iolink_device_get_events_ctx(&app.device);
+    events->time_us = iolink_test_time_us;
+    events->time_user = NULL;
+
     iolink_isdu_ctx_t ctx;
     make_isdu_ctx(&app, &ctx);
     uint8_t response[64];
@@ -189,10 +193,9 @@ static void test_conformance_event_device_status(void** state)
     assert_int_equal(response[1], 0x8CU);
     assert_int_equal(response[2], 0x10U);
 
-    iolink_events_ctx_t* events = iolink_device_get_events_ctx(&app.device);
     iolink_events_memory_write(events, 0U, 0U);
     assert_int_equal(conformance_device_clear_event(&app, 0x8C10U), 0);
-    (void) usleep(120000);
+    test_clock_advance_ms(120U);
     iolink_events_process(events);
     make_isdu_ctx(&app, &ctx);
     len = read_object(&ctx, IOLINK_IDX_DETAILED_DEVICE_STATUS, 0U, response, sizeof(response));
@@ -390,6 +393,20 @@ static void test_conformance_minimal_profile(void** state)
     conformance_device_close(&app);
 }
 
+static int group_setup(void** state)
+{
+    (void) state;
+    test_clock_install();
+    return 0;
+}
+
+static int group_teardown(void** state)
+{
+    (void) state;
+    test_clock_uninstall();
+    return 0;
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -406,5 +423,5 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_conformance_event_device_status, test_setup,
                                         test_teardown),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, group_setup, group_teardown);
 }

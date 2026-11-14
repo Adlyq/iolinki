@@ -177,13 +177,11 @@ static void test_isr_frame_counts_as_master_activity(void** state)
     mock_phy_feed_byte(frame[1]);
     mock_phy_feed_byte(frame[2]);
     mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 2U); /* PD-in（1）+ CKS */
-    will_return(mock_phy_send, 0);
     iolink_device_process_isr(&dev.ctx);
     while (dev.ctx.dll.main.shared.isr_tx_active != 0U) {
         iolink_device_process_isr(&dev.ctx);
     }
+    assert_tx_len(2U); /* PD-in（1）+ CKS */
 
     /* ISR 侧的监控时间戳必须已经知道主站仍存活。
      * 否则丢失窗口会从主泵最后一次运行的时刻开始度量，繁忙的

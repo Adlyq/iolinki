@@ -18,7 +18,6 @@
 #include <cmocka.h>
 #include <stdint.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "iolinki/device.h"
 #include "iolinki/events.h"
@@ -352,7 +351,7 @@ static void test_device_process_pumps_events(void** state)
     assert_false(iolink_events_pop(evt, &ev));
 
     /* 窗口之后，泵会自行输出消失事件。 */
-    usleep(60000U);
+    test_clock_advance_ms(60U);
     iolink_device_process(&dev.ctx);
     assert_true(iolink_events_pop(evt, &ev));
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
@@ -376,6 +375,20 @@ static void test_device_od_width_default(void** state)
     assert_int_equal(dev.ctx.dll.main.shared.od_width, 2U);
 }
 
+static int group_setup(void** state)
+{
+    (void) state;
+    test_clock_install();
+    return 0;
+}
+
+static int group_teardown(void** state)
+{
+    (void) state;
+    test_clock_uninstall();
+    return 0;
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -395,5 +408,5 @@ int main(void)
         cmocka_unit_test(test_device_init_builds_ds_image),
         cmocka_unit_test(test_device_process_pumps_events),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, group_setup, group_teardown);
 }

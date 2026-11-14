@@ -111,10 +111,8 @@ static void run_fixed_case(const fixed_case_t* c)
     expected[pos] = iolink_checksum6(expected, pos);
     pos++;
 
-    expect_memory(mock_phy_send, data, expected, pos);
-    expect_value(mock_phy_send, len, pos);
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_frame(expected, pos);
 
     /* --- WRITE：请求 = MC、CKT、PD-out、OD；应答 = PD-in、CKS。 */
     (void) memset(frame, 0, sizeof(frame));
@@ -127,10 +125,8 @@ static void run_fixed_case(const fixed_case_t* c)
     (void) memcpy(expected, pd_in, c->pd_in);
     expected[c->pd_in] = iolink_checksum6(expected, c->pd_in);
 
-    expect_memory(mock_phy_send, data, expected, (size_t) c->pd_in + 1U);
-    expect_value(mock_phy_send, len, (size_t) c->pd_in + 1U);
-    will_return(mock_phy_send, 0);
     test_io_cycle(&dev.ctx);
+    assert_tx_frame(expected, (size_t) c->pd_in + 1U);
 
     if (c->pd_out > 0U) {
         assert_int_equal(iolink_device_pd_output_read(&dev.ctx, readback, c->pd_out), c->pd_out);

@@ -17,7 +17,6 @@
 #include <cmocka.h>
 #include <stdint.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "iolinki/events.h"
 
@@ -320,7 +319,7 @@ static void test_event_appears_disappears(void** state)
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_APPEARS);
     assert_false(iolink_events_pop(&ctx, &ev));
 
-    usleep(60000U); /* > IOLINK_EVENT_MIN_APPEAR_MS */
+    test_clock_advance_ms(IOLINK_EVENT_MIN_APPEAR_MS + 10U);
     iolink_events_process(&ctx);
     assert_true(iolink_events_pop(&ctx, &ev));
     assert_int_equal(ev.code, 0x1000U);
@@ -731,6 +730,20 @@ static void test_event_clear_diagnosis_skips_unreported_event(void** state)
     assert_int_equal(iolink_diag_device_status(&ctx), 0U);
 }
 
+static int group_setup(void** state)
+{
+    (void) state;
+    test_clock_install();
+    return 0;
+}
+
+static int group_teardown(void** state)
+{
+    (void) state;
+    test_clock_uninstall();
+    return 0;
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -759,5 +772,5 @@ int main(void)
         cmocka_unit_test(test_event_clear_diagnosis),
         cmocka_unit_test(test_event_clear_diagnosis_skips_unreported_event),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    return cmocka_run_group_tests(tests, group_setup, group_teardown);
 }

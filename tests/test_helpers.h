@@ -26,11 +26,16 @@
 extern uint8_t g_tx_buf[1024];
 extern uint8_t g_rx_buf[1024];
 
-/* 需要真实时间源的测试所使用的单调主机时钟。 */
+/* 测试时钟：未安装假时钟时返回真实单调时间，安装后由用例手动推进。 */
 uint64_t iolink_test_time_us(void* user);
 uint32_t iolink_test_time_ms(void);
-/* 由驱动受控时钟的测试使用的可选覆盖项。 */
 extern iolink_device_time_us_fn g_iolink_test_time_us_override;
+
+/* 手动推进的假时钟；必须在 iolink_test_device_init() 之前安装。 */
+void test_clock_install(void);
+void test_clock_advance_ms(uint32_t ms);
+uint64_t test_clock_now_us(void);
+void test_clock_uninstall(void);
 
 /* 为 2 个八位字节的报文 [octet, checksum-with-low-bits-zero] 构造校验和。
  * 供用例构造主站帧与设备应答时使用（A.1.6）。 */
@@ -45,15 +50,14 @@ int mock_phy_init(void* user);
 void mock_phy_set_mode(void* user, iolink_phy_mode_t mode);
 void mock_phy_set_baudrate(void* user, iolink_baudrate_t baudrate);
 int mock_phy_send(void* user, const uint8_t* data, size_t len);
-int mock_phy_recv_byte(void* user, uint8_t* byte);
 int mock_phy_detect_wakeup(void* user);
 void mock_phy_set_cq_line(void* user, uint8_t state);
 
 /*
- * 传输适配层：将主站帧送入 mock PHY，并驱动实际编译的
- * 传输方式。流式（send/recv_byte）与可选的
- * ISR（rx_octet/tx_octet）路径最终都会调用 mock_phy_send() 交付应答，
- * 因此同一套测试断言在两种构建中都适用。
+ * 传输适配层：把主站帧的八位字节送入 mock PHY 的接收队列，
+ * 由 mock_rx_octet() 逐个交付给组帧引擎。设备应答经
+ * mock_tx_octet()/mock_tx_done() 收集后交给 mock_phy_send()，
+ * 后者只做捕获，断言由 assert_tx_* 完成。
  */
 void mock_phy_feed_byte(uint8_t b);
 void mock_phy_feed_chk(void);
@@ -61,6 +65,15 @@ void mock_phy_feed_error(void);
 void mock_phy_clear_rx(void);
 void mock_phy_clear_tx(void);
 const uint8_t* mock_phy_tx(size_t* len);
+
+/* 应答捕获断言：每次断言消费自上次断言（或 mock_phy_clear_tx()）以来的
+ * 一个已交付帧；没有交付帧即失败。 */
+void assert_tx_frame(const uint8_t* expected, size_t len);
+void assert_tx_len(size_t len);
+void assert_no_tx(void);
+
+/* 注入 mock_phy_send 的返回值；默认返回 len。 */
+void mock_phy_set_send_result(int result);
 
 /* 在生效的传输上驱动一个完整的请求/应答周期。 */
 void test_io_cycle(iolink_device_ctx_t* ctx);
@@ -90,15 +103,12 @@ iolink_result_t test_params_write(iolink_test_params_t* params, uint16_t index, 
                                   const uint8_t* data, size_t len);
 iolink_od_app_t* test_params_od(iolink_test_params_t* params);
 
-/* 进程级默认标签表（惰性初始化，三个标签绑定到全局缓冲）。 */
+/* 进程级默认标签表（惰性初始化，三个标签绑定到静态缓冲）。 */
 iolink_od_app_t* test_default_tag_od(void);
-/* 把 app 的表项与默认标签表项合并到调用方提供的 storage；返回合并表。 */
-iolink_od_app_t test_od_with_tags(const iolink_od_app_t* app, iolink_od_entry_t* storage,
-                                  size_t capacity);
-/* 同上，使用进程级静态缓冲；标签来自 params（NULL 表示进程默认标签表）。
- * 测试串行使用；不要同时持有两个结果。 */
-iolink_od_app_t* test_od_with_tags_static(const iolink_od_app_t* app,
-                                          const iolink_test_params_t* params);
+/* 把 app 的表项与 tags 的表项合并到调用方提供的 storage；tags 为 NULL 时
+ * 使用进程默认标签表。 */
+iolink_od_app_t test_od_with_tags(const iolink_od_app_t* app, const iolink_od_app_t* tags,
+                                  iolink_od_entry_t* storage, size_t capacity);
 
 /* 显式的测试环境：设备标识 + 标签参数（测试 shim）。
  *
@@ -128,6 +138,7 @@ typedef struct
 {
     iolink_device_ctx_t ctx;
     iolink_device_config_t cfg;
+    iolink_test_params_t params;
 } iolink_test_device_t;
 
 int iolink_test_device_init(iolink_test_device_t* dev, const iolink_stack_config_t* stack,

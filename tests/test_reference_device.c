@@ -18,16 +18,17 @@ static void test_reference_device_payload(void** state)
     assert_int_equal(iolink_device_get_pd_in_len(&app.device), 3);
     assert_int_equal(iolink_device_get_pd_out_len(&app.device), 1);
     move_to_operate_ctx(&app.device);
-    uint8_t frame[5] = {0x80, IOLINK_MSEQ_TYPE_2, 1, 0, 0};
+    /* TYPE_2 过程通道 READ：MC + CKT + PD-out（OD 宽度 2 不参与读请求）。
+       请求长度由配置决定，整帧传输下多送字节会被判为成帧错误。 */
+    uint8_t frame[3] = {0x80, IOLINK_MSEQ_TYPE_2, 1};
     frame[1] |= iolink_checksum6(frame, sizeof(frame));
     for (size_t i = 0; i < sizeof(frame); i++) {
         mock_phy_feed_byte(frame[i]);
     }
     mock_phy_feed_chk();
-    expect_any(mock_phy_send, data);
-    expect_value(mock_phy_send, len, 6);
-    will_return(mock_phy_send, 6);
+    mock_phy_set_send_result(6);
     test_io_cycle(&app.device);
+    assert_tx_len(6);
     assert_int_equal(reference_device_tick(&app, true), 0);
     assert_true(app.led);
     assert_int_equal(app.counter, 1);
