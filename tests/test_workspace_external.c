@@ -61,6 +61,7 @@ static void test_set_baudrate(void* user, iolink_baudrate_t baudrate)
     (void) baudrate;
 }
 
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
 static int test_rx_octet(void* user, uint8_t* data, uint8_t* status)
 {
     (void) user;
@@ -68,7 +69,9 @@ static int test_rx_octet(void* user, uint8_t* data, uint8_t* status)
     *status = 0U;
     return 0;
 }
+#endif
 
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 static int test_tx_octet(void* user, uint8_t data)
 {
     (void) user;
@@ -80,6 +83,7 @@ static void test_tx_done(void* user)
 {
     (void) user;
 }
+#endif
 
 static uint8_t test_int_active(void* user)
 {
@@ -100,12 +104,13 @@ int main(void)
     config.phy.set_mode = test_set_mode;
     config.phy.set_baudrate = test_set_baudrate;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
-    config.phy.rx_frame = NULL; /* 本 fixture 只构建 BYTE/BYTE。 */
+    /* 该 fixture 只验证工作区绑定，不驱动收发；FRAME 构建下不提供帧钩子。 */
+    config.phy.rx_frame = NULL;
 #else
     config.phy.rx_octet = test_rx_octet;
 #endif
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-    config.phy.tx_frame = NULL; /* 本 fixture 只构建 BYTE/BYTE。 */
+    config.phy.tx_frame = NULL;
 #else
     config.phy.tx_octet = test_tx_octet;
     config.phy.tx_done = test_tx_done;

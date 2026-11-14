@@ -95,18 +95,26 @@ run_config() {
 
     local dir="$BUILD_ROOT/$name"
     local cflags="$STRICT_FLAGS $cflags_extra"
+    local transport=""
+    case "$mode" in
+        BYTE_BYTE) transport=BYTE ;;
+        FRAME_FRAME) transport=FRAME ;;
+        FRAME_BYTE|BYTE_FRAME) transport="" ;; # 混合粒度只有编译探针
+        *) echo "internal: bad mode $mode" >&2; exit 2 ;;
+    esac
     case "$mode" in
         BYTE_BYTE) ;;
         FRAME_FRAME) cflags+=" -DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME" ;;
         FRAME_BYTE) cflags+=" -DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_BYTE" ;;
         BYTE_FRAME) cflags+=" -DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_BYTE -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME" ;;
-        *) echo "internal: bad mode $mode" >&2; exit 2 ;;
     esac
 
-    # Tests drive the BYTE-only virtual PHY and BYTE mock vtables, so they are
-    # only meaningful on the BYTE/BYTE layout. FRAME remains compile-only.
+    # The unit suite runs on every transport that has a test contract
+    # (BYTE/BYTE and FRAME/FRAME); the mock PHY implements both. Mixed-granularity
+    # layouts stay compile-only. IOLINK_TEST_TRANSPORT lets tests/CMakeLists.txt
+    # drop the targets that pin a BYTE-only contract.
     local tests_flag=ON
-    if [ "$mode" != "BYTE_BYTE" ] || [ "$run_tests" != "yes" ]; then
+    if [ "$run_tests" != "yes" ] || [ -z "$transport" ]; then
         tests_flag=OFF
     fi
 
@@ -119,6 +127,7 @@ run_config() {
             "-DCMAKE_BUILD_TYPE=$build_type" \
             "-DCMAKE_C_FLAGS=$cflags" \
             "-DBUILD_TESTING=$tests_flag" \
+            "-DIOLINK_TEST_TRANSPORT=${transport:-BYTE}" \
             $cmake_extra >"$dir/configure.log" 2>&1; then
         echo "CONFIGURE FAILED"
         sed -n '1,40p' "$dir/configure.log" | sed 's/^/    /'

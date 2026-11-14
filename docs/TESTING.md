@@ -30,12 +30,50 @@ Verify code against warnings and static analysis tools.
 Every supported structural configuration must build. The matrix is defined once
 in `tools/matrix_configs.sh`: four structural configurations (`host_default`,
 its Release variant `host_default_release`, `host_frame` and
-`target_minimal`, plus `host_smp_split`), seven syntax-only combination probes,
+`target_minimal`, plus `host_smp_split`), the syntax-only combination probes,
 the link-time profile probes and the bare-metal platform. Feature trimming is
-expressed with the individual `IOLINK_FEATURE_*` switches. Configurations marked tests=yes (`host_default`,
-`host_default_release`, `host_smp_split`) also run the unit suite; `host_frame`
-is build-only because the host tests drive BYTE-only PHY vtables, and demoted
-runtime switches are covered by expected-frame tests in the default suite.
+expressed with the individual `IOLINK_FEATURE_*` switches.
+
+Configurations marked tests=yes (`host_default`, `host_default_release`,
+`host_smp_split`, `host_frame`) also run the unit suite. The suite is transport
+neutral: `tests/test_helpers.c` implements both PHY contracts — the BYTE hooks
+(`rx_octet`/`tx_octet`/`tx_done`) and the FRAME hooks
+(`rx_frame`/`tx_frame`/`tx_busy`) — over the same request queue, and
+`tools/build_matrix.sh` passes `-DIOLINK_TEST_TRANSPORT=<BYTE|FRAME>` to CMake
+so the suite is built and run against the layout of that row.
+
+FRAME coverage has three explicit gaps, all BYTE-contract facts rather than
+untested code:
+
+- `test_ctx_sizes` pins exact context sizes, and `IOLINK_PD_IN_BUFFERS` is 3 on
+  FRAME/FRAME without `tx_busy`; the target is therefore not built.
+- Individual cases that need a half-frame or a receive error from the PHY (a
+  BYTE intermediate state that a FRAME PHY never delivers), the optional
+  `tx_done` hook, timer B re-arm on frame end (the PHY's DMA completion in TX
+  FRAME), or the 2-buffer PD-in lease are guarded with `#if IOLINK_ISR_*_MODE`
+  and reported as skipped.
+- The PTY host examples (`conformance_device_smoke`, `conformance_device_master`,
+  `conformance_device_iodd_oracle`) are registered only for the BYTE transport:
+  `iolink_phy_virtual` is a byte stream and its `get()` returns NULL in a FRAME
+  build, so the example cannot initialise.
+
+Mixed-granularity layouts (`FRAME_BYTE`, `BYTE_FRAME`) remain compile-only: they
+have no test transport contract, so their rows stay tests=no.
+
+A single FRAME row locally:
+
+```bash
+cmake -B build_frame -DIOLINK_PLATFORM=LINUX -DIOLINK_TEST_TRANSPORT=FRAME \
+      -DCMAKE_C_FLAGS="-DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME"
+cmake --build build_frame
+(cd build_frame && ctest)
+```
+
+Coverage sees both transports the same way: `tools/coverage.sh --transport both`
+builds and tests BYTE and FRAME in separate trees (`build_coverage/` and
+`build_coverage/frame/`), writes one gcovr JSON tracefile per transport and
+merges them into a combined report. `--check` still compares only the BYTE
+number, because `tools/coverage_baseline.txt` is calibrated on the BYTE build.
 
 ```bash
 ./tools/build_matrix.sh                    # everything (~1-2 min)

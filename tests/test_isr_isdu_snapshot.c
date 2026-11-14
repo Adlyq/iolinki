@@ -40,6 +40,23 @@ static size_t tx_n;
 static unsigned request_calls;
 static uint8_t chk_pending;
 
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+/* RX FRAME：feed() 送入的字节即一整个 PHY 帧。 */
+static const uint8_t* rx_frame(void* user, uint8_t* status, uint8_t* len)
+{
+    (void) user;
+    *len = 0U;
+    *status = 0U;
+    if ((rx_n == 0U) || (rx_i >= rx_n)) {
+        return NULL;
+    }
+    const uint8_t* frame = &rx_q[rx_i];
+    *len = (uint8_t) (rx_n - rx_i);
+    *status = (uint8_t) (IOLINK_PHY_STATUS_DATA_READY | IOLINK_PHY_STATUS_CHK);
+    rx_i = rx_n;
+    return frame;
+}
+#else
 static int rx_octet(void* user, uint8_t* data, uint8_t* status)
 {
     (void) user;
@@ -55,7 +72,33 @@ static int rx_octet(void* user, uint8_t* data, uint8_t* status)
     }
     return 0;
 }
+#endif
 
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+/* TX FRAME：帧尾 CKS 由库在 tx_frame() 之后写入，交付推迟到观察点。 */
+static const uint8_t* tx_pending;
+static size_t tx_pending_n;
+
+static void tx_frame_sync(void)
+{
+    if (tx_pending == NULL) {
+        return;
+    }
+    tx_n = (tx_pending_n <= sizeof(tx_q)) ? tx_pending_n : sizeof(tx_q);
+    (void) memcpy(tx_q, tx_pending, tx_n);
+    tx_pending = NULL;
+    tx_pending_n = 0U;
+}
+
+static int tx_frame(void* user, const uint8_t* data, size_t len)
+{
+    (void) user;
+    tx_frame_sync();
+    tx_pending = data;
+    tx_pending_n = len;
+    return 0;
+}
+#else
 static int tx_octet(void* user, uint8_t data)
 {
     (void) user;
@@ -69,12 +112,18 @@ static void tx_done(void* user)
 {
     (void) user;
 }
+#endif
 
 static uint8_t int_active(void* user)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) user;
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    (void) ctx;
+    return ((rx_n != 0U) && (rx_i < rx_n)) ? 1U : 0U;
+#else
     return ((rx_i < rx_n) || (chk_pending != 0U) || (ctx->main.shared.isr_tx_active != 0U)) ? 1U
                                                                                             : 0U;
+#endif
 }
 
 static void request_service(void* user)
@@ -96,6 +145,9 @@ static void drain_tx(iolink_dll_ctx_t* ctx)
     while (ctx->main.shared.isr_tx_active != 0U) {
         iolink_dll_process_isr(&ctx->main);
     }
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    tx_frame_sync();
+#endif
 }
 
 /* MC + CKT + PD-out，A.1.6 校验和位于 CKT 的低位。 */
@@ -126,9 +178,17 @@ static int test_eager_isdu_snapshot(void)
     iolink_dll_ctx_t dll;
     const iolink_phy_api_t phy = {
         .user = &dll,
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+        .rx_frame = rx_frame,
+#else
         .rx_octet = rx_octet,
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+        .tx_frame = tx_frame,
+#else
         .tx_octet = tx_octet,
         .tx_done = tx_done,
+#endif
         .int_active = int_active,
     };
 
@@ -222,9 +282,17 @@ static int test_request_service_staging(void)
     iolink_dll_ctx_t dll;
     const iolink_phy_api_t phy = {
         .user = &dll,
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+        .rx_frame = rx_frame,
+#else
         .rx_octet = rx_octet,
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+        .tx_frame = tx_frame,
+#else
         .tx_octet = tx_octet,
         .tx_done = tx_done,
+#endif
         .int_active = int_active,
         .request_service = request_service,
     };
@@ -272,9 +340,17 @@ static int test_type0_diagnosis_read_isr(void)
     iolink_dll_ctx_t dll;
     const iolink_phy_api_t phy = {
         .user = &dll,
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+        .rx_frame = rx_frame,
+#else
         .rx_octet = rx_octet,
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+        .tx_frame = tx_frame,
+#else
         .tx_octet = tx_octet,
         .tx_done = tx_done,
+#endif
         .int_active = int_active,
         .request_service = request_service,
     };

@@ -14,6 +14,9 @@
  * PD-in 捕获已不再被流式发送。在帧中途卡住的收发器
  * 不得让 PD-in 更新在本次会话剩余时间内
  * 冻结。
+ *
+ * "无空闲缓冲区"只在 TX BYTE 的两缓冲区布局可达：TX FRAME 里 PHY 用
+ * tx_busy() 报告帧结束，主泵因此能主动释放租约。
  */
 
 #include <stdarg.h>
@@ -29,6 +32,12 @@
 static void test_lease_recovery_and_skip_counter(void** state)
 {
     (void) state;
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    /* 该场景手工占用"活动缓冲区之外的唯一缓冲区"，只在两缓冲区的 TX BYTE
+     * 布局可达。TX FRAME 下 PHY 通过 tx_busy() 报告帧结束（mock 随即报告
+     * 线路空闲），主泵会主动释放租约；三缓冲区布局又总有一个可写槽位。 */
+    skip();
+#endif
     const iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0};
     iolink_test_device_t dev;
     const uint8_t data[2] = {0x11U, 0x22U};

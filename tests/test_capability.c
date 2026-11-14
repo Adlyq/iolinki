@@ -97,23 +97,34 @@ static void test_resolve_probes_the_built_vtable(void** state)
     no_cq.set_cq_line = NULL;
     assert_false(iolink_caps_has(iolink_caps_resolve(&no_cq, NULL, NULL, NULL), IOLINK_CAP_SIO_CQ));
     /* mock PHY 没有这些可选钩子：能力位必须为 0。 */
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    /* TX FRAME 的 mock 上报线路占用（tx_frame 之后到 DMA 完成之前）。 */
+    assert_true(iolink_caps_has(caps, IOLINK_CAP_TX_BUSY));
+#else
     assert_false(iolink_caps_has(caps, IOLINK_CAP_TX_BUSY));
+#endif
     assert_false(iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE));
     assert_false(iolink_caps_has(caps, IOLINK_CAP_PHY_FAULTS));
 
-    /* 缺 send 钩子：TX 能力必须消失（不是"有 tx_octet 就算"）。 */
+    /* 缺发送钩子：TX 能力必须消失（不是"有 rx 钩子就算"）。 */
     iolink_phy_api_t no_tx = g_phy_mock;
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    no_tx.tx_frame = NULL;
+#else
     no_tx.tx_octet = NULL;
+#endif
     const iolink_caps_t caps_no_tx = iolink_caps_resolve(&no_tx, NULL, NULL, NULL);
     assert_true(iolink_caps_has(caps_no_tx, IOLINK_CAP_RX));
     assert_false(iolink_caps_has(caps_no_tx, IOLINK_CAP_TX));
 
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
     /* tx_done 只是可选的帧结束通知：缺少它不改变 TX 能力，
      * 与 dll_isr_tx_step 只依赖 tx_octet 的实现一致。 */
     iolink_phy_api_t no_done = g_phy_mock;
     no_done.tx_done = NULL;
     const iolink_caps_t caps_no_done = iolink_caps_resolve(&no_done, NULL, NULL, NULL);
     assert_true(iolink_caps_has(caps_no_done, IOLINK_CAP_TX));
+#endif
 
     /* PHY 为 NULL：只有构建/配置能力。 */
     const iolink_caps_t null_phy = iolink_caps_resolve(NULL, NULL, NULL, NULL);

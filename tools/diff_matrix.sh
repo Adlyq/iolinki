@@ -19,8 +19,9 @@
 #
 # A stale tools/diff_allowlist.txt entry (a configuration or transcript that no
 # longer exists) is a hard failure, so a removed comparison cannot silently keep
-# passing. Only BYTE/BYTE configurations build the suite (build_matrix.sh keeps
-# tests off for FRAME transports).
+# passing. Only BYTE/BYTE configurations take part: the gate compares reply
+# transcripts, not transports (host_frame runs the unit suite but no transcript
+# comparison).
 #
 # Usage:
 #   ./tools/diff_matrix.sh            # run the gate

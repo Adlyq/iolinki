@@ -44,6 +44,15 @@ static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t le
     iolink_ring_publish(&ctx->main.shared.isr_frame_ring);
 }
 
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+static const uint8_t* rx_frame(void* user, uint8_t* status, uint8_t* len)
+{
+    (void) user;
+    *status = 0U;
+    *len = 0U;
+    return NULL; /* 测试直接向邮箱发布数据，PHY 不交付帧。 */
+}
+#else
 static int rx_octet(void* user, uint8_t* data, uint8_t* status)
 {
     (void) user;
@@ -51,7 +60,18 @@ static int rx_octet(void* user, uint8_t* data, uint8_t* status)
     (void) status;
     return 0; /* 测试直接向邮箱发布数据。 */
 }
+#endif
 
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+static int tx_frame(void* user, const uint8_t* data, size_t len)
+{
+    (void) user;
+    (void) data;
+    tx_frames++;
+    tx_octets += (unsigned) len;
+    return 0;
+}
+#else
 static int tx_octet(void* user, uint8_t data)
 {
     (void) user;
@@ -65,6 +85,7 @@ static void tx_done(void* user)
     (void) user;
     tx_frames++;
 }
+#endif
 
 static uint8_t int_active(void* user)
 {
@@ -120,9 +141,17 @@ int main(void)
     iolink_dll_ctx_t ctx;
     const iolink_phy_api_t phy = {
         .user = &ctx,
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+        .rx_frame = rx_frame,
+#else
         .rx_octet = rx_octet,
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+        .tx_frame = tx_frame,
+#else
         .tx_octet = tx_octet,
         .tx_done = tx_done,
+#endif
         .int_active = int_active,
     };
 

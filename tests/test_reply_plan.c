@@ -53,6 +53,23 @@ static uint64_t plan_time_us(void* user)
     return s_now_us;
 }
 
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+/* RX FRAME：feed() 送入的字节即一整个 PHY 帧；没有被送入的帧就交付 NULL。 */
+static const uint8_t* plan_rx_frame(void* user, uint8_t* status, uint8_t* len)
+{
+    (void) user;
+    *len = 0U;
+    *status = 0U;
+    if ((s_rx_n == 0U) || (s_rx_i >= s_rx_n)) {
+        return NULL;
+    }
+    const uint8_t* frame = &s_rx_q[s_rx_i];
+    *len = (uint8_t) (s_rx_n - s_rx_i);
+    *status = (uint8_t) (IOLINK_PHY_STATUS_DATA_READY | IOLINK_PHY_STATUS_CHK);
+    s_rx_i = s_rx_n;
+    return frame;
+}
+#else
 static int plan_rx_octet(void* user, uint8_t* data, uint8_t* status)
 {
     (void) user;
@@ -68,7 +85,34 @@ static int plan_rx_octet(void* user, uint8_t* data, uint8_t* status)
     }
     return 0;
 }
+#endif
 
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+/* TX FRAME：库在 tx_frame() 返回之后才把帧尾 CKS 写进同一缓冲区
+ * （长应答的 DMA 时序），因此交付推迟到观察点 drain_tx()。 */
+static const uint8_t* s_tx_pending;
+static size_t s_tx_pending_n;
+
+static void plan_tx_frame_sync(void)
+{
+    if (s_tx_pending == NULL) {
+        return;
+    }
+    s_tx_n = (s_tx_pending_n <= sizeof(s_tx_q)) ? s_tx_pending_n : sizeof(s_tx_q);
+    (void) memcpy(s_tx_q, s_tx_pending, s_tx_n);
+    s_tx_pending = NULL;
+    s_tx_pending_n = 0U;
+}
+
+static int plan_tx_frame(void* user, const uint8_t* data, size_t len)
+{
+    (void) user;
+    plan_tx_frame_sync();
+    s_tx_pending = data;
+    s_tx_pending_n = len;
+    return 0;
+}
+#else
 static int plan_tx_octet(void* user, uint8_t data)
 {
     (void) user;
@@ -87,27 +131,46 @@ static void plan_tx_done(void* user)
     (void) user;
     s_tx_active = 0U;
 }
+#endif
 
 static uint8_t plan_int_active(void* user)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) user;
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    (void) ctx;
+    /* 只有完整帧才是 PHY 可交付的事件。 */
+    return ((s_rx_n != 0U) && (s_rx_i < s_rx_n)) ? 1U : 0U;
+#else
     return ((s_rx_i < s_rx_n) || (s_chk_pending != 0U) || (ctx->main.shared.isr_tx_active != 0U))
                ? 1U
                : 0U;
+#endif
 }
 
 static const iolink_phy_api_t s_phy = {
     .user = &s_dll,
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    .rx_frame = plan_rx_frame,
+#else
     .rx_octet = plan_rx_octet,
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    .tx_frame = plan_tx_frame,
+#else
     .tx_octet = plan_tx_octet,
     .tx_done = plan_tx_done,
+#endif
     .int_active = plan_int_active,
 };
 
 /** @brief 只收不发的 PHY（用于"计划命中但无法执行"的兜底路径）。 */
 static const iolink_phy_api_t s_phy_rx_only = {
     .user = &s_dll,
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
+    .rx_frame = plan_rx_frame,
+#else
     .rx_octet = plan_rx_octet,
+#endif
     .int_active = plan_int_active,
 };
 
@@ -135,6 +198,9 @@ static void drain_tx(void)
     while (s_dll.main.shared.isr_tx_active != 0U) {
         iolink_dll_process_isr(&s_dll.main);
     }
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    plan_tx_frame_sync();
+#endif
 }
 
 /** @brief OPERATE / TYPE_2_V：PD-in 1、PD-out 0、OD 1。 */
@@ -893,6 +959,7 @@ static int test_capability_change_invalidates_plan(void)
 }
 
 /* tx_done 只是可选的帧结束通知：只有 tx_octet 的 PHY 仍应置位 CAP_TX 并能发送。 */
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 static int test_tx_without_done_hook(void)
 {
     iolink_phy_api_t phy = s_phy;
@@ -932,6 +999,7 @@ static int test_tx_without_done_hook(void)
     }
     return 0;
 }
+#endif /* IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE */
 
 int main(void)
 {
@@ -983,10 +1051,12 @@ int main(void)
     if (rc != 0) {
         return 120 + rc;
     }
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
     rc = test_tx_without_done_hook();
     if (rc != 0) {
         return 130 + rc;
     }
+#endif
     rc = test_type0_page_write_is_answered();
     if (rc != 0) {
         return 140 + rc;

@@ -451,6 +451,9 @@ static void test_busy_tx_frame_keeps_frame_for_main(void** state)
     s_ctx.main.shared.pd_out_len_current = 1U;
     s_ctx.main.shared.pd_in_len = 1U;
     s_ctx.main.pd_in_len_current = 1U;
+    /* 计划表按配置发布：改了 PD/OD 宽度后必须重发，否则请求长度
+     * 与计划里的 req_len 不一致，帧会按"计划未命中"丢弃。 */
+    iolink_dll_publish_reply_plans(&s_ctx.main);
     make_frame(frame, sizeof(frame));
     feed_frame(frame, sizeof(frame));
 
