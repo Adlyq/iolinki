@@ -12,6 +12,9 @@
  *        DLL 和事件引擎使用，而不使用平台时钟。
  */
 
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
 #include <cmocka.h>
 #include <stdint.h>
 #include <string.h>

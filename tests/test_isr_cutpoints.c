@@ -24,6 +24,9 @@
  * 槽位，且记录的元数据随记录一起传递。
  */
 
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
 #include <cmocka.h>
 #include <stdint.h>
 #include <string.h>

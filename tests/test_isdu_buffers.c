@@ -15,6 +15,9 @@
  * 读取缓冲；`resp_sel`/`resp_pub` 仍交替，保证发布字能区分新旧应答。
  */
 
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
 #include <cmocka.h>
 #include <stdint.h>
 

@@ -12,6 +12,9 @@
  * propagation and lazy argument evaluation included).
  */
 
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
 #include <cmocka.h>
 #include <string.h>
 

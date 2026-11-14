@@ -15,6 +15,9 @@
  * 且 ISR 侧的自增不会触及主上下文字段。
  */
 
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
 #include <cmocka.h>
 #include <string.h>
 

@@ -15,6 +15,9 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
 #include <cmocka.h>
 
 #include "iolinki/crc.h"

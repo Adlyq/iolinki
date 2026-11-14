@@ -12,6 +12,9 @@
  *        本可执行文件有意不链接强覆盖实现。
  */
 
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
 #include <cmocka.h>
 #include <stdint.h>
 #include <string.h>

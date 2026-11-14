@@ -15,6 +15,9 @@
  * 在各自配置所需的最小原语集合下均可编译并链接。
  */
 
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
 #include <cmocka.h>
 #include <stddef.h>
 #include <stdint.h>

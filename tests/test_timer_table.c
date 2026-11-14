@@ -11,6 +11,9 @@
  * @brief 截止时间表：契约完整性、装载/取消、回绕单点、同刻优先级。
  */
 
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
 #include <cmocka.h>
 #include <stdint.h>
 #include <string.h>

@@ -15,6 +15,9 @@
  * 符号的方向（负向探针见 tools/check_profile_abi.sh）。
  */
 
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
 #include <cmocka.h>
 
 #include "iolinki/capability.h"

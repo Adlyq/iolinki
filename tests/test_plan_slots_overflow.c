@@ -16,6 +16,9 @@
  * 计数保持不变，测试失败。
  */
 
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
 #include <cmocka.h>
 #include <string.h>
 

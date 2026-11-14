@@ -150,8 +150,10 @@ def render_test(rows: list[Row]) -> str:
 
 /* clang-format off */
 
-#include <cmocka.h>
+#include <stdarg.h>
 #include <stddef.h>
+#include <setjmp.h>
+#include <cmocka.h>
 #include <stdint.h>
 
 #include "iolinki/dll_sm.h"

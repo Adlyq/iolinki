@@ -18,15 +18,18 @@
 #ifndef IOLINK_TEST_CASE_H_
 #define IOLINK_TEST_CASE_H_
 
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
 #include <cmocka.h>
 
 /* 声明一个返回 0 表示通过的用例函数，并生成同名的 cmocka 用例。
  * 定义式宏：调用时不要写结尾分号（文件作用域的 `;` 不是合法 C99）。 */
-#define IOLINK_TEST_RC(fn)                                                                        \
-    static void iolink_case_##fn(void** state)                                                    \
-    {                                                                                             \
-        (void) state;                                                                             \
-        assert_int_equal(fn(), 0);                                                                \
+#define IOLINK_TEST_RC(fn)                     \
+    static void iolink_case_##fn(void** state) \
+    {                                          \
+        (void) state;                          \
+        assert_int_equal(fn(), 0);             \
     }
 
 #endif /* IOLINK_TEST_CASE_H_ */
