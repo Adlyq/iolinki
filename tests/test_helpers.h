@@ -69,7 +69,7 @@ void test_io_cycle(iolink_device_ctx_t* ctx);
 extern const iolink_phy_api_t g_phy_mock;
 
 /* 测试专用参数 shim：库已删除 params 上下文；这里用应用标签 OD 表项
- * 复刻旧的 `iolink_params_ctx_*` 读写语义，让既有测试最小改动迁移。 */
+ * 复刻旧的参数读写语义，让既有测试最小改动迁移。 */
 typedef struct
 {
     uint8_t app[33];
