@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "============================================"
 echo "🔍 iolinki Code Quality & Safety Check"
 echo "============================================"
@@ -8,17 +10,38 @@ echo "============================================"
 # 1. Compiler Warnings (Strict)
 # We rely on CMake to set -Wall -Wextra -Werror via the build system
 echo -e "\n[1/9] 🛡️  Verifying Compilation Warnings..."
-BUILD_DIR="${IOLINKI_BUILD_DIR:-build_quality}"
+BUILD_DIR="${IOLINKI_BUILD_DIR:-$ROOT/build_quality}"
+case "${BUILD_DIR}" in
+    /*) ;;
+    *) BUILD_DIR="$ROOT/${BUILD_DIR}" ;;
+esac
+RELEASE_DIR="${BUILD_DIR}_release"
+
+# Both trees are thrown away and rebuilt on every run, so leaving them behind
+# only costs disk. Set IOLINK_KEEP_BUILDS=1 to inspect them after a failure.
+cleanup_build_trees() {
+    if [ "${IOLINK_KEEP_BUILDS:-0}" = "1" ]; then
+        echo "build trees kept: ${BUILD_DIR} ${RELEASE_DIR}"
+        return
+    fi
+    # IOLINKI_BUILD_DIR may point anywhere; only remove a tree that looks like
+    # one of ours, so a mistyped path cannot take user data with it.
+    case "${BUILD_DIR##*/}" in
+        build*) rm -rf -- "${BUILD_DIR}" "${RELEASE_DIR}" ;;
+        *) echo "not removing (name is not build*): ${BUILD_DIR}" ;;
+    esac
+}
+trap cleanup_build_trees EXIT
 if [ -f "${BUILD_DIR}/CMakeCache.txt" ]; then
     cached_src=$(grep -E '^CMAKE_HOME_DIRECTORY:INTERNAL=' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2-)
-    if [ -n "${cached_src}" ] && [ "${cached_src}" != "$(pwd)" ]; then
+    if [ -n "${cached_src}" ] && [ "${cached_src}" != "${ROOT}" ]; then
         rm -rf "${BUILD_DIR}"
     fi
 fi
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 # Enable Strict Mode (we need to add this flag support to CMakeLists or force it here)
-cmake .. -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
+cmake -S "${ROOT}" -B . -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
 # cmake --build is generator-agnostic (the host may default to Ninja, where a
 # bare `make` finds no Makefile).
 if cmake --build . --parallel "$(nproc)"; then
@@ -27,11 +50,10 @@ else
     echo "   ❌ Strict Compilation FAILED"
     exit 1
 fi
-cd ..
+cd "${ROOT}"
 
 # Debug (-O0) does not emit some -O2/-O3-only diagnostics
 # (e.g. -Wmaybe-uninitialized), so repeat the strict build at -O3.
-RELEASE_DIR="${BUILD_DIR}_release"
 rm -rf "${RELEASE_DIR}"
 cmake -S . -B "${RELEASE_DIR}" -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_FLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
@@ -171,6 +193,7 @@ if command -v shellcheck &> /dev/null; then
     # is a legacy one-shot helper with a known SC2218 false positive.
     lint_scripts=(tools/build_matrix.sh tools/coverage.sh tools/diff_matrix.sh
                   tools/check_ownership.sh tools/check_test_whitebox.sh
+                  tools/check_test_gates.sh tools/clean_builds.sh
                   tools/test_install_consumer.sh
                   tools/wcet_run.sh tools/check_profile_abi.sh
                   tools/matrix_configs.sh
@@ -194,11 +217,12 @@ else
     exit 1
 fi
 
-echo -e "\n[8/9] 🧱 Test White-box Boundary..."
-if ./tools/check_test_whitebox.sh --selftest && ./tools/check_test_whitebox.sh; then
-    echo "   ✅ Test White-box Boundary Passed"
+echo -e "\n[8/9] 🧱 Test Gates (white-box, teardown)..."
+if ./tools/check_test_whitebox.sh --selftest && ./tools/check_test_whitebox.sh &&
+    ./tools/check_test_gates.sh; then
+    echo "   ✅ Test Gates Passed"
 else
-    echo "   ❌ Test White-box Boundary FAILED"
+    echo "   ❌ Test Gates FAILED"
     exit 1
 fi
 

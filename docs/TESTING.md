@@ -132,6 +132,9 @@ bookkeeping in their own group teardown.
 A failing group teardown must fail the *process*: cmocka 2.x reports
 `[ FAILED ] GROUP TEARDOWN` but still exits 0, so the gate prints the offending
 frame and calls `exit(EXIT_FAILURE)` instead of relying on the return value.
+`tools/check_test_gates.sh` rejects a teardown body that uses `assert_*` and a
+binary that includes the shared harness without wiring the teardown, so the gate
+cannot silently turn decorative again.
 
 Tests reach the DLL layout through one header. Behaviour and conformance
 tests use the public API (`iolink_device_get_state`, `iolink_device_get_dll_stats`,
@@ -156,7 +159,22 @@ build still owes a master. `tests/transport_probe.c` is the one plain `main()`
 left: it is a compile-time check that the suite's `IOLINK_TEST_TRANSPORT` label
 matches the compiled ISR granularity, not a test.
 
-### 5. Mutation spot checks
+### 5. Build trees
+
+The quality and coverage scripts create CMake trees next to the sources
+(`build_quality*`, `build_coverage`, `build_wcet`, ...), and every ad-hoc
+`cmake -B build_<name>` leaves another. They are ignored by git but they occupy
+the working directory and its disk:
+
+```bash
+./tools/clean_builds.sh          # list the trees and their size
+./tools/clean_builds.sh --yes    # remove them
+```
+
+`check_quality.sh` removes its own two trees on exit; set
+`IOLINK_KEEP_BUILDS=1` to keep them for post-mortem.
+
+### 6. Mutation spot checks
 
 A small set of deliberate defects that the suite must catch. They are checked by
 hand (in a `/tmp` copy of the tree, reverting each one) whenever the related
@@ -170,7 +188,7 @@ area changes; a survivor is a real coverage gap, not a warning.
 | M4 | `IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN` -> `VAL_LEN_UNDRUN` in `src/od.c` | `test_conformance_gaps::test_0123_application_tag_overlong` and the ISDU wire test |
 | M5 | DS checksum comparison replaced by a no-op | `test_ds::test_ds_state_transitions` |
 
-### 6. Docker Environment
+### 7. Docker Environment
 To ensure a reproducible environment matching CI, run tests inside Docker:
 
 ```bash

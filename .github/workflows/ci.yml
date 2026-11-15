@@ -107,7 +107,8 @@ jobs:
         run: |
           shellcheck -S warning tools/build_matrix.sh tools/coverage.sh \
             tools/diff_matrix.sh tools/check_ownership.sh \
-            tools/check_test_whitebox.sh tools/test_install_consumer.sh \
+            tools/check_test_whitebox.sh tools/check_test_gates.sh \
+            tools/clean_builds.sh tools/test_install_consumer.sh \
             tools/wcet_run.sh \
             tools/check_profile_abi.sh tools/matrix_configs.sh \
             test_all.sh check_quality.sh .docker_test_entrypoint.sh
@@ -157,6 +158,8 @@ jobs:
         run: ./tools/check_ownership.sh
       - name: Test white-box boundary
         run: ./tools/check_test_whitebox.sh --selftest && ./tools/check_test_whitebox.sh
+      - name: Test gate conventions
+        run: ./tools/check_test_gates.sh
       - name: Install and consume
         run: ./tools/test_install_consumer.sh
 
