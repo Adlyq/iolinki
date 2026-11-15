@@ -30,7 +30,8 @@
 
 # Structural configuration names (what --list reports as the matrix size).
 # shellcheck disable=SC2034 # consumed by the scripts that source this file
-IOLINK_MATRIX_STRUCTURAL_CONFIGS=(host_default host_frame target_minimal host_smp_split)
+IOLINK_MATRIX_STRUCTURAL_CONFIGS=(
+    host_default host_frame host_no_ds host_no_events target_minimal host_smp_split)
 
 # Emit every build row: <callback> <name> <mode> <build-type> <tests> <cmake-extra> <cflags-extra>
 #
@@ -42,6 +43,10 @@ iolink_matrix_emit()
     "$cb" host_default BYTE_BYTE Debug yes "" ""
     "$cb" host_default_release BYTE_BYTE Release yes "" ""
     "$cb" host_frame FRAME_FRAME Debug yes "" ""
+    # Trimmed builds run only tests/test_trimmed_contract.c, which pins the
+    # responses the master can observe when a subsystem is compiled out.
+    "$cb" host_no_ds BYTE_BYTE Debug yes "-DIOLINK_FEATURE_DATA_STORAGE=OFF" ""
+    "$cb" host_no_events BYTE_BYTE Debug yes "-DIOLINK_FEATURE_EVENTS=OFF" ""
     "$cb" target_minimal BYTE_BYTE Release no \
         "-DIOLINK_FEATURE_DATA_STORAGE=OFF -DIOLINK_FEATURE_EVENTS=OFF -DIOLINK_PLATFORM=BAREMETAL" \
         "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE"

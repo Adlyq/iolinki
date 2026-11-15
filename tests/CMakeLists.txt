@@ -6,13 +6,6 @@ if(NOT IOLINK_TEST_TRANSPORT STREQUAL "BYTE" AND NOT IOLINK_TEST_TRANSPORT STREQ
     message(FATAL_ERROR "IOLINK_TEST_TRANSPORT must be BYTE or FRAME")
 endif()
 
-# The full suite exercises the untrimmed stack. Skip it for a trimmed build;
-# build the library target (or configure with -DBUILD_TESTING=OFF) instead.
-if(NOT IOLINK_FEATURE_DATA_STORAGE OR NOT IOLINK_FEATURE_EVENTS)
-    message(STATUS "Feature-trimmed build: skipping the unit suite")
-    return()
-endif()
-
 message(STATUS "Unit suite transport: ${IOLINK_TEST_TRANSPORT}")
 
 # The transport label must match the ISR granularity the sources were actually
@@ -80,12 +73,6 @@ function(iolink_test)
     add_test(NAME ${T_NAME} COMMAND ${T_NAME})
 endfunction()
 
-# External-workspace profile: a second build of the sources without the
-# embedded scratch, so the -16 rejection and the explicit-workspace path are
-# compiled and executed (not only syntax-probed).
-add_library(iolink_workspace_fixture STATIC ${IOLINK_SOURCES})
-target_include_directories(iolink_workspace_fixture PUBLIC ${CMAKE_SOURCE_DIR}/include)
-target_compile_definitions(iolink_workspace_fixture PUBLIC IOLINK_WORKSPACE_EMBEDDED=0)
 # CMocka is required for the suite; detect it before the first target so every
 # iolink_test(... CMOCKA) gets a non-empty CMOCKA_LIBRARIES.
 find_package(PkgConfig QUIET)
@@ -113,9 +100,25 @@ if(CMOCKA_FOUND)
 else()
     message(FATAL_ERROR
         "CMocka is required for the unit suite. Install libcmocka-dev (Debian) "
-        "or cmocka (Arch), configure with -DBUILD_TESTING=OFF for a library-only "
-        "build, or trim a feature to skip the suite.")
+        "or cmocka (Arch), or configure with -DBUILD_TESTING=OFF for a "
+        "library-only build.")
 endif()
+
+# The full suite exercises the untrimmed stack, but the switches still change
+# what a master observes. Keep one contract test so "compiles" is not mistaken
+# for "behaves".
+if(NOT IOLINK_FEATURE_DATA_STORAGE OR NOT IOLINK_FEATURE_EVENTS)
+    message(STATUS "Feature-trimmed build: registering the trimmed-behaviour contract only")
+    iolink_test(NAME test_trimmed_contract SOURCES test_trimmed_contract.c CMOCKA NO_HELPERS)
+    return()
+endif()
+
+# External-workspace profile: a second build of the sources without the
+# embedded scratch, so the -16 rejection and the explicit-workspace path are
+# compiled and executed (not only syntax-probed).
+add_library(iolink_workspace_fixture STATIC ${IOLINK_SOURCES})
+target_include_directories(iolink_workspace_fixture PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_compile_definitions(iolink_workspace_fixture PUBLIC IOLINK_WORKSPACE_EMBEDDED=0)
 
 iolink_test(NAME test_workspace_external
     SOURCES test_workspace_external.c

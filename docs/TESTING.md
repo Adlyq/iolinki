@@ -28,11 +28,13 @@ Verify code against warnings and static analysis tools.
 
 ### 3. Run the Compile Matrix
 Every supported structural configuration must build. The matrix is defined once
-in `tools/matrix_configs.sh`: four structural configurations (`host_default`,
-its Release variant `host_default_release`, `host_frame` and
-`target_minimal`, plus `host_smp_split`), the syntax-only combination probes,
-the link-time profile probes and the bare-metal platform. Feature trimming is
-expressed with the individual `IOLINK_FEATURE_*` switches.
+in `tools/matrix_configs.sh`: six structural configurations (`host_default`,
+its Release variant `host_default_release`, `host_frame`, `host_no_ds`,
+`host_no_events`, `target_minimal` and `host_smp_split`), the syntax-only
+combination probes, the link-time profile probes and the bare-metal platform.
+Feature trimming is expressed with the individual `IOLINK_FEATURE_*` switches;
+`host_no_ds` / `host_no_events` run `tests/test_trimmed_contract.c` so a
+trimmed build proves what the master observes, not only that it compiles.
 
 Configurations marked tests=yes (`host_default`, `host_default_release`,
 `host_smp_split`, `host_frame`) also run the unit suite. The suite is transport
@@ -143,10 +145,12 @@ the matchers honest; both run from `check_quality.sh` and CI.
 
 CMocka is a hard requirement for the suite: a configure without it fails
 instead of silently registering no tests. Use `-DBUILD_TESTING=OFF` for a
-library-only build, or trim `IOLINK_FEATURE_DATA_STORAGE`/`IOLINK_FEATURE_EVENTS`
-— a trimmed build skips the suite before cmocka is looked for. `tests/transport_probe.c` is
-the one plain `main()` left: it is a compile-time check that the suite's
-`IOLINK_TEST_TRANSPORT` label matches the compiled ISR granularity, not a test.
+library-only build. Trimming `IOLINK_FEATURE_DATA_STORAGE` or
+`IOLINK_FEATURE_EVENTS` drops the full suite (it exercises the untrimmed stack)
+but keeps `tests/test_trimmed_contract.c`, which asserts the responses such a
+build still owes a master. `tests/transport_probe.c` is the one plain `main()`
+left: it is a compile-time check that the suite's `IOLINK_TEST_TRANSPORT` label
+matches the compiled ISR granularity, not a test.
 
 ### 5. Mutation spot checks
 

@@ -8,7 +8,7 @@
 # IOLINK_FEATURE_*, IOLINK_PHY_FEATURE_*, IOLINK_ISR_*_MODE, IOLINK_COMPAT_*,
 # IOLINK_PLATFORM or any #if in src/ and include/.
 #
-# Besides the four structural configurations it runs:
+# Besides the structural configurations it runs:
 #   - compile-only combination probes for legal but uninstantiated layouts;
 #   - the SINGLE profile's "no iolink_critical_*" nm -u assertion;
 #   - the link-time profile gate (tools/check_profile_abi.sh).

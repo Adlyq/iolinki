@@ -147,7 +147,8 @@ if(BUILD_TESTING AND Python3_FOUND)
     add_test(NAME iodd_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/test_iodd_cli.py)
     add_test(NAME conformance_traceability
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/check_conformance_traceability.py)
-    if(IOLINK_PLATFORM STREQUAL "LINUX" AND IOLINK_TEST_TRANSPORT STREQUAL "BYTE")
+    if(IOLINK_PLATFORM STREQUAL "LINUX" AND IOLINK_TEST_TRANSPORT STREQUAL "BYTE"
+       AND IOLINK_FEATURE_DATA_STORAGE AND IOLINK_FEATURE_EVENTS)
         # These drive the host example through its PTY, i.e. the byte-stream
         # iolink_phy_virtual: its get() returns NULL in FRAME builds.
         add_test(NAME conformance_device_smoke

@@ -38,7 +38,7 @@ source of "why did my build not behave as configured" reports.
 | `IOLINK_CONCURRENCY` | ISR | SINGLE / SMP synchronisation primitives |
 | `IOLINK_STATS_MODE` | `IOLINK_STATS_SHARED` | `IOLINK_STATS_SPLIT`: per-context counter sets (+16 B) |
 
-The matrix uses four structural configurations, defined once in
+The matrix uses six structural configurations, defined once in
 `tools/matrix_configs.sh`:
 
 | # | Name | ISR | Concurrency/stats | Trim | Platform |
@@ -46,11 +46,15 @@ The matrix uses four structural configurations, defined once in
 | C1 | `host_default` | BYTE/BYTE | ISR+COMPILER/SHARED | full | LINUX Debug |
 | C1r | `host_default_release` | BYTE/BYTE | ISR/SHARED | full | LINUX Release |
 | C2 | `host_frame` | FRAME/FRAME+TX_BUSY | ISR/SHARED | full | LINUX Debug (compile only) |
-| C3 | `target_minimal` | BYTE/BYTE | SINGLE/SHARED | no DS, no events | BAREMETAL Release |
-| C4 | `host_smp_split` | BYTE/BYTE | SMP/SMP barrier/SPLIT | full | LINUX Debug |
+| C3 | `host_no_ds` | BYTE/BYTE | ISR/SHARED | no DS | LINUX Debug |
+| C4 | `host_no_events` | BYTE/BYTE | ISR/SHARED | no events | LINUX Debug |
+| C5 | `target_minimal` | BYTE/BYTE | SINGLE/SHARED | no DS, no events | BAREMETAL Release |
+| C6 | `host_smp_split` | BYTE/BYTE | SMP/SMP barrier/SPLIT | full | LINUX Debug |
 
-The full unit suite runs on C1, C1r and C4; cross-combinations are covered by
-syntax-only probes.
+The full unit suite runs on C1, C1r and C6. C3/C4 run
+`tests/test_trimmed_contract.c`, which asserts the replies a trimmed stack still
+owes a master (missing DS index/commands, empty DetailedDeviceStatus); C5 is
+compile-only and the remaining cross-combinations are syntax-only probes.
 
 ## Runtime capability bits
 
