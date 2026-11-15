@@ -35,7 +35,7 @@
 #include <unistd.h>
 
 #include "iolinki/crc.h"
-#include "iolinki/dll_ctx.h"
+#include "iolinki/internal/dll_ctx.h"
 #include "iolinki/iolink.h"
 #include "iolinki/isdu.h"
 #include "iolinki/protocol.h"

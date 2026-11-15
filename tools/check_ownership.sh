@@ -5,7 +5,8 @@
 #
 # Two independent properties are checked:
 #   1. src/dll.c's full preprocessor dependency set must not pull in
-#      dll_isr.h, the packed container (dll_ctx.h) or device.h;
+#      the ISR state (internal/dll_isr.h), the packed container
+#      (internal/dll_ctx.h) or device.h;
 #   2. a main-only translation unit cannot dereference the opaque ISR handle,
 #      while the packed container can.
 #
@@ -26,14 +27,14 @@ if ! "$cc_bin" -std=c99 -Iinclude -Isrc -M src/dll.c >"$deps" 2>"$tmp/deps.log";
     exit 1
 fi
 
-if grep -Eq '/iolinki/(dll_isr|dll_ctx|device)\.h' "$deps"; then
-    echo "FAIL: src/dll.c must not transitively include dll_isr.h/dll_ctx.h/device.h" >&2
-    grep -E '/iolinki/(dll_isr|dll_ctx|device)\.h' "$deps" >&2
+if grep -Eq '/iolinki/(internal/(dll_isr|dll_ctx)\.h|device\.h)' "$deps"; then
+    echo "FAIL: src/dll.c must not transitively include internal/dll_isr.h, internal/dll_ctx.h or device.h" >&2
+    grep -E '/iolinki/(internal/(dll_isr|dll_ctx)\.h|device\.h)' "$deps" >&2
     exit 1
 fi
 
 cat >"$tmp/probe_ctx.c" <<'PROBE'
-#include "iolinki/dll_ctx.h"
+#include "iolinki/internal/dll_ctx.h"
 void probe(iolink_dll_ctx_t* ctx)
 {
     ctx->isr.isr_tx_flags = 1U;
@@ -48,7 +49,7 @@ if ! "$cc_bin" -std=c99 -Iinclude -c "$tmp/probe_ctx.c" -o "$tmp/probe_ctx.o" \
 fi
 
 cat >"$tmp/probe_main.c" <<'PROBE'
-#include "iolinki/dll_main.h"
+#include "iolinki/internal/dll_main.h"
 void probe(iolink_dll_main_t* ctx)
 {
     ctx->shared.isr->isr_tx_flags = 1U;

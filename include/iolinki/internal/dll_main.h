@@ -9,7 +9,7 @@
 #ifndef IOLINK_DLL_MAIN_H
 #define IOLINK_DLL_MAIN_H
 
-#include "iolinki/dll_shared.h"
+#include "iolinki/internal/dll_shared.h"
 #include "iolinki/data_storage.h"
 
 /**

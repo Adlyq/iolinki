@@ -6,7 +6,7 @@
  * See LICENSE for details.
  */
 
-#include "iolinki/dll_isr.h"
+#include "iolinki/internal/dll_isr.h"
 #include "iolinki/crc.h"
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"

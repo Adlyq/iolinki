@@ -11,8 +11,8 @@
 
 #include <stddef.h>
 
-#include "iolinki/dll_main.h"
-#include "iolinki/dll_isr.h"
+#include "iolinki/internal/dll_main.h"
+#include "iolinki/internal/dll_isr.h"
 
 /**
  * @file dll_ctx.h

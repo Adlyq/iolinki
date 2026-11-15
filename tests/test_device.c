@@ -104,6 +104,45 @@ static void test_device_init_rejects_invalid_config(void** state)
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_BAUDRATE);
 }
 
+static int g_phy_init_calls;
+
+static int failing_phy_init(void* user)
+{
+    (void) user;
+    g_phy_init_calls++;
+    return -7; /* 驱动私有错误码 */
+}
+
+static void test_device_init_maps_phy_error(void** state)
+{
+    (void) state;
+    iolink_device_ctx_t ctx;
+    iolink_device_config_t config = make_device_config();
+
+    config.phy.init = failing_phy_init;
+    g_phy_init_calls = 0;
+
+    /* 驱动错误不得冒充配置错误：对外统一映射。 */
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_PHY);
+    assert_int_equal(g_phy_init_calls, 1);
+    /* 默认日志是静默的，原始码必须能从上下文取回。 */
+    assert_int_equal(iolink_device_get_phy_error(&ctx), -7);
+    assert_int_equal(iolink_device_get_phy_error(NULL), 0);
+}
+
+static void test_device_init_clears_stale_phy_error(void** state)
+{
+    (void) state;
+    iolink_device_ctx_t ctx;
+    iolink_device_config_t config = make_device_config();
+
+    /* 上一次尝试留下的驱动码不得被读成这一次的结果。 */
+    (void) memset(&ctx, 0xFF, sizeof(ctx));
+    config.time_us = NULL; /* 校验阶段失败，未触及 PHY */
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_TIME);
+    assert_int_equal(iolink_device_get_phy_error(&ctx), 0);
+}
+
 static void test_device_init_validates_config_not_context(void** state)
 {
     (void) state;
@@ -393,6 +432,8 @@ int main(void)
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_device_init_rejects_null),
         cmocka_unit_test(test_device_init_rejects_invalid_config),
+        cmocka_unit_test(test_device_init_maps_phy_error),
+        cmocka_unit_test(test_device_init_clears_stale_phy_error),
         cmocka_unit_test(test_device_init_validates_config_not_context),
         cmocka_unit_test(test_device_init_accepts_valid_config),
         cmocka_unit_test(test_device_pd_input_bounds),

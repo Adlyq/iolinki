@@ -10,7 +10,7 @@
 #define IOLINK_DLL_INTERNAL_H
 
 #include <stdint.h>
-#include "iolinki/dll_main.h"
+#include "iolinki/internal/dll_main.h"
 
 /**
  * @file dll_internal.h

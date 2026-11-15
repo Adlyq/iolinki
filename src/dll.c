@@ -13,7 +13,7 @@
 #include "iolinki/utils.h"
 #include "iolinki/port.h"
 #include "dll_internal.h"
-#include "iolinki/dll_sm.h"
+#include "iolinki/internal/dll_sm.h"
 #include <string.h>
 
 /**
@@ -1792,7 +1792,7 @@ static bool dll_reject_startup_operate(iolink_dll_main_t* ctx, bool was_establis
  *
  * state × event -> (进入状态, 动作)。事件分类只看帧字节与长度；动作仍是
  * 普通函数，连续条件（通道宽度、兼容开关、长度）留在函数里。
- * 表由 include/iolinki/dll_sm.h 的 DLL_SM_ROWS 展开，tools/
+ * 表由 include/iolinki/internal/dll_sm.h 的 DLL_SM_ROWS 展开，tools/
  * gen_dll_statemachine.py 从同一份宏行生成 mermaid/CSV/覆盖测试。
  * ------------------------------------------------------------------------- */
 

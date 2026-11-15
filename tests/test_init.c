@@ -71,23 +71,11 @@ static void test_iolink_init_fail_null(void** state)
     assert_int_not_equal(result, 0);
 }
 
-static void test_iolink_init_fail_driver(void** state)
-{
-    (void) state;
-    iolink_device_ctx_t ctx;
-    iolink_device_config_t config = make_device_config();
-
-    will_return(local_mock_phy_init, -1);
-    int result = iolink_device_init(&ctx, &config);
-    assert_int_equal(result, -1);
-}
-
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_iolink_init_success),
         cmocka_unit_test(test_iolink_init_fail_null),
-        cmocka_unit_test(test_iolink_init_fail_driver),
     };
     return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

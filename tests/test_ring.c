@@ -17,7 +17,7 @@
 #include <cmocka.h>
 #include <string.h>
 
-#include "iolinki/ring.h"
+#include "iolinki/internal/ring.h"
 
 #define TEST_SLOTS 2U
 #define TEST_SLOT_SIZE 4U

@@ -15,7 +15,7 @@
 #include "iolinki/capability.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/device_info.h"
-#include "iolinki/dll_ctx.h"
+#include "iolinki/internal/dll_ctx.h"
 #include "iolinki/iolink.h"
 #include "iolinki/od.h"
 #include "iolinki/phy.h"
@@ -149,15 +149,17 @@ typedef struct
     const iolink_device_config_t* config; /**< 指向所提供配置的指针（唯一配置来源）。 */
     iolink_reset_handler_t reset_handler; /**< 应用重置处理函数（可以为 NULL）。 */
     bool master_lost_last;                /**< 上一次的主站丢失状态（回调边沿） */
+    int phy_error;                        /**< 最近一次 PHY init 失败的原始驱动码
+                                               （0 = 无失败；日志关闭时仍可读） */
     uint8_t direct_param_page2[16];       /**< Direct Parameter Page 2 存储。 */
 } iolink_device_ctx_t;
 
 /**
  * @brief iolink_device_init() 返回的结果代码。
  *
- * 负值表示配置被拒绝。PHY 初始化回调返回的负值
- * 会原样传播，可能落在本枚举
- * 范围之外。
+ * 负值表示初始化被拒绝。PHY 的 `init` 回调失败时统一返回
+ * `IOLINK_DEVICE_INIT_ERR_PHY`，驱动自己的错误码不会混进本枚举的取值域，
+ * 而是由 iolink_device_get_phy_error() 提供（默认日志是静默的）。
  */
 typedef enum
 {
@@ -174,7 +176,8 @@ typedef enum
     IOLINK_DEVICE_INIT_ERR_CRITICAL = -11,   /**< 平台临界区为弱默认实现 */
     IOLINK_DEVICE_INIT_ERR_PD_INPUT =
         -14, /**< PD 回调路径与轮询调用混用（能力位已置位时调用轮询 API） */
-    IOLINK_DEVICE_INIT_ERR_PHY = -15,       /**< 构建配置所需的某个 PHY 钩子为 NULL */
+    IOLINK_DEVICE_INIT_ERR_PHY = -15,       /**< 所需 PHY 钩子缺失，或 PHY `init` 失败
+                                                 （原始驱动码见 iolink_device_get_phy_error()） */
     IOLINK_DEVICE_INIT_ERR_WORKSPACE = -16, /**< `IOLINK_WORKSPACE_EMBEDDED=0` 但没有提供工作区 */
     IOLINK_DEVICE_INIT_ERR_OD = -17,        /**< 应用对象字典表存在未定义/自相矛盾的配置 */
     /* -8、-12、-13、-18 未使用（保持编号稳定）。 */
@@ -184,8 +187,9 @@ typedef enum
  * @brief 根据配置初始化设备上下文。
  * @param ctx     要初始化的设备上下文。
  * @param config  要应用的配置（在 ctx 生命周期内必须保持有效）。
- * @return 成功时为 0；配置无效时为负的 ::iolink_device_init_result_t 值，
- *         或 PHY 初始化回调返回的负错误码。
+ * @return 成功时为 0；失败时为负的 ::iolink_device_init_result_t 值。
+ *         PHY `init` 失败统一映射为 `IOLINK_DEVICE_INIT_ERR_PHY`；驱动
+ *         自己的错误码用 iolink_device_get_phy_error() 读取。
  */
 int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* config);
 
@@ -196,6 +200,16 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
  * @return 外部工作区指针；使用内嵌 fallback 存储时返回 NULL。
  */
 iolink_workspace_t* iolink_device_get_workspace(const iolink_device_ctx_t* ctx);
+
+/**
+ * @brief 返回最近一次 `iolink_device_init()` 中 PHY `init` 回调的原始错误码。
+ *
+ * 初始化失败时返回负的 `iolink_device_init_result_t`，PHY 驱动自己的负值
+ * 不会混进那个枚举；需要区分"哪一步失败"时读这里（0 表示 PHY 未失败）。
+ * @param ctx 设备上下文（初始化尝试用的那个）
+ * @return 驱动返回的原始值，或 0
+ */
+int iolink_device_get_phy_error(const iolink_device_ctx_t* ctx);
 
 /**
  * @brief 在运行时更换日志回调或阈值。

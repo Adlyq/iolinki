@@ -81,7 +81,7 @@ compile-time switch selects a behaviour.
 | --- | --- |
 | `-DIOLINK_FEATURE_DATA_STORAGE=OFF` | Structural removal of DS (link-time contract) |
 | `-DIOLINK_FEATURE_EVENTS=OFF` | Structural removal of the event engine (link-time contract) |
-| `-DIOLINK_ISR_RX_MODE=...` / `-DIOLINK_ISR_TX_MODE=...` | Transport granularity |
+| `-DIOLINK_ISR_RX_MODE=...` / `-DIOLINK_ISR_TX_MODE=...` | Transport granularity (CMake cache variables; exported to consumers because they change struct layout) |
 | `-DIOLINK_CONCURRENCY=...` | ISR / SINGLE / SMP |
 | `-DIOLINK_STATS_MODE=...` | `IOLINK_STATS_SHARED` / `IOLINK_STATS_SPLIT` |
 | `-DIOLINK_PHY_FEATURE_TX_BUSY=ON` | TX-FRAME `tx_busy()` hook |

@@ -26,7 +26,9 @@ Measured on a 64-bit host with the default buffers in
 | **PHY API** | 20-30 bytes | Function pointers (usually const/flash, but pointer storage in RAM) |
 
 `IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 16 bytes (two counter sets plus padding).
-32-bit targets are smaller because pointers are 4 bytes.
+32-bit targets are smaller because pointers are 4 bytes. One exception:
+`iolink_device_ctx_t::phy_error` (an `int`) can add 4 bytes there, because the
+64-bit layout absorbs it in existing padding.
 
 The DLL state is owned by two sibling structures inside `iolink_dll_ctx_t`:
 `iolink_dll_main_t` (which nests the main/ISR shared region) and

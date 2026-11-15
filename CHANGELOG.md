@@ -11,6 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/conformance_traceability.csv`: it still pointed at renamed tests and
   no tool validated it; `tests/conformance_audit.csv` is the single matrix.
 
+### Changed (public tree and package)
+- The context-layout headers (`dll_ctx.h`, `dll_main.h`, `dll_shared.h`,
+  `dll_isr.h`, `dll_sm.h`, `ring.h`) moved to `include/iolinki/internal/`.
+  `device.h` still embeds the layout (the application allocates the context),
+  but a direct include now reads as what it is. `tools/check_test_whitebox.sh`
+  rejects the layout headers from tests, and `iolink_device_ctx_t`'s accessors
+  remain the supported path.
+- `iolink::iolinki` is exported: `cmake --install` writes an
+  `iolinkiConfig.cmake`, the target carries its include directory, and
+  `tools/test_install_consumer.sh` builds a two-file consumer against an
+  installed prefix in the quality gate and CI.
+- `dll.h` is documented as the advanced/low-level interface; applications start
+  at `device.h`.
+- `iolink_device_init()` maps a failing PHY `init` callback to
+  `IOLINK_DEVICE_INIT_ERR_PHY` instead of returning the driver's negative code,
+  which mixed two error domains. The driver code is still available through
+  `iolink_device_get_phy_error()` (the default log is silent).
+
 ### Added (per-frame fate counters)
 - `isr_frames_consumed` (the ISR completed the frame and the main pump never
   sees it, whether it replied or was silent by specification) and
@@ -33,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DLL context. They use the public API where it exists and otherwise the
   accessors in `tests/dll_access.h` (`test_dll`, `test_dll_shared`,
   `test_dll_isdu`, `test_dll_ctx`), the only test file that includes
-  `iolinki/dll_ctx.h` directly. Tests whose subject is the DLL internals keep
+  `iolinki/internal/dll_ctx.h` directly. Tests whose subject is the DLL internals keep
   declaring `iolink_dll_main_t` directly.
 - `tools/check_test_whitebox.sh` enforces both rules (`--selftest` checks the
   matchers) and runs from `check_quality.sh` and CI.

@@ -7,7 +7,7 @@ echo "============================================"
 
 # 1. Compiler Warnings (Strict)
 # We rely on CMake to set -Wall -Wextra -Werror via the build system
-echo -e "\n[1/8] 🛡️  Verifying Compilation Warnings..."
+echo -e "\n[1/9] 🛡️  Verifying Compilation Warnings..."
 BUILD_DIR="${IOLINKI_BUILD_DIR:-build_quality}"
 if [ -f "${BUILD_DIR}/CMakeCache.txt" ]; then
     cached_src=$(grep -E '^CMAKE_HOME_DIRECTORY:INTERNAL=' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2-)
@@ -43,7 +43,7 @@ else
 fi
 
 # 2. Static Analysis (Cppcheck)
-echo -e "\n[2/8] 🧹 Running Static Analysis (Cppcheck)..."
+echo -e "\n[2/9] 🧹 Running Static Analysis (Cppcheck)..."
 if command -v cppcheck &> /dev/null; then
     # Run cppcheck with rigorous settings
     # --enable=all: Enable all checks (style, performance, portability, etc.)
@@ -74,7 +74,7 @@ else
 fi
 
 # 3. MISRA C:2012 Check (Cppcheck addon)
-echo -e "\n[3/8] 📏 Running MISRA C:2012 Check..."
+echo -e "\n[3/9] 📏 Running MISRA C:2012 Check..."
 if command -v cppcheck &> /dev/null; then
     # Use cppcheck MISRA addon if available in the environment.
     # If the addon is not present, fail in enforce mode.
@@ -127,7 +127,7 @@ else
 fi
 
 # 4. Code Formatting Check
-echo -e "\n[4/8] 🎨 Checking Code Formatting..."
+echo -e "\n[4/9] 🎨 Checking Code Formatting..."
 if command -v clang-format &> /dev/null; then
     # clang-format is pinned to 23.1.1 in .pre-commit-config.yaml and the Docker
     # images. Other major versions reformat differently, so do not silently skip:
@@ -150,7 +150,7 @@ else
 fi
 
 # 5. Doxygen Warning Check
-echo -e "\n[5/8] 📚 Checking Doxygen Warnings..."
+echo -e "\n[5/9] 📚 Checking Doxygen Warnings..."
 if command -v doxygen &> /dev/null; then
     doxygen Doxyfile > /dev/null 2> doxygen.log
     if grep -q "warning:" doxygen.log; then
@@ -165,12 +165,13 @@ else
      echo "   ⚠️ Doxygen not installed. Skipping check."
 fi
 
-echo -e "\n[6/8] 🐚 Linting Shell Scripts (Shellcheck)..."
+echo -e "\n[6/9] 🐚 Linting Shell Scripts (Shellcheck)..."
 if command -v shellcheck &> /dev/null; then
     # Maintained CI/test scripts (add new ones here). tools/add_copyright_headers.sh
     # is a legacy one-shot helper with a known SC2218 false positive.
     lint_scripts=(tools/build_matrix.sh tools/coverage.sh tools/diff_matrix.sh
                   tools/check_ownership.sh tools/check_test_whitebox.sh
+                  tools/test_install_consumer.sh
                   tools/wcet_run.sh tools/check_profile_abi.sh
                   tools/matrix_configs.sh
                   test_all.sh check_quality.sh .docker_test_entrypoint.sh)
@@ -185,7 +186,7 @@ else
     echo "      Arch: sudo pacman -S shellcheck-static / Debian: apt-get install shellcheck"
 fi
 
-echo -e "\n[7/8] 🔒 DLL Ownership Isolation..."
+echo -e "\n[7/9] 🔒 DLL Ownership Isolation..."
 if ./tools/check_ownership.sh; then
     echo "   ✅ Ownership Isolation Passed"
 else
@@ -193,11 +194,19 @@ else
     exit 1
 fi
 
-echo -e "\n[8/8] 🧱 Test White-box Boundary..."
+echo -e "\n[8/9] 🧱 Test White-box Boundary..."
 if ./tools/check_test_whitebox.sh --selftest && ./tools/check_test_whitebox.sh; then
     echo "   ✅ Test White-box Boundary Passed"
 else
     echo "   ❌ Test White-box Boundary FAILED"
+    exit 1
+fi
+
+echo -e "\n[9/9] 📦 Install and Consume..."
+if ./tools/test_install_consumer.sh; then
+    echo "   ✅ Install/Consume Passed"
+else
+    echo "   ❌ Install/Consume FAILED"
     exit 1
 fi
 

@@ -16,7 +16,7 @@
  * 本文件的访问器取得：设备上下文如何包含 DLL 只在 `test_dll()` 里表达
  * 一次，而不是散落在每个用例中。
  *
- * `iolinki/dll_ctx.h` 只允许在本文件中直接包含（由
+ * `iolinki/internal/dll_ctx.h` 只允许在本文件中直接包含（由
  * `tools/check_test_whitebox.sh` 校验）。
  */
 
@@ -24,7 +24,7 @@
 #define TEST_DLL_ACCESS_H_
 
 #include "iolinki/device.h"
-#include "iolinki/dll_ctx.h"
+#include "iolinki/internal/dll_ctx.h"
 
 /** @brief 设备上下文内嵌的完整 DLL 上下文。 */
 static inline iolink_dll_ctx_t* test_dll_ctx(iolink_device_ctx_t* ctx)

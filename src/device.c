@@ -287,6 +287,9 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     if ((ctx == NULL) || (config == NULL)) {
         return IOLINK_DEVICE_INIT_ERR_NULL;
     }
+    /* 早退路径（钩子缺失、工作区缺失）同样返回 INIT_ERR_PHY 或其它码：
+     * 先清掉上一次尝试留下的驱动码，getter 的 0 才明确表示"PHY init 没失败"。 */
+    ctx->phy_error = 0;
 
 #if !IOLINK_WORKSPACE_EMBEDDED
     if (workspace == NULL) {
@@ -313,7 +316,10 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
             /* sink 尚未绑定到各子系统（PHY init 在绑定之前运行）。 */
             iolink_log_sink_init(&sink, config->log_write, config->user, config->log_level);
             IOLINK_LOG_ERROR(&sink, "phy init failed: err=%d", err);
-            return err;
+            /* 驱动错误码属于另一个域：对外统一为 PHY 失败，原始值留在
+             * 上下文里（默认日志是静默的，不能只靠日志）。 */
+            ctx->phy_error = err;
+            return IOLINK_DEVICE_INIT_ERR_PHY;
         }
     }
 
@@ -385,6 +391,11 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
         return IOLINK_DEVICE_INIT_ERR_NULL;
     }
     return device_init_with_workspace(ctx, config, config->workspace);
+}
+
+int iolink_device_get_phy_error(const iolink_device_ctx_t* ctx)
+{
+    return (ctx != NULL) ? ctx->phy_error : 0;
 }
 
 iolink_workspace_t* iolink_device_get_workspace(const iolink_device_ctx_t* ctx)

@@ -5,8 +5,8 @@
 # Behaviour and conformance tests must use the public API
 # (`iolink_device_get_state`, `iolink_device_get_dll_stats`,
 # `iolink_device_get_events_ctx`, ...) or the accessors in
-# `tests/dll_access.h`. Only that header may name the DLL layout, so a change to
-# `iolink_device_ctx_t` touches one file instead of every test.
+# `tests/dll_access.h`. Only that header may include `iolinki/internal/`, so a
+# change to how a device context embeds the DLL touches one file.
 #
 # Tests whose subject is the DLL internals declare `iolink_dll_ctx_t` or
 # `iolink_dll_main_t` themselves and keep using `ctx.main...`; that form is not
@@ -28,8 +28,10 @@ ACCESSOR="tests/dll_access.h"
 # does that, and rewording is cheaper than a parser here.
 ACCESS_RE='(\.|->)[[:space:]]*dll([^[:alnum:]_]|$)|offsetof\([^,]*,[[:space:]]*dll[[:space:]]*\)'
 
-# Only a direct include is rejected; naming the header in prose is fine.
-INCLUDE_RE='^[[:space:]]*#[[:space:]]*include[[:space:]]*[<"]iolinki/dll_ctx\.h[>"]'
+# The context-layout headers are the ones a test must not name. The state
+# machine table and the ring are modules with their own unit tests, so those
+# two stay reachable. Naming any of them in prose is fine.
+INCLUDE_RE='^[[:space:]]*#[[:space:]]*include[[:space:]]*[<"]iolinki/internal/(dll_ctx|dll_main|dll_shared|dll_isr)\.h[>"]'
 
 # Scan C source the way the compiler sees it: comments are not code, and (for
 # the access rule) string contents are not identifiers either.
@@ -168,16 +170,20 @@ selftest() {
  line two";'
     )
     local bad_include=(
-        '#include "iolinki/dll_ctx.h"'
-        '   #include <iolinki/dll_ctx.h>'
+        '#include "iolinki/internal/dll_ctx.h"'
+        '   #include <iolinki/internal/dll_main.h>'
+        '#include "iolinki/internal/dll_shared.h"'
+        '#include "iolinki/internal/dll_isr.h"'
     )
     local good_include=(
-        '// see include/iolinki/dll_ctx.h'
-        '/* layout lives in iolinki/dll_ctx.h */'
+        '// see include/iolinki/internal/dll_ctx.h'
+        '/* layout lives in iolinki/internal/dll_ctx.h */'
         '#include "dll_access.h"'
-        '// #include "iolinki/dll_ctx.h"'
-        '/* #include "iolinki/dll_ctx.h" */'
-        'const char* p = "iolinki/dll_ctx.h";'
+        '#include "iolinki/internal/dll_sm.h"'
+        '#include "iolinki/internal/ring.h"'
+        '// #include "iolinki/internal/dll_ctx.h"'
+        '/* #include "iolinki/internal/dll_ctx.h" */'
+        'const char* p = "iolinki/internal/dll_ctx.h";'
     )
 
     for sample in "${bad_access[@]}"; do
@@ -243,7 +249,7 @@ check_includes() {
             { echo "FAIL: cannot scan $file" >&2; exit 1; }
         while IFS=: read -r line _; do
             [ -z "$line" ] && continue
-            echo "FAIL: $file:$line includes iolinki/dll_ctx.h; use tests/dll_access.h" >&2
+            echo "FAIL: $file:$line includes an iolinki/internal layout header; use tests/dll_access.h" >&2
             failed=1
         done <<< "$(printf '%s\n' "$scanned" | grep -nE "$INCLUDE_RE" || true)"
     done <<< "$(grep -rlE "$INCLUDE_RE" tests/ 2>/dev/null || true)"

@@ -21,7 +21,10 @@ Runs the Linux build, the virtual-master tests and the bare-metal library build.
 ```
 
 ### 2. Run Quality Checks
-Verify code against warnings and static analysis tools.
+Strict compilation, static analysis, formatting, Doxygen, shellcheck, the DLL
+ownership and white-box gates, and the install/consume check (the exported
+package is installed into a scratch prefix and a two-file consumer is built
+against it).
 ```bash
 ./check_quality.sh
 ```
@@ -80,7 +83,7 @@ A single FRAME row locally:
 
 ```bash
 cmake -B build_frame -DIOLINK_PLATFORM=LINUX -DIOLINK_TEST_TRANSPORT=FRAME \
-      -DCMAKE_C_FLAGS="-DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME"
+      -DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME
 cmake --build build_frame
 (cd build_frame && ctest)
 ```
@@ -138,7 +141,7 @@ accessor exists they use `tests/dll_access.h` (`test_dll`, `test_dll_shared`,
 embedded in a device context (`ctx->dll...`), so changing how
 `iolink_device_ctx_t` embeds it touches one file instead of every test.
 `tests/dll_access.h` is also the only test file that includes
-`iolinki/dll_ctx.h` directly. Tests whose subject is the DLL internals declare
+`iolinki/internal/dll_ctx.h` directly. Tests whose subject is the DLL internals declare
 `iolink_dll_ctx_t` or `iolink_dll_main_t` themselves and keep using
 `ctx.main...`.
 `tools/check_test_whitebox.sh` enforces both rules and its `--selftest` keeps

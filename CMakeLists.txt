@@ -33,13 +33,18 @@ option(IOLINK_FEATURE_VALIDATE "Run the init-time configuration self-checks" ON)
 # counter set (the public stats then sum both); empty keeps the config.h
 # default, IOLINK_STATS_SHARED. The macro must be identical for the library and
 # the tests, so it is set once for the whole build instead of via CMAKE_C_FLAGS.
+# Layout-affecting macros change struct sizes, so the exported target must carry
+# them: a consumer built with a different value than the library would allocate
+# the wrong iolink_device_ctx_t. Empty keeps the config.h default.
 set(IOLINK_STATS_MODE "" CACHE STRING "IOLINK_STATS_SHARED or IOLINK_STATS_SPLIT; empty = config.h default")
+set(IOLINK_ISR_RX_MODE "" CACHE STRING "IOLINK_ISR_RX_BYTE or IOLINK_ISR_RX_FRAME; empty = config.h default")
+set(IOLINK_ISR_TX_MODE "" CACHE STRING "IOLINK_ISR_TX_BYTE or IOLINK_ISR_TX_FRAME; empty = config.h default")
+set(IOLINK_PHY_FEATURE_TX_BUSY "" CACHE STRING "0/1; empty = config.h default")
 set_property(CACHE IOLINK_STATS_MODE PROPERTY STRINGS "" IOLINK_STATS_SHARED IOLINK_STATS_SPLIT)
 if(IOLINK_STATS_MODE STREQUAL "")
     message(STATUS "Statistics mode: config.h default (IOLINK_STATS_SHARED)")
 elseif(IOLINK_STATS_MODE STREQUAL "IOLINK_STATS_SHARED" OR
        IOLINK_STATS_MODE STREQUAL "IOLINK_STATS_SPLIT")
-    add_compile_definitions(IOLINK_STATS_MODE=${IOLINK_STATS_MODE})
     message(STATUS "Statistics mode: ${IOLINK_STATS_MODE} (IOLINK_STATS_MODE cache variable)")
 else()
     message(FATAL_ERROR
@@ -68,6 +73,25 @@ set(IOLINK_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/device.c
 )
 add_library(iolinki STATIC ${IOLINK_SOURCES})
+target_include_directories(iolinki PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>)
+# Same spelling for add_subdirectory() and find_package() consumers.
+add_library(iolinki::iolinki ALIAS iolinki)
+
+# Layout macros are part of the ABI contract, not just behaviour: the exported
+# target has to hand them to the consumer. The directory-wide copy keeps the
+# test fixtures (separate targets over the same sources) in the same layout.
+foreach(_iolink_layout_macro
+        IOLINK_STATS_MODE
+        IOLINK_ISR_RX_MODE
+        IOLINK_ISR_TX_MODE
+        IOLINK_PHY_FEATURE_TX_BUSY)
+    if(NOT "${${_iolink_layout_macro}}" STREQUAL "")
+        add_compile_definitions(${_iolink_layout_macro}=${${_iolink_layout_macro}})
+        target_compile_definitions(iolinki PUBLIC ${_iolink_layout_macro}=${${_iolink_layout_macro}})
+    endif()
+endforeach()
 
 # Only trimmed features are defined; the rest keep the config.h defaults.
 foreach(_iolink_feature
@@ -79,6 +103,33 @@ foreach(_iolink_feature
         target_compile_definitions(iolinki PUBLIC ${_iolink_feature}=0)
     endif()
 endforeach()
+
+# Install/export: consumers use find_package(iolinki CONFIG REQUIRED) and link
+# iolinki::iolinki. The public tree includes the internal/ headers because
+# device.h embeds the DLL layout (the application allocates the context); they
+# are installed so the public headers compile, not as an API.
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+install(TARGETS iolinki EXPORT iolinkiTargets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(EXPORT iolinkiTargets
+        NAMESPACE iolinki::
+        FILE iolinkiTargets.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/iolinki)
+configure_package_config_file(cmake/iolinkiConfig.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/iolinkiConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/iolinki)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/iolinkiConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion)
+install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/iolinkiConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/iolinkiConfigVersion.cmake"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/iolinki)
 
 # Platform Selection
 set(IOLINK_PLATFORM "LINUX" CACHE STRING "Target platform: LINUX, BAREMETAL")

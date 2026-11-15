@@ -8,7 +8,7 @@
 
 #include "iolinki/protocol.h"
 #include "iolinki/isdu.h"
-#include "iolinki/dll_main.h"
+#include "iolinki/internal/dll_main.h"
 #include "iolinki/iolink.h"
 #include "iolinki/crc.h"
 #include "iolinki/events.h"

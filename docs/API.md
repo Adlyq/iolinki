@@ -6,6 +6,9 @@
 `include/iolinki/isdu.h`、`include/iolinki/data_storage.h`、
 `include/iolinki/workspace.h`、`include/iolinki/capability.h`、
 `include/iolinki/od.h` 和 `include/iolinki/diag.h`。
+`include/iolinki/dll.h` 是高级/底层接口（帧泵、定时器表、统计）；只写设备
+逻辑时不要包含它。上下文布局头在 `include/iolinki/internal/`，随库安装但
+只供公共头编译使用。
 
 库不拥有非易失存储（NVM）：参数值、标签和 Data Storage 标志的落盘由应用负责，
 库只通过钩子通知变化，见“应用持久化契约”。
@@ -25,7 +28,9 @@ iolink_workspace_t* iolink_device_get_workspace(const iolink_device_ctx_t* ctx);
 保持有效。
 
 **返回值**：成功返回 `0`，配置无效返回负的 `iolink_device_init_result_t`
-（`IOLINK_DEVICE_INIT_ERR_*`），PHY `init` 回调的负返回值原样向上传播。
+（`IOLINK_DEVICE_INIT_ERR_*`）。PHY `init` 回调失败映射为
+`IOLINK_DEVICE_INIT_ERR_PHY`；驱动自己的错误码用
+`iolink_device_get_phy_error()` 读取（默认日志是静默的）。
 
 #### 工作区
 

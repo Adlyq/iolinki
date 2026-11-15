@@ -38,13 +38,23 @@ transceiver / MCU driver
 
 ### 2.1 CMake
 
+已安装的包（`cmake --install` 到某个前缀后）：
+
 ```cmake
-add_subdirectory(path/to/iolinki)
-target_link_libraries(your_firmware PRIVATE iolinki)
-target_include_directories(your_firmware PRIVATE path/to/iolinki/include)
+find_package(iolinki CONFIG REQUIRED)
+target_link_libraries(your_firmware PRIVATE iolinki::iolinki)
 ```
 
-`iolinki` 不会导出接口 include 目录，因此需要显式添加 `include/` 路径。作为子项目使用时，
+作为子目录：
+
+```cmake
+add_subdirectory(path/to/iolinki)
+target_link_libraries(your_firmware PRIVATE iolinki::iolinki)
+```
+
+两种方式都通过目标导出 include 目录，不需要再手写 `include/`。安装到
+`lib64`（RPM 系约定）时 CMake 的默认搜索路径可能不包含它，用
+`-Diolinki_DIR=<prefix>/lib64/cmake/iolinki` 显式指定。作为子项目使用时，
 优先使用 `add_subdirectory(path/to/iolinki EXCLUDE_FROM_ALL)`，避免把自带的示例/测试
 加入默认构建；`-DBUILD_TESTING=OFF` 还可以额外关闭测试。默认的
 `IOLINK_PLATFORM=LINUX` 构建会引入 `phy_virtual.c`；不要在 MCU 固件中使用
@@ -240,7 +250,10 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 （`IOLINK_DEVICE_INIT_ERR_OD`，见 4.6 节），以及能力位要求了 PHY 未提供的钩子
 （`IOLINK_DEVICE_INIT_ERR_PHY`：`REQUIRE_ISR_TX` 缺少 `request_service()`，或
 TX FRAME 构建设置 `IOLINK_PHY_FEATURE_TX_BUSY=1` 但 PHY 没有 `tx_busy()`）。
-PHY `init` 的负返回值会原样向上传播。
+PHY `init` 失败也归到 `IOLINK_DEVICE_INIT_ERR_PHY`；驱动自己的错误码不会混进
+这个枚举，需要用 `iolink_device_get_phy_error()` 读取（默认日志是静默的）。
+该 getter 同时区分两种 `INIT_ERR_PHY`：非 0 表示驱动 `init` 真的失败了（重试
+可能有意义），0 表示钩子/能力位这类永久配置错误（重试不会改变结果）。
 
 `IOLINK_M_SEQ_TYPE_1_1` 属于旧版类型，初始化会以
 `IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE` 拒绝。

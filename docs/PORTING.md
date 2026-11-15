@@ -321,7 +321,7 @@ add_executable(my_app
     src/phy_custom.c
 )
 
-target_link_libraries(my_app PRIVATE iolinki)
+target_link_libraries(my_app PRIVATE iolinki::iolinki)
 ```
 
 ### Option 3: Native IDE (IAR, Keil, vendor IDE)

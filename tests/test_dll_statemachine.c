@@ -26,7 +26,7 @@
 
 #include "crc_oracle.h"
 #include "dll_access.h"
-#include "iolinki/dll_sm.h"
+#include "iolinki/internal/dll_sm.h"
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
 #include "test_case.h"

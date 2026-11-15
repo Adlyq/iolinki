@@ -14,11 +14,16 @@
 #include "iolinki/phy.h"
 #include "iolinki/config.h"
 #include "iolinki/port.h"
-#include "iolinki/ring.h"
+#include "iolinki/internal/ring.h"
 
 /**
  * @file dll.h
- * @brief IO-Link 数据链路层（DLL）实现
+ * @brief IO-Link 数据链路层（DLL）实现 —— 高级/底层接口
+ *
+ * 应用通常只包含 `iolink/device.h`：设备层把 DLL、ISDU、OD、Data Storage
+ * 与事件组合成一个上下文，并在 `iolink_device_process()` 里完成调度。
+ * 本头文件面向需要自定义主循环、直接驱动帧泵或读取 DLL 统计的集成；
+ * 其中的上下文类型由 `iolink/internal/` 提供完整布局，不要直接依赖。
  */
 
 /**
