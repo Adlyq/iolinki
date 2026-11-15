@@ -89,8 +89,8 @@ cmake --build build_frame
 ```
 
 Coverage sees both transports the same way: `tools/coverage.sh --transport both`
-builds and tests BYTE and FRAME in separate trees (`build_coverage/` and
-`build_coverage/frame/`), writes one gcovr JSON tracefile per transport and
+builds and tests BYTE and FRAME in separate trees (`build/coverage/` and
+`build/coverage/frame/`), writes one gcovr JSON tracefile per transport and
 merges them into a combined report. `--check` still compares only the BYTE
 number, because `tools/coverage_baseline.txt` is calibrated on the BYTE build.
 
@@ -161,18 +161,26 @@ matches the compiled ISR granularity, not a test.
 
 ### 5. Build trees
 
-The quality and coverage scripts create CMake trees next to the sources
-(`build_quality*`, `build_coverage`, `build_wcet`, ...), and every ad-hoc
-`cmake -B build_<name>` leaves another. They are ignored by git but they occupy
-the working directory and its disk:
+Every build goes below `build/`, one subdirectory per purpose:
+
+| Directory | Created by |
+| --- | --- |
+| `build/quality`, `build/quality_release` | `check_quality.sh` (Debug and `-O3`) |
+| `build/matrix`, `build/diff` | `build_matrix.sh`, `diff_matrix.sh` |
+| `build/coverage` | `coverage.sh` |
+| `build/wcet`, `build/size` | `wcet_run.sh`, `size_matrix.py` |
+| `build/docker`, `build/bare` | `.docker_test_entrypoint.sh` |
+
+`build/` is ignored by git, so the repository root stays clean and one command
+removes everything:
 
 ```bash
-./tools/clean_builds.sh          # list the trees and their size
-./tools/clean_builds.sh --yes    # remove them
+./tools/clean_builds.sh          # list build/ and its size
+./tools/clean_builds.sh --yes    # remove it
 ```
 
-`check_quality.sh` removes its own two trees on exit; set
-`IOLINK_KEEP_BUILDS=1` to keep them for post-mortem.
+Ad-hoc work should follow the same rule (`cmake -B build/scratch`), and the
+`IOLINKI_*_DIR` environment variables can still point a script elsewhere.
 
 ### 6. Mutation spot checks
 

@@ -28,7 +28,7 @@
 #   ./tools/diff_matrix.sh --keep     # keep per-config matrix logs
 #
 # Environment:
-#   IOLINKI_DIFF_DIR   build root (default: <repo>/build_diff)
+#   IOLINKI_DIFF_DIR   build root (default: <repo>/build/diff)
 #   JOBS               parallel build jobs (default: nproc)
 
 set -uo pipefail
@@ -36,7 +36,7 @@ set -uo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=tools/matrix_configs.sh
 . "$ROOT/tools/matrix_configs.sh"
-BUILD_ROOT="${IOLINKI_DIFF_DIR:-$ROOT/build_diff}"
+BUILD_ROOT="${IOLINKI_DIFF_DIR:-$ROOT/build/diff}"
 TRACE_ROOT="$BUILD_ROOT/traces"
 if [ -z "${JOBS:-}" ]; then
     JOBS="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"

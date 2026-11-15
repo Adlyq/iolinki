@@ -24,13 +24,13 @@
 ./tools/wcet_run.sh --update
 
 # 只构建，直接控制场景与输出
-cmake -S tools/wcet -B build_wcet -DCMAKE_BUILD_TYPE=Release
-cmake --build build_wcet --parallel
-./build_wcet/wcet_harness --repeat 2 --json build_wcet/wcet_metrics.json
-./build_wcet/wcet_harness --list
+cmake -S tools/wcet -B build/wcet -DCMAKE_BUILD_TYPE=Release
+cmake --build build/wcet --parallel
+./build/wcet/wcet_harness --repeat 2 --json build/wcet/wcet_metrics.json
+./build/wcet/wcet_harness --list
 ```
 
-默认构建目录是 `build_wcet/`（已在 `.gitignore` 中）；可用
+默认构建目录是 `build/wcet/`（在 `.gitignore` 中）；可用
 `--build-dir DIR` 或环境变量 `WCET_BUILD_DIR` 覆盖。构建直接编译 `src/*.c`，
 使用仓库**默认配置**（`config.h` 缺省值：BYTE/BYTE ISR 传输、
 `IOLINK_CONCURRENCY=ISR`、全部特性打开），不经过 `iolinki` 静态库，因此
@@ -101,10 +101,10 @@ cmake --build build_wcet --parallel
 ```
 
 - 把该步骤放在常规构建/单测之后、独立 job 中执行，避免与 `build/` 竞争；
-  脚本自带独立构建目录 `build_wcet/`。
+  脚本自带独立构建目录 `build/wcet/`。
 - `tools/wcet_baseline.json` 必须随代码提交。基线只能在**显式**运行
   `--update` 后更新，PR 中应说明指标变化原因（允许下降，禁止无解释增长）。
-- 需要保留证据时，把 `build_wcet/wcet_metrics.json` 作为 artifact 上传。
+- 需要保留证据时，把 `build/wcet/wcet_metrics.json` 作为 artifact 上传。
 - 该门不替代目标端 DWT 门；它只保证 ISR/主循环路径长度不回归。
 
 ## 目标端 DWT 门：接入方式与挂起条件

@@ -24,7 +24,7 @@
 #   ./tools/build_matrix.sh --keep          # keep the logs of passing configs
 #
 # Environment:
-#   IOLINKI_MATRIX_DIR   build root (default: <repo>/build_matrix)
+#   IOLINKI_MATRIX_DIR   build root (default: <repo>/build/matrix)
 #   JOBS                 parallel build jobs (default: nproc)
 #   CC                   C compiler for the probes (default: cc)
 
@@ -33,7 +33,7 @@ set -uo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=tools/matrix_configs.sh
 . "$ROOT/tools/matrix_configs.sh"
-BUILD_ROOT="${IOLINKI_MATRIX_DIR:-$ROOT/build_matrix}"
+BUILD_ROOT="${IOLINKI_MATRIX_DIR:-$ROOT/build/matrix}"
 CC_BIN="${CC:-cc}"
 if [ -z "${JOBS:-}" ]; then
     JOBS="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"

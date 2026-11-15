@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/conformance_traceability.csv`: it still pointed at renamed tests and
   no tool validated it; `tests/conformance_audit.csv` is the single matrix.
 
+### Changed (build trees)
+- Every build goes below `build/` (`build/quality`, `build/matrix`,
+  `build/coverage`, `build/wcet`, `build/size`, `build/docker`, `build/bare`),
+  so the repository root stays clean and `tools/clean_builds.sh` removes all of
+  it in one step. The `IOLINKI_*_DIR` overrides still work.
+- `tools/check_test_gates.sh` rejects a group teardown that relies on a cmocka
+  assertion (cmocka 2.x still exits 0 for those, so such a gate can never fail)
+  and a binary that includes the shared PHY harness without wiring
+  `test_tx_all_asserted`.
+
 ### Changed (public tree and package)
 - The context-layout headers (`dll_ctx.h`, `dll_main.h`, `dll_shared.h`,
   `dll_isr.h`, `dll_sm.h`, `ring.h`) moved to `include/iolinki/internal/`.

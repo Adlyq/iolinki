@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 #
-# Remove generated CMake build trees from the repository root.
+# Remove generated CMake build trees.
 #
-# Each `cmake -B build_<something>` leaves a tree of 10-50 MB behind. The test
-# and quality scripts create several per run, and investigations add more, so
-# the root directory fills up over time. This tool only touches directories that
-# are recognisably build trees (a CMakeCache.txt / CMakeFiles at the top, or a
-# directory holding per-configuration trees such as build_matrix/).
+# Every build goes to `build/<name>` (build/quality, build/matrix,
+# build/coverage, build/wcet, build/size, ...), so the whole tree is one
+# directory that git already ignores. This tool reports its size and removes it;
+# it also sweeps `build_*` trees left at the repository root by older scripts.
 #
 # Usage: tools/clean_builds.sh [--dry-run | --yes]
 #   --dry-run  list what would be removed (default)
-#   --yes      remove the listed trees
+#   --yes      remove it
 
 set -euo pipefail
 
@@ -27,9 +26,17 @@ case "${1:-}" in
         ;;
 esac
 
-total_kb=0
 found=0
 
+if [ -d build ]; then
+    found=$((found + 1))
+    printf '%8s  %s\n' "$(du -sh -- build | cut -f1)" "build/"
+    [ "$mode" = "delete" ] && rm -rf -- build
+fi
+
+# Older scripts created trees next to the sources. Only remove directories that
+# are recognisably CMake trees, so a source directory that happens to start with
+# "build" is left alone.
 while IFS= read -r dir; do
     [ -z "$dir" ] && continue
     if [ ! -f "$dir/CMakeCache.txt" ] && [ ! -d "$dir/CMakeFiles" ] &&
@@ -37,13 +44,9 @@ while IFS= read -r dir; do
         continue
     fi
     found=$((found + 1))
-    kb="$(du -sk -- "$dir" | cut -f1)"
-    total_kb=$((total_kb + kb))
     printf '%8s  %s\n' "$(du -sh -- "$dir" | cut -f1)" "$dir"
-    if [ "$mode" = "delete" ]; then
-        rm -rf -- "$dir"
-    fi
-done < <(find . -mindepth 1 -maxdepth 1 -type d -name 'build*' | sort)
+    [ "$mode" = "delete" ] && rm -rf -- "$dir"
+done < <(find . -mindepth 1 -maxdepth 1 -type d -name 'build_*' | sort)
 
 if [ "$found" -eq 0 ]; then
     echo "build trees: none in $ROOT"
@@ -51,7 +54,7 @@ if [ "$found" -eq 0 ]; then
 fi
 
 if [ "$mode" = "delete" ]; then
-    echo "removed $found build tree(s) (~$((total_kb / 1024)) MB)"
+    echo "removed $found build tree(s)"
 else
-    echo "would remove $found build tree(s) (~$((total_kb / 1024)) MB); rerun with --yes"
+    echo "would remove $found build tree(s); rerun with --yes"
 fi

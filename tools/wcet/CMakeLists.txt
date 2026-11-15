@@ -5,8 +5,8 @@
 # 输出各场景的调用次数路径长度指标。测量的是调用次数，不是 CPU 周期；周期上界
 # 必须用目标端 DWT（见 README.md）。
 #
-# 用法：cmake -S tools/wcet -B build_wcet && cmake --build build_wcet
-#       ./build_wcet/wcet_harness
+# 用法：cmake -S tools/wcet -B build/wcet && cmake --build build/wcet
+#       ./build/wcet/wcet_harness
 
 cmake_minimum_required(VERSION 3.16)
 project(iolinki_wcet LANGUAGES C)

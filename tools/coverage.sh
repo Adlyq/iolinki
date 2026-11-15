@@ -9,7 +9,7 @@
 #   ./tools/coverage.sh                       # BYTE transport: text report + summary
 #   ./tools/coverage.sh --transport FRAME     # FRAME transport only
 #   ./tools/coverage.sh --transport both      # BYTE + FRAME summaries + merged report
-#   ./tools/coverage.sh --html                # also write build_coverage/coverage/
+#   ./tools/coverage.sh --html                # also write build/coverage/coverage/
 #   ./tools/coverage.sh --check               # fail when line coverage < tools/coverage_baseline.txt
 #   ./tools/coverage.sh --filter dll          # only files whose path contains "dll"
 #
@@ -23,7 +23,7 @@
 #   on the BYTE build; the merged number is reported but never gated.
 #
 # Environment:
-#   IOLINKI_COVERAGE_DIR   build root (default: <repo>/build_coverage)
+#   IOLINKI_COVERAGE_DIR   build root (default: <repo>/build/coverage)
 #   JOBS                   parallel build jobs (default: nproc)
 #
 # JSON tracefiles: <build root>/coverage-byte.json,
@@ -33,7 +33,7 @@
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="${IOLINKI_COVERAGE_DIR:-$ROOT/build_coverage}"
+BUILD_DIR="${IOLINKI_COVERAGE_DIR:-$ROOT/build/coverage}"
 if [ -z "${JOBS:-}" ]; then
     JOBS="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
 fi

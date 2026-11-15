@@ -1,22 +1,22 @@
 #!/bin/bash
 set -e
 
-rm -rf build_docker
+rm -rf build/docker
 
-cmake -B build_docker -DIOLINK_PLATFORM=LINUX
-cmake --build build_docker
+cmake -B build/docker -DIOLINK_PLATFORM=LINUX
+cmake --build build/docker
 
 # Run Unit Tests
-cd build_docker
+cd build/docker
 ctest --output-on-failure
 cd ..
 
 # Run Bare Metal Build Verification
 echo -e "\nRunning Bare Metal Build Verification..."
-rm -rf build_bare
-cmake -B build_bare -DIOLINK_PLATFORM=BAREMETAL
-cmake --build build_bare
-export IOLINK_DEVICE_PATH=/workspace/build_docker/examples/host_demo/host_demo
+rm -rf build/bare
+cmake -B build/bare -DIOLINK_PLATFORM=BAREMETAL
+cmake --build build/bare
+export IOLINK_DEVICE_PATH=/workspace/build/docker/examples/host_demo/host_demo
 # The virtual-master integration tests drive the device over a PTY and are
 # timing-sensitive; bound each so a stuck PTY fails fast instead of hanging the
 # whole CI run (observed stalling 40+ min on loaded runners). Normal runtime is

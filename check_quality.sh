@@ -10,28 +10,12 @@ echo "============================================"
 # 1. Compiler Warnings (Strict)
 # We rely on CMake to set -Wall -Wextra -Werror via the build system
 echo -e "\n[1/9] 🛡️  Verifying Compilation Warnings..."
-BUILD_DIR="${IOLINKI_BUILD_DIR:-$ROOT/build_quality}"
+BUILD_DIR="${IOLINKI_BUILD_DIR:-$ROOT/build/quality}"
 case "${BUILD_DIR}" in
     /*) ;;
     *) BUILD_DIR="$ROOT/${BUILD_DIR}" ;;
 esac
 RELEASE_DIR="${BUILD_DIR}_release"
-
-# Both trees are thrown away and rebuilt on every run, so leaving them behind
-# only costs disk. Set IOLINK_KEEP_BUILDS=1 to inspect them after a failure.
-cleanup_build_trees() {
-    if [ "${IOLINK_KEEP_BUILDS:-0}" = "1" ]; then
-        echo "build trees kept: ${BUILD_DIR} ${RELEASE_DIR}"
-        return
-    fi
-    # IOLINKI_BUILD_DIR may point anywhere; only remove a tree that looks like
-    # one of ours, so a mistyped path cannot take user data with it.
-    case "${BUILD_DIR##*/}" in
-        build*) rm -rf -- "${BUILD_DIR}" "${RELEASE_DIR}" ;;
-        *) echo "not removing (name is not build*): ${BUILD_DIR}" ;;
-    esac
-}
-trap cleanup_build_trees EXIT
 if [ -f "${BUILD_DIR}/CMakeCache.txt" ]; then
     cached_src=$(grep -E '^CMAKE_HOME_DIRECTORY:INTERNAL=' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2-)
     if [ -n "${cached_src}" ] && [ "${cached_src}" != "${ROOT}" ]; then

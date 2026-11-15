@@ -36,7 +36,7 @@ Usage:
 
 Environment:
     ARM_GCC        toolchain prefix (default: arm-none-eabi-)
-    IOLINKI_SIZE_DIR  build root (default: <repo>/build_size)
+    IOLINKI_SIZE_DIR  build root (default: <repo>/build/size)
 
 The baseline records the toolchain that produced it. With a matching toolchain
 the per-row 0.5% budget applies. A different toolchain is compared with the
@@ -56,7 +56,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BUILD = Path(os.environ.get("IOLINKI_SIZE_DIR", ROOT / "build_size"))
+BUILD = Path(os.environ.get("IOLINKI_SIZE_DIR", ROOT / "build" / "size"))
 BASELINE = ROOT / "tools" / "size_baseline.csv"
 PREFIX = os.environ.get("ARM_GCC", "arm-none-eabi-")
 

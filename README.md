@@ -145,9 +145,9 @@ cmake -B build && cmake --build build
 ### Building for Bare Metal
 
 ```bash
-cmake -B build_bare -DIOLINK_PLATFORM=BAREMETAL
-cmake --build build_bare
-./build_bare/examples/bare_metal_app/bare_metal_app
+cmake -B build/bare -DIOLINK_PLATFORM=BAREMETAL
+cmake --build build/bare
+./build/bare/examples/bare_metal_app/bare_metal_app
 ```
 
 ## Project Status

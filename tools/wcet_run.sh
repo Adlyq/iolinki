@@ -7,7 +7,7 @@
 #   ./tools/wcet_run.sh                 构建 + 运行，打印指标表
 #   ./tools/wcet_run.sh --check         与 tools/wcet_baseline.json 比较（增长即失败）
 #   ./tools/wcet_run.sh --update        用本次实测结果覆盖基线（显式操作）
-#   ./tools/wcet_run.sh --build-dir DIR 指定构建目录（默认 build_wcet/）
+#   ./tools/wcet_run.sh --build-dir DIR 指定构建目录（默认 build/wcet/）
 #
 # --check 还会用 --repeat 2 运行每个场景，验证同一场景重复运行指标完全一致。
 # 指标是调用次数（路径长度代理），不是 CPU 周期 WCET；周期上界见
@@ -17,7 +17,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-BUILD_DIR="${WCET_BUILD_DIR:-${REPO_ROOT}/build_wcet}"
+BUILD_DIR="${WCET_BUILD_DIR:-${REPO_ROOT}/build/wcet}"
 BASELINE="${SCRIPT_DIR}/wcet_baseline.json"
 MODE="run"
 
