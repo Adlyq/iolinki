@@ -445,8 +445,6 @@ static void test_dll_reject_transition_in_operate(void** state)
     iolink_dll_stats_t stats_after;
     iolink_device_get_dll_stats(&dev.ctx, &stats_after);
     assert_int_equal(stats_after.isr_plan_misses, misses_before + 1U);
-    /* 无计划的帧不应答：公共统计里的 answered 保持不变。 */
-    assert_int_equal(stats_after.isr_frames_answered, stats_before.isr_frames_answered);
     assert_int_equal(stats_after.framing_errors, stats_before.framing_errors);
 }
 

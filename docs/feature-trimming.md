@@ -31,7 +31,7 @@ source of "why did my build not behave as configured" reports.
 | Macro | Default | Trimmed to 0 |
 | --- | --- | --- |
 | `IOLINK_FEATURE_DATA_STORAGE` | 1 | `src/data_storage.c` body and the `ds` context field are removed; index `0x0003` and the DS SystemCommands answer `FUNC_NOTAVAIL`/`IDX_NOTAVAIL`. The `iolink_ds_*` symbols stay exported: the reduction is a **link-time contract** (negative link probes in `tools/check_profile_abi.sh`) |
-| `IOLINK_FEATURE_EVENTS` | 1 | `src/events.c` is replaced by inert stubs (no queue, no classification); DetailedDeviceStatus reports no events. Same link-time contract |
+| `IOLINK_FEATURE_EVENTS` | 1 | `src/events.c` is replaced by inert stubs (no queue, no classification); `0x0025` DetailedDeviceStatus answers `IDX_NOTAVAIL`. Same link-time contract |
 | `IOLINK_FEATURE_VALIDATE` | 1 | Compiles the init-time OD self-check (`od_validate_app`); `IOLINK_DEVICE_INIT_ERR_OD` is only produced when enabled. A `.text`-only switch, no link-time contract |
 | `IOLINK_ISR_RX_MODE` / `IOLINK_ISR_TX_MODE` | BYTE/BYTE | FRAME transports: different PHY vtable and ISR buffering |
 | `IOLINK_PHY_FEATURE_TX_BUSY` | 0 | TX-FRAME line-state hook (two vs three PD-in slots) |
@@ -45,15 +45,15 @@ The matrix uses six structural configurations, defined once in
 |---|---|---|---|---|---|
 | C1 | `host_default` | BYTE/BYTE | ISR+COMPILER/SHARED | full | LINUX Debug |
 | C1r | `host_default_release` | BYTE/BYTE | ISR/SHARED | full | LINUX Release |
-| C2 | `host_frame` | FRAME/FRAME+TX_BUSY | ISR/SHARED | full | LINUX Debug (compile only) |
+| C2 | `host_frame` | FRAME/FRAME+TX_BUSY | ISR/SHARED | full | LINUX Debug |
 | C3 | `host_no_ds` | BYTE/BYTE | ISR/SHARED | no DS | LINUX Debug |
 | C4 | `host_no_events` | BYTE/BYTE | ISR/SHARED | no events | LINUX Debug |
 | C5 | `target_minimal` | BYTE/BYTE | SINGLE/SHARED | no DS, no events | BAREMETAL Release |
 | C6 | `host_smp_split` | BYTE/BYTE | SMP/SMP barrier/SPLIT | full | LINUX Debug |
 
-The full unit suite runs on C1, C1r and C6. C3/C4 run
+The full unit suite runs on C1, C1r, C2 and C6. C3/C4 run
 `tests/test_trimmed_contract.c`, which asserts the replies a trimmed stack still
-owes a master (missing DS index/commands, empty DetailedDeviceStatus); C5 is
+owes a master (missing DS index/commands, `0x0025` -> `IDX_NOTAVAIL`); C5 is
 compile-only and the remaining cross-combinations are syntax-only probes.
 
 ## Runtime capability bits

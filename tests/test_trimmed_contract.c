@@ -79,6 +79,8 @@ static void test_standard_object_still_readable(void** state)
 
     iolink_isdu_init(&ctx);
     assert_int_equal(read_object(&ctx, IOLINK_IDX_DEVICE_STATUS, 0U, out, sizeof(out)), 1);
+    /* 没有事件时 DeviceStatus 必须是明确的 0，而不是任意一字节。 */
+    assert_int_equal(out[0], 0x00U);
 }
 
 #if !IOLINK_FEATURE_DATA_STORAGE
@@ -101,7 +103,7 @@ static void test_data_storage_commands_unavailable(void** state)
     uint8_t request[4];
     uint8_t out[8] = {0};
 
-    /* 8 位索引 + 子索引 0 + 1 字节数据（I-Service 0x1，长度 4）。 */
+    /* 8 位索引、无子索引、1 字节数据（I-Service 0x1，长度 4）。 */
     request[0] = 0x14U;
     request[1] = (uint8_t) IOLINK_IDX_SYSTEM_COMMAND;
     request[2] = IOLINK_CMD_PARAM_DOWNLOAD_START;

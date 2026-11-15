@@ -154,7 +154,8 @@ typedef struct iolink_dll_shared
 
     uint32_t isr_plan_misses; /**< ISR 未命中应答计划而丢弃的合法帧 */
 
-    uint32_t isr_frames_answered; /**< ISR 已生成应答的帧（含仍需主泵副作用的帧） */
+    uint32_t isr_frames_consumed; /**< 由 ISR 完全处理、不再进入邮箱的帧
+                                      （含按规范有意不应答的转换/复位帧） */
 
     uint32_t isr_frames_handoff; /**< 成功投递邮箱交给主泵的帧 */
 

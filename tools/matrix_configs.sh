@@ -11,11 +11,14 @@
 #   C1 host_default   BYTE/BYTE, ISR + COMPILER fence, SHARED stats, full stack
 #                     (plus the Release build-type variant)
 #   C2 host_frame     FRAME/FRAME, SHARED stats, full stack
-#   C3 target_minimal BYTE/BYTE, SINGLE (no critical-section symbols), no DS,
+#   C3 host_no_ds     BYTE/BYTE, full stack minus Data Storage
+#   C4 host_no_events BYTE/BYTE, full stack minus the event engine
+#   C5 target_minimal BYTE/BYTE, SINGLE (no critical-section symbols), no DS,
 #                     no events, BAREMETAL platform, Release
-#   C4 host_smp_split BYTE/BYTE, SMP + SMP fence, SPLIT stats, full stack
+#   C6 host_smp_split BYTE/BYTE, SMP + SMP fence, SPLIT stats, full stack
 #
-# C1, C2 and C4 run the unit suite. C2 passes -DIOLINK_TEST_TRANSPORT=FRAME
+# C1, C2, C3, C4 and C6 run tests; C3/C4 register only the trimmed-behaviour
+# contract. C2 passes -DIOLINK_TEST_TRANSPORT=FRAME
 # (build_matrix.sh derives it from the mode), which drops the targets that pin
 # a BYTE transport contract; see docs/TESTING.md. C2 carries no
 # IOLINK_PHY_FEATURE_TX_BUSY=1 because that build requires every PHY under test

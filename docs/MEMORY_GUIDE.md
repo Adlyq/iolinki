@@ -77,7 +77,7 @@ To move the scratch **out of the context entirely**, build with
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 4896 | **3600** |
+| `iolink_device_ctx_t` | 4904 | **3608** |
 | `iolink_isdu_ctx_t` | 1344 | **304** |
 | `iolink_ds_ctx_t` | 360 | **104** |
 | `iolink_workspace_t` (separate allocation) | — | 1289 |
@@ -88,7 +88,7 @@ instead of carrying it inside the main context. One measured example (`IOLINK_IS
 
 | Component | Embedded | External workspace |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 3936 | **3600** |
+| `iolink_device_ctx_t` | 3944 | **3608** |
 | `iolink_workspace_t` | — | 329 |
 
 > **Lease rule (ISDU response).** There is exactly one framed-response buffer.
@@ -126,7 +126,7 @@ You can tune these values to fit your MCU.
 
 ### Total RAM
 
-The default `iolink_device_ctx_t` is **4896 bytes** (64-bit host, default
+The default `iolink_device_ctx_t` is **4904 bytes** (64-bit host, default
 buffers); buffer arrays dominate it. On a 32-bit target the same layout is
 smaller. To measure your own build instead of relying on the table:
 

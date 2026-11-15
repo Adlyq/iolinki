@@ -29,15 +29,16 @@ Verify code against warnings and static analysis tools.
 ### 3. Run the Compile Matrix
 Every supported structural configuration must build. The matrix is defined once
 in `tools/matrix_configs.sh`: six structural configurations (`host_default`,
-its Release variant `host_default_release`, `host_frame`, `host_no_ds`,
-`host_no_events`, `target_minimal` and `host_smp_split`), the syntax-only
+`host_frame`, `host_no_ds`, `host_no_events`, `target_minimal` and
+`host_smp_split`, plus the Release variant `host_default_release`), the syntax-only
 combination probes, the link-time profile probes and the bare-metal platform.
 Feature trimming is expressed with the individual `IOLINK_FEATURE_*` switches;
 `host_no_ds` / `host_no_events` run `tests/test_trimmed_contract.c` so a
 trimmed build proves what the master observes, not only that it compiles.
 
 Configurations marked tests=yes (`host_default`, `host_default_release`,
-`host_smp_split`, `host_frame`) also run the unit suite. The suite is transport
+`host_frame`, `host_no_ds`, `host_no_events`, `host_smp_split`) also run their
+registered tests (the full suite except on the two trimmed rows). The suite is transport
 neutral: `tests/test_helpers.c` implements both PHY contracts — the BYTE hooks
 (`rx_octet`/`tx_octet`/`tx_done`) and the FRAME hooks
 (`rx_frame`/`tx_frame`/`tx_busy`) — over the same request queue, and
@@ -63,7 +64,7 @@ untested code:
   `iolink_phy_virtual` is a byte stream and its `get()` returns NULL in a FRAME
   build, so the example cannot initialise.
 
-`test_ctx_sizes` pins both layouts: 4704/4896 bytes on BYTE and 4696/4888 bytes
+`test_ctx_sizes` pins both layouts: 4712/4904 bytes on BYTE and 4704/4896 bytes
 on FRAME/FRAME for the DLL and device contexts.
 
 Mixed-granularity layouts (`FRAME_BYTE`, `BYTE_FRAME`) remain compile-only: they

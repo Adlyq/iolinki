@@ -259,7 +259,7 @@ typedef struct
     uint32_t isr_od_overruns;      /**< 上一条写请求未被主泵接管时又收到 START */
     uint32_t isr_plan_misses;      /**< 未命中应答计划而被丢弃的合法帧 */
     uint32_t isr_mailbox_drops;    /**< 因帧邮箱满而丢弃的帧 */
-    uint32_t isr_frames_answered;  /**< ISR 已生成应答的帧（含仍需主泵副作用的帧） */
+    uint32_t isr_frames_consumed;  /**< 由 ISR 完全处理、不再进入邮箱的帧 */
     uint32_t isr_frames_handoff;   /**< 成功投递邮箱交给主泵的帧 */
     uint32_t t_pd_discards;        /**< 在 t_PD 保护窗口内丢弃的邮箱帧 */
     uint32_t reply_plan_overflows; /**< 因计划槽位耗尽而未发布的计划条目 */

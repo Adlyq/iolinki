@@ -2688,7 +2688,7 @@ void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_
     out_stats->isr_od_overruns = ctx->shared.isr_od_overruns;
     out_stats->isr_plan_misses = ctx->shared.isr_plan_misses;
     out_stats->isr_mailbox_drops = ctx->shared.isr_mailbox_drops;
-    out_stats->isr_frames_answered = ctx->shared.isr_frames_answered;
+    out_stats->isr_frames_consumed = ctx->shared.isr_frames_consumed;
     out_stats->isr_frames_handoff = ctx->shared.isr_frames_handoff;
     out_stats->t_pd_discards = ctx->t_pd_discards;
     out_stats->reply_plan_overflows = ctx->reply_plan_overflows;

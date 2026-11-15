@@ -12,18 +12,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no tool validated it; `tests/conformance_audit.csv` is the single matrix.
 
 ### Added (per-frame fate counters)
-- `isr_frames_answered` and `isr_frames_handoff` in `iolink_dll_stats_t` record
-  what the data ISR did with each completed frame (replied / handed to the main
-  pump). Together with `isr_plan_misses`, `isr_mailbox_drops` and the framing
-  counters, every frame's fate is now observable instead of inferred. The two
-  counters cost 8 bytes of context RAM in every configuration.
+- `isr_frames_consumed` (the ISR completed the frame and the main pump never
+  sees it, whether it replied or was silent by specification) and
+  `isr_frames_handoff` (the frame was published to the main pump) in
+  `iolink_dll_stats_t` split the ISR's work in two. Dropped frames stay visible
+  through `isr_plan_misses`, `isr_mailbox_drops` and `isr_eager_rejects`
+  (corrupt ISDU writes). The two counters cost 8 bytes of context RAM.
 
 ### Added (trimmed-build behaviour contract)
 - A trimmed build (`IOLINK_FEATURE_DATA_STORAGE=OFF` or
   `IOLINK_FEATURE_EVENTS=OFF`) no longer proves only that it compiles:
   `tests/test_trimmed_contract.c` asserts what a master observes in that build
-  (`0x0003` -> `IDX_NOTAVAIL`, DS SystemCommands -> `FUNC_NOTAVAIL`, empty
-  `DetailedDeviceStatus`) with a control assertion that a standard object is
+  (`0x0003` -> `IDX_NOTAVAIL`, DS SystemCommands -> `FUNC_NOTAVAIL`,
+  `0x0025` -> `IDX_NOTAVAIL`) with a control assertion that a standard object is
   still readable. `host_no_ds` / `host_no_events` are matrix configurations, so
   the matrix now covers six structural configurations.
 

@@ -62,7 +62,7 @@ static inline uint32_t dll_time_ms(const iolink_dll_main_t* ctx)
  */
 static inline uint8_t dll_rx_expected_cks(const uint8_t* frame)
 {
-    return (uint8_t) (frame[1] & 0x3FU);
+    return (uint8_t) (frame[1] & IOLINK_MSEQ_CHECKSUM_MASK);
 }
 
 #define IOLINK_M_SEQ_TYPE1_LEN(pd_len)                         \

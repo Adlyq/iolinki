@@ -539,6 +539,13 @@ static int test_type0_page_read_fast_path(void)
     if ((tx_observed_len() != 2U) || (tx_q[0] != expected)) {
         return 1;
     }
+    /* 该帧由 ISR 完全处理：计入消费，不进入邮箱。 */
+    if (dll.main.shared.isr_frames_consumed != 1U) {
+        return 2;
+    }
+    if (dll.main.shared.isr_frames_handoff != 0U) {
+        return 3;
+    }
     return 0;
 }
 
@@ -650,8 +657,8 @@ static int test_eager_reject(void)
     if (iolink_ring_count(&dll.main.shared.isr_frame_ring) != 1U) {
         return 3; /* 已发布，以便主泵校验或回退 */
     }
-    /* 坏帧不被应答，但必须交给主泵：answered 不变，handoff 加一。 */
-    if (dll.main.shared.isr_frames_answered != 0U) {
+    /* 坏帧不被应答，但必须交给主泵：consumed 不变，handoff 加一。 */
+    if (dll.main.shared.isr_frames_consumed != 0U) {
         return 4;
     }
     if (dll.main.shared.isr_frames_handoff != 1U) {
@@ -691,12 +698,19 @@ static int test_valid_eager(void)
     if (tx_observed_len() != 2U) {
         return 3;
     }
-    /* 该帧既由 ISR 应答，也要进邮箱让主泵做副作用：两个计数各加一。 */
-    if (dll.main.shared.isr_frames_answered != 1U) {
+    /* ISR 应答了，但帧仍进入邮箱由主泵做副作用：不算消费，只算交接。 */
+    if (dll.main.shared.isr_frames_consumed != 0U) {
         return 4;
     }
     if (dll.main.shared.isr_frames_handoff != 1U) {
         return 5;
+    }
+    /* 公共统计必须与共享区一致（覆盖 get_stats 的拷贝）。 */
+    iolink_dll_stats_t stats = {0};
+    iolink_dll_get_stats(&dll.main, &stats);
+    if ((stats.isr_frames_consumed != dll.main.shared.isr_frames_consumed) ||
+        (stats.isr_frames_handoff != dll.main.shared.isr_frames_handoff)) {
+        return 6;
     }
     return 0;
 }
@@ -767,8 +781,8 @@ static int test_isdu_write_consumed_by_isr(void)
     if (dll.main.shared.isdu.req_total != 4U) {
         return 2;
     }
-    /* 四个写段都由 ISR 应答；字节已由 ISR 暂存，但帧仍要交给主泵执行。 */
-    if (dll.main.shared.isr_frames_answered != 4U) {
+    /* 四个写段都由 ISR 应答；帧仍要交给主泵执行，因此只计交接。 */
+    if (dll.main.shared.isr_frames_consumed != 0U) {
         return 7;
     }
     if (dll.main.shared.isr_frames_handoff != 4U) {
@@ -871,6 +885,13 @@ static int test_type0_commands_fast_path(void)
 #endif
     if ((dll.main.shared.state != IOLINK_DLL_STATE_PREOPERATE) || (tx_observed_len() != 2U)) {
         return 4;
+    }
+    /* 四帧都由 ISR 定案：转换命令按规范不应答，另外三条回 OD/CKS。 */
+    if (dll.main.shared.isr_frames_consumed != 4U) {
+        return 5;
+    }
+    if (dll.main.shared.isr_frames_handoff != 0U) {
+        return 6;
     }
     return 0;
 }

@@ -339,7 +339,7 @@ flowchart TD
 - ISDU 写由 ISR 直接调用 `iolink_isdu_od_write()` 累计（按 FlowCTRL 位置去重）：只有“下一个期望段”推进位置，重发与过早的乱序段照常 ACK 但不修改缓冲，因此重发风暴不会耗尽缓冲。START 置 `isr_isdu_invalidated`；在写被主泵接管并产出新应答前，发布 `len=0`（无服务），因此“写后立刻读”不会读到旧值。上一条已收齐（`COMPLETE`）但主泵尚未接管时又来 START，前一条被覆盖并计 `isr_od_overruns`。
 - **64 位截止时间只由主上下文写**。ISR 只置一次性标志：`isr_dsio_clear`、`isr_fallback_pending`、`isr_master_activity`、`isr_isdu_read_reset`；诊断侧只写 `iolink_conditions_t::isr_pulse[]` 单字节 one-shot。这类标志由任一方置 1、只由主泵清 0，重复置位幂等。
 - 顺序约束：即时应答在邮箱发布**之前**启动（t_A），记录随后连同 `eager` 标志一起入环；TX BYTE 下每个中断只喂一个八位组后让出，TX FRAME 由 PHY 拥有整帧传输；重入用 `in_isr` + `isr_reentry_pending` 延迟到外层调用，保证泵状态只有一个写入者。
-- 邮箱是 `IOLINK_MBX_SLOTS` 个槽（默认 4）的 SPSC 环（`include/iolinki/ring.h`）：环满（所有槽都未消费）时新帧计入 `isr_mailbox_drops` 并被丢弃。记录携带自身长度与 `eager` 标志，主泵据此快照 `frame_replied_by_isr`，因此无需跨帧状态。每帧的终局另有 `isr_frames_answered`（ISR 已应答）与 `isr_frames_handoff`（成功入环）两个计数，与 `isr_plan_misses`、`isr_mailbox_drops` 一起覆盖"应答 / 交接 / 丢弃"三类去向。
+- 邮箱是 `IOLINK_MBX_SLOTS` 个槽（默认 4）的 SPSC 环（`include/iolinki/ring.h`）：环满（所有槽都未消费）时新帧计入 `isr_mailbox_drops` 并被丢弃。记录携带自身长度与 `eager` 标志，主泵据此快照 `frame_replied_by_isr`，因此无需跨帧状态。每帧的终局另有 `isr_frames_consumed`（ISR 已应答）与 `isr_frames_handoff`（成功入环）两个计数，与 `isr_plan_misses`、`isr_mailbox_drops` 一起覆盖"应答 / 交接 / 丢弃"三类去向。
 - 状态通知是**电平式**的：`ctx->shared.state` 立即更新（单字节写，无临界区），`iolink_dll_flush_state_callbacks()` 只在“当前状态 ≠ 上次已交付状态”时调用一次回调。主上下文迁移在 `dll_set_state()` 内立即投递；ISR 迁移只改状态，由下一次主上下文 flush 投递，多次 ISR 迁移会合并为最终状态（中间态不单独回调）。例外：ISR 进入 STARTUP 会置 `startup_notification_pending`，该复位通知优先投递，不会被后续 PREOPERATE 覆盖。flush 由 `iolink_dll_process()` 末尾执行，设备层不再重复调用。
 
 ---
@@ -989,8 +989,8 @@ flowchart LR
 - `last_notified_state`：主上下文记录“已交付给应用的状态”，配合 `shared.state` 做电平式通知；`startup_notification_pending` 保留 ISR 触发的 STARTUP 边沿，避免快速进入 PREOPERATE 时丢失复位通知。
 
 上下文尺寸契约（默认缓冲、64 位主机，由 `tests/test_ctx_sizes.c` 断言）：
-`iolink_device_ctx_t` 4896 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4912 B），内嵌
-`iolink_dll_ctx_t` 4704/4720 B、`iolink_isdu_ctx_t` 1344 B、`iolink_events_ctx_t` 504 B、
+`iolink_device_ctx_t` 4904 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4920 B），内嵌
+`iolink_dll_ctx_t` 4712/4728 B、`iolink_isdu_ctx_t` 1344 B、`iolink_events_ctx_t` 504 B、
 `iolink_ds_ctx_t` 360 B；`iolink_workspace_t` 1289 B。
 
 并发边界：
