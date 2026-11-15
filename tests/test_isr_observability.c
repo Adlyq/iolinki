@@ -546,6 +546,12 @@ static int test_type0_page_read_fast_path(void)
     if (dll.main.shared.isr_frames_handoff != 0U) {
         return 3;
     }
+    /* 公共统计与共享区一致（覆盖 get_stats 的两个拷贝）。 */
+    iolink_dll_stats_t stats = {0};
+    iolink_dll_get_stats(&dll.main, &stats);
+    if ((stats.isr_frames_consumed != 1U) || (stats.isr_frames_handoff != 0U)) {
+        return 4;
+    }
     return 0;
 }
 

@@ -45,7 +45,7 @@ The matrix uses six structural configurations, defined once in
 |---|---|---|---|---|---|
 | C1 | `host_default` | BYTE/BYTE | ISR+COMPILER/SHARED | full | LINUX Debug |
 | C1r | `host_default_release` | BYTE/BYTE | ISR/SHARED | full | LINUX Release |
-| C2 | `host_frame` | FRAME/FRAME+TX_BUSY | ISR/SHARED | full | LINUX Debug |
+| C2 | `host_frame` | FRAME/FRAME | ISR/SHARED | full | LINUX Debug |
 | C3 | `host_no_ds` | BYTE/BYTE | ISR/SHARED | no DS | LINUX Debug |
 | C4 | `host_no_events` | BYTE/BYTE | ISR/SHARED | no events | LINUX Debug |
 | C5 | `target_minimal` | BYTE/BYTE | SINGLE/SHARED | no DS, no events | BAREMETAL Release |
