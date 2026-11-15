@@ -115,14 +115,17 @@ Every registered test binary is a cmocka program:
 
 A reply that no case asserts is a failure, not a silent extra. The shared mock
 (`tests/test_helpers.c`) counts delivered and asserted replies and every group
-whose binary includes it passes `test_tx_all_asserted` as the group teardown.
-The counters are cumulative across cases (`setup_mock_phy()` no longer clears
-them), and a reply may not be erased: `mock_phy_clear_tx()` counts any pending
-unasserted reply as a discard and the teardown fails on it. Use
-`mock_phy_ignore_tx()` where a reply is deliberately irrelevant. Binaries with a
-local PHY mock (`test_reply_plan`, `test_isr_*`, `test_dll_statemachine`,
-`test_tx_busy`) keep the same delivered/asserted bookkeeping in their own group
-teardown.
+that uses it passes `test_tx_all_asserted` as the group teardown. The counters
+are cumulative across cases (`setup_mock_phy()` no longer clears them), and a
+reply may not be erased: `mock_phy_clear_tx()` counts any pending unasserted
+reply as a discard. Use `mock_phy_ignore_tx()` where a reply is deliberately
+irrelevant. Binaries with a local PHY mock (`test_reply_plan`, `test_isr_*`,
+`test_dll_statemachine`, `test_tx_busy`) keep the same delivered/asserted
+bookkeeping in their own group teardown.
+
+A failing group teardown must fail the *process*: cmocka 2.x reports
+`[ FAILED ] GROUP TEARDOWN` but still exits 0, so the gate prints the offending
+frame and calls `exit(EXIT_FAILURE)` instead of relying on the return value.
 
 Tests reach the DLL layout through one header. Behaviour and conformance
 tests use the public API (`iolink_device_get_state`, `iolink_device_get_dll_stats`,
@@ -133,7 +136,8 @@ embedded in a device context (`ctx->dll...`), so changing how
 `iolink_device_ctx_t` embeds it touches one file instead of every test.
 `tests/dll_access.h` is also the only test file that includes
 `iolinki/dll_ctx.h` directly. Tests whose subject is the DLL internals declare
-`iolink_dll_main_t` directly and keep using `ctx.main...`.
+`iolink_dll_ctx_t` or `iolink_dll_main_t` themselves and keep using
+`ctx.main...`.
 `tools/check_test_whitebox.sh` enforces both rules and its `--selftest` keeps
 the matchers honest; both run from `check_quality.sh` and CI.
 

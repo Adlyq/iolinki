@@ -16,8 +16,8 @@
  * 本文件的访问器取得：设备上下文如何包含 DLL 只在 `test_dll()` 里表达
  * 一次，而不是散落在每个用例中。
  *
- * `iolinki/dll_ctx.h` 只允许在本文件与 `tests/test_helpers.c` 中包含
- * （由 `tools/check_test_whitebox.sh` 校验）。
+ * `iolinki/dll_ctx.h` 只允许在本文件中直接包含（由
+ * `tools/check_test_whitebox.sh` 校验）。
  */
 
 #ifndef TEST_DLL_ACCESS_H_

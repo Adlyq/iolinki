@@ -1677,6 +1677,7 @@ static void test_dll_isr_back_to_box_counts_each_frame_once(void** state)
     }
     mock_phy_feed_chk();
     test_io_cycle(&dev.ctx);
+    assert_tx_len(2);
     assert_false(test_dll(&dev.ctx)->back_to_box_pending);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_COMM_DISABLED);
 }

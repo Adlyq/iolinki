@@ -314,10 +314,10 @@ iolink_test(NAME test_ident_indices SOURCES test_ident_indices.c CMOCKA)
 iolink_test(NAME test_protocol_constants SOURCES test_protocol_constants.c CMOCKA)
 iolink_test(NAME test_system_commands SOURCES test_system_commands.c CMOCKA)
 iolink_test(NAME test_config_trim SOURCES test_config_trim.c CMOCKA)
-# Spec-conformance assertions for known stack gaps (expected to fail until fixed)
+# Spec-conformance assertions for the B.2 / Table B.x object rules.
 iolink_test(NAME test_spec_conformance SOURCES test_spec_conformance.c CMOCKA)
 if(IOLINK_PLATFORM STREQUAL "LINUX")
-    # New Test Spec cases and known-gap xfails, annotated with SDCI_TC_xxxx IDs.
+    # Test Spec cases annotated with SDCI_TC_xxxx IDs.
     # They link the host conformance-device example, so they are host-only.
     iolink_test(NAME test_conformance_gaps
         SOURCES test_conformance_gaps.c

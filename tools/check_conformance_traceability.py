@@ -36,28 +36,109 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-def skip_ws_and_comments(text: str, index: int) -> int:
-    """Skip whitespace and comments starting at `index`."""
-    while index < len(text):
-        if text[index] in " \t\r\n":
-            index += 1
-        elif text.startswith("/*", index):
-            end = text.find("*/", index + 2)
-            if end < 0:
-                return len(text)
-            index = end + 2
-        elif text.startswith("//", index):
-            end = text.find("\n", index + 2)
-            if end < 0:
-                return len(text)
-            index = end + 1
+def mask_source(text: str, mask_literals: bool) -> str:
+    """Blank comments (and optionally string/char literals), keeping offsets.
+
+    An annotation that only exists in a comment or in a string is not a real
+    annotation, so the scan runs on masked text. Every consumed character maps
+    to one space (newlines are kept) so line numbers stay correct.
+    """
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    state = "code"
+    while i < n:
+        c = text[i]
+        if state == "block":
+            if c == "*" and i + 1 < n and text[i + 1] == "/":
+                out.append("  ")
+                i += 2
+                state = "code"
+            else:
+                out.append("\n" if c == "\n" else " ")
+                i += 1
+            continue
+        if state == "line":
+            if c == "\n":
+                out.append("\n")
+                i += 1
+                state = "code"
+            else:
+                out.append(" ")
+                i += 1
+            continue
+        if state in {"string", "char"}:
+            if c == "\\" and i + 1 < n:
+                out.append("  ")
+                i += 2
+                continue
+            if (state == "string" and c == '"') or (state == "char" and c == "'"):
+                out.append(c if not mask_literals else " ")
+                i += 1
+                state = "code"
+                continue
+            out.append("\n" if c == "\n" else (" " if mask_literals else c))
+            i += 1
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            out.append("  ")
+            i += 2
+            state = "block"
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "/":
+            out.append("  ")
+            i += 2
+            state = "line"
+            continue
+        if c == '"':
+            out.append('"')
+            i += 1
+            state = "string"
+            continue
+        if c == "'":
+            out.append("'")
+            i += 1
+            state = "char"
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def mask_disabled_blocks(text: str) -> str:
+    """Blank `#if 0` regions: code inside them is not compiled."""
+    lines = text.splitlines(keepends=True)
+    depth = 0
+    in_disabled = False
+    out: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if re.match(r"#\s*if\s+0\s*$", stripped):
+            depth += 1
+            in_disabled = True
+            out.append("\n" if line.endswith("\n") else "")
+            continue
+        if re.match(r"#\s*if(n?def)?\b", stripped) or re.match(r"#\s*else\b", stripped):
+            if in_disabled:
+                depth += 1
+            out.append("\n" if line.endswith("\n") else "")
+            continue
+        if re.match(r"#\s*endif\b", stripped):
+            if in_disabled:
+                depth -= 1
+                if depth == 0:
+                    in_disabled = False
+            out.append("\n" if line.endswith("\n") else "")
+            continue
+        if in_disabled:
+            out.append("\n" if line.endswith("\n") else "")
         else:
-            break
-    return index
+            out.append(line)
+    return "".join(out)
 
 
-def function_body(text: str, name: str) -> tuple[str | None, int]:
-    """Return (body, line) of the first definition of `name`."""
+def function_body(text: str, name: str) -> tuple[int, int, int] | None:
+    """Return (start, end, line) of the first definition of `name`."""
     for match in re.finditer(r"\b" + re.escape(name) + r"\s*\(", text):
         i = match.end() - 1
         depth = 0
@@ -69,7 +150,9 @@ def function_body(text: str, name: str) -> tuple[str | None, int]:
                 if depth == 0:
                     break
             i += 1
-        start = skip_ws_and_comments(text, i + 1)
+        start = i + 1
+        while start < len(text) and text[start] in " \t\r\n":
+            start += 1
         if start < len(text) and text[start] == "{":
             depth = 0
             for k in range(start, len(text)):
@@ -79,8 +162,8 @@ def function_body(text: str, name: str) -> tuple[str | None, int]:
                     depth -= 1
                     if depth == 0:
                         line = text.count("\n", 0, match.start()) + 1
-                        return text[start : k + 1], line
-    return None, 0
+                        return start, k + 1, line
+    return None
 
 
 def check_c_evidence(row: dict[str, str]) -> None:
@@ -88,13 +171,15 @@ def check_c_evidence(row: dict[str, str]) -> None:
     case_id = row["case_id"]
     path = ROOT / row["unit_test_file"]
     text = path.read_text(errors="replace")
+    code = mask_disabled_blocks(mask_source(text, mask_literals=True))
+    code_with_literals = mask_disabled_blocks(mask_source(text, mask_literals=False))
     marker = f'IOLINK_CONFORMANCE_CASE("{case_id}")'
     for name in (n.strip() for n in row["unit_test_function"].split(";") if n.strip()):
-        body, line = function_body(text, name)
-        if body is None:
-            where = f"{row['unit_test_file']}:{line}" if line else row["unit_test_file"]
-            fail(f"{case_id}: {where} has no function {name!r}")
-        if marker not in body:
+        span = function_body(code, name)
+        if span is None:
+            fail(f"{case_id}: {row['unit_test_file']} has no function {name!r}")
+        start, end, line = span
+        if marker not in code_with_literals[start:end]:
             fail(
                 f"{case_id}: {row['unit_test_file']}:{line} function {name!r} "
                 f"does not carry {marker}"
@@ -134,8 +219,9 @@ def main() -> int:
 
     annotations = set()
     for path in (ROOT / "tests").glob("*.c"):
-        for match in re.finditer(r'IOLINK_CONFORMANCE_CASE\("SDCI_TC_([0-9]+)"\)',
-                                 path.read_text(errors="replace")):
+        text = mask_disabled_blocks(mask_source(path.read_text(errors="replace"),
+                                                mask_literals=False))
+        for match in re.finditer(r'IOLINK_CONFORMANCE_CASE\("SDCI_TC_([0-9]+)"\)', text):
             annotations.add(f"SDCI_TC_{match.group(1)}")
     unknown = sorted(annotations - set(ids))
     if unknown:

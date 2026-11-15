@@ -17,6 +17,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "crc_oracle.h"
@@ -248,9 +249,8 @@ static int group_teardown(void** state)
         print_message("test_tx_busy: %llu replies delivered, %llu asserted, %llu discarded\n",
                       (unsigned long long) g_tx_delivered, (unsigned long long) g_tx_asserted,
                       (unsigned long long) g_tx_leaked);
+        exit(EXIT_FAILURE); /* cmocka keeps exit 0 after a failed group teardown */
     }
-    assert_int_equal(g_tx_asserted, g_tx_delivered);
-    assert_int_equal(g_tx_leaked, 0U);
     return 0;
 }
 

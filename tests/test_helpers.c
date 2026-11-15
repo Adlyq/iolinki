@@ -248,6 +248,9 @@ void mock_phy_clear_tx(void)
     /* 清空观察窗口。窗口里若还有未断言的帧，这就是一次静默丢弃：
      * teardown 会看到 g_tx_discarded 非零并失败。确实不关心的帧用
      * mock_phy_ignore_tx()。 */
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    mock_tx_finish(NULL); /* 帧模式下交付发生在下一次 PHY 交互，先结算 */
+#endif
     g_tx_discarded += g_tx_seq - g_tx_asserted;
     g_tx_asserted = g_tx_seq;
     g_txq_len = 0U;
@@ -348,11 +351,18 @@ int test_tx_all_asserted(void** state)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     mock_tx_finish(NULL);
 #endif
-    if (g_tx_seq != g_tx_asserted) {
-        print_hex_frame("unasserted", g_txq, g_txq_len);
+    if ((g_tx_seq != g_tx_asserted) || (g_tx_discarded != 0U)) {
+        if (g_tx_seq != g_tx_asserted) {
+            print_hex_frame("unasserted", g_txq, g_txq_len);
+        }
+        /* cmocka 2.x reports a failed group teardown but still exits 0, so the
+         * gate has to end the process itself. */
+        fprintf(stderr, "FAIL: %llu replies delivered, %llu asserted, %llu discarded\n",
+                (unsigned long long) g_tx_seq, (unsigned long long) g_tx_asserted,
+                (unsigned long long) g_tx_discarded);
+        fflush(stderr);
+        exit(EXIT_FAILURE);
     }
-    assert_int_equal(g_tx_seq, g_tx_asserted);
-    assert_int_equal(g_tx_discarded, 0U);
     g_tx_asserted = g_tx_seq;
     return 0;
 }
@@ -668,6 +678,7 @@ void setup_mock_phy(void)
     g_mock_send_delay_us = 0U;
     g_txq_len = 0U;
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    mock_tx_finish(NULL); /* 上一用例遗留的待交付帧先计入，再由 teardown 判定 */
     g_tx_pending = NULL;
     g_tx_pending_len = 0U;
 #else

@@ -14,6 +14,7 @@
  */
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <stdarg.h>
@@ -103,11 +104,10 @@ static void tx_done(void* user)
 }
 #endif
 
-/* 读取已交付应答数即算一次查看：每次读取消费一次尚未查看的交付，
- * group teardown 核对"交付 == 查看"，任何无人查看的应答都会失败。 */
+/* 读取即视为查看：调用点断言的是累计总数（60000/60020），因此一次读取
+ * 覆盖此前全部交付；group teardown 再核对"交付 == 查看"。 */
 static unsigned tx_frame_count(void)
 {
-    /* 这是一次批量查看：断言的是累计总量，因此读取即覆盖此前全部交付。 */
     tx_asserted = tx_delivered;
     return tx_frames;
 }
@@ -230,8 +230,8 @@ static int group_teardown(void** state)
     if (tx_asserted != tx_delivered) {
         print_message("test_isr_stability: %llu replies delivered, %llu asserted\n",
                       (unsigned long long) tx_delivered, (unsigned long long) tx_asserted);
+        exit(EXIT_FAILURE); /* cmocka keeps exit 0 after a failed group teardown */
     }
-    assert_int_equal(tx_asserted, tx_delivered);
     return 0;
 }
 

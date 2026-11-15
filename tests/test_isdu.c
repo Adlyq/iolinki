@@ -543,15 +543,10 @@ static void test_isdu_pdin_descriptor_read(void** state)
     assert_int_equal(byte, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 }
 
+#if IOLINK_DS_LEGACY_IMAGE_SUB0
 static void test_isdu_data_storage_round_trip(void** state)
 {
     (void) state;
-#if !IOLINK_DS_LEGACY_IMAGE_SUB0
-    /* V1.1 的默认行为是在 sub0 上返回拼接后的 DataStorageIndex 记录；
-       旧式的整幅镜像往返仅在兼容
-       开关下可用。 */
-    skip();
-#else
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
     test_env_init(&g_test_env, NULL);
@@ -598,8 +593,8 @@ static void test_isdu_data_storage_round_trip(void** state)
     assert_int_equal(restored.code, 0);
     assert_int_equal(restored.len, strlen(app));
     assert_memory_equal(buf, app, strlen(app));
-#endif
 }
+#endif
 
 /* Table B.10：DataStorageIndex 的子索引 02-05 是只读访问器。 */
 static void test_isdu_data_storage_subindices(void** state)
@@ -1649,8 +1644,10 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_direct_parameters_page2, test_setup,
                                         test_teardown),
+#if IOLINK_DS_LEGACY_IMAGE_SUB0
         cmocka_unit_test_setup_teardown(test_isdu_data_storage_round_trip, test_setup,
                                         test_teardown),
+#endif
         cmocka_unit_test_setup_teardown(test_isdu_data_storage_subindices, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_ds_command_sequence, test_setup, test_teardown),

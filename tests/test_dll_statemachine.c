@@ -16,6 +16,7 @@
  */
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <stdarg.h>
@@ -452,9 +453,8 @@ static int group_teardown(void** state)
             "test_dll_statemachine: %llu replies delivered, %llu asserted, %llu discarded\n",
             (unsigned long long) s_tx_delivered, (unsigned long long) s_tx_asserted,
             (unsigned long long) s_tx_leaked);
+        exit(EXIT_FAILURE); /* cmocka keeps exit 0 after a failed group teardown */
     }
-    assert_int_equal(s_tx_asserted, s_tx_delivered);
-    assert_int_equal(s_tx_leaked, 0U);
     return 0;
 }
 

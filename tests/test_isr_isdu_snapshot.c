@@ -13,6 +13,7 @@
  */
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <stdarg.h>
@@ -436,9 +437,8 @@ static int group_teardown(void** state)
             "test_isr_isdu_snapshot: %llu replies delivered, %llu asserted, %llu discarded\n",
             (unsigned long long) tx_delivered, (unsigned long long) tx_asserted,
             (unsigned long long) tx_leaked);
+        exit(EXIT_FAILURE); /* cmocka keeps exit 0 after a failed group teardown */
     }
-    assert_int_equal(tx_asserted, tx_delivered);
-    assert_int_equal(tx_leaked, 0U);
     return 0;
 }
 

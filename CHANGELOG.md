@@ -28,9 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fails instead of silently skipping.
 - The conformance audit matrix now names functions that exist and carry the
   matching `IOLINK_CONFORMANCE_CASE` id; `check_conformance_traceability.py`
-  enforces both.
-- Every test binary fails when a captured reply was never asserted (shared
-  harness group teardown, and an equivalent counter in the local PHY mocks).
+  enforces both and ignores annotations that only exist in a comment, a string
+  or an `#if 0` block. The `IOLINK_DS_LEGACY_IMAGE_SUB0` round trip is now
+  registered only when that option is enabled instead of skipping at runtime.
+- Every test binary that uses the PHY mock fails when a captured reply was
+  never asserted: the shared harness and the local PHY mocks count delivered
+  and asserted replies, and the group teardown exits with `EXIT_FAILURE`
+  because cmocka 2.x reports a failed teardown but still exits 0.
 - Expected frames no longer compute their checksum with the code under test:
   `tests/crc_oracle.h` implements A.1.6 independently of `src/crc.c`.
 - `IOLINK_STATS_MODE` is a real CMake variable, and the SPLIT statistics
