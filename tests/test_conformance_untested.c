@@ -133,7 +133,7 @@ static uint16_t device_error_count(iolink_device_ctx_t* device)
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = &device->dll;
+    ctx.dll_ctx = test_dll_ctx(device);
     uint8_t data[2] = {0U};
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_ERROR_COUNT, 0U), 1);
     iolink_isdu_process(&ctx);

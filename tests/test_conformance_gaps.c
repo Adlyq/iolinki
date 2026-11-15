@@ -195,8 +195,8 @@ static void test_0089_master_cycle_time_readback(void** state)
     test_env_reset_params(&g_test_env);
 
     iolink_device_ctx_t dev;
-    iolink_dll_main_t* dll = test_dll(&dev);
     (void) memset(&dev, 0, sizeof(dev));
+    iolink_dll_main_t* dll = test_dll(&dev);
     dll->master_cycle_time = 0x4FU;
 
     iolink_isdu_ctx_t ctx;

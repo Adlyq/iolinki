@@ -20,8 +20,8 @@
  * （由 `tools/check_test_whitebox.sh` 校验）。
  */
 
-#ifndef IOLINK_TEST_DLL_ACCESS_H_
-#define IOLINK_TEST_DLL_ACCESS_H_
+#ifndef TEST_DLL_ACCESS_H_
+#define TEST_DLL_ACCESS_H_
 
 #include "iolinki/device.h"
 #include "iolinki/dll_ctx.h"
@@ -56,4 +56,4 @@ static inline iolink_isdu_ctx_t* test_dll_isdu(iolink_device_ctx_t* ctx)
     return &ctx->dll.main.shared.isdu;
 }
 
-#endif /* IOLINK_TEST_DLL_ACCESS_H_ */
+#endif /* TEST_DLL_ACCESS_H_ */

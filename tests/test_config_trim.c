@@ -52,8 +52,8 @@ static void test_capacity_overrides(void** state)
     assert_int_equal(IOLINK_REPLY_PLAN_SLOTS, 12);
 
     /* 覆盖值必须真正进入 DLL 布局，而不只是宏层生效。 */
-    iolink_device_ctx_t dev;
-    const iolink_dll_main_t* dll = test_dll(&dev);
+    iolink_dll_main_t main_ctx;
+    const iolink_dll_main_t* dll = &main_ctx;
     assert_int_equal(sizeof(dll->isr_frame_slot) / sizeof(dll->isr_frame_slot[0]),
                      IOLINK_MBX_SLOTS);
     assert_int_equal(sizeof(dll->shared.reply_plan) / sizeof(dll->shared.reply_plan[0]),

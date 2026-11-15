@@ -279,12 +279,14 @@ static void test_device_setter_propagates(void** state)
     assert_true(test_dll_isdu(&ctx)->log.write == log_capture);
     assert_ptr_equal(test_dll_isdu(&ctx)->log.user, &token);
 #if IOLINK_FEATURE_DATA_STORAGE
-    assert_true(iolink_device_get_ds_ctx(&ctx)->log.write == log_capture);
-    assert_ptr_equal(iolink_device_get_ds_ctx(&ctx)->log.user, &token);
+    iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&ctx);
+    assert_true(ds->log.write == log_capture);
+    assert_ptr_equal(ds->log.user, &token);
 #endif
 #if IOLINK_FEATURE_EVENTS
-    assert_true(iolink_device_get_events_ctx(&ctx)->log.write == log_capture);
-    assert_ptr_equal(iolink_device_get_events_ctx(&ctx)->log.user, &token);
+    iolink_events_ctx_t* events = iolink_device_get_events_ctx(&ctx);
+    assert_true(events->log.write == log_capture);
+    assert_ptr_equal(events->log.user, &token);
 #endif
 
     /* Logging through a propagated subsystem sink works. */

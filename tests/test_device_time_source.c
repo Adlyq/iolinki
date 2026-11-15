@@ -73,12 +73,12 @@ static void test_event_engine_uses_app_clock(void** state)
     g_app_time_us = 1234000ULL;
     init_device(&ctx, app_time_us);
 
-    iolink_event_trigger(iolink_device_get_events_ctx(&ctx), IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD,
-                         IOLINK_EVENT_TYPE_ERROR);
+    iolink_events_ctx_t* events = iolink_device_get_events_ctx(&ctx);
+    iolink_event_trigger(events, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD, IOLINK_EVENT_TYPE_ERROR);
 
-    assert_true(iolink_device_get_events_ctx(&ctx)->pending[0].active);
-    assert_true(iolink_device_get_events_ctx(&ctx)->pending[0].appears_valid);
-    assert_int_equal(iolink_device_get_events_ctx(&ctx)->pending[0].last_appears_ms, 1234U);
+    assert_true(events->pending[0].active);
+    assert_true(events->pending[0].appears_valid);
+    assert_int_equal(events->pending[0].last_appears_ms, 1234U);
 }
 
 static void test_null_clock_is_rejected_at_init(void** state)

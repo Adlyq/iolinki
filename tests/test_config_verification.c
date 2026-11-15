@@ -43,8 +43,8 @@ static void test_config_defaults(void** state)
     assert_true(sizeof(events.queue) / sizeof(iolink_event_t) == IOLINK_EVENT_QUEUE_SIZE);
 
     /* 验证 DLL 过程数据缓冲区 */
-    iolink_device_ctx_t dev;
-    const iolink_dll_main_t* dll = test_dll(&dev);
+    iolink_dll_main_t main_ctx;
+    const iolink_dll_main_t* dll = &main_ctx;
     assert_true(sizeof(dll->shared.pd_in[0]) == IOLINK_PD_REPLY_MAX);
     assert_true(sizeof(dll->pd_out) == IOLINK_PD_OUT_MAX_SIZE);
 

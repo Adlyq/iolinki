@@ -12,14 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no tool validated it; `tests/conformance_audit.csv` is the single matrix.
 
 ### Changed (test layout coupling)
-- Tests no longer reach into the device's embedded DLL context. Behaviour and
-  conformance tests use the public API; the rest go through `tests/dll_access.h`
-  (`test_dll`, `test_dll_shared`, `test_dll_isdu`, `test_dll_ctx`), the only
-  header allowed to include `iolinki/dll_ctx.h` besides the shared harness.
-  Tests whose subject is the DLL internals keep declaring `iolink_dll_main_t`
-  directly.
-- `tools/check_test_whitebox.sh` enforces both rules and runs from
-  `check_quality.sh`.
+- Behaviour and conformance tests no longer reach into the device's embedded
+  DLL context. They use the public API where it exists and otherwise the
+  accessors in `tests/dll_access.h` (`test_dll`, `test_dll_shared`,
+  `test_dll_isdu`, `test_dll_ctx`), the only test file that includes
+  `iolinki/dll_ctx.h` directly. Tests whose subject is the DLL internals keep
+  declaring `iolink_dll_main_t` directly.
+- `tools/check_test_whitebox.sh` enforces both rules (`--selftest` checks the
+  matchers) and runs from `check_quality.sh` and CI.
 
 ### Changed (test effectiveness)
 - `skip_known_gap()` is gone: the conformance cases now assert the behaviour the

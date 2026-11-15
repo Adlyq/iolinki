@@ -128,12 +128,14 @@ Tests reach the DLL layout through one header. Behaviour and conformance
 tests use the public API (`iolink_device_get_state`, `iolink_device_get_dll_stats`,
 `iolink_device_get_events_ctx`, `iolink_device_get_ds_ctx`, ...); where no public
 accessor exists they use `tests/dll_access.h` (`test_dll`, `test_dll_shared`,
-`test_dll_isdu`, `test_dll_ctx`). Only `tests/dll_access.h` and the shared
-harness may include `iolinki/dll_ctx.h`, so changing how a device context
-embeds the DLL touches one file instead of every test. Tests whose subject is
-the DLL internals declare `iolink_dll_main_t` directly and keep using it.
-`tools/check_test_whitebox.sh` enforces both rules and runs from
-`check_quality.sh`.
+`test_dll_isdu`, `test_dll_ctx`). Nothing outside that header names the DLL
+embedded in a device context (`ctx->dll...`), so changing how
+`iolink_device_ctx_t` embeds it touches one file instead of every test.
+`tests/dll_access.h` is also the only test file that includes
+`iolinki/dll_ctx.h` directly. Tests whose subject is the DLL internals declare
+`iolink_dll_main_t` directly and keep using `ctx.main...`.
+`tools/check_test_whitebox.sh` enforces both rules and its `--selftest` keeps
+the matchers honest; both run from `check_quality.sh` and CI.
 
 CMocka is a hard requirement for the suite: a configure without it fails
 instead of silently registering no tests. Use `-DBUILD_TESTING=OFF` for a
