@@ -1707,7 +1707,7 @@ static dll_frame_result_t dll_frame_validate(iolink_dll_main_t* ctx)
 {
     uint8_t crc_buf[sizeof(ctx->frame_buf)];
     (void) memcpy(crc_buf, ctx->frame_buf, ctx->req_len);
-    const uint8_t expected_ck = (uint8_t) (crc_buf[1] & 0x3FU);
+    const uint8_t expected_ck = dll_rx_expected_cks(crc_buf);
     crc_buf[1] = (uint8_t) (crc_buf[1] & IOLINK_MSEQ_TYPE_MASK);
     const bool crc_ok = (iolink_checksum6(crc_buf, ctx->req_len) == expected_ck);
     const bool type_ok = dll_type_allowed(ctx, ctx->frame_buf);

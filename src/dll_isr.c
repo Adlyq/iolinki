@@ -157,7 +157,7 @@ static bool dll_isr_frame_valid(const iolink_dll_main_t* ctx, const uint8_t* fra
     if ((ctx == NULL) || (frame == NULL) || (len < 2U)) {
         return false;
     }
-    const uint8_t expected = (uint8_t) (frame[1] & 0x3FU);
+    const uint8_t expected = dll_rx_expected_cks(frame);
     /* A.1.6 种子；八位组 1（CKT）被掩码到其类型位。将其放在
      * 循环外处理，使其余八位组运行紧凑的 XOR 循环。 */
     uint8_t acc = (uint8_t) (0x52U ^ frame[0]);
@@ -178,8 +178,8 @@ static bool dll_isr_frame_valid_acc(const iolink_dll_main_t* ctx, const uint8_t*
     if ((ctx == NULL) || (frame == NULL) || (len < 2U)) {
         return false;
     }
-    const uint8_t expected = (uint8_t) (frame[1] & 0x3FU);
-    return (iolink_checksum6_from_acc(acc) == expected) && dll_isr_type_ok(ctx, frame);
+    return (iolink_checksum6_from_acc(acc) == dll_rx_expected_cks(frame)) &&
+           dll_isr_type_ok(ctx, frame);
 }
 #endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
 

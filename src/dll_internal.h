@@ -55,6 +55,16 @@ static inline uint32_t dll_time_ms(const iolink_dll_main_t* ctx)
 }
 /** @} */
 
+/**
+ * @brief 请求校验和八位组：CKT 的低 6 位（A.1.6）。
+ *
+ * 主泵与两条 ISR 校验路径共用，避免三份"取 CKS"同时漂移。
+ */
+static inline uint8_t dll_rx_expected_cks(const uint8_t* frame)
+{
+    return (uint8_t) (frame[1] & 0x3FU);
+}
+
 #define IOLINK_M_SEQ_TYPE1_LEN(pd_len)                         \
     (4 + (pd_len)) /* MC(8) + CKT(8) + PD(var) + OD(8) + CK(8) \
                     */
