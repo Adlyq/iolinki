@@ -12,7 +12,7 @@
 # `iolink_dll_main_t` themselves and keep using `ctx.main...`; that form is not
 # matched here and stays allowed.
 #
-# Run `--selftest` to exercise the matchers and the comment stripper against
+# Run `--selftest` to exercise the matchers and the source scanner against
 # known-good and known-bad samples.
 
 set -euo pipefail
@@ -31,48 +31,99 @@ ACCESS_RE='(\.|->)[[:space:]]*dll([^[:alnum:]_]|$)|offsetof\([^,]*,[[:space:]]*d
 # Only a direct include is rejected; naming the header in prose is fine.
 INCLUDE_RE='^[[:space:]]*#[[:space:]]*include[[:space:]]*[<"]iolinki/dll_ctx\.h[>"]'
 
-# Prose such as "do not name ctx->dll here" is not a violation, so strip C
-# comments before matching. Line numbers are preserved.
-strip_comments() {
-    awk '
-        BEGIN { inblock = 0 }
+# Scan C source the way the compiler sees it: comments are not code, and (for
+# the access rule) string contents are not identifiers either.
+#
+#   $1 = 1  keep string contents (the include path lives inside quotes)
+#   $1 = 0  blank string and character literals
+#
+# Line structure is preserved so reported line numbers stay correct.
+scan_source() {
+    awk -v keep_strings="${1:-1}" '
+        BEGIN { in_block = 0; in_string = 0; in_char = 0 }
         {
             out = ""
             n = length($0)
             i = 1
             while (i <= n) {
-                if (inblock) {
-                    j = index(substr($0, i), "*/")
-                    if (j == 0) {
-                        i = n + 1
-                        continue
+                c = substr($0, i, 1)
+                nxt = substr($0, i + 1, 1)
+                if (in_block) {
+                    if (c == "*" && nxt == "/") {
+                        in_block = 0
+                        i += 2
+                    } else {
+                        i++
                     }
-                    inblock = 0
-                    i = i + j + 1
                     continue
                 }
-                rest = substr($0, i)
-                open_at = index(rest, "/*")
-                line_at = index(rest, "//")
-                if ((line_at > 0) && ((open_at == 0) || (line_at < open_at))) {
-                    out = out substr(rest, 1, line_at - 1)
-                    i = n + 1
-                } else if (open_at == 0) {
-                    out = out rest
-                    i = n + 1
-                } else {
-                    out = out substr(rest, 1, open_at - 1)
-                    inblock = 1
-                    i = i + open_at + 1
+                if (in_string) {
+                    out = out ((keep_strings == 1) ? c : "")
+                    if (c == "\\") {
+                        out = out ((keep_strings == 1) ? nxt : "")
+                        i += 2
+                    } else {
+                        if (c == "\"") {
+                            in_string = 0
+                        }
+                        i++
+                    }
+                    continue
                 }
+                if (in_char) {
+                    out = out ((keep_strings == 1) ? c : "")
+                    if (c == "\\") {
+                        out = out ((keep_strings == 1) ? nxt : "")
+                        i += 2
+                    } else {
+                        if (c == "\047") {
+                            in_char = 0
+                        }
+                        i++
+                    }
+                    continue
+                }
+                if (c == "\"") {
+                    in_string = 1
+                    out = out c
+                    i++
+                    continue
+                }
+                if (c == "\047") {
+                    in_char = 1
+                    out = out c
+                    i++
+                    continue
+                }
+                if (c == "/" && nxt == "*") {
+                    in_block = 1
+                    i += 2
+                    continue
+                }
+                if (c == "/" && nxt == "/") {
+                    i = n + 1
+                    continue
+                }
+                out = out c
+                i++
             }
             print out
         }'
 }
 
+matches_access() {
+    local text="$1"
+    printf '%s\n' "$text" | grep -qE "$ACCESS_RE"
+}
+
+matches_include() {
+    local text="$1"
+    printf '%s\n' "$text" | grep -qE "$INCLUDE_RE"
+}
+
 selftest() {
     local rc=0
-    local sample
+    local sample scanned
 
     local bad_access=(
         'ctx.dll.main.pd_valid = true;'
@@ -82,6 +133,9 @@ selftest() {
         'size_t off = offsetof(iolink_device_ctx_t, dll);'
         '#define DLLP(p) (&(p)->dll)'
         'ctx->dll; /* trailing comment */'
+        'const char* u = "http://example.test"; (void) ctx->dll;'
+        'const char* open = "/*"; (void) ctx->dll;'
+        'const char* quote = "\""; (void) ctx->dll;'
     )
     local good_access=(
         'test_dll(&ctx)->pd_valid = true;'
@@ -95,6 +149,10 @@ selftest() {
         '/* multi
            ctx->dll
            line comment */'
+        'const char* s = "frame.dll.stats";'
+        'const char* u = "http://example.test";'
+        'const char* open = "/*";'
+        'char c = 0x27;'
     )
     local bad_include=(
         '#include "iolinki/dll_ctx.h"'
@@ -104,36 +162,35 @@ selftest() {
         '// see include/iolinki/dll_ctx.h'
         '/* layout lives in iolinki/dll_ctx.h */'
         '#include "dll_access.h"'
+        '// #include "iolinki/dll_ctx.h"'
+        '/* #include "iolinki/dll_ctx.h" */'
+        'const char* p = "iolinki/dll_ctx.h";'
     )
 
     for sample in "${bad_access[@]}"; do
-        local stripped
-        stripped="$(strip_comments <<< "$sample")"
-        if ! printf '%s\n' "$stripped" | grep -qE "$ACCESS_RE"; then
+        scanned="$(scan_source 0 <<< "$sample")"
+        if ! matches_access "$scanned"; then
             echo "SELFTEST FAIL: access rule misses: $sample" >&2
             rc=1
         fi
     done
     for sample in "${good_access[@]}"; do
-        local stripped
-        stripped="$(strip_comments <<< "$sample")"
-        if printf '%s\n' "$stripped" | grep -qE "$ACCESS_RE"; then
+        scanned="$(scan_source 0 <<< "$sample")"
+        if matches_access "$scanned"; then
             echo "SELFTEST FAIL: access rule false positive: $sample" >&2
             rc=1
         fi
     done
     for sample in "${bad_include[@]}"; do
-        local stripped
-        stripped="$(strip_comments <<< "$sample")"
-        if ! printf '%s\n' "$stripped" | grep -qE "$INCLUDE_RE"; then
+        scanned="$(scan_source 1 <<< "$sample")"
+        if ! matches_include "$scanned"; then
             echo "SELFTEST FAIL: include rule misses: $sample" >&2
             rc=1
         fi
     done
     for sample in "${good_include[@]}"; do
-        local stripped
-        stripped="$(strip_comments <<< "$sample")"
-        if printf '%s\n' "$stripped" | grep -qE "$INCLUDE_RE"; then
+        scanned="$(scan_source 1 <<< "$sample")"
+        if matches_include "$scanned"; then
             echo "SELFTEST FAIL: include rule false positive: $sample" >&2
             rc=1
         fi
@@ -163,25 +220,40 @@ fi
 
 failed=0
 
-while IFS= read -r file; do
-    [ -z "$file" ] && continue
-    [ "$file" = "$ACCESSOR" ] && continue
-    while IFS=: read -r line _; do
-        [ -z "$line" ] && continue
-        echo "FAIL: $file:$line includes iolinki/dll_ctx.h; use tests/dll_access.h" >&2
-        failed=1
-    done <<< "$(grep -nE "$INCLUDE_RE" "$file" 2>/dev/null || true)"
-done <<< "$(grep -rlE "$INCLUDE_RE" tests/ 2>/dev/null || true)"
+check_includes() {
+    local file scanned line
+    while IFS= read -r file; do
+        [ -z "$file" ] && continue
+        [ "$file" = "$ACCESSOR" ] && continue
+        # shellcheck disable=SC2218  # defined above; shellcheck 0.11 mis-tracks it
+        scanned="$(scan_source 1 < "$file")"
+        while IFS=: read -r line _; do
+            [ -z "$line" ] && continue
+            echo "FAIL: $file:$line includes iolinki/dll_ctx.h; use tests/dll_access.h" >&2
+            failed=1
+        done <<< "$(printf '%s\n' "$scanned" | grep -nE "$INCLUDE_RE" || true)"
+    done <<< "$(grep -rlE "$INCLUDE_RE" tests/ 2>/dev/null || true)"
+    return 0
+}
 
-while IFS= read -r file; do
-    [ -z "$file" ] && continue
-    [ "$file" = "$ACCESSOR" ] && continue
-    while IFS=: read -r line _; do
-        [ -z "$line" ] && continue
-        echo "FAIL: $file:$line accesses the device's DLL context directly" >&2
-        failed=1
-    done <<< "$(stripped="$(strip_comments < "$file")"; printf '%s\\n' "$stripped" | grep -nE "$ACCESS_RE" || true)"
-done <<< "$(grep -rlE "$ACCESS_RE" tests/ 2>/dev/null || true)"
+check_access() {
+    local file scanned line
+    while IFS= read -r file; do
+        [ -z "$file" ] && continue
+        [ "$file" = "$ACCESSOR" ] && continue
+        # shellcheck disable=SC2218  # defined above; shellcheck 0.11 mis-tracks it
+        scanned="$(scan_source 0 < "$file")"
+        while IFS=: read -r line _; do
+            [ -z "$line" ] && continue
+            echo "FAIL: $file:$line accesses the device's DLL context directly" >&2
+            failed=1
+        done <<< "$(printf '%s\n' "$scanned" | grep -nE "$ACCESS_RE" || true)"
+    done <<< "$(grep -rlE "$ACCESS_RE" tests/ 2>/dev/null || true)"
+    return 0
+}
+
+check_includes
+check_access
 
 if [ "$failed" -eq 0 ]; then
     echo "white-box access: OK (DLL layout reached only through tests/dll_access.h)"
