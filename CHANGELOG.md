@@ -11,11 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/conformance_traceability.csv`: it still pointed at renamed tests and
   no tool validated it; `tests/conformance_audit.csv` is the single matrix.
 
+### Removed (unused root script)
+- `verify_events.py` at the repository root: an unreferenced variant of
+  `tools/virtual_master/verify_events.py` that could not import its own module
+  (`ModuleNotFoundError: virtual_master.master`). The copy under `tools/`
+  imports and runs.
+
 ### Changed (build trees)
-- Every build goes below `build/` (`build/quality`, `build/matrix`,
-  `build/coverage`, `build/wcet`, `build/size`, `build/docker`, `build/bare`),
-  so the repository root stays clean and `tools/clean_builds.sh` removes all of
-  it in one step. The `IOLINKI_*_DIR` overrides still work.
+- Every build goes below `build/`, one subdirectory per purpose
+  (`build/quality`, `build/matrix`, `build/coverage`, `build/wcet`,
+  `build/size`, `build/linux`, `build/docker`, ...), so the repository root
+  stays clean and `tools/clean_builds.sh` removes all of it in one step. The
+  `IOLINKI_*_DIR` overrides still work.
 - `tools/check_test_gates.sh` rejects a group teardown that relies on a cmocka
   assertion (cmocka 2.x still exits 0 for those, so such a gate can never fail)
   and a binary that includes the shared PHY harness without wiring

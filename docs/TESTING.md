@@ -82,10 +82,10 @@ the test always agree, and the configure log prints the effective mode.
 A single FRAME row locally:
 
 ```bash
-cmake -B build_frame -DIOLINK_PLATFORM=LINUX -DIOLINK_TEST_TRANSPORT=FRAME \
+cmake -B build/frame -DIOLINK_PLATFORM=LINUX -DIOLINK_TEST_TRANSPORT=FRAME \
       -DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME
-cmake --build build_frame
-(cd build_frame && ctest)
+cmake --build build/frame
+ctest --test-dir build/frame
 ```
 
 Coverage sees both transports the same way: `tools/coverage.sh --transport both`
@@ -169,6 +169,8 @@ Every build goes below `build/`, one subdirectory per purpose:
 | `build/matrix`, `build/diff` | `build_matrix.sh`, `diff_matrix.sh` |
 | `build/coverage` | `coverage.sh` |
 | `build/wcet`, `build/size` | `wcet_run.sh`, `size_matrix.py` |
+| `build/isr_latency` | `tools/isr_latency/run_isolated.sh` |
+| `build/linux`, `build/baremetal` | `test_all.sh` |
 | `build/docker`, `build/bare` | `.docker_test_entrypoint.sh` |
 
 `build/` is ignored by git, so the repository root stays clean and one command

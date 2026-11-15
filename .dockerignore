@@ -1,7 +1,5 @@
 build/
-build_linux/
-build_baremetal/
-build_zephyr/
+build_*/
 .git/
 .venv/
 __pycache__/

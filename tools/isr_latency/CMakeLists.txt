@@ -6,9 +6,9 @@
 # 测量的是主机墙钟时延，不是目标周期：绝对值跨机器无意义，只做同机、
 # 同核心、同构建的相对比较。目标周期上界用目标端 DWT（见 README.md）。
 #
-# 用法：cmake -S tools/isr_latency -B build_isr_latency
-#       cmake --build build_isr_latency --parallel
-#       ./build_isr_latency/isr_latency --json tools/isr_latency_baseline.json
+# 用法：cmake -S tools/isr_latency -B build/isr_latency
+#       cmake --build build/isr_latency --parallel
+#       ./build/isr_latency/isr_latency --json tools/isr_latency_baseline.json
 
 cmake_minimum_required(VERSION 3.16)
 project(iolinki_isr_latency LANGUAGES C)

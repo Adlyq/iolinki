@@ -86,12 +86,12 @@ jobs:
           sudo apt-get install -y cmake build-essential libcmocka-dev
       - name: Configure Release with strict warnings
         run: |
-          cmake -B build_release -DCMAKE_BUILD_TYPE=Release \
+          cmake -B build/release -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_FLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
       - name: Build
-        run: cmake --build build_release --parallel "$(nproc)"
+        run: cmake --build build/release --parallel "$(nproc)"
       - name: Test
-        run: ctest --test-dir build_release --output-on-failure
+        run: ctest --test-dir build/release --output-on-failure
 
   # Lint the maintained CI/test scripts. Keep this list in sync with the
   # shellcheck step in check_quality.sh.

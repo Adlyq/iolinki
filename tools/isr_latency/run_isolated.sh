@@ -21,7 +21,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-TOOL="$ROOT/build_isr_latency/isr_latency"
+TOOL="$ROOT/build/isr_latency/isr_latency"
 BASELINE="$ROOT/tools/isr_latency_baseline.json"
 CORE=0
 FREQ_KHZ="${FREQ_KHZ:-2500000}"
@@ -62,8 +62,8 @@ while [ $# -gt 0 ]; do
 done
 
 if [ ! -x "$TOOL" ]; then
-    echo "harness not built: cmake -S tools/isr_latency -B build_isr_latency" \
-        "&& cmake --build build_isr_latency" >&2
+    echo "harness not built: cmake -S tools/isr_latency -B build/isr_latency" \
+        "&& cmake --build build/isr_latency" >&2
     exit 1
 fi
 if ! sudo -v; then

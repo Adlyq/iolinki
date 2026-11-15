@@ -71,8 +71,8 @@ min）。
 ## 运行
 
 ```bash
-cmake -S tools/isr_latency -B build_isr_latency
-cmake --build build_isr_latency --parallel
+cmake -S tools/isr_latency -B build/isr_latency
+cmake --build build/isr_latency --parallel
 
 # 推荐：降低宿主干扰后取基线（需要 sudo；退出时自动恢复系统设置）
 ./tools/isr_latency/run_isolated.sh
@@ -81,11 +81,11 @@ cmake --build build_isr_latency --parallel
 ./tools/isr_latency/run_isolated.sh --check
 
 # 不降低干扰的裸跑（仅用于快速自检）
-./build_isr_latency/isr_latency --json tools/isr_latency_baseline.json
-./build_isr_latency/isr_latency --check
+./build/isr_latency/isr_latency --json tools/isr_latency_baseline.json
+./build/isr_latency/isr_latency --check
 
 # 只列场景
-./build_isr_latency/isr_latency --list
+./build/isr_latency/isr_latency --list
 ```
 
 基线 JSON（`tools/isr_latency_baseline.json`）是机器相关的本地产物，已在

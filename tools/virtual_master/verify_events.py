@@ -12,7 +12,7 @@ def verify_task3():
     master = VirtualMaster()
     device_tty = master.get_device_tty()
     demo_bin = os.environ.get(
-        "IOLINK_DEVICE_PATH", "./build_linux/examples/host_demo/host_demo"
+        "IOLINK_DEVICE_PATH", "./build/linux/examples/host_demo/host_demo"
     )
 
     print("=== Task 3 Verification: Error Event Reporting ===")

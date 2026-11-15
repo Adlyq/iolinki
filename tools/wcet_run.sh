@@ -28,7 +28,7 @@ usage() {
   （无参数）      构建 + 运行，打印各场景指标表
   --check        与 tools/wcet_baseline.json 比较；任一指标增长即失败
   --update       用本次实测结果覆盖基线（显式操作）
-  --build-dir    指定构建目录（默认 build_wcet/）
+  --build-dir    指定构建目录（默认 build/wcet/）
 
 指标是路径长度代理（调用次数），不是 CPU 周期 WCET；
 周期上界见 tools/wcet/README.md。
