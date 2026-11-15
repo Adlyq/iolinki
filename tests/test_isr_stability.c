@@ -29,7 +29,6 @@
 static uint64_t now_us;
 static unsigned tx_octets;
 static unsigned tx_frames;
-static uint8_t tx_active;
 /* 交付给用例的应答数与用例已经查看过的应答数：group teardown 要求相等。 */
 static uint64_t tx_delivered;
 static uint64_t tx_asserted;
@@ -83,6 +82,7 @@ static int tx_frame(void* user, const uint8_t* data, size_t len)
     return 0;
 }
 #else
+static uint8_t tx_active; /* 只在 BYTE 传输下有字节流式发送 */
 static int tx_octet(void* user, uint8_t data)
 {
     (void) user;
