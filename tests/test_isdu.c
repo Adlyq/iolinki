@@ -543,16 +543,19 @@ static void test_isdu_pdin_descriptor_read(void** state)
     assert_int_equal(byte, IOLINK_ISDU_ERROR_WRITE_PROTECTED);
 }
 
-#if IOLINK_DS_LEGACY_IMAGE_SUB0
-static void test_isdu_data_storage_round_trip(void** state)
+/* 旧的整镜像往返由运行时能力位 IOLINK_CAP_DS_LEGACY_SUB0 控制，因此在
+ * 每个构建里都能覆盖：绑定该位后 sub0 是整镜像，未绑定时是记录（只读）。 */
+static void test_isdu_data_storage_image_round_trip(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
     iolink_ds_ctx_t ds;
+    const iolink_caps_t caps_with_legacy = ~(iolink_caps_t) 0U;
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
+    iolink_isdu_bind_caps(&ctx, &caps_with_legacy);
     iolink_ds_init(&ds);
     iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
     ctx.ds_ctx = &ds;
@@ -582,6 +585,7 @@ static void test_isdu_data_storage_round_trip(void** state)
     /* 下载（写 0x0003）：主站恢复已备份的镜像。 */
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
+    iolink_isdu_bind_caps(&ctx, &caps_with_legacy);
     ctx.ds_ctx = &ds;
     assert_int_equal(
         isdu_send_write_request(&ctx, IOLINK_IDX_DATA_STORAGE, 0x00, image, (uint8_t) img_len), 1);
@@ -594,7 +598,6 @@ static void test_isdu_data_storage_round_trip(void** state)
     assert_int_equal(restored.len, strlen(app));
     assert_memory_equal(buf, app, strlen(app));
 }
-#endif
 
 /* Table B.10：DataStorageIndex 的子索引 02-05 是只读访问器。 */
 static void test_isdu_data_storage_subindices(void** state)
@@ -1644,10 +1647,8 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_direct_parameters_page2, test_setup,
                                         test_teardown),
-#if IOLINK_DS_LEGACY_IMAGE_SUB0
-        cmocka_unit_test_setup_teardown(test_isdu_data_storage_round_trip, test_setup,
+        cmocka_unit_test_setup_teardown(test_isdu_data_storage_image_round_trip, test_setup,
                                         test_teardown),
-#endif
         cmocka_unit_test_setup_teardown(test_isdu_data_storage_subindices, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_ds_command_sequence, test_setup, test_teardown),
