@@ -107,6 +107,14 @@ scan_source() {
                 out = out c
                 i++
             }
+            # A C string or character literal cannot span a raw newline; a
+            # stray apostrophe in a preprocessor message must not blank the
+            # rest of the file. Only a backslash continuation keeps the
+            # state.
+            if ((n == 0) || (substr($0, n, 1) != "\\")) {
+                in_string = 0
+                in_char = 0
+            }
             print out
         }'
 }
@@ -136,6 +144,8 @@ selftest() {
         'const char* u = "http://example.test"; (void) ctx->dll;'
         'const char* open = "/*"; (void) ctx->dll;'
         'const char* quote = "\""; (void) ctx->dll;'
+        '#error don\047t build
+         void f(iolink_device_ctx_t* c) { (void) c->dll; }'
     )
     local good_access=(
         'test_dll(&ctx)->pd_valid = true;'
@@ -153,6 +163,9 @@ selftest() {
         'const char* u = "http://example.test";'
         'const char* open = "/*";'
         'char c = 0x27;'
+        '#error don\047t build here'
+        'const char* multi = "line one \\
+ line two";'
     )
     local bad_include=(
         '#include "iolinki/dll_ctx.h"'
@@ -168,28 +181,28 @@ selftest() {
     )
 
     for sample in "${bad_access[@]}"; do
-        scanned="$(scan_source 0 <<< "$sample")"
+        scanned="$(scan_source 0 <<< "$sample")" || { echo "SELFTEST FAIL: scanner error" >&2; return 1; }
         if ! matches_access "$scanned"; then
             echo "SELFTEST FAIL: access rule misses: $sample" >&2
             rc=1
         fi
     done
     for sample in "${good_access[@]}"; do
-        scanned="$(scan_source 0 <<< "$sample")"
+        scanned="$(scan_source 0 <<< "$sample")" || { echo "SELFTEST FAIL: scanner error" >&2; return 1; }
         if matches_access "$scanned"; then
             echo "SELFTEST FAIL: access rule false positive: $sample" >&2
             rc=1
         fi
     done
     for sample in "${bad_include[@]}"; do
-        scanned="$(scan_source 1 <<< "$sample")"
+        scanned="$(scan_source 1 <<< "$sample")" || { echo "SELFTEST FAIL: scanner error" >&2; return 1; }
         if ! matches_include "$scanned"; then
             echo "SELFTEST FAIL: include rule misses: $sample" >&2
             rc=1
         fi
     done
     for sample in "${good_include[@]}"; do
-        scanned="$(scan_source 1 <<< "$sample")"
+        scanned="$(scan_source 1 <<< "$sample")" || { echo "SELFTEST FAIL: scanner error" >&2; return 1; }
         if matches_include "$scanned"; then
             echo "SELFTEST FAIL: include rule false positive: $sample" >&2
             rc=1
@@ -226,7 +239,8 @@ check_includes() {
         [ -z "$file" ] && continue
         [ "$file" = "$ACCESSOR" ] && continue
         # shellcheck disable=SC2218  # defined above; shellcheck 0.11 mis-tracks it
-        scanned="$(scan_source 1 < "$file")"
+        scanned="$(scan_source 1 < "$file")" ||
+            { echo "FAIL: cannot scan $file" >&2; exit 1; }
         while IFS=: read -r line _; do
             [ -z "$line" ] && continue
             echo "FAIL: $file:$line includes iolinki/dll_ctx.h; use tests/dll_access.h" >&2
@@ -242,7 +256,8 @@ check_access() {
         [ -z "$file" ] && continue
         [ "$file" = "$ACCESSOR" ] && continue
         # shellcheck disable=SC2218  # defined above; shellcheck 0.11 mis-tracks it
-        scanned="$(scan_source 0 < "$file")"
+        scanned="$(scan_source 0 < "$file")" ||
+            { echo "FAIL: cannot scan $file" >&2; exit 1; }
         while IFS=: read -r line _; do
             [ -z "$line" ] && continue
             echo "FAIL: $file:$line accesses the device's DLL context directly" >&2
