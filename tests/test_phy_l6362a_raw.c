@@ -760,9 +760,10 @@ static void test_platform_hooks(void** state)
     iolink_critical_exit();
     assert_int_equal(mock_primask, 1U);
 
-    /* 不平衡的退出不得下溢，其后的配对仍保存并恢复。 */
+    /* 不平衡的退出不得下溢：它不写 PRIMASK，其后的配对仍保存并恢复。 */
+    mock_primask = 0U;
     iolink_critical_exit();
-    assert_int_equal(mock_primask, 1U);
+    assert_int_equal(mock_primask, 0U);
     mock_primask = 0U;
     iolink_critical_enter();
     mock_primask = 1U;

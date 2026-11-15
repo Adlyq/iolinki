@@ -269,8 +269,10 @@ static void test_t_pd_window_drops_frames(void** state)
     iolink_ring_publish(&ctx.main.shared.isr_frame_ring);
 
     ctx.main.pd_valid = false;
+    const uint32_t framing_before = ctx.main.shared.framing_errors;
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.t_pd_violations, 1U);
+    assert_int_equal(ctx.main.shared.framing_errors, framing_before);
     assert_int_equal(ctx.main.shared.state, IOLINK_DLL_STATE_OPERATE);
     assert_true(ctx.main.pd_valid);
     assert_int_equal(ctx.main.last_valid_frame_ms, (uint32_t) (g_now / 1000U));
@@ -325,6 +327,13 @@ static void test_idle_deadline_boundary(void** state)
     g_now += 1000U;
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.idle_timeouts, 1U);
+    assert_false(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
+
+    /* 更长的静默（2 s）同样必须判为过期；把截止时间算成"未来"的实现
+     * 会在这里漏掉。 */
+    ctx.main.shared.last_activity_ms = (uint32_t) (g_now / 1000U) - 2000U;
+    iolink_dll_process(&ctx.main);
+    assert_int_equal(ctx.main.idle_timeouts, 2U);
     assert_false(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
 }
 

@@ -162,7 +162,7 @@ int iolink_platform_critical_sections_ready(void);
  * 情况下运行。状态迁移不需要临界区：状态是一次对齐
  * 存储，其应用通知是基于电平的。
  *
- * `IOLINK_STATS_MODE=SPLIT` 消除了最后一处计数器竞争（两个
+ * `IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 消除了最后一处计数器竞争（两个
  * 上下文递增同一字段），但不改变上述要求。
  */
 #define IOLINK_NEED_CRITICAL (IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_ISR)
