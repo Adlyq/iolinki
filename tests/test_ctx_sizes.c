@@ -73,16 +73,16 @@ IOLINK_STATIC_ASSERT(sizeof(iolink_workspace_t) == sizeof(iolink_isdu_scratch_t)
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
 #if IOLINK_STATS_MODE == IOLINK_STATS_SHARED
 #if IOLINK_PD_IN_BUFFERS == 3U
-IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4696u, "dll ctx (STATS_SHARED, FRAME) changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4888u,
+IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4704u, "dll ctx (STATS_SHARED, FRAME) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4896u,
                      "device ctx (STATS_SHARED, FRAME) changed");
 #else
-IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4704u, "dll ctx (STATS_SHARED) changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4896u, "device ctx (STATS_SHARED) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4712u, "dll ctx (STATS_SHARED) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4904u, "device ctx (STATS_SHARED) changed");
 #endif
 #else
-IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4720u, "dll ctx (STATS_SPLIT) changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4912u, "device ctx (STATS_SPLIT) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4728u, "dll ctx (STATS_SPLIT) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4920u, "device ctx (STATS_SPLIT) changed");
 #endif
 IOLINK_STATIC_ASSERT(sizeof(iolink_isdu_ctx_t) == 1344u, "isdu ctx changed");
 IOLINK_STATIC_ASSERT(sizeof(iolink_ds_ctx_t) == 360u, "ds ctx changed");

@@ -276,7 +276,9 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 `isr_mailbox_drops`（邮箱满）、`isr_od_overruns`（已收齐请求被新 START 覆盖）、
 `t_pd_discards`（t_PD 窗口内丢弃的邮箱帧）、`reply_plan_overflows`（计划槽位耗尽）。
 `isr_plan_misses` 持续增长说明计划表缺少某种合法帧形状（或计划表已失效）；`isr_od_overruns`
-持续增长说明主泵长时间未接管已收齐的请求。
+持续增长说明主泵长时间未接管已收齐的请求。`isr_frames_answered`（ISR 已应答的帧）与
+`isr_frames_handoff`（成功交给主泵的帧）给出每帧终局的数量，可用来核对"应答 / 交接 / 丢弃"
+三者的比例。
 
 `iolink_device_init()` 使用 `config.workspace`（可为 NULL，表示使用上下文内嵌的
 ISDU/DS scratch）；把 scratch 放进 DTCM 或外部 RAM 时在配置里指向工作区即可，工作区

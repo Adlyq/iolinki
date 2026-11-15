@@ -650,6 +650,13 @@ static int test_eager_reject(void)
     if (iolink_ring_count(&dll.main.shared.isr_frame_ring) != 1U) {
         return 3; /* 已发布，以便主泵校验或回退 */
     }
+    /* 坏帧不被应答，但必须交给主泵：answered 不变，handoff 加一。 */
+    if (dll.main.shared.isr_frames_answered != 0U) {
+        return 4;
+    }
+    if (dll.main.shared.isr_frames_handoff != 1U) {
+        return 5;
+    }
     return 0;
 }
 
@@ -683,6 +690,13 @@ static int test_valid_eager(void)
     /* 过程数据 READ 应答：OD 占位 + CKS。 */
     if (tx_observed_len() != 2U) {
         return 3;
+    }
+    /* 该帧既由 ISR 应答，也要进邮箱让主泵做副作用：两个计数各加一。 */
+    if (dll.main.shared.isr_frames_answered != 1U) {
+        return 4;
+    }
+    if (dll.main.shared.isr_frames_handoff != 1U) {
+        return 5;
     }
     return 0;
 }
@@ -752,6 +766,13 @@ static int test_isdu_write_consumed_by_isr(void)
     }
     if (dll.main.shared.isdu.req_total != 4U) {
         return 2;
+    }
+    /* 四个写段都由 ISR 应答；字节已由 ISR 暂存，但帧仍要交给主泵执行。 */
+    if (dll.main.shared.isr_frames_answered != 4U) {
+        return 7;
+    }
+    if (dll.main.shared.isr_frames_handoff != 4U) {
+        return 8;
     }
     /* 对只读索引的写会产生一个已组帧的否定响应。 */
     if ((dll.main.shared.isdu.state != ISDU_STATE_RESPONSE_READY) ||

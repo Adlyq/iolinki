@@ -209,6 +209,7 @@ static bool dll_isr_publish_frame(iolink_dll_main_t* ctx, const uint8_t* frame, 
     record->eager = eager;
     (void) memcpy(record->data, frame, len);
     iolink_ring_publish(&ctx->shared.isr_frame_ring); /* 最后发布 */
+    ctx->shared.isr_frames_handoff++;
     return true;
 }
 
@@ -829,6 +830,7 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
              * 序号作为发布边沿（单字对齐存储，无撕裂读）。 */
             ctx->shared.isr_consumed_us = (uint32_t) dll_time_us(ctx);
             ctx->shared.isr_consumed_seq = (uint8_t) (ctx->shared.isr_consumed_seq + 1U);
+            ctx->shared.isr_frames_answered++;
             return;
         }
     }
@@ -856,6 +858,7 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
     }
     /* 计划已应答但帧仍需主泵副作用（例如 DPP1 写）：邮箱副本携带
      * eager=1，主泵不得重发应答。 */
+    ctx->shared.isr_frames_answered++;
     (void) dll_isr_publish_frame(ctx, frame, len, 1U);
 }
 

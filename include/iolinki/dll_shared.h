@@ -154,6 +154,10 @@ typedef struct iolink_dll_shared
 
     uint32_t isr_plan_misses; /**< ISR 未命中应答计划而丢弃的合法帧 */
 
+    uint32_t isr_frames_answered; /**< ISR 已生成应答的帧（含仍需主泵副作用的帧） */
+
+    uint32_t isr_frames_handoff; /**< 成功投递邮箱交给主泵的帧 */
+
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
     iolink_dll_isr_stats_t isr_stat; /**< ISR 自有的计数器组（SPLIT 模式） */
 #endif

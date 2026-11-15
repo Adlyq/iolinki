@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/conformance_traceability.csv`: it still pointed at renamed tests and
   no tool validated it; `tests/conformance_audit.csv` is the single matrix.
 
+### Added (per-frame fate counters)
+- `isr_frames_answered` and `isr_frames_handoff` in `iolink_dll_stats_t` record
+  what the data ISR did with each completed frame (replied / handed to the main
+  pump). Together with `isr_plan_misses`, `isr_mailbox_drops` and the framing
+  counters, every frame's fate is now observable instead of inferred. The two
+  counters cost 8 bytes of context RAM in every configuration.
+
 ### Added (trimmed-build behaviour contract)
 - A trimmed build (`IOLINK_FEATURE_DATA_STORAGE=OFF` or
   `IOLINK_FEATURE_EVENTS=OFF`) no longer proves only that it compiles:
