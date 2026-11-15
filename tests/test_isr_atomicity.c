@@ -21,7 +21,7 @@
 #include <string.h>
 
 #include "crc_oracle.h"
-#include "iolinki/dll_ctx.h"
+#include "dll_access.h"
 #include "iolinki/iolink.h"
 #include "iolinki/port.h"
 #include "iolinki/protocol.h"

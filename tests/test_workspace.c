@@ -22,6 +22,7 @@
 #include "iolinki/device.h"
 #include "iolinki/isdu.h"
 #include "iolinki/workspace.h"
+#include "dll_access.h"
 #include "test_helpers.h"
 
 static iolink_test_env_t g_env;
@@ -59,7 +60,7 @@ static void test_device_binds_external_workspace(void** state)
     assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), IOLINK_DEVICE_INIT_OK);
     assert_ptr_equal(iolink_device_get_workspace(&dev.ctx), &ws);
 
-    const iolink_isdu_ctx_t* isdu = &dev.ctx.dll.main.shared.isdu;
+    const iolink_isdu_ctx_t* isdu = test_dll_isdu(&dev.ctx);
     assert_ptr_equal(isdu->buffer, ws.isdu.payload);
     assert_ptr_equal(isdu->response_buf, ws.isdu.response);
     assert_ptr_equal(isdu->req_buf, ws.isdu.request);
@@ -86,7 +87,7 @@ static void test_device_falls_back_to_embedded_scratch(void** state)
 #if IOLINK_WORKSPACE_EMBEDDED
     assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), IOLINK_DEVICE_INIT_OK);
     assert_null(iolink_device_get_workspace(&dev.ctx));
-    const iolink_isdu_ctx_t* isdu = &dev.ctx.dll.main.shared.isdu;
+    const iolink_isdu_ctx_t* isdu = test_dll_isdu(&dev.ctx);
     assert_ptr_equal(isdu->buffer, isdu->scratch.payload);
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&dev.ctx);

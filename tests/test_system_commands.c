@@ -21,7 +21,7 @@
 #include <string.h>
 
 #include "iolinki/isdu.h"
-#include "iolinki/dll_ctx.h"
+#include "dll_access.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/events.h"
 #include "iolinki/protocol.h"
@@ -200,69 +200,69 @@ static void test_reset_commands_clear_diagnostics(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0316");
     (void) state;
     iolink_isdu_ctx_t ctx;
-    iolink_dll_ctx_t dll;
+    iolink_dll_main_t dll;
 
     const uint8_t reset_commands[] = {IOLINK_CMD_DEVICE_RESET, IOLINK_CMD_RESTORE_FACTORY_SETTINGS,
                                       IOLINK_CMD_BACK_TO_BOX};
     for (size_t i = 0U; i < (sizeof(reset_commands) / sizeof(reset_commands[0])); i++) {
         (void) memset(&dll, 0, sizeof(dll));
-        iolink_events_init(&dll.main.shared.events);
-        dll.main.crc_errors = 3U;
-        dll.main.shared.timeout_errors = 2U;
-        dll.main.shared.framing_errors = 1U;
-        dll.main.timing_errors = 4U;
-        iolink_event_trigger(&dll.main.shared.events, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+        iolink_events_init(&dll.shared.events);
+        dll.crc_errors = 3U;
+        dll.shared.timeout_errors = 2U;
+        dll.shared.framing_errors = 1U;
+        dll.timing_errors = 4U;
+        iolink_event_trigger(&dll.shared.events, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
 
         iolink_isdu_init(&ctx);
         test_isdu_bind_params(&ctx, &g_test_env);
-        ctx.dll_ctx = &dll.main;
-        ctx.event_ctx = &dll.main.shared.events;
+        ctx.dll_ctx = &dll;
+        ctx.event_ctx = &dll.shared.events;
         assert_int_equal(send_system_command(&ctx, reset_commands[i]), 1);
         iolink_isdu_process(&ctx);
 
-        assert_int_equal(dll.main.crc_errors, 0U);
-        assert_int_equal(dll.main.shared.timeout_errors, 0U);
-        assert_int_equal(dll.main.shared.framing_errors, 0U);
-        assert_int_equal(dll.main.timing_errors, 0U);
+        assert_int_equal(dll.crc_errors, 0U);
+        assert_int_equal(dll.shared.timeout_errors, 0U);
+        assert_int_equal(dll.shared.framing_errors, 0U);
+        assert_int_equal(dll.timing_errors, 0U);
         if (reset_commands[i] == IOLINK_CMD_RESTORE_FACTORY_SETTINGS) {
             /* Table 101 的 "Clear"：已发布的 appear 保持不变，withdraw
                对立即被追加，DeviceStatus 随之下降。 */
             iolink_event_t event;
-            assert_int_equal(dll.main.shared.events.count, 2U);
-            assert_true(iolink_events_flag(&dll.main.shared.events));
-            assert_true(iolink_events_pop(&dll.main.shared.events, &event));
+            assert_int_equal(dll.shared.events.count, 2U);
+            assert_true(iolink_events_flag(&dll.shared.events));
+            assert_true(iolink_events_pop(&dll.shared.events, &event));
             assert_int_equal(event.code, 0x1000U);
             assert_int_equal(event.mode, IOLINK_EVENT_MODE_APPEARS);
-            assert_true(iolink_events_pop(&dll.main.shared.events, &event));
+            assert_true(iolink_events_pop(&dll.shared.events, &event));
             assert_int_equal(event.code, 0x1000U);
             assert_int_equal(event.mode, IOLINK_EVENT_MODE_DISAPPEARS);
-            assert_int_equal(iolink_diag_device_status(&dll.main.shared.events), 0U);
-            assert_int_equal(dll.main.shared.events.count, 0U);
-            assert_false(iolink_events_flag(&dll.main.shared.events));
+            assert_int_equal(iolink_diag_device_status(&dll.shared.events), 0U);
+            assert_int_equal(dll.shared.events.count, 0U);
+            assert_false(iolink_events_flag(&dll.shared.events));
         }
         else {
-            assert_int_equal(dll.main.shared.events.count, 0U);
-            assert_false(iolink_events_flag(&dll.main.shared.events));
-            assert_int_equal(iolink_diag_device_status(&dll.main.shared.events), 0U);
+            assert_int_equal(dll.shared.events.count, 0U);
+            assert_false(iolink_events_flag(&dll.shared.events));
+            assert_int_equal(iolink_diag_device_status(&dll.shared.events), 0U);
         }
     }
 
     /* Application reset (0x81)：Table 101 为 "No"。 */
     (void) memset(&dll, 0, sizeof(dll));
-    iolink_events_init(&dll.main.shared.events);
-    dll.main.crc_errors = 5U;
-    iolink_event_trigger(&dll.main.shared.events, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_events_init(&dll.shared.events);
+    dll.crc_errors = 5U;
+    iolink_event_trigger(&dll.shared.events, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
 
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = &dll.main;
-    ctx.event_ctx = &dll.main.shared.events;
+    ctx.dll_ctx = &dll;
+    ctx.event_ctx = &dll.shared.events;
     assert_int_equal(send_system_command(&ctx, IOLINK_CMD_APPLICATION_RESET), 1);
     iolink_isdu_process(&ctx);
 
-    assert_int_equal(dll.main.crc_errors, 5U);
+    assert_int_equal(dll.crc_errors, 5U);
     iolink_event_t ev;
-    assert_true(iolink_events_peek(&dll.main.shared.events, &ev));
+    assert_true(iolink_events_peek(&dll.shared.events, &ev));
     assert_int_equal(ev.code, 0x2000U); /* 原有诊断仍然保留 */
 }
 

@@ -26,7 +26,7 @@
 
 #include "iolinki/data_storage.h"
 #include "iolinki/device_info.h"
-#include "iolinki/dll_ctx.h"
+#include "dll_access.h"
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
 #include "iolinki/protocol.h"

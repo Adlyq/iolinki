@@ -27,6 +27,7 @@
 #include "iolinki/isdu.h"
 #include "iolinki/od.h"
 #include "iolinki/protocol.h"
+#include "dll_access.h"
 #include "switching_sensor.h"
 #include "test_helpers.h"
 
@@ -542,16 +543,16 @@ static void test_od_index_domain_routing(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    iolink_dll_ctx_t dll;
+    iolink_device_ctx_t dev;
     iolink_od_app_t app = {0};
     uint8_t buf[16] = {0U};
 
-    (void) memset(&dll, 0, sizeof(dll));
+    (void) memset(&dev, 0, sizeof(dev));
     test_env_init(&g_od_env, NULL);
     test_env_reset_params(&g_od_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_od_env);
-    ctx.dll_ctx = &dll.main;
+    ctx.dll_ctx = test_dll(&dev);
 
     app.entries = k_shadow_entries;
     app.count = sizeof(k_shadow_entries) / sizeof(k_shadow_entries[0]);
@@ -578,20 +579,20 @@ static void test_od_device_specific_fallback(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    iolink_dll_ctx_t dll;
+    iolink_device_ctx_t dev;
     uint8_t buf[16] = {0U};
 
-    (void) memset(&dll, 0, sizeof(dll));
-    dll.main.crc_errors = 0x11223344U;
-    dll.main.shared.timeout_errors = 0xAABBCCDDU;
-    dll.main.shared.framing_errors = 0x01020304U;
-    dll.main.timing_errors = 0x05060708U;
+    (void) memset(&dev, 0, sizeof(dev));
+    test_dll(&dev)->crc_errors = 0x11223344U;
+    test_dll_shared(&dev)->timeout_errors = 0xAABBCCDDU;
+    test_dll_shared(&dev)->framing_errors = 0x01020304U;
+    test_dll(&dev)->timing_errors = 0x05060708U;
 
     test_env_init(&g_od_env, NULL);
     test_env_reset_params(&g_od_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_od_env);
-    ctx.dll_ctx = &dll.main;
+    ctx.dll_ctx = test_dll(&dev);
 
     /* 没有应用表时 0x0040 回落到标准表里的内建错误统计对象。 */
     assert_int_equal(od_read(&ctx, IOLINK_IDX_ERROR_STATS, 0U, buf, sizeof(buf)), 16);

@@ -23,7 +23,7 @@
 #include "iolinki/events.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/protocol.h"
-#include "iolinki/dll_ctx.h"
+#include "dll_access.h"
 #include "iolinki/device_info.h"
 #include "test_helpers.h"
 
@@ -169,18 +169,18 @@ static void test_isdu_error_stats_read(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    iolink_dll_ctx_t dll_ctx;
+    iolink_dll_main_t dll_ctx;
     (void) memset(&dll_ctx, 0, sizeof(dll_ctx));
-    dll_ctx.main.crc_errors = 0x11223344U;
-    dll_ctx.main.shared.timeout_errors = 0xAABBCCDDU;
-    dll_ctx.main.shared.framing_errors = 0x01020304U;
-    dll_ctx.main.timing_errors = 0x05060708U;
+    dll_ctx.crc_errors = 0x11223344U;
+    dll_ctx.shared.timeout_errors = 0xAABBCCDDU;
+    dll_ctx.shared.framing_errors = 0x01020304U;
+    dll_ctx.timing_errors = 0x05060708U;
 
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = &dll_ctx.main;
+    ctx.dll_ctx = &dll_ctx;
 
     /* 读取错误统计（索引 0x0040 处的厂商对象） */
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_ERROR_STATS, 0x00), 1);
@@ -474,7 +474,7 @@ static unsigned pd_descriptor_octets(uint8_t code)
 }
 
 /* 读取 Direct Parameter 第 1 页的一个八位组（地址 0x00..0x0F）。 */
-static uint8_t read_dpp1_octet(iolink_dll_ctx_t* dll, uint8_t addr)
+static uint8_t read_dpp1_octet(iolink_dll_main_t* dll, uint8_t addr)
 {
     iolink_isdu_ctx_t page_ctx;
     iolink_isdu_init(&page_ctx);
@@ -494,7 +494,7 @@ static void test_isdu_pdin_descriptor_read(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0132");
     (void) state;
     iolink_isdu_ctx_t ctx;
-    iolink_dll_ctx_t dll = {0};
+    iolink_dll_main_t dll = {0};
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
@@ -502,12 +502,12 @@ static void test_isdu_pdin_descriptor_read(void** state)
 
     /* 连接一个运行时 PD-in 长度为 3 的 DLL 上下文（公开的 setter
        会更新 pd_in_len_current，这正是 0x0028 必须提供的内容）。 */
-    assert_int_equal(iolink_dll_set_pd_length(&dll.main, 3, 0), 0);
-    dll.main.pd_valid = true;
-    dll.main.shared.pd_in[0][dll.main.shared.od_width + 0U] = 0x11U;
-    dll.main.shared.pd_in[0][dll.main.shared.od_width + 1U] = 0x22U;
-    dll.main.shared.pd_in[0][dll.main.shared.od_width + 2U] = 0x33U;
-    ctx.dll_ctx = &dll.main;
+    assert_int_equal(iolink_dll_set_pd_length(&dll, 3, 0), 0);
+    dll.pd_valid = true;
+    dll.shared.pd_in[0][dll.shared.od_width + 0U] = 0x11U;
+    dll.shared.pd_in[0][dll.shared.od_width + 1U] = 0x22U;
+    dll.shared.pd_in[0][dll.shared.od_width + 2U] = 0x33U;
+    ctx.dll_ctx = &dll;
 
     /* Table B.8/B.2.23：读操作返回运行时的 PD-in 数据（3 个八位组）。 */
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00), 1);
@@ -884,7 +884,7 @@ static void test_isdu_unbound_identity_scope(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    iolink_dll_ctx_t dll_ctx;
+    iolink_dll_main_t dll_ctx;
     uint8_t buf[8];
     uint8_t byte;
 
@@ -892,7 +892,7 @@ static void test_isdu_unbound_identity_scope(void** state)
 
     /* 0x0010 Vendor Name：无身份 -> 否定应答 0x80 + IDX_NOT_AVAIL。 */
     iolink_isdu_init(&ctx);
-    ctx.dll_ctx = &dll_ctx.main;
+    ctx.dll_ctx = &dll_ctx;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_VENDOR_NAME, 0x00), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
@@ -902,35 +902,35 @@ static void test_isdu_unbound_identity_scope(void** state)
 
     /* 0x0020 ErrorCount：不依赖身份，返回 2 字节。 */
     iolink_isdu_init(&ctx);
-    ctx.dll_ctx = &dll_ctx.main;
+    ctx.dll_ctx = &dll_ctx;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_ERROR_COUNT, 0x00), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 2);
 
     /* 0x0024 DeviceStatus：不依赖身份，返回 1 字节。 */
     iolink_isdu_init(&ctx);
-    ctx.dll_ctx = &dll_ctx.main;
+    ctx.dll_ctx = &dll_ctx;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DEVICE_STATUS, 0x00), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 1);
 
     /* 0x0028 ProcessDataInput：不依赖身份；零长度 PD 返回空应答而不是错误。 */
     iolink_isdu_init(&ctx);
-    ctx.dll_ctx = &dll_ctx.main;
+    ctx.dll_ctx = &dll_ctx;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0x00), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 0);
 
     /* 0x0029 ProcessDataOutput：同样不依赖身份。 */
     iolink_isdu_init(&ctx);
-    ctx.dll_ctx = &dll_ctx.main;
+    ctx.dll_ctx = &dll_ctx;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_OUTPUT, 0x00), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 0);
 
     /* 0x0018 ApplicationTag：应用表未绑定 -> 否定应答，而不是静默丢弃。 */
     iolink_isdu_init(&ctx);
-    ctx.dll_ctx = &dll_ctx.main;
+    ctx.dll_ctx = &dll_ctx;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_APPLICATION_TAG, 0x00), 1);
     iolink_isdu_process(&ctx);
     assert_int_equal(iolink_isdu_get_response_byte(&ctx, &byte), 1);
@@ -974,13 +974,13 @@ static void test_isdu_system_command_read_only_write(void** state)
 static uint8_t page1_octet3(uint8_t m_seq_type, uint8_t pd_in, uint8_t pd_out)
 {
     iolink_isdu_ctx_t ctx;
-    iolink_dll_ctx_t dll;
+    iolink_dll_main_t dll;
     (void) memset(&dll, 0, sizeof(dll));
-    dll.main.shared.m_seq_type = m_seq_type;
-    assert_int_equal(iolink_dll_set_pd_length(&dll.main, pd_in, pd_out), 0);
+    dll.shared.m_seq_type = m_seq_type;
+    assert_int_equal(iolink_dll_set_pd_length(&dll, pd_in, pd_out), 0);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = &dll.main;
+    ctx.dll_ctx = &dll;
     return iolink_isdu_direct_param_page1_octet(&ctx, 0x03U);
 }
 
@@ -1005,22 +1005,22 @@ static void test_isdu_dp_page1_image_octets(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    iolink_dll_ctx_t dll;
+    iolink_dll_main_t dll;
     uint8_t page[16];
     uint8_t isdu_page[16];
 
     (void) memset(&dll, 0, sizeof(dll));
-    dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
-    dll.main.shared.od_width = 1U; /* TYPE_2_1 的 Annex A 固定布局 */
-    dll.main.baudrate = IOLINK_BAUDRATE_COM2;
-    dll.main.master_cycle_time = 0x1AU;
+    dll.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
+    dll.shared.od_width = 1U; /* TYPE_2_1 的 Annex A 固定布局 */
+    dll.baudrate = IOLINK_BAUDRATE_COM2;
+    dll.master_cycle_time = 0x1AU;
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
-    assert_int_equal(iolink_dll_set_pd_length(&dll.main, 2, 1), 0);
+    assert_int_equal(iolink_dll_set_pd_length(&dll, 2, 1), 0);
 
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = &dll.main;
+    ctx.dll_ctx = &dll;
 
     const iolink_device_info_t* info = iolink_device_info_ctx_get(test_env_info(&g_test_env));
     for (uint8_t addr = 0U; addr < 16U; addr++) {
@@ -1056,20 +1056,20 @@ static void test_isdu_dp_page1_read_range(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    iolink_dll_ctx_t dll;
+    iolink_dll_main_t dll;
     uint8_t range[20];
 
     (void) memset(&dll, 0, sizeof(dll));
-    dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
-    dll.main.shared.od_width = 1U;
-    dll.main.baudrate = IOLINK_BAUDRATE_COM2;
-    dll.main.master_cycle_time = 0x1AU;
+    dll.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
+    dll.shared.od_width = 1U;
+    dll.baudrate = IOLINK_BAUDRATE_COM2;
+    dll.master_cycle_time = 0x1AU;
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
-    assert_int_equal(iolink_dll_set_pd_length(&dll.main, 2, 1), 0);
+    assert_int_equal(iolink_dll_set_pd_length(&dll, 2, 1), 0);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = &dll.main;
+    ctx.dll_ctx = &dll;
 
     const iolink_device_info_t* info = iolink_device_info_ctx_get(test_env_info(&g_test_env));
     (void) memset(range, 0xAA, sizeof(range));
@@ -1096,12 +1096,12 @@ static void test_isdu_dp_page1_read_range(void** state)
 
     /* 重建期间：ISR 视角不返回半更新/旧值。 */
     ctx.dp_page1_seq = (uint8_t) (ctx.dp_page1_seq | 1U);
-    dll.main.shared.in_isr = 1U;
+    dll.shared.in_isr = 1U;
     (void) memset(range, 0xAA, sizeof(range));
     assert_false(iolink_isdu_dp_page1_read_range(&ctx, 0U, range, 4U));
     assert_int_equal(range[0], 0x00U);
     assert_int_equal(range[3], 0x00U);
-    dll.main.shared.in_isr = 0U;
+    dll.shared.in_isr = 0U;
 
     /* 主泵侧读取先重建，恢复稳定的一代。 */
     assert_true(iolink_isdu_dp_page1_read_range(&ctx, 0U, range, 2U));
@@ -1113,7 +1113,7 @@ static void test_isdu_dp_page1_refresh_tracks_inputs(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    iolink_dll_ctx_t dll;
+    iolink_dll_main_t dll;
     uint8_t value = 0U;
 
     (void) memset(&dll, 0, sizeof(dll));
@@ -1121,12 +1121,12 @@ static void test_isdu_dp_page1_refresh_tracks_inputs(void** state)
     test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = &dll.main;
+    ctx.dll_ctx = &dll;
 
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x00U);
 
     /* 主站写入 MasterCycleTime 后，主泵侧读取看到新值。 */
-    dll.main.master_cycle_time = 0x7AU;
+    dll.master_cycle_time = 0x7AU;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x7AU);
 
     /* ISDU 子索引读与访问器同源。 */
@@ -1136,13 +1136,13 @@ static void test_isdu_dp_page1_refresh_tracks_inputs(void** state)
     assert_int_equal(value, 0x7AU);
 
     /* M-sequenceCapability 跟随 m_seq_type/od_width（写入点负责失效标记）。 */
-    dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
-    dll.main.shared.od_width = 8U;
+    dll.shared.m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
+    dll.shared.od_width = 8U;
     iolink_isdu_dp_page1_invalidate(&ctx);
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x03U), 0x0DU);
 
     /* PD 长度跟随运行时配置。 */
-    assert_int_equal(iolink_dll_set_pd_length(&dll.main, 3, 0), 0);
+    assert_int_equal(iolink_dll_set_pd_length(&dll, 3, 0), 0);
     iolink_isdu_dp_page1_invalidate(&ctx);
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x05U), 0x82U);
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x06U), 0x00U);
@@ -1153,37 +1153,37 @@ static void test_isdu_dp_page1_invalidate(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    iolink_dll_ctx_t dll;
+    iolink_dll_main_t dll;
 
     (void) memset(&dll, 0, sizeof(dll));
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = &dll.main;
+    ctx.dll_ctx = &dll;
 
-    dll.main.master_cycle_time = 0x11U;
+    dll.master_cycle_time = 0x11U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x11U);
 
     /* 输入已改变但尚未刷新：失效期间 ISR 既不重建，也不发旧值。 */
-    dll.main.master_cycle_time = 0x33U;
-    dll.main.shared.in_isr = 1U; /* 先进入 ISR 侧：invalidate 只标记失效 */
+    dll.master_cycle_time = 0x33U;
+    dll.shared.in_isr = 1U; /* 先进入 ISR 侧：invalidate 只标记失效 */
     iolink_isdu_dp_page1_invalidate(&ctx);
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x00U);
     assert_int_equal((ctx.dp_page1_seq & 1U), 1U);
 
     /* 主泵侧读取重建并发布。 */
-    dll.main.shared.in_isr = 0U;
+    dll.shared.in_isr = 0U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x33U);
     assert_int_equal((ctx.dp_page1_seq & 1U), 0U);
 
     /* 主泵处理轮次重建"ISR 侧失效"的映像（直接置奇数序号模拟，
      * 避免 invalidate 在主泵上下文立即重建而让断言恒真）。 */
-    dll.main.master_cycle_time = 0x44U;
-    dll.main.shared.in_isr = 0U;
+    dll.master_cycle_time = 0x44U;
+    dll.shared.in_isr = 0U;
     ctx.dp_page1_seq = (uint8_t) (ctx.dp_page1_seq | 1U);
     iolink_isdu_process(&ctx);
-    dll.main.shared.in_isr = 1U;
+    dll.shared.in_isr = 1U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x44U);
 }
 
@@ -1192,15 +1192,15 @@ static void test_isdu_dp_page1_seqlock_tearing(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    iolink_dll_ctx_t dll;
+    iolink_dll_main_t dll;
 
     (void) memset(&dll, 0, sizeof(dll));
-    dll.main.master_cycle_time = 0x5AU;
+    dll.master_cycle_time = 0x5AU;
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = &dll.main;
+    ctx.dll_ctx = &dll;
 
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x5AU);
     assert_int_equal((ctx.dp_page1_seq & 1U), 0U);
@@ -1211,14 +1211,14 @@ static void test_isdu_dp_page1_seqlock_tearing(void** state)
 
     /* 模拟主泵正处在序号奇数窗口内。 */
     ctx.dp_page1_seq = 1U;
-    dll.main.shared.in_isr = 1U;
+    dll.shared.in_isr = 1U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x00U);
     /* ISR 从不写发布字，也不改编排中的映像。 */
     assert_int_equal(ctx.dp_page1_seq, 1U);
     assert_int_equal(ctx.dp_page1[0x01], 0x5AU);
 
     /* 主泵侧读取重新发布会得到稳定值。 */
-    dll.main.shared.in_isr = 0U;
+    dll.shared.in_isr = 0U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x5AU);
     assert_int_equal((ctx.dp_page1_seq & 1U), 0U);
 
@@ -1232,25 +1232,25 @@ static void test_isdu_dp_page1_isr_read_only(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
-    iolink_dll_ctx_t dll;
+    iolink_dll_main_t dll;
 
     (void) memset(&dll, 0, sizeof(dll));
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = &dll.main;
+    ctx.dll_ctx = &dll;
 
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x00U);
     const uint8_t stable_seq = ctx.dp_page1_seq;
 
     /* ISR 只读稳定映像：输入变化只有主泵刷新后才可见。 */
-    dll.main.master_cycle_time = 0x66U;
-    dll.main.shared.in_isr = 1U;
+    dll.master_cycle_time = 0x66U;
+    dll.shared.in_isr = 1U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x00U);
     assert_int_equal(ctx.dp_page1_seq, stable_seq);
 
-    dll.main.shared.in_isr = 0U;
+    dll.shared.in_isr = 0U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x66U);
 }
 

@@ -6,7 +6,7 @@
 #include <string.h>
 
 #include "iolinki/iolink.h"
-#include "iolinki/dll_ctx.h"
+#include "dll_access.h"
 #include "iolinki/phy.h"
 
 /* Mock PHY 函数 */

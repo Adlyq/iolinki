@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <setjmp.h>
 #include <cmocka.h>
-#include "iolinki/dll_ctx.h"
+#include "dll_access.h"
 static uint64_t now;
 static int wake_pending;
 static uint64_t test_time_us(void* user)

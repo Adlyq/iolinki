@@ -21,6 +21,7 @@
 
 #include "iolinki/device.h"
 #include "iolinki/events.h"
+#include "dll_access.h"
 #include "test_helpers.h"
 
 static int g_reset_count;
@@ -112,10 +113,10 @@ static void test_device_init_validates_config_not_context(void** state)
     /* 未初始化上下文中的值不得参与校验：只有
      * 调用者提供的配置才是权威来源。 */
     (void) memset(&ctx, 0, sizeof(ctx));
-    ctx.dll.main.shared.m_seq_type = 7U;
-    ctx.dll.main.shared.pd_in_len = IOLINK_PD_IN_MAX_SIZE + 1U;
-    ctx.dll.main.pd_out_len = IOLINK_PD_OUT_MAX_SIZE + 1U;
-    ctx.dll.main.shared.od_width = 3U;
+    test_dll_shared(&ctx)->m_seq_type = 7U;
+    test_dll_shared(&ctx)->pd_in_len = IOLINK_PD_IN_MAX_SIZE + 1U;
+    test_dll(&ctx)->pd_out_len = IOLINK_PD_OUT_MAX_SIZE + 1U;
+    test_dll_shared(&ctx)->od_width = 3U;
 
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
 }
@@ -179,10 +180,9 @@ static void test_device_pd_input_bounds(void** state)
 
     const uint8_t pd[2] = {0x11U, 0x22U};
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), true), 0);
-    assert_int_equal(dev.ctx.dll.main.pd_in_len_current, 2U);
-    assert_memory_equal(&dev.ctx.dll.main.shared.pd_in[dev.ctx.dll.main.shared.pd_in_active]
-                                                      [dev.ctx.dll.main.shared.od_width],
-                        pd, sizeof(pd));
+    assert_int_equal(test_dll(&dev.ctx)->pd_in_len_current, 2U);
+    const iolink_dll_shared_t* shared = test_dll_shared(&dev.ctx);
+    assert_memory_equal(&shared->pd_in[shared->pd_in_active][shared->od_width], pd, sizeof(pd));
 }
 
 static void test_device_pd_valid_flag(void** state)
@@ -193,10 +193,10 @@ static void test_device_pd_valid_flag(void** state)
 
     const uint8_t pd[2] = {0xAAU, 0xBBU};
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), false), 0);
-    assert_false(dev.ctx.dll.main.pd_valid);
+    assert_false(test_dll(&dev.ctx)->pd_valid);
 
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), true), 0);
-    assert_true(dev.ctx.dll.main.pd_valid);
+    assert_true(test_dll(&dev.ctx)->pd_valid);
 }
 
 static void test_device_pd_output_read(void** state)
@@ -205,9 +205,9 @@ static void test_device_pd_output_read(void** state)
     iolink_test_device_t dev;
     init_device(&dev, IOLINK_M_SEQ_TYPE_2_V, 2U, 3U);
 
-    dev.ctx.dll.main.pd_out[0] = 0x01U;
-    dev.ctx.dll.main.pd_out[1] = 0x02U;
-    dev.ctx.dll.main.pd_out[2] = 0x03U;
+    test_dll(&dev.ctx)->pd_out[0] = 0x01U;
+    test_dll(&dev.ctx)->pd_out[1] = 0x02U;
+    test_dll(&dev.ctx)->pd_out[2] = 0x03U;
 
     uint8_t out[4] = {0};
     assert_int_equal(iolink_device_pd_output_read(&dev.ctx, out, 2U), 2);
@@ -216,7 +216,7 @@ static void test_device_pd_output_read(void** state)
 
     (void) memset(out, 0, sizeof(out));
     assert_int_equal(iolink_device_pd_output_read(&dev.ctx, out, sizeof(out)), 3);
-    assert_memory_equal(out, dev.ctx.dll.main.pd_out, 3U);
+    assert_memory_equal(out, test_dll_const(&dev.ctx)->pd_out, 3U);
 
     assert_int_equal(iolink_device_pd_output_read(&dev.ctx, NULL, 1U), -1);
 }
@@ -231,12 +231,12 @@ static void test_device_reset_handler(void** state)
 
     g_reset_count = 0;
     g_last_reset = IOLINK_RESET_APPLICATION;
-    dev.ctx.dll.main.shared.isdu.reset_pending = true;
+    test_dll_isdu(&dev.ctx)->reset_pending = true;
     iolink_device_process(&dev.ctx);
     assert_int_equal(g_reset_count, 1);
     assert_int_equal(g_last_reset, IOLINK_RESET_DEVICE);
 
-    dev.ctx.dll.main.shared.isdu.app_reset_pending = true;
+    test_dll_isdu(&dev.ctx)->app_reset_pending = true;
     iolink_device_process(&dev.ctx);
     assert_int_equal(g_reset_count, 2);
     assert_int_equal(g_last_reset, IOLINK_RESET_APPLICATION);
@@ -299,7 +299,7 @@ static void test_device_config_baudrate(void** state)
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
     assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM1);
-    assert_int_equal(dev.ctx.dll.main.operating_baudrate, IOLINK_BAUDRATE_COM1);
+    assert_int_equal(test_dll(&dev.ctx)->operating_baudrate, IOLINK_BAUDRATE_COM1);
 }
 
 /* 初始化时即建立 DS 镜像和校验和，即使没有已持久化的镜像也是如此，
@@ -372,7 +372,7 @@ static void test_device_od_width_default(void** state)
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
-    assert_int_equal(dev.ctx.dll.main.shared.od_width, 2U);
+    assert_int_equal(test_dll_shared(&dev.ctx)->od_width, 2U);
 }
 
 static int group_setup(void** state)

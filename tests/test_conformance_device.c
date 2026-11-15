@@ -8,6 +8,7 @@
 
 #include "conformance_device.h"
 #include "conformance_profiles.h"
+#include "dll_access.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/isdu.h"
 #include "iolinki/protocol.h"
@@ -55,7 +56,7 @@ static void make_isdu_ctx(conformance_device_t* app, iolink_isdu_ctx_t* ctx)
     iolink_isdu_init(ctx);
     ctx->event_ctx = iolink_device_get_events_ctx(&app->device);
     ctx->ds_ctx = iolink_device_get_ds_ctx(&app->device);
-    ctx->dll_ctx = &app->device.dll.main;
+    ctx->dll_ctx = test_dll(&app->device);
     ctx->device_info = &app->device.device_info;
     ctx->od = app->config.od;
     ctx->direct_param_page2 = app->device.direct_param_page2;
@@ -96,15 +97,14 @@ static void test_conformance_reset_observation(void** state)
     assert_false(conformance_device_is_default_state(&app));
 
     /* 0x80 Device Reset 保留参数并记录原因。 */
-    iolink_isdu_execute_system_command(&app.device.dll.main.shared.isdu, IOLINK_CMD_DEVICE_RESET);
+    iolink_isdu_execute_system_command(test_dll_isdu(&app.device), IOLINK_CMD_DEVICE_RESET);
     conformance_device_process(&app);
     assert_int_equal(obs->device_reset_count, 1U);
     assert_int_equal(obs->last_reset_reason, CONFORMANCE_RESET_DEVICE);
     assert_false(conformance_device_is_default_state(&app));
 
     /* 0x81 Application Reset 恢复应用默认值。 */
-    iolink_isdu_execute_system_command(&app.device.dll.main.shared.isdu,
-                                       IOLINK_CMD_APPLICATION_RESET);
+    iolink_isdu_execute_system_command(test_dll_isdu(&app.device), IOLINK_CMD_APPLICATION_RESET);
     conformance_device_process(&app);
     assert_int_equal(obs->application_reset_count, 1U);
     assert_int_equal(obs->last_reset_reason, CONFORMANCE_RESET_APPLICATION);

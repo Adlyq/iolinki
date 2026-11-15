@@ -22,7 +22,7 @@
 #include <cmocka.h>
 #include <string.h>
 
-#include "iolinki/dll_ctx.h"
+#include "dll_access.h"
 #include "iolinki/iolink.h"
 
 static const iolink_phy_api_t s_phy = {.user = NULL};

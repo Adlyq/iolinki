@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/conformance_traceability.csv`: it still pointed at renamed tests and
   no tool validated it; `tests/conformance_audit.csv` is the single matrix.
 
+### Changed (test layout coupling)
+- Tests no longer reach into the device's embedded DLL context. Behaviour and
+  conformance tests use the public API; the rest go through `tests/dll_access.h`
+  (`test_dll`, `test_dll_shared`, `test_dll_isdu`, `test_dll_ctx`), the only
+  header allowed to include `iolinki/dll_ctx.h` besides the shared harness.
+  Tests whose subject is the DLL internals keep declaring `iolink_dll_main_t`
+  directly.
+- `tools/check_test_whitebox.sh` enforces both rules and runs from
+  `check_quality.sh`.
+
 ### Changed (test effectiveness)
 - `skip_known_gap()` is gone: the conformance cases now assert the behaviour the
   stack actually produces (`0x8030` for reserved access-lock bits, `0x8033` for

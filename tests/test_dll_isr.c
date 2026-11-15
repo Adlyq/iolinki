@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "iolinki/dll_ctx.h"
+#include "dll_access.h"
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 

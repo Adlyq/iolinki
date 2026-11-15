@@ -21,6 +21,7 @@
 
 #include "iolinki/device.h"
 #include "iolinki/events.h"
+#include "dll_access.h"
 
 static uint64_t g_app_time_us;
 
@@ -59,9 +60,9 @@ static void test_initialization_uses_app_clock(void** state)
     init_device(&ctx, app_time_us);
 
     /* T_PD 截止时间与主站活动种子都来自应用时钟。 */
-    assert_int_equal(iolink_dll_timer_deadline(&ctx.dll.main, IOLINK_TIMER_T_PD),
+    assert_int_equal(iolink_dll_timer_deadline(test_dll(&ctx), IOLINK_TIMER_T_PD),
                      (1000000ULL + 500ULL));
-    assert_int_equal(ctx.dll.main.master_last_activity_ms, 1000U);
+    assert_int_equal(test_dll(&ctx)->master_last_activity_ms, 1000U);
 }
 
 static void test_event_engine_uses_app_clock(void** state)
@@ -72,12 +73,12 @@ static void test_event_engine_uses_app_clock(void** state)
     g_app_time_us = 1234000ULL;
     init_device(&ctx, app_time_us);
 
-    iolink_event_trigger(&ctx.dll.main.shared.events, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD,
+    iolink_event_trigger(iolink_device_get_events_ctx(&ctx), IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD,
                          IOLINK_EVENT_TYPE_ERROR);
 
-    assert_true(ctx.dll.main.shared.events.pending[0].active);
-    assert_true(ctx.dll.main.shared.events.pending[0].appears_valid);
-    assert_int_equal(ctx.dll.main.shared.events.pending[0].last_appears_ms, 1234U);
+    assert_true(iolink_device_get_events_ctx(&ctx)->pending[0].active);
+    assert_true(iolink_device_get_events_ctx(&ctx)->pending[0].appears_valid);
+    assert_int_equal(iolink_device_get_events_ctx(&ctx)->pending[0].last_appears_ms, 1234U);
 }
 
 static void test_null_clock_is_rejected_at_init(void** state)

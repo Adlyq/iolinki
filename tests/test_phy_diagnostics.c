@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "iolinki/dll_ctx.h"
+#include "dll_access.h"
 #include "iolinki/phy.h"
 #include "iolinki/events.h"
 

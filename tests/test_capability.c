@@ -23,6 +23,7 @@
 #include "iolinki/capability.h"
 #include "iolinki/device.h"
 #include "iolinki/dll.h"
+#include "dll_access.h"
 #include "test_helpers.h"
 
 static void test_build_profile_matches_macros(void** state)
@@ -249,15 +250,15 @@ static void test_capability_override_invalidates_plans(void** state)
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
 
-    iolink_dll_publish_reply_plans(&dev.ctx.dll.main);
-    assert_true(iolink_atomic_load(&dev.ctx.dll.main.shared.reply_plan_seq) != 0U);
+    iolink_dll_publish_reply_plans(test_dll(&dev.ctx));
+    assert_true(iolink_atomic_load(&test_dll_shared(&dev.ctx)->reply_plan_seq) != 0U);
 
     iolink_device_set_capabilities(
         &dev.ctx, iolink_device_capabilities(&dev.ctx) | IOLINK_CAP_COMPAT_T0_READ);
-    assert_int_equal(iolink_atomic_load(&dev.ctx.dll.main.shared.reply_plan_seq), 0U);
+    assert_int_equal(iolink_atomic_load(&test_dll_shared(&dev.ctx)->reply_plan_seq), 0U);
 
-    iolink_dll_publish_reply_plans(&dev.ctx.dll.main);
-    assert_true(iolink_atomic_load(&dev.ctx.dll.main.shared.reply_plan_seq) != 0U);
+    iolink_dll_publish_reply_plans(test_dll(&dev.ctx));
+    assert_true(iolink_atomic_load(&test_dll_shared(&dev.ctx)->reply_plan_seq) != 0U);
 }
 
 int main(void)

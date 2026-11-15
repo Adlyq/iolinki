@@ -28,7 +28,7 @@
 #include <stdint.h>
 
 #include "iolinki/config.h"
-#include "iolinki/dll_ctx.h"
+#include "dll_access.h"
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"
 
@@ -52,16 +52,15 @@ static void test_capacity_overrides(void** state)
     assert_int_equal(IOLINK_REPLY_PLAN_SLOTS, 12);
 
     /* 覆盖值必须真正进入 DLL 布局，而不只是宏层生效。 */
-    iolink_dll_ctx_t dll;
-    (void) dll;
-    assert_int_equal(sizeof(dll.main.isr_frame_slot) / sizeof(dll.main.isr_frame_slot[0]),
+    iolink_device_ctx_t dev;
+    const iolink_dll_main_t* dll = test_dll(&dev);
+    assert_int_equal(sizeof(dll->isr_frame_slot) / sizeof(dll->isr_frame_slot[0]),
                      IOLINK_MBX_SLOTS);
-    assert_int_equal(sizeof(dll.main.shared.reply_plan) / sizeof(dll.main.shared.reply_plan[0]),
+    assert_int_equal(sizeof(dll->shared.reply_plan) / sizeof(dll->shared.reply_plan[0]),
                      IOLINK_REPLY_PLAN_SLOTS);
     /* 主泵槽位 0/1 + ISR 槽位：派生量不允许被单独覆盖。 */
-    assert_int_equal(
-        sizeof(dll.main.shared.isr_tx_payload) / sizeof(dll.main.shared.isr_tx_payload[0]),
-        IOLINK_TX_SLOTS);
+    assert_int_equal(sizeof(dll->shared.isr_tx_payload) / sizeof(dll->shared.isr_tx_payload[0]),
+                     IOLINK_TX_SLOTS);
     assert_int_equal(IOLINK_TX_SLOTS, IOLINK_TX_ISR_SLOT + 1);
 
     iolink_isdu_ctx_t isdu;

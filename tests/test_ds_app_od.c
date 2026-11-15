@@ -32,6 +32,7 @@
 #include "iolinki/isdu.h"
 #include "iolinki/od.h"
 #include "iolinki/protocol.h"
+#include "dll_access.h"
 #include "test_helpers.h"
 
 #define APP_DS_IDX 0x0180U
@@ -84,7 +85,7 @@ static int ds_app_teardown(void** state)
 static int app_write_object(iolink_device_ctx_t* ctx, uint16_t index, const uint8_t* data,
                             uint8_t len, uint8_t* out, size_t out_size)
 {
-    iolink_isdu_ctx_t* isdu = &ctx->dll.main.shared.isdu;
+    iolink_isdu_ctx_t* isdu = test_dll_isdu(ctx);
 
     assert_int_equal(isdu_send_write_request(isdu, index, 0U, data, len), 1);
     iolink_isdu_process(isdu);
@@ -94,7 +95,7 @@ static int app_write_object(iolink_device_ctx_t* ctx, uint16_t index, const uint
 /** @brief 通过 ISDU 读一个参数并返回数据长度。 */
 static int app_read_object(iolink_device_ctx_t* ctx, uint16_t index, uint8_t* out, size_t out_size)
 {
-    iolink_isdu_ctx_t* isdu = &ctx->dll.main.shared.isdu;
+    iolink_isdu_ctx_t* isdu = test_dll_isdu(ctx);
 
     assert_int_equal(isdu_send_read_request(isdu, index, 0U), 1);
     iolink_isdu_process(isdu);

@@ -30,6 +30,7 @@
 #include "iolinki/device.h"
 #include "iolinki/isdu.h"
 #include "iolinki/workspace.h"
+#include "dll_access.h"
 
 /* 默认构建需要真实的临界区实现（test_helpers.c 也提供同一对空实现）。 */
 void iolink_critical_enter(void)
@@ -147,8 +148,8 @@ static void test_binds_external_workspace(void** state)
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
     assert_ptr_equal(iolink_device_get_workspace(&ctx), &g_workspace);
 
-    iolink_isdu_ctx_t* isdu = &ctx.dll.main.shared.isdu;
-    iolink_ds_ctx_t* ds = &ctx.dll.main.ds;
+    iolink_isdu_ctx_t* isdu = test_dll_isdu(&ctx);
+    iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&ctx);
 
     /* 绑定后所有缓冲都指向工作区。 */
     assert_ptr_equal(isdu->buffer, g_workspace.isdu.payload);
@@ -171,8 +172,8 @@ static void test_unbind_clears_pointers(void** state)
     config.workspace = &g_workspace;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
 
-    iolink_isdu_ctx_t* isdu = &ctx.dll.main.shared.isdu;
-    iolink_ds_ctx_t* ds = &ctx.dll.main.ds;
+    iolink_isdu_ctx_t* isdu = test_dll_isdu(&ctx);
+    iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&ctx);
 
     /* 解绑必须清零全部指针与容量：不得保留旧工作区地址。 */
     iolink_isdu_bind_workspace(isdu, NULL);

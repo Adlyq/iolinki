@@ -21,7 +21,7 @@
 #include <cmocka.h>
 #include <string.h>
 
-#include "iolinki/dll_ctx.h"
+#include "dll_access.h"
 
 static void prepare_ctx(iolink_dll_ctx_t* ctx)
 {

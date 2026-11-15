@@ -31,7 +31,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "iolinki/dll_ctx.h"
+#include "dll_access.h"
 #include "iolinki/iolink.h"
 
 static uint64_t now_us;

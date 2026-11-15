@@ -25,7 +25,7 @@
 #include <string.h>
 
 #include "iolinki/isdu.h"
-#include "iolinki/dll_ctx.h"
+#include "dll_access.h"
 #include "iolinki/device_info.h"
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
@@ -83,7 +83,7 @@ static int read_object(uint16_t index, uint8_t* out, size_t out_size)
 }
 
 /* 同上，但绑定了 DLL 上下文（过程数据对象需要）。 */
-static int read_object_with_dll(uint16_t index, iolink_dll_ctx_t* dll, uint8_t* out,
+static int read_object_with_dll(uint16_t index, iolink_dll_main_t* dll, uint8_t* out,
                                 size_t out_size)
 {
     iolink_isdu_ctx_t ctx;
@@ -220,19 +220,19 @@ static void test_process_data_input_returns_pd(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0132");
     (void) state;
-    iolink_dll_ctx_t dll;
-    (void) memset(&dll, 0, sizeof(dll));
+    iolink_device_ctx_t dev;
+    (void) memset(&dev, 0, sizeof(dev));
 
     /* 只有公共 setter 会配置长度：它更新运行时
        字段，因此这里改用 pd_in_len 会把应答截断为 0。 */
-    assert_int_equal(iolink_dll_set_pd_length(&dll.main, 2U, 0U), 0);
-    assert_int_equal(dll.main.shared.pd_in_len, 0U);
-    dll.main.pd_valid = true;
-    dll.main.shared.pd_in[0][dll.main.shared.od_width + 0U] = 0x11U;
-    dll.main.shared.pd_in[0][dll.main.shared.od_width + 1U] = 0x22U;
+    assert_int_equal(iolink_dll_set_pd_length(test_dll(&dev), 2U, 0U), 0);
+    assert_int_equal(test_dll_shared(&dev)->pd_in_len, 0U);
+    test_dll(&dev)->pd_valid = true;
+    test_dll_shared(&dev)->pd_in[0][test_dll_shared(&dev)->od_width + 0U] = 0x11U;
+    test_dll_shared(&dev)->pd_in[0][test_dll_shared(&dev)->od_width + 1U] = 0x22U;
 
     uint8_t out[8] = {0};
-    int n = read_object_with_dll(0x0028U, &dll, out, sizeof(out));
+    int n = read_object_with_dll(0x0028U, test_dll(&dev), out, sizeof(out));
     assert_int_equal(n, 2);
     assert_int_equal(out[0], 0x11U);
     assert_int_equal(out[1], 0x22U);
@@ -244,16 +244,16 @@ static void test_process_data_input_returns_pd(void** state)
 static void test_process_data_input_invalid_still_serves_buffer(void** state)
 {
     (void) state;
-    iolink_dll_ctx_t dll;
-    (void) memset(&dll, 0, sizeof(dll));
-    dll.main.pd_in_len_current = 2U;
-    dll.main.shared.pd_in_len = 2U;
-    dll.main.pd_valid = false;
-    dll.main.shared.pd_in[0][dll.main.shared.od_width + 0U] = 0x11U;
-    dll.main.shared.pd_in[0][dll.main.shared.od_width + 1U] = 0x22U;
+    iolink_device_ctx_t dev;
+    (void) memset(&dev, 0, sizeof(dev));
+    test_dll(&dev)->pd_in_len_current = 2U;
+    test_dll_shared(&dev)->pd_in_len = 2U;
+    test_dll(&dev)->pd_valid = false;
+    test_dll_shared(&dev)->pd_in[0][test_dll_shared(&dev)->od_width + 0U] = 0x11U;
+    test_dll_shared(&dev)->pd_in[0][test_dll_shared(&dev)->od_width + 1U] = 0x22U;
 
     uint8_t out[8] = {0};
-    int n = read_object_with_dll(0x0028U, &dll, out, sizeof(out));
+    int n = read_object_with_dll(0x0028U, test_dll(&dev), out, sizeof(out));
     assert_int_equal(n, 2);
     assert_int_equal(out[0], 0x11U);
     assert_int_equal(out[1], 0x22U);
@@ -264,12 +264,12 @@ static void test_process_data_input_invalid_still_serves_buffer(void** state)
 static void test_process_data_output_before_first_frame(void** state)
 {
     (void) state;
-    iolink_dll_ctx_t dll;
-    (void) memset(&dll, 0, sizeof(dll));
-    dll.main.shared.pd_out_len_current = 2U;
+    iolink_device_ctx_t dev;
+    (void) memset(&dev, 0, sizeof(dev));
+    test_dll_shared(&dev)->pd_out_len_current = 2U;
 
     uint8_t out[8] = {0xFFU, 0xFFU};
-    int n = read_object_with_dll(0x0029U, &dll, out, sizeof(out));
+    int n = read_object_with_dll(0x0029U, test_dll(&dev), out, sizeof(out));
     assert_int_equal(n, 2);
     assert_int_equal(out[0], 0x00U);
     assert_int_equal(out[1], 0x00U);
@@ -280,12 +280,12 @@ static void test_process_data_output_before_first_frame(void** state)
 static void test_process_data_zero_length(void** state)
 {
     (void) state;
-    iolink_dll_ctx_t dll;
-    (void) memset(&dll, 0, sizeof(dll));
+    iolink_device_ctx_t dev;
+    (void) memset(&dev, 0, sizeof(dev));
 
     uint8_t out[8] = {0};
-    assert_int_equal(read_object_with_dll(0x0028U, &dll, out, sizeof(out)), 0);
-    assert_int_equal(read_object_with_dll(0x0029U, &dll, out, sizeof(out)), 0);
+    assert_int_equal(read_object_with_dll(0x0028U, test_dll(&dev), out, sizeof(out)), 0);
+    assert_int_equal(read_object_with_dll(0x0029U, test_dll(&dev), out, sizeof(out)), 0);
 }
 
 /* B.2.23：以 0x80 开头的标准 2 字节正向载荷不得
@@ -293,18 +293,18 @@ static void test_process_data_zero_length(void** state)
 static void test_process_data_80xx_is_positive(void** state)
 {
     (void) state;
-    iolink_dll_ctx_t dll;
-    (void) memset(&dll, 0, sizeof(dll));
-    dll.main.pd_in_len_current = 2U;
-    dll.main.shared.pd_in_len = 2U;
-    dll.main.pd_valid = true;
-    dll.main.shared.pd_in[0][dll.main.shared.od_width + 0U] = 0x80U;
-    dll.main.shared.pd_in[0][dll.main.shared.od_width + 1U] = 0x42U;
+    iolink_device_ctx_t dev;
+    (void) memset(&dev, 0, sizeof(dev));
+    test_dll(&dev)->pd_in_len_current = 2U;
+    test_dll_shared(&dev)->pd_in_len = 2U;
+    test_dll(&dev)->pd_valid = true;
+    test_dll_shared(&dev)->pd_in[0][test_dll_shared(&dev)->od_width + 0U] = 0x80U;
+    test_dll_shared(&dev)->pd_in[0][test_dll_shared(&dev)->od_width + 1U] = 0x42U;
 
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = &dll.main;
+    ctx.dll_ctx = test_dll(&dev);
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_PROCESS_DATA_INPUT, 0U), 1);
     iolink_isdu_process(&ctx);
 
@@ -326,7 +326,7 @@ static unsigned pd_descriptor_octets(uint8_t code)
 }
 
 /* 读取 Direct Parameter page 1 的一个字节（地址 0x00..0x0F）。 */
-static uint8_t read_dpp1_octet(iolink_dll_ctx_t* dll, uint8_t addr)
+static uint8_t read_dpp1_octet(iolink_dll_main_t* dll, uint8_t addr)
 {
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
@@ -346,22 +346,22 @@ static void test_process_data_output_returns_pd(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0133");
     (void) state;
-    iolink_dll_ctx_t dll;
-    (void) memset(&dll, 0, sizeof(dll));
-    dll.main.shared.pd_out_len_current = 2U;
-    dll.main.pd_out[0] = 0xAAU;
-    dll.main.pd_out[1] = 0xBBU;
-    dll.main.pd_out_seen = true;
+    iolink_device_ctx_t dev;
+    (void) memset(&dev, 0, sizeof(dev));
+    test_dll_shared(&dev)->pd_out_len_current = 2U;
+    test_dll(&dev)->pd_out[0] = 0xAAU;
+    test_dll(&dev)->pd_out[1] = 0xBBU;
+    test_dll(&dev)->pd_out_seen = true;
 
     uint8_t out[8] = {0};
-    int n = read_object_with_dll(0x0029U, &dll, out, sizeof(out));
+    int n = read_object_with_dll(0x0029U, test_dll(&dev), out, sizeof(out));
     assert_int_equal(n, 2);
     assert_int_equal(out[0], 0xAAU);
     assert_int_equal(out[1], 0xBBU);
 
     /* SDCI_TC_0133：长度与 DPP1 0x06 一致；描述符中
        保留位 5 和未使用的 SIO 位 6 均为 0。 */
-    const uint8_t dpp1_pdout = read_dpp1_octet(&dll, 0x06U);
+    const uint8_t dpp1_pdout = read_dpp1_octet(test_dll(&dev), 0x06U);
     assert_int_equal(dpp1_pdout & 0x60U, 0x00U);
     assert_int_equal(pd_descriptor_octets(dpp1_pdout), n);
 }
