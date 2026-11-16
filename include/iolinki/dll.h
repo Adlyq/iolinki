@@ -274,7 +274,7 @@ typedef struct
  * @name 截止时间表
  *
  * DLL 的所有软件超时收敛为一张静态表：每个 timer 只保存一个绝对
- * 截止时间（微秒，来自唯一时钟源 @c shared.time_us / dll_time_us()），
+ * 截止时间（微秒，来自唯一时钟源 @c shared.clock / dll_time_us()），
  * 主上下文再维护一个 @c next_deadline。主泵正常路径只把当前时间与
  * @c next_deadline 比较一次；表项装载/取消是边沿事件（收帧、唤醒、
  * 主站活动），不随 timer 数量线性扫描。
@@ -352,7 +352,7 @@ bool iolink_dll_timer_armed(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
  * @param phy 要绑定的 PHY 实现
  * @note 两个对象都会被清零，包括时钟。直接使用 DLL 的用户必须在此调用之后
  *       设置 @c ctx->shared.clock；
- *       iolink_device_init() 会从 iolink_device_config_t::time_us 绑定它们。
+ *       iolink_device_init() 会从 `iolink_device_app_t::time_us` 绑定它。
  */
 void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink_phy_api_t* phy);
 

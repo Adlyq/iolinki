@@ -37,7 +37,7 @@ void dll_timer_cancel(iolink_dll_main_t* ctx, iolink_timer_id_t id);
  * @name 内部时钟辅助函数
  *
  * 时间戳来自设备初始化时绑定的应用时钟
- * （iolink_device_config_t::time_us）。缺少时钟时返回 0：设备层会拒绝它，
+ * （iolink_device_app_t::time_us）。缺少时钟时返回 0：设备层会拒绝它，
  * 但裸 DLL 上下文在绑定之前仍可被检查。
  * @{
  */

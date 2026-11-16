@@ -146,7 +146,8 @@ typedef struct
     /* 系统命令标志 */
     bool reset_pending;           /**< 请求设备复位（0x80） */
     bool app_reset_pending;       /**< 请求应用复位（0x81） */
-    const iolink_log_sink_t* log; /**< 日志汇点（默认静默；设备层绑定） */
+    const iolink_log_sink_t* log; /**< 日志汇点指针（NULL = 静默；设备层指向共享 sink，
+                                      独立使用须自行指向调用方的 sink） */
 
 #if IOLINK_WORKSPACE_EMBEDDED
     iolink_isdu_scratch_t scratch; /**< 未提供工作区时的默认 scratch */

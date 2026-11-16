@@ -87,7 +87,8 @@ typedef struct
     size_t image_len;             /**< @ref image 中的有效字节数 */
     bool image_valid;             /**< image 是否保存了当前参数的完整快照 */
     bool download_invalid;        /**< 被拒绝的写入会使当前下载失效 */
-    const iolink_log_sink_t* log; /**< 日志汇点（默认静默；设备层绑定） */
+    const iolink_log_sink_t* log; /**< 日志汇点指针（NULL = 静默；设备层指向共享 sink，
+                                      独立使用须自行指向调用方的 sink） */
 #if IOLINK_WORKSPACE_EMBEDDED
     uint8_t scratch[IOLINK_DS_IMAGE_MAX]; /**< 未提供工作区时的默认暂存缓冲 */
 #endif

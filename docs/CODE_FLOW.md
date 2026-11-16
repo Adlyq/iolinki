@@ -81,7 +81,7 @@ flowchart TB
     end
 
     subgraph PLAT["平台层"]
-        T1["config.time_us<br/>应用微秒时钟"]
+        T1["config.app-&gt;time_us<br/>应用微秒时钟"]
         T2["port.h<br/>临界区、屏障、原子字"]
         W1["workspace.h<br/>ISDU scratch + DS 暂存"]
     end
@@ -246,7 +246,7 @@ flowchart TD
     J --> K["绑定 time_us；事件窗口<br/>iolink_events_set_window()"]
     K --> L["绑定 ISDU 依赖：od / device_info<br/>direct_param_page2 / state_cb"]
     L --> M["启用 DS 时：iolink_ds_init()<br/>iolink_ds_set_flag_persist(config.ds_flag_persist)<br/>iolink_ds_bind_workspace()<br/>iolink_ds_bind_sources(config.od, config.app->self) + iolink_ds_refresh()"]
-    M --> O["iolink_device_set_log()<br/>把 sink 复制到 DLL/ISDU/DS/事件"]
+    M --> O["iolink_device_set_log()<br/>设置共享 sink，各模块只保存指针"]
     O --> P["device_apply_stack_config()<br/>PD/OD 长度、t_pd、工作 COM、MinCycleTime<br/>timing_enforce 覆盖"]
     P --> T["调用 on_startup()"]
 ```

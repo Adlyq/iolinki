@@ -627,8 +627,10 @@ ISDU 附加错误码（`IOLINK_ISDU_ERROR_*`，例如 `IDX_NOTAVAIL` `0x11`、
 
 `iolink_device_app_t::time_us` 是 `iolink_device_init()` 的必需项（`NULL` 以
 `IOLINK_DEVICE_INIT_ERR_TIME` 拒绝），协议栈用它完成全部 DLL、ISR 和事件计时。没有
-单独的平台时间 API；直接使用 DLL 的调用方必须在 `iolink_dll_init()` 之后自行绑定
-`ctx->shared.clock`（DLL 上下文分为主视图和 ISR 视图）。临界区
+单独的平台时间 API；设备层只创建一个 `iolink_clock_t`（回调 + 实例指针，
+`shared.clock`），事件引擎的 `ctx->clock` 指向它。直接使用 DLL 的调用方必须在
+`iolink_dll_init()` 之后自行绑定 `ctx->shared.clock`；直接使用事件引擎的调用方把
+`ctx->clock` 指向自己的 `iolink_clock_t`（`NULL` 读作时间 0）。临界区
 使用 `include/iolinki/port.h` 中的 `iolink_critical_enter()` /
 `iolink_critical_exit()`；`iolink_device_init()` 以 `IOLINK_DEVICE_INIT_ERR_CRITICAL`
 拒绝库自带的 weak no-op 默认实现。

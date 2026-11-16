@@ -18,12 +18,12 @@
  * @brief 协议栈日志打印点与运行时 sink。
  *
  * 库在设备、DLL、ISDU、数据存储和事件路径上提供打印点，但不实现
- * 输出：每条日志都经过上下文中的一个 ::iolink_log_sink_t 汇点，其
+ * 输出：每条日志都经过上下文中的一个 `iolink_log_sink_t` 汇点，其
  * 回调由应用提供，负责格式化（`vsnprintf`）、级别过滤后的输出以及
  * 时间戳等策略；库只做运行时级别比较和参数转发，不引入 stdio。
  *
  * sink 默认全零（静默）：`write == NULL` 或 `level == SILENT` 时
- * 不产生任何调用。应用通过 ::iolink_device_config_t::log_write /
+ * 不产生任何调用。应用通过 `iolink_device_app_t::log_write` /
  * log_level 在初始化时配置，或在运行时用
  * iolink_device_set_log() 更换。
  */
@@ -55,8 +55,8 @@ typedef enum
 /**
  * @brief 日志输出回调。
  *
- * @param self  应用上下文（::iolink_device_app_t::self，或直接 DLL 用户的
- *               ::iolink_log_sink_t::self）。
+ * @param self  应用上下文（`iolink_device_app_t::self`，或直接 DLL 用户的
+ *               `iolink_log_sink_t::self`）。
  * @param level 该条日志的级别，已通过 sink 的运行时阈值。
  * @param format printf 风格格式串；在 GCC/Clang 下由编译器校验。
  *

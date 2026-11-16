@@ -17,8 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   object instead of four, and a module that was never bound is silent instead
   of logging through a stale copy. Standalone users point `ctx->log` /
   `ctx->clock` at their own objects (NULL = silent / time 0).
-- Saves 28 B per device on a 32-bit target and 56 B on the 64-bit host; the
-  events context shrinks from 504 to 480 B (device 4920 -> 4864 on the host).
+- Saves 28 B of RAM per device on a 32-bit target and 56 B on the 64-bit host;
+  the events context shrinks from 504 to 480 B (device 4920 -> 4864 on the
+  host). One extra indirection costs 16 B of `.text` in the full image.
 
 ### Changed (application context is a trait)
 - `iolink_device_config_t` no longer takes `user`, `time_us`, `log_write` and

@@ -21,8 +21,8 @@ Measured on a 64-bit host with the default buffers in
 | `iolink_device_ctx_t` (FRAME/FRAME) | 4856 | `IOLINK_ISR_*_MODE` = FRAME; `iolink_dll_ctx_t` is 4664 |
 | `iolink_dll_ctx_t` | 4672 | DLL state, timers, reply-plan table (48×24 B, four state slices), frame mailbox; embeds ISDU, Events and DS |
 | `iolink_isdu_ctx_t` | 1336 | Transport state, buffer pointers, the DPP1 RAM image (16 B + seqlock) and the embedded ISDU scratch (1033 B) |
-| `iolink_events_ctx_t` | 504 | Event queue plus lifecycle records |
-| `iolink_ds_ctx_t` | 368 | DS state, buffer pointers, the OD set and the embedded download stage |
+| `iolink_events_ctx_t` | 480 | Event queue plus lifecycle records |
+| `iolink_ds_ctx_t` | 352 | DS state, buffer pointers, the OD set and the embedded download stage |
 | **PHY API** | 20-30 bytes | Function pointers (usually const/flash, but pointer storage in RAM) |
 
 `IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 16 bytes (two counter sets plus padding).

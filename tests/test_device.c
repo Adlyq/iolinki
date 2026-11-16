@@ -162,9 +162,25 @@ static void test_device_binds_instance_context(void** state)
     assert_ptr_equal(test_dll_shared(&dev.ctx)->clock.self, (iolink_app_t*) &sentinel);
     assert_ptr_equal(test_dll_isdu(&dev.ctx)->od_self, (iolink_app_t*) &sentinel);
     assert_ptr_equal(test_dll(&dev.ctx)->ds.self, (iolink_app_t*) &sentinel);
+#if IOLINK_FEATURE_DATA_STORAGE
+    assert_ptr_equal(test_dll(&dev.ctx)->ds.flag_self, (iolink_app_t*) &sentinel);
+#endif
 #if IOLINK_FEATURE_EVENTS
     assert_ptr_equal(test_dll_shared(&dev.ctx)->events.clock->self, (iolink_app_t*) &sentinel);
 #endif
+}
+
+static void test_device_init_rejection_clears_stale_phy_error(void** state)
+{
+    (void) state;
+    iolink_device_ctx_t ctx;
+    iolink_device_config_t config = make_device_config();
+
+    /* 上一次尝试留下的驱动码不得被读成这一次的结果（ERR_APP 早退同样如此）。 */
+    (void) memset(&ctx, 0xFF, sizeof(ctx));
+    config.app = NULL;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_APP);
+    assert_int_equal(iolink_device_get_phy_error(&ctx), 0);
 }
 
 static void test_device_init_validates_config_not_context(void** state)
@@ -458,6 +474,7 @@ int main(void)
         cmocka_unit_test(test_device_init_rejects_invalid_config),
         cmocka_unit_test(test_device_init_maps_phy_error),
         cmocka_unit_test(test_device_init_clears_stale_phy_error),
+        cmocka_unit_test(test_device_init_rejection_clears_stale_phy_error),
         cmocka_unit_test(test_device_init_validates_config_not_context),
         cmocka_unit_test(test_device_binds_instance_context),
         cmocka_unit_test(test_device_init_accepts_valid_config),

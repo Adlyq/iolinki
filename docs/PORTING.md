@@ -334,7 +334,7 @@ source list from `CMakeLists.txt`, replacing the Linux time/platform sources wit
 your own. For a physical target exclude `phy_virtual.c` and the Linux sources;
 if you supply strong platform hooks, exclude `platform.c` too and provide
 `iolink_platform_critical_sections_ready()` returning 0. Provide the time source
-through `config.time_us`, the critical-section symbols declared in
+through `config.app->time_us`, the critical-section symbols declared in
 `include/iolinki/port.h`, and the parameter persistence hooks (`on_change` on the
 OD entries and `iolink_device_config_t::ds_flag_persist`) in the application. Keep
 every library and application unit on the same configuration defines and make the
@@ -437,6 +437,9 @@ routes the sink to its UART/RTOS logger instead:
 ```c
 #include <stdarg.h>
 #include <stdio.h>
+
+struct iolink_app { int unused; };
+static struct iolink_app g_app_state;
 
 static void port_log(iolink_app_t* self, iolink_log_level_t level, const char* format, ...)
 {

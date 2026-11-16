@@ -92,7 +92,7 @@
  */
 
 /** @brief 返回以微秒为单位的单调时间戳的回调。
- *  @param self 应用上下文（::iolink_device_app_t::self）。
+ *  @param self 应用上下文（`iolink_device_app_t::self`）。
  *  @return 当前时间，单位为微秒。
  *  @note 主循环和数据 ISR 都会调用它，因此它必须是非阻塞
  *        且 ISR 安全的。 */
@@ -208,7 +208,7 @@ int iolink_device_get_phy_error(const iolink_device_ctx_t* ctx);
  * @brief 在运行时更换日志回调或阈值。
  *
  * 更新 DLL、ISDU、DS 和事件子系统共用的汇点；`self` 仍取
- * ::iolink_device_app_t::self。传入 `write == NULL` 或
+ * 应用 trait 的 `self` 字段。传入 `write == NULL` 或
  * `level == IOLINK_LOG_LEVEL_SILENT` 可立即静默。
  *
  * @param ctx   由 iolink_device_init() 初始化的设备上下文。
