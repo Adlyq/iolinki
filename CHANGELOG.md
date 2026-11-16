@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (static analyzer gate)
+- `tools/gates.sh analyzer` runs `clang --analyze` over `src/` and fails on any
+  finding. It runs per translation unit instead of through `scan-build`: that
+  tool intercepts compilation with a `cc` wrapper on `PATH`, and
+  `configure_tree()` pins `CMAKE_C_COMPILER` to an absolute path, so the wrapper
+  never saw a single invocation — a deliberate null-dereference probe passed
+  unnoticed. The per-file form catches the same probe in 11 s.
+
+### Changed (ATFE 23.1.0)
+- The ROM/RAM baseline is re-recorded with ATFE 23.1.0, the version the
+  firmware is built with, and the test image pins the same release (version and
+  SHA-256 as build args) at `/opt/atfe`, which is also
+  `tools/size_matrix.py`'s default. Measuring 22.1.0 numbers against a 23.1.0
+  toolchain silently fell back to the wider cross-toolchain budget, so the gate
+  was looser than it claimed.
+
 ### Added (memcheck gate)
 - `tools/gates.sh memcheck` runs the unit binaries under valgrind memcheck, the
   only tool here that reports reads of uninitialised memory — the class the

@@ -33,7 +33,9 @@ name, prints each group's wall time, and stops at the first failure
 | `test` | strict Debug build plus `ctest` |
 | `gcc` | the gcc-only strict diagnostics (`-DIOLINK_STRICT_GCC=ON`, library target) and `gcc -fanalyzer` as a report-only step |
 | `sanitize` | the unit suite under AddressSanitizer, UndefinedBehaviorSanitizer and `implicit-conversion` (clang only; a sanitizer report fails the run) |
-| `memcheck` | the unit binaries under valgrind memcheck (uninitialised reads, invalid accesses); the PTY conformance examples are covered by `test` || `static` | cppcheck and the MISRA addon (report-only unless `IOLINKI_MISRA_ENFORCE=1`) |
+| `memcheck` | the unit binaries under valgrind memcheck (uninitialised reads, invalid accesses); the PTY conformance examples are covered by `test` |
+| `analyzer` | the clang static analyzer over `src/` (`clang --analyze`); a finding fails the group |
+| `static` | cppcheck and the MISRA addon (report-only unless `IOLINKI_MISRA_ENFORCE=1`) |
 | `docs` | Doxygen warnings |
 | `matrix` | `tools/build_matrix.sh` (clang) and `tools/diff_matrix.sh` |
 | `perf` | `tools/coverage.sh --check` (clang), `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` (ATFE) |
@@ -89,6 +91,18 @@ plus `implicit-conversion`, which covers what `-Wconversion` cannot see (an
 `x++` on a narrow type, for example). `unsigned-integer-overflow` is left out on
 purpose: the CRC and checksum arithmetic relies on wrapping. A sanitizer report
 fails the group; there is no report-only mode.
+
+`analyzer` runs `clang --analyze` over `src/` and fails on any finding. It does
+not go through `scan-build`: that tool intercepts compilation by putting a `cc`
+wrapper on `PATH`, while `configure_tree()` pins `CMAKE_C_COMPILER` to an
+absolute path, so the wrapper never sees an invocation and the run reports "no
+bugs" whatever the code says (a deliberate null-dereference probe confirmed it).
+
+`memcheck` runs the unit binaries under valgrind. On hosts where valgrind cannot
+redirect loader symbols (Arch with a recent glibc) the group reports `SKIP` with
+the reason instead of one startup failure per binary; the Docker image installs
+`valgrind` and `libc6-dbg` and runs the group for real, with `-gdwarf-4` because
+valgrind 3.18 cannot parse DWARF 5.
 
 No level up to L2 builds a structural configuration or re-measures size,
 coverage or the WCET proxy, so a green L2 says nothing about those. Add a group

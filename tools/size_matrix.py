@@ -43,7 +43,7 @@ Usage:
 
 Environment:
     IOLINKI_SIZE_TOOLCHAIN  target toolchain: `atfe` (default) or `gcc`
-    ARM_ATFE                ATFE install prefix (default: /opt/arm-toolchain/bin)
+    ARM_ATFE                ATFE install prefix (default: /opt/atfe/bin)
     ARM_GCC                 gcc toolchain prefix, `gcc` mode (default: arm-none-eabi-)
     IOLINKI_SIZE_DIR  build root (default: <repo>/build/size)
 
@@ -85,7 +85,7 @@ if TOOLCHAIN == "gcc":
     LINK_EXTRA = ["-Wl,--no-warn-rwx-segments"]
     BASELINE = ROOT / "tools" / "size_baseline.csv"
 elif TOOLCHAIN == "atfe":
-    _atfe = Path(os.environ.get("ARM_ATFE", "/opt/arm-toolchain/bin"))
+    _atfe = Path(os.environ.get("ARM_ATFE", "/opt/atfe/bin"))
     CC = [str(_atfe / "clang"), "--target=arm-none-eabi"]
     AR = [str(_atfe / "llvm-ar")]
     SIZE = [str(_atfe / "llvm-size")]

@@ -27,7 +27,7 @@ trap 'rm -f "$IOLINK_GATES_SNAPSHOT"' EXIT
 ROOT="${IOLINK_GATES_ROOT:?gates: snapshot re-exec lost the repository root}"
 cd "$ROOT"
 
-GATE_GROUPS=(quick build test gcc sanitize memcheck static docs matrix perf package)
+GATE_GROUPS=(quick build test gcc sanitize memcheck analyzer static docs matrix perf package)
 
 STRICT_CFLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
 
@@ -62,6 +62,7 @@ Groups:
            (clang only; a sanitizer report fails the run)
   memcheck the unit binaries under valgrind memcheck (uninitialised reads,
            invalid accesses)
+  analyzer the clang static analyzer over the library (clang --analyze)
   static   cppcheck and the MISRA addon (report-only unless
            IOLINKI_MISRA_ENFORCE=1)
   docs     Doxygen warnings
@@ -340,6 +341,50 @@ group_memcheck() {
     step "unit binaries under valgrind" run_memcheck
 }
 
+# --- analyzer ---------------------------------------------------------------
+
+# The clang static analyzer follows the data flow the compiler warnings cannot
+# see (a pointer that is only NULL on one path, a store read after a reset).
+#
+# It runs as `clang --analyze` per translation unit rather than through
+# scan-build: scan-build intercepts compilation by putting a `cc` wrapper on
+# PATH, and `configure_tree` pins CMAKE_C_COMPILER to an absolute path, so the
+# wrapper never sees a single invocation and the run reports "no bugs" whatever
+# the code says.
+run_analyzer() {
+    local out
+    out=$(for f in "$ROOT"/src/*.c; do
+        "$CC_PRIMARY" --analyze -std=c99 -I"$ROOT/include" -I"$ROOT/src" \
+            -Xanalyzer -analyzer-output=text "$f" 2>&1 || true
+    done)
+    # A compile error means the file was not analysed at all; that is a gate
+    # failure, not a finding.
+    if printf '%s\n' "$out" | grep -q 'error:'; then
+        printf '   the analyzer could not compile the library:\n'
+        printf '%s\n' "$out" | grep 'error:' | head -5
+        return 1
+    fi
+    out=$(printf '%s\n' "$out" | grep -E 'warning:' || true)
+    if [ -z "$out" ]; then
+        printf '   analyzer: clean\n'
+        return 0
+    fi
+    printf '   analyzer: %s finding(s); first 10:\n' "$(printf '%s\n' "$out" | wc -l)"
+    printf '%s\n' "$out" | head -10
+    return 1
+}
+
+group_analyzer() {
+    case "$CC_PRIMARY" in
+        *clang*) ;;
+        *)
+            skip "the clang static analyzer needs clang (IOLINKI_CC=$CC_PRIMARY)"
+            return 0
+            ;;
+    esac
+    step "clang static analyzer (clang --analyze)" run_analyzer
+}
+
 # --- static ----------------------------------------------------------------
 
 cppcheck_run() {
@@ -457,6 +502,7 @@ run_group() {
         gcc) group_gcc ;;
         sanitize) group_sanitize ;;
         memcheck) group_memcheck ;;
+        analyzer) group_analyzer ;;
         static) group_static ;;
         docs) group_docs ;;
         matrix) group_matrix ;;
@@ -488,7 +534,7 @@ for arg in "$@"; do
         all)
             requested+=("${GATE_GROUPS[@]}")
             ;;
-        quick | build | test | gcc | sanitize | memcheck | static | docs | matrix | perf | package)
+        quick | build | test | gcc | sanitize | memcheck | analyzer | static | docs | matrix | perf | package)
             requested+=("$arg")
             ;;
         *)

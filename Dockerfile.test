@@ -24,13 +24,13 @@ RUN apt-get update && apt-get install -y \
 # with (tools/size_matrix.py defaults to it). Arm publishes no container image,
 # only these checksummed release tarballs, so the version and the digest are
 # pinned here.
-ARG ATFE_VERSION=22.1.0
-ARG ATFE_SHA256=e2e9e637bba097ba6e4bae6982883fe705ffd7e8c3a7dc876964835ef1c7a724
-RUN mkdir -p /opt/arm-toolchain && \
+ARG ATFE_VERSION=23.1.0
+ARG ATFE_SHA256=a7be511613af15151c93961ad39c8cf9ae6889a453c8b547f42f4051a416dc8e
+RUN mkdir -p /opt/atfe && \
     url="https://github.com/arm/arm-toolchain/releases/download/release-${ATFE_VERSION}-ATfE/ATfE-${ATFE_VERSION}-Linux-x86_64.tar.xz" && \
     wget -q -O /tmp/atfe.tar.xz "$url" && \
     echo "${ATFE_SHA256}  /tmp/atfe.tar.xz" | sha256sum -c - && \
-    tar xf /tmp/atfe.tar.xz -C /opt/arm-toolchain --strip-components=1 && \
+    tar xf /tmp/atfe.tar.xz -C /opt/atfe --strip-components=1 && \
     rm /tmp/atfe.tar.xz
 ENV ARM_ATFE=/opt/atfe/bin
 
