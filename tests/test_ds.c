@@ -463,6 +463,27 @@ static void test_ds_download_end_error_classification(void** state)
     assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -4);
 }
 
+/* image_len 也由 measure-only 序列化（out == NULL）写入，并且是
+ * DataStorageIndex 上报的参数集大小，所以 "len > 0" 不能证明存在暂存缓冲。
+ * 外部工作区构建（IOLINK_WORKSPACE_EMBEDDED=0）且未绑定时就是这个状态：
+ * DownloadEnd 必须显式失败，而不是把 NULL 交给 apply_image() 并报告成
+ * "镜像格式错误"。 */
+static void test_ds_download_end_without_staging_buffer(void** state)
+{
+    (void) state;
+    iolink_ds_ctx_t ds;
+
+    iolink_ds_init(&ds);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)), NULL);
+    ds.state = IOLINK_DS_STATE_DOWNLOADING;
+    ds.image = NULL;
+    ds.image_len = 7U; /* 只有测量长度，没有缓冲 */
+
+    assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -4);
+    assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
+    assert_int_equal(ds.image_len, 0U);
+}
+
 /* 表项的 block_len 限制存入镜像的值。 */
 static void test_ds_entry_block_len_bounds_value(void** state)
 {
@@ -1059,6 +1080,7 @@ int main(void)
         cmocka_unit_test(test_ds_vendor_param_set_round_trip),
         cmocka_unit_test(test_ds_entry_block_len_bounds_value),
         cmocka_unit_test(test_ds_download_end_error_classification),
+        cmocka_unit_test(test_ds_download_end_without_staging_buffer),
         cmocka_unit_test(test_ds_download_recovery),
         cmocka_unit_test(test_ds_apply_precheck_rejects_before_write),
         cmocka_unit_test(test_ds_legacy_sub0_is_runtime_compat),

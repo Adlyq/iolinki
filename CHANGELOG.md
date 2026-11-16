@@ -71,6 +71,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   off. `--selftest` covers a well-formed header, a missing include, a
   conditional region and an unbalanced pair.
 
+### Fixed (Data Storage download without a staging buffer)
+- `ParamDownloadEnd` decided "there is an image to commit" from `image_len > 0`,
+  but `iolink_ds_serialize()` also writes `image_len` when it measures without a
+  buffer (`out == NULL`) — that value is what `DataStorageIndex` reports as the
+  parameter-set size — so the two are not equivalent. With
+  `IOLINK_WORKSPACE_EMBEDDED=0` and no workspace bound, the commit path handed a
+  NULL buffer to `iolink_ds_apply_image()` and answered PAR_SETINVALID
+  ("malformed image") for a state that simply had nothing staged. It now fails
+  explicitly with PAR_SETINCONSIST (0x8041) and clears the length.
+
 ### Added (static analyzer gate)
 - `tools/gates.sh analyzer` runs `clang --analyze` over `src/` and fails on any
   finding. It runs per translation unit instead of through `scan-build`: that

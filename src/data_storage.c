@@ -641,6 +641,16 @@ static int ds_cmd_download_end(iolink_ds_ctx_t* ctx)
         return -4; /* PAR_SETINCONSIST (0x8041) */
     }
     if (ctx->image_len > 0U) {
+        if (ctx->image == NULL) {
+            /* image_len 也由 iolink_ds_serialize() 在 out == NULL 时写入
+               （它同时是 DataStorageIndex 上报的参数集大小），所以
+               "len > 0" 不等于"有暂存缓冲"。没有缓冲就没有可提交的内容：
+               显式失败，不能把 NULL 交给 apply_image() 报成"格式错误"。 */
+            ctx->image_len = 0U;
+            ctx->state = IOLINK_DS_STATE_IDLE;
+            IOLINK_LOG_WARN(ctx->log, "ds download end without staging buffer");
+            return -4; /* PAR_SETINCONSIST (0x8041) */
+        }
         rc = iolink_ds_apply_image(ctx, ctx->image, ctx->image_len);
     }
     ctx->state = IOLINK_DS_STATE_IDLE;
