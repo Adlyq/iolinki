@@ -329,10 +329,9 @@ static void feed_process_read(void)
     feed(frame, sizeof(frame), 0U);
 }
 
-/* OPERATE 的 M-sequence 页读：有身份时报 DPP1 字节。
- * 无身份时该帧的 OD 槽位按 A.1.2 报 0（周期帧不能不应答）；这条分支由
- * dll_dispatch_od 的守卫保证，夹具无法把一条 2 字节读送进主泵派发，
- * 因此这里只钉正向路径。 */
+/* OPERATE 的 M-sequence 页读：有身份时返回绑定的 DPP1 字节。
+ * 无身份时该 OD 槽位按 A.1.2 报 0（见 dll_dispatch_od 的注释）；那条分支
+ * 依赖主泵派发，本夹具的 ISR 计划会先接管这条帧，故只钉正向路径。 */
 static int test_operate_page_read_uses_identity(void)
 {
     init_operate();
