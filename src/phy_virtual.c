@@ -36,7 +36,7 @@ void iolink_phy_virtual_set_port(const char* port)
     (void) port;
 }
 
-const iolink_phy_api_t* iolink_phy_virtual_get(void)
+const iolink_phy_api_t* IOLINK_NULLABLE iolink_phy_virtual_get(void)
 {
     return NULL;
 }
@@ -251,7 +251,7 @@ static const iolink_phy_api_t g_phy_virtual = {
     .detect_wakeup = virtual_detect_wakeup,
 };
 
-const iolink_phy_api_t* iolink_phy_virtual_get(void)
+const iolink_phy_api_t* IOLINK_NULLABLE iolink_phy_virtual_get(void)
 {
     return &g_phy_virtual;
 }

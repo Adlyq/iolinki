@@ -99,7 +99,7 @@ int iolink_phy_tiol112_init(iolink_tiol112_ctx_t* d, const iolink_tiol112_io_t* 
     return 0;
 }
 
-const iolink_phy_api_t* iolink_phy_tiol112_get(iolink_tiol112_ctx_t* d)
+const iolink_phy_api_t* IOLINK_NULLABLE iolink_phy_tiol112_get(iolink_tiol112_ctx_t* d)
 {
     return d != NULL ? &d->phy : NULL;
 }

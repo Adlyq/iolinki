@@ -107,7 +107,7 @@ static void ds_attach_image(iolink_ds_ctx_t* ctx, uint8_t* buffer, size_t size)
     ctx->image_valid = false;
 }
 
-void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws)
+void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* IOLINK_NULLABLE ws)
 {
     if (ctx == NULL) {
         return;
@@ -147,7 +147,7 @@ void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn 
     ctx->flag_self = self;
 }
 
-void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app,
+void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* IOLINK_NULLABLE app,
                             iolink_app_t* IOLINK_NULLABLE self)
 {
     if (ctx == NULL) {
@@ -295,7 +295,7 @@ static int ds_serialize_entries(iolink_ds_ctx_t* ctx, uint8_t* out, size_t cap,
     return (int) pos;
 }
 
-int iolink_ds_serialize(iolink_ds_ctx_t* ctx, uint8_t* out, size_t cap)
+int iolink_ds_serialize(iolink_ds_ctx_t* ctx, uint8_t* IOLINK_NULLABLE out, size_t cap)
 {
     uint32_t checksum = 0U;
 
@@ -463,7 +463,8 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
     return 0;
 }
 
-const uint8_t* iolink_ds_get_image(iolink_ds_ctx_t* ctx, size_t* out_len)
+const uint8_t* IOLINK_NULLABLE iolink_ds_get_image(iolink_ds_ctx_t* ctx,
+                                                   size_t* IOLINK_NULLABLE out_len)
 {
     if (ctx == NULL) {
         return NULL;
@@ -829,7 +830,7 @@ size_t iolink_ds_param_count(const iolink_ds_ctx_t* ctx)
     return ds_entry_count(ctx, IOLINK_OD_STORAGE_DS);
 }
 
-const iolink_od_entry_t* iolink_ds_param_entry(const iolink_ds_ctx_t* ctx, size_t i)
+const iolink_od_entry_t* IOLINK_NULLABLE iolink_ds_param_entry(const iolink_ds_ctx_t* ctx, size_t i)
 {
     if ((ctx == NULL) || (i >= ds_entry_count(ctx, IOLINK_OD_STORAGE_DS))) {
         return NULL;

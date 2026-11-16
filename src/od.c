@@ -171,7 +171,7 @@ static const iolink_od_entry_t k_od_table[] = {
 
 #define OD_TABLE_COUNT (sizeof(k_od_table) / sizeof(k_od_table[0]))
 
-const iolink_od_codec_t* iolink_od_codec(uint8_t datatype)
+const iolink_od_codec_t* IOLINK_NULLABLE iolink_od_codec(uint8_t datatype)
 {
     if (datatype >= (uint8_t) IOLINK_OD_DT_COUNT) {
         return NULL;
@@ -184,7 +184,7 @@ size_t iolink_od_count(void)
     return OD_TABLE_COUNT;
 }
 
-const iolink_od_entry_t* iolink_od_at(size_t i)
+const iolink_od_entry_t* IOLINK_NULLABLE iolink_od_at(size_t i)
 {
     return (i < OD_TABLE_COUNT) ? &k_od_table[i] : NULL;
 }
@@ -315,7 +315,7 @@ const iolink_od_entry_t* iolink_od_ds_at_app(const iolink_od_app_t* app, size_t 
     return NULL;
 }
 
-bool iolink_od_is_ds(const iolink_od_app_t* app, uint16_t index, uint8_t subindex)
+bool iolink_od_is_ds(const iolink_od_app_t* IOLINK_NULLABLE app, uint16_t index, uint8_t subindex)
 {
     const iolink_od_entry_t* entry = od_find_in(k_od_table, OD_TABLE_COUNT, index, subindex);
 

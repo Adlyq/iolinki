@@ -56,7 +56,7 @@ int iolink_device_info_ctx_init(iolink_device_info_ctx_t* ctx,
 }
 
 const iolink_device_info_t* IOLINK_NULLABLE
-iolink_device_info_ctx_get(const iolink_device_info_ctx_t* IOLINK_NULLABLE ctx)
+iolink_device_info_ctx_get(const iolink_device_info_ctx_t* ctx)
 {
     if ((ctx == NULL) || (ctx->configured == NULL)) {
         return NULL; /* 未绑定身份：没有可返回的标识 */

@@ -63,8 +63,8 @@ usage() {
 Usage: tools/gates.sh [--keep-going] <group> [group ...]
 
 Groups:
-  quick    clang-format, per-file size, shellcheck, DLL ownership and the test
-           conventions                                    (seconds, no build)
+  quick    clang-format, per-file size, shellcheck, DLL ownership, nullability
+           regions and the test conventions               (seconds, no build)
   build    strict -Werror compilation with clang, Debug (-O0) and Release (-O3)
   test     strict Debug build plus the unit suite (ctest)
   gcc      the gcc-only strict diagnostic set, plus -fanalyzer as a report

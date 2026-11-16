@@ -207,7 +207,7 @@ static void test_device_info_ctx_edges(void** state)
     assert_int_equal(iolink_device_info_ctx_init(&ctx, TEST_NULL(const iolink_device_info_t*)), -1);
     assert_null(iolink_device_info_ctx_get(&ctx));
     assert_int_equal(iolink_device_info_ctx_get_access_locks(&ctx), 0U);
-    assert_null(iolink_device_info_ctx_get(NULL));
+    assert_null(iolink_device_info_ctx_get(TEST_NULL(const iolink_device_info_ctx_t*)));
     assert_int_equal(
         iolink_device_info_ctx_get_access_locks(TEST_NULL(const iolink_device_info_ctx_t*)), 0U);
     iolink_device_info_ctx_set_access_locks(TEST_NULL(iolink_device_info_ctx_t*), 0x1234U);

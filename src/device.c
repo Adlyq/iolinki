@@ -380,7 +380,7 @@ int iolink_device_get_phy_error(const iolink_device_ctx_t* ctx)
     return (ctx != NULL) ? ctx->phy_error : 0;
 }
 
-iolink_workspace_t* iolink_device_get_workspace(const iolink_device_ctx_t* ctx)
+iolink_workspace_t* IOLINK_NULLABLE iolink_device_get_workspace(const iolink_device_ctx_t* ctx)
 {
     if (ctx == NULL) {
         return NULL;
@@ -675,7 +675,8 @@ int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, 
     return (int) read_len;
 }
 
-void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx, iolink_reset_handler_t handler)
+void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx,
+                                     iolink_reset_handler_t IOLINK_NULLABLE handler)
 {
     if (ctx != NULL) {
         ctx->reset_handler = handler;

@@ -91,6 +91,11 @@ typedef enum
  *
  * 本接口定义协议栈与硬件相关
  * 收发器驱动（例如用于 MAX14827、L6362 或虚拟 TTY）之间的契约。
+ *
+ * 每个钩子都是可选项：@ref iolink_caps_resolve 探测钩子是否存在，把对应
+ * 能力位置位，库只在能力位成立时调用它（`int_active` 另有显式的判空门控）。
+ * 因此钩子为 NULL 表示"该 PHY 不支持这项能力"，而不是错误；`self` 是应用
+ * 放在绑定里的不透明上下文，同样可能为 NULL，回调需自行决定如何使用。
  */
 typedef struct
 {
@@ -129,7 +134,8 @@ typedef struct
      * 校验仍由库负责。
      * @return 指向该帧的指针；没有完整帧就绪时为 NULL。
      */
-    const uint8_t* (*rx_frame)(iolink_app_t* IOLINK_NULLABLE self, uint8_t* status, uint8_t* len);
+    const uint8_t* IOLINK_NULLABLE (*IOLINK_NULLABLE rx_frame)(iolink_app_t* IOLINK_NULLABLE self,
+                                                               uint8_t* status, uint8_t* len);
 #else
     /**
      * @brief 读取一个接收字节及其收发器状态（RX BYTE 模式）。
@@ -141,7 +147,8 @@ typedef struct
      * @return 若读出字节到 @p data 则返回 1，若无待处理数据返回 0，
      *         传输错误时返回负值。
      */
-    int (*rx_octet)(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status);
+    int (*IOLINK_NULLABLE rx_octet)(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data,
+                                    uint8_t* status);
 #endif
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
@@ -155,7 +162,8 @@ typedef struct
      * 直到传输完成。
      * @return 成功返回 0，出错返回负值。
      */
-    int (*tx_frame)(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data, size_t len);
+    int (*IOLINK_NULLABLE tx_frame)(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data,
+                                    size_t len);
 
     /**
      * @brief PHY 仍占用 C/Q 线路时返回非零值（可选）。
@@ -179,7 +187,7 @@ typedef struct
      * 与数据中断的仲裁由 PHY 负责。
      * @return 本次访问的规范化 PHY 状态字节（IOLINK_PHY_STATUS_*）。
      */
-    int (*tx_octet)(iolink_app_t* IOLINK_NULLABLE self, uint8_t data);
+    int (*IOLINK_NULLABLE tx_octet)(iolink_app_t* IOLINK_NULLABLE self, uint8_t data);
 
     /**
      * @brief 结束/完成当前设备发送（仅 TX BYTE，可选）。
@@ -204,7 +212,7 @@ typedef struct
      *         排空背靠背突发；在 FRAME 模式下还会报告
      *         RX 帧完整/TX 就绪。
      */
-    uint8_t (*int_active)(iolink_app_t* IOLINK_NULLABLE self);
+    uint8_t (*IOLINK_NULLABLE int_active)(iolink_app_t* IOLINK_NULLABLE self);
 
     /* --- 可选协议栈定时器（与 ST 的 ISR 泵送对齐） ---------------------------
      * response_timer_* 实现 t_A 单次定时（13 个位时间）：在有效的

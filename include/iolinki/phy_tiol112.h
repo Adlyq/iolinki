@@ -34,7 +34,7 @@ typedef struct
                               size_t len);
     int (*uart_recv)(iolink_tiol112_board_t* IOLINK_NULLABLE board, uint8_t* byte);
     int (*consume_wakeup)(iolink_tiol112_board_t* IOLINK_NULLABLE board);
-    bool (*read_nfault)(iolink_tiol112_board_t* IOLINK_NULLABLE board);
+    bool (*IOLINK_NULLABLE read_nfault)(iolink_tiol112_board_t* IOLINK_NULLABLE board);
 } iolink_tiol112_io_t;
 
 typedef struct
@@ -50,7 +50,7 @@ typedef struct
 
 /* 复制 IO 回调；driver 和 io.user 的生命周期必须长于设备。 */
 int iolink_phy_tiol112_init(iolink_tiol112_ctx_t* driver, const iolink_tiol112_io_t* io);
-const iolink_phy_api_t* iolink_phy_tiol112_get(iolink_tiol112_ctx_t* driver);
+const iolink_phy_api_t* IOLINK_NULLABLE iolink_phy_tiol112_get(iolink_tiol112_ctx_t* driver);
 /* 聚合 NFAULT：欠压、温度或短路。不推断原因。
  * 有效时返回 1，无故障返回 0，未初始化或引脚不可用时返回 -1。 */
 int iolink_phy_tiol112_fault(const iolink_tiol112_ctx_t* driver);

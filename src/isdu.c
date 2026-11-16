@@ -142,7 +142,7 @@ static void isdu_clear_scratch(iolink_isdu_ctx_t* ctx)
 }
 #endif
 
-void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* ws)
+void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* IOLINK_NULLABLE ws)
 {
     if (ctx == NULL) {
         return;
@@ -175,7 +175,7 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx)
 #endif
 }
 
-void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app,
+void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* IOLINK_NULLABLE app,
                          iolink_app_t* IOLINK_NULLABLE self)
 {
     if (ctx != NULL) {
@@ -184,7 +184,7 @@ void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app,
     }
 }
 
-void iolink_isdu_bind_caps(iolink_isdu_ctx_t* ctx, const iolink_caps_t* caps)
+void iolink_isdu_bind_caps(iolink_isdu_ctx_t* ctx, const iolink_caps_t* IOLINK_NULLABLE caps)
 {
     if (ctx != NULL) {
         ctx->caps = caps;

@@ -23,11 +23,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   introduced it (`application`, `od`, `dll`, `isdu`, `events`, `data_storage`).
 - PHY callbacks take `iolink_app_t* IOLINK_NULLABLE self`: the library forwards
   whatever the binding holds, and a callback that does not use the context is
-  valid. The hooks the library calls only after a NULL check (`init`,
-  `set_mode`, `set_baudrate`, `tx_busy`, `tx_done`, the two `response_timer_*`
-  and `stack_timer_start`, `request_service`, `detect_wakeup`, `set_cq_line`,
-  `get_faults`) are `IOLINK_NULLABLE` themselves; `rx_*`/`tx_*`/`int_active` are
-  called unconditionally and stay required.
+  valid. Every hook in the vtable is `IOLINK_NULLABLE`: `iolink_caps_resolve()`
+  probes each one and the library calls it only when the matching capability bit
+  is set (`int_active` keeps its own NULL check), so a NULL hook means "this PHY
+  does not offer that capability". `rx_frame` also returns
+  `IOLINK_NULLABLE` — "no complete frame yet" is a normal answer, not an error.
+- The driver headers follow the same reading of the code:
+  `iolink_phy_l6362a_get()`/`iolink_phy_tiol112_get()` return `IOLINK_NULLABLE`
+  (both implementations return NULL for an uninitialised driver), their
+  `read_ol`/`read_diag`/`read_nfault` board callbacks are optional, and
+  `iolink_device_info_t::product_uri` is nullable because index 0x001B is
+  Profile-dependent and NULL is answered with `IDX_NOT_AVAIL`.
 - Lookup functions keep "NULL means not in the table" in the return type:
   `iolink_od_at()`, `iolink_diag_desc()`, `iolink_diag_registry_at()`,
   `iolink_diag_src_desc()`, `iolink_dll_sm_cell()`, `iolink_ring_peek()`,

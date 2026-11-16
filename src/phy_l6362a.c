@@ -88,7 +88,7 @@ int iolink_phy_l6362a_init(iolink_l6362a_ctx_t* d, const iolink_l6362a_io_t* io)
     d->phy.set_cq_line = cq;
     return 0;
 }
-const iolink_phy_api_t* iolink_phy_l6362a_get(iolink_l6362a_ctx_t* d)
+const iolink_phy_api_t* IOLINK_NULLABLE iolink_phy_l6362a_get(iolink_l6362a_ctx_t* d)
 {
     return d ? &d->phy : NULL;
 }

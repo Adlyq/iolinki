@@ -28,8 +28,8 @@ typedef struct
     int (*uart_send_complete)(iolink_l6362a_board_t* IOLINK_NULLABLE, const uint8_t*, size_t);
     int (*uart_recv)(iolink_l6362a_board_t* IOLINK_NULLABLE, uint8_t*);
     int (*consume_wakeup)(iolink_l6362a_board_t* IOLINK_NULLABLE);
-    bool (*read_ol)(iolink_l6362a_board_t* IOLINK_NULLABLE);
-    bool (*read_diag)(iolink_l6362a_board_t* IOLINK_NULLABLE);
+    bool (*IOLINK_NULLABLE read_ol)(iolink_l6362a_board_t* IOLINK_NULLABLE);
+    bool (*IOLINK_NULLABLE read_diag)(iolink_l6362a_board_t* IOLINK_NULLABLE);
 } iolink_l6362a_io_t;
 typedef struct
 {
@@ -41,7 +41,7 @@ typedef struct
     bool initialized, enabled, cq;
 } iolink_l6362a_ctx_t;
 int iolink_phy_l6362a_init(iolink_l6362a_ctx_t*, const iolink_l6362a_io_t*);
-const iolink_phy_api_t* iolink_phy_l6362a_get(iolink_l6362a_ctx_t*);
+const iolink_phy_api_t* IOLINK_NULLABLE iolink_phy_l6362a_get(iolink_l6362a_ctx_t*);
 /* 1=过载有效；0=无故障；-1=不可用。不推断短路/热故障原因。 */
 int iolink_phy_l6362a_overload(const iolink_l6362a_ctx_t*);
 /* DIAG 故障仅在 EN 请求为高时才有意义；否则为 -1。
