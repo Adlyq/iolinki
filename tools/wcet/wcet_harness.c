@@ -301,7 +301,7 @@ static void wcet_env_init(void)
     g_device_info.vendor_id = 0x0123U;
     g_device_info.device_id = 0x010203U;
     g_device_info.profile_characteristic = 0x0001U;
-    g_device_info.revision_id = 0x0111U;
+    g_device_info.revision_id = IOLINK_REVISION_ID_1_1;
     g_device_info.min_cycle_time = 0U;
 }
 

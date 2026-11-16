@@ -21,6 +21,7 @@
 
 #include "iolinki/protocol.h"
 #include "iolinki/events.h"
+#include "iolinki/device_info.h"
 
 /* Table A.3：CKT/CKS 中的 M-sequence 类型位。 */
 static void test_msequence_type_bits(void** state)
@@ -176,6 +177,17 @@ static void test_event_code_ranges(void** state)
     assert_int_equal(IOLINK_EVENTCODE_DS_UPLOAD_REQUEST, 0xFF91U);
 }
 
+/* Table B.1 / Figure B.4：DPP1 0x04 的 RevisionID 是高半字节 MajorRev、
+   低半字节 MinorRev 的一个八位组。 */
+static void test_revision_id_encoding(void** state)
+{
+    (void) state;
+    assert_int_equal(IOLINK_REVISION_ID_1_0, 0x10U);
+    assert_int_equal(IOLINK_REVISION_ID_1_1, 0x11U);
+    assert_int_equal(IOLINK_REVISION_ID_1_1 >> 4, 1U); /* MajorRev */
+    assert_int_equal(IOLINK_REVISION_ID_1_1 & 0x0FU, 1U);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -187,6 +199,7 @@ int main(void)
         cmocka_unit_test(test_isdu_error_values),
         cmocka_unit_test(test_access_lock_bits),
         cmocka_unit_test(test_event_code_ranges),
+        cmocka_unit_test(test_revision_id_encoding),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

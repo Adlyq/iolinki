@@ -225,19 +225,19 @@ static void test_0092_revision_id_configured(void** state)
 
     iolink_device_info_t info;
     (void) memset(&info, 0, sizeof(info));
-    info.revision_id = 0x0110U;
+    info.revision_id = IOLINK_REVISION_ID_1_0;
     test_env_init(&g_test_env, &info);
     test_env_reset_params(&g_test_env);
 
     iolink_isdu_ctx_t ctx;
     uint8_t value = 0U;
     assert_int_equal(read_object(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x05U, &value, 1U), 1);
-    assert_int_equal(value, 0x10U);
+    assert_int_equal(value, IOLINK_REVISION_ID_1_0);
 
-    info.revision_id = 0x0111U;
+    info.revision_id = IOLINK_REVISION_ID_1_1;
     test_env_init(&g_test_env, &info);
     assert_int_equal(read_object(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x05U, &value, 1U), 1);
-    assert_int_equal(value, 0x11U);
+    assert_int_equal(value, IOLINK_REVISION_ID_1_1);
 }
 
 /* ------------------------------------------------------------------------- */

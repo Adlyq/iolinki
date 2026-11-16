@@ -36,7 +36,7 @@ static const iolink_device_info_t k_default_info = {
     .profile_characteristic = 0x0000U,
 
     .min_cycle_time = 10U, /* 1.0ms (10 * 100μs) */
-    .revision_id = 0x0111U,
+    .revision_id = IOLINK_REVISION_ID_1_1,
     .device_status = 0x00U, /* 无错误 */
     .detailed_device_status = 0x0000U,
 

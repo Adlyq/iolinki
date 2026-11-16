@@ -18,6 +18,9 @@
  * 实现 IO-Link V1.1.5 规范所要求的强制索引。
  */
 
+#define IOLINK_REVISION_ID_1_0 0x10U /**< MajorRev 1, MinorRev 0（协议版本 1.0）。 */
+#define IOLINK_REVISION_ID_1_1 0x11U /**< MajorRev 1, MinorRev 1（协议版本 1.1）。 */
+
 /**
  * @defgroup iolinki_device_info 设备标识
  * @brief 设备标识数据以及强制的身份 ISDU 索引。
@@ -52,7 +55,7 @@ typedef struct
 
     /* 系统信息 */
     uint8_t min_cycle_time;          /**< 最小周期时间（DPP1 0x02，Table B.3）。 */
-    uint16_t revision_id;            /**< Revision ID（DPP1 0x04；0x0111 = 协议 v1.1）。 */
+    uint8_t revision_id;             /**< DPP1 0x04：高半字节 MajorRev，低半字节 MinorRev。 */
     uint8_t device_status;           /**< 设备状态（Index 0x0024）。 */
     uint16_t detailed_device_status; /**< 详细设备状态（Index 0x0025，可选）。 */
 

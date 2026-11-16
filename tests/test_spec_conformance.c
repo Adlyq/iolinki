@@ -42,7 +42,7 @@ static iolink_device_info_t make_info(void)
     info.device_id = 0x010203U;
     info.profile_characteristic = 0x0001U;
     info.function_id = 0xABCDU;
-    info.revision_id = 0x0111U;
+    info.revision_id = IOLINK_REVISION_ID_1_1;
     info.vendor_name = "VendorX";
     info.vendor_text = "Vendor text";
     info.product_name = "Product name";

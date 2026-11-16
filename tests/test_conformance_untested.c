@@ -541,7 +541,7 @@ static void test_0316_device_reset_sequence(void** state)
         conformance_device_read_param(&app, CONFORMANCE_CONFIG1_INDEX, 0U, before, &before_len), 0);
     const uint16_t vendor_id = app.profile->identity->vendor_id;
     const uint32_t device_id = app.profile->identity->device_id;
-    const uint16_t revision_id = app.profile->identity->revision_id;
+    const uint8_t revision_id = app.profile->identity->revision_id;
 
     conformance_send_system_command(&app, IOLINK_CMD_DEVICE_RESET);
     iolink_isdu_ctx_t ctx;
@@ -610,7 +610,7 @@ static void test_0317_application_reset_sequence(void** state)
 
     const uint16_t vendor_id = app.profile->identity->vendor_id;
     const uint32_t device_id = app.profile->identity->device_id;
-    const uint16_t revision_id = app.profile->identity->revision_id;
+    const uint8_t revision_id = app.profile->identity->revision_id;
 
     conformance_send_system_command(&app, IOLINK_CMD_APPLICATION_RESET);
     assert_int_equal(obs->application_reset_count, 1U);
@@ -673,7 +673,7 @@ static void test_0155_factory_settings_sequence(void** state)
     assert_true(obs->startup_count == startup_before || obs->startup_count == startup_before + 1U);
     /* 默认值与标识信息。 */
     assert_true(conformance_device_is_default_state(&app));
-    assert_int_equal(app.profile->identity->revision_id, 0x0111U);
+    assert_int_equal(app.profile->identity->revision_id, IOLINK_REVISION_ID_1_1);
     assert_int_equal(app.profile->identity->vendor_id, 1234U);
     assert_int_equal(app.profile->identity->device_id, 5680U);
 
@@ -720,7 +720,7 @@ static void test_0318_back_to_box_sequence(void** state)
     assert_int_equal(conformance_device_power_cycle(&app, &k_noop_phy, nvm), 0);
     assert_int_equal(obs->startup_count, startups_before + 1U);
     assert_true(conformance_device_is_default_state(&app));
-    assert_int_equal(app.profile->identity->revision_id, 0x0111U);
+    assert_int_equal(app.profile->identity->revision_id, IOLINK_REVISION_ID_1_1);
     assert_int_equal(app.profile->identity->vendor_id, 1234U);
     assert_int_equal(app.profile->identity->device_id, 5680U);
 

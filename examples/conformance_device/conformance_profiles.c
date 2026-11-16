@@ -20,7 +20,7 @@ static const iolink_device_info_t g_full_identity = {
     .vendor_id = 1234U,
     .device_id = 5680U,
     .min_cycle_time = 10U,
-    .revision_id = 0x0111U,
+    .revision_id = IOLINK_REVISION_ID_1_1,
 };
 
 static const iolink_device_info_t g_config_identity = {
@@ -35,7 +35,7 @@ static const iolink_device_info_t g_config_identity = {
     .vendor_id = 1234U,
     .device_id = 5681U,
     .min_cycle_time = 10U,
-    .revision_id = 0x0111U,
+    .revision_id = IOLINK_REVISION_ID_1_1,
 };
 
 static const iolink_device_info_t g_pdout_identity = {
@@ -50,7 +50,7 @@ static const iolink_device_info_t g_pdout_identity = {
     .vendor_id = 1234U,
     .device_id = 5682U,
     .min_cycle_time = 10U,
-    .revision_id = 0x0111U,
+    .revision_id = IOLINK_REVISION_ID_1_1,
 };
 
 static const iolink_device_info_t g_minimal_identity = {
@@ -65,7 +65,7 @@ static const iolink_device_info_t g_minimal_identity = {
     .vendor_id = 1234U,
     .device_id = 5683U,
     .min_cycle_time = 10U,
-    .revision_id = 0x0111U,
+    .revision_id = IOLINK_REVISION_ID_1_1,
 };
 
 static const conformance_profile_t g_profiles[] = {

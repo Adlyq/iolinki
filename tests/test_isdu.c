@@ -1029,7 +1029,7 @@ static void test_isdu_dp_page1_image_octets(void** state)
     assert_int_equal(page[0x01], 0x1AU); /* MasterCycleTime */
     assert_int_equal(page[0x02], 0x1AU); /* MinCycleTime = 2.6 ms（COM2、OD1、PDin 2/PDout 1） */
     assert_int_equal(page[0x03], 0x01U); /* TYPE_2_1 + OD1 -> OPERATE 编码 0 */
-    assert_int_equal(page[0x04], 0x11U); /* RevisionID 低字节 */
+    assert_int_equal(page[0x04], IOLINK_REVISION_ID_1_1);
     assert_int_equal(page[0x05], 0x10U); /* PDIn 2 字节（位长度） */
     assert_int_equal(page[0x06], 0x08U); /* PDout 1 字节（位长度） */
     assert_int_equal(page[0x07], (uint8_t) (info->vendor_id >> 8));
@@ -1076,7 +1076,7 @@ static void test_isdu_dp_page1_read_range(void** state)
     assert_int_equal(range[0x01], 0x1AU);
     assert_int_equal(range[0x02], 0x1AU);
     assert_int_equal(range[0x03], 0x01U);
-    assert_int_equal(range[0x04], 0x11U);
+    assert_int_equal(range[0x04], IOLINK_REVISION_ID_1_1);
     assert_int_equal(range[0x05], 0x10U);
     assert_int_equal(range[0x06], 0x08U);
     assert_int_equal(range[0x07], (uint8_t) (info->vendor_id >> 8));

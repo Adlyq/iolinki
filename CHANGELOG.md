@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (RevisionID is one octet)
+- `iolink_device_info_t::revision_id` was `uint16_t` holding the IODD value
+  0x0111 while DPP1 octet 0x04 carries a single octet: Figure B.4 packs
+  MajorRev in bits 4-7 and MinorRev in bits 0-3, so V1.1 is 0x11 and V1.0 is
+  0x10. The field is now `uint8_t` and the two values have names
+  (`IOLINK_REVISION_ID_1_0` / `IOLINK_REVISION_ID_1_1`); the DPP1 builder
+  copies the field instead of masking a 16-bit value.
+
 ### Changed (one log sink, one clock)
 - The DLL, ISDU, DS and events contexts used to embed their own
   `iolink_log_sink_t` (four copies of the same callback/self/level) and the

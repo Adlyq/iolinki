@@ -70,7 +70,7 @@ static void wire_device_info_init(void)
     info.vendor_id = 0x0123U;
     info.device_id = 0x010203U;
     info.profile_characteristic = 0x0001U;
-    info.revision_id = 0x0111U;
+    info.revision_id = IOLINK_REVISION_ID_1_1;
     info.min_cycle_time = 0U;
     test_env_init(&g_test_env, &info);
 }

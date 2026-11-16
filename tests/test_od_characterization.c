@@ -110,7 +110,7 @@ static const iolink_device_info_t k_char_info = {
     .function_id = 0x0001U,
     .profile_characteristic = 0x1234U,
     .min_cycle_time = 0U,
-    .revision_id = 0x0111U,
+    .revision_id = IOLINK_REVISION_ID_1_1,
     .device_status = 0U,
     .detailed_device_status = 0U,
     .access_locks = 0U,
@@ -211,7 +211,7 @@ static void test_char_direct_param_page1(void** state)
     assert_int_equal(buf[0x00], 0x00U); /* MasterCommand（未绑定主站命令） */
     assert_int_equal(buf[0x01], 0x00U); /* MasterCycleTime（未绑定 DLL） */
     assert_int_equal(buf[0x02], 0x00U); /* MinCycleTime（未配置） */
-    assert_int_equal(buf[0x04], 0x11U); /* RevisionID 低字节 */
+    assert_int_equal(buf[0x04], IOLINK_REVISION_ID_1_1);
     assert_int_equal(buf[0x07], 0x04U); /* VendorID MSB */
     assert_int_equal(buf[0x08], 0xD2U); /* VendorID LSB */
     assert_int_equal(buf[0x09], 0x00U); /* DeviceID 高字节 */

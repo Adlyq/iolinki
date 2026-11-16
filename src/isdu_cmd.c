@@ -642,10 +642,8 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
         page[0x02] = (min_cyc == 0U) ? 0U : iolink_cycle_time_encode(min_cyc);
     }
     page[0x03] = direct_param_mseq_capability(m_seq, od_width); /* M-sequenceCapability */
-    /* DPP1 RevisionID 是一字节的协议修订号。设备信息
-       字段保存完整的 IODD iolinkRevision（V1.1 为 0x0111）；其低
-       字节即在 DPP1 0x04 中传输的值。 */
-    page[0x04] = (uint8_t) (((info != NULL) ? info->revision_id : 0x0111U) & 0xFFU);
+    /* RevisionID 在 DPP1 0x04 中按一个八位组传输，MajorRev/MinorRev 各占半字节。 */
+    page[0x04] = (info != NULL) ? info->revision_id : IOLINK_REVISION_ID_1_1;
     page[0x05] = direct_param_encode_pd(pd_in);  /* ProcessDataIn */
     page[0x06] = direct_param_encode_pd(pd_out); /* ProcessDataOut */
     if (info != NULL) {
