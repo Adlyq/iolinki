@@ -16,6 +16,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "iolinki/types.h"
+
+IOLINK_ASSUME_NONNULL_BEGIN
 
 /**
  * @file od.h
@@ -539,7 +542,7 @@ typedef struct
 } iolink_od_codec_t;
 
 /** @brief 取 datatype 的 codec 描述；越界返回 NULL。 */
-const iolink_od_codec_t* iolink_od_codec(uint8_t datatype);
+const iolink_od_codec_t* IOLINK_NULLABLE iolink_od_codec(uint8_t datatype);
 
 /**
  * @brief 校验一个待写入值：线长、OctetString 长度上限、标量范围与
@@ -555,8 +558,9 @@ const iolink_od_codec_t* iolink_od_codec(uint8_t datatype);
  * @param len   @p data 字节数
  * @return 0 接受；0x33 长度不符；0x30 越界；负值为内部错误。
  */
-iolink_result_t iolink_od_check_value(const iolink_od_entry_t* entry, iolink_app_t* self,
-                                      const uint8_t* data, size_t len);
+iolink_result_t iolink_od_check_value(const iolink_od_entry_t* entry,
+                                      iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data,
+                                      size_t len);
 
 /**
  * @brief 把标量线上字节解码为原生值。
@@ -583,7 +587,7 @@ iolink_result_t iolink_od_default(const iolink_od_entry_t* entry, uint8_t* out, 
 size_t iolink_od_count(void);
 
 /** @brief 取第 @p i 个标准表项；越界返回 NULL。 */
-const iolink_od_entry_t* iolink_od_at(size_t i);
+const iolink_od_entry_t* IOLINK_NULLABLE iolink_od_at(size_t i);
 
 /**
  * @brief 按索引查表项：先标准表，再应用表。
@@ -596,8 +600,8 @@ const iolink_od_entry_t* iolink_od_at(size_t i);
  * @param subindex ISDU 子索引（用于多元素对象的精确匹配）
  * @return 命中的表项；未知索引返回 NULL
  */
-const iolink_od_entry_t* iolink_od_find(const iolink_od_app_t* app, uint16_t index,
-                                        uint8_t subindex);
+const iolink_od_entry_t* IOLINK_NULLABLE iolink_od_find(const iolink_od_app_t* IOLINK_NULLABLE app,
+                                                        uint16_t index, uint8_t subindex);
 
 /**
  * @brief 只在应用表中查找表项。
@@ -605,20 +609,21 @@ const iolink_od_entry_t* iolink_od_find(const iolink_od_app_t* app, uint16_t ind
  * ISDU 分发用它把"应用声明的设备专用索引"置于内建回落项之前。
  * 标准索引的分发不使用它：@ref iolink_od_find 保证标准表优先。
  */
-const iolink_od_entry_t* iolink_od_find_app(const iolink_od_app_t* app, uint16_t index,
-                                            uint8_t subindex);
+const iolink_od_entry_t* IOLINK_NULLABLE
+iolink_od_find_app(const iolink_od_app_t* IOLINK_NULLABLE app, uint16_t index, uint8_t subindex);
 
 /** @brief 标准表中 storage 为 DS 的表项数量。 */
 size_t iolink_od_ds_count(void);
 
 /** @brief 取第 @p i 个标准 DS 表项；越界返回 NULL。 */
-const iolink_od_entry_t* iolink_od_ds_at(size_t i);
+const iolink_od_entry_t* IOLINK_NULLABLE iolink_od_ds_at(size_t i);
 
 /** @brief 应用表中 storage 为 DS 的表项数量；@p app 为 NULL 时返回 0。 */
-size_t iolink_od_ds_count_app(const iolink_od_app_t* app);
+size_t iolink_od_ds_count_app(const iolink_od_app_t* IOLINK_NULLABLE app);
 
 /** @brief 取第 @p i 个应用 DS 表项；越界返回 NULL。 */
-const iolink_od_entry_t* iolink_od_ds_at_app(const iolink_od_app_t* app, size_t i);
+const iolink_od_entry_t* IOLINK_NULLABLE
+iolink_od_ds_at_app(const iolink_od_app_t* IOLINK_NULLABLE app, size_t i);
 
 /**
  * @brief index/subindex 是否属于 DS 参数集（标准表优先，其次应用表）。
@@ -665,5 +670,7 @@ iolink_result_t iolink_od_restore_value(iolink_od_ctx_t* ctx, const iolink_od_en
                                         uint8_t subindex, const uint8_t* data, size_t len);
 
 /** @} */ /* end of iolinki_od */
+
+IOLINK_ASSUME_NONNULL_END
 
 #endif  // IOLINK_OD_H

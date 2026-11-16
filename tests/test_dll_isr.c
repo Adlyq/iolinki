@@ -21,6 +21,7 @@
 #include "dll_access.h"
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
+#include "test_null.h"
 
 #include "conformance_test.h"
 
@@ -79,7 +80,7 @@ static void test_expected_req_len_operate(void** state)
     assert_int_equal(iolink_dll_expected_req_len(&dll2.main, 0x00U), 6U);
 
     /* NULL 上下文是安全的。 */
-    assert_int_equal(iolink_dll_expected_req_len(NULL, 0x80U), 0U);
+    assert_int_equal(iolink_dll_expected_req_len(TEST_NULL(const iolink_dll_main_t*), 0x80U), 0U);
 }
 
 /* 未调用 iolink_dll_init() 时 shared.isr 为 NULL；所有 ISR 入口必须安全返回，

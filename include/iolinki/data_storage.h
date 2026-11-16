@@ -19,6 +19,9 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "iolinki/types.h"
+
+IOLINK_ASSUME_NONNULL_BEGIN
 
 /**
  * @file data_storage.h
@@ -104,7 +107,7 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx);
 
 /** @brief 绑定 DS_UPLOAD_FLAG 持久化钩子（NULL 解除绑定）。 */
 void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn fn,
-                                iolink_app_t* self);
+                                iolink_app_t* IOLINK_NULLABLE self);
 
 /**
  * @brief 绑定外部工作区。
@@ -121,7 +124,7 @@ void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn 
  * @param ctx DS 上下文
  * @param ws  工作区（必须比 ctx 存活更久）；NULL 表示解绑或回到内嵌 fallback
  */
-void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws);
+void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* IOLINK_NULLABLE ws);
 
 /**
  * @brief 流式序列化当前 DS 参数集。
@@ -136,7 +139,7 @@ void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws);
  * @param cap @p out 的容量
  * @return int 序列化字节数；参数集放不下或读取失败时返回负值。
  */
-int iolink_ds_serialize(iolink_ds_ctx_t* ctx, uint8_t* out, size_t cap);
+int iolink_ds_serialize(iolink_ds_ctx_t* ctx, uint8_t* IOLINK_NULLABLE out, size_t cap);
 
 /**
  * @brief 重新计算当前参数集的长度与校验和（不保存镜像）。
@@ -162,7 +165,8 @@ void iolink_ds_refresh(iolink_ds_ctx_t* ctx);
  * @param ctx DS 上下文
  * @param app 应用 OD 表（可为 NULL，表示没有 DS 参数）
  */
-void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app, iolink_app_t* self);
+void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* IOLINK_NULLABLE app,
+                            iolink_app_t* IOLINK_NULLABLE self);
 
 /**
  * @brief 计算参数块的标准 32 位校验和（Fletcher-32）
@@ -294,7 +298,8 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
  * @param out_len [out] 接收映像长度（字节）
  * @return const uint8_t* 指向映像缓冲区的指针，出错时返回 NULL。
  */
-const uint8_t* iolink_ds_get_image(iolink_ds_ctx_t* ctx, size_t* out_len);
+const uint8_t* IOLINK_NULLABLE iolink_ds_get_image(iolink_ds_ctx_t* ctx,
+                                                   size_t* IOLINK_NULLABLE out_len);
 
 /**
  * @brief 把 DS 集合的表项恢复为表项默认值（仅 RAM）。
@@ -353,7 +358,8 @@ size_t iolink_ds_param_count(const iolink_ds_ctx_t* ctx);
  * @param i   集合索引
  * @return const iolink_od_entry_t* 表项指针；越界或未绑定时返回 NULL。
  */
-const iolink_od_entry_t* iolink_ds_param_entry(const iolink_ds_ctx_t* ctx, size_t i);
+const iolink_od_entry_t* IOLINK_NULLABLE iolink_ds_param_entry(const iolink_ds_ctx_t* ctx,
+                                                               size_t i);
 
 /**
  * @brief 发起数据存储上传请求（置位 DS_UPLOAD_FLAG，10.4.2）。
@@ -375,5 +381,7 @@ void iolink_ds_clear_upload(iolink_ds_ctx_t* ctx);
 #endif /* IOLINK_FEATURE_DATA_STORAGE */
 
 /** @} */ /* end of iolinki_data_storage */
+
+IOLINK_ASSUME_NONNULL_END
 
 #endif  // IOLINK_DATA_STORAGE_H

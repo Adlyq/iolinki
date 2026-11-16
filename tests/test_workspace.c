@@ -24,6 +24,7 @@
 #include "iolinki/workspace.h"
 #include "dll_access.h"
 #include "test_helpers.h"
+#include "test_null.h"
 
 static iolink_test_env_t g_env;
 
@@ -164,22 +165,22 @@ static void test_ds_refresh_without_image_buffer(void** state)
 static void test_bind_null_is_ignored(void** state)
 {
     (void) state;
-    /* 防御性空指针契约：绑定函数不得解引用。 */
-    iolink_isdu_bind_workspace(NULL, NULL);
-    iolink_ds_bind_workspace(NULL, NULL);
-    assert_null(iolink_device_get_workspace(NULL));
+    /* 兜底路径：上下文为 NULL 时不得解引用，各自返回错误/空操作。 */
+    iolink_isdu_bind_workspace(TEST_NULL(iolink_isdu_ctx_t*), NULL);
+    iolink_ds_bind_workspace(TEST_NULL(iolink_ds_ctx_t*), NULL);
+    assert_null(iolink_device_get_workspace(TEST_NULL(iolink_device_ctx_t*)));
     assert_int_equal(iolink_device_init(NULL, NULL), IOLINK_DEVICE_INIT_ERR_NULL);
 }
 
 static void test_ds_null_api_contracts(void** state)
 {
     (void) state;
-    assert_int_equal(iolink_ds_serialize(NULL, NULL, 0U), -1);
-    assert_int_equal(iolink_ds_build_image(NULL), -1);
-    iolink_ds_refresh(NULL);
-    assert_null(iolink_ds_get_image(NULL, NULL));
-    assert_int_equal(iolink_ds_param_count(NULL), 0U);
-    iolink_ds_bind_sources(NULL, NULL, NULL);
+    assert_int_equal(iolink_ds_serialize(TEST_NULL(iolink_ds_ctx_t*), NULL, 0U), -1);
+    assert_int_equal(iolink_ds_build_image(TEST_NULL(iolink_ds_ctx_t*)), -1);
+    iolink_ds_refresh(TEST_NULL(iolink_ds_ctx_t*));
+    assert_null(iolink_ds_get_image(TEST_NULL(iolink_ds_ctx_t*), TEST_NULL(size_t*)));
+    assert_int_equal(iolink_ds_param_count(TEST_NULL(const iolink_ds_ctx_t*)), 0U);
+    iolink_ds_bind_sources(TEST_NULL(iolink_ds_ctx_t*), NULL, NULL);
 }
 
 int main(void)

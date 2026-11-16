@@ -63,6 +63,7 @@
  * 取自它，缺失时 iolink_device_init() 返回
  * `IOLINK_DEVICE_INIT_ERR_TIME`。
  */
+IOLINK_ASSUME_NONNULL_BEGIN
 typedef struct
 {
     iolink_app_t* IOLINK_NULLABLE self; /**< 实例指针；原样传给下面每个回调（可为 NULL）。 */
@@ -72,28 +73,33 @@ typedef struct
      *
      * 数据 ISR 会读取它，因此实现必须是单调、无阻塞且 ISR 安全的。
      */
-    uint64_t (*IOLINK_NONNULL time_us)(iolink_app_t* IOLINK_NULLABLE self);
+    uint64_t (*time_us)(iolink_app_t* IOLINK_NULLABLE self);
 
     /** @brief 可选日志回调；NULL 表示静默（由 `config.log_level` 过滤）。 */
     void (*IOLINK_NULLABLE log_write)(iolink_app_t* IOLINK_NULLABLE self, iolink_log_level_t level,
                                       const char* format, ...) IOLINK_LOG_PRINTF_FORMAT(3, 4);
 
-    void (*on_startup)(iolink_app_t* self);    /**< 已进入 STARTUP */
-    void (*on_preoperate)(iolink_app_t* self); /**< 已进入 PREOPERATE */
-    void (*on_operate)(iolink_app_t* self);    /**< 已进入 OPERATE */
-    bool (*on_pd_input)(iolink_app_t* self, uint8_t* data,
-                        uint8_t len);                                     /**< 填充输入 PD；
-                                                                              false 表示无效。
-                                                                              NULL = 使用轮询 API。 */
-    void (*on_pd_output)(iolink_app_t* self, uint8_t* data, uint8_t len); /**< 已收到输出 PD */
-    void (*on_state_change)(iolink_app_t* self,
-                            iolink_dll_state_t state); /**< 基于电平通知时的当前 DLL 状态。
-                                                            在主上下文中运行，可能位于
-                                                            iolink_dll_process() 内部；
-                                                            在此处不得重入 iolink_*。 */
-    void (*on_master_lost)(iolink_app_t* self);        /**< 主站通信丢失 */
-    void (*on_master_online)(iolink_app_t* self);      /**< 主站通信恢复 */
+    void (*IOLINK_NULLABLE on_startup)(iolink_app_t* IOLINK_NULLABLE self); /**< 已进入 STARTUP */
+    void (*IOLINK_NULLABLE on_preoperate)(
+        iolink_app_t* IOLINK_NULLABLE self); /**< 已进入 PREOPERATE */
+    void (*IOLINK_NULLABLE on_operate)(iolink_app_t* IOLINK_NULLABLE self); /**< 已进入 OPERATE */
+    bool (*IOLINK_NULLABLE on_pd_input)(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data,
+                                        uint8_t len); /**< 填充输入 PD；
+                                                           false 表示无效。
+                                                           NULL = 使用轮询 API。 */
+    void (*IOLINK_NULLABLE on_pd_output)(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data,
+                                         uint8_t len); /**< 已收到输出 PD */
+    void (*IOLINK_NULLABLE on_state_change)(
+        iolink_app_t* IOLINK_NULLABLE self,
+        iolink_dll_state_t state); /**< 基于电平通知时的当前 DLL 状态。
+                                        在主上下文中运行，可能位于
+                                        iolink_dll_process() 内部；
+                                        在此处不得重入 iolink_*。 */
+    void (*IOLINK_NULLABLE on_master_lost)(iolink_app_t* IOLINK_NULLABLE self); /**< 主站通信丢失 */
+    void (*IOLINK_NULLABLE on_master_online)(
+        iolink_app_t* IOLINK_NULLABLE self); /**< 主站通信恢复 */
 } iolink_device_app_t;
+IOLINK_ASSUME_NONNULL_END
 
 /** @} */ /* end of iolinki_application */
 

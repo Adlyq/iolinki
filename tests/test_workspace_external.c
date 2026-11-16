@@ -31,6 +31,7 @@
 #include "iolinki/isdu.h"
 #include "iolinki/workspace.h"
 #include "dll_access.h"
+#include "test_null.h"
 
 /* 库不再提供默认身份：这些 NO_HELPERS 用例只需要一个有效的身份对象。 */
 static const iolink_device_info_t k_test_identity = {.revision_id = IOLINK_REVISION_ID_1_1};
@@ -216,7 +217,8 @@ static void test_unbind_clears_pointers(void** state)
     iolink_isdu_od_write(isdu, IOLINK_FLOWCTRL_START, &service, 1);
     iolink_isdu_process(isdu);
     uint8_t snapshot[8] = {0U};
-    assert_int_equal(iolink_isdu_snapshot_response(isdu, NULL, snapshot, sizeof(snapshot)), 0U);
+    assert_int_equal(
+        iolink_isdu_snapshot_response(isdu, TEST_NULL(bool*), snapshot, sizeof(snapshot)), 0U);
 
     assert_null(iolink_ds_get_image(ds, NULL));
     const int built = iolink_ds_build_image(ds);

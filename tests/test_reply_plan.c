@@ -33,6 +33,7 @@
 #include <cmocka.h>
 
 #include "crc_oracle.h"
+#include "test_null.h"
 #include "dll_access.h"
 #include "iolinki/iolink.h"
 #include "iolinki/isdu.h"
@@ -714,8 +715,8 @@ static int test_invalid_frame_is_published(void)
 static int test_plan_hit_without_tx_is_deferred(void)
 {
     /* 公共入口对 NULL 上下文是空操作。 */
-    iolink_dll_publish_reply_plans(NULL);
-    iolink_dll_invalidate_reply_plans(NULL);
+    iolink_dll_publish_reply_plans(TEST_NULL(iolink_dll_main_t*));
+    iolink_dll_invalidate_reply_plans(TEST_NULL(iolink_dll_main_t*));
 
     init_preoperate_rx_only();
     uint8_t frame[2];

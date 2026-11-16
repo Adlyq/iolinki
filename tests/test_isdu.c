@@ -26,6 +26,7 @@
 #include "dll_access.h"
 #include "iolinki/device_info.h"
 #include "test_helpers.h"
+#include "test_null.h"
 
 static iolink_test_env_t g_test_env;
 
@@ -1257,7 +1258,7 @@ static void test_isdu_dp_page1_seqlock_tearing(void** state)
 
     /* 越界与 NULL 上下文不崩溃。 */
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 16U), 0U);
-    assert_int_equal(iolink_isdu_direct_param_page1_octet(NULL, 0U), 0U);
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(TEST_NULL(iolink_isdu_ctx_t*), 0U), 0U);
 }
 
 /* ISR 读取是纯索引：不重建整页，主泵输入变化在刷新前不可见。 */
@@ -1332,7 +1333,9 @@ static void test_isdu_snapshot_response(void** state)
     assert_memory_equal(out, resp, 2U);
 
     /* NULL 安全。 */
-    assert_int_equal(iolink_isdu_snapshot_response(NULL, NULL, NULL, 0U), 0U);
+    assert_int_equal(iolink_isdu_snapshot_response(TEST_NULL(const iolink_isdu_ctx_t*),
+                                                   TEST_NULL(bool*), TEST_NULL(uint8_t*), 0U),
+                     0U);
 }
 
 /* 事件/DS 服务门控：当且仅当传输处于 ISDU_STATE_IDLE 时为空闲。 */
@@ -1354,7 +1357,7 @@ static void test_isdu_is_idle(void** state)
 
     ctx.state = ISDU_STATE_IDLE;
     assert_true(iolink_isdu_is_idle(&ctx));
-    assert_false(iolink_isdu_is_idle(NULL));
+    assert_false(iolink_isdu_is_idle(TEST_NULL(const iolink_isdu_ctx_t*)));
 }
 
 /* B.2.4：DeviceAccessLocks 仅可通过子索引 0 访问；B.2.5：

@@ -16,6 +16,8 @@
 #include "iolinki/port.h"
 #include "iolinki/types.h"
 
+IOLINK_ASSUME_NONNULL_BEGIN
+
 IOLINK_STATIC_ASSERT(IOLINK_EVENT_QUEUE_SIZE > 0U, "IOLINK_EVENT_QUEUE_SIZE must be > 0");
 IOLINK_STATIC_ASSERT(IOLINK_EVENT_PENDING_MAX > 0U, "IOLINK_EVENT_PENDING_MAX must be > 0");
 
@@ -392,5 +394,7 @@ uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_even
 #endif /* IOLINK_FEATURE_EVENTS */
 
 /** @} */ /* end of iolinki_events */
+
+IOLINK_ASSUME_NONNULL_END
 
 #endif  // IOLINK_EVENTS_H

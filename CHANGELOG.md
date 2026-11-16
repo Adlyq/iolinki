@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (nullability model: non-null by default)
+- Public headers declare `IOLINK_ASSUME_NONNULL_BEGIN/END` around their
+  declarations (`_Pragma("clang assume_nonnull ...")` on clang, empty on gcc),
+  so a pointer is non-null unless it is marked. `IOLINK_NULLABLE` now marks the
+  cases where NULL is a meaningful input — an optional hook, "no application
+  table", "measure only" — and the return types whose NULL means "not found".
+- A function may still guard `if (ctx == NULL) return err;` internally. That
+  guard is a fallback for a caller bug, not a contract, so the parameter stays
+  non-null. Marking such parameters nullable would write "you may pass garbage"
+  into the interface.
+- `IOLINK_NONNULL` stays for nested pointer types (arrays of pointers), which
+  `assume_nonnull` deliberately does not infer.
+
 ### Added (static analyzer gate)
 - `tools/gates.sh analyzer` runs `clang --analyze` over `src/` and fails on any
   finding. It runs per translation unit instead of through `scan-build`: that

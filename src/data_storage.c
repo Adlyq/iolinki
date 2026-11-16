@@ -371,9 +371,13 @@ int iolink_ds_factory_reset(iolink_ds_ctx_t* ctx)
             continue; /* 内建处理器（含标签）由设备/应用复位。 */
         }
         if (entry->datatype == (uint8_t) IOLINK_OD_DT_OCTET_STRING) {
-            const uint8_t* def = entry->block_default;
-            const size_t def_len = (def != NULL) ? (size_t) entry->block_len : 0U;
-            /* 走统一写路径，让应用通过 on_change 收到“已复位，请落盘”。 */
+            /* 走统一写路径，让应用通过 on_change 收到“已复位，请落盘”。
+             * `block_default` 可以为 NULL（没有默认值）；此时长度为 0，
+             * 指针不会被解引用，但契约要求非空，因此给一个有效对象。 */
+            static const uint8_t k_empty_default = 0U;
+            const uint8_t* def =
+                (entry->block_default != NULL) ? entry->block_default : &k_empty_default;
+            const size_t def_len = (entry->block_default != NULL) ? (size_t) entry->block_len : 0U;
             (void) iolink_od_write_value(&od, entry, entry->subindex, def, def_len);
             continue;
         }

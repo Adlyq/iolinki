@@ -15,6 +15,9 @@
 #include "iolinki/config.h"
 #include "iolinki/port.h"
 #include "iolinki/internal/ring.h"
+#include "iolinki/types.h"
+
+IOLINK_ASSUME_NONNULL_BEGIN
 
 /**
  * @file dll.h
@@ -200,19 +203,19 @@ typedef enum
  */
 typedef struct
 {
-    const uint8_t* data;  /**< @ref IOLINK_REPLY_SRC_TEMPLATE 的模板字节 */
-    uint16_t deadline_us; /**< t_A 预算（10 个位时间）；时序审计/WCET 用 */
-    uint8_t match_mask;   /**< MC 字节参与匹配的位 */
-    uint8_t match_value;  /**< MC 字节匹配值 */
-    uint8_t ckt_mask;     /**< CKT 类型位掩码（0 = 不比较类型） */
-    uint8_t ckt_value;    /**< CKT 类型位匹配值 */
-    uint8_t addr_max;     /**< MC 地址字段上界（0x1F = 不限制） */
-    uint8_t req_len;      /**< 精确请求长度，0 = 不限制 */
-    uint8_t len;          /**< 载荷字节数（不含 CKS） */
-    uint8_t flags;        /**< @ref IOLINK_REPLY_FLAG_PD_TAIL 等 */
-    uint8_t source;       /**< @ref iolink_reply_source_t */
-    uint8_t action;       /**< @ref iolink_reply_action_t */
-    uint8_t state;        /**< 编译该计划时的 DLL 状态（仅记录/调试；匹配范围由切片决定） */
+    const uint8_t* IOLINK_NULLABLE data; /**< @ref IOLINK_REPLY_SRC_TEMPLATE 的模板字节 */
+    uint16_t deadline_us;                /**< t_A 预算（10 个位时间）；时序审计/WCET 用 */
+    uint8_t match_mask;                  /**< MC 字节参与匹配的位 */
+    uint8_t match_value;                 /**< MC 字节匹配值 */
+    uint8_t ckt_mask;                    /**< CKT 类型位掩码（0 = 不比较类型） */
+    uint8_t ckt_value;                   /**< CKT 类型位匹配值 */
+    uint8_t addr_max;                    /**< MC 地址字段上界（0x1F = 不限制） */
+    uint8_t req_len;                     /**< 精确请求长度，0 = 不限制 */
+    uint8_t len;                         /**< 载荷字节数（不含 CKS） */
+    uint8_t flags;                       /**< @ref IOLINK_REPLY_FLAG_PD_TAIL 等 */
+    uint8_t source;                      /**< @ref iolink_reply_source_t */
+    uint8_t action;                      /**< @ref iolink_reply_action_t */
+    uint8_t state; /**< 编译该计划时的 DLL 状态（仅记录/调试；匹配范围由切片决定） */
 } iolink_reply_plan_t;
 /** @} */
 
@@ -495,8 +498,8 @@ int iolink_dll_set_pd_length(iolink_dll_main_t* ctx, uint8_t pd_in_len, uint8_t 
  * @param[out] pd_in_len 当前 PD_In 长度
  * @param[out] pd_out_len 当前 PD_Out 长度
  */
-void iolink_dll_get_pd_length(const iolink_dll_main_t* ctx, uint8_t* pd_in_len,
-                              uint8_t* pd_out_len);
+void iolink_dll_get_pd_length(const iolink_dll_main_t* ctx, uint8_t* IOLINK_NULLABLE pd_in_len,
+                              uint8_t* IOLINK_NULLABLE pd_out_len);
 
 /**
  * @brief 请求切换到 SIO 模式（单线通信）
@@ -622,5 +625,7 @@ void iolink_dll_set_timing_enforcement(iolink_dll_main_t* ctx, bool enable);
 void iolink_dll_set_t_ren_limit_us(iolink_dll_main_t* ctx, uint32_t limit_us);
 
 /** @} */ /* iolinki_dll 结束 */
+
+IOLINK_ASSUME_NONNULL_END
 
 #endif  // IOLINK_DLL_H

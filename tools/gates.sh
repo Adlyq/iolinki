@@ -30,6 +30,13 @@ cd "$ROOT"
 GATE_GROUPS=(quick build test gcc sanitize memcheck analyzer static docs matrix perf package)
 
 STRICT_CFLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
+# -Wnullability reports a NULL passed where `IOLINK_NONNULL` (or the
+# IOLINK_ASSUME_NONNULL_* default) says the argument is required; -Wnonnull
+# covers the call sites. It stays off while the nullability rollout marks the
+# nullable pointers header by header: enabling it now would turn the unmarked
+# remainder into errors. Re-enable it (gates.sh analyzer) once the headers are
+# annotated; until then `sanitize` (`-fsanitize=null`) is the runtime oracle.
+NULLABILITY_FLAGS=""
 
 # clang is the primary compiler: the shipping toolchains are clang-based (ATFE
 # is clang, AC6 armclang is LLVM) and the pointer annotations only exist under
@@ -169,6 +176,7 @@ same_compiler() {
 configure_tree() {
     local dir="$1" type="$2" cc="$3"
     shift 3
+    local flags="$STRICT_CFLAGS $NULLABILITY_FLAGS"
     if [ -f "$dir/CMakeCache.txt" ]; then
         local cached_src cached_cc
         cached_src=$(grep -E '^CMAKE_HOME_DIRECTORY:INTERNAL=' "$dir/CMakeCache.txt" |
@@ -181,7 +189,7 @@ configure_tree() {
         fi
     fi
     cmake -S "$ROOT" -B "$dir" -DCMAKE_BUILD_TYPE="$type" \
-        -DCMAKE_C_COMPILER="$cc" -DCMAKE_C_FLAGS="$STRICT_CFLAGS" "$@"
+        -DCMAKE_C_COMPILER="$cc" -DCMAKE_C_FLAGS="$flags" "$@"
 }
 
 build_debug() {
@@ -269,7 +277,7 @@ build_sanitize() {
     # is a clang sanitizer and the linker flags reach the C++ link as well.
     configure_tree "$SANITIZE_DIR" Debug "$CC_PRIMARY" \
         "-DCMAKE_CXX_COMPILER=$CXX_PRIMARY" \
-        "-DCMAKE_C_FLAGS=$STRICT_CFLAGS $SANITIZE_FLAGS" \
+        "-DCMAKE_C_FLAGS=$STRICT_CFLAGS $NULLABILITY_FLAGS $SANITIZE_FLAGS" \
         "-DCMAKE_EXE_LINKER_FLAGS=$SANITIZE_FLAGS" &&
         cmake --build "$SANITIZE_DIR" --parallel "$(nproc)"
 }
@@ -299,7 +307,7 @@ build_memcheck() {
     # cannot parse the DWARF 5 that current clang emits by default and abort
     # with "ensure_valid failed" on every binary.
     configure_tree "$MEMCHECK_DIR" Debug "$CC_PRIMARY" \
-        "-DCMAKE_C_FLAGS=$STRICT_CFLAGS -gdwarf-4" &&
+        "-DCMAKE_C_FLAGS=$STRICT_CFLAGS $NULLABILITY_FLAGS -gdwarf-4" &&
         cmake --build "$MEMCHECK_DIR" --parallel "$(nproc)"
 }
 

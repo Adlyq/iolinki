@@ -30,6 +30,7 @@
 #include "dll_access.h"
 #include "switching_sensor.h"
 #include "test_helpers.h"
+#include "test_null.h"
 
 static iolink_test_env_t g_od_env;
 
@@ -337,24 +338,35 @@ static void test_od_codec_edges(void** state)
     assert_null(iolink_od_at(iolink_od_count()));
 
     /* decode：空参数、非标量、范围越界。 */
-    assert_int_equal(iolink_od_decode(NULL, buf, 1U, &value).code, IOLINK_RESULT_INVALID);
-    assert_int_equal(iolink_od_decode(scalar, buf, 1U, NULL).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_decode(TEST_NULL(const iolink_od_entry_t*), buf, 1U, &value).code,
+                     IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_decode(scalar, buf, 1U, TEST_NULL(uint32_t*)).code,
+                     IOLINK_RESULT_INVALID);
     assert_int_equal(iolink_od_decode(octet, buf, 4U, &value).code, IOLINK_RESULT_INVALID);
     const uint8_t too_big[1] = {2U};
     assert_int_equal(iolink_od_decode(range, too_big, 1U, &value).code,
                      IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG);
 
     /* encode：空参数、非标量、超范围与容量不足。 */
-    assert_int_equal(iolink_od_encode(NULL, 0U, buf, sizeof(buf)).code, IOLINK_RESULT_INVALID);
-    assert_int_equal(iolink_od_encode(scalar, 0U, NULL, sizeof(buf)).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(
+        iolink_od_encode(TEST_NULL(const iolink_od_entry_t*), 0U, buf, sizeof(buf)).code,
+        IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_encode(scalar, 0U, TEST_NULL(uint8_t*), sizeof(buf)).code,
+                     IOLINK_RESULT_INVALID);
     assert_int_equal(iolink_od_encode(octet, 0U, buf, sizeof(buf)).code, IOLINK_RESULT_NOT_HANDLED);
     assert_int_equal(iolink_od_encode(range, 0x100U, buf, sizeof(buf)).code, IOLINK_RESULT_INVALID);
     assert_int_equal(iolink_od_encode(scalar, 0U, buf, 1U).code, IOLINK_RESULT_INVALID);
 
     /* check_value：空表项、空数据但声明了长度。 */
-    assert_int_equal(iolink_od_check_value(NULL, NULL, buf, 1U).code, IOLINK_RESULT_INVALID);
-    assert_int_equal(iolink_od_check_value(scalar, NULL, NULL, 1U).code, IOLINK_RESULT_INVALID);
-    assert_true(iolink_result_succeeded(iolink_od_check_value(octet, NULL, NULL, 0U)));
+    assert_int_equal(iolink_od_check_value(TEST_NULL(const iolink_od_entry_t*),
+                                           TEST_NULL(iolink_app_t*), buf, 1U)
+                         .code,
+                     IOLINK_RESULT_INVALID);
+    assert_int_equal(
+        iolink_od_check_value(scalar, TEST_NULL(iolink_app_t*), TEST_NULL(const uint8_t*), 1U).code,
+        IOLINK_RESULT_INVALID);
+    assert_true(iolink_result_succeeded(
+        iolink_od_check_value(octet, TEST_NULL(iolink_app_t*), TEST_NULL(const uint8_t*), 0U)));
     /* OctetString 的 block_len 是写上限；block_len == 0 才表示不限制。 */
     const uint8_t block_ok[4] = {0U};
     const uint8_t block_too_long[5] = {0U};
@@ -401,15 +413,17 @@ static void test_od_value_layer_edges(void** state)
     const iolink_od_entry_t* octet = &k_octet_entry[0];
 
     /* default：空参数、块默认值拷贝与容量不足。 */
-    assert_int_equal(iolink_od_default(NULL, buf, sizeof(buf)).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_default(TEST_NULL(const iolink_od_entry_t*), buf, sizeof(buf)).code,
+                     IOLINK_RESULT_INVALID);
     assert_int_equal(iolink_od_default(octet, buf, sizeof(buf)).len, 4);
     assert_memory_equal(buf, k_block_default, sizeof(k_block_default));
     assert_int_equal(iolink_od_default(octet, buf, 3U).code, IOLINK_RESULT_INVALID);
 
     /* read_value：空参数、缺应用表、缺 read、后端失败、线长不符、超出容量。 */
     iolink_od_ctx_t ctx = {0};
-    assert_int_equal(iolink_od_read_value(NULL, scalar, 0U, buf, sizeof(buf)).code,
-                     IOLINK_RESULT_INVALID);
+    assert_int_equal(
+        iolink_od_read_value(TEST_NULL(const iolink_od_ctx_t*), scalar, 0U, buf, sizeof(buf)).code,
+        IOLINK_RESULT_INVALID);
     assert_int_equal(iolink_od_read_value(&ctx, scalar, 0U, buf, sizeof(buf)).code,
                      IOLINK_RESULT_NOT_HANDLED); /* HANDLER 但 app == NULL */
     single_cell_t read_cell = {.value = 0U};
@@ -439,7 +453,8 @@ static void test_od_value_layer_edges(void** state)
                      IOLINK_RESULT_INVALID);
 
     /* write_value：空参数、TRIGGER 无钩子、无 app、写后钩子。 */
-    assert_int_equal(iolink_od_write_value(NULL, scalar, 0U, &one, 1U).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(iolink_od_write_value(TEST_NULL(iolink_od_ctx_t*), scalar, 0U, &one, 1U).code,
+                     IOLINK_RESULT_INVALID);
     assert_int_equal(iolink_od_write_value(&ctx, &k_trigger_no_hook[0], 0U, &one, 1U).code,
                      IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
 
@@ -821,9 +836,12 @@ static void test_od_restore_value_paths(void** state)
     const uint8_t too_long[5] = {0U};
     uint8_t tag_out[4] = {0U};
 
-    assert_int_equal(iolink_od_restore_value(NULL, &entries[0], 0U, wire, 2U).code,
-                     IOLINK_RESULT_INVALID);
-    assert_int_equal(iolink_od_restore_value(&ctx, NULL, 0U, wire, 2U).code, IOLINK_RESULT_INVALID);
+    assert_int_equal(
+        iolink_od_restore_value(TEST_NULL(iolink_od_ctx_t*), &entries[0], 0U, wire, 2U).code,
+        IOLINK_RESULT_INVALID);
+    assert_int_equal(
+        iolink_od_restore_value(&ctx, TEST_NULL(const iolink_od_entry_t*), 0U, wire, 2U).code,
+        IOLINK_RESULT_INVALID);
     assert_int_equal(iolink_od_restore_value(&ctx, &entries[0], 1U, wire, 2U).code,
                      IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
 

@@ -51,6 +51,17 @@ typedef struct iolink_app iolink_app_t;
 #if defined(__clang__)
 #define IOLINK_NONNULL _Nonnull
 #define IOLINK_NULLABLE _Nullable
+/**
+ * @brief 声明的默认空值约定：区域内未标注的指针按"必须非 NULL"处理。
+ *
+ * 每个公共头文件把声明区包在 BEGIN/END 之间，因此"必需"是默认，"可缺省"
+ * 才需要写 @ref IOLINK_NULLABLE —— 与 Rust 的 `&T` / `Option<&T>` 同一取向。
+ * Clang 的 `assume_nonnull` 是**文件作用域**的，不能在一个头里开、在另一个
+ * 头里继承（`#pragma ... was not ended within this file`），所以每个头都要
+ * 自带一对。
+ */
+#define IOLINK_ASSUME_NONNULL_BEGIN _Pragma("clang assume_nonnull begin")
+#define IOLINK_ASSUME_NONNULL_END _Pragma("clang assume_nonnull end")
 /* 注解按需书写（只标注契约里有实际意义的指针），不要求每个指针都标，
  * 因此关掉完整性诊断。该 pragma 在包含本头之后对整个翻译单元生效：需要
  * 完整性检查的代码可在包含 iolinki 头之后用
@@ -73,6 +84,8 @@ typedef struct iolink_app iolink_app_t;
 #else
 #define IOLINK_NONNULL
 #define IOLINK_NULLABLE
+#define IOLINK_ASSUME_NONNULL_BEGIN
+#define IOLINK_ASSUME_NONNULL_END
 #endif
 
 #endif /* IOLINK_TYPES_H */
