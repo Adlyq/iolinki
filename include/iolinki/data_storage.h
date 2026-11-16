@@ -19,7 +19,6 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "iolinki/types.h"
 
 IOLINK_ASSUME_NONNULL_BEGIN
 
@@ -81,15 +80,15 @@ typedef struct iolink_ds_ctx
     bool ds_upload_flag;                           /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
     bool upload_event_pending;                     /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
     iolink_ds_flag_persist_fn IOLINK_NULLABLE flag_persist; /**< 标志变化通知（可为 NULL）。 */
-    iolink_app_t* flag_self; /**< 传给 @ref flag_persist 的上下文。 */
-    iolink_app_t* self;      /**< 传给 OD 钩子/后端的应用上下文。 */
+    iolink_app_t* IOLINK_NULLABLE flag_self; /**< 传给 @ref flag_persist 的上下文。 */
+    iolink_app_t* IOLINK_NULLABLE self;      /**< 传给 OD 钩子/后端的应用上下文。 */
     /* 镜像不再常驻状态结构。序列化交给工作区中的暂存缓冲（上传可
      * 直接流式写入调用方缓冲），这里只保留指针与容量。 */
-    uint8_t* image;        /**< 序列化/下载暂存缓冲（工作区或内嵌 fallback） */
-    size_t image_size;     /**< @ref image 的容量 */
-    size_t image_len;      /**< @ref image 中的有效字节数 */
-    bool image_valid;      /**< image 是否保存了当前参数的完整快照 */
-    bool download_invalid; /**< 被拒绝的写入会使当前下载失效 */
+    uint8_t* IOLINK_NULLABLE image;               /**< 序列化/下载暂存缓冲（解绑时为 NULL） */
+    size_t image_size;                            /**< @ref image 的容量 */
+    size_t image_len;                             /**< @ref image 中的有效字节数 */
+    bool image_valid;                             /**< image 是否保存了当前参数的完整快照 */
+    bool download_invalid;                        /**< 被拒绝的写入会使当前下载失效 */
     const iolink_log_sink_t* IOLINK_NULLABLE log; /**< 日志汇点指针（NULL = 静默；设备层指向共享
                                       sink， 独立使用须自行指向调用方的 sink） */
 #if IOLINK_WORKSPACE_EMBEDDED

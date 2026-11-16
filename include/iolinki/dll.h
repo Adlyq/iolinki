@@ -340,7 +340,7 @@ typedef struct
 } iolink_timer_contract_t;
 
 /** @brief 取时序契约表（只读，进程生命周期内稳定）。 */
-const iolink_timer_contract_t* iolink_dll_timer_contract(uint8_t* count);
+const iolink_timer_contract_t* iolink_dll_timer_contract(uint8_t* IOLINK_NULLABLE count);
 
 /** @brief 查询一个 timer 的绝对截止时间（0 = 未装载）。 */
 uint64_t iolink_dll_timer_deadline(const iolink_dll_main_t* ctx, iolink_timer_id_t id);

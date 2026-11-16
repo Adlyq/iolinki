@@ -98,34 +98,34 @@ typedef struct
 
     /* 传输缓冲位于 `workspace`（或上下文内嵌 fallback）中。
      * 容量随缓冲一起记录，避免运行期再出现第二份尺寸常量。 */
-    uint8_t* buffer;             /**< 请求载荷缓冲区 */
-    size_t buffer_size;          /**< @ref buffer 的容量 */
-    size_t buffer_idx;           /**< 当前缓冲区中已采集的字节数 */
-    iolink_isdu_header_t header; /**< 已解码的请求头 */
+    uint8_t* IOLINK_NULLABLE buffer; /**< 请求载荷缓冲区（解绑工作区时为 NULL） */
+    size_t buffer_size;              /**< @ref buffer 的容量 */
+    size_t buffer_idx;               /**< 当前缓冲区中已采集的字节数 */
+    iolink_isdu_header_t header;     /**< 已解码的请求头 */
 
-    uint8_t* response_buf; /**< 应答载荷缓冲区 */
-    size_t response_size;  /**< @ref response_buf 的容量 */
-    size_t response_idx;   /**< 已从应答缓冲区发送的字节数 */
-    size_t response_len;   /**< 应答缓冲区中的总字节数 */
+    uint8_t* IOLINK_NULLABLE response_buf; /**< 应答载荷缓冲区（解绑时为 NULL） */
+    size_t response_size;                  /**< @ref response_buf 的容量 */
+    size_t response_idx;                   /**< 已从应答缓冲区发送的字节数 */
+    size_t response_len;                   /**< 应答缓冲区中的总字节数 */
 
     /* 规范 ISDU 传输（C3，Table 52） */
-    uint8_t* req_buf; /**< 原始 ISDU 请求八位组（含 CHKPDU） */
-    size_t req_size;  /**< @ref req_buf 的容量 */
+    uint8_t* IOLINK_NULLABLE req_buf; /**< 原始 ISDU 请求八位组（含 CHKPDU） */
+    size_t req_size;                  /**< @ref req_buf 的容量 */
     /* 成帧应答，单缓冲 + 租约：引擎在缓冲空闲时构建，
      * 数据 ISR 在租约期内读取。`resp_store[0/1]` 是同一个缓冲的两个
      * 视图槽，只为保持 ISR 发布字中 sel 位的既有编码。 */
-    uint8_t* resp_frame;                   /**< 唯一成帧应答缓冲区 */
-    uint8_t* IOLINK_NONNULL resp_store[2]; /**< 两个视图槽（同一缓冲） */
-    uint8_t* resp_buf;                     /**< 正在构建的缓冲区 */
-    uint8_t resp_sel;                      /**< resp_buf 的视图索引 */
-    uint8_t resp_pub;                      /**< 最后一个完整（已发布）应答的视图索引 */
-    size_t req_idx;                        /**< req_buf 中已采集的八位组数 */
-    size_t req_total;                      /**< 由 Length/ExtLength 得出的预期 ISDU 总长度 */
-    size_t resp_idx;                       /**< 已从 resp_buf 发出的八位组数 */
-    size_t resp_total;                     /**< resp_buf 中的总八位组数 */
-    uint8_t last_flowctrl;                 /**< 上一条 ISDU 报文的 FlowCTRL */
-    bool flowctrl_seen;                    /**< 自 START 以来已收到 FlowCTRL */
-    uint8_t error_code;                    /**< IO-Link ISDU 错误码（0x80XX） */
+    uint8_t* IOLINK_NULLABLE resp_frame;    /**< 唯一成帧应答缓冲区 */
+    uint8_t* IOLINK_NULLABLE resp_store[2]; /**< 两个视图槽（同一缓冲） */
+    uint8_t* IOLINK_NULLABLE resp_buf;      /**< 正在构建的缓冲区 */
+    uint8_t resp_sel;                       /**< resp_buf 的视图索引 */
+    uint8_t resp_pub;                       /**< 最后一个完整（已发布）应答的视图索引 */
+    size_t req_idx;                         /**< req_buf 中已采集的八位组数 */
+    size_t req_total;                       /**< 由 Length/ExtLength 得出的预期 ISDU 总长度 */
+    size_t resp_idx;                        /**< 已从 resp_buf 发出的八位组数 */
+    size_t resp_total;                      /**< resp_buf 中的总八位组数 */
+    uint8_t last_flowctrl;                  /**< 上一条 ISDU 报文的 FlowCTRL */
+    bool flowctrl_seen;                     /**< 自 START 以来已收到 FlowCTRL */
+    uint8_t error_code;                     /**< IO-Link ISDU 错误码（0x80XX） */
 
     /* 指向外部依赖的指针 */
     bool response_negative; /**< 由 isdu_respond_error 设置；用于区分 0x80 两八位组载荷。 */
@@ -201,7 +201,7 @@ void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* IOLI
  * @param app  应用表（必须在使用期间保持有效；NULL 解除绑定）
  * @param self 传给 OD 钩子与 HANDLER 后端的应用上下文（可为 NULL）
  */
-void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app,
+void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* IOLINK_NULLABLE app,
                          iolink_app_t* IOLINK_NULLABLE self);
 
 /**
@@ -213,7 +213,7 @@ void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app,
  * @param ctx  ISDU 上下文
  * @param caps 指向实例能力位的指针（必须比 ctx 存活更久）；NULL 解绑
  */
-void iolink_isdu_bind_caps(iolink_isdu_ctx_t* ctx, const iolink_caps_t* caps);
+void iolink_isdu_bind_caps(iolink_isdu_ctx_t* ctx, const iolink_caps_t* IOLINK_NULLABLE caps);
 
 /**
  * @brief 处理 ISDU 引擎逻辑（主上下文）。
@@ -274,7 +274,8 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
  *
  * @param ctx ISDU 上下文
  * @param flowctrl FlowCTRL 值（mc & 0x1F）
- * @param od_out [out] od_len 个八位组的缓冲区
+ * @param od_out [out] od_len 个八位组的缓冲区；仅当 @p od_len 为 0
+ *               时可以为 NULL（用于只推进状态、不取字节的调用）
  * @param od_len 要填充的 OD 八位组数量
  */
 void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* IOLINK_NULLABLE od_out,
@@ -301,8 +302,8 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* IOLI
  * @param dst_size @p dst 的容量
  * @return uint8_t 复制的应答八位组数量（无/忙时为 0）
  */
-uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* busy, uint8_t* dst,
-                                      size_t dst_size);
+uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* IOLINK_NULLABLE busy,
+                                      uint8_t* dst, size_t dst_size);
 
 /**
  * @brief ISDU 传输是否空闲。

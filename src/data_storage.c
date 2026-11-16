@@ -361,6 +361,10 @@ int iolink_ds_factory_reset(iolink_ds_ctx_t* ctx)
 
     /* 复位 DS 集合：它是主站可备份/恢复的参数集，也是库当前唯一持有的
        集合标记。纯应用持久化参数由应用自行复位。 */
+    /* `block_default` 可以为 NULL（没有默认值）；此时长度为 0，指针不会被
+     * 解引用，但 `iolink_od_write_value()` 的契约要求非空，所以给一个有效
+     * 对象。 */
+    static const uint8_t k_empty_default = 0U;
     const size_t count = ds_entry_count(ctx, IOLINK_OD_STORAGE_DS);
     for (size_t i = 0U; i < count; i++) {
         const iolink_od_entry_t* entry = ds_entry_at(ctx, i, IOLINK_OD_STORAGE_DS);
@@ -371,10 +375,7 @@ int iolink_ds_factory_reset(iolink_ds_ctx_t* ctx)
             continue; /* 内建处理器（含标签）由设备/应用复位。 */
         }
         if (entry->datatype == (uint8_t) IOLINK_OD_DT_OCTET_STRING) {
-            /* 走统一写路径，让应用通过 on_change 收到“已复位，请落盘”。
-             * `block_default` 可以为 NULL（没有默认值）；此时长度为 0，
-             * 指针不会被解引用，但契约要求非空，因此给一个有效对象。 */
-            static const uint8_t k_empty_default = 0U;
+            /* 走统一写路径，让应用通过 on_change 收到“已复位，请落盘”。 */
             const uint8_t* def =
                 (entry->block_default != NULL) ? entry->block_default : &k_empty_default;
             const size_t def_len = (entry->block_default != NULL) ? (size_t) entry->block_len : 0U;

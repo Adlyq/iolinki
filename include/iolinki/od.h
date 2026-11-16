@@ -16,7 +16,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "iolinki/types.h"
 
 IOLINK_ASSUME_NONNULL_BEGIN
 
@@ -515,8 +514,8 @@ struct iolink_od_entry
  */
 typedef struct
 {
-    const iolink_od_entry_t* entries; /**< 应用表项数组。 */
-    size_t count;                     /**< 表项数量。 */
+    const iolink_od_entry_t* IOLINK_NULLABLE entries; /**< 应用表项数组（空表可为 NULL）。 */
+    size_t count;                                     /**< 表项数量。 */
 } iolink_od_app_t;
 
 /**
@@ -524,9 +523,9 @@ typedef struct
  */
 typedef struct
 {
-    const iolink_od_app_t* app; /**< 应用表与后端（可为 NULL）。 */
-    iolink_app_t* self;         /**< 传给钩子与 HANDLER 后端的应用上下文
-                                     （可为 NULL，钩子需自行处理）。 */
+    const iolink_od_app_t* IOLINK_NULLABLE app; /**< 应用表与后端（可为 NULL）。 */
+    iolink_app_t* IOLINK_NULLABLE self;         /**< 传给钩子与 HANDLER 后端的应用上下文
+                                                     （可为 NULL，钩子需自行处理）。 */
 } iolink_od_ctx_t;
 
 /**
@@ -632,7 +631,7 @@ iolink_od_ds_at_app(const iolink_od_app_t* IOLINK_NULLABLE app, size_t i);
  * @param index    ISDU 索引
  * @param subindex ISDU 子索引
  */
-bool iolink_od_is_ds(const iolink_od_app_t* app, uint16_t index, uint8_t subindex);
+bool iolink_od_is_ds(const iolink_od_app_t* IOLINK_NULLABLE app, uint16_t index, uint8_t subindex);
 
 /**
  * @brief 通过表项读取一个值。

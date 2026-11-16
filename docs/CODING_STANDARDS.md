@@ -61,11 +61,15 @@ implementation-level buffer ownership stays in `docs/CODE_FLOW.md` (section
   `rx_frame()` call").
 - **Direction tags are mandatory** for pointer parameters: `@param[in]`,
   `@param[out]` or `@param[in,out]`.
-- **Nullability is annotated, not implied.** `IOLINK_NONNULL` marks required
-  pointers, `IOLINK_NULLABLE` marks the documented optional ones (NULL means
-  "unsupported / not needed", never "take another path"). Both are Clang
-  `_Nonnull` / `_Nullable` and empty elsewhere; annotations are written where
-  the contract matters, not on every pointer.
+- **Nullability: non-null by default.** A header opens an
+  `IOLINK_ASSUME_NONNULL_BEGIN`/`END` region, so an unmarked pointer is
+  required (`_Nonnull` under Clang, nothing elsewhere). `IOLINK_NULLABLE` marks
+  the cases where NULL carries meaning: an optional hook or context, "no
+  application table", an output the caller may skip, or a return value whose
+  NULL means "not found". A function may still guard `if (p == NULL) return
+  err;` — that is a fallback for a caller bug, not a contract, so the parameter
+  stays non-null. `IOLINK_NONNULL` is only written for nested pointer types
+  (arrays of pointers), which the pragma does not infer.
 - **No universal pointers.** Name the type, or declare an opaque type and let
   the owner define the struct (e.g. `iolink_tiol112_board_t`). `void *` is
   reserved for interfaces that cannot name a type (byte views, symbol tables,

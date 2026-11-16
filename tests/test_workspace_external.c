@@ -217,8 +217,7 @@ static void test_unbind_clears_pointers(void** state)
     iolink_isdu_od_write(isdu, IOLINK_FLOWCTRL_START, &service, 1);
     iolink_isdu_process(isdu);
     uint8_t snapshot[8] = {0U};
-    assert_int_equal(
-        iolink_isdu_snapshot_response(isdu, TEST_NULL(bool*), snapshot, sizeof(snapshot)), 0U);
+    assert_int_equal(iolink_isdu_snapshot_response(isdu, NULL, snapshot, sizeof(snapshot)), 0U);
 
     assert_null(iolink_ds_get_image(ds, NULL));
     const int built = iolink_ds_build_image(ds);
