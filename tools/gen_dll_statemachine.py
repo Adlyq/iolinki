@@ -87,12 +87,28 @@ def parse_rows() -> list[Row]:
     return rows
 
 
+class AdminRowError(Exception):
+    """DLL_SM_ADMIN_ROWS cannot be read; the message says why."""
+
+
 def parse_admin_rows() -> list[tuple[str, str, str]]:
     """Rows of DLL_SM_ADMIN_ROWS: transitions the frame grid cannot express."""
     text = HEADER.read_text(encoding="utf-8").replace("\\\n", " ")
-    start = text.index("#define DLL_SM_ADMIN_ROWS")
-    end = text.index("/* clang-format on */", start)
-    return [tuple(m.groups()) for m in ADMIN_ROW_RE.finditer(text[start:end])]
+    start = text.find("#define DLL_SM_ADMIN_ROWS")
+    if start < 0:
+        raise AdminRowError("DLL_SM_ADMIN_ROWS block not found")
+    end = text.find("/* clang-format on */", start)
+    if end < 0:
+        raise AdminRowError("DLL_SM_ADMIN_ROWS block is not closed with /* clang-format on */")
+    block = text[start:end]
+    rows = [tuple(m.groups()) for m in ADMIN_ROW_RE.finditer(block)]
+    # Every X( line in the block must parse; a typo must not shrink the table.
+    if block.count("X(") != len(rows):
+        raise AdminRowError(
+            f"{block.count('X(') - len(rows)} DLL_SM_ADMIN_ROWS row(s) do not match "
+            'X("a", "b", "c")'
+        )
+    return rows
 
 
 def render_admin_table(rows: list[tuple[str, str, str]]) -> str:
@@ -107,7 +123,7 @@ def sync_admin_doc(rows: list[tuple[str, str, str]], check_only: bool) -> bool:
     expected = render_admin_table(rows)
     text = DOC.read_text(encoding="utf-8")
     begin = text.find(ADMIN_BEGIN)
-    end = text.find(ADMIN_END)
+    end = text.find(ADMIN_END, begin if begin >= 0 else 0)
     if begin < 0 or end < 0:
         print(f"statemachine: {DOC} has no generated admin block", file=sys.stderr)
         return False
@@ -279,9 +295,14 @@ def main() -> int:
     args = parser.parse_args()
 
     rows = parse_rows()
-    admin_rows = parse_admin_rows()
+    try:
+        admin_rows = parse_admin_rows()
+    except AdminRowError as exc:
+        print(f"statemachine: {HEADER.relative_to(ROOT)}: {exc}", file=sys.stderr)
+        return 1
     if not admin_rows:
-        print("statemachine: DLL_SM_ADMIN_ROWS has no rows", file=sys.stderr)
+        print(f"statemachine: {HEADER.relative_to(ROOT)}: DLL_SM_ADMIN_ROWS has no rows",
+              file=sys.stderr)
         return 1
     errors = validate(rows)
     if errors:

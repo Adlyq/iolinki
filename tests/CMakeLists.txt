@@ -104,6 +104,15 @@ else()
         "library-only build.")
 endif()
 
+# Source-level generator gate (state-machine table, Mermaid/CSV and the
+# transition table in docs/CODE_FLOW.md). It only reads the source tree, so it
+# runs for every configuration, including the trimmed ones below.
+find_package(Python3 QUIET)
+if(Python3_FOUND)
+    add_test(NAME dll_statemachine_gen_check
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/gen_dll_statemachine.py --check)
+endif()
+
 # The full suite exercises the untrimmed stack, but the switches still change
 # what a master observes. Keep one contract test so "compiles" is not mistaken
 # for "behaves".
@@ -114,8 +123,8 @@ if(NOT IOLINK_FEATURE_DATA_STORAGE OR NOT IOLINK_FEATURE_EVENTS)
 endif()
 
 # External-workspace profile: a second build of the sources without the
-# embedded scratch, so the -16 rejection and the explicit-workspace path are
-# compiled and executed (not only syntax-probed).
+# embedded scratch, so the IOLINK_DEVICE_INIT_ERR_WORKSPACE rejection and the
+# explicit-workspace path are compiled and executed (not only syntax-probed).
 add_library(iolink_workspace_fixture STATIC ${IOLINK_SOURCES})
 target_include_directories(iolink_workspace_fixture PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_compile_definitions(iolink_workspace_fixture PUBLIC IOLINK_WORKSPACE_EMBEDDED=0)
@@ -126,14 +135,9 @@ iolink_test(NAME test_workspace_external
         CMOCKA NO_HELPERS)
 
 # 参数事实源是 C 对象字典表；校验 IODD 导出使用表项而不是 JSON 变量。
-find_package(Python3 QUIET)
 if(Python3_FOUND)
     add_test(NAME od_iodd_export
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_od_iodd_export.py)
-    # The generated state-machine table, Mermaid and CSV must match the
-    # C source of truth; --check fails on drift (also run in CI).
-    add_test(NAME dll_statemachine_gen_check
-             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/gen_dll_statemachine.py --check)
 endif()
 
 # OD 后端链接协议栈（表项编解码在 src/od.c）。

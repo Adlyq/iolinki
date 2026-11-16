@@ -596,7 +596,7 @@ typedef enum {
     IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6,
     IOLINK_DEVICE_INIT_ERR_BAUDRATE = -7,
     IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -8,
-    IOLINK_DEVICE_INIT_ERR_TIME = -9,      /* time_us 为 NULL */
+    IOLINK_DEVICE_INIT_ERR_TIME = -9,       /* time_us 为 NULL */
     IOLINK_DEVICE_INIT_ERR_CRITICAL = -10,  /* 仍在使用 weak 临界区默认实现 */
     IOLINK_DEVICE_INIT_ERR_PD_INPUT = -11,  /* 回调路径上调用轮询更新 */
     IOLINK_DEVICE_INIT_ERR_PHY = -12,       /* 必需的 PHY 钩子为 NULL 或 init 失败 */

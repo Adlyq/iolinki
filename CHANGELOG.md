@@ -33,16 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   holes (-8/-12/-13/-18) existed only to keep numbering stable; the tree is
   unreleased, so the values moved and the "keep numbering stable" note is gone.
 - A valid frame that has no reply plan is now logged at WARN in `OPERATE`
-  (where it is an anomaly) and at DEBUG elsewhere (where FALLBACK has no plans
+  (where it is more suspicious) and at DEBUG elsewhere (where FALLBACK has no plans
   on purpose). The counter was already there; the log line used to be DEBUG
   everywhere. Both stay behind `IOLINK_LOG_ENABLE_ISR`.
 
 ### Added (generated transition table)
 - `DLL_SM_ADMIN_ROWS` declares the non-frame transitions (init, wake-up,
   timers, management commands). `tools/gen_dll_statemachine.py` now renders
-  them into `docs/CODE_FLOW.md` between markers and `--check` (ctest
-  `dll_statemachine_gen_check`) rejects a stale table, so the documented
-  transitions and the code agree by construction.
+  them into `docs/CODE_FLOW.md` between markers; `--check` (ctest
+  `dll_statemachine_gen_check`) rejects a stale table, so the table and the
+  macro cannot drift. The mermaid sketch above the table stays illustrative.
 
 ### Changed (public tree and package)
 - The context-layout headers (`dll_ctx.h`, `dll_main.h`, `dll_shared.h`,

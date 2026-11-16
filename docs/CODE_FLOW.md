@@ -833,6 +833,8 @@ sequenceDiagram
 
 ## 10. 通信状态机与代码对应
 
+下图只画常见路径，便于建立直觉；**完整迁移（含定时器、复位请求与 ISR 快路径）以下面的表格为准**，表格由 `DLL_SM_ADMIN_ROWS` 生成。
+
 ```mermaid
 stateDiagram-v2
     [*] --> STARTUP: iolink_dll_init()
@@ -862,8 +864,8 @@ stateDiagram-v2
 | :--- | :--- | :--- |
 | 初始化 → STARTUP | `iolink_dll_init()` | `dll_set_state(STARTUP)` |
 | STARTUP → AWAITING_COMM | SIO + `detect_wakeup()>0` | `dll_handle_sio_wakeup()` |
-| STARTUP/AWAITING → PREOPERATE | 首个有效帧 | `g_dll_sm` → `dll_sm_*`（表项的 `enter_state`） |
-| PREOPERATE → ESTAB_COM | MC=0x0F transition command | `dll_sm_transition()` → `dll_handle_preoperate()` |
+| STARTUP/AWAITING → PREOPERATE | 首个有效帧 | `g_dll_sm` 表项的 `enter_state` / `dll_isr_plan_action()`（ENTER_PREOPERATE） |
+| PREOPERATE → ESTAB_COM | MC=0x0F transition command | `dll_sm_transition()` → `dll_handle_preoperate()` / `dll_isr_plan_action()` |
 | PREOPERATE → ESTAB_COM | 0x99 DeviceOperate | `dll_sm_master_command()` → `dll_apply_master_command()` |
 | PREOPERATE → OPERATE | 0x98 PDOperate | `dll_apply_master_command()` |
 | ESTAB_COM → OPERATE | 首个周期帧（Type-1/2 或任一 Type-0 周期帧） | `g_dll_sm` 表项的 `enter_state` |
@@ -872,12 +874,13 @@ stateDiagram-v2
 | FALLBACK/OPERATE/ESTAB/PREOP → STARTUP | T_FBD 到期，切 COM1 + SIO | `dll_timer_expire_fbd()` |
 | AWAITING/STARTUP → STARTUP | T_DSIO 到期，切 COM1 + SIO | `dll_timer_expire_dsio()` |
 | 任意 → STARTUP | 0x97 DeviceStartup 或非 OPERATE/ESTAB 的类型错误 | `dll_protocol_error_to_startup()` / `dll_handle_frame_error()` |
-| OPERATE → COMM_DISABLED | SystemCommand 0x83 Back-to-box，服务 ≥3 帧后 | `dll_frame_drop_if_stopped()` |
+| 任意（Back-to-box 挂起后） → COMM_DISABLED | SystemCommand 0x83 之后又服务 ≥3 帧 | `dll_frame_drop_if_stopped()` |
+| OPERATE → STARTUP | Type-0 页读且未开 IOLINK_CAP_COMPAT_T0_READ（复位请求） | `dll_sm_operate_page_read()` / `dll_isr_plan_action()`（RESET_STARTUP） |
 <!-- END GENERATED -->
 
 补充：
 
-- 迁移由 `include/iolinki/internal/dll_sm.h` 描述：帧事件用 `DLL_SM_ROWS`（7 个状态 × 8 类事件，`src/dll.c` 展开成 `g_dll_sm[state][event]`），定时器/管理类迁移（上表）用 `DLL_SM_ADMIN_ROWS`。`tools/gen_dll_statemachine.py` 解析这两份宏，生成 mermaid/CSV/覆盖测试与本节表格；`--check`（ctest `dll_statemachine_gen_check`）会拒绝过期的手写内容，因此新增/移动迁移只改宏。
+- 迁移由 `include/iolinki/internal/dll_sm.h` 描述：帧事件用 `DLL_SM_ROWS`（7 个状态 × 8 类事件，`src/dll.c` 展开成 `g_dll_sm[state][event]`），定时器/管理类迁移（上表）用 `DLL_SM_ADMIN_ROWS`。`tools/gen_dll_statemachine.py` 解析这两份宏，生成 mermaid/CSV/覆盖测试与本节表格；`--check`（ctest `dll_statemachine_gen_check`）会拒绝过期的表格。帧事件迁移改 `DLL_SM_ROWS` 即可生效；定时器/管理类迁移的**触发代码**仍在 `src/dll.c`，改代码时要同步 `DLL_SM_ADMIN_ROWS`。
 - 首个有效帧把 STARTUP/AWAITING_COMM 迁到 PREOPERATE 后，如果该帧本身就是 transition command（`MC=0x0F`），同一次 `dll_process_complete_frame()` 会继续调用 `dll_handle_preoperate()`，因此可以一帧内连续进入 ESTAB_COM。
 - `master_lost` 只在 OPERATE 且 `master_lost_cycles != 0` 时计算，超过阈值只置提示位并触发 `on_master_lost`，**不改变状态和波特率**（`dll_timer_expire_master_lost()`，`iolink_device_master_lost()`）。
 - CRC 错误不会单独导致 STARTUP；类型非法在 OPERATE/ESTAB 只计数并丢帧，避免链路抖动。

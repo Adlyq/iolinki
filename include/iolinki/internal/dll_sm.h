@@ -189,9 +189,9 @@ typedef struct
     X("初始化 → STARTUP", "`iolink_dll_init()`", "`dll_set_state(STARTUP)`")                     \
     X("STARTUP → AWAITING_COMM", "SIO + `detect_wakeup()>0`", "`dll_handle_sio_wakeup()`")       \
     X("STARTUP/AWAITING → PREOPERATE", "首个有效帧",                                              \
-      "`g_dll_sm` → `dll_sm_*`（表项的 `enter_state`）")                                          \
+      "`g_dll_sm` 表项的 `enter_state` / `dll_isr_plan_action()`（ENTER_PREOPERATE）")            \
     X("PREOPERATE → ESTAB_COM", "MC=0x0F transition command",                                    \
-      "`dll_sm_transition()` → `dll_handle_preoperate()`")                                       \
+      "`dll_sm_transition()` → `dll_handle_preoperate()` / `dll_isr_plan_action()`")             \
     X("PREOPERATE → ESTAB_COM", "0x99 DeviceOperate",                                            \
       "`dll_sm_master_command()` → `dll_apply_master_command()`")                                \
     X("PREOPERATE → OPERATE", "0x98 PDOperate", "`dll_apply_master_command()`")                  \
@@ -206,8 +206,10 @@ typedef struct
       "`dll_timer_expire_dsio()`")                                                               \
     X("任意 → STARTUP", "0x97 DeviceStartup 或非 OPERATE/ESTAB 的类型错误",                      \
       "`dll_protocol_error_to_startup()` / `dll_handle_frame_error()`")                          \
-    X("OPERATE → COMM_DISABLED", "SystemCommand 0x83 Back-to-box，服务 ≥3 帧后",                 \
-      "`dll_frame_drop_if_stopped()`")
+    X("任意（Back-to-box 挂起后） → COMM_DISABLED", "SystemCommand 0x83 之后又服务 ≥3 帧",      \
+      "`dll_frame_drop_if_stopped()`")                                                           \
+    X("OPERATE → STARTUP", "Type-0 页读且未开 IOLINK_CAP_COMPAT_T0_READ（复位请求）",             \
+      "`dll_sm_operate_page_read()` / `dll_isr_plan_action()`（RESET_STARTUP）")
 /* clang-format on */
 
 /**
