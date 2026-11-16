@@ -343,9 +343,9 @@ static iolink_dll_state_t s_states[8];
 static uint8_t s_state_count;
 static bool s_cb_in_isr;
 
-static void state_cb(void* self, iolink_dll_state_t state)
+static void state_cb(void* user, iolink_dll_state_t state)
 {
-    (void) self;
+    (void) user;
     s_cb_in_isr = (s_ctx.main.shared.in_isr != 0U);
     if (s_state_count < (uint8_t) (sizeof(s_states) / sizeof(s_states[0]))) {
         s_states[s_state_count++] = state;

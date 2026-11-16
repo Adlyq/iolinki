@@ -51,7 +51,7 @@ scratch；编译进 Data Storage 时还包含 DS 序列化暂存区。它不保�
 
 ```c
 typedef struct {
-    iolink_phy_api_t phy;                        /* PHY 驱动 vtable（phy.user 由驱动自己绑定） */
+    iolink_phy_api_t phy;                        /* PHY 驱动 vtable（phy.self 由驱动自己写入） */
     iolink_stack_config_t stack;                 /* 协议设置 */
     const iolink_device_app_t* app;              /* 应用 trait：实例指针 + 回调；NULL 拒绝初始化 */
     const iolink_device_info_t* device_info;     /* 可为 NULL */
@@ -247,8 +247,10 @@ void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx, iolink_reset_hand
 
 从 `include/iolinki/phy.h` 复制 `iolink_phy_api_t`。每个回调的第一个参数都是
 `iolink_app_t* self`（应用实例，库原样转发；驱动在自己的回调里转回自己的状态类型）。
-`phy.self` 由驱动或应用设置：把驱动上下文放进 `struct iolink_app` 时两者是同一个
-指针，一个实例只有一个。`init`、`set_mode` 和 `set_baudrate` 为必需。传输钩子取决于配置的粒度：
+`phy.self` **由驱动**在初始化时写入自己的上下文，应用不得覆盖（覆盖后驱动会把
+错误的指针转回自己的状态）。若应用希望一个实例只有一个指针，就把驱动上下文作为
+`struct iolink_app` 的第一个成员（偏移 0）并令 `app->self = (iolink_app_t*) &app`：
+两者地址相同。分开存放时各有一个指针，驱动仍能正常工作，但两者不是同一对象。`init`、`set_mode` 和 `set_baudrate` 为必需。传输钩子取决于配置的粒度：
 BYTE 模式使用 `rx_octet`/`tx_octet`，FRAME 模式使用 `rx_frame`/`tx_frame`，外加
 `int_active`。`tx_done`（TX BYTE）是可选的完成通知：TX 能力由 `tx_octet` 解析，钩子
 缺省时库自行完成帧。`tx_busy`（TX FRAME）、`detect_wakeup`、`set_cq_line` 和

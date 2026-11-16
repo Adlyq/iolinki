@@ -49,7 +49,8 @@ as a substitute for checksum validation.
 ```c
 static int stm32_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 {
-    UART_HandleTypeDef* uart = user;
+    struct my_app* app = (struct my_app*) self;
+    UART_HandleTypeDef* uart = app->uart;
     *status = 0U;
     if (HAL_UART_Receive(uart, data, 1, 0) != HAL_OK) {
         return 0;
@@ -59,7 +60,8 @@ static int stm32_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 
 static int stm32_tx_octet(iolink_app_t* self, uint8_t data)
 {
-    UART_HandleTypeDef* uart = user;
+    struct my_app* app = (struct my_app*) self;
+    UART_HandleTypeDef* uart = app->uart;
     if (HAL_UART_Transmit(uart, &data, 1, 10) != HAL_OK) {
         return -1;
     }

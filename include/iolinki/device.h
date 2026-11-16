@@ -67,7 +67,7 @@
  * ---------------------------+-----------------+---------------------------------------------
  * iolink_device_config_t     | application     | 必须比上下文存活更久
  *  .phy (vtable)             | application/PHY | 回调在 ctx 生命周期内有效
- *  .phy.user                 | PHY driver      | 仅传给 PHY 回调
+ *  .phy.self                 | PHY driver      | 仅传给 PHY 回调；驱动初始化时写入
  *  .app                      | application     | trait（self + 回调）保持有效；
  *                            |                 | self 传给 time/log/OD/on_* 全部钩子
  *  .app->time_us             | application     | 单调递增、非阻塞、ISR 安全
@@ -106,9 +106,10 @@ typedef uint64_t (*iolink_device_time_us_fn)(iolink_app_t* self);
  */
 typedef struct
 {
-    iolink_phy_api_t phy;                    /**< 物理层驱动 API。`phy.user` 是驱动自己的
-                                                  上下文，由 `iolink_phy_*_init()` 绑定；
-                                                  应用不设置它，也不与 `app->self` 混用。 */
+    iolink_phy_api_t phy;                    /**< 物理层驱动 API。`phy.self` 由驱动在
+                                                  `iolink_phy_*_init()` 中写入自己的上下文，
+                                                  库原样转发；应用不覆盖它（覆盖会让驱动的
+                                                  回调把错误指针转回自己的状态）。 */
     iolink_stack_config_t stack;             /**< 协议栈行为配置。 */
     const iolink_device_app_t* app;          /**< 应用 trait：实例指针与生命周期/PD/时钟/日志
                                                   回调的唯一来源。`app` 为 NULL 时初始化返回

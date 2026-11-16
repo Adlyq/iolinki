@@ -226,7 +226,7 @@ void data_irq_handler(void)
 
 | 字段 | 生命周期 / 契约 |
 | --- | --- |
-| `phy` | 初始化时复制。`phy.user` 只传给 PHY 回调，与 `app->self` 相互独立。 |
+| `phy` | 初始化时复制。`phy.self` 只传给 PHY 回调，由驱动在自己的 init 中写入。 |
 | `stack` | 复制到上下文中。 |
 | `app` | 应用 trait（`iolink_device_app_t`）：实例指针 + 时钟/日志/生命周期回调的唯一来源。保留指针，必须比上下文存活更久。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_APP`。 |
 | `device_info` | 身份来源；其中的 `application_tag` 只是身份字段，标签索引由 OD 表提供。参见 8.1 节的身份限制。 |

@@ -33,6 +33,26 @@ static void device_reset_handler(iolink_reset_type_t type)
     g_last_reset = type;
 }
 
+static iolink_app_t* g_phy_self_seen;
+
+static int record_phy_init(iolink_app_t* self)
+{
+    g_phy_self_seen = self;
+    return 0;
+}
+
+static void record_phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
+{
+    (void) self;
+    (void) mode;
+}
+
+static void record_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
+{
+    (void) self;
+    (void) baudrate;
+}
+
 static iolink_device_config_t make_device_config(void)
 {
     iolink_device_config_t config;
@@ -141,6 +161,26 @@ static void test_device_init_clears_stale_phy_error(void** state)
     config.app = iolink_test_app_without_clock(); /* 校验阶段失败，未触及 PHY */
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_TIME);
     assert_int_equal(iolink_device_get_phy_error(&ctx), 0);
+}
+
+static void test_device_forwards_phy_self(void** state)
+{
+    (void) state;
+    static int phy_ctx;
+    iolink_device_ctx_t ctx;
+    iolink_device_config_t config = make_device_config();
+
+    /* 库必须把 config.phy.self 原样交给 PHY 回调，而不是换成 app->self。 */
+    config.phy = (iolink_phy_api_t){0};
+    config.phy.init = record_phy_init;
+    config.phy.set_mode = record_phy_set_mode;
+    config.phy.set_baudrate = record_phy_set_baudrate;
+    config.phy.self = (iolink_app_t*) &phy_ctx;
+
+    g_phy_self_seen = NULL;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
+    assert_ptr_equal(g_phy_self_seen, (iolink_app_t*) &phy_ctx);
+    assert_ptr_not_equal(g_phy_self_seen, config.app->self);
 }
 
 static void test_device_binds_instance_context(void** state)
@@ -476,6 +516,7 @@ int main(void)
         cmocka_unit_test(test_device_init_clears_stale_phy_error),
         cmocka_unit_test(test_device_init_rejection_clears_stale_phy_error),
         cmocka_unit_test(test_device_init_validates_config_not_context),
+        cmocka_unit_test(test_device_forwards_phy_self),
         cmocka_unit_test(test_device_binds_instance_context),
         cmocka_unit_test(test_device_init_accepts_valid_config),
         cmocka_unit_test(test_device_pd_input_bounds),

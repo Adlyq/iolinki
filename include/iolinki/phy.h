@@ -92,7 +92,7 @@ typedef enum
  */
 typedef struct
 {
-    iolink_app_t* self; /**< 应用实例指针，原样回传给每个回调。 */
+    iolink_app_t* self; /**< 库原样转发的上下文；内置驱动的值是驱动 ctx。 */
 
     /**
      * @brief 初始化收发器硬件
