@@ -55,7 +55,7 @@ implementation-level buffer ownership stays in `docs/CODE_FLOW.md` (section
   the call unless documented otherwise; the stack does not retain it.
 - **Retained pointers must say so.** Any pointer kept beyond the call (e.g.
   `iolink_device_config_t`, `device_info`, `storage`, the PHY vtable and its
-  `user`) states "must outlive the context" in its Doxygen comment.
+  `self`) states "must outlive the context" in its Doxygen comment.
 - **Borrowed views must state their expiry.** A returned pointer the caller
   does not own names its invalidation point (e.g. "valid until the next
   `rx_frame()` call").

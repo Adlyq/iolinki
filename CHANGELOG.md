@@ -42,9 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `iolink_ds_bind_sources()` take it as an argument.
 - The PHY vtable follows the same rule: `phy.user` is now `phy.self` typed
   `iolink_app_t*`. The library forwards that pointer unchanged and the driver
-  turns it back into its own state, so an application that keeps the driver
-  context inside `struct iolink_app` ends up with one pointer per instance
-  (`phy.self == app->self`). The TIOL112/L6362A `io.user` (board adapter) and
+  turns it back into its own state. An application that keeps the driver
+  context as the first member (offset 0) of `struct iolink_app` and sets
+  `app->self = (iolink_app_t*) &app` gets one pointer per instance:
+  `phy.self == app->self`. The TIOL112/L6362A `io.user` (board adapter) and
   `iolink_dll_state_cb_t` (device context) keep `void*`: they carry the board's
   and the device's private state, not the application instance.
 - `iolink_log_write_fn` and `iolink_ds_flag_persist_fn` take `iolink_app_t*`;

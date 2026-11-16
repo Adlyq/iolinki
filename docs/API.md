@@ -247,10 +247,13 @@ void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx, iolink_reset_hand
 
 从 `include/iolinki/phy.h` 复制 `iolink_phy_api_t`。每个回调的第一个参数都是
 `iolink_app_t* self`（应用实例，库原样转发；驱动在自己的回调里转回自己的状态类型）。
-`phy.self` **由驱动**在初始化时写入自己的上下文，应用不得覆盖（覆盖后驱动会把
-错误的指针转回自己的状态）。若应用希望一个实例只有一个指针，就把驱动上下文作为
+`phy.self` 由提供 vtable 的一方写入自己的上下文：内置驱动在 `iolink_phy_*_init()`
+里写，手写 vtable 就在初始化器里写。应用不得覆盖它（覆盖后驱动会把错误的指针转回
+自己的状态）。若应用希望一个实例只有一个指针，就把驱动上下文作为
 `struct iolink_app` 的第一个成员（偏移 0）并令 `app->self = (iolink_app_t*) &app`：
-两者地址相同。分开存放时各有一个指针，驱动仍能正常工作，但两者不是同一对象。`init`、`set_mode` 和 `set_baudrate` 为必需。传输钩子取决于配置的粒度：
+两者地址相同。分开存放时各有一个指针，驱动仍能正常工作，但两者不是同一对象。
+
+`init`、`set_mode` 和 `set_baudrate` 为必需。传输钩子取决于配置的粒度：
 BYTE 模式使用 `rx_octet`/`tx_octet`，FRAME 模式使用 `rx_frame`/`tx_frame`，外加
 `int_active`。`tx_done`（TX BYTE）是可选的完成通知：TX 能力由 `tx_octet` 解析，钩子
 缺省时库自行完成帧。`tx_busy`（TX FRAME）、`detect_wakeup`、`set_cq_line` 和

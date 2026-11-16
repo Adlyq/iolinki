@@ -134,6 +134,10 @@ previously missing:
 - DPP1 `MinCycleTime` (0x02) is encoded as Table B.3 `time base | multiplier`
   and clamped to the 0.4 ms minimum; raw 0.1 ms units are only valid inside
   0x04-0x3F. Pinned by `test_protocol_tables`.
+- DPP1 `RevisionID` (0x04) is one octet: bits 4-7 MajorRev, bits 0-3 MinorRev
+  (Figure B.4), so V1.1 is 0x11 and V1.0 is 0x10. The IODD's 16-bit
+  `iolinkRevision` (0x0111) is not the wire value. Pinned by
+  `test_protocol_constants` and `test_conformance_gaps` (SDCI_TC_0092).
 - `0x83` is **Back-to-box** (10.7.5): restore delivery values and stop
   communication after the ISDU response, not a plain "restore app defaults".
 - Event codes: 0x1800-0x18FF are vendor-specific (Table D.1); the conflicting

@@ -238,6 +238,17 @@ static void test_0092_revision_id_configured(void** state)
     test_env_init(&g_test_env, &info);
     assert_int_equal(read_object(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x05U, &value, 1U), 1);
     assert_int_equal(value, IOLINK_REVISION_ID_1_1);
+
+    /* 字段按原值写到线上（不是 16 位值的低字节）：0x21 -> 0x21。 */
+    info.revision_id = 0x21U;
+    test_env_init(&g_test_env, &info);
+    assert_int_equal(read_object(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x05U, &value, 1U), 1);
+    assert_int_equal(value, 0x21U);
+
+    /* 未绑定身份时回落到 V1.1。 */
+    test_env_init(&g_test_env, NULL);
+    assert_int_equal(read_object(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x05U, &value, 1U), 1);
+    assert_int_equal(value, IOLINK_REVISION_ID_1_1);
 }
 
 /* ------------------------------------------------------------------------- */

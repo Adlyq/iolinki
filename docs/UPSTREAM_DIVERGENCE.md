@@ -47,6 +47,7 @@
 | 15 | Event memory 冻结时机 | 7.2.1.17 `DL_EventTrigger … freezes the Event memory` | 我们 |
 | 16 | appears/disappears + 1s 限流 + 50ms 最短 + 优先级 | 10.10.2 | 我们 |
 | 17 | MinCycleTime 编码 | B.1.3 / Figure B.2（time base 7:6 + multiplier 5:0）+ Table B.3 | 我们 |
+| 18 | RevisionID 是一个八位组（V1.1 = 0x11，V1.0 = 0x10），不是 IODD 的 16 位 0x0111 | B.1.5 / Figure B.4（bits 4-7 MajorRev，bits 0-3 MinorRev）+ Table B.1 `0x04` | 我们 |
 | 18 | DS subindex（DS_Command/State_Property/Size/Checksum） | Table B.10 | 我们（暂缓/另议） |
 
 ---
