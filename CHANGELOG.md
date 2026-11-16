@@ -27,7 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identity indices are not fabricated either: an ISDU context that never bound
   a device identity answers `0x80 0x11` (`IDX_NOT_AVAIL`), and the DLL layers
   stay silent instead of emitting an all-zero DPP1 page (ISR reply plan, the
-  STARTUP page probe and the Type-0 page read).
+  STARTUP page probe and the Type-0 page read). A Type-1/2 page read cannot
+  stay silent because its cyclic frame must fill the OD slot; it reports `0`
+  (A.1.2 "unimplemented address") instead of building a page.
 - Direct Parameter page 2 is owned by the device: an ISDU context without
   `direct_param_page2` bound answers `0x80 0x11` for that index instead of
   writing into a shared static fallback buffer (which leaked one device's
