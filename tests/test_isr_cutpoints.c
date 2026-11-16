@@ -180,6 +180,7 @@ static void test_main_pass_cutpoint(void** state)
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.main.enforce_timing = false;
     ctx.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    ctx.main.shared.od_width = 1U;
     now_us = 1000000U;
 
     reset_rings(&ctx);

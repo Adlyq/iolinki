@@ -138,6 +138,19 @@ static iolink_phy_api_t g_phy;
 static iolink_stack_config_t g_stack;
 static const iolink_device_app_t g_app = {.self = NULL, .time_us = app_time_us};
 
+static const iolink_device_info_t g_info = {
+    .vendor_name = "iolinki",
+    .product_name = "size probe",
+    .product_id = "size-probe",
+    .serial_number = "0000000001",
+    .hardware_revision = "1",
+    .firmware_revision = "1",
+    .vendor_id = 1234U,
+    .device_id = 5678U,
+    .min_cycle_time = 10U,
+    .revision_id = IOLINK_REVISION_ID_1_1,
+};
+
 void* memset(void* dst, int c, size_t n)
 {
     uint8_t* d = dst;
@@ -178,6 +191,7 @@ void reset_handler(void)
     g_cfg.phy = &g_phy;
     g_cfg.stack = &g_stack;
     g_cfg.app = &g_app;
+    g_cfg.device_info = &g_info;
     if (iolink_device_init(&g_ctx, &g_cfg) != 0) {
         for (;;) {
             g_ticks++;

@@ -22,6 +22,9 @@
 #include "iolinki/device.h"
 #include "dll_access.h"
 
+/* 库不再提供默认身份：这些 NO_HELPERS 用例只需要一个有效的身份对象。 */
+static const iolink_device_info_t k_test_identity = {.revision_id = IOLINK_REVISION_ID_1_1};
+
 void iolink_critical_enter(void)
 {
 }
@@ -88,8 +91,10 @@ static void make_config(iolink_device_config_t* cfg, iolink_device_app_t* app,
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     stack.pd_in_len = 2U;
     stack.pd_out_len = 0U;
+    stack.od_width = 2U;
     cfg->stack = &stack;
     cfg->app = app;
+    cfg->device_info = &k_test_identity;
 }
 
 static void test_polling_path_without_callback(void** state)

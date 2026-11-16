@@ -603,7 +603,7 @@ iolink_od_app_t* test_default_tag_od(void)
 
     if (params.od.count == 0U) {
         iolink_device_info_ctx_t info;
-        iolink_device_info_ctx_init(&info, NULL);
+        assert_int_equal(iolink_device_info_ctx_init(&info, iolink_test_identity()), 0);
         test_params_init(&params, &info);
     }
     return &params.od;
@@ -635,7 +635,8 @@ void test_env_init(iolink_test_env_t* env, const iolink_device_info_t* info)
         return;
     }
     (void) memset(env, 0, sizeof(*env));
-    iolink_device_info_ctx_init(&env->info, info);
+    assert_int_equal(
+        iolink_device_info_ctx_init(&env->info, (info != NULL) ? info : iolink_test_identity()), 0);
     test_params_init(&env->params, &env->info);
 }
 
@@ -726,6 +727,33 @@ uint32_t iolink_test_time_ms(void)
 
 iolink_device_time_us_fn g_iolink_test_time_us_override = NULL;
 
+/** @brief 测试用设备身份：覆盖全部标识字段，供不关心身份的用例使用。 */
+static const iolink_device_info_t g_test_identity = {
+    .vendor_name = "iolinki",
+    .vendor_text = "Open-Source IO-Link Stack",
+    .product_name = "Generic IO-Link Device",
+    .product_id = "IOLINK-DEV-001",
+    .product_text = "Reference Implementation",
+    .serial_number = "0000000001",
+    .hardware_revision = "1.0",
+    .firmware_revision = "0.1.0",
+    .application_tag = "DefaultTag",
+    .vendor_id = 0xFFFFU,
+    .device_id = 0x00000001U,
+    .function_id = 0x0000U,
+    .profile_characteristic = 0x0000U,
+    .min_cycle_time = 10U,
+    .revision_id = IOLINK_REVISION_ID_1_1,
+    .device_status = 0x00U,
+    .detailed_device_status = 0x0000U,
+    .access_locks = 0x0000U,
+};
+
+const iolink_device_info_t* iolink_test_identity(void)
+{
+    return &g_test_identity;
+}
+
 /** @brief 未显式提供 trait 的测试使用的默认应用表（只有时钟）。 */
 static const iolink_device_app_t g_default_app = {.self = NULL, .time_us = iolink_test_time_us};
 static const iolink_device_app_t g_app_without_clock = {.self = NULL};
@@ -746,11 +774,11 @@ static void test_device_fill_config(iolink_test_device_t* dev, const iolink_stac
     (void) memset(dev, 0, sizeof(*dev));
     dev->cfg.phy = &g_phy_mock;
     dev->cfg.app = (app != NULL) ? app : &g_default_app;
-    /* 设备默认带三个标签（应用以 STORAGE 表项提供）；用库的默认
-       device_info 生成 "DefaultTag" 标签初值。 */
+    /* 三个标签由应用以 STORAGE 表项提供；初值取自测试身份。 */
     iolink_device_info_ctx_t info;
-    iolink_device_info_ctx_init(&info, NULL);
+    assert_int_equal(iolink_device_info_ctx_init(&info, iolink_test_identity()), 0);
     test_params_init(&dev->params, &info);
+    dev->cfg.device_info = iolink_test_identity();
     dev->cfg.od = &dev->params.od;
     if (stack != NULL) {
         dev->stack = *stack;
@@ -758,6 +786,7 @@ static void test_device_fill_config(iolink_test_device_t* dev, const iolink_stac
     else {
         dev->stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
         dev->stack.min_cycle_time = 0U;
+        dev->stack.od_width = 1U;
     }
     dev->cfg.stack = &dev->stack;
 }

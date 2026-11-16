@@ -25,7 +25,7 @@ static void test_crc_errors_do_not_enter_sio(void** state)
     (void) state;
 
     iolink_stack_config_t config = {
-        .pd_in_len = 0, .pd_out_len = 0, .m_seq_type = IOLINK_M_SEQ_TYPE_0};
+        .pd_in_len = 0, .pd_out_len = 0, .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -60,7 +60,7 @@ static void test_valid_frame_after_crc_errors(void** state)
     (void) state;
 
     iolink_stack_config_t config = {
-        .pd_in_len = 0, .pd_out_len = 0, .m_seq_type = IOLINK_M_SEQ_TYPE_0};
+        .pd_in_len = 0, .pd_out_len = 0, .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -99,7 +99,7 @@ static void test_t_dsio_returns_to_sio_without_message(void** state)
     (void) state;
 
     iolink_stack_config_t config = {
-        .pd_in_len = 0, .pd_out_len = 0, .m_seq_type = IOLINK_M_SEQ_TYPE_0};
+        .pd_in_len = 0, .pd_out_len = 0, .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -123,8 +123,11 @@ static void test_fallback_command_switches_to_sio_after_t_fbd(void** state)
     (void) state;
 
     /* min_cycle_time 以 0.1 ms 为单位：10 -> 1 ms -> T_FBD = 3 ms。 */
-    iolink_stack_config_t config = {
-        .pd_in_len = 0, .pd_out_len = 0, .m_seq_type = IOLINK_M_SEQ_TYPE_0, .min_cycle_time = 10U};
+    iolink_stack_config_t config = {.pd_in_len = 0,
+                                    .pd_out_len = 0,
+                                    .m_seq_type = IOLINK_M_SEQ_TYPE_0,
+                                    .od_width = 1,
+                                    .min_cycle_time = 10U};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -153,8 +156,11 @@ static void test_fallback_command_ignored_without_wakeup(void** state)
 {
     (void) state;
 
-    iolink_stack_config_t config = {
-        .pd_in_len = 0, .pd_out_len = 0, .m_seq_type = IOLINK_M_SEQ_TYPE_0, .min_cycle_time = 10U};
+    iolink_stack_config_t config = {.pd_in_len = 0,
+                                    .pd_out_len = 0,
+                                    .m_seq_type = IOLINK_M_SEQ_TYPE_0,
+                                    .od_width = 1,
+                                    .min_cycle_time = 10U};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
 
@@ -168,6 +174,7 @@ static void test_fallback_command_ignored_without_wakeup(void** state)
     phy.detect_wakeup = NULL;
     dev.cfg.phy = &phy;
     dev.cfg.app = iolink_test_default_app();
+    dev.cfg.device_info = iolink_test_identity();
     dev.stack = config;
     dev.cfg.stack = &dev.stack;
     assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), 0);

@@ -316,7 +316,7 @@ static void test_dll_preoperate_to_operate(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 2, .pd_out_len = 1};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 2, .pd_out_len = 1};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -356,7 +356,7 @@ static void test_dll_crc_error_keeps_operate(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 2, .pd_out_len = 1};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 2, .pd_out_len = 1};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -414,7 +414,7 @@ static void test_dll_reject_transition_in_operate(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 1, .pd_out_len = 1};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 1, .pd_out_len = 1};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -480,7 +480,7 @@ static void test_dll_illegal_mseq_type(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -510,7 +510,7 @@ static void test_dll_isdu_channel_idle(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -546,7 +546,7 @@ static void test_dll_diagnosis_channel(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -581,7 +581,7 @@ static void test_dll_event_flag_in_cks(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -626,7 +626,7 @@ static void test_dll_preoperate_type0_od_write_ignores_operate_widths(void** sta
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_1_2, .pd_in_len = 0, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_1_2, .od_width = 2, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -667,7 +667,7 @@ static void test_dll_type0_write_is_three_octets_with_two_octet_od(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 2, .pd_out_len = 2};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 2, .pd_out_len = 2};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -846,7 +846,7 @@ static void test_dll_startup_0x99_rejected(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0035");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .pd_in_len = 1, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .od_width = 1, .pd_in_len = 1, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -918,6 +918,7 @@ static void test_dll_compat_v10_startup_operate_accepted(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_1,
+                                    .od_width = 1,
                                     .pd_in_len = 1,
                                     .pd_out_len = 0,
                                     .compat_flags = IOLINK_STACK_COMPAT_V10_STARTUP_OPERATE};
@@ -942,7 +943,7 @@ static void test_dll_operate_type0_read_resets(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0038");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .pd_in_len = 1, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .od_width = 1, .pd_in_len = 1, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -983,7 +984,7 @@ static void test_dll_operate_type0_min_cycle_time_read(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0049");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .pd_in_len = 1, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .od_width = 1, .pd_in_len = 1, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1007,7 +1008,7 @@ static void test_dll_type0_dpp2_unimplemented_read_returns_zero(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1029,6 +1030,7 @@ static void test_dll_compat_type0_page_read_answered_in_operate(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_1,
+                                    .od_width = 1,
                                     .pd_in_len = 1,
                                     .pd_out_len = 0,
                                     .compat_flags = IOLINK_STACK_COMPAT_TYPE0_PAGE_READ_OPERATE};
@@ -1064,7 +1066,7 @@ static void test_dll_startup_cycle_time_reads(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0034");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1096,7 +1098,7 @@ static void test_dll_startup_operate_type_no_response(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0036");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1125,7 +1127,7 @@ static void test_dll_operate_to_startup_0x97(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0037");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .pd_in_len = 1, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .od_width = 1, .pd_in_len = 1, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1161,7 +1163,7 @@ static void test_dll_operate_type_master_command_0x97_restarts(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0037");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .pd_in_len = 1, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_1, .od_width = 1, .pd_in_len = 1, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1187,7 +1189,7 @@ static void test_dll_preoperate_truncated_write(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0041");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1246,7 +1248,7 @@ static void test_dll_preoperate_illegal_operate_type(void** state)
        OPERATE M-sequence 类型的读不应答并强制进入 STARTUP；同一读
        改用 PREOPERATE 和 STARTUP 类型（均为 TYPE_0）时会被应答。 */
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1277,7 +1279,7 @@ static void test_dll_preoperate_type0_same_type(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0044");
     (void) state;
     iolink_stack_config_t type0 = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev0;
@@ -1384,7 +1386,7 @@ static void test_dll_dpp1_mseqcap_isdu_bit(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0052");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 2, .pd_out_len = 2};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 2, .pd_out_len = 2};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1445,7 +1447,7 @@ static void test_dll_operate_min_cycle_time_valid(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0375");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 2, .pd_out_len = 2};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 2, .pd_out_len = 2};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1488,7 +1490,7 @@ static void test_dll_pdout_only_status_valid(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0376");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 1};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 1};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1542,7 +1544,7 @@ static void test_dll_device_id_override_rejected(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0315");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .pd_in_len = 0, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1645,6 +1647,7 @@ static void test_dll_isr_back_to_box_counts_each_frame_once(void** state)
     (void) state;
     iolink_stack_config_t config = {
         .m_seq_type = IOLINK_M_SEQ_TYPE_2_1,
+        .od_width = 1,
         .pd_in_len = 1U,
         .pd_out_len = 0U,
     };
@@ -1689,7 +1692,7 @@ static void test_dll_main_pump_type1_2_reply(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 2, .pd_out_len = 2};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 2, .pd_out_len = 2};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;

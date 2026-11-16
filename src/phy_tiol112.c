@@ -6,11 +6,11 @@
 static int initialize(iolink_app_t* self)
 {
     iolink_tiol112_ctx_t* d = (iolink_tiol112_ctx_t*) self;
-    if (d->initialized) d->io.set_enable(d->io.user, false);
+    if (d->initialized) d->io.set_enable(d->io.board, false);
     d->mode = IOLINK_PHY_MODE_INACTIVE;
-    d->error = d->io.init(d->io.user);
+    d->error = d->io.init(d->io.board);
     d->initialized = d->error == 0;
-    if (d->initialized) d->io.set_enable(d->io.user, false);
+    if (d->initialized) d->io.set_enable(d->io.board, false);
     return d->error;
 }
 
@@ -18,14 +18,14 @@ static void set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
 {
     iolink_tiol112_ctx_t* d = (iolink_tiol112_ctx_t*) self;
     if (!d->initialized) return;
-    d->io.set_enable(d->io.user, false);
+    d->io.set_enable(d->io.board, false);
     d->mode = mode;
     if (mode == IOLINK_PHY_MODE_SIO) {
-        d->io.set_sio_tx(d->io.user, d->cq == 0U);
-        if (d->error == 0) d->io.set_enable(d->io.user, true);
+        d->io.set_sio_tx(d->io.board, d->cq == 0U);
+        if (d->error == 0) d->io.set_enable(d->io.board, true);
     }
     else if (mode == IOLINK_PHY_MODE_SDCI) {
-        d->error = d->io.uart_configure(d->io.user, d->baud);
+        d->error = d->io.uart_configure(d->io.board, d->baud);
     }
     else if (mode != IOLINK_PHY_MODE_INACTIVE) {
         d->error = -1;
@@ -47,13 +47,13 @@ static void set_baudrate(iolink_app_t* self, iolink_baudrate_t baud)
             break;
         default:
             d->error = -1;
-            if (d->initialized) d->io.set_enable(d->io.user, false);
+            if (d->initialized) d->io.set_enable(d->io.board, false);
             return;
     }
     /* 在 SIO 中保持 TX 为 GPIO 模式。仅在通信时切换复用功能。 */
     if (d->initialized && (d->mode == IOLINK_PHY_MODE_SDCI)) {
-        d->io.set_enable(d->io.user, false);
-        d->error = d->io.uart_configure(d->io.user, d->baud);
+        d->io.set_enable(d->io.board, false);
+        d->error = d->io.uart_configure(d->io.board, d->baud);
     }
 }
 
@@ -61,7 +61,7 @@ static int detect_wakeup(iolink_app_t* self)
 {
     iolink_tiol112_ctx_t* d = (iolink_tiol112_ctx_t*) self;
     if (!d->initialized) return 0;
-    return d->io.consume_wakeup(d->io.user);
+    return d->io.consume_wakeup(d->io.board);
 }
 
 static void set_cq(iolink_app_t* self, uint8_t state)
@@ -70,15 +70,15 @@ static void set_cq(iolink_app_t* self, uint8_t state)
     d->cq = state != 0U ? 1U : 0U;
     if ((d->mode == IOLINK_PHY_MODE_SIO) && (d->error == 0)) {
         /* TI table 8-2：TX 高电平时 CQ 为灌电流，TX 低电平时 CQ 为拉电流。 */
-        d->io.set_sio_tx(d->io.user, d->cq == 0U);
-        d->io.set_enable(d->io.user, true);
+        d->io.set_sio_tx(d->io.board, d->cq == 0U);
+        d->io.set_enable(d->io.board, true);
     }
 }
 
 int iolink_phy_tiol112_fault(const iolink_tiol112_ctx_t* d)
 {
     if ((d == NULL) || !d->initialized || (d->io.read_nfault == NULL)) return -1;
-    return d->io.read_nfault(d->io.user) ? 0 : 1;
+    return d->io.read_nfault(d->io.board) ? 0 : 1;
 }
 
 int iolink_phy_tiol112_init(iolink_tiol112_ctx_t* d, const iolink_tiol112_io_t* io)

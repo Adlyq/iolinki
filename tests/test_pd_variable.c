@@ -34,7 +34,7 @@ static void test_pd_variable_lengths(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 8, .pd_out_len = 8};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 8, .pd_out_len = 8};
     iolink_test_device_t dev;
 
     setup_mock_phy();
@@ -64,7 +64,7 @@ static void test_pd_invalid_flag(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 1, .pd_out_len = 1};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 1, .pd_out_len = 1};
     iolink_test_device_t dev;
 
     setup_mock_phy();
@@ -119,7 +119,7 @@ static void test_pd_runtime_negotiation(void** state)
     (void) state;
     /* 最大 8 个八位字节的可变类型。 */
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 8, .pd_out_len = 8};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 8, .pd_out_len = 8};
     iolink_test_device_t dev;
 
     setup_mock_phy();
@@ -142,7 +142,7 @@ static void test_pd_fixed_not_negotiable(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_1_2, .pd_in_len = 0, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_1_2, .od_width = 2, .pd_in_len = 0, .pd_out_len = 0};
     iolink_test_device_t dev;
 
     setup_mock_phy();
@@ -209,8 +209,10 @@ static void run_pd_roundtrip(iolink_test_device_t* dev, uint8_t pd_in_len, uint8
 
 static void run_variable_pd_case(uint8_t pd_in_len, uint8_t pd_out_len)
 {
-    iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = pd_in_len, .pd_out_len = pd_out_len};
+    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+                                    .od_width = 2,
+                                    .pd_in_len = pd_in_len,
+                                    .pd_out_len = pd_out_len};
     iolink_test_device_t dev;
 
     will_return(mock_phy_init, 0);
@@ -259,6 +261,7 @@ static void test_variable_pd_length_limits(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+                                    .od_width = 2,
                                     .pd_in_len = IOLINK_PD_IN_MAX_SIZE,
                                     .pd_out_len = IOLINK_PD_OUT_MAX_SIZE};
     iolink_test_device_t dev;
@@ -306,7 +309,7 @@ static void test_pd_input_update_refreshes_dpp1(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 8, .pd_out_len = 8};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 8, .pd_out_len = 8};
     iolink_test_device_t dev;
 
     setup_mock_phy();

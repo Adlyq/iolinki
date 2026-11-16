@@ -29,8 +29,10 @@ wake-up event.
 
 Provide every required callback in `iolink_tiol112_io_t`, then call
 `iolink_phy_tiol112_init()` and pass `*iolink_phy_tiol112_get()` to the device
-configuration. Driver storage, MCU callback user storage and device configuration
-must all outlive the device context. `reference_device_init()` shows configuration
+configuration. The callbacks take the board state as `iolink_tiol112_board_t*`:
+define `struct iolink_tiol112_board` in the board translation unit (or leave
+`io.board` NULL for a single-instance adapter). Driver storage, board state and
+device configuration must all outlive the device context. `reference_device_init()` shows configuration
 lifetime and the device application layer.
 
 The MCU adapter must implement:

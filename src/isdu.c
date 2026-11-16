@@ -198,7 +198,7 @@ void isdu_factory_reset(iolink_isdu_ctx_t* ctx)
 #if IOLINK_FEATURE_DATA_STORAGE
     /* 应用参数恢复默认值（三个标签也由应用的 DS 表项承担）。 */
     if (ctx->ds_ctx != NULL) {
-        (void) iolink_ds_factory_reset((iolink_ds_ctx_t*) ctx->ds_ctx);
+        (void) iolink_ds_factory_reset(ctx->ds_ctx);
     }
 #endif
 }
@@ -418,7 +418,7 @@ static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
  */
 static void isdu_lease_begin(iolink_isdu_ctx_t* ctx)
 {
-    iolink_dll_main_t* dll = (iolink_dll_main_t*) ctx->dll_ctx;
+    iolink_dll_main_t* dll = ctx->dll_ctx;
     if (dll == NULL) {
         return;
     }

@@ -104,6 +104,10 @@ static inline uint8_t iolink_cycle_time_encode(uint16_t units100us)
 
 /**
  * @brief M 序列类型的默认 OD 八位组数量 m（Table A.10）。
+ *
+ * 只作为应用选择合法 `stack.od_width` 的参考值：库不会用它推导配置，
+ * `stack.od_width` 必须由应用显式给出。
+ *
  * @param m_seq_type M 序列类型值。
  * @return 默认 OD 宽度，以字节计。
  */
@@ -200,7 +204,8 @@ typedef struct
     uint8_t pd_in_len;              /**< 过程数据输入长度（设备到主站），以字节计 */
     uint8_t pd_out_len;             /**< 过程数据输出长度（主站到设备），以字节计 */
     uint32_t t_pd_us;               /**< 上电延迟（t_pd），单位为微秒 */
-    uint8_t od_width;               /**< OD 八位组数（Table A.10）；0 表示由 m_seq_type 推导 */
+    uint8_t od_width;               /**< OD 八位组数（Table A.10），必须显式给出 1/2/8/32；
+                                         0 视为配置错误（`IOLINK_DEVICE_INIT_ERR_OD_WIDTH`） */
     iolink_baudrate_t baudrate;     /**< baudrate_set 为 true 时使用的 COM */
     bool baudrate_set;              /**< 初始化时应用波特率；false 保持 COM2 默认值 */
     uint8_t master_lost_cycles;     /**< 触发 master_lost 前允许丢失的主站周期数；0 表示禁用 */

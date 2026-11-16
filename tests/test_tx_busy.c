@@ -27,6 +27,9 @@
 #include "iolinki/port.h"
 #include "iolinki/protocol.h"
 
+/* 库不再提供默认身份：这些 NO_HELPERS 用例只需要一个有效的身份对象。 */
+static const iolink_device_info_t k_test_identity = {.revision_id = IOLINK_REVISION_ID_1_1};
+
 static uint64_t now_us;
 
 static uint64_t test_time_us(iolink_app_t* self)
@@ -242,11 +245,14 @@ static void test_device_init_requires_tx_busy(void** state)
 
     (void) memset(&cfg, 0, sizeof(cfg));
     (void) memset(&stack, 0, sizeof(stack));
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    stack.od_width = 1U;
     cfg.stack = &stack;
     phy = g_phy;
     phy.tx_busy = NULL;
     cfg.phy = &phy;
     cfg.app = &device_app;
+    cfg.device_info = &k_test_identity;
     assert_int_equal(iolink_device_init(&ctx, &cfg), IOLINK_DEVICE_INIT_ERR_PHY);
 
     phy.tx_busy = mock_tx_busy;

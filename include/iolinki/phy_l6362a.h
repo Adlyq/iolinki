@@ -7,18 +7,26 @@
  * init 将 EN 保持为低。uart_send_complete 抑制回显并等待最后一个
  * 停止位，带有限截止时间。consume_wakeup 消费 OL 下降沿 IRQ。
  * OL 是过载/电流限制，不是专用唤醒输出。 */
+/**
+ * @brief 板级适配器状态（不透明）。
+ *
+ * 板级代码在自己的翻译单元里定义 `struct iolink_l6362a_board`，把引脚、
+ * UART 句柄等放进去；驱动只保存并原样透传这个指针，从不访问其字段。
+ */
+typedef struct iolink_l6362a_board iolink_l6362a_board_t;
+
 typedef struct
 {
-    void* user;
-    int (*init)(void*);
-    void (*set_enable)(void*, bool);
-    void (*set_in2)(void*, bool);
-    int (*uart_configure)(void*, uint32_t);
-    int (*uart_send_complete)(void*, const uint8_t*, size_t);
-    int (*uart_recv)(void*, uint8_t*);
-    int (*consume_wakeup)(void*);
-    bool (*read_ol)(void*);
-    bool (*read_diag)(void*);
+    iolink_l6362a_board_t* IOLINK_NULLABLE board; /**< 板级状态；单例适配器可留 NULL */
+    int (*init)(iolink_l6362a_board_t*);
+    void (*set_enable)(iolink_l6362a_board_t*, bool);
+    void (*set_in2)(iolink_l6362a_board_t*, bool);
+    int (*uart_configure)(iolink_l6362a_board_t*, uint32_t);
+    int (*uart_send_complete)(iolink_l6362a_board_t*, const uint8_t*, size_t);
+    int (*uart_recv)(iolink_l6362a_board_t*, uint8_t*);
+    int (*consume_wakeup)(iolink_l6362a_board_t*);
+    bool (*read_ol)(iolink_l6362a_board_t*);
+    bool (*read_diag)(iolink_l6362a_board_t*);
 } iolink_l6362a_io_t;
 typedef struct
 {

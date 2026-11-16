@@ -69,26 +69,26 @@ typedef void (*iolink_ds_flag_persist_fn)(iolink_app_t* self, bool flag);
  * 跟踪 DS 同步过程的状态与校验和。参数集合与值访问都来自对象
  * 字典：标准表 + 应用 OD 表中 storage 为 `IOLINK_OD_STORAGE_DS` 的项。
  */
-typedef struct
+typedef struct iolink_ds_ctx
 {
-    iolink_ds_state_t state;                /**< 当前 DS 状态机位置 */
-    const iolink_od_app_t* od_app;          /**< 应用 OD 表（可为 NULL，表示只有标准表） */
-    uint32_t current_checksum;              /**< 最近一次计算的本地参数校验和 */
-    uint32_t master_checksum;               /**< 主站最近校验过的校验和 */
-    bool ds_upload_flag;                    /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
-    bool upload_event_pending;              /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
-    iolink_ds_flag_persist_fn flag_persist; /**< 标志变化通知（可为 NULL）。 */
-    iolink_app_t* flag_self;                /**< 传给 @ref flag_persist 的上下文。 */
-    iolink_app_t* self;                     /**< 传给 OD 钩子/后端的应用上下文。 */
+    iolink_ds_state_t state;                       /**< 当前 DS 状态机位置 */
+    const iolink_od_app_t* IOLINK_NULLABLE od_app; /**< 应用 OD 表（可为 NULL，表示只有标准表） */
+    uint32_t current_checksum;                     /**< 最近一次计算的本地参数校验和 */
+    uint32_t master_checksum;                      /**< 主站最近校验过的校验和 */
+    bool ds_upload_flag;                           /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
+    bool upload_event_pending;                     /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
+    iolink_ds_flag_persist_fn IOLINK_NULLABLE flag_persist; /**< 标志变化通知（可为 NULL）。 */
+    iolink_app_t* flag_self; /**< 传给 @ref flag_persist 的上下文。 */
+    iolink_app_t* self;      /**< 传给 OD 钩子/后端的应用上下文。 */
     /* 镜像不再常驻状态结构。序列化交给工作区中的暂存缓冲（上传可
      * 直接流式写入调用方缓冲），这里只保留指针与容量。 */
-    uint8_t* image;               /**< 序列化/下载暂存缓冲（工作区或内嵌 fallback） */
-    size_t image_size;            /**< @ref image 的容量 */
-    size_t image_len;             /**< @ref image 中的有效字节数 */
-    bool image_valid;             /**< image 是否保存了当前参数的完整快照 */
-    bool download_invalid;        /**< 被拒绝的写入会使当前下载失效 */
-    const iolink_log_sink_t* log; /**< 日志汇点指针（NULL = 静默；设备层指向共享 sink，
-                                      独立使用须自行指向调用方的 sink） */
+    uint8_t* image;        /**< 序列化/下载暂存缓冲（工作区或内嵌 fallback） */
+    size_t image_size;     /**< @ref image 的容量 */
+    size_t image_len;      /**< @ref image 中的有效字节数 */
+    bool image_valid;      /**< image 是否保存了当前参数的完整快照 */
+    bool download_invalid; /**< 被拒绝的写入会使当前下载失效 */
+    const iolink_log_sink_t* IOLINK_NULLABLE log; /**< 日志汇点指针（NULL = 静默；设备层指向共享
+                                      sink， 独立使用须自行指向调用方的 sink） */
 #if IOLINK_WORKSPACE_EMBEDDED
     uint8_t scratch[IOLINK_DS_IMAGE_MAX]; /**< 未提供工作区时的默认暂存缓冲 */
 #endif

@@ -134,7 +134,7 @@ static uint16_t device_error_count(iolink_device_ctx_t* device)
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    ctx.dll_ctx = test_dll_ctx(device);
+    ctx.dll_ctx = test_dll(device);
     uint8_t data[2] = {0U};
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_ERROR_COUNT, 0U), 1);
     iolink_isdu_process(&ctx);
@@ -281,7 +281,7 @@ static void test_0124_error_count_increment_and_reset(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0124");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 1, .pd_out_len = 1};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 1, .pd_out_len = 1};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -361,7 +361,7 @@ typedef struct
 
 static void reset_fixture_init(reset_fixture_t* f)
 {
-    iolink_device_info_ctx_init(&f->info, NULL);
+    iolink_device_info_ctx_init(&f->info, iolink_test_identity());
     test_params_init(&f->params, &f->info);
     iolink_ds_init(&f->ds);
     iolink_ds_bind_sources(&f->ds, test_params_od(&f->params), NULL);

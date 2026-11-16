@@ -229,7 +229,7 @@ flowchart TD
     B -- 是 --> B2{"IOLINK_WORKSPACE_EMBEDDED=0<br/>且 workspace == NULL?"}
     B2 -- 是 --> E4["返回 IOLINK_DEVICE_INIT_ERR_WORKSPACE"]
     B2 -- 否 --> C["device_config_validate()"]
-    C --> C1{"time_us / M-seq 类型 / PD 长度 / OD 宽度<br/>固定布局 / 波特率 / 临界区 / 应用 OD 表<br/>能力位与 PHY 钩子一致?"}
+    C --> C1{"phy / stack / device_info / time_us<br/>M-seq 类型 / PD 长度 / OD 宽度 / 固定布局<br/>波特率 / 临界区 / 应用 OD 表 / 能力位"}
     C1 -- 否 --> E2["返回对应负错误码"]
     C1 -- 是 --> D["清零 ctx，保存 config 指针"]
     D --> F["phy->init(self)"]

@@ -31,6 +31,7 @@ static void test_device_context_api_initializes_two_configs(void** state)
     static const iolink_device_app_t app = {.time_us = iolink_test_time_us};
     static const iolink_stack_config_t stack_a = {
         .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+        .od_width = 2,
         .min_cycle_time = 10U,
         .pd_in_len = 1U,
         .pd_out_len = 0U,
@@ -38,6 +39,7 @@ static void test_device_context_api_initializes_two_configs(void** state)
     };
     static const iolink_stack_config_t stack_b = {
         .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+        .od_width = 2,
         .min_cycle_time = 10U,
         .pd_in_len = 2U,
         .pd_out_len = 2U,
@@ -47,11 +49,13 @@ static void test_device_context_api_initializes_two_configs(void** state)
         .phy = &phy,
         .app = &app,
         .stack = &stack_a,
+        .device_info = iolink_test_identity(),
     };
     iolink_device_config_t cfg_b = {
         .phy = &phy,
         .app = &app,
         .stack = &stack_b,
+        .device_info = iolink_test_identity(),
     };
 
     assert_int_equal(iolink_device_init(&dev_a, &cfg_a), 0);
@@ -74,8 +78,8 @@ static void test_parameter_contexts_keep_writable_tags_isolated(void** state)
     uint8_t out_a[32] = {0};
     uint8_t out_b[32] = {0};
 
-    iolink_device_info_ctx_init(&info_a, NULL);
-    iolink_device_info_ctx_init(&info_b, NULL);
+    iolink_device_info_ctx_init(&info_a, iolink_test_identity());
+    iolink_device_info_ctx_init(&info_b, iolink_test_identity());
     test_params_init(&params_a, &info_a);
     test_params_init(&params_b, &info_b);
 

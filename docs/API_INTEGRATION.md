@@ -160,10 +160,25 @@ static const iolink_stack_config_t g_stack = {
     .min_cycle_time = 20U,                /* 2.0 ms，0.1 ms 单位 */
 };
 
+static const iolink_device_info_t g_identity = {
+    .vendor_name = "Acme Sensors",
+    .vendor_text = "Acme Sensors GmbH",
+    .product_name = "Acme IO-Link device",
+    .product_id = "ACME-001",
+    .serial_number = "0000000001",
+    .hardware_revision = "1",
+    .firmware_revision = "1.0.0",
+    .vendor_id = 1234U,
+    .device_id = 5678U,
+    .min_cycle_time = 20U,
+    .revision_id = IOLINK_REVISION_ID_1_1,
+};
+
 static const iolink_device_config_t g_config = {
     .phy = &g_phy,
     .stack = &g_stack,
     .app = &g_app,                        /* trait：实例指针 + 回调 */
+    .device_info = &g_identity,           /* 必需；库没有默认身份 */
 #if IOLINK_FEATURE_DATA_STORAGE
     .ds_flag_persist = app_ds_flag_persist,
 #endif
@@ -232,7 +247,7 @@ void data_irq_handler(void)
 | `phy` | 指针，必须比上下文存活更久（通常取 `iolink_phy_*_get()`）。`phy->self` 由驱动在自己的 init 中写入。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_NULL`。 |
 | `stack` | 指针，必须比上下文存活更久；配置在初始化时读入上下文。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_NULL`。 |
 | `app` | 应用 trait（`iolink_device_app_t`）：实例指针 + 时钟/日志/生命周期回调的唯一来源。保留指针，必须比上下文存活更久。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_APP`。 |
-| `device_info` | 身份来源；其中的 `application_tag` 只是身份字段，标签索引由 OD 表提供。参见 8.1 节的身份限制。 |
+| `device_info` | 必填的身份来源，保留指针；为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_DEVICE_INFO`（库不提供默认身份）。其中的 `application_tag` 只是身份字段，标签索引由 OD 表提供。参见 8.1 节的身份限制。 |
 | `ds_flag_persist` | 仅在 `IOLINK_FEATURE_DATA_STORAGE=1` 时声明；`DS_UPLOAD_FLAG` 变化时调用，`self` 为 `app->self`。为 NULL 时标志只保存在 RAM。 |
 | `log_level` | 运行时日志阈值；`IOLINK_LOG_LEVEL_SILENT` 表示静默。日志回调在 `app->log_write`。 |
 | `od` | 可选的设备专用参数入口（`include/iolinki/od.h`）：const 表 + get/set 后端，ISDU 与 Data Storage 共用。 |
@@ -246,7 +261,7 @@ void data_irq_handler(void)
 | `min_cycle_time` | 最小循环时间，单位 0.1 ms；在 DPP1 中按表 B.3 编码。 |
 | `pd_in_len`, `pd_out_len` | 初始/声明的 PD 长度。 |
 | `t_pd_us` | 上电后接受帧之前的延迟。 |
-| `od_width` | OD octet 数（1/2/8/32）；0 表示根据 M-sequence 类型推导。 |
+| `od_width` | OD octet 数（1/2/8/32），必须显式给出；0 返回 `IOLINK_DEVICE_INIT_ERR_OD_WIDTH`（库不按类型推导；需要 Table A.10 的默认值时用 `iolink_mseq_default_od_width()` 自己算）。 |
 | `baudrate`, `baudrate_set` | 当 `baudrate_set` 为 true 时，初始化阶段应用的 COM。 |
 | `master_lost_cycles` | 判定 `master_lost` 前的丢失周期数；0 表示关闭该提示。 |
 | `compat_flags` | `IOLINK_STACK_COMPAT_*` 兼容位，与构建期默认值按位或。 |
@@ -256,8 +271,10 @@ void data_irq_handler(void)
 | `event_min_appear_ms`, `event_min_repeat_ms` | 覆盖 A.6.4 的出现/重复窗口；0 表示沿用构建默认值。 |
 
 初始化会用 `IOLINK_DEVICE_INIT_ERR_*` 拒绝非法组合（参见 `device.h`），包括
-`time_us` 为 NULL、平台临界区仍是 weak 默认实现、PD/OD 大小超过编译期缓冲区、
-固定布局不匹配、`IOLINK_WORKSPACE_EMBEDDED=0` 但未提供工作区
+`phy`/`stack` 为 NULL（`IOLINK_DEVICE_INIT_ERR_NULL`）、`device_info` 为 NULL
+（`IOLINK_DEVICE_INIT_ERR_DEVICE_INFO`）、`time_us` 为 NULL、平台临界区仍是 weak
+默认实现、PD/OD 大小超过编译期缓冲区、固定布局不匹配、
+`IOLINK_WORKSPACE_EMBEDDED=0` 但未提供工作区
 （`IOLINK_DEVICE_INIT_ERR_WORKSPACE`）、应用对象字典表自检失败
 （`IOLINK_DEVICE_INIT_ERR_OD`，见 4.6 节），以及能力位要求了 PHY 未提供的钩子
 （`IOLINK_DEVICE_INIT_ERR_PHY`：`REQUIRE_ISR_TX` 缺少 `request_service()`，或
@@ -745,8 +762,8 @@ DS 映像不是常驻状态：上下文只持有指向暂存缓冲的指针（
 每个上下文的 API 为：
 
 ```c
-void iolink_device_info_ctx_init(iolink_device_info_ctx_t* ctx,
-                                 const iolink_device_info_t* configured);
+int iolink_device_info_ctx_init(iolink_device_info_ctx_t* ctx,
+                                const iolink_device_info_t* configured);
 const iolink_device_info_t* iolink_device_info_ctx_get(
     const iolink_device_info_ctx_t* ctx);
 int iolink_device_info_ctx_set_application_tag(iolink_device_info_ctx_t* ctx,
@@ -760,7 +777,9 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 身份与参数全部按上下文绑定，没有进程级全局状态：
 
 - `config.device_info` 提供静态身份，`iolink_device_init()` 把它绑定到
-  `ctx->device_info`；`0x0010+` 与 DPP1 从该上下文读取。
+  `ctx->device_info`；`0x0010+` 与 DPP1 从该上下文读取。**没有默认身份**：
+  `config.device_info` 为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_DEVICE_INFO`，
+  `iolink_device_info_ctx_init()` 也拒绝 NULL 并返回负值。
 - 运行时访问锁用 `iolink_device_info_ctx_set_access_locks()` / `_get_access_locks()`
   操作 `ctx->device_info`；ISDU 的参数锁检查读取同一个上下文。
 - 可写参数（含三个标签）通过 `config.od` 的应用对象字典访问，ISDU 在初始化时绑定
@@ -860,7 +879,7 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 2. 为选定的 BYTE/FRAME 模式实现 PHY 回调，包括 `int_active` 和
    `request_service`。
 3. 保证 `config`、PHY 状态和所有回调数据在上下文生命周期内有效。
-4. 身份索引或 DPP1 需要正确时，在 `config.device_info` 中提供静态身份；传 NULL 时使用内置默认身份（`k_default_info`）。
+4. 在 `config.device_info` 中提供静态身份；它是必填项，缺失时初始化失败（库不提供默认身份）。
 5. 调用 `iolink_device_init()`，然后至少每个 M-cycle 调用一次
    `iolink_device_process()`，并从数据中断调用 `iolink_device_process_isr()`。
 6. 选择一种 PD-in 来源：提供 `on_pd_input` 回调，或调用

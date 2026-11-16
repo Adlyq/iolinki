@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
+#include "iolinki/types.h"
 
 /**
  * @file utils.h
@@ -37,7 +38,7 @@
  * @param len   @p data 声称的长度，以字节计。
  * @return 该对有效时返回 true，否则返回 false。
  */
-static inline bool iolink_buf_is_valid(const void* data, size_t len)
+static inline bool iolink_buf_is_valid(const void* IOLINK_OPAQUE IOLINK_NULLABLE data, size_t len)
 {
     return !((data == NULL) && (len > 0U));
 }
@@ -49,7 +50,7 @@ static inline bool iolink_buf_is_valid(const void* data, size_t len)
  * @param len       要清零的字节数。
  * @return @p ctx 已清零时返回 true，@p ctx 为 NULL 时返回 false。
  */
-static inline bool iolink_ctx_zero(void* ctx, size_t len)
+static inline bool iolink_ctx_zero(void* IOLINK_OPAQUE IOLINK_NULLABLE ctx, size_t len)
 {
     if (ctx == NULL) {
         return false;

@@ -36,6 +36,7 @@ static void test_plan_slot_overflow_is_counted(void** state)
 
     ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     ctx.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    ctx.main.shared.od_width = 2U;
     /* init 已经发布过一次（默认配置）；这里只断言本次重发布的增量。 */
     const uint32_t overflows_before = ctx.main.reply_plan_overflows;
     iolink_dll_publish_reply_plans(&ctx.main);

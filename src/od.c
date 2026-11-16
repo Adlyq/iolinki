@@ -425,7 +425,7 @@ iolink_result_t iolink_od_default(const iolink_od_entry_t* entry, uint8_t* out, 
 /** @brief 从 STORAGE 表项的应用变量复制线上字节。 */
 static iolink_result_t od_storage_read(const iolink_od_entry_t* entry, uint8_t* out, size_t cap)
 {
-    const void* value = entry->u.storage.value;
+    const uint8_t* value = entry->u.storage.value;
 
     if (value == NULL) {
         return iolink_result_error(IOLINK_RESULT_INVALID);
@@ -467,7 +467,7 @@ static iolink_result_t od_storage_apply(const iolink_od_entry_t* entry, const ui
             return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
         }
         if (len > 0U) {
-            (void) memcpy((void*) entry->u.storage.value, data, len);
+            (void) memcpy((uint8_t*) entry->u.storage.value, data, len);
         }
         *entry->u.storage.str_len = (uint8_t) len;
         return iolink_result_ok(0U);
@@ -481,7 +481,7 @@ static iolink_result_t od_storage_apply(const iolink_od_entry_t* entry, const ui
     if (codec == NULL) {
         return iolink_result_error(IOLINK_RESULT_INVALID);
     }
-    (void) memcpy((void*) entry->u.storage.value, &raw, codec->len);
+    (void) memcpy((uint8_t*) entry->u.storage.value, &raw, codec->len);
     return iolink_result_ok(0U);
 }
 
@@ -522,7 +522,7 @@ static iolink_result_t od_storage_write(const iolink_od_entry_t* entry, iolink_a
         result = entry->on_change(self, entry, data, len);
         if (!iolink_result_succeeded(result)) {
             if (!is_string) {
-                (void) memcpy((void*) entry->u.storage.value, old_bytes, codec->len);
+                (void) memcpy((uint8_t*) entry->u.storage.value, old_bytes, codec->len);
             }
         }
     }

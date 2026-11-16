@@ -46,6 +46,7 @@ int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy,
     app->od.count = 3U;
     app->config.od = &app->od;
     app->stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    app->stack.od_width = 2U;
     app->stack.pd_in_len = sizeof(app->input);
     app->stack.pd_out_len = 1;
     app->stack.min_cycle_time = 10;

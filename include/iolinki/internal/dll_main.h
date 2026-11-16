@@ -179,9 +179,10 @@ struct iolink_dll_main
     iolink_ds_ctx_t ds; /**< 数据存储引擎 */
 #endif
 
-    iolink_dll_state_cb_t state_cb; /**< 可选的状态变更钩子（由核心层设置） */
+    iolink_dll_state_cb_t IOLINK_NULLABLE state_cb; /**< 可选的状态变更钩子（由核心层设置） */
 
-    void* state_cb_user; /**< 传给 state_cb 的用户指针 */
+    void* IOLINK_OPAQUE IOLINK_NULLABLE
+        state_cb_user; /**< 传给 state_cb 的调用方上下文（DLL 不解释） */
 };
 
 /**

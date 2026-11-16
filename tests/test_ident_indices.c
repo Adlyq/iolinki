@@ -198,8 +198,13 @@ static void test_device_info_ctx_edges(void** state)
     iolink_device_info_t info = make_info();
     iolink_device_info_ctx_t ctx;
 
-    /* NULL 上下文：初始化/访问器都应安全返回。 */
-    iolink_device_info_ctx_init(NULL, &info);
+    /* NULL 上下文/身份：初始化失败，访问器安全返回。 */
+    assert_int_equal(iolink_device_info_ctx_init(NULL, &info), -1);
+    assert_int_equal(iolink_device_info_ctx_init(&ctx, NULL), -1);
+    /* 缺身份时上下文被清零，不保留上一次的身份数据。 */
+    assert_null(iolink_device_info_ctx_get(&ctx)->vendor_name);
+    assert_null(iolink_device_info_ctx_get(&ctx)->product_name);
+    assert_int_equal(iolink_device_info_ctx_get_access_locks(&ctx), 0U);
     assert_null(iolink_device_info_ctx_get(NULL));
     assert_int_equal(iolink_device_info_ctx_get_access_locks(NULL), 0U);
     iolink_device_info_ctx_set_access_locks(NULL, 0x1234U);
@@ -209,7 +214,7 @@ static void test_device_info_ctx_edges(void** state)
     (void) memset(long_tag, 'A', sizeof(long_tag) - 1U);
     long_tag[sizeof(long_tag) - 1U] = '\0';
     info.application_tag = long_tag;
-    iolink_device_info_ctx_init(&ctx, &info);
+    assert_int_equal(iolink_device_info_ctx_init(&ctx, &info), 0);
     assert_int_equal((int) strlen(iolink_device_info_ctx_get(&ctx)->application_tag), 32);
 
     /* set_application_tag：非法参数、超长、合法更新。 */

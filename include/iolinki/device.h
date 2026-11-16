@@ -74,7 +74,7 @@
  *  .app->time_us             | application     | 单调递增、非阻塞、ISR 安全
  *  .app->log_write           | application     | 主服务上下文调用；启用
  *                            |                 | IOLINK_LOG_ENABLE_ISR 时须 ISR 安全
- *  .device_info              | application     | 静态标识数据
+ *  .device_info              | application     | 指针，必须提供；静态标识数据
  * iolink_device_ctx_t        | application     | 每个链路一个实例；一个主上下文
  *                            |                 | 调用者加数据 ISR
  * PD data (pd_input_update)  | application     | 调用期间借用；内部复制到
@@ -107,31 +107,36 @@ typedef uint64_t (*iolink_device_time_us_fn)(iolink_app_t* self);
  */
 typedef struct
 {
-    const iolink_phy_api_t* phy;        /**< 物理层驱动 API（通常取自 `iolink_phy_*_get()`），必须
-                                             比上下文存活更久：`iolink_device_set_capabilities()`
-                                             仍读它。`phy->self` 由提供 vtable 的一方写入自己的
-                                             上下文（内置驱动在 `iolink_phy_*_init()` 里写），
-                                             应用不覆盖它（覆盖会让驱动把错误指针转回自己的
-                                             状态）。为 NULL 时初始化返回
-                                             `IOLINK_DEVICE_INIT_ERR_NULL`。 */
-    const iolink_stack_config_t* stack; /**< 协议栈行为配置；必须比上下文存活更久。为 NULL
-                                             时初始化返回 `IOLINK_DEVICE_INIT_ERR_NULL`。 */
-    const iolink_device_app_t* app;     /**< 应用 trait：实例指针与生命周期/PD/时钟/日志回调
-                                             的唯一来源，必须比上下文存活更久（仍被
-                                             `iolink_device_set_capabilities()` 读取）。`app` 为
-                                             NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_APP`；
-                                             `app->time_us` 为 NULL 时返回
-                                             `IOLINK_DEVICE_INIT_ERR_TIME`。 */
-    const iolink_device_info_t* device_info; /**< 静态设备标识数据。 */
+    const iolink_phy_api_t* IOLINK_NONNULL
+        phy; /**< 物理层驱动 API（通常取自 `iolink_phy_*_get()`），必须
+   比上下文存活更久：`iolink_device_set_capabilities()`
+   仍读它。`phy->self` 由提供 vtable 的一方写入自己的
+   上下文（内置驱动在 `iolink_phy_*_init()` 里写），
+   应用不覆盖它（覆盖会让驱动把错误指针转回自己的
+   状态）。为 NULL 时初始化返回
+   `IOLINK_DEVICE_INIT_ERR_NULL`。 */
+    const iolink_stack_config_t* IOLINK_NONNULL stack; /**< 协议栈行为配置；必须比上下文存活更久。为
+                                             NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_NULL`。 */
+    const iolink_device_app_t* IOLINK_NONNULL
+        app; /**< 应用 trait：实例指针与生命周期/PD/时钟/日志回调
+   的唯一来源，必须比上下文存活更久（仍被
+   `iolink_device_set_capabilities()` 读取）。`app` 为
+   NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_APP`；
+   `app->time_us` 为 NULL 时返回
+   `IOLINK_DEVICE_INIT_ERR_TIME`。 */
+    const iolink_device_info_t* IOLINK_NONNULL
+        device_info; /**< 静态设备标识数据，必须提供（设备没有默认身份）；
+           为 NULL 时初始化返回
+           `IOLINK_DEVICE_INIT_ERR_DEVICE_INFO`。 */
 #if IOLINK_FEATURE_DATA_STORAGE
-    iolink_ds_flag_persist_fn ds_flag_persist; /**< 持久化 DS_UPLOAD_FLAG（NULL = RAM-only）；
-                                                    回调收到 `app->self`。 */
+    iolink_ds_flag_persist_fn IOLINK_NULLABLE ds_flag_persist; /**< 持久化 DS_UPLOAD_FLAG（NULL =
+                                                    RAM-only）； 回调收到 `app->self`。 */
 #endif
-    iolink_log_level_t log_level;  /**< 运行时日志阈值；IOLINK_LOG_LEVEL_SILENT（0）
-                                        表示不输出。 */
-    const iolink_od_app_t* od;     /**< 应用对象字典（可选；设备专用索引与参数值的
-                                        唯一扩展入口）。 */
-    iolink_workspace_t* workspace; /**< 可选的传输 scratch 工作区。NULL 表示使用
+    iolink_log_level_t log_level;                  /**< 运行时日志阈值；IOLINK_LOG_LEVEL_SILENT（0）
+                                                        表示不输出。 */
+    const iolink_od_app_t* IOLINK_NULLABLE od;     /**< 应用对象字典（可选；设备专用索引与参数值的
+                                            唯一扩展入口）。 */
+    iolink_workspace_t* IOLINK_NULLABLE workspace; /**< 可选的传输 scratch 工作区。NULL 表示使用
                                         上下文内嵌的 fallback 存储；当
                                         `IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供。 */
 } iolink_device_config_t;
@@ -148,11 +153,11 @@ typedef struct
     iolink_dll_ctx_t dll;                 /**< 数据链路层上下文。 */
     iolink_device_info_ctx_t device_info; /**< 设备标识上下文。 */
     const iolink_device_config_t* config; /**< 指向所提供配置的指针（唯一配置来源）。 */
-    iolink_reset_handler_t reset_handler; /**< 应用重置处理函数（可以为 NULL）。 */
-    bool master_lost_last;                /**< 上一次的主站丢失状态（回调边沿） */
-    int phy_error;                        /**< 最近一次 PHY init 失败的原始驱动码
-                                               （0 = 无失败；日志关闭时仍可读） */
-    uint8_t direct_param_page2[16];       /**< Direct Parameter Page 2 存储。 */
+    iolink_reset_handler_t IOLINK_NULLABLE reset_handler; /**< 应用重置处理函数（可以为 NULL）。 */
+    bool master_lost_last;                                /**< 上一次的主站丢失状态（回调边沿） */
+    int phy_error;                                        /**< 最近一次 PHY init 失败的原始驱动码
+                                                               （0 = 无失败；日志关闭时仍可读） */
+    uint8_t direct_param_page2[16];                       /**< Direct Parameter Page 2 存储。 */
 } iolink_device_ctx_t;
 
 /**
@@ -182,6 +187,8 @@ typedef enum
     IOLINK_DEVICE_INIT_ERR_WORKSPACE = -13, /**< `IOLINK_WORKSPACE_EMBEDDED=0` 但没有提供工作区 */
     IOLINK_DEVICE_INIT_ERR_OD = -14,        /**< 应用对象字典表存在未定义/自相矛盾的配置 */
     IOLINK_DEVICE_INIT_ERR_APP = -15,       /**< 未提供应用 trait（`config->app == NULL`） */
+    IOLINK_DEVICE_INIT_ERR_DEVICE_INFO =
+        -16, /**< 未提供设备身份（`config->device_info == NULL`） */
 } iolink_device_init_result_t;
 
 /**

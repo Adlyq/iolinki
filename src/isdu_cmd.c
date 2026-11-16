@@ -53,7 +53,7 @@ void isdu_read_error_count(iolink_isdu_ctx_t* ctx)
     uint32_t total = 0U;
     if (ctx->dll_ctx != NULL) {
         iolink_dll_stats_t stats;
-        iolink_dll_get_stats((const iolink_dll_main_t*) ctx->dll_ctx, &stats);
+        iolink_dll_get_stats(ctx->dll_ctx, &stats);
         uint64_t sum = (uint64_t) stats.crc_errors + (uint64_t) stats.framing_errors +
                        (uint64_t) stats.timeout_errors + (uint64_t) stats.timing_errors;
         total = (sum > 0xFFFFU) ? 0xFFFFU : (uint32_t) sum;
@@ -135,7 +135,7 @@ void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
 {
     uint8_t len = 0U;
     if (ctx->dll_ctx != NULL) {
-        const iolink_dll_main_t* dll = (const iolink_dll_main_t*) ctx->dll_ctx;
+        const iolink_dll_main_t* dll = ctx->dll_ctx;
         if (input) {
             /* B.2.23：该对象携带 PDin 通道的过程数据
                及其运行时长。PD 状态位（A.1.5）承载
@@ -172,7 +172,7 @@ void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
 void isdu_read_device_status(iolink_isdu_ctx_t* ctx)
 {
 #if IOLINK_FEATURE_EVENTS
-    ctx->response_buf[0] = iolink_diag_device_status((iolink_events_ctx_t*) ctx->event_ctx);
+    ctx->response_buf[0] = iolink_diag_device_status(ctx->event_ctx);
 #else
     ctx->response_buf[0] = 0U;
 #endif
@@ -190,7 +190,7 @@ static void isdu_clear_ds_upload_req(iolink_isdu_ctx_t* ctx)
 {
 #if IOLINK_FEATURE_DATA_STORAGE
     if (ctx->ds_ctx != NULL) {
-        iolink_ds_clear_upload((iolink_ds_ctx_t*) ctx->ds_ctx);
+        iolink_ds_clear_upload(ctx->ds_ctx);
     }
 #else
     (void) ctx;
@@ -208,14 +208,13 @@ static void isdu_trigger_ds_upload_req(iolink_isdu_ctx_t* ctx)
            当前 ISDU 应答被完整读取后发布，因此 Event 标志不会
            出现在 DS 命令应答中，也不会使主站在 ISDU 传输
            进行中插入诊断读取。 */
-        iolink_ds_request_upload((iolink_ds_ctx_t*) ctx->ds_ctx);
+        iolink_ds_request_upload(ctx->ds_ctx);
         return;
     }
 #endif
 #if IOLINK_FEATURE_EVENTS
     if (ctx->event_ctx != NULL) {
-        iolink_diag_raise_code((iolink_events_ctx_t*) ctx->event_ctx,
-                               IOLINK_EVENTCODE_DS_UPLOAD_REQUEST);
+        iolink_diag_raise_code(ctx->event_ctx, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST);
     }
 #else
     (void) ctx;
@@ -248,7 +247,7 @@ uint8_t isdu_ds_result_error(int ret, uint8_t fallback)
 static void isdu_reset_diagnostics(iolink_isdu_ctx_t* ctx)
 {
     if (ctx->dll_ctx != NULL) {
-        iolink_dll_reset_diagnostics((iolink_dll_main_t*) ctx->dll_ctx);
+        iolink_dll_reset_diagnostics(ctx->dll_ctx);
     }
 }
 
@@ -256,7 +255,7 @@ static void isdu_reset_diagnostics(iolink_isdu_ctx_t* ctx)
 static void isdu_reset_error_counters(iolink_isdu_ctx_t* ctx)
 {
     if (ctx->dll_ctx != NULL) {
-        iolink_dll_reset_error_counters((iolink_dll_main_t*) ctx->dll_ctx);
+        iolink_dll_reset_error_counters(ctx->dll_ctx);
     }
 }
 
@@ -291,10 +290,10 @@ static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             isdu_reset_error_counters(ctx);
 #if IOLINK_FEATURE_EVENTS
             if (ctx->event_ctx != NULL) {
-                iolink_events_clear_diagnosis((iolink_events_ctx_t*) ctx->event_ctx);
+                iolink_events_clear_diagnosis(ctx->event_ctx);
             }
             else if (ctx->dll_ctx != NULL) {
-                iolink_events_clear_diagnosis(&((iolink_dll_main_t*) ctx->dll_ctx)->shared.events);
+                iolink_events_clear_diagnosis(&(ctx->dll_ctx)->shared.events);
             }
 #endif
             break;
@@ -307,7 +306,7 @@ static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
             isdu_factory_reset(ctx);
             isdu_clear_ds_upload_req(ctx);
             if (ctx->dll_ctx != NULL) {
-                iolink_dll_request_back_to_box((iolink_dll_main_t*) ctx->dll_ctx);
+                iolink_dll_request_back_to_box(ctx->dll_ctx);
             }
             isdu_reset_diagnostics(ctx);
             break;
@@ -328,7 +327,7 @@ static bool isdu_system_ds(iolink_isdu_ctx_t* ctx, uint8_t cmd)
     if (ctx->ds_ctx == NULL) {
         return false; /* 无事可做：成功（空应答） */
     }
-    iolink_ds_ctx_t* ds = (iolink_ds_ctx_t*) ctx->ds_ctx;
+    iolink_ds_ctx_t* ds = ctx->ds_ctx;
 
     if (cmd == IOLINK_CMD_PARAM_BREAK) { /* 0x06 */
         /* 空闲状态下没有可中止的操作，因此这是一个意外命令
@@ -494,7 +493,7 @@ void handle_detailed_device_status(iolink_isdu_ctx_t* ctx)
         return;
     }
 
-    iolink_events_ctx_t* event_ctx = (iolink_events_ctx_t*) ctx->event_ctx;
+    iolink_events_ctx_t* event_ctx = ctx->event_ctx;
 
     /* 快照在临界区内完成；下面的格式化在锁外执行（应答缓冲区归主上下文
        所有）。条目集合 = “Event appears 已上线、disappears 尚未发出”的
@@ -554,7 +553,7 @@ void handle_error_stats(iolink_isdu_ctx_t* ctx)
     }
 
     iolink_dll_stats_t stats;
-    iolink_dll_get_stats((const iolink_dll_main_t*) ctx->dll_ctx, &stats);
+    iolink_dll_get_stats(ctx->dll_ctx, &stats);
 
     size_t idx = 0U;
     isdu_write_u32_be(ctx->response_buf, &idx, stats.crc_errors);
@@ -572,7 +571,7 @@ static uint8_t* direct_param_page2(iolink_isdu_ctx_t* ctx)
     static uint8_t fallback_page2[16] = {0U};
 
     if ((ctx != NULL) && (ctx->direct_param_page2 != NULL)) {
-        return (uint8_t*) ctx->direct_param_page2;
+        return ctx->direct_param_page2;
     }
     return fallback_page2;
 }
@@ -602,26 +601,26 @@ static uint8_t direct_param_encode_pd(uint8_t octets)
 static uint8_t direct_param_mseq_capability(uint8_t m_seq_type, uint8_t od_width)
 {
     uint8_t cap = 0x01U; /* 支持 ISDU */
-    /* Table A.10 的 OPERATE 编码跟随实际 OD 宽度（1/2/8/32）。 */
-    if (od_width == 0U) {
-        od_width = iolink_mseq_default_od_width(m_seq_type);
-    }
+    /* Table A.10 的 OPERATE 编码跟随已配置的 OD 宽度（1/2/8/32）。 */
     const uint8_t operate_code = iolink_mseq_operate_code(m_seq_type, od_width);
     cap |= (uint8_t) ((operate_code & 0x07U) << 1);
     /* 本协议栈的 PREOPERATE M-sequence 为 TYPE_0（编码 0）-> bits 4-5 = 0。 */
     return cap;
 }
 
-/** @brief 从设备信息与 DLL 状态填充 16 字节的 Direct Parameter page 1。 */
-static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
+/** @brief 从设备信息与 DLL 状态填充 16 字节的 Direct Parameter page 1。
+ *
+ * @p info 由调用方保证非 NULL：没有身份就没有 Direct Parameter page 1。
+ */
+static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, const iolink_device_info_t* info,
+                                     uint8_t* page)
 {
-    const iolink_device_info_t* info = isdu_info(ctx);
     uint8_t pd_in = 0U;
     uint8_t pd_out = 0U;
     uint8_t m_seq = 0U;
     uint8_t od_width = 0U;
     if (ctx->dll_ctx != NULL) {
-        const iolink_dll_main_t* dll = (const iolink_dll_main_t*) ctx->dll_ctx;
+        const iolink_dll_main_t* dll = ctx->dll_ctx;
         iolink_dll_get_pd_length(dll, &pd_in, &pd_out);
         m_seq = dll->shared.m_seq_type;
         od_width = dll->shared.od_width;
@@ -630,29 +629,26 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
     (void) memset(page, 0, 16);
     /* 0x01 MasterCycleTime 是主站在启动期间写入的值。 */
     if (ctx->dll_ctx != NULL) {
-        const iolink_dll_main_t* dll = (const iolink_dll_main_t*) ctx->dll_ctx;
+        const iolink_dll_main_t* dll = ctx->dll_ctx;
         page[0x01] = dll->master_cycle_time;
     }
     {
         uint16_t min_cyc = (ctx->dll_ctx != NULL)
-                               ? (uint16_t) iolink_dll_compute_min_cycle_time(
-                                     (const iolink_dll_main_t*) ctx->dll_ctx)
-                               : ((info != NULL) ? (uint16_t) info->min_cycle_time : 0U);
+                               ? (uint16_t) iolink_dll_compute_min_cycle_time(ctx->dll_ctx)
+                               : (uint16_t) info->min_cycle_time;
         /* 0x00 表示 "no MinCycleTime"；否则编码时间基准 | 乘数（Table B.3）。 */
         page[0x02] = (min_cyc == 0U) ? 0U : iolink_cycle_time_encode(min_cyc);
     }
     page[0x03] = direct_param_mseq_capability(m_seq, od_width); /* M-sequenceCapability */
     /* RevisionID 在 DPP1 0x04 中按一个八位组传输，MajorRev/MinorRev 各占半字节。 */
-    page[0x04] = (info != NULL) ? info->revision_id : IOLINK_REVISION_ID_1_1;
-    page[0x05] = direct_param_encode_pd(pd_in);  /* ProcessDataIn */
-    page[0x06] = direct_param_encode_pd(pd_out); /* ProcessDataOut */
-    if (info != NULL) {
-        page[0x07] = (uint8_t) (info->vendor_id >> 8);            /* VendorID 高字节 */
-        page[0x08] = (uint8_t) (info->vendor_id & 0xFFU);         /* VendorID 低字节 */
-        page[0x09] = (uint8_t) ((info->device_id >> 16) & 0xFFU); /* DeviceID 第 2 字节 */
-        page[0x0A] = (uint8_t) ((info->device_id >> 8) & 0xFFU);  /* DeviceID 第 1 字节 */
-        page[0x0B] = (uint8_t) (info->device_id & 0xFFU);         /* DeviceID 第 0 字节 */
-    }
+    page[0x04] = info->revision_id;
+    page[0x05] = direct_param_encode_pd(pd_in);               /* ProcessDataIn */
+    page[0x06] = direct_param_encode_pd(pd_out);              /* ProcessDataOut */
+    page[0x07] = (uint8_t) (info->vendor_id >> 8);            /* VendorID 高字节 */
+    page[0x08] = (uint8_t) (info->vendor_id & 0xFFU);         /* VendorID 低字节 */
+    page[0x09] = (uint8_t) ((info->device_id >> 16) & 0xFFU); /* DeviceID 第 2 字节 */
+    page[0x0A] = (uint8_t) ((info->device_id >> 8) & 0xFFU);  /* DeviceID 第 1 字节 */
+    page[0x0B] = (uint8_t) (info->device_id & 0xFFU);         /* DeviceID 第 0 字节 */
     /* 0x0C-0x0E 保留（0）；0x0F SystemCommand（W）读出为 0。 */
 }
 
@@ -664,7 +660,7 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, uint8_t* page)
  */
 bool dp_page1_main_context(const iolink_isdu_ctx_t* ctx)
 {
-    const iolink_dll_main_t* dll = (const iolink_dll_main_t*) ctx->dll_ctx;
+    const iolink_dll_main_t* dll = ctx->dll_ctx;
     return (dll == NULL) || (dll->shared.in_isr == 0U);
 }
 
@@ -677,13 +673,17 @@ bool dp_page1_main_context(const iolink_isdu_ctx_t* ctx)
 static void dp_page1_refresh(iolink_isdu_ctx_t* ctx)
 {
     uint8_t page[16];
+    const iolink_device_info_t* info = isdu_info(ctx);
 
-    build_direct_param_page1(ctx, page);
+    if (info == NULL) {
+        return; /* 没有身份就不生成映像；ISDU 读路径已用错误应答拒绝 */
+    }
+    build_direct_param_page1(ctx, info, page);
     ctx->dp_page1_seq = (uint8_t) (ctx->dp_page1_seq | 1U);
     IOLINK_FENCE(); /* 先标记"更新中"，再写映像 */
     (void) memcpy(ctx->dp_page1, page, sizeof(page));
     ctx->dp_page1_src = ctx->dll_ctx;
-    ctx->dp_page1_info = (const void*) ctx->device_info;
+    ctx->dp_page1_info = ctx->device_info;
     IOLINK_FENCE(); /* 映像写完后才发布为稳定 */
     ctx->dp_page1_seq = (uint8_t) (ctx->dp_page1_seq + 1U);
 }
@@ -697,10 +697,13 @@ static void dp_page1_refresh(iolink_isdu_ctx_t* ctx)
  */
 void dp_page1_ensure(iolink_isdu_ctx_t* ctx)
 {
-    const iolink_dll_main_t* dll = (const iolink_dll_main_t*) ctx->dll_ctx;
+    const iolink_dll_main_t* dll = ctx->dll_ctx;
     bool stale = ((ctx->dp_page1_seq & 1U) != 0U);
-    if ((ctx->dp_page1_src != ctx->dll_ctx) ||
-        (ctx->dp_page1_info != (const void*) ctx->device_info)) {
+
+    if (ctx->device_info == NULL) {
+        return; /* 未绑定身份：没有可发布的映像 */
+    }
+    if ((ctx->dp_page1_src != ctx->dll_ctx) || (ctx->dp_page1_info != ctx->device_info)) {
         stale = true; /* 绑定/重绑上下文：映像必须按新上下文重建 */
     }
     if ((dll != NULL) && (ctx->dp_page1[0x01] != dll->master_cycle_time)) {
@@ -825,9 +828,16 @@ void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
             (void) memcpy(page, page2_storage, sizeof(page));
         }
         else {
+            const iolink_device_info_t* info = isdu_info(ctx);
+            if (info == NULL) {
+                /* 没有设备身份时 DPP1 不可用（其余标识索引同样如此），
+                 * 不能退回臆造的 VendorID/RevisionID。 */
+                isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+                return;
+            }
             /* 主泵路径直接用同一个构建器（单一口径）；RAM 映像只服务
              * 数据 ISR 的页读快路径。 */
-            build_direct_param_page1(ctx, page);
+            build_direct_param_page1(ctx, info, page);
         }
 
         if (sub == 0U) {

@@ -56,11 +56,25 @@ static uint64_t freertos_time_us(iolink_app_t* self)
 
 static iolink_device_ctx_t g_device_ctx;
 static const iolink_device_app_t g_device_app = {.self = NULL, .time_us = freertos_time_us};
-static const iolink_stack_config_t g_device_stack = {0};
+static const iolink_device_info_t g_identity = {
+    .vendor_name = "iolinki example",
+    .product_name = "FreeRTOS device",
+    .product_id = "freertos-device",
+    .serial_number = "EXAMPLE-001",
+    .hardware_revision = "1",
+    .firmware_revision = "1",
+    .vendor_id = 1234U,
+    .device_id = 5678U,
+    .min_cycle_time = 10U,
+    .revision_id = IOLINK_REVISION_ID_1_1,
+};
+static const iolink_stack_config_t g_device_stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_0,
+                                                     .od_width = 1U};
 static iolink_device_config_t g_device_config = {
     .phy = &g_phy_freertos,
     .stack = &g_device_stack,
     .app = &g_device_app,
+    .device_info = &g_identity,
 };
 
 /* Request posted by another task and served by the IO-Link task. The IO-Link

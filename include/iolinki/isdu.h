@@ -18,6 +18,11 @@
 #include "iolinki/device_info.h"
 #include "iolinki/workspace.h"
 
+/* 反向链接只在这里当不透明句柄使用；定义在各自的模块头里。 */
+struct iolink_ds_ctx;
+struct iolink_events_ctx;
+struct iolink_dll_main;
+
 /**
  * @file isdu.h
  * @brief IO-Link 索引服务数据单元（ISDU）非周期报文
@@ -121,13 +126,15 @@ typedef struct
 
     /* 指向外部依赖的指针 */
     bool response_negative; /**< 由 isdu_respond_error 设置；用于区分 0x80 两八位组载荷。 */
-    void* event_ctx;        /**< 诊断主机反向链接 */
-    void* ds_ctx;           /**< 用于系统命令的 Data Storage 上下文 */
-    void* dll_ctx;          /**< 用于统计访问的 DLL 上下文 */
-    iolink_device_info_ctx_t* device_info; /**< 设备标识上下文（可为 NULL） */
-    const iolink_od_app_t* od;             /**< 应用对象字典（表 + get/set 后端；可为 NULL） */
-    iolink_app_t* od_self;                 /**< 传给 OD 钩子/后端的应用上下文 */
-    void* direct_param_page2;              /**< 每设备的 Direct Parameter page 2 存储 */
+    struct iolink_events_ctx* IOLINK_NULLABLE event_ctx; /**< 诊断主机反向链接（可为 NULL） */
+    struct iolink_ds_ctx* IOLINK_NULLABLE
+        ds_ctx; /**< 系统命令用的 Data Storage 上下文（可为 NULL） */
+    struct iolink_dll_main* IOLINK_NULLABLE dll_ctx; /**< 统计/页映像用的 DLL 上下文（可为 NULL） */
+    iolink_device_info_ctx_t* IOLINK_NULLABLE device_info; /**< 设备标识上下文（可为 NULL） */
+    const iolink_od_app_t* IOLINK_NULLABLE od; /**< 应用对象字典（表 + get/set 后端；可为 NULL） */
+    iolink_app_t* IOLINK_NULLABLE od_self;     /**< 传给 OD 钩子/后端的应用上下文（可为 NULL） */
+    uint8_t* IOLINK_NULLABLE
+        direct_param_page2; /**< 每设备的 Direct Parameter page 2 存储（16 字节；可为 NULL） */
 
     /* Direct Parameter page 1（0x00-0x0F）RAM 映像。
      * 并发契约：主泵是唯一写者，数据 ISR 只读。
@@ -137,17 +144,19 @@ typedef struct
      * 绝不重建整页；整页构建只发生在主泵上下文。 */
     uint8_t dp_page1[16];          /**< DPP1 映像（主泵写、ISR 读） */
     volatile uint8_t dp_page1_seq; /**< 奇数 = 更新中/失效；偶数 = 稳定 */
-    const void* dp_page1_src;      /**< 上次构建映像时绑定的 DLL 上下文 */
-    const void* dp_page1_info;     /**< 上次构建映像时绑定的参数/设备信息上下文 */
+    const struct iolink_dll_main* IOLINK_NULLABLE
+        dp_page1_src; /**< 上次构建映像时绑定的 DLL 上下文 */
+    const iolink_device_info_ctx_t* IOLINK_NULLABLE
+        dp_page1_info; /**< 上次构建映像时的设备信息上下文 */
 
-    iolink_workspace_t* workspace; /**< 绑定的工作区；NULL = 使用内嵌 fallback */
-    const iolink_caps_t* caps;     /**< 实例能力位；NULL = 全开（独立使用引擎时） */
+    iolink_workspace_t* IOLINK_NULLABLE workspace; /**< 绑定的工作区；NULL = 使用内嵌 fallback */
+    const iolink_caps_t* IOLINK_NULLABLE caps;     /**< 实例能力位；NULL = 全开（独立使用引擎时） */
 
     /* 系统命令标志 */
-    bool reset_pending;           /**< 请求设备复位（0x80） */
-    bool app_reset_pending;       /**< 请求应用复位（0x81） */
-    const iolink_log_sink_t* log; /**< 日志汇点指针（NULL = 静默；设备层指向共享 sink，
-                                      独立使用须自行指向调用方的 sink） */
+    bool reset_pending;                           /**< 请求设备复位（0x80） */
+    bool app_reset_pending;                       /**< 请求应用复位（0x81） */
+    const iolink_log_sink_t* IOLINK_NULLABLE log; /**< 日志汇点指针（NULL = 静默；设备层指向共享
+                                      sink， 独立使用须自行指向调用方的 sink） */
 
 #if IOLINK_WORKSPACE_EMBEDDED
     iolink_isdu_scratch_t scratch; /**< 未提供工作区时的默认 scratch */

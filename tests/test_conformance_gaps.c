@@ -246,14 +246,16 @@ static void test_0092_revision_id_configured(void** state)
     assert_int_equal(read_object(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x05U, &value, 1U), 1);
     assert_int_equal(value, 0x21U);
 
-    /* ctx->device_info 为空时回落到 V1.1：只绑 OD、不绑身份，env 里仍是 0x21。 */
+    /* 没有绑定的设备身份就没有 DPP1：不臆造 RevisionID，直接拒绝。 */
     iolink_isdu_init(&ctx);
     ctx.od = &g_test_env.params.od;
     assert_null(ctx.device_info);
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x05U), 1);
     iolink_isdu_process(&ctx);
-    assert_int_equal(isdu_collect_response(&ctx, &value, 1U), 1);
-    assert_int_equal(value, IOLINK_REVISION_ID_1_1);
+    uint8_t response[2] = {0U, 0U};
+    assert_int_equal(isdu_collect_response(&ctx, response, sizeof(response)), 2);
+    assert_int_equal(response[0], 0x80U);
+    assert_int_equal(response[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
 }
 
 /* ------------------------------------------------------------------------- */

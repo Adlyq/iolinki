@@ -346,6 +346,7 @@ static int test_request_service_staging(void)
     dll.main.shared.clock.time_us = test_time_us;
     dll.main.shared.state = IOLINK_DLL_STATE_STARTUP;
     dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    dll.main.shared.od_width = 1U;
     dll.main.shared.pd_out_len_current = 0U;
     dll.main.pd_in_len_current = 0U;
     now_us = 1000000U;
@@ -404,6 +405,7 @@ static int test_type0_diagnosis_read_isr(void)
     dll.main.shared.clock.time_us = test_time_us;
     dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
     dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    dll.main.shared.od_width = 1U;
     dll.main.shared.pd_out_len_current = 0U;
     dll.main.pd_in_len_current = 0U;
     /* 主泵按当前状态发布应答计划；本用例直接驱动 ISR，故显式发布。 */

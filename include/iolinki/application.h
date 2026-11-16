@@ -65,18 +65,18 @@
  */
 typedef struct
 {
-    iolink_app_t* self; /**< 实例指针；原样传给下面每个回调（可为 NULL）。 */
+    iolink_app_t* IOLINK_NULLABLE self; /**< 实例指针；原样传给下面每个回调（可为 NULL）。 */
 
     /**
      * @brief 单调微秒时钟（必需）。
      *
      * 数据 ISR 会读取它，因此实现必须是单调、无阻塞且 ISR 安全的。
      */
-    uint64_t (*time_us)(iolink_app_t* self);
+    uint64_t (*IOLINK_NONNULL time_us)(iolink_app_t* IOLINK_NULLABLE self);
 
     /** @brief 可选日志回调；NULL 表示静默（由 `config.log_level` 过滤）。 */
-    void (*log_write)(iolink_app_t* self, iolink_log_level_t level, const char* format, ...)
-        IOLINK_LOG_PRINTF_FORMAT(3, 4);
+    void (*IOLINK_NULLABLE log_write)(iolink_app_t* IOLINK_NULLABLE self, iolink_log_level_t level,
+                                      const char* format, ...) IOLINK_LOG_PRINTF_FORMAT(3, 4);
 
     void (*on_startup)(iolink_app_t* self);    /**< 已进入 STARTUP */
     void (*on_preoperate)(iolink_app_t* self); /**< 已进入 PREOPERATE */

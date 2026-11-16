@@ -42,7 +42,9 @@ static void device_config_defaults(iolink_test_device_t* dev)
     (void) memset(dev, 0, sizeof(*dev));
     dev->cfg.phy = &g_phy_mock;
     dev->cfg.app = iolink_test_default_app();
+    dev->cfg.device_info = iolink_test_identity();
     dev->stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    dev->stack.od_width = 1U;
     dev->cfg.stack = &dev->stack;
 }
 

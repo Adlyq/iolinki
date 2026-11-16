@@ -64,7 +64,12 @@ typedef enum
  * 而此时帧分发仍在栈上）。因此钩子不得对
  * iolink_dll_* / iolink_device_* 做重入调用。
  */
-typedef void (*iolink_dll_state_cb_t)(void* user, iolink_dll_state_t state);
+/** @brief 状态变更钩子。
+ *
+ * @p user 是调用方自己的上下文：DLL 只保存并原样回传，不解释其内容
+ * （DLL 层与上层的设备类型无编译期依赖）。 */
+typedef void (*iolink_dll_state_cb_t)(void* IOLINK_OPAQUE IOLINK_NULLABLE user,
+                                      iolink_dll_state_t state);
 
 /** 本库成帧的最大 M 序列长度（请求或应答），以字节计。 */
 #define IOLINK_M_SEQ_MAX_LEN (IOLINK_PD_OUT_MAX_SIZE + IOLINK_OD_MAX_SIZE + 2U)

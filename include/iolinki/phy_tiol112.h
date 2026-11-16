@@ -12,17 +12,25 @@
  * set_sio_tx 选择 GPIO 复用并设置 TIOL112 TX 引脚的原始电平。
  * consume_wakeup 原子地消费 IRQ 锁存的低有效 WAKE 事件。
  * read_nfault 返回原始引脚电平（true = 无故障）；可选。 */
+/**
+ * @brief 板级适配器状态（不透明）。
+ *
+ * 板级代码在自己的翻译单元里定义 `struct iolink_tiol112_board`，把引脚、
+ * UART 句柄等放进去；驱动只保存并原样透传这个指针，从不访问其字段。
+ */
+typedef struct iolink_tiol112_board iolink_tiol112_board_t;
+
 typedef struct
 {
-    void* user;
-    int (*init)(void* user);
-    void (*set_enable)(void* user, bool enabled);
-    void (*set_sio_tx)(void* user, bool high);
-    int (*uart_configure)(void* user, uint32_t baud);
-    int (*uart_send_complete)(void* user, const uint8_t* data, size_t len);
-    int (*uart_recv)(void* user, uint8_t* byte);
-    int (*consume_wakeup)(void* user);
-    bool (*read_nfault)(void* user);
+    iolink_tiol112_board_t* IOLINK_NULLABLE board; /**< 板级状态；单例适配器可留 NULL */
+    int (*init)(iolink_tiol112_board_t* board);
+    void (*set_enable)(iolink_tiol112_board_t* board, bool enabled);
+    void (*set_sio_tx)(iolink_tiol112_board_t* board, bool high);
+    int (*uart_configure)(iolink_tiol112_board_t* board, uint32_t baud);
+    int (*uart_send_complete)(iolink_tiol112_board_t* board, const uint8_t* data, size_t len);
+    int (*uart_recv)(iolink_tiol112_board_t* board, uint8_t* byte);
+    int (*consume_wakeup)(iolink_tiol112_board_t* board);
+    bool (*read_nfault)(iolink_tiol112_board_t* board);
 } iolink_tiol112_io_t;
 
 typedef struct

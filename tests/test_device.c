@@ -63,6 +63,7 @@ static iolink_device_config_t make_device_config(iolink_stack_config_t* stack,
     (void) memset(phy, 0, sizeof(*phy));
     config.phy = phy;
     config.app = iolink_test_default_app();
+    config.device_info = iolink_test_identity();
     stack->m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     stack->pd_in_len = 2U;
     stack->pd_out_len = 2U;
@@ -78,6 +79,8 @@ static void init_device(iolink_test_device_t* dev, iolink_m_seq_type_t type, uin
     config.m_seq_type = type;
     config.pd_in_len = pd_in;
     config.pd_out_len = pd_out;
+    /* 设备必须显式给出 OD 宽度；这里取 Table A.10 的 OPERATE 值。 */
+    config.od_width = iolink_mseq_default_od_width((uint8_t) type);
 
     setup_mock_phy();
     will_return(mock_phy_init, 0);
@@ -93,6 +96,23 @@ static void test_device_init_rejects_null(void** state)
 
     assert_int_equal(iolink_device_init(NULL, &config), IOLINK_DEVICE_INIT_ERR_NULL);
     assert_int_equal(iolink_device_init(&ctx, NULL), IOLINK_DEVICE_INIT_ERR_NULL);
+}
+
+static void test_device_init_requires_device_info(void** state)
+{
+    (void) state;
+    iolink_device_ctx_t ctx;
+    iolink_stack_config_t stack;
+    iolink_phy_api_t phy;
+    iolink_device_config_t config = make_device_config(&stack, &phy);
+
+    /* 设备没有默认身份：缺 device_info 就是配置错误，不能退回臆造的标识。 */
+    config.device_info = NULL;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_DEVICE_INFO);
+    assert_int_equal(iolink_device_get_phy_error(&ctx), 0);
+
+    config = make_device_config(&stack, &phy);
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
 }
 
 static void test_device_init_rejects_null_phy_and_stack(void** state)
@@ -222,6 +242,7 @@ static void test_device_binds_instance_context(void** state)
 
     app.self = (iolink_app_t*) &sentinel;
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    stack.od_width = 1U;
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &stack, &app), IOLINK_DEVICE_INIT_OK);
@@ -441,6 +462,7 @@ static void test_device_config_baudrate(void** state)
     (void) state;
     iolink_stack_config_t config = {0};
     config.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    config.od_width = 2U;
     config.pd_in_len = 2U;
     config.pd_out_len = 2U;
     config.baudrate = IOLINK_BAUDRATE_COM1;
@@ -473,6 +495,7 @@ static void test_device_init_builds_ds_image(void** state)
     (void) memset(&dev, 0, sizeof(dev));
     dev.cfg.phy = &g_phy_mock;
     dev.cfg.app = iolink_test_default_app();
+    dev.cfg.device_info = iolink_test_identity();
     dev.stack = stack;
     dev.cfg.stack = &dev.stack;
     dev.cfg.od = test_default_tag_od();
@@ -513,19 +536,25 @@ static void test_device_process_pumps_events(void** state)
 /* Table A.10：当配置保留 od_width = 0 时，TYPE_1_2 默认使用 2 字节 OD（code 1）。
  * DLL 仅在 ISR 传输下存储 od_width，因此有条件地断言它；
  * 配置校验（接受推导出的 2）在两种传输下都会运行。 */
-static void test_device_od_width_default(void** state)
+static void test_device_od_width_required(void** state)
 {
     (void) state;
-    iolink_test_device_t dev;
-    iolink_stack_config_t config = {0};
+    iolink_device_ctx_t ctx;
+    iolink_stack_config_t stack;
+    iolink_phy_api_t phy;
+    iolink_device_config_t config = make_device_config(&stack, &phy);
 
-    config.m_seq_type = IOLINK_M_SEQ_TYPE_1_2;
-    config.pd_in_len = 0U;
-    config.pd_out_len = 0U;
-    setup_mock_phy();
-    will_return(mock_phy_init, 0);
-    assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
-    assert_int_equal(test_dll_shared(&dev.ctx)->od_width, 2U);
+    /* 没有由 M-sequence 类型推导的路径：缺 od_width 就是配置错误。 */
+    stack.od_width = 0U;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_OD_WIDTH);
+
+    /* 显式给出的宽度原样进入 DLL 布局（TYPE_1_2 固定为 0/0 PD、2 OD）。 */
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_1_2;
+    stack.od_width = 2U;
+    stack.pd_in_len = 0U;
+    stack.pd_out_len = 0U;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
+    assert_int_equal(test_dll_shared(&ctx)->od_width, 2U);
 }
 
 static int group_setup(void** state)
@@ -545,6 +574,7 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_device_init_rejects_null),
+        cmocka_unit_test(test_device_init_requires_device_info),
         cmocka_unit_test(test_device_init_rejects_null_phy_and_stack),
         cmocka_unit_test(test_device_init_rejects_invalid_config),
         cmocka_unit_test(test_device_init_maps_phy_error),
@@ -560,7 +590,7 @@ int main(void)
         cmocka_unit_test(test_device_reset_handler),
         cmocka_unit_test(test_device_introspection),
         cmocka_unit_test(test_device_config_baudrate),
-        cmocka_unit_test(test_device_od_width_default),
+        cmocka_unit_test(test_device_od_width_required),
         cmocka_unit_test(test_device_set_pd_length_fixed),
         cmocka_unit_test(test_device_set_pd_length_variable),
         cmocka_unit_test(test_device_init_builds_ds_image),

@@ -61,6 +61,16 @@ implementation-level buffer ownership stays in `docs/CODE_FLOW.md` (section
   `rx_frame()` call").
 - **Direction tags are mandatory** for pointer parameters: `@param[in]`,
   `@param[out]` or `@param[in,out]`.
+- **Nullability is annotated, not implied.** `IOLINK_NONNULL` marks required
+  pointers, `IOLINK_NULLABLE` marks the documented optional ones (NULL means
+  "unsupported / not needed", never "take another path"). Both are Clang
+  `_Nonnull` / `_Nullable` and empty elsewhere; annotations are written where
+  the contract matters, not on every pointer.
+- **No universal pointers.** Name the type, or declare an opaque type and let
+  the owner define the struct (e.g. `iolink_tiol112_board_t`). `void *` is
+  reserved for interfaces that cannot name a type (byte views, symbol tables,
+  a lower layer's caller context) and every such use carries `IOLINK_OPAQUE`
+  plus the reason in its Doxygen.
 - **Context rules are part of the contract.** State whether a callback runs in
   main context or the data ISR, and whether re-entering the API is allowed.
 - **Getter contexts are `const`** unless the call updates state that the

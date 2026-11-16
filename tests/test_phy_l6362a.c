@@ -17,30 +17,30 @@ static void reset_board(void)
     config_result = 0;
     baud = 0U;
 }
-static int start(void* u)
+static int start(iolink_l6362a_board_t* u)
 {
     (void) u;
     en = false;
     return 0;
 }
-static void enable(void* u, bool b)
+static void enable(iolink_l6362a_board_t* u, bool b)
 {
     (void) u;
     en = b;
 }
-static void level(void* u, bool b)
+static void level(iolink_l6362a_board_t* u, bool b)
 {
     (void) u;
     in2 = b;
 }
-static int config(void* u, uint32_t b)
+static int config(iolink_l6362a_board_t* u, uint32_t b)
 {
     (void) u;
     assert_false(en);
     baud = b;
     return config_result;
 }
-static int send_bytes(void* u, const uint8_t* b, size_t n)
+static int send_bytes(iolink_l6362a_board_t* u, const uint8_t* b, size_t n)
 {
     (void) u;
     (void) b;
@@ -48,23 +48,23 @@ static int send_bytes(void* u, const uint8_t* b, size_t n)
     assert_true(en);
     return tx_result;
 }
-static int recv_byte(void* u, uint8_t* b)
+static int recv_byte(iolink_l6362a_board_t* u, uint8_t* b)
 {
     (void) u;
     *b = 0xa5;
     return 1;
 }
-static int wake(void* u)
+static int wake(iolink_l6362a_board_t* u)
 {
     (void) u;
     return 1;
 }
-static bool read_ol(void* u)
+static bool read_ol(iolink_l6362a_board_t* u)
 {
     (void) u;
     return ol;
 }
-static bool read_diag(void* u)
+static bool read_diag(iolink_l6362a_board_t* u)
 {
     (void) u;
     return diag;

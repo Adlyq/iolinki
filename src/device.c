@@ -56,26 +56,6 @@ static void device_state_cb(void* user, iolink_dll_state_t state)
     }
 }
 
-/** @brief 某种 M-sequence 类型的默认 OD 字节数（Table A.10）。
- *
- * TYPE_1_2 携带 2 个 OD 字节（编码 1），TYPE_1_V 为 8 字节（编码 6），
- * TYPE_2_V 默认为 2 个 OD 字节（编码 5）；其余情况默认为 1。
- * TYPE_1_1 在初始化时被 ISR 传输层拒绝；默认值 1 仅作为
- * 安全的占位值。 */
-static uint8_t device_default_od_width(uint8_t m_seq_type)
-{
-    switch (m_seq_type) {
-        case IOLINK_M_SEQ_TYPE_1_2:
-            return 2U;
-        case IOLINK_M_SEQ_TYPE_1_V:
-            return 8U;
-        case IOLINK_M_SEQ_TYPE_2_V:
-            return 2U;
-        default:
-            return 1U;
-    }
-}
-
 /** @brief 将用户协议栈配置应用到 DLL 上下文，并推导长度/时序。
  *
  * 配置只有一个来源：调用者在初始化期间提供的
@@ -96,26 +76,15 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
                       dll_time_us(&ctx->dll.main) + (uint64_t) ctx->dll.main.t_pd_delay_us);
     }
 
-    /* Table A.10：TYPE_2_1/TYPE_2_2 携带一个 On-request Data 字节；TYPE_2_V 是
-       两字节变体（OPERATE M-sequence 编码 5）。 */
-    ctx->dll.main.od_len = (ctx->dll.main.shared.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
-
     ctx->dll.main.pd_in_len_current = ctx->dll.main.shared.pd_in_len;
     ctx->dll.main.shared.pd_out_len_current = ctx->dll.main.pd_out_len;
     ctx->dll.main.pd_in_len_max = ctx->dll.main.shared.pd_in_len;
     ctx->dll.main.pd_out_len_max = ctx->dll.main.pd_out_len;
 
-    /* 双泵传输：ISR 组帧请求，并基于共享状态
-     * 组装应答，因此 DLL 需要 OD 宽度来确定应答布局。
-     * OD 宽度默认取 Table A.10 的值；config.od_width 选择
-     * 8/32 字节扩展。 */
+    /* 双泵传输：ISR 组帧请求，并基于共享状态组装应答，因此 DLL 需要
+     * OD 宽度来确定应答布局（Table A.10 的 OPERATE 编码跟随该宽度）。
+     * 宽度由 config.od_width 显式给出（校验阶段已拒绝 0）。 */
     ctx->dll.main.shared.od_width = stack->od_width;
-    if (ctx->dll.main.shared.od_width == 0U) {
-        ctx->dll.main.shared.od_width =
-            device_default_od_width((uint8_t) ctx->dll.main.shared.m_seq_type);
-    }
-    /* ISR 传输层始终使用 od_width（0/1/2/8/32）；保持 od_len 与之
-     * 同步，避免旧的 1/2 假设渗入该构建。 */
     ctx->dll.main.od_len = ctx->dll.main.shared.od_width;
 
     /* 在根据波特率推导最小周期时间之前，先采用
@@ -205,6 +174,9 @@ static int device_config_validate(const iolink_device_config_t* config)
         return IOLINK_DEVICE_INIT_ERR_NULL;
     }
     stack = config->stack;
+    if (config->device_info == NULL) {
+        return IOLINK_DEVICE_INIT_ERR_DEVICE_INFO;
+    }
     if (config->app->time_us == NULL) {
         return IOLINK_DEVICE_INIT_ERR_TIME;
     }
@@ -219,11 +191,8 @@ static int device_config_validate(const iolink_device_config_t* config)
         return IOLINK_DEVICE_INIT_ERR_PD_OUT_LEN;
     }
 
-    /* Table A.10 的 OD 宽度；0 表示由 M-sequence 类型推导。 */
+    /* Table A.10 的 OD 宽度必须显式给出（1/2/8/32），没有推导。 */
     od = stack->od_width;
-    if (od == 0U) {
-        od = device_default_od_width((uint8_t) stack->m_seq_type);
-    }
     if ((uint32_t) od > (uint32_t) IOLINK_OD_MAX_SIZE) {
         return IOLINK_DEVICE_INIT_ERR_OD_CAPACITY;
     }
@@ -329,7 +298,9 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
         }
     }
 
-    iolink_device_info_ctx_init(&ctx->device_info, config->device_info);
+    if (iolink_device_info_ctx_init(&ctx->device_info, config->device_info) != 0) {
+        return IOLINK_DEVICE_INIT_ERR_DEVICE_INFO; /* 校验阶段已拦截，兜底不回落默认值 */
+    }
     iolink_dll_init(&ctx->dll.main, &ctx->dll.isr, config->phy);
     /* 实例能力在绑定 PHY 之后、任何 ISR 可能运行之前解析一次。 */
     ctx->dll.main.shared.caps = iolink_caps_resolve(config->phy, config->stack, config->app, NULL);

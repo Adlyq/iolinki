@@ -70,21 +70,26 @@ typedef struct
  * 用可变的运行时值（应用标签、访问锁）和出厂默认值
  * 包装静态配置的身份。
  */
-typedef struct
+typedef struct iolink_device_info_ctx
 {
     const iolink_device_info_t* configured; /**< 静态配置的身份。 */
-    iolink_device_info_t defaults;          /**< 出厂默认身份快照。 */
-    char application_tag[33];               /**< 运行时应用标签（32 字节 + NUL）。 */
-    uint16_t access_locks;                  /**< 运行时设备访问锁值。 */
+    iolink_device_info_t defaults; /**< 配置身份的运行时快照（标签/访问锁指向本上下文）。 */
+    char application_tag[33];      /**< 运行时应用标签（32 字节 + NUL）。 */
+    uint16_t access_locks;         /**< 运行时设备访问锁值。 */
 } iolink_device_info_ctx_t;
 
 /**
  * @brief 初始化设备信息上下文。
+ *
+ * 没有默认身份：@p configured 必须由应用提供并保持有效。缺少身份时
+ * 上下文被清零（没有任何标识数据）并返回负值，设备层会拒绝初始化。
+ *
  * @param ctx         要初始化的上下文。
- * @param configured  要绑定的静态设备身份（必须保持有效）。
+ * @param configured  要绑定的静态设备身份（必须保持有效，不得为 NULL）。
+ * @return 成功时为 0，@p ctx 或 @p configured 为 NULL 时为 -1。
  */
-void iolink_device_info_ctx_init(iolink_device_info_ctx_t* ctx,
-                                 const iolink_device_info_t* configured);
+int iolink_device_info_ctx_init(iolink_device_info_ctx_t* ctx,
+                                const iolink_device_info_t* configured);
 
 /**
  * @brief 从上下文获取有效的设备身份。

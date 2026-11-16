@@ -256,23 +256,24 @@ struct iolink_od_entry
     {
         struct
         {
-            const void* value; /**< 应用变量地址（标量或字节串缓冲）。 */
-            uint8_t* str_len;  /**< OctetString 当前长度（标量置 NULL）。 */
+            const uint8_t* IOLINK_NULLABLE
+                value; /**< 应用变量地址（标量或字节串缓冲），按字节视图访问。 */
+            uint8_t* IOLINK_NULLABLE str_len; /**< OctetString 当前长度（标量置 NULL）。 */
         } storage;
         struct
         {
-            iolink_od_read_fn read;   /**< 读值函数。 */
-            iolink_od_write_fn write; /**< 写值函数（只读对象可为 NULL）。 */
+            iolink_od_read_fn IOLINK_NULLABLE read;   /**< 读值函数（STORAGE 表项为 NULL）。 */
+            iolink_od_write_fn IOLINK_NULLABLE write; /**< 写值函数（只读对象可为 NULL）。 */
         } handler;
     } u;
-    uint8_t block_len;              /**< OctetString 长度上限/IODD fixedLength。 */
-    uint32_t range_min;             /**< 标量下限（含）。 */
-    uint32_t range_max;             /**< 标量上限（含）。 */
-    uint32_t scalar_default;        /**< 标量默认值。 */
-    const void* block_default;      /**< OctetString 默认值字节（可为 NULL）。 */
-    const char* name;               /**< 对象名称（IODD/文档）。 */
-    iolink_od_validate_fn validate; /**< 写校验钩子（可为 NULL）。 */
-    iolink_od_change_fn on_change;  /**< 写后/触发钩子（可为 NULL）。 */
+    uint8_t block_len;                              /**< OctetString 长度上限/IODD fixedLength。 */
+    uint32_t range_min;                             /**< 标量下限（含）。 */
+    uint32_t range_max;                             /**< 标量上限（含）。 */
+    uint32_t scalar_default;                        /**< 标量默认值。 */
+    const uint8_t* IOLINK_NULLABLE block_default;   /**< OctetString 默认值字节（可为 NULL）。 */
+    const char* name;                               /**< 对象名称（IODD/文档）。 */
+    iolink_od_validate_fn IOLINK_NULLABLE validate; /**< 写校验钩子（可为 NULL）。 */
+    iolink_od_change_fn IOLINK_NULLABLE on_change;  /**< 写后/触发钩子（可为 NULL）。 */
 };
 
 /**
@@ -377,7 +378,7 @@ struct iolink_od_entry
                                               IOLINK_OD_ASSERT_SEMANTICS(semantics_, storage_)),   \
      .handler = IOLINK_OD_HANDLER_NONE,                                                            \
      .backend = IOLINK_OD_BACKEND_STORAGE,                                                         \
-     .u.storage = {.value = (const void*) (ptr_), .str_len = NULL},                                \
+     .u.storage = {.value = (const uint8_t*) (ptr_), .str_len = NULL},                             \
      .block_len = 0U,                                                                              \
      .range_min = (low_),                                                                          \
      .range_max = (high_),                                                                         \
@@ -416,7 +417,7 @@ struct iolink_od_entry
                                               IOLINK_OD_ASSERT_BYTES_BOUND(access_, block_len_)),  \
      .handler = IOLINK_OD_HANDLER_NONE,                                                            \
      .backend = IOLINK_OD_BACKEND_STORAGE,                                                         \
-     .u.storage = {.value = (const void*) (buf_), .str_len = (len_ptr_)},                          \
+     .u.storage = {.value = (const uint8_t*) (buf_), .str_len = (len_ptr_)},                       \
      .block_len = (block_len_),                                                                    \
      .range_min = 0U,                                                                              \
      .range_max = 0U,                                                                              \

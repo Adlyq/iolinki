@@ -4,14 +4,14 @@
 #include <string.h>
 static void enable(iolink_l6362a_ctx_t* d, bool on)
 {
-    d->io.set_enable(d->io.user, on);
+    d->io.set_enable(d->io.board, on);
     d->enabled = on;
 }
 static int initialize(iolink_app_t* self)
 {
     iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
     if (d->initialized) enable(d, false);
-    d->error = d->io.init(d->io.user);
+    d->error = d->io.init(d->io.board);
     d->initialized = d->error == 0;
     d->mode = IOLINK_PHY_MODE_INACTIVE;
     if (d->initialized) enable(d, false);
@@ -24,11 +24,11 @@ static void mode(iolink_app_t* self, iolink_phy_mode_t m)
     enable(d, false);
     d->mode = m;
     if (m == IOLINK_PHY_MODE_SIO) {
-        d->io.set_in2(d->io.user, d->cq);
+        d->io.set_in2(d->io.board, d->cq);
         if (d->error == 0) enable(d, true);
     }
     else if (m == IOLINK_PHY_MODE_SDCI)
-        d->error = d->io.uart_configure(d->io.user, d->baud);
+        d->error = d->io.uart_configure(d->io.board, d->baud);
     else if (m != IOLINK_PHY_MODE_INACTIVE)
         d->error = -1;
 }
@@ -52,13 +52,13 @@ static void speed(iolink_app_t* self, iolink_baudrate_t b)
     }
     if (d->initialized && d->mode == IOLINK_PHY_MODE_SDCI) {
         enable(d, false);
-        d->error = d->io.uart_configure(d->io.user, d->baud);
+        d->error = d->io.uart_configure(d->io.board, d->baud);
     }
 }
 static int wake(iolink_app_t* self)
 {
     iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
-    return d->initialized ? d->io.consume_wakeup(d->io.user) : 0;
+    return d->initialized ? d->io.consume_wakeup(d->io.board) : 0;
 }
 
 static void cq(iolink_app_t* self, uint8_t b)
@@ -67,7 +67,7 @@ static void cq(iolink_app_t* self, uint8_t b)
     d->cq = b != 0;
     if (d->initialized && !d->error && d->mode == IOLINK_PHY_MODE_SIO) {
         /* IN1=GND：table 14 中 CQ=IN2。IN2 跳变具有死区保护。 */
-        d->io.set_in2(d->io.user, d->cq);
+        d->io.set_in2(d->io.board, d->cq);
         enable(d, true);
     }
 }
@@ -95,10 +95,10 @@ const iolink_phy_api_t* iolink_phy_l6362a_get(iolink_l6362a_ctx_t* d)
 int iolink_phy_l6362a_fault(const iolink_l6362a_ctx_t* d)
 {
     if (!d || !d->initialized || !d->enabled || !d->io.read_diag) return -1;
-    return d->io.read_diag(d->io.user) ? 0 : 1;
+    return d->io.read_diag(d->io.board) ? 0 : 1;
 }
 int iolink_phy_l6362a_overload(const iolink_l6362a_ctx_t* d)
 {
     if (!d || !d->initialized || !d->io.read_ol) return -1;
-    return d->io.read_ol(d->io.user) ? 0 : 1;
+    return d->io.read_ol(d->io.board) ? 0 : 1;
 }

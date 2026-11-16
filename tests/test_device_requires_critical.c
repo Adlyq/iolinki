@@ -21,6 +21,9 @@
 
 #include "iolinki/device.h"
 
+/* 库不再提供默认身份：这些 NO_HELPERS 用例只需要一个有效的身份对象。 */
+static const iolink_device_info_t k_test_identity = {.revision_id = IOLINK_REVISION_ID_1_1};
+
 static uint64_t test_time_us(iolink_app_t* self)
 {
     (void) self;
@@ -41,9 +44,11 @@ static void test_device_init_critical_hook(void** state)
     (void) memset(&stack, 0, sizeof(stack));
     (void) memset(&phy, 0, sizeof(phy));
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    stack.od_width = 1U;
     config.stack = &stack;
     config.phy = &phy;
     config.app = &test_app;
+    config.device_info = &k_test_identity;
 
     /* 不含异步上下文的配置文件（SINGLE）从不引用
      * 临界区钩子，因此那里缺少 port 不再是致命错误。 */

@@ -162,7 +162,7 @@ static void isdu_ds_read_subindex(iolink_isdu_ctx_t* ctx, iolink_ds_ctx_t* ds, u
 
 static void handle_data_storage(iolink_isdu_ctx_t* ctx)
 {
-    iolink_ds_ctx_t* ds = (iolink_ds_ctx_t*) ctx->ds_ctx;
+    iolink_ds_ctx_t* ds = ctx->ds_ctx;
     const uint8_t sub = ctx->header.subindex;
 
     if (ds == NULL) {
@@ -211,7 +211,7 @@ bool isdu_reject_ds_access(iolink_isdu_ctx_t* ctx)
         (index == IOLINK_IDX_DIRECT_PARAMETERS_2)) {
         return false;
     }
-    const iolink_ds_ctx_t* ds = (const iolink_ds_ctx_t*) ctx->ds_ctx;
+    const iolink_ds_ctx_t* ds = ctx->ds_ctx;
     const bool blocked = ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) &&
                           (ds->state == IOLINK_DS_STATE_UPLOADING)) ||
                          ((ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_READ) &&
@@ -285,10 +285,9 @@ static void isdu_serve_od_value(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t*
            无副作用预校验，全部通过后再逐条写入并持久化（10.3.2）。
            这不是跨参数事务：NVM 写入失败仍可能留下已生效的前缀记录。 */
         if (((entry->storage & IOLINK_OD_STORAGE_DS) != 0U) && (ctx->ds_ctx != NULL) &&
-            iolink_ds_downloading((const iolink_ds_ctx_t*) ctx->ds_ctx)) {
-            const iolink_result_t staged =
-                iolink_ds_stage_param((iolink_ds_ctx_t*) ctx->ds_ctx, entry->index,
-                                      ctx->header.subindex, ctx->buffer, ctx->buffer_idx);
+            iolink_ds_downloading(ctx->ds_ctx)) {
+            const iolink_result_t staged = iolink_ds_stage_param(
+                ctx->ds_ctx, entry->index, ctx->header.subindex, ctx->buffer, ctx->buffer_idx);
             if (!iolink_result_succeeded(staged)) {
                 isdu_respond_result(ctx, staged);
                 return;

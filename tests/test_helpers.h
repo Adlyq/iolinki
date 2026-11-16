@@ -153,6 +153,9 @@ const iolink_device_app_t* iolink_test_default_app(void);
 
 /** @brief 没有时钟的 trait：用于验证 IOLINK_DEVICE_INIT_ERR_TIME。 */
 const iolink_device_app_t* iolink_test_app_without_clock(void);
+
+/** @brief 测试用设备身份（库不再提供默认身份，固定值由测试自己持有）。 */
+const iolink_device_info_t* iolink_test_identity(void);
 /* 同上，并在初始化前绑定应用 OD 表（用于验证 config->od 的设备层接线）。 */
 int iolink_test_device_init_with_od(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
                                     const iolink_device_app_t* app, const iolink_od_app_t* od);

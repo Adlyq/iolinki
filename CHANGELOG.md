@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed (od_width is not derived)
+- `stack.od_width` must be given explicitly (1/2/8/32); `0` used to be turned
+  into a per-M-sequence default inside `iolink_device_init()` and the DPP1
+  M-sequenceCapability builder, so a config that forgot the width silently ran
+  with a guessed layout. It now returns `IOLINK_DEVICE_INIT_ERR_OD_WIDTH`.
+  `iolink_mseq_default_od_width()` stays as the Table A.10 lookup an
+  application can use to pick its own value.
+
+### Removed (no default device identity)
+- `src/device_info.c` no longer carries a fallback identity
+  (`k_default_info`: `vendor_id 0xFFFF`, `"Generic IO-Link Device"`,
+  `"DefaultTag"`, protocol 1.1). A device without `config.device_info` would
+  have advertised that fabricated identity on the wire, including a VendorID
+  that belongs to nobody. `config.device_info` is now required:
+  `iolink_device_init()` returns `IOLINK_DEVICE_INIT_ERR_DEVICE_INFO` (-16)
+  when it is NULL, and `iolink_device_info_ctx_init()` returns -1 and leaves
+  the context zeroed instead of substituting the fallback. DPP1 and the
+  identity indices are not fabricated either: an ISDU context that never bound
+  a device identity answers `0x80 0x11` (`IDX_NOT_AVAIL`).
+
+### Changed (typed handles instead of `void *`)
+- `iolink_isdu_ctx_t` back-links carry their real types: `event_ctx`, `ds_ctx`
+  and `dll_ctx` are `struct iolink_events_ctx *`, `struct iolink_ds_ctx *` and
+  `struct iolink_dll_main *` (opaque forward declarations in `isdu.h`),
+  `direct_param_page2` is `uint8_t *`, and the DPP1 cache keys name the DLL and
+  info contexts. The casts they forced in `isdu*.c` are gone.
+- `iolink_od_entry_t` stores the application variable as a byte view:
+  `u.storage.value` and `block_default` are `const uint8_t *`. The initialiser
+  macros cast for you, so OD tables do not change.
+- The TIOL112 and L6362A board adapters no longer take `void *`: the state is
+  `iolink_tiol112_board_t *` / `iolink_l6362a_board_t *`, opaque types the board
+  defines (the field is `io.board`). Adapters that need no state leave it NULL.
+- Pointer contracts are annotated instead of implied: `IOLINK_NONNULL` /
+  `IOLINK_NULLABLE` (Clang `_Nonnull` / `_Nullable`, empty elsewhere) mark the
+  required inputs and the documented optional ones, and the remaining `void *`
+  carry `IOLINK_OPAQUE` with the reason in their Doxygen: the byte helpers in
+  `utils.h`, the profile symbol table, and the DLL state callback's context.
+
 ### Changed (config holds pointers)
 - `iolink_device_config_t::phy` and `stack` are pointers now, like `app`,
   `device_info`, `od` and `workspace`. `phy` used to be copied by value (120 B

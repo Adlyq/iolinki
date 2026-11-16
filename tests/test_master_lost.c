@@ -67,6 +67,7 @@ static void init_device(iolink_test_device_t* dev, uint8_t cycles, const iolink_
 {
     iolink_stack_config_t config = {
         .m_seq_type = IOLINK_M_SEQ_TYPE_0,
+        .od_width = 1,
         .min_cycle_time = 20U, /* 2 ms */
         .master_lost_cycles = cycles,
     };
@@ -156,6 +157,7 @@ static void test_isr_frame_counts_as_master_activity(void** state)
     iolink_test_device_t dev;
     const iolink_stack_config_t config = {
         .m_seq_type = IOLINK_M_SEQ_TYPE_2_1,
+        .od_width = 1,
         .min_cycle_time = 20U, /* 2 ms */
         .master_lost_cycles = 3U,
         .pd_in_len = 1U,

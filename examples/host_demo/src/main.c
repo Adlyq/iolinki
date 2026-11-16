@@ -65,6 +65,22 @@ static void host_tags_init(void)
     g_tag_od.count = 3U;
 }
 
+/* 设备身份：库没有默认身份，每个设备都必须自己提供。 */
+static const iolink_device_info_t g_identity = {
+    .vendor_name = "iolinki example",
+    .vendor_text = "Example identity; replace before shipping",
+    .product_name = "Simple IO-Link Device",
+    .product_id = "simple-device",
+    .product_text = "Minimal example",
+    .serial_number = "EXAMPLE-001",
+    .hardware_revision = "simulation",
+    .firmware_revision = "1",
+    .vendor_id = 1234U,
+    .device_id = 5678U,
+    .min_cycle_time = 10U,
+    .revision_id = IOLINK_REVISION_ID_1_1,
+};
+
 int main(int argc, char* argv[])
 {
     if (argc < 2) {
@@ -81,8 +97,11 @@ int main(int argc, char* argv[])
 
     /* Parse optional config. The M-sequence value is the C enum value, so the
      * Python Master can pass its MSequenceType directly. */
-    iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .min_cycle_time = 0, .pd_in_len = 0, .pd_out_len = 0};
+    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0,
+                                    .od_width = 1,
+                                    .min_cycle_time = 0,
+                                    .pd_in_len = 0,
+                                    .pd_out_len = 0};
     int type = IOLINK_M_SEQ_TYPE_0;
     int pd_len = 2;
 
@@ -149,6 +168,7 @@ int main(int argc, char* argv[])
         .phy = phy,
         .stack = &config,
         .app = &app,
+        .device_info = &g_identity,
     };
     host_tags_init();
     dev_config.od = &g_tag_od;

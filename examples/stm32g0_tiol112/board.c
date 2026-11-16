@@ -87,19 +87,19 @@ void board_led(bool on)
 {
     GPIOA->BSRR = 1UL << (on ? 5U : 21U);
 }
-static void enable(void* user, bool enabled)
+static void enable(iolink_tiol112_board_t* user, bool enabled)
 {
     (void) user;
     GPIOA->BSRR = 1UL << (enabled ? 8U : 24U);
 }
-static void sio_tx(void* user, bool high)
+static void sio_tx(iolink_tiol112_board_t* user, bool high)
 {
     (void) user;
     USART1->CR1 = 0;
     GPIOA->BSRR = 1UL << (high ? 9U : 25U);
     mode(GPIOA, 9, 1);
 }
-static int phy_init(void* user)
+static int phy_init(iolink_tiol112_board_t* user)
 {
     enable(user, false);
     RCC->APBENR2 |= RCC_APBENR2_USART1EN;
@@ -126,7 +126,7 @@ void EXTI0_1_IRQHandler(void)
         wake_pending = 1;
     }
 }
-static int wake(void* user)
+static int wake(iolink_tiol112_board_t* user)
 {
     (void) user;
     iolink_critical_enter();
@@ -135,12 +135,12 @@ static int wake(void* user)
     iolink_critical_exit();
     return result;
 }
-static bool nfault(void* user)
+static bool nfault(iolink_tiol112_board_t* user)
 {
     (void) user;
     return (GPIOB->IDR & 2U) != 0U;
 }
-static int configure(void* user, uint32_t baud)
+static int configure(iolink_tiol112_board_t* user, uint32_t baud)
 {
     (void) user;
     if (baud != 4800U && baud != 38400U && baud != 230400U) return -1;
@@ -177,7 +177,7 @@ void USART1_IRQHandler(void)
         if (!errors) rx_queue_push(&board_rx, byte);
     }
 }
-static int recv_byte(void* user, uint8_t* byte)
+static int recv_byte(iolink_tiol112_board_t* user, uint8_t* byte)
 {
     (void) user;
     iolink_critical_enter();
@@ -191,7 +191,7 @@ static int wait_status(uint32_t flag, uint64_t deadline)
         if (board_time_us() >= deadline) return -1;
     return 0;
 }
-static int send_complete(void* user, const uint8_t* data, size_t len)
+static int send_complete(iolink_tiol112_board_t* user, const uint8_t* data, size_t len)
 {
     (void) user;
     /* Disable receiver throughout transmission; no local CQ echo can enter ISR. */

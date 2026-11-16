@@ -354,8 +354,10 @@ of IAR compatibility.
 
 static iolink_device_ctx_t g_ctx;
 static const iolink_stack_config_t g_stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V};
+static const iolink_device_info_t g_identity = {.vendor_id = 1234U, .device_id = 5678U,
+    .revision_id = IOLINK_REVISION_ID_1_1}; /* 必填，见 API_INTEGRATION */
 static const iolink_device_config_t g_cfg = {
-    .phy = &g_phy_stm32, .stack = &g_stack, .app = &g_app /* 必需，见 API_INTEGRATION */};
+    .phy = &g_phy_stm32, .stack = &g_stack, .app = &g_app, .device_info = &g_identity};
 
 /* One task only: the stack has a single main-context caller. */
 void iolink_task(void *pvParameters) {
@@ -382,8 +384,10 @@ int main(void) {
 
 static iolink_device_ctx_t g_ctx;
 static const iolink_stack_config_t g_stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V};
+static const iolink_device_info_t g_identity = {.vendor_id = 1234U, .device_id = 5678U,
+    .revision_id = IOLINK_REVISION_ID_1_1}; /* 必填，见 API_INTEGRATION */
 static const iolink_device_config_t g_cfg = {
-    .phy = &g_phy_baremetal, .stack = &g_stack, .app = &g_app /* 必需，见 API_INTEGRATION */};
+    .phy = &g_phy_baremetal, .stack = &g_stack, .app = &g_app, .device_info = &g_identity};
 
 int main(void) {
     // Initialize SysTick for 1ms interrupt

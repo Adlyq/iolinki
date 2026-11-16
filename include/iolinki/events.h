@@ -185,7 +185,8 @@ struct iolink_events_ctx
     /* 由设备层绑定的应用时钟。独立使用事件引擎的用户必须在
      * iolink_events_init() 之后设置它；NULL 被读取为时间 0。 */
     const iolink_clock_t* clock;
-    const iolink_log_sink_t* log; /**< 日志汇点（NULL = 静默；设备层绑定到共享 sink） */
+    const iolink_log_sink_t* IOLINK_NULLABLE
+        log; /**< 日志汇点（NULL = 静默；设备层绑定到共享 sink） */
 };
 
 /**

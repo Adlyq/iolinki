@@ -264,10 +264,16 @@ static void init_operate(void)
 }
 
 /** @brief PREOPERATE / TYPE_0：无 PD、OD 1。 */
+/* DPP1 需要设备身份（库不再提供默认值），这里给 DLL 一个最小身份。 */
+static iolink_device_info_ctx_t s_info_ctx;
+
 static void init_preoperate(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
+    static const iolink_device_info_t identity = {.revision_id = IOLINK_REVISION_ID_1_1};
+    assert_int_equal(iolink_device_info_ctx_init(&s_info_ctx, &identity), 0);
+    s_dll.main.shared.isdu.device_info = &s_info_ctx;
     s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
@@ -792,6 +798,7 @@ static int test_startup_probe_plan(void)
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    s_dll.main.shared.od_width = 2U;
     s_dll.main.shared.pd_in_len = 1U;
     s_dll.main.shared.pd_out_len_current = 0U;
     s_dll.main.pd_in_len_current = 1U;

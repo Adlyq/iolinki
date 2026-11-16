@@ -28,6 +28,9 @@
 #include "iolinki/log.h"
 #include "dll_access.h"
 
+/* 库不再提供默认身份：这些 NO_HELPERS 用例只需要一个有效的身份对象。 */
+static const iolink_device_info_t k_test_identity = {.revision_id = IOLINK_REVISION_ID_1_1};
+
 #if IOLINK_NEED_CRITICAL
 /* Strong replacements for the weak no-op defaults: iolink_device_init()
  * rejects builds that still use the defaults, and the integration test below
@@ -107,6 +110,7 @@ static void make_minimal_config(iolink_device_config_t* config, iolink_device_ap
     stack.od_width = 1U;
     config->stack = &stack;
     config->app = app;
+    config->device_info = &k_test_identity;
 }
 
 static void test_device_init_binds_config_sink(void** state)

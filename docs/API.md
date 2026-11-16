@@ -54,7 +54,7 @@ typedef struct {
     const iolink_phy_api_t* phy;                 /* PHY 驱动 vtable（phy->self 由驱动写入） */
     const iolink_stack_config_t* stack;          /* 协议设置；必须比上下文存活更久 */
     const iolink_device_app_t* app;              /* 应用 trait：实例指针 + 回调；NULL 拒绝初始化 */
-    const iolink_device_info_t* device_info;     /* 可为 NULL */
+    const iolink_device_info_t* device_info;     /* 必填；NULL 拒绝初始化 */
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_flag_persist_fn ds_flag_persist;   /* DS_UPLOAD_FLAG 落盘钩子；NULL = 仅 RAM */
 #endif
@@ -76,7 +76,7 @@ typedef struct {
     uint8_t pd_in_len;              /* Process Data Input 长度（字节） */
     uint8_t pd_out_len;             /* Process Data Output 长度（字节） */
     uint32_t t_pd_us;               /* 上电延迟（t_pd），微秒 */
-    uint8_t od_width;               /* OD 八位组数；0 = 由 m_seq_type 推导 */
+    uint8_t od_width;               /* OD 八位组数 1/2/8/32；必填，0 拒绝初始化 */
     iolink_baudrate_t baudrate;     /* baudrate_set 为 true 时使用的 COM */
     bool baudrate_set;              /* false 保持 COM2 默认值 */
     uint8_t master_lost_cycles;     /* 判定 master_lost 的丢失周期数；0 = 关闭 */
@@ -342,7 +342,7 @@ struct iolink_od_entry {
     uint8_t backend;          /* IOLINK_OD_BACKEND_STORAGE / _HANDLER */
     union {
         struct {
-            const void* value; /* 应用变量地址 */
+            const uint8_t* value; /* 应用变量地址（字节视图） */
             uint8_t* str_len;  /* OctetString 当前长度 */
         } storage;
         struct {
@@ -354,7 +354,7 @@ struct iolink_od_entry {
     uint32_t range_min;
     uint32_t range_max;
     uint32_t scalar_default;
-    const void* block_default;
+    const uint8_t* block_default;
     const char* name;
     iolink_od_validate_fn validate;
     iolink_od_change_fn on_change;

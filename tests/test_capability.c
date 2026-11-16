@@ -166,7 +166,7 @@ static void test_instance_caps_cannot_forge_hardware(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
-    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0};
+    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1};
 
     setup_mock_phy();
     will_return(mock_phy_init, 0);
@@ -232,6 +232,7 @@ static void test_require_isr_tx_needs_request_service(void** state)
     (void) state;
     iolink_test_device_t dev;
     iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0,
+                                    .od_width = 1,
                                     .flags = IOLINK_STACK_FLAG_REQUIRE_ISR_TX};
 
     /* 校验在 PHY 初始化之前完成，因此不需要任何 mock 期望。 */
@@ -244,7 +245,7 @@ static void test_capability_override_invalidates_plans(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
-    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0};
+    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1};
 
     setup_mock_phy();
     will_return(mock_phy_init, 0);

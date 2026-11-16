@@ -77,9 +77,9 @@ typedef void (*iolink_log_write_fn)(iolink_app_t* self, iolink_log_level_t level
  */
 typedef struct
 {
-    iolink_log_write_fn write; /**< 输出回调；NULL 表示静默 */
-    iolink_app_t* self;        /**< 传给 @ref write 的应用上下文 */
-    iolink_log_level_t level;  /**< 运行时阈值（0 = 静默） */
+    iolink_log_write_fn IOLINK_NULLABLE write; /**< 输出回调；NULL 表示静默 */
+    iolink_app_t* self;                        /**< 传给 @ref write 的应用上下文 */
+    iolink_log_level_t level;                  /**< 运行时阈值（0 = 静默） */
 } iolink_log_sink_t;
 
 /**

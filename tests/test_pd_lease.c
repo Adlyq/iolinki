@@ -38,7 +38,7 @@ static void test_lease_recovery_and_skip_counter(void** state)
      * 线路空闲），主泵会主动释放租约；三缓冲区布局又总有一个可写槽位。 */
     skip();
 #endif
-    const iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0};
+    const iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1};
     iolink_test_device_t dev;
     const uint8_t data[2] = {0x11U, 0x22U};
 

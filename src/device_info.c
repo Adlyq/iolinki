@@ -19,41 +19,19 @@
 #include <stdbool.h>
 #include <string.h>
 
-static const iolink_device_info_t k_default_info = {
-    .vendor_name = "iolinki",
-    .vendor_text = "Open-Source IO-Link Stack",
-    .product_name = "Generic IO-Link Device",
-    .product_id = "IOLINK-DEV-001",
-    .product_text = "Reference Implementation",
-    .serial_number = "0000000001",
-    .hardware_revision = "1.0",
-    .firmware_revision = "0.1.0",
-    .application_tag = "DefaultTag",
-
-    .vendor_id = 0xFFFFU, /* 未分配的供应商标识 */
-    .device_id = 0x00000001U,
-    .function_id = 0x0000U,
-    .profile_characteristic = 0x0000U,
-
-    .min_cycle_time = 10U, /* 1.0ms (10 * 100μs) */
-    .revision_id = IOLINK_REVISION_ID_1_1,
-    .device_status = 0x00U, /* 无错误 */
-    .detailed_device_status = 0x0000U,
-
-    .access_locks = 0x0000U /* 默认全部未锁定 */
-};
-
-void iolink_device_info_ctx_init(iolink_device_info_ctx_t* ctx,
-                                 const iolink_device_info_t* configured)
+int iolink_device_info_ctx_init(iolink_device_info_ctx_t* ctx,
+                                const iolink_device_info_t* configured)
 {
     const iolink_device_info_t* source = configured;
 
     if (ctx == NULL) {
-        return;
+        return -1;
     }
 
+    /* 没有默认身份：缺配置就清零，不伪造厂商/产品数据。 */
+    (void) memset(ctx, 0, sizeof(*ctx));
     if (source == NULL) {
-        source = &k_default_info;
+        return -1;
     }
 
     ctx->configured = configured;
@@ -74,6 +52,7 @@ void iolink_device_info_ctx_init(iolink_device_info_ctx_t* ctx,
 
     ctx->defaults.application_tag = ctx->application_tag;
     ctx->defaults.access_locks = ctx->access_locks;
+    return 0;
 }
 
 const iolink_device_info_t* iolink_device_info_ctx_get(const iolink_device_info_ctx_t* ctx)

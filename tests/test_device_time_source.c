@@ -23,6 +23,9 @@
 #include "iolinki/events.h"
 #include "dll_access.h"
 
+/* 库不再提供默认身份：这些 NO_HELPERS 用例只需要一个有效的身份对象。 */
+static const iolink_device_info_t k_test_identity = {.revision_id = IOLINK_REVISION_ID_1_1};
+
 static uint64_t g_app_time_us;
 
 void iolink_critical_enter(void)
@@ -50,10 +53,12 @@ static void init_device(iolink_device_ctx_t* ctx, const iolink_device_app_t* app
     (void) memset(&stack, 0, sizeof(stack));
     (void) memset(&phy, 0, sizeof(phy));
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    stack.od_width = 1U;
     stack.t_pd_us = 500U;
     config.stack = &stack;
     config.phy = &phy;
     config.app = app;
+    config.device_info = &k_test_identity;
 
     assert_int_equal(iolink_device_init(ctx, &config), 0);
 }
@@ -104,8 +109,10 @@ static void test_null_clock_is_rejected_at_init(void** state)
     (void) memset(&stack, 0, sizeof(stack));
     (void) memset(&phy, 0, sizeof(phy));
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    stack.od_width = 1U;
     config.stack = &stack;
     config.phy = &phy;
+    config.device_info = &k_test_identity;
 
     /* 没有应用 trait：初始化先拒绝 APP。 */
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_APP);

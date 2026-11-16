@@ -147,7 +147,7 @@ static void test_type_1_1_rejected(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .pd_in_len = 2, .pd_out_len = 0};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_1_1, .od_width = 1, .pd_in_len = 2, .pd_out_len = 0};
     iolink_test_device_t dev;
 
     /* 校验在接触 PHY 之前就拒绝了该配置。 */
@@ -163,14 +163,14 @@ static void test_fixed_layout_mismatch_rejected(void** state)
     /* TYPE_2_2 需要 PD-in=2 且 PD-out=0。 */
     {
         iolink_stack_config_t config = {
-            .m_seq_type = IOLINK_M_SEQ_TYPE_2_2, .pd_in_len = 2, .pd_out_len = 2};
+            .m_seq_type = IOLINK_M_SEQ_TYPE_2_2, .od_width = 1, .pd_in_len = 2, .pd_out_len = 2};
         assert_int_equal(iolink_test_device_init(&dev, &config, NULL),
                          IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT);
     }
     /* TYPE_1_V 仅用于 OD（8/32），不是可变 PD 类型。 */
     {
         iolink_stack_config_t config = {
-            .m_seq_type = IOLINK_M_SEQ_TYPE_1_V, .pd_in_len = 8, .pd_out_len = 8};
+            .m_seq_type = IOLINK_M_SEQ_TYPE_1_V, .od_width = 8, .pd_in_len = 8, .pd_out_len = 8};
         assert_int_equal(iolink_test_device_init(&dev, &config, NULL),
                          IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT);
     }

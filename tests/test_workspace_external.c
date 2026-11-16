@@ -32,6 +32,9 @@
 #include "iolinki/workspace.h"
 #include "dll_access.h"
 
+/* 库不再提供默认身份：这些 NO_HELPERS 用例只需要一个有效的身份对象。 */
+static const iolink_device_info_t k_test_identity = {.revision_id = IOLINK_REVISION_ID_1_1};
+
 /* 默认构建需要真实的临界区实现（test_helpers.c 也提供同一对空实现）。 */
 void iolink_critical_enter(void)
 {
@@ -131,6 +134,7 @@ static void make_config(iolink_device_config_t* config)
     g_test_phy.int_active = test_int_active;
     config->phy = &g_test_phy;
     config->app = &g_app;
+    config->device_info = &k_test_identity;
     g_test_stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     g_test_stack.od_width = 1U;
     config->stack = &g_test_stack;

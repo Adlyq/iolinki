@@ -5,62 +5,61 @@
 #include <cmocka.h>
 #include "iolinki/phy_tiol112.h"
 
-typedef struct
+/* 板级适配器状态由板级代码定义；测试里这一份就是 `struct iolink_tiol112_board`。 */
+struct iolink_tiol112_board
 {
     bool enabled, tx_high, fault_high, wake, ready;
     int result, init_result, config_result;
     unsigned baud;
-} board_t;
-static int init_board(void* p)
+};
+static int init_board(iolink_tiol112_board_t* p)
 {
-    ((board_t*) p)->ready = ((board_t*) p)->init_result == 0;
-    return ((board_t*) p)->init_result;
+    p->ready = p->init_result == 0;
+    return p->init_result;
 }
-static void enable(void* p, bool v)
+static void enable(iolink_tiol112_board_t* p, bool v)
 {
-    assert_true(((board_t*) p)->ready);
-    ((board_t*) p)->enabled = v;
+    assert_true(p->ready);
+    p->enabled = v;
 }
-static void sio_tx(void* p, bool v)
+static void sio_tx(iolink_tiol112_board_t* p, bool v)
 {
-    ((board_t*) p)->tx_high = v;
+    p->tx_high = v;
 }
-static int configure(void* p, uint32_t baud)
+static int configure(iolink_tiol112_board_t* p, uint32_t baud)
 {
-    ((board_t*) p)->baud = baud;
-    return ((board_t*) p)->config_result;
+    p->baud = baud;
+    return p->config_result;
 }
-static int transmit(void* p, const uint8_t* b, size_t n)
+static int transmit(iolink_tiol112_board_t* board, const uint8_t* b, size_t n)
 {
-    board_t* board = p;
     assert_true(board->enabled);
     assert_non_null(b);
     return board->result < 0 ? board->result : (int) n;
 }
-static int receive(void* p, uint8_t* b)
+static int receive(iolink_tiol112_board_t* p, uint8_t* b)
 {
     (void) p;
     (void) b;
     return 0;
 }
-static int consume_wake(void* p)
+static int consume_wake(iolink_tiol112_board_t* b)
 {
-    board_t* b = p;
     int v = b->wake;
     b->wake = false;
     return v;
 }
-static bool fault_high(void* p)
+static bool fault_high(iolink_tiol112_board_t* p)
 {
-    return ((board_t*) p)->fault_high;
+    return p->fault_high;
 }
 
 static void test_driver_modes_and_turnaround(void** state)
 {
     (void) state;
-    board_t board = {.fault_high = true};
+    struct iolink_tiol112_board board = {.fault_high = true};
     const iolink_tiol112_io_t io = {
-        .user = &board,
+        .board = &board,
         .init = init_board,
         .set_enable = enable,
         .set_sio_tx = sio_tx,

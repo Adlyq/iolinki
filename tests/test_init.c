@@ -51,9 +51,11 @@ static iolink_device_config_t make_device_config(void)
     (void) memset(&config, 0, sizeof(config));
     (void) memset(&stack, 0, sizeof(stack));
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    stack.od_width = 1U;
     config.phy = &local_phy_mock;
     config.stack = &stack;
     config.app = &g_test_app;
+    config.device_info = iolink_test_identity();
     return config;
 }
 

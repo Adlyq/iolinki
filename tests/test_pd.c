@@ -28,7 +28,7 @@ static void test_pd_input_output(void** state)
     (void) state;
 
     iolink_stack_config_t config = {
-        .pd_in_len = 2, .pd_out_len = 0, .m_seq_type = IOLINK_M_SEQ_TYPE_2_2};
+        .pd_in_len = 2, .pd_out_len = 0, .m_seq_type = IOLINK_M_SEQ_TYPE_2_2, .od_width = 1};
     iolink_test_device_t dev;
 
     setup_mock_phy();
