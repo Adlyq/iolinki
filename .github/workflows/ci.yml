@@ -168,8 +168,15 @@ jobs:
   # ROM/RAM measurement of the structural configurations:
   # source integration vs non-LTO static library, with and without
   # --gc-sections. Same toolchain as the STM32G0 example.
+  #
+  # This job installs the GNU toolchain from apt, so it gates the gcc baseline
+  # (`tools/size_baseline.csv`). The shipping numbers are the ATFE ones
+  # (`tools/size_baseline.atfe.csv`); the Docker image carries the pinned ATfE
+  # tarball and the docker-validation job runs that gate.
   size-baseline:
     runs-on: ubuntu-latest
+    env:
+      IOLINKI_SIZE_TOOLCHAIN: gcc
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

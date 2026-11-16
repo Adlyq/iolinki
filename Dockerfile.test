@@ -2,6 +2,7 @@ FROM ubuntu:22.04
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
+    clang \
     cmake \
     build-essential \
     libcmocka-dev \
@@ -13,7 +14,23 @@ RUN apt-get update && apt-get install -y \
     nodejs \
     doxygen \
     graphviz \
+    xz-utils \
+    wget \
     && rm -rf /var/lib/apt/lists/*
+
+# Arm Toolchain for Embedded: the compiler the ROM/RAM baseline is measured
+# with (tools/size_matrix.py defaults to it). Arm publishes no container image,
+# only these checksummed release tarballs, so the version and the digest are
+# pinned here.
+ARG ATFE_VERSION=22.1.0
+ARG ATFE_SHA256=e2e9e637bba097ba6e4bae6982883fe705ffd7e8c3a7dc876964835ef1c7a724
+RUN mkdir -p /opt/arm-toolchain && \
+    url="https://github.com/arm/arm-toolchain/releases/download/release-${ATFE_VERSION}-ATfE/ATfE-${ATFE_VERSION}-Linux-x86_64.tar.xz" && \
+    wget -q -O /tmp/atfe.tar.xz "$url" && \
+    echo "${ATFE_SHA256}  /tmp/atfe.tar.xz" | sha256sum -c - && \
+    tar xf /tmp/atfe.tar.xz -C /opt/arm-toolchain --strip-components=1 && \
+    rm /tmp/atfe.tar.xz
+ENV ARM_ATFE=/opt/arm-toolchain/bin
 
 # Pinned to match .pre-commit-config.yaml; tools/gates.sh enforces this version.
 RUN pip3 install --no-cache-dir clang-format==23.1.1

@@ -42,14 +42,18 @@ Usage:
                                       # require --check to return non-zero
 
 Environment:
-    ARM_GCC        toolchain prefix (default: arm-none-eabi-)
+    IOLINKI_SIZE_TOOLCHAIN  target toolchain: `atfe` (default) or `gcc`
+    ARM_ATFE                ATFE install prefix (default: /opt/arm-toolchain/bin)
+    ARM_GCC                 gcc toolchain prefix, `gcc` mode (default: arm-none-eabi-)
     IOLINKI_SIZE_DIR  build root (default: <repo>/build/size)
 
 The baseline records the toolchain that produced it. With a matching toolchain
 the per-row 0.5% budget applies. A different toolchain is compared with the
 wider cross-toolchain budget (see CROSS_TOOLCHAIN_*_PERMILLE), because register
-allocation and string merging differ between GCC releases; regenerate the
-baseline with `--update` after an intentional change.
+allocation and string merging differ between compilers; regenerate the
+baseline with `--update` after an intentional change. Each toolchain has its
+own baseline file, so the shipped numbers are measured with the compiler the
+firmware is built with.
 """
 
 from __future__ import annotations
@@ -64,8 +68,33 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = Path(os.environ.get("IOLINKI_SIZE_DIR", ROOT / "build" / "size"))
-BASELINE = ROOT / "tools" / "size_baseline.csv"
-PREFIX = os.environ.get("ARM_GCC", "arm-none-eabi-")
+
+# The size numbers are meaningful only per toolchain: ATFE (clang + llvm) is
+# what the firmware is built with, gcc stays available for comparison and for
+# hosts without the Arm toolchain installed. Each mode keeps its own baseline
+# so a measurement is never compared against another compiler's baseline.
+TOOLCHAIN = os.environ.get("IOLINKI_SIZE_TOOLCHAIN", "atfe")
+if TOOLCHAIN == "gcc":
+    _gcc_prefix = os.environ.get("ARM_GCC", "arm-none-eabi-")
+    CC = [_gcc_prefix + "gcc"]
+    AR = [_gcc_prefix + "ar"]
+    SIZE = [_gcc_prefix + "size"]
+    # gcc needs its runtime for __aeabi_* helpers; its linker also accepts the
+    # RWX warning switch that lld rejects.
+    LINK_RUNTIME = ["-lgcc"]
+    LINK_EXTRA = ["-Wl,--no-warn-rwx-segments"]
+    BASELINE = ROOT / "tools" / "size_baseline.csv"
+elif TOOLCHAIN == "atfe":
+    _atfe = Path(os.environ.get("ARM_ATFE", "/opt/arm-toolchain/bin"))
+    CC = [str(_atfe / "clang"), "--target=arm-none-eabi"]
+    AR = [str(_atfe / "llvm-ar")]
+    SIZE = [str(_atfe / "llvm-size")]
+    LINK_RUNTIME = ["-lclang_rt.builtins"]
+    LINK_EXTRA = []
+    BASELINE = ROOT / "tools" / "size_baseline.atfe.csv"
+else:
+    sys.stderr.write(f"unknown IOLINKI_SIZE_TOOLCHAIN: {TOOLCHAIN} (atfe|gcc)\n")
+    raise SystemExit(2)
 
 # 跨工具链比较的预算（‰ of the baseline）。工具链与基线一致时使用基线里
 # 逐行记录的 0.5% 容差；不一致时（CI 的 apt 工具链 vs 本地发布的
@@ -232,7 +261,7 @@ def run(cmd: list[str], cwd: Path | None = None) -> str:
 
 
 def toolchain_version() -> str:
-    out = run([PREFIX + "gcc", "--version"])
+    out = run([*CC, "--version"])
     return out.splitlines()[0].strip()
 
 
@@ -247,33 +276,33 @@ def build_config(name: str, defines: list[str], lto: str) -> dict[str, dict[str,
     app_c = cfg_dir / "app.c"
     app_c.write_text(APP)
     app_o = cfg_dir / "app.o"
-    run([PREFIX + "gcc", *COMMON_FLAGS, *defines, "-c", str(app_c), "-o", str(app_o)])
+    run([*CC, *COMMON_FLAGS, *defines, "-c", str(app_c), "-o", str(app_o)])
 
     objects: list[Path] = []
     for src in SOURCES:
         obj = obj_dir / (Path(src).stem + ".o")
-        run([PREFIX + "gcc", *flags, *defines, "-c", str(ROOT / src), "-o", str(obj)])
+        run([*CC, *flags, *defines, "-c", str(ROOT / src), "-o", str(obj)])
         objects.append(obj)
 
     lib = cfg_dir / "libiolinki.a"
-    run([PREFIX + "ar", "rcs", str(lib), *[str(o) for o in objects]])
+    run([*AR, "rcs", str(lib), *[str(o) for o in objects]])
 
     rows: dict[str, dict[str, int]] = {}
     app_cfg = cfg_dir / "app_cfg.o"
     # The application uses the same profile as the library, but never -flto:
     # see the note in the module docstring.
-    run([PREFIX + "gcc", *COMMON_FLAGS, *defines, "-c", str(app_c), "-o", str(app_cfg)])
+    run([*CC, *COMMON_FLAGS, *defines, "-c", str(app_c), "-o", str(app_cfg)])
 
     for delivery in DELIVERIES:
         for gc in GC_MODES:
             elf = cfg_dir / f"size-{delivery}-{gc}.elf"
             link = [
-                PREFIX + "gcc",
+                *CC,
                 *CPU_FLAGS,
                 "-nostdlib",
                 "-nostartfiles",
                 "-Wl,-e,reset_handler",
-                "-Wl,--no-warn-rwx-segments",
+                *LINK_EXTRA,
             ]
             if gc == "on":
                 link.append("-Wl,--gc-sections")
@@ -283,14 +312,14 @@ def build_config(name: str, defines: list[str], lto: str) -> dict[str, dict[str,
                 link += [str(app_cfg), *[str(o) for o in objects]]
             else:
                 link += [str(app_cfg), str(lib)]
-            link += ["-lgcc", "-o", str(elf)]
+            link += [*LINK_RUNTIME, "-o", str(elf)]
             run(link)
             rows[f"{delivery}|{gc}"] = section_sizes(elf)
     return rows
 
 
 def section_sizes(elf: Path) -> dict[str, int]:
-    out = run([PREFIX + "size", "-A", str(elf)])
+    out = run([*SIZE, "-A", str(elf)])
     sizes = {"text": 0, "rodata": 0, "data": 0, "bss": 0}
     for line in out.splitlines():
         parts = line.split()
