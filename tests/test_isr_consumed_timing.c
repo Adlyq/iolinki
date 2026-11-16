@@ -232,10 +232,26 @@ static bool run_consumed_page_read(void)
            iolink_ring_is_empty(&s_dll.main.shared.isr_frame_ring);
 }
 
+/* DPP1 需要绑定的设备身份：DLL 层没有默认身份，页读依赖它。 */
+static iolink_device_info_ctx_t s_identity_ctx;
+
+static void bind_test_identity(iolink_dll_main_t* main)
+{
+    static const iolink_device_info_t identity = {
+        .vendor_id = 1234U,
+        .device_id = 5678U,
+        .min_cycle_time = 10U,
+        .revision_id = IOLINK_REVISION_ID_1_1,
+    };
+    assert_int_equal(iolink_device_info_ctx_init(&s_identity_ctx, &identity), 0);
+    main->shared.isdu.device_info = &s_identity_ctx;
+}
+
 static void init_operate_type0(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
+    bind_test_identity(&s_dll.main);
     s_dll.main.shared.clock.time_us = test_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;

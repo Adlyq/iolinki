@@ -135,7 +135,8 @@ static const iolink_device_app_t g_app = {
 };
 
 static const iolink_stack_config_t g_stack = {
-    .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 3, .pd_out_len = 1};
+    .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2U,
+    .pd_in_len = 3, .pd_out_len = 1};
 
 static const iolink_device_config_t g_cfg = {
     .phy = &g_phy_virtual,
@@ -626,6 +627,7 @@ typedef enum {
     IOLINK_DEVICE_INIT_ERR_WORKSPACE = -13, /* IOLINK_WORKSPACE_EMBEDDED=0 且没有工作区 */
     IOLINK_DEVICE_INIT_ERR_OD = -14,        /* 应用对象字典表存在未定义/自相矛盾配置 */
     IOLINK_DEVICE_INIT_ERR_APP = -15,       /* config.app == NULL（缺少应用 trait） */
+    IOLINK_DEVICE_INIT_ERR_DEVICE_INFO = -16, /* config.device_info == NULL（设备没有默认身份） */
 } iolink_device_init_result_t;
 ```
 

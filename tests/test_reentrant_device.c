@@ -78,8 +78,8 @@ static void test_parameter_contexts_keep_writable_tags_isolated(void** state)
     uint8_t out_a[32] = {0};
     uint8_t out_b[32] = {0};
 
-    iolink_device_info_ctx_init(&info_a, iolink_test_identity());
-    iolink_device_info_ctx_init(&info_b, iolink_test_identity());
+    assert_int_equal(iolink_device_info_ctx_init(&info_a, iolink_test_identity()), 0);
+    assert_int_equal(iolink_device_info_ctx_init(&info_b, iolink_test_identity()), 0);
     test_params_init(&params_a, &info_a);
     test_params_init(&params_b, &info_b);
 

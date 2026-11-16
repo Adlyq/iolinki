@@ -357,7 +357,6 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
 
     /* Table A.10：TYPE_2_1/TYPE_2_2 携带一个 On-request Data 字节；TYPE_2_V 是
        双字节变体（OPERATE M-sequence 代码 5）。 */
-    ctx->od_len = (ctx->shared.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) ? 2U : 1U;
     ctx->shared.isr_isdu_last_flowctrl = 0xFFU; /* 尚未见到 START */
 
     ctx->pd_in_len_current = ctx->shared.pd_in_len;

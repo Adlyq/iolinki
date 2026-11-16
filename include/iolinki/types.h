@@ -51,7 +51,10 @@ typedef struct iolink_app iolink_app_t;
 #if defined(__clang__)
 #define IOLINK_NONNULL _Nonnull
 #define IOLINK_NULLABLE _Nullable
-/* 注解按需书写（只标注契约里有实际意义的指针），不要求每个指针都标。 */
+/* 注解按需书写（只标注契约里有实际意义的指针），不要求每个指针都标，
+ * 因此关掉完整性诊断。该 pragma 在包含本头之后对整个翻译单元生效：需要
+ * 完整性检查的代码可在包含 iolinki 头之后用
+ * `#pragma clang diagnostic warning "-Wnullability-completeness"` 恢复。 */
 #pragma clang diagnostic ignored "-Wnullability-completeness"
 #else
 #define IOLINK_NONNULL

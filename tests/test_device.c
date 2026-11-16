@@ -35,9 +35,12 @@ static void device_reset_handler(iolink_reset_type_t type)
 
 static iolink_app_t* g_phy_self_seen;
 
+static int g_record_init_calls;
+
 static int record_phy_init(iolink_app_t* self)
 {
     g_phy_self_seen = self;
+    g_record_init_calls++;
     return 0;
 }
 
@@ -79,8 +82,22 @@ static void init_device(iolink_test_device_t* dev, iolink_m_seq_type_t type, uin
     config.m_seq_type = type;
     config.pd_in_len = pd_in;
     config.pd_out_len = pd_out;
-    /* 设备必须显式给出 OD 宽度；这里取 Table A.10 的 OPERATE 值。 */
-    config.od_width = iolink_mseq_default_od_width((uint8_t) type);
+    /* 设备必须显式给出 OD 宽度；这里沿用旧库内推导的值
+     * （TYPE_1_2 → 2、TYPE_1_V → 8、TYPE_2_V → 2、其余 → 1）。 */
+    switch (type) {
+        case IOLINK_M_SEQ_TYPE_1_2:
+            config.od_width = 2U;
+            break;
+        case IOLINK_M_SEQ_TYPE_1_V:
+            config.od_width = 8U;
+            break;
+        case IOLINK_M_SEQ_TYPE_2_V:
+            config.od_width = 2U;
+            break;
+        default:
+            config.od_width = 1U;
+            break;
+    }
 
     setup_mock_phy();
     will_return(mock_phy_init, 0);
@@ -106,10 +123,17 @@ static void test_device_init_requires_device_info(void** state)
     iolink_phy_api_t phy;
     iolink_device_config_t config = make_device_config(&stack, &phy);
 
-    /* 设备没有默认身份：缺 device_info 就是配置错误，不能退回臆造的标识。 */
+    phy.init = record_phy_init;
+    phy.set_mode = record_phy_set_mode;
+    phy.set_baudrate = record_phy_set_baudrate;
+    g_record_init_calls = 0;
+
+    /* 设备没有默认身份：缺 device_info 就是配置错误，不能退回臆造的标识，
+     * 也不能先驱动 PHY。 */
     config.device_info = NULL;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_DEVICE_INFO);
     assert_int_equal(iolink_device_get_phy_error(&ctx), 0);
+    assert_int_equal(g_record_init_calls, 0);
 
     config = make_device_config(&stack, &phy);
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
@@ -533,9 +557,8 @@ static void test_device_process_pumps_events(void** state)
     assert_int_equal(ev.mode, IOLINK_EVENT_MODE_DISAPPEARS);
 }
 
-/* Table A.10：当配置保留 od_width = 0 时，TYPE_1_2 默认使用 2 字节 OD（code 1）。
- * DLL 仅在 ISR 传输下存储 od_width，因此有条件地断言它；
- * 配置校验（接受推导出的 2）在两种传输下都会运行。 */
+/* od_width 没有推导：0 在初始化阶段被拒绝，显式给出的宽度原样进入
+ * DLL 布局（DPP1 的 M-sequenceCapability 也按它编码）。 */
 static void test_device_od_width_required(void** state)
 {
     (void) state;
@@ -555,6 +578,14 @@ static void test_device_od_width_required(void** state)
     stack.pd_out_len = 0U;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
     assert_int_equal(test_dll_shared(&ctx)->od_width, 2U);
+
+    /* TYPE_2_V 是可变的：应用选 8 字节就按 8 字节布线。 */
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    stack.od_width = 8U;
+    stack.pd_in_len = 2U;
+    stack.pd_out_len = 2U;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
+    assert_int_equal(test_dll_shared(&ctx)->od_width, 8U);
 }
 
 static int group_setup(void** state)

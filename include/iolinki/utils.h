@@ -34,6 +34,9 @@
  * 除非指针为 NULL 且声称长度非零，否则缓冲区
  * 被视为有效。长度为零的 NULL 指针有效。
  *
+ * @p data 的类型有意擦除（`IOLINK_OPAQUE`）：这是任意对象的字节视图，
+ * 等价于 `memcmp` 的入参。
+ *
  * @param data  要校验的缓冲区指针。
  * @param len   @p data 声称的长度，以字节计。
  * @return 该对有效时返回 true，否则返回 false。
@@ -45,6 +48,9 @@ static inline bool iolink_buf_is_valid(const void* IOLINK_OPAQUE IOLINK_NULLABLE
 
 /**
  * @brief 将上下文对象清零初始化。
+ *
+ * @p ctx 的类型有意擦除（`IOLINK_OPAQUE`）：等价于 `memset`，接受任意
+ * 结构体。
  *
  * @param[out] ctx  要清零的对象；为 NULL 时忽略（返回 false）。
  * @param len       要清零的字节数。

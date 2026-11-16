@@ -23,14 +23,15 @@ typedef struct iolink_tiol112_board iolink_tiol112_board_t;
 typedef struct
 {
     iolink_tiol112_board_t* IOLINK_NULLABLE board; /**< 板级状态；单例适配器可留 NULL */
-    int (*init)(iolink_tiol112_board_t* board);
-    void (*set_enable)(iolink_tiol112_board_t* board, bool enabled);
-    void (*set_sio_tx)(iolink_tiol112_board_t* board, bool high);
-    int (*uart_configure)(iolink_tiol112_board_t* board, uint32_t baud);
-    int (*uart_send_complete)(iolink_tiol112_board_t* board, const uint8_t* data, size_t len);
-    int (*uart_recv)(iolink_tiol112_board_t* board, uint8_t* byte);
-    int (*consume_wakeup)(iolink_tiol112_board_t* board);
-    bool (*read_nfault)(iolink_tiol112_board_t* board);
+    int (*init)(iolink_tiol112_board_t* IOLINK_NULLABLE board);
+    void (*set_enable)(iolink_tiol112_board_t* IOLINK_NULLABLE board, bool enabled);
+    void (*set_sio_tx)(iolink_tiol112_board_t* IOLINK_NULLABLE board, bool high);
+    int (*uart_configure)(iolink_tiol112_board_t* IOLINK_NULLABLE board, uint32_t baud);
+    int (*uart_send_complete)(iolink_tiol112_board_t* IOLINK_NULLABLE board, const uint8_t* data,
+                              size_t len);
+    int (*uart_recv)(iolink_tiol112_board_t* IOLINK_NULLABLE board, uint8_t* byte);
+    int (*consume_wakeup)(iolink_tiol112_board_t* IOLINK_NULLABLE board);
+    bool (*read_nfault)(iolink_tiol112_board_t* IOLINK_NULLABLE board);
 } iolink_tiol112_io_t;
 
 typedef struct

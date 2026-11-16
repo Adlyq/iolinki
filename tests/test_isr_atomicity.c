@@ -200,6 +200,21 @@ static const iolink_phy_api_t s_phy = {
     .detect_wakeup = phy_detect_wakeup,
 };
 
+/* DPP1 需要绑定的设备身份：DLL 层没有默认身份，页读依赖它。 */
+static iolink_device_info_ctx_t s_identity_ctx;
+
+static void bind_test_identity(iolink_dll_main_t* main)
+{
+    static const iolink_device_info_t identity = {
+        .vendor_id = 1234U,
+        .device_id = 5678U,
+        .min_cycle_time = 10U,
+        .revision_id = IOLINK_REVISION_ID_1_1,
+    };
+    assert_int_equal(iolink_device_info_ctx_init(&s_identity_ctx, &identity), 0);
+    main->shared.isdu.device_info = &s_identity_ctx;
+}
+
 static void reset_ctx(void)
 {
     memset(&s_ctx, 0, sizeof(s_ctx));
@@ -224,13 +239,13 @@ static void reset_ctx(void)
     s_in_critical = false;
 
     iolink_dll_init(&s_ctx.main, &s_ctx.isr, &s_phy);
+    bind_test_identity(&s_ctx.main);
     /* 直接驱动共享的帧处理器：OPERATE、SDCI、不强制时序。 */
     s_ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     s_ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     s_ctx.main.enforce_timing = false;
     s_ctx.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     s_ctx.main.shared.od_width = 1U;
-    s_ctx.main.od_len = 1U;
     s_ctx.main.shared.pd_in_len = 0U;
     s_ctx.main.pd_out_len = 0U;
     s_ctx.main.pd_in_len_current = 0U;
@@ -446,7 +461,6 @@ static void test_busy_tx_frame_keeps_frame_for_main(void** state)
     reset_ctx();
     s_ctx.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
     s_ctx.main.shared.od_width = 1U;
-    s_ctx.main.od_len = 1U;
     s_ctx.main.pd_out_len = 1U;
     s_ctx.main.shared.pd_out_len_current = 1U;
     s_ctx.main.shared.pd_in_len = 1U;

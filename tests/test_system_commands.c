@@ -64,7 +64,7 @@ typedef struct
 
 static void ds_block_fixture_init(ds_block_fixture_t* f)
 {
-    iolink_device_info_ctx_init(&f->info, iolink_test_identity());
+    assert_int_equal(iolink_device_info_ctx_init(&f->info, iolink_test_identity()), 0);
     test_params_init(&f->params, &f->info);
     iolink_ds_init(&f->ds);
     iolink_ds_bind_sources(&f->ds, test_params_od(&f->params), NULL);

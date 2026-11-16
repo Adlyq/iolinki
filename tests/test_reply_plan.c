@@ -242,11 +242,26 @@ static void drain_tx(void)
 #endif
 }
 
-/** @brief OPERATE / TYPE_2_V：PD-in 1、PD-out 0、OD 1。 */
+/* DPP1 需要绑定的设备身份：DLL 层没有默认身份，页读依赖它。 */
+static iolink_device_info_ctx_t s_identity_ctx;
+
+static void bind_test_identity(iolink_dll_main_t* main)
+{
+    static const iolink_device_info_t identity = {
+        .vendor_id = 1234U,
+        .device_id = 5678U,
+        .min_cycle_time = 10U,
+        .revision_id = IOLINK_REVISION_ID_1_1,
+    };
+    assert_int_equal(iolink_device_info_ctx_init(&s_identity_ctx, &identity), 0);
+    main->shared.isdu.device_info = &s_identity_ctx;
+}
+
 static void init_operate(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
+    bind_test_identity(&s_dll.main);
     s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
@@ -264,16 +279,12 @@ static void init_operate(void)
 }
 
 /** @brief PREOPERATE / TYPE_0：无 PD、OD 1。 */
-/* DPP1 需要设备身份（库不再提供默认值），这里给 DLL 一个最小身份。 */
-static iolink_device_info_ctx_t s_info_ctx;
-
 static void init_preoperate(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
-    static const iolink_device_info_t identity = {.revision_id = IOLINK_REVISION_ID_1_1};
-    assert_int_equal(iolink_device_info_ctx_init(&s_info_ctx, &identity), 0);
-    s_dll.main.shared.isdu.device_info = &s_info_ctx;
+    bind_test_identity(&s_dll.main);
+
     s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
@@ -293,6 +304,7 @@ static void init_preoperate_rx_only(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy_rx_only);
+    bind_test_identity(&s_dll.main);
     s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
@@ -461,6 +473,45 @@ static int test_type0_page_write_is_answered(void)
     }
     if (s_dll.main.shared.isr_plan_misses != 0U) {
         return 8;
+    }
+    return 0;
+}
+
+/* 没有绑定设备身份时，DPP1 页读必须保持沉默：既不能发全零页（ISR 快路），
+ * 也不能由主泵的启动探测补一个臆造页。 */
+static int test_page_read_without_identity_is_dropped(void)
+{
+    (void) memset(&s_dll, 0, sizeof(s_dll));
+    iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
+    s_dll.main.shared.clock.time_us = plan_time_us;
+    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    s_dll.main.shared.od_width = 1U;
+    s_dll.main.shared.pd_in_len = 0U;
+    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.pd_in_len_current = 0U;
+    s_dll.main.pd_valid = true;
+    s_now_us = 1000000U;
+    tx_reset();
+    s_tx_active = 0U;
+    iolink_dll_publish_reply_plans(&s_dll.main);
+
+    uint8_t rd[2];
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x01U), IOLINK_MSEQ_TYPE_0,
+               rd, sizeof(rd));
+
+    /* ISR 快路：计划源没有身份可读，本帧不应答。 */
+    feed(rd, sizeof(rd), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if (tx_observed_len() != 0U) {
+        return 1;
+    }
+
+    /* 主泵窗口：PREOPERATE/ESTAB_COM 的 Type-0 页读同样不能补发。 */
+    iolink_dll_process(&s_dll.main);
+    drain_tx();
+    if (tx_observed_len() != 0U) {
+        return 2;
     }
     return 0;
 }
@@ -796,6 +847,7 @@ static int test_startup_probe_plan(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
+    bind_test_identity(&s_dll.main);
     s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     s_dll.main.shared.od_width = 2U;
@@ -1026,6 +1078,7 @@ static int test_tx_without_done_hook(void)
 
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &phy);
+    bind_test_identity(&s_dll.main);
     s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
@@ -1076,6 +1129,7 @@ IOLINK_TEST_RC(test_capability_change_invalidates_plan)
 IOLINK_TEST_RC(test_tx_without_done_hook)
 #endif
 IOLINK_TEST_RC(test_type0_page_write_is_answered)
+IOLINK_TEST_RC(test_page_read_without_identity_is_dropped)
 IOLINK_TEST_RC(test_plan_hit_without_tx_is_deferred)
 
 static int group_teardown(void** state)
@@ -1112,6 +1166,7 @@ int main(void)
         cmocka_unit_test(iolink_case_test_tx_without_done_hook),
 #endif
         cmocka_unit_test(iolink_case_test_type0_page_write_is_answered),
+        cmocka_unit_test(iolink_case_test_page_read_without_identity_is_dropped),
         cmocka_unit_test(iolink_case_test_plan_hit_without_tx_is_deferred),
     };
     return cmocka_run_group_tests(tests, NULL, group_teardown);

@@ -138,6 +138,9 @@ extern const uint8_t iolink_profile_pd_in_buffers_3;
  * @endcode
  *
  * @param name 锚点对象名（仅用于链接映射/调试）
+ *
+ * 数组元素的类型有意擦除（`IOLINK_OPAQUE`）：每项指向不同的
+ * `iolink_profile_*` 符号，只有链接器需要它们，运行期从不解引用。
  */
 #define IOLINK_PROFILE_ANCHOR(name)                            \
     IOLINK_PROFILE_ROOT static const void* IOLINK_OPAQUE const \

@@ -25,7 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when it is NULL, and `iolink_device_info_ctx_init()` returns -1 and leaves
   the context zeroed instead of substituting the fallback. DPP1 and the
   identity indices are not fabricated either: an ISDU context that never bound
-  a device identity answers `0x80 0x11` (`IDX_NOT_AVAIL`).
+  a device identity answers `0x80 0x11` (`IDX_NOT_AVAIL`), and the DLL layers
+  stay silent instead of emitting an all-zero DPP1 page (ISR reply plan, the
+  STARTUP page probe and the Type-0 page read).
+- Direct Parameter page 2 is owned by the device: an ISDU context without
+  `direct_param_page2` bound answers `0x80 0x11` for that index instead of
+  writing into a shared static fallback buffer (which leaked one device's
+  page 2 into another context).
 
 ### Changed (typed handles instead of `void *`)
 - `iolink_isdu_ctx_t` back-links carry their real types: `event_ctx`, `ds_ctx`

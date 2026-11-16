@@ -818,9 +818,14 @@ static void test_isdu_direct_parameters_page2(void** state)
 {
     (void) state;
     iolink_isdu_ctx_t ctx;
+    /* Page 2 属于设备：没有绑定时该对象不可用（见 test_isdu_page2_unbound）。 */
+    static uint8_t page2[16];
     test_env_init(&g_test_env, NULL);
+    (void) memset(page2, 0, sizeof(page2));
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
+    ctx.direct_param_page2 = page2;
+    ctx.direct_param_page2 = page2;
 
     /* 写入整个第 2 页，然后回读。 */
     uint8_t img[16];
@@ -833,6 +838,7 @@ static void test_isdu_direct_parameters_page2(void** state)
 
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
+    ctx.direct_param_page2 = page2;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_2, 0x00), 1);
     iolink_isdu_process(&ctx);
     uint8_t rb[16];
@@ -842,6 +848,7 @@ static void test_isdu_direct_parameters_page2(void** state)
     /* 在子索引 3 处进行单八位组写，然后回读。 */
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
+    ctx.direct_param_page2 = page2;
     uint8_t one = 0x5A;
     assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_2, 0x03, &one, 1),
                      1);
@@ -849,6 +856,7 @@ static void test_isdu_direct_parameters_page2(void** state)
 
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
+    ctx.direct_param_page2 = page2;
     assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_2, 0x03), 1);
     iolink_isdu_process(&ctx);
     uint8_t one_rb[2];

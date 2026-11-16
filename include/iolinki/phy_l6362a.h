@@ -18,15 +18,15 @@ typedef struct iolink_l6362a_board iolink_l6362a_board_t;
 typedef struct
 {
     iolink_l6362a_board_t* IOLINK_NULLABLE board; /**< 板级状态；单例适配器可留 NULL */
-    int (*init)(iolink_l6362a_board_t*);
-    void (*set_enable)(iolink_l6362a_board_t*, bool);
-    void (*set_in2)(iolink_l6362a_board_t*, bool);
-    int (*uart_configure)(iolink_l6362a_board_t*, uint32_t);
-    int (*uart_send_complete)(iolink_l6362a_board_t*, const uint8_t*, size_t);
-    int (*uart_recv)(iolink_l6362a_board_t*, uint8_t*);
-    int (*consume_wakeup)(iolink_l6362a_board_t*);
-    bool (*read_ol)(iolink_l6362a_board_t*);
-    bool (*read_diag)(iolink_l6362a_board_t*);
+    int (*init)(iolink_l6362a_board_t* IOLINK_NULLABLE);
+    void (*set_enable)(iolink_l6362a_board_t* IOLINK_NULLABLE, bool);
+    void (*set_in2)(iolink_l6362a_board_t* IOLINK_NULLABLE, bool);
+    int (*uart_configure)(iolink_l6362a_board_t* IOLINK_NULLABLE, uint32_t);
+    int (*uart_send_complete)(iolink_l6362a_board_t* IOLINK_NULLABLE, const uint8_t*, size_t);
+    int (*uart_recv)(iolink_l6362a_board_t* IOLINK_NULLABLE, uint8_t*);
+    int (*consume_wakeup)(iolink_l6362a_board_t* IOLINK_NULLABLE);
+    bool (*read_ol)(iolink_l6362a_board_t* IOLINK_NULLABLE);
+    bool (*read_diag)(iolink_l6362a_board_t* IOLINK_NULLABLE);
 } iolink_l6362a_io_t;
 typedef struct
 {

@@ -85,7 +85,6 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
      * OD 宽度来确定应答布局（Table A.10 的 OPERATE 编码跟随该宽度）。
      * 宽度由 config.od_width 显式给出（校验阶段已拒绝 0）。 */
     ctx->dll.main.shared.od_width = stack->od_width;
-    ctx->dll.main.od_len = ctx->dll.main.shared.od_width;
 
     /* 在根据波特率推导最小周期时间之前，先采用
      * 配置的操作 COM（及其时序限制）。 */

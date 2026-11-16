@@ -222,10 +222,26 @@ static void drain_tx(void)
 }
 
 /** @brief 直接构造一个已确认状态；不经过状态机（性质测试需要每个相位）。 */
+/* DPP1 需要绑定的设备身份：DLL 层没有默认身份，页读依赖它。 */
+static iolink_device_info_ctx_t s_identity_ctx;
+
+static void bind_test_identity(iolink_dll_main_t* main)
+{
+    static const iolink_device_info_t identity = {
+        .vendor_id = 1234U,
+        .device_id = 5678U,
+        .min_cycle_time = 10U,
+        .revision_id = IOLINK_REVISION_ID_1_1,
+    };
+    assert_int_equal(iolink_device_info_ctx_init(&s_identity_ctx, &identity), 0);
+    main->shared.isdu.device_info = &s_identity_ctx;
+}
+
 static void init_state(iolink_dll_state_t state)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
+    bind_test_identity(&s_dll.main);
     s_dll.main.shared.clock.time_us = sm_time_us;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_1_2;
     s_dll.main.shared.od_width = 1U;

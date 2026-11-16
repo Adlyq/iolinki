@@ -47,8 +47,6 @@ struct iolink_dll_main
 
     uint8_t pd_out_len; /**< 输出过程数据长度 */
 
-    uint8_t od_len; /**< 流式路径的 OD 长度（1 或 2 字节）。 */
-
     /* 应答计划发布键。计划表是 {状态, M-sequence 类型, OD 宽度, 波特率}
      * 的纯函数；键不变时 iolink_dll_publish_reply_plans() 不写共享区，
      * 因此主泵循环不会与 ISR 读者无谓竞争。键不覆盖实例能力位，

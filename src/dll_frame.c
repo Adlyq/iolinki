@@ -411,6 +411,10 @@ void dll_handle_preoperate(iolink_dll_main_t* ctx, uint8_t mc, uint8_t ck)
  */
 void dll_handle_page_channel_read(iolink_dll_main_t* ctx, uint8_t mc)
 {
+    if (ctx->shared.isdu.device_info == NULL) {
+        /* 没有设备身份就没有 DPP1：保持沉默，不发全零页。 */
+        return;
+    }
     uint8_t resp[2];
     resp[0] = iolink_isdu_direct_param_page1_octet(&ctx->shared.isdu,
                                                    (uint8_t) (mc & IOLINK_MC_ADDR_MASK));
@@ -502,6 +506,14 @@ static bool dll_dispatch_od(iolink_dll_main_t* ctx, uint8_t mc, const uint8_t* o
 void dll_handle_operate_type0(iolink_dll_main_t* ctx, uint8_t mc, uint8_t cks)
 {
     (void) cks;
+    const bool type0_write = ((mc & IOLINK_MC_RW_MASK) == 0U);
+    const bool page_channel = ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE);
+    if (!type0_write && page_channel && (ctx->shared.isdu.device_info == NULL)) {
+        /* DPP1 读需要绑定的设备身份：不答（主站超时），不发全零页。 */
+        ctx->last_response_us = dll_time_us(ctx);
+        return;
+    }
+
     uint8_t od_resp = 0U;
     (void) dll_dispatch_od(ctx, mc, &cks, 1U, &od_resp);
 
@@ -515,7 +527,6 @@ void dll_handle_operate_type0(iolink_dll_main_t* ctx, uint8_t mc, uint8_t cks)
     /* Figure A.5：Type-0 WRITE 在每个通信通道上都只由 CKS
        应答；每个 Type-0 READ 由 OD 后跟 CKS
        应答。 */
-    const bool type0_write = ((mc & IOLINK_MC_RW_MASK) == 0U);
     if (type0_write) {
         resp[0] = ck_flags;
         resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));

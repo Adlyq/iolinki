@@ -565,15 +565,13 @@ void handle_error_stats(iolink_isdu_ctx_t* ctx)
     ctx->state = ISDU_STATE_RESPONSE_READY;
 }
 
-/** @brief 返回 Direct Parameter page 2 存储（设备专用，地址 0x10-0x1F）。 */
+/** @brief 返回 Direct Parameter page 2 存储（设备专用，地址 0x10-0x1F）。
+ *
+ * 没有绑定时返回 NULL：page 2 属于设备，不能退回共享的臆造缓冲。
+ */
 static uint8_t* direct_param_page2(iolink_isdu_ctx_t* ctx)
 {
-    static uint8_t fallback_page2[16] = {0U};
-
-    if ((ctx != NULL) && (ctx->direct_param_page2 != NULL)) {
-        return ctx->direct_param_page2;
-    }
-    return fallback_page2;
+    return (ctx != NULL) ? ctx->direct_param_page2 : NULL;
 }
 
 /**
@@ -796,6 +794,12 @@ void handle_direct_parameters(iolink_isdu_ctx_t* ctx)
     bool page2 = (ctx->header.index == IOLINK_IDX_DIRECT_PARAMETERS_2);
     uint8_t sub = ctx->header.subindex;
     uint8_t* page2_storage = direct_param_page2(ctx);
+
+    if ((page2_storage == NULL) && page2) {
+        /* 没有绑定 page 2 存储：该对象不可用（写入不再改任何状态）。 */
+        isdu_respond_error(ctx, IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+        return;
+    }
 
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
         if (!page2) {

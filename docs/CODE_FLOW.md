@@ -236,7 +236,9 @@ flowchart TD
     F --> F1{"返回 0?"}
     F1 -- 否 --> E3["ctx->phy_error = 驱动码<br/>返回 INIT_ERR_PHY"]
     F1 -- 是 --> G["iolink_device_info_ctx_init()<br/>身份与访问锁"]
-    G --> H["iolink_dll_init(main, isr, phy)<br/>状态 STARTUP、COM2、绑定 shared.isr"]
+    G --> G1{"绑定成功?"}
+    G1 -- 否 --> E5["返回 INIT_ERR_DEVICE_INFO"]
+    G1 -- 是 --> H["iolink_dll_init(main, isr, phy)<br/>状态 STARTUP、COM2、绑定 shared.isr"]
     H --> H1{"PHY 有 detect_wakeup?"}
     H1 -- 是 --> H2["set_mode(SIO)<br/>等待唤醒"]
     H1 -- 否 --> H3["set_mode(SDCI)<br/>直接接受 M-sequence"]

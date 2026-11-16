@@ -156,7 +156,7 @@ static const iolink_stack_config_t g_stack = {
     .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
     .pd_in_len = 2U,
     .pd_out_len = 2U,
-    .od_width = 1U,
+    .od_width = 2U,
     .min_cycle_time = 20U,                /* 2.0 ms，0.1 ms 单位 */
 };
 
@@ -803,10 +803,11 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 
 `iolink_device_init()` 会把 `config.device_info` 和 `config.od` 绑定到 ISDU；
 直接使用底层 `iolink_isdu_*` API 时，调用方需要自行设置 `isdu.device_info`、
-`isdu.od` 和 `isdu.ds_ctx`。未绑定时的行为：身份索引（`0x000D` 与 `0x0010-0x001B`）
-返回 `IDX_NOT_AVAIL`；应用参数与标签按空表处理（索引返回 `0x80 0x11`）；访问锁按空
-上下文处理（读为 0，写被忽略）；`0x0020`/`0x0024`/`0x0028`/`0x0029` 不依赖身份，仍然
-可用。
+`isdu.od`、`isdu.ds_ctx` 和 `isdu.direct_param_page2`。未绑定时的行为：身份索引
+（`0x000D` 与 `0x0010-0x001B`）返回 `IDX_NOT_AVAIL`；DPP1 与 DPP2 返回
+`IDX_NOT_AVAIL`（不会退回臆造的页内容）；应用参数与标签按空表处理（索引返回
+`0x80 0x11`）；访问锁按空上下文处理（读为 0，写被忽略）；`0x0020`/`0x0024`/`0x0028`/
+`0x0029` 不依赖身份，仍然可用。
 
 ### 8.4 回调与缓冲区生命周期
 

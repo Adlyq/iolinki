@@ -227,6 +227,21 @@ static void make_type2_process_read(uint8_t* frame, size_t len)
 
 static iolink_phy_api_t g_phy;
 
+/* DPP1 页读需要绑定的设备身份：DLL 层没有默认身份。 */
+static iolink_device_info_ctx_t s_identity_ctx;
+
+static void bind_test_identity(iolink_dll_main_t* main)
+{
+    static const iolink_device_info_t identity = {
+        .vendor_id = 1234U,
+        .device_id = 5678U,
+        .min_cycle_time = 10U,
+        .revision_id = IOLINK_REVISION_ID_1_1,
+    };
+    assert_int_equal(iolink_device_info_ctx_init(&s_identity_ctx, &identity), 0);
+    main->shared.isdu.device_info = &s_identity_ctx;
+}
+
 static void init_ctx(iolink_dll_ctx_t* dll)
 {
     g_phy.self = (iolink_app_t*) dll;
@@ -247,6 +262,7 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     g_phy.stack_timer_start = timer_b_start;
     g_phy.detect_wakeup = mock_detect_wakeup;
     iolink_dll_init(&dll->main, &dll->isr, &g_phy);
+    bind_test_identity(&dll->main);
     dll->main.shared.clock.time_us = test_time_us;
     dll->main.phy_mode = IOLINK_PHY_MODE_SDCI;
     dll->main.shared.state = IOLINK_DLL_STATE_OPERATE;
@@ -324,6 +340,7 @@ static void init_type0_ctx(iolink_dll_ctx_t* dll)
     g_phy.stack_timer_start = timer_b_start;
     g_phy.detect_wakeup = mock_detect_wakeup;
     iolink_dll_init(&dll->main, &dll->isr, &g_phy);
+    bind_test_identity(&dll->main);
     dll->main.shared.clock.time_us = test_time_us;
     dll->main.phy_mode = IOLINK_PHY_MODE_SDCI;
     dll->main.shared.state = IOLINK_DLL_STATE_PREOPERATE;

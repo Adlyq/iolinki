@@ -170,7 +170,7 @@ typedef struct
 typedef enum
 {
     IOLINK_DEVICE_INIT_OK = 0,               /**< 初始化成功 */
-    IOLINK_DEVICE_INIT_ERR_NULL = -1,        /**< ctx、config 或必需的配置指针为 NULL */
+    IOLINK_DEVICE_INIT_ERR_NULL = -1,        /**< ctx、config、phy 或 stack 为 NULL */
     IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE = -2,   /**< m_seq_type 不是有效类型 */
     IOLINK_DEVICE_INIT_ERR_PD_IN_LEN = -3,   /**< pd_in_len 超出缓冲区 */
     IOLINK_DEVICE_INIT_ERR_PD_OUT_LEN = -4,  /**< pd_out_len 超出缓冲区 */

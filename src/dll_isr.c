@@ -558,6 +558,11 @@ static bool dll_isr_plan_source(iolink_dll_main_t* ctx, const iolink_reply_plan_
             }
             return true;
         case IOLINK_REPLY_SRC_PAGE:
+            /* 没有绑定的设备身份就没有 DPP1：不答（主站超时）而不是发出
+             * 全零页。设备构建在初始化时已强制要求身份。 */
+            if (ctx->shared.isdu.device_info == NULL) {
+                return false;
+            }
             /* 单次 seqlock 窗口复制整段：页读载荷整帧同代，且避免逐字节
              * 访问器的函数调用与序号双读（M0+ 上尤其明显）。 */
             (void) iolink_isdu_dp_page1_read_range(&ctx->shared.isdu, addr, out, plan->len);

@@ -353,9 +353,11 @@ of IAR compatibility.
 #include "iolinki/device.h"
 
 static iolink_device_ctx_t g_ctx;
-static const iolink_stack_config_t g_stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V};
+static const iolink_stack_config_t g_stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+                                               .od_width = 2U};
 static const iolink_device_info_t g_identity = {.vendor_id = 1234U, .device_id = 5678U,
     .revision_id = IOLINK_REVISION_ID_1_1}; /* 必填，见 API_INTEGRATION */
+/* od_width 必须显式给出 1/2/8/32；0 会被初始化拒绝。 */
 static const iolink_device_config_t g_cfg = {
     .phy = &g_phy_stm32, .stack = &g_stack, .app = &g_app, .device_info = &g_identity};
 
@@ -383,7 +385,8 @@ int main(void) {
 #include "iolinki/device.h"
 
 static iolink_device_ctx_t g_ctx;
-static const iolink_stack_config_t g_stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V};
+static const iolink_stack_config_t g_stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+                                               .od_width = 2U};
 static const iolink_device_info_t g_identity = {.vendor_id = 1234U, .device_id = 5678U,
     .revision_id = IOLINK_REVISION_ID_1_1}; /* 必填，见 API_INTEGRATION */
 static const iolink_device_config_t g_cfg = {

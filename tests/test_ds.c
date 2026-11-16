@@ -224,8 +224,8 @@ static void test_ds_bound_params_restore_device_context_only(void** state)
     uint8_t backup[IOLINK_DS_IMAGE_MAX];
     uint8_t out[16] = {0U};
 
-    iolink_device_info_ctx_init(&info_a, iolink_test_identity());
-    iolink_device_info_ctx_init(&info_b, iolink_test_identity());
+    assert_int_equal(iolink_device_info_ctx_init(&info_a, iolink_test_identity()), 0);
+    assert_int_equal(iolink_device_info_ctx_init(&info_b, iolink_test_identity()), 0);
     test_params_init(&params_a, &info_a);
     test_params_init(&params_b, &info_b);
     iolink_ds_init(&ds_a);
@@ -521,7 +521,7 @@ typedef struct
 
 static void ds_fixture_init(ds_fixture_t* f)
 {
-    iolink_device_info_ctx_init(&f->info, iolink_test_identity());
+    assert_int_equal(iolink_device_info_ctx_init(&f->info, iolink_test_identity()), 0);
     test_params_init(&f->params, &f->info);
     iolink_ds_init(&f->ds);
     iolink_ds_bind_sources(&f->ds, test_params_od(&f->params), NULL);

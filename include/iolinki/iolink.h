@@ -108,6 +108,10 @@ static inline uint8_t iolink_cycle_time_encode(uint16_t units100us)
  * 只作为应用选择合法 `stack.od_width` 的参考值：库不会用它推导配置，
  * `stack.od_width` 必须由应用显式给出。
  *
+ * 返回 0 表示该类型没有 OD 八位组（TYPE_1_1 不得用于 V1.1.5 设备），
+ * 不是可用的宽度。TYPE_2_V 的宽度随应用 PD/OD 配置变化，这里的 1 只是
+ * Table A.10 的最小项，应用应按自己的对象字典选择。
+ *
  * @param m_seq_type M 序列类型值。
  * @return 默认 OD 宽度，以字节计。
  */

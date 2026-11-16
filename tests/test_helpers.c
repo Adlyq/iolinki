@@ -727,7 +727,12 @@ uint32_t iolink_test_time_ms(void)
 
 iolink_device_time_us_fn g_iolink_test_time_us_override = NULL;
 
-/** @brief 测试用设备身份：覆盖全部标识字段，供不关心身份的用例使用。 */
+/** @brief 测试用设备身份：覆盖全部标识字段，供不关心身份的用例使用。
+ *
+ * 这些值（VendorID 0xFFFF、Generic 名称、"DefaultTag"）刻意沿用被删除的
+ * 库内默认身份，让既有 DPP1/DS 字节断言保持原样；这是测试夹具的选择，
+ * 不是库的默认值。
+ */
 static const iolink_device_info_t g_test_identity = {
     .vendor_name = "iolinki",
     .vendor_text = "Open-Source IO-Link Stack",

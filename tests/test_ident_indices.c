@@ -200,10 +200,11 @@ static void test_device_info_ctx_edges(void** state)
 
     /* NULL 上下文/身份：初始化失败，访问器安全返回。 */
     assert_int_equal(iolink_device_info_ctx_init(NULL, &info), -1);
+    /* 先绑定有效身份，再让一次绑定失败：旧身份必须被清掉。 */
+    assert_int_equal(iolink_device_info_ctx_init(&ctx, &info), 0);
+    assert_non_null(iolink_device_info_ctx_get(&ctx));
     assert_int_equal(iolink_device_info_ctx_init(&ctx, NULL), -1);
-    /* 缺身份时上下文被清零，不保留上一次的身份数据。 */
-    assert_null(iolink_device_info_ctx_get(&ctx)->vendor_name);
-    assert_null(iolink_device_info_ctx_get(&ctx)->product_name);
+    assert_null(iolink_device_info_ctx_get(&ctx));
     assert_int_equal(iolink_device_info_ctx_get_access_locks(&ctx), 0U);
     assert_null(iolink_device_info_ctx_get(NULL));
     assert_int_equal(iolink_device_info_ctx_get_access_locks(NULL), 0U);
