@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y \
     nodejs \
     doxygen \
     graphviz \
+    valgrind \
+    libc6-dbg \
     xz-utils \
     wget \
     && rm -rf /var/lib/apt/lists/*
@@ -30,7 +32,7 @@ RUN mkdir -p /opt/arm-toolchain && \
     echo "${ATFE_SHA256}  /tmp/atfe.tar.xz" | sha256sum -c - && \
     tar xf /tmp/atfe.tar.xz -C /opt/arm-toolchain --strip-components=1 && \
     rm /tmp/atfe.tar.xz
-ENV ARM_ATFE=/opt/arm-toolchain/bin
+ENV ARM_ATFE=/opt/atfe/bin
 
 # Pinned to match .pre-commit-config.yaml; tools/gates.sh enforces this version.
 RUN pip3 install --no-cache-dir clang-format==23.1.1

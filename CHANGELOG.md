@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (memcheck gate)
+- `tools/gates.sh memcheck` runs the unit binaries under valgrind memcheck, the
+  only tool here that reports reads of uninitialised memory — the class the
+  empty-context bugs belonged to. The PTY conformance examples stay with the
+  `test` group (they spawn a device process).
+- Two host/toolchain mismatches are handled instead of being reported as
+  findings: valgrind cannot redirect loader symbols on Arch's glibc 2.44, and
+  valgrind 3.18 (Ubuntu 22.04) cannot parse DWARF 5, so the memcheck tree is
+  built with `-gdwarf-4`. The group probes valgrind once and skips with the
+  reason when it cannot start at all; the container installs `valgrind` and
+  `libc6-dbg` and runs the group for real.
+
 ### Added (sanitizer gate)
 - `tools/gates.sh sanitize` runs the unit suite under AddressSanitizer,
   UndefinedBehaviorSanitizer and `implicit-conversion` (clang only). A report

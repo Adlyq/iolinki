@@ -27,7 +27,7 @@ trap 'rm -f "$IOLINK_GATES_SNAPSHOT"' EXIT
 ROOT="${IOLINK_GATES_ROOT:?gates: snapshot re-exec lost the repository root}"
 cd "$ROOT"
 
-GATE_GROUPS=(quick build test gcc sanitize static docs matrix perf package)
+GATE_GROUPS=(quick build test gcc sanitize memcheck static docs matrix perf package)
 
 STRICT_CFLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
 
@@ -46,6 +46,7 @@ esac
 RELEASE_DIR="${BUILD_DIR}_release"
 SECONDARY_DIR="${BUILD_DIR}_${CC_SECONDARY}"
 SANITIZE_DIR="${BUILD_DIR}_sanitize"
+MEMCHECK_DIR="${BUILD_DIR}_memcheck"
 
 usage() {
     cat >&2 <<'EOF'
@@ -59,6 +60,8 @@ Groups:
   gcc      the gcc-only strict diagnostic set, plus -fanalyzer as a report
   sanitize the unit suite under AddressSanitizer + UndefinedBehaviorSanitizer
            (clang only; a sanitizer report fails the run)
+  memcheck the unit binaries under valgrind memcheck (uninitialised reads,
+           invalid accesses)
   static   cppcheck and the MISRA addon (report-only unless
            IOLINKI_MISRA_ENFORCE=1)
   docs     Doxygen warnings
@@ -288,6 +291,55 @@ group_sanitize() {
     step "unit suite under sanitizers" run_sanitize_tests
 }
 
+# --- memcheck ---------------------------------------------------------------
+
+build_memcheck() {
+    # -gdwarf-4: valgrind releases in older distributions (3.18 on Ubuntu 22.04)
+    # cannot parse the DWARF 5 that current clang emits by default and abort
+    # with "ensure_valid failed" on every binary.
+    configure_tree "$MEMCHECK_DIR" Debug "$CC_PRIMARY" \
+        "-DCMAKE_C_FLAGS=$STRICT_CFLAGS -gdwarf-4" &&
+        cmake --build "$MEMCHECK_DIR" --parallel "$(nproc)"
+}
+
+# valgrind memcheck is the only tool here that reports reads of uninitialised
+# memory, which is the defect class the empty-context bugs belong to. Only the
+# unit binaries run: the PTY conformance examples spawn a device process and are
+# covered by the plain `test` group.
+run_memcheck() {
+    local failed=0
+    local err
+    err="$(mktemp "${TMPDIR:-/tmp}/iolink-memcheck.XXXXXX")"
+    for test_bin in "$MEMCHECK_DIR"/tests/test_*; do
+        [ -x "$test_bin" ] || continue
+        if ! valgrind --error-exitcode=1 --leak-check=no --quiet \
+            --track-origins=yes "$test_bin" >/dev/null 2>"$err"; then
+            printf '   FAIL: %s\n' "${test_bin##*/}" >&2
+            sed -n '1,12p' "$err" >&2
+            failed=1
+        fi
+    done
+    rm -f "$err"
+    return "$failed"
+}
+
+group_memcheck() {
+    if ! have valgrind; then
+        skip "valgrind missing (apt-get install valgrind)"
+        return 0
+    fi
+    # valgrind cannot redirect loader symbols on some distribution/glibc
+    # combinations; it then fails at startup on every binary, which is a host
+    # problem, not a finding. Probe once and say so instead of reporting 80
+    # identical failures.
+    if ! valgrind --quiet --error-exitcode=1 /bin/true >/dev/null 2>&1; then
+        skip "valgrind cannot start on this host (needs glibc debug info: 'debuginfod' on Arch, 'libc6-dbg' on Debian)"
+        return 0
+    fi
+    step "build for memcheck" build_memcheck || return 1
+    step "unit binaries under valgrind" run_memcheck
+}
+
 # --- static ----------------------------------------------------------------
 
 cppcheck_run() {
@@ -404,6 +456,7 @@ run_group() {
         test) group_test ;;
         gcc) group_gcc ;;
         sanitize) group_sanitize ;;
+        memcheck) group_memcheck ;;
         static) group_static ;;
         docs) group_docs ;;
         matrix) group_matrix ;;
@@ -435,7 +488,7 @@ for arg in "$@"; do
         all)
             requested+=("${GATE_GROUPS[@]}")
             ;;
-        quick | build | test | gcc | sanitize | static | docs | matrix | perf | package)
+        quick | build | test | gcc | sanitize | memcheck | static | docs | matrix | perf | package)
             requested+=("$arg")
             ;;
         *)

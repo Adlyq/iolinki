@@ -18,6 +18,7 @@ fi
 docker run --rm -v "$(pwd)":/workspace iolinki-test bash -c \
     "./tools/gates.sh quick build static docs package && \
      ./tools/size_matrix.py --check --selftest && \
+     ./tools/gates.sh memcheck && \
      bash /workspace/.docker_test_entrypoint.sh"
 
 echo -e "\n============================================"
