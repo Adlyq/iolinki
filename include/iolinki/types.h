@@ -78,6 +78,9 @@ typedef struct iolink_app iolink_app_t;
  * 保护，否则 `#pragma` 本身会触发 `-Wunknown-warning-option`。 */
 #pragma clang diagnostic ignored "-Wnullability-completeness"
 #pragma clang diagnostic ignored "-Wnullability-extension"
+/* cppcheck 2.7 只认内建宏，不会求值 `__has_warning()`，会把它当成语法错误；
+   这一行在真实编译器里是标准的"探测告警是否存在"写法。 */
+// cppcheck-suppress syntaxError
 #if defined(__has_warning) && __has_warning("-Wc2y-extensions")
 #pragma clang diagnostic ignored "-Wc2y-extensions"
 #endif
