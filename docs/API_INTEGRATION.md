@@ -151,15 +151,17 @@ static const iolink_device_app_t g_app = {
     .time_us = board_time_us,              /* 必需；NULL 拒绝初始化 */
 };
 
+static const iolink_stack_config_t g_stack = {
+    .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+    .pd_in_len = 2U,
+    .pd_out_len = 2U,
+    .od_width = 1U,
+    .min_cycle_time = 20U,                /* 2.0 ms，0.1 ms 单位 */
+};
+
 static const iolink_device_config_t g_config = {
-    .phy = g_phy,
-    .stack = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
-        .pd_in_len = 2U,
-        .pd_out_len = 2U,
-        .od_width = 1U,
-        .min_cycle_time = 20U,            /* 2.0 ms，0.1 ms 单位 */
-    },
+    .phy = &g_phy,
+    .stack = &g_stack,
     .app = &g_app,                        /* trait：实例指针 + 回调 */
 #if IOLINK_FEATURE_DATA_STORAGE
     .ds_flag_persist = app_ds_flag_persist,
@@ -226,8 +228,8 @@ void data_irq_handler(void)
 
 | 字段 | 生命周期 / 契约 |
 | --- | --- |
-| `phy` | 初始化时复制。`phy.self` 只传给 PHY 回调，由驱动在自己的 init 中写入。 |
-| `stack` | 复制到上下文中。 |
+| `phy` | 指针，必须比上下文存活更久（通常取 `iolink_phy_*_get()`）。`phy->self` 由驱动在自己的 init 中写入。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_NULL`。 |
+| `stack` | 指针，必须比上下文存活更久；配置在初始化时读入上下文。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_NULL`。 |
 | `app` | 应用 trait（`iolink_device_app_t`）：实例指针 + 时钟/日志/生命周期回调的唯一来源。保留指针，必须比上下文存活更久。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_APP`。 |
 | `device_info` | 身份来源；其中的 `application_tag` 只是身份字段，标签索引由 OD 表提供。参见 8.1 节的身份限制。 |
 | `ds_flag_persist` | 仅在 `IOLINK_FEATURE_DATA_STORAGE=1` 时声明；`DS_UPLOAD_FLAG` 变化时调用，`self` 为 `app->self`。为 NULL 时标志只保存在 RAM。 |

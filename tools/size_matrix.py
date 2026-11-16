@@ -134,6 +134,8 @@ static void app_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
 
 static iolink_device_ctx_t g_ctx;
 static iolink_device_config_t g_cfg;
+static iolink_phy_api_t g_phy;
+static iolink_stack_config_t g_stack;
 static const iolink_device_app_t g_app = {.self = NULL, .time_us = app_time_us};
 
 void* memset(void* dst, int c, size_t n)
@@ -168,11 +170,13 @@ volatile uint32_t g_ticks;
 
 void reset_handler(void)
 {
-    g_cfg.phy.init = app_phy_init;
-    g_cfg.phy.set_mode = app_phy_set_mode;
-    g_cfg.phy.set_baudrate = app_phy_set_baudrate;
-    g_cfg.stack.m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
-    g_cfg.stack.od_width = 8U;
+    g_phy.init = app_phy_init;
+    g_phy.set_mode = app_phy_set_mode;
+    g_phy.set_baudrate = app_phy_set_baudrate;
+    g_stack.m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
+    g_stack.od_width = 8U;
+    g_cfg.phy = &g_phy;
+    g_cfg.stack = &g_stack;
     g_cfg.app = &g_app;
     if (iolink_device_init(&g_ctx, &g_cfg) != 0) {
         for (;;) {

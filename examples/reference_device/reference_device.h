@@ -10,6 +10,7 @@ typedef struct
     iolink_device_ctx_t device;
     iolink_device_config_t config;
     iolink_device_app_t app_trait;
+    iolink_stack_config_t stack;
     uint16_t counter;
     uint8_t input[3];
     bool button;

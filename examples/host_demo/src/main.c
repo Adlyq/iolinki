@@ -146,8 +146,8 @@ int main(int argc, char* argv[])
     static const iolink_device_app_t app = {.self = NULL, .time_us = host_time_us};
     iolink_device_ctx_t ctx;
     iolink_device_config_t dev_config = {
-        .phy = *phy,
-        .stack = config,
+        .phy = phy,
+        .stack = &config,
         .app = &app,
     };
     host_tags_init();

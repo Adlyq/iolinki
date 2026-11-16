@@ -744,7 +744,7 @@ static void test_device_fill_config(iolink_test_device_t* dev, const iolink_stac
                                     const iolink_device_app_t* app)
 {
     (void) memset(dev, 0, sizeof(*dev));
-    dev->cfg.phy = g_phy_mock;
+    dev->cfg.phy = &g_phy_mock;
     dev->cfg.app = (app != NULL) ? app : &g_default_app;
     /* 设备默认带三个标签（应用以 STORAGE 表项提供）；用库的默认
        device_info 生成 "DefaultTag" 标签初值。 */
@@ -753,12 +753,13 @@ static void test_device_fill_config(iolink_test_device_t* dev, const iolink_stac
     test_params_init(&dev->params, &info);
     dev->cfg.od = &dev->params.od;
     if (stack != NULL) {
-        dev->cfg.stack = *stack;
+        dev->stack = *stack;
     }
     else {
-        dev->cfg.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-        dev->cfg.stack.min_cycle_time = 0U;
+        dev->stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+        dev->stack.min_cycle_time = 0U;
     }
+    dev->cfg.stack = &dev->stack;
 }
 
 int iolink_test_device_init(iolink_test_device_t* dev, const iolink_stack_config_t* stack,

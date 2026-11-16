@@ -56,8 +56,10 @@ static uint64_t freertos_time_us(iolink_app_t* self)
 
 static iolink_device_ctx_t g_device_ctx;
 static const iolink_device_app_t g_device_app = {.self = NULL, .time_us = freertos_time_us};
+static const iolink_stack_config_t g_device_stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V};
 static iolink_device_config_t g_device_config = {
-    .phy = g_phy_freertos,
+    .phy = &g_phy_freertos,
+    .stack = &g_device_stack,
     .app = &g_device_app,
 };
 

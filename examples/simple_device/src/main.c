@@ -43,7 +43,7 @@ int main(void)
     static const iolink_device_app_t app = {.self = NULL, .time_us = simple_time_us};
     iolink_device_ctx_t ctx;
     iolink_device_config_t dev_config = {
-        .phy = g_hw_phy,
+        .phy = &g_hw_phy,
         .app = &app,
     };
 

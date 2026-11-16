@@ -161,11 +161,15 @@ static void test_fallback_command_ignored_without_wakeup(void** state)
     /* 相同 PHY，但没有唤醒检测器：DLL 从 SDCI 启动，
      * 且无法回到 SIO。 */
     iolink_test_device_t dev;
+    static iolink_phy_api_t phy;
     memset(&dev, 0, sizeof(dev));
-    dev.cfg.phy = g_phy_mock;
-    dev.cfg.phy.detect_wakeup = NULL;
+    (void) memset(&phy, 0, sizeof(phy));
+    phy = g_phy_mock;
+    phy.detect_wakeup = NULL;
+    dev.cfg.phy = &phy;
     dev.cfg.app = iolink_test_default_app();
-    dev.cfg.stack = config;
+    dev.stack = config;
+    dev.cfg.stack = &dev.stack;
     assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), 0);
 
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);

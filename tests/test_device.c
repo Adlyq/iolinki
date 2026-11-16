@@ -53,16 +53,21 @@ static void record_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudra
     (void) baudrate;
 }
 
-static iolink_device_config_t make_device_config(void)
+static iolink_device_config_t make_device_config(iolink_stack_config_t* stack,
+                                                 iolink_phy_api_t* phy)
 {
     iolink_device_config_t config;
 
     (void) memset(&config, 0, sizeof(config));
+    (void) memset(stack, 0, sizeof(*stack));
+    (void) memset(phy, 0, sizeof(*phy));
+    config.phy = phy;
     config.app = iolink_test_default_app();
-    config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    config.stack.pd_in_len = 2U;
-    config.stack.pd_out_len = 2U;
-    config.stack.od_width = 1U;
+    stack->m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    stack->pd_in_len = 2U;
+    stack->pd_out_len = 2U;
+    stack->od_width = 1U;
+    config.stack = stack;
     return config;
 }
 
@@ -95,32 +100,34 @@ static void test_device_init_rejects_invalid_config(void** state)
     (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t config;
+    iolink_stack_config_t stack;
+    iolink_phy_api_t phy;
 
     (void) memset(&ctx, 0, sizeof(ctx));
 
-    config = make_device_config();
-    config.stack.m_seq_type = (iolink_m_seq_type_t) 10; /* > IOLINK_M_SEQ_TYPE_MAX */
+    config = make_device_config(&stack, &phy);
+    stack.m_seq_type = (iolink_m_seq_type_t) 10; /* > IOLINK_M_SEQ_TYPE_MAX */
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE);
 
-    config = make_device_config();
-    config.stack.pd_in_len = IOLINK_PD_IN_MAX_SIZE + 1U;
+    config = make_device_config(&stack, &phy);
+    stack.pd_in_len = IOLINK_PD_IN_MAX_SIZE + 1U;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_PD_IN_LEN);
 
-    config = make_device_config();
-    config.stack.pd_out_len = IOLINK_PD_OUT_MAX_SIZE + 1U;
+    config = make_device_config(&stack, &phy);
+    stack.pd_out_len = IOLINK_PD_OUT_MAX_SIZE + 1U;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_PD_OUT_LEN);
 
-    config = make_device_config();
-    config.stack.od_width = 3U;
+    config = make_device_config(&stack, &phy);
+    stack.od_width = 3U;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_OD_WIDTH);
 
-    config = make_device_config();
-    config.stack.od_width = IOLINK_OD_MAX_SIZE + 1U;
+    config = make_device_config(&stack, &phy);
+    stack.od_width = IOLINK_OD_MAX_SIZE + 1U;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_OD_CAPACITY);
 
-    config = make_device_config();
-    config.stack.baudrate_set = true;
-    config.stack.baudrate = (iolink_baudrate_t) 3;
+    config = make_device_config(&stack, &phy);
+    stack.baudrate_set = true;
+    stack.baudrate = (iolink_baudrate_t) 3;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_BAUDRATE);
 }
 
@@ -137,9 +144,11 @@ static void test_device_init_maps_phy_error(void** state)
 {
     (void) state;
     iolink_device_ctx_t ctx;
-    iolink_device_config_t config = make_device_config();
+    iolink_stack_config_t stack;
+    iolink_phy_api_t phy;
+    iolink_device_config_t config = make_device_config(&stack, &phy);
 
-    config.phy.init = failing_phy_init;
+    phy.init = failing_phy_init;
     g_phy_init_calls = 0;
 
     /* 驱动错误不得冒充配置错误：对外统一映射。 */
@@ -154,7 +163,9 @@ static void test_device_init_clears_stale_phy_error(void** state)
 {
     (void) state;
     iolink_device_ctx_t ctx;
-    iolink_device_config_t config = make_device_config();
+    iolink_stack_config_t stack;
+    iolink_phy_api_t phy;
+    iolink_device_config_t config = make_device_config(&stack, &phy);
 
     /* 上一次尝试留下的驱动码不得被读成这一次的结果。 */
     (void) memset(&ctx, 0xFF, sizeof(ctx));
@@ -168,14 +179,15 @@ static void test_device_forwards_phy_self(void** state)
     (void) state;
     static int phy_ctx;
     iolink_device_ctx_t ctx;
-    iolink_device_config_t config = make_device_config();
+    iolink_stack_config_t stack;
+    iolink_phy_api_t phy;
+    iolink_device_config_t config = make_device_config(&stack, &phy);
 
     /* 库必须把 config.phy.self 原样交给 PHY 回调，而不是换成 app->self。 */
-    config.phy = (iolink_phy_api_t){0};
-    config.phy.init = record_phy_init;
-    config.phy.set_mode = record_phy_set_mode;
-    config.phy.set_baudrate = record_phy_set_baudrate;
-    config.phy.self = (iolink_app_t*) &phy_ctx;
+    phy.init = record_phy_init;
+    phy.set_mode = record_phy_set_mode;
+    phy.set_baudrate = record_phy_set_baudrate;
+    phy.self = (iolink_app_t*) &phy_ctx;
 
     g_phy_self_seen = NULL;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
@@ -214,7 +226,9 @@ static void test_device_init_rejection_clears_stale_phy_error(void** state)
 {
     (void) state;
     iolink_device_ctx_t ctx;
-    iolink_device_config_t config = make_device_config();
+    iolink_stack_config_t stack;
+    iolink_phy_api_t phy;
+    iolink_device_config_t config = make_device_config(&stack, &phy);
 
     /* 上一次尝试留下的驱动码不得被读成这一次的结果（ERR_APP 早退同样如此）。 */
     (void) memset(&ctx, 0xFF, sizeof(ctx));
@@ -227,7 +241,9 @@ static void test_device_init_validates_config_not_context(void** state)
 {
     (void) state;
     iolink_device_ctx_t ctx;
-    iolink_device_config_t config = make_device_config();
+    iolink_stack_config_t stack;
+    iolink_phy_api_t phy;
+    iolink_device_config_t config = make_device_config(&stack, &phy);
 
     /* 未初始化上下文中的值不得参与校验：只有
      * 调用者提供的配置才是权威来源。 */
@@ -438,9 +454,10 @@ static void test_device_init_builds_ds_image(void** state)
     will_return(mock_phy_init, 0);
 
     (void) memset(&dev, 0, sizeof(dev));
-    dev.cfg.phy = g_phy_mock;
+    dev.cfg.phy = &g_phy_mock;
     dev.cfg.app = iolink_test_default_app();
-    dev.cfg.stack = stack;
+    dev.stack = stack;
+    dev.cfg.stack = &dev.stack;
     dev.cfg.od = test_default_tag_od();
     assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), IOLINK_DEVICE_INIT_OK);
 

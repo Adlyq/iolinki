@@ -66,8 +66,9 @@
  * 对象                       | 所有者          | 生命周期 / 访问规则
  * ---------------------------+-----------------+---------------------------------------------
  * iolink_device_config_t     | application     | 必须比上下文存活更久
- *  .phy (vtable)             | application/PHY | 回调在 ctx 生命周期内有效
- *  .phy.self                 | PHY driver      | 仅传给 PHY 回调；驱动初始化时写入
+ *  .phy (vtable)             | application/PHY | 指针；vtable 在 ctx 生命周期内有效
+ *  .phy->self                | PHY driver      | 仅传给 PHY 回调；驱动初始化时写入
+ *  .stack                    | application     | 指针；初始化时读入上下文，须存活更久
  *  .app                      | application     | trait（self + 回调）保持有效；
  *                            |                 | self 传给 time/log/OD/on_* 全部钩子
  *  .app->time_us             | application     | 单调递增、非阻塞、ISR 安全
@@ -106,11 +107,13 @@ typedef uint64_t (*iolink_device_time_us_fn)(iolink_app_t* self);
  */
 typedef struct
 {
-    iolink_phy_api_t phy;                    /**< 物理层驱动 API。`phy.self` 由驱动在
-                                                  `iolink_phy_*_init()` 中写入自己的上下文，
-                                                  库原样转发；应用不覆盖它（覆盖会让驱动的
-                                                  回调把错误指针转回自己的状态）。 */
-    iolink_stack_config_t stack;             /**< 协议栈行为配置。 */
+    const iolink_phy_api_t* phy;             /**< 物理层驱动 API（通常取自 `iolink_phy_*_get()`）。
+                                                  `phy->self` 由提供 vtable 的一方写入自己的上下文
+                                                  （内置驱动在 `iolink_phy_*_init()` 里写），应用不
+                                                  覆盖它（覆盖会让驱动把错误指针转回自己的状态）。
+                                                  为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_NULL`。 */
+    const iolink_stack_config_t* stack;      /**< 协议栈行为配置；必须比上下文存活更久。为 NULL
+                                                  时初始化返回 `IOLINK_DEVICE_INIT_ERR_NULL`。 */
     const iolink_device_app_t* app;          /**< 应用 trait：实例指针与生命周期/PD/时钟/日志
                                                   回调的唯一来源。`app` 为 NULL 时初始化返回
                                                   `IOLINK_DEVICE_INIT_ERR_APP`；`app->time_us`
@@ -158,7 +161,7 @@ typedef struct
 typedef enum
 {
     IOLINK_DEVICE_INIT_OK = 0,               /**< 初始化成功 */
-    IOLINK_DEVICE_INIT_ERR_NULL = -1,        /**< ctx 或 config 为 NULL */
+    IOLINK_DEVICE_INIT_ERR_NULL = -1,        /**< ctx、config 或必需的配置指针为 NULL */
     IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE = -2,   /**< m_seq_type 不是有效类型 */
     IOLINK_DEVICE_INIT_ERR_PD_IN_LEN = -3,   /**< pd_in_len 超出缓冲区 */
     IOLINK_DEVICE_INIT_ERR_PD_OUT_LEN = -4,  /**< pd_out_len 超出缓冲区 */

@@ -102,30 +102,37 @@ static uint8_t test_int_active(iolink_app_t* self)
     return 0U;
 }
 
+static iolink_phy_api_t g_test_phy;
+static iolink_stack_config_t g_test_stack;
+
 static void make_config(iolink_device_config_t* config)
 {
     (void) memset(config, 0, sizeof(*config));
     (void) memset(&g_workspace, 0, sizeof(g_workspace));
+    (void) memset(&g_test_phy, 0, sizeof(g_test_phy));
+    (void) memset(&g_test_stack, 0, sizeof(g_test_stack));
 
-    config->phy.init = test_phy_init;
-    config->phy.set_mode = test_set_mode;
-    config->phy.set_baudrate = test_set_baudrate;
+    g_test_phy.init = test_phy_init;
+    g_test_phy.set_mode = test_set_mode;
+    g_test_phy.set_baudrate = test_set_baudrate;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     /* 该 fixture 只验证工作区绑定，不驱动收发；FRAME 构建下不提供帧钩子。 */
-    config->phy.rx_frame = NULL;
+    g_test_phy.rx_frame = NULL;
 #else
-    config->phy.rx_octet = test_rx_octet;
+    g_test_phy.rx_octet = test_rx_octet;
 #endif
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-    config->phy.tx_frame = NULL;
+    g_test_phy.tx_frame = NULL;
 #else
-    config->phy.tx_octet = test_tx_octet;
-    config->phy.tx_done = test_tx_done;
+    g_test_phy.tx_octet = test_tx_octet;
+    g_test_phy.tx_done = test_tx_done;
 #endif
-    config->phy.int_active = test_int_active;
+    g_test_phy.int_active = test_int_active;
+    config->phy = &g_test_phy;
     config->app = &g_app;
-    config->stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    config->stack.od_width = 1U;
+    g_test_stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    g_test_stack.od_width = 1U;
+    config->stack = &g_test_stack;
 }
 
 static void test_init_requires_workspace(void** state)

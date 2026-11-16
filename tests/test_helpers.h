@@ -141,6 +141,7 @@ typedef struct
 {
     iolink_device_ctx_t ctx;
     iolink_device_config_t cfg;
+    iolink_stack_config_t stack; /**< cfg.stack 指向它，生命周期与 dev 相同。 */
     iolink_test_params_t params;
 } iolink_test_device_t;
 

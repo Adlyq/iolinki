@@ -129,11 +129,11 @@ int conformance_device_init(conformance_device_t* app, const conformance_profile
     conformance_defaults(app);
     conformance_capture_defaults(app);
 
-    app->config.phy = *phy;
+    app->config.phy = phy;
     app->app_trait.self = (iolink_app_t*) app;
     app->app_trait.time_us = conformance_time_us;
     app->config.app = &app->app_trait;
-    app->config.stack = profile->stack;
+    app->config.stack = &profile->stack;
     app->config.device_info = profile->identity;
     conformance_od_init(&app->od);
     app->config.od = &app->od;

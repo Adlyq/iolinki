@@ -94,6 +94,7 @@ typedef struct
 {
     iolink_device_ctx_t ctx;
     iolink_device_config_t cfg;
+    iolink_stack_config_t stack;
 } wcet_dev_t;
 
 static wcet_phy_state_t g_phy;
@@ -335,16 +336,17 @@ static int wcet_device_setup(iolink_m_seq_type_t type, uint8_t pd_in_len, uint8_
         g_pd_in[i] = (uint8_t) (0x30U + i);
     }
 
-    g_dev.cfg.phy = g_phy_api;
-    g_dev.cfg.phy.self = NULL;
-    g_dev.cfg.stack.m_seq_type = type;
-    g_dev.cfg.stack.min_cycle_time = min_cycle_time;
-    g_dev.cfg.stack.pd_in_len = pd_in_len;
-    g_dev.cfg.stack.pd_out_len = pd_out_len;
-    g_dev.cfg.stack.od_width = od_width;
-    g_dev.cfg.stack.baudrate = IOLINK_BAUDRATE_COM2;
-    g_dev.cfg.stack.baudrate_set = false;
-    g_dev.cfg.stack.master_lost_cycles = 0U;
+    (void) memset(&g_dev.stack, 0, sizeof(g_dev.stack));
+    g_dev.cfg.phy = &g_phy_api;
+    g_dev.cfg.stack = &g_dev.stack;
+    g_dev.stack.m_seq_type = type;
+    g_dev.stack.min_cycle_time = min_cycle_time;
+    g_dev.stack.pd_in_len = pd_in_len;
+    g_dev.stack.pd_out_len = pd_out_len;
+    g_dev.stack.od_width = od_width;
+    g_dev.stack.baudrate = IOLINK_BAUDRATE_COM2;
+    g_dev.stack.baudrate_set = false;
+    g_dev.stack.master_lost_cycles = 0U;
     g_dev.cfg.app = &g_app;
     g_dev.cfg.device_info = &g_device_info;
     g_dev.cfg.od = &g_wcet_od;

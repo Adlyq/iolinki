@@ -45,9 +45,13 @@ static const iolink_device_app_t g_test_app = {.self = NULL, .time_us = iolink_t
 
 static iolink_device_config_t make_device_config(void)
 {
+    static iolink_stack_config_t stack;
     iolink_device_config_t config;
     (void) memset(&config, 0, sizeof(config));
-    config.phy = local_phy_mock;
+    (void) memset(&stack, 0, sizeof(stack));
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    config.phy = &local_phy_mock;
+    config.stack = &stack;
     config.app = &g_test_app;
     return config;
 }

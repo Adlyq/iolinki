@@ -24,7 +24,7 @@ int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy,
         return -1;
     }
     memset(app, 0, sizeof(*app));
-    app->config.phy = *phy;
+    app->config.phy = phy;
     app->app_trait.self = (iolink_app_t*) app;
     app->app_trait.time_us = time_us;
     app->config.app = &app->app_trait;
@@ -45,10 +45,11 @@ int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy,
     app->od.entries = app->od_entries;
     app->od.count = 3U;
     app->config.od = &app->od;
-    app->config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    app->config.stack.pd_in_len = sizeof(app->input);
-    app->config.stack.pd_out_len = 1;
-    app->config.stack.min_cycle_time = 10;
+    app->stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    app->stack.pd_in_len = sizeof(app->input);
+    app->stack.pd_out_len = 1;
+    app->stack.min_cycle_time = 10;
+    app->config.stack = &app->stack;
     return iolink_device_init(&app->device, &app->config);
 }
 

@@ -40,9 +40,10 @@ static void fill_env(void)
 static void device_config_defaults(iolink_test_device_t* dev)
 {
     (void) memset(dev, 0, sizeof(*dev));
-    dev->cfg.phy = g_phy_mock;
+    dev->cfg.phy = &g_phy_mock;
     dev->cfg.app = iolink_test_default_app();
-    dev->cfg.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    dev->stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    dev->cfg.stack = &dev->stack;
 }
 
 static void test_device_binds_external_workspace(void** state)

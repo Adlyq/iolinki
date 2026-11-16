@@ -82,7 +82,7 @@ static uint8_t device_default_od_width(uint8_t m_seq_type)
  * @ref iolink_device_config_t 结构。上下文不保留第二份副本。 */
 static void device_apply_stack_config(iolink_device_ctx_t* ctx)
 {
-    const iolink_stack_config_t* stack = &ctx->config->stack;
+    const iolink_stack_config_t* stack = ctx->config->stack;
 
     ctx->dll.main.shared.m_seq_type = (uint8_t) stack->m_seq_type;
     ctx->dll.main.shared.pd_in_len = stack->pd_in_len;
@@ -200,8 +200,11 @@ static int device_config_validate(const iolink_device_config_t* config)
     if (config == NULL) {
         return IOLINK_DEVICE_INIT_ERR_NULL;
     }
-    stack = &config->stack;
 
+    if ((config->phy == NULL) || (config->stack == NULL)) {
+        return IOLINK_DEVICE_INIT_ERR_NULL;
+    }
+    stack = config->stack;
     if (config->app->time_us == NULL) {
         return IOLINK_DEVICE_INIT_ERR_TIME;
     }
@@ -257,7 +260,7 @@ static int device_config_validate(const iolink_device_config_t* config)
     /* 能力的一致性校验。降级后的最大风险不是"位为开但没编译"
      * （resolve 只置位 built 支持的位，unbuilt 能力被静默屏蔽），而是
      * 运行时要求与 PHY 实际钩子不匹配：见下方 REQUIRE_ISR_TX 与 TX_BUSY。 */
-    const iolink_caps_t caps = iolink_caps_resolve(&config->phy, &config->stack, config->app, NULL);
+    const iolink_caps_t caps = iolink_caps_resolve(config->phy, config->stack, config->app, NULL);
 
     if (iolink_caps_has(caps, IOLINK_CAP_REQUIRE_ISR_TX) &&
         !iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE)) {
@@ -311,8 +314,8 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     (void) memset(ctx, 0, sizeof(*ctx));
     ctx->config = config;
 
-    if (config->phy.init != NULL) {
-        err = config->phy.init(config->phy.self);
+    if (config->phy->init != NULL) {
+        err = config->phy->init(config->phy->self);
         if (err != 0) {
             iolink_log_sink_t sink;
             /* sink 尚未绑定到各子系统（PHY init 在绑定之前运行）。 */
@@ -327,10 +330,9 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     }
 
     iolink_device_info_ctx_init(&ctx->device_info, config->device_info);
-    iolink_dll_init(&ctx->dll.main, &ctx->dll.isr, &config->phy);
+    iolink_dll_init(&ctx->dll.main, &ctx->dll.isr, config->phy);
     /* 实例能力在绑定 PHY 之后、任何 ISR 可能运行之前解析一次。 */
-    ctx->dll.main.shared.caps =
-        iolink_caps_resolve(&config->phy, &config->stack, config->app, NULL);
+    ctx->dll.main.shared.caps = iolink_caps_resolve(config->phy, config->stack, config->app, NULL);
     /* ISDU 的传输缓冲：外部工作区或默认内嵌 fallback。 */
     iolink_isdu_bind_workspace(&ctx->dll.main.shared.isdu, workspace);
     /* ISDU 与事件引擎按实例能力位选运行时路径。 */
@@ -343,8 +345,8 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
 #if IOLINK_FEATURE_EVENTS
     ctx->dll.main.shared.events.clock = &ctx->dll.main.shared.clock;
     /* A.6.4 的两个窗口是运行时能力：栈配置非 0 时覆盖构建默认值。 */
-    iolink_events_set_window(&ctx->dll.main.shared.events, config->stack.event_min_appear_ms,
-                             config->stack.event_min_repeat_ms);
+    iolink_events_set_window(&ctx->dll.main.shared.events, config->stack->event_min_appear_ms,
+                             config->stack->event_min_repeat_ms);
 #endif
     /* iolink_dll_init() 在时钟绑定之前已采样了平台时钟。 */
     ctx->dll.main.master_last_activity_ms = dll_time_ms(&ctx->dll.main);
@@ -382,8 +384,8 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
 
     IOLINK_LOG_INFO(&ctx->dll.main.shared.log,
                     "device init: m_seq=%u pd_in=%u pd_out=%u od=%u baud=%u",
-                    (unsigned) config->stack.m_seq_type, (unsigned) config->stack.pd_in_len,
-                    (unsigned) config->stack.pd_out_len, (unsigned) ctx->dll.main.shared.od_width,
+                    (unsigned) config->stack->m_seq_type, (unsigned) config->stack->pd_in_len,
+                    (unsigned) config->stack->pd_out_len, (unsigned) ctx->dll.main.shared.od_width,
                     (unsigned) ctx->dll.main.baudrate);
     return 0;
 }
@@ -733,7 +735,7 @@ iolink_caps_t iolink_device_set_capabilities(iolink_device_ctx_t* ctx, iolink_ca
                                      IOLINK_CAP_REQUEST_SERVICE | IOLINK_CAP_PHY_FAULTS |
                                      IOLINK_CAP_REQUIRE_ISR_TX | IOLINK_CAP_PD_IN_CALLBACK;
     const iolink_caps_t bound =
-        iolink_caps_resolve(&ctx->config->phy, &ctx->config->stack, ctx->config->app, NULL);
+        iolink_caps_resolve(ctx->config->phy, ctx->config->stack, ctx->config->app, NULL);
     const iolink_build_caps_t* build = iolink_caps_build();
 
     caps = (caps & (iolink_caps_t) ~bound_mask) | (bound & bound_mask);

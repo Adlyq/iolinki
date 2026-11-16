@@ -34,9 +34,15 @@ static void test_device_init_critical_hook(void** state)
     (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t config;
+    iolink_stack_config_t stack;
+    static iolink_phy_api_t phy;
 
     (void) memset(&config, 0, sizeof(config));
-    config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    (void) memset(&stack, 0, sizeof(stack));
+    (void) memset(&phy, 0, sizeof(phy));
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    config.stack = &stack;
+    config.phy = &phy;
     config.app = &test_app;
 
     /* 不含异步上下文的配置文件（SINGLE）从不引用

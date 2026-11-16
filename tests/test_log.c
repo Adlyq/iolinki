@@ -91,14 +91,21 @@ static uint64_t fake_time_us(iolink_app_t* self)
 
 static void make_minimal_config(iolink_device_config_t* config, iolink_device_app_t* app)
 {
+    static iolink_stack_config_t stack;
+    static iolink_phy_api_t phy;
+
     (void) memset(app, 0, sizeof(*app));
     app->time_us = fake_time_us;
     (void) memset(config, 0, sizeof(*config));
+    (void) memset(&stack, 0, sizeof(stack));
+    (void) memset(&phy, 0, sizeof(phy));
+    config->phy = &phy;
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    stack.pd_in_len = 2U;
+    stack.pd_out_len = 2U;
+    stack.od_width = 1U;
+    config->stack = &stack;
     config->app = app;
-    config->stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    config->stack.pd_in_len = 2U;
-    config->stack.pd_out_len = 2U;
-    config->stack.od_width = 1U;
 }
 
 static void test_device_init_binds_config_sink(void** state)

@@ -29,29 +29,29 @@ static void test_device_context_api_initializes_two_configs(void** state)
     iolink_device_ctx_t dev_b;
     static iolink_phy_api_t phy = {.init = noop_user};
     static const iolink_device_app_t app = {.time_us = iolink_test_time_us};
+    static const iolink_stack_config_t stack_a = {
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+        .min_cycle_time = 10U,
+        .pd_in_len = 1U,
+        .pd_out_len = 0U,
+        .t_pd_us = 0U,
+    };
+    static const iolink_stack_config_t stack_b = {
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
+        .min_cycle_time = 10U,
+        .pd_in_len = 2U,
+        .pd_out_len = 2U,
+        .t_pd_us = 0U,
+    };
     iolink_device_config_t cfg_a = {
-        .phy = phy,
+        .phy = &phy,
         .app = &app,
-        .stack =
-            {
-                .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
-                .min_cycle_time = 10U,
-                .pd_in_len = 1U,
-                .pd_out_len = 0U,
-                .t_pd_us = 0U,
-            },
+        .stack = &stack_a,
     };
     iolink_device_config_t cfg_b = {
-        .phy = phy,
+        .phy = &phy,
         .app = &app,
-        .stack =
-            {
-                .m_seq_type = IOLINK_M_SEQ_TYPE_2_V,
-                .min_cycle_time = 10U,
-                .pd_in_len = 2U,
-                .pd_out_len = 2U,
-                .t_pd_us = 0U,
-            },
+        .stack = &stack_b,
     };
 
     assert_int_equal(iolink_device_init(&dev_a, &cfg_a), 0);

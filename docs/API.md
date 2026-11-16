@@ -51,8 +51,8 @@ scratch；编译进 Data Storage 时还包含 DS 序列化暂存区。它不保�
 
 ```c
 typedef struct {
-    iolink_phy_api_t phy;                        /* PHY 驱动 vtable（phy.self 由驱动自己写入） */
-    iolink_stack_config_t stack;                 /* 协议设置 */
+    const iolink_phy_api_t* phy;                 /* PHY 驱动 vtable（phy->self 由驱动写入） */
+    const iolink_stack_config_t* stack;          /* 协议设置；必须比上下文存活更久 */
     const iolink_device_app_t* app;              /* 应用 trait：实例指针 + 回调；NULL 拒绝初始化 */
     const iolink_device_info_t* device_info;     /* 可为 NULL */
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -134,9 +134,12 @@ static const iolink_device_app_t g_app = {
     .time_us = board_time_us,
 };
 
+static const iolink_stack_config_t g_stack = {
+    .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 3, .pd_out_len = 1};
+
 static const iolink_device_config_t g_cfg = {
-    .phy = g_phy_virtual,
-    .stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 3, .pd_out_len = 1},
+    .phy = &g_phy_virtual,
+    .stack = &g_stack,
     .app = &g_app,
     .device_info = &g_identity,
 };

@@ -79,11 +79,15 @@ static void make_config(iolink_device_config_t* cfg, iolink_device_app_t* app,
     app->time_us = test_time_us;
     app->on_pd_input = pd_input;
 
+    static iolink_stack_config_t stack;
+
     (void) memset(cfg, 0, sizeof(*cfg));
-    cfg->phy = g_phy;
-    cfg->stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    cfg->stack.pd_in_len = 2U;
-    cfg->stack.pd_out_len = 0U;
+    (void) memset(&stack, 0, sizeof(stack));
+    cfg->phy = &g_phy;
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    stack.pd_in_len = 2U;
+    stack.pd_out_len = 0U;
+    cfg->stack = &stack;
     cfg->app = app;
 }
 

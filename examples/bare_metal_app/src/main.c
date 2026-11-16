@@ -39,9 +39,11 @@ int main(void)
     iolink_phy_virtual_set_port("/dev/null");
     const iolink_phy_api_t* phy = iolink_phy_virtual_get();
     static const iolink_device_app_t app = {.self = NULL, .time_us = baremetal_time_us};
+    static const iolink_stack_config_t stack = {0};
     iolink_device_ctx_t ctx;
     iolink_device_config_t dev_config = {
-        .phy = *phy,
+        .phy = phy,
+        .stack = &stack,
         .app = &app,
     };
 

@@ -237,13 +237,19 @@ static void test_device_init_requires_tx_busy(void** state)
     iolink_device_ctx_t ctx;
     iolink_device_config_t cfg;
 
+    static iolink_phy_api_t phy = {0};
+    static iolink_stack_config_t stack;
+
     (void) memset(&cfg, 0, sizeof(cfg));
-    cfg.phy = g_phy;
-    cfg.phy.tx_busy = NULL;
+    (void) memset(&stack, 0, sizeof(stack));
+    cfg.stack = &stack;
+    phy = g_phy;
+    phy.tx_busy = NULL;
+    cfg.phy = &phy;
     cfg.app = &device_app;
     assert_int_equal(iolink_device_init(&ctx, &cfg), IOLINK_DEVICE_INIT_ERR_PHY);
 
-    cfg.phy.tx_busy = mock_tx_busy;
+    phy.tx_busy = mock_tx_busy;
     assert_int_equal(iolink_device_init(&ctx, &cfg), 0);
 }
 

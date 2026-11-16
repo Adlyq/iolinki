@@ -42,10 +42,16 @@ static uint64_t app_time_us(iolink_app_t* self)
 static void init_device(iolink_device_ctx_t* ctx, const iolink_device_app_t* app)
 {
     iolink_device_config_t config;
+    iolink_stack_config_t stack;
+    static iolink_phy_api_t phy;
 
     (void) memset(&config, 0, sizeof(config));
-    config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    config.stack.t_pd_us = 500U;
+    (void) memset(&stack, 0, sizeof(stack));
+    (void) memset(&phy, 0, sizeof(phy));
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    stack.t_pd_us = 500U;
+    config.stack = &stack;
+    config.phy = &phy;
     config.app = app;
 
     assert_int_equal(iolink_device_init(ctx, &config), 0);
@@ -90,8 +96,15 @@ static void test_null_clock_is_rejected_at_init(void** state)
     iolink_device_config_t config;
     iolink_device_app_t app;
 
+    iolink_stack_config_t stack;
+    static iolink_phy_api_t phy;
+
     (void) memset(&config, 0, sizeof(config));
-    config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    (void) memset(&stack, 0, sizeof(stack));
+    (void) memset(&phy, 0, sizeof(phy));
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    config.stack = &stack;
+    config.phy = &phy;
 
     /* 没有应用 trait：初始化先拒绝 APP。 */
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_APP);
