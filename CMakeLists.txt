@@ -205,6 +205,14 @@ if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
+# Fuzz harnesses: separate tree, clang + libFuzzer only (tools/fuzz.sh, group
+# `fuzz`). The library is rebuilt there with sanitizer coverage, so the option
+# must not be combined with a tree the other gates reuse.
+option(IOLINK_BUILD_FUZZERS "Build the libFuzzer harnesses (clang only)" OFF)
+if(IOLINK_BUILD_FUZZERS)
+    add_subdirectory(fuzz)
+endif()
+
 if(IOLINK_PLATFORM STREQUAL "LINUX")
     add_subdirectory(examples/reference_device)
     add_subdirectory(examples/switching_sensor)

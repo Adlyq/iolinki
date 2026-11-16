@@ -102,6 +102,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (increment operators are exempt) but the sanitizer does. The wrap at 65535 is
   intended and asserted by `test_reference_device`.
 
+### Added (fuzz gate)
+- `tools/gates.sh fuzz` builds three libFuzzer harnesses from `fuzz/` and runs
+  each for 60 s (`FUZZ_SECONDS` overrides). They cover the parsers that consume
+  untrusted bytes: the received octet stream driven through the real ISR and
+  main pumps (`fuzz_frame`), ISDU reassembly with a one-shot versus chunked
+  differential (`fuzz_isdu`), and OD lookup plus codec/read/write/restore
+  (`fuzz_od`).
+- The harnesses carry their own assertions on top of the sanitizers — a reply
+  never exceeds the largest legal reply, the DLL/ISDU state stays inside its
+  enumeration, a lookup only ever returns an entry that belongs to one of the
+  two tables, draining yields exactly the announced length, and chunking an ISDU
+  payload never changes the response.
+- The library is rebuilt in `build/fuzz` with
+  `-fsanitize=fuzzer-no-link,address,undefined`: without instrumentation the
+  fuzzer gets no coverage feedback and the sanitizers see none of the library's
+  memory errors. Seeds are written once into that tree, so a previous run's
+  discoveries survive; crash inputs land in `build/fuzz/artifacts/`.
+
 ### Changed (clang is the primary compiler)
 - The gates, the compile matrix, the coverage tree and the WCET harness now
   build with clang (the compiler family the firmware is built with, and the

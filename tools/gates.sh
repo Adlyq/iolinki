@@ -27,7 +27,7 @@ trap 'rm -f "$IOLINK_GATES_SNAPSHOT"' EXIT
 ROOT="${IOLINK_GATES_ROOT:?gates: snapshot re-exec lost the repository root}"
 cd "$ROOT"
 
-GATE_GROUPS=(quick build test gcc sanitize memcheck analyzer static docs matrix perf package)
+GATE_GROUPS=(quick build test gcc sanitize memcheck analyzer static docs matrix perf package fuzz)
 
 STRICT_CFLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
 # -Wnullable-to-nonnull-conversion rejects passing a nullable expression to a
@@ -78,6 +78,8 @@ Groups:
   docs     Doxygen warnings
   matrix   compile matrix plus the differential frame gate
   perf     coverage floor, WCET path proxy and size baseline
+  fuzz     libFuzzer over the frame, ISDU and OD parsers (60 s per target;
+           clang + libFuzzer runtime required)
   package  install the exported CMake package and build a consumer against it
   all      every group above
 
@@ -117,7 +119,7 @@ check_format() {
         printf '   WARN: clang-format %s != pinned 23.1.1 (results may differ)\n' \
             "${version:-unknown}"
     fi
-    find src include tests examples -type f \( -name '*.c' -o -name '*.h' \) -print0 |
+    find src include tests examples fuzz -type f \( -name '*.c' -o -name '*.h' \) -print0 |
         xargs -0 clang-format --dry-run --Werror
 }
 
@@ -139,7 +141,7 @@ check_shellcheck() {
     local scripts=(tools/gates.sh tools/build_matrix.sh tools/coverage.sh
                    tools/diff_matrix.sh tools/check_ownership.sh
                    tools/check_test_whitebox.sh tools/check_test_gates.sh
-                   tools/check_nullability.sh
+                   tools/check_nullability.sh tools/fuzz.sh
                    tools/clean_builds.sh tools/test_install_consumer.sh
                    tools/wcet_run.sh tools/check_profile_abi.sh
                    tools/matrix_configs.sh
@@ -500,6 +502,19 @@ group_perf() {
     step "ROM/RAM size baseline" check_size_baseline
 }
 
+# --- fuzz -------------------------------------------------------------------
+
+# libFuzzer over the three parsers that take untrusted bytes. The harnesses live
+# in fuzz/ and are built in their own tree (tools/fuzz.sh), because the library
+# has to carry sanitizer coverage for the fuzzer to make progress.
+group_fuzz() {
+    if ! have "$CC_PRIMARY"; then
+        skip "$CC_PRIMARY missing (the harnesses use libFuzzer)"
+        return 0
+    fi
+    step "libFuzzer harnesses" ./tools/fuzz.sh
+}
+
 # --- package ---------------------------------------------------------------
 
 group_package() {
@@ -521,6 +536,7 @@ run_group() {
         docs) group_docs ;;
         matrix) group_matrix ;;
         perf) group_perf ;;
+        fuzz) group_fuzz ;;
         package) group_package ;;
         *)
             echo "internal error: unknown group $1" >&2

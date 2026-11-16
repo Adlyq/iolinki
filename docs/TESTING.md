@@ -40,6 +40,7 @@ name, prints each group's wall time, and stops at the first failure
 | `matrix` | `tools/build_matrix.sh` (clang) and `tools/diff_matrix.sh` |
 | `perf` | `tools/coverage.sh --check` (clang), `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` (ATFE) |
 | `package` | the exported package is installed into a scratch prefix and a two-file consumer is built against it |
+| `fuzz` | libFuzzer over the three parsers that take untrusted bytes (received octets, ISDU payloads, OD indices/values); 60 s per target (`FUZZ_SECONDS` overrides), a crash, timeout or leak fails the group |
 | `all` | every group above |
 
 Groups compose (`tools/gates.sh quick static`). Four cumulative levels cover the
@@ -50,11 +51,12 @@ usual points of a change; each level adds groups to the one above it:
 | L0 | after every save | `./tools/gates.sh quick` | ~2 s, no build |
 | L1 | before every commit | `./tools/gates.sh quick build test gcc` | ~45 s |
 | L2 | before a push | `./tools/gates.sh quick build test gcc static docs package --keep-going` | ~3 min |
-| L3 | before a release, or a full local run | `./tools/gates.sh all` | ~6 min |
+| L3 | before a release, or a full local run | `./tools/gates.sh all` | ~9 min |
 
 Times are the sum of the group wall times on a 16-core host; `build`, `test`,
-`static` and `matrix` scale with the machine, and `static` (cppcheck plus the
-MISRA addon) is about 100 s of L2.
+`static`, `matrix` and `fuzz` scale with the machine, and `static` (cppcheck
+plus the MISRA addon) is about 100 s of L2 while `fuzz` is 3 × what
+`FUZZ_SECONDS` says.
 
 L2 is a superset of the old `check_quality.sh`, not an equivalent: all ten of
 its steps map onto `quick` (clang-format, per-file size, shellcheck, DLL
@@ -335,6 +337,11 @@ The CI workflow (`.github/workflows/ci.yml`) runs on every push and PR to
     ATFE is installed.
 6.  **stm32g0-example**: STM32G0/TIOL112 firmware built with `arm-none-eabi`.
 7.  **lint-scripts** and **sbom-tools**: shellcheck and Python tool tests.
+8.  **fuzz**: `tools/gates.sh fuzz` builds the three libFuzzer harnesses and
+    runs each for `FUZZ_SECONDS` (60 s in CI). A crash, a parser that stops
+    making progress (`-timeout=10`), a sanitizer report or a leaked allocation
+    fails the job; the offending input is uploaded from
+    `build/fuzz/artifacts/`.
 
 The release workflow (tag push) builds Debug with coverage, runs `ctest` with
 JUnit output, validates the IODDs and the IAR project, generates SBOMs, packages
