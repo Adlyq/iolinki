@@ -16,9 +16,9 @@ cmake -B build && cmake --build build && (cd build && ctest --output-on-failure)
 ctest --test-dir build -R test_dll
 
 # Grouped gates: pick the groups a change can break (see docs/TESTING.md).
-./tools/gates.sh quick              # seconds: format, size, shellcheck, ownership
-./tools/gates.sh quick build test   # strict -Werror builds + ctest
-./tools/gates.sh all                # everything; CI runs the same groups in jobs
+./tools/gates.sh quick                  # seconds: format, size, shellcheck, ownership
+./tools/gates.sh quick build test gcc   # strict -Werror builds + ctest + gcc extras
+./tools/gates.sh all                    # everything; CI runs the same groups in jobs
 
 # Compile matrix: every feature toggle, ISR mode and platform. Required for any
 # change touching a compile-time switch or an #if in src/ and include/.
@@ -27,6 +27,11 @@ ctest --test-dir build -R test_dll
 # Coverage of src/ (gcovr; local only, --html writes the report).
 ./tools/coverage.sh
 ```
+
+clang is the primary compiler — it is the family the firmware is built with and
+the only one that checks `IOLINK_NONNULL`/`IOLINK_NULLABLE`; `gcc` is the
+supplement for its own diagnostics and `-fanalyzer`. `IOLINKI_CC` overrides the
+compiler for the gates, the matrix, coverage and WCET.
 
 ## Code constraints
 

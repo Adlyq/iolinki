@@ -29,12 +29,13 @@ name, prints each group's wall time, and stops at the first failure
 | Group | Checks |
 | --- | --- |
 | `quick` | clang-format, per-file size (800 code lines, comments excluded), shellcheck, DLL ownership isolation, test conventions (`check_test_whitebox.sh`, `check_test_gates.sh`) |
-| `build` | strict `-Werror` compilation, Debug (`-O0`) and Release (`-O3`) |
+| `build` | strict `-Werror` compilation with clang, Debug (`-O0`) and Release (`-O3`) |
 | `test` | strict Debug build plus `ctest` |
+| `gcc` | the gcc-only strict diagnostics (`-DIOLINK_STRICT_GCC=ON`, library target) and `gcc -fanalyzer` as a report-only step |
 | `static` | cppcheck and the MISRA addon (report-only unless `IOLINKI_MISRA_ENFORCE=1`) |
 | `docs` | Doxygen warnings |
-| `matrix` | `tools/build_matrix.sh` and `tools/diff_matrix.sh` |
-| `perf` | `tools/coverage.sh --check`, `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` |
+| `matrix` | `tools/build_matrix.sh` (clang) and `tools/diff_matrix.sh` |
+| `perf` | `tools/coverage.sh --check` (clang), `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` (ATFE) |
 | `package` | the exported package is installed into a scratch prefix and a two-file consumer is built against it |
 | `all` | every group above |
 
@@ -44,19 +45,44 @@ usual points of a change; each level adds groups to the one above it:
 | Level | When | Command | Cost |
 | --- | --- | --- | --- |
 | L0 | after every save | `./tools/gates.sh quick` | ~2 s, no build |
-| L1 | before every commit | `./tools/gates.sh quick build test` | ~35 s |
-| L2 | before a push | `./tools/gates.sh quick build test static docs package --keep-going` | ~3 min |
+| L1 | before every commit | `./tools/gates.sh quick build test gcc` | ~45 s |
+| L2 | before a push | `./tools/gates.sh quick build test gcc static docs package --keep-going` | ~3 min |
 | L3 | before a release, or a full local run | `./tools/gates.sh all` | ~6 min |
 
-Times are the sum of the group wall times on a 16-core host; `build`, `test`
-and `static` scale with the machine, and `static` (cppcheck plus the MISRA
-addon) is about 150 s of L2.
+Times are the sum of the group wall times on a 16-core host; `build`, `test`,
+`static` and `matrix` scale with the machine, and `static` (cppcheck plus the
+MISRA addon) is about 100 s of L2.
 
 L2 is a superset of the old `check_quality.sh`, not an equivalent: all ten of
 its steps map onto `quick` (clang-format, per-file size, shellcheck, DLL
 ownership, test conventions), `build` (strict Debug *and* Release), `static`
 (cppcheck, MISRA), `docs` and `package`, and L2 adds `test`, which the old
 script never ran.
+
+Two compilers run, and they are not interchangeable:
+
+- **clang is primary.** It is the family the firmware is built with (ATFE is
+  clang, AC6 armclang is LLVM), and the pointer annotations
+  (`IOLINK_NONNULL`/`IOLINK_NULLABLE`) only exist under clang — on gcc they
+  expand to nothing. `IOLINKI_CC` selects it for the gates, the matrix, the
+  coverage tree and the WCET harness.
+- **gcc is the supplement.** It owns the diagnostics clang does not implement:
+  `-Wduplicated-branches`, `-Wlogical-op`, `-Wmaybe-uninitialized` (only at
+  `-O3`), `-Wstringop-overflow` and `-fanalyzer`. The flag set lives in
+  `CMakeLists.txt` (`IOLINK_STRICT_GCC`) and applies to the library target
+  only, because `-Wstack-usage`/`-Wframe-larger-than` describe the library, not
+  the host examples.
+
+Baselines record the toolchain that produced them and are never compared across
+compilers:
+
+- `tools/size_baseline.atfe.csv` is measured with ATFE (the
+  `tools/size_matrix.py` default); `tools/size_baseline.csv` keeps the
+  GNU-toolchain numbers and `IOLINKI_SIZE_TOOLCHAIN=gcc` reproduces them.
+- `tools/coverage_baseline.txt` is calibrated on clang's gcov output, which
+  counts 5496 executable lines on this tree where gcc counts 4809. gcc reports
+  91.0% and clang 90.7% on the same sources; the file records both denominators
+  so the difference is not read as a regression.
 
 No level up to L2 builds a structural configuration or re-measures size,
 coverage or the WCET proxy, so a green L2 says nothing about those. Add a group
@@ -258,8 +284,12 @@ To ensure a reproducible environment matching CI, run tests inside Docker:
 ```
 
 It builds `Dockerfile.test` and runs `tools/gates.sh quick build static docs
-package` plus `.docker_test_entrypoint.sh` (Linux and BAREMETAL builds, `ctest`,
-and the virtual-master tests) inside the container.
+package`, `tools/size_matrix.py --check --selftest` and
+`.docker_test_entrypoint.sh` (Linux and BAREMETAL builds, `ctest`, and the
+virtual-master tests) inside the container. The image installs clang (the
+primary compiler) and the pinned Arm Toolchain for Embedded tarball, so the
+ATFE size baseline is reproduced there; Arm publishes no container image, only
+checksummed release tarballs.
 
 ## ✅ Continuous Integration (CI)
 
@@ -272,14 +302,17 @@ The CI workflow (`.github/workflows/ci.yml`) runs on every push and PR to
     `test_conformance_error_injection`, `test_conformance_isdu`,
     `test_conformance_state_machine`, `test_conformance_timing`).
 2.  **release-build**: strict `-Werror` build and `ctest` at `-O3`.
-3.  **build-matrix**: every structural configuration builds, plus the
-    syntax-only probes and the link-time profile gate
+3.  **build-matrix**: every structural configuration builds with clang
+    (`IOLINKI_CC`), plus the syntax-only probes and the link-time profile gate
     (`tools/build_matrix.sh`).
 4.  **differential gate**: `tools/diff_matrix.sh` compares the frame transcripts
     of the runnable configurations byte for byte.
 5.  **coverage / size / WCET**: `tools/coverage.sh --check`,
     `tools/size_matrix.py --check --selftest` and `tools/wcet_run.sh --check`
-    enforce the floors and the host-side path-length proxy.
+    enforce the floors and the host-side path-length proxy. The size job
+    installs the GNU toolchain from apt, so it pins `IOLINKI_SIZE_TOOLCHAIN=gcc`
+    and gates `tools/size_baseline.csv`; the ATFE baseline is measured where
+    ATFE is installed.
 6.  **stm32g0-example**: STM32G0/TIOL112 firmware built with `arm-none-eabi`.
 7.  **lint-scripts** and **sbom-tools**: shellcheck and Python tool tests.
 

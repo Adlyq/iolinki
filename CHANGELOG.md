@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (clang is the primary compiler)
+- The gates, the compile matrix, the coverage tree and the WCET harness now
+  build with clang (the compiler family the firmware is built with, and the
+  only one that checks `IOLINK_NONNULL`/`IOLINK_NULLABLE`; on gcc they expand to
+  nothing). `IOLINKI_CC` overrides the choice.
+- `gcc` stays as a blocking supplement group: it runs the diagnostics clang
+  does not implement (`-Wduplicated-branches`, `-Wlogical-op`,
+  `-Wmaybe-uninitialized`, `-Wstringop-overflow`, ...) through
+  `-DIOLINK_STRICT_GCC=ON`, applied to the library target only, plus
+  `-fanalyzer` as a report-only step. `-Wswitch-enum` is part of that set: the
+  six switches it flagged now list every enumerator, so a new state or timer id
+  cannot be added without deciding what the switch does with it.
+- The test image installs clang (the primary compiler) and the pinned Arm
+  Toolchain for Embedded tarball (version and SHA-256 are build args; Arm
+  publishes no container image). `run_all_tests_docker.sh` runs the size gate
+  there, so the ATFE baseline is reproduced in CI rather than only on a
+  developer machine.
+- The public headers now compile under `clang -Wpedantic -Werror`: the
+  extension diagnostics for `_Nonnull`/`_Nullable` and for the `__COUNTER__`
+  fallback of `IOLINK_STATIC_ASSERT` are suppressed where they are defined (the
+  C2y one behind `__has_warning`, because clang 14 does not know that group).
+- The ROM/RAM baseline is measured with ATFE (clang + llvm,
+  `--target=arm-none-eabi`) because that is what builds the firmware;
+  `tools/size_baseline.atfe.csv` is new and `tools/size_baseline.csv` keeps the
+  GNU-toolchain numbers (`IOLINKI_SIZE_TOOLCHAIN=gcc`).
+- The coverage floor is re-calibrated on clang: it counts 5496 executable lines
+  on this tree where gcc counts 4809, so the floor is 90.7% (gcc reports 91.0%
+  on the same sources). Both denominators are recorded in
+  `tools/coverage_baseline.txt`.
+
+### Changed (event type and OD storage types)
+- `iolink_diag_type_for()` returns `iolink_event_type_t` instead of `uint8_t`,
+  and that enum now lives in `diag.h` (`events.h` includes it), so callers stop
+  casting the result back to the enum. `gcc -Wbad-function-cast` rejected the
+  cast of a call result.
+- `iolink_od_entry_t.u.storage.value` is `uint8_t*`: the storage backend is
+  written by the ISDU write path and by the scalar rollback, so the previous
+  `const uint8_t*` was a contract the implementation could only honour by
+  casting the qualifier away (`-Wcast-qual`). Read-only bindings belong in
+  `block_default`, which stays `const`.
+
 ### Changed (grouped quality gates)
 - `check_quality.sh` is replaced by `tools/gates.sh`, which runs the same checks
   in named groups (`quick`, `build`, `test`, `static`, `docs`, `matrix`,

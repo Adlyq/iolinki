@@ -417,6 +417,14 @@ void SysTick_Handler(void) {
 See the [Memory Usage Guide](MEMORY_GUIDE.md) for RAM/ROM sizing, the per-buffer
 costs, compiler-flag advice and the context-size measurement snippet.
 
+The ROM/RAM baseline in `tools/size_baseline.atfe.csv` is measured with the Arm
+Toolchain for Embedded (ATFE: clang + llvm, `--target=arm-none-eabi`,
+`-mcpu=cortex-m0plus -mthumb -Os`, `-nostdlib`) because that is the compiler the
+reference firmware is built with. `tools/size_matrix.py --toolchain` (or
+`IOLINKI_SIZE_TOOLCHAIN=gcc`) reproduces the GNU-toolchain numbers from
+`tools/size_baseline.csv` instead. Numbers from the two are not comparable: the
+gate only compares a measurement against the baseline of its own toolchain.
+
 ## Hardware Requirements
 
 ### Minimum MCU Specs
