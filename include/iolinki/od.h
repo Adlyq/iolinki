@@ -137,7 +137,8 @@ typedef struct iolink_od_entry iolink_od_entry_t;
  * @param len   @p data 的字节数。
  * @return 结果模型：0 接受；正方 ISDU ErrorCode 原样上送。
  */
-typedef iolink_result_t (*iolink_od_validate_fn)(iolink_app_t* self, const iolink_od_entry_t* entry,
+typedef iolink_result_t (*iolink_od_validate_fn)(iolink_app_t* IOLINK_NULLABLE self,
+                                                 const iolink_od_entry_t* entry,
                                                  const uint8_t* data, size_t len);
 
 /**
@@ -153,8 +154,9 @@ typedef iolink_result_t (*iolink_od_validate_fn)(iolink_app_t* self, const iolin
  * @param len   @p data 的字节数。
  * @return 结果模型：0 成功；正方 ISDU ErrorCode 原样上送。
  */
-typedef iolink_result_t (*iolink_od_change_fn)(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                               const uint8_t* data, size_t len);
+typedef iolink_result_t (*iolink_od_change_fn)(iolink_app_t* IOLINK_NULLABLE self,
+                                               const iolink_od_entry_t* entry, const uint8_t* data,
+                                               size_t len);
 
 /**
  * @brief 读取一个参数值的后端（HANDLER 表项）。
@@ -165,8 +167,9 @@ typedef iolink_result_t (*iolink_od_change_fn)(iolink_app_t* self, const iolink_
  * @param cap   @p out 的容量。
  * @return 结果模型：成功时 `len` 为写出的字节数。
  */
-typedef iolink_result_t (*iolink_od_read_fn)(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                             uint8_t* out, size_t cap);
+typedef iolink_result_t (*iolink_od_read_fn)(iolink_app_t* IOLINK_NULLABLE self,
+                                             const iolink_od_entry_t* entry, uint8_t* out,
+                                             size_t cap);
 
 /**
  * @brief 写入一个参数值的后端（HANDLER 表项）。
@@ -181,8 +184,9 @@ typedef iolink_result_t (*iolink_od_read_fn)(iolink_app_t* self, const iolink_od
  * @param len      @p data 的字节数。
  * @return 结果模型：成功时 `len` 为 0。
  */
-typedef iolink_result_t (*iolink_od_write_fn)(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                              uint8_t subindex, const uint8_t* data, size_t len);
+typedef iolink_result_t (*iolink_od_write_fn)(iolink_app_t* IOLINK_NULLABLE self,
+                                              const iolink_od_entry_t* entry, uint8_t subindex,
+                                              const uint8_t* data, size_t len);
 
 /**
  * @brief 应用表项的值后端。

@@ -339,7 +339,7 @@ typedef struct
     uint8_t phase;            /**< 分发阶段：0 = 模式切换之前，1 = 门控之后 */
 } iolink_timer_contract_t;
 
-/** @brief 取时序契约表（只读，进程生命周期内稳定）。 */
+/** @brief 取时序契约表（只读，进程生命周期内稳定）；@p count 可传 NULL。 */
 const iolink_timer_contract_t* iolink_dll_timer_contract(uint8_t* IOLINK_NULLABLE count);
 
 /** @brief 查询一个 timer 的绝对截止时间（0 = 未装载）。 */
@@ -495,8 +495,8 @@ int iolink_dll_set_pd_length(iolink_dll_main_t* ctx, uint8_t pd_in_len, uint8_t 
  * @brief 获取当前 PD 长度
  *
  * @param ctx DLL 上下文
- * @param[out] pd_in_len 当前 PD_In 长度
- * @param[out] pd_out_len 当前 PD_Out 长度
+ * @param[out] pd_in_len 当前 PD_In 长度；可传 NULL 表示不需要该值
+ * @param[out] pd_out_len 当前 PD_Out 长度；可传 NULL 表示不需要该值
  */
 void iolink_dll_get_pd_length(const iolink_dll_main_t* ctx, uint8_t* IOLINK_NULLABLE pd_in_len,
                               uint8_t* IOLINK_NULLABLE pd_out_len);

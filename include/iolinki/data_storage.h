@@ -63,7 +63,7 @@ typedef enum
  * @param self 应用上下文（设备层传 `iolink_device_app_t::self`）。
  * @param flag 新的标志值。
  */
-typedef void (*iolink_ds_flag_persist_fn)(iolink_app_t* self, bool flag);
+typedef void (*iolink_ds_flag_persist_fn)(iolink_app_t* IOLINK_NULLABLE self, bool flag);
 
 /**
  * @brief 数据存储引擎上下文
@@ -294,7 +294,7 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
  * @brief 获取当前序列化的参数映像（按需构建）。
  *
  * @param ctx DS 上下文
- * @param out_len [out] 接收映像长度（字节）
+ * @param out_len [out] 接收映像长度（字节）；可传 NULL 表示不需要该值
  * @return const uint8_t* 指向映像缓冲区的指针，出错时返回 NULL。
  */
 const uint8_t* IOLINK_NULLABLE iolink_ds_get_image(iolink_ds_ctx_t* ctx,

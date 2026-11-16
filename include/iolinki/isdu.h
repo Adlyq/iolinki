@@ -297,7 +297,7 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* IOLI
  * 数据中断是原子的）。
  *
  * @param ctx ISDU 上下文
- * @param busy [out] 应用应答仍在执行时为 true
+ * @param busy [out] 应用应答仍在执行时为 true；可传 NULL 表示不需要该值
  * @param dst [out] 接收成帧应答八位组的缓冲区
  * @param dst_size @p dst 的容量
  * @return uint8_t 复制的应答八位组数量（无/忙时为 0）
