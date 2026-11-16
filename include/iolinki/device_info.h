@@ -98,7 +98,7 @@ int iolink_device_info_ctx_init(iolink_device_info_ctx_t* ctx,
  * @return 指向设备身份的指针；@p ctx 为 NULL 或尚未绑定身份时返回 NULL。
  */
 const iolink_device_info_t* IOLINK_NULLABLE
-iolink_device_info_ctx_get(const iolink_device_info_ctx_t* ctx);
+iolink_device_info_ctx_get(const iolink_device_info_ctx_t* IOLINK_NULLABLE ctx);
 
 /**
  * @brief 在上下文上设置运行时应用标签（Index 0x0018）。

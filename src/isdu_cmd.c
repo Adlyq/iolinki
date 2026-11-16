@@ -698,8 +698,8 @@ void dp_page1_ensure(iolink_isdu_ctx_t* ctx)
     const iolink_dll_main_t* dll = ctx->dll_ctx;
     bool stale = ((ctx->dp_page1_seq & 1U) != 0U);
 
-    if (ctx->device_info == NULL) {
-        return; /* 未绑定身份：没有可发布的映像 */
+    if (isdu_info(ctx) == NULL) {
+        return; /* 未绑定身份（或绑定未初始化）：没有可发布的映像 */
     }
     if ((ctx->dp_page1_src != ctx->dll_ctx) || (ctx->dp_page1_info != ctx->device_info)) {
         stale = true; /* 绑定/重绑上下文：映像必须按新上下文重建 */

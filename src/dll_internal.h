@@ -27,7 +27,8 @@
  */
 static inline bool dll_dp_page1_available(const iolink_dll_main_t* ctx)
 {
-    return iolink_device_info_ctx_get(ctx->shared.isdu.device_info) != NULL;
+    const iolink_device_info_ctx_t* info = ctx->shared.isdu.device_info;
+    return (info != NULL) && (info->configured != NULL);
 }
 
 /**
