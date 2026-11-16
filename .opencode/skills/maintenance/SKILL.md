@@ -103,9 +103,9 @@ Record the PR link in `docs/UPSTREAM_DIVERGENCE.md` §8. Do not add a
 cmake -B build && cmake --build build
 (cd build && ctest --output-on-failure)
 
-# quality script (-Werror build + cppcheck; MISRA/format only with the
-# IOLINKI_MISRA_ENFORCE=1 env var)
-./check_quality.sh
+# grouped gates: quick (format/shellcheck/...), build (-Werror Debug+Release),
+# test (ctest), static (cppcheck/MISRA); `all` runs every group
+./tools/gates.sh quick build test static
 
 # trimmed builds only build the library (the unit suite is skipped)
 cmake -B build_trim -DIOLINK_FEATURE_DATA_STORAGE=OFF -DIOLINK_FEATURE_EVENTS=OFF \

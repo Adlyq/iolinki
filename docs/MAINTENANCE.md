@@ -33,9 +33,8 @@ numbers as a target.
 3. Run the local checks:
 
    ```bash
-   cmake -B build && cmake --build build
-   (cd build && ctest --output-on-failure)
-   ./check_quality.sh
+   ./tools/gates.sh quick build test
+   ./tools/gates.sh static docs package    # `all` runs every group
    ```
 
 4. Open the PR against `own_dev` and wait for CI.

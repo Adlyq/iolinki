@@ -13,7 +13,7 @@
 2.  **Verify the environment**:
     Ensure you have CMake, GCC, Python 3, and cppcheck installed.
     ```bash
-    ./check_quality.sh
+    ./tools/gates.sh quick
     ```
 
 ## Development Workflow
@@ -26,8 +26,10 @@
     ```
 4.  **Check Quality**:
     ```bash
-    ./check_quality.sh
+    ./tools/gates.sh quick build test static docs package
     ```
+    `./tools/gates.sh all` adds the compile matrix, the differential gate and
+    the coverage/WCET/size floors. See [TESTING.md](TESTING.md) for the groups.
 5.  **Update Changelog**: Add a matching entry in `CHANGELOG.md` under `[Unreleased]`.
 6.  **Submit Pull Request**: target **`own_dev`**; CI will automatically run the
     above checks.

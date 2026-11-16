@@ -5,7 +5,7 @@ This document defines the coding style and engineering practices for the `iolink
 ## 1. C Language Standard
 - **Standard**: C99 (ISO/IEC 9899:1999). A few test targets use C11 for
   `_Static_assert`.
-- **Safety**: MISRA C:2012 subset (see `check_quality.sh`); the MISRA addon is
+- **Safety**: MISRA C:2012 subset (see `tools/gates.sh static`); the MISRA addon is
   report-only unless `IOLINKI_MISRA_ENFORCE=1`.
 
 ## 2. Naming Conventions

@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
     graphviz \
     && rm -rf /var/lib/apt/lists/*
 
-# Pinned to match .pre-commit-config.yaml; check_quality.sh enforces this version.
+# Pinned to match .pre-commit-config.yaml; tools/gates.sh enforces this version.
 RUN pip3 install --no-cache-dir clang-format==23.1.1
 
 # Install Python Virtual Master dependencies

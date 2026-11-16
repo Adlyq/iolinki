@@ -245,8 +245,8 @@ that drives the pump from a signal handler.
 - `tools/build_matrix.sh` builds the `SINGLE` and `SMP` profiles and checks
   that the `SINGLE` library archive has **no undefined
   `iolink_critical_*` symbols**.
-- `./check_quality.sh` and the matrix are the delivery gate for any change that
-  touches these switches.
+- `./tools/gates.sh build test` and `./tools/gates.sh matrix` are the delivery
+  gate for any change that touches these switches.
 
 ### 2.2 Statistics counters
 

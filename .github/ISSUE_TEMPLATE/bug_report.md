@@ -20,7 +20,7 @@ Steps to reproduce the behavior:
 A clear and concise description of what you expected to happen.
 
 **Logs/Output**
-If applicable, verify with `check_quality.sh` and attach logs.
+If applicable, run `./tools/gates.sh build test` and attach the logs.
 
 **Environment (please complete the following information):**
  - Platform: [e.g. Linux Host, STM32]

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (grouped quality gates)
+- `check_quality.sh` is replaced by `tools/gates.sh`, which runs the same checks
+  in named groups (`quick`, `build`, `test`, `static`, `docs`, `matrix`,
+  `perf`, `package`) plus `all`, so a local run only pays for what a change can
+  break. CI keeps the full set, split across the same jobs as before. A group
+  that needs a tool the machine does not have reports `SKIP`; CI installs them.
+
 ### Removed (od_width is not derived)
 - `stack.od_width` must be given explicitly (1/2/8/32); `0` used to be turned
   into a per-M-sequence default inside `iolink_device_init()` and the DPP1

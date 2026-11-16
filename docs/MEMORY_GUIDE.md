@@ -174,7 +174,7 @@ Code size varies heavily by architecture (ARM Cortex-M vs AVR vs RISC-V) and com
 
 These are ARM Cortex-M `-Os` estimates, not measurements of the default host
 build. The default CMake build sets no `CMAKE_BUILD_TYPE` (no optimisation) and
-`check_quality.sh` builds `Debug` (`-O0`), so both are much larger than `-Os`.
+`tools/gates.sh build` builds `Debug` (`-O0`), so both are much larger than `-Os`.
 
 **Estimated Sizes (ARM Cortex-M, -Os):**
 

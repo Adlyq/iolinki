@@ -94,7 +94,7 @@ jobs:
         run: ctest --test-dir build/release --output-on-failure
 
   # Lint the maintained CI/test scripts. Keep this list in sync with the
-  # shellcheck step in check_quality.sh.
+  # shellcheck step in tools/gates.sh.
   lint-scripts:
     runs-on: ubuntu-latest
     steps:
@@ -111,7 +111,7 @@ jobs:
             tools/clean_builds.sh tools/test_install_consumer.sh \
             tools/wcet_run.sh \
             tools/check_profile_abi.sh tools/matrix_configs.sh \
-            test_all.sh check_quality.sh .docker_test_entrypoint.sh
+            test_all.sh tools/gates.sh .docker_test_entrypoint.sh
 
   # Coverage floor: line coverage of src/ must not drop below the checked-in
   # baseline in tools/coverage_baseline.txt.

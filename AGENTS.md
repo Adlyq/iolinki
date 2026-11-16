@@ -15,9 +15,10 @@ cmake -B build && cmake --build build && (cd build && ctest --output-on-failure)
 # One test
 ctest --test-dir build -R test_dll
 
-# Strict -Werror builds (Debug + Release), cppcheck, clang-format, shellcheck,
-# Doxygen; MISRA is report-only unless IOLINKI_MISRA_ENFORCE=1.
-./check_quality.sh
+# Grouped gates: pick the groups a change can break (see docs/TESTING.md).
+./tools/gates.sh quick              # seconds: format, size, shellcheck, ownership
+./tools/gates.sh quick build test   # strict -Werror builds + ctest
+./tools/gates.sh all                # everything; CI runs the same groups in jobs
 
 # Compile matrix: every feature toggle, ISR mode and platform. Required for any
 # change touching a compile-time switch or an #if in src/ and include/.
@@ -72,7 +73,7 @@ ctest --test-dir build -R test_dll
 - Public symbols `iolink_` prefix, `snake_case`, `_t` suffix, `UPPER_SNAKE`
   macros; Doxygen on public API in `include/`.
 - `clang-format` pinned to 23.1.1 (Google-based, 4 spaces, 100 cols), enforced
-  by `check_quality.sh`.
+  by `tools/gates.sh quick`.
 - Conventional Commits (`feat(dll): ...`); add `[Unreleased]` to `CHANGELOG.md`.
 - Topic branches `fix/*`/`feature/*` cut from `own_dev`; PRs target `own_dev`.
   `no-commit-to-branch` blocks `main` and `develop`.

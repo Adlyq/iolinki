@@ -4,7 +4,7 @@ project(iolinki VERSION 4.0.0 LANGUAGES C)
 
 # No default CMAKE_BUILD_TYPE: the toolchain default applies (GCC = -O0), so
 # static helpers stay out of line. Do not judge ISR code size or timing from a
-# plain build; check_quality.sh builds Debug and Release, and the embedded
+# plain build; `tools/gates.sh build` builds Debug and Release, and the embedded
 # examples use -Os.
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")

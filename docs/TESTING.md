@@ -20,14 +20,37 @@ Runs the Linux build, the virtual-master tests and the bare-metal library build.
 ./test_all.sh
 ```
 
-### 2. Run Quality Checks
-Strict compilation, static analysis, formatting, the per-file size gate
-(800 code lines, comments excluded), Doxygen, shellcheck, the DLL ownership and
-white-box gates, and the install/consume check (the exported package is
-installed into a scratch prefix and a two-file consumer is built against it).
-```bash
-./check_quality.sh
-```
+### 2. Quality gates
+
+`tools/gates.sh` is the single gate entry point. It runs only the groups you
+name, prints each group's wall time, and stops at the first failure
+(`--keep-going` runs the rest and summarises):
+
+| Group | Checks |
+| --- | --- |
+| `quick` | clang-format, per-file size (800 code lines, comments excluded), shellcheck, DLL ownership isolation, test conventions (`check_test_whitebox.sh`, `check_test_gates.sh`) |
+| `build` | strict `-Werror` compilation, Debug (`-O0`) and Release (`-O3`) |
+| `test` | strict Debug build plus `ctest` |
+| `static` | cppcheck and the MISRA addon (report-only unless `IOLINKI_MISRA_ENFORCE=1`) |
+| `docs` | Doxygen warnings |
+| `matrix` | `tools/build_matrix.sh` and `tools/diff_matrix.sh` |
+| `perf` | `tools/coverage.sh --check`, `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` |
+| `package` | the exported package is installed into a scratch prefix and a two-file consumer is built against it |
+| `all` | every group above |
+
+Groups compose (`tools/gates.sh quick static`). Pick them by what the change
+can break:
+
+| When | Command |
+| --- | --- |
+| after an edit | `./tools/gates.sh quick` |
+| before a commit | `./tools/gates.sh quick build test` |
+| before a push | `./tools/gates.sh quick build test static docs package` |
+| before a release, or a full local run | `./tools/gates.sh all` |
+
+A missing optional tool (clang-format, cppcheck, doxygen, shellcheck, the Arm
+toolchain for the size gate) reports `SKIP`; CI installs them in the Docker
+image and the job setup, so a skip only happens locally.
 
 ### 3. Run the Compile Matrix
 Every supported structural configuration must build. The matrix is defined once
@@ -148,7 +171,7 @@ embedded in a device context (`ctx->dll...`), so changing how
 `iolink_dll_ctx_t` or `iolink_dll_main_t` themselves and keep using
 `ctx.main...`.
 `tools/check_test_whitebox.sh` enforces both rules and its `--selftest` keeps
-the matchers honest; both run from `check_quality.sh` and CI.
+the matchers honest; both run from `tools/gates.sh quick` and CI.
 
 CMocka is a hard requirement for the suite: a configure without it fails
 instead of silently registering no tests. Use `-DBUILD_TESTING=OFF` for a
@@ -165,7 +188,7 @@ Every build goes below `build/`, one subdirectory per purpose:
 
 | Directory | Created by |
 | --- | --- |
-| `build/quality`, `build/quality_release` | `check_quality.sh` (Debug and `-O3`) |
+| `build/quality`, `build/quality_release` | `tools/gates.sh build` (Debug and `-O3`) |
 | `build/matrix`, `build/diff` | `build_matrix.sh`, `diff_matrix.sh` |
 | `build/coverage` | `coverage.sh` |
 | `build/wcet`, `build/size` | `wcet_run.sh`, `size_matrix.py` |
@@ -205,17 +228,17 @@ To ensure a reproducible environment matching CI, run tests inside Docker:
 ./run_all_tests_docker.sh
 ```
 
-It builds `Dockerfile.test` and runs `check_quality.sh` plus
-`.docker_test_entrypoint.sh` (Linux and BAREMETAL builds, `ctest`, and the
-virtual-master tests) inside the container.
+It builds `Dockerfile.test` and runs `tools/gates.sh quick build static docs
+package` plus `.docker_test_entrypoint.sh` (Linux and BAREMETAL builds, `ctest`,
+and the virtual-master tests) inside the container.
 
 ## ✅ Continuous Integration (CI)
 
 The CI workflow (`.github/workflows/ci.yml`) runs on every push and PR to
 `own_dev`/`develop`:
 
-1.  **docker-validation**: `check_quality.sh` + Linux/BAREMETAL builds + `ctest`
-    + the virtual-master suite
+1.  **docker-validation**: `tools/gates.sh quick build static docs package`
+    + Linux/BAREMETAL builds + `ctest` + the virtual-master suite
     (`test_automated_mandatory`, `test_pd_variable`,
     `test_conformance_error_injection`, `test_conformance_isdu`,
     `test_conformance_state_machine`, `test_conformance_timing`).

@@ -15,7 +15,8 @@ if [[ "$(docker images -q iolinki-test 2> /dev/null)" == "" ]]; then
 else
     echo "   ✅ Test image found. Reusing cached image."
 fi
-docker run --rm -v "$(pwd)":/workspace iolinki-test bash -c "./check_quality.sh && bash /workspace/.docker_test_entrypoint.sh"
+docker run --rm -v "$(pwd)":/workspace iolinki-test bash -c \
+    "./tools/gates.sh quick build static docs package && bash /workspace/.docker_test_entrypoint.sh"
 
 echo -e "\n============================================"
 echo "✅ Dockerized Tests Completed Successfully"

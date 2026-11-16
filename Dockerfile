@@ -14,14 +14,15 @@ RUN apt-get update && apt-get install -y \
     graphviz \
     && rm -rf /var/lib/apt/lists/*
 
-# Pinned to match .pre-commit-config.yaml; check_quality.sh enforces this version.
+# Pinned to match .pre-commit-config.yaml; tools/gates.sh enforces this version.
 RUN pip3 install --no-cache-dir clang-format==23.1.1
 
 WORKDIR /workspace
 
 COPY . .
 
-RUN chmod +x test_all.sh check_quality.sh
+RUN chmod +x test_all.sh tools/gates.sh
 
-# Default command: quality gate, then the host validation suite.
-CMD ["/bin/bash", "-c", "./check_quality.sh && ./test_all.sh"]
+# Default command: quality gate, then the host validation suite. The image has
+# no Arm toolchain or gcovr, so the matrix/perf groups stay out of it.
+CMD ["/bin/bash", "-c", "./tools/gates.sh quick build static docs package && ./test_all.sh"]
