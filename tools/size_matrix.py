@@ -7,14 +7,17 @@
 # See LICENSE for details.
 """ROM/RAM measurement matrix for the structural configurations.
 
-Measures a minimal device application for two delivery forms and two
-garbage-collection settings:
+Measures a minimal device application for two delivery forms, two
+garbage-collection settings and LTO on/off:
 
   source   all objects on the link line (what the examples do)
   archive  the same objects packed into libiolinki.a, application links the .a
 
   gc on    -Wl,--gc-sections
   gc off   no section GC
+
+  lto off  one translation unit per source file (the default build)
+  lto on   -flto at compile and link (docs/MEMORY_GUIDE.md suggests it)
 
 Facts this tool is built around (measured, not assumed):
 
@@ -24,7 +27,11 @@ Facts this tool is built around (measured, not assumed):
     pins its implementation, so GC can only reclaim implementations the table
     does not list, never a listed branch that is unused at run time;
   * a non-LTO .a is extracted object by object, so "source" and "archive" are
-    close when the application references most of the API.
+    close when the application references most of the API;
+  * the probe application stays a non-LTO object even in the LTO rows: its
+    memcpy/memset definitions are what -nostdlib links against, and LTO drops
+    them after deciding they are unused while later re-introducing the call.
+    Firmware with libc never hits this.
 
 Usage:
     ./tools/size_matrix.py --update   # rewrite tools/size_baseline.csv
@@ -193,6 +200,7 @@ CONFIGS = [
 
 DELIVERIES = ["source", "archive"]
 GC_MODES = ["on", "off"]
+LTO_MODES = ["off", "on"]
 
 
 def run(cmd: list[str], cwd: Path | None = None) -> str:
@@ -209,8 +217,9 @@ def toolchain_version() -> str:
     return out.splitlines()[0].strip()
 
 
-def build_config(name: str, defines: list[str]) -> dict[str, dict[str, int]]:
-    cfg_dir = BUILD / name
+def build_config(name: str, defines: list[str], lto: str) -> dict[str, dict[str, int]]:
+    flags = COMMON_FLAGS + (["-flto"] if lto == "on" else [])
+    cfg_dir = BUILD / (name if lto == "off" else f"{name}_lto")
     obj_dir = cfg_dir / "obj"
     if cfg_dir.exists():
         shutil.rmtree(cfg_dir)
@@ -224,7 +233,7 @@ def build_config(name: str, defines: list[str]) -> dict[str, dict[str, int]]:
     objects: list[Path] = []
     for src in SOURCES:
         obj = obj_dir / (Path(src).stem + ".o")
-        run([PREFIX + "gcc", *COMMON_FLAGS, *defines, "-c", str(ROOT / src), "-o", str(obj)])
+        run([PREFIX + "gcc", *flags, *defines, "-c", str(ROOT / src), "-o", str(obj)])
         objects.append(obj)
 
     lib = cfg_dir / "libiolinki.a"
@@ -232,7 +241,8 @@ def build_config(name: str, defines: list[str]) -> dict[str, dict[str, int]]:
 
     rows: dict[str, dict[str, int]] = {}
     app_cfg = cfg_dir / "app_cfg.o"
-    # The application uses the same profile as the library.
+    # The application uses the same profile as the library, but never -flto:
+    # see the note in the module docstring.
     run([PREFIX + "gcc", *COMMON_FLAGS, *defines, "-c", str(app_c), "-o", str(app_cfg)])
 
     for delivery in DELIVERIES:
@@ -248,6 +258,8 @@ def build_config(name: str, defines: list[str]) -> dict[str, dict[str, int]]:
             ]
             if gc == "on":
                 link.append("-Wl,--gc-sections")
+            if lto == "on":
+                link.append("-flto")
             if delivery == "source":
                 link += [str(app_cfg), *[str(o) for o in objects]]
             else:
@@ -284,28 +296,32 @@ def section_sizes(elf: Path) -> dict[str, int]:
 def collect() -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for name, defines in CONFIGS:
-        sizes = build_config(name, defines)
-        for delivery in DELIVERIES:
-            for gc in GC_MODES:
-                s = sizes[f"{delivery}|{gc}"]
-                rows.append(
-                    {
-                        "config": name,
-                        "delivery": delivery,
-                        "gc": gc,
-                        "text": str(s["text"]),
-                        "rodata": str(s["rodata"]),
-                        "data": str(s["data"]),
-                        "bss": str(s["bss"]),
-                        # 0.5% of the full image, rounded up, as the design
-                        # suggests for a single capability; the whole-image
-                        # budget is 3%.
-                        "text_tol": str(max(64, (sizes["source|on"]["text"] * 5) // 1000)),
-                        # .rodata 里放的是表（OD/能力/诊断/状态机），同样
-                        # 是 0.5% 预算：只门控 text 会放过表膨胀。
-                        "rodata_tol": str(max(16, (sizes["source|on"]["rodata"] * 5) // 1000)),
-                    }
-                )
+        for lto in LTO_MODES:
+            sizes = build_config(name, defines, lto)
+            for delivery in DELIVERIES:
+                for gc in GC_MODES:
+                    s = sizes[f"{delivery}|{gc}"]
+                    rows.append(
+                        {
+                            "config": name,
+                            "delivery": delivery,
+                            "gc": gc,
+                            "lto": lto,
+                            "text": str(s["text"]),
+                            "rodata": str(s["rodata"]),
+                            "data": str(s["data"]),
+                            "bss": str(s["bss"]),
+                            # 0.5% of the full image, rounded up, as the design
+                            # suggests for a single capability; the whole-image
+                            # budget is 3%.
+                            "text_tol": str(max(64, (sizes["source|on"]["text"] * 5) // 1000)),
+                            # .rodata 里放的是表（OD/能力/诊断/状态机），同样
+                            # 是 0.5% 预算：只门控 text 会放过表膨胀。
+                            "rodata_tol": str(
+                                max(16, (sizes["source|on"]["rodata"] * 5) // 1000)
+                            ),
+                        }
+                    )
     return rows
 
 
@@ -313,13 +329,14 @@ def write_baseline(rows: list[dict[str, str]]) -> None:
     with BASELINE.open("w", newline="") as handle:
         handle.write("# 由 ./tools/size_matrix.py --update 生成；不要手改数字\n")
         handle.write(f"# toolchain: {toolchain_version()}\n")
-        handle.write("# opt: -Os; lto: off; cpu: cortex-m0plus\n")
+        handle.write("# opt: -Os; lto: off/on; cpu: cortex-m0plus\n")
         writer = csv.DictWriter(
             handle,
             fieldnames=[
                 "config",
                 "delivery",
                 "gc",
+                "lto",
                 "text",
                 "rodata",
                 "data",
@@ -350,12 +367,15 @@ def read_baseline() -> tuple[str, list[dict[str, str]]]:
 
 
 def key(row: dict[str, str]) -> str:
-    return f"{row['config']}|{row['delivery']}|{row['gc']}"
+    return f"{row['config']}|{row['delivery']}|{row['gc']}|{row.get('lto', 'off')}"
 
 
 def print_table(current: list[dict[str, str]], baseline: list[dict[str, str]] | None) -> None:
     base = {key(r): r for r in baseline or []}
-    print(f"{'config':22} {'delivery':9} {'gc':3} {'text':>7} {'rodata':>7} {'data':>6} {'bss':>7}")
+    print(
+        f"{'config':22} {'delivery':9} {'gc':3} {'lto':3} "
+        f"{'text':>7} {'rodata':>7} {'data':>6} {'bss':>7}"
+    )
     for row in current:
         old = base.get(key(row))
         delta = ""
@@ -363,7 +383,7 @@ def print_table(current: list[dict[str, str]], baseline: list[dict[str, str]] | 
             d = int(row["text"]) - int(old["text"])
             delta = f"  ({d:+d})"
         print(
-            f"{row['config']:22} {row['delivery']:9} {row['gc']:3} "
+            f"{row['config']:22} {row['delivery']:9} {row['gc']:3} {row['lto']:3} "
             f"{row['text']:>7} {row['rodata']:>7} {row['data']:>6} {row['bss']:>7}{delta}"
         )
 
@@ -413,7 +433,7 @@ def check(current: list[dict[str, str]], baseline: list[dict[str, str]], base_to
             failures += 1
         # 旧基线没有 rodata_tol 列：按同一配置 source|on 行的 0.5% 规则推导，
         # 与 write_baseline() 的算法一致（逐行自身推导会差 1 B）。
-        source_on = base.get(f"{row['config']}|source|on")
+        source_on = base.get(f"{row['config']}|source|on|{row['lto']}")
         fallback_src = int(source_on["rodata"]) if source_on else int(old["rodata"])
         rodata_tol = int(old.get("rodata_tol") or max(16, (fallback_src * 5) // 1000))
         if cross:

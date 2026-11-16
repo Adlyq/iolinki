@@ -24,6 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the helpers across the former single translation unit; `tools/size_baseline.csv`
   was regenerated for that reason. rodata, data and bss are unchanged.
 
+### Added (LTO dimension in the size gate)
+- `tools/size_matrix.py` now measures every structural configuration twice, with
+  and without `-flto`, so the documented "enable LTO to save flash" advice is
+  covered by the gate instead of being taken on trust. The probe application
+  stays a non-LTO object in the LTO rows: with `-nostdlib` its `memcpy`/`memset`
+  definitions are the only ones available, and LTO would drop them after
+  deciding they are unused. Firmware linked against libc is unaffected.
+- With LTO the translation-unit split costs ~24 B instead of ~750 B, because
+  the linker can inline across the new files again.
+
 ### Added (file-size gate)
 - `tools/check_file_size.py` fails when a `src/`, `include/` or `examples/`
   file reaches 800 code lines. Comments and blank lines are removed first (a

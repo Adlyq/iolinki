@@ -197,7 +197,9 @@ there are no lookup tables to size.
 
 ### Reducing Flash
 1.  **Compiler Flags**: Always use `-Os` or `-Oz` (for Clang).
-2.  **LTO**: Enable Link Time Optimization (`-flto`).
+2.  **LTO**: Enable Link Time Optimization (`-flto`). It also recovers most of the
+    cross-file inlining lost when a large translation unit is split: the size gate
+    measures both modes, and the split costs ~24 B under `-flto` instead of ~750 B.
 3.  **Remove Unused Features**: The linker will garbage-collect unused functions if you compile with `-ffunction-sections -fdata-sections` and link with `--gc-sections`.
 
 ## 5. Verification
