@@ -17,13 +17,18 @@ FUZZ_SECONDS="${FUZZ_SECONDS:-${IOLINKI_FUZZ_SECONDS:-60}}"
 cc="${IOLINKI_CC:-clang}"
 
 # libFuzzer reads 0 as "run forever", which would hang the whole `all` run; a
-# typo has to fail here instead.
+# typo has to fail here instead. The base-10 conversion covers "00"/"08", which
+# libFuzzer also treats as zero or rejects as octal.
 case "$FUZZ_SECONDS" in
-    '' | *[!0-9]* | 0)
+    '' | *[!0-9]*)
         echo "FUZZ_SECONDS must be a positive integer, got '$FUZZ_SECONDS'" >&2
         exit 2
         ;;
 esac
+if [ $((10#$FUZZ_SECONDS)) -le 0 ]; then
+    echo "FUZZ_SECONDS must be a positive integer, got '$FUZZ_SECONDS'" >&2
+    exit 2
+fi
 
 if ! command -v "$cc" >/dev/null 2>&1; then
     echo "skip: $cc not found (the harnesses need libFuzzer)" >&2

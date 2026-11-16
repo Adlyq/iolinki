@@ -105,7 +105,14 @@ static bool in_standard_table(const iolink_od_entry_t* entry)
 /** @brief Is @p entry one of the application table's entries? */
 static bool in_app_table(const iolink_od_entry_t* entry)
 {
-    return (entry >= &k_entries[0]) && (entry < &k_entries[3]);
+    /* Compare equality per element: relational comparison between pointers to
+     * different objects is undefined, and a lookup must never return one. */
+    for (size_t i = 0U; i < k_app.count; i++) {
+        if (&k_entries[i] == entry) {
+            return true;
+        }
+    }
+    return false;
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
