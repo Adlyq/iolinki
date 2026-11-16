@@ -9,7 +9,6 @@
 #include "iolinki/crc.h"
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
-#include "iolinki/utils.h"
 #include "iolinki/port.h"
 #include "dll_internal.h"
 #include "iolinki/internal/dll_sm.h"

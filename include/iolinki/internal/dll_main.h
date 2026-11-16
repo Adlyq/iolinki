@@ -187,7 +187,7 @@ struct iolink_dll_main
 /**
  * @name 截止时间表内部操作（库私有，dll_ 前缀）
  *
- * 仅供 dll.c / dll_isr.c 与单元测试使用，不属于公开 iolink_ API。
+ * 仅供 src/dll*.c（含 dll_isr*.c）与单元测试使用，不属于公开 iolink_ API。
  * `deadline == 0` 表示未装载；装载与取消都只改表和 next_deadline。
  * @{
  */

@@ -15,8 +15,8 @@
  * @file dll_isr.h
  * @brief 数据 ISR 独占的 DLL 状态。
  *
- * 只有 dll_isr.c（以及负责布局的容器头 dll_ctx.h）包含此文件。
- * 主上下文（dll.c）不包含它，因此无法引用这些字段。
+ * 只有 dll_isr*.c（以及负责布局的容器头 dll_ctx.h）包含此文件。
+ * 主上下文（src/dll*.c，dll_isr*.c 除外）不包含它，因此无法引用这些字段。
  */
 struct iolink_dll_isr
 {

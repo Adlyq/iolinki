@@ -9,12 +9,10 @@
 #include "iolinki/isdu.h"
 #include "iolinki/internal/dll_main.h"
 #include "iolinki/iolink.h"
-#include "iolinki/crc.h"
 #include "iolinki/events.h"
 #include "iolinki/device_info.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/port.h"
-#include "iolinki/utils.h"
 #include <string.h>
 #include <stdint.h>
 #include "isdu_internal.h"

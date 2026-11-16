@@ -18,14 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   internals are declared in `src/dll_internal.h`, `src/dll_isr_internal.h`
   and `src/isdu_internal.h`; nothing new is installed or public. The DLL
   ownership gate now covers every main-context TU instead of only `dll.c`,
-  and `tools/build_matrix.sh` / `tools/size_matrix.py` list the new sources.
+  `tools/build_matrix.sh` / `tools/size_matrix.py` list the new sources, and the
+  example build scripts and the IAR project (`examples/stm32g0_tiol112/`) too.
   Splitting costs about 0.8 kB of text (+3.5%) because GCC can no longer inline
   the helpers across the former single translation unit; `tools/size_baseline.csv`
   was regenerated for that reason. rodata, data and bss are unchanged.
 
 ### Added (file-size gate)
 - `tools/check_file_size.py` fails when a `src/`, `include/` or `examples/`
-  file exceeds 800 code lines. Comments and blank lines are removed first (a
+  file reaches 800 code lines. Comments and blank lines are removed first (a
   string literal containing `//` still counts), so documentation does not
   inflate a file and comment padding cannot hide one. It runs in
   `check_quality.sh` and in CI, and `--selftest` keeps the counter honest.

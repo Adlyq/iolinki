@@ -2,7 +2,7 @@
 """File-size gate for the product sources.
 
 A translation unit that grows past a screenful per function is fine; a
-translation unit that grows past 800 lines of code is not. This gate counts
+translation unit that reaches 800 lines of code is not. This gate counts
 *code* lines -- blank lines and comments are removed first, string and
 character literals are preserved -- so that heavy documentation does not
 inflate a file and comment-only padding does not hide one.
@@ -35,6 +35,8 @@ SCOPE = [
 
 def strip_comments(text: str) -> str:
     """Remove C comments, keeping line structure and literal contents."""
+    if text.startswith("\ufeff"):
+        text = text[1:]
     out: list[str] = []
     index = 0
     length = len(text)
@@ -63,6 +65,11 @@ def strip_comments(text: str) -> str:
             continue
 
         if state == "line":
+            if char == "\\" and following == "\n":
+                # Line splicing happens before comment removal: the comment
+                # continues on the next physical line.
+                index += 2
+                continue
             if char == "\n":
                 state = None
                 out.append(char)
@@ -95,7 +102,16 @@ def strip_comments(text: str) -> str:
 
 def count_code_lines(text: str) -> int:
     body = strip_comments(text)
-    return sum(1 for line in body.splitlines() if line.strip())
+    return sum(1 for line in body.split("\n") if line.strip())
+
+
+def read_source(path: Path) -> str:
+    """Read a source file; a BOM must not turn the first line into code."""
+    try:
+        return path.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError as exc:
+        print(f"file-size: cannot read {path}: {exc}", file=sys.stderr)
+        raise
 
 
 def scan() -> list[tuple[int, Path]]:
@@ -104,8 +120,8 @@ def scan() -> list[tuple[int, Path]]:
         if not base.is_dir():
             continue
         for path in base.rglob("*"):
-            if path.is_file() and path.suffix in suffixes:
-                rows.append((count_code_lines(path.read_text(encoding="utf-8")), path))
+            if path.is_file() and path.suffix.lower() in suffixes:
+                rows.append((count_code_lines(read_source(path)), path))
     rows.sort(key=lambda row: (-row[0], str(row[1])))
     return rows
 
@@ -122,6 +138,10 @@ def selftest() -> int:
         ("block comment spans code line", "int a; /* x\ny */ int b;\n", 2),
         ("escaped quote", 'const char* s = "a\\"b"; int x;\n', 1),
         ("preprocessor counts", "#define A 1\n#undef A\n", 2),
+        ("utf-8 bom", "\ufeff/* a\n b\n */\nint a;\n", 1),
+        ("line continuation in comment", "// a \\\nint b;\n", 0),
+        ("escaped char quote", "char c = '\\''; int x;\n", 1),
+        ("unclosed block comment", "int a; /* open\nint b;\n", 1),
         ("ascii art in comment", "/**\n * +--+\n * |  |\n * +--+\n */\nint a;\n", 1),
     ]
     failures = 0
@@ -153,8 +173,8 @@ def main() -> int:
     oversized = [(count, path) for count, path in rows if count >= MAX_CODE_LINES]
     if args.list:
         for count, path in rows:
-            if count >= MAX_CODE_LINES:
-                print(f"{count:6d}  {path.relative_to(ROOT)}")
+            print(f"{count:6d}  {path.relative_to(ROOT)}")
+        return 0
     if oversized:
         for count, path in oversized:
             print(

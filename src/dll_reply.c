@@ -6,7 +6,6 @@
  * See LICENSE for details.
  */
 
-#include "iolinki/crc.h"
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
 #include "iolinki/utils.h"

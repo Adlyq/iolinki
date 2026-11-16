@@ -21,13 +21,19 @@ cc_bin="${CC:-cc}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-MAIN_TUS=(
-    src/dll.c
-    src/dll_frame.c
-    src/dll_sm.c
-    src/dll_reply.c
-    src/dll_api.c
-)
+# Derive the list instead of hard-coding it: a new main-context file must not
+# be able to join the tree without being checked.
+MAIN_TUS=()
+for tu in src/dll*.c; do
+    case "$tu" in
+        src/dll_isr*) ;;
+        *) MAIN_TUS+=("$tu") ;;
+    esac
+done
+if [ "${#MAIN_TUS[@]}" -eq 0 ]; then
+    echo "FAIL: no main-context translation units found in src/" >&2
+    exit 1
+fi
 
 for tu in "${MAIN_TUS[@]}"; do
     deps="$tmp/$(basename "$tu" .c).d"

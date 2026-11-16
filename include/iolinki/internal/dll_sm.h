@@ -19,7 +19,7 @@
  * 动作函数"。内容语义仍在动作函数里（表管骨架 + 函数管动作），因为
  * 纯表装不下长度/通道/兼容开关这类连续条件。
  *
- * @ref DLL_SM_ROWS 是唯一事实源：`src/dll.c` 用指定初始化器把它展开成
+ * @ref DLL_SM_ROWS 是唯一事实源：`src/dll_sm.c` 用指定初始化器把它展开成
  * `g_dll_sm[state][event]` 常量表；`tools/gen_dll_statemachine.py`
  * 解析同一份宏行，生成 mermaid、CSV 与覆盖测试。新增/移动迁移时只改
  * 这里，脚本的 `--check` 会验证 7×8 网格无空洞、无重复。
@@ -177,7 +177,7 @@ typedef struct
 /**
  * @brief 帧事件之外的迁移（初始化、唤醒、定时器、管理命令）。
  *
- * 这些迁移由 `dll.c` 里的显式调用触发，不在 `g_dll_sm` 网格内；本表只是
+ * 这些迁移由主上下文与 ISR 里的显式调用触发，不在 `g_dll_sm` 网格内；本表只是
  * 它们的声明，`tools/gen_dll_statemachine.py` 用它生成
  * `docs/CODE_FLOW.md` 的迁移表并在 `--check` 时校验，避免文档与代码漂移。
  * C 侧不展开该宏。
@@ -213,7 +213,7 @@ typedef struct
 /* clang-format on */
 
 /**
- * @brief 查询表项（测试/生成物使用；运行时由 dll.c 直接访问常量表）。
+ * @brief 查询表项（测试/生成物使用；运行时由 dll_sm.c 直接访问常量表）。
  * @return 命中的表项，越界时返回 NULL。
  */
 const iolink_dll_sm_cell_t* iolink_dll_sm_cell(iolink_dll_state_t state, iolink_dll_event_t event);

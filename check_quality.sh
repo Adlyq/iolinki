@@ -157,11 +157,15 @@ fi
 
 # 5. File Size Gate
 echo -e "\n[5/10] 📐 Checking File Size (code lines per file)..."
-if python3 tools/check_file_size.py --selftest && python3 tools/check_file_size.py; then
-    echo "   ✅ File Size Passed"
+if command -v python3 &> /dev/null; then
+    if python3 tools/check_file_size.py --selftest && python3 tools/check_file_size.py; then
+        echo "   ✅ File Size Passed"
+    else
+        echo "   ❌ File Size FAILED"
+        exit 1
+    fi
 else
-    echo "   ❌ File Size FAILED"
-    exit 1
+    echo "   ⚠️ python3 not installed. Skipping check."
 fi
 
 # 6. Doxygen Warning Check
