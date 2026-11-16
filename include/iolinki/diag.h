@@ -90,6 +90,19 @@ typedef enum
 #define IOLINK_DIAG_F_LATCHING 0x08U
 
 /**
+ * @brief IO-Link 事件严重级别（Table D.1 EventType）。
+ *
+ * 注册表条目与诊断 API 都以本类型表述 EventType，避免在调用点反复
+ * `uint8_t` ↔ 枚举互转。
+ */
+typedef enum
+{
+    IOLINK_EVENT_TYPE_NOTIFICATION = 0U, /**< 仅信息，无需操作 */
+    IOLINK_EVENT_TYPE_WARNING = 1U,      /**< 潜在问题，操作继续 */
+    IOLINK_EVENT_TYPE_ERROR = 2U         /**< 严重故障，运行可能降级 */
+} iolink_event_type_t;
+
+/**
  * @brief ROM 注册表条目。
  *
  * 只存放规范元数据，不存放运行时状态；整张表是 `const`，可以放在 ROM。
@@ -173,9 +186,9 @@ uint16_t iolink_diag_src_code(iolink_diag_src_t src);
  *
  * @param code     16 位 EventCode
  * @param fallback 未登记代码使用的类型（调用方输入，仅作回落）
- * @return uint8_t EventType
+ * @return 规范 EventType
  */
-uint8_t iolink_diag_type_for(uint16_t code, uint8_t fallback);
+iolink_event_type_t iolink_diag_type_for(uint16_t code, iolink_event_type_t fallback);
 
 /**
  * @brief Table D.1 首选 DeviceStatus：未登记时按类型回落到 0/2/4。

@@ -51,6 +51,13 @@ static void device_state_cb(void* user, iolink_dll_state_t state)
                 ctx->config->app->on_operate(ctx->config->app->self);
             }
             break;
+        /* 这些状态没有对应的应用回调；枚举项全部列出，新增状态时
+         * 必须在这里显式决定它走哪条路。 */
+        case IOLINK_DLL_STATE_AWAITING_COMM:
+        case IOLINK_DLL_STATE_ESTAB_COM:
+        case IOLINK_DLL_STATE_FALLBACK:
+        case IOLINK_DLL_STATE_COMM_DISABLED:
+        case IOLINK_DLL_STATE_COUNT:
         default:
             break;
     }

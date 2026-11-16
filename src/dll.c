@@ -852,6 +852,14 @@ static void dll_timers_dispatch(iolink_dll_main_t* ctx, uint8_t phase)
             case IOLINK_TIMER_T_BYTE:
                 dll_timer_expire_t_byte(ctx);
                 break;
+            /* WINDOW 类表项由边沿检查处理，没有到期动作；枚举项全部
+             * 列出，新增定时器时必须在这里显式选择。 */
+            case IOLINK_TIMER_T_PD:
+            case IOLINK_TIMER_T_WU:
+            case IOLINK_TIMER_T_REN:
+            case IOLINK_TIMER_T_CYCLE:
+            case IOLINK_TIMER_T_A:
+            case IOLINK_TIMER_COUNT:
             default:
                 break;
         }

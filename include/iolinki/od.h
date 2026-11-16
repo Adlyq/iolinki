@@ -256,8 +256,8 @@ struct iolink_od_entry
     {
         struct
         {
-            const uint8_t* IOLINK_NULLABLE
-                value; /**< 应用变量地址（标量或字节串缓冲），按字节视图访问。 */
+            uint8_t* IOLINK_NULLABLE
+                value; /**< 应用变量地址（标量或字节串缓冲），按字节视图读写。 */
             uint8_t* IOLINK_NULLABLE str_len; /**< OctetString 当前长度（标量置 NULL）。 */
         } storage;
         struct
@@ -378,7 +378,7 @@ struct iolink_od_entry
                                               IOLINK_OD_ASSERT_SEMANTICS(semantics_, storage_)),   \
      .handler = IOLINK_OD_HANDLER_NONE,                                                            \
      .backend = IOLINK_OD_BACKEND_STORAGE,                                                         \
-     .u.storage = {.value = (const uint8_t*) (ptr_), .str_len = NULL},                             \
+     .u.storage = {.value = (uint8_t*) (ptr_), .str_len = NULL},                                   \
      .block_len = 0U,                                                                              \
      .range_min = (low_),                                                                          \
      .range_max = (high_),                                                                         \
@@ -417,7 +417,7 @@ struct iolink_od_entry
                                               IOLINK_OD_ASSERT_BYTES_BOUND(access_, block_len_)),  \
      .handler = IOLINK_OD_HANDLER_NONE,                                                            \
      .backend = IOLINK_OD_BACKEND_STORAGE,                                                         \
-     .u.storage = {.value = (const uint8_t*) (buf_), .str_len = (len_ptr_)},                       \
+     .u.storage = {.value = (uint8_t*) (buf_), .str_len = (len_ptr_)},                             \
      .block_len = (block_len_),                                                                    \
      .range_min = 0U,                                                                              \
      .range_max = 0U,                                                                              \

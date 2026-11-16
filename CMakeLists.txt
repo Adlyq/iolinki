@@ -86,6 +86,45 @@ target_include_directories(iolinki PUBLIC
 # Same spelling for add_subdirectory() and find_package() consumers.
 add_library(iolinki::iolinki ALIAS iolinki)
 
+# gcc-only diagnostics that clang does not provide (docs/TESTING.md, group
+# `gcc`). They are applied to the library target, not build-wide: the stack
+# bounds below are meaningful for src/ while the host examples allocate
+# multi-kilobyte contexts on the stack by design.
+option(IOLINK_STRICT_GCC "gcc-only strict diagnostics on the iolinki target" OFF)
+if(IOLINK_STRICT_GCC AND CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(iolinki PRIVATE
+        -Wsign-conversion
+        -Wshadow
+        -Wdouble-promotion
+        -Wformat=2
+        -Wformat-signedness
+        -Wnull-dereference
+        -Wimplicit-fallthrough=5
+        -Wduplicated-branches
+        -Wduplicated-cond
+        -Wlogical-op
+        -Wlogical-not-parentheses
+        -Wstrict-prototypes
+        -Wmissing-prototypes
+        -Wmissing-declarations
+        -Wold-style-definition
+        -Wredundant-decls
+        -Wundef
+        -Wcast-qual
+        -Wbad-function-cast
+        -Wwrite-strings
+        -Wpointer-arith
+        -Wvla
+        -Wswitch-default
+        -Wswitch-enum
+        -Wcast-align
+        -Wshift-overflow=2
+        -Warray-bounds=2
+        -Wstringop-overflow=4
+        -Wstack-usage=512
+        -Wframe-larger-than=1024)
+endif()
+
 # Layout macros are part of the ABI contract, not just behaviour: the exported
 # target has to hand them to the consumer. The directory-wide copy keeps the
 # test fixtures (separate targets over the same sources) in the same layout.

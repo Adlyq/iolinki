@@ -26,19 +26,9 @@ IOLINK_STATIC_ASSERT(IOLINK_EVENT_PENDING_MAX > 0U, "IOLINK_EVENT_PENDING_MAX mu
 
 /**
  * @defgroup iolinki_events 事件处理
- * @brief 诊断事件代码、严重级别以及设备事件队列。
+ * @brief 事件代码、出现/消失模式、事件队列与设备事件存储器。
  * @{
  */
-
-/**
- * @brief IO-Link 事件严重级别
- */
-typedef enum
-{
-    IOLINK_EVENT_TYPE_NOTIFICATION = 0U, /**< 仅信息，无需操作 */
-    IOLINK_EVENT_TYPE_WARNING = 1U,      /**< 潜在问题，操作继续 */
-    IOLINK_EVENT_TYPE_ERROR = 2U         /**< 严重故障，运行可能降级 */
-} iolink_event_type_t;
 
 /**
  * @brief 事件 MODE（A.6.4 / Figure A.24）

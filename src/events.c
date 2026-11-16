@@ -82,8 +82,9 @@ uint8_t iolink_event_qualifier(uint16_t code, iolink_event_type_t type, iolink_e
         case IOLINK_EVENT_MODE_SINGLE_SHOT:
             q = 0x40U; /* MODE = 事件单次触发（0b01） */
             break;
+        case IOLINK_EVENT_MODE_APPEARS:
         default:
-            q = 0xC0U; /* MODE = 事件出现（0b11） */
+            q = 0xC0U; /* MODE = 事件出现（0b11）；default 兜住越界值 */
             break;
     }
     switch (type) {
@@ -277,7 +278,7 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
 
     /* 注册表登记的代码使用规范 EventType；未登记（厂商/应用）代码
      * 保留调用方输入，应用事件的自定义类型因此不受影响。 */
-    type = (iolink_event_type_t) iolink_diag_type_for(code, (uint8_t) type);
+    type = iolink_diag_type_for(code, type);
 
     if (type == IOLINK_EVENT_TYPE_NOTIFICATION) {
         /* 通知是单次触发的。在前一个实例仍未确认时，不要再次

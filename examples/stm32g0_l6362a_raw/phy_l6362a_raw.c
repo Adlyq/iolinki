@@ -60,7 +60,6 @@ _Static_assert(IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME, "8110 board uses TX FR
 
 /* Private variables ---------------------------------------------------------*/
 
-static iolink_baudrate_t s_baudrate;
 static uint32_t s_baud_hz;
 static iolink_baudrate_t s_initial_baudrate = IOLINK_BAUDRATE_COM3;
 static uint32_t s_gap_us; /* frame-end byte-gap time-out (RX BYTE) */
@@ -368,7 +367,6 @@ static void l6362_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
 #endif
         phy_txen_set(false);
     }
-    s_baudrate = baudrate;
     s_baud_hz = new_hz;
     /* Frame-end time-out ~ 13 bit times (matches the ST single-octet engine). */
     s_gap_us = (13U * 1000000U) / s_baud_hz;

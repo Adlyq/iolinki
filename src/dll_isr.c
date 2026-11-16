@@ -478,6 +478,11 @@ static int dll_plan_slot_of(iolink_dll_state_t state)
             return (int) IOLINK_PLAN_SLOT_ESTAB_COM;
         case IOLINK_DLL_STATE_OPERATE:
             return (int) IOLINK_PLAN_SLOT_OPERATE;
+        /* FALLBACK 没有计划；COMM_DISABLED 不回帧。枚举项全部列出，
+         * 新增状态时必须显式选择槽位。 */
+        case IOLINK_DLL_STATE_FALLBACK:
+        case IOLINK_DLL_STATE_COMM_DISABLED:
+        case IOLINK_DLL_STATE_COUNT:
         default:
             return -1;
     }

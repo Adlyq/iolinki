@@ -34,11 +34,6 @@ void iolink_dll_request_back_to_box(iolink_dll_main_t* ctx)
  * 公共配置与查询 API
  * ------------------------------------------------------------------------- */
 
-iolink_dll_state_t iolink_dll_get_state(const iolink_dll_main_t* ctx)
-{
-    return (ctx != NULL) ? ctx->shared.state : IOLINK_DLL_STATE_STARTUP;
-}
-
 iolink_phy_mode_t iolink_dll_get_phy_mode(const iolink_dll_main_t* ctx)
 {
     return (ctx != NULL) ? ctx->phy_mode : IOLINK_PHY_MODE_SIO;

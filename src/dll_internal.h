@@ -32,20 +32,6 @@ static inline bool dll_dp_page1_available(const iolink_dll_main_t* ctx)
 }
 
 /**
- * @brief 装载一个 timer 的绝对截止时间（内部 API，由主上下文调用）。
- *
- * @param ctx        主上下文
- * @param id         timer 标识
- * @param deadline_us 微秒绝对时间（0 = 不装载）
- */
-void dll_timer_arm(iolink_dll_main_t* ctx, iolink_timer_id_t id, uint64_t deadline_us);
-
-/**
- * @brief 取消一个 timer（内部 API）。
- */
-void dll_timer_cancel(iolink_dll_main_t* ctx, iolink_timer_id_t id);
-
-/**
  * @name 内部时钟辅助函数
  *
  * 时间戳来自设备初始化时绑定的应用时钟

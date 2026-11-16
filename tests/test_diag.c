@@ -102,7 +102,9 @@ static void test_registry_matches_table_d1(void** state)
         assert_int_equal(desc->hold_ms, k_table_d1[i].hold_ms);
         assert_int_equal(iolink_diag_type_for(k_table_d1[i].code, IOLINK_EVENT_TYPE_ERROR),
                          k_table_d1[i].type);
-        assert_int_equal(iolink_diag_type_for(k_table_d1[i].code, 0xFFU), k_table_d1[i].type);
+        /* 注册表命中时 fallback 不参与，取另一个合法枚举值即可。 */
+        assert_int_equal(iolink_diag_type_for(k_table_d1[i].code, IOLINK_EVENT_TYPE_WARNING),
+                         k_table_d1[i].type);
         assert_int_equal(iolink_diag_status_for(k_table_d1[i].code, k_table_d1[i].type),
                          k_table_d1[i].status);
     }

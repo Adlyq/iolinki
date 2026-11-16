@@ -538,6 +538,8 @@ void iolink_ds_process(iolink_ds_ctx_t* ctx)
             /* 保持 Downloading 直到 DownloadEnd 提交暂存镜像。 */
             break;
 
+        case IOLINK_DS_STATE_IDLE:
+        /* 每个枚举项都必须显式列出：新增状态而不处理时，这里会漏掉。 */
         default:
             ctx->state = IOLINK_DS_STATE_IDLE;
             break;
@@ -786,6 +788,7 @@ uint8_t iolink_ds_state_property(const iolink_ds_ctx_t* ctx)
         case IOLINK_DS_STATE_DOWNLOADING:
             property = 0x04U; /* 0b10 下载 */
             break;
+        case IOLINK_DS_STATE_IDLE:
         default:
             property = 0x00U; /* 0b00 未激活 */
             break;

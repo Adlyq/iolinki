@@ -103,13 +103,15 @@ static uint8_t phy_int_active(iolink_app_t* self)
 #endif
 }
 
-static int s_tx_calls;
-static int s_tx_rc;
 static uint32_t s_service_calls;
 static bool s_service_in_critical;
 static void (*s_timer_start_hook)(void);
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+/* 只由 FRAME 传输的"线路繁忙"用例读取：BYTE 传输没有
+ * tx_frame 返回值语义，计数器在那里无人读。 */
+static int s_tx_calls;
+static int s_tx_rc;
 static int phy_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
 {
     (void) self;
@@ -123,7 +125,6 @@ static int phy_tx_octet(iolink_app_t* self, uint8_t data)
 {
     (void) self;
     (void) data;
-    s_tx_calls++;
     return 0;
 }
 
@@ -229,8 +230,10 @@ static void reset_ctx(void)
     s_chk_pending = false;
 #endif
     s_rx_calls = 0U;
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     s_tx_calls = 0;
     s_tx_rc = 0;
+#endif
     s_service_calls = 0U;
     s_service_in_critical = false;
     s_timer_start_hook = NULL;

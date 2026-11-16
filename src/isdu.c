@@ -16,6 +16,7 @@
 #include "iolinki/data_storage.h"
 #include "iolinki/port.h"
 #include "iolinki/utils.h"
+#include "isdu_internal.h"
 #include <string.h>
 #include <stdint.h>
 #include "isdu_internal.h"
@@ -222,8 +223,6 @@ uint16_t isdu_access_locks(const iolink_isdu_ctx_t* ctx)
     const iolink_device_info_ctx_t* info_ctx = (ctx != NULL) ? ctx->device_info : NULL;
     return (info_ctx != NULL) ? iolink_device_info_ctx_get_access_locks(info_ctx) : 0U;
 }
-
-void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error);
 
 /** @brief 将统一结果翻译为 ISDU 否定应答。
  *

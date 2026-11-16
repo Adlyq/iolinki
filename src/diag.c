@@ -163,10 +163,10 @@ uint16_t iolink_diag_src_code(iolink_diag_src_t src)
     return (desc != NULL) ? desc->code : 0U;
 }
 
-uint8_t iolink_diag_type_for(uint16_t code, uint8_t fallback)
+iolink_event_type_t iolink_diag_type_for(uint16_t code, iolink_event_type_t fallback)
 {
     const iolink_diag_desc_t* desc = iolink_diag_desc(code);
-    return (desc != NULL) ? desc->type : fallback;
+    return (desc != NULL) ? (iolink_event_type_t) desc->type : fallback;
 }
 
 uint8_t iolink_diag_status_for(uint16_t code, uint8_t type)
@@ -383,8 +383,7 @@ void iolink_diag_raise_code(iolink_events_ctx_t* events, uint16_t code)
     if (events == NULL) {
         return;
     }
-    iolink_event_trigger(events, code,
-                         (iolink_event_type_t) iolink_diag_type_for(code, IOLINK_EVENT_TYPE_ERROR));
+    iolink_event_trigger(events, code, iolink_diag_type_for(code, IOLINK_EVENT_TYPE_ERROR));
 }
 
 void iolink_diag_clear_code(iolink_events_ctx_t* events, uint16_t code)

@@ -343,7 +343,7 @@ struct iolink_od_entry {
     uint8_t backend;          /* IOLINK_OD_BACKEND_STORAGE / _HANDLER */
     union {
         struct {
-            const uint8_t* value; /* 应用变量地址（字节视图） */
+            uint8_t* value;    /* 应用变量地址（字节视图，读写） */
             uint8_t* str_len;  /* OctetString 当前长度 */
         } storage;
         struct {
