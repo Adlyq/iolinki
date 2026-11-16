@@ -14,11 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cases where NULL is a meaningful input — an optional hook, "no application
   table", "measure only" — and the return types whose NULL means "not found".
 - A function may still guard `if (ctx == NULL) return err;` internally. That
-  guard is a fallback for a caller bug, and the parameter stays non-null — unless
-  a supported caller legitimately produces NULL. Then the parameter is
-  `IOLINK_NULLABLE`, the guard implements the declared absence, and the header
-  says what NULL means. Marking such a parameter nullable otherwise would write
-  "you may pass garbage" into the interface.
+  guard is a fallback for a caller bug, and the parameter stays non-null. The
+  exception is a NULL that *is* a state the interface defines rather than a value
+  the caller forgot to fill in: the parameter is then `IOLINK_NULLABLE`, the
+  guard implements the declared state, and the header says what NULL means.
+  Marking such a parameter nullable otherwise would write "you may pass garbage"
+  into the interface.
 - `iolink_diag_device_status()` takes `iolink_events_ctx_t* IOLINK_NULLABLE`: a
   standalone ISDU engine (`iolink_isdu_init()` without the DLL) has no diagnosis
   registry, and "no registry" means DeviceStatus 0, not an error. The behaviour
