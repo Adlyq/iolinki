@@ -30,12 +30,15 @@ cd "$ROOT"
 GATE_GROUPS=(quick build test gcc sanitize memcheck analyzer static docs matrix perf package)
 
 STRICT_CFLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
-# -Wnullability reports a NULL passed where `IOLINK_NONNULL` (or the
-# IOLINK_ASSUME_NONNULL_* default) says the argument is required; -Wnonnull
-# covers the call sites. It stays off while the nullability rollout marks the
-# nullable pointers header by header: enabling it now would turn the unmarked
-# remainder into errors. Re-enable it (gates.sh analyzer) once the headers are
-# annotated; until then `sanitize` (`-fsanitize=null`) is the runtime oracle.
+# -Wnullable-to-nonnull-conversion rejects passing a nullable expression to a
+# non-null parameter. It is purely type-based with no data flow, so a nullable
+# struct field that was checked one line earlier still has to be copied into an
+# unqualified local before every call. The model is complete, but the library
+# still reads the nullable ISDU/DS context fields directly (`isdu_cmd`,
+# `isdu_ds`, `data_storage`), so the flag would currently fail on shape rather
+# than on behaviour; adding local copies there is its own change. Until then
+# `-Wnonnull` (literal NULL), `clang --analyze` (data flow) and
+# `-fsanitize=null` (runtime) are the nullability oracle.
 NULLABILITY_FLAGS=""
 
 # clang is the primary compiler: the shipping toolchains are clang-based (ATFE
@@ -136,6 +139,7 @@ check_shellcheck() {
     local scripts=(tools/gates.sh tools/build_matrix.sh tools/coverage.sh
                    tools/diff_matrix.sh tools/check_ownership.sh
                    tools/check_test_whitebox.sh tools/check_test_gates.sh
+                   tools/check_nullability.sh
                    tools/clean_builds.sh tools/test_install_consumer.sh
                    tools/wcet_run.sh tools/check_profile_abi.sh
                    tools/matrix_configs.sh
@@ -154,6 +158,8 @@ group_quick() {
     step "file size" check_file_size || return 1
     step "shellcheck" check_shellcheck || return 1
     step "DLL ownership isolation" ./tools/check_ownership.sh || return 1
+    step "nullability regions" ./tools/check_nullability.sh --selftest &&
+        ./tools/check_nullability.sh || return 1
     step "test conventions (white-box, teardown)" check_test_conventions
 }
 

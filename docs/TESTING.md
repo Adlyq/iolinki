@@ -28,7 +28,7 @@ name, prints each group's wall time, and stops at the first failure
 
 | Group | Checks |
 | --- | --- |
-| `quick` | clang-format, per-file size (800 code lines, comments excluded), shellcheck, DLL ownership isolation, test conventions (`check_test_whitebox.sh`, `check_test_gates.sh`) |
+| `quick` | clang-format, per-file size (800 code lines, comments excluded), shellcheck, DLL ownership isolation, nullability regions (`check_nullability.sh`), test conventions (`check_test_whitebox.sh`, `check_test_gates.sh`) |
 | `build` | strict `-Werror` compilation with clang, Debug (`-O0`) and Release (`-O3`) |
 | `test` | strict Debug build plus `ctest` |
 | `gcc` | the gcc-only strict diagnostics (`-DIOLINK_STRICT_GCC=ON`, library target) and `gcc -fanalyzer` as a report-only step |
@@ -58,9 +58,9 @@ MISRA addon) is about 100 s of L2.
 
 L2 is a superset of the old `check_quality.sh`, not an equivalent: all ten of
 its steps map onto `quick` (clang-format, per-file size, shellcheck, DLL
-ownership, test conventions), `build` (strict Debug *and* Release), `static`
-(cppcheck, MISRA), `docs` and `package`, and L2 adds `test`, which the old
-script never ran.
+ownership, nullability regions, test conventions), `build` (strict Debug *and*
+Release), `static` (cppcheck, MISRA), `docs` and `package`, and L2 adds `test`,
+which the old script never ran.
 
 Two compilers run, and they are not interchangeable:
 
