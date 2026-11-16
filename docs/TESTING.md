@@ -38,19 +38,48 @@ name, prints each group's wall time, and stops at the first failure
 | `package` | the exported package is installed into a scratch prefix and a two-file consumer is built against it |
 | `all` | every group above |
 
-Groups compose (`tools/gates.sh quick static`). Pick them by what the change
-can break:
+Groups compose (`tools/gates.sh quick static`). Four cumulative levels cover the
+usual points of a change; each level adds groups to the one above it:
 
-| When | Command |
+| Level | When | Command | Cost |
+| --- | --- | --- | --- |
+| L0 | after every save | `./tools/gates.sh quick` | ~2 s, no build |
+| L1 | before every commit | `./tools/gates.sh quick build test` | ~35 s |
+| L2 | before a push | `./tools/gates.sh quick build test static docs package --keep-going` | ~3 min |
+| L3 | before a release, or a full local run | `./tools/gates.sh all` | ~6 min |
+
+Times are the sum of the group wall times on a 16-core host; `build`, `test`
+and `static` scale with the machine, and `static` (cppcheck plus the MISRA
+addon) is about 150 s of L2.
+
+L2 is a superset of the old `check_quality.sh`, not an equivalent: all ten of
+its steps map onto `quick` (clang-format, per-file size, shellcheck, DLL
+ownership, test conventions), `build` (strict Debug *and* Release), `static`
+(cppcheck, MISRA), `docs` and `package`, and L2 adds `test`, which the old
+script never ran.
+
+No level up to L2 builds a structural configuration or re-measures size,
+coverage or the WCET proxy, so a green L2 says nothing about those. Add a group
+when the change can break it:
+
+| The change touches | Add |
 | --- | --- |
-| after an edit | `./tools/gates.sh quick` |
-| before a commit | `./tools/gates.sh quick build test` |
-| before a push | `./tools/gates.sh quick build test static docs package` |
-| before a release, or a full local run | `./tools/gates.sh all` |
+| any `#if`, an `IOLINK_*` switch, or a public header | `matrix` (required, see the delivery rule in §3) |
+| a hot path, or anything that can move ROM/RAM or coverage | `perf` |
+| a PHY driver or an example firmware | nothing locally (`package` is already in L2); the `stm32g0-example` arm build exists only in CI |
+
+`all` is not the release gate either: it does not build the
+`examples/stm32g0_l6362a_raw` firmware with `arm-none-eabi`, run
+`.docker_test_entrypoint.sh` (Linux and BAREMETAL builds and the virtual-master
+suite), validate the IODDs or generate SBOMs. A release is "CI green on
+`own_dev`, then tag"; locally that is `./tools/gates.sh all` followed by
+`./run_all_tests_docker.sh`.
 
 A missing optional tool (clang-format, cppcheck, doxygen, shellcheck, the Arm
-toolchain for the size gate) reports `SKIP`; CI installs them in the Docker
-image and the job setup, so a skip only happens locally.
+toolchain for the size gate) reports `SKIP`. A skipped group checks nothing, so
+a level only counts when its groups actually ran: CI installs the tools in the
+Docker image and the job setup, and `./run_all_tests_docker.sh` reproduces that
+environment locally.
 
 ### 3. Run the Compile Matrix
 Every supported structural configuration must build. The matrix is defined once
