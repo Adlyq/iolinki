@@ -277,6 +277,7 @@ static void isdu_serve_od_value(iolink_isdu_ctx_t* ctx, const iolink_od_entry_t*
 {
     iolink_od_ctx_t od;
     od.app = ctx->od;
+    od.self = ctx->od_self;
 
     if (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE) {
 #if IOLINK_FEATURE_DATA_STORAGE

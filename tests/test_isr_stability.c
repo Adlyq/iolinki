@@ -34,9 +34,9 @@ static unsigned tx_frames;
 static uint64_t tx_delivered;
 static uint64_t tx_asserted;
 
-static uint64_t test_time_us(void* user)
+static uint64_t test_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return now_us;
 }
 

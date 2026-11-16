@@ -20,11 +20,11 @@ void iolink_critical_exit(void)
 static volatile uint32_t g_tick_ms;
 
 /* Demo-only clock: a 1 ms tick is too coarse for t_A/t_ren timing. A real
- * device must feed iolink_device_config_t::time_us from a microsecond timer
+ * device must feed the application trait's time_us from a microsecond timer
  * (or expand the tick counter with the timer's free-running counter). */
-static uint64_t baremetal_time_us(void* user)
+static uint64_t baremetal_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return (uint64_t) g_tick_ms * 1000ULL;
 }
 
@@ -38,10 +38,11 @@ int main(void)
     /* Initialize stack with virtual PHY (simplified for bare metal, typically uses UART/SPI) */
     iolink_phy_virtual_set_port("/dev/null");
     const iolink_phy_api_t* phy = iolink_phy_virtual_get();
+    static const iolink_device_app_t app = {.self = NULL, .time_us = baremetal_time_us};
     iolink_device_ctx_t ctx;
     iolink_device_config_t dev_config = {
         .phy = *phy,
-        .time_us = baremetal_time_us,
+        .app = &app,
     };
 
     if (iolink_device_init(&ctx, &dev_config) != 0) {

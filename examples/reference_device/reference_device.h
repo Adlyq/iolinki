@@ -9,6 +9,7 @@ typedef struct
 {
     iolink_device_ctx_t device;
     iolink_device_config_t config;
+    iolink_device_app_t app_trait;
     uint16_t counter;
     uint8_t input[3];
     bool button;

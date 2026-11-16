@@ -30,9 +30,9 @@ void iolink_critical_exit(void)
 {
 }
 
-static uint64_t test_time_us(void* user)
+static uint64_t test_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return 1000000ULL;
 }
 
@@ -63,25 +63,28 @@ static int g_pd_calls;
 static uint8_t g_pd_pattern;
 static void* g_expected_user;
 
-static bool on_pd_input(void* user, uint8_t* data, uint8_t len)
+static bool on_pd_input(iolink_app_t* self, uint8_t* data, uint8_t len)
 {
-    assert_ptr_equal(user, g_expected_user);
+    assert_ptr_equal(self, g_expected_user);
     g_pd_calls++;
     (void) memset(data, g_pd_pattern, len);
     return true;
 }
 
-static const iolink_app_callbacks_t g_cbs = {.on_pd_input = on_pd_input};
-
-static void make_config(iolink_device_config_t* cfg, const iolink_app_callbacks_t* cbs)
+static void make_config(iolink_device_config_t* cfg, iolink_device_app_t* app,
+                        bool (*pd_input)(iolink_app_t* self, uint8_t* data, uint8_t len))
 {
+    (void) memset(app, 0, sizeof(*app));
+    app->self = g_expected_user;
+    app->time_us = test_time_us;
+    app->on_pd_input = pd_input;
+
     (void) memset(cfg, 0, sizeof(*cfg));
     cfg->phy = g_phy;
     cfg->stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     cfg->stack.pd_in_len = 2U;
     cfg->stack.pd_out_len = 0U;
-    cfg->app_callbacks = cbs;
-    cfg->time_us = test_time_us;
+    cfg->app = app;
 }
 
 static void test_polling_path_without_callback(void** state)
@@ -89,9 +92,11 @@ static void test_polling_path_without_callback(void** state)
     (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t cfg;
+    iolink_device_app_t app;
     const uint8_t data[2] = {0x11U, 0x22U};
 
-    make_config(&cfg, NULL);
+    g_expected_user = NULL;
+    make_config(&cfg, &app, NULL);
     assert_int_equal(iolink_device_init(&ctx, &cfg), 0);
 
     const iolink_caps_t caps = iolink_device_capabilities(&ctx);
@@ -110,14 +115,14 @@ static void test_callback_path_selected_by_presence(void** state)
     (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t cfg;
+    iolink_device_app_t app;
     const uint8_t data[2] = {0x33U, 0x44U};
 
     g_pd_calls = 0;
     g_pd_pattern = 0xA5U;
     static int user_sentinel;
     g_expected_user = &user_sentinel;
-    make_config(&cfg, &g_cbs);
-    cfg.user = g_expected_user;
+    make_config(&cfg, &app, on_pd_input);
     assert_int_equal(iolink_device_init(&ctx, &cfg), 0);
 
     const iolink_caps_t caps = iolink_device_capabilities(&ctx);

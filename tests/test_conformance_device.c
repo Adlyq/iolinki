@@ -169,7 +169,7 @@ static void test_conformance_event_device_status(void** state)
     /* 事件窗口由假时钟推进；设备其余时间戳仍用应用时钟。 */
     iolink_events_ctx_t* events = iolink_device_get_events_ctx(&app.device);
     events->time_us = iolink_test_time_us;
-    events->time_user = NULL;
+    events->time_self = NULL;
 
     iolink_isdu_ctx_t ctx;
     make_isdu_ctx(&app, &ctx);

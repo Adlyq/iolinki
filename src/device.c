@@ -27,28 +27,28 @@ static void device_state_cb(void* user, iolink_dll_state_t state)
 {
     iolink_device_ctx_t* ctx = (iolink_device_ctx_t*) user;
 
-    if ((ctx == NULL) || (ctx->config == NULL) || (ctx->config->app_callbacks == NULL)) {
+    if ((ctx == NULL) || (ctx->config == NULL)) {
         return;
     }
 
-    if (ctx->config->app_callbacks->on_state_change != NULL) {
-        ctx->config->app_callbacks->on_state_change(ctx->config->user, state);
+    if (ctx->config->app->on_state_change != NULL) {
+        ctx->config->app->on_state_change(ctx->config->app->self, state);
     }
 
     switch (state) {
         case IOLINK_DLL_STATE_STARTUP:
-            if (ctx->config->app_callbacks->on_startup != NULL) {
-                ctx->config->app_callbacks->on_startup(ctx->config->user);
+            if (ctx->config->app->on_startup != NULL) {
+                ctx->config->app->on_startup(ctx->config->app->self);
             }
             break;
         case IOLINK_DLL_STATE_PREOPERATE:
-            if (ctx->config->app_callbacks->on_preoperate != NULL) {
-                ctx->config->app_callbacks->on_preoperate(ctx->config->user);
+            if (ctx->config->app->on_preoperate != NULL) {
+                ctx->config->app->on_preoperate(ctx->config->app->self);
             }
             break;
         case IOLINK_DLL_STATE_OPERATE:
-            if (ctx->config->app_callbacks->on_operate != NULL) {
-                ctx->config->app_callbacks->on_operate(ctx->config->user);
+            if (ctx->config->app->on_operate != NULL) {
+                ctx->config->app->on_operate(ctx->config->app->self);
             }
             break;
         default:
@@ -202,7 +202,7 @@ static int device_config_validate(const iolink_device_config_t* config)
     }
     stack = &config->stack;
 
-    if (config->time_us == NULL) {
+    if (config->app->time_us == NULL) {
         return IOLINK_DEVICE_INIT_ERR_TIME;
     }
 
@@ -257,8 +257,7 @@ static int device_config_validate(const iolink_device_config_t* config)
     /* 能力的一致性校验。降级后的最大风险不是"位为开但没编译"
      * （resolve 只置位 built 支持的位，unbuilt 能力被静默屏蔽），而是
      * 运行时要求与 PHY 实际钩子不匹配：见下方 REQUIRE_ISR_TX 与 TX_BUSY。 */
-    const iolink_caps_t caps =
-        iolink_caps_resolve(&config->phy, &config->stack, config->app_callbacks, NULL);
+    const iolink_caps_t caps = iolink_caps_resolve(&config->phy, &config->stack, config->app, NULL);
 
     if (iolink_caps_has(caps, IOLINK_CAP_REQUIRE_ISR_TX) &&
         !iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE)) {
@@ -287,6 +286,9 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     if ((ctx == NULL) || (config == NULL)) {
         return IOLINK_DEVICE_INIT_ERR_NULL;
     }
+    if (config->app == NULL) {
+        return IOLINK_DEVICE_INIT_ERR_APP;
+    }
     /* 早退路径（钩子缺失、工作区缺失）同样返回 INIT_ERR_PHY 或其它码：
      * 先清掉上一次尝试留下的驱动码，getter 的 0 才明确表示"PHY init 没失败"。 */
     ctx->phy_error = 0;
@@ -300,8 +302,8 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     err = device_config_validate(config);
     if (err != IOLINK_DEVICE_INIT_OK) {
         iolink_log_sink_t sink;
-        /* ctx 尚未初始化，不能经由它打印：用配置构造临时汇点。 */
-        iolink_log_sink_init(&sink, config->log_write, config->user, config->log_level);
+        const iolink_device_app_t* app = config->app;
+        iolink_log_sink_init(&sink, app->log_write, app->self, config->log_level);
         IOLINK_LOG_ERROR(&sink, "device init rejected: err=%d", err);
         return err;
     }
@@ -314,7 +316,8 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
         if (err != 0) {
             iolink_log_sink_t sink;
             /* sink 尚未绑定到各子系统（PHY init 在绑定之前运行）。 */
-            iolink_log_sink_init(&sink, config->log_write, config->user, config->log_level);
+            iolink_log_sink_init(&sink, config->app->log_write, config->app->self,
+                                 config->log_level);
             IOLINK_LOG_ERROR(&sink, "phy init failed: err=%d", err);
             /* 驱动错误码属于另一个域：对外统一为 PHY 失败，原始值留在
              * 上下文里（默认日志是静默的，不能只靠日志）。 */
@@ -327,7 +330,7 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     iolink_dll_init(&ctx->dll.main, &ctx->dll.isr, &config->phy);
     /* 实例能力在绑定 PHY 之后、任何 ISR 可能运行之前解析一次。 */
     ctx->dll.main.shared.caps =
-        iolink_caps_resolve(&config->phy, &config->stack, config->app_callbacks, NULL);
+        iolink_caps_resolve(&config->phy, &config->stack, config->app, NULL);
     /* ISDU 的传输缓冲：外部工作区或默认内嵌 fallback。 */
     iolink_isdu_bind_workspace(&ctx->dll.main.shared.isdu, workspace);
     /* ISDU 与事件引擎按实例能力位选运行时路径。 */
@@ -335,11 +338,11 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     /* 在推导任何截止时间之前绑定应用时钟。设备层
      * 要求该时钟（NULL 已在上文被拒绝）。事件引擎共享
      * 同一时钟，使事件时序与 DLL 一致。 */
-    ctx->dll.main.shared.time_us = config->time_us;
-    ctx->dll.main.shared.time_user = config->user;
+    ctx->dll.main.shared.time_us = config->app->time_us;
+    ctx->dll.main.shared.time_self = config->app->self;
 #if IOLINK_FEATURE_EVENTS
-    ctx->dll.main.shared.events.time_us = config->time_us;
-    ctx->dll.main.shared.events.time_user = config->user;
+    ctx->dll.main.shared.events.time_us = config->app->time_us;
+    ctx->dll.main.shared.events.time_self = config->app->self;
     /* A.6.4 的两个窗口是运行时能力：栈配置非 0 时覆盖构建默认值。 */
     iolink_events_set_window(&ctx->dll.main.shared.events, config->stack.event_min_appear_ms,
                              config->stack.event_min_repeat_ms);
@@ -349,16 +352,17 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     ctx->dll.main.shared.isdu.direct_param_page2 = ctx->direct_param_page2;
     ctx->dll.main.shared.isdu.device_info = &ctx->device_info;
     ctx->dll.main.shared.isdu.od = config->od;
+    ctx->dll.main.shared.isdu.od_self = config->app->self;
     ctx->dll.main.state_cb = device_state_cb;
     ctx->dll.main.state_cb_user = ctx;
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_init(&ctx->dll.main.ds);
-    iolink_ds_set_flag_persist(&ctx->dll.main.ds, config->ds_flag_persist, config->user);
+    iolink_ds_set_flag_persist(&ctx->dll.main.ds, config->ds_flag_persist, config->app->self);
     iolink_ds_bind_workspace(&ctx->dll.main.ds, workspace);
     ctx->dll.main.shared.isdu.ds_ctx = &ctx->dll.main.ds;
     /* DS 参数访问统一走 OD 表：标准标签经参数上下文，应用参数经表项
        后端。DS 成员由表项 storage 位掩码决定（标准表 + config->od）。 */
-    iolink_ds_bind_sources(&ctx->dll.main.ds, config->od);
+    iolink_ds_bind_sources(&ctx->dll.main.ds, config->od, config->app->self);
     /* 按当前参数集刷新 Size/Checksum，使 0x0003 在首次上传前有效。 */
     iolink_ds_refresh(&ctx->dll.main.ds);
 #else
@@ -368,13 +372,13 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
      * 必须在 iolink_dll_init()/iolink_ds_init() 之后绑定，因为这些
      * 初始化会清零各自的上下文；放在应用配置之前，使初始化期间的
      * 状态/波特率日志也能输出。 */
-    iolink_device_set_log(ctx, config->log_write, config->log_level);
+    iolink_device_set_log(ctx, config->app->log_write, config->log_level);
 
     device_apply_stack_config(ctx);
     ctx->master_lost_last = ctx->dll.main.master_lost;
 
-    if ((config->app_callbacks != NULL) && (config->app_callbacks->on_startup != NULL)) {
-        config->app_callbacks->on_startup(config->user);
+    if (config->app->on_startup != NULL) {
+        config->app->on_startup(config->app->self);
     }
 
     IOLINK_LOG_INFO(&ctx->dll.main.shared.log,
@@ -412,19 +416,19 @@ void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn write,
     if (ctx == NULL) {
         return;
     }
-    void* user = (ctx->config != NULL) ? ctx->config->user : NULL;
+    iolink_app_t* self = (ctx->config != NULL) ? ctx->config->app->self : NULL;
 
     /* 字段更新必须对数据 ISR 原子：启用 ISR 日志时，中断可能正在
      * 读取同一个 sink。临界区在 SINGLE profile 中展开为空。 */
     IOLINK_CRITICAL_ENTER();
     /* 设备层没有自己的 sink：打印点使用 DLL 的那一份。 */
-    iolink_log_sink_init(&ctx->dll.main.shared.log, write, user, level);
-    iolink_log_sink_init(&ctx->dll.main.shared.isdu.log, write, user, level);
+    iolink_log_sink_init(&ctx->dll.main.shared.log, write, self, level);
+    iolink_log_sink_init(&ctx->dll.main.shared.isdu.log, write, self, level);
 #if IOLINK_FEATURE_DATA_STORAGE
-    iolink_log_sink_init(&ctx->dll.main.ds.log, write, user, level);
+    iolink_log_sink_init(&ctx->dll.main.ds.log, write, self, level);
 #endif
 #if IOLINK_FEATURE_EVENTS
-    iolink_log_sink_init(&ctx->dll.main.shared.events.log, write, user, level);
+    iolink_log_sink_init(&ctx->dll.main.shared.events.log, write, self, level);
 #endif
     IOLINK_CRITICAL_EXIT();
 }
@@ -516,7 +520,7 @@ static void device_service_events_and_ds(iolink_device_ctx_t* ctx)
 /** @brief 向应用报告主站丢失/主站在线的边沿事件。 */
 static void device_notify_master_lost(iolink_device_ctx_t* ctx)
 {
-    if ((ctx->config == NULL) || (ctx->config->app_callbacks == NULL)) {
+    if (ctx->config == NULL) {
         return;
     }
     if (ctx->dll.main.shared.state != IOLINK_DLL_STATE_OPERATE) {
@@ -531,12 +535,12 @@ static void device_notify_master_lost(iolink_device_ctx_t* ctx)
     }
     ctx->master_lost_last = lost;
     if (lost) {
-        if (ctx->config->app_callbacks->on_master_lost != NULL) {
-            ctx->config->app_callbacks->on_master_lost(ctx->config->user);
+        if (ctx->config->app->on_master_lost != NULL) {
+            ctx->config->app->on_master_lost(ctx->config->app->self);
         }
     }
-    else if (ctx->config->app_callbacks->on_master_online != NULL) {
-        ctx->config->app_callbacks->on_master_online(ctx->config->user);
+    else if (ctx->config->app->on_master_online != NULL) {
+        ctx->config->app->on_master_online(ctx->config->app->self);
     }
 }
 
@@ -562,13 +566,12 @@ static void device_dispatch_resets(iolink_device_ctx_t* ctx)
 /** @brief 在 OPERATE 状态下运行应用过程数据回调。 */
 static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
 {
-    if ((ctx->config == NULL) || (ctx->config->app_callbacks == NULL) ||
-        (ctx->dll.main.shared.state != IOLINK_DLL_STATE_OPERATE)) {
+    if ((ctx->config == NULL) || (ctx->dll.main.shared.state != IOLINK_DLL_STATE_OPERATE)) {
         return;
     }
-    if (ctx->config->app_callbacks->on_pd_output != NULL) {
-        ctx->config->app_callbacks->on_pd_output(ctx->config->user, ctx->dll.main.pd_out,
-                                                 ctx->dll.main.shared.pd_out_len_current);
+    if (ctx->config->app->on_pd_output != NULL) {
+        ctx->config->app->on_pd_output(ctx->config->app->self, ctx->dll.main.pd_out,
+                                       ctx->dll.main.shared.pd_out_len_current);
     }
     if (iolink_caps_has(ctx->dll.main.shared.caps, IOLINK_CAP_PD_IN_CALLBACK)) {
         /* 填写一个 ISR 未在流式发送的缓冲区，然后原子地发布，
@@ -581,8 +584,9 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
         }
         /* 在临界区之外填写空闲缓冲区：在此期间 ISR
          * 继续发送已捕获的副本。 */
-        const bool valid = ctx->config->app_callbacks->on_pd_input(
-            ctx->config->user, &ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.od_width],
+        const bool valid = ctx->config->app->on_pd_input(
+            ctx->config->app->self,
+            &ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.od_width],
             ctx->dll.main.pd_in_len_current);
 
         IOLINK_CRITICAL_ENTER();
@@ -728,8 +732,8 @@ iolink_caps_t iolink_device_set_capabilities(iolink_device_ctx_t* ctx, iolink_ca
                                      IOLINK_CAP_SIO_CQ | IOLINK_CAP_TX_BUSY |
                                      IOLINK_CAP_REQUEST_SERVICE | IOLINK_CAP_PHY_FAULTS |
                                      IOLINK_CAP_REQUIRE_ISR_TX | IOLINK_CAP_PD_IN_CALLBACK;
-    const iolink_caps_t bound = iolink_caps_resolve(&ctx->config->phy, &ctx->config->stack,
-                                                    ctx->config->app_callbacks, NULL);
+    const iolink_caps_t bound =
+        iolink_caps_resolve(&ctx->config->phy, &ctx->config->stack, ctx->config->app, NULL);
     const iolink_build_caps_t* build = iolink_caps_build();
 
     caps = (caps & (iolink_caps_t) ~bound_mask) | (bound & bound_mask);

@@ -49,7 +49,7 @@ static void test_ds_state_transitions(void** state)
     (void) state;
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)), NULL);
 
     /* 1. 触发 Download（主站数据更新） */
     iolink_ds_check(&ds, 0xABCD);
@@ -103,7 +103,7 @@ static void test_ds_commands_locked(void** state)
     (void) state;
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)), NULL);
 
     /* 1. 在锁定状态下尝试 Download Start（写） */
     int ret = iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, IOLINK_LOCK_DS);
@@ -125,7 +125,7 @@ static void test_ds_commands_unlocked(void** state)
     (void) state;
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)), NULL);
 
     /* 1. Download Start（写）未锁定 */
     int ret = iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0);
@@ -145,7 +145,7 @@ static void test_ds_param_round_trip(void** state)
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)), NULL);
 
     /* 配置已知的参数值。 */
     const char* app = "APP-TAG-1";
@@ -230,8 +230,8 @@ static void test_ds_bound_params_restore_device_context_only(void** state)
     test_params_init(&params_b, &info_b);
     iolink_ds_init(&ds_a);
     iolink_ds_init(&ds_b);
-    iolink_ds_bind_sources(&ds_a, test_params_od(&params_a));
-    iolink_ds_bind_sources(&ds_b, test_params_od(&params_b));
+    iolink_ds_bind_sources(&ds_a, test_params_od(&params_a), NULL);
+    iolink_ds_bind_sources(&ds_b, test_params_od(&params_b), NULL);
 
     assert_int_equal(
         test_params_write(&params_a, IOLINK_IDX_APPLICATION_TAG, 0U, tag_a, sizeof(tag_a) - 1U)
@@ -268,7 +268,7 @@ static void test_ds_apply_rejects_truncated(void** state)
     (void) state;
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)), NULL);
     /* 头部声称有 5 字节值，但后面只有 2 个数据字节 -> 被拒绝。 */
     uint8_t bad[] = {0x00, 0x18, 0x00, 0x05, 0xAA, 0xBB};
     assert_int_equal(iolink_ds_apply_image(&ds, bad, sizeof(bad)), -1);
@@ -280,10 +280,10 @@ static void test_ds_apply_rejects_truncated(void** state)
 static uint8_t g_vendor_param[8];
 static size_t g_vendor_param_len;
 
-static iolink_result_t vendor_od_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
-                                      size_t cap)
+static iolink_result_t vendor_od_read(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                      uint8_t* out, size_t cap)
 {
-    (void) user;
+    (void) self;
     if (entry->index != VENDOR_PARAM_IDX) {
         return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
@@ -292,10 +292,10 @@ static iolink_result_t vendor_od_read(void* user, const iolink_od_entry_t* entry
     return iolink_result_ok((uint16_t) n);
 }
 
-static iolink_result_t vendor_od_write(void* user, const iolink_od_entry_t* entry, uint8_t subindex,
-                                       const uint8_t* data, size_t len)
+static iolink_result_t vendor_od_write(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                       uint8_t subindex, const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) subindex;
     if (entry->index != VENDOR_PARAM_IDX) {
         return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
@@ -317,7 +317,6 @@ static const iolink_od_entry_t k_vendor_entries[] = {
 static iolink_od_app_t k_vendor_app = {
     .entries = k_vendor_entries,
     .count = sizeof(k_vendor_entries) / sizeof(k_vendor_entries[0]),
-    .user = NULL,
 };
 
 static void test_ds_vendor_param_set_round_trip(void** state)
@@ -333,7 +332,7 @@ static void test_ds_vendor_param_set_round_trip(void** state)
     iolink_ds_init(&ds);
     merged = test_od_with_tags(&k_vendor_app, test_params_od(test_env_params(&g_test_env)),
                                merged_storage, 64U);
-    iolink_ds_bind_sources(&ds, &merged);
+    iolink_ds_bind_sources(&ds, &merged, NULL);
 
     assert_int_equal(test_params_write(test_env_params(&g_test_env), IOLINK_IDX_APPLICATION_TAG, 0U,
                                        (const uint8_t*) "TAG", 3U)
@@ -374,7 +373,7 @@ static void test_ds_download_recovery(void** state)
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)), NULL);
 
     /* 构造一个镜像，包含已知参数（ApplicationTag 0x18 = "X"）以及
        设备无法存储的未知索引（0x9999）。 */
@@ -411,10 +410,10 @@ static void test_ds_download_recovery(void** state)
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOAD_REQ);
 }
 
-static iolink_result_t rejecting_od_write(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t rejecting_od_write(iolink_app_t* self, const iolink_od_entry_t* entry,
                                           uint8_t subindex, const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     (void) subindex;
     (void) data;
@@ -430,7 +429,6 @@ static const iolink_od_entry_t k_reject_entries[] = {
 static iolink_od_app_t k_reject_app = {
     .entries = k_reject_entries,
     .count = sizeof(k_reject_entries) / sizeof(k_reject_entries[0]),
-    .user = NULL,
 };
 
 /* ParamDownloadEnd 将格式错误的镜像（PAR_SETINVALID 0x8040）与
@@ -444,7 +442,7 @@ static void test_ds_download_end_error_classification(void** state)
 
     /* 格式错误的暂存镜像 -> -1 -> PAR_SETINVALID。 */
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)), NULL);
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
     uint8_t bad[] = {0x00U, 0x18U, 0x00U, 0x05U, 0xAAU}; /* 声称 5 字节，实际为 1 */
     (void) memcpy(ds.image, bad, sizeof(bad));
@@ -455,7 +453,7 @@ static void test_ds_download_end_error_classification(void** state)
     iolink_ds_init(&ds);
     merged = test_od_with_tags(&k_reject_app, test_params_od(test_env_params(&g_test_env)),
                                merged_storage, 64U);
-    iolink_ds_bind_sources(&ds, &merged);
+    iolink_ds_bind_sources(&ds, &merged, NULL);
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
     uint8_t img[] = {0x00U, 0x50U, 0x00U, 0x03U, 'A', 'B', 'C'};
     (void) memcpy(ds.image, img, sizeof(img));
@@ -478,13 +476,12 @@ static void test_ds_entry_block_len_bounds_value(void** state)
     static iolink_od_app_t bounded_app = {
         .entries = bounded_entries,
         .count = sizeof(bounded_entries) / sizeof(bounded_entries[0]),
-        .user = NULL,
     };
 
     iolink_ds_init(&ds);
     merged = test_od_with_tags(&bounded_app, test_params_od(test_env_params(&g_test_env)),
                                merged_storage, 64U);
-    iolink_ds_bind_sources(&ds, &merged);
+    iolink_ds_bind_sources(&ds, &merged, NULL);
     g_vendor_param_len = 8U;
     (void) memcpy(g_vendor_param, "ABCDEFGH", 8U);
 
@@ -527,7 +524,7 @@ static void ds_fixture_init(ds_fixture_t* f)
     iolink_device_info_ctx_init(&f->info, NULL);
     test_params_init(&f->params, &f->info);
     iolink_ds_init(&f->ds);
-    iolink_ds_bind_sources(&f->ds, test_params_od(&f->params));
+    iolink_ds_bind_sources(&f->ds, test_params_od(&f->params), NULL);
     iolink_events_init(&f->events);
 }
 
@@ -927,12 +924,12 @@ static void test_ds_0081_upload_abort_points(void** state)
     }
 }
 
-static void* g_validate_user;
+static iolink_app_t* g_validate_user;
 
-static iolink_result_t reject_validate(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t reject_validate(iolink_app_t* self, const iolink_od_entry_t* entry,
                                        const uint8_t* data, size_t len)
 {
-    g_validate_user = user;
+    g_validate_user = self;
     (void) entry;
     (void) data;
     (void) len;
@@ -956,7 +953,6 @@ static void test_ds_apply_precheck_rejects_before_write(void** state)
     static const iolink_od_app_t app = {
         .entries = entries,
         .count = sizeof(entries) / sizeof(entries[0]),
-        .user = &marker,
     };
     /* 合法 FunctionTag 在前，被 validate 拒绝的 0x01B0 在后。 */
     const uint8_t image[] = {0x00U, 0x19U, 0x00U, 0x01U, 'X',  0x01U,
@@ -967,7 +963,7 @@ static void test_ds_apply_precheck_rejects_before_write(void** state)
     iolink_ds_init(&ds);
     merged =
         test_od_with_tags(&app, test_params_od(test_env_params(&g_test_env)), merged_storage, 64U);
-    iolink_ds_bind_sources(&ds, &merged);
+    iolink_ds_bind_sources(&ds, &merged, (iolink_app_t*) &marker);
 
     g_validate_user = NULL;
     assert_int_equal(iolink_ds_apply_image(&ds, image, sizeof(image)), -2);
@@ -984,9 +980,9 @@ static void test_ds_apply_precheck_rejects_before_write(void** state)
 static int g_flag_persist_calls;
 static bool g_flag_persist_last;
 
-static void flag_persist_cb(void* user, bool flag)
+static void flag_persist_cb(iolink_app_t* self, bool flag)
 {
-    (void) user;
+    (void) self;
     g_flag_persist_calls++;
     g_flag_persist_last = flag;
 }

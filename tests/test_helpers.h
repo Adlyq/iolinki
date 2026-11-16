@@ -27,7 +27,7 @@ extern uint8_t g_tx_buf[1024];
 extern uint8_t g_rx_buf[1024];
 
 /* 测试时钟：未安装假时钟时返回真实单调时间，安装后由用例手动推进。 */
-uint64_t iolink_test_time_us(void* user);
+uint64_t iolink_test_time_us(iolink_app_t* self);
 uint32_t iolink_test_time_ms(void);
 extern iolink_device_time_us_fn g_iolink_test_time_us_override;
 
@@ -145,11 +145,16 @@ typedef struct
 } iolink_test_device_t;
 
 int iolink_test_device_init(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
-                            const iolink_app_callbacks_t* callbacks);
+                            const iolink_device_app_t* app);
+
+/** @brief 默认应用 trait（只有 iolink_test_time_us）；直接构造 config 的测试使用。 */
+const iolink_device_app_t* iolink_test_default_app(void);
+
+/** @brief 没有时钟的 trait：用于验证 IOLINK_DEVICE_INIT_ERR_TIME。 */
+const iolink_device_app_t* iolink_test_app_without_clock(void);
 /* 同上，并在初始化前绑定应用 OD 表（用于验证 config->od 的设备层接线）。 */
 int iolink_test_device_init_with_od(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
-                                    const iolink_app_callbacks_t* callbacks,
-                                    const iolink_od_app_t* od);
+                                    const iolink_device_app_t* app, const iolink_od_app_t* od);
 void move_to_operate_ctx(iolink_device_ctx_t* ctx);
 
 /* ISDU V1.1.5 交织格式辅助函数 */

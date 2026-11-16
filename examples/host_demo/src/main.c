@@ -22,9 +22,9 @@ void iolink_critical_exit(void)
 {
 }
 
-static uint64_t host_time_us(void* user)
+static uint64_t host_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
         return 0ULL;
@@ -63,7 +63,6 @@ static void host_tags_init(void)
         IOLINK_OD_STORAGE_DS, 32U, "LocationTag", g_tags[2], &g_tag_len[2]);
     g_tag_od.entries = g_tag_entries;
     g_tag_od.count = 3U;
-    g_tag_od.user = NULL;
 }
 
 int main(int argc, char* argv[])
@@ -144,11 +143,12 @@ int main(int argc, char* argv[])
 
     /* Initialize stack with virtual PHY and config */
     const iolink_phy_api_t* phy = iolink_phy_virtual_get();
+    static const iolink_device_app_t app = {.self = NULL, .time_us = host_time_us};
     iolink_device_ctx_t ctx;
     iolink_device_config_t dev_config = {
         .phy = *phy,
         .stack = config,
-        .time_us = host_time_us,
+        .app = &app,
     };
     host_tags_init();
     dev_config.od = &g_tag_od;

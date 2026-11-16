@@ -164,7 +164,7 @@ static void test_fallback_command_ignored_without_wakeup(void** state)
     memset(&dev, 0, sizeof(dev));
     dev.cfg.phy = g_phy_mock;
     dev.cfg.phy.detect_wakeup = NULL;
-    dev.cfg.time_us = iolink_test_time_us;
+    dev.cfg.app = iolink_test_default_app();
     dev.cfg.stack = config;
     assert_int_equal(iolink_device_init(&dev.ctx, &dev.cfg), 0);
 

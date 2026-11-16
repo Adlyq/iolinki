@@ -189,9 +189,9 @@ static void test_get_faults_overtemp_and_short(void** state)
 
 static uint32_t g_fault_ms;
 
-static uint64_t fault_time_us(void* user)
+static uint64_t fault_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return (uint64_t) g_fault_ms * 1000U;
 }
 

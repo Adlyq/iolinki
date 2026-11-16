@@ -376,7 +376,7 @@ iolink_result_t iolink_od_encode(const iolink_od_entry_t* entry, uint32_t value,
     return iolink_result_ok(codec->len);
 }
 
-iolink_result_t iolink_od_check_value(const iolink_od_entry_t* entry, void* user,
+iolink_result_t iolink_od_check_value(const iolink_od_entry_t* entry, iolink_app_t* self,
                                       const uint8_t* data, size_t len)
 {
     if (entry == NULL) {
@@ -399,7 +399,7 @@ iolink_result_t iolink_od_check_value(const iolink_od_entry_t* entry, void* user
         return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
     }
     if (entry->validate != NULL) {
-        return entry->validate(user, entry, data, len);
+        return entry->validate(self, entry, data, len);
     }
     return iolink_result_ok((uint16_t) len);
 }
@@ -491,7 +491,7 @@ static iolink_result_t od_storage_apply(const iolink_od_entry_t* entry, const ui
  * 标量保存写前的原生字节（≤4 B）；OctetString 不做回滚（避免在主泵
  * 栈上复制最多 255 字节），拒绝语义应由 `validate` 钩子完成。
  */
-static iolink_result_t od_storage_write(const iolink_od_entry_t* entry, void* user,
+static iolink_result_t od_storage_write(const iolink_od_entry_t* entry, iolink_app_t* self,
                                         const uint8_t* data, size_t len)
 {
     const bool is_string = entry->datatype == (uint8_t) IOLINK_OD_DT_OCTET_STRING;
@@ -519,7 +519,7 @@ static iolink_result_t od_storage_write(const iolink_od_entry_t* entry, void* us
         return result;
     }
     if (entry->on_change != NULL) {
-        result = entry->on_change(user, entry, data, len);
+        result = entry->on_change(self, entry, data, len);
         if (!iolink_result_succeeded(result)) {
             if (!is_string) {
                 (void) memcpy((void*) entry->u.storage.value, old_bytes, codec->len);
@@ -547,7 +547,7 @@ iolink_result_t iolink_od_read_value(const iolink_od_ctx_t* ctx, const iolink_od
         }
         else if ((entry->backend == (uint8_t) IOLINK_OD_BACKEND_HANDLER) && (ctx->app != NULL) &&
                  (entry->u.handler.read != NULL)) {
-            result = entry->u.handler.read(ctx->app->user, entry, out, cap);
+            result = entry->u.handler.read(ctx->self, entry, out, cap);
         }
         else {
             return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
@@ -583,8 +583,8 @@ iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entr
         return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
     }
 
-    void* user = (ctx->app != NULL) ? ctx->app->user : NULL;
-    iolink_result_t result = iolink_od_check_value(entry, user, data, len);
+    iolink_app_t* self = ctx->self;
+    iolink_result_t result = iolink_od_check_value(entry, self, data, len);
 
     if (!iolink_result_succeeded(result)) {
         return result;
@@ -595,18 +595,18 @@ iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entr
         if (entry->on_change == NULL) {
             return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL);
         }
-        return entry->on_change(user, entry, data, len);
+        return entry->on_change(self, entry, data, len);
     }
 
     if (entry->handler == (uint8_t) IOLINK_OD_HANDLER_NONE) {
         if (entry->backend == (uint8_t) IOLINK_OD_BACKEND_STORAGE) {
-            return od_storage_write(entry, user, data, len);
+            return od_storage_write(entry, self, data, len);
         }
         if ((entry->backend != (uint8_t) IOLINK_OD_BACKEND_HANDLER) || (ctx->app == NULL) ||
             (entry->u.handler.write == NULL)) {
             return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
         }
-        result = entry->u.handler.write(ctx->app->user, entry, subindex, data, len);
+        result = entry->u.handler.write(ctx->self, entry, subindex, data, len);
     }
     else {
         /* 内建处理器（SystemCommand/DataStorage/事件/诊断）由 ISDU 层执行。 */
@@ -616,7 +616,7 @@ iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entr
         return result;
     }
     if (entry->on_change != NULL) {
-        result = entry->on_change(user, entry, data, len);
+        result = entry->on_change(self, entry, data, len);
         if (!iolink_result_succeeded(result)) {
             return result;
         }
@@ -641,7 +641,7 @@ iolink_result_t iolink_od_restore_value(iolink_od_ctx_t* ctx, const iolink_od_en
     }
     if ((entry->backend == (uint8_t) IOLINK_OD_BACKEND_HANDLER) && (ctx->app != NULL) &&
         (entry->u.handler.write != NULL)) {
-        return entry->u.handler.write(ctx->app->user, entry, subindex, data, len);
+        return entry->u.handler.write(ctx->self, entry, subindex, data, len);
     }
     return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
 }

@@ -47,14 +47,14 @@ char g_last_msg[128];
 void* g_last_user;
 
 /* Shared with test_log_isr_on.c, which compiles IOLINK_LOG_ENABLE_ISR=1. */
-void log_capture(void* user, iolink_log_level_t level, const char* format, ...)
+void log_capture(iolink_app_t* self, iolink_log_level_t level, const char* format, ...)
 {
     va_list args;
     va_start(args, format);
     (void) vsnprintf(g_last_msg, sizeof(g_last_msg), format, args);
     va_end(args);
     g_last_level = level;
-    g_last_user = user;
+    g_last_user = self;
     g_calls++;
 }
 
@@ -83,16 +83,18 @@ void test_log_isr_on_run(void);
  * must still log through the config (the context is not usable yet).
  */
 
-static uint64_t fake_time_us(void* user)
+static uint64_t fake_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return 1000U;
 }
 
-static void make_minimal_config(iolink_device_config_t* config)
+static void make_minimal_config(iolink_device_config_t* config, iolink_device_app_t* app)
 {
+    (void) memset(app, 0, sizeof(*app));
+    app->time_us = fake_time_us;
     (void) memset(config, 0, sizeof(*config));
-    config->time_us = fake_time_us;
+    config->app = app;
     config->stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     config->stack.pd_in_len = 2U;
     config->stack.pd_out_len = 2U;
@@ -104,24 +106,25 @@ static void test_device_init_binds_config_sink(void** state)
     (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t config;
+    iolink_device_app_t app;
     int token;
 
-    make_minimal_config(&config);
-    config.user = &token;
-    config.log_write = log_capture;
+    make_minimal_config(&config, &app);
+    app.self = (iolink_app_t*) &token;
+    app.log_write = log_capture;
     config.log_level = IOLINK_LOG_LEVEL_INFO;
 
     reset_capture();
     assert_int_equal(iolink_device_init(&ctx, &config), 0);
 
-    /* The init summary is emitted through the config sink, with config.user. */
+    /* The init summary is emitted through the config sink, with app->self. */
     assert_true(g_calls >= 1);
     assert_int_equal(g_last_level, IOLINK_LOG_LEVEL_INFO);
     assert_ptr_equal(g_last_user, &token);
     assert_non_null(strstr(g_last_msg, "device init"));
 
     assert_true(test_dll_shared(&ctx)->log.write == log_capture);
-    assert_ptr_equal(test_dll_shared(&ctx)->log.user, &token);
+    assert_ptr_equal(test_dll_shared(&ctx)->log.self, &token);
     assert_int_equal(test_dll_shared(&ctx)->log.level, IOLINK_LOG_LEVEL_INFO);
     assert_true(test_dll_isdu(&ctx)->log.write == log_capture);
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -145,12 +148,13 @@ static void test_device_init_failure_logs_through_config(void** state)
     (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t config;
+    iolink_device_app_t app;
     int token;
 
-    make_minimal_config(&config);
-    config.time_us = NULL; /* rejected before the context is initialized */
-    config.user = &token;
-    config.log_write = log_capture;
+    make_minimal_config(&config, &app);
+    app.time_us = NULL; /* rejected before the context is initialized */
+    app.self = (iolink_app_t*) &token;
+    app.log_write = log_capture;
     config.log_level = IOLINK_LOG_LEVEL_DEBUG;
 
     reset_capture();
@@ -212,7 +216,7 @@ static void test_forwarding_and_user(void** state)
     iolink_log_sink_t sink;
     int token;
 
-    iolink_log_sink_init(&sink, log_capture, &token, IOLINK_LOG_LEVEL_DEBUG);
+    iolink_log_sink_init(&sink, log_capture, (iolink_app_t*) &token, IOLINK_LOG_LEVEL_DEBUG);
     reset_capture();
     IOLINK_LOG_INFO(&sink, "idx=0x%04X sub=%u", 0x0042U, 3U);
     assert_int_equal(g_calls, 1);
@@ -264,29 +268,32 @@ static void test_device_setter_propagates(void** state)
     (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t config;
+    iolink_device_app_t app;
     int token;
 
     (void) memset(&ctx, 0, sizeof(ctx));
     (void) memset(&config, 0, sizeof(config));
-    config.user = &token;
+    (void) memset(&app, 0, sizeof(app));
+    app.self = (iolink_app_t*) &token;
+    config.app = &app;
     ctx.config = &config;
 
     iolink_device_set_log(&ctx, log_capture, IOLINK_LOG_LEVEL_INFO);
 
     assert_true(test_dll_shared(&ctx)->log.write == log_capture);
-    assert_ptr_equal(test_dll_shared(&ctx)->log.user, &token);
+    assert_ptr_equal(test_dll_shared(&ctx)->log.self, &token);
     assert_int_equal(test_dll_shared(&ctx)->log.level, IOLINK_LOG_LEVEL_INFO);
     assert_true(test_dll_isdu(&ctx)->log.write == log_capture);
-    assert_ptr_equal(test_dll_isdu(&ctx)->log.user, &token);
+    assert_ptr_equal(test_dll_isdu(&ctx)->log.self, &token);
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&ctx);
     assert_true(ds->log.write == log_capture);
-    assert_ptr_equal(ds->log.user, &token);
+    assert_ptr_equal(ds->log.self, &token);
 #endif
 #if IOLINK_FEATURE_EVENTS
     iolink_events_ctx_t* events = iolink_device_get_events_ctx(&ctx);
     assert_true(events->log.write == log_capture);
-    assert_ptr_equal(events->log.user, &token);
+    assert_ptr_equal(events->log.self, &token);
 #endif
 
     /* Logging through a propagated subsystem sink works. */

@@ -24,14 +24,14 @@
 每次通过 ISDU 或 DS 写入成功后，库调用表项的 `on_change`：
 
 ```c
-typedef iolink_result_t (*iolink_od_change_fn)(void* user, const iolink_od_entry_t* entry,
+typedef iolink_result_t (*iolink_od_change_fn)(iolink_app_t* self, const iolink_od_entry_t* entry,
                                                const uint8_t* data, size_t len);
 ```
 
 | 项目 | 约定 |
 | --- | --- |
 | 调用时机 | 值已写入后端之后（DS 下载推迟到应用阶段，见 4.2）；`IOLINK_OD_WRITE_TRIGGER` 表项不写后端，钩子就是动作本身 |
-| 参数 | `user` 来自 `iolink_od_app_t::user`；`data`/`len` 是线上字节（大端） |
+| 参数 | `self` 来自设备实例（`iolink_device_app_t::self`）；`data`/`len` 是线上字节（大端） |
 | 返回值 | 0 表示成功；正的 ISDU ErrorCode 原样上送主站；负值也形成否定应答（普通 ISDU 写为 0x11，DS 下载使整次下载以 0x41 失败） |
 | 失败处理 | STORAGE 标量回滚到写前值；OctetString 不回滚 |
 | 子索引 | 钩子看不到请求的子索引；多元素对象按 `entry->subindex`/`entry->max_subindex` 自行区分 |
@@ -95,10 +95,10 @@ static uint16_t g_setpoint;
 
 static iolink_result_t nvm_write_record(uint16_t index, const uint8_t* data, size_t len);
 
-static iolink_result_t parameter_changed(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t parameter_changed(iolink_app_t* self, const iolink_od_entry_t* entry,
                                          const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     if (nvm_write_record(entry->index, data, len) != 0) {
         return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL);
     }
@@ -192,12 +192,12 @@ NVM。`iolink_ds_serialize()` 把内容流式写入调用方缓冲（整包读�
 位 7）。该标志的 RAM 副本由库维护，掉电保存由应用完成：
 
 ```c
-typedef void (*iolink_ds_flag_persist_fn)(void* user, bool flag);
+typedef void (*iolink_ds_flag_persist_fn)(iolink_app_t* self, bool flag);
 ```
 
-在 `iolink_device_config_t::ds_flag_persist` 中绑定，`user` 固定为
-`iolink_device_config_t::user`；传 NULL 表示该标志只存 RAM。直接驱动 DS 上下文时用
-`iolink_ds_set_flag_persist(ctx, fn, user)` 绑定同一钩子。
+在 `iolink_device_config_t::ds_flag_persist` 中绑定，`self` 固定为
+`iolink_device_app_t::self`；传 NULL 表示该标志只存 RAM。直接驱动 DS 上下文时用
+`iolink_ds_set_flag_persist(ctx, fn, self)` 绑定同一钩子。
 
 | 事件 | 标志 | 钩子 |
 | --- | --- | --- |
@@ -215,9 +215,9 @@ ParamDownloadStore 先完成 DownloadEnd（清除），再置位并请求上传�
 会再次以 `true` 触发钩子，因此钩子必须能承受重复写入。
 
 ```c
-static void app_ds_flag_store(void* user, bool flag)
+static void app_ds_flag_store(iolink_app_t* self, bool flag)
 {
-    app_t* app = user;
+    app_t* app = (app_t*) self;
     (void) app_nvm_write(app, APP_NVM_DS_FLAG, &flag, sizeof(flag));
 }
 

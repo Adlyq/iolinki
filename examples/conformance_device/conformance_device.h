@@ -55,6 +55,7 @@ typedef struct
     iolink_device_ctx_t device;
     const conformance_profile_t* profile;
     iolink_device_config_t config;
+    iolink_device_app_t app_trait;
     iolink_od_app_t od;
 
     uint8_t input[32];

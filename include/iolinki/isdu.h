@@ -126,6 +126,7 @@ typedef struct
     void* dll_ctx;          /**< 用于统计访问的 DLL 上下文 */
     iolink_device_info_ctx_t* device_info; /**< 设备标识上下文（可为 NULL） */
     const iolink_od_app_t* od;             /**< 应用对象字典（表 + get/set 后端；可为 NULL） */
+    iolink_app_t* od_self;                 /**< 传给 OD 钩子/后端的应用上下文 */
     void* direct_param_page2;              /**< 每设备的 Direct Parameter page 2 存储 */
 
     /* Direct Parameter page 1（0x00-0x0F）RAM 映像。
@@ -183,10 +184,11 @@ void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* ws);
  * 分发顺序固定为：规范索引走标准表，设备专用索引先查应用表、再回落到
  * 标准表内建项。应用表不能遮蔽规范固定索引。
  *
- * @param ctx ISDU 上下文
- * @param app 应用表（必须在使用期间保持有效；NULL 解除绑定）
+ * @param ctx  ISDU 上下文
+ * @param app  应用表（必须在使用期间保持有效；NULL 解除绑定）
+ * @param self 传给 OD 钩子与 HANDLER 后端的应用上下文（可为 NULL）
  */
-void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app);
+void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app, iolink_app_t* self);
 
 /**
  * @brief 绑定实例能力位。

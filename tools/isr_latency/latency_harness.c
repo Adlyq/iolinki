@@ -73,9 +73,9 @@ static uint64_t now_ns(void)
     return ((uint64_t) ts.tv_sec * 1000000000ULL) + (uint64_t) ts.tv_nsec;
 }
 
-static uint64_t plan_time_us(void* user)
+static uint64_t plan_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return s_now_us;
 }
 

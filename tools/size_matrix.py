@@ -108,9 +108,9 @@ APP = r"""
 #include <stdint.h>
 #include "iolinki/device.h"
 
-static uint64_t app_time_us(void* user)
+static uint64_t app_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return 0U;
 }
 
@@ -134,6 +134,7 @@ static void app_phy_set_baudrate(void* user, iolink_baudrate_t baudrate)
 
 static iolink_device_ctx_t g_ctx;
 static iolink_device_config_t g_cfg;
+static const iolink_device_app_t g_app = {.self = NULL, .time_us = app_time_us};
 
 void* memset(void* dst, int c, size_t n)
 {
@@ -172,7 +173,7 @@ void reset_handler(void)
     g_cfg.phy.set_baudrate = app_phy_set_baudrate;
     g_cfg.stack.m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
     g_cfg.stack.od_width = 8U;
-    g_cfg.time_us = app_time_us;
+    g_cfg.app = &g_app;
     if (iolink_device_init(&g_ctx, &g_cfg) != 0) {
         for (;;) {
             g_ticks++;

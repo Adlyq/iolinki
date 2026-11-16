@@ -140,14 +140,13 @@ static const iolink_od_entry_t k_wcet_od_entries[] = {
 static iolink_od_app_t g_wcet_od = {
     .entries = k_wcet_od_entries,
     .count = sizeof(k_wcet_od_entries) / sizeof(k_wcet_od_entries[0]),
-    .user = NULL,
 };
 
 /* --- 合成 PHY 实现 ------------------------------------------------------ */
 
-static uint64_t wcet_time_us(void* user)
+static uint64_t wcet_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return g_now_us;
 }
 
@@ -279,7 +278,7 @@ static const iolink_phy_api_t g_phy_api = {
     .detect_wakeup = wcet_phy_detect_wakeup,
 };
 
-static const iolink_app_callbacks_t g_app_callbacks = {0};
+static const iolink_device_app_t g_app = {.time_us = wcet_time_us};
 
 /* --- 设备与泵驱动 ------------------------------------------------------- */
 
@@ -346,10 +345,8 @@ static int wcet_device_setup(iolink_m_seq_type_t type, uint8_t pd_in_len, uint8_
     g_dev.cfg.stack.baudrate = IOLINK_BAUDRATE_COM2;
     g_dev.cfg.stack.baudrate_set = false;
     g_dev.cfg.stack.master_lost_cycles = 0U;
-    g_dev.cfg.app_callbacks = &g_app_callbacks;
+    g_dev.cfg.app = &g_app;
     g_dev.cfg.device_info = &g_device_info;
-    g_dev.cfg.time_us = wcet_time_us;
-    g_dev.cfg.user = NULL;
     g_dev.cfg.od = &g_wcet_od;
 
     const int rc = iolink_device_init(&g_dev.ctx, &g_dev.cfg);

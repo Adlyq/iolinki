@@ -23,9 +23,9 @@
 
 static uint64_t g_now;
 
-static uint64_t test_time_us(void* user)
+static uint64_t test_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return g_now;
 }
 

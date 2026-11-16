@@ -104,6 +104,7 @@ static void make_isdu_ctx(conformance_device_t* app, iolink_isdu_ctx_t* ctx)
     ctx->ds_ctx = iolink_device_get_ds_ctx(&app->device);
     ctx->dll_ctx = test_dll(&app->device);
     ctx->od = app->config.od;
+    ctx->od_self = app->config.app->self;
     ctx->direct_param_page2 = app->device.direct_param_page2;
 }
 
@@ -363,13 +364,13 @@ static void reset_fixture_init(reset_fixture_t* f)
     iolink_device_info_ctx_init(&f->info, NULL);
     test_params_init(&f->params, &f->info);
     iolink_ds_init(&f->ds);
-    iolink_ds_bind_sources(&f->ds, test_params_od(&f->params));
+    iolink_ds_bind_sources(&f->ds, test_params_od(&f->params), NULL);
 }
 
 static void reset_fixture_power_cycle(reset_fixture_t* f)
 {
     iolink_ds_init(&f->ds);
-    iolink_ds_bind_sources(&f->ds, test_params_od(&f->params));
+    iolink_ds_bind_sources(&f->ds, test_params_od(&f->params), NULL);
 }
 
 static int reset_fixture_isdu(reset_fixture_t* f, bool write, uint16_t index, uint8_t sub,

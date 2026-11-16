@@ -24,9 +24,10 @@ static uint16_t g_scalar;
 static uint8_t g_buf[16];
 static uint8_t g_len;
 
-static iolink_result_t h_read(void* user, const iolink_od_entry_t* entry, uint8_t* out, size_t cap)
+static iolink_result_t h_read(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t* out,
+                              size_t cap)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     if (cap < 1U) {
         return iolink_result_error(IOLINK_RESULT_INVALID);
@@ -35,10 +36,10 @@ static iolink_result_t h_read(void* user, const iolink_od_entry_t* entry, uint8_
     return iolink_result_ok(1U);
 }
 
-static iolink_result_t h_write(void* user, const iolink_od_entry_t* entry, uint8_t subindex,
+static iolink_result_t h_write(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t subindex,
                                const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     (void) subindex;
     (void) data;
@@ -47,10 +48,10 @@ static iolink_result_t h_write(void* user, const iolink_od_entry_t* entry, uint8
 }
 
 /* validate 与 on_change 共用同一签名。 */
-static iolink_result_t h_hook(void* user, const iolink_od_entry_t* entry, const uint8_t* data,
-                              size_t len)
+static iolink_result_t h_hook(iolink_app_t* self, const iolink_od_entry_t* entry,
+                              const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     (void) data;
     (void) len;
@@ -82,7 +83,6 @@ static int validate_one(const iolink_od_entry_t* entry)
 
     app.entries = entry;
     app.count = 1U;
-    app.user = NULL;
     return od_validate_app(&app);
 }
 
@@ -95,7 +95,6 @@ static void test_null_and_empty(void** state)
 
     app.entries = NULL;
     app.count = 0U;
-    app.user = NULL;
     assert_int_equal(od_validate_app(&app), OD_VALIDATE_OK);
 }
 
@@ -106,7 +105,6 @@ static void test_table_malformed(void** state)
 
     app.entries = NULL;
     app.count = 1U;
-    app.user = NULL;
     assert_int_equal(od_validate_app(&app), OD_VALIDATE_ERR_TABLE);
 }
 
@@ -121,7 +119,6 @@ static void test_valid_table(void** state)
 
     app.entries = k_valid_table;
     app.count = (size_t) VALID_COUNT;
-    app.user = NULL;
     assert_int_equal(od_validate_app(&app), OD_VALIDATE_OK);
 }
 
@@ -263,7 +260,6 @@ static void test_duplicate(void** state)
     entries[1] = k_valid_table[IDX_SCALAR];
     app.entries = entries;
     app.count = 2U;
-    app.user = NULL;
     assert_int_equal(od_validate_app(&app), OD_VALIDATE_ERR_DUPLICATE);
 }
 

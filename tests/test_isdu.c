@@ -280,7 +280,7 @@ static void test_system_cmd_factory_restore(void** state)
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)), NULL);
     ctx.ds_ctx = &ds;
 
     /* 先设置一个自定义应用标签 */
@@ -557,7 +557,7 @@ static void test_isdu_data_storage_image_round_trip(void** state)
     test_isdu_bind_params(&ctx, &g_test_env);
     iolink_isdu_bind_caps(&ctx, &caps_with_legacy);
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)), NULL);
     ctx.ds_ctx = &ds;
 
     /* 配置一个已知的 ApplicationTag。 */
@@ -613,7 +613,7 @@ static void test_isdu_data_storage_subindices(void** state)
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)));
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)), NULL);
     ctx.ds_ctx = &ds;
 
     assert_true(iolink_ds_build_image(&ds) >= 0);
@@ -1404,9 +1404,9 @@ static int read_events_index(iolink_events_ctx_t* events, uint16_t index, uint8_
 
 static uint32_t g_dds_event_ms;
 
-static uint64_t dds_event_time_us(void* user)
+static uint64_t dds_event_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return (uint64_t) g_dds_event_ms * 1000U;
 }
 

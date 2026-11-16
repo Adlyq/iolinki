@@ -39,7 +39,7 @@ static void ds_clear_upload_flag(iolink_ds_ctx_t* ctx)
     const bool changed = ctx->ds_upload_flag;
     ctx->ds_upload_flag = false;
     if (changed && (ctx->flag_persist != NULL)) {
-        ctx->flag_persist(ctx->flag_user, false);
+        ctx->flag_persist(ctx->flag_self, false);
     }
 }
 
@@ -137,21 +137,23 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx)
 #endif
 }
 
-void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn fn, void* user)
+void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn fn,
+                                iolink_app_t* self)
 {
     if (ctx == NULL) {
         return;
     }
     ctx->flag_persist = fn;
-    ctx->flag_user = user;
+    ctx->flag_self = self;
 }
 
-void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app)
+void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app, iolink_app_t* self)
 {
     if (ctx == NULL) {
         return;
     }
     ctx->od_app = app;
+    ctx->self = self;
 }
 
 /** @brief 组合表项的值访问上下文。 */
@@ -159,6 +161,7 @@ static iolink_od_ctx_t ds_od_ctx(iolink_ds_ctx_t* ctx)
 {
     iolink_od_ctx_t od;
     od.app = ctx->od_app;
+    od.self = ctx->self;
     return od;
 }
 
@@ -354,6 +357,7 @@ int iolink_ds_factory_reset(iolink_ds_ctx_t* ctx)
     }
     iolink_od_ctx_t od;
     od.app = ctx->od_app;
+    od.self = ctx->self;
 
     /* 复位 DS 集合：它是主站可备份/恢复的参数集，也是库当前唯一持有的
        集合标记。纯应用持久化参数由应用自行复位。 */
@@ -406,7 +410,7 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
     /* 第一阶段：已知参数的无副作用预校验。必须在写入任何参数之前完成，
        这样一条非法记录不会留下"前面已生效、后面失败"的半恢复状态。 */
     {
-        void* hook_user = (ctx->od_app != NULL) ? ctx->od_app->user : NULL;
+        iolink_app_t* hook_self = ctx->self;
         pos = 0U;
         while (pos < len) {
             uint16_t index = (uint16_t) (((uint16_t) data[pos] << 8) | (uint16_t) data[pos + 1U]);
@@ -417,7 +421,7 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
                 entry = iolink_od_find(ctx->od_app, index, subindex);
             }
             if ((entry != NULL) && !iolink_result_succeeded(iolink_od_check_value(
-                                       entry, hook_user, &data[pos + DS_RECORD_HEADER], rlen))) {
+                                       entry, hook_self, &data[pos + DS_RECORD_HEADER], rlen))) {
                 return -2; /* 已知参数拒绝了该值：尚未写入任何参数 */
             }
             pos += DS_RECORD_HEADER + rlen;
@@ -829,7 +833,7 @@ void iolink_ds_request_upload(iolink_ds_ctx_t* ctx)
     if (ctx != NULL) {
         ctx->ds_upload_flag = true;
         if (ctx->flag_persist != NULL) {
-            ctx->flag_persist(ctx->flag_user, true);
+            ctx->flag_persist(ctx->flag_self, true);
         }
         /* 尺寸/校验和按当前参数集重建；没有独立的 DS 镜像需要落盘。 */
         iolink_ds_refresh(ctx);

@@ -12,6 +12,7 @@
 #include "iolinki/config.h"
 #include "iolinki/od.h"
 #include "iolinki/result.h"
+#include "iolinki/types.h"
 #include "iolinki/workspace.h"
 
 #include "iolinki/protocol.h"
@@ -57,10 +58,10 @@ typedef enum
  *
  * 标志变化时由库调用；应用把它写进自己的 NVM。NULL 表示 RAM-only。
  *
- * @param user 应用上下文（设备层传 `iolink_device_config_t::user`）。
+ * @param self 应用上下文（设备层传 `iolink_device_app_t::self`）。
  * @param flag 新的标志值。
  */
-typedef void (*iolink_ds_flag_persist_fn)(void* user, bool flag);
+typedef void (*iolink_ds_flag_persist_fn)(iolink_app_t* self, bool flag);
 
 /**
  * @brief 数据存储引擎上下文
@@ -77,7 +78,8 @@ typedef struct
     bool ds_upload_flag;                    /**< DS_UPLOAD_REQ 挂起（State_Property 位 7） */
     bool upload_event_pending;              /**< DS_UPLOAD_REQ 通知推迟到 ISDU 空闲后发出 */
     iolink_ds_flag_persist_fn flag_persist; /**< 标志变化通知（可为 NULL）。 */
-    void* flag_user;                        /**< 传给 @ref flag_persist 的上下文。 */
+    iolink_app_t* flag_self;                /**< 传给 @ref flag_persist 的上下文。 */
+    iolink_app_t* self;                     /**< 传给 OD 钩子/后端的应用上下文。 */
     /* 镜像不再常驻状态结构。序列化交给工作区中的暂存缓冲（上传可
      * 直接流式写入调用方缓冲），这里只保留指针与容量。 */
     uint8_t* image;        /**< 序列化/下载暂存缓冲（工作区或内嵌 fallback） */
@@ -100,7 +102,8 @@ typedef struct
 void iolink_ds_init(iolink_ds_ctx_t* ctx);
 
 /** @brief 绑定 DS_UPLOAD_FLAG 持久化钩子（NULL 解除绑定）。 */
-void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn fn, void* user);
+void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn fn,
+                                iolink_app_t* self);
 
 /**
  * @brief 绑定外部工作区。
@@ -158,7 +161,7 @@ void iolink_ds_refresh(iolink_ds_ctx_t* ctx);
  * @param ctx DS 上下文
  * @param app 应用 OD 表（可为 NULL，表示没有 DS 参数）
  */
-void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app);
+void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app, iolink_app_t* self);
 
 /**
  * @brief 计算参数块的标准 32 位校验和（Fletcher-32）

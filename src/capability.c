@@ -107,8 +107,7 @@ const iolink_build_caps_t* iolink_caps_build(void)
 }
 
 iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* phy, const iolink_stack_config_t* stack,
-                                  const iolink_app_callbacks_t* app,
-                                  const iolink_build_caps_t* build)
+                                  const iolink_device_app_t* app, const iolink_build_caps_t* build)
 {
     iolink_caps_t caps = 0U;
     uint8_t compat;

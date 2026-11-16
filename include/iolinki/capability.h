@@ -159,13 +159,12 @@ const iolink_build_caps_t* iolink_caps_build(void);
  *
  * @param phy   绑定的 PHY vtable（可以为 NULL，表示无 PHY 能力）
  * @param stack 运行时协议栈配置（可以为 NULL，取默认）
- * @param app   应用回调（可以为 NULL）
+ * @param app   应用 trait（可以为 NULL）
  * @param build 构建档位（NULL 表示 @ref iolink_caps_build()）
  * @return 能力位掩码
  */
 iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* phy, const iolink_stack_config_t* stack,
-                                  const iolink_app_callbacks_t* app,
-                                  const iolink_build_caps_t* build);
+                                  const iolink_device_app_t* app, const iolink_build_caps_t* build);
 
 /**
  * @brief 测试能力位是否置位。

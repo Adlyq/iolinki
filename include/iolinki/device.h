@@ -68,13 +68,12 @@
  * iolink_device_config_t     | application     | 必须比上下文存活更久
  *  .phy (vtable)             | application/PHY | 回调在 ctx 生命周期内有效
  *  .phy.user                 | PHY driver      | 仅传给 PHY 回调
- *  .user                     | application     | 传给 time_us、OD 后端
- *                            |                 | 以及 app_callbacks 的 on_* 钩子
- *  .app_callbacks            | application     | 结构体与回调目标保持有效
- *  .device_info              | application     | 静态标识数据
- *  .time_us                  | application     | 单调递增、非阻塞、ISR 安全
- *  .log_write                | application     | 主服务上下文调用；启用
+ *  .app                      | application     | trait（self + 回调）保持有效；
+ *                            |                 | self 传给 time/log/OD/on_* 全部钩子
+ *  .app->time_us             | application     | 单调递增、非阻塞、ISR 安全
+ *  .app->log_write           | application     | 主服务上下文调用；启用
  *                            |                 | IOLINK_LOG_ENABLE_ISR 时须 ISR 安全
+ *  .device_info              | application     | 静态标识数据
  * iolink_device_ctx_t        | application     | 每个链路一个实例；一个主上下文
  *                            |                 | 调用者加数据 ISR
  * PD data (pd_input_update)  | application     | 调用期间借用；内部复制到
@@ -93,11 +92,11 @@
  */
 
 /** @brief 返回以微秒为单位的单调时间戳的回调。
- *  @param user 通过 ::iolink_device_config_t 提供的用户不透明指针。
+ *  @param self 应用上下文（::iolink_device_app_t::self）。
  *  @return 当前时间，单位为微秒。
  *  @note 主循环和数据 ISR 都会调用它，因此它必须是非阻塞
  *        且 ISR 安全的。 */
-typedef uint64_t (*iolink_device_time_us_fn)(void* user);
+typedef uint64_t (*iolink_device_time_us_fn)(iolink_app_t* self);
 
 /**
  * @brief 初始化时提供的设备配置。
@@ -107,32 +106,26 @@ typedef uint64_t (*iolink_device_time_us_fn)(void* user);
  */
 typedef struct
 {
-    iolink_phy_api_t phy;                        /**< 物理层驱动 API。`phy.user` 是仅传给
-                                                      PHY vtable 的驱动上下文；它与下面的
-                                                      @ref user 相互独立。 */
-    iolink_stack_config_t stack;                 /**< 协议栈行为配置。 */
-    const iolink_app_callbacks_t* app_callbacks; /**< 应用生命周期/PD 回调（可以为 NULL；
-                                                    提供 on_pd_input 时 DLL 走回调路径，
-                                                    否则使用轮询 API）。 */
-    const iolink_device_info_t* device_info;     /**< 静态设备标识数据。 */
+    iolink_phy_api_t phy;                    /**< 物理层驱动 API。`phy.user` 是驱动自己的
+                                                  上下文，由 `iolink_phy_*_init()` 绑定；
+                                                  应用不设置它，也不与 `app->self` 混用。 */
+    iolink_stack_config_t stack;             /**< 协议栈行为配置。 */
+    const iolink_device_app_t* app;          /**< 应用 trait：实例指针与生命周期/PD/时钟/日志
+                                                  回调的唯一来源。`app` 为 NULL 时初始化返回
+                                                  `IOLINK_DEVICE_INIT_ERR_APP`；`app->time_us`
+                                                  为 NULL 时返回 `IOLINK_DEVICE_INIT_ERR_TIME`。 */
+    const iolink_device_info_t* device_info; /**< 静态设备标识数据。 */
 #if IOLINK_FEATURE_DATA_STORAGE
-    iolink_ds_flag_persist_fn ds_flag_persist; /**< 持久化 DS_UPLOAD_FLAG（NULL = RAM-only）。 */
+    iolink_ds_flag_persist_fn ds_flag_persist; /**< 持久化 DS_UPLOAD_FLAG（NULL = RAM-only）；
+                                                    回调收到 `app->self`。 */
 #endif
-    iolink_device_time_us_fn time_us; /**< DLL、ISR 泵和事件引擎使用的应用时钟；
-                                           必需（NULL 在初始化时会被
-                                           拒绝）。 */
-    void* user;                       /**< 传给 iolink_device_time_us_fn、OD 后端、
-                                           log_write 以及每个 iolink_app_callbacks_t 钩子的
-                                           应用上下文。 */
-    iolink_log_write_fn log_write;    /**< 可选的运行时日志回调；NULL 表示静默。
-                                           参见 iolinki/log.h。 */
-    iolink_log_level_t log_level;     /**< 运行时日志阈值；IOLINK_LOG_LEVEL_SILENT（0）
-                                           表示不输出。 */
-    const iolink_od_app_t* od;        /**< 应用对象字典（可选；设备专用索引与参数值的
-                                           唯一扩展入口）。 */
-    iolink_workspace_t* workspace;    /**< 可选的传输 scratch 工作区。NULL 表示使用
-                                           上下文内嵌的 fallback 存储；当
-                                           `IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供。 */
+    iolink_log_level_t log_level;  /**< 运行时日志阈值；IOLINK_LOG_LEVEL_SILENT（0）
+                                        表示不输出。 */
+    const iolink_od_app_t* od;     /**< 应用对象字典（可选；设备专用索引与参数值的
+                                        唯一扩展入口）。 */
+    iolink_workspace_t* workspace; /**< 可选的传输 scratch 工作区。NULL 表示使用
+                                        上下文内嵌的 fallback 存储；当
+                                        `IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供。 */
 } iolink_device_config_t;
 
 /**
@@ -180,6 +173,7 @@ typedef enum
                                                  （原始驱动码见 iolink_device_get_phy_error()） */
     IOLINK_DEVICE_INIT_ERR_WORKSPACE = -13, /**< `IOLINK_WORKSPACE_EMBEDDED=0` 但没有提供工作区 */
     IOLINK_DEVICE_INIT_ERR_OD = -14,        /**< 应用对象字典表存在未定义/自相矛盾的配置 */
+    IOLINK_DEVICE_INIT_ERR_APP = -15,       /**< 未提供应用 trait（`config->app == NULL`） */
 } iolink_device_init_result_t;
 
 /**
@@ -213,8 +207,8 @@ int iolink_device_get_phy_error(const iolink_device_ctx_t* ctx);
 /**
  * @brief 在运行时更换日志回调或阈值。
  *
- * 更新 DLL、ISDU、DS 和事件子系统共用的汇点；`user` 仍取
- * ::iolink_device_config_t::user 字段。传入 `write == NULL` 或
+ * 更新 DLL、ISDU、DS 和事件子系统共用的汇点；`self` 仍取
+ * ::iolink_device_app_t::self。传入 `write == NULL` 或
  * `level == IOLINK_LOG_LEVEL_SILENT` 可立即静默。
  *
  * @param ctx   由 iolink_device_init() 初始化的设备上下文。

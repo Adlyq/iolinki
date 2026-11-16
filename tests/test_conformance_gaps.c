@@ -818,10 +818,10 @@ static void test_0056_config1_write_readback(void** state)
 
 static uint8_t g_long_data[200];
 
-static iolink_result_t long_param_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
-                                       size_t cap)
+static iolink_result_t long_param_read(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                       uint8_t* out, size_t cap)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     if (cap < sizeof(g_long_data)) {
         return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN);
@@ -870,10 +870,11 @@ static void test_0055_200_byte_read(void** state)
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    iolink_od_app_t app = {.entries = k_long_entry,
-                           .count = sizeof(k_long_entry) / sizeof(k_long_entry[0]),
-                           .user = NULL};
-    iolink_isdu_bind_od(&ctx, &app);
+    iolink_od_app_t app = {
+        .entries = k_long_entry,
+        .count = sizeof(k_long_entry) / sizeof(k_long_entry[0]),
+    };
+    iolink_isdu_bind_od(&ctx, &app, NULL);
 
     assert_int_equal(isdu_send_read_request(&ctx, 0x00E4U, 0U), 1);
     iolink_isdu_process(&ctx);

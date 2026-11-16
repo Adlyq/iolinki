@@ -43,11 +43,16 @@ void iolink_critical_exit(void)
 
 static iolink_workspace_t g_workspace;
 
-static uint64_t test_time_us(void* user)
+static uint64_t test_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return 1000U;
 }
+
+static const iolink_device_app_t g_app = {
+    .self = NULL,
+    .time_us = test_time_us,
+};
 
 static int test_phy_init(void* user)
 {
@@ -118,7 +123,7 @@ static void make_config(iolink_device_config_t* config)
     config->phy.tx_done = test_tx_done;
 #endif
     config->phy.int_active = test_int_active;
-    config->time_us = test_time_us;
+    config->app = &g_app;
     config->stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     config->stack.od_width = 1U;
 }

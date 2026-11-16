@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (application context is a trait)
+- `iolink_device_config_t` no longer takes `user`, `time_us`, `log_write` and
+  `app_callbacks`. They are one `const iolink_device_app_t* app`: a trait that
+  binds `iolink_app_t* self` to the clock, the log sink and every lifecycle/PD
+  callback. `iolink_app_t` is an incomplete type the application defines, so
+  assigning an unrelated pointer to `self` needs an explicit cast and is a
+  compile-time diagnostic instead of a silent `void*` conversion.
+- The OD hooks and HANDLER backends receive the same `self`
+  (`iolink_od_app_t` lost its `user` field; `iolink_od_ctx_t`, `iolink_isdu_ctx_t`
+  and `iolink_ds_ctx_t` carry it), and `iolink_isdu_bind_od()` /
+  `iolink_ds_bind_sources()` take it as an argument. The PHY keeps its own
+  driver handle: `phy.user` is set by `iolink_phy_*_init()`, never by the app.
+- `iolink_log_write_fn` and `iolink_ds_flag_persist_fn` take `iolink_app_t*`;
+  `iolink_log_sink_t::user` is now `self`.
+- New `IOLINK_DEVICE_INIT_ERR_APP` (-15) when `config.app == NULL`; a trait
+  without `time_us` still returns `IOLINK_DEVICE_INIT_ERR_TIME`.
+- Layout: device context 4904 → 4920 B, ISDU 1344 → 1352 B, DS 360 → 368 B on
+  the 64-bit host (each context stores the instance pointer; the config struct
+  loses four pointers). The application trait itself is 44 B of `.rodata` on a
+  32-bit target (11 pointers) instead of 16 B of scattered config fields, so
+  `tools/size_baseline.csv` was regenerated for that intentional change.
+
 ### Changed (source layout)
 - The three oversized translation units are split by responsibility, so each
   stays readable and reviewable: `dll.c` (context, deadline table, pump),

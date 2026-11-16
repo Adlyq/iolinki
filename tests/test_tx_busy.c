@@ -29,9 +29,9 @@
 
 static uint64_t now_us;
 
-static uint64_t test_time_us(void* user)
+static uint64_t test_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return now_us;
 }
 
@@ -220,11 +220,16 @@ void iolink_critical_exit(void)
 {
 }
 
-static uint64_t device_time_us(void* user)
+static uint64_t device_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return 1000000ULL;
 }
+
+static const iolink_device_app_t device_app = {
+    .self = NULL,
+    .time_us = device_time_us,
+};
 
 static void test_device_init_requires_tx_busy(void** state)
 {
@@ -235,7 +240,7 @@ static void test_device_init_requires_tx_busy(void** state)
     (void) memset(&cfg, 0, sizeof(cfg));
     cfg.phy = g_phy;
     cfg.phy.tx_busy = NULL;
-    cfg.time_us = device_time_us;
+    cfg.app = &device_app;
     assert_int_equal(iolink_device_init(&ctx, &cfg), IOLINK_DEVICE_INIT_ERR_PHY);
 
     cfg.phy.tx_busy = mock_tx_busy;

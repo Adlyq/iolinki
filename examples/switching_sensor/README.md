@@ -50,8 +50,8 @@ Checker for your product definition. Schema/CLI validation does not supply
 official Checker approval. See `tools/IODD_GEN.md` for generate/inspect/validate/pack.
 
 For an MCU integration, keep the sensor/config/device contexts alive, call
-`switching_sensor_od_init(&od_app, &sensor)`, assign `config.od = &od_app` and
-`config.user = &sensor`, configure Type 2.V with three input bytes and no output
+`switching_sensor_od_init(&od_app)`, assign `config.od = &od_app`, point the
+application trait's `self` at `&sensor`, configure Type 2.V with three input bytes and no output
 bytes, and publish each sample using `iolink_device_pd_input_update`.
 Sample at application cadence while
 servicing `iolink_device_process` fast enough for the link. Supply the MCU/PHY,

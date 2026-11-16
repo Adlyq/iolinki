@@ -70,15 +70,17 @@ static int stm32_tx_octet(void* user, uint8_t data)
 ### 2. Time Source
 
 Supply a monotonic microsecond clock through
-`iolink_device_config_t::time_us`. `iolink_device_init()` rejects NULL with
-`IOLINK_DEVICE_INIT_ERR_TIME`. The DLL, ISR pump and event engine all use this
+`iolink_device_app_t::time_us` (inside the `config.app` trait). `iolink_device_init()`
+rejects a missing trait with
+`IOLINK_DEVICE_INIT_ERR_APP` (no trait) or `IOLINK_DEVICE_INIT_ERR_TIME` (no
+clock). The DLL, ISR pump and event engine all use this
 callback; because the data ISR calls it, it must be non-blocking and ISR-safe.
 
 **Example** (FreeRTOS):
 ```c
-static uint64_t app_time_us(void* user)
+static uint64_t app_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return (uint64_t) xTaskGetTickCount() * (1000000ULL / configTICK_RATE_HZ);
 }
 ```
@@ -97,9 +99,9 @@ void SysTick_Handler(void)
     g_tick_ms++;
 }
 
-static uint64_t app_time_us(void* user)
+static uint64_t app_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return (uint64_t) g_tick_ms * 1000ULL; /* replace with a hardware timer */
 }
 ```
@@ -423,8 +425,8 @@ costs, compiler-flag advice and the context-size measurement snippet.
 ### Logging
 
 The stack ships print points with a runtime sink: set
-`iolink_device_config_t::log_write` and `log_level` (the `user` argument is
-`config.user`), or call `iolink_device_set_log()` later. A zeroed sink is
+`iolink_device_app_t::log_write` (its `self` argument is `app->self`) and
+`config.log_level`, or call `iolink_device_set_log()` later. A zeroed sink is
 silent. The library does not format; the callback owns `vsnprintf` and the
 transport. ISR print points additionally require `IOLINK_LOG_ENABLE_ISR=1`.
 See `include/iolinki/log.h` and `docs/API.md`.
@@ -436,9 +438,9 @@ routes the sink to its UART/RTOS logger instead:
 #include <stdarg.h>
 #include <stdio.h>
 
-static void port_log(void* user, iolink_log_level_t level, const char* format, ...)
+static void port_log(iolink_app_t* self, iolink_log_level_t level, const char* format, ...)
 {
-    (void) user;
+    (void) self;
     (void) level;
     va_list args;
     va_start(args, format);
@@ -446,7 +448,7 @@ static void port_log(void* user, iolink_log_level_t level, const char* format, .
     va_end(args);
 }
 
-config.log_write = port_log;
+config.app->log_write = port_log; /* trait 里的回调；trait 本身由应用构造 */
 config.log_level = IOLINK_LOG_LEVEL_INFO; /* SILENT disables */
 ```
 

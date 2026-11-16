@@ -255,7 +255,7 @@ static iolink_od_app_t g_app;
 void shim_init(void)
 {
     switching_sensor_init(&g_sensor);
-    switching_sensor_od_init(&g_app, &g_sensor);
+    switching_sensor_od_init(&g_app);
 }
 
 const unsigned char* shim_pd(void) { return g_sensor.pd; }
@@ -271,6 +271,7 @@ int shim_read(unsigned index, unsigned sub, unsigned char* out, size_t cap, size
     const iolink_od_entry_t* entry = iolink_od_find(&g_app, (unsigned short) index,
                                                     (unsigned char) sub);
     ctx.app = &g_app;
+    ctx.self = (iolink_app_t*) &g_sensor;
     if (entry == 0) {
         return -1;
     }
@@ -285,6 +286,7 @@ int shim_write(unsigned index, unsigned sub, const unsigned char* data, size_t l
     const iolink_od_entry_t* entry = iolink_od_find(&g_app, (unsigned short) index,
                                                     (unsigned char) sub);
     ctx.app = &g_app;
+    ctx.self = (iolink_app_t*) &g_sensor;
     if (entry == 0) {
         return -1;
     }

@@ -442,18 +442,18 @@ static void test_char_status_and_process_data(void** state)
 static int g_char_app_reads;
 static int g_char_app_writes;
 
-static iolink_result_t char_shadow_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
-                                        size_t cap)
+static iolink_result_t char_shadow_read(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                        uint8_t* out, size_t cap)
 {
-    (void) user;
+    (void) self;
     g_char_app_reads++;
     return iolink_od_encode(entry, 0xAAU, out, cap);
 }
 
-static iolink_result_t char_shadow_write(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t char_shadow_write(iolink_app_t* self, const iolink_od_entry_t* entry,
                                          uint8_t subindex, const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     (void) subindex;
     (void) data;
@@ -475,18 +475,18 @@ typedef struct
     uint8_t seen_subindex;
 } char_multi_cell_t;
 
-static iolink_result_t char_multi_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
-                                       size_t cap)
+static iolink_result_t char_multi_read(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                       uint8_t* out, size_t cap)
 {
-    const char_multi_cell_t* cell = user;
+    const char_multi_cell_t* cell = (const char_multi_cell_t*) self;
 
     return iolink_od_encode(entry, cell->value, out, cap);
 }
 
-static iolink_result_t char_multi_write(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t char_multi_write(iolink_app_t* self, const iolink_od_entry_t* entry,
                                         uint8_t subindex, const uint8_t* data, size_t len)
 {
-    char_multi_cell_t* cell = user;
+    char_multi_cell_t* cell = (char_multi_cell_t*) self;
     uint32_t value = 0U;
     const iolink_result_t decoded = iolink_od_decode(entry, data, len, &value);
 
@@ -527,7 +527,7 @@ static void test_char_standard_index_wins_over_app(void** state)
     char_prepare(&ctx, &k_char_info);
     app.entries = k_char_shadow_entries;
     app.count = sizeof(k_char_shadow_entries) / sizeof(k_char_shadow_entries[0]);
-    iolink_isdu_bind_od(&ctx, &app);
+    iolink_isdu_bind_od(&ctx, &app, NULL);
 
     g_char_app_reads = 0;
     g_char_app_writes = 0;
@@ -550,8 +550,7 @@ static void test_char_subindex_reaches_app_write(void** state)
     char_prepare(&ctx, &k_char_info);
     app.entries = k_char_multi_entries;
     app.count = sizeof(k_char_multi_entries) / sizeof(k_char_multi_entries[0]);
-    app.user = &cell;
-    iolink_isdu_bind_od(&ctx, &app);
+    iolink_isdu_bind_od(&ctx, &app, (iolink_app_t*) &cell);
 
     const uint8_t at_sub1[2] = {0x12U, 0x34U};
     assert_int_equal(char_write(&ctx, 0x0304U, 1U, at_sub1, 2U, buf, sizeof(buf)), 0);

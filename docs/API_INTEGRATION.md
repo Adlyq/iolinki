@@ -92,12 +92,13 @@ void iolink_critical_exit(void);
 `IOLINK_DEVICE_INIT_ERR_CRITICAL`。实现必须可嵌套，并能在 ISR 双泵下保护邮箱、
 ISDU 快照和应答暂存区。
 
-`iolink_device_config_t::time_us` 是必需的。`iolink_device_init()` 在回调为
-NULL 时直接返回 `IOLINK_DEVICE_INIT_ERR_TIME`，不会进入运行阶段。设置后，DLL、
-ISR 双泵和事件引擎的所有时间戳都从该回调获取。
+`iolink_device_app_t::time_us` 是必需的。`iolink_device_init()` 在 `config.app`
+为 NULL 时返回 `IOLINK_DEVICE_INIT_ERR_APP`，在 `app->time_us` 为 NULL 时返回
+`IOLINK_DEVICE_INIT_ERR_TIME`，不会进入运行阶段。设置后，DLL、ISR 双泵和事件
+引擎的所有时间戳都从该回调获取。
 
 核心不再调用平台时间函数；直接使用 `iolink_dll_*` 时，调用方必须在
-`iolink_dll_init()` 后自行绑定 `ctx->shared.time_us`（及 `shared.time_user`，
+`iolink_dll_init()` 后自行绑定 `ctx->shared.time_us`（及 `shared.time_self`，
 其中 `ctx` 是 `iolink_dll_main_t*`；初始化需要同时传入 ISR 对象）。未绑定时
 内部计时读数为 0。
 
@@ -125,7 +126,7 @@ static int  board_phy_tx_octet(void* user, uint8_t data);
 static void board_phy_tx_done(void* user);
 static uint8_t board_phy_int_active(void* user);
 static void board_phy_request_service(void* user);
-static uint64_t board_time_us(void* user);
+static uint64_t board_time_us(iolink_app_t* self);
 
 static const iolink_phy_api_t g_phy = {
     .init = board_phy_init,
@@ -139,7 +140,16 @@ static const iolink_phy_api_t g_phy = {
 };
 
 /* DS_UPLOAD_FLAG 落盘钩子；不提供则标志只保存在 RAM（见 7.1/7.3） */
-static void app_ds_flag_persist(void* user, bool flag);
+static void app_ds_flag_persist(iolink_app_t* self, bool flag);
+
+/* 应用自己的状态；库只看到 &g_app_state 这一个指针 */
+struct iolink_app { uint8_t pd_in[2]; };
+static struct iolink_app g_app_state;
+
+static const iolink_device_app_t g_app = {
+    .self = (iolink_app_t*) &g_app_state,
+    .time_us = board_time_us,              /* 必需；NULL 拒绝初始化 */
+};
 
 static const iolink_device_config_t g_config = {
     .phy = g_phy,
@@ -150,11 +160,10 @@ static const iolink_device_config_t g_config = {
         .od_width = 1U,
         .min_cycle_time = 20U,            /* 2.0 ms，0.1 ms 单位 */
     },
-    .time_us = board_time_us,             /* 必需；NULL 拒绝初始化 */
+    .app = &g_app,                        /* trait：实例指针 + 回调 */
 #if IOLINK_FEATURE_DATA_STORAGE
     .ds_flag_persist = app_ds_flag_persist,
 #endif
-    .user = NULL,
 };
 
 int app_init(void)
@@ -173,8 +182,8 @@ void data_irq_handler(void)
 }
 ```
 
-`g_config` 必须在 `g_device` 的整个生命周期内保持有效。`app_callbacks`、
-PHY 驱动状态以及它们引用的所有缓冲区同样如此。
+`g_config`、`g_app` 必须在 `g_device` 的整个生命周期内保持有效。PHY 驱动状态
+以及它们引用的所有缓冲区同样如此。
 
 ### 2.4 PHY 移植
 
@@ -219,12 +228,10 @@ PHY 驱动状态以及它们引用的所有缓冲区同样如此。
 | --- | --- |
 | `phy` | 初始化时复制。`phy.user` 只传给 PHY 回调；与 `user` 相互独立。 |
 | `stack` | 复制到上下文中。 |
-| `app_callbacks` | 保留指针；必须比上下文存活更久。可以为 NULL；`on_pd_input` 非 NULL 时选择 PD-in 回调路径。 |
+| `app` | 应用 trait（`iolink_device_app_t`）：实例指针 + 时钟/日志/生命周期回调的唯一来源。保留指针，必须比上下文存活更久。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_APP`。 |
 | `device_info` | 身份来源；其中的 `application_tag` 只是身份字段，标签索引由 OD 表提供。参见 8.1 节的身份限制。 |
-| `ds_flag_persist` | 仅在 `IOLINK_FEATURE_DATA_STORAGE=1` 时声明；`DS_UPLOAD_FLAG` 变化时调用，`user` 为 `config.user`。为 NULL 时标志只保存在 RAM。 |
-| `time_us` | 必需的应用时钟。DLL、ISR 双泵和事件引擎都用它计时；回调必须单调、非阻塞、ISR 安全。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_TIME`。 |
-| `user` | 传给 `time_us`、`log_write`、`ds_flag_persist`、OD 钩子以及全部应用回调的透明指针。 |
-| `log_write`, `log_level` | 可选运行时日志汇点与阈值；NULL / `IOLINK_LOG_LEVEL_SILENT` 表示静默。 |
+| `ds_flag_persist` | 仅在 `IOLINK_FEATURE_DATA_STORAGE=1` 时声明；`DS_UPLOAD_FLAG` 变化时调用，`self` 为 `app->self`。为 NULL 时标志只保存在 RAM。 |
+| `log_level` | 运行时日志阈值；`IOLINK_LOG_LEVEL_SILENT` 表示静默。日志回调在 `app->log_write`。 |
 | `od` | 可选的设备专用参数入口（`include/iolinki/od.h`）：const 表 + get/set 后端，ISDU 与 Data Storage 共用。 |
 | `workspace` | 可选的传输 scratch 工作区（`include/iolinki/workspace.h`）。NULL 表示使用上下文内嵌 fallback；`IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供，否则初始化返回 `IOLINK_DEVICE_INIT_ERR_WORKSPACE`。 |
 
@@ -334,19 +341,19 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx,
 
 ### 4.3 应用回调
 
-通过 `config.app_callbacks` 注册；没有单独注册函数。所有回调都在主上下文运行，绝不在
-ISR 中运行。
+通过 `config.app` 指向的 `iolink_device_app_t` 注册；没有单独注册函数。所有回调都在
+主上下文运行，绝不在 ISR 中运行。
 
 | 回调 | 调用时机 |
 | --- | --- |
-| `on_startup(user)` | 进入 STARTUP。 |
-| `on_preoperate(user)`, `on_operate(user)` | 进入对应状态。 |
-| `on_pd_input(user, data, len)` | 提供时（非 NULL），每个 OPERATE 周期调用；填写一个 ISR 未占用的 PD-in 缓冲区，返回值作为 PD-valid 标志。未提供时改用 `iolink_device_pd_input_update()`。 |
-| `on_pd_output(user, data, len)` | 每个 OPERATE 周期调用，携带最新的主站输出数据。 |
-| `on_state_change(user, state)` | 当前 DLL 状态（电平式）：状态变化时调用一次，主上下文迁移立即投递，ISR 期间的多次迁移合并为最终状态；例外是 ISR 进入 STARTUP 的复位迁移，会先于最终状态单独投递。 |
-| `on_master_lost(user)`, `on_master_online(user)` | 主站静默提示的边沿。 |
+| `on_startup(self)` | 进入 STARTUP。 |
+| `on_preoperate(self)`, `on_operate(self)` | 进入对应状态。 |
+| `on_pd_input(self, data, len)` | 提供时（非 NULL），每个 OPERATE 周期调用；填写一个 ISR 未占用的 PD-in 缓冲区，返回值作为 PD-valid 标志。未提供时改用 `iolink_device_pd_input_update()`。 |
+| `on_pd_output(self, data, len)` | 每个 OPERATE 周期调用，携带最新的主站输出数据。 |
+| `on_state_change(self, state)` | 当前 DLL 状态（电平式）：状态变化时调用一次，主上下文迁移立即投递，ISR 期间的多次迁移合并为最终状态；例外是 ISR 进入 STARTUP 的复位迁移，会先于最终状态单独投递。 |
+| `on_master_lost(self)`, `on_master_online(self)` | 主站静默提示的边沿。 |
 
-所有回调的 `user` 参数就是 `iolink_device_config_t.user`。
+所有回调的 `self` 参数就是 `iolink_device_app_t::self`。
 
 `on_pd_output` 收到的是指向上下文内部的指针，不能保留。
 
@@ -385,7 +392,7 @@ iolink_caps_t iolink_device_set_capabilities(iolink_device_ctx_t* ctx, iolink_ca
 
 const iolink_build_caps_t* iolink_caps_build(void);
 iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* phy, const iolink_stack_config_t* stack,
-                                  const iolink_app_callbacks_t* app,
+                                  const iolink_device_app_t* app,
                                   const iolink_build_caps_t* build);
 bool iolink_caps_has(iolink_caps_t caps, iolink_caps_t bit);
 bool iolink_caps_built(const iolink_build_caps_t* caps, uint32_t mask);
@@ -411,8 +418,12 @@ ISR 粒度、并发/统计档位、PD-in 缓冲数）。实例能力在 `iolink_
 typedef struct {
     const iolink_od_entry_t* entries;
     size_t count;
-    void* user; /* 传给钩子与 HANDLER 函数指针 */
 } iolink_od_app_t;
+
+typedef struct {
+    const iolink_od_app_t* app;
+    iolink_app_t* self; /* 传给钩子与 HANDLER 后端；未设置时钩子收到 NULL */
+} iolink_od_ctx_t;
 ```
 
 参数只在对象字典里描述一次（索引/子索引、datatype codec、访问权限、写语义、
@@ -562,7 +573,8 @@ EventCode、`0x0024` DeviceStatus 与 `0x0025` DetailedDeviceStatus 都从同一
 ```c
 void iolink_isdu_init(iolink_isdu_ctx_t* ctx);
 void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* ws);
-void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app);
+void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app,
+                         iolink_app_t* self);
 void iolink_isdu_bind_caps(iolink_isdu_ctx_t* ctx, const iolink_caps_t* caps);
 void iolink_isdu_process(iolink_isdu_ctx_t* ctx);
 void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl,
@@ -650,9 +662,10 @@ iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx);
 
 void iolink_ds_init(iolink_ds_ctx_t* ctx);
 void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn fn,
-                                void* user);
+                                iolink_app_t* self);
 void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws);
-void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app);
+void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app,
+                            iolink_app_t* self);
 void iolink_ds_process(iolink_ds_ctx_t* ctx);
 void iolink_ds_check(iolink_ds_ctx_t* ctx, uint32_t master_checksum);
 int  iolink_ds_abort(iolink_ds_ctx_t* ctx);
@@ -687,7 +700,7 @@ void iolink_ds_clear_upload(iolink_ds_ctx_t* ctx);
 
 DS 是对象字典的投影：参数集合就是标准表与应用表中 `storage` 含
 `IOLINK_OD_STORAGE_DS` 的表项，顺序固定为标准表在前、应用表按表序（设备层自动调用
-`iolink_ds_bind_sources(ctx, config.od)`）。值全部来自表项后端，DS 上下文不保存参数
+`iolink_ds_bind_sources(ctx, config.od, config.app->self)`）。值全部来自表项后端，DS 上下文不保存参数
 副本，也不写 NVM。
 
 - **上传**：`iolink_ds_serialize()` 按记录流式序列化当前参数集，可直接写入 ISDU
@@ -756,11 +769,12 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 
 ### 8.2 `time_us` 与平台时间源
 
-`iolink_device_config_t::time_us` 在 `iolink_device_init()` 中绑定到 DLL 和事件
-上下文。该回调为必需项：NULL 会在初始化阶段被拒绝并返回
-`IOLINK_DEVICE_INIT_ERR_TIME`。绑定后，主循环、数据 ISR 和事件引擎都使用该回调，
-核心不再调用平台时间函数。直接使用 `iolink_dll_*` 时，调用方需在初始化后自行绑定
-`ctx->time_us`/`time_user`。时间源必须在上下文生命周期内保持单调。
+`iolink_device_app_t::time_us` 在 `iolink_device_init()` 中绑定到 DLL 和事件
+上下文。该回调为必需项：`config.app` 为 NULL 返回 `IOLINK_DEVICE_INIT_ERR_APP`，
+`app->time_us` 为 NULL 返回 `IOLINK_DEVICE_INIT_ERR_TIME`。绑定后，主循环、
+数据 ISR 和事件引擎都使用该回调，核心不再调用平台时间函数。直接使用
+`iolink_dll_*` 时，调用方需在初始化后自行绑定 `ctx->time_us`/`time_self`。
+时间源必须在上下文生命周期内保持单调。
 
 ### 8.3 上下文绑定
 
@@ -837,7 +851,7 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 
 ## 10. 集成检查清单
 
-1. 在 `config.time_us` 中提供单调、ISR 安全的微秒时钟，并实现可嵌套的
+1. 在 `config.app->time_us` 中提供单调、ISR 安全的微秒时钟，并实现可嵌套的
    `iolink_critical_enter/exit()`；初始化会拒绝 weak 默认临界区。
 2. 为选定的 BYTE/FRAME 模式实现 PHY 回调，包括 `int_active` 和
    `request_service`。

@@ -18,9 +18,9 @@ void iolink_critical_exit(void)
 {
 }
 
-static uint64_t simple_time_us(void* user)
+static uint64_t simple_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
         return 0ULL;
@@ -40,10 +40,11 @@ int main(void)
     printf("IO-Link Simple Device Example\n");
 
     /* Use default configuration */
+    static const iolink_device_app_t app = {.self = NULL, .time_us = simple_time_us};
     iolink_device_ctx_t ctx;
     iolink_device_config_t dev_config = {
         .phy = g_hw_phy,
-        .time_us = simple_time_us,
+        .app = &app,
     };
 
     if (iolink_device_init(&ctx, &dev_config) != 0) {

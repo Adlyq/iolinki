@@ -36,6 +36,6 @@ bool switching_sensor_value_set(switching_sensor_t* sensor, uint16_t index, uint
 
 /* 对象字典入口：应用参数 0x0100-0x0103 的唯一描述。 */
 const iolink_od_entry_t* switching_sensor_od_entries(size_t* count);
-void switching_sensor_od_init(iolink_od_app_t* app, switching_sensor_t* sensor);
+void switching_sensor_od_init(iolink_od_app_t* app);
 
 #endif

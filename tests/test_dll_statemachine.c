@@ -50,9 +50,9 @@ static uint64_t s_tx_asserted;
 static uint64_t s_tx_leaked; /* 开始新捕获时仍未查看的交付 */
 static uint8_t s_tx_active;
 
-static uint64_t sm_time_us(void* user)
+static uint64_t sm_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return s_now_us;
 }
 

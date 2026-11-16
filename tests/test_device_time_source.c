@@ -8,7 +8,7 @@
 
 /**
  * @file test_device_time_source.c
- * @brief 通过 iolink_device_config_t::time_us 提供的应用时钟会被
+ * @brief 通过 iolink_device_app_t::time_us 提供的应用时钟会被
  *        DLL 和事件引擎使用，而不使用平台时钟。
  */
 
@@ -33,20 +33,20 @@ void iolink_critical_exit(void)
 {
 }
 
-static uint64_t app_time_us(void* user)
+static uint64_t app_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return g_app_time_us;
 }
 
-static void init_device(iolink_device_ctx_t* ctx, iolink_device_time_us_fn time_us)
+static void init_device(iolink_device_ctx_t* ctx, const iolink_device_app_t* app)
 {
     iolink_device_config_t config;
 
     (void) memset(&config, 0, sizeof(config));
     config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     config.stack.t_pd_us = 500U;
-    config.time_us = time_us;
+    config.app = app;
 
     assert_int_equal(iolink_device_init(ctx, &config), 0);
 }
@@ -55,9 +55,10 @@ static void test_initialization_uses_app_clock(void** state)
 {
     (void) state;
     iolink_device_ctx_t ctx;
+    static const iolink_device_app_t app = {.self = NULL, .time_us = app_time_us};
 
     g_app_time_us = 1000000ULL;
-    init_device(&ctx, app_time_us);
+    init_device(&ctx, &app);
 
     /* T_PD 截止时间与主站活动种子都来自应用时钟。 */
     assert_int_equal(iolink_dll_timer_deadline(test_dll(&ctx), IOLINK_TIMER_T_PD),
@@ -69,9 +70,10 @@ static void test_event_engine_uses_app_clock(void** state)
 {
     (void) state;
     iolink_device_ctx_t ctx;
+    static const iolink_device_app_t app = {.self = NULL, .time_us = app_time_us};
 
     g_app_time_us = 1234000ULL;
-    init_device(&ctx, app_time_us);
+    init_device(&ctx, &app);
 
     iolink_events_ctx_t* events = iolink_device_get_events_ctx(&ctx);
     iolink_event_trigger(events, IOLINK_EVENTCODE_TEMPERATURE_OVERLOAD, IOLINK_EVENT_TYPE_ERROR);
@@ -86,10 +88,17 @@ static void test_null_clock_is_rejected_at_init(void** state)
     (void) state;
     iolink_device_ctx_t ctx;
     iolink_device_config_t config;
+    iolink_device_app_t app;
 
     (void) memset(&config, 0, sizeof(config));
     config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
 
+    /* 没有应用 trait：初始化先拒绝 APP。 */
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_APP);
+
+    /* 有 trait 但缺少时钟：初始化拒绝 TIME。 */
+    (void) memset(&app, 0, sizeof(app));
+    config.app = &app;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_TIME);
 }
 

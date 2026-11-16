@@ -13,12 +13,12 @@
 #include "iolinki/protocol.h"
 
 /** @brief SP1 必须 >= 迟滞；迟滞必须 <= SP1。 */
-/* 回调类型固定为 void* user；同一张表的 ss_teach 需要可变指针，不能改成 const。 */
+/* 同一张表的 ss_teach 需要可变指针，因此接收非 const 的应用上下文。 */
 // cppcheck-suppress constParameterCallback
-static iolink_result_t ss_validate(void* user, const iolink_od_entry_t* entry, const uint8_t* data,
-                                   size_t len)
+static iolink_result_t ss_validate(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                   const uint8_t* data, size_t len)
 {
-    const switching_sensor_t* sensor = user;
+    const switching_sensor_t* sensor = (const switching_sensor_t*) self;
     uint32_t value = 0U;
     const iolink_result_t decoded = iolink_od_decode(entry, data, len, &value);
 
@@ -37,10 +37,10 @@ static iolink_result_t ss_validate(void* user, const iolink_od_entry_t* entry, c
 }
 
 /** @brief teach：把当前有效测量值写为新的 SP1（写语义 TRIGGER）。 */
-static iolink_result_t ss_teach(void* user, const iolink_od_entry_t* entry, const uint8_t* data,
-                                size_t len)
+static iolink_result_t ss_teach(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                const uint8_t* data, size_t len)
 {
-    switching_sensor_t* sensor = user;
+    switching_sensor_t* sensor = (switching_sensor_t*) self;
 
     (void) entry;
     (void) data;
@@ -52,22 +52,22 @@ static iolink_result_t ss_teach(void* user, const iolink_od_entry_t* entry, cons
     return iolink_result_ok(0U);
 }
 
-/* 只读后端，但回调类型固定为 void* user，不能改成 const。 */
+/* 只读后端；上下文类型由 OD 钩子签名决定，不能改成 const。 */
 // cppcheck-suppress constParameterCallback
-static iolink_result_t ss_od_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+static iolink_result_t ss_od_read(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t* out,
                                   size_t cap)
 {
     uint32_t value = 0U;
 
-    if (!switching_sensor_value_get(user, entry->index, &value)) {
+    if (!switching_sensor_value_get((const switching_sensor_t*) self, entry->index, &value)) {
         /* 0x0103 为只写对象。 */
         return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
     return iolink_od_encode(entry, value, out, cap);
 }
 
-static iolink_result_t ss_od_write(void* user, const iolink_od_entry_t* entry, uint8_t subindex,
-                                   const uint8_t* data, size_t len)
+static iolink_result_t ss_od_write(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                   uint8_t subindex, const uint8_t* data, size_t len)
 {
     uint32_t value = 0U;
     const iolink_result_t decoded = iolink_od_decode(entry, data, len, &value);
@@ -76,7 +76,7 @@ static iolink_result_t ss_od_write(void* user, const iolink_od_entry_t* entry, u
     if (!iolink_result_succeeded(decoded)) {
         return decoded;
     }
-    if (!switching_sensor_value_set(user, entry->index, value)) {
+    if (!switching_sensor_value_set((switching_sensor_t*) self, entry->index, value)) {
         return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
     }
     return iolink_result_ok(0U);
@@ -114,12 +114,11 @@ const iolink_od_entry_t* switching_sensor_od_entries(size_t* count)
     return k_switching_sensor_od;
 }
 
-void switching_sensor_od_init(iolink_od_app_t* app, switching_sensor_t* sensor)
+void switching_sensor_od_init(iolink_od_app_t* app)
 {
-    if ((app == NULL) || (sensor == NULL)) {
+    if (app == NULL) {
         return;
     }
     app->entries = k_switching_sensor_od;
     app->count = SS_OD_COUNT;
-    app->user = sensor;
 }

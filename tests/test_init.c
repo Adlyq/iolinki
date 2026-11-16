@@ -41,12 +41,14 @@ static const iolink_phy_api_t local_phy_mock = {.init = local_mock_phy_init,
                                                 .set_mode = local_mock_phy_set_mode,
                                                 .set_baudrate = local_mock_phy_set_baudrate};
 
+static const iolink_device_app_t g_test_app = {.self = NULL, .time_us = iolink_test_time_us};
+
 static iolink_device_config_t make_device_config(void)
 {
     iolink_device_config_t config;
     (void) memset(&config, 0, sizeof(config));
     config.phy = local_phy_mock;
-    config.time_us = iolink_test_time_us;
+    config.app = &g_test_app;
     return config;
 }
 

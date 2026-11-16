@@ -82,9 +82,9 @@ static size_t g_tx_pending_len;
 #define TEST_CLOCK_BASE_US 1000000ULL /* 非 0：0 在 DLL 中表示“未绑定时钟” */
 static uint64_t g_test_clock_us = TEST_CLOCK_BASE_US;
 
-static uint64_t test_clock_read_us(void* user)
+static uint64_t test_clock_read_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return g_test_clock_us;
 }
 
@@ -552,7 +552,6 @@ void test_params_init(iolink_test_params_t* params, iolink_device_info_ctx_t* in
         IOLINK_OD_STORAGE_DS, 32U, "LocationTag", params->loc, &params->loc_len);
     params->od.entries = params->entries;
     params->od.count = 3U;
-    params->od.user = NULL;
 }
 
 void test_params_factory_reset(iolink_test_params_t* params)
@@ -627,7 +626,6 @@ iolink_od_app_t test_od_with_tags(const iolink_od_app_t* app, const iolink_od_ap
     }
     merged.entries = storage;
     merged.count = n;
-    merged.user = (app != NULL) ? app->user : NULL;
     return merged;
 }
 
@@ -709,10 +707,10 @@ void test_io_cycle(iolink_device_ctx_t* ctx)
     }
 }
 
-uint64_t iolink_test_time_us(void* user)
+uint64_t iolink_test_time_us(iolink_app_t* self)
 {
     if (g_iolink_test_time_us_override != NULL) {
-        return g_iolink_test_time_us_override(user);
+        return g_iolink_test_time_us_override(self);
     }
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
@@ -728,12 +726,26 @@ uint32_t iolink_test_time_ms(void)
 
 iolink_device_time_us_fn g_iolink_test_time_us_override = NULL;
 
+/** @brief 未显式提供 trait 的测试使用的默认应用表（只有时钟）。 */
+static const iolink_device_app_t g_default_app = {.self = NULL, .time_us = iolink_test_time_us};
+static const iolink_device_app_t g_app_without_clock = {.self = NULL};
+
+const iolink_device_app_t* iolink_test_default_app(void)
+{
+    return &g_default_app;
+}
+
+const iolink_device_app_t* iolink_test_app_without_clock(void)
+{
+    return &g_app_without_clock;
+}
+
 static void test_device_fill_config(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
-                                    const iolink_app_callbacks_t* callbacks)
+                                    const iolink_device_app_t* app)
 {
     (void) memset(dev, 0, sizeof(*dev));
     dev->cfg.phy = g_phy_mock;
-    dev->cfg.time_us = iolink_test_time_us;
+    dev->cfg.app = (app != NULL) ? app : &g_default_app;
     /* 设备默认带三个标签（应用以 STORAGE 表项提供）；用库的默认
        device_info 生成 "DefaultTag" 标签初值。 */
     iolink_device_info_ctx_t info;
@@ -747,29 +759,27 @@ static void test_device_fill_config(iolink_test_device_t* dev, const iolink_stac
         dev->cfg.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
         dev->cfg.stack.min_cycle_time = 0U;
     }
-    dev->cfg.app_callbacks = callbacks;
 }
 
 int iolink_test_device_init(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
-                            const iolink_app_callbacks_t* callbacks)
+                            const iolink_device_app_t* app)
 {
     if (dev == NULL) {
         return -1;
     }
 
-    test_device_fill_config(dev, stack, callbacks);
+    test_device_fill_config(dev, stack, app);
     return iolink_device_init(&dev->ctx, &dev->cfg);
 }
 
 int iolink_test_device_init_with_od(iolink_test_device_t* dev, const iolink_stack_config_t* stack,
-                                    const iolink_app_callbacks_t* callbacks,
-                                    const iolink_od_app_t* od)
+                                    const iolink_device_app_t* app, const iolink_od_app_t* od)
 {
     if (dev == NULL) {
         return -1;
     }
 
-    test_device_fill_config(dev, stack, callbacks);
+    test_device_fill_config(dev, stack, app);
     dev->cfg.od = od;
     return iolink_device_init(&dev->ctx, &dev->cfg);
 }

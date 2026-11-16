@@ -24,23 +24,23 @@
 
 static uint32_t g_now_ms;
 
-static uint64_t master_lost_time_us(void* user)
+static uint64_t master_lost_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return (uint64_t) g_now_ms * 1000U;
 }
 
 static int lost_calls;
 static int online_calls;
-static void* g_expected_user;
+static iolink_app_t* g_expected_user;
 
-static void on_lost(void* user)
+static void on_lost(iolink_app_t* user)
 {
     assert_ptr_equal(user, g_expected_user);
     lost_calls++;
 }
 
-static void on_online(void* user)
+static void on_online(iolink_app_t* user)
 {
     assert_ptr_equal(user, g_expected_user);
     online_calls++;
@@ -63,8 +63,7 @@ static int test_teardown(void** state)
     return 0;
 }
 
-static void init_device(iolink_test_device_t* dev, uint8_t cycles,
-                        const iolink_app_callbacks_t* cbs)
+static void init_device(iolink_test_device_t* dev, uint8_t cycles, const iolink_device_app_t* app)
 {
     iolink_stack_config_t config = {
         .m_seq_type = IOLINK_M_SEQ_TYPE_0,
@@ -73,21 +72,22 @@ static void init_device(iolink_test_device_t* dev, uint8_t cycles,
     };
     setup_mock_phy();
     will_return(mock_phy_init, 0);
-    assert_int_equal(iolink_test_device_init(dev, &config, cbs), 0);
+    assert_int_equal(iolink_test_device_init(dev, &config, app), 0);
 }
 
 static void test_master_lost_after_n_cycles(void** state)
 {
     (void) state;
-    static const iolink_app_callbacks_t cbs = {
+    static iolink_device_app_t app = {
+        .time_us = iolink_test_time_us,
         .on_master_lost = on_lost,
         .on_master_online = on_online,
     };
-    iolink_test_device_t dev;
     static int user_sentinel;
-    g_expected_user = &user_sentinel;
-    init_device(&dev, 3U, &cbs);
-    dev.cfg.user = g_expected_user;
+    iolink_test_device_t dev;
+    g_expected_user = (iolink_app_t*) &user_sentinel;
+    app.self = g_expected_user;
+    init_device(&dev, 3U, &app);
 
     /* 启动/预操作阶段的间隔不得触发主站丢失。 */
     g_now_ms = 1000U;

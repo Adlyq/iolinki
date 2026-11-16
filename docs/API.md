@@ -51,25 +51,21 @@ scratch；编译进 Data Storage 时还包含 DS 序列化暂存区。它不保�
 
 ```c
 typedef struct {
-    iolink_phy_api_t phy;                        /* PHY 驱动 vtable */
+    iolink_phy_api_t phy;                        /* PHY 驱动 vtable（phy.user 由驱动自己绑定） */
     iolink_stack_config_t stack;                 /* 协议设置 */
-    const iolink_app_callbacks_t* app_callbacks; /* 可为 NULL；非 NULL 的
-                                                    on_pd_input 选择 PD-in 回调路径 */
+    const iolink_device_app_t* app;              /* 应用 trait：实例指针 + 回调；NULL 拒绝初始化 */
     const iolink_device_info_t* device_info;     /* 可为 NULL */
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_flag_persist_fn ds_flag_persist;   /* DS_UPLOAD_FLAG 落盘钩子；NULL = 仅 RAM */
 #endif
-    iolink_device_time_us_fn time_us;        /* 必需的微秒时钟（ISR 安全）；NULL 拒绝初始化 */
-    void* user;                              /* 回调使用的透明指针 */
-    iolink_log_write_fn log_write;           /* 可选运行时日志汇点；NULL 表示静默 */
     iolink_log_level_t log_level;            /* 运行时日志阈值；SILENT（0）关闭 */
     const iolink_od_app_t* od;               /* 可选的应用对象字典 */
     iolink_workspace_t* workspace;           /* 可选 scratch；NULL = 内嵌 fallback */
 } iolink_device_config_t;
 ```
 
-`ds_flag_persist` 收到的是 `config.user` 和新的标志值；应用在自己的 NVM 中保存它。
-`user` 同时传给 `time_us`、`log_write`、OD 钩子和全部应用回调。
+`app` 是唯一的应用上下文来源（见下面的 trait）。`ds_flag_persist` 收到的是
+`app->self` 和新的标志值；应用在自己的 NVM 中保存它。
 
 #### 协议栈配置
 
@@ -125,15 +121,23 @@ extern const iolink_device_info_t g_identity;
 static iolink_device_ctx_t g_ctx;
 static uint64_t g_time_us; /* 由你的微秒定时器推进 */
 
-static uint64_t board_time_us(void* user) {
-    (void) user;
+struct iolink_app { uint8_t pd_in[3]; };    /* 应用自己的状态，库不访问 */
+static struct iolink_app g_app_state;
+
+static uint64_t board_time_us(iolink_app_t* self) {
+    (void) self;
     return g_time_us;
 }
+
+static const iolink_device_app_t g_app = {
+    .self = (iolink_app_t*) &g_app_state,
+    .time_us = board_time_us,
+};
 
 static const iolink_device_config_t g_cfg = {
     .phy = g_phy_virtual,
     .stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .pd_in_len = 3, .pd_out_len = 1},
-    .time_us = board_time_us,
+    .app = &g_app,
     .device_info = &g_identity,
 };
 
@@ -201,7 +205,7 @@ iolink_caps_t iolink_device_set_capabilities(iolink_device_ctx_t* ctx, iolink_ca
 
 const iolink_build_caps_t* iolink_caps_build(void);
 iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* phy, const iolink_stack_config_t* stack,
-                                  const iolink_app_callbacks_t* app,
+                                  const iolink_device_app_t* app,
                                   const iolink_build_caps_t* build);
 bool iolink_caps_has(iolink_caps_t caps, iolink_caps_t bit);
 bool iolink_caps_built(const iolink_build_caps_t* caps, uint32_t mask);
@@ -270,33 +274,42 @@ static int my_phy_tx_octet(void* user, uint8_t data) {
 
 ```c
 typedef struct {
-    void (*on_startup)(void* user);
-    void (*on_preoperate)(void* user);
-    void (*on_operate)(void* user);
-    bool (*on_pd_input)(void* user, uint8_t* data, uint8_t len); /* 非 NULL 选择回调路径 */
-    void (*on_pd_output)(void* user, uint8_t* data, uint8_t len);
-    void (*on_state_change)(void* user, iolink_dll_state_t state);
-    void (*on_master_lost)(void* user);
-    void (*on_master_online)(void* user);
-} iolink_app_callbacks_t;
+    iolink_app_t* self;                          /* 实例指针，原样传给每个回调 */
+    uint64_t (*time_us)(iolink_app_t* self);     /* 必需；DLL/ISR/事件共用 */
+    void (*log_write)(iolink_app_t* self, iolink_log_level_t level, const char* format, ...);
+    void (*on_startup)(iolink_app_t* self);
+    void (*on_preoperate)(iolink_app_t* self);
+    void (*on_operate)(iolink_app_t* self);
+    bool (*on_pd_input)(iolink_app_t* self, uint8_t* data, uint8_t len); /* 非 NULL 选择回调路径 */
+    void (*on_pd_output)(iolink_app_t* self, uint8_t* data, uint8_t len);
+    void (*on_state_change)(iolink_app_t* self, iolink_dll_state_t state);
+    void (*on_master_lost)(iolink_app_t* self);
+    void (*on_master_online)(iolink_app_t* self);
+} iolink_device_app_t;
 ```
 
-每个回调都收到 `iolink_device_config_t.user`，应用不需要借助全局变量访问自己的状态。
-通过 `iolink_device_config_t.app_callbacks` 注册，没有单独的注册函数。`on_pd_input`
+`iolink_app_t` 是应用在自己翻译单元里定义的不完整类型（`types.h` 只做前置声明），
+因此把别的指针赋给 `self` 需要显式强转，`void*` 时代的静默传错变成编译期诊断。
+每个回调都收到同一个 `self`，应用不需要借助全局变量访问自己的状态。
+通过 `iolink_device_config_t.app` 注册，没有单独的注册函数。`on_pd_input`
 填写一个空闲 PD-in 缓冲，其返回值成为 PD-valid 标志；保持 `NULL` 表示应用改用
 `iolink_device_pd_input_update()` 发布 PD-in。
 
 **示例**：
 
 ```c
-static void on_operate(void* user) { /* ... */ }
-static void on_pd_output(void* user, uint8_t* data, uint8_t len) { (void)user; (void)data; (void)len; }
+struct iolink_app { uint8_t pd[3]; };
 
-static const iolink_app_callbacks_t g_app = {
+static void on_operate(iolink_app_t* self) { struct iolink_app* a = (struct iolink_app*) self; }
+static void on_pd_output(iolink_app_t* self, uint8_t* data, uint8_t len) { (void)self; (void)data; (void)len; }
+
+static const iolink_device_app_t g_app = {
+    .self = (iolink_app_t*) &g_app_state,
+    .time_us = board_time_us,
     .on_operate = on_operate,
     .on_pd_output = on_pd_output,
 };
-/* ... 在 iolink_device_config_t 中设置 .app_callbacks = &g_app、.user = &app_state ... */
+/* ... 在 iolink_device_config_t 中设置 .app = &g_app ... */
 ```
 
 ## 对象字典 API
@@ -341,7 +354,6 @@ typedef struct iolink_od_entry iolink_od_entry_t;
 typedef struct {
     const iolink_od_entry_t* entries; /* 应用表项数组 */
     size_t count;                     /* 表项数量 */
-    void* user;                       /* 传给钩子和 HANDLER 后端 */
 } iolink_od_app_t;
 
 const iolink_od_entry_t* iolink_od_find(const iolink_od_app_t* app, uint16_t index,
@@ -352,7 +364,7 @@ iolink_result_t iolink_od_read_value(const iolink_od_ctx_t* ctx, const iolink_od
                                      uint8_t subindex, uint8_t* out, size_t cap);
 iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entry_t* entry,
                                       const uint8_t* data, size_t len);
-iolink_result_t iolink_od_check_value(const iolink_od_entry_t* entry, void* user,
+iolink_result_t iolink_od_check_value(const iolink_od_entry_t* entry, iolink_app_t* self,
                                       const uint8_t* data, size_t len);
 iolink_result_t iolink_od_restore_value(iolink_od_ctx_t* ctx, const iolink_od_entry_t* entry,
                                         uint8_t subindex, const uint8_t* data, size_t len);
@@ -502,9 +514,11 @@ DeviceStatus 和 DDS 都不缓存：每次读取都从条件表重新计算，�
 iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx);
 
 void iolink_ds_init(iolink_ds_ctx_t* ctx);
-void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn fn, void* user);
+void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn fn,
+                                iolink_app_t* self);
 void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws);
-void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app);
+void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app,
+                            iolink_app_t* self);
 void iolink_ds_process(iolink_ds_ctx_t* ctx);                  /* 由 iolink_device_process 驱动 */
 void iolink_ds_check(iolink_ds_ctx_t* ctx, uint32_t master_checksum);
 int  iolink_ds_abort(iolink_ds_ctx_t* ctx);
@@ -519,7 +533,7 @@ int  iolink_ds_factory_reset(iolink_ds_ctx_t* ctx);
 
 DS 上下文由 `iolink_device_init()` 初始化（仅在 `IOLINK_FEATURE_DATA_STORAGE=1` 时
 可用），用 `iolink_device_get_ds_ctx()` 访问。`ds_flag_persist` 由设备层绑定到
-`config.ds_flag_persist` 和 `config.user`。
+`config.ds_flag_persist`，并把 `app->self` 同时交给持久化钩子和 OD 钩子。
 
 DS 的语义是**对象字典的投影**：参数集合就是标准表与应用表中 `storage` 含
 `IOLINK_OD_STORAGE_DS` 的表项（设备层自动绑定 `iolink_device_config_t.od`），集合
@@ -602,6 +616,7 @@ typedef enum {
     IOLINK_DEVICE_INIT_ERR_PHY = -12,       /* 必需的 PHY 钩子为 NULL 或 init 失败 */
     IOLINK_DEVICE_INIT_ERR_WORKSPACE = -13, /* IOLINK_WORKSPACE_EMBEDDED=0 且没有工作区 */
     IOLINK_DEVICE_INIT_ERR_OD = -14,        /* 应用对象字典表存在未定义/自相矛盾配置 */
+    IOLINK_DEVICE_INIT_ERR_APP = -15,       /* config.app == NULL（缺少应用 trait） */
 } iolink_device_init_result_t;
 ```
 
@@ -614,7 +629,7 @@ ISDU 附加错误码（`IOLINK_ISDU_ERROR_*`，例如 `IDX_NOTAVAIL` `0x11`、
 `iolink_device_config_t::time_us` 是 `iolink_device_init()` 的必需项（`NULL` 以
 `IOLINK_DEVICE_INIT_ERR_TIME` 拒绝），协议栈用它完成全部 DLL、ISR 和事件计时。没有
 单独的平台时间 API；直接使用 DLL 的调用方必须在 `iolink_dll_init()` 之后自行绑定
-`ctx->shared.time_us`/`shared.time_user`（DLL 上下文分为主视图和 ISR 视图）。临界区
+`ctx->shared.time_us`/`shared.time_self`（DLL 上下文分为主视图和 ISR 视图）。临界区
 使用 `include/iolinki/port.h` 中的 `iolink_critical_enter()` /
 `iolink_critical_exit()`；`iolink_device_init()` 以 `IOLINK_DEVICE_INIT_ERR_CRITICAL`
 拒绝库自带的 weak no-op 默认实现。
@@ -641,9 +656,9 @@ ISDU 附加错误码（`IOLINK_ISDU_ERROR_*`，例如 `IDX_NOTAVAIL` `0x11`、
 #include <stdarg.h>
 #include <stdio.h>
 
-static void my_log(void* user, iolink_log_level_t level, const char* format, ...)
+static void my_log(iolink_app_t* self, iolink_log_level_t level, const char* format, ...)
 {
-    (void) user;
+    (void) self;
     (void) level;
     va_list args;
     va_start(args, format);
@@ -651,14 +666,15 @@ static void my_log(void* user, iolink_log_level_t level, const char* format, ...
     va_end(args);
 }
 
-config.user = my_context;
-config.log_write = my_log;
+/* 在应用的 trait 中提供回调 */
+static const iolink_device_app_t g_app = {.self = (iolink_app_t*) &g_ctx_state, .log_write = my_log};
+config.app = &g_app;
 config.log_level = IOLINK_LOG_LEVEL_INFO;
 ```
 
-`IOLINK_LOG_LEVEL_SILENT`（默认）或 `config.log_write == NULL` 保持静默。
-`iolink_device_set_log(ctx, write, level)` 在运行期更换汇点；`user` 参数仍为
-`config.user`。汇点被复制到 DLL、ISDU、DS 和事件上下文，直接使用这些模块的调用方
+`IOLINK_LOG_LEVEL_SILENT`（默认）或 trait 的 `log_write == NULL` 保持静默。
+`iolink_device_set_log(ctx, write, level)` 在运行期更换汇点；`self` 参数仍为
+`app->self`。汇点被复制到 DLL、ISDU、DS 和事件上下文，直接使用这些模块的调用方
 需要自行用 `iolink_log_sink_init()` 绑定 `ctx->log`。
 
 库不格式化也不缓存任何内容：回调收到 printf 风格的格式串和参数，只有通过运行时

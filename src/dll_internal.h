@@ -46,7 +46,7 @@ static inline uint64_t dll_time_us(const iolink_dll_main_t* ctx)
     if ((ctx == NULL) || (ctx->shared.time_us == NULL)) {
         return 0U;
     }
-    return ctx->shared.time_us(ctx->shared.time_user);
+    return ctx->shared.time_us(ctx->shared.time_self);
 }
 
 static inline uint32_t dll_time_ms(const iolink_dll_main_t* ctx)

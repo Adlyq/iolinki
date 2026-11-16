@@ -41,7 +41,7 @@ static void device_config_defaults(iolink_test_device_t* dev)
 {
     (void) memset(dev, 0, sizeof(*dev));
     dev->cfg.phy = g_phy_mock;
-    dev->cfg.time_us = iolink_test_time_us;
+    dev->cfg.app = iolink_test_default_app();
     dev->cfg.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
 }
 
@@ -105,7 +105,7 @@ static void test_ds_serialize_matches_stored_image(void** state)
 
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_env)));
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_env)), NULL);
 
     uint8_t serialized[IOLINK_DS_IMAGE_MAX];
     const int n = iolink_ds_serialize(&ds, serialized, sizeof(serialized));
@@ -139,7 +139,7 @@ static void test_ds_refresh_without_image_buffer(void** state)
 
     iolink_ds_ctx_t ds;
     iolink_ds_init(&ds);
-    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_env)));
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_env)), NULL);
 
     uint8_t serialized[IOLINK_DS_IMAGE_MAX];
     const int expected = iolink_ds_serialize(&ds, serialized, sizeof(serialized));
@@ -176,7 +176,7 @@ static void test_ds_null_api_contracts(void** state)
     iolink_ds_refresh(NULL);
     assert_null(iolink_ds_get_image(NULL, NULL));
     assert_int_equal(iolink_ds_param_count(NULL), 0U);
-    iolink_ds_bind_sources(NULL, NULL);
+    iolink_ds_bind_sources(NULL, NULL, NULL);
 }
 
 int main(void)

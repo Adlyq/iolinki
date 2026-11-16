@@ -58,7 +58,6 @@ static const iolink_od_entry_t k_ds_param_entry[] = {
 static const iolink_od_app_t k_ds_app = {
     .entries = k_ds_param_entry,
     .count = sizeof(k_ds_param_entry) / sizeof(k_ds_param_entry[0]),
-    .user = NULL,
 };
 
 /* 无长度上限的 DS 参数（block_len 0）：只用于镜像容量边界。 */
@@ -70,7 +69,6 @@ static const iolink_od_entry_t k_ds_param_unbounded[] = {
 static const iolink_od_app_t k_ds_app_unbounded = {
     .entries = k_ds_param_unbounded,
     .count = sizeof(k_ds_param_unbounded) / sizeof(k_ds_param_unbounded[0]),
-    .user = NULL,
 };
 
 /* 未处理的索引不得伪装成协议错误：调用方据此回退到下一层。
@@ -156,7 +154,7 @@ static void test_round_trip_reports_length(void** state)
 static void ds_download_begin(iolink_ds_ctx_t* ds, const iolink_od_app_t* app)
 {
     iolink_ds_init(ds);
-    iolink_ds_bind_sources(ds, app);
+    iolink_ds_bind_sources(ds, app, NULL);
     /* 0x03 同时是 ParamDownloadStart ISDU 命令与 DS_DownloadStart 命令。 */
     assert_int_equal(iolink_ds_handle_ds_command(ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0U), 0);
 }
@@ -215,9 +213,8 @@ static void test_isdu_reports_positive_error_code(void** state)
     iolink_isdu_init(&isdu);
     isdu.ds_ctx = &ds;
     iolink_od_app_t app = {.entries = k_ds_param_entry,
-                           .count = sizeof(k_ds_param_entry) / sizeof(k_ds_param_entry[0]),
-                           .user = NULL};
-    iolink_isdu_bind_od(&isdu, &app);
+                           .count = sizeof(k_ds_param_entry) / sizeof(k_ds_param_entry[0])};
+    iolink_isdu_bind_od(&isdu, &app, NULL);
 
     assert_int_equal(isdu_send_write_request(&isdu, 0x0100U, 0U, data, sizeof(data)), 1);
     iolink_isdu_process(&isdu);

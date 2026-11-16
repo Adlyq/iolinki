@@ -65,7 +65,7 @@ static uint32_t events_now_ms(const iolink_events_ctx_t* ctx)
     if (ctx->time_us == NULL) {
         return 0U;
     }
-    return (uint32_t) (ctx->time_us(ctx->time_user) / 1000U);
+    return (uint32_t) (ctx->time_us(ctx->time_self) / 1000U);
 }
 
 /** @brief 由事件类型和 MODE 生成 EventQualifier（A.6.4，Figure A.24）。

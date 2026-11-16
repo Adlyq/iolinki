@@ -14,6 +14,7 @@
 #include "iolinki/config.h"
 #include "iolinki/diag.h"
 #include "iolinki/port.h"
+#include "iolinki/types.h"
 
 IOLINK_STATIC_ASSERT(IOLINK_EVENT_QUEUE_SIZE > 0U, "IOLINK_EVENT_QUEUE_SIZE must be > 0");
 IOLINK_STATIC_ASSERT(IOLINK_EVENT_PENDING_MAX > 0U, "IOLINK_EVENT_PENDING_MAX must be > 0");
@@ -172,8 +173,8 @@ struct iolink_events_ctx
     /* 由设备层绑定的应用时钟（config::time_us）。独立使用事件引擎的
      * 用户必须在 iolink_events_init() 之后设置它；缺失的时钟会被
      * 读取为时间 0。 */
-    uint64_t (*time_us)(void* user);
-    void* time_user;
+    uint64_t (*time_us)(iolink_app_t* self);
+    iolink_app_t* time_self;
     iolink_log_sink_t log; /**< 日志汇点（默认静默；设备层绑定） */
 };
 
@@ -183,7 +184,7 @@ struct iolink_events_ctx
  * 重置队列和内部计数器。
  *
  * @param ctx 要初始化的事件上下文
- * @note 独立用户必须在此调用之后绑定 @c ctx->time_us / @c ctx->time_user；
+ * @note 独立用户必须在此调用之后绑定 @c ctx->time_us / @c ctx->time_self；
  *       iolink_device_init() 会从设备配置中绑定它们。
  */
 #if IOLINK_FEATURE_EVENTS

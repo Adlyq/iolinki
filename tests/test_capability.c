@@ -139,7 +139,7 @@ static void test_resolve_merges_runtime_switches(void** state)
 {
     (void) state;
     iolink_stack_config_t stack = {0};
-    iolink_app_callbacks_t app = {0};
+    iolink_device_app_t app = {0};
 
     iolink_caps_t caps = iolink_caps_resolve(NULL, &stack, &app, NULL);
 #if IOLINK_FEATURE_SYSTEM_COMMAND

@@ -44,9 +44,9 @@ void iolink_critical_exit(void)
 /* Mock PHY */
 const iolink_phy_api_t g_phy_freertos = {.init = NULL, .set_baudrate = NULL};
 
-static uint64_t freertos_time_us(void* user)
+static uint64_t freertos_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
         return 0ULL;
@@ -55,9 +55,10 @@ static uint64_t freertos_time_us(void* user)
 }
 
 static iolink_device_ctx_t g_device_ctx;
+static const iolink_device_app_t g_device_app = {.self = NULL, .time_us = freertos_time_us};
 static iolink_device_config_t g_device_config = {
     .phy = g_phy_freertos,
-    .time_us = freertos_time_us,
+    .app = &g_device_app,
 };
 
 /* Request posted by another task and served by the IO-Link task. The IO-Link

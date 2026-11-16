@@ -103,9 +103,9 @@ static void conformance_reset_handler(iolink_reset_type_t type)
     }
 }
 
-static uint64_t conformance_time_us(void* user)
+static uint64_t conformance_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
         return 0ULL;
@@ -130,12 +130,13 @@ int conformance_device_init(conformance_device_t* app, const conformance_profile
     conformance_capture_defaults(app);
 
     app->config.phy = *phy;
-    app->config.time_us = conformance_time_us;
+    app->app_trait.self = (iolink_app_t*) app;
+    app->app_trait.time_us = conformance_time_us;
+    app->config.app = &app->app_trait;
     app->config.stack = profile->stack;
     app->config.device_info = profile->identity;
     conformance_od_init(&app->od, app);
     app->config.od = &app->od;
-    app->config.user = app;
 
     const int rc = iolink_device_init(&app->device, &app->config);
     if (rc != 0) {
@@ -323,7 +324,7 @@ int conformance_device_read_param(conformance_device_t* app, uint16_t index, uin
     if (entry == NULL) {
         return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
     }
-    iolink_od_ctx_t od = {.app = &app->od};
+    iolink_od_ctx_t od = {.app = &app->od, .self = app->config.app->self};
     const iolink_result_t result =
         iolink_od_read_value(&od, entry, subindex, output, *output_length);
     if (!iolink_result_succeeded(result)) {
@@ -343,7 +344,7 @@ int conformance_device_write_param(conformance_device_t* app, uint16_t index, ui
     if (entry == NULL) {
         return IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
     }
-    iolink_od_ctx_t od = {.app = &app->od};
+    iolink_od_ctx_t od = {.app = &app->od, .self = app->config.app->self};
     const iolink_result_t result = iolink_od_write_value(&od, entry, subindex, input, length);
     if (!iolink_result_succeeded(result)) {
         return (result.code > 0) ? (int) result.code : -1;

@@ -63,7 +63,7 @@ compile-only and the remaining cross-combinations are syntax-only probes.
 | `IOLINK_CAP_SYSTEM_COMMAND` | build profile | `stack.flags` / `iolink_device_set_capabilities()` |
 | `IOLINK_CAP_WAKEUP` | PHY vtable (`detect_wakeup`) | hardware bound |
 | `IOLINK_CAP_SIO_CQ` | PHY vtable (`set_cq_line`) | hardware bound |
-| `IOLINK_CAP_PD_IN_CALLBACK` | `app_callbacks->on_pd_input` | application |
+| `IOLINK_CAP_PD_IN_CALLBACK` | `app->on_pd_input` | application |
 | `IOLINK_CAP_REQUIRE_ISR_TX` | build profile | `stack.flags` + `phy->request_service` |
 | `IOLINK_CAP_COMPAT_V10_OP` | `compat_defaults` | `stack.compat_flags` |
 | `IOLINK_CAP_COMPAT_T0_READ` | `compat_defaults` | `stack.compat_flags` |

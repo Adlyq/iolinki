@@ -66,7 +66,6 @@ static void app_od_init(iolink_od_app_t* app)
 {
     app->entries = k_app_entries;
     app->count = sizeof(k_app_entries) / sizeof(k_app_entries[0]);
-    app->user = &g_app_state;
 }
 
 static int ds_app_setup(void** state)

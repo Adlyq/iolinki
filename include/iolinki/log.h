@@ -11,6 +11,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "iolinki/types.h"
 
 /**
  * @file log.h
@@ -54,8 +55,8 @@ typedef enum
 /**
  * @brief 日志输出回调。
  *
- * @param user  ::iolink_device_config_t::user 字段（或直接 DLL 用户的
- *               ::iolink_log_sink_t::user 字段）。
+ * @param self  应用上下文（::iolink_device_app_t::self，或直接 DLL 用户的
+ *               ::iolink_log_sink_t::self）。
  * @param level 该条日志的级别，已通过 sink 的运行时阈值。
  * @param format printf 风格格式串；在 GCC/Clang 下由编译器校验。
  *
@@ -63,8 +64,8 @@ typedef enum
  * 启用 IOLINK_LOG_ENABLE_ISR 后它也会从数据 ISR 调用，此时必须
  * 满足 ISR 安全要求。
  */
-typedef void (*iolink_log_write_fn)(void* user, iolink_log_level_t level, const char* format, ...)
-    IOLINK_LOG_PRINTF_FORMAT(3, 4);
+typedef void (*iolink_log_write_fn)(iolink_app_t* self, iolink_log_level_t level,
+                                    const char* format, ...) IOLINK_LOG_PRINTF_FORMAT(3, 4);
 
 /**
  * @brief 每个上下文携带的日志汇点。
@@ -77,7 +78,7 @@ typedef void (*iolink_log_write_fn)(void* user, iolink_log_level_t level, const 
 typedef struct
 {
     iolink_log_write_fn write; /**< 输出回调；NULL 表示静默 */
-    void* user;                /**< 传给 @ref write 的不透明指针 */
+    iolink_app_t* self;        /**< 传给 @ref write 的应用上下文 */
     iolink_log_level_t level;  /**< 运行时阈值（0 = 静默） */
 } iolink_log_sink_t;
 
@@ -88,13 +89,13 @@ typedef struct
  * 集成代码使用；设备层会自动完成同样的绑定。
  */
 static inline void iolink_log_sink_init(iolink_log_sink_t* sink, iolink_log_write_fn write,
-                                        void* user, iolink_log_level_t level)
+                                        iolink_app_t* self, iolink_log_level_t level)
 {
     if (sink == NULL) {
         return;
     }
     sink->write = write;
-    sink->user = user;
+    sink->self = self;
     sink->level = level;
 }
 
@@ -108,7 +109,7 @@ static inline void iolink_log_sink_init(iolink_log_sink_t* sink, iolink_log_writ
         const iolink_log_sink_t* iolink_log_sink_ = (sink);                      \
         if ((iolink_log_sink_ != NULL) && (iolink_log_sink_->write != NULL) &&   \
             ((lvl) <= iolink_log_sink_->level)) {                                \
-            iolink_log_sink_->write(iolink_log_sink_->user, (lvl), __VA_ARGS__); \
+            iolink_log_sink_->write(iolink_log_sink_->self, (lvl), __VA_ARGS__); \
         }                                                                        \
     } while (0)
 

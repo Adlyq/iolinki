@@ -92,7 +92,7 @@ static uint32_t diag_now_ms(const iolink_events_ctx_t* events)
     if ((events == NULL) || (events->time_us == NULL)) {
         return 0U;
     }
-    return (uint32_t) (events->time_us(events->time_user) / 1000U);
+    return (uint32_t) (events->time_us(events->time_self) / 1000U);
 }
 
 /** @brief 按 EventCode 查找已分配的条件槽位（任意状态）。 */

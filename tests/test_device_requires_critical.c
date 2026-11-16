@@ -21,11 +21,13 @@
 
 #include "iolinki/device.h"
 
-static uint64_t test_time_us(void* user)
+static uint64_t test_time_us(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return 1000000ULL;
 }
+
+static const iolink_device_app_t test_app = {.self = NULL, .time_us = test_time_us};
 
 static void test_device_init_critical_hook(void** state)
 {
@@ -35,7 +37,7 @@ static void test_device_init_critical_hook(void** state)
 
     (void) memset(&config, 0, sizeof(config));
     config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    config.time_us = test_time_us;
+    config.app = &test_app;
 
     /* 不含异步上下文的配置文件（SINGLE）从不引用
      * 临界区钩子，因此那里缺少 port 不再是致命错误。 */

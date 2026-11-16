@@ -25,7 +25,9 @@ int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy,
     }
     memset(app, 0, sizeof(*app));
     app->config.phy = *phy;
-    app->config.time_us = time_us;
+    app->app_trait.self = (iolink_app_t*) app;
+    app->app_trait.time_us = time_us;
+    app->config.app = &app->app_trait;
     app->config.device_info = &identity;
     /* 三个标签是应用数据：以 STORAGE 表项提供，默认应用标签 "DefaultTag"。 */
     static const char default_tag[] = "DefaultTag";
@@ -42,7 +44,6 @@ int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy,
         IOLINK_OD_STORAGE_DS, 32U, "LocationTag", app->tags[2], &app->tag_len[2]);
     app->od.entries = app->od_entries;
     app->od.count = 3U;
-    app->od.user = app;
     app->config.od = &app->od;
     app->config.stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     app->config.stack.pd_in_len = sizeof(app->input);

@@ -17,10 +17,10 @@ Measured on a 64-bit host with the default buffers in
 
 | Component | Size (bytes) | Description |
 | :--- | ---: | :--- |
-| **`iolink_device_ctx_t`** | **4904** | The object the application allocates (includes everything below) |
-| `iolink_device_ctx_t` (FRAME/FRAME) | 4896 | `IOLINK_ISR_*_MODE` = FRAME; `iolink_dll_ctx_t` is 4704 |
-| `iolink_dll_ctx_t` | 4712 | DLL state, timers, reply-plan table (48×24 B, four state slices), frame mailbox; embeds ISDU, Events and DS |
-| `iolink_isdu_ctx_t` | 1344 | Transport state, buffer pointers, the DPP1 RAM image (16 B + seqlock) and the embedded ISDU scratch (1033 B) |
+| **`iolink_device_ctx_t`** | **4920** | The object the application allocates (includes everything below) |
+| `iolink_device_ctx_t` (FRAME/FRAME) | 4912 | `IOLINK_ISR_*_MODE` = FRAME; `iolink_dll_ctx_t` is 4720 |
+| `iolink_dll_ctx_t` | 4728 | DLL state, timers, reply-plan table (48×24 B, four state slices), frame mailbox; embeds ISDU, Events and DS |
+| `iolink_isdu_ctx_t` | 1352 | Transport state, buffer pointers, the DPP1 RAM image (16 B + seqlock) and the embedded ISDU scratch (1033 B) |
 | `iolink_events_ctx_t` | 504 | Event queue plus lifecycle records |
 | `iolink_ds_ctx_t` | 360 | DS state, buffer pointers, the OD set and the embedded download stage |
 | **PHY API** | 20-30 bytes | Function pointers (usually const/flash, but pointer storage in RAM) |
@@ -79,8 +79,8 @@ To move the scratch **out of the context entirely**, build with
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 4904 | **3608** |
-| `iolink_isdu_ctx_t` | 1344 | **304** |
+| `iolink_device_ctx_t` | 4920 | **3608** |
+| `iolink_isdu_ctx_t` | 1352 | **304** |
 | `iolink_ds_ctx_t` | 360 | **104** |
 | `iolink_workspace_t` (separate allocation) | — | 1289 |
 
@@ -128,7 +128,7 @@ You can tune these values to fit your MCU.
 
 ### Total RAM
 
-The default `iolink_device_ctx_t` is **4904 bytes** (64-bit host, default
+The default `iolink_device_ctx_t` is **4920 bytes** (64-bit host, default
 buffers); buffer arrays dominate it. On a 32-bit target the same layout is
 smaller. To measure your own build instead of relying on the table:
 

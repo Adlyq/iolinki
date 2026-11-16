@@ -11,6 +11,7 @@
 
 #include "iolinki/config.h"
 #include "iolinki/result.h"
+#include "iolinki/types.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -128,13 +129,13 @@ typedef struct iolink_od_entry iolink_od_entry_t;
  * 区分元素的钩子应按 @ref iolink_od_entry_t::subindex 或
  * @ref iolink_od_entry_t::max_subindex 自行判定，而不能依赖请求值。
  *
- * @param user  绑定后端的不透明指针（应用表为应用值，标准标签为 NULL）。
+ * @param self  应用上下文（`iolink_device_app_t::self`；标准表项为 NULL）。
  * @param entry 被校验的表项。
  * @param data  待写入的线上字节。
  * @param len   @p data 的字节数。
  * @return 结果模型：0 接受；正方 ISDU ErrorCode 原样上送。
  */
-typedef iolink_result_t (*iolink_od_validate_fn)(void* user, const iolink_od_entry_t* entry,
+typedef iolink_result_t (*iolink_od_validate_fn)(iolink_app_t* self, const iolink_od_entry_t* entry,
                                                  const uint8_t* data, size_t len);
 
 /**
@@ -144,25 +145,25 @@ typedef iolink_result_t (*iolink_od_validate_fn)(void* user, const iolink_od_ent
  * 对 STORAGE 标量，钩子返回错误时变量回滚到写前值；OctetString 不做
  * 回滚（避免在栈上复制整块），需要在写入前拒绝时使用 validate。
  *
- * @param user  绑定后端的不透明指针。
+ * @param self  应用上下文。
  * @param entry 被写入的表项。
  * @param data  已接受的线上字节。
  * @param len   @p data 的字节数。
  * @return 结果模型：0 成功；正方 ISDU ErrorCode 原样上送。
  */
-typedef iolink_result_t (*iolink_od_change_fn)(void* user, const iolink_od_entry_t* entry,
+typedef iolink_result_t (*iolink_od_change_fn)(iolink_app_t* self, const iolink_od_entry_t* entry,
                                                const uint8_t* data, size_t len);
 
 /**
  * @brief 读取一个参数值的后端（HANDLER 表项）。
  *
- * @param user  应用不透明指针（@ref iolink_od_app_t::user ）。
+ * @param self  应用上下文（`iolink_device_app_t::self`）。
  * @param entry 命中的表项。
  * @param out   接收线上字节的缓冲区。
  * @param cap   @p out 的容量。
  * @return 结果模型：成功时 `len` 为写出的字节数。
  */
-typedef iolink_result_t (*iolink_od_read_fn)(void* user, const iolink_od_entry_t* entry,
+typedef iolink_result_t (*iolink_od_read_fn)(iolink_app_t* self, const iolink_od_entry_t* entry,
                                              uint8_t* out, size_t cap);
 
 /**
@@ -170,7 +171,7 @@ typedef iolink_result_t (*iolink_od_read_fn)(void* user, const iolink_od_entry_t
  *
  * 输入已经通过线长/范围/validate 校验，后端只负责应用取值。
  *
- * @param user     应用不透明指针。
+ * @param self     应用上下文。
  * @param entry    命中的表项（其 @c subindex 是表项声明的元素，
  *                 不一定等于请求的子索引）。
  * @param subindex 请求的子索引；多元素对象用它区分元素。
@@ -178,7 +179,7 @@ typedef iolink_result_t (*iolink_od_read_fn)(void* user, const iolink_od_entry_t
  * @param len      @p data 的字节数。
  * @return 结果模型：成功时 `len` 为 0。
  */
-typedef iolink_result_t (*iolink_od_write_fn)(void* user, const iolink_od_entry_t* entry,
+typedef iolink_result_t (*iolink_od_write_fn)(iolink_app_t* self, const iolink_od_entry_t* entry,
                                               uint8_t subindex, const uint8_t* data, size_t len);
 
 /**
@@ -502,24 +503,25 @@ struct iolink_od_entry
                                write_, NULL, NULL)
 
 /**
- * @brief 应用对象字典：const 表 + 钩子用户指针。
+ * @brief 应用对象字典：const 表。
  *
- * 表项自己携带值后端（STORAGE/HANDLER）；`user` 只传给钩子与 HANDLER
- * 函数指针。
+ * 表项自己携带值后端（STORAGE/HANDLER）；钩子与 HANDLER 函数指针
+ * 收到的上下文来自设备实例（`iolink_od_ctx_t::self`），因此同一张
+ * 表可以被多个实例共享。
  */
 typedef struct
 {
     const iolink_od_entry_t* entries; /**< 应用表项数组。 */
     size_t count;                     /**< 表项数量。 */
-    void* user;                       /**< 传给钩子与 HANDLER 后端的不透明指针。 */
 } iolink_od_app_t;
 
 /**
- * @brief 值访问上下文：应用表。
+ * @brief 值访问上下文：应用表 + 实例上下文。
  */
 typedef struct
 {
     const iolink_od_app_t* app; /**< 应用表与后端（可为 NULL）。 */
+    iolink_app_t* self;         /**< 传给钩子与 HANDLER 后端的应用上下文。 */
 } iolink_od_ctx_t;
 
 /**
@@ -546,12 +548,12 @@ const iolink_od_codec_t* iolink_od_codec(uint8_t datatype);
  * 表示不限制（例如 0x0025 这类只读数组对象）。
  *
  * @param entry 表项
- * @param user  钩子用户指针
+ * @param self  应用上下文
  * @param data  线上字节
  * @param len   @p data 字节数
  * @return 0 接受；0x33 长度不符；0x30 越界；负值为内部错误。
  */
-iolink_result_t iolink_od_check_value(const iolink_od_entry_t* entry, void* user,
+iolink_result_t iolink_od_check_value(const iolink_od_entry_t* entry, iolink_app_t* self,
                                       const uint8_t* data, size_t len);
 
 /**

@@ -27,18 +27,18 @@ static iolink_result_t exact_length(const iolink_od_entry_t* entry, size_t len)
     return iolink_result_ok((uint16_t) len);
 }
 
-static iolink_result_t validate_config1(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t validate_config1(iolink_app_t* self, const iolink_od_entry_t* entry,
                                         const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) data;
     return exact_length(entry, len);
 }
 
-static iolink_result_t validate_config3(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t validate_config3(iolink_app_t* self, const iolink_od_entry_t* entry,
                                         const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) data;
     /* block_len 已拒绝超长；这里只要求至少 1 字节。 */
     if (len == 0U) {
@@ -48,17 +48,17 @@ static iolink_result_t validate_config3(void* user, const iolink_od_entry_t* ent
     return iolink_result_ok((uint16_t) len);
 }
 
-static iolink_result_t validate_config4(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t validate_config4(iolink_app_t* self, const iolink_od_entry_t* entry,
                                         const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) data;
     return exact_length(entry, len);
 }
 
-static iolink_result_t conformance_od_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
-                                           size_t cap);
-static iolink_result_t conformance_od_write(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t conformance_od_read(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                           uint8_t* out, size_t cap);
+static iolink_result_t conformance_od_write(iolink_app_t* self, const iolink_od_entry_t* entry,
                                             uint8_t subindex, const uint8_t* data, size_t len);
 
 static const iolink_od_entry_t k_conformance_od[] = {
@@ -118,10 +118,10 @@ static iolink_result_t copy_block(uint8_t* out, size_t cap, const uint8_t* src, 
 }
 
 // cppcheck-suppress constParameterCallback
-static iolink_result_t conformance_od_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
-                                           size_t cap)
+static iolink_result_t conformance_od_read(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                           uint8_t* out, size_t cap)
 {
-    const conformance_device_t* app = (const conformance_device_t*) user;
+    const conformance_device_t* app = (const conformance_device_t*) self;
 
     if (app == NULL) {
         return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
@@ -166,10 +166,10 @@ static iolink_result_t conformance_write_tag(conformance_device_t* app, size_t s
     return iolink_result_ok(0U);
 }
 
-static iolink_result_t conformance_od_write(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t conformance_od_write(iolink_app_t* self, const iolink_od_entry_t* entry,
                                             uint8_t subindex, const uint8_t* data, size_t len)
 {
-    conformance_device_t* app = (conformance_device_t*) user;
+    conformance_device_t* app = (conformance_device_t*) self;
 
     (void) subindex;
     if (app == NULL) {
@@ -230,5 +230,5 @@ void conformance_od_init(iolink_od_app_t* app, conformance_device_t* device)
     }
     app->entries = k_conformance_od;
     app->count = sizeof(k_conformance_od) / sizeof(k_conformance_od[0]);
-    app->user = device;
+    (void) device;
 }

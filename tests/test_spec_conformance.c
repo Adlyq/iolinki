@@ -98,10 +98,10 @@ static int read_object_with_dll(uint16_t index, iolink_dll_main_t* dll, uint8_t*
 /* 应用 OD 表里的设备专用参数（用于验证 Parameter 锁）。 */
 static unsigned g_vendor_calls;
 
-static iolink_result_t vendor_param_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
-                                         size_t cap)
+static iolink_result_t vendor_param_read(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                         uint8_t* out, size_t cap)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     (void) out;
     (void) cap;
@@ -109,10 +109,10 @@ static iolink_result_t vendor_param_read(void* user, const iolink_od_entry_t* en
     return iolink_result_ok(0U);
 }
 
-static iolink_result_t vendor_param_write(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t vendor_param_write(iolink_app_t* self, const iolink_od_entry_t* entry,
                                           uint8_t subindex, const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     (void) subindex;
     (void) data;
@@ -454,14 +454,15 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
 
     iolink_device_info_ctx_set_access_locks(test_env_info(&g_test_env), IOLINK_LOCK_PARAM);
     g_vendor_calls = 0U;
-    iolink_od_app_t app = {.entries = k_vendor_entries,
-                           .count = sizeof(k_vendor_entries) / sizeof(k_vendor_entries[0]),
-                           .user = NULL};
+    iolink_od_app_t app = {
+        .entries = k_vendor_entries,
+        .count = sizeof(k_vendor_entries) / sizeof(k_vendor_entries[0]),
+    };
 
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    iolink_isdu_bind_od(&ctx, &app);
+    iolink_isdu_bind_od(&ctx, &app, NULL);
     const uint8_t value = 0x5AU;
     assert_int_equal(isdu_send_write_request(&ctx, 0x0041U, 0U, &value, 1U), 1);
     iolink_isdu_process(&ctx);
@@ -476,7 +477,7 @@ static void test_parameter_lock_blocks_vendor_write(void** state)
 
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
-    iolink_isdu_bind_od(&ctx, &app);
+    iolink_isdu_bind_od(&ctx, &app, NULL);
     assert_int_equal(isdu_send_read_request(&ctx, 0x0041U, 0U), 1);
     iolink_isdu_process(&ctx);
     n = isdu_collect_response(&ctx, out, sizeof(out));

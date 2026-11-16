@@ -72,18 +72,18 @@ typedef struct
     uint16_t value;
 } single_cell_t;
 
-static iolink_result_t single_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+static iolink_result_t single_read(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t* out,
                                    size_t cap)
 {
-    const single_cell_t* cell = user;
+    const single_cell_t* cell = (const single_cell_t*) self;
 
     return iolink_od_encode(entry, cell->value, out, cap);
 }
 
-static iolink_result_t single_write(void* user, const iolink_od_entry_t* entry, uint8_t subindex,
-                                    const uint8_t* data, size_t len)
+static iolink_result_t single_write(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                    uint8_t subindex, const uint8_t* data, size_t len)
 {
-    single_cell_t* cell = user;
+    single_cell_t* cell = (single_cell_t*) self;
     uint32_t value = 0U;
     const iolink_result_t decoded = iolink_od_decode(entry, data, len, &value);
 
@@ -117,8 +117,7 @@ static void test_od_single_entry_parameter(void** state)
 
     app.entries = k_single_entry;
     app.count = sizeof(k_single_entry) / sizeof(k_single_entry[0]);
-    app.user = &cell;
-    iolink_isdu_bind_od(&ctx, &app);
+    iolink_isdu_bind_od(&ctx, &app, (iolink_app_t*) &cell);
 
     /* 表项默认值经 od_default 解析，与应用初值一致；应用后端读出同一值。 */
     assert_int_equal(cell.value, 42U);
@@ -164,8 +163,8 @@ static void test_od_switching_sensor(void** state)
     test_env_reset_params(&g_od_env);
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_od_env);
-    switching_sensor_od_init(&app, &sensor);
-    iolink_isdu_bind_od(&ctx, &app);
+    switching_sensor_od_init(&app);
+    iolink_isdu_bind_od(&ctx, &app, (iolink_app_t*) &sensor);
 
     /* 表项默认值与应用初值一致，并据此读出。 */
     const iolink_od_entry_t* threshold_entry =
@@ -214,7 +213,7 @@ static void test_od_switching_sensor(void** state)
 
     /* OD 层自己也守住 max_subindex：直接调用值层（不经 ISDU）同样拒绝。 */
     const iolink_od_entry_t* threshold = iolink_od_find(&app, SWITCHING_SENSOR_IDX_THRESHOLD, 0U);
-    iolink_od_ctx_t od = {.app = &app};
+    iolink_od_ctx_t od = {.app = &app, .self = (iolink_app_t*) &sensor};
     assert_non_null(threshold);
     assert_int_equal(iolink_od_read_value(&od, threshold, 1U, buf, sizeof(buf)).code,
                      IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
@@ -270,10 +269,10 @@ static const iolink_od_entry_t k_no_read_entry[] = {
 
 static int g_od_change_calls;
 
-static iolink_result_t track_change(void* user, const iolink_od_entry_t* entry, const uint8_t* data,
-                                    size_t len)
+static iolink_result_t track_change(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                    const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     (void) data;
     (void) len;
@@ -288,10 +287,10 @@ static const iolink_od_entry_t k_change_entry[] = {
                                 "WriteWithHook", single_read, single_write, NULL, track_change),
 };
 
-static iolink_result_t failing_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
-                                    size_t cap)
+static iolink_result_t failing_read(iolink_app_t* self, const iolink_od_entry_t* entry,
+                                    uint8_t* out, size_t cap)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     (void) out;
     (void) cap;
@@ -299,10 +298,10 @@ static iolink_result_t failing_read(void* user, const iolink_od_entry_t* entry, 
 }
 
 /* 标量只返回 1 字节：与表项 codec 的 2 字节不一致。 */
-static iolink_result_t short_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+static iolink_result_t short_read(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t* out,
                                   size_t cap)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     (void) out;
     (void) cap;
@@ -310,10 +309,10 @@ static iolink_result_t short_read(void* user, const iolink_od_entry_t* entry, ui
 }
 
 /* 字节串返回超过调用方容量的长度。 */
-static iolink_result_t long_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+static iolink_result_t long_read(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t* out,
                                  size_t cap)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     (void) out;
     return iolink_result_ok((uint16_t) (cap + 1U));
@@ -415,8 +414,9 @@ static void test_od_value_layer_edges(void** state)
                      IOLINK_RESULT_NOT_HANDLED); /* HANDLER 但 app == NULL */
     single_cell_t read_cell = {.value = 0U};
     iolink_od_ctx_t handler_ctx = {0};
-    iolink_od_app_t app_cell = {.entries = k_single_entry, .count = 1U, .user = &read_cell};
+    iolink_od_app_t app_cell = {.entries = k_single_entry, .count = 1U};
     handler_ctx.app = &app_cell;
+    handler_ctx.self = (iolink_app_t*) &read_cell;
     assert_int_equal(
         iolink_od_read_value(&handler_ctx, &k_no_read_entry[0], 0U, buf, sizeof(buf)).code,
         IOLINK_RESULT_NOT_HANDLED);
@@ -452,8 +452,7 @@ static void test_od_value_layer_edges(void** state)
     iolink_od_app_t app = {0};
     app.entries = k_change_entry;
     app.count = 1U;
-    app.user = &cell;
-    iolink_od_ctx_t change_ctx = {.app = &app};
+    iolink_od_ctx_t change_ctx = {.app = &app, .self = (iolink_app_t*) &cell};
     g_od_change_calls = 0;
     assert_true(iolink_result_succeeded(
         iolink_od_write_value(&change_ctx, &k_change_entry[0], 0U, &one, 1U)));
@@ -518,10 +517,10 @@ static void test_od_table_contract(void** state)
  * 索引域路由：规范索引不可遮蔽，设备专用索引回落到内建表
  * ------------------------------------------------------------------------- */
 
-static iolink_result_t shadow_read(void* user, const iolink_od_entry_t* entry, uint8_t* out,
+static iolink_result_t shadow_read(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t* out,
                                    size_t cap)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     if (cap < 1U) {
         return iolink_result_error(IOLINK_RESULT_INVALID);
@@ -556,7 +555,7 @@ static void test_od_index_domain_routing(void** state)
 
     app.entries = k_shadow_entries;
     app.count = sizeof(k_shadow_entries) / sizeof(k_shadow_entries[0]);
-    iolink_isdu_bind_od(&ctx, &app);
+    iolink_isdu_bind_od(&ctx, &app, NULL);
 
     /* 规范索引 0x0024 由标准表提供，应用表不能遮蔽。 */
     assert_int_equal(od_read(&ctx, IOLINK_IDX_DEVICE_STATUS, 0U, buf, sizeof(buf)), 1);
@@ -644,7 +643,7 @@ static void test_od_storage_scalar_round_trip(void** state)
                                  IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U, 0xFFFFU,
                                  0U, "StorageScalar", &value),
     };
-    iolink_od_app_t app = {.entries = entries, .count = 1U, .user = NULL};
+    iolink_od_app_t app = {.entries = entries, .count = 1U};
     iolink_od_ctx_t ctx = {.app = &app};
     const uint8_t wire[2] = {0x12U, 0x34U};
     uint8_t out[2] = {0U};
@@ -677,7 +676,7 @@ static void test_od_storage_string_round_trip(void** state)
         IOLINK_OD_BYTES_STORAGE(0x0201U, IOLINK_OD_ACCESS_RW, IOLINK_OD_WRITE_VOLATILE,
                                 IOLINK_OD_STORAGE_VOLATILE, 8U, "StorageString", buffer, &length),
     };
-    iolink_od_app_t app = {.entries = entries, .count = 1U, .user = NULL};
+    iolink_od_app_t app = {.entries = entries, .count = 1U};
     iolink_od_ctx_t ctx = {.app = &app};
     const uint8_t wire[3] = {'A', 'B', 'C'};
     uint8_t out[8] = {0U};
@@ -700,10 +699,10 @@ static void test_od_storage_string_round_trip(void** state)
 }
 
 /* on_change 拒绝时 STORAGE 标量回滚到写前值。 */
-static iolink_result_t reject_change(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t reject_change(iolink_app_t* self, const iolink_od_entry_t* entry,
                                      const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     (void) data;
     (void) len;
@@ -719,7 +718,7 @@ static void test_od_storage_scalar_rollback(void** state)
                                     IOLINK_OD_WRITE_VOLATILE, IOLINK_OD_STORAGE_VOLATILE, 0U,
                                     0xFFFFU, 0U, "RollbackScalar", &value, NULL, reject_change),
     };
-    iolink_od_app_t app = {.entries = entries, .count = 1U, .user = NULL};
+    iolink_od_app_t app = {.entries = entries, .count = 1U};
     iolink_od_ctx_t ctx = {.app = &app};
     const uint8_t wire[2] = {0x00U, 0x07U};
 
@@ -739,7 +738,7 @@ static void test_od_storage_string_on_change_keeps_value(void** state)
                                    IOLINK_OD_STORAGE_VOLATILE, 8U, "StringHook", buffer, &length,
                                    NULL, reject_change),
     };
-    iolink_od_app_t app = {.entries = entries, .count = 1U, .user = NULL};
+    iolink_od_app_t app = {.entries = entries, .count = 1U};
     iolink_od_ctx_t ctx = {.app = &app};
     const uint8_t wire[6] = {'L', 'O', 'N', 'G', 'E', 'R'};
     uint8_t out[8] = {0U};
@@ -755,10 +754,10 @@ static void test_od_storage_string_on_change_keeps_value(void** state)
 /* 恢复路径绕过 validate/on_change，只写后端。 */
 static int g_restore_hooks;
 
-static iolink_result_t restore_validate(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t restore_validate(iolink_app_t* self, const iolink_od_entry_t* entry,
                                         const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     (void) data;
     (void) len;
@@ -766,10 +765,10 @@ static iolink_result_t restore_validate(void* user, const iolink_od_entry_t* ent
     return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG);
 }
 
-static iolink_result_t restore_change(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t restore_change(iolink_app_t* self, const iolink_od_entry_t* entry,
                                       const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) entry;
     (void) data;
     (void) len;
@@ -777,10 +776,10 @@ static iolink_result_t restore_change(void* user, const iolink_od_entry_t* entry
     return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG);
 }
 
-static iolink_result_t restore_handler_write(void* user, const iolink_od_entry_t* entry,
+static iolink_result_t restore_handler_write(iolink_app_t* self, const iolink_od_entry_t* entry,
                                              uint8_t subindex, const uint8_t* data, size_t len)
 {
-    uint16_t* value = user;
+    uint16_t* value = (uint16_t*) self;
     uint32_t raw = 0U;
     const iolink_result_t decoded = iolink_od_decode(entry, data, len, &raw);
 
@@ -816,8 +815,8 @@ static void test_od_restore_value_paths(void** state)
     };
     test_env_init(&g_od_env, NULL);
     test_env_reset_params(&g_od_env);
-    iolink_od_app_t app = {.entries = entries, .count = 4U, .user = &handler_value};
-    iolink_od_ctx_t ctx = {.app = &app};
+    iolink_od_app_t app = {.entries = entries, .count = 4U};
+    iolink_od_ctx_t ctx = {.app = &app, .self = (iolink_app_t*) &handler_value};
     const uint8_t wire[2] = {0x12U, 0x34U};
     const uint8_t too_long[5] = {0U};
     uint8_t tag_out[4] = {0U};
@@ -911,7 +910,7 @@ static void test_od_storage_backend_edges(void** state)
          .u.storage = {.value = block, .str_len = &block_len},
          .name = "BadCodec"},
     };
-    iolink_od_app_t app = {.entries = entries, .count = 4U, .user = NULL};
+    iolink_od_app_t app = {.entries = entries, .count = 4U};
     iolink_od_ctx_t ctx = {.app = &app};
     uint8_t out[8] = {0U};
     const uint8_t wire[2] = {0x00U, 0x07U};
