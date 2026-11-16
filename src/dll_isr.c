@@ -847,10 +847,17 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
         /* 合法帧计划未命中：不应答、不解释内容，关闭 t_A 看门狗并
          * 直接丢弃。主泵不再接手计划未命中的合法帧。 */
         ctx->shared.isr_plan_misses++;
-        /* 计数是主信号；逐帧 WARN 在 FALLBACK 等"无计划"状态下会刷屏，
-         * 因此只记 DEBUG（ISR 日志默认编译关闭）。 */
-        IOLINK_LOG_ISR_DEBUG(&ctx->shared.log, "no reply plan: mc=0x%02X len=%u",
-                             (unsigned) frame[0], (unsigned) len);
+        /* 计数是主信号。FALLBACK/COMM_DISABLED 下"无计划"是常态，只记
+         * DEBUG；OPERATE 下合法帧却没有计划属于异常，用 WARN 暴露一次。
+         * 两者都受 IOLINK_LOG_ENABLE_ISR 编译开关约束（默认关闭）。 */
+        if (ctx->shared.state == IOLINK_DLL_STATE_OPERATE) {
+            IOLINK_LOG_ISR_WARN(&ctx->shared.log, "no reply plan in OPERATE: mc=0x%02X len=%u",
+                                (unsigned) frame[0], (unsigned) len);
+        }
+        else {
+            IOLINK_LOG_ISR_DEBUG(&ctx->shared.log, "no reply plan: mc=0x%02X len=%u",
+                                 (unsigned) frame[0], (unsigned) len);
+        }
         if (ctx->shared.phy->response_timer_stop != NULL) {
             ctx->shared.phy->response_timer_stop(ctx->shared.phy->user);
         }

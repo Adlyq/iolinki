@@ -171,16 +171,15 @@ typedef enum
     IOLINK_DEVICE_INIT_ERR_OD_WIDTH = -5,    /**< od_width 不是 1/2/8/32 */
     IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6, /**< od_width 超出 IOLINK_OD_MAX_SIZE */
     IOLINK_DEVICE_INIT_ERR_BAUDRATE = -7,    /**< baudrate_set 使用了无效的 COM */
-    IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -9, /**< PD/OD 长度与 M-sequence 类型不兼容 */
-    IOLINK_DEVICE_INIT_ERR_TIME = -10,       /**< time_us 回调为 NULL */
-    IOLINK_DEVICE_INIT_ERR_CRITICAL = -11,   /**< 平台临界区为弱默认实现 */
+    IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -8, /**< PD/OD 长度与 M-sequence 类型不兼容 */
+    IOLINK_DEVICE_INIT_ERR_TIME = -9,        /**< time_us 回调为 NULL */
+    IOLINK_DEVICE_INIT_ERR_CRITICAL = -10,   /**< 平台临界区为弱默认实现 */
     IOLINK_DEVICE_INIT_ERR_PD_INPUT =
-        -14, /**< PD 回调路径与轮询调用混用（能力位已置位时调用轮询 API） */
-    IOLINK_DEVICE_INIT_ERR_PHY = -15,       /**< 所需 PHY 钩子缺失，或 PHY `init` 失败
+        -11, /**< PD 回调路径与轮询调用混用（能力位已置位时调用轮询 API） */
+    IOLINK_DEVICE_INIT_ERR_PHY = -12,       /**< 所需 PHY 钩子缺失，或 PHY `init` 失败
                                                  （原始驱动码见 iolink_device_get_phy_error()） */
-    IOLINK_DEVICE_INIT_ERR_WORKSPACE = -16, /**< `IOLINK_WORKSPACE_EMBEDDED=0` 但没有提供工作区 */
-    IOLINK_DEVICE_INIT_ERR_OD = -17,        /**< 应用对象字典表存在未定义/自相矛盾的配置 */
-    /* -8、-12、-13、-18 未使用（保持编号稳定）。 */
+    IOLINK_DEVICE_INIT_ERR_WORKSPACE = -13, /**< `IOLINK_WORKSPACE_EMBEDDED=0` 但没有提供工作区 */
+    IOLINK_DEVICE_INIT_ERR_OD = -14,        /**< 应用对象字典表存在未定义/自相矛盾的配置 */
 } iolink_device_init_result_t;
 
 /**

@@ -595,15 +595,13 @@ typedef enum {
     IOLINK_DEVICE_INIT_ERR_OD_WIDTH = -5,
     IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6,
     IOLINK_DEVICE_INIT_ERR_BAUDRATE = -7,
-    /* -8 未使用（保持编号稳定）。 */
-    IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -9,
-    IOLINK_DEVICE_INIT_ERR_TIME = -10,      /* time_us 为 NULL */
-    IOLINK_DEVICE_INIT_ERR_CRITICAL = -11,  /* 仍在使用 weak 临界区默认实现 */
-    /* -12、-13 未使用（保持编号稳定）。 */
-    IOLINK_DEVICE_INIT_ERR_PD_INPUT = -14,  /* 回调路径上调用轮询更新 */
-    IOLINK_DEVICE_INIT_ERR_PHY = -15,       /* 必需的 PHY 钩子为 NULL */
-    IOLINK_DEVICE_INIT_ERR_WORKSPACE = -16, /* IOLINK_WORKSPACE_EMBEDDED=0 且没有工作区 */
-    IOLINK_DEVICE_INIT_ERR_OD = -17,        /* 应用对象字典表存在未定义/自相矛盾配置 */
+    IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -8,
+    IOLINK_DEVICE_INIT_ERR_TIME = -9,      /* time_us 为 NULL */
+    IOLINK_DEVICE_INIT_ERR_CRITICAL = -10,  /* 仍在使用 weak 临界区默认实现 */
+    IOLINK_DEVICE_INIT_ERR_PD_INPUT = -11,  /* 回调路径上调用轮询更新 */
+    IOLINK_DEVICE_INIT_ERR_PHY = -12,       /* 必需的 PHY 钩子为 NULL 或 init 失败 */
+    IOLINK_DEVICE_INIT_ERR_WORKSPACE = -13, /* IOLINK_WORKSPACE_EMBEDDED=0 且没有工作区 */
+    IOLINK_DEVICE_INIT_ERR_OD = -14,        /* 应用对象字典表存在未定义/自相矛盾配置 */
 } iolink_device_init_result_t;
 ```
 

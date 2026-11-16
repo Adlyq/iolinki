@@ -28,6 +28,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a binary that includes the shared PHY harness without wiring
   `test_tx_all_asserted`.
 
+### Changed (init result codes)
+- `iolink_device_init_result_t` is contiguous again (-1..-14). The reserved
+  holes (-8/-12/-13/-18) existed only to keep numbering stable; the tree is
+  unreleased, so the values moved and the "keep numbering stable" note is gone.
+- A valid frame that has no reply plan is now logged at WARN in `OPERATE`
+  (where it is an anomaly) and at DEBUG elsewhere (where FALLBACK has no plans
+  on purpose). The counter was already there; the log line used to be DEBUG
+  everywhere. Both stay behind `IOLINK_LOG_ENABLE_ISR`.
+
 ### Changed (public tree and package)
 - The context-layout headers (`dll_ctx.h`, `dll_main.h`, `dll_shared.h`,
   `dll_isr.h`, `dll_sm.h`, `ring.h`) moved to `include/iolinki/internal/`.

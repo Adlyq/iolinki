@@ -322,7 +322,7 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx,
 
 两条 PD-in 路径在同一构建内共存：`on_pd_input` 非 NULL 时初始化选择回调路径并置位
 `IOLINK_CAP_PD_IN_CALLBACK`，此后 `pd_input_update()` 返回
-`IOLINK_DEVICE_INIT_ERR_PD_INPUT`（-14），避免线上 PD 在回调输出与调用方数据之间
+`IOLINK_DEVICE_INIT_ERR_PD_INPUT`（-11），避免线上 PD 在回调输出与调用方数据之间
 跳变；`on_pd_input` 为 NULL 时用轮询 API 发布。路径只由 `on_pd_input` 是否存在决定。
 
 `pd_output_read()` 最多复制 `len` 字节，并返回实际复制的字节数；参数非法时返回负值。
@@ -438,7 +438,7 @@ storage 标志、默认值与可选钩子），ISDU 分发、Data Storage 成员
 semantics/backend 非法、storage 含未知位、`TRIGGER` 带 storage、可写字节串无
 `block_len`、只读项带写钩子、范围/默认值矛盾、STORAGE/HANDLER 后端缺指针、重复
 index/subindex，以及应用表占用规范索引（标签除外）。命中返回
-`IOLINK_DEVICE_INIT_ERR_OD`（-17）。表项宏只做常量检查；协议期数据校验不受该开关影响。
+`IOLINK_DEVICE_INIT_ERR_OD`（-14）。表项宏只做常量检查；协议期数据校验不受该开关影响。
 
 完整示例见 `examples/switching_sensor/switching_sensor_od.c`。
 

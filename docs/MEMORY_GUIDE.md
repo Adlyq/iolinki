@@ -75,7 +75,7 @@ embedded case.
 To move the scratch **out of the context entirely**, build with
 `-DIOLINK_WORKSPACE_EMBEDDED=0`. The context then keeps only pointers and
 `iolink_device_init()` rejects a missing workspace with
-`IOLINK_DEVICE_INIT_ERR_WORKSPACE` (-16). Measured on the same host:
+`IOLINK_DEVICE_INIT_ERR_WORKSPACE` (-13). Measured on the same host:
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
