@@ -59,9 +59,13 @@ flowchart TB
 
     subgraph CORE["协议核心"]
         D1["device.c<br/>顶层编排、回调分发、DS 来源绑定"]
-        D2["dll.c<br/>主泵：状态机表、计划编译/发布、截止时间表、通道分发"]
-        D2I["dll_isr.c<br/>ISR：计划执行器、收帧、ISDU 快照读、暂存 TX"]
-        D3["isdu.c<br/>ISDU 传输状态机、表驱动的索引/系统命令服务"]
+        D2["dll.c<br/>主泵：上下文、截止时间表、ISR 交接、定时器分发"]
+        D2A["dll_frame.c<br/>帧路径：类型判定、应答发送、通道处理"]
+        D2S["dll_sm.c<br/>状态机骨架与完整帧分发"]
+        D2R["dll_reply.c<br/>应答计划编译/发布、ISDU 快照"]
+        D2P["dll_api.c<br/>公共查询与配置入口"]
+        D2I["dll_isr.c / dll_isr_rx.c<br/>ISR：计划执行、暂存 TX、RX 组装"]
+        D3["isdu.c / isdu_cmd.c / isdu_ds.c<br/>ISDU 传输、标准索引/系统命令、DS 与 OD 表项"]
         D4["data_storage.c<br/>DS 流式序列化、下载暂存/应用、DS 命令"]
         D6["device_info.c<br/>身份信息、访问锁"]
         D7["events.c<br/>事件队列、事件内存、严重度"]
@@ -127,9 +131,16 @@ flowchart TB
 | 文件 | 职责 | 是否在设备运行数据路径 |
 | :--- | :--- | :--- |
 | `src/device.c` | `iolink_device_init/process`、PD API、应用回调、reset、能力位查询、DS 来源绑定 | 是 |
-| `src/dll.c` | 主泵：M-sequence 内容语义、状态机骨架表分发、应答计划编译/发布（seqlock）、截止时间表、PHY 模式/波特率、通道分流 | 是（主上下文） |
-| `src/dll_isr.c` | ISR 传输：重入保护、收帧与校验、ISDU 写暂存、计划查表/执行、ISDU 快照读、暂存 TX 的字节喂送 | 是（中断上下文） |
-| `src/isdu.c` | ISDU 请求收集、索引解析、OD 表分发、标准对象/系统命令/DS 服务、响应组帧 | 是 |
+| `src/dll.c` | 主泵与上下文：截止时间表、状态入口、初始化、ISR 交接、定时器到期分发、`iolink_dll_process` | 是（主上下文） |
+| `src/dll_frame.c` | 帧路径：M-sequence 类型判定、应答发送、MasterCommand/Fallback/页通道、OD 与 PD 处理、PHY 故障轮询 | 是（主上下文） |
+| `src/dll_sm.c` | 状态机骨架 `g_dll_sm`、事件分类、校验失败处理与完整帧流水线 | 是（主上下文） |
+| `src/dll_reply.c` | 应答计划编译/发布（seqlock）、ISDU 响应快照、主站活动与周期时间推算 | 是（主上下文） |
+| `src/dll_api.c` | `iolink_dll_*` 查询与配置入口（状态、波特率、PD 长度、统计、定时器契约） | 否（仅配置/查询） |
+| `src/dll_isr.c` | ISR 传输：重入保护、计划查表/执行、ISDU 写暂存、暂存 TX 的字节喂送、ISR 入口 | 是（中断上下文） |
+| `src/dll_isr_rx.c` | ISR 接收：帧长度/校验、逐帧完成决策、RX FRAME 与 RX BYTE 组装 | 是（中断上下文） |
+| `src/isdu.c` | ISDU 请求收集、头部解析、分段执行、OD 读写入口、索引分发与响应组帧 | 是 |
+| `src/isdu_cmd.c` | 标准索引（设备信息/过程数据/状态/统计）、SystemCommand、Direct Parameter 页 | 是 |
+| `src/isdu_ds.c` | 数据存储索引与访问权限、OD 表项读写应答 | 是（启用 DS 时） |
 | `src/od.c` | 对象字典（内建 const 表 + 应用表）、datatype codec、值校验/编解码/读写、DS 集合判定 | 是（每次 ISDU 参数访问） |
 | `src/data_storage.c` | DS 参数集流式序列化、下载暂存/应用、DS 状态与 DS_Command | 是（启用 DS 时） |
 | `src/device_info.c` | VendorID/DeviceID/字符串身份、Access Locks | 是 |
@@ -186,7 +197,7 @@ flowchart LR
     DS -->|flag_persist| NVM
 ```
 
-`iolink_dll_ctx_t` 只是 `{ iolink_dll_main_t main; iolink_dll_isr_t isr; }` 的单次分配容器（`include/iolinki/internal/dll_ctx.h`）。两者是**兄弟结构**：`main.shared` 是 `iolink_dll_main_t` 的首成员，`shared.isr` 反向指向 `isr`。因此字段访问路径是 `ctx->dll.main.<field>` 与 `ctx->dll.main.shared.<field>`，`dll.c` 只包含 `dll_main.h`、看不到 ISR 独占字段（`tools/check_ownership.sh` 机械校验）。
+`iolink_dll_ctx_t` 只是 `{ iolink_dll_main_t main; iolink_dll_isr_t isr; }` 的单次分配容器（`include/iolinki/internal/dll_ctx.h`）。两者是**兄弟结构**：`main.shared` 是 `iolink_dll_main_t` 的首成员，`shared.isr` 反向指向 `isr`。因此字段访问路径是 `ctx->dll.main.<field>` 与 `ctx->dll.main.shared.<field>`，主上下文翻译单元（`src/dll*.c`，`dll_isr*.c` 除外）只包含 `dll_main.h`、看不到 ISR 独占字段（`tools/check_ownership.sh` 机械校验）。
 
 绑定分两处：`iolink_dll_init()` 建立 ISDU ↔ DLL/事件的内部反向链接
 （`isdu.dll_ctx = &ctx->dll.main`、`isdu.event_ctx = &shared.events`）；
@@ -880,7 +891,7 @@ stateDiagram-v2
 
 补充：
 
-- 迁移由 `include/iolinki/internal/dll_sm.h` 描述：帧事件用 `DLL_SM_ROWS`（7 个状态 × 8 类事件，`src/dll.c` 展开成 `g_dll_sm[state][event]`），定时器/管理类迁移（上表）用 `DLL_SM_ADMIN_ROWS`。`tools/gen_dll_statemachine.py` 解析这两份宏，生成 mermaid/CSV/覆盖测试与本节表格；`--check`（ctest `dll_statemachine_gen_check`）会拒绝过期的表格。帧事件迁移改 `DLL_SM_ROWS` 即可生效；定时器/管理类迁移的**触发代码**仍在 `src/dll.c`，改代码时要同步 `DLL_SM_ADMIN_ROWS`。
+- 迁移由 `include/iolinki/internal/dll_sm.h` 描述：帧事件用 `DLL_SM_ROWS`（7 个状态 × 8 类事件，`src/dll_sm.c` 展开成 `g_dll_sm[state][event]`），定时器/管理类迁移（上表）用 `DLL_SM_ADMIN_ROWS`。`tools/gen_dll_statemachine.py` 解析这两份宏，生成 mermaid/CSV/覆盖测试与本节表格；`--check`（ctest `dll_statemachine_gen_check`）会拒绝过期的表格。帧事件迁移改 `DLL_SM_ROWS` 即可生效（表在 `src/dll_sm.c` 展开）；定时器/管理类迁移的**触发代码**分散在 `src/dll.c`、`src/dll_frame.c` 与 `src/dll_isr.c`，改代码时要同步 `DLL_SM_ADMIN_ROWS`。
 - 首个有效帧把 STARTUP/AWAITING_COMM 迁到 PREOPERATE 后，如果该帧本身就是 transition command（`MC=0x0F`），同一次 `dll_process_complete_frame()` 会继续调用 `dll_handle_preoperate()`，因此可以一帧内连续进入 ESTAB_COM。
 - `master_lost` 只在 OPERATE 且 `master_lost_cycles != 0` 时计算，超过阈值只置提示位并触发 `on_master_lost`，**不改变状态和波特率**（`dll_timer_expire_master_lost()`，`iolink_device_master_lost()`）。
 - CRC 错误不会单独导致 STARTUP；类型非法在 OPERATE/ESTAB 只计数并丢帧，避免链路抖动。
@@ -1078,11 +1089,11 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 
 | 位置 | 内容 | 归类 |
 | :--- | :--- | :--- |
-| `dll_send()`（`dll.c`） | `isr_tx_payload` 暂存（≤`IOLINK_M_SEQ_MAX_LEN`） | 主→ISR 应答移交；暂存本身无锁（主上下文单写者 + 发布字 `isr_tx_pending`），只有直发回退（PHY 无 `request_service()`，非 `IOLINK_CAP_REQUIRE_ISR_TX`）在临界区内驱动 PHY |
-| `dll_isdu_sync_snapshot()`（`dll.c`） | 清除 `isr_isdu_invalidated` | 与 ISR 置位握手分离，避免清掉尚未入环的失效请求 |
+| `dll_send()`（`dll_frame.c`） | `isr_tx_payload` 暂存（≤`IOLINK_M_SEQ_MAX_LEN`） | 主→ISR 应答移交；暂存本身无锁（主上下文单写者 + 发布字 `isr_tx_pending`），只有直发回退（PHY 无 `request_service()`，非 `IOLINK_CAP_REQUIRE_ISR_TX`）在临界区内驱动 PHY |
+| `dll_isdu_sync_snapshot()`（`dll_reply.c`） | 清除 `isr_isdu_invalidated` | 与 ISR 置位握手分离，避免清掉尚未入环的失效请求 |
 | `dll_process_body()`（`dll.c`，TX FRAME） | 轮询 `tx_busy` 并释放 `pd_in_captured` | 防止 ISR 在轮询与释放之间捕获新缓冲 |
-| `iolink_dll_set_pd_length()`（`dll.c`） | PD-in/PD-out 长度对 | 2 字节 RMW |
-| `iolink_dll_reset_error_counters()`（`dll.c`） | 清零两个上下文共享的计数器 | 与 ISR 自增分开 |
+| `iolink_dll_set_pd_length()`（`dll_api.c`） | PD-in/PD-out 长度对 | 2 字节 RMW |
+| `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零两个上下文共享的计数器 | 与 ISR 自增分开 |
 | `diag.c`（4 处） | 来源标记、ISR 脉冲消费、DeviceStatus 快照、DDS 快照 | 条件表内部不变式；ISR 只写 `isr_pulse[]` |
 | `device.c`（3 处） | `set_log` sink 更新、`on_pd_input` 发布、轮询发布，交换 `pd_in_active`/`pd_in_len`/`pd_valid` | 索引/长度标量（PD 拷贝在锁外；PD-out 读取不取锁） |
 | `events.c`（10 处） | 事件队列、pending 表、事件内存 | 事件引擎内部不变式；ISR 侧只读 flag/memory |
@@ -1155,7 +1166,7 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 - `IOLINK_PHY_FEATURE_TX_BUSY=1` 的 TX FRAME 构建在初始化时要求 PHY 提供 `tx_busy()`，否则返回 `IOLINK_DEVICE_INIT_ERR_PHY`。
 - 参数持久化由应用负责：写路径只改 RAM 并调用表项 `on_change`，库不提供 NVM 后端、启动恢复或存储布局宏。`DS_UPLOAD_FLAG` 只保 RAM，经 `config.ds_flag_persist` 通知应用落盘。
 - `IOLINK_FEATURE_VALIDATE=1`（默认）时，初始化会拒绝自相矛盾或不可达的应用 OD 表并返回 `IOLINK_DEVICE_INIT_ERR_OD`；稳定构建可设 0 去掉该自检。
-- `dll.c` 只包含 `dll_main.h`，看不到 ISR 独占字段；新增跨上下文访问必须走 `shared` 或既有 API，否则 `tools/check_ownership.sh` 失败。
+- `src/dll*.c`（`dll_isr*.c` 除外）只包含 `dll_main.h`，看不到 ISR 独占字段；新增跨上下文访问必须走 `shared` 或既有 API，否则 `tools/check_ownership.sh` 失败。
 
 ---
 

@@ -61,8 +61,10 @@ target_link_libraries(your_firmware PRIVATE iolinki::iolinki)
 该配置。自定义目标可只编译需要的源文件：
 
 ```text
-src/device.c src/dll.c src/dll_isr.c src/isdu.c src/events.c src/diag.c
-src/od.c src/data_storage.c src/device_info.c src/capability.c src/profile.c src/crc.c
+src/device.c src/dll.c src/dll_frame.c src/dll_sm.c src/dll_reply.c src/dll_api.c
+src/dll_isr.c src/dll_isr_rx.c src/isdu.c src/isdu_cmd.c src/isdu_ds.c
+src/events.c src/diag.c src/od.c src/data_storage.c src/device_info.c
+src/capability.c src/profile.c src/crc.c
 src/platform.c                    # 或你自己的临界区实现
 src/phy_<your_transceiver>.c
 ```

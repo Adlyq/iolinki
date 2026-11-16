@@ -171,8 +171,15 @@ run_config() {
 # is red.
 PROBE_SOURCES=(
     src/dll.c
+    src/dll_frame.c
+    src/dll_sm.c
+    src/dll_reply.c
+    src/dll_api.c
     src/dll_isr.c
+    src/dll_isr_rx.c
     src/isdu.c
+    src/isdu_cmd.c
+    src/isdu_ds.c
     src/device.c
     src/capability.c
     src/profile.c

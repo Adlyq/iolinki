@@ -62,9 +62,16 @@ set(IOLINK_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/capability.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/profile.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dll.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dll_frame.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dll_sm.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dll_reply.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dll_api.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dll_isr.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dll_isr_rx.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/od.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/isdu.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/isdu_cmd.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/isdu_ds.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/events.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/diag.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/platform.c

@@ -7,42 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Removed (stale traceability duplicate)
-- `tests/conformance_traceability.csv`: it still pointed at renamed tests and
-  no tool validated it; `tests/conformance_audit.csv` is the single matrix.
-
-### Removed (unused root script)
-- `verify_events.py` at the repository root: an unreferenced variant of
-  `tools/virtual_master/verify_events.py` that could not import its own module
-  (`ModuleNotFoundError: virtual_master.master`). The copy under `tools/`
-  imports and runs.
-
-### Changed (build trees)
-- Every build goes below `build/`, one subdirectory per purpose
-  (`build/quality`, `build/matrix`, `build/coverage`, `build/wcet`,
-  `build/size`, `build/linux`, `build/docker`, ...), so the repository root
-  stays clean and `tools/clean_builds.sh` removes all of it in one step. The
-  `IOLINKI_*_DIR` overrides still work.
-- `tools/check_test_gates.sh` rejects a group teardown that relies on a cmocka
-  assertion (cmocka 2.x still exits 0 for those, so such a gate can never fail)
-  and a binary that includes the shared PHY harness without wiring
-  `test_tx_all_asserted`.
-
-### Changed (init result codes)
-- `iolink_device_init_result_t` is contiguous again (-1..-14). The reserved
-  holes (-8/-12/-13/-18) existed only to keep numbering stable; the tree is
-  unreleased, so the values moved and the "keep numbering stable" note is gone.
-- A valid frame that has no reply plan is now logged at WARN in `OPERATE`
-  (where it is more suspicious) and at DEBUG elsewhere (where FALLBACK has no plans
-  on purpose). The counter was already there; the log line used to be DEBUG
-  everywhere. Both stay behind `IOLINK_LOG_ENABLE_ISR`.
-
-### Added (generated transition table)
-- `DLL_SM_ADMIN_ROWS` declares the non-frame transitions (init, wake-up,
-  timers, management commands). `tools/gen_dll_statemachine.py` now renders
-  them into `docs/CODE_FLOW.md` between markers; `--check` (ctest
-  `dll_statemachine_gen_check`) rejects a stale table, so the table and the
-  macro cannot drift. The mermaid sketch above the table stays illustrative.
+### Changed (source layout)
+- The three oversized translation units are split by responsibility, so each
+  stays readable and reviewable: `dll.c` (context, deadline table, pump),
+  `dll_frame.c` (frame path), `dll_sm.c` (state-machine skeleton),
+  `dll_reply.c` (reply-plan publication and ISDU snapshot), `dll_api.c`
+  (public getters/setters), `dll_isr.c` + `dll_isr_rx.c` (TX/plan executor
+  vs. RX assembly), and `isdu.c` + `isdu_cmd.c` + `isdu_ds.c` (transport,
+  standard indices/system commands, data storage and OD entries). The shared
+  internals are declared in `src/dll_internal.h`, `src/dll_isr_internal.h`
+  and `src/isdu_internal.h`; nothing new is installed or public. The DLL
+  ownership gate now covers every main-context TU instead of only `dll.c`,
+  and `tools/build_matrix.sh` / `tools/size_matrix.py` list the new sources.
+  Splitting costs about 0.8 kB of text (+3.5%) because GCC can no longer inline
+  the helpers across the former single translation unit; `tools/size_baseline.csv`
+  was regenerated for that reason. rodata, data and bss are unchanged.
 
 ### Changed (public tree and package)
 - The context-layout headers (`dll_ctx.h`, `dll_main.h`, `dll_shared.h`,

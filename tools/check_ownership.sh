@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 #
-# Ownership gate: the main-context translation unit must not be
+# Ownership gate: every main-context translation unit must not be
 # able to reference data-ISR-exclusive fields.
 #
 # Two independent properties are checked:
-#   1. src/dll.c's full preprocessor dependency set must not pull in
-#      the ISR state (internal/dll_isr.h), the packed container
-#      (internal/dll_ctx.h) or device.h;
+#   1. the full preprocessor dependency set of each main-context TU
+#      (src/dll*.c except dll_isr*.c) must not pull in the ISR state
+#      (internal/dll_isr.h), the packed container (internal/dll_ctx.h)
+#      or device.h;
 #   2. a main-only translation unit cannot dereference the opaque ISR handle,
 #      while the packed container can.
 #
@@ -20,18 +21,28 @@ cc_bin="${CC:-cc}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-deps="$tmp/dll.d"
-if ! "$cc_bin" -std=c99 -Iinclude -Isrc -M src/dll.c >"$deps" 2>"$tmp/deps.log"; then
-    echo "FAIL: cannot preprocess src/dll.c (toolchain or headers broken)" >&2
-    cat "$tmp/deps.log" >&2
-    exit 1
-fi
+MAIN_TUS=(
+    src/dll.c
+    src/dll_frame.c
+    src/dll_sm.c
+    src/dll_reply.c
+    src/dll_api.c
+)
 
-if grep -Eq '/iolinki/(internal/(dll_isr|dll_ctx)\.h|device\.h)' "$deps"; then
-    echo "FAIL: src/dll.c must not transitively include internal/dll_isr.h, internal/dll_ctx.h or device.h" >&2
-    grep -E '/iolinki/(internal/(dll_isr|dll_ctx)\.h|device\.h)' "$deps" >&2
-    exit 1
-fi
+for tu in "${MAIN_TUS[@]}"; do
+    deps="$tmp/$(basename "$tu" .c).d"
+    if ! "$cc_bin" -std=c99 -Iinclude -Isrc -M "$tu" >"$deps" 2>"$tmp/deps.log"; then
+        echo "FAIL: cannot preprocess $tu (toolchain or headers broken)" >&2
+        cat "$tmp/deps.log" >&2
+        exit 1
+    fi
+
+    if grep -Eq '/iolinki/(internal/(dll_isr|dll_ctx)\.h|device\.h)' "$deps"; then
+        echo "FAIL: $tu must not transitively include internal/dll_isr.h, internal/dll_ctx.h or device.h" >&2
+        grep -E '/iolinki/(internal/(dll_isr|dll_ctx)\.h|device\.h)' "$deps" >&2
+        exit 1
+    fi
+done
 
 cat >"$tmp/probe_ctx.c" <<'PROBE'
 #include "iolinki/internal/dll_ctx.h"
@@ -68,4 +79,4 @@ if ! grep -Eq 'isr_tx_flags|iolink_dll_isr|incomplete|不完全' "$tmp/probe_mai
     exit 1
 fi
 
-echo "ownership check: PASS (dll.c cannot reference ISR-exclusive fields)"
+echo "ownership check: PASS (main-context TUs cannot reference ISR-exclusive fields)"
