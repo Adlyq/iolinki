@@ -257,11 +257,14 @@ void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx, iolink_reset_hand
 `struct iolink_app` 的第一个成员（偏移 0）并令 `app->self = (iolink_app_t*) &app`：
 两者地址相同。分开存放时各有一个指针，驱动仍能正常工作，但两者不是同一对象。
 
-`init`、`set_mode` 和 `set_baudrate` 为必需。传输钩子取决于配置的粒度：
-BYTE 模式使用 `rx_octet`/`tx_octet`，FRAME 模式使用 `rx_frame`/`tx_frame`，外加
-`int_active`。`tx_done`（TX BYTE）是可选的完成通知：TX 能力由 `tx_octet` 解析，钩子
-缺省时库自行完成帧。`tx_busy`（TX FRAME）、`detect_wakeup`、`set_cq_line` 和
-`get_faults` 可以为 `NULL`。
+vtable 的每个钩子在类型上都是可选的：`iolink_caps_resolve()` 按"钩子是否存在"
+推导能力位，库只在对应能力位成立时调用（权威定义见 `include/iolinki/phy.h`）。
+实际可用的 PHY 需要配置粒度对应的传输钩子（BYTE 模式 `rx_octet`/`tx_octet`，
+FRAME 模式 `rx_frame`/`tx_frame`）、使用 ISR 泵时的 `int_active`（缺失时
+`dll_isr_process()` 直接返回），以及硬件需要的 `init`/`set_mode`/`set_baudrate`
+（存在才调用）。`tx_done`（TX BYTE，完成通知）、`tx_busy`（TX FRAME）、
+`detect_wakeup`、`set_cq_line`、`request_service`、两个定时器钩子和 `get_faults`
+是可选项。
 
 `IOLINK_BAUDRATE_COM1`、`COM2`、`COM3` 分别是 0、1、2，对应 4.8、38.4 和
 230.4 kbit/s；它们不是波特率编号本身。
@@ -623,7 +626,7 @@ typedef enum {
     IOLINK_DEVICE_INIT_ERR_TIME = -9,       /* time_us 为 NULL */
     IOLINK_DEVICE_INIT_ERR_CRITICAL = -10,  /* 仍在使用 weak 临界区默认实现 */
     IOLINK_DEVICE_INIT_ERR_PD_INPUT = -11,  /* 回调路径上调用轮询更新 */
-    IOLINK_DEVICE_INIT_ERR_PHY = -12,       /* 必需的 PHY 钩子为 NULL 或 init 失败 */
+    IOLINK_DEVICE_INIT_ERR_PHY = -12,       /* PHY 能力组合不可满足（如缺 request_service/tx_busy）或 init 失败 */
     IOLINK_DEVICE_INIT_ERR_WORKSPACE = -13, /* IOLINK_WORKSPACE_EMBEDDED=0 且没有工作区 */
     IOLINK_DEVICE_INIT_ERR_OD = -14,        /* 应用对象字典表存在未定义/自相矛盾配置 */
     IOLINK_DEVICE_INIT_ERR_APP = -15,       /* config.app == NULL（缺少应用 trait） */

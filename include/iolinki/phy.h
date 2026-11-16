@@ -95,7 +95,10 @@ typedef enum
  * 每个钩子都是可选项：@ref iolink_caps_resolve 探测钩子是否存在，把对应
  * 能力位置位，库只在能力位成立时调用它（`int_active` 另有显式的判空门控）。
  * 因此钩子为 NULL 表示"该 PHY 不支持这项能力"，而不是错误；`self` 是应用
- * 放在绑定里的不透明上下文，同样可能为 NULL，回调需自行决定如何使用。
+ * 放在绑定里的不透明上下文，库只原样转发，自建 vtable 时可以自行约定它的
+ * 含义。内置收发器驱动（`phy_l6362a`、`phy_tiol112`）把它绑成自己的 ctx，
+ * 因此那些回调里 `self` 恒为非 NULL；`phy_virtual`/`phy_generic` 不用它，
+ * 保持 NULL。
  */
 typedef struct
 {

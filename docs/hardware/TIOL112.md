@@ -27,9 +27,10 @@ TX low sources C/Q high, TX high sinks C/Q low. EN low releases the line for
 receive. WAKE and NFAULT have separate roles; a fault must not be treated as a
 wake-up event.
 
-Provide every required callback in `iolink_tiol112_io_t`, then call
-`iolink_phy_tiol112_init()` and pass `*iolink_phy_tiol112_get()` to the device
-configuration. The callbacks take the board state as `iolink_tiol112_board_t*`:
+Provide the callbacks your board implements in `iolink_tiol112_io_t` (every
+member is optional; a NULL callback means the board does not offer that signal),
+then call `iolink_phy_tiol112_init()` and pass `*iolink_phy_tiol112_get()` to the
+device configuration. The callbacks take the board state as `iolink_tiol112_board_t*`:
 define `struct iolink_tiol112_board` in the board translation unit (or leave
 `io.board` NULL for a single-instance adapter). Driver storage, board state and
 device configuration must all outlive the device context. `reference_device_init()` shows configuration

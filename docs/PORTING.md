@@ -41,10 +41,11 @@ as a substitute for checksum validation.
 **Implementation Steps**:
 
 1. Create `src/platform/<your_platform>/phy_<your_platform>.c`
-2. Implement all required PHY functions
+2. Implement the hooks your transport and hardware need (every member of
+   `iolink_phy_api_t` is optional; see 2.1 for what a usable PHY provides)
 3. Export PHY API structure
 
-**Example** (STM32 HAL, BYTE mode). `init`, `set_mode`, and `set_baudrate` are still required and must take `iolink_app_t* self` first. Do not invent transceiver register addresses.
+**Example** (STM32 HAL, BYTE mode). Every callback takes `iolink_app_t* self` first. Do not invent transceiver register addresses.
 
 ```c
 static int stm32_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
