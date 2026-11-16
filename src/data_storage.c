@@ -107,6 +107,18 @@ static void ds_attach_image(iolink_ds_ctx_t* ctx, uint8_t* buffer, size_t size)
     ctx->image_valid = false;
 }
 
+/** @brief 丢弃暂存长度。
+ *
+ * `image_len` 有双重身份：绑定了缓冲时它是暂存字节数，未绑定时它来自
+ * measure-only 序列化，是 `DataStorageIndex` 上报的参数集大小。丢弃暂存
+ * 只能清前者，否则失败路径会把上报的 `Data_Storage_Size` 变成 0。 */
+static void ds_discard_staged_len(iolink_ds_ctx_t* ctx)
+{
+    if (ctx->image != NULL) {
+        ctx->image_len = 0U;
+    }
+}
+
 void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* IOLINK_NULLABLE ws)
 {
     if (ctx == NULL) {
@@ -561,7 +573,7 @@ int iolink_ds_abort(iolink_ds_ctx_t* ctx)
 
     /* 中止任何活动的 DS 操作。 */
     ctx->state = IOLINK_DS_STATE_IDLE;
-    ctx->image_len = 0U;
+    ds_discard_staged_len(ctx);
     ctx->download_invalid = false;
     return 0;
 }
@@ -573,7 +585,7 @@ static int ds_cmd_upload_start(iolink_ds_ctx_t* ctx)
        同时也会重新启动活动的上传。 */
     if ((ctx->state == IOLINK_DS_STATE_DOWNLOADING) ||
         (ctx->state == IOLINK_DS_STATE_DOWNLOAD_REQ)) {
-        ctx->image_len = 0U;
+        ds_discard_staged_len(ctx);
     }
     iolink_ds_refresh(ctx);
     ctx->state = IOLINK_DS_STATE_UPLOAD_REQ;
@@ -595,7 +607,7 @@ static int ds_cmd_upload_end(iolink_ds_ctx_t* ctx)
     }
     if ((ctx->state == IOLINK_DS_STATE_DOWNLOADING) ||
         (ctx->state == IOLINK_DS_STATE_DOWNLOAD_REQ)) {
-        ctx->image_len = 0U;
+        ds_discard_staged_len(ctx);
     }
     ctx->state = IOLINK_DS_STATE_IDLE;
     ds_clear_upload_flag(ctx);
@@ -608,7 +620,7 @@ static int ds_cmd_download_start(iolink_ds_ctx_t* ctx)
 {
     /* 0147/0328：新下载会重新启动活动下载并中止活动上传
        （上传没有可丢弃的暂存镜像）。 */
-    ctx->image_len = 0U;
+    ds_discard_staged_len(ctx);
     ctx->download_invalid = false;
     ctx->state = IOLINK_DS_STATE_DOWNLOADING;
     return 0;
@@ -635,11 +647,7 @@ static int ds_cmd_download_end(iolink_ds_ctx_t* ctx)
     int rc = 0;
     if (ctx->download_invalid) {
         ctx->download_invalid = false;
-        /* 只有绑定了缓冲时 image_len 才是暂存长度；没有缓冲时它来自
-           measure-only 序列化，是上报的参数集大小，必须保留。 */
-        if (ctx->image != NULL) {
-            ctx->image_len = 0U;
-        }
+        ds_discard_staged_len(ctx);
         ctx->state = IOLINK_DS_STATE_IDLE;
         IOLINK_LOG_WARN(ctx->log, "ds download rejected: inconsistent image");
         return -4; /* PAR_SETINCONSIST (0x8041) */

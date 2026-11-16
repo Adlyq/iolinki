@@ -506,6 +506,35 @@ static void test_ds_download_end_invalid_without_staging_buffer(void** state)
     assert_int_equal(iolink_ds_size(&ds), 7U);
 }
 
+/* 其余"丢弃暂存"的转换（abort、UploadEnd、DownloadStart）共用同一条规则：
+ * 没有缓冲时 image_len 是上报的参数集大小，不能被当成暂存长度丢掉。 */
+static void test_ds_discard_keeps_reported_size_without_buffer(void** state)
+{
+    (void) state;
+    iolink_ds_ctx_t ds;
+
+    iolink_ds_init(&ds);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)), NULL);
+
+    /* 中止活动操作（ParamBreak、Store-in-upload、出厂复位都走这里）。 */
+    ds.image = NULL;
+    ds.image_len = 7U;
+    ds.state = IOLINK_DS_STATE_DOWNLOADING;
+    assert_int_equal(iolink_ds_abort(&ds), 0);
+    assert_int_equal(iolink_ds_size(&ds), 7U);
+
+    /* UploadEnd 在下载期间丢弃暂存。 */
+    ds.image_len = 7U;
+    ds.state = IOLINK_DS_STATE_DOWNLOADING;
+    assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_UPLOAD_END, 0U), 0);
+    assert_int_equal(iolink_ds_size(&ds), 7U);
+
+    /* DownloadStart 重置暂存。 */
+    ds.image_len = 7U;
+    assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0U), 0);
+    assert_int_equal(iolink_ds_size(&ds), 7U);
+}
+
 /* 表项的 block_len 限制存入镜像的值。 */
 static void test_ds_entry_block_len_bounds_value(void** state)
 {
@@ -1104,6 +1133,7 @@ int main(void)
         cmocka_unit_test(test_ds_download_end_error_classification),
         cmocka_unit_test(test_ds_download_end_without_staging_buffer),
         cmocka_unit_test(test_ds_download_end_invalid_without_staging_buffer),
+        cmocka_unit_test(test_ds_discard_keeps_reported_size_without_buffer),
         cmocka_unit_test(test_ds_download_recovery),
         cmocka_unit_test(test_ds_apply_precheck_rejects_before_write),
         cmocka_unit_test(test_ds_legacy_sub0_is_runtime_compat),
