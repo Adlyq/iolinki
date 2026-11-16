@@ -22,6 +22,11 @@ set(IOLINK_FUZZ_FLAGS
 add_library(iolinki_fuzz STATIC ${IOLINK_SOURCES})
 target_include_directories(iolinki_fuzz PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_compile_options(iolinki_fuzz PRIVATE ${IOLINK_FUZZ_FLAGS})
+# Feature toggles are per-target definitions on `iolinki` (not directory-wide,
+# unlike the layout macros), so a fuzz tree configured with
+# -DIOLINK_FEATURE_EVENTS=OFF would otherwise fuzz a differently built library.
+target_compile_definitions(iolinki_fuzz PUBLIC
+    $<TARGET_PROPERTY:iolinki,INTERFACE_COMPILE_DEFINITIONS>)
 
 set(IOLINK_FUZZ_TARGETS fuzz_frame fuzz_isdu fuzz_od)
 foreach(_fuzz_target IN LISTS IOLINK_FUZZ_TARGETS)

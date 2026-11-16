@@ -98,6 +98,11 @@ static int fuzz_phy_rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, 
 static int fuzz_phy_tx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t data)
 {
     (void) self;
+    if (!g_phy.tx_active) {
+        /* The transceiver was idle: this octet starts a new reply, so the
+         * buffer holds one reply, not every reply of the whole input. */
+        g_phy.reply_len = 0U;
+    }
     if (g_phy.reply_len >= sizeof(g_phy.reply)) {
         /* A reply longer than the largest legal M-sequence is a framing bug,
          * not a fuzz input; make it visible instead of truncating it. */

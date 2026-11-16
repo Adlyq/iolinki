@@ -132,7 +132,7 @@ static void run_isdu(const uint8_t* payload, size_t len, bool chunked, run_resul
     }
 }
 
-/** @brief ABORT must drop a partial transfer without disturbing the buffers. */
+/** @brief ABORT must return the transport to idle with the buffers emptied. */
 static void run_abort(const uint8_t* payload, size_t len)
 {
     engine_start();
@@ -141,8 +141,8 @@ static void run_abort(const uint8_t* payload, size_t len)
     }
     iolink_isdu_od_write(&g_ctx, IOLINK_FLOWCTRL_ABORT, payload, 0U);
     iolink_isdu_process(&g_ctx);
-    if ((g_ctx.response_len > g_ctx.response_size) ||
-        ((uint32_t) g_ctx.state > (uint32_t) ISDU_STATE_RESPONSE_READY)) {
+    if ((g_ctx.state != ISDU_STATE_IDLE) || (g_ctx.stage_state != IOLINK_ISDU_STAGE_IDLE) ||
+        (g_ctx.response_len != 0U)) {
         abort();
     }
 }
