@@ -78,9 +78,9 @@ Groups:
   docs     Doxygen warnings
   matrix   compile matrix plus the differential frame gate
   perf     coverage floor, WCET path proxy and size baseline
+  package  install the exported CMake package and build a consumer against it
   fuzz     libFuzzer over the frame, ISDU and OD parsers (60 s per target;
            clang + libFuzzer runtime required)
-  package  install the exported CMake package and build a consumer against it
   all      every group above
 
 Groups compose: tools/gates.sh quick static
@@ -523,6 +523,18 @@ group_package() {
 
 # --- dispatch --------------------------------------------------------------
 
+# known_group <name>: is this a group the dispatch below can run? The argument
+# parser derives from GATE_GROUPS instead of repeating the list, so adding a
+# group cannot leave the command line behind (that is how `fuzz` was once
+# unreachable through `tools/gates.sh` while `all` already ran it).
+known_group() {
+    local candidate="$1" known
+    for known in "${GATE_GROUPS[@]}"; do
+        [ "$candidate" = "$known" ] && return 0
+    done
+    return 1
+}
+
 run_group() {
     case "$1" in
         quick) group_quick ;;
@@ -564,13 +576,14 @@ for arg in "$@"; do
         all)
             requested+=("${GATE_GROUPS[@]}")
             ;;
-        quick | build | test | gcc | sanitize | memcheck | analyzer | static | docs | matrix | perf | package)
-            requested+=("$arg")
-            ;;
         *)
-            echo "unknown argument: $arg" >&2
-            usage
-            exit 2
+            if known_group "$arg"; then
+                requested+=("$arg")
+            else
+                echo "unknown argument: $arg" >&2
+                usage
+                exit 2
+            fi
             ;;
     esac
 done

@@ -16,6 +16,15 @@ FUZZ_DIR="${FUZZ_DIR:-build/fuzz}"
 FUZZ_SECONDS="${FUZZ_SECONDS:-${IOLINKI_FUZZ_SECONDS:-60}}"
 cc="${IOLINKI_CC:-clang}"
 
+# libFuzzer reads 0 as "run forever", which would hang the whole `all` run; a
+# typo has to fail here instead.
+case "$FUZZ_SECONDS" in
+    '' | *[!0-9]* | 0)
+        echo "FUZZ_SECONDS must be a positive integer, got '$FUZZ_SECONDS'" >&2
+        exit 2
+        ;;
+esac
+
 if ! command -v "$cc" >/dev/null 2>&1; then
     echo "skip: $cc not found (the harnesses need libFuzzer)" >&2
     exit 0
@@ -40,14 +49,23 @@ if ! "$cc" -fsanitize=fuzzer "$tmp/probe.c" -o "$tmp/probe" >/dev/null 2>&1; the
 fi
 
 # CMake refuses a cache from another source tree or compiler, and the fuzz tree
-# carries different instrumentation than every other gate.
+# carries different instrumentation than every other gate. Same comparison as
+# gates.sh: resolve the paths, so two names for one binary do not trigger a
+# rebuild and two different binaries with one name cannot slip through.
+same_compiler() {
+    local a b
+    a=$(command -v "$1" 2>/dev/null || printf '%s' "$1")
+    b=$(command -v "$2" 2>/dev/null || printf '%s' "$2")
+    [ "$(readlink -f "$a" 2>/dev/null || printf '%s' "$a")" = \
+        "$(readlink -f "$b" 2>/dev/null || printf '%s' "$b")" ]
+}
 if [ -f "$FUZZ_DIR/CMakeCache.txt" ]; then
     cached_src="$(grep -E '^CMAKE_HOME_DIRECTORY:INTERNAL=' "$FUZZ_DIR/CMakeCache.txt" |
         cut -d= -f2- || true)"
     cached_cc="$(sed -n 's/^CMAKE_C_COMPILER:[A-Z_]*=//p' "$FUZZ_DIR/CMakeCache.txt" | head -1)"
     if [ -n "$cached_src" ] && [ "$cached_src" != "$root" ]; then
         rm -rf "$FUZZ_DIR"
-    elif [ -n "$cached_cc" ] && [ "$(basename "$cached_cc")" != "$(basename "$cc")" ]; then
+    elif [ -n "$cached_cc" ] && ! same_compiler "$cached_cc" "$cc"; then
         rm -rf "$FUZZ_DIR"
     fi
 fi
@@ -69,6 +87,19 @@ mkdir -p "$corpus/frame" "$corpus/isdu" "$corpus/od" "$artifacts"
 seed() {
     local dir="$1" name="$2" hex="$3"
     [ -s "$dir/$name" ] && return 0
+    # `sed` below turns every byte pair into \xHH; an odd-length or non-hex
+    # string would silently become ASCII instead of the intended byte, so
+    # reject it here.
+    case "$hex" in
+        '' | *[!0-9a-fA-F]*)
+            echo "seed $name: '$hex' is not a hex string" >&2
+            exit 2
+            ;;
+    esac
+    if [ $((${#hex} % 2)) -ne 0 ]; then
+        echo "seed $name: '$hex' is not an even-length hex string" >&2
+        exit 2
+    fi
     printf '%b' "$(printf '%s' "$hex" | sed 's/../\\x&/g')" >"$dir/$name"
 }
 
