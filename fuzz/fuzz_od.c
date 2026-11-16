@@ -121,6 +121,13 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
         return 0;
     }
 
+    /* Deterministic reproduction: the application storage is part of the state
+     * a crash input depends on. */
+    g_scalar = 0U;
+    (void) memset(g_u16, 0, sizeof(g_u16));
+    (void) memset(g_block, 0, sizeof(g_block));
+    g_block_len = 0U;
+
     const uint16_t index = (uint16_t) (((uint16_t) data[0] << 8) | (uint16_t) data[1]);
     const uint8_t subindex = data[2];
     size_t len = data[3];
@@ -154,19 +161,11 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
     (void) iolink_od_ds_at_app(&k_app, (size_t) index);
 
     if (entry == NULL) {
-        /* Most 16-bit indices miss both tables. Fall back to a deterministic
-         * entry so every input also drives a codec/read/write path instead of
-         * returning after the lookup. */
-        const size_t std_count = iolink_od_count();
-        if (std_count > 0U) {
-            entry = iolink_od_at((size_t) data[0] % std_count);
-        }
-        else {
-            entry = &k_entries[0];
-        }
-    }
-    if (entry == NULL) {
-        return 0;
+        /* Most 16-bit indices miss both tables. Fall back to an application
+         * entry — those are STORAGE-backed, so every input also drives the
+         * read/write/restore paths (the standard table is handler-only and
+         * would answer NOT_HANDLED there). */
+        entry = &k_entries[(size_t) data[0] % k_app.count];
     }
 
     uint8_t out[FUZZ_MAX_OUT];

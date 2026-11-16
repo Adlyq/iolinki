@@ -15,7 +15,7 @@
  * validation, state transitions and reply construction all run on it.
  *
  * What the target asserts (in addition to the sanitizers):
- *  - a reply never exceeds the largest legal reply;
+ *  - a reply never exceeds the largest legal M-sequence (`tx_octet` aborts);
  *  - the DLL state stays inside its enumeration;
  *  - the device accepts the build's own reference configuration.
  */
@@ -32,6 +32,8 @@
 #include "iolinki/phy.h"
 #include "iolinki/port.h"
 
+#define FUZZ_MAX_CYCLES 48U
+
 /* The stack refuses to start while the weak no-op critical section is the only
  * implementation (it cannot tell "not ported" from "single-threaded by
  * design"). This harness is single-threaded, so it supplies the real ones. */
@@ -43,16 +45,13 @@ void iolink_critical_exit(void)
 {
 }
 
-#define FUZZ_MAX_INPUT 96U  /**< M-sequences are at most 66 octets; 96 leaves room. */
-#define FUZZ_MAX_REPLY 160U /**< PD_OUT_MAX + OD_MAX + header/CKS, with margin. */
-#define FUZZ_MAX_CYCLES 48U
-
 typedef struct
 {
     const uint8_t* data;
     size_t len;
     size_t pos;
-    uint8_t reply[FUZZ_MAX_REPLY];
+    bool tx_active;
+    uint8_t reply[IOLINK_M_SEQ_MAX_LEN];
     size_t reply_len;
 } fuzz_phy_state_t;
 
@@ -100,23 +99,28 @@ static int fuzz_phy_tx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t data)
 {
     (void) self;
     if (g_phy.reply_len >= sizeof(g_phy.reply)) {
-        /* A reply longer than the legal maximum is a framing bug, not a fuzz
-         * input; make it visible instead of truncating it. */
+        /* A reply longer than the largest legal M-sequence is a framing bug,
+         * not a fuzz input; make it visible instead of truncating it. */
         abort();
     }
     g_phy.reply[g_phy.reply_len++] = data;
+    g_phy.tx_active = true;
     return 0;
 }
 
 static void fuzz_phy_tx_done(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
+    g_phy.tx_active = false;
 }
 
 static uint8_t fuzz_phy_int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
-    return (g_phy.pos < g_phy.len) ? 1U : 0U;
+    /* The transceiver reports service while it still owes a reply: the ISR
+     * pump only drives `tx_step` while this is non-zero, so a reply in
+     * progress has to keep the line active after the last RX octet. */
+    return ((g_phy.pos < g_phy.len) || g_phy.tx_active) ? 1U : 0U;
 }
 
 static int fuzz_phy_detect_wakeup(iolink_app_t* IOLINK_NULLABLE self)
@@ -183,7 +187,7 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
 
     (void) memset(&g_phy, 0, sizeof(g_phy));
     g_phy.data = data;
-    g_phy.len = (size > FUZZ_MAX_INPUT) ? FUZZ_MAX_INPUT : size;
+    g_phy.len = (size > (size_t) IOLINK_M_SEQ_MAX_LEN) ? (size_t) IOLINK_M_SEQ_MAX_LEN : size;
     g_now_us = 0U;
     g_wakeup_pulses = 1U;
 
@@ -197,15 +201,12 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
         iolink_device_process_isr(&g_device);
         iolink_device_process(&g_device);
         g_now_us += 250U;
-        if ((g_phy.pos >= g_phy.len) && (i >= 8U)) {
+        if ((g_phy.pos >= g_phy.len) && !g_phy.tx_active && (i >= 8U)) {
             break;
         }
     }
 
     if ((uint32_t) iolink_device_get_state(&g_device) >= (uint32_t) IOLINK_DLL_STATE_COUNT) {
-        abort();
-    }
-    if (g_phy.reply_len > sizeof(g_phy.reply)) {
         abort();
     }
     return 0;
