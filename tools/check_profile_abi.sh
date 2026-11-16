@@ -12,12 +12,12 @@
 #   ./tools/check_profile_abi.sh
 #
 # Environment:
-#   CC   C compiler (default: cc)
+#   CC           C compiler (default: IOLINKI_CC, else clang)
 
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-CC_BIN="${CC:-cc}"
+CC_BIN="${CC:-${IOLINKI_CC:-clang}}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 

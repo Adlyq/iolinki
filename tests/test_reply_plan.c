@@ -48,11 +48,23 @@ static uint64_t s_now_us;
 static uint8_t s_rx_q[RX_MAX];
 static size_t s_rx_n;
 static size_t s_rx_i;
-static uint8_t s_chk_pending;
 
 static uint8_t s_tx_q[TX_MAX];
 static size_t s_tx_n;
+/* 逐字节状态分别属于 RX 与 TX 传输：FRAME 传输没有这些钩子，写点用下面的
+ * 宏置空，否则 clang 会把它们当成"只写不读"的全局量。 */
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+static uint8_t s_chk_pending;
+#define TEST_CHK_PENDING(chk_) (s_chk_pending = (chk_))
+#else
+#define TEST_CHK_PENDING(chk_) ((void) (chk_))
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 static uint8_t s_tx_active;
+#define TEST_TX_IDLE() (s_tx_active = 0U)
+#else
+#define TEST_TX_IDLE() ((void) 0)
+#endif
 /* 交付给用例的应答数与用例已经查看过的应答数：group teardown 要求相等。 */
 static uint64_t s_tx_delivered;
 static uint64_t s_tx_asserted;
@@ -142,7 +154,7 @@ static void plan_tx_done(iolink_app_t* self)
 {
     (void) self;
     if (s_tx_active != 0U) {
-        s_tx_active = 0U;
+        TEST_TX_IDLE();
         s_tx_delivered++;
     }
 }
@@ -229,7 +241,7 @@ static void feed(const uint8_t* frame, size_t len, uint8_t chk)
     (void) memcpy(s_rx_q, frame, len);
     s_rx_n = len;
     s_rx_i = 0U;
-    s_chk_pending = chk;
+    TEST_CHK_PENDING(chk);
 }
 
 static void drain_tx(void)
@@ -275,7 +287,7 @@ static void init_operate(void)
     s_dll.main.shared.pd_in[0][1] = 0x5AU; /* PD-in 槽位（OD 头之后） */
     s_now_us = 1000000U;
     tx_reset();
-    s_tx_active = 0U;
+    TEST_TX_IDLE();
     iolink_dll_publish_reply_plans(&s_dll.main);
 }
 
@@ -296,7 +308,7 @@ static void init_preoperate(void)
     s_dll.main.pd_valid = true;
     s_now_us = 1000000U;
     tx_reset();
-    s_tx_active = 0U;
+    TEST_TX_IDLE();
     iolink_dll_publish_reply_plans(&s_dll.main);
 }
 
@@ -316,7 +328,7 @@ static void init_preoperate_rx_only(void)
     s_dll.main.pd_valid = true;
     s_now_us = 1000000U;
     tx_reset();
-    s_tx_active = 0U;
+    TEST_TX_IDLE();
     iolink_dll_publish_reply_plans(&s_dll.main);
 }
 
@@ -519,7 +531,7 @@ static int test_page_read_without_identity_is_dropped(void)
     s_dll.main.pd_valid = true;
     s_now_us = 1000000U;
     tx_reset();
-    s_tx_active = 0U;
+    TEST_TX_IDLE();
     iolink_dll_publish_reply_plans(&s_dll.main);
 
     uint8_t rd[2];
@@ -883,7 +895,7 @@ static int test_startup_probe_plan(void)
     s_dll.main.pd_in_len_current = 1U;
     s_now_us = 1000000U;
     tx_reset();
-    s_tx_active = 0U;
+    TEST_TX_IDLE();
     iolink_dll_process(&s_dll.main); /* 主泵窗口：按当前配置发布计划切片 */
 
     uint8_t frame[2];
@@ -1118,7 +1130,7 @@ static int test_tx_without_done_hook(void)
     s_dll.main.shared.pd_in[0][1] = 0x5AU;
     s_now_us = 1000000U;
     tx_reset();
-    s_tx_active = 0U;
+    TEST_TX_IDLE();
 
     if (!iolink_caps_has(s_dll.main.shared.caps, IOLINK_CAP_TX)) {
         return 1;

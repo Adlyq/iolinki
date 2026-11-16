@@ -457,7 +457,8 @@ void handle_access_locks(iolink_isdu_ctx_t* ctx)
         /* 写：更新访问锁。位 4..15 为保留位，应
            以 PAR_VALOUTOFRNG 拒绝（B.2.4 / SDCI_TC_0110）。 */
         if (ctx->buffer_idx >= 2U) {
-            uint16_t new_locks = ((uint16_t) ctx->buffer[0] << 8) | ctx->buffer[1];
+            uint16_t new_locks =
+                (uint16_t) (((uint16_t) ctx->buffer[0] << 8) | (uint16_t) ctx->buffer[1]);
             if ((new_locks & (uint16_t) ~isdu_locks_implemented(ctx)) != 0U) {
                 isdu_respond_error(ctx, IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG);
                 return;

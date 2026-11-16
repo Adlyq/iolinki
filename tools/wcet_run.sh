@@ -12,6 +12,9 @@
 # --check 还会用 --repeat 2 运行每个场景，验证同一场景重复运行指标完全一致。
 # 指标是调用次数（路径长度代理），不是 CPU 周期 WCET；周期上界见
 # tools/wcet/README.md。
+#
+# 环境变量：WCET_BUILD_DIR 构建目录（默认 build/wcet）；
+#           IOLINKI_CC 编译器（默认 clang）。
 
 set -euo pipefail
 
@@ -77,6 +80,7 @@ METRICS="${BUILD_DIR}/wcet_metrics.json"
 
 echo "[wcet] 构建 ${BUILD_DIR}"
 if ! cmake -S "${SCRIPT_DIR}/wcet" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release \
+    "-DCMAKE_C_COMPILER=${IOLINKI_CC:-clang}" \
     >"${BUILD_LOG}" 2>&1 ||
     ! cmake --build "${BUILD_DIR}" --parallel "${JOBS}" >>"${BUILD_LOG}" 2>&1; then
     cat "${BUILD_LOG}" >&2

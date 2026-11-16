@@ -49,7 +49,13 @@ static uint64_t tx_delivered;
 static uint64_t tx_asserted;
 static uint64_t tx_leaked; /* 开始新捕获时仍未查看的交付 */
 static unsigned request_calls;
+/* 逐字节 CHK 只存在于 RX BYTE；FRAME 传输下一整帧自带帧尾，写点用宏置空。 */
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
 static uint8_t chk_pending;
+#define TEST_CHK_PENDING(chk_) (chk_pending = (chk_))
+#else
+#define TEST_CHK_PENDING(chk_) ((void) (chk_))
+#endif
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
 /* RX FRAME：feed() 送入的字节即一整个 PHY 帧。 */
@@ -182,7 +188,7 @@ static void feed(const uint8_t* frame, size_t n, uint8_t chk)
     (void) memcpy(rx_q, frame, n);
     rx_n = n;
     rx_i = 0U;
-    chk_pending = chk;
+    TEST_CHK_PENDING(chk);
 }
 
 static void drain_tx(iolink_dll_ctx_t* ctx)

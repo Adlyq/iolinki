@@ -45,15 +45,28 @@ static size_t tx_n;
 static uint64_t tx_delivered;
 static uint64_t tx_asserted;
 static uint64_t tx_leaked; /* 开始新捕获时仍未查看的交付 */
-#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
-static uint8_t tx_active; /* 一个应答正在发送（tx_done 交付） */
-#endif
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+/* 逐字节 CHK 只存在于 RX BYTE；FRAME 传输下没有读者，写点用宏置空。 */
 static uint8_t chk_pending;
+#define TEST_CHK_PENDING(chk_) (chk_pending = (chk_))
+#define TEST_CHK_CLEAR() (chk_pending = 0U)
+#define TEST_CHK_SET() (chk_pending = 1U)
+#else
+#define TEST_CHK_PENDING(chk_) ((void) (chk_))
+#define TEST_CHK_CLEAR() ((void) 0)
+#define TEST_CHK_SET() ((void) 0)
+#endif
 static unsigned timer_a_starts;
 static unsigned timer_a_stops;
-static unsigned timer_b_starts;
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
-static unsigned tx_done_calls; /* tx_done 只在 TX BYTE 存在 */
+static uint8_t tx_active;       /* 一个应答正在发送（tx_done 交付） */
+static unsigned tx_done_calls;  /* tx_done 只在 TX BYTE 存在 */
+static unsigned timer_b_starts; /* 应答完成时重启 Timer B，仅 TX BYTE */
+#define TEST_TIMER_B_STARTED() (timer_b_starts++)
+#define TEST_TIMER_B_RESET() (timer_b_starts = 0U)
+#else
+#define TEST_TIMER_B_STARTED() ((void) 0)
+#define TEST_TIMER_B_RESET() ((void) 0)
 #endif
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
@@ -175,7 +188,7 @@ static void timer_a_stop(iolink_app_t* self)
 static void timer_b_start(iolink_app_t* self)
 {
     (void) self;
-    timer_b_starts++;
+    TEST_TIMER_B_STARTED();
 }
 
 /* 仅当 PHY 能报告唤醒（dll_phy_has_wakeup()）时，DLL 才会启用 FALLBACK 迁移；
@@ -204,7 +217,7 @@ static void feed(const uint8_t* frame, size_t n)
     (void) memcpy(rx_q, frame, n);
     rx_n = n;
     rx_i = 0U;
-    chk_pending = 0U;
+    TEST_CHK_CLEAR();
 }
 
 static void feed_chk(const uint8_t* frame, size_t n)
@@ -212,7 +225,7 @@ static void feed_chk(const uint8_t* frame, size_t n)
     (void) memcpy(rx_q, frame, n);
     rx_n = n;
     rx_i = 0U;
-    chk_pending = 1U;
+    TEST_CHK_SET();
 }
 
 static void make_type2_process_read(uint8_t* frame, size_t len)
@@ -356,7 +369,7 @@ static void init_type0_ctx(iolink_dll_ctx_t* dll)
     now_us = 1000000U;
     rx_n = 0U;
     rx_i = 0U;
-    chk_pending = 0U;
+    TEST_CHK_CLEAR();
     tx_reset();
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
     tx_active = 0U;
@@ -962,7 +975,7 @@ static int test_timer_interlock(void)
     init_type0_ctx(&dll);
     timer_a_starts = 0U;
     timer_a_stops = 0U;
-    timer_b_starts = 0U;
+    TEST_TIMER_B_RESET();
 
     uint8_t frame[2];
     make_type0((uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_MC_RW_MASK | IOLINK_FLOWCTRL_START),

@@ -13,6 +13,9 @@
 #include <stddef.h>
 
 #include "iolinki/config.h"
+/* types.h 提供指针契约注解与它们需要的诊断配置（`__COUNTER__` 的
+ * `-Wc2y-extensions` 抑制就装在那里），因此本头必须先包含它。 */
+#include "iolinki/types.h"
 
 /**
  * @file port.h

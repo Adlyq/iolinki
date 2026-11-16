@@ -54,8 +54,22 @@ typedef struct iolink_app iolink_app_t;
 /* 注解按需书写（只标注契约里有实际意义的指针），不要求每个指针都标，
  * 因此关掉完整性诊断。该 pragma 在包含本头之后对整个翻译单元生效：需要
  * 完整性检查的代码可在包含 iolinki 头之后用
- * `#pragma clang diagnostic warning "-Wnullability-completeness"` 恢复。 */
+ * `#pragma clang diagnostic warning "-Wnullability-completeness"` 恢复。
+ *
+ * 另外两条只在 `-Wpedantic` 下才会触发的"扩展用法"诊断也在这里关掉，否则
+ * 公共头无法被 `-Wpedantic -Werror` 的调用方使用：
+ * - `-Wnullability-extension`：`_Nonnull`/`_Nullable` 是 Clang 扩展，
+ *   但注解本身是接口契约的一部分；语义检查（`-Wnullability`）仍然生效。
+ * - `-Wc2y-extensions`：`port.h` 的 `IOLINK_STATIC_ASSERT` 用 `__COUNTER__`
+ *   生成唯一名（C99 无 `_Static_assert`），这也是扩展用法。
+ * 两者都不改变任何诊断的语义，只是不再因为"不是标准写法"而拒绝编译。
+ * `-Wc2y-extensions` 只在较新的 clang 上存在，旧版本用 `__has_warning`
+ * 保护，否则 `#pragma` 本身会触发 `-Wunknown-warning-option`。 */
 #pragma clang diagnostic ignored "-Wnullability-completeness"
+#pragma clang diagnostic ignored "-Wnullability-extension"
+#if defined(__has_warning) && __has_warning("-Wc2y-extensions")
+#pragma clang diagnostic ignored "-Wc2y-extensions"
+#endif
 #else
 #define IOLINK_NONNULL
 #define IOLINK_NULLABLE

@@ -26,7 +26,8 @@
 # Environment:
 #   IOLINKI_MATRIX_DIR   build root (default: <repo>/build/matrix)
 #   JOBS                 parallel build jobs (default: nproc)
-#   CC                   C compiler for the probes (default: cc)
+#   CC                   C compiler for the probes (default: IOLINKI_CC, else clang)
+#   IOLINKI_CC           C compiler for the matrix rows (default: clang)
 
 set -uo pipefail
 
@@ -34,7 +35,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=tools/matrix_configs.sh
 . "$ROOT/tools/matrix_configs.sh"
 BUILD_ROOT="${IOLINKI_MATRIX_DIR:-$ROOT/build/matrix}"
-CC_BIN="${CC:-cc}"
+CC_BIN="${CC:-${IOLINKI_CC:-clang}}"
 if [ -z "${JOBS:-}" ]; then
     JOBS="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
 fi
@@ -51,7 +52,7 @@ STOP=0
 RESULTS=()
 
 usage() {
-    sed -n '3,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '3,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -125,6 +126,7 @@ run_config() {
     # shellcheck disable=SC2086 # intentional word splitting of the option list
     if ! cmake -S "$ROOT" -B "$dir" \
             "-DCMAKE_BUILD_TYPE=$build_type" \
+            "-DCMAKE_C_COMPILER=${IOLINKI_CC:-clang}" \
             "-DCMAKE_C_FLAGS=$cflags" \
             "-DBUILD_TESTING=$tests_flag" \
             "-DIOLINK_TEST_TRANSPORT=${transport:-BYTE}" \

@@ -40,7 +40,6 @@ static uint64_t s_now_us;
 static uint8_t s_rx_q[RX_MAX];
 static size_t s_rx_n;
 static size_t s_rx_i;
-static uint8_t s_chk_pending;
 
 static uint8_t s_tx_q[TX_MAX];
 static size_t s_tx_n;
@@ -48,7 +47,19 @@ static size_t s_tx_n;
 static uint64_t s_tx_delivered;
 static uint64_t s_tx_asserted;
 static uint64_t s_tx_leaked; /* 开始新捕获时仍未查看的交付 */
+/* 逐字节状态分别属于 RX 与 TX 传输：FRAME 传输没有这些钩子，写点用宏置空。 */
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+static uint8_t s_chk_pending;
+#define TEST_CHK_PENDING() (s_chk_pending = 1U)
+#else
+#define TEST_CHK_PENDING() ((void) 0)
+#endif
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 static uint8_t s_tx_active;
+#define TEST_TX_IDLE() (s_tx_active = 0U)
+#else
+#define TEST_TX_IDLE() ((void) 0)
+#endif
 
 static uint64_t sm_time_us(iolink_app_t* self)
 {
@@ -206,9 +217,9 @@ static void feed(const uint8_t* frame, size_t len)
     (void) memcpy(s_rx_q, frame, len);
     s_rx_n = len;
     s_rx_i = 0U;
-    s_chk_pending = 1U;
+    TEST_CHK_PENDING();
     s_tx_reset();
-    s_tx_active = 0U;
+    TEST_TX_IDLE();
 }
 
 static void drain_tx(void)

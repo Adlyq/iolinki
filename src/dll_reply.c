@@ -241,9 +241,9 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
      * 的纯函数。状态不再参与键：每个 ISR 可达状态一份切片，一次发布；
      * 状态迁移不再需要主泵重发布。能力位变化仍须先调用
      * iolink_dll_invalidate_reply_plans()，否则键不变会让这里提前返回。 */
-    const uint16_t key = (uint16_t) (0x8000U | ((uint16_t) (ctx->shared.m_seq_type & 0x0FU)) |
-                                     ((uint16_t) (ctx->shared.od_width & 0x1FU) << 4) |
-                                     ((uint16_t) ((uint8_t) ctx->baudrate & 0x03U) << 9));
+    const uint16_t key = (uint16_t) (0x8000U | ((unsigned) (ctx->shared.m_seq_type & 0x0FU)) |
+                                     ((unsigned) (ctx->shared.od_width & 0x1FU) << 4) |
+                                     ((unsigned) ((uint8_t) ctx->baudrate & 0x03U) << 9));
     const IOLINK_ATOMIC_UINT_T seq = iolink_atomic_load(&ctx->shared.reply_plan_seq);
     if ((seq != 0U) && (key == ctx->reply_plan_key)) {
         return; /* 计划表是键的纯函数：没有变化就不写 */

@@ -24,6 +24,7 @@
 #
 # Environment:
 #   IOLINKI_COVERAGE_DIR   build root (default: <repo>/build/coverage)
+#   IOLINKI_CC             C compiler (default: clang; selects the gcov front end)
 #   JOBS                   parallel build jobs (default: nproc)
 #
 # JSON tracefiles: <build root>/coverage-byte.json,
@@ -120,6 +121,19 @@ if grep -q -- '--merge-mode-functions' <<<"$help"; then
     gcovr_opts+=(--merge-mode-functions=merge-use-line-min)
 fi
 
+# clang writes .gcno files the system gcov cannot read; llvm-cov ships a
+# gcov-compatible front end. The compiler is chosen by this script, so the
+# trace format is known before any tree is configured.
+case "${IOLINKI_CC:-clang}" in
+    *clang*)
+        if ! command -v llvm-cov >/dev/null 2>&1; then
+            echo "llvm-cov is required for clang coverage (package: llvm)" >&2
+            exit 2
+        fi
+        gcovr_opts+=(--gcov-executable "llvm-cov gcov")
+        ;;
+esac
+
 filter="$ROOT/src/"
 if [ -n "$FILTER" ]; then
     filter="$ROOT/src/.*$FILTER"
@@ -150,7 +164,8 @@ fi
 build_transport() {
     local transport="$1" dir="$2"
     local cmake_args=(-S "$ROOT" -B "$dir"
-        -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON)
+        -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON
+        "-DCMAKE_C_COMPILER=${IOLINKI_CC:-clang}")
     if [ "$transport" = "FRAME" ]; then
         # The transport is a compile-time ISR granularity: the FRAME code only
         # exists in the library when these definitions are set.

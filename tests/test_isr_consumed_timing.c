@@ -41,7 +41,13 @@ static size_t s_rx_i;
 
 static uint8_t s_tx_q[TX_MAX];
 static size_t s_tx_n;
+/* BYTE 传输的发送忙标志：FRAME 传输没有逐字节钩子，复位点用宏置空。 */
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 static uint8_t s_tx_active;
+#define TEST_TX_IDLE() (s_tx_active = 0U)
+#else
+#define TEST_TX_IDLE() ((void) 0)
+#endif
 /* 交付给用例的应答数与用例已经查看过的应答数：group teardown 要求相等。 */
 static uint64_t s_tx_delivered;
 static uint64_t s_tx_asserted;
@@ -189,7 +195,7 @@ static void feed(const uint8_t* frame, size_t len)
     s_rx_n = len;
     s_rx_i = 0U;
     s_tx_reset();
-    s_tx_active = 0U;
+    TEST_TX_IDLE();
 }
 
 static void drain_tx(void)

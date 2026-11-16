@@ -8,4 +8,9 @@
 # compiled by the build matrix, but are no longer reachable from the default
 # (ISR) unit-test build. This is a deliberate 0.1% adjustment, not a silent
 # regression.
-lines=90.9
+#
+# 90.7 (from 90.9): the gate now measures with clang (the shipping toolchain
+# family) instead of gcc. The same tree reports 5496 executable lines under
+# clang and 4809 under gcc, so the two ratios are not comparable; gcc still
+# reports 91.0% on this tree, clang 90.7%. Raise this when coverage improves.
+lines=90.7
