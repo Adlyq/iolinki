@@ -9,7 +9,7 @@ echo "============================================"
 
 # 1. Compiler Warnings (Strict)
 # We rely on CMake to set -Wall -Wextra -Werror via the build system
-echo -e "\n[1/9] 🛡️  Verifying Compilation Warnings..."
+echo -e "\n[1/10] 🛡️  Verifying Compilation Warnings..."
 BUILD_DIR="${IOLINKI_BUILD_DIR:-$ROOT/build/quality}"
 case "${BUILD_DIR}" in
     /*) ;;
@@ -49,7 +49,7 @@ else
 fi
 
 # 2. Static Analysis (Cppcheck)
-echo -e "\n[2/9] 🧹 Running Static Analysis (Cppcheck)..."
+echo -e "\n[2/10] 🧹 Running Static Analysis (Cppcheck)..."
 if command -v cppcheck &> /dev/null; then
     # Run cppcheck with rigorous settings
     # --enable=all: Enable all checks (style, performance, portability, etc.)
@@ -80,7 +80,7 @@ else
 fi
 
 # 3. MISRA C:2012 Check (Cppcheck addon)
-echo -e "\n[3/9] 📏 Running MISRA C:2012 Check..."
+echo -e "\n[3/10] 📏 Running MISRA C:2012 Check..."
 if command -v cppcheck &> /dev/null; then
     # Use cppcheck MISRA addon if available in the environment.
     # If the addon is not present, fail in enforce mode.
@@ -133,7 +133,7 @@ else
 fi
 
 # 4. Code Formatting Check
-echo -e "\n[4/9] 🎨 Checking Code Formatting..."
+echo -e "\n[4/10] 🎨 Checking Code Formatting..."
 if command -v clang-format &> /dev/null; then
     # clang-format is pinned to 23.1.1 in .pre-commit-config.yaml and the Docker
     # images. Other major versions reformat differently, so do not silently skip:
@@ -155,8 +155,17 @@ else
     echo "      Install the pinned version: pip install clang-format==23.1.1"
 fi
 
-# 5. Doxygen Warning Check
-echo -e "\n[5/9] 📚 Checking Doxygen Warnings..."
+# 5. File Size Gate
+echo -e "\n[5/10] 📐 Checking File Size (code lines per file)..."
+if python3 tools/check_file_size.py --selftest && python3 tools/check_file_size.py; then
+    echo "   ✅ File Size Passed"
+else
+    echo "   ❌ File Size FAILED"
+    exit 1
+fi
+
+# 6. Doxygen Warning Check
+echo -e "\n[6/10] 📚 Checking Doxygen Warnings..."
 if command -v doxygen &> /dev/null; then
     doxygen Doxyfile > /dev/null 2> doxygen.log
     if grep -q "warning:" doxygen.log; then
@@ -171,7 +180,7 @@ else
      echo "   ⚠️ Doxygen not installed. Skipping check."
 fi
 
-echo -e "\n[6/9] 🐚 Linting Shell Scripts (Shellcheck)..."
+echo -e "\n[7/10] 🐚 Linting Shell Scripts (Shellcheck)..."
 if command -v shellcheck &> /dev/null; then
     # Maintained CI/test scripts (add new ones here). tools/add_copyright_headers.sh
     # is a legacy one-shot helper with a known SC2218 false positive.
@@ -193,7 +202,7 @@ else
     echo "      Arch: sudo pacman -S shellcheck-static / Debian: apt-get install shellcheck"
 fi
 
-echo -e "\n[7/9] 🔒 DLL Ownership Isolation..."
+echo -e "\n[8/10] 🔒 DLL Ownership Isolation..."
 if ./tools/check_ownership.sh; then
     echo "   ✅ Ownership Isolation Passed"
 else
@@ -201,7 +210,7 @@ else
     exit 1
 fi
 
-echo -e "\n[8/9] 🧱 Test Gates (white-box, teardown)..."
+echo -e "\n[9/10] 🧱 Test Gates (white-box, teardown)..."
 if ./tools/check_test_whitebox.sh --selftest && ./tools/check_test_whitebox.sh &&
     ./tools/check_test_gates.sh; then
     echo "   ✅ Test Gates Passed"
@@ -210,7 +219,7 @@ else
     exit 1
 fi
 
-echo -e "\n[9/9] 📦 Install and Consume..."
+echo -e "\n[10/10] 📦 Install and Consume..."
 if ./tools/test_install_consumer.sh; then
     echo "   ✅ Install/Consume Passed"
 else

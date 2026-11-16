@@ -154,6 +154,8 @@ jobs:
         run: ./tools/build_matrix.sh
       - name: Differential frame gate
         run: ./tools/diff_matrix.sh
+      - name: File size gate
+        run: python3 tools/check_file_size.py --selftest && python3 tools/check_file_size.py
       - name: DLL ownership isolation
         run: ./tools/check_ownership.sh
       - name: Test white-box boundary

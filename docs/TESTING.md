@@ -21,10 +21,10 @@ Runs the Linux build, the virtual-master tests and the bare-metal library build.
 ```
 
 ### 2. Run Quality Checks
-Strict compilation, static analysis, formatting, Doxygen, shellcheck, the DLL
-ownership and white-box gates, and the install/consume check (the exported
-package is installed into a scratch prefix and a two-file consumer is built
-against it).
+Strict compilation, static analysis, formatting, the per-file size gate
+(800 code lines, comments excluded), Doxygen, shellcheck, the DLL ownership and
+white-box gates, and the install/consume check (the exported package is
+installed into a scratch prefix and a two-file consumer is built against it).
 ```bash
 ./check_quality.sh
 ```
