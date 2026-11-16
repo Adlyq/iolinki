@@ -460,8 +460,13 @@ static bool dll_dispatch_od(iolink_dll_main_t* ctx, uint8_t mc, const uint8_t* o
             iolink_isdu_execute_system_command(&ctx->shared.isdu, od_in[0]);
         }
         if (((mc & IOLINK_MC_RW_MASK) != 0U) && (od_len > 0U)) {
-            od_out[0] = iolink_isdu_direct_param_page1_octet(&ctx->shared.isdu,
-                                                             (uint8_t) (mc & IOLINK_MC_ADDR_MASK));
+            /* 周期帧的 OD 槽位必须填满。没有可用的设备身份时不构造臆造页，
+             * 该字节报 0（A.1.2 的"未实现地址"）；Type-0 页读由
+             * dll_handle_operate_type0() 直接不应答。 */
+            od_out[0] = dll_dp_page1_available(ctx)
+                            ? iolink_isdu_direct_param_page1_octet(
+                                  &ctx->shared.isdu, (uint8_t) (mc & IOLINK_MC_ADDR_MASK))
+                            : 0U;
         }
         return true;
     }

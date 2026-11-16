@@ -329,6 +329,30 @@ static void feed_process_read(void)
     feed(frame, sizeof(frame), 0U);
 }
 
+/* OPERATE 的 M-sequence 页读：有身份时报 DPP1 字节，没有身份时报 0。 */
+static int test_operate_page_read_uses_identity(void)
+{
+    init_operate();
+    /* 主泵先跑一轮：DPP1 映像只由主泵构建，ISR 只读。 */
+    iolink_dll_process(&s_dll.main);
+    drain_tx();
+
+    uint8_t rd[2];
+    make_frame((uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x04U), IOLINK_MSEQ_TYPE_2,
+               rd, sizeof(rd));
+    tx_reset();
+    feed(rd, sizeof(rd), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if (tx_observed_len() != 3U) {
+        return 1; /* OD 1 + PD-in 1 + CKS */
+    }
+    if (s_tx_q[0] != IOLINK_REVISION_ID_1_1) {
+        return 2;
+    }
+    return 0;
+}
+
 /* 命中计划：ISR 直接应答，帧仍带 eager=1 发布给主泵。 */
 static int test_plan_hit_executes_reply(void)
 {
@@ -1131,6 +1155,7 @@ IOLINK_TEST_RC(test_tx_without_done_hook)
 #endif
 IOLINK_TEST_RC(test_type0_page_write_is_answered)
 IOLINK_TEST_RC(test_page_read_without_identity_is_dropped)
+IOLINK_TEST_RC(test_operate_page_read_uses_identity)
 IOLINK_TEST_RC(test_plan_hit_without_tx_is_deferred)
 
 static int group_teardown(void** state)
@@ -1168,6 +1193,7 @@ int main(void)
 #endif
         cmocka_unit_test(iolink_case_test_type0_page_write_is_answered),
         cmocka_unit_test(iolink_case_test_page_read_without_identity_is_dropped),
+        cmocka_unit_test(iolink_case_test_operate_page_read_uses_identity),
         cmocka_unit_test(iolink_case_test_plan_hit_without_tx_is_deferred),
     };
     return cmocka_run_group_tests(tests, NULL, group_teardown);
