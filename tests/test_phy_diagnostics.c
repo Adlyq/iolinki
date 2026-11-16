@@ -24,25 +24,25 @@
 
 static uint8_t mock_faults;
 
-static int mock_init(iolink_app_t* self)
+static int mock_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 0;
 }
 
-static void mock_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
+static void mock_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode)
 {
     (void) self;
     (void) mode;
 }
 
-static void mock_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
+static void mock_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
 {
     (void) self;
     (void) baudrate;
 }
 
-static uint8_t mock_get_faults(iolink_app_t* self)
+static uint8_t mock_get_faults(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return mock_faults;
@@ -189,7 +189,7 @@ static void test_get_faults_overtemp_and_short(void** state)
 
 static uint32_t g_fault_ms;
 
-static uint64_t fault_time_us(iolink_app_t* self)
+static uint64_t fault_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return (uint64_t) g_fault_ms * 1000U;

@@ -15,6 +15,9 @@
 #include "iolinki/config.h"
 #include "iolinki/port.h"
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file diag.h
  * @brief 诊断源注册表：条件 → EventCode / DeviceStatus / DetailedDeviceStatus
@@ -153,7 +156,7 @@ uint8_t iolink_diag_registry_size(void);
  * @param index 0 .. iolink_diag_registry_size()-1
  * @return 条目指针；越界时为 NULL
  */
-const iolink_diag_desc_t* iolink_diag_registry_at(uint8_t index);
+const iolink_diag_desc_t* IOLINK_NULLABLE iolink_diag_registry_at(uint8_t index);
 
 /**
  * @brief 按 EventCode 查找注册表条目（忽略来源条目的 code 重复）。
@@ -163,7 +166,7 @@ const iolink_diag_desc_t* iolink_diag_registry_at(uint8_t index);
  * @param code 16 位 EventCode
  * @return 条目指针；未登记时为 NULL
  */
-const iolink_diag_desc_t* iolink_diag_desc(uint16_t code);
+const iolink_diag_desc_t* IOLINK_NULLABLE iolink_diag_desc(uint16_t code);
 
 /**
  * @brief 按来源取得其注册表条目。
@@ -171,7 +174,7 @@ const iolink_diag_desc_t* iolink_diag_desc(uint16_t code);
  * @param src 来源编号
  * @return 条目指针；越界或未登记时为 NULL
  */
-const iolink_diag_desc_t* iolink_diag_src_desc(iolink_diag_src_t src);
+const iolink_diag_desc_t* IOLINK_NULLABLE iolink_diag_src_desc(iolink_diag_src_t src);
 
 /**
  * @brief 来源对应的 EventCode。
@@ -334,4 +337,5 @@ uint32_t iolink_diag_edge_count(const iolink_events_ctx_t* events, iolink_diag_s
 
 /** @} */ /* end of iolinki_diag */
 
+IOLINK_ASSUME_NONNULL_END
 #endif /* IOLINK_DIAG_H */

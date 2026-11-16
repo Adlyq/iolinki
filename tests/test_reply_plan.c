@@ -71,7 +71,7 @@ static uint64_t s_tx_delivered;
 static uint64_t s_tx_asserted;
 static uint64_t s_tx_leaked; /* 开始新捕获时仍未查看的交付（一律算失败） */
 
-static uint64_t plan_time_us(iolink_app_t* self)
+static uint64_t plan_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return s_now_us;
@@ -79,7 +79,8 @@ static uint64_t plan_time_us(iolink_app_t* self)
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
 /* RX FRAME：feed() 送入的字节即一整个 PHY 帧；没有被送入的帧就交付 NULL。 */
-static const uint8_t* plan_rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len)
+static const uint8_t* plan_rx_frame(iolink_app_t* IOLINK_NULLABLE self, uint8_t* status,
+                                    uint8_t* len)
 {
     (void) self;
     *len = 0U;
@@ -94,7 +95,7 @@ static const uint8_t* plan_rx_frame(iolink_app_t* self, uint8_t* status, uint8_t
     return frame;
 }
 #else
-static int plan_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
+static int plan_rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status)
 {
     (void) self;
     *status = 0U;
@@ -129,7 +130,7 @@ static void plan_tx_frame_sync(void)
     s_tx_delivered++;
 }
 
-static int plan_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
+static int plan_tx_frame(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data, size_t len)
 {
     (void) self;
     plan_tx_frame_sync();
@@ -138,7 +139,7 @@ static int plan_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
     return 0;
 }
 #else
-static int plan_tx_octet(iolink_app_t* self, uint8_t data)
+static int plan_tx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t data)
 {
     (void) self;
     if (!s_tx_active) {
@@ -151,7 +152,7 @@ static int plan_tx_octet(iolink_app_t* self, uint8_t data)
     return 0;
 }
 
-static void plan_tx_done(iolink_app_t* self)
+static void plan_tx_done(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     if (s_tx_active != 0U) {
@@ -185,7 +186,7 @@ static size_t tx_observed_len(void)
     return s_tx_n;
 }
 
-static uint8_t plan_int_active(iolink_app_t* self)
+static uint8_t plan_int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
@@ -200,7 +201,7 @@ static uint8_t plan_int_active(iolink_app_t* self)
 }
 
 static const iolink_phy_api_t s_phy = {
-    .self = (iolink_app_t*) &s_dll,
+    .self = (iolink_app_t * IOLINK_NULLABLE) & s_dll,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     .rx_frame = plan_rx_frame,
 #else
@@ -217,7 +218,7 @@ static const iolink_phy_api_t s_phy = {
 
 /** @brief 只收不发的 PHY（用于"计划命中但无法执行"的兜底路径）。 */
 static const iolink_phy_api_t s_phy_rx_only = {
-    .self = (iolink_app_t*) &s_dll,
+    .self = (iolink_app_t * IOLINK_NULLABLE) & s_dll,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     .rx_frame = plan_rx_frame,
 #else

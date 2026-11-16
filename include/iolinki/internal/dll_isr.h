@@ -11,6 +11,9 @@
 
 #include "iolinki/dll.h"
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file dll_isr.h
  * @brief 数据 ISR 独占的 DLL 状态。
@@ -62,4 +65,5 @@ struct iolink_dll_isr
     volatile uint8_t isr_tx_acc; /**< 运行中的校验和累加器 */
 };
 
+IOLINK_ASSUME_NONNULL_END
 #endif /* IOLINK_DLL_ISR_H */

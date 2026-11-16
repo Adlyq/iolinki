@@ -24,7 +24,7 @@
 
 static uint32_t g_now_ms;
 
-static uint64_t master_lost_time_us(iolink_app_t* self)
+static uint64_t master_lost_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return (uint64_t) g_now_ms * 1000U;
@@ -32,15 +32,15 @@ static uint64_t master_lost_time_us(iolink_app_t* self)
 
 static int lost_calls;
 static int online_calls;
-static iolink_app_t* g_expected_user;
+static iolink_app_t* IOLINK_NULLABLE g_expected_user;
 
-static void on_lost(iolink_app_t* user)
+static void on_lost(iolink_app_t* IOLINK_NULLABLE user)
 {
     assert_ptr_equal(user, g_expected_user);
     lost_calls++;
 }
 
-static void on_online(iolink_app_t* user)
+static void on_online(iolink_app_t* IOLINK_NULLABLE user)
 {
     assert_ptr_equal(user, g_expected_user);
     online_calls++;
@@ -86,7 +86,7 @@ static void test_master_lost_after_n_cycles(void** state)
     };
     static int user_sentinel;
     iolink_test_device_t dev;
-    g_expected_user = (iolink_app_t*) &user_sentinel;
+    g_expected_user = (iolink_app_t * IOLINK_NULLABLE) & user_sentinel;
     app.self = g_expected_user;
     init_device(&dev, 3U, &app);
 

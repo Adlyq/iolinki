@@ -6,13 +6,13 @@
 #include "dll_access.h"
 static uint64_t now;
 static int wake_pending;
-static uint64_t test_time_us(iolink_app_t* self)
+static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return now;
 }
 
-static int wake(iolink_app_t* self)
+static int wake(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     int result = wake_pending;

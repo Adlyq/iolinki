@@ -13,6 +13,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file workspace.h
  * @brief 协议栈传输缓冲工作区。
@@ -75,4 +78,5 @@ typedef struct
 
 /** @} */ /* end of iolinki_workspace */
 
+IOLINK_ASSUME_NONNULL_END
 #endif /* IOLINK_WORKSPACE_H */

@@ -62,29 +62,29 @@ static int g_cb_pd_output;
 static int g_cb_state;
 static void* g_expected_user;
 
-static void cb_startup(iolink_app_t* self)
+static void cb_startup(iolink_app_t* IOLINK_NULLABLE self)
 {
     assert_ptr_equal(self, g_expected_user);
     g_cb_startup++;
 }
-static void cb_preoperate(iolink_app_t* self)
+static void cb_preoperate(iolink_app_t* IOLINK_NULLABLE self)
 {
     assert_ptr_equal(self, g_expected_user);
     g_cb_preoperate++;
 }
-static void cb_operate(iolink_app_t* self)
+static void cb_operate(iolink_app_t* IOLINK_NULLABLE self)
 {
     assert_ptr_equal(self, g_expected_user);
     g_cb_operate++;
 }
-static void cb_pd_output(iolink_app_t* self, uint8_t* data, uint8_t len)
+static void cb_pd_output(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t len)
 {
     assert_ptr_equal(self, g_expected_user);
     (void) data;
     (void) len;
     g_cb_pd_output++;
 }
-static void cb_state_change(iolink_app_t* self, iolink_dll_state_t state)
+static void cb_state_change(iolink_app_t* IOLINK_NULLABLE self, iolink_dll_state_t state)
 {
     assert_ptr_equal(self, g_expected_user);
     (void) state;
@@ -123,7 +123,7 @@ static void test_app_callbacks_lifecycle(void** state)
 
     static int user_sentinel;
     g_expected_user = &user_sentinel;
-    cbs.self = (iolink_app_t*) g_expected_user;
+    cbs.self = (iolink_app_t * IOLINK_NULLABLE) g_expected_user;
 
     move_to_operate_ctx(&dev.ctx);
     assert_true(g_cb_state >= 1);

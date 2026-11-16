@@ -24,6 +24,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file device.h
  * @brief IO-Link 设备应用层 API。
@@ -97,7 +100,7 @@
  *  @return 当前时间，单位为微秒。
  *  @note 主循环和数据 ISR 都会调用它，因此它必须是非阻塞
  *        且 ISR 安全的。 */
-typedef uint64_t (*iolink_device_time_us_fn)(iolink_app_t* self);
+typedef uint64_t (*iolink_device_time_us_fn)(iolink_app_t* IOLINK_NULLABLE self);
 
 /**
  * @brief 初始化时提供的设备配置。
@@ -207,7 +210,7 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
  * @param ctx 设备上下文。
  * @return 外部工作区指针；使用内嵌 fallback 存储时返回 NULL。
  */
-iolink_workspace_t* iolink_device_get_workspace(const iolink_device_ctx_t* ctx);
+iolink_workspace_t* IOLINK_NULLABLE iolink_device_get_workspace(const iolink_device_ctx_t* ctx);
 
 /**
  * @brief 返回最近一次 `iolink_device_init()` 中 PHY `init` 回调的原始错误码。
@@ -230,7 +233,7 @@ int iolink_device_get_phy_error(const iolink_device_ctx_t* ctx);
  * @param write 新的输出回调，可为 NULL。
  * @param level 新的运行时阈值。
  */
-void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn write,
+void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_NULLABLE write,
                            iolink_log_level_t level);
 
 /**
@@ -308,7 +311,8 @@ int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, 
  * @param ctx      设备上下文。
  * @param handler  重置处理函数回调（可以为 NULL 以清除）。
  */
-void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx, iolink_reset_handler_t handler);
+void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx,
+                                     iolink_reset_handler_t IOLINK_NULLABLE handler);
 
 #if IOLINK_FEATURE_EVENTS
 /**
@@ -410,4 +414,5 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx, uint8_t pd_in_len, uin
 
 /** @} */ /* end of iolinki_device */
 
+IOLINK_ASSUME_NONNULL_END
 #endif  // IOLINK_DEVICE_H

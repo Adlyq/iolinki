@@ -7,7 +7,7 @@ static void enable(iolink_l6362a_ctx_t* d, bool on)
     d->io.set_enable(d->io.board, on);
     d->enabled = on;
 }
-static int initialize(iolink_app_t* self)
+static int initialize(iolink_app_t* IOLINK_NULLABLE self)
 {
     iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
     if (d->initialized) enable(d, false);
@@ -17,7 +17,7 @@ static int initialize(iolink_app_t* self)
     if (d->initialized) enable(d, false);
     return d->error;
 }
-static void mode(iolink_app_t* self, iolink_phy_mode_t m)
+static void mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t m)
 {
     iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
     if (!d->initialized) return;
@@ -32,7 +32,7 @@ static void mode(iolink_app_t* self, iolink_phy_mode_t m)
     else if (m != IOLINK_PHY_MODE_INACTIVE)
         d->error = -1;
 }
-static void speed(iolink_app_t* self, iolink_baudrate_t b)
+static void speed(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t b)
 {
     iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
     switch (b) {
@@ -55,13 +55,13 @@ static void speed(iolink_app_t* self, iolink_baudrate_t b)
         d->error = d->io.uart_configure(d->io.board, d->baud);
     }
 }
-static int wake(iolink_app_t* self)
+static int wake(iolink_app_t* IOLINK_NULLABLE self)
 {
     iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
     return d->initialized ? d->io.consume_wakeup(d->io.board) : 0;
 }
 
-static void cq(iolink_app_t* self, uint8_t b)
+static void cq(iolink_app_t* IOLINK_NULLABLE self, uint8_t b)
 {
     iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
     d->cq = b != 0;
@@ -80,7 +80,7 @@ int iolink_phy_l6362a_init(iolink_l6362a_ctx_t* d, const iolink_l6362a_io_t* io)
     memset(d, 0, sizeof(*d));
     d->io = *io;
     d->baud = 4800;
-    d->phy.self = (iolink_app_t*) d;
+    d->phy.self = (iolink_app_t * IOLINK_NULLABLE) d;
     d->phy.init = initialize;
     d->phy.set_mode = mode;
     d->phy.set_baudrate = speed;

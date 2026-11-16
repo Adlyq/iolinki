@@ -24,6 +24,7 @@
 #include "iolinki/device_info.h"
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
+#include "test_null.h"
 
 static iolink_test_env_t g_test_env;
 
@@ -198,17 +199,18 @@ static void test_device_info_ctx_edges(void** state)
     iolink_device_info_t info = make_info();
     iolink_device_info_ctx_t ctx;
 
-    /* NULL 上下文/身份：初始化失败，访问器安全返回。 */
-    assert_int_equal(iolink_device_info_ctx_init(NULL, &info), -1);
+    /* 兜底路径：NULL 上下文/身份，初始化失败，访问器安全返回。 */
+    assert_int_equal(iolink_device_info_ctx_init(TEST_NULL(iolink_device_info_ctx_t*), &info), -1);
     /* 先绑定有效身份，再让一次绑定失败：旧身份必须被清掉。 */
     assert_int_equal(iolink_device_info_ctx_init(&ctx, &info), 0);
     assert_non_null(iolink_device_info_ctx_get(&ctx));
-    assert_int_equal(iolink_device_info_ctx_init(&ctx, NULL), -1);
+    assert_int_equal(iolink_device_info_ctx_init(&ctx, TEST_NULL(const iolink_device_info_t*)), -1);
     assert_null(iolink_device_info_ctx_get(&ctx));
     assert_int_equal(iolink_device_info_ctx_get_access_locks(&ctx), 0U);
     assert_null(iolink_device_info_ctx_get(NULL));
-    assert_int_equal(iolink_device_info_ctx_get_access_locks(NULL), 0U);
-    iolink_device_info_ctx_set_access_locks(NULL, 0x1234U);
+    assert_int_equal(
+        iolink_device_info_ctx_get_access_locks(TEST_NULL(const iolink_device_info_ctx_t*)), 0U);
+    iolink_device_info_ctx_set_access_locks(TEST_NULL(iolink_device_info_ctx_t*), 0x1234U);
 
     /* 超长 application tag 截断到 32 字节。 */
     char long_tag[40];
@@ -219,8 +221,11 @@ static void test_device_info_ctx_edges(void** state)
     assert_int_equal((int) strlen(iolink_device_info_ctx_get(&ctx)->application_tag), 32);
 
     /* set_application_tag：非法参数、超长、合法更新。 */
-    assert_int_equal(iolink_device_info_ctx_set_application_tag(NULL, "x", 1U), -1);
-    assert_int_equal(iolink_device_info_ctx_set_application_tag(&ctx, NULL, 0U), -1);
+    assert_int_equal(
+        iolink_device_info_ctx_set_application_tag(TEST_NULL(iolink_device_info_ctx_t*), "x", 1U),
+        -1);
+    assert_int_equal(iolink_device_info_ctx_set_application_tag(&ctx, TEST_NULL(const char*), 0U),
+                     -1);
     assert_int_equal(iolink_device_info_ctx_set_application_tag(&ctx, "x", 33U), -1);
     assert_int_equal(iolink_device_info_ctx_set_application_tag(&ctx, "ABC", 3U), 0);
     assert_string_equal(iolink_device_info_ctx_get(&ctx)->application_tag, "ABC");

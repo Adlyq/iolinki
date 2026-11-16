@@ -19,6 +19,7 @@
 #include <stdint.h>
 
 #include "iolinki/crc.h"
+#include "test_null.h"
 
 /* 用 A.1 公式压缩 8 位累加器，与被测实现无关
  * （Table A.1）。 */
@@ -89,9 +90,9 @@ static void test_checksum6_empty_message(void** state)
 {
     (void) state;
 
-    /* 长度为 0 的 NULL 缓冲区是合法的；校验和即种子值
-     * 经过压缩器折叠一次的结果。 */
-    assert_int_equal(iolink_checksum6(NULL, 0U), 0x2DU);
+    /* len == 0 时循环不执行，校验和即种子值折叠一次的结果。缓冲区契约
+     * 仍要求非空，因此这里用 TEST_NULL 显式违反它。 */
+    assert_int_equal(iolink_checksum6(TEST_NULL(const uint8_t*), 0U), 0x2DU);
 }
 
 int main(void)

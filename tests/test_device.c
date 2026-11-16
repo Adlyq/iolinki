@@ -24,6 +24,7 @@
 #include "iolinki/isdu.h"
 #include "dll_access.h"
 #include "test_helpers.h"
+#include "test_null.h"
 
 static int g_reset_count;
 static iolink_reset_type_t g_last_reset;
@@ -34,24 +35,24 @@ static void device_reset_handler(iolink_reset_type_t type)
     g_last_reset = type;
 }
 
-static iolink_app_t* g_phy_self_seen;
+static iolink_app_t* IOLINK_NULLABLE g_phy_self_seen;
 
 static int g_record_init_calls;
 
-static int record_phy_init(iolink_app_t* self)
+static int record_phy_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     g_phy_self_seen = self;
     g_record_init_calls++;
     return 0;
 }
 
-static void record_phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
+static void record_phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode)
 {
     (void) self;
     (void) mode;
 }
 
-static void record_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
+static void record_phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
 {
     (void) self;
     (void) baudrate;
@@ -112,8 +113,10 @@ static void test_device_init_rejects_null(void** state)
     iolink_device_config_t config;
     (void) memset(&config, 0, sizeof(config));
 
-    assert_int_equal(iolink_device_init(NULL, &config), IOLINK_DEVICE_INIT_ERR_NULL);
-    assert_int_equal(iolink_device_init(&ctx, NULL), IOLINK_DEVICE_INIT_ERR_NULL);
+    assert_int_equal(iolink_device_init(TEST_NULL(iolink_device_ctx_t*), &config),
+                     IOLINK_DEVICE_INIT_ERR_NULL);
+    assert_int_equal(iolink_device_init(&ctx, TEST_NULL(const iolink_device_config_t*)),
+                     IOLINK_DEVICE_INIT_ERR_NULL);
 }
 
 static void test_device_init_requires_device_info(void** state)
@@ -200,7 +203,7 @@ static void test_device_init_rejects_invalid_config(void** state)
 
 static int g_phy_init_calls;
 
-static int failing_phy_init(iolink_app_t* self)
+static int failing_phy_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     g_phy_init_calls++;
@@ -223,7 +226,7 @@ static void test_device_init_maps_phy_error(void** state)
     assert_int_equal(g_phy_init_calls, 1);
     /* 默认日志是静默的，原始码必须能从上下文取回。 */
     assert_int_equal(iolink_device_get_phy_error(&ctx), -7);
-    assert_int_equal(iolink_device_get_phy_error(NULL), 0);
+    assert_int_equal(iolink_device_get_phy_error(TEST_NULL(const iolink_device_ctx_t*)), 0);
 }
 
 static void test_device_init_clears_stale_phy_error(void** state)
@@ -254,11 +257,11 @@ static void test_device_forwards_phy_self(void** state)
     phy.init = record_phy_init;
     phy.set_mode = record_phy_set_mode;
     phy.set_baudrate = record_phy_set_baudrate;
-    phy.self = (iolink_app_t*) &phy_ctx;
+    phy.self = (iolink_app_t * IOLINK_NULLABLE) & phy_ctx;
 
     g_phy_self_seen = NULL;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
-    assert_ptr_equal(g_phy_self_seen, (iolink_app_t*) &phy_ctx);
+    assert_ptr_equal(g_phy_self_seen, (iolink_app_t * IOLINK_NULLABLE) & phy_ctx);
     assert_ptr_not_equal(g_phy_self_seen, config.app->self);
 }
 
@@ -270,7 +273,7 @@ static void test_device_binds_instance_context(void** state)
     iolink_stack_config_t stack = {0};
     iolink_test_device_t dev;
 
-    app.self = (iolink_app_t*) &sentinel;
+    app.self = (iolink_app_t * IOLINK_NULLABLE) & sentinel;
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     stack.od_width = 1U;
     setup_mock_phy();
@@ -279,14 +282,16 @@ static void test_device_binds_instance_context(void** state)
 
     /* 设备层必须把同一个实例指针交给时钟、ISDU 与 DS 的 OD 钩子；
        否则 OD HANDLER 会收到 NULL 并回 0x11。 */
-    assert_ptr_equal(test_dll_shared(&dev.ctx)->clock.self, (iolink_app_t*) &sentinel);
-    assert_ptr_equal(test_dll_isdu(&dev.ctx)->od_self, (iolink_app_t*) &sentinel);
-    assert_ptr_equal(test_dll(&dev.ctx)->ds.self, (iolink_app_t*) &sentinel);
+    assert_ptr_equal(test_dll_shared(&dev.ctx)->clock.self,
+                     (iolink_app_t * IOLINK_NULLABLE) & sentinel);
+    assert_ptr_equal(test_dll_isdu(&dev.ctx)->od_self, (iolink_app_t * IOLINK_NULLABLE) & sentinel);
+    assert_ptr_equal(test_dll(&dev.ctx)->ds.self, (iolink_app_t * IOLINK_NULLABLE) & sentinel);
 #if IOLINK_FEATURE_DATA_STORAGE
-    assert_ptr_equal(test_dll(&dev.ctx)->ds.flag_self, (iolink_app_t*) &sentinel);
+    assert_ptr_equal(test_dll(&dev.ctx)->ds.flag_self, (iolink_app_t * IOLINK_NULLABLE) & sentinel);
 #endif
 #if IOLINK_FEATURE_EVENTS
-    assert_ptr_equal(test_dll_shared(&dev.ctx)->events.clock->self, (iolink_app_t*) &sentinel);
+    assert_ptr_equal(test_dll_shared(&dev.ctx)->events.clock->self,
+                     (iolink_app_t * IOLINK_NULLABLE) & sentinel);
 #endif
 }
 
@@ -378,7 +383,8 @@ static void test_device_pd_input_bounds(void** state)
 
     const uint8_t data[IOLINK_PD_IN_MAX_SIZE + 1U] = {0};
 
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, NULL, 2U, true), -1);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, TEST_NULL(const uint8_t*), 2U, true),
+                     -1);
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true), -1);
 
     const uint8_t pd[2] = {0x11U, 0x22U};
@@ -421,7 +427,7 @@ static void test_device_pd_output_read(void** state)
     assert_int_equal(iolink_device_pd_output_read(&dev.ctx, out, sizeof(out)), 3);
     assert_memory_equal(out, test_dll_const(&dev.ctx)->pd_out, 3U);
 
-    assert_int_equal(iolink_device_pd_output_read(&dev.ctx, NULL, 1U), -1);
+    assert_int_equal(iolink_device_pd_output_read(&dev.ctx, TEST_NULL(uint8_t*), 1U), -1);
 }
 
 static void test_device_reset_handler(void** state)
@@ -460,9 +466,11 @@ static void test_device_introspection(void** state)
     assert_non_null(iolink_device_get_events_ctx(&dev.ctx));
     assert_non_null(iolink_device_get_ds_ctx(&dev.ctx));
 
-    /* NULL 安全的访问器回退到文档记载的默认值。 */
-    assert_int_equal(iolink_device_get_state(NULL), IOLINK_DLL_STATE_STARTUP);
-    assert_int_equal(iolink_device_get_m_seq_type(NULL), IOLINK_M_SEQ_TYPE_0);
+    /* 访问器的兜底路径：NULL 上下文返回默认值，契约仍要求非空。 */
+    assert_int_equal(iolink_device_get_state(TEST_NULL(const iolink_device_ctx_t*)),
+                     IOLINK_DLL_STATE_STARTUP);
+    assert_int_equal(iolink_device_get_m_seq_type(TEST_NULL(const iolink_device_ctx_t*)),
+                     IOLINK_M_SEQ_TYPE_0);
 }
 
 static void test_device_set_pd_length_fixed(void** state)
@@ -472,7 +480,7 @@ static void test_device_set_pd_length_fixed(void** state)
     init_device(&fixed, IOLINK_M_SEQ_TYPE_1_2, 0U, 0U);
     /* 只有可变类型接受运行时长度变更（Table A.10）。 */
     assert_int_equal(iolink_device_set_pd_length(&fixed.ctx, 1U, 1U), -2);
-    assert_int_equal(iolink_device_set_pd_length(NULL, 1U, 1U), -1);
+    assert_int_equal(iolink_device_set_pd_length(TEST_NULL(iolink_device_ctx_t*), 1U, 1U), -1);
 }
 
 static void test_device_set_pd_length_variable(void** state)

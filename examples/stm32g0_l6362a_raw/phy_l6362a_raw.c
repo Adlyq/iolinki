@@ -95,24 +95,25 @@ static uint32_t s_crit_depth;
 static uint32_t s_crit_primask;
 
 /* Private function prototypes -----------------------------------------------*/
-static int l6362_init(iolink_app_t* self);
-static void l6362_set_mode(iolink_app_t* self, iolink_phy_mode_t mode);
-static void l6362_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate);
+static int l6362_init(iolink_app_t* IOLINK_NULLABLE self);
+static void l6362_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode);
+static void l6362_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate);
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
-static int l6362_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status);
+static int l6362_rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status);
 #else
-static const uint8_t* l6362_rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len);
+static const uint8_t* l6362_rx_frame(iolink_app_t* IOLINK_NULLABLE self, uint8_t* status,
+                                     uint8_t* len);
 #endif
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-static int l6362_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len);
-static uint8_t l6362_tx_busy(iolink_app_t* self);
+static int l6362_tx_frame(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data, size_t len);
+static uint8_t l6362_tx_busy(iolink_app_t* IOLINK_NULLABLE self);
 #else
-static int l6362_tx_octet(iolink_app_t* self, uint8_t data);
-static void l6362_tx_done(iolink_app_t* self);
+static int l6362_tx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t data);
+static void l6362_tx_done(iolink_app_t* IOLINK_NULLABLE self);
 #endif
-static uint8_t l6362_int_active(iolink_app_t* self);
-static void l6362_request_service(iolink_app_t* self);
-static int l6362_detect_wakeup(iolink_app_t* self);
+static uint8_t l6362_int_active(iolink_app_t* IOLINK_NULLABLE self);
+static void l6362_request_service(iolink_app_t* IOLINK_NULLABLE self);
+static int l6362_detect_wakeup(iolink_app_t* IOLINK_NULLABLE self);
 static void phy_rx_set(bool on);
 static bool phy_txen_get(void);
 static void phy_txen_set(bool on);
@@ -252,7 +253,7 @@ static void GapTimerRestart(void)
 
 /* Raw-octet PHY API ---------------------------------------------------------*/
 
-static int l6362_init(iolink_app_t* self)
+static int l6362_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     HAL_GPIO_WritePin(EN_GPIO_Port, EN_Pin, GPIO_PIN_SET);
@@ -273,7 +274,7 @@ static int l6362_init(iolink_app_t* self)
     return 0;
 }
 
-static void l6362_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
+static void l6362_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode)
 {
     (void) self;
     /* The mode transition reconfigures the UART and resets RX/TX state. Keep the
@@ -331,7 +332,7 @@ static void l6362_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
     iolink_critical_exit();
 }
 
-static void l6362_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
+static void l6362_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
 {
     (void) self;
     uint32_t new_hz;
@@ -382,7 +383,7 @@ static void l6362_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
-static int l6362_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
+static int l6362_rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status)
 {
     (void) self;
     uint8_t byte;
@@ -416,7 +417,8 @@ static int l6362_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 }
 #else
 /** @brief Return the whole frame the DMA just completed (zero-copy). */
-static const uint8_t* l6362_rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len)
+static const uint8_t* l6362_rx_frame(iolink_app_t* IOLINK_NULLABLE self, uint8_t* status,
+                                     uint8_t* len)
 {
     (void) self;
     if (s_rx_ready == 0U) {
@@ -505,7 +507,7 @@ static void phy_txen_set(bool on)
 }
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
-static int l6362_tx_octet(iolink_app_t* self, uint8_t data)
+static int l6362_tx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t data)
 {
     (void) self;
     L6362_TX_ASSERT_ISR();
@@ -544,7 +546,7 @@ static int l6362_tx_octet(iolink_app_t* self, uint8_t data)
     return 0;
 }
 
-static void l6362_tx_done(iolink_app_t* self)
+static void l6362_tx_done(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     const uint64_t deadline = phy_l6362a_time_us() + L6362_OCTET_TIMEOUT_US;
@@ -582,7 +584,7 @@ static void TxFrameComplete(void)
     phy_txen_set(false);
 }
 
-static int l6362_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
+static int l6362_tx_frame(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data, size_t len)
 {
     (void) self;
     L6362_TX_ASSERT_ISR();
@@ -614,7 +616,7 @@ static int l6362_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
 }
 
 /** Line is free once the completion handler dropped TX_EN. */
-static uint8_t l6362_tx_busy(iolink_app_t* self)
+static uint8_t l6362_tx_busy(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return phy_txen_get() ? 1U : 0U;
@@ -622,14 +624,14 @@ static uint8_t l6362_tx_busy(iolink_app_t* self)
 #endif
 
 /** @brief Poke the USART2 interrupt so the ISR pump sends a staged reply. */
-static void l6362_request_service(iolink_app_t* self)
+static void l6362_request_service(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     phy_l6362a_raw_request_pump();
 }
 
 /* Timer A hook: 13 Tbit one-shot (the BYTE byte-gap watchdog). */
-static void l6362_response_timer_start(iolink_app_t* self)
+static void l6362_response_timer_start(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     TIM3->CR1 &= ~TIM_CR1_CEN;
@@ -640,14 +642,14 @@ static void l6362_response_timer_start(iolink_app_t* self)
 }
 
 /** Stop Timer A when the reply starts (t_A window closed). */
-static void l6362_response_timer_stop(iolink_app_t* self)
+static void l6362_response_timer_stop(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     TIM3->CR1 &= ~TIM_CR1_CEN;
     TIM3->SR = 0U;
 }
 
-static uint8_t l6362_int_active(iolink_app_t* self)
+static uint8_t l6362_int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 
@@ -676,7 +678,7 @@ static uint8_t l6362_int_active(iolink_app_t* self)
     return 0U;
 }
 
-static int l6362_detect_wakeup(iolink_app_t* self)
+static int l6362_detect_wakeup(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 

@@ -14,6 +14,8 @@
 #include <string.h>
 #include "iolinki/types.h"
 
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file utils.h
  * @brief 杂项辅助工具。
@@ -67,4 +69,5 @@ static inline bool iolink_ctx_zero(void* IOLINK_OPAQUE IOLINK_NULLABLE ctx, size
 
 /** @} */ /* end of iolinki_utils */
 
+IOLINK_ASSUME_NONNULL_END
 #endif /* IOLINK_UTILS_H */

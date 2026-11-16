@@ -12,6 +12,8 @@
 #include <stdint.h>
 #include "iolinki/types.h"
 
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file device_info.h
  * @brief 设备标识与强制 ISDU 索引
@@ -126,4 +128,5 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx, uint
 
 /** @} */ /* end of iolinki_device_info */
 
+IOLINK_ASSUME_NONNULL_END
 #endif  // IOLINK_DEVICE_INFO_H

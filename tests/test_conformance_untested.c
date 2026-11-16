@@ -72,19 +72,19 @@ static int test_teardown(void** state)
     return 0;
 }
 
-static int noop_init(iolink_app_t* self)
+static int noop_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 0;
 }
 
-static void noop_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
+static void noop_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode)
 {
     (void) self;
     (void) mode;
 }
 
-static void noop_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
+static void noop_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
 {
     (void) self;
     (void) baudrate;

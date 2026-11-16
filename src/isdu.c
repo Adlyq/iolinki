@@ -175,7 +175,8 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx)
 #endif
 }
 
-void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app, iolink_app_t* self)
+void iolink_isdu_bind_od(iolink_isdu_ctx_t* ctx, const iolink_od_app_t* app,
+                         iolink_app_t* IOLINK_NULLABLE self)
 {
     if (ctx != NULL) {
         ctx->od = app;

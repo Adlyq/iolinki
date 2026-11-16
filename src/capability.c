@@ -106,28 +106,31 @@ const iolink_build_caps_t* iolink_caps_build(void)
     return &g_iolink_build_caps;
 }
 
-iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* phy, const iolink_stack_config_t* stack,
-                                  const iolink_device_app_t* app, const iolink_build_caps_t* build)
+iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* IOLINK_NULLABLE phy,
+                                  const iolink_stack_config_t* IOLINK_NULLABLE stack,
+                                  const iolink_device_app_t* IOLINK_NULLABLE app,
+                                  const iolink_build_caps_t* IOLINK_NULLABLE build)
 {
     iolink_caps_t caps = 0U;
     uint8_t compat;
     uint8_t flags = 0U;
 
-    if (build == NULL) {
-        build = &g_iolink_build_caps;
-    }
-    compat = build->compat_defaults;
+    /* `build` 可以省略；用一个已解析的局部指针继续，后续调用点因此都是
+     * 非空实参（`iolink_caps_built()` 的契约），也不必重复判空。 */
+    const iolink_build_caps_t* const resolved_build =
+        (build != NULL) ? build : &g_iolink_build_caps;
+    compat = resolved_build->compat_defaults;
     if (stack != NULL) {
         compat |= stack->compat_flags;
         flags = stack->flags;
     }
 
     /* 构建特性（实例是否启用）。 */
-    if (iolink_caps_built(build, IOLINK_CAPB_SYSTEM_COMMAND) &&
+    if (iolink_caps_built(resolved_build, IOLINK_CAPB_SYSTEM_COMMAND) &&
         ((flags & IOLINK_STACK_FLAG_NO_SYSTEM_COMMAND) == 0U)) {
         caps |= IOLINK_CAP_SYSTEM_COMMAND;
     }
-    if (iolink_caps_built(build, IOLINK_CAPB_EVENTS)) {
+    if (iolink_caps_built(resolved_build, IOLINK_CAPB_EVENTS)) {
         caps |= IOLINK_CAP_EVENTS;
     }
 
@@ -144,7 +147,7 @@ iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* phy, const iolink_stac
 
     /* 端口声明：所有应答必须由 ISR 发送。 */
     if (((flags & IOLINK_STACK_FLAG_REQUIRE_ISR_TX) != 0U) ||
-        (iolink_caps_built(build, IOLINK_CAPB_ISR_TX_ONLY))) {
+        (iolink_caps_built(resolved_build, IOLINK_CAPB_ISR_TX_ONLY))) {
         caps |= IOLINK_CAP_REQUIRE_ISR_TX;
     }
 

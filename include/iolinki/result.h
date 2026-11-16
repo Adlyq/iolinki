@@ -12,6 +12,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file result.h
  * @brief 统一操作结果。
@@ -62,4 +65,5 @@ static inline bool iolink_result_succeeded(iolink_result_t result)
     return result.code == 0;
 }
 
+IOLINK_ASSUME_NONNULL_END
 #endif  // IOLINK_RESULT_H

@@ -311,7 +311,7 @@ uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* IOLINK
  * 空闲表示没有请求正在被采集、执行或读出；设备
  * 层据此只在 ISDU 交互之间运行事件/DS 引擎。
  *
- * @param ctx ISDU 上下文（只读，可以为 NULL）
+ * @param ctx ISDU 上下文（只读）
  * @return 引擎处于 ISDU_STATE_IDLE 时为 true
  */
 bool iolink_isdu_is_idle(const iolink_isdu_ctx_t* ctx);

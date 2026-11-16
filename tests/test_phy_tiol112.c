@@ -4,6 +4,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include "iolinki/phy_tiol112.h"
+#include "test_null.h"
 
 /* 板级适配器状态由板级代码定义；测试里这一份就是 `struct iolink_tiol112_board`。 */
 struct iolink_tiol112_board
@@ -108,8 +109,8 @@ static void test_driver_rejects_incomplete_port(void** state)
     iolink_tiol112_ctx_t driver;
     const iolink_tiol112_io_t io = {0};
     assert_int_equal(iolink_phy_tiol112_init(&driver, &io), -1);
-    assert_int_equal(iolink_phy_tiol112_init(NULL, &io), -1);
-    assert_null(iolink_phy_tiol112_get(NULL));
+    assert_int_equal(iolink_phy_tiol112_init(TEST_NULL(iolink_tiol112_ctx_t*), &io), -1);
+    assert_null(iolink_phy_tiol112_get(TEST_NULL(iolink_tiol112_ctx_t*)));
 }
 
 int main(void)

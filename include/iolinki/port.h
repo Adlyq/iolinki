@@ -104,6 +104,10 @@ int iolink_platform_critical_sections_ready(void);
 #include IOLINK_PORT_CONFIG_FILE
 #endif
 
+/* 区域必须开在条件编译之外：否则未定义 IOLINK_PORT_CONFIG_FILE 的翻译单元
+ * 会执行到文件末尾的 END 而没有 BEGIN。 */
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @brief 自然原子的无符号整数类型（对齐时为单拷贝原子）。
  *
@@ -305,4 +309,5 @@ IOLINK_STATIC_ASSERT(sizeof(IOLINK_ATOMIC_UINT_T) >= 4,
 
 /** @} */ /* end of iolinki_port */
 
+IOLINK_ASSUME_NONNULL_END
 #endif  // IOLINK_PORT_H

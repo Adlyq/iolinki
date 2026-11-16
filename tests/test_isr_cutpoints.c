@@ -36,7 +36,7 @@
 
 static uint64_t now_us;
 
-static uint64_t test_time_us(iolink_app_t* self)
+static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return now_us;
@@ -153,7 +153,7 @@ static void test_frame_full_rejects(void** state)
 static uint8_t g_publish_on_poll;
 static iolink_dll_ctx_t* g_poll_ctx;
 
-static uint8_t poll_faults_publish(iolink_app_t* self)
+static uint8_t poll_faults_publish(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     if (g_publish_on_poll != 0U) {

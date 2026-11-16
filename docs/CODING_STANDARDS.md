@@ -70,6 +70,16 @@ implementation-level buffer ownership stays in `docs/CODE_FLOW.md` (section
   err;` — that is a fallback for a caller bug, not a contract, so the parameter
   stays non-null. `IOLINK_NONNULL` is only written for nested pointer types
   (arrays of pointers), which the pragma does not infer.
+  A pointer paired with a length stays non-null even when the length can be
+  0; the empty case does not turn it into an optional argument. The one type
+  that is always `IOLINK_NULLABLE` is the application context
+  (`iolink_app_t *`): it is whatever the application stored in
+  `iolink_device_app_t::self`, and every hook has to tolerate NULL there.
+  The region must be unconditional and the header must include
+  `"iolinki/types.h"` for the macro; `tools/check_nullability.sh` fails the
+  `quick` group otherwise. Tests that exercise a defensive guard reach it
+  through `TEST_NULL(type)` (`tests/test_null.h`), which documents "this call
+  breaks the contract on purpose".
 - **No universal pointers.** Name the type, or declare an opaque type and let
   the owner define the struct (e.g. `iolink_tiol112_board_t`). `void *` is
   reserved for interfaces that cannot name a type (byte views, symbol tables,

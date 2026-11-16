@@ -376,8 +376,9 @@ iolink_result_t iolink_od_encode(const iolink_od_entry_t* entry, uint32_t value,
     return iolink_result_ok(codec->len);
 }
 
-iolink_result_t iolink_od_check_value(const iolink_od_entry_t* entry, iolink_app_t* self,
-                                      const uint8_t* data, size_t len)
+iolink_result_t iolink_od_check_value(const iolink_od_entry_t* entry,
+                                      iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data,
+                                      size_t len)
 {
     if (entry == NULL) {
         return iolink_result_error(IOLINK_RESULT_INVALID);
@@ -491,8 +492,9 @@ static iolink_result_t od_storage_apply(const iolink_od_entry_t* entry, const ui
  * 标量保存写前的原生字节（≤4 B）；OctetString 不做回滚（避免在主泵
  * 栈上复制最多 255 字节），拒绝语义应由 `validate` 钩子完成。
  */
-static iolink_result_t od_storage_write(const iolink_od_entry_t* entry, iolink_app_t* self,
-                                        const uint8_t* data, size_t len)
+static iolink_result_t od_storage_write(const iolink_od_entry_t* entry,
+                                        iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data,
+                                        size_t len)
 {
     const bool is_string = entry->datatype == (uint8_t) IOLINK_OD_DT_OCTET_STRING;
     const iolink_od_codec_t* codec = NULL;
@@ -583,7 +585,7 @@ iolink_result_t iolink_od_write_value(iolink_od_ctx_t* ctx, const iolink_od_entr
         return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
     }
 
-    iolink_app_t* self = ctx->self;
+    iolink_app_t* IOLINK_NULLABLE self = ctx->self;
     iolink_result_t result = iolink_od_check_value(entry, self, data, len);
 
     if (!iolink_result_succeeded(result)) {

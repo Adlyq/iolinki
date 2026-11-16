@@ -32,7 +32,7 @@ static const iolink_device_info_t k_test_identity = {.revision_id = IOLINK_REVIS
 
 static uint64_t now_us;
 
-static uint64_t test_time_us(iolink_app_t* self)
+static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return now_us;
@@ -48,7 +48,8 @@ static uint64_t g_tx_asserted;
 static uint64_t g_tx_leaked; /* 开始新捕获时仍未查看的交付 */
 static uint8_t g_line_busy;
 
-static const uint8_t* mock_rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len)
+static const uint8_t* mock_rx_frame(iolink_app_t* IOLINK_NULLABLE self, uint8_t* status,
+                                    uint8_t* len)
 {
     (void) self;
     if (g_frame_ready == 0U) {
@@ -62,7 +63,7 @@ static const uint8_t* mock_rx_frame(iolink_app_t* self, uint8_t* status, uint8_t
     return g_frame;
 }
 
-static int mock_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
+static int mock_tx_frame(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data, size_t len)
 {
     (void) self;
     (void) data;
@@ -92,29 +93,29 @@ static unsigned tx_calls(void)
     return g_tx_calls;
 }
 
-static uint8_t mock_tx_busy(iolink_app_t* self)
+static uint8_t mock_tx_busy(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return g_line_busy;
 }
 
-static uint8_t mock_int_active(iolink_app_t* self)
+static uint8_t mock_int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return g_frame_ready;
 }
 
-static void mock_timer_start(iolink_app_t* self)
+static void mock_timer_start(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 }
 
-static void mock_timer_stop(iolink_app_t* self)
+static void mock_timer_stop(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 }
 
-static void mock_request_service(iolink_app_t* self)
+static void mock_request_service(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 }
@@ -142,7 +143,7 @@ static void feed_process_read(void)
 
 static void init_ctx(iolink_dll_ctx_t* dll)
 {
-    g_phy.self = (iolink_app_t*) dll;
+    g_phy.self = (iolink_app_t * IOLINK_NULLABLE) dll;
     iolink_dll_init(&dll->main, &dll->isr, &g_phy);
     dll->main.shared.clock.time_us = test_time_us;
     dll->main.phy_mode = IOLINK_PHY_MODE_SDCI;
@@ -223,7 +224,7 @@ void iolink_critical_exit(void)
 {
 }
 
-static uint64_t device_time_us(iolink_app_t* self)
+static uint64_t device_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 1000000ULL;

@@ -50,7 +50,8 @@ char g_last_msg[128];
 void* g_last_user;
 
 /* Shared with test_log_isr_on.c, which compiles IOLINK_LOG_ENABLE_ISR=1. */
-void log_capture(iolink_app_t* self, iolink_log_level_t level, const char* format, ...)
+void log_capture(iolink_app_t* IOLINK_NULLABLE self, iolink_log_level_t level, const char* format,
+                 ...)
 {
     va_list args;
     va_start(args, format);
@@ -86,7 +87,7 @@ void test_log_isr_on_run(void);
  * must still log through the config (the context is not usable yet).
  */
 
-static uint64_t fake_time_us(iolink_app_t* self)
+static uint64_t fake_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 1000U;
@@ -122,7 +123,7 @@ static void test_device_init_binds_config_sink(void** state)
     int token;
 
     make_minimal_config(&config, &app);
-    app.self = (iolink_app_t*) &token;
+    app.self = (iolink_app_t * IOLINK_NULLABLE) & token;
     app.log_write = log_capture;
     config.log_level = IOLINK_LOG_LEVEL_INFO;
 
@@ -165,7 +166,7 @@ static void test_device_init_failure_logs_through_config(void** state)
 
     make_minimal_config(&config, &app);
     app.time_us = NULL; /* rejected before the context is initialized */
-    app.self = (iolink_app_t*) &token;
+    app.self = (iolink_app_t * IOLINK_NULLABLE) & token;
     app.log_write = log_capture;
     config.log_level = IOLINK_LOG_LEVEL_DEBUG;
 
@@ -228,7 +229,8 @@ static void test_forwarding_and_user(void** state)
     iolink_log_sink_t sink;
     int token;
 
-    iolink_log_sink_init(&sink, log_capture, (iolink_app_t*) &token, IOLINK_LOG_LEVEL_DEBUG);
+    iolink_log_sink_init(&sink, log_capture, (iolink_app_t * IOLINK_NULLABLE) & token,
+                         IOLINK_LOG_LEVEL_DEBUG);
     reset_capture();
     IOLINK_LOG_INFO(&sink, "idx=0x%04X sub=%u", 0x0042U, 3U);
     assert_int_equal(g_calls, 1);
@@ -286,7 +288,7 @@ static void test_device_setter_propagates(void** state)
     (void) memset(&ctx, 0, sizeof(ctx));
     (void) memset(&config, 0, sizeof(config));
     (void) memset(&app, 0, sizeof(app));
-    app.self = (iolink_app_t*) &token;
+    app.self = (iolink_app_t * IOLINK_NULLABLE) & token;
     config.app = &app;
     ctx.config = &config;
 

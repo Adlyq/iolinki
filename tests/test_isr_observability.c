@@ -27,7 +27,7 @@
 
 static uint64_t now_us;
 
-static uint64_t test_time_us(iolink_app_t* self)
+static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return now_us;
@@ -71,7 +71,7 @@ static unsigned timer_b_starts; /* 应答完成时重启 Timer B，仅 TX BYTE *
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
 /* RX FRAME：feed()/feed_chk() 送入的字节即一整个 PHY 帧。 */
-static const uint8_t* rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len)
+static const uint8_t* rx_frame(iolink_app_t* IOLINK_NULLABLE self, uint8_t* status, uint8_t* len)
 {
     (void) self;
     *len = 0U;
@@ -86,7 +86,7 @@ static const uint8_t* rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len
     return frame;
 }
 #else
-static int rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
+static int rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status)
 {
     (void) self;
     *status = 0U;
@@ -119,7 +119,7 @@ static void tx_frame_sync(void)
     tx_delivered++;
 }
 
-static int tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
+static int tx_frame(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data, size_t len)
 {
     (void) self;
     tx_frame_sync();
@@ -128,7 +128,7 @@ static int tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
     return 0;
 }
 #else
-static int tx_octet(iolink_app_t* self, uint8_t data)
+static int tx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t data)
 {
     (void) self;
     tx_active = 1U;
@@ -138,7 +138,7 @@ static int tx_octet(iolink_app_t* self, uint8_t data)
     return 0;
 }
 
-static void tx_done(iolink_app_t* self)
+static void tx_done(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     tx_done_calls++;
@@ -173,19 +173,19 @@ static size_t tx_observed_len(void)
     return tx_n;
 }
 
-static void timer_a_start(iolink_app_t* self)
+static void timer_a_start(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     timer_a_starts++;
 }
 
-static void timer_a_stop(iolink_app_t* self)
+static void timer_a_stop(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     timer_a_stops++;
 }
 
-static void timer_b_start(iolink_app_t* self)
+static void timer_b_start(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     TEST_TIMER_B_STARTED();
@@ -194,13 +194,13 @@ static void timer_b_start(iolink_app_t* self)
 /* 仅当 PHY 能报告唤醒（dll_phy_has_wakeup()）时，DLL 才会启用 FALLBACK 迁移；
  * 因此提供该钩子，让快速路径上的 Fallback 命令
  * 走完整个迁移 + 截止时间流程。 */
-static int mock_detect_wakeup(iolink_app_t* self)
+static int mock_detect_wakeup(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 0;
 }
 
-static uint8_t int_active(iolink_app_t* self)
+static uint8_t int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
@@ -257,7 +257,7 @@ static void bind_test_identity(iolink_dll_main_t* main)
 
 static void init_ctx(iolink_dll_ctx_t* dll)
 {
-    g_phy.self = (iolink_app_t*) dll;
+    g_phy.self = (iolink_app_t * IOLINK_NULLABLE) dll;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     g_phy.rx_frame = rx_frame;
 #else
@@ -335,7 +335,7 @@ static void make_type0(uint8_t mc, uint8_t* frame, size_t len)
 
 static void init_type0_ctx(iolink_dll_ctx_t* dll)
 {
-    g_phy.self = (iolink_app_t*) dll;
+    g_phy.self = (iolink_app_t * IOLINK_NULLABLE) dll;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     g_phy.rx_frame = rx_frame;
 #else

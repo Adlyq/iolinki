@@ -98,8 +98,8 @@ static int read_object_with_dll(uint16_t index, iolink_dll_main_t* dll, uint8_t*
 /* 应用 OD 表里的设备专用参数（用于验证 Parameter 锁）。 */
 static unsigned g_vendor_calls;
 
-static iolink_result_t vendor_param_read(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                         uint8_t* out, size_t cap)
+static iolink_result_t vendor_param_read(iolink_app_t* IOLINK_NULLABLE self,
+                                         const iolink_od_entry_t* entry, uint8_t* out, size_t cap)
 {
     (void) self;
     (void) entry;
@@ -109,8 +109,9 @@ static iolink_result_t vendor_param_read(iolink_app_t* self, const iolink_od_ent
     return iolink_result_ok(0U);
 }
 
-static iolink_result_t vendor_param_write(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                          uint8_t subindex, const uint8_t* data, size_t len)
+static iolink_result_t vendor_param_write(iolink_app_t* IOLINK_NULLABLE self,
+                                          const iolink_od_entry_t* entry, uint8_t subindex,
+                                          const uint8_t* data, size_t len)
 {
     (void) self;
     (void) entry;

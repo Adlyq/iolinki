@@ -24,8 +24,8 @@ static uint16_t g_scalar;
 static uint8_t g_buf[16];
 static uint8_t g_len;
 
-static iolink_result_t h_read(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t* out,
-                              size_t cap)
+static iolink_result_t h_read(iolink_app_t* IOLINK_NULLABLE self, const iolink_od_entry_t* entry,
+                              uint8_t* out, size_t cap)
 {
     (void) self;
     (void) entry;
@@ -36,8 +36,8 @@ static iolink_result_t h_read(iolink_app_t* self, const iolink_od_entry_t* entry
     return iolink_result_ok(1U);
 }
 
-static iolink_result_t h_write(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t subindex,
-                               const uint8_t* data, size_t len)
+static iolink_result_t h_write(iolink_app_t* IOLINK_NULLABLE self, const iolink_od_entry_t* entry,
+                               uint8_t subindex, const uint8_t* data, size_t len)
 {
     (void) self;
     (void) entry;
@@ -48,7 +48,7 @@ static iolink_result_t h_write(iolink_app_t* self, const iolink_od_entry_t* entr
 }
 
 /* validate 与 on_change 共用同一签名。 */
-static iolink_result_t h_hook(iolink_app_t* self, const iolink_od_entry_t* entry,
+static iolink_result_t h_hook(iolink_app_t* IOLINK_NULLABLE self, const iolink_od_entry_t* entry,
                               const uint8_t* data, size_t len)
 {
     (void) self;

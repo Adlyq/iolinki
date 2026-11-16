@@ -103,7 +103,7 @@ static void conformance_reset_handler(iolink_reset_type_t type)
     }
 }
 
-static uint64_t conformance_time_us(iolink_app_t* self)
+static uint64_t conformance_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     struct timespec ts;
@@ -130,7 +130,7 @@ int conformance_device_init(conformance_device_t* app, const conformance_profile
     conformance_capture_defaults(app);
 
     app->config.phy = phy;
-    app->app_trait.self = (iolink_app_t*) app;
+    app->app_trait.self = (iolink_app_t * IOLINK_NULLABLE) app;
     app->app_trait.time_us = conformance_time_us;
     app->config.app = &app->app_trait;
     app->config.stack = &profile->stack;

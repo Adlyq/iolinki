@@ -68,7 +68,7 @@ void iolink_phy_virtual_set_port(const char* port)
 }
 
 /** @brief 以 raw、非阻塞模式打开并配置后端串口。 */
-static int virtual_init(iolink_app_t* self)
+static int virtual_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 
@@ -113,7 +113,7 @@ static int virtual_init(iolink_app_t* self)
 }
 
 /** @brief 记录请求的 PHY 模式（对虚拟链路无电气影响）。 */
-static void virtual_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
+static void virtual_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode)
 {
     (void) self;
     /* int_active() 仅在 SDCI 中声明需要服务，这与真实收发器一致：
@@ -124,14 +124,14 @@ static void virtual_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
 }
 
 /** @brief 记录请求的波特率（对虚拟链路无影响）。 */
-static void virtual_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
+static void virtual_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
 {
     (void) self;
     printf("[PHY-VIRTUAL] Baudrate set to: %d\n", (int) baudrate);
 }
 
 /** @brief 为 ISR 组帧引擎读取一个接收到的 octet（非阻塞）。 */
-static int virtual_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
+static int virtual_rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status)
 {
     (void) self;
 
@@ -151,7 +151,7 @@ static int virtual_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 }
 
 /** @brief 缓冲一个回复 octet；tx_done() 会刷新整帧。 */
-static int virtual_tx_octet(iolink_app_t* self, uint8_t data)
+static int virtual_tx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t data)
 {
     (void) self;
 
@@ -165,7 +165,7 @@ static int virtual_tx_octet(iolink_app_t* self, uint8_t data)
 }
 
 /** @brief 将缓冲的回复刷新到 PTY 并释放线路。 */
-static void virtual_tx_done(iolink_app_t* self)
+static void virtual_tx_done(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 
@@ -184,7 +184,7 @@ static void virtual_tx_done(iolink_app_t* self)
 }
 
 /** @brief 数据中断电平：发送进行中或已有接收 octet 可用。 */
-static uint8_t virtual_int_active(iolink_app_t* self)
+static uint8_t virtual_int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 
@@ -215,13 +215,13 @@ static uint8_t virtual_int_active(iolink_app_t* self)
 }
 
 /** @brief 请求 ISR 泵立即运行（主机示例每个周期轮询）。 */
-static void virtual_request_service(iolink_app_t* self)
+static void virtual_request_service(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 }
 
 /** @brief 在缓冲输入中扫描 0x55 唤醒标记字节。 */
-static int virtual_detect_wakeup(iolink_app_t* self)
+static int virtual_detect_wakeup(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 

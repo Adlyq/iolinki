@@ -24,7 +24,7 @@
 /* 库不再提供默认身份：这些 NO_HELPERS 用例只需要一个有效的身份对象。 */
 static const iolink_device_info_t k_test_identity = {.revision_id = IOLINK_REVISION_ID_1_1};
 
-static uint64_t test_time_us(iolink_app_t* self)
+static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 1000000ULL;

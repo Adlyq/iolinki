@@ -22,7 +22,8 @@
 
 #include "iolinki/log.h"
 
-extern void log_capture(iolink_app_t* self, iolink_log_level_t level, const char* format, ...);
+extern void log_capture(iolink_app_t* IOLINK_NULLABLE self, iolink_log_level_t level,
+                        const char* format, ...);
 extern int g_calls;
 extern char g_last_msg[128];
 extern void* g_last_user;
@@ -40,7 +41,8 @@ void test_log_isr_on_run(void)
     iolink_log_sink_t sink;
     int token;
 
-    iolink_log_sink_init(&sink, log_capture, (iolink_app_t*) &token, IOLINK_LOG_LEVEL_INFO);
+    iolink_log_sink_init(&sink, log_capture, (iolink_app_t * IOLINK_NULLABLE) & token,
+                         IOLINK_LOG_LEVEL_INFO);
 
     g_calls = 0;
     g_last_msg[0] = '\0';

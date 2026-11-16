@@ -394,7 +394,7 @@ void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn write,
     if (ctx == NULL) {
         return;
     }
-    iolink_app_t* self = (ctx->config != NULL) ? ctx->config->app->self : NULL;
+    iolink_app_t* IOLINK_NULLABLE self = (ctx->config != NULL) ? ctx->config->app->self : NULL;
 
     /* 字段更新必须对数据 ISR 原子：启用 ISR 日志时，中断可能正在
      * 读取同一个 sink。临界区在 SINGLE profile 中展开为空。 */

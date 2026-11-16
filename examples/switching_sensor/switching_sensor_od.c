@@ -15,8 +15,8 @@
 /** @brief SP1 必须 >= 迟滞；迟滞必须 <= SP1。 */
 /* 同一张表的 ss_teach 需要可变指针，因此接收非 const 的应用上下文。 */
 // cppcheck-suppress constParameterCallback
-static iolink_result_t ss_validate(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                   const uint8_t* data, size_t len)
+static iolink_result_t ss_validate(iolink_app_t* IOLINK_NULLABLE self,
+                                   const iolink_od_entry_t* entry, const uint8_t* data, size_t len)
 {
     const switching_sensor_t* sensor = (const switching_sensor_t*) self;
     uint32_t value = 0U;
@@ -37,7 +37,7 @@ static iolink_result_t ss_validate(iolink_app_t* self, const iolink_od_entry_t* 
 }
 
 /** @brief teach：把当前有效测量值写为新的 SP1（写语义 TRIGGER）。 */
-static iolink_result_t ss_teach(iolink_app_t* self, const iolink_od_entry_t* entry,
+static iolink_result_t ss_teach(iolink_app_t* IOLINK_NULLABLE self, const iolink_od_entry_t* entry,
                                 const uint8_t* data, size_t len)
 {
     switching_sensor_t* sensor = (switching_sensor_t*) self;
@@ -54,8 +54,8 @@ static iolink_result_t ss_teach(iolink_app_t* self, const iolink_od_entry_t* ent
 
 /* 只读后端；上下文类型由 OD 钩子签名决定，不能改成 const。 */
 // cppcheck-suppress constParameterCallback
-static iolink_result_t ss_od_read(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t* out,
-                                  size_t cap)
+static iolink_result_t ss_od_read(iolink_app_t* IOLINK_NULLABLE self,
+                                  const iolink_od_entry_t* entry, uint8_t* out, size_t cap)
 {
     uint32_t value = 0U;
 
@@ -66,8 +66,9 @@ static iolink_result_t ss_od_read(iolink_app_t* self, const iolink_od_entry_t* e
     return iolink_od_encode(entry, value, out, cap);
 }
 
-static iolink_result_t ss_od_write(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                   uint8_t subindex, const uint8_t* data, size_t len)
+static iolink_result_t ss_od_write(iolink_app_t* IOLINK_NULLABLE self,
+                                   const iolink_od_entry_t* entry, uint8_t subindex,
+                                   const uint8_t* data, size_t len)
 {
     uint32_t value = 0U;
     const iolink_result_t decoded = iolink_od_decode(entry, data, len, &value);

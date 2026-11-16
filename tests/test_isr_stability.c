@@ -34,7 +34,7 @@ static unsigned tx_frames;
 static uint64_t tx_delivered;
 static uint64_t tx_asserted;
 
-static uint64_t test_time_us(iolink_app_t* self)
+static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return now_us;
@@ -55,7 +55,7 @@ static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t le
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
-static const uint8_t* rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len)
+static const uint8_t* rx_frame(iolink_app_t* IOLINK_NULLABLE self, uint8_t* status, uint8_t* len)
 {
     (void) self;
     *status = 0U;
@@ -63,7 +63,7 @@ static const uint8_t* rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len
     return NULL; /* 测试直接向邮箱发布数据，PHY 不交付帧。 */
 }
 #else
-static int rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
+static int rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status)
 {
     (void) self;
     (void) data;
@@ -73,7 +73,7 @@ static int rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 #endif
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-static int tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
+static int tx_frame(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data, size_t len)
 {
     (void) self;
     (void) data;
@@ -84,7 +84,7 @@ static int tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
 }
 #else
 static uint8_t tx_active; /* 只在 BYTE 传输下有字节流式发送 */
-static int tx_octet(iolink_app_t* self, uint8_t data)
+static int tx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t data)
 {
     (void) self;
     (void) data;
@@ -93,7 +93,7 @@ static int tx_octet(iolink_app_t* self, uint8_t data)
     return 0;
 }
 
-static void tx_done(iolink_app_t* self)
+static void tx_done(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     if (tx_active != 0U) {
@@ -112,7 +112,7 @@ static unsigned tx_frame_count(void)
     return tx_frames;
 }
 
-static uint8_t int_active(iolink_app_t* self)
+static uint8_t int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
     return ((ctx != NULL) && (ctx->main.shared.isr_tx_active != 0U)) ? 1U : 0U;
@@ -165,7 +165,7 @@ static int run_all(void)
 {
     iolink_dll_ctx_t ctx;
     const iolink_phy_api_t phy = {
-        .self = (iolink_app_t*) &ctx,
+        .self = (iolink_app_t * IOLINK_NULLABLE) & ctx,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
         .rx_frame = rx_frame,
 #else

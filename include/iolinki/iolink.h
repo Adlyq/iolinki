@@ -13,6 +13,9 @@
 #include <stdbool.h>
 #include "iolinki/phy.h"
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file iolink.h
  * @brief 共享的 IO-Link 协议栈类型
@@ -241,4 +244,5 @@ typedef void (*iolink_reset_handler_t)(iolink_reset_type_t type);
 
 /** @} */ /* end of iolinki_core */
 
+IOLINK_ASSUME_NONNULL_END
 #endif  // IOLINK_H

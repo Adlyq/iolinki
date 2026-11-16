@@ -22,7 +22,7 @@ static volatile uint32_t g_tick_ms;
 /* Demo-only clock: a 1 ms tick is too coarse for t_A/t_ren timing. A real
  * device must feed the application trait's time_us from a microsecond timer
  * (or expand the tick counter with the timer's free-running counter). */
-static uint64_t baremetal_time_us(iolink_app_t* self)
+static uint64_t baremetal_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return (uint64_t) g_tick_ms * 1000ULL;

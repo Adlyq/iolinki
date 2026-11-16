@@ -66,19 +66,19 @@ static const char* gap_nvm_path(const char* tag)
 
 #include "conformance_device.h"
 
-static int gap_noop_init(iolink_app_t* self)
+static int gap_noop_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 0;
 }
 
-static void gap_noop_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
+static void gap_noop_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode)
 {
     (void) self;
     (void) mode;
 }
 
-static void gap_noop_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
+static void gap_noop_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
 {
     (void) self;
     (void) baudrate;
@@ -838,8 +838,8 @@ static void test_0056_config1_write_readback(void** state)
 
 static uint8_t g_long_data[200];
 
-static iolink_result_t long_param_read(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                       uint8_t* out, size_t cap)
+static iolink_result_t long_param_read(iolink_app_t* IOLINK_NULLABLE self,
+                                       const iolink_od_entry_t* entry, uint8_t* out, size_t cap)
 {
     (void) self;
     (void) entry;

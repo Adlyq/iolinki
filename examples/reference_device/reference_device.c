@@ -25,7 +25,7 @@ int reference_device_init(reference_device_t* app, const iolink_phy_api_t* phy,
     }
     memset(app, 0, sizeof(*app));
     app->config.phy = phy;
-    app->app_trait.self = (iolink_app_t*) app;
+    app->app_trait.self = (iolink_app_t * IOLINK_NULLABLE) app;
     app->app_trait.time_us = time_us;
     app->config.app = &app->app_trait;
     app->config.device_info = &identity;

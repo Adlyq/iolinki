@@ -47,7 +47,7 @@ void iolink_critical_exit(void)
 
 static iolink_workspace_t g_workspace;
 
-static uint64_t test_time_us(iolink_app_t* self)
+static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 1000U;
@@ -58,26 +58,26 @@ static const iolink_device_app_t g_app = {
     .time_us = test_time_us,
 };
 
-static int test_phy_init(iolink_app_t* self)
+static int test_phy_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 0;
 }
 
-static void test_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
+static void test_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode)
 {
     (void) self;
     (void) mode;
 }
 
-static void test_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
+static void test_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
 {
     (void) self;
     (void) baudrate;
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
-static int test_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
+static int test_rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status)
 {
     (void) self;
     (void) data;
@@ -87,20 +87,20 @@ static int test_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 #endif
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
-static int test_tx_octet(iolink_app_t* self, uint8_t data)
+static int test_tx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t data)
 {
     (void) self;
     (void) data;
     return 0;
 }
 
-static void test_tx_done(iolink_app_t* self)
+static void test_tx_done(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 }
 #endif
 
-static uint8_t test_int_active(iolink_app_t* self)
+static uint8_t test_int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 0U;

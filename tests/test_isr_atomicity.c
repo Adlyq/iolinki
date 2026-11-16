@@ -51,7 +51,8 @@ static uint8_t s_frame_len;
 static bool s_frame_pending;
 static uint32_t s_rx_calls;
 
-static const uint8_t* phy_rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len)
+static const uint8_t* phy_rx_frame(iolink_app_t* IOLINK_NULLABLE self, uint8_t* status,
+                                   uint8_t* len)
 {
     (void) self;
     s_rx_calls++;
@@ -74,7 +75,7 @@ static uint8_t s_rxq_pos;
 static bool s_chk_pending;
 static uint32_t s_rx_calls;
 
-static int phy_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
+static int phy_rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status)
 {
     (void) self;
     s_rx_calls++;
@@ -93,7 +94,7 @@ static int phy_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 }
 #endif
 
-static uint8_t phy_int_active(iolink_app_t* self)
+static uint8_t phy_int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
@@ -112,7 +113,7 @@ static void (*s_timer_start_hook)(void);
  * tx_frame 返回值语义，计数器在那里无人读。 */
 static int s_tx_calls;
 static int s_tx_rc;
-static int phy_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
+static int phy_tx_frame(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data, size_t len)
 {
     (void) self;
     (void) data;
@@ -121,20 +122,20 @@ static int phy_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
     return s_tx_rc;
 }
 #else
-static int phy_tx_octet(iolink_app_t* self, uint8_t data)
+static int phy_tx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t data)
 {
     (void) self;
     (void) data;
     return 0;
 }
 
-static void phy_tx_done(iolink_app_t* self)
+static void phy_tx_done(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 }
 #endif
 
-static void phy_timer_start(iolink_app_t* self)
+static void phy_timer_start(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     if (s_timer_start_hook != NULL) {
@@ -142,37 +143,37 @@ static void phy_timer_start(iolink_app_t* self)
     }
 }
 
-static void phy_timer_stop(iolink_app_t* self)
+static void phy_timer_stop(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 }
 
-static void phy_request_service(iolink_app_t* self)
+static void phy_request_service(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     s_service_calls++;
     s_service_in_critical = s_in_critical;
 }
 
-static int phy_init(iolink_app_t* self)
+static int phy_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 0;
 }
 
-static void phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
+static void phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode)
 {
     (void) self;
     (void) mode;
 }
 
-static void phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
+static void phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
 {
     (void) self;
     (void) baudrate;
 }
 
-static int phy_detect_wakeup(iolink_app_t* self)
+static int phy_detect_wakeup(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 0;

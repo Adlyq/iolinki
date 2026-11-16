@@ -9,6 +9,9 @@
 #ifndef IOLINK_PROTOCOL_H
 #define IOLINK_PROTOCOL_H
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file protocol.h
  * @brief IO-Link 协议常量与定义（Spec V1.1.5）
@@ -210,4 +213,5 @@
 #define IOLINK_DEVICE_STATUS_FAILURE 0x04U          /**< 故障（Table B.13）。 */
 /** @} */
 
+IOLINK_ASSUME_NONNULL_END
 #endif /* IOLINK_PROTOCOL_H */

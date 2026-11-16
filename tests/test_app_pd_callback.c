@@ -33,25 +33,25 @@ void iolink_critical_exit(void)
 {
 }
 
-static uint64_t test_time_us(iolink_app_t* self)
+static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 1000000ULL;
 }
 
-static int phy_init(iolink_app_t* self)
+static int phy_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 0;
 }
 
-static void phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
+static void phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode)
 {
     (void) self;
     (void) mode;
 }
 
-static void phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
+static void phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
 {
     (void) self;
     (void) baudrate;
@@ -66,7 +66,7 @@ static int g_pd_calls;
 static uint8_t g_pd_pattern;
 static void* g_expected_user;
 
-static bool on_pd_input(iolink_app_t* self, uint8_t* data, uint8_t len)
+static bool on_pd_input(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t len)
 {
     assert_ptr_equal(self, g_expected_user);
     g_pd_calls++;
@@ -75,7 +75,8 @@ static bool on_pd_input(iolink_app_t* self, uint8_t* data, uint8_t len)
 }
 
 static void make_config(iolink_device_config_t* cfg, iolink_device_app_t* app,
-                        bool (*pd_input)(iolink_app_t* self, uint8_t* data, uint8_t len))
+                        bool (*pd_input)(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data,
+                                         uint8_t len))
 {
     (void) memset(app, 0, sizeof(*app));
     app->self = g_expected_user;

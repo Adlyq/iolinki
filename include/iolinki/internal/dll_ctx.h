@@ -14,6 +14,9 @@
 #include "iolinki/internal/dll_main.h"
 #include "iolinki/internal/dll_isr.h"
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file dll_ctx.h
  * @brief DLL 的单次分配容器（主上下文 + 数据 ISR）。
@@ -39,5 +42,7 @@ typedef char
     iolink_dll_ctx_layout_shared_first[offsetof(struct iolink_dll_main, shared) == 0U ? 1 : -1];
 typedef char iolink_dll_ctx_layout_isr_follows
     [offsetof(struct iolink_dll_ctx, isr) >= sizeof(iolink_dll_main_t) ? 1 : -1];
+
+IOLINK_ASSUME_NONNULL_END
 
 #endif /* IOLINK_DLL_CTX_H */

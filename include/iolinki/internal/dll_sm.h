@@ -11,6 +11,9 @@
 
 #include "iolinki/dll.h"
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file dll_sm.h
  * @brief DLL 状态机骨架表：state × event -> action。
@@ -216,6 +219,8 @@ typedef struct
  * @brief 查询表项（测试/生成物使用；运行时由 dll_sm.c 直接访问常量表）。
  * @return 命中的表项，越界时返回 NULL。
  */
-const iolink_dll_sm_cell_t* iolink_dll_sm_cell(iolink_dll_state_t state, iolink_dll_event_t event);
+const iolink_dll_sm_cell_t* IOLINK_NULLABLE iolink_dll_sm_cell(iolink_dll_state_t state,
+                                                               iolink_dll_event_t event);
 
+IOLINK_ASSUME_NONNULL_END
 #endif /* IOLINK_DLL_SM_H */

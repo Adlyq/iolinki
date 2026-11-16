@@ -16,6 +16,7 @@
 
 #include "main.h"
 #include "phy_l6362a_raw.h"
+#include "test_null.h"
 
 #define TEST_RX_DMA_SIZE 256U
 #define TEST_GAP_BITS 13U
@@ -347,7 +348,7 @@ static void test_tx_frame_and_completion(void** state)
     /* 发送钩子只能从 ISR 泵运行。 */
     SCB->ICSR = SCB_ICSR_VECTACTIVE_Msk;
 
-    assert_int_equal(s_phy->tx_frame(NULL, NULL, 3U), -1);
+    assert_int_equal(s_phy->tx_frame(NULL, TEST_NULL(const uint8_t*), 3U), -1);
     assert_int_equal(s_phy->tx_frame(NULL, reply, 0U), -1);
     assert_int_equal(s_phy->tx_frame(NULL, reply, 0x10000U), -1);
 
@@ -462,7 +463,7 @@ static void test_tx_frame_requires_isr_context(void** state)
 
     SCB->ICSR = 0U;
     mock_error_handler_calls = 0U;
-    assert_int_equal(s_phy->tx_frame(NULL, NULL, sizeof(reply)), -1);
+    assert_int_equal(s_phy->tx_frame(NULL, TEST_NULL(const uint8_t*), sizeof(reply)), -1);
     assert_int_equal(mock_error_handler_calls, 1U);
 }
 

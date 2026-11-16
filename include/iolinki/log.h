@@ -13,6 +13,8 @@
 #include <stdint.h>
 #include "iolinki/types.h"
 
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file log.h
  * @brief 协议栈日志打印点与运行时 sink。
@@ -64,7 +66,7 @@ typedef enum
  * 启用 IOLINK_LOG_ENABLE_ISR 后它也会从数据 ISR 调用，此时必须
  * 满足 ISR 安全要求。
  */
-typedef void (*iolink_log_write_fn)(iolink_app_t* self, iolink_log_level_t level,
+typedef void (*iolink_log_write_fn)(iolink_app_t* IOLINK_NULLABLE self, iolink_log_level_t level,
                                     const char* format, ...) IOLINK_LOG_PRINTF_FORMAT(3, 4);
 
 /**
@@ -78,7 +80,7 @@ typedef void (*iolink_log_write_fn)(iolink_app_t* self, iolink_log_level_t level
 typedef struct
 {
     iolink_log_write_fn IOLINK_NULLABLE write; /**< 输出回调；NULL 表示静默 */
-    iolink_app_t* self;                        /**< 传给 @ref write 的应用上下文 */
+    iolink_app_t* IOLINK_NULLABLE self;        /**< 传给 @ref write 的应用上下文（可为 NULL） */
     iolink_log_level_t level;                  /**< 运行时阈值（0 = 静默） */
 } iolink_log_sink_t;
 
@@ -88,8 +90,10 @@ typedef struct
  * 供直接使用 DLL/ISDU 等子上下文（不经由 iolink_device_init()）的
  * 集成代码使用；设备层会自动完成同样的绑定。
  */
-static inline void iolink_log_sink_init(iolink_log_sink_t* sink, iolink_log_write_fn write,
-                                        iolink_app_t* self, iolink_log_level_t level)
+static inline void iolink_log_sink_init(iolink_log_sink_t* sink,
+                                        iolink_log_write_fn IOLINK_NULLABLE write,
+                                        iolink_app_t* IOLINK_NULLABLE self,
+                                        iolink_log_level_t level)
 {
     if (sink == NULL) {
         return;
@@ -147,4 +151,5 @@ static inline void iolink_log_sink_init(iolink_log_sink_t* sink, iolink_log_writ
 
 /** @} */ /* iolinki_log 结束 */
 
+IOLINK_ASSUME_NONNULL_END
 #endif /* IOLINK_LOG_H */

@@ -11,6 +11,9 @@
 
 #include "iolinki/log.h"
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file config.h
  * @brief iolinki 协议栈的编译期默认值。
@@ -428,4 +431,5 @@
 
 /** @} */ /* iolinki_config 结束 */
 
+IOLINK_ASSUME_NONNULL_END
 #endif  // IOLINK_CONFIG_H

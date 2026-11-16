@@ -24,10 +24,11 @@
 #include "dll_access.h"
 #include "iolinki/events.h"
 #include "iolinki/phy.h"
+#include "test_null.h"
 
 static uint32_t g_ms;
 
-static uint64_t diag_time_us(iolink_app_t* self)
+static uint64_t diag_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return (uint64_t) g_ms * 1000U;
@@ -372,7 +373,8 @@ static void test_status_and_dds_share_condition_set(void** state)
 
     /* 快照容量边界：max=1 只返回一条。 */
     assert_int_equal(iolink_diag_dds_snapshot(&events, entries, 1U), 1U);
-    assert_int_equal(iolink_diag_dds_snapshot(&events, NULL, 1U), 0U);
+    assert_int_equal(iolink_diag_dds_snapshot(&events, TEST_NULL(iolink_diag_dds_entry_t*), 1U),
+                     0U);
 }
 
 /* rearm：只清 present；仍为高电平时下一次采样产生新的上升沿并保留边沿历史。 */
@@ -471,19 +473,19 @@ static void test_clear_diagnosis_rearms_on_next_sample(void** state)
 
 /* DLL 端到端：ISR 只发布 one-shot，主泵 service 后产生事件；0x0024 派生
  * 值与事件队列一致。 */
-static int diag_phy_init(iolink_app_t* self)
+static int diag_phy_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return 0;
 }
 
-static void diag_phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
+static void diag_phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode)
 {
     (void) self;
     (void) mode;
 }
 
-static void diag_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
+static void diag_phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
 {
     (void) self;
     (void) baudrate;
@@ -526,28 +528,31 @@ static void test_api_guards(void** state)
     iolink_events_ctx_t events;
     diag_events_init(&events);
 
-    assert_false(iolink_diag_set_level(NULL, IOLINK_DIAG_SRC_PHY_OVERTEMP, true));
+    assert_false(
+        iolink_diag_set_level(TEST_NULL(iolink_events_ctx_t*), IOLINK_DIAG_SRC_PHY_OVERTEMP, true));
     assert_false(iolink_diag_set_level(&events, (iolink_diag_src_t) IOLINK_DIAG_SRC_COUNT, true));
     assert_false(iolink_diag_set_level(&events, IOLINK_DIAG_SRC_COMM_CRC, true));
 
-    iolink_diag_pulse(NULL, IOLINK_DIAG_SRC_COMM_CRC);
+    iolink_diag_pulse(TEST_NULL(iolink_events_ctx_t*), IOLINK_DIAG_SRC_COMM_CRC);
     iolink_diag_pulse(&events, IOLINK_DIAG_SRC_PHY_OVERTEMP);
-    iolink_diag_pulse_isr(NULL, IOLINK_DIAG_SRC_COMM_CRC);
+    iolink_diag_pulse_isr(TEST_NULL(iolink_events_ctx_t*), IOLINK_DIAG_SRC_COMM_CRC);
     iolink_diag_pulse_isr(&events, (iolink_diag_src_t) IOLINK_DIAG_SRC_COUNT);
     assert_int_equal(events.count, 0U);
 
-    iolink_diag_service(NULL, 0U);
-    iolink_diag_rearm(NULL, 0xFFU);
+    iolink_diag_service(TEST_NULL(iolink_events_ctx_t*), 0U);
+    iolink_diag_rearm(TEST_NULL(iolink_events_ctx_t*), 0xFFU);
     iolink_diag_rearm(&events, 0xFFU); /* 无活动条件：无副作用 */
 
-    iolink_diag_raise_code(NULL, 0x1000U);
-    iolink_diag_clear_code(NULL, 0x1000U);
+    iolink_diag_raise_code(TEST_NULL(iolink_events_ctx_t*), 0x1000U);
+    iolink_diag_clear_code(TEST_NULL(iolink_events_ctx_t*), 0x1000U);
 
-    assert_int_equal(iolink_diag_device_status(NULL), 0U);
+    assert_int_equal(iolink_diag_device_status(TEST_NULL(iolink_events_ctx_t*)), 0U);
     iolink_diag_dds_entry_t entry;
-    assert_int_equal(iolink_diag_dds_snapshot(NULL, &entry, 1U), 0U);
+    assert_int_equal(iolink_diag_dds_snapshot(TEST_NULL(iolink_events_ctx_t*), &entry, 1U), 0U);
     assert_int_equal(iolink_diag_dds_snapshot(&events, &entry, 0U), 0U);
-    assert_int_equal(iolink_diag_edge_count(NULL, IOLINK_DIAG_SRC_COMM_CRC), 0U);
+    assert_int_equal(
+        iolink_diag_edge_count(TEST_NULL(const iolink_events_ctx_t*), IOLINK_DIAG_SRC_COMM_CRC),
+        0U);
     assert_int_equal(iolink_diag_edge_count(&events, (iolink_diag_src_t) IOLINK_DIAG_SRC_COUNT),
                      0U);
     assert_int_equal(iolink_diag_src_code((iolink_diag_src_t) IOLINK_DIAG_SRC_COUNT), 0U);

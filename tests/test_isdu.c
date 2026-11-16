@@ -1442,7 +1442,7 @@ static int read_events_index(iolink_events_ctx_t* events, uint16_t index, uint8_
 
 static uint32_t g_dds_event_ms;
 
-static uint64_t dds_event_time_us(iolink_app_t* self)
+static uint64_t dds_event_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return (uint64_t) g_dds_event_ms * 1000U;

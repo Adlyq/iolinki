@@ -15,6 +15,8 @@
 #include "iolinki/isdu.h"
 #include "iolinki/types.h"
 
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file dll_shared.h
  * @brief DLL 中由主上下文与数据 ISR 共同访问的状态。
@@ -254,4 +256,5 @@ static inline int dll_phy_detect_wakeup(iolink_dll_shared_t* ctx)
     return ctx->phy->detect_wakeup(ctx->phy->self);
 }
 
+IOLINK_ASSUME_NONNULL_END
 #endif /* IOLINK_DLL_SHARED_H */

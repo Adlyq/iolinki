@@ -20,19 +20,21 @@
 
 #include "iolinki/device.h"
 #include "test_helpers.h"
+#include "test_null.h"
 
 /* 本地 mock，避免与 CMocka 符号的链接问题 */
-static int local_mock_phy_init(iolink_app_t* self)
+static int local_mock_phy_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return (int) mock();
 }
-static void local_mock_phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
+static void local_mock_phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode)
 {
     (void) self;
     (void) mode;
 }
-static void local_mock_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
+static void local_mock_phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self,
+                                        iolink_baudrate_t baudrate)
 {
     (void) self;
     (void) baudrate;
@@ -76,7 +78,7 @@ static void test_iolink_init_fail_null(void** state)
 {
     (void) state;
     iolink_device_ctx_t ctx;
-    int result = iolink_device_init(&ctx, NULL);
+    int result = iolink_device_init(&ctx, TEST_NULL(const iolink_device_config_t*));
     assert_int_not_equal(result, 0);
 }
 

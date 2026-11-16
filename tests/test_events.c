@@ -33,7 +33,7 @@ static void events_init(iolink_events_ctx_t* ctx)
 
 static uint32_t g_fake_ms;
 
-static uint64_t fake_time_us(iolink_app_t* self)
+static uint64_t fake_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return (uint64_t) g_fake_ms * 1000U;

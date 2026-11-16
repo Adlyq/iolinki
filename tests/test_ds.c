@@ -280,8 +280,8 @@ static void test_ds_apply_rejects_truncated(void** state)
 static uint8_t g_vendor_param[8];
 static size_t g_vendor_param_len;
 
-static iolink_result_t vendor_od_read(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                      uint8_t* out, size_t cap)
+static iolink_result_t vendor_od_read(iolink_app_t* IOLINK_NULLABLE self,
+                                      const iolink_od_entry_t* entry, uint8_t* out, size_t cap)
 {
     (void) self;
     if (entry->index != VENDOR_PARAM_IDX) {
@@ -292,8 +292,9 @@ static iolink_result_t vendor_od_read(iolink_app_t* self, const iolink_od_entry_
     return iolink_result_ok((uint16_t) n);
 }
 
-static iolink_result_t vendor_od_write(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                       uint8_t subindex, const uint8_t* data, size_t len)
+static iolink_result_t vendor_od_write(iolink_app_t* IOLINK_NULLABLE self,
+                                       const iolink_od_entry_t* entry, uint8_t subindex,
+                                       const uint8_t* data, size_t len)
 {
     (void) self;
     (void) subindex;
@@ -410,8 +411,9 @@ static void test_ds_download_recovery(void** state)
     assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOAD_REQ);
 }
 
-static iolink_result_t rejecting_od_write(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                          uint8_t subindex, const uint8_t* data, size_t len)
+static iolink_result_t rejecting_od_write(iolink_app_t* IOLINK_NULLABLE self,
+                                          const iolink_od_entry_t* entry, uint8_t subindex,
+                                          const uint8_t* data, size_t len)
 {
     (void) self;
     (void) entry;
@@ -924,10 +926,11 @@ static void test_ds_0081_upload_abort_points(void** state)
     }
 }
 
-static iolink_app_t* g_validate_user;
+static iolink_app_t* IOLINK_NULLABLE g_validate_user;
 
-static iolink_result_t reject_validate(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                       const uint8_t* data, size_t len)
+static iolink_result_t reject_validate(iolink_app_t* IOLINK_NULLABLE self,
+                                       const iolink_od_entry_t* entry, const uint8_t* data,
+                                       size_t len)
 {
     g_validate_user = self;
     (void) entry;
@@ -963,7 +966,7 @@ static void test_ds_apply_precheck_rejects_before_write(void** state)
     iolink_ds_init(&ds);
     merged =
         test_od_with_tags(&app, test_params_od(test_env_params(&g_test_env)), merged_storage, 64U);
-    iolink_ds_bind_sources(&ds, &merged, (iolink_app_t*) &marker);
+    iolink_ds_bind_sources(&ds, &merged, (iolink_app_t * IOLINK_NULLABLE) & marker);
 
     g_validate_user = NULL;
     assert_int_equal(iolink_ds_apply_image(&ds, image, sizeof(image)), -2);
@@ -980,7 +983,7 @@ static void test_ds_apply_precheck_rejects_before_write(void** state)
 static int g_flag_persist_calls;
 static bool g_flag_persist_last;
 
-static void flag_persist_cb(iolink_app_t* self, bool flag)
+static void flag_persist_cb(iolink_app_t* IOLINK_NULLABLE self, bool flag)
 {
     (void) self;
     g_flag_persist_calls++;

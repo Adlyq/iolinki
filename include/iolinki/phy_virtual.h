@@ -11,6 +11,9 @@
 
 #include "iolinki/phy.h"
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file phy_virtual.h
  * @brief 用于仿真的虚拟 PHY 实现
@@ -34,7 +37,7 @@
  *
  * @return const iolink_phy_api_t*
  */
-const iolink_phy_api_t* iolink_phy_virtual_get(void);
+const iolink_phy_api_t* IOLINK_NULLABLE iolink_phy_virtual_get(void);
 
 /**
  * @brief 设置虚拟 PHY 的串口
@@ -44,4 +47,5 @@ void iolink_phy_virtual_set_port(const char* port);
 
 /** @} */ /* iolinki_phy_virtual 结束 */
 
+IOLINK_ASSUME_NONNULL_END
 #endif  // IOLINK_PHY_VIRTUAL_H

@@ -12,6 +12,8 @@
 #include "iolinki/config.h"
 #include "iolinki/types.h"
 
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file profile.h
  * @brief 构建档位的链接期一致性断言。
@@ -156,4 +158,5 @@ extern const uint8_t iolink_profile_pd_in_buffers_3;
             (const void*) &IOLINK_PROFILE_PD_BUFFERS_SYM,      \
     }
 
+IOLINK_ASSUME_NONNULL_END
 #endif /* IOLINK_PROFILE_H */

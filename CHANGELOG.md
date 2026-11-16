@@ -19,6 +19,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   into the interface.
 - `IOLINK_NONNULL` stays for nested pointer types (arrays of pointers), which
   `assume_nonnull` deliberately does not infer.
+- The model now covers every public and internal header, not only the six that
+  introduced it (`application`, `od`, `dll`, `isdu`, `events`, `data_storage`).
+- PHY callbacks take `iolink_app_t* IOLINK_NULLABLE self`: the library forwards
+  whatever the binding holds, and a callback that does not use the context is
+  valid. The hooks the library calls only after a NULL check (`init`,
+  `set_mode`, `set_baudrate`, `tx_busy`, `tx_done`, the two `response_timer_*`
+  and `stack_timer_start`, `request_service`, `detect_wakeup`, `set_cq_line`,
+  `get_faults`) are `IOLINK_NULLABLE` themselves; `rx_*`/`tx_*`/`int_active` are
+  called unconditionally and stay required.
+- Lookup functions keep "NULL means not in the table" in the return type:
+  `iolink_od_at()`, `iolink_diag_desc()`, `iolink_diag_registry_at()`,
+  `iolink_diag_src_desc()`, `iolink_dll_sm_cell()`, `iolink_ring_peek()`,
+  `iolink_ring_claim()`, `iolink_phy_virtual_get()` and
+  `iolink_device_get_workspace()`.
+- `iolink_log_sink_init(self)` and `iolink_device_set_log(write)` accept NULL:
+  a sink without a context and "silence the log" are documented actions, not
+  caller bugs.
+- `iolink_app_t*` — the application's opaque context, i.e. the value of
+  `iolink_device_app_t::self` forwarded to every hook — is `IOLINK_NULLABLE` at
+  every declaration: the hook typedefs, the log sink's copy, the OD/ISDU/DS
+  contexts, the PHY `self` and the test doubles. It is one type with one
+  meaning, so the marker belongs on the type instead of on a hundred
+  parameters, and declarations, definitions and tests cannot drift apart.
+- `iolink_isdu_is_idle()` no longer claims that a NULL context is legal: that
+  guard returns `false` for a caller bug, the same shape as
+  `iolink_device_get_state()`'s default, and the parameter stays non-null.
+
+### Added (nullability invariants gate)
+- `tools/check_nullability.sh` (in `quick`) enforces the two properties the
+  macro model rests on: a header that opens a region includes
+  `"iolinki/types.h"` directly, and the region is not nested inside an `#if`.
+  Both failed during the rollout — 18 headers used the macro without the
+  include, and `port.h` opened the region inside
+  `#ifdef IOLINK_PORT_CONFIG_FILE`, which disappears whenever that switch is
+  off. `--selftest` covers a well-formed header, a missing include, a
+  conditional region and an unbalanced pair.
 
 ### Added (static analyzer gate)
 - `tools/gates.sh analyzer` runs `clang --analyze` over `src/` and fails on any

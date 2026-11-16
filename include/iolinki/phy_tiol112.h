@@ -3,6 +3,9 @@
 #define IOLINK_PHY_TIOL112_H
 #include "iolinki/phy.h"
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /* MCU 适配器契约。不含引脚号、OS、编译器扩展或全局状态。
  * init 将 EN 配置为低电平，并为低有效 WAKE 和 NFAULT 配置上拉/IRQ。
  * 失败时必须保持 EN 为低；其他回调只需在成功后才工作。
@@ -51,4 +54,6 @@ const iolink_phy_api_t* iolink_phy_tiol112_get(iolink_tiol112_ctx_t* driver);
 /* 聚合 NFAULT：欠压、温度或短路。不推断原因。
  * 有效时返回 1，无故障返回 0，未初始化或引脚不可用时返回 -1。 */
 int iolink_phy_tiol112_fault(const iolink_tiol112_ctx_t* driver);
+
+IOLINK_ASSUME_NONNULL_END
 #endif

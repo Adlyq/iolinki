@@ -12,6 +12,9 @@
 #include "iolinki/internal/dll_shared.h"
 #include "iolinki/data_storage.h"
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file dll_main.h
  * @brief 主上下文独占的 DLL 状态。
@@ -205,4 +208,5 @@ bool dll_time_passed(uint64_t now_us, uint64_t deadline_us);
 bool dll_timer_due(const iolink_dll_main_t* ctx, iolink_timer_id_t id, uint64_t now_us);
 /** @} */
 
+IOLINK_ASSUME_NONNULL_END
 #endif /* IOLINK_DLL_MAIN_H */

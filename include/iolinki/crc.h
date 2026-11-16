@@ -12,6 +12,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file crc.h
  * @brief IO-Link 报文校验和（Spec V1.1.5 A.1.6）
@@ -51,4 +54,5 @@ uint8_t iolink_checksum6_from_acc(uint8_t acc);
 
 /** @} */ /* end of iolinki_crc */
 
+IOLINK_ASSUME_NONNULL_END
 #endif  // IOLINK_CRC_H

@@ -73,16 +73,17 @@ typedef struct
     uint16_t value;
 } single_cell_t;
 
-static iolink_result_t single_read(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t* out,
-                                   size_t cap)
+static iolink_result_t single_read(iolink_app_t* IOLINK_NULLABLE self,
+                                   const iolink_od_entry_t* entry, uint8_t* out, size_t cap)
 {
     const single_cell_t* cell = (const single_cell_t*) self;
 
     return iolink_od_encode(entry, cell->value, out, cap);
 }
 
-static iolink_result_t single_write(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                    uint8_t subindex, const uint8_t* data, size_t len)
+static iolink_result_t single_write(iolink_app_t* IOLINK_NULLABLE self,
+                                    const iolink_od_entry_t* entry, uint8_t subindex,
+                                    const uint8_t* data, size_t len)
 {
     single_cell_t* cell = (single_cell_t*) self;
     uint32_t value = 0U;
@@ -118,7 +119,7 @@ static void test_od_single_entry_parameter(void** state)
 
     app.entries = k_single_entry;
     app.count = sizeof(k_single_entry) / sizeof(k_single_entry[0]);
-    iolink_isdu_bind_od(&ctx, &app, (iolink_app_t*) &cell);
+    iolink_isdu_bind_od(&ctx, &app, (iolink_app_t * IOLINK_NULLABLE) & cell);
 
     /* 表项默认值经 od_default 解析，与应用初值一致；应用后端读出同一值。 */
     assert_int_equal(cell.value, 42U);
@@ -165,7 +166,7 @@ static void test_od_switching_sensor(void** state)
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_od_env);
     switching_sensor_od_init(&app);
-    iolink_isdu_bind_od(&ctx, &app, (iolink_app_t*) &sensor);
+    iolink_isdu_bind_od(&ctx, &app, (iolink_app_t * IOLINK_NULLABLE) & sensor);
 
     /* 表项默认值与应用初值一致，并据此读出。 */
     const iolink_od_entry_t* threshold_entry =
@@ -214,7 +215,7 @@ static void test_od_switching_sensor(void** state)
 
     /* OD 层自己也守住 max_subindex：直接调用值层（不经 ISDU）同样拒绝。 */
     const iolink_od_entry_t* threshold = iolink_od_find(&app, SWITCHING_SENSOR_IDX_THRESHOLD, 0U);
-    iolink_od_ctx_t od = {.app = &app, .self = (iolink_app_t*) &sensor};
+    iolink_od_ctx_t od = {.app = &app, .self = (iolink_app_t * IOLINK_NULLABLE) & sensor};
     assert_non_null(threshold);
     assert_int_equal(iolink_od_read_value(&od, threshold, 1U, buf, sizeof(buf)).code,
                      IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL);
@@ -270,8 +271,8 @@ static const iolink_od_entry_t k_no_read_entry[] = {
 
 static int g_od_change_calls;
 
-static iolink_result_t track_change(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                    const uint8_t* data, size_t len)
+static iolink_result_t track_change(iolink_app_t* IOLINK_NULLABLE self,
+                                    const iolink_od_entry_t* entry, const uint8_t* data, size_t len)
 {
     (void) self;
     (void) entry;
@@ -288,8 +289,8 @@ static const iolink_od_entry_t k_change_entry[] = {
                                 "WriteWithHook", single_read, single_write, NULL, track_change),
 };
 
-static iolink_result_t failing_read(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                    uint8_t* out, size_t cap)
+static iolink_result_t failing_read(iolink_app_t* IOLINK_NULLABLE self,
+                                    const iolink_od_entry_t* entry, uint8_t* out, size_t cap)
 {
     (void) self;
     (void) entry;
@@ -299,8 +300,8 @@ static iolink_result_t failing_read(iolink_app_t* self, const iolink_od_entry_t*
 }
 
 /* 标量只返回 1 字节：与表项 codec 的 2 字节不一致。 */
-static iolink_result_t short_read(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t* out,
-                                  size_t cap)
+static iolink_result_t short_read(iolink_app_t* IOLINK_NULLABLE self,
+                                  const iolink_od_entry_t* entry, uint8_t* out, size_t cap)
 {
     (void) self;
     (void) entry;
@@ -310,8 +311,8 @@ static iolink_result_t short_read(iolink_app_t* self, const iolink_od_entry_t* e
 }
 
 /* 字节串返回超过调用方容量的长度。 */
-static iolink_result_t long_read(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t* out,
-                                 size_t cap)
+static iolink_result_t long_read(iolink_app_t* IOLINK_NULLABLE self, const iolink_od_entry_t* entry,
+                                 uint8_t* out, size_t cap)
 {
     (void) self;
     (void) entry;
@@ -359,14 +360,15 @@ static void test_od_codec_edges(void** state)
 
     /* check_value：空表项、空数据但声明了长度。 */
     assert_int_equal(iolink_od_check_value(TEST_NULL(const iolink_od_entry_t*),
-                                           TEST_NULL(iolink_app_t*), buf, 1U)
+                                           TEST_NULL(iolink_app_t * IOLINK_NULLABLE), buf, 1U)
                          .code,
                      IOLINK_RESULT_INVALID);
-    assert_int_equal(
-        iolink_od_check_value(scalar, TEST_NULL(iolink_app_t*), TEST_NULL(const uint8_t*), 1U).code,
-        IOLINK_RESULT_INVALID);
-    assert_true(iolink_result_succeeded(
-        iolink_od_check_value(octet, TEST_NULL(iolink_app_t*), TEST_NULL(const uint8_t*), 0U)));
+    assert_int_equal(iolink_od_check_value(scalar, TEST_NULL(iolink_app_t * IOLINK_NULLABLE),
+                                           TEST_NULL(const uint8_t*), 1U)
+                         .code,
+                     IOLINK_RESULT_INVALID);
+    assert_true(iolink_result_succeeded(iolink_od_check_value(
+        octet, TEST_NULL(iolink_app_t * IOLINK_NULLABLE), TEST_NULL(const uint8_t*), 0U)));
     /* OctetString 的 block_len 是写上限；block_len == 0 才表示不限制。 */
     const uint8_t block_ok[4] = {0U};
     const uint8_t block_too_long[5] = {0U};
@@ -430,7 +432,7 @@ static void test_od_value_layer_edges(void** state)
     iolink_od_ctx_t handler_ctx = {0};
     iolink_od_app_t app_cell = {.entries = k_single_entry, .count = 1U};
     handler_ctx.app = &app_cell;
-    handler_ctx.self = (iolink_app_t*) &read_cell;
+    handler_ctx.self = (iolink_app_t * IOLINK_NULLABLE) & read_cell;
     assert_int_equal(
         iolink_od_read_value(&handler_ctx, &k_no_read_entry[0], 0U, buf, sizeof(buf)).code,
         IOLINK_RESULT_NOT_HANDLED);
@@ -467,7 +469,7 @@ static void test_od_value_layer_edges(void** state)
     iolink_od_app_t app = {0};
     app.entries = k_change_entry;
     app.count = 1U;
-    iolink_od_ctx_t change_ctx = {.app = &app, .self = (iolink_app_t*) &cell};
+    iolink_od_ctx_t change_ctx = {.app = &app, .self = (iolink_app_t * IOLINK_NULLABLE) & cell};
     g_od_change_calls = 0;
     assert_true(iolink_result_succeeded(
         iolink_od_write_value(&change_ctx, &k_change_entry[0], 0U, &one, 1U)));
@@ -532,8 +534,8 @@ static void test_od_table_contract(void** state)
  * 索引域路由：规范索引不可遮蔽，设备专用索引回落到内建表
  * ------------------------------------------------------------------------- */
 
-static iolink_result_t shadow_read(iolink_app_t* self, const iolink_od_entry_t* entry, uint8_t* out,
-                                   size_t cap)
+static iolink_result_t shadow_read(iolink_app_t* IOLINK_NULLABLE self,
+                                   const iolink_od_entry_t* entry, uint8_t* out, size_t cap)
 {
     (void) self;
     (void) entry;
@@ -714,8 +716,9 @@ static void test_od_storage_string_round_trip(void** state)
 }
 
 /* on_change 拒绝时 STORAGE 标量回滚到写前值。 */
-static iolink_result_t reject_change(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                     const uint8_t* data, size_t len)
+static iolink_result_t reject_change(iolink_app_t* IOLINK_NULLABLE self,
+                                     const iolink_od_entry_t* entry, const uint8_t* data,
+                                     size_t len)
 {
     (void) self;
     (void) entry;
@@ -769,8 +772,9 @@ static void test_od_storage_string_on_change_keeps_value(void** state)
 /* 恢复路径绕过 validate/on_change，只写后端。 */
 static int g_restore_hooks;
 
-static iolink_result_t restore_validate(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                        const uint8_t* data, size_t len)
+static iolink_result_t restore_validate(iolink_app_t* IOLINK_NULLABLE self,
+                                        const iolink_od_entry_t* entry, const uint8_t* data,
+                                        size_t len)
 {
     (void) self;
     (void) entry;
@@ -780,8 +784,9 @@ static iolink_result_t restore_validate(iolink_app_t* self, const iolink_od_entr
     return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG);
 }
 
-static iolink_result_t restore_change(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                      const uint8_t* data, size_t len)
+static iolink_result_t restore_change(iolink_app_t* IOLINK_NULLABLE self,
+                                      const iolink_od_entry_t* entry, const uint8_t* data,
+                                      size_t len)
 {
     (void) self;
     (void) entry;
@@ -791,8 +796,9 @@ static iolink_result_t restore_change(iolink_app_t* self, const iolink_od_entry_
     return iolink_result_error((int16_t) IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG);
 }
 
-static iolink_result_t restore_handler_write(iolink_app_t* self, const iolink_od_entry_t* entry,
-                                             uint8_t subindex, const uint8_t* data, size_t len)
+static iolink_result_t restore_handler_write(iolink_app_t* IOLINK_NULLABLE self,
+                                             const iolink_od_entry_t* entry, uint8_t subindex,
+                                             const uint8_t* data, size_t len)
 {
     uint16_t* value = (uint16_t*) self;
     uint32_t raw = 0U;
@@ -831,7 +837,7 @@ static void test_od_restore_value_paths(void** state)
     test_env_init(&g_od_env, NULL);
     test_env_reset_params(&g_od_env);
     iolink_od_app_t app = {.entries = entries, .count = 4U};
-    iolink_od_ctx_t ctx = {.app = &app, .self = (iolink_app_t*) &handler_value};
+    iolink_od_ctx_t ctx = {.app = &app, .self = (iolink_app_t * IOLINK_NULLABLE) & handler_value};
     const uint8_t wire[2] = {0x12U, 0x34U};
     const uint8_t too_long[5] = {0U};
     uint8_t tag_out[4] = {0U};

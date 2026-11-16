@@ -2,6 +2,9 @@
 #ifndef IOLINK_PHY_L6362A_H
 #define IOLINK_PHY_L6362A_H
 #include "iolinki/phy.h"
+
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
 /* IN1 必须硬连线为低：CQ=IN2，RX=OUTI/Q（ST 表 14/15）。
  * EN 必须通过板上串联电阻驱动；DIAG 采样其 IC 侧。
  * init 将 EN 保持为低。uart_send_complete 抑制回显并等待最后一个
@@ -44,4 +47,6 @@ int iolink_phy_l6362a_overload(const iolink_l6362a_ctx_t*);
 /* DIAG 故障仅在 EN 请求为高时才有意义；否则为 -1。
  * 有效时聚合截止/UVLO/过温；无法识别具体原因。 */
 int iolink_phy_l6362a_fault(const iolink_l6362a_ctx_t*);
+
+IOLINK_ASSUME_NONNULL_END
 #endif

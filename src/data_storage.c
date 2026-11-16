@@ -137,8 +137,8 @@ void iolink_ds_init(iolink_ds_ctx_t* ctx)
 #endif
 }
 
-void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn fn,
-                                iolink_app_t* self)
+void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn IOLINK_NULLABLE fn,
+                                iolink_app_t* IOLINK_NULLABLE self)
 {
     if (ctx == NULL) {
         return;
@@ -147,7 +147,8 @@ void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn 
     ctx->flag_self = self;
 }
 
-void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app, iolink_app_t* self)
+void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app,
+                            iolink_app_t* IOLINK_NULLABLE self)
 {
     if (ctx == NULL) {
         return;
@@ -415,7 +416,7 @@ int iolink_ds_apply_image(iolink_ds_ctx_t* ctx, const uint8_t* data, size_t len)
     /* 第一阶段：已知参数的无副作用预校验。必须在写入任何参数之前完成，
        这样一条非法记录不会留下"前面已生效、后面失败"的半恢复状态。 */
     {
-        iolink_app_t* hook_self = ctx->self;
+        iolink_app_t* IOLINK_NULLABLE hook_self = ctx->self;
         pos = 0U;
         while (pos < len) {
             uint16_t index = (uint16_t) (((uint16_t) data[pos] << 8) | (uint16_t) data[pos + 1U]);

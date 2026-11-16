@@ -4,6 +4,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include "iolinki/phy_l6362a.h"
+#include "test_null.h"
 static bool en, in2, ol = true, diag = true;
 static int tx_result = 1, config_result;
 static uint32_t baud;
@@ -139,7 +140,7 @@ static void test_init_rejects_null_driver(void** state)
 {
     (void) state;
     reset_board();
-    assert_int_equal(iolink_phy_l6362a_init(NULL, &g_io), -1);
+    assert_int_equal(iolink_phy_l6362a_init(TEST_NULL(iolink_l6362a_ctx_t*), &g_io), -1);
 }
 
 int main(void)

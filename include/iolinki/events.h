@@ -115,8 +115,8 @@ typedef struct
  */
 typedef struct
 {
-    uint64_t (*time_us)(iolink_app_t* self);
-    iolink_app_t* self;
+    uint64_t (*time_us)(iolink_app_t* IOLINK_NULLABLE self);
+    iolink_app_t* IOLINK_NULLABLE self;
 } iolink_clock_t;
 
 /**

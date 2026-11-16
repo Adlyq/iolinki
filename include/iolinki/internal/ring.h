@@ -14,6 +14,9 @@
 
 #include "iolinki/port.h"
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file ring.h
  * @brief 供 ISR 交接使用的单生产者 / 单消费者槽位环形缓冲区。
@@ -86,7 +89,7 @@ static inline bool iolink_ring_is_empty(const iolink_ring_t* ring)
  *         后必须恰好调用一次 iolink_ring_publish()，之后才能
  *         再次认领。
  */
-static inline uint8_t* iolink_ring_claim(iolink_ring_t* ring)
+static inline uint8_t* IOLINK_NULLABLE iolink_ring_claim(iolink_ring_t* ring)
 {
     const IOLINK_ATOMIC_UINT_T in = ring->in;
     const IOLINK_ATOMIC_UINT_T out = iolink_atomic_load(&ring->out);
@@ -109,7 +112,7 @@ static inline void iolink_ring_publish(iolink_ring_t* ring)
  * @return 只读槽位；环形缓冲区为空时返回 NULL。调用方处理完该
  *         记录后必须调用 iolink_ring_release()。
  */
-static inline const uint8_t* iolink_ring_peek(const iolink_ring_t* ring)
+static inline const uint8_t* IOLINK_NULLABLE iolink_ring_peek(const iolink_ring_t* ring)
 {
     const IOLINK_ATOMIC_UINT_T out = ring->out;
     const IOLINK_ATOMIC_UINT_T in = iolink_atomic_load(&ring->in);
@@ -128,4 +131,5 @@ static inline void iolink_ring_release(iolink_ring_t* ring)
 
 /** @} */ /* end of iolinki_ring */
 
+IOLINK_ASSUME_NONNULL_END
 #endif  // IOLINK_RING_H

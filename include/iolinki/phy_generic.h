@@ -11,6 +11,9 @@
 
 #include "iolinki/phy.h"
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -42,4 +45,5 @@ const iolink_phy_api_t* iolink_phy_generic_get(void);
 }
 #endif
 
+IOLINK_ASSUME_NONNULL_END
 #endif  // IOLINK_PHY_GENERIC_H

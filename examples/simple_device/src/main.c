@@ -18,7 +18,7 @@ void iolink_critical_exit(void)
 {
 }
 
-static uint64_t simple_time_us(iolink_app_t* self)
+static uint64_t simple_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     struct timespec ts;

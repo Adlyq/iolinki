@@ -23,7 +23,7 @@ static void reset_cb(iolink_reset_type_t type)
     reset_calls++;
 }
 
-static void timer_b_start(iolink_app_t* self)
+static void timer_b_start(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 }

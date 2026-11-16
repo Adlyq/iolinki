@@ -53,7 +53,7 @@ static uint64_t s_tx_delivered;
 static uint64_t s_tx_asserted;
 static uint64_t s_tx_leaked; /* 开始新捕获时仍未查看的交付 */
 
-static uint64_t test_time_us(iolink_app_t* self)
+static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     return s_now_us;
@@ -61,7 +61,8 @@ static uint64_t test_time_us(iolink_app_t* self)
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
 /* RX FRAME：feed() 送入的字节即一整个 PHY 帧。 */
-static const uint8_t* test_rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len)
+static const uint8_t* test_rx_frame(iolink_app_t* IOLINK_NULLABLE self, uint8_t* status,
+                                    uint8_t* len)
 {
     (void) self;
     *len = 0U;
@@ -76,7 +77,7 @@ static const uint8_t* test_rx_frame(iolink_app_t* self, uint8_t* status, uint8_t
     return frame;
 }
 #else
-static int test_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
+static int test_rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status)
 {
     (void) self;
     *status = 0U;
@@ -105,7 +106,7 @@ static void test_tx_frame_sync(void)
     s_tx_delivered++;
 }
 
-static int test_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
+static int test_tx_frame(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data, size_t len)
 {
     (void) self;
     test_tx_frame_sync();
@@ -114,7 +115,7 @@ static int test_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
     return 0;
 }
 #else
-static int test_tx_octet(iolink_app_t* self, uint8_t data)
+static int test_tx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t data)
 {
     (void) self;
     if (!s_tx_active) {
@@ -127,7 +128,7 @@ static int test_tx_octet(iolink_app_t* self, uint8_t data)
     return 0;
 }
 
-static void test_tx_done(iolink_app_t* self)
+static void test_tx_done(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
     if (s_tx_active) {
@@ -137,7 +138,7 @@ static void test_tx_done(iolink_app_t* self)
 }
 #endif
 
-static uint8_t test_int_active(iolink_app_t* self)
+static uint8_t test_int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
@@ -149,7 +150,7 @@ static uint8_t test_int_active(iolink_app_t* self)
 }
 
 static const iolink_phy_api_t s_phy = {
-    .self = (iolink_app_t*) &s_dll,
+    .self = (iolink_app_t * IOLINK_NULLABLE) & s_dll,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     .rx_frame = test_rx_frame,
 #else

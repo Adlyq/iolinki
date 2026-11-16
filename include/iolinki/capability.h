@@ -17,6 +17,9 @@
 #include "iolinki/iolink.h"
 #include "iolinki/phy.h"
 
+#include "iolinki/types.h"
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /**
  * @file capability.h
  * @brief 能力表：构建档位（ROM 常量）+ 实例能力位（运行时）。
@@ -163,8 +166,10 @@ const iolink_build_caps_t* iolink_caps_build(void);
  * @param build 构建档位（NULL 表示 @ref iolink_caps_build()）
  * @return 能力位掩码
  */
-iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* phy, const iolink_stack_config_t* stack,
-                                  const iolink_device_app_t* app, const iolink_build_caps_t* build);
+iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* IOLINK_NULLABLE phy,
+                                  const iolink_stack_config_t* IOLINK_NULLABLE stack,
+                                  const iolink_device_app_t* IOLINK_NULLABLE app,
+                                  const iolink_build_caps_t* IOLINK_NULLABLE build);
 
 /**
  * @brief 测试能力位是否置位。
@@ -188,4 +193,5 @@ static inline bool iolink_caps_built(const iolink_build_caps_t* caps, uint32_t m
 
 /** @} */ /* end of iolinki_capability */
 
+IOLINK_ASSUME_NONNULL_END
 #endif /* IOLINK_CAPABILITY_H */
