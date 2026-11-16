@@ -48,7 +48,8 @@ typedef struct
     bool initialized;
 } iolink_tiol112_ctx_t;
 
-/* 复制 IO 回调；driver 和 io.user 的生命周期必须长于设备。 */
+/* 复制 IO 回调；driver 和 io.user 的生命周期必须长于设备。
+   初始化后 vtable 的 `self` 恒为该 driver，回调里的 `self` 不会是 NULL。 */
 int iolink_phy_tiol112_init(iolink_tiol112_ctx_t* driver, const iolink_tiol112_io_t* io);
 const iolink_phy_api_t* IOLINK_NULLABLE iolink_phy_tiol112_get(iolink_tiol112_ctx_t* driver);
 /* 聚合 NFAULT：欠压、温度或短路。不推断原因。

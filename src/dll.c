@@ -234,7 +234,7 @@ bool iolink_dll_timer_armed(const iolink_dll_main_t* ctx, iolink_timer_id_t id)
     return dll_timer_armed(ctx, id);
 }
 
-const iolink_timer_contract_t* iolink_dll_timer_contract(uint8_t* count)
+const iolink_timer_contract_t* iolink_dll_timer_contract(uint8_t* IOLINK_NULLABLE count)
 {
     if (count != NULL) {
         *count = (uint8_t) IOLINK_TIMER_COUNT;

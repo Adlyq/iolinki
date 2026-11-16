@@ -137,12 +137,12 @@ uint8_t iolink_diag_registry_size(void)
     return DIAG_REGISTRY_SIZE;
 }
 
-const iolink_diag_desc_t* iolink_diag_registry_at(uint8_t index)
+const iolink_diag_desc_t* IOLINK_NULLABLE iolink_diag_registry_at(uint8_t index)
 {
     return (index < DIAG_REGISTRY_SIZE) ? &diag_registry[index] : NULL;
 }
 
-const iolink_diag_desc_t* iolink_diag_desc(uint16_t code)
+const iolink_diag_desc_t* IOLINK_NULLABLE iolink_diag_desc(uint16_t code)
 {
     for (uint8_t i = 0U; i < DIAG_REGISTRY_SIZE; i++) {
         if (diag_registry[i].code == code) {
@@ -152,7 +152,7 @@ const iolink_diag_desc_t* iolink_diag_desc(uint16_t code)
     return NULL;
 }
 
-const iolink_diag_desc_t* iolink_diag_src_desc(iolink_diag_src_t src)
+const iolink_diag_desc_t* IOLINK_NULLABLE iolink_diag_src_desc(iolink_diag_src_t src)
 {
     return diag_desc_by_src(src);
 }

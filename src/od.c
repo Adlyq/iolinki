@@ -212,8 +212,8 @@ static const iolink_od_entry_t* od_find_in(const iolink_od_entry_t* entries, siz
     return fallback;
 }
 
-const iolink_od_entry_t* iolink_od_find_app(const iolink_od_app_t* app, uint16_t index,
-                                            uint8_t subindex)
+const iolink_od_entry_t* IOLINK_NULLABLE
+iolink_od_find_app(const iolink_od_app_t* IOLINK_NULLABLE app, uint16_t index, uint8_t subindex)
 {
     return (app != NULL) ? od_find_in(app->entries, app->count, index, subindex) : NULL;
 }
@@ -230,8 +230,8 @@ static bool od_index_is_app_owned(uint16_t index)
     return (index >= IOLINK_IDX_APPLICATION_TAG) && (index <= IOLINK_IDX_LOCATION_TAG);
 }
 
-const iolink_od_entry_t* iolink_od_find(const iolink_od_app_t* app, uint16_t index,
-                                        uint8_t subindex)
+const iolink_od_entry_t* IOLINK_NULLABLE iolink_od_find(const iolink_od_app_t* IOLINK_NULLABLE app,
+                                                        uint16_t index, uint8_t subindex)
 {
     const iolink_od_entry_t* entry;
 
@@ -265,7 +265,7 @@ size_t iolink_od_ds_count(void)
     return n;
 }
 
-const iolink_od_entry_t* iolink_od_ds_at(size_t i)
+const iolink_od_entry_t* IOLINK_NULLABLE iolink_od_ds_at(size_t i)
 {
     size_t seen = 0U;
 
@@ -281,7 +281,7 @@ const iolink_od_entry_t* iolink_od_ds_at(size_t i)
     return NULL;
 }
 
-size_t iolink_od_ds_count_app(const iolink_od_app_t* app)
+size_t iolink_od_ds_count_app(const iolink_od_app_t* IOLINK_NULLABLE app)
 {
     if (app == NULL) {
         return 0U;
@@ -296,7 +296,8 @@ size_t iolink_od_ds_count_app(const iolink_od_app_t* app)
     return n;
 }
 
-const iolink_od_entry_t* iolink_od_ds_at_app(const iolink_od_app_t* app, size_t i)
+const iolink_od_entry_t* IOLINK_NULLABLE
+iolink_od_ds_at_app(const iolink_od_app_t* IOLINK_NULLABLE app, size_t i)
 {
     size_t seen = 0U;
 

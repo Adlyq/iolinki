@@ -205,7 +205,10 @@ void data_irq_handler(void)
 
 ### 2.4 PHY 移植
 
-所需回调取决于配置的 ISR 粒度：
+vtable 的每个成员在类型上都是可选的（`IOLINK_NULLABLE`）：`iolink_caps_resolve()`
+按"钩子是否存在"推导能力位，库只在对应能力位成立时调用。下表的"必需"指功能
+可用性，不是类型约束；钩子存在但实现错误仍然是 bug，"缺失"只表示这个 PHY 不
+提供该能力。
 
 | 函数 | 是否必需 | 说明 |
 | --- | --- | --- |
@@ -218,7 +221,7 @@ void data_irq_handler(void)
 | `tx_frame` | TX FRAME 模式 | 发送完整应答，通常使用 DMA。 |
 | `tx_done` | TX BYTE 模式 | 发完最后一字节后释放线路；RX BYTE 的 gap 也会用它释放接收引擎。TX FRAME 下该成员不存在，由 PHY 自己在传输完成中断里收尾。 |
 | `tx_busy` | TX FRAME 可选 | 线路仍被占用时返回非 0；库据此推迟 ISR 应答并在主泵释放 PD-in 缓冲。为 NULL 时只能等下一次 capture 复用缓冲。 |
-| `int_active` | 必需 | 数据中断电平；用于门控 ISR 泵。 |
+| `int_active` | ISR 泵需要 | 数据中断电平；`dll_isr_process()` 在它或 RX 能力缺失时直接返回，不泵送。 |
 | `request_service` | 推荐 | 主上下文暂存应答后唤醒数据 ISR。设置 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX`（或构建默认 `IOLINK_PHY_FEATURE_ISR_TX_ONLY=1`）时必需，缺少会在初始化阶段被拒绝。 |
 | `response_timer_start/stop` | 可选 | 硬件 t_A 定时器。为 NULL 时使用软件时间戳。 |
 | `stack_timer_start` | 可选 | 周期性的主上下文服务窗口（Timer B 到期时调用 `iolink_dll_on_stack_tick()`）。 |

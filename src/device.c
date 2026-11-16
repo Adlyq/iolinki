@@ -388,7 +388,7 @@ iolink_workspace_t* IOLINK_NULLABLE iolink_device_get_workspace(const iolink_dev
     return ctx->dll.main.shared.isdu.workspace;
 }
 
-void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn write,
+void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_NULLABLE write,
                            iolink_log_level_t level)
 {
     if (ctx == NULL) {

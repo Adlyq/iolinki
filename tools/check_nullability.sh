@@ -66,7 +66,7 @@ scan() {
             }
             next
         }
-        /^[[:space:]]*#[[:space:]]*(if|ifdef|elif)([[:space:]]|$)/ { depth++; next }
+        /^[[:space:]]*#[[:space:]]*(if|ifdef)([[:space:]]|$)/ { depth++; next }
         /^[[:space:]]*#[[:space:]]*endif([[:space:]]|$)/ { if (depth > 0) depth--; next }
         # A marker must be the whole line: anything after it means this scan
         # would not see the pair, which would silently disable every check.
@@ -143,7 +143,7 @@ selftest() {
     # Not `local`: the EXIT trap runs after this function returns.
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
-    mkdir -p "$tmp/good" "$tmp/no-types" "$tmp/include-in-if" "$tmp/in-if" \
+    mkdir -p "$tmp/good" "$tmp/no-types" "$tmp/include-in-if" "$tmp/elif" "$tmp/in-if" \
         "$tmp/guardless-if" "$tmp/unbalanced" "$tmp/reversed" "$tmp/trailing" "$tmp/unused"
 
     cat >"$tmp/good/ok.h" <<'FIXTURE'
@@ -171,6 +171,25 @@ FIXTURE
 #ifdef OPTIONAL_FEATURE
 #include <iolinki/types.h>
 #endif
+IOLINK_ASSUME_NONNULL_BEGIN
+void f(int* p);
+IOLINK_ASSUME_NONNULL_END
+#endif
+FIXTURE
+
+    # `#elif` does not open a new level: a platform-selection block before the
+    # include must not be counted as nesting.
+    cat >"$tmp/elif/ok.h" <<'FIXTURE'
+#ifndef OK_H
+#define OK_H
+#if defined(PLATFORM_A)
+#define IOLINK_PLATFORM 1
+#elif defined(PLATFORM_B)
+#define IOLINK_PLATFORM 2
+#else
+#define IOLINK_PLATFORM 0
+#endif
+#include "iolinki/types.h"
 IOLINK_ASSUME_NONNULL_BEGIN
 void f(int* p);
 IOLINK_ASSUME_NONNULL_END
@@ -232,6 +251,10 @@ FIXTURE
     local failures=0
     if ! check_dir "$tmp/good" 2>/dev/null; then
         echo "selftest FAIL: rejected a well-formed header" >&2
+        failures=1
+    fi
+    if ! check_dir "$tmp/elif" 2>/dev/null; then
+        echo "selftest FAIL: counted #elif as a nesting level" >&2
         failures=1
     fi
     local bad

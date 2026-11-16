@@ -40,17 +40,18 @@ IOLINK_ASSUME_NONNULL_BEGIN
 typedef struct
 {
     /* 强制 ID 索引（0x0010-0x0018） */
-    const char* vendor_name;                 /**< 厂商名称字符串（Index 0x0010）。 */
-    const char* vendor_text;                 /**< 厂商文本字符串（Index 0x0011）。 */
-    const char* product_name;                /**< 产品名称字符串（Index 0x0012）。 */
-    const char* product_id;                  /**< 产品 ID 字符串（Index 0x0013）。 */
-    const char* product_text;                /**< 产品文本字符串（Index 0x0014）。 */
-    const char* serial_number;               /**< 序列号字符串（Index 0x0015）。 */
-    const char* hardware_revision;           /**< 硬件版本字符串（Index 0x0016）。 */
-    const char* firmware_revision;           /**< 固件版本字符串（Index 0x0017）。 */
-    const char* IOLINK_NULLABLE product_uri; /**< ProductURI 字符串（Index 0x001B，
-                                                  取决于 Profile；NULL = 未提供） */
-    const char* application_tag;             /**< 应用标签字符串（Index 0x0018，可选）。 */
+    const char* vendor_name;                     /**< 厂商名称字符串（Index 0x0010）。 */
+    const char* vendor_text;                     /**< 厂商文本字符串（Index 0x0011）。 */
+    const char* product_name;                    /**< 产品名称字符串（Index 0x0012）。 */
+    const char* product_id;                      /**< 产品 ID 字符串（Index 0x0013）。 */
+    const char* product_text;                    /**< 产品文本字符串（Index 0x0014）。 */
+    const char* serial_number;                   /**< 序列号字符串（Index 0x0015）。 */
+    const char* hardware_revision;               /**< 硬件版本字符串（Index 0x0016）。 */
+    const char* firmware_revision;               /**< 固件版本字符串（Index 0x0017）。 */
+    const char* IOLINK_NULLABLE product_uri;     /**< ProductURI 字符串（Index 0x001B，
+                                                      取决于 Profile；NULL = 未提供） */
+    const char* IOLINK_NULLABLE application_tag; /**< 应用标签字符串（Index 0x0018；
+                                                      NULL = 空标签，可由 DS 写入）。 */
 
     /* 设备 ID（Direct Parameter page 1，V1.1.5 Table B.1） */
     uint16_t vendor_id;              /**< Vendor ID（DPP1 0x07-0x08）。 */

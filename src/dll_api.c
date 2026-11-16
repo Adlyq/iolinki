@@ -133,7 +133,8 @@ int iolink_dll_set_pd_length(iolink_dll_main_t* ctx, uint8_t pd_in_len, uint8_t 
     return 0;
 }
 
-void iolink_dll_get_pd_length(const iolink_dll_main_t* ctx, uint8_t* pd_in_len, uint8_t* pd_out_len)
+void iolink_dll_get_pd_length(const iolink_dll_main_t* ctx, uint8_t* IOLINK_NULLABLE pd_in_len,
+                              uint8_t* IOLINK_NULLABLE pd_out_len)
 {
     if (ctx == NULL) return;
     if (pd_in_len) *pd_in_len = ctx->pd_in_len_current;

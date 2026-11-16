@@ -547,7 +547,8 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
     }
 }
 
-void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_out, uint8_t od_len)
+void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* IOLINK_NULLABLE od_out,
+                         uint8_t od_len)
 {
     if ((ctx == NULL) || (ctx->buffer == NULL)) {
         return;
@@ -755,8 +756,8 @@ int iolink_isdu_get_response_byte(iolink_isdu_ctx_t* ctx, uint8_t* byte)
     return 1;
 }
 
-uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* busy, uint8_t* dst,
-                                      size_t dst_size)
+uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* IOLINK_NULLABLE busy,
+                                      uint8_t* dst, size_t dst_size)
 {
     if (busy != NULL) {
         *busy = false;

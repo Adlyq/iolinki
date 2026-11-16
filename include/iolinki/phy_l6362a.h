@@ -40,6 +40,8 @@ typedef struct
     int error;
     bool initialized, enabled, cq;
 } iolink_l6362a_ctx_t;
+/* 初始化：把 vtable 的 `self` 绑定到这个 ctx，回调里的 `self` 因此恒为该值，
+   不会是 NULL（传 NULL 属调用方错误）。 */
 int iolink_phy_l6362a_init(iolink_l6362a_ctx_t*, const iolink_l6362a_io_t*);
 const iolink_phy_api_t* IOLINK_NULLABLE iolink_phy_l6362a_get(iolink_l6362a_ctx_t*);
 /* 1=过载有效；0=无故障；-1=不可用。不推断短路/热故障原因。 */

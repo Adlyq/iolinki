@@ -244,7 +244,8 @@ static const iolink_dll_sm_cell_t g_dll_sm[IOLINK_DLL_STATE_COUNT][DLL_EV_COUNT]
 #undef DLL_SM_ROW
 };
 
-const iolink_dll_sm_cell_t* iolink_dll_sm_cell(iolink_dll_state_t state, iolink_dll_event_t event)
+const iolink_dll_sm_cell_t* IOLINK_NULLABLE iolink_dll_sm_cell(iolink_dll_state_t state,
+                                                               iolink_dll_event_t event)
 {
     if (((uint32_t) state >= (uint32_t) IOLINK_DLL_STATE_COUNT) ||
         ((uint32_t) event >= (uint32_t) DLL_EV_COUNT)) {

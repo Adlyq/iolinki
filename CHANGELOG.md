@@ -32,8 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `iolink_phy_l6362a_get()`/`iolink_phy_tiol112_get()` return `IOLINK_NULLABLE`
   (both implementations return NULL for an uninitialised driver), their
   `read_ol`/`read_diag`/`read_nfault` board callbacks are optional, and
-  `iolink_device_info_t::product_uri` is nullable because index 0x001B is
-  Profile-dependent and NULL is answered with `IDX_NOT_AVAIL`.
+  `iolink_device_info_t::product_uri` (0x001B) and `application_tag` (0x0018)
+  are nullable: both are answered with an empty value when absent
+  (`IDX_NOT_AVAIL` for the URI, an empty tag that Data Storage can later
+  write).
 - Lookup functions keep "NULL means not in the table" in the return type:
   `iolink_od_at()`, `iolink_diag_desc()`, `iolink_diag_registry_at()`,
   `iolink_diag_src_desc()`, `iolink_dll_sm_cell()`, `iolink_ring_peek()`,
