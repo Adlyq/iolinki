@@ -329,7 +329,7 @@ static uint8_t diag_status_priority(uint8_t status)
     }
 }
 
-uint8_t iolink_diag_device_status(iolink_events_ctx_t* events)
+uint8_t iolink_diag_device_status(iolink_events_ctx_t* IOLINK_NULLABLE events)
 {
     if (events == NULL) {
         return 0U;

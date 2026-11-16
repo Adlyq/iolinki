@@ -124,7 +124,10 @@ static void test_isdu_device_status_without_event_registry(void** state)
     assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 1);
     assert_int_equal(buf[0], IOLINK_DEVICE_STATUS_OK);
 
-    /* 绑定了 DLL 但没有事件主机时同样如此：DeviceStatus 只认注册表。 */
+    /* 绑定了 DLL 但没有事件主机时同样如此：DeviceStatus 只认注册表，
+       不会静默回落到 DLL 的共享事件表。 */
+    iolink_events_init(&dll_ctx.shared.events);
+    iolink_event_trigger(&dll_ctx.shared.events, IOLINK_EVENT_COMM_CRC, IOLINK_EVENT_TYPE_ERROR);
     iolink_isdu_init(&ctx);
     iolink_isdu_bind_workspace(&ctx, &ws);
     ctx.dll_ctx = &dll_ctx;

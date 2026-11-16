@@ -68,16 +68,18 @@ implementation-level buffer ownership stays in `docs/CODE_FLOW.md` (section
   application table", an output the caller may skip, or a return value whose
   NULL means "not found". A function may still guard `if (p == NULL) return
   err;` — that is a fallback for a caller bug, not a contract, so the parameter
-  stays non-null. The test is whether a supported caller legitimately produces
-  NULL: if it does, the parameter is `IOLINK_NULLABLE`, the guard implements the
-  declared absence, and the header says what NULL means (an unbound diagnosis
-  registry for `iolink_diag_device_status()`); if only a buggy caller can, the
-  parameter stays non-null and the guard is only a fallback.
-  `IOLINK_NONNULL` is only written for nested pointer types
+  stays non-null. `IOLINK_NONNULL` is only written for nested pointer types
   (arrays of pointers), which the pragma does not infer.
   A pointer the callee *reads* stays non-null even when the paired length can
-  be 0 — the empty case does not turn an input into an optional argument. An
-  output the caller may skip is `IOLINK_NULLABLE` and names the precondition
+  be 0 — the empty case does not turn an input into an optional argument. The
+  exception is a NULL that *is* a state the interface defines rather than a
+  value the caller forgot to fill in: an unbound diagnosis registry means "no
+  registry" and answers DeviceStatus 0, and a standalone ISDU engine
+  legitimately has none, so `iolink_diag_device_status()` takes
+  `IOLINK_NULLABLE` and its internal guard implements the declared state. The
+  header then says what NULL means, and a test passes the literal NULL so that
+  dropping the annotation fails to compile.
+  An output the caller may skip is `IOLINK_NULLABLE` and names the precondition
   that makes skipping useful (`iolink_isdu_od_read(od_out)` with `od_len == 0`,
   `iolink_ds_serialize(out = NULL)` = measure only). The one type
   that is always `IOLINK_NULLABLE` is the application context

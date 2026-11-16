@@ -546,7 +546,7 @@ static void test_api_guards(void** state)
     iolink_diag_raise_code(TEST_NULL(iolink_events_ctx_t*), 0x1000U);
     iolink_diag_clear_code(TEST_NULL(iolink_events_ctx_t*), 0x1000U);
 
-    assert_int_equal(iolink_diag_device_status(TEST_NULL(iolink_events_ctx_t*)), 0U);
+    assert_int_equal(iolink_diag_device_status(NULL), 0U);
     iolink_diag_dds_entry_t entry;
     assert_int_equal(iolink_diag_dds_snapshot(TEST_NULL(iolink_events_ctx_t*), &entry, 1U), 0U);
     assert_int_equal(iolink_diag_dds_snapshot(&events, &entry, 0U), 0U);
