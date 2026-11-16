@@ -110,8 +110,8 @@ typedef struct
 /**
  * @name 跨 TU 的 DLL 声明
  *
- * dll.c 提供 ISR 使用的状态/时序辅助函数，dll_isr.c
- * 提供 dll_send() 使用的暂存 TX 入口。这些符号是库私有的
+ * 主上下文翻译单元提供状态/时序辅助函数与 dll_send()，
+ * dll_isr.c 提供 dll_send() 使用的暂存 TX 入口。这些符号是库私有的
  * （不安装），并有意保留 dll_ 前缀；它们
  * 不属于公共 iolink_ API。关于主/ISR
  * 上下文约定，参见 docs/CODE_FLOW.md。

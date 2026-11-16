@@ -23,7 +23,7 @@
  *
  * 从数据中断运行：请求成帧、应答计划执行、ISDU
  * 段索引以及分阶段 TX 泵。主泵与 M-sequence 内容
- * 分发位于 dll.c；应用回调绝不能在此运行。
+ * 分发位于 dll_frame.c / dll_sm.c；应用回调绝不能在此运行。
  *
  * 本文件命名约定：dll_isr_* 仅可在 ISR 上下文中调用；
  * 普通 dll_* 辅助函数与主泵共享（上下文约定表见
@@ -55,7 +55,7 @@
  *  1. ISDU 写：dll_isr_consume_isdu_write 直接调用
  *     iolink_isdu_od_write（按 FlowCTRL 位置去重累计），并置
  *     isr_isdu_invalidated；CHKPDU/解析/执行由主泵完成。
- *  2. 应答计划：dll_isr_plan_lookup 在 dll.c 发布的计划表中查找
+ *  2. 应答计划：dll_isr_plan_lookup 在 dll_reply.c 发布的计划表中查找
  *     命中项（seqlock 读者）；dll_isr_plan_execute 按计划执行
  *     动作 -> 取源 -> 追加 CKS -> 喂字节。
  *  3. 合法帧计划未命中：不应答、不解释内容，关闭 t_A 看门狗并直接
@@ -462,7 +462,7 @@ static bool dll_isr_start_reply_byte(iolink_dll_main_t* ctx, uint8_t* base, uint
  * ISR 不再解读 M-sequence 内容：主泵把"哪种请求、用哪段字节、多长、
  * 是否附带 PD 尾部"编译成计划表并原子发布；这里只做 查计划 ->
  * 取源字节 -> 追加 CKS -> 喂字节。t_A 的时序语义（何时开始应答、
- * 回多少字节）留在本文件，内容语义只在 dll.c。
+ * 回多少字节）留在本文件，内容语义只在 dll_frame.c。
  * ------------------------------------------------------------------------- */
 
 /** @brief 状态到计划切片的映射（FALLBACK 没有计划）。 */

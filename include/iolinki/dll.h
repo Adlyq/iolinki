@@ -229,7 +229,7 @@ typedef struct
  * @brief DLL 主上下文状态（含共享区）。
  *
  * 完整定义见 dll_main.h。主上下文只包含本类型；数据 ISR 的
- * 独占字段在 @ref iolink_dll_isr_t 中，dll.c 看不到它们。
+ * 独占字段在 @ref iolink_dll_isr_t 中，主上下文翻译单元看不到它们。
  */
 typedef struct iolink_dll_main iolink_dll_main_t;
 
