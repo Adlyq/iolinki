@@ -5,9 +5,9 @@ static reference_device_t app;
 static iolink_tiol112_ctx_t tiol112;
 volatile int board_phy_fault;
 
-static uint64_t board_time_us_callback(void* user)
+static uint64_t board_time_us_callback(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return board_time_us();
 }
 

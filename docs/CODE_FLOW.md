@@ -1007,7 +1007,7 @@ flowchart LR
 上下文尺寸契约（默认缓冲、64 位主机，由 `tests/test_ctx_sizes.c` 断言）：
 `iolink_device_ctx_t` 4920 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4936 B），内嵌
 `iolink_dll_ctx_t` 4728/4744 B、`iolink_isdu_ctx_t` 1352 B、`iolink_events_ctx_t` 504 B、
-`iolink_ds_ctx_t` 360 B；`iolink_workspace_t` 1289 B。
+`iolink_ds_ctx_t` 368 B；`iolink_workspace_t` 1289 B。
 
 并发边界：
 
@@ -1037,7 +1037,7 @@ flowchart LR
 | `iolink_diag_service()`、`iolink_diag_set_level()`、`iolink_diag_device_status()`、`iolink_diag_dds_snapshot()` | 主上下文 | 条件表与派生视图只在主上下文读写 |
 | `dll_send()` | 主上下文 | 主泵暂存应答，ISR 负责发送 |
 
-ISR 还允许调用以下只读/时序 helper：`iolink_dll_expected_req_len()`、`iolink_checksum6_from_acc()`、`iolink_isdu_direct_param_page1_octet()`、已绑定的时间源（`iolink_device_config_t::time_us` 回调）、`iolink_events_flag()`、`iolink_events_memory_read()`、`iolink_ring_claim/publish`。
+ISR 还允许调用以下只读/时序 helper：`iolink_dll_expected_req_len()`、`iolink_checksum6_from_acc()`、`iolink_isdu_direct_param_page1_octet()`、已绑定的时间源（`iolink_device_app_t::time_us` 回调）、`iolink_events_flag()`、`iolink_events_memory_read()`、`iolink_ring_claim/publish`。
 
 禁止在 ISR 分区调用：`iolink_isdu_process()`、事件写路径（`iolink_event_trigger()`、`iolink_events_process()`、`iolink_event_clear()`）、诊断服务/派生（`iolink_diag_service()` 等）、`iolink_dll_flush_state_callbacks()`、应用回调（`state_cb`、`od.read/write` 等）。
 
@@ -1156,7 +1156,7 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 集成注意（按当前代码实际调用点）：
 
 - 1 s idle 监督是截止时间表的 `IOLINK_TIMER_IDLE` 表项（`dll_timer_sync_idle()` / `dll_timer_expire_idle()`），比较阈值固定 1000 ms，不提供编译期开关。
-- `iolink_device_config_t::time_us` 是必需项，初始化时绑定到 `shared.time_us` 与事件引擎；NULL 会被 `iolink_device_init()` 拒绝。主循环、ISR、事件与诊断窗口都用它；直接使用 `iolink_dll_*` 时需自行绑定 `ctx->shared.time_us`。
+- `iolink_device_app_t::time_us` 是必需项，初始化时绑定到 `shared.time_us` 与事件引擎；NULL 会被 `iolink_device_init()` 拒绝。主循环、ISR、事件与诊断窗口都用它；直接使用 `iolink_dll_*` 时需自行绑定 `ctx->shared.time_us`。
 - `phy->set_cq_line` 当前没有栈内调用点（PHY 自己管理 SIO 线状态）。
 - `iolink_events_process()`、`iolink_ds_process()` 由 `iolink_device_process()` 在 ISDU 空闲时自动调度；`iolink_ds_check()` 需要应用自行调度（master 校验和来源应用自有）。
 - 本路径要求 `iolink_critical_enter/exit` 真实可用（初始化会校验），且 `ctx` 的主循环调用与 ISR 调用遵守文档约束。`IOLINK_CONCURRENCY=SINGLE` 档不需要临界区，初始化跳过校验且库不引用该符号；其余档位仍会校验。

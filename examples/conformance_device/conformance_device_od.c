@@ -223,12 +223,11 @@ static iolink_result_t conformance_od_write(iolink_app_t* self, const iolink_od_
     return iolink_result_error(IOLINK_RESULT_NOT_HANDLED);
 }
 
-void conformance_od_init(iolink_od_app_t* app, conformance_device_t* device)
+void conformance_od_init(iolink_od_app_t* app)
 {
-    if ((app == NULL) || (device == NULL)) {
+    if (app == NULL) {
         return;
     }
     app->entries = k_conformance_od;
     app->count = sizeof(k_conformance_od) / sizeof(k_conformance_od[0]);
-    (void) device;
 }

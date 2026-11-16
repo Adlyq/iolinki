@@ -390,7 +390,6 @@ static const iolink_od_entry_t g_od_entries[] = {
 static const iolink_od_app_t g_od = {
     .entries = g_od_entries,
     .count = sizeof(g_od_entries) / sizeof(g_od_entries[0]),
-    .user = NULL, /* 传给钩子和 HANDLER 后端 */
 };
 /* ... 在 iolink_device_config_t 中设置 .od = &g_od ... */
 ```
@@ -626,7 +625,7 @@ ISDU 附加错误码（`IOLINK_ISDU_ERROR_*`，例如 `IDX_NOTAVAIL` `0x11`、
 
 ## 平台抽象
 
-`iolink_device_config_t::time_us` 是 `iolink_device_init()` 的必需项（`NULL` 以
+`iolink_device_app_t::time_us` 是 `iolink_device_init()` 的必需项（`NULL` 以
 `IOLINK_DEVICE_INIT_ERR_TIME` 拒绝），协议栈用它完成全部 DLL、ISR 和事件计时。没有
 单独的平台时间 API；直接使用 DLL 的调用方必须在 `iolink_dll_init()` 之后自行绑定
 `ctx->shared.time_us`/`shared.time_self`（DLL 上下文分为主视图和 ISR 视图）。临界区

@@ -143,6 +143,30 @@ static void test_device_init_clears_stale_phy_error(void** state)
     assert_int_equal(iolink_device_get_phy_error(&ctx), 0);
 }
 
+static void test_device_binds_instance_context(void** state)
+{
+    (void) state;
+    static int sentinel;
+    static iolink_device_app_t app = {.time_us = iolink_test_time_us};
+    iolink_stack_config_t stack = {0};
+    iolink_test_device_t dev;
+
+    app.self = (iolink_app_t*) &sentinel;
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_test_device_init(&dev, &stack, &app), IOLINK_DEVICE_INIT_OK);
+
+    /* 设备层必须把同一个实例指针交给时钟、ISDU 与 DS 的 OD 钩子；
+       否则 OD HANDLER 会收到 NULL 并回 0x11。 */
+    assert_ptr_equal(test_dll_shared(&dev.ctx)->time_self, (iolink_app_t*) &sentinel);
+    assert_ptr_equal(test_dll_isdu(&dev.ctx)->od_self, (iolink_app_t*) &sentinel);
+    assert_ptr_equal(test_dll(&dev.ctx)->ds.self, (iolink_app_t*) &sentinel);
+#if IOLINK_FEATURE_EVENTS
+    assert_ptr_equal(test_dll_shared(&dev.ctx)->events.time_self, (iolink_app_t*) &sentinel);
+#endif
+}
+
 static void test_device_init_validates_config_not_context(void** state)
 {
     (void) state;
@@ -435,6 +459,7 @@ int main(void)
         cmocka_unit_test(test_device_init_maps_phy_error),
         cmocka_unit_test(test_device_init_clears_stale_phy_error),
         cmocka_unit_test(test_device_init_validates_config_not_context),
+        cmocka_unit_test(test_device_binds_instance_context),
         cmocka_unit_test(test_device_init_accepts_valid_config),
         cmocka_unit_test(test_device_pd_input_bounds),
         cmocka_unit_test(test_device_pd_valid_flag),

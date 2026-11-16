@@ -224,7 +224,7 @@ static void app_ds_flag_store(iolink_app_t* self, bool flag)
 static const iolink_device_config_t g_cfg = {
     /* ... */
     .ds_flag_persist = app_ds_flag_store,
-    .user = &g_app,
+    .app = &g_trait, /* trait 的 self 指向 g_app */
 };
 
 /* iolink_device_init() 之后 */
@@ -251,8 +251,7 @@ if (app_nvm_read(&g_app, APP_NVM_DS_FLAG, &pending, sizeof(pending)) && pending)
 ```c
 static iolink_workspace_t g_workspace;
 static iolink_od_app_t g_app_od = {.entries = k_app_entries,
-                                   .count = sizeof(k_app_entries) / sizeof(k_app_entries[0]),
-                                   .user = &g_app};
+                                   .count = sizeof(k_app_entries) / sizeof(k_app_entries[0])};
 ```
 
 `IOLINK_WORKSPACE_EMBEDDED=0` 的构建必须提供工作区，否则初始化返回

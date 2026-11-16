@@ -22,7 +22,7 @@ Measured on a 64-bit host with the default buffers in
 | `iolink_dll_ctx_t` | 4728 | DLL state, timers, reply-plan table (48×24 B, four state slices), frame mailbox; embeds ISDU, Events and DS |
 | `iolink_isdu_ctx_t` | 1352 | Transport state, buffer pointers, the DPP1 RAM image (16 B + seqlock) and the embedded ISDU scratch (1033 B) |
 | `iolink_events_ctx_t` | 504 | Event queue plus lifecycle records |
-| `iolink_ds_ctx_t` | 360 | DS state, buffer pointers, the OD set and the embedded download stage |
+| `iolink_ds_ctx_t` | 368 | DS state, buffer pointers, the OD set and the embedded download stage |
 | **PHY API** | 20-30 bytes | Function pointers (usually const/flash, but pointer storage in RAM) |
 
 `IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 16 bytes (two counter sets plus padding).
@@ -79,9 +79,9 @@ To move the scratch **out of the context entirely**, build with
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 4920 | **3608** |
-| `iolink_isdu_ctx_t` | 1352 | **304** |
-| `iolink_ds_ctx_t` | 360 | **104** |
+| `iolink_device_ctx_t` | 4920 | **3624** |
+| `iolink_isdu_ctx_t` | 1352 | **312** |
+| `iolink_ds_ctx_t` | 368 | **112** |
 | `iolink_workspace_t` (separate allocation) | — | 1289 |
 
 The trimmed build is the small-MCU path: place the 1289-byte workspace in
@@ -90,7 +90,7 @@ instead of carrying it inside the main context. One measured example (`IOLINK_IS
 
 | Component | Embedded | External workspace |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 3944 | **3608** |
+| `iolink_device_ctx_t` | 3960 | **3624** |
 | `iolink_workspace_t` | — | 329 |
 
 > **Lease rule (ISDU response).** There is exactly one framed-response buffer.

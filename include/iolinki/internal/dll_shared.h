@@ -49,7 +49,7 @@ typedef struct iolink_dll_shared
      * 主上下文与 ISR 都只读它（位掩码是自然对齐的单字加载）。 */
     iolink_caps_t caps;
 
-    /* 应用时钟，来自 iolink_device_config_t::time_us。DLL 与
+    /* 应用时钟，来自 iolink_device_app_t::time_us。DLL 与
      * 事件引擎的每个时间戳都使用它。数据 ISR 会读取它，因此
      * 该回调必须是单调的且 ISR 安全的。未绑定时钟的裸 DLL
      * 上下文读取到的时间为 0。 */

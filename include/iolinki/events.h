@@ -170,7 +170,7 @@ struct iolink_events_ctx
     /* 诊断注册表的 RAM 侧（ISR one-shot 脉冲、PULSE 窗口、边沿计数）。 */
     iolink_conditions_t diag;
 
-    /* 由设备层绑定的应用时钟（config::time_us）。独立使用事件引擎的
+    /* 由设备层绑定的应用时钟（app->time_us）。独立使用事件引擎的
      * 用户必须在 iolink_events_init() 之后设置它；缺失的时钟会被
      * 读取为时间 0。 */
     uint64_t (*time_us)(iolink_app_t* self);

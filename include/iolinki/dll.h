@@ -351,7 +351,7 @@ bool iolink_dll_timer_armed(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
  * @param isr ISR 独占状态（通常为 @c iolink_dll_ctx_t::isr）
  * @param phy 要绑定的 PHY 实现
  * @note 两个对象都会被清零，包括时钟。直接使用 DLL 的用户必须在此调用之后
- *       设置 @c ctx->shared.time_us / @c ctx->shared.time_self；
+ *       设置 @c ctx->shared.clock；
  *       iolink_device_init() 会从 iolink_device_config_t::time_us 绑定它们。
  */
 void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink_phy_api_t* phy);

@@ -286,12 +286,12 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     if ((ctx == NULL) || (config == NULL)) {
         return IOLINK_DEVICE_INIT_ERR_NULL;
     }
+    /* 早退路径（钩子缺失、工作区缺失、trait 缺失）同样返回其它码：
+     * 先清掉上一次尝试留下的驱动码，getter 的 0 才明确表示"PHY init 没失败"。 */
+    ctx->phy_error = 0;
     if (config->app == NULL) {
         return IOLINK_DEVICE_INIT_ERR_APP;
     }
-    /* 早退路径（钩子缺失、工作区缺失）同样返回 INIT_ERR_PHY 或其它码：
-     * 先清掉上一次尝试留下的驱动码，getter 的 0 才明确表示"PHY init 没失败"。 */
-    ctx->phy_error = 0;
 
 #if !IOLINK_WORKSPACE_EMBEDDED
     if (workspace == NULL) {

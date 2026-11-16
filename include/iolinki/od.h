@@ -129,7 +129,7 @@ typedef struct iolink_od_entry iolink_od_entry_t;
  * 区分元素的钩子应按 @ref iolink_od_entry_t::subindex 或
  * @ref iolink_od_entry_t::max_subindex 自行判定，而不能依赖请求值。
  *
- * @param self  应用上下文（`iolink_device_app_t::self`；标准表项为 NULL）。
+ * @param self  应用上下文（`iolink_device_app_t::self`）；标准表项没有钩子，不使用它。
  * @param entry 被校验的表项。
  * @param data  待写入的线上字节。
  * @param len   @p data 的字节数。
@@ -521,7 +521,8 @@ typedef struct
 typedef struct
 {
     const iolink_od_app_t* app; /**< 应用表与后端（可为 NULL）。 */
-    iolink_app_t* self;         /**< 传给钩子与 HANDLER 后端的应用上下文。 */
+    iolink_app_t* self;         /**< 传给钩子与 HANDLER 后端的应用上下文
+                                     （可为 NULL，钩子需自行处理）。 */
 } iolink_od_ctx_t;
 
 /**

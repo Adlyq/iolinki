@@ -86,7 +86,7 @@ typedef struct
 int conformance_device_init(conformance_device_t* app, const conformance_profile_t* profile,
                             const iolink_phy_api_t* phy, const char* nvm_path);
 /** @brief 把示例设备的应用参数表与后端绑定到 @p app。 */
-void conformance_od_init(iolink_od_app_t* app, conformance_device_t* device);
+void conformance_od_init(iolink_od_app_t* app);
 int conformance_device_power_cycle(conformance_device_t* app, const iolink_phy_api_t* phy,
                                    const char* nvm_path);
 void conformance_device_close(const conformance_device_t* app);

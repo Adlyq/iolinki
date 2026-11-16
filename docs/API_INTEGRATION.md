@@ -226,7 +226,7 @@ void data_irq_handler(void)
 
 | 字段 | 生命周期 / 契约 |
 | --- | --- |
-| `phy` | 初始化时复制。`phy.user` 只传给 PHY 回调；与 `user` 相互独立。 |
+| `phy` | 初始化时复制。`phy.user` 只传给 PHY 回调，与 `app->self` 相互独立。 |
 | `stack` | 复制到上下文中。 |
 | `app` | 应用 trait（`iolink_device_app_t`）：实例指针 + 时钟/日志/生命周期回调的唯一来源。保留指针，必须比上下文存活更久。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_APP`。 |
 | `device_info` | 身份来源；其中的 `application_tag` 只是身份字段，标签索引由 OD 表提供。参见 8.1 节的身份限制。 |
@@ -900,7 +900,7 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 - `include/iolinki/workspace.h`：可选的 ISDU/DS 传输 scratch 工作区，见 §4.1。
 - `include/iolinki/diag.h`：诊断来源注册表与 DeviceStatus/DDS 派生，见 §5.2。
 - `include/iolinki/port.h`：临界区与屏障原语。时间源通过
-  `iolink_device_config_t::time_us` 提供；持久化由应用通过 OD 钩子完成。
+  `iolink_device_app_t::time_us` 提供；持久化由应用通过 OD 钩子完成。
 
 ## 12. 参考资料
 

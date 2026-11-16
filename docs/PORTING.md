@@ -448,7 +448,12 @@ static void port_log(iolink_app_t* self, iolink_log_level_t level, const char* f
     va_end(args);
 }
 
-config.app->log_write = port_log; /* trait 里的回调；trait 本身由应用构造 */
+static const iolink_device_app_t app = {
+    .self = (iolink_app_t*) &g_app_state,
+    .time_us = app_time_us,
+    .log_write = port_log,
+};
+config.app = &app;
 config.log_level = IOLINK_LOG_LEVEL_INFO; /* SILENT disables */
 ```
 
