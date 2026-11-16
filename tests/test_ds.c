@@ -485,6 +485,27 @@ static void test_ds_download_end_without_staging_buffer(void** state)
     assert_int_equal(iolink_ds_size(&ds), 7U); /* 上报长度不被这次失败污染 */
 }
 
+/* 暂存被拒（`download_invalid`）与"没有暂存缓冲"是两个分支，但共用同一条
+ * 长度规则：只有绑定了缓冲时 image_len 才是暂存长度，没有缓冲时它是
+ * `DataStorage_Size`，失败路径不能把它清零。 */
+static void test_ds_download_end_invalid_without_staging_buffer(void** state)
+{
+    (void) state;
+    iolink_ds_ctx_t ds;
+
+    iolink_ds_init(&ds);
+    iolink_ds_bind_sources(&ds, test_params_od(test_env_params(&g_test_env)), NULL);
+    ds.state = IOLINK_DS_STATE_DOWNLOADING;
+    ds.image = NULL;
+    ds.image_len = 7U;
+    ds.download_invalid = true;
+
+    assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -4);
+    assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
+    assert_false(ds.download_invalid);
+    assert_int_equal(iolink_ds_size(&ds), 7U);
+}
+
 /* 表项的 block_len 限制存入镜像的值。 */
 static void test_ds_entry_block_len_bounds_value(void** state)
 {
@@ -1082,6 +1103,7 @@ int main(void)
         cmocka_unit_test(test_ds_entry_block_len_bounds_value),
         cmocka_unit_test(test_ds_download_end_error_classification),
         cmocka_unit_test(test_ds_download_end_without_staging_buffer),
+        cmocka_unit_test(test_ds_download_end_invalid_without_staging_buffer),
         cmocka_unit_test(test_ds_download_recovery),
         cmocka_unit_test(test_ds_apply_precheck_rejects_before_write),
         cmocka_unit_test(test_ds_legacy_sub0_is_runtime_compat),

@@ -635,7 +635,11 @@ static int ds_cmd_download_end(iolink_ds_ctx_t* ctx)
     int rc = 0;
     if (ctx->download_invalid) {
         ctx->download_invalid = false;
-        ctx->image_len = 0U;
+        /* 只有绑定了缓冲时 image_len 才是暂存长度；没有缓冲时它来自
+           measure-only 序列化，是上报的参数集大小，必须保留。 */
+        if (ctx->image != NULL) {
+            ctx->image_len = 0U;
+        }
         ctx->state = IOLINK_DS_STATE_IDLE;
         IOLINK_LOG_WARN(ctx->log, "ds download rejected: inconsistent image");
         return -4; /* PAR_SETINCONSIST (0x8041) */
