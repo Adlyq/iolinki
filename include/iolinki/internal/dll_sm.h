@@ -175,6 +175,42 @@ typedef struct
 /* clang-format on */
 
 /**
+ * @brief 帧事件之外的迁移（初始化、唤醒、定时器、管理命令）。
+ *
+ * 这些迁移由 `dll.c` 里的显式调用触发，不在 `g_dll_sm` 网格内；本表只是
+ * 它们的声明，`tools/gen_dll_statemachine.py` 用它生成
+ * `docs/CODE_FLOW.md` 的迁移表并在 `--check` 时校验，避免文档与代码漂移。
+ * C 侧不展开该宏。
+ *
+ * 参数：迁移、触发条件、代码位置。
+ */
+/* clang-format off */
+#define DLL_SM_ADMIN_ROWS(X)                                                                     \
+    X("初始化 → STARTUP", "`iolink_dll_init()`", "`dll_set_state(STARTUP)`")                     \
+    X("STARTUP → AWAITING_COMM", "SIO + `detect_wakeup()>0`", "`dll_handle_sio_wakeup()`")       \
+    X("STARTUP/AWAITING → PREOPERATE", "首个有效帧",                                              \
+      "`g_dll_sm` → `dll_sm_*`（表项的 `enter_state`）")                                          \
+    X("PREOPERATE → ESTAB_COM", "MC=0x0F transition command",                                    \
+      "`dll_sm_transition()` → `dll_handle_preoperate()`")                                       \
+    X("PREOPERATE → ESTAB_COM", "0x99 DeviceOperate",                                            \
+      "`dll_sm_master_command()` → `dll_apply_master_command()`")                                \
+    X("PREOPERATE → OPERATE", "0x98 PDOperate", "`dll_apply_master_command()`")                  \
+    X("ESTAB_COM → OPERATE", "首个周期帧（Type-1/2 或任一 Type-0 周期帧）",                       \
+      "`g_dll_sm` 表项的 `enter_state`")                                                          \
+    X("→ PREOPERATE", "0x9A DevicePreoperate", "`dll_apply_master_command()`")                   \
+    X("→ FALLBACK", "0x5A Fallback（需唤醒能力）",                                                \
+      "`dll_handle_fallback_command()` / `dll_isr_plan_action()`")                               \
+    X("FALLBACK/OPERATE/ESTAB/PREOP → STARTUP", "T_FBD 到期，切 COM1 + SIO",                     \
+      "`dll_timer_expire_fbd()`")                                                                \
+    X("AWAITING/STARTUP → STARTUP", "T_DSIO 到期，切 COM1 + SIO",                                 \
+      "`dll_timer_expire_dsio()`")                                                               \
+    X("任意 → STARTUP", "0x97 DeviceStartup 或非 OPERATE/ESTAB 的类型错误",                      \
+      "`dll_protocol_error_to_startup()` / `dll_handle_frame_error()`")                          \
+    X("OPERATE → COMM_DISABLED", "SystemCommand 0x83 Back-to-box，服务 ≥3 帧后",                 \
+      "`dll_frame_drop_if_stopped()`")
+/* clang-format on */
+
+/**
  * @brief 查询表项（测试/生成物使用；运行时由 dll.c 直接访问常量表）。
  * @return 命中的表项，越界时返回 NULL。
  */

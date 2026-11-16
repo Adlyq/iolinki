@@ -8,9 +8,10 @@ source of truth for the state x event table. This script parses those rows
   * ``build/statemachine/dll_state_machine.mmd``  -- mermaid state diagram
   * ``build/statemachine/dll_state_machine.csv``  -- full state x event grid
   * ``tests/test_dll_statemachine_gen.c``         -- generated coverage test
+  * ``docs/CODE_FLOW.md``                          -- non-frame transitions table
 
 ``--check`` validates the grid (no holes, no duplicates) and verifies that the
-committed generated test is up to date. It is the machine gate for the table
+committed generated test and the documentation table are up to date. It is the machine gate for the table
 shape; runtime behaviour is covered by tests/test_dll_statemachine.c and the
 differential gate.
 
@@ -31,6 +32,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = ROOT / "include" / "iolinki" / "internal" / "dll_sm.h"
 GENERATED_TEST = ROOT / "tests" / "test_dll_statemachine_gen.c"
+DOC = ROOT / "docs" / "CODE_FLOW.md"
+ADMIN_BEGIN = "<!-- BEGIN GENERATED: admin transitions (tools/gen_dll_statemachine.py) -->"
+ADMIN_END = "<!-- END GENERATED -->"
+
 
 EXPECTED_STATES = [
     "IOLINK_DLL_STATE_STARTUP",
@@ -62,6 +67,9 @@ ROW_RE = re.compile(
 )
 
 
+ADMIN_ROW_RE = re.compile(r'X\(\s*"([^"]*)"\s*,\s*"([^"]*)"\s*,\s*"([^"]*)"\s*\)')
+
+
 class Row:
     def __init__(self, state: str, event: str, action: str, enter: str, clause: str):
         self.state = state
@@ -77,6 +85,44 @@ def parse_rows() -> list[Row]:
     text = text.replace("\\\n", " ")
     rows = [Row(*m.groups()) for m in ROW_RE.finditer(text)]
     return rows
+
+
+def parse_admin_rows() -> list[tuple[str, str, str]]:
+    """Rows of DLL_SM_ADMIN_ROWS: transitions the frame grid cannot express."""
+    text = HEADER.read_text(encoding="utf-8").replace("\\\n", " ")
+    start = text.index("#define DLL_SM_ADMIN_ROWS")
+    end = text.index("/* clang-format on */", start)
+    return [tuple(m.groups()) for m in ADMIN_ROW_RE.finditer(text[start:end])]
+
+
+def render_admin_table(rows: list[tuple[str, str, str]]) -> str:
+    lines = [ADMIN_BEGIN, "| 迁移 | 触发 | 代码 |", "| :--- | :--- | :--- |"]
+    lines += [f"| {a} | {b} | {c} |" for a, b, c in rows]
+    lines.append(ADMIN_END)
+    return "\n".join(lines) + "\n"
+
+
+def sync_admin_doc(rows: list[tuple[str, str, str]], check_only: bool) -> bool:
+    """Write or verify the generated table block in docs/CODE_FLOW.md."""
+    expected = render_admin_table(rows)
+    text = DOC.read_text(encoding="utf-8")
+    begin = text.find(ADMIN_BEGIN)
+    end = text.find(ADMIN_END)
+    if begin < 0 or end < 0:
+        print(f"statemachine: {DOC} has no generated admin block", file=sys.stderr)
+        return False
+    end += len(ADMIN_END) + 1
+    if check_only:
+        if text[begin:end] != expected:
+            print(
+                "statemachine: docs/CODE_FLOW.md admin table is stale; "
+                "rerun tools/gen_dll_statemachine.py",
+                file=sys.stderr,
+            )
+            return False
+        return True
+    DOC.write_text(text[:begin] + expected + text[end:], encoding="utf-8")
+    return True
 
 
 def validate(rows: list[Row]) -> list[str]:
@@ -233,6 +279,10 @@ def main() -> int:
     args = parser.parse_args()
 
     rows = parse_rows()
+    admin_rows = parse_admin_rows()
+    if not admin_rows:
+        print("statemachine: DLL_SM_ADMIN_ROWS has no rows", file=sys.stderr)
+        return 1
     errors = validate(rows)
     if errors:
         for error in errors:
@@ -251,14 +301,22 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
+        if not sync_admin_doc(admin_rows, check_only=True):
+            return 1
         print(
             f"statemachine: OK ({len(rows)} cells = "
-            f"{len(EXPECTED_STATES)} states x {len(EXPECTED_EVENTS)} events)"
+            f"{len(EXPECTED_STATES)} states x {len(EXPECTED_EVENTS)} events, "
+            f"{len(admin_rows)} admin transitions)"
         )
         return 0
 
     write_artifacts(rows, args.out, update_test=True)
-    print(f"statemachine: wrote {len(rows)} cells to {args.out} and {GENERATED_TEST}")
+    if not sync_admin_doc(admin_rows, check_only=False):
+        return 1
+    print(
+        f"statemachine: wrote {len(rows)} cells to {args.out}, {GENERATED_TEST} "
+        f"and {len(admin_rows)} admin transitions to {DOC}"
+    )
     return 0
 
 

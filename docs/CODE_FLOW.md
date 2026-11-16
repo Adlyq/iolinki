@@ -857,6 +857,7 @@ stateDiagram-v2
     COMM_DISABLED --> COMM_DISABLED: 仅下次上电恢复
 ```
 
+<!-- BEGIN GENERATED: admin transitions (tools/gen_dll_statemachine.py) -->
 | 迁移 | 触发 | 代码 |
 | :--- | :--- | :--- |
 | 初始化 → STARTUP | `iolink_dll_init()` | `dll_set_state(STARTUP)` |
@@ -872,10 +873,11 @@ stateDiagram-v2
 | AWAITING/STARTUP → STARTUP | T_DSIO 到期，切 COM1 + SIO | `dll_timer_expire_dsio()` |
 | 任意 → STARTUP | 0x97 DeviceStartup 或非 OPERATE/ESTAB 的类型错误 | `dll_protocol_error_to_startup()` / `dll_handle_frame_error()` |
 | OPERATE → COMM_DISABLED | SystemCommand 0x83 Back-to-box，服务 ≥3 帧后 | `dll_frame_drop_if_stopped()` |
+<!-- END GENERATED -->
 
 补充：
 
-- 迁移由 `include/iolinki/internal/dll_sm.h` 的 `DLL_SM_ROWS` 描述：7 个状态 × 8 类事件的每个格子给出“动作函数 + 进入状态”，`src/dll.c` 用指定初始化器展开成 `g_dll_sm[state][event]`。`tools/gen_dll_statemachine.py` 解析同一份宏行生成 mermaid/CSV/覆盖测试，新增迁移只改这一处。
+- 迁移由 `include/iolinki/internal/dll_sm.h` 描述：帧事件用 `DLL_SM_ROWS`（7 个状态 × 8 类事件，`src/dll.c` 展开成 `g_dll_sm[state][event]`），定时器/管理类迁移（上表）用 `DLL_SM_ADMIN_ROWS`。`tools/gen_dll_statemachine.py` 解析这两份宏，生成 mermaid/CSV/覆盖测试与本节表格；`--check`（ctest `dll_statemachine_gen_check`）会拒绝过期的手写内容，因此新增/移动迁移只改宏。
 - 首个有效帧把 STARTUP/AWAITING_COMM 迁到 PREOPERATE 后，如果该帧本身就是 transition command（`MC=0x0F`），同一次 `dll_process_complete_frame()` 会继续调用 `dll_handle_preoperate()`，因此可以一帧内连续进入 ESTAB_COM。
 - `master_lost` 只在 OPERATE 且 `master_lost_cycles != 0` 时计算，超过阈值只置提示位并触发 `on_master_lost`，**不改变状态和波特率**（`dll_timer_expire_master_lost()`，`iolink_device_master_lost()`）。
 - CRC 错误不会单独导致 STARTUP；类型非法在 OPERATE/ESTAB 只计数并丢帧，避免链路抖动。
