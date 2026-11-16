@@ -79,7 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `IOLINK_WORKSPACE_EMBEDDED=0` and no workspace bound, the commit path handed a
   NULL buffer to `iolink_ds_apply_image()` and answered PAR_SETINVALID
   ("malformed image") for a state that simply had nothing staged. It now fails
-  explicitly with PAR_SETINCONSIST (0x8041) and clears the length.
+  explicitly with PAR_SETINCONSIST (0x8041) and leaves the reported size alone.
 
 ### Added (static analyzer gate)
 - `tools/gates.sh analyzer` runs `clang --analyze` over `src/` and fails on any

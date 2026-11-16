@@ -467,7 +467,7 @@ static void test_ds_download_end_error_classification(void** state)
  * DataStorageIndex 上报的参数集大小，所以 "len > 0" 不能证明存在暂存缓冲。
  * 外部工作区构建（IOLINK_WORKSPACE_EMBEDDED=0）且未绑定时就是这个状态：
  * DownloadEnd 必须显式失败，而不是把 NULL 交给 apply_image() 并报告成
- * "镜像格式错误"。 */
+ * "镜像格式错误"，也不能顺手把上报长度清零。 */
 static void test_ds_download_end_without_staging_buffer(void** state)
 {
     (void) state;
@@ -481,7 +481,8 @@ static void test_ds_download_end_without_staging_buffer(void** state)
 
     assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_END, 0U), -4);
     assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
-    assert_int_equal(ds.image_len, 0U);
+    assert_false(ds.download_invalid);         /* 走的是新分支，不是"暂存被拒" */
+    assert_int_equal(iolink_ds_size(&ds), 7U); /* 上报长度不被这次失败污染 */
 }
 
 /* 表项的 block_len 限制存入镜像的值。 */

@@ -163,7 +163,10 @@ NVM。`iolink_ds_serialize()` 把内容流式写入调用方缓冲（整包读�
 
 1. 结构校验：`DownloadEnd`（或 `ParamDownloadStore`）先遍历整份镜像，截断或长度
    字段越界时以 `PAR_SETINVALID`（0x40）拒绝，不写入任何参数；此前被暂存拒绝过的
-   下载以 `PAR_SETINCONSIST`（0x41）结束。
+   下载以 `PAR_SETINCONSIST`（0x41）结束。`image_len` 在 measure-only 序列化
+   （`out == NULL`）时也会被写入，那时它是上报的 `Data_Storage_Size` 而不是暂存
+   长度，所以"长度非零"不蕴含存在暂存缓冲；没有缓冲时以 `PAR_SETINCONSIST`
+   （0x41）结束，并且不改动上报长度。
 2. 无副作用预校验：对每条已知记录调用 `iolink_od_check_value()`（线长、范围、
    `validate` 钩子）。任一记录被拒绝时以 `PAR_SETINCONSIST`（0x41）结束，仍不写入
    任何参数。
