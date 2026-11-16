@@ -23,9 +23,9 @@ static void reset_cb(iolink_reset_type_t type)
     reset_calls++;
 }
 
-static void timer_b_start(void* user)
+static void timer_b_start(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
 }
 
 static void test_main_window_gated_by_tick(void** state)

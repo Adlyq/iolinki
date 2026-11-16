@@ -373,7 +373,7 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
 
     ctx->baudrate = IOLINK_BAUDRATE_COM2;
     if (ctx->shared.phy->set_baudrate != NULL) {
-        ctx->shared.phy->set_baudrate(ctx->shared.phy->user, IOLINK_BAUDRATE_COM2);
+        ctx->shared.phy->set_baudrate(ctx->shared.phy->self, IOLINK_BAUDRATE_COM2);
     }
 
     DLL_EVENTS_INIT(&ctx->shared.events);
@@ -878,7 +878,7 @@ static void dll_process_body(iolink_dll_main_t* ctx)
     if ((ctx->shared.phy != NULL) && (ctx->shared.phy->tx_busy != NULL)) {
         IOLINK_CRITICAL_ENTER();
         if ((ctx->shared.pd_in_captured != 0xFFU) &&
-            (ctx->shared.phy->tx_busy(ctx->shared.phy->user) == 0U)) {
+            (ctx->shared.phy->tx_busy(ctx->shared.phy->self) == 0U)) {
             ctx->shared.pd_in_captured = 0xFFU;
         }
         IOLINK_CRITICAL_EXIT();

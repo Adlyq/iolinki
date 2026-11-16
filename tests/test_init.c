@@ -22,19 +22,19 @@
 #include "test_helpers.h"
 
 /* 本地 mock，避免与 CMocka 符号的链接问题 */
-static int local_mock_phy_init(void* user)
+static int local_mock_phy_init(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return (int) mock();
 }
-static void local_mock_phy_set_mode(void* user, iolink_phy_mode_t mode)
+static void local_mock_phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
 {
-    (void) user;
+    (void) self;
     (void) mode;
 }
-static void local_mock_phy_set_baudrate(void* user, iolink_baudrate_t baudrate)
+static void local_mock_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
 {
-    (void) user;
+    (void) self;
     (void) baudrate;
 }
 static const iolink_phy_api_t local_phy_mock = {.init = local_mock_phy_init,

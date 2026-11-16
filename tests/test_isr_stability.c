@@ -55,17 +55,17 @@ static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t le
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
-static const uint8_t* rx_frame(void* user, uint8_t* status, uint8_t* len)
+static const uint8_t* rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len)
 {
-    (void) user;
+    (void) self;
     *status = 0U;
     *len = 0U;
     return NULL; /* 测试直接向邮箱发布数据，PHY 不交付帧。 */
 }
 #else
-static int rx_octet(void* user, uint8_t* data, uint8_t* status)
+static int rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 {
-    (void) user;
+    (void) self;
     (void) data;
     (void) status;
     return 0; /* 测试直接向邮箱发布数据。 */
@@ -73,9 +73,9 @@ static int rx_octet(void* user, uint8_t* data, uint8_t* status)
 #endif
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-static int tx_frame(void* user, const uint8_t* data, size_t len)
+static int tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) data;
     tx_frames++;
     tx_octets += (unsigned) len;
@@ -84,18 +84,18 @@ static int tx_frame(void* user, const uint8_t* data, size_t len)
 }
 #else
 static uint8_t tx_active; /* 只在 BYTE 传输下有字节流式发送 */
-static int tx_octet(void* user, uint8_t data)
+static int tx_octet(iolink_app_t* self, uint8_t data)
 {
-    (void) user;
+    (void) self;
     (void) data;
     tx_active = 1U;
     tx_octets++;
     return 0;
 }
 
-static void tx_done(void* user)
+static void tx_done(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     if (tx_active != 0U) {
         tx_active = 0U;
         tx_frames++;
@@ -112,9 +112,9 @@ static unsigned tx_frame_count(void)
     return tx_frames;
 }
 
-static uint8_t int_active(void* user)
+static uint8_t int_active(iolink_app_t* self)
 {
-    const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) user;
+    const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
     return ((ctx != NULL) && (ctx->main.shared.isr_tx_active != 0U)) ? 1U : 0U;
 }
 
@@ -165,7 +165,7 @@ static int run_all(void)
 {
     iolink_dll_ctx_t ctx;
     const iolink_phy_api_t phy = {
-        .user = &ctx,
+        .self = (iolink_app_t*) &ctx,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
         .rx_frame = rx_frame,
 #else

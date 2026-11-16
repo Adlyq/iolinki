@@ -153,9 +153,9 @@ static void test_frame_full_rejects(void** state)
 static uint8_t g_publish_on_poll;
 static iolink_dll_ctx_t* g_poll_ctx;
 
-static uint8_t poll_faults_publish(void* user)
+static uint8_t poll_faults_publish(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     if (g_publish_on_poll != 0U) {
         g_publish_on_poll = 0U;
         assert_true(publish_frame(g_poll_ctx, 0x90U, 2U));
@@ -170,7 +170,7 @@ static void test_main_pass_cutpoint(void** state)
     (void) state;
     iolink_dll_ctx_t ctx;
     const iolink_phy_api_t phy = {
-        .user = NULL,
+        .self = NULL,
         .get_faults = poll_faults_publish,
     };
 

@@ -312,7 +312,7 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     ctx->config = config;
 
     if (config->phy.init != NULL) {
-        err = config->phy.init(config->phy.user);
+        err = config->phy.init(config->phy.self);
         if (err != 0) {
             iolink_log_sink_t sink;
             /* sink 尚未绑定到各子系统（PHY init 在绑定之前运行）。 */

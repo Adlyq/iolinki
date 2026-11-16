@@ -143,7 +143,7 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
          * 该钩子属于端口代码（可能进行 SPI 访问或获取锁）。
          * 其间自然产生的数据中断只会排空暂存
          * 应答，随后额外的服务请求便无事可做。 */
-        ctx->shared.phy->request_service(ctx->shared.phy->user);
+        ctx->shared.phy->request_service(ctx->shared.phy->self);
         return;
     }
 
@@ -718,7 +718,7 @@ void dll_handle_operate_type1_2(iolink_dll_main_t* ctx)
 static void dll_poll_phy_faults(iolink_dll_main_t* ctx)
 {
 #if IOLINK_FEATURE_EVENTS
-    const uint8_t faults = ctx->shared.phy->get_faults(ctx->shared.phy->user);
+    const uint8_t faults = ctx->shared.phy->get_faults(ctx->shared.phy->self);
 
     if (DLL_DIAG_SET_LEVEL(&ctx->shared.events, IOLINK_DIAG_SRC_PHY_UNDERVOLTAGE,
                            (faults & IOLINK_PHY_FAULT_UNDERVOLTAGE) != 0U)) {
@@ -777,7 +777,7 @@ bool dll_frame_drop_if_stopped(iolink_dll_main_t* ctx)
         ctx->back_to_box_pending = false;
         dll_set_state(ctx, IOLINK_DLL_STATE_COMM_DISABLED);
         if ((ctx->shared.phy != NULL) && (ctx->shared.phy->set_mode != NULL)) {
-            ctx->shared.phy->set_mode(ctx->shared.phy->user, IOLINK_PHY_MODE_INACTIVE);
+            ctx->shared.phy->set_mode(ctx->shared.phy->self, IOLINK_PHY_MODE_INACTIVE);
         }
         ctx->frame_index = 0U;
         return true;

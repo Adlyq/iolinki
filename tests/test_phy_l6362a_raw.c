@@ -121,7 +121,7 @@ static void test_api_and_hw_init(void** state)
     (void) state;
     boot(IOLINK_BAUDRATE_COM3);
 
-    assert_null(s_phy->user);
+    assert_null(s_phy->self);
     assert_non_null(s_phy->init);
     assert_non_null(s_phy->set_mode);
     assert_non_null(s_phy->set_baudrate);

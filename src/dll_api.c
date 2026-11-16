@@ -91,7 +91,7 @@ int iolink_dll_set_baudrate(iolink_dll_main_t* ctx, iolink_baudrate_t baudrate)
     }
     ctx->baudrate = baudrate;
     if (ctx->shared.phy->set_baudrate != NULL)
-        ctx->shared.phy->set_baudrate(ctx->shared.phy->user, baudrate);
+        ctx->shared.phy->set_baudrate(ctx->shared.phy->self, baudrate);
     if (changing) {
         /* UART 重配时 PHY 会中止进行中的应答；
          * 丢弃匹配的 ISR TX 状态，使其无法在下次请求时
@@ -149,7 +149,7 @@ int iolink_dll_set_sio_mode(iolink_dll_main_t* ctx)
 {
     if (ctx == NULL) return -1;
     if (ctx->shared.phy->set_mode != NULL)
-        ctx->shared.phy->set_mode(ctx->shared.phy->user, IOLINK_PHY_MODE_SIO);
+        ctx->shared.phy->set_mode(ctx->shared.phy->self, IOLINK_PHY_MODE_SIO);
     ctx->phy_mode = IOLINK_PHY_MODE_SIO;
     /* SIO 转换会中止 PHY 中任何进行中的应答；丢弃
      * 匹配的 ISR TX 状态，使陈旧的 active 索引不会泄漏到下一个
@@ -166,7 +166,7 @@ int iolink_dll_set_sdci_mode(iolink_dll_main_t* ctx)
 {
     if (ctx == NULL) return -1;
     if (ctx->shared.phy->set_mode != NULL)
-        ctx->shared.phy->set_mode(ctx->shared.phy->user, IOLINK_PHY_MODE_SDCI);
+        ctx->shared.phy->set_mode(ctx->shared.phy->self, IOLINK_PHY_MODE_SDCI);
     ctx->phy_mode = IOLINK_PHY_MODE_SDCI;
     return 0;
 }

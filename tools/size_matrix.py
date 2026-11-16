@@ -114,21 +114,21 @@ static uint64_t app_time_us(iolink_app_t* self)
     return 0U;
 }
 
-static int app_phy_init(void* user)
+static int app_phy_init(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return 0;
 }
 
-static void app_phy_set_mode(void* user, iolink_phy_mode_t mode)
+static void app_phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
 {
-    (void) user;
+    (void) self;
     (void) mode;
 }
 
-static void app_phy_set_baudrate(void* user, iolink_baudrate_t baudrate)
+static void app_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
 {
-    (void) user;
+    (void) self;
     (void) baudrate;
 }
 

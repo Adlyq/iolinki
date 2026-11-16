@@ -29,7 +29,7 @@ The PHY layer provides hardware abstraction for UART communication.
 
 **Location**: `include/iolinki/phy.h`
 
-**Interface**: copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `void* user` first. The transport hooks depend on the configured granularity: `rx_octet`/`tx_octet` in BYTE mode or `rx_frame`/`tx_frame` in FRAME mode, plus `tx_done` (TX BYTE only), `tx_busy` (TX FRAME, optional) and `int_active`. `detect_wakeup`, `set_cq_line`, `request_service`, `response_timer_start`/`response_timer_stop`, `stack_timer_start` and `get_faults` are optional and may be NULL. `init`, `set_mode`, and `set_baudrate` are required. `request_service()` is the key hook for the ISR TX path: without it a main-context reply cannot be handed to the ISR unless the direct-send fallback is compiled in.
+**Interface**: copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `iolink_app_t* self` first (the application instance; the library forwards it unchanged). The transport hooks depend on the configured granularity: `rx_octet`/`tx_octet` in BYTE mode or `rx_frame`/`tx_frame` in FRAME mode, plus `tx_done` (TX BYTE only), `tx_busy` (TX FRAME, optional) and `int_active`. `detect_wakeup`, `set_cq_line`, `request_service`, `response_timer_start`/`response_timer_stop`, `stack_timer_start` and `get_faults` are optional and may be NULL. `init`, `set_mode`, and `set_baudrate` are required. `request_service()` is the key hook for the ISR TX path: without it a main-context reply cannot be handed to the ISR unless the direct-send fallback is compiled in.
 
 In RX FRAME mode, `rx_frame()` must return only a complete PHY-delimited
 M-sequence. A two-octet header or another truncated prefix is not a frame and
@@ -44,10 +44,10 @@ as a substitute for checksum validation.
 2. Implement all required PHY functions
 3. Export PHY API structure
 
-**Example** (STM32 HAL, BYTE mode). `init`, `set_mode`, and `set_baudrate` are still required and must take `void* user` first. Do not invent transceiver register addresses.
+**Example** (STM32 HAL, BYTE mode). `init`, `set_mode`, and `set_baudrate` are still required and must take `iolink_app_t* self` first. Do not invent transceiver register addresses.
 
 ```c
-static int stm32_rx_octet(void* user, uint8_t* data, uint8_t* status)
+static int stm32_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 {
     UART_HandleTypeDef* uart = user;
     *status = 0U;
@@ -57,7 +57,7 @@ static int stm32_rx_octet(void* user, uint8_t* data, uint8_t* status)
     return 1;
 }
 
-static int stm32_tx_octet(void* user, uint8_t data)
+static int stm32_tx_octet(iolink_app_t* self, uint8_t data)
 {
     UART_HandleTypeDef* uart = user;
     if (HAL_UART_Transmit(uart, &data, 1, 10) != HAL_OK) {

@@ -251,7 +251,7 @@ static inline int dll_phy_detect_wakeup(iolink_dll_shared_t* ctx)
     if (!dll_phy_has_wakeup(ctx)) {
         return 0;
     }
-    return ctx->phy->detect_wakeup(ctx->phy->user);
+    return ctx->phy->detect_wakeup(ctx->phy->self);
 }
 
 #endif /* IOLINK_DLL_SHARED_H */

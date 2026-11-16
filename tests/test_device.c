@@ -106,9 +106,9 @@ static void test_device_init_rejects_invalid_config(void** state)
 
 static int g_phy_init_calls;
 
-static int failing_phy_init(void* user)
+static int failing_phy_init(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     g_phy_init_calls++;
     return -7; /* 驱动私有错误码 */
 }

@@ -110,21 +110,21 @@ void test_clock_uninstall(void)
     g_test_clock_us = TEST_CLOCK_BASE_US;
 }
 
-int mock_phy_init(void* user)
+int mock_phy_init(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return (int) mock();
 }
 
-void mock_phy_set_mode(void* user, iolink_phy_mode_t mode)
+void mock_phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
 {
-    (void) user;
+    (void) self;
     check_expected(mode);
 }
 
-void mock_phy_set_baudrate(void* user, iolink_baudrate_t baudrate)
+void mock_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
 {
-    (void) user;
+    (void) self;
     check_expected(baudrate);
 }
 
@@ -154,9 +154,9 @@ static void trace_tx_frame(const uint8_t* data, size_t len)
     (void) fclose(trace);
 }
 
-int mock_phy_send(void* user, const uint8_t* data, size_t len)
+int mock_phy_send(iolink_app_t* self, const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     trace_tx_frame(data, len);
     g_tx_seq++;
     if (g_mock_send_delay_us > 0U) {
@@ -170,17 +170,17 @@ int mock_phy_send(void* user, const uint8_t* data, size_t len)
     return (int) len;
 }
 
-int mock_phy_detect_wakeup(void* user)
+int mock_phy_detect_wakeup(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     int ret = g_mock_wakeup;
     g_mock_wakeup = 0;
     return ret;
 }
 
-void mock_phy_set_cq_line(void* user, uint8_t state)
+void mock_phy_set_cq_line(iolink_app_t* self, uint8_t state)
 {
-    (void) user;
+    (void) self;
     g_mock_cq_state = state;
 }
 
@@ -189,7 +189,7 @@ void mock_phy_set_cq_line(void* user, uint8_t state)
  * （长应答的 DMA 时序，见 dll_isr_start_reply_frame），因此交付必须推迟到
  * 下一次 PHY 交互：下一次 tx_frame（上一帧已在线上完成）、数据中断
  * （DMA 完成）或断言/读取钩子。 */
-static void mock_tx_finish(void* user)
+static void mock_tx_finish(iolink_app_t* self)
 {
     const uint8_t* data = g_tx_pending;
     size_t len = g_tx_pending_len;
@@ -207,7 +207,7 @@ static void mock_tx_finish(void* user)
         g_txq[len - 1U] = data[len - 1U];
     }
     g_txq_len = len;
-    (void) mock_phy_send(user, g_txq, g_txq_len);
+    (void) mock_phy_send(self, g_txq, g_txq_len);
 }
 #endif
 
@@ -368,9 +368,9 @@ int test_tx_all_asserted(void** state)
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
-static int mock_rx_octet(void* user, uint8_t* data, uint8_t* status)
+static int mock_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 {
-    (void) user;
+    (void) self;
     if (g_rxq_tail != g_rxq_head) {
         *data = g_rxq[g_rxq_tail++];
         *status = IOLINK_PHY_STATUS_DATA_READY;
@@ -392,9 +392,9 @@ static int mock_rx_octet(void* user, uint8_t* data, uint8_t* status)
 #else
 /* RX FRAME：整帧交付。PHY 契约禁止交付帧头或截断前缀，
  * 因此只有带 CHK 标记的完整帧才会被返回。 */
-static const uint8_t* mock_rx_frame(void* user, uint8_t* status, uint8_t* len)
+static const uint8_t* mock_rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len)
 {
-    (void) user;
+    (void) self;
     if (len != NULL) {
         *len = 0U;
     }
@@ -428,9 +428,9 @@ static const uint8_t* mock_rx_frame(void* user, uint8_t* status, uint8_t* len)
 #endif
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
-static int mock_tx_octet(void* user, uint8_t b)
+static int mock_tx_octet(iolink_app_t* self, uint8_t b)
 {
-    (void) user;
+    (void) self;
     if (!g_tx_active) {
         g_txq_len = 0U; /* 新应答的开始 */
         g_tx_active = 1U;
@@ -441,7 +441,7 @@ static int mock_tx_octet(void* user, uint8_t b)
     return 0;
 }
 
-static void mock_tx_done(void* user)
+static void mock_tx_done(iolink_app_t* self)
 {
     if (!g_tx_active) {
         /* CHK 路径复位，并非应答：无需交付。 */
@@ -449,16 +449,16 @@ static void mock_tx_done(void* user)
     }
     g_tx_active = 0U;
     /* 把收集到的整帧交给用例断言的发送钩子。 */
-    (void) mock_phy_send(user, g_txq, g_txq_len);
+    (void) mock_phy_send(self, g_txq, g_txq_len);
 }
 #else
-static int mock_tx_frame(void* user, const uint8_t* data, size_t len)
+static int mock_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
 {
     if ((data == NULL) || (len == 0U) || (len > sizeof(g_txq))) {
         return -1; /* 与 PHY 契约一致：拒绝无法发送的帧 */
     }
     /* 上一帧在本帧开始前已传输完毕。 */
-    mock_tx_finish(user);
+    mock_tx_finish(self);
     /* 立即复制除尾字节外的内容：库在 tx_frame() 返回之后才写入帧尾 CKS，
      * 因此捕获结果不依赖库的缓冲区在观察点之前保持不变。 */
     const size_t head = (len > 1U) ? (len - 1U) : 0U;
@@ -470,20 +470,20 @@ static int mock_tx_frame(void* user, const uint8_t* data, size_t len)
 }
 
 /* 可选钩子：帧交给 PHY 之后、DMA 完成之前线路仍被判为忙。 */
-static uint8_t mock_tx_busy(void* user)
+static uint8_t mock_tx_busy(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return (g_tx_pending != NULL) ? 1U : 0U;
 }
 #endif
 
-static uint8_t mock_int_active(void* user)
+static uint8_t mock_int_active(iolink_app_t* self)
 {
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     /* 数据中断即为 DMA 完成边沿：上一帧在此刻结束并交付。 */
-    mock_tx_finish(user);
+    mock_tx_finish(self);
 #else
-    (void) user;
+    (void) self;
 #endif
     if (g_rx_err_pending) {
         return 1U;
@@ -505,7 +505,7 @@ static uint8_t mock_int_active(void* user)
 #endif
 }
 
-const iolink_phy_api_t g_phy_mock = {.user = NULL,
+const iolink_phy_api_t g_phy_mock = {.self = NULL,
                                      .init = mock_phy_init,
                                      .set_mode = mock_phy_set_mode,
                                      .set_baudrate = mock_phy_set_baudrate,

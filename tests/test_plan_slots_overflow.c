@@ -25,7 +25,7 @@
 #include "dll_access.h"
 #include "iolinki/iolink.h"
 
-static const iolink_phy_api_t s_phy = {.user = NULL};
+static const iolink_phy_api_t s_phy = {.self = NULL};
 
 static void test_plan_slot_overflow_is_counted(void** state)
 {

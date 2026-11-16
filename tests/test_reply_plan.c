@@ -66,9 +66,9 @@ static uint64_t plan_time_us(iolink_app_t* self)
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
 /* RX FRAME：feed() 送入的字节即一整个 PHY 帧；没有被送入的帧就交付 NULL。 */
-static const uint8_t* plan_rx_frame(void* user, uint8_t* status, uint8_t* len)
+static const uint8_t* plan_rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len)
 {
-    (void) user;
+    (void) self;
     *len = 0U;
     *status = 0U;
     if ((s_rx_n == 0U) || (s_rx_i >= s_rx_n)) {
@@ -81,9 +81,9 @@ static const uint8_t* plan_rx_frame(void* user, uint8_t* status, uint8_t* len)
     return frame;
 }
 #else
-static int plan_rx_octet(void* user, uint8_t* data, uint8_t* status)
+static int plan_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 {
-    (void) user;
+    (void) self;
     *status = 0U;
     if (s_rx_i < s_rx_n) {
         *data = s_rx_q[s_rx_i++];
@@ -116,18 +116,18 @@ static void plan_tx_frame_sync(void)
     s_tx_delivered++;
 }
 
-static int plan_tx_frame(void* user, const uint8_t* data, size_t len)
+static int plan_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     plan_tx_frame_sync();
     s_tx_pending = data;
     s_tx_pending_n = len;
     return 0;
 }
 #else
-static int plan_tx_octet(void* user, uint8_t data)
+static int plan_tx_octet(iolink_app_t* self, uint8_t data)
 {
-    (void) user;
+    (void) self;
     if (!s_tx_active) {
         s_tx_n = 0U;
         s_tx_active = 1U;
@@ -138,9 +138,9 @@ static int plan_tx_octet(void* user, uint8_t data)
     return 0;
 }
 
-static void plan_tx_done(void* user)
+static void plan_tx_done(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     if (s_tx_active != 0U) {
         s_tx_active = 0U;
         s_tx_delivered++;
@@ -172,9 +172,9 @@ static size_t tx_observed_len(void)
     return s_tx_n;
 }
 
-static uint8_t plan_int_active(void* user)
+static uint8_t plan_int_active(iolink_app_t* self)
 {
-    const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) user;
+    const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     (void) ctx;
     /* 只有完整帧才是 PHY 可交付的事件。 */
@@ -187,7 +187,7 @@ static uint8_t plan_int_active(void* user)
 }
 
 static const iolink_phy_api_t s_phy = {
-    .user = &s_dll,
+    .self = (iolink_app_t*) &s_dll,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     .rx_frame = plan_rx_frame,
 #else
@@ -204,7 +204,7 @@ static const iolink_phy_api_t s_phy = {
 
 /** @brief 只收不发的 PHY（用于"计划命中但无法执行"的兜底路径）。 */
 static const iolink_phy_api_t s_phy_rx_only = {
-    .user = &s_dll,
+    .self = (iolink_app_t*) &s_dll,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     .rx_frame = plan_rx_frame,
 #else

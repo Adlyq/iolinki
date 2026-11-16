@@ -66,21 +66,21 @@ static const char* gap_nvm_path(const char* tag)
 
 #include "conformance_device.h"
 
-static int gap_noop_init(void* user)
+static int gap_noop_init(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return 0;
 }
 
-static void gap_noop_set_mode(void* user, iolink_phy_mode_t mode)
+static void gap_noop_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
 {
-    (void) user;
+    (void) self;
     (void) mode;
 }
 
-static void gap_noop_set_baudrate(void* user, iolink_baudrate_t baudrate)
+static void gap_noop_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
 {
-    (void) user;
+    (void) self;
     (void) baudrate;
 }
 

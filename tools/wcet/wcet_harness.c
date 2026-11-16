@@ -157,31 +157,31 @@ static void wcet_phy_reset(void)
     g_phy.baudrate = IOLINK_BAUDRATE_COM2;
 }
 
-static int wcet_phy_init(void* user)
+static int wcet_phy_init(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     g_phy.tx_len = 0U;
     g_phy.tx_active = 0U;
     g_phy.mode = IOLINK_PHY_MODE_INACTIVE;
     return 0;
 }
 
-static void wcet_phy_set_mode(void* user, iolink_phy_mode_t mode)
+static void wcet_phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
 {
-    (void) user;
+    (void) self;
     g_phy.mode = mode;
 }
 
-static void wcet_phy_set_baudrate(void* user, iolink_baudrate_t baudrate)
+static void wcet_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
 {
-    (void) user;
+    (void) self;
     g_phy.baudrate = baudrate;
 }
 
 /** @brief 逐字节交付已排队的请求；错误/帧结束标记优先于空闲。 */
-static int wcet_phy_rx_octet(void* user, uint8_t* data, uint8_t* status)
+static int wcet_phy_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 {
-    (void) user;
+    (void) self;
     g_m.rx_octets++;
     if (g_phy.rx_tail != g_phy.rx_head) {
         *data = g_phy.rx[g_phy.rx_tail];
@@ -204,9 +204,9 @@ static int wcet_phy_rx_octet(void* user, uint8_t* data, uint8_t* status)
 }
 
 /** @brief 收集应答字节：第一个字节开启一个新帧。 */
-static int wcet_phy_tx_octet(void* user, uint8_t data)
+static int wcet_phy_tx_octet(iolink_app_t* self, uint8_t data)
 {
-    (void) user;
+    (void) self;
     if (g_phy.tx_active == 0U) {
         g_phy.tx_active = 1U;
         g_phy.tx_len = 0U;
@@ -220,9 +220,9 @@ static int wcet_phy_tx_octet(void* user, uint8_t data)
     return 0;
 }
 
-static void wcet_phy_tx_done(void* user)
+static void wcet_phy_tx_done(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     if (g_phy.tx_active == 0U) {
         return; /* RX 间隔释放，并非应答结束 */
     }
@@ -234,9 +234,9 @@ static void wcet_phy_tx_done(void* user)
 }
 
 /** @brief 收发器数据中断电平：接收字节、帧结束、发送中或软件请求服务。 */
-static uint8_t wcet_phy_int_active(void* user)
+static uint8_t wcet_phy_int_active(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     if (g_phy.service_pending != 0U) {
         return 1U;
     }
@@ -249,15 +249,15 @@ static uint8_t wcet_phy_int_active(void* user)
     return (g_phy.rx_tail != g_phy.rx_head) ? 1U : 0U;
 }
 
-static void wcet_phy_request_service(void* user)
+static void wcet_phy_request_service(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     g_phy.service_pending = 1U;
 }
 
-static int wcet_phy_detect_wakeup(void* user)
+static int wcet_phy_detect_wakeup(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     if (g_phy.wakeup != 0) {
         g_phy.wakeup = 0;
         return 1;
@@ -266,7 +266,7 @@ static int wcet_phy_detect_wakeup(void* user)
 }
 
 static const iolink_phy_api_t g_phy_api = {
-    .user = NULL,
+    .self = NULL,
     .init = wcet_phy_init,
     .set_mode = wcet_phy_set_mode,
     .set_baudrate = wcet_phy_set_baudrate,
@@ -336,7 +336,7 @@ static int wcet_device_setup(iolink_m_seq_type_t type, uint8_t pd_in_len, uint8_
     }
 
     g_dev.cfg.phy = g_phy_api;
-    g_dev.cfg.phy.user = NULL;
+    g_dev.cfg.phy.self = NULL;
     g_dev.cfg.stack.m_seq_type = type;
     g_dev.cfg.stack.min_cycle_time = min_cycle_time;
     g_dev.cfg.stack.pd_in_len = pd_in_len;

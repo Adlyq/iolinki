@@ -16,9 +16,9 @@
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
 
-static int noop_user(void* user)
+static int noop_user(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return 0;
 }
 

@@ -51,9 +51,9 @@ static uint8_t s_frame_len;
 static bool s_frame_pending;
 static uint32_t s_rx_calls;
 
-static const uint8_t* phy_rx_frame(void* user, uint8_t* status, uint8_t* len)
+static const uint8_t* phy_rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len)
 {
-    (void) user;
+    (void) self;
     s_rx_calls++;
     if (!s_frame_pending) {
         return NULL;
@@ -74,9 +74,9 @@ static uint8_t s_rxq_pos;
 static bool s_chk_pending;
 static uint32_t s_rx_calls;
 
-static int phy_rx_octet(void* user, uint8_t* data, uint8_t* status)
+static int phy_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 {
-    (void) user;
+    (void) self;
     s_rx_calls++;
     if (s_rxq_pos < s_rxq_len) {
         *data = s_rxq[s_rxq_pos++];
@@ -93,9 +93,9 @@ static int phy_rx_octet(void* user, uint8_t* data, uint8_t* status)
 }
 #endif
 
-static uint8_t phy_int_active(void* user)
+static uint8_t phy_int_active(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     return s_frame_pending ? 1U : 0U;
 #else
@@ -110,75 +110,75 @@ static bool s_service_in_critical;
 static void (*s_timer_start_hook)(void);
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-static int phy_tx_frame(void* user, const uint8_t* data, size_t len)
+static int phy_tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     (void) data;
     (void) len;
     s_tx_calls++;
     return s_tx_rc;
 }
 #else
-static int phy_tx_octet(void* user, uint8_t data)
+static int phy_tx_octet(iolink_app_t* self, uint8_t data)
 {
-    (void) user;
+    (void) self;
     (void) data;
     s_tx_calls++;
     return 0;
 }
 
-static void phy_tx_done(void* user)
+static void phy_tx_done(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
 }
 #endif
 
-static void phy_timer_start(void* user)
+static void phy_timer_start(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     if (s_timer_start_hook != NULL) {
         s_timer_start_hook();
     }
 }
 
-static void phy_timer_stop(void* user)
+static void phy_timer_stop(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
 }
 
-static void phy_request_service(void* user)
+static void phy_request_service(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     s_service_calls++;
     s_service_in_critical = s_in_critical;
 }
 
-static int phy_init(void* user)
+static int phy_init(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return 0;
 }
 
-static void phy_set_mode(void* user, iolink_phy_mode_t mode)
+static void phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
 {
-    (void) user;
+    (void) self;
     (void) mode;
 }
 
-static void phy_set_baudrate(void* user, iolink_baudrate_t baudrate)
+static void phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
 {
-    (void) user;
+    (void) self;
     (void) baudrate;
 }
 
-static int phy_detect_wakeup(void* user)
+static int phy_detect_wakeup(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return 0;
 }
 
 static const iolink_phy_api_t s_phy = {
-    .user = NULL,
+    .self = NULL,
     .init = phy_init,
     .set_mode = phy_set_mode,
     .set_baudrate = phy_set_baudrate,
@@ -343,9 +343,9 @@ static iolink_dll_state_t s_states[8];
 static uint8_t s_state_count;
 static bool s_cb_in_isr;
 
-static void state_cb(void* user, iolink_dll_state_t state)
+static void state_cb(void* self, iolink_dll_state_t state)
 {
-    (void) user;
+    (void) self;
     s_cb_in_isr = (s_ctx.main.shared.in_isr != 0U);
     if (s_state_count < (uint8_t) (sizeof(s_states) / sizeof(s_states[0]))) {
         s_states[s_state_count++] = state;

@@ -73,33 +73,33 @@ static void test_driver_modes_and_turnaround(void** state)
     iolink_tiol112_ctx_t driver;
     assert_int_equal(iolink_phy_tiol112_init(&driver, &io), 0);
     const iolink_phy_api_t* phy = iolink_phy_tiol112_get(&driver);
-    assert_int_equal(phy->init(phy->user), 0);
+    assert_int_equal(phy->init(phy->self), 0);
     assert_false(board.enabled);
-    phy->set_mode(phy->user, IOLINK_PHY_MODE_SIO);
-    phy->set_cq_line(phy->user, 1);
+    phy->set_mode(phy->self, IOLINK_PHY_MODE_SIO);
+    phy->set_cq_line(phy->self, 1);
     assert_true(board.enabled);
     assert_false(board.tx_high); /* TI 真值表：TX 为低时 CQ 为高 */
-    phy->set_cq_line(phy->user, 0);
+    phy->set_cq_line(phy->self, 0);
     assert_true(board.tx_high);
-    phy->set_mode(phy->user, IOLINK_PHY_MODE_SDCI);
+    phy->set_mode(phy->self, IOLINK_PHY_MODE_SDCI);
     assert_false(board.enabled);
-    phy->set_baudrate(phy->user, IOLINK_BAUDRATE_COM3);
+    phy->set_baudrate(phy->self, IOLINK_BAUDRATE_COM3);
     assert_int_equal(board.baud, 230400);
     board.wake = true;
-    assert_int_equal(phy->detect_wakeup(phy->user), 1);
-    assert_int_equal(phy->detect_wakeup(phy->user), 0);
+    assert_int_equal(phy->detect_wakeup(phy->self), 1);
+    assert_int_equal(phy->detect_wakeup(phy->self), 0);
     assert_int_equal(iolink_phy_tiol112_fault(&driver), 0);
     board.fault_high = false;
     assert_int_equal(iolink_phy_tiol112_fault(&driver), 1);
-    phy->set_mode(phy->user, IOLINK_PHY_MODE_INACTIVE);
+    phy->set_mode(phy->self, IOLINK_PHY_MODE_INACTIVE);
     board.init_result = -3;
-    assert_int_equal(phy->init(phy->user), -3);
-    phy->set_mode(phy->user, IOLINK_PHY_MODE_SDCI);
+    assert_int_equal(phy->init(phy->self), -3);
+    phy->set_mode(phy->self, IOLINK_PHY_MODE_SDCI);
     assert_false(board.enabled);
     board.init_result = 0;
-    assert_int_equal(phy->init(phy->user), 0);
+    assert_int_equal(phy->init(phy->self), 0);
     board.config_result = -4;
-    phy->set_mode(phy->user, IOLINK_PHY_MODE_SDCI);
+    phy->set_mode(phy->self, IOLINK_PHY_MODE_SDCI);
     assert_false(board.enabled);
 }
 

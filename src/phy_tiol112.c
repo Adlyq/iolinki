@@ -3,9 +3,9 @@
 #include <limits.h>
 #include <string.h>
 
-static int initialize(void* user)
+static int initialize(iolink_app_t* self)
 {
-    iolink_tiol112_ctx_t* d = user;
+    iolink_tiol112_ctx_t* d = (iolink_tiol112_ctx_t*) self;
     if (d->initialized) d->io.set_enable(d->io.user, false);
     d->mode = IOLINK_PHY_MODE_INACTIVE;
     d->error = d->io.init(d->io.user);
@@ -14,9 +14,9 @@ static int initialize(void* user)
     return d->error;
 }
 
-static void set_mode(void* user, iolink_phy_mode_t mode)
+static void set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
 {
-    iolink_tiol112_ctx_t* d = user;
+    iolink_tiol112_ctx_t* d = (iolink_tiol112_ctx_t*) self;
     if (!d->initialized) return;
     d->io.set_enable(d->io.user, false);
     d->mode = mode;
@@ -32,9 +32,9 @@ static void set_mode(void* user, iolink_phy_mode_t mode)
     }
 }
 
-static void set_baudrate(void* user, iolink_baudrate_t baud)
+static void set_baudrate(iolink_app_t* self, iolink_baudrate_t baud)
 {
-    iolink_tiol112_ctx_t* d = user;
+    iolink_tiol112_ctx_t* d = (iolink_tiol112_ctx_t*) self;
     switch (baud) {
         case IOLINK_BAUDRATE_COM1:
             d->baud = 4800;
@@ -57,16 +57,16 @@ static void set_baudrate(void* user, iolink_baudrate_t baud)
     }
 }
 
-static int detect_wakeup(void* user)
+static int detect_wakeup(iolink_app_t* self)
 {
-    iolink_tiol112_ctx_t* d = user;
+    iolink_tiol112_ctx_t* d = (iolink_tiol112_ctx_t*) self;
     if (!d->initialized) return 0;
     return d->io.consume_wakeup(d->io.user);
 }
 
-static void set_cq(void* user, uint8_t state)
+static void set_cq(iolink_app_t* self, uint8_t state)
 {
-    iolink_tiol112_ctx_t* d = user;
+    iolink_tiol112_ctx_t* d = (iolink_tiol112_ctx_t*) self;
     d->cq = state != 0U ? 1U : 0U;
     if ((d->mode == IOLINK_PHY_MODE_SIO) && (d->error == 0)) {
         /* TI table 8-2：TX 高电平时 CQ 为灌电流，TX 低电平时 CQ 为拉电流。 */
@@ -90,7 +90,7 @@ int iolink_phy_tiol112_init(iolink_tiol112_ctx_t* d, const iolink_tiol112_io_t* 
     memset(d, 0, sizeof(*d));
     d->io = *io;
     d->baud = 4800;
-    d->phy.user = d;
+    d->phy.self = (iolink_app_t*) d;
     d->phy.init = initialize;
     d->phy.set_mode = set_mode;
     d->phy.set_baudrate = set_baudrate;

@@ -246,7 +246,9 @@ void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx, iolink_reset_hand
 ## PHY 层 API
 
 从 `include/iolinki/phy.h` 复制 `iolink_phy_api_t`。每个回调的第一个参数都是
-`void* user`。`init`、`set_mode` 和 `set_baudrate` 为必需。传输钩子取决于配置的粒度：
+`iolink_app_t* self`（应用实例，库原样转发；驱动在自己的回调里转回自己的状态类型）。
+`phy.self` 由驱动或应用设置：把驱动上下文放进 `struct iolink_app` 时两者是同一个
+指针，一个实例只有一个。`init`、`set_mode` 和 `set_baudrate` 为必需。传输钩子取决于配置的粒度：
 BYTE 模式使用 `rx_octet`/`tx_octet`，FRAME 模式使用 `rx_frame`/`tx_frame`，外加
 `int_active`。`tx_done`（TX BYTE）是可选的完成通知：TX 能力由 `tx_octet` 解析，钩子
 缺省时库自行完成帧。`tx_busy`（TX FRAME）、`detect_wakeup`、`set_cq_line` 和
@@ -256,15 +258,15 @@ BYTE 模式使用 `rx_octet`/`tx_octet`，FRAME 模式使用 `rx_frame`/`tx_fram
 230.4 kbit/s；它们不是波特率编号本身。
 
 ```c
-static int my_phy_rx_octet(void* user, uint8_t* data, uint8_t* status) {
-    (void)user;
+static int my_phy_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status) {
+    (void)self;
     (void)data;
     (void)status;
     return 0;
 }
 
-static int my_phy_tx_octet(void* user, uint8_t data) {
-    (void)user;
+static int my_phy_tx_octet(iolink_app_t* self, uint8_t data) {
+    (void)self;
     (void)data;
     return 0;
 }

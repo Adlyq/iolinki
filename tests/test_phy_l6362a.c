@@ -77,7 +77,7 @@ static const iolink_phy_api_t* init_driver(iolink_l6362a_ctx_t* d)
     reset_board();
     assert_int_equal(iolink_phy_l6362a_init(d, &g_io), 0);
     const iolink_phy_api_t* p = iolink_phy_l6362a_get(d);
-    assert_int_equal(p->init(p->user), 0);
+    assert_int_equal(p->init(p->self), 0);
     return p;
 }
 
@@ -88,17 +88,17 @@ static void test_line_polarity_and_baudrate(void** state)
     const iolink_phy_api_t* p = init_driver(&d);
 
     assert_false(en);
-    p->set_cq_line(p->user, 1);
-    p->set_mode(p->user, IOLINK_PHY_MODE_SIO);
+    p->set_cq_line(p->self, 1);
+    p->set_mode(p->self, IOLINK_PHY_MODE_SIO);
     assert_true(en);
     assert_true(in2); /* L6362A 的 IN1=0 为同相，与 TIOL112 不同。 */
-    p->set_cq_line(p->user, 0);
+    p->set_cq_line(p->self, 0);
     assert_true(en);
     assert_false(in2);
-    p->set_mode(p->user, IOLINK_PHY_MODE_SDCI);
+    p->set_mode(p->self, IOLINK_PHY_MODE_SDCI);
     assert_false(en);
     assert_int_equal(baud, 4800);
-    p->set_baudrate(p->user, IOLINK_BAUDRATE_COM3);
+    p->set_baudrate(p->self, IOLINK_BAUDRATE_COM3);
     assert_int_equal(baud, 230400);
 }
 
@@ -108,16 +108,16 @@ static void test_diagnostics_overload_and_wakeup(void** state)
     iolink_l6362a_ctx_t d;
     const iolink_phy_api_t* p = init_driver(&d);
 
-    p->set_mode(p->user, IOLINK_PHY_MODE_SIO);
+    p->set_mode(p->self, IOLINK_PHY_MODE_SIO);
     assert_true(en);
     diag = false;
     assert_int_equal(iolink_phy_l6362a_fault(&d), 1);
     diag = true;
-    p->set_mode(p->user, IOLINK_PHY_MODE_SDCI);
+    p->set_mode(p->self, IOLINK_PHY_MODE_SDCI);
     assert_int_equal(iolink_phy_l6362a_fault(&d), -1);
     ol = false;
     assert_int_equal(iolink_phy_l6362a_overload(&d), 1);
-    assert_int_equal(p->detect_wakeup(p->user), 1);
+    assert_int_equal(p->detect_wakeup(p->self), 1);
 }
 
 static void test_line_disabled_on_config_failure(void** state)
@@ -126,12 +126,12 @@ static void test_line_disabled_on_config_failure(void** state)
     iolink_l6362a_ctx_t d;
     const iolink_phy_api_t* p = init_driver(&d);
 
-    p->set_mode(p->user, IOLINK_PHY_MODE_SIO);
+    p->set_mode(p->self, IOLINK_PHY_MODE_SIO);
     assert_true(en);
     config_result = -1;
-    p->set_mode(p->user, IOLINK_PHY_MODE_SDCI);
+    p->set_mode(p->self, IOLINK_PHY_MODE_SDCI);
     assert_false(en);
-    p->set_mode(p->user, IOLINK_PHY_MODE_INACTIVE);
+    p->set_mode(p->self, IOLINK_PHY_MODE_INACTIVE);
     assert_false(en);
 }
 

@@ -14,6 +14,7 @@
 #include <stdbool.h>
 
 #include "iolinki/config.h"
+#include "iolinki/types.h"
 
 /**
  * @file phy.h
@@ -24,6 +25,14 @@
  * @defgroup iolinki_phy 物理层（PHY）接口
  * @brief 与硬件无关的收发器契约、运行模式和波特率。
  * @{
+ */
+
+/*
+ * PHY 上下文就是应用实例（@ref iolink_app_t）：库把它原样传给每个
+ * 回调，从不访问它的字段。驱动在自己的回调里把它转回自己的状态
+ * 类型，因此驱动状态放在哪里由应用决定——把驱动上下文嵌进
+ * `struct iolink_app`（偏移 0）时，@ref iolink_phy_api_t::self 与
+ * @ref iolink_device_app_t::self 是同一个值，一个实例只有一个指针。
  */
 
 /**
@@ -83,25 +92,25 @@ typedef enum
  */
 typedef struct
 {
-    void* user; /**< 回传给每个回调的不透明驱动上下文。 */
+    iolink_app_t* self; /**< 应用实例指针，原样回传给每个回调。 */
 
     /**
      * @brief 初始化收发器硬件
      * @return 成功返回 0，硬件失败返回负错误码
      */
-    int (*init)(void* user);
+    int (*init)(iolink_app_t* self);
 
     /**
      * @brief 设置 PHY 运行模式（SDCI 与 SIO）
      * @param mode 目标模式
      */
-    void (*set_mode)(void* user, iolink_phy_mode_t mode);
+    void (*set_mode)(iolink_app_t* self, iolink_phy_mode_t mode);
 
     /**
      * @brief 设置通信波特率
      * @param baudrate 目标 COMx 速率
      */
-    void (*set_baudrate)(void* user, iolink_baudrate_t baudrate);
+    void (*set_baudrate)(iolink_app_t* self, iolink_baudrate_t baudrate);
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     /**
@@ -117,7 +126,7 @@ typedef struct
      * 校验仍由库负责。
      * @return 指向该帧的指针；没有完整帧就绪时为 NULL。
      */
-    const uint8_t* (*rx_frame)(void* user, uint8_t* status, uint8_t* len);
+    const uint8_t* (*rx_frame)(iolink_app_t* self, uint8_t* status, uint8_t* len);
 #else
     /**
      * @brief 读取一个接收字节及其收发器状态（RX BYTE 模式）。
@@ -129,7 +138,7 @@ typedef struct
      * @return 若读出字节到 @p data 则返回 1，若无待处理数据返回 0，
      *         传输错误时返回负值。
      */
-    int (*rx_octet)(void* user, uint8_t* data, uint8_t* status);
+    int (*rx_octet)(iolink_app_t* self, uint8_t* data, uint8_t* status);
 #endif
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
@@ -143,7 +152,7 @@ typedef struct
      * 直到传输完成。
      * @return 成功返回 0，出错返回负值。
      */
-    int (*tx_frame)(void* user, const uint8_t* data, size_t len);
+    int (*tx_frame)(iolink_app_t* self, const uint8_t* data, size_t len);
 
     /**
      * @brief PHY 仍占用 C/Q 线路时返回非零值（可选）。
@@ -156,7 +165,7 @@ typedef struct
      * 应答缓冲区只在下一次捕获之后才复用。
      * @return 传输进行中返回 1，线路空闲时返回 0。
      */
-    uint8_t (*tx_busy)(void* user);
+    uint8_t (*tx_busy)(iolink_app_t* self);
 #else
     /**
      * @brief 写入一个应答字节（TX BYTE 模式）。
@@ -167,7 +176,7 @@ typedef struct
      * 与数据中断的仲裁由 PHY 负责。
      * @return 本次访问的规范化 PHY 状态字节（IOLINK_PHY_STATUS_*）。
      */
-    int (*tx_octet)(void* user, uint8_t data);
+    int (*tx_octet)(iolink_app_t* self, uint8_t data);
 
     /**
      * @brief 结束/完成当前设备发送（仅 TX BYTE，可选）。
@@ -183,7 +192,7 @@ typedef struct
      * 硬件收尾（例如切换收发器方向），应实现本回调；否则由收发器自行
      * 在最后的 CKS 之后完成帧结束。
      */
-    void (*tx_done)(void* user);
+    void (*tx_done)(iolink_app_t* self);
 #endif
 
     /**
@@ -192,7 +201,7 @@ typedef struct
      *         排空背靠背突发；在 FRAME 模式下还会报告
      *         RX 帧完整/TX 就绪。
      */
-    uint8_t (*int_active)(void* user);
+    uint8_t (*int_active)(iolink_app_t* self);
 
     /* --- 可选协议栈定时器（与 ST 的 ISR 泵送对齐） ---------------------------
      * response_timer_* 实现 t_A 单次定时（13 个位时间）：在有效的
@@ -200,9 +209,9 @@ typedef struct
      * 应答开始或超时时停止。stack_timer_start 驱动周期性节拍，
      * 该节拍授权主上下文服务窗口。这些钩子均为可选；当
      * 为 NULL 时，库保持旧有的软件时间戳行为。 */
-    void (*response_timer_start)(void* user);
-    void (*response_timer_stop)(void* user);
-    void (*stack_timer_start)(void* user);
+    void (*response_timer_start)(iolink_app_t* self);
+    void (*response_timer_stop)(iolink_app_t* self);
+    void (*stack_timer_start)(iolink_app_t* self);
 
     /**
      * @brief 请求 PHY 立即运行数据中断泵送（可选）。
@@ -213,7 +222,7 @@ typedef struct
      * 实际的 TX 钩子只从 ISR 中调用。NULL 保持旧有的
      * 直接发送行为（由调用方发送）。
      */
-    void (*request_service)(void* user);
+    void (*request_service)(iolink_app_t* self);
 
     /* 可选的诊断/支持函数（可为 NULL） */
 
@@ -227,7 +236,7 @@ typedef struct
      * 唤醒）。
      * @return 当前窗口内检测到唤醒脉冲返回 1，否则返回 0
      */
-    int (*detect_wakeup)(void* user);
+    int (*detect_wakeup)(iolink_app_t* self);
 
     /**
      * @brief 手动设置 C/Q 线路状态（用于 SIO 推挽）
@@ -236,7 +245,7 @@ typedef struct
      * 负责 SIO 线路状态）。
      * @param state 0 为低电平，1 为高电平
      */
-    void (*set_cq_line)(void* user, uint8_t state);
+    void (*set_cq_line)(iolink_app_t* self, uint8_t state);
 
     /**
      * @brief 可选：当前活跃的物理故障，为
@@ -251,7 +260,7 @@ typedef struct
      * NULL 时不做物理诊断。
      * @return 活跃故障标志。
      */
-    uint8_t (*get_faults)(void* user);
+    uint8_t (*get_faults)(iolink_app_t* self);
 } iolink_phy_api_t;
 
 /** @} */ /* iolinki_phy 结束 */

@@ -12,9 +12,9 @@ static uint64_t test_time_us(iolink_app_t* self)
     return now;
 }
 
-static int wake(void* user)
+static int wake(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     int result = wake_pending;
     wake_pending = 0;
     return result;

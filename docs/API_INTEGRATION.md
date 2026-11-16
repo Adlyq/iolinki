@@ -118,14 +118,14 @@ RTOS 端口即使把临界区实现为调度锁，也不能据此从多个任务
 
 static iolink_device_ctx_t g_device;
 
-static int  board_phy_init(void* user);
-static void board_phy_set_mode(void* user, iolink_phy_mode_t mode);
-static void board_phy_set_baudrate(void* user, iolink_baudrate_t baud);
-static int  board_phy_rx_octet(void* user, uint8_t* data, uint8_t* status);
-static int  board_phy_tx_octet(void* user, uint8_t data);
-static void board_phy_tx_done(void* user);
-static uint8_t board_phy_int_active(void* user);
-static void board_phy_request_service(void* user);
+static int  board_phy_init(iolink_app_t* self);
+static void board_phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode);
+static void board_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baud);
+static int  board_phy_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status);
+static int  board_phy_tx_octet(iolink_app_t* self, uint8_t data);
+static void board_phy_tx_done(iolink_app_t* self);
+static uint8_t board_phy_int_active(iolink_app_t* self);
+static void board_phy_request_service(iolink_app_t* self);
 static uint64_t board_time_us(iolink_app_t* self);
 
 static const iolink_phy_api_t g_phy = {

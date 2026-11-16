@@ -31,8 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The OD hooks and HANDLER backends receive the same `self`
   (`iolink_od_app_t` lost its `user` field; `iolink_od_ctx_t`, `iolink_isdu_ctx_t`
   and `iolink_ds_ctx_t` carry it), and `iolink_isdu_bind_od()` /
-  `iolink_ds_bind_sources()` take it as an argument. The PHY keeps its own
-  driver handle: `phy.user` is set by `iolink_phy_*_init()`, never by the app.
+  `iolink_ds_bind_sources()` take it as an argument.
+- The PHY vtable follows the same rule: `phy.user` is now `phy.self` typed
+  `iolink_app_t*`. The library forwards that pointer unchanged and the driver
+  turns it back into its own state, so an application that keeps the driver
+  context inside `struct iolink_app` ends up with one pointer per instance
+  (`phy.self == app->self`). The TIOL112/L6362A `io.user` (board adapter) and
+  `iolink_dll_state_cb_t` (device context) keep `void*`: they carry the board's
+  and the device's private state, not the application instance.
 - `iolink_log_write_fn` and `iolink_ds_flag_persist_fn` take `iolink_app_t*`;
   `iolink_log_sink_t::user` is now `self`.
 - New `IOLINK_DEVICE_INIT_ERR_APP` (-15) when `config.app == NULL`; a trait

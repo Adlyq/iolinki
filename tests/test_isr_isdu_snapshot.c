@@ -53,9 +53,9 @@ static uint8_t chk_pending;
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
 /* RX FRAME：feed() 送入的字节即一整个 PHY 帧。 */
-static const uint8_t* rx_frame(void* user, uint8_t* status, uint8_t* len)
+static const uint8_t* rx_frame(iolink_app_t* self, uint8_t* status, uint8_t* len)
 {
-    (void) user;
+    (void) self;
     *len = 0U;
     *status = 0U;
     if ((rx_n == 0U) || (rx_i >= rx_n)) {
@@ -68,9 +68,9 @@ static const uint8_t* rx_frame(void* user, uint8_t* status, uint8_t* len)
     return frame;
 }
 #else
-static int rx_octet(void* user, uint8_t* data, uint8_t* status)
+static int rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 {
-    (void) user;
+    (void) self;
     *status = 0U;
     if (rx_i < rx_n) {
         *data = rx_q[rx_i++];
@@ -102,9 +102,9 @@ static void tx_frame_sync(void)
     tx_delivered++;
 }
 
-static int tx_frame(void* user, const uint8_t* data, size_t len)
+static int tx_frame(iolink_app_t* self, const uint8_t* data, size_t len)
 {
-    (void) user;
+    (void) self;
     tx_frame_sync();
     tx_pending = data;
     tx_pending_n = len;
@@ -112,9 +112,9 @@ static int tx_frame(void* user, const uint8_t* data, size_t len)
 }
 #else
 static uint8_t tx_active; /* 只在 BYTE 传输下有字节流式发送 */
-static int tx_octet(void* user, uint8_t data)
+static int tx_octet(iolink_app_t* self, uint8_t data)
 {
-    (void) user;
+    (void) self;
     if (tx_active == 0U) {
         tx_n = 0U;
         tx_active = 1U;
@@ -125,9 +125,9 @@ static int tx_octet(void* user, uint8_t data)
     return 0;
 }
 
-static void tx_done(void* user)
+static void tx_done(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     if (tx_active != 0U) {
         tx_active = 0U;
         tx_delivered++;
@@ -159,9 +159,9 @@ static size_t tx_observed_len(void)
     return tx_n;
 }
 
-static uint8_t int_active(void* user)
+static uint8_t int_active(iolink_app_t* self)
 {
-    const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) user;
+    const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     (void) ctx;
     return ((rx_n != 0U) && (rx_i < rx_n)) ? 1U : 0U;
@@ -171,10 +171,10 @@ static uint8_t int_active(void* user)
 #endif
 }
 
-static void request_service(void* user)
+static void request_service(iolink_app_t* self)
 {
     request_calls++;
-    iolink_dll_process_isr(&((iolink_dll_ctx_t*) user)->main);
+    iolink_dll_process_isr(&((iolink_dll_ctx_t*) self)->main);
 }
 
 static void feed(const uint8_t* frame, size_t n, uint8_t chk)
@@ -222,7 +222,7 @@ static int test_eager_isdu_snapshot(void)
 {
     iolink_dll_ctx_t dll;
     const iolink_phy_api_t phy = {
-        .user = &dll,
+        .self = (iolink_app_t*) &dll,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
         .rx_frame = rx_frame,
 #else
@@ -326,7 +326,7 @@ static int test_request_service_staging(void)
 {
     iolink_dll_ctx_t dll;
     const iolink_phy_api_t phy = {
-        .user = &dll,
+        .self = (iolink_app_t*) &dll,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
         .rx_frame = rx_frame,
 #else
@@ -384,7 +384,7 @@ static int test_type0_diagnosis_read_isr(void)
 {
     iolink_dll_ctx_t dll;
     const iolink_phy_api_t phy = {
-        .user = &dll,
+        .self = (iolink_app_t*) &dll,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
         .rx_frame = rx_frame,
 #else

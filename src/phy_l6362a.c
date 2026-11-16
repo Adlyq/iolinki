@@ -7,9 +7,9 @@ static void enable(iolink_l6362a_ctx_t* d, bool on)
     d->io.set_enable(d->io.user, on);
     d->enabled = on;
 }
-static int initialize(void* u)
+static int initialize(iolink_app_t* self)
 {
-    iolink_l6362a_ctx_t* d = u;
+    iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
     if (d->initialized) enable(d, false);
     d->error = d->io.init(d->io.user);
     d->initialized = d->error == 0;
@@ -17,9 +17,9 @@ static int initialize(void* u)
     if (d->initialized) enable(d, false);
     return d->error;
 }
-static void mode(void* u, iolink_phy_mode_t m)
+static void mode(iolink_app_t* self, iolink_phy_mode_t m)
 {
-    iolink_l6362a_ctx_t* d = u;
+    iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
     if (!d->initialized) return;
     enable(d, false);
     d->mode = m;
@@ -32,9 +32,9 @@ static void mode(void* u, iolink_phy_mode_t m)
     else if (m != IOLINK_PHY_MODE_INACTIVE)
         d->error = -1;
 }
-static void speed(void* u, iolink_baudrate_t b)
+static void speed(iolink_app_t* self, iolink_baudrate_t b)
 {
-    iolink_l6362a_ctx_t* d = u;
+    iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
     switch (b) {
         case IOLINK_BAUDRATE_COM1:
             d->baud = 4800;
@@ -55,15 +55,15 @@ static void speed(void* u, iolink_baudrate_t b)
         d->error = d->io.uart_configure(d->io.user, d->baud);
     }
 }
-static int wake(void* u)
+static int wake(iolink_app_t* self)
 {
-    iolink_l6362a_ctx_t* d = u;
+    iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
     return d->initialized ? d->io.consume_wakeup(d->io.user) : 0;
 }
 
-static void cq(void* u, uint8_t b)
+static void cq(iolink_app_t* self, uint8_t b)
 {
-    iolink_l6362a_ctx_t* d = u;
+    iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
     d->cq = b != 0;
     if (d->initialized && !d->error && d->mode == IOLINK_PHY_MODE_SIO) {
         /* IN1=GND：table 14 中 CQ=IN2。IN2 跳变具有死区保护。 */
@@ -80,7 +80,7 @@ int iolink_phy_l6362a_init(iolink_l6362a_ctx_t* d, const iolink_l6362a_io_t* io)
     memset(d, 0, sizeof(*d));
     d->io = *io;
     d->baud = 4800;
-    d->phy.user = d;
+    d->phy.self = (iolink_app_t*) d;
     d->phy.init = initialize;
     d->phy.set_mode = mode;
     d->phy.set_baudrate = speed;

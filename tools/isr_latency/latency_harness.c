@@ -79,9 +79,9 @@ static uint64_t plan_time_us(iolink_app_t* self)
     return s_now_us;
 }
 
-static int lat_rx_octet(void* user, uint8_t* data, uint8_t* status)
+static int lat_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status)
 {
-    (void) user;
+    (void) self;
     *status = 0U;
     if (s_rx_i < s_rx_n) {
         *data = s_rx_q[s_rx_i++];
@@ -94,9 +94,9 @@ static int lat_rx_octet(void* user, uint8_t* data, uint8_t* status)
     return 0;
 }
 
-static int lat_tx_octet(void* user, uint8_t data)
+static int lat_tx_octet(iolink_app_t* self, uint8_t data)
 {
-    (void) user;
+    (void) self;
     (void) data;
     if (s_tx_active == 0U) {
         s_tx_n = 0U;
@@ -112,22 +112,22 @@ static int lat_tx_octet(void* user, uint8_t data)
     return 0;
 }
 
-static void lat_tx_done(void* user)
+static void lat_tx_done(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     s_tx_active = 0U;
 }
 
-static uint8_t lat_int_active(void* user)
+static uint8_t lat_int_active(iolink_app_t* self)
 {
-    const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) user;
+    const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
     return ((s_rx_i < s_rx_n) || (s_chk_pending != 0U) || (ctx->main.shared.isr_tx_active != 0U))
                ? 1U
                : 0U;
 }
 
 static const iolink_phy_api_t s_phy = {
-    .user = &s_dll,
+    .self = (iolink_app_t*) &s_dll,
     .rx_octet = lat_rx_octet,
     .tx_octet = lat_tx_octet,
     .tx_done = lat_tx_done,

@@ -18,41 +18,41 @@
 #include "iolinki/phy_generic.h"
 
 /** @brief 模板 PHY 初始化钩子（未实现前返回失败）。 */
-static int generic_init(void* user)
+static int generic_init(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     /* 模板：在此初始化 UART/GPIO/收发器。 */
     return -1;
 }
 
 /** @brief 用于为 SIO/SDCI 模式配置收发器的模板钩子。 */
-static void generic_set_mode(void* user, iolink_phy_mode_t mode)
+static void generic_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
 {
-    (void) user;
+    (void) self;
     (void) mode;
     /* 模板：为 SIO/SDCI 配置收发器。 */
 }
 
 /** @brief 用于配置 COM1/2/3 下 UART 速率的模板钩子。 */
-static void generic_set_baudrate(void* user, iolink_baudrate_t baudrate)
+static void generic_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
 {
-    (void) user;
+    (void) self;
     (void) baudrate;
     /* 模板：配置 COM1/2/3 的 UART 速率。 */
 }
 
 /** @brief 用于检测 C/Q 线上 80us 唤醒脉冲的模板钩子。 */
-static int generic_detect_wakeup(void* user)
+static int generic_detect_wakeup(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     /* 模板：检测 C/Q 线上的 80us 唤醒脉冲。 */
     return 0;
 }
 
 /** @brief 用于在 SIO 模式下驱动 C/Q 线高/低的模板钩子。 */
-static void generic_set_cq_line(void* user, uint8_t state)
+static void generic_set_cq_line(iolink_app_t* self, uint8_t state)
 {
-    (void) user;
+    (void) self;
     (void) state;
     /* 模板：在 SIO 模式下驱动 C/Q 线高/低。 */
 }

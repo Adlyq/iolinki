@@ -94,7 +94,7 @@ void dll_isr_start_staged_tx(iolink_dll_main_t* ctx, uint8_t slot, uint8_t len)
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     if (ctx->shared.phy->tx_frame != NULL) {
-        if (ctx->shared.phy->tx_frame(ctx->shared.phy->user, ctx->shared.isr_tx_payload[slot],
+        if (ctx->shared.phy->tx_frame(ctx->shared.phy->self, ctx->shared.isr_tx_payload[slot],
                                       len) != 0) {
             IOLINK_LOG_ISR_WARN(&ctx->shared.log, "tx_frame failed: len=%u", (unsigned) len);
             /* 由主泵回退路径与 ISR 泵共享：将丢弃归属到
@@ -112,7 +112,7 @@ void dll_isr_start_staged_tx(iolink_dll_main_t* ctx, uint8_t slot, uint8_t len)
     if (ctx->shared.phy->tx_octet != NULL) {
         if (ctx->shared.isr_tx_active != 0U) {
             if (ctx->shared.phy->tx_done != NULL) {
-                ctx->shared.phy->tx_done(ctx->shared.phy->user);
+                ctx->shared.phy->tx_done(ctx->shared.phy->self);
             }
             ctx->shared.isr_tx_active = 0U;
         }
@@ -150,7 +150,7 @@ void dll_isr_tx_step(iolink_dll_main_t* ctx)
 {
     if (ctx->shared.isr_tx_idx < ctx->shared.isr_tx_len) {
         const uint8_t octet = ctx->shared.isr->isr_tx_base[ctx->shared.isr_tx_idx];
-        (void) ctx->shared.phy->tx_octet(ctx->shared.phy->user, octet);
+        (void) ctx->shared.phy->tx_octet(ctx->shared.phy->self, octet);
         if (ctx->shared.isr_tx_has_cks != 0U) {
             ctx->shared.isr->isr_tx_acc = (uint8_t) (ctx->shared.isr->isr_tx_acc ^ octet);
         }
@@ -162,15 +162,15 @@ void dll_isr_tx_step(iolink_dll_main_t* ctx)
         const uint8_t acc = (uint8_t) (ctx->shared.isr->isr_tx_acc ^ ctx->shared.isr->isr_tx_flags);
         const uint8_t cks =
             (uint8_t) (ctx->shared.isr->isr_tx_flags | iolink_checksum6_from_acc(acc));
-        (void) ctx->shared.phy->tx_octet(ctx->shared.phy->user, cks);
+        (void) ctx->shared.phy->tx_octet(ctx->shared.phy->self, cks);
         ctx->shared.isr_tx_idx++;
     }
     else {
         if (ctx->shared.phy->tx_done != NULL) {
-            ctx->shared.phy->tx_done(ctx->shared.phy->user);
+            ctx->shared.phy->tx_done(ctx->shared.phy->self);
         }
         if (ctx->shared.phy->stack_timer_start != NULL) {
-            ctx->shared.phy->stack_timer_start(ctx->shared.phy->user); /* 帧结束 -> Timer B */
+            ctx->shared.phy->stack_timer_start(ctx->shared.phy->self); /* 帧结束 -> Timer B */
         }
         ctx->shared.isr_tx_active = 0U;
         /* TX BYTE：回复已完成，因此 ISR 租用的 PD-in 槽位
@@ -294,7 +294,7 @@ static uint8_t dll_isr_status_flags(const iolink_dll_main_t* ctx)
 static void dll_isr_send_staged(iolink_dll_main_t* ctx, uint8_t slot, uint8_t len, uint8_t flags)
 {
     if (ctx->shared.phy->response_timer_stop != NULL) {
-        ctx->shared.phy->response_timer_stop(ctx->shared.phy->user); /* 回复开始 -> 停止 t_A */
+        ctx->shared.phy->response_timer_stop(ctx->shared.phy->self); /* 回复开始 -> 停止 t_A */
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     /* 短回复：第一个八位组一移入
@@ -310,7 +310,7 @@ static void dll_isr_send_staged(iolink_dll_main_t* ctx, uint8_t slot, uint8_t le
     ctx->shared.isr_tx_len = (uint8_t) (len + 1U);
     ctx->shared.isr_tx_active = 0U;
     if (ctx->shared.phy->tx_frame != NULL) {
-        if (ctx->shared.phy->tx_frame(ctx->shared.phy->user, payload, ctx->shared.isr_tx_len) !=
+        if (ctx->shared.phy->tx_frame(ctx->shared.phy->self, payload, ctx->shared.isr_tx_len) !=
             0) {
             IOLINK_STAT_ISR(ctx, isr_tx_dropped)++; /* PHY 忙：回复丢失 */
         }
@@ -399,7 +399,7 @@ static bool dll_isr_start_reply_frame(iolink_dll_main_t* ctx, uint8_t* base, uin
     ctx->shared.isr_tx_len = (uint8_t) out_len;
     ctx->shared.isr_tx_active = 0U;
     if (ctx->shared.phy->response_timer_stop != NULL) {
-        ctx->shared.phy->response_timer_stop(ctx->shared.phy->user);
+        ctx->shared.phy->response_timer_stop(ctx->shared.phy->self);
     }
     /* 对于 1-2 个八位组的应答，DMA 几乎立即读取 CKS（TDR
      * 在帧开始时就清空）。只有当 CKS 之前至少有两个八位组时（out_len >= 3），
@@ -411,7 +411,7 @@ static bool dll_isr_start_reply_frame(iolink_dll_main_t* ctx, uint8_t* base, uin
     if (out_len >= 3U) {
         int tx_rc = -1;
         if (ctx->shared.phy->tx_frame != NULL) {
-            tx_rc = ctx->shared.phy->tx_frame(ctx->shared.phy->user, base, out_len);
+            tx_rc = ctx->shared.phy->tx_frame(ctx->shared.phy->self, base, out_len);
         }
         if (tx_rc != 0) {
             return false;
@@ -430,7 +430,7 @@ static bool dll_isr_start_reply_frame(iolink_dll_main_t* ctx, uint8_t* base, uin
         }
         base[out_len - 1U] = (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
         if ((ctx->shared.phy->tx_frame == NULL) ||
-            (ctx->shared.phy->tx_frame(ctx->shared.phy->user, base, out_len) != 0)) {
+            (ctx->shared.phy->tx_frame(ctx->shared.phy->self, base, out_len) != 0)) {
             return false;
         }
     }
@@ -449,7 +449,7 @@ static bool dll_isr_start_reply_byte(iolink_dll_main_t* ctx, uint8_t* base, uint
     ctx->shared.isr_tx_has_cks = 1U;
     ctx->shared.isr_tx_active = 1U;
     if (ctx->shared.phy->response_timer_stop != NULL) {
-        ctx->shared.phy->response_timer_stop(ctx->shared.phy->user);
+        ctx->shared.phy->response_timer_stop(ctx->shared.phy->self);
     }
     dll_isr_tx_step(ctx);
     return true;
@@ -613,7 +613,7 @@ static bool dll_isr_plan_action(iolink_dll_main_t* ctx, const iolink_reply_plan_
 static bool dll_isr_phy_busy(const iolink_dll_main_t* ctx)
 {
     return (ctx->shared.phy->tx_busy != NULL) &&
-           (ctx->shared.phy->tx_busy(ctx->shared.phy->user) != 0U);
+           (ctx->shared.phy->tx_busy(ctx->shared.phy->self) != 0U);
 }
 #else
 static bool dll_isr_phy_busy(const iolink_dll_main_t* ctx)
@@ -651,11 +651,11 @@ bool dll_isr_plan_execute(iolink_dll_main_t* ctx, const iolink_reply_plan_t* pla
     if ((plan->flags & IOLINK_REPLY_FLAG_CLOSE_WINDOW) != 0U) {
         /* 按规范有意不应答（转换命令、复位请求）：关闭 t_A 窗口。 */
         if (ctx->shared.phy->response_timer_stop != NULL) {
-            ctx->shared.phy->response_timer_stop(ctx->shared.phy->user);
+            ctx->shared.phy->response_timer_stop(ctx->shared.phy->self);
         }
         if (((plan->flags & IOLINK_REPLY_FLAG_RESTART_TIMER_B) != 0U) &&
             (ctx->shared.phy->stack_timer_start != NULL)) {
-            ctx->shared.phy->stack_timer_start(ctx->shared.phy->user);
+            ctx->shared.phy->stack_timer_start(ctx->shared.phy->self);
         }
         dll_isr_touch_activity(ctx);
         return true;
@@ -703,7 +703,7 @@ static void dll_isr_tx_pending(iolink_dll_main_t* ctx)
 {
     ctx->shared.isr_tx_pending = 0U;
     if (ctx->shared.phy->response_timer_stop != NULL) {
-        ctx->shared.phy->response_timer_stop(ctx->shared.phy->user);
+        ctx->shared.phy->response_timer_stop(ctx->shared.phy->self);
     }
     dll_isr_start_staged_tx(ctx, ctx->shared.isr_tx_pending_slot, ctx->shared.isr_tx_len);
 }
@@ -723,7 +723,7 @@ static void dll_isr_process(iolink_dll_main_t* ctx)
 
     /* 电平复查：数据中断可能锁存串扰边沿；在零
      * 成本下退出，除非收发器确实在请求服务。 */
-    if (ctx->shared.phy->int_active(ctx->shared.phy->user) == 0U) {
+    if (ctx->shared.phy->int_active(ctx->shared.phy->self) == 0U) {
         return;
     }
 
@@ -766,7 +766,7 @@ void iolink_dll_on_rx_timeout(iolink_dll_main_t* ctx)
     ctx->shared.isr->isr_rx_expect = 0U;
 #endif
     if ((ctx->shared.phy != NULL) && (ctx->shared.phy->response_timer_stop != NULL)) {
-        ctx->shared.phy->response_timer_stop(ctx->shared.phy->user);
+        ctx->shared.phy->response_timer_stop(ctx->shared.phy->self);
     }
 }
 

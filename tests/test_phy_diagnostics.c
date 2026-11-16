@@ -24,27 +24,27 @@
 
 static uint8_t mock_faults;
 
-static int mock_init(void* user)
+static int mock_init(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return 0;
 }
 
-static void mock_set_mode(void* user, iolink_phy_mode_t mode)
+static void mock_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
 {
-    (void) user;
+    (void) self;
     (void) mode;
 }
 
-static void mock_set_baudrate(void* user, iolink_baudrate_t baudrate)
+static void mock_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
 {
-    (void) user;
+    (void) self;
     (void) baudrate;
 }
 
-static uint8_t mock_get_faults(void* user)
+static uint8_t mock_get_faults(iolink_app_t* self)
 {
-    (void) user;
+    (void) self;
     return mock_faults;
 }
 
