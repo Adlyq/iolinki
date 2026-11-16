@@ -31,6 +31,17 @@ ctest --test-dir build -R test_dll
 
 - No dynamic memory; context-based (no globals); `<stdint.h>` types; negative-int
   error codes; MISRA C:2012 subset.
+- **No fallback paths for required inputs.** A missing required input, an error
+  return or an unexpected state ends in an explicit failure (negative code,
+  `IOLINK_DEVICE_INIT_ERR_*`, ISDU error response, `false`/`NULL` for a
+  documented borrowed view). Never substitute a default value, a second
+  implementation or a silently degraded behaviour ("if it is missing, use X
+  instead"). Absence that means "unsupported" or "not needed" is a legitimate
+  outcome, but it must be declared at the interface (nullable pointer, optional
+  hook, or a spec-defined `0` = "none"); it is not a fallback.
+- Pointer contracts are explicit: `IOLINK_NONNULL`/`IOLINK_NULLABLE` for
+  required/optional pointers, a named opaque type instead of `void *`, and
+  `IOLINK_OPAQUE` (with a reason) only where the interface cannot name a type.
 
 ## Spec constraints
 
