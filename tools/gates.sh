@@ -27,7 +27,7 @@ trap 'rm -f "$IOLINK_GATES_SNAPSHOT"' EXIT
 ROOT="${IOLINK_GATES_ROOT:?gates: snapshot re-exec lost the repository root}"
 cd "$ROOT"
 
-GATE_GROUPS=(quick build test gcc static docs matrix perf package)
+GATE_GROUPS=(quick build test gcc sanitize static docs matrix perf package)
 
 STRICT_CFLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
 
@@ -35,6 +35,7 @@ STRICT_CFLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
 # is clang, AC6 armclang is LLVM) and the pointer annotations only exist under
 # clang. gcc runs afterwards with the diagnostics clang does not offer.
 CC_PRIMARY="${IOLINKI_CC:-clang}"
+CXX_PRIMARY="${IOLINKI_CXX:-clang++}"
 CC_SECONDARY="${IOLINKI_CC_SECONDARY:-gcc}"
 
 BUILD_DIR="${IOLINKI_BUILD_DIR:-$ROOT/build/quality}"
@@ -44,6 +45,7 @@ case "$BUILD_DIR" in
 esac
 RELEASE_DIR="${BUILD_DIR}_release"
 SECONDARY_DIR="${BUILD_DIR}_${CC_SECONDARY}"
+SANITIZE_DIR="${BUILD_DIR}_sanitize"
 
 usage() {
     cat >&2 <<'EOF'
@@ -55,6 +57,8 @@ Groups:
   build    strict -Werror compilation with clang, Debug (-O0) and Release (-O3)
   test     strict Debug build plus the unit suite (ctest)
   gcc      the gcc-only strict diagnostic set, plus -fanalyzer as a report
+  sanitize the unit suite under AddressSanitizer + UndefinedBehaviorSanitizer
+           (clang only; a sanitizer report fails the run)
   static   cppcheck and the MISRA addon (report-only unless
            IOLINKI_MISRA_ENFORCE=1)
   docs     Doxygen warnings
@@ -246,6 +250,44 @@ group_gcc() {
     step "$CC_SECONDARY -fanalyzer (report-only)" gcc_analyzer
 }
 
+# --- sanitize ---------------------------------------------------------------
+
+# UndefinedBehaviorSanitizer catches the integer-conversion and shift mistakes
+# the compiler only warns about, AddressSanitizer the out-of-bounds accesses on
+# the fixed-size frame/OD/page buffers. `unsigned-integer-overflow` is not
+# included: the CRC and checksum arithmetic relies on wrapping by design.
+SANITIZE_FLAGS="-fsanitize=address,undefined,implicit-conversion,bounds,null -fno-sanitize-recover=all -fno-omit-frame-pointer -g"
+
+build_sanitize() {
+    # configure_tree() sets CMAKE_C_FLAGS first; the later -D wins, which is how
+    # the sanitizer flags replace the plain strict set. The example subprojects
+    # also enable C++, so the C++ compiler has to match: `implicit-conversion`
+    # is a clang sanitizer and the linker flags reach the C++ link as well.
+    configure_tree "$SANITIZE_DIR" Debug "$CC_PRIMARY" \
+        "-DCMAKE_CXX_COMPILER=$CXX_PRIMARY" \
+        "-DCMAKE_C_FLAGS=$STRICT_CFLAGS $SANITIZE_FLAGS" \
+        "-DCMAKE_EXE_LINKER_FLAGS=$SANITIZE_FLAGS" &&
+        cmake --build "$SANITIZE_DIR" --parallel "$(nproc)"
+}
+
+run_sanitize_tests() {
+    ASAN_OPTIONS="detect_leaks=0" \
+        UBSAN_OPTIONS="print_stacktrace=1" \
+        ctest --test-dir "$SANITIZE_DIR" --output-on-failure
+}
+
+group_sanitize() {
+    case "$CC_PRIMARY" in
+        *clang*) ;;
+        *)
+            skip "sanitizers need clang (IOLINKI_CC=$CC_PRIMARY)"
+            return 0
+            ;;
+    esac
+    step "sanitizer build (asan + ubsan + implicit-conversion)" build_sanitize || return 1
+    step "unit suite under sanitizers" run_sanitize_tests
+}
+
 # --- static ----------------------------------------------------------------
 
 cppcheck_run() {
@@ -361,6 +403,7 @@ run_group() {
         build) group_build ;;
         test) group_test ;;
         gcc) group_gcc ;;
+        sanitize) group_sanitize ;;
         static) group_static ;;
         docs) group_docs ;;
         matrix) group_matrix ;;
@@ -392,7 +435,7 @@ for arg in "$@"; do
         all)
             requested+=("${GATE_GROUPS[@]}")
             ;;
-        quick | build | test | gcc | static | docs | matrix | perf | package)
+        quick | build | test | gcc | sanitize | static | docs | matrix | perf | package)
             requested+=("$arg")
             ;;
         *)

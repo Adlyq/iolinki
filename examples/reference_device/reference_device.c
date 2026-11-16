@@ -59,7 +59,9 @@ int reference_device_tick(reference_device_t* app, bool button)
     if (app == NULL) {
         return -1;
     }
-    app->counter++;
+    /* 16 位计数器按设计回绕（65535 -> 0），因此写回时显式收窄：
+     * 隐式转换会被 `-fsanitize=implicit-conversion` 判为丢值。 */
+    app->counter = (uint16_t) (app->counter + 1U);
     app->input[0] = (uint8_t) (app->counter >> 8);
     app->input[1] = (uint8_t) app->counter;
     app->input[2] = button ? 1U : 0U;

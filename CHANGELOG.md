@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (sanitizer gate)
+- `tools/gates.sh sanitize` runs the unit suite under AddressSanitizer,
+  UndefinedBehaviorSanitizer and `implicit-conversion` (clang only). A report
+  fails the run; `unsigned-integer-overflow` stays off because the CRC and
+  checksum arithmetic wraps by design.
+- The reference device's 16-bit counter now narrows explicitly: `counter++`
+  promoted to `int` and truncated back, which `-Wconversion` does not diagnose
+  (increment operators are exempt) but the sanitizer does. The wrap at 65535 is
+  intended and asserted by `test_reference_device`.
+
 ### Changed (clang is the primary compiler)
 - The gates, the compile matrix, the coverage tree and the WCET harness now
   build with clang (the compiler family the firmware is built with, and the

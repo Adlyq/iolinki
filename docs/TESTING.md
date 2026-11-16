@@ -32,6 +32,7 @@ name, prints each group's wall time, and stops at the first failure
 | `build` | strict `-Werror` compilation with clang, Debug (`-O0`) and Release (`-O3`) |
 | `test` | strict Debug build plus `ctest` |
 | `gcc` | the gcc-only strict diagnostics (`-DIOLINK_STRICT_GCC=ON`, library target) and `gcc -fanalyzer` as a report-only step |
+| `sanitize` | the unit suite under AddressSanitizer, UndefinedBehaviorSanitizer and `implicit-conversion` (clang only; a sanitizer report fails the run) |
 | `static` | cppcheck and the MISRA addon (report-only unless `IOLINKI_MISRA_ENFORCE=1`) |
 | `docs` | Doxygen warnings |
 | `matrix` | `tools/build_matrix.sh` (clang) and `tools/diff_matrix.sh` |
@@ -75,7 +76,6 @@ Two compilers run, and they are not interchangeable:
 
 Baselines record the toolchain that produced them and are never compared across
 compilers:
-
 - `tools/size_baseline.atfe.csv` is measured with ATFE (the
   `tools/size_matrix.py` default); `tools/size_baseline.csv` keeps the
   GNU-toolchain numbers and `IOLINKI_SIZE_TOOLCHAIN=gcc` reproduces them.
@@ -83,6 +83,12 @@ compilers:
   counts 5496 executable lines on this tree where gcc counts 4809. gcc reports
   91.0% and clang 90.7% on the same sources; the file records both denominators
   so the difference is not read as a regression.
+
+`sanitize` runs the same suite with AddressSanitizer and UndefinedBehaviorSanitizer
+plus `implicit-conversion`, which covers what `-Wconversion` cannot see (an
+`x++` on a narrow type, for example). `unsigned-integer-overflow` is left out on
+purpose: the CRC and checksum arithmetic relies on wrapping. A sanitizer report
+fails the group; there is no report-only mode.
 
 No level up to L2 builds a structural configuration or re-measures size,
 coverage or the WCET proxy, so a green L2 says nothing about those. Add a group
