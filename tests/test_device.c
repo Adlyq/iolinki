@@ -159,11 +159,11 @@ static void test_device_binds_instance_context(void** state)
 
     /* 设备层必须把同一个实例指针交给时钟、ISDU 与 DS 的 OD 钩子；
        否则 OD HANDLER 会收到 NULL 并回 0x11。 */
-    assert_ptr_equal(test_dll_shared(&dev.ctx)->time_self, (iolink_app_t*) &sentinel);
+    assert_ptr_equal(test_dll_shared(&dev.ctx)->clock.self, (iolink_app_t*) &sentinel);
     assert_ptr_equal(test_dll_isdu(&dev.ctx)->od_self, (iolink_app_t*) &sentinel);
     assert_ptr_equal(test_dll(&dev.ctx)->ds.self, (iolink_app_t*) &sentinel);
 #if IOLINK_FEATURE_EVENTS
-    assert_ptr_equal(test_dll_shared(&dev.ctx)->events.time_self, (iolink_app_t*) &sentinel);
+    assert_ptr_equal(test_dll_shared(&dev.ctx)->events.clock->self, (iolink_app_t*) &sentinel);
 #endif
 }
 

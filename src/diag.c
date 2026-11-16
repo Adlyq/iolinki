@@ -89,10 +89,10 @@ static const iolink_diag_desc_t* diag_desc_by_src(iolink_diag_src_t src)
 /** @brief 已绑定事件的当前时间（毫秒）。 */
 static uint32_t diag_now_ms(const iolink_events_ctx_t* events)
 {
-    if ((events == NULL) || (events->time_us == NULL)) {
+    if ((events == NULL) || (events->clock == NULL) || (events->clock->time_us == NULL)) {
         return 0U;
     }
-    return (uint32_t) (events->time_us(events->time_self) / 1000U);
+    return (uint32_t) (events->clock->time_us(events->clock->self) / 1000U);
 }
 
 /** @brief 按 EventCode 查找已分配的条件槽位（任意状态）。 */

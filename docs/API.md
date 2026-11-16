@@ -628,7 +628,7 @@ ISDU 附加错误码（`IOLINK_ISDU_ERROR_*`，例如 `IDX_NOTAVAIL` `0x11`、
 `iolink_device_app_t::time_us` 是 `iolink_device_init()` 的必需项（`NULL` 以
 `IOLINK_DEVICE_INIT_ERR_TIME` 拒绝），协议栈用它完成全部 DLL、ISR 和事件计时。没有
 单独的平台时间 API；直接使用 DLL 的调用方必须在 `iolink_dll_init()` 之后自行绑定
-`ctx->shared.time_us`/`shared.time_self`（DLL 上下文分为主视图和 ISR 视图）。临界区
+`ctx->shared.clock`（DLL 上下文分为主视图和 ISR 视图）。临界区
 使用 `include/iolinki/port.h` 中的 `iolink_critical_enter()` /
 `iolink_critical_exit()`；`iolink_device_init()` 以 `IOLINK_DEVICE_INIT_ERR_CRITICAL`
 拒绝库自带的 weak no-op 默认实现。
@@ -673,8 +673,9 @@ config.log_level = IOLINK_LOG_LEVEL_INFO;
 
 `IOLINK_LOG_LEVEL_SILENT`（默认）或 trait 的 `log_write == NULL` 保持静默。
 `iolink_device_set_log(ctx, write, level)` 在运行期更换汇点；`self` 参数仍为
-`app->self`。汇点被复制到 DLL、ISDU、DS 和事件上下文，直接使用这些模块的调用方
-需要自行用 `iolink_log_sink_init()` 绑定 `ctx->log`。
+`app->self`。设备只有一个 sink（`shared.log`），ISDU、DS 和事件上下文只保存指向它
+的指针，因此一次 set_log 就更新全部模块；直接使用这些模块的调用方把 `ctx->log`
+指向自己的 sink 即可，NULL 表示静默。
 
 库不格式化也不缓存任何内容：回调收到 printf 风格的格式串和参数，只有通过运行时
 阈值时才求值。ISR 打印点使用单独的 `IOLINK_LOG_ISR_*` 系列，只有

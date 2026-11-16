@@ -209,8 +209,8 @@ static void test_get_faults_clear_emits_disappears(void** state)
     mock_faults = IOLINK_PHY_FAULT_OVERTEMP;
 
     iolink_dll_init(&ctx.main, &ctx.isr, &mock_phy_faults);
-    ctx.main.shared.time_us = fault_time_us;
-    ctx.main.shared.events.time_us = fault_time_us;
+    ctx.main.shared.clock.time_us = fault_time_us;
+    ctx.main.shared.events.clock = &ctx.main.shared.clock;
     iolink_dll_process(&ctx.main);
 
     assert_true(iolink_events_pop(&ctx.main.shared.events, &ev));

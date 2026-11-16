@@ -379,7 +379,7 @@ static bool isdu_system_ds(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 
 void handle_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
 {
-    IOLINK_LOG_INFO(&ctx->log, "system command 0x%02X", (unsigned) cmd);
+    IOLINK_LOG_INFO(ctx->log, "system command 0x%02X", (unsigned) cmd);
     /* 能力位关闭时，所有命令统一回 FUNC_NOTAVAIL。拒绝分支常驻，
      * 因此关位是运行时决定，不是构建期分裂。 */
     if (!isdu_cap_default_on(ctx, IOLINK_CAP_SYSTEM_COMMAND)) {

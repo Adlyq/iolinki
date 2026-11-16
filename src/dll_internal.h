@@ -43,10 +43,10 @@ void dll_timer_cancel(iolink_dll_main_t* ctx, iolink_timer_id_t id);
  */
 static inline uint64_t dll_time_us(const iolink_dll_main_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->shared.time_us == NULL)) {
+    if ((ctx == NULL) || (ctx->shared.clock.time_us == NULL)) {
         return 0U;
     }
-    return ctx->shared.time_us(ctx->shared.time_self);
+    return ctx->shared.clock.time_us(ctx->shared.clock.self);
 }
 
 static inline uint32_t dll_time_ms(const iolink_dll_main_t* ctx)

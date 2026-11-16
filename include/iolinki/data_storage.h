@@ -82,12 +82,12 @@ typedef struct
     iolink_app_t* self;                     /**< 传给 OD 钩子/后端的应用上下文。 */
     /* 镜像不再常驻状态结构。序列化交给工作区中的暂存缓冲（上传可
      * 直接流式写入调用方缓冲），这里只保留指针与容量。 */
-    uint8_t* image;        /**< 序列化/下载暂存缓冲（工作区或内嵌 fallback） */
-    size_t image_size;     /**< @ref image 的容量 */
-    size_t image_len;      /**< @ref image 中的有效字节数 */
-    bool image_valid;      /**< image 是否保存了当前参数的完整快照 */
-    bool download_invalid; /**< 被拒绝的写入会使当前下载失效 */
-    iolink_log_sink_t log; /**< 日志汇点（默认静默；设备层绑定） */
+    uint8_t* image;               /**< 序列化/下载暂存缓冲（工作区或内嵌 fallback） */
+    size_t image_size;            /**< @ref image 的容量 */
+    size_t image_len;             /**< @ref image 中的有效字节数 */
+    bool image_valid;             /**< image 是否保存了当前参数的完整快照 */
+    bool download_invalid;        /**< 被拒绝的写入会使当前下载失效 */
+    const iolink_log_sink_t* log; /**< 日志汇点（默认静默；设备层绑定） */
 #if IOLINK_WORKSPACE_EMBEDDED
     uint8_t scratch[IOLINK_DS_IMAGE_MAX]; /**< 未提供工作区时的默认暂存缓冲 */
 #endif

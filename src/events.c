@@ -62,10 +62,10 @@ static uint16_t events_min_repeat_ms(const iolink_events_ctx_t* ctx)
 /** @brief 来自已绑定应用时钟的当前时间（毫秒）。 */
 static uint32_t events_now_ms(const iolink_events_ctx_t* ctx)
 {
-    if (ctx->time_us == NULL) {
+    if ((ctx->clock == NULL) || (ctx->clock->time_us == NULL)) {
         return 0U;
     }
-    return (uint32_t) (ctx->time_us(ctx->time_self) / 1000U);
+    return (uint32_t) (ctx->clock->time_us(ctx->clock->self) / 1000U);
 }
 
 /** @brief 由事件类型和 MODE 生成 EventQualifier（A.6.4，Figure A.24）。
@@ -268,7 +268,7 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
         return;
     }
 
-    IOLINK_LOG_DEBUG(&ctx->log, "event trigger code=0x%04X type=%u", (unsigned) code,
+    IOLINK_LOG_DEBUG(ctx->log, "event trigger code=0x%04X type=%u", (unsigned) code,
                      (unsigned) type);
 
     IOLINK_CRITICAL_ENTER();
@@ -348,7 +348,7 @@ void iolink_event_clear(iolink_events_ctx_t* ctx, uint16_t code)
             ctx->pending_count--;
         }
         IOLINK_CRITICAL_EXIT();
-        IOLINK_LOG_DEBUG(&ctx->log, "event clear code=0x%04X", (unsigned) code);
+        IOLINK_LOG_DEBUG(ctx->log, "event clear code=0x%04X", (unsigned) code);
         return;
     }
     IOLINK_CRITICAL_EXIT();

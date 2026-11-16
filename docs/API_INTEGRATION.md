@@ -98,7 +98,7 @@ ISDU 快照和应答暂存区。
 引擎的所有时间戳都从该回调获取。
 
 核心不再调用平台时间函数；直接使用 `iolink_dll_*` 时，调用方必须在
-`iolink_dll_init()` 后自行绑定 `ctx->shared.time_us`（及 `shared.time_self`，
+`iolink_dll_init()` 后自行绑定 `ctx->shared.clock`（回调 + 实例指针，
 其中 `ctx` 是 `iolink_dll_main_t*`；初始化需要同时传入 ISR 对象）。未绑定时
 内部计时读数为 0。
 
@@ -773,7 +773,8 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 上下文。该回调为必需项：`config.app` 为 NULL 返回 `IOLINK_DEVICE_INIT_ERR_APP`，
 `app->time_us` 为 NULL 返回 `IOLINK_DEVICE_INIT_ERR_TIME`。绑定后，主循环、
 数据 ISR 和事件引擎都使用该回调，核心不再调用平台时间函数。直接使用
-`iolink_dll_*` 时，调用方需在初始化后自行绑定 `ctx->time_us`/`time_self`。
+`iolink_dll_*` 时，调用方需在初始化后自行绑定 `ctx->shared.clock`；事件引擎的
+`ctx->clock` 可指向同一个实例（设备层就是这么做的），也可以指向独立时钟。
 时间源必须在上下文生命周期内保持单调。
 
 ### 8.3 上下文绑定

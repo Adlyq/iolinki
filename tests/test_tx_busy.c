@@ -141,7 +141,7 @@ static void init_ctx(iolink_dll_ctx_t* dll)
 {
     g_phy.user = dll;
     iolink_dll_init(&dll->main, &dll->isr, &g_phy);
-    dll->main.shared.time_us = test_time_us;
+    dll->main.shared.clock.time_us = test_time_us;
     dll->main.phy_mode = IOLINK_PHY_MODE_SDCI;
     dll->main.shared.state = IOLINK_DLL_STATE_OPERATE;
     dll->main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;

@@ -619,7 +619,7 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* od_o
 /** @brief 以两字节否定应答终止 ISDU 服务。 */
 void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error)
 {
-    IOLINK_LOG_DEBUG(&ctx->log, "isdu error 0x%02X", (unsigned) error);
+    IOLINK_LOG_DEBUG(ctx->log, "isdu error 0x%02X", (unsigned) error);
     ctx->response_negative = true;
     ctx->response_buf[0] = 0x80U;
     ctx->response_buf[1] = error;
@@ -723,7 +723,7 @@ void iolink_isdu_process(iolink_isdu_ctx_t* ctx)
     }
 
     if (applied) {
-        IOLINK_LOG_DEBUG(&ctx->log, "isdu req idx=0x%04X sub=%u len=%u write=%u",
+        IOLINK_LOG_DEBUG(ctx->log, "isdu req idx=0x%04X sub=%u len=%u write=%u",
                          (unsigned) ctx->header.index, (unsigned) ctx->header.subindex,
                          (unsigned) ctx->header.length,
                          (unsigned) (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE));
@@ -736,7 +736,7 @@ void iolink_isdu_process(iolink_isdu_ctx_t* ctx)
         }
         else {
             isdu_frame_response(ctx);
-            IOLINK_LOG_DEBUG(&ctx->log, "isdu rsp idx=0x%04X sub=%u neg=%u len=%u",
+            IOLINK_LOG_DEBUG(ctx->log, "isdu rsp idx=0x%04X sub=%u neg=%u len=%u",
                              (unsigned) ctx->header.index, (unsigned) ctx->header.subindex,
                              (unsigned) ctx->response_negative, (unsigned) ctx->resp_total);
         }

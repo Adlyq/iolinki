@@ -23,10 +23,12 @@
 #include "conformance_test.h"
 #include "test_helpers.h"
 
+static const iolink_clock_t g_test_clock = {.time_us = iolink_test_time_us};
+
 static void events_init(iolink_events_ctx_t* ctx)
 {
     iolink_events_init(ctx);
-    ctx->time_us = iolink_test_time_us;
+    ctx->clock = &g_test_clock;
 }
 
 static uint32_t g_fake_ms;
@@ -36,6 +38,8 @@ static uint64_t fake_time_us(iolink_app_t* self)
     (void) self;
     return (uint64_t) g_fake_ms * 1000U;
 }
+
+static const iolink_clock_t g_fake_clock = {.time_us = fake_time_us};
 
 static void test_event_queue_flow(void** state)
 {
@@ -350,7 +354,7 @@ static void test_event_window_is_runtime_configurable(void** state)
     (void) state;
     iolink_events_ctx_t ctx;
     iolink_events_init(&ctx);
-    ctx.time_us = fake_time_us;
+    ctx.clock = &g_fake_clock;
     iolink_events_set_window(&ctx, 10U, 20U);
     assert_int_equal(ctx.min_appear_ms, 10U);
     assert_int_equal(ctx.min_repeat_ms, 20U);
@@ -383,7 +387,7 @@ static void test_event_window_defaults_without_config(void** state)
     (void) state;
     iolink_events_ctx_t ctx;
     (void) memset(&ctx, 0, sizeof(ctx));
-    ctx.time_us = fake_time_us;
+    ctx.clock = &g_fake_clock;
     assert_int_equal(ctx.min_appear_ms, 0U);
     assert_int_equal(ctx.min_repeat_ms, 0U);
 
@@ -412,7 +416,7 @@ static void test_event_recently_sent(void** state)
     (void) state;
     iolink_events_ctx_t ctx;
     events_init(&ctx);
-    ctx.time_us = fake_time_us;
+    ctx.clock = &g_fake_clock;
     g_fake_ms = 0U;
     iolink_event_t ev;
 
@@ -452,7 +456,7 @@ static void test_event_pending_full_observable(void** state)
     (void) state;
     iolink_events_ctx_t ctx;
     events_init(&ctx);
-    ctx.time_us = fake_time_us;
+    ctx.clock = &g_fake_clock;
     g_fake_ms = 0U;
 
     iolink_event_t ev;
@@ -567,7 +571,7 @@ static void test_event_device_status_drops_with_condition(void** state)
     (void) state;
     iolink_events_ctx_t ctx;
     events_init(&ctx);
-    ctx.time_us = fake_time_us;
+    ctx.clock = &g_fake_clock;
     g_fake_ms = 0U;
 
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_SHORT_CIRCUIT, IOLINK_EVENT_TYPE_ERROR);
@@ -651,7 +655,7 @@ static void test_event_clear_diagnosis(void** state)
     (void) state;
     iolink_events_ctx_t ctx;
     events_init(&ctx);
-    ctx.time_us = fake_time_us;
+    ctx.clock = &g_fake_clock;
     g_fake_ms = 0U;
 
     iolink_event_trigger(&ctx, IOLINK_EVENTCODE_GENERAL_MALFUNCTION, IOLINK_EVENT_TYPE_ERROR);
@@ -706,7 +710,7 @@ static void test_event_clear_diagnosis_skips_unreported_event(void** state)
     (void) state;
     iolink_events_ctx_t ctx;
     events_init(&ctx);
-    ctx.time_us = fake_time_us;
+    ctx.clock = &g_fake_clock;
     g_fake_ms = 0U;
 
     iolink_event_t ev;

@@ -33,11 +33,13 @@ static uint64_t diag_time_us(iolink_app_t* self)
     return (uint64_t) g_ms * 1000U;
 }
 
+static const iolink_clock_t g_diag_clock = {.time_us = diag_time_us};
+
 static void diag_events_init(iolink_events_ctx_t* events)
 {
     g_ms = 0U;
     iolink_events_init(events);
-    events->time_us = diag_time_us;
+    events->clock = &g_diag_clock;
 }
 
 /** @brief 独立于实现的 Table D.1 期望表。 */

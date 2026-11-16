@@ -338,11 +338,10 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     /* 在推导任何截止时间之前绑定应用时钟。设备层
      * 要求该时钟（NULL 已在上文被拒绝）。事件引擎共享
      * 同一时钟，使事件时序与 DLL 一致。 */
-    ctx->dll.main.shared.time_us = config->app->time_us;
-    ctx->dll.main.shared.time_self = config->app->self;
+    ctx->dll.main.shared.clock.time_us = config->app->time_us;
+    ctx->dll.main.shared.clock.self = config->app->self;
 #if IOLINK_FEATURE_EVENTS
-    ctx->dll.main.shared.events.time_us = config->app->time_us;
-    ctx->dll.main.shared.events.time_self = config->app->self;
+    ctx->dll.main.shared.events.clock = &ctx->dll.main.shared.clock;
     /* A.6.4 的两个窗口是运行时能力：栈配置非 0 时覆盖构建默认值。 */
     iolink_events_set_window(&ctx->dll.main.shared.events, config->stack.event_min_appear_ms,
                              config->stack.event_min_repeat_ms);
@@ -423,12 +422,13 @@ void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn write,
     IOLINK_CRITICAL_ENTER();
     /* 设备层没有自己的 sink：打印点使用 DLL 的那一份。 */
     iolink_log_sink_init(&ctx->dll.main.shared.log, write, self, level);
-    iolink_log_sink_init(&ctx->dll.main.shared.isdu.log, write, self, level);
+    /* 一个 sink 服务全部模块：它们只保存指针，这里统一指向它。 */
+    ctx->dll.main.shared.isdu.log = &ctx->dll.main.shared.log;
 #if IOLINK_FEATURE_DATA_STORAGE
-    iolink_log_sink_init(&ctx->dll.main.ds.log, write, self, level);
+    ctx->dll.main.ds.log = &ctx->dll.main.shared.log;
 #endif
 #if IOLINK_FEATURE_EVENTS
-    iolink_log_sink_init(&ctx->dll.main.shared.events.log, write, self, level);
+    ctx->dll.main.shared.events.log = &ctx->dll.main.shared.log;
 #endif
     IOLINK_CRITICAL_EXIT();
 }

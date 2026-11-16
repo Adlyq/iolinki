@@ -165,7 +165,7 @@ static void init_preop(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
-    s_dll.main.shared.time_us = plan_time_us;
+    s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     s_dll.main.shared.od_width = 1U;
@@ -181,7 +181,7 @@ static void init_op_t1_od32(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
-    s_dll.main.shared.time_us = plan_time_us;
+    s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
     s_dll.main.shared.od_width = 32U;
@@ -198,7 +198,7 @@ static void init_op_t2_pd32(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
-    s_dll.main.shared.time_us = plan_time_us;
+    s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     s_dll.main.shared.od_width = 1U;

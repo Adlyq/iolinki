@@ -58,7 +58,7 @@ static int run_all(void)
     const iolink_phy_api_t phy = {0};
     iolink_dll_ctx_t ctx;
     iolink_dll_init(&ctx.main, &ctx.isr, &phy);
-    ctx.main.shared.time_us = test_time_us;
+    ctx.main.shared.clock.time_us = test_time_us;
 
     ctx.main.shared.state = IOLINK_DLL_STATE_ESTAB_COM;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;

@@ -247,7 +247,7 @@ static void init_operate(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
-    s_dll.main.shared.time_us = plan_time_us;
+    s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     s_dll.main.shared.od_width = 1U;
@@ -268,7 +268,7 @@ static void init_preoperate(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
-    s_dll.main.shared.time_us = plan_time_us;
+    s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     s_dll.main.shared.od_width = 1U;
@@ -287,7 +287,7 @@ static void init_preoperate_rx_only(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy_rx_only);
-    s_dll.main.shared.time_us = plan_time_us;
+    s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     s_dll.main.shared.od_width = 1U;
@@ -790,7 +790,7 @@ static int test_startup_probe_plan(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
-    s_dll.main.shared.time_us = plan_time_us;
+    s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     s_dll.main.shared.pd_in_len = 1U;
     s_dll.main.shared.pd_out_len_current = 0U;
@@ -1019,7 +1019,7 @@ static int test_tx_without_done_hook(void)
 
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &phy);
-    s_dll.main.shared.time_us = plan_time_us;
+    s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     s_dll.main.shared.od_width = 1U;

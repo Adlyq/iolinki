@@ -116,6 +116,18 @@ typedef struct
 } iolink_event_t;
 
 /**
+ * @brief 应用时钟：回调与实例指针成对出现。
+ *
+ * 设备层只创建一个实例（DLL 与事件引擎共用），因此时钟只绑定一次；
+ * 独立使用事件引擎或 DLL 时由调用方提供。
+ */
+typedef struct
+{
+    uint64_t (*time_us)(iolink_app_t* self);
+    iolink_app_t* self;
+} iolink_clock_t;
+
+/**
  * @brief 单个活动 Error/Warning EventCode 的生命周期跟踪。
  *
  * 实现 A.6.4 的出现/消失配对：一个代码在报告其消失之前只能出现
@@ -170,12 +182,10 @@ struct iolink_events_ctx
     /* 诊断注册表的 RAM 侧（ISR one-shot 脉冲、PULSE 窗口、边沿计数）。 */
     iolink_conditions_t diag;
 
-    /* 由设备层绑定的应用时钟（app->time_us）。独立使用事件引擎的
-     * 用户必须在 iolink_events_init() 之后设置它；缺失的时钟会被
-     * 读取为时间 0。 */
-    uint64_t (*time_us)(iolink_app_t* self);
-    iolink_app_t* time_self;
-    iolink_log_sink_t log; /**< 日志汇点（默认静默；设备层绑定） */
+    /* 由设备层绑定的应用时钟。独立使用事件引擎的用户必须在
+     * iolink_events_init() 之后设置它；NULL 被读取为时间 0。 */
+    const iolink_clock_t* clock;
+    const iolink_log_sink_t* log; /**< 日志汇点（NULL = 静默；设备层绑定到共享 sink） */
 };
 
 /**
@@ -184,8 +194,8 @@ struct iolink_events_ctx
  * 重置队列和内部计数器。
  *
  * @param ctx 要初始化的事件上下文
- * @note 独立用户必须在此调用之后绑定 @c ctx->time_us / @c ctx->time_self；
- *       iolink_device_init() 会从设备配置中绑定它们。
+ * @note 独立用户必须在此调用之后绑定 @c ctx->clock 与 @c ctx->log；
+ *       iolink_device_init() 会把它们指向设备的共享实例。
  */
 #if IOLINK_FEATURE_EVENTS
 void iolink_events_init(iolink_events_ctx_t* ctx);

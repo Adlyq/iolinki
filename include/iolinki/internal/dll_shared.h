@@ -53,9 +53,7 @@ typedef struct iolink_dll_shared
      * 事件引擎的每个时间戳都使用它。数据 ISR 会读取它，因此
      * 该回调必须是单调的且 ISR 安全的。未绑定时钟的裸 DLL
      * 上下文读取到的时间为 0。 */
-    uint64_t (*time_us)(iolink_app_t* self);
-
-    iolink_app_t* time_self;
+    iolink_clock_t clock;
 
     volatile uint32_t last_activity_ms; /**< 最后收到字节的时间戳 */
 

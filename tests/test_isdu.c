@@ -1465,7 +1465,8 @@ static void test_isdu_dds_keeps_cleared_event_until_disappear(void** state)
 
     iolink_events_ctx_t events;
     iolink_events_init(&events);
-    events.time_us = dds_event_time_us;
+    const iolink_clock_t dds_clock = {.time_us = dds_event_time_us};
+    events.clock = &dds_clock;
     g_dds_event_ms = 0U;
 
     uint8_t records[16];

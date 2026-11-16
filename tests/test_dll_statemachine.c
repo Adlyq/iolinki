@@ -226,7 +226,7 @@ static void init_state(iolink_dll_state_t state)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
-    s_dll.main.shared.time_us = sm_time_us;
+    s_dll.main.shared.clock.time_us = sm_time_us;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_1_2;
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 0U;

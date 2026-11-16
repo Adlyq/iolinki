@@ -903,7 +903,7 @@ stateDiagram-v2
 
 ## 11. 定时与错误路径
 
-所有软件超时收敛为一张静态表 `iolink_dll_main_t::timers[IOLINK_TIMER_COUNT]`（每项只存绝对截止时间，微秒）+ 一个 `next_deadline`。时钟源唯一：`shared.time_us` → `dll_time_us()`；主泵正常路径只做一次“现在是否到达 `next_deadline`”的比较，装载/取消是边沿事件。
+所有软件超时收敛为一张静态表 `iolink_dll_main_t::timers[IOLINK_TIMER_COUNT]`（每项只存绝对截止时间，微秒）+ 一个 `next_deadline`。时钟源唯一：`shared.clock.time_us` → `dll_time_us()`；主泵正常路径只做一次“现在是否到达 `next_deadline`”的比较，装载/取消是边沿事件。
 
 timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范条款由 `g_timer_contract[]` 描述并通过 `iolink_dll_timer_contract()` 导出（测试与文档共用同一份事实源）：
 
@@ -1005,9 +1005,9 @@ flowchart LR
 - `last_notified_state`：主上下文记录“已交付给应用的状态”，配合 `shared.state` 做电平式通知；`startup_notification_pending` 保留 ISR 触发的 STARTUP 边沿，避免快速进入 PREOPERATE 时丢失复位通知。
 
 上下文尺寸契约（默认缓冲、64 位主机，由 `tests/test_ctx_sizes.c` 断言）：
-`iolink_device_ctx_t` 4920 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4936 B），内嵌
-`iolink_dll_ctx_t` 4728/4744 B、`iolink_isdu_ctx_t` 1352 B、`iolink_events_ctx_t` 504 B、
-`iolink_ds_ctx_t` 368 B；`iolink_workspace_t` 1289 B。
+`iolink_device_ctx_t` 4864 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4880 B），内嵌
+`iolink_dll_ctx_t` 4672/4688 B、`iolink_isdu_ctx_t` 1336 B、`iolink_events_ctx_t` 480 B、
+`iolink_ds_ctx_t` 352 B；`iolink_workspace_t` 1289 B。
 
 并发边界：
 
@@ -1156,7 +1156,7 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 集成注意（按当前代码实际调用点）：
 
 - 1 s idle 监督是截止时间表的 `IOLINK_TIMER_IDLE` 表项（`dll_timer_sync_idle()` / `dll_timer_expire_idle()`），比较阈值固定 1000 ms，不提供编译期开关。
-- `iolink_device_app_t::time_us` 是必需项，初始化时绑定到 `shared.time_us` 与事件引擎；NULL 会被 `iolink_device_init()` 拒绝。主循环、ISR、事件与诊断窗口都用它；直接使用 `iolink_dll_*` 时需自行绑定 `ctx->shared.time_us`。
+- `iolink_device_app_t::time_us` 是必需项，初始化时绑定到 `shared.clock`（事件引擎的 `clock` 指向同一个实例）；NULL 会被 `iolink_device_init()` 拒绝。主循环、ISR、事件与诊断窗口都用它；直接使用 `iolink_dll_*` 时需自行绑定 `ctx->shared.clock`。
 - `phy->set_cq_line` 当前没有栈内调用点（PHY 自己管理 SIO 线状态）。
 - `iolink_events_process()`、`iolink_ds_process()` 由 `iolink_device_process()` 在 ISDU 空闲时自动调度；`iolink_ds_check()` 需要应用自行调度（master 校验和来源应用自有）。
 - 本路径要求 `iolink_critical_enter/exit` 真实可用（初始化会校验），且 `ctx` 的主循环调用与 ISR 调用遵守文档约束。`IOLINK_CONCURRENCY=SINGLE` 档不需要临界区，初始化跳过校验且库不引用该符号；其余档位仍会校验。

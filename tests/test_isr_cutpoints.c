@@ -175,7 +175,7 @@ static void test_main_pass_cutpoint(void** state)
     };
 
     iolink_dll_init(&ctx.main, &ctx.isr, &phy);
-    ctx.main.shared.time_us = test_time_us;
+    ctx.main.shared.clock.time_us = test_time_us;
     ctx.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.main.enforce_timing = false;

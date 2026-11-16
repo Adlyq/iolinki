@@ -126,12 +126,12 @@ static void test_device_init_binds_config_sink(void** state)
     assert_true(test_dll_shared(&ctx)->log.write == log_capture);
     assert_ptr_equal(test_dll_shared(&ctx)->log.self, &token);
     assert_int_equal(test_dll_shared(&ctx)->log.level, IOLINK_LOG_LEVEL_INFO);
-    assert_true(test_dll_isdu(&ctx)->log.write == log_capture);
+    assert_true(test_dll_isdu(&ctx)->log->write == log_capture);
 #if IOLINK_FEATURE_DATA_STORAGE
-    assert_true(iolink_device_get_ds_ctx(&ctx)->log.write == log_capture);
+    assert_true(iolink_device_get_ds_ctx(&ctx)->log->write == log_capture);
 #endif
 #if IOLINK_FEATURE_EVENTS
-    assert_true(iolink_device_get_events_ctx(&ctx)->log.write == log_capture);
+    assert_true(iolink_device_get_events_ctx(&ctx)->log->write == log_capture);
 #endif
 
     /* The runtime switch silences an initialized device immediately. */
@@ -283,22 +283,22 @@ static void test_device_setter_propagates(void** state)
     assert_true(test_dll_shared(&ctx)->log.write == log_capture);
     assert_ptr_equal(test_dll_shared(&ctx)->log.self, &token);
     assert_int_equal(test_dll_shared(&ctx)->log.level, IOLINK_LOG_LEVEL_INFO);
-    assert_true(test_dll_isdu(&ctx)->log.write == log_capture);
-    assert_ptr_equal(test_dll_isdu(&ctx)->log.self, &token);
+    assert_true(test_dll_isdu(&ctx)->log->write == log_capture);
+    assert_ptr_equal(test_dll_isdu(&ctx)->log->self, &token);
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_ctx_t* ds = iolink_device_get_ds_ctx(&ctx);
-    assert_true(ds->log.write == log_capture);
-    assert_ptr_equal(ds->log.self, &token);
+    assert_true(ds->log->write == log_capture);
+    assert_ptr_equal(ds->log->self, &token);
 #endif
 #if IOLINK_FEATURE_EVENTS
     iolink_events_ctx_t* events = iolink_device_get_events_ctx(&ctx);
-    assert_true(events->log.write == log_capture);
-    assert_ptr_equal(events->log.self, &token);
+    assert_true(events->log->write == log_capture);
+    assert_ptr_equal(events->log->self, &token);
 #endif
 
     /* Logging through a propagated subsystem sink works. */
     reset_capture();
-    IOLINK_LOG_INFO(&test_dll_isdu(&ctx)->log, "from isdu");
+    IOLINK_LOG_INFO(test_dll_isdu(&ctx)->log, "from isdu");
     assert_true((g_calls == 1) && (strcmp(g_last_msg, "from isdu") == 0));
 
     iolink_device_set_log(&ctx, NULL, IOLINK_LOG_LEVEL_SILENT);

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (one log sink, one clock)
+- The DLL, ISDU, DS and events contexts used to embed their own
+  `iolink_log_sink_t` (four copies of the same callback/self/level) and the
+  events engine kept a second clock next to the DLL's. The device now owns a
+  single sink (`shared.log`) and a single `iolink_clock_t` (`shared.clock`);
+  the module contexts hold `const` pointers to them, bound once by
+  `iolink_device_set_log()` and at init. `iolink_device_set_log()` updates one
+  object instead of four, and a module that was never bound is silent instead
+  of logging through a stale copy. Standalone users point `ctx->log` /
+  `ctx->clock` at their own objects (NULL = silent / time 0).
+- Saves 28 B per device on a 32-bit target and 56 B on the 64-bit host; the
+  events context shrinks from 504 to 480 B (device 4920 -> 4864 on the host).
+
 ### Changed (application context is a trait)
 - `iolink_device_config_t` no longer takes `user`, `time_us`, `log_write` and
   `app_callbacks`. They are one `const iolink_device_app_t* app`: a trait that

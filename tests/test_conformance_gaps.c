@@ -27,10 +27,12 @@
 
 static iolink_test_env_t g_test_env;
 
+static const iolink_clock_t g_test_clock = {.time_us = iolink_test_time_us};
+
 static void events_init(iolink_events_ctx_t* ctx)
 {
     iolink_events_init(ctx);
-    ctx->time_us = iolink_test_time_us;
+    ctx->clock = &g_test_clock;
 }
 #include "conformance_test.h"
 #define GAP_NVM_SLOTS 8U
