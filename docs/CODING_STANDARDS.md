@@ -68,7 +68,12 @@ implementation-level buffer ownership stays in `docs/CODE_FLOW.md` (section
   application table", an output the caller may skip, or a return value whose
   NULL means "not found". A function may still guard `if (p == NULL) return
   err;` — that is a fallback for a caller bug, not a contract, so the parameter
-  stays non-null. `IOLINK_NONNULL` is only written for nested pointer types
+  stays non-null. The test is whether a supported caller legitimately produces
+  NULL: if it does, the parameter is `IOLINK_NULLABLE`, the guard implements the
+  declared absence, and the header says what NULL means (an unbound diagnosis
+  registry for `iolink_diag_device_status()`); if only a buggy caller can, the
+  parameter stays non-null and the guard is only a fallback.
+  `IOLINK_NONNULL` is only written for nested pointer types
   (arrays of pointers), which the pragma does not infer.
   A pointer the callee *reads* stays non-null even when the paired length can
   be 0 — the empty case does not turn an input into an optional argument. An

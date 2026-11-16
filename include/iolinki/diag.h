@@ -283,10 +283,12 @@ void iolink_diag_rearm(iolink_events_ctx_t* events, uint8_t src_mask);
  * 最高优先级（Failure > Functional-Check > Maintenance > Out-of-Spec）。
  * 该过滤条件保证 DDS 仍列出条目时 DeviceStatus 不会提前回 0。
  *
- * @param events 事件上下文
+ * @param events 事件上下文；@c NULL 表示尚未绑定诊断注册表（独立的 ISDU
+ *               引擎没有事件主机），此时返回 0。这是声明式的“未绑定”，
+ *               不是用默认值掩盖缺失的注册表。
  * @return uint8_t 0..4
  */
-uint8_t iolink_diag_device_status(iolink_events_ctx_t* events);
+uint8_t iolink_diag_device_status(iolink_events_ctx_t* IOLINK_NULLABLE events);
 
 /**
  * @brief Table B.14 DDS 记录快照，由条件表派生。

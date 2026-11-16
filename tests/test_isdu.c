@@ -102,6 +102,38 @@ static void test_isdu_device_status_read(void** state)
     assert_int_equal(status_buf[0], 2); /* Out-of-Specification（0x1801 = Warning） */
 }
 
+/** @brief 未绑定事件注册表时 DeviceStatus 返回 0（接口上声明的"未绑定"）。 */
+static void test_isdu_device_status_without_event_registry(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_workspace_t ws;
+    iolink_dll_main_t dll_ctx;
+    uint8_t buf[1];
+
+    (void) memset(&dll_ctx, 0, sizeof(dll_ctx));
+    (void) memset(&ws, 0, sizeof(ws));
+
+    /* 独立的 ISDU 引擎（单元测试、单机工具）没有事件主机：这是声明式的
+       "未绑定诊断注册表"，不是把缺失的注册表换成别的默认值。 */
+    iolink_isdu_init(&ctx);
+    assert_null(ctx.event_ctx);
+    iolink_isdu_bind_workspace(&ctx, &ws);
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DEVICE_STATUS, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 1);
+    assert_int_equal(buf[0], IOLINK_DEVICE_STATUS_OK);
+
+    /* 绑定了 DLL 但没有事件主机时同样如此：DeviceStatus 只认注册表。 */
+    iolink_isdu_init(&ctx);
+    iolink_isdu_bind_workspace(&ctx, &ws);
+    ctx.dll_ctx = &dll_ctx;
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DEVICE_STATUS, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, buf, sizeof(buf)), 1);
+    assert_int_equal(buf[0], IOLINK_DEVICE_STATUS_OK);
+}
+
 static void test_isdu_detailed_device_status_read(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0129");
@@ -1645,6 +1677,8 @@ int main(void)
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_isdu_vendor_name_read, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_device_status_read, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_device_status_without_event_registry, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_detailed_device_status_read, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_detailed_device_status_cr443_octet_order,

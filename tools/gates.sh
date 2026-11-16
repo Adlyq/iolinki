@@ -33,12 +33,16 @@ STRICT_CFLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
 # -Wnullable-to-nonnull-conversion rejects passing a nullable expression to a
 # non-null parameter. It is purely type-based with no data flow, so a nullable
 # struct field that was checked one line earlier still has to be copied into an
-# unqualified local before every call. The model is complete, but the library
-# still reads the nullable ISDU/DS context fields directly (`isdu_cmd`,
-# `isdu_ds`, `data_storage`), so the flag would currently fail on shape rather
-# than on behaviour; adding local copies there is its own change. Until then
-# `-Wnonnull` (literal NULL), `clang --analyze` (data flow) and
-# `-fsanitize=null` (runtime) are the nullability oracle.
+# unqualified local before every call. Every remaining site in src/ is one of
+# two shapes: a field that the enclosing `if` already tested, or the ISDU buffer
+# pair (`buffer`/`response_buf`), which is attached and cleared together and is
+# never NULL once `iolink_isdu_process()` gets past its early return. Copying
+# those fields into locals silences the warning but the assignment itself is not
+# checked, so the flag would stop enforcing the guard at exactly the sites that
+# need it. It stays off; the nullability oracle is `-Wnonnull` (literal NULL),
+# `clang --analyze` (data flow) and `-fsanitize=null` (runtime, group
+# `sanitize`). A nullable parameter that is genuinely meaningful is declared as
+# such instead — see `iolink_diag_device_status()` taking a NULL event registry.
 NULLABILITY_FLAGS=""
 
 # clang is the primary compiler: the shipping toolchains are clang-based (ATFE
