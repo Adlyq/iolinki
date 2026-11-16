@@ -521,17 +521,20 @@ static void test_ds_discard_keeps_reported_size_without_buffer(void** state)
     ds.image_len = 7U;
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
     assert_int_equal(iolink_ds_abort(&ds), 0);
+    assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
     assert_int_equal(iolink_ds_size(&ds), 7U);
 
     /* UploadEnd 在下载期间丢弃暂存。 */
     ds.image_len = 7U;
     ds.state = IOLINK_DS_STATE_DOWNLOADING;
     assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_UPLOAD_END, 0U), 0);
+    assert_int_equal(ds.state, IOLINK_DS_STATE_IDLE);
     assert_int_equal(iolink_ds_size(&ds), 7U);
 
     /* DownloadStart 重置暂存。 */
     ds.image_len = 7U;
     assert_int_equal(iolink_ds_handle_param_command(&ds, IOLINK_CMD_PARAM_DOWNLOAD_START, 0U), 0);
+    assert_int_equal(ds.state, IOLINK_DS_STATE_DOWNLOADING);
     assert_int_equal(iolink_ds_size(&ds), 7U);
 }
 

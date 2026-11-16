@@ -151,6 +151,11 @@ NVM。`iolink_ds_serialize()` 把内容流式写入调用方缓冲（整包读�
 （`IOLINK_WORKSPACE_EMBEDDED=1`）。DS 上下文不保存常驻镜像，只保留状态、缓冲指针
 （或内嵌 scratch），尺寸见 [MEMORY_GUIDE.md](MEMORY_GUIDE.md)。
 
+`iolink_ds_ctx_t::image_len` 因此有双重身份：绑定了缓冲时它是暂存字节数，未绑定
+工作区时它是 measure-only 序列化得到的 `Data_Storage_Size`。所以丢弃暂存的转换
+（`iolink_ds_abort()`、UploadEnd、DownloadStart，以及 DownloadEnd 的失败路径）
+只在绑定缓冲时把它清零——否则会把上报的参数集大小变成 0。
+
 `iolink_ds_check()` 需要主站的校验和，由应用在主站比较后调用：主站没有备份
 （校验和 0）时进入上传请求状态，不一致时进入下载请求状态，相等时保持空闲。
 
@@ -163,10 +168,8 @@ NVM。`iolink_ds_serialize()` 把内容流式写入调用方缓冲（整包读�
 
 1. 结构校验：`DownloadEnd`（或 `ParamDownloadStore`）先遍历整份镜像，截断或长度
    字段越界时以 `PAR_SETINVALID`（0x40）拒绝，不写入任何参数；此前被暂存拒绝过的
-   下载以 `PAR_SETINCONSIST`（0x41）结束。`image_len` 在 measure-only 序列化
-   （`out == NULL`）时也会被写入，那时它是上报的 `Data_Storage_Size` 而不是暂存
-   长度，所以"长度非零"不蕴含存在暂存缓冲；没有缓冲时以 `PAR_SETINCONSIST`
-   （0x41）结束，并且不改动上报长度。
+   下载以 `PAR_SETINCONSIST`（0x41）结束。没有暂存缓冲时（§4.1 的 `image_len`
+   双重身份）同样以 0x41 结束。
 2. 无副作用预校验：对每条已知记录调用 `iolink_od_check_value()`（线长、范围、
    `validate` 钩子）。任一记录被拒绝时以 `PAR_SETINCONSIST`（0x41）结束，仍不写入
    任何参数。
