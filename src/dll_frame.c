@@ -411,7 +411,7 @@ void dll_handle_preoperate(iolink_dll_main_t* ctx, uint8_t mc, uint8_t ck)
  */
 void dll_handle_page_channel_read(iolink_dll_main_t* ctx, uint8_t mc)
 {
-    if (ctx->shared.isdu.device_info == NULL) {
+    if (!dll_dp_page1_available(ctx)) {
         /* 没有设备身份就没有 DPP1：保持沉默，不发全零页。 */
         return;
     }
@@ -508,9 +508,10 @@ void dll_handle_operate_type0(iolink_dll_main_t* ctx, uint8_t mc, uint8_t cks)
     (void) cks;
     const bool type0_write = ((mc & IOLINK_MC_RW_MASK) == 0U);
     const bool page_channel = ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE);
-    if (!type0_write && page_channel && (ctx->shared.isdu.device_info == NULL)) {
-        /* DPP1 读需要绑定的设备身份：不答（主站超时），不发全零页。 */
-        ctx->last_response_us = dll_time_us(ctx);
+    if (!type0_write && page_channel && !dll_dp_page1_available(ctx)) {
+        /* DPP1 读需要绑定的设备身份：不答（主站超时），不发全零页。
+         * 没有发出应答，因此也不刷新 last_response_us（t_A/T_REN 统计
+         * 只记录真实应答）。 */
         return;
     }
 

@@ -20,6 +20,17 @@
 #include "iolinki/protocol.h"
 
 /**
+ * @brief DPP1 是否可读：绑定了设备身份，且该身份上下文确实已初始化。
+ *
+ * 只判指针非 NULL 不够——调用方可能绑定一个从未 `iolink_device_info_ctx_init()`
+ * 的上下文，那样页映像仍是全零。
+ */
+static inline bool dll_dp_page1_available(const iolink_dll_main_t* ctx)
+{
+    return iolink_device_info_ctx_get(ctx->shared.isdu.device_info) != NULL;
+}
+
+/**
  * @brief 装载一个 timer 的绝对截止时间（内部 API，由主上下文调用）。
  *
  * @param ctx        主上下文

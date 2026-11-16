@@ -21,6 +21,7 @@
 
 #include "iolinki/device.h"
 #include "iolinki/events.h"
+#include "iolinki/isdu.h"
 #include "dll_access.h"
 #include "test_helpers.h"
 
@@ -136,7 +137,12 @@ static void test_device_init_requires_device_info(void** state)
     assert_int_equal(g_record_init_calls, 0);
 
     config = make_device_config(&stack, &phy);
+    phy.init = record_phy_init;
+    phy.set_mode = record_phy_set_mode;
+    phy.set_baudrate = record_phy_set_baudrate;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
+    /* 阳性对照：被接受的配置确实驱动了一次 PHY init。 */
+    assert_int_equal(g_record_init_calls, 1);
 }
 
 static void test_device_init_rejects_null_phy_and_stack(void** state)
@@ -579,13 +585,16 @@ static void test_device_od_width_required(void** state)
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
     assert_int_equal(test_dll_shared(&ctx)->od_width, 2U);
 
-    /* TYPE_2_V 是可变的：应用选 8 字节就按 8 字节布线。 */
+    /* TYPE_2_V 是可变的：应用选 8 字节就按 8 字节布线，
+     * DPP1 的 M-sequenceCapability 也随之编码 OPERATE code 6。 */
     stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     stack.od_width = 8U;
     stack.pd_in_len = 2U;
     stack.pd_out_len = 2U;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
     assert_int_equal(test_dll_shared(&ctx)->od_width, 8U);
+    /* 0x01 = 支持 ISDU，bits1-3 = code 6（TYPE_2_V / 8 字节 OD）。 */
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(test_dll_isdu(&ctx), 0x03U), 0x0DU);
 }
 
 static int group_setup(void** state)

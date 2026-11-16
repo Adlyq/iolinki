@@ -257,6 +257,7 @@ static void bind_test_identity(iolink_dll_main_t* main)
     main->shared.isdu.device_info = &s_identity_ctx;
 }
 
+/** @brief OPERATE / TYPE_2_V：PD-in 1、PD-out 0、OD 1。 */
 static void init_operate(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));

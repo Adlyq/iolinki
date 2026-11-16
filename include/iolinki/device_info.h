@@ -10,6 +10,7 @@
 #define IOLINK_DEVICE_INFO_H
 
 #include <stdint.h>
+#include "iolinki/types.h"
 
 /**
  * @file device_info.h
@@ -94,9 +95,10 @@ int iolink_device_info_ctx_init(iolink_device_info_ctx_t* ctx,
 /**
  * @brief 从上下文获取有效的设备身份。
  * @param ctx 设备信息上下文。
- * @return 指向有效设备身份的指针。
+ * @return 指向设备身份的指针；@p ctx 为 NULL 或尚未绑定身份时返回 NULL。
  */
-const iolink_device_info_t* iolink_device_info_ctx_get(const iolink_device_info_ctx_t* ctx);
+const iolink_device_info_t* IOLINK_NULLABLE
+iolink_device_info_ctx_get(const iolink_device_info_ctx_t* ctx);
 
 /**
  * @brief 在上下文上设置运行时应用标签（Index 0x0018）。

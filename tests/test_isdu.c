@@ -825,7 +825,6 @@ static void test_isdu_direct_parameters_page2(void** state)
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     ctx.direct_param_page2 = page2;
-    ctx.direct_param_page2 = page2;
 
     /* 写入整个第 2 页，然后回读。 */
     uint8_t img[16];
@@ -862,6 +861,34 @@ static void test_isdu_direct_parameters_page2(void** state)
     uint8_t one_rb[2];
     assert_int_equal(isdu_collect_response(&ctx, one_rb, sizeof(one_rb)), 1);
     assert_int_equal(one_rb[0], 0x5A);
+}
+
+/* Page 2 未绑定时该对象不可用：读、写都回 0x80 0x11，不写到任何共享缓冲。 */
+static void test_isdu_page2_unbound(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    test_env_init(&g_test_env, NULL);
+    iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
+    assert_null(ctx.direct_param_page2);
+
+    uint8_t out[2] = {0U, 0U};
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_2, 0x00), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, out, sizeof(out)), 2);
+    assert_int_equal(out[0], 0x80U);
+    assert_int_equal(out[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
+
+    const uint8_t byte = 0x5AU;
+    iolink_isdu_init(&ctx);
+    test_isdu_bind_params(&ctx, &g_test_env);
+    assert_int_equal(isdu_send_write_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_2, 0x03, &byte, 1),
+                     1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, out, sizeof(out)), 2);
+    assert_int_equal(out[0], 0x80U);
+    assert_int_equal(out[1], IOLINK_ISDU_ERROR_IDX_NOT_AVAIL);
 }
 
 static void test_isdu_reserved_indices_negative(void** state)
@@ -1656,6 +1683,7 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_direct_parameters_page2, test_setup,
                                         test_teardown),
+        cmocka_unit_test_setup_teardown(test_isdu_page2_unbound, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_data_storage_image_round_trip, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_isdu_data_storage_subindices, test_setup,
