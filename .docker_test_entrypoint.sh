@@ -1,21 +1,24 @@
 #!/bin/bash
 set -e
 
-rm -rf build/docker
+root=/workspace
+cd "$root"
 
-cmake -B build/docker -DIOLINK_PLATFORM=LINUX
-cmake --build build/docker
+rm -rf "$root/build/docker"
+
+cmake -S "$root" -B "$root/build/docker" -DIOLINK_PLATFORM=LINUX
+cmake --build "$root/build/docker"
 
 # Run Unit Tests
-cd build/docker
-ctest --output-on-failure
-cd ..
+(cd "$root/build/docker" && ctest --output-on-failure)
 
-# Run Bare Metal Build Verification
+# Run Bare Metal Build Verification. Keep the source directory explicit: the
+# old `cd`/`cd ..` left the working directory inside build/, so CMake looked for
+# CMakeLists.txt there.
 echo -e "\nRunning Bare Metal Build Verification..."
-rm -rf build/bare
-cmake -B build/bare -DIOLINK_PLATFORM=BAREMETAL
-cmake --build build/bare
+rm -rf "$root/build/bare"
+cmake -S "$root" -B "$root/build/bare" -DIOLINK_PLATFORM=BAREMETAL
+cmake --build "$root/build/bare"
 export IOLINK_DEVICE_PATH=/workspace/build/docker/examples/host_demo/host_demo
 # The virtual-master integration tests drive the device over a PTY and are
 # timing-sensitive; bound each so a stuck PTY fails fast instead of hanging the
