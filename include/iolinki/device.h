@@ -107,17 +107,18 @@ typedef uint64_t (*iolink_device_time_us_fn)(iolink_app_t* self);
  */
 typedef struct
 {
-    const iolink_phy_api_t* phy;             /**< 物理层驱动 API（通常取自 `iolink_phy_*_get()`）。
-                                                  `phy->self` 由提供 vtable 的一方写入自己的上下文
-                                                  （内置驱动在 `iolink_phy_*_init()` 里写），应用不
-                                                  覆盖它（覆盖会让驱动把错误指针转回自己的状态）。
-                                                  为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_NULL`。 */
-    const iolink_stack_config_t* stack;      /**< 协议栈行为配置；必须比上下文存活更久。为 NULL
-                                                  时初始化返回 `IOLINK_DEVICE_INIT_ERR_NULL`。 */
-    const iolink_device_app_t* app;          /**< 应用 trait：实例指针与生命周期/PD/时钟/日志
-                                                  回调的唯一来源。`app` 为 NULL 时初始化返回
-                                                  `IOLINK_DEVICE_INIT_ERR_APP`；`app->time_us`
-                                                  为 NULL 时返回 `IOLINK_DEVICE_INIT_ERR_TIME`。 */
+    const iolink_phy_api_t* phy;        /**< 物理层驱动 API（通常取自 `iolink_phy_*_get()`），必须
+                                             比上下文存活更久（`set_capabilities()` 仍读它）。
+                                             `phy->self` 由提供 vtable 的一方写入自己的上下文
+                                             （内置驱动在 `iolink_phy_*_init()` 里写），应用不
+                                             覆盖它（覆盖会让驱动把错误指针转回自己的状态）。
+                                             为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_NULL`。 */
+    const iolink_stack_config_t* stack; /**< 协议栈行为配置；必须比上下文存活更久。为 NULL
+                                             时初始化返回 `IOLINK_DEVICE_INIT_ERR_NULL`。 */
+    const iolink_device_app_t* app;     /**< 应用 trait：实例指针与生命周期/PD/时钟/日志
+                                             回调的唯一来源。`app` 为 NULL 时初始化返回
+                                             `IOLINK_DEVICE_INIT_ERR_APP`；`app->time_us`
+                                             为 NULL 时返回 `IOLINK_DEVICE_INIT_ERR_TIME`。 */
     const iolink_device_info_t* device_info; /**< 静态设备标识数据。 */
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_flag_persist_fn ds_flag_persist; /**< 持久化 DS_UPLOAD_FLAG（NULL = RAM-only）；

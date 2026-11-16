@@ -205,7 +205,7 @@ flowchart LR
 
 - `dll.main.shared.isdu.od = config->od`、`...isdu.ds_ctx = &ctx->dll.main.ds`、`...isdu.device_info = &ctx->device_info`；
 - `dll.main.shared.isdu.direct_param_page2 = ctx->direct_param_page2`；
-- `dll.main.shared.caps = iolink_caps_resolve(&config->phy, &config->stack, config->app, NULL)`；
+- `dll.main.shared.caps = iolink_caps_resolve(config->phy, config->stack, config->app, NULL)`；
 - `iolink_isdu_bind_workspace()` / `iolink_ds_bind_workspace()` 把传输 scratch 指向工作区；`iolink_isdu_bind_caps()` 让 ISDU 按实例能力位选路；
 - `dll.main.state_cb = device_state_cb`，用于把 DLL 状态变化转成应用回调；
 - `ds` 只绑定 OD 表：`iolink_ds_bind_sources(ctx, config->od, config->app->self)`。集合成员（`storage` 含 `IOLINK_OD_STORAGE_DS` 的表项）与取值、写回都经 `iolink_od_find()` + OD 值层完成，没有独立的参数访问器或存储后端；表外索引返回 `NOT_HANDLED`。`iolink_od_find()` 按索引域决定优先级：规范索引标准表优先；设备专用索引（`0x0040-0x00FE`、`0x0100+`）与应用拥有的标签索引（`0x0018-0x001A`）应用表优先、标准表内建项回落；
@@ -232,7 +232,7 @@ flowchart TD
     C --> C1{"time_us / M-seq 类型 / PD 长度 / OD 宽度<br/>固定布局 / 波特率 / 临界区 / 应用 OD 表<br/>能力位与 PHY 钩子一致?"}
     C1 -- 否 --> E2["返回对应负错误码"]
     C1 -- 是 --> D["清零 ctx，保存 config 指针"]
-    D --> F["phy->init(user)"]
+    D --> F["phy->init(self)"]
     F --> F1{"返回 0?"}
     F1 -- 否 --> E3["ctx->phy_error = 驱动码<br/>返回 INIT_ERR_PHY"]
     F1 -- 是 --> G["iolink_device_info_ctx_init()<br/>身份与访问锁"]

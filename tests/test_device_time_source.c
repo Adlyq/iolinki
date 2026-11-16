@@ -42,7 +42,8 @@ static uint64_t app_time_us(iolink_app_t* self)
 static void init_device(iolink_device_ctx_t* ctx, const iolink_device_app_t* app)
 {
     iolink_device_config_t config;
-    iolink_stack_config_t stack;
+    /* config 只存指针：phy/stack 必须比 ctx 存活更久。 */
+    static iolink_stack_config_t stack;
     static iolink_phy_api_t phy;
 
     (void) memset(&config, 0, sizeof(config));

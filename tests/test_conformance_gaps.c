@@ -239,15 +239,20 @@ static void test_0092_revision_id_configured(void** state)
     assert_int_equal(read_object(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x05U, &value, 1U), 1);
     assert_int_equal(value, IOLINK_REVISION_ID_1_1);
 
-    /* 字段按原值写到线上（不是 16 位值的低字节）：0x21 -> 0x21。 */
+    /* 字段是一个八位组：宽度由类型保证，线上按原值写出（0x21 -> 0x21）。 */
+    assert_int_equal(sizeof(info.revision_id), 1U);
     info.revision_id = 0x21U;
     test_env_init(&g_test_env, &info);
     assert_int_equal(read_object(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x05U, &value, 1U), 1);
     assert_int_equal(value, 0x21U);
 
-    /* 未绑定身份时回落到 V1.1。 */
-    test_env_init(&g_test_env, NULL);
-    assert_int_equal(read_object(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x05U, &value, 1U), 1);
+    /* ctx->device_info 为空时回落到 V1.1：只绑 OD、不绑身份，env 里仍是 0x21。 */
+    iolink_isdu_init(&ctx);
+    ctx.od = &g_test_env.params.od;
+    assert_null(ctx.device_info);
+    assert_int_equal(isdu_send_read_request(&ctx, IOLINK_IDX_DIRECT_PARAMETERS_1, 0x05U), 1);
+    iolink_isdu_process(&ctx);
+    assert_int_equal(isdu_collect_response(&ctx, &value, 1U), 1);
     assert_int_equal(value, IOLINK_REVISION_ID_1_1);
 }
 

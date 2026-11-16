@@ -11,8 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `iolink_device_config_t::phy` and `stack` are pointers now, like `app`,
   `device_info`, `od` and `workspace`. `phy` used to be copied by value (120 B
   of vtable duplicated into every config) while `device_info` (104 B) was a
-  pointer; the struct is 64 B instead of 200 B on the host (32 B instead of
-  116 B on a 32-bit target). `phy` and `stack` must outlive the context and a
+  pointer; the struct is 64 B instead of 200 B on the host and 32 B instead of
+  116 B on a 32-bit target (56 B / 28 B with `IOLINK_FEATURE_DATA_STORAGE=0`).
+  `phy` and `stack` must outlive the context and a
   NULL in either of them is rejected with `IOLINK_DEVICE_INIT_ERR_NULL`.
 
 ### Fixed (RevisionID is one octet)

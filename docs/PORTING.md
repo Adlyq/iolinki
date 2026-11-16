@@ -354,7 +354,8 @@ of IAR compatibility.
 
 static iolink_device_ctx_t g_ctx;
 static const iolink_stack_config_t g_stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V};
-static const iolink_device_config_t g_cfg = {.phy = &g_phy_stm32, .stack = &g_stack};
+static const iolink_device_config_t g_cfg = {
+    .phy = &g_phy_stm32, .stack = &g_stack, .app = &g_app /* 必需，见 API_INTEGRATION */};
 
 /* One task only: the stack has a single main-context caller. */
 void iolink_task(void *pvParameters) {
@@ -381,7 +382,8 @@ int main(void) {
 
 static iolink_device_ctx_t g_ctx;
 static const iolink_stack_config_t g_stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_2_V};
-static const iolink_device_config_t g_cfg = {.phy = &g_phy_baremetal, .stack = &g_stack};
+static const iolink_device_config_t g_cfg = {
+    .phy = &g_phy_baremetal, .stack = &g_stack, .app = &g_app /* 必需，见 API_INTEGRATION */};
 
 int main(void) {
     // Initialize SysTick for 1ms interrupt

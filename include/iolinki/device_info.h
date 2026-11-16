@@ -18,16 +18,15 @@
  * 实现 IO-Link V1.1.5 规范所要求的强制索引。
  */
 
-/** @brief DPP1 0x04 RevisionID 的编码（Figure B.4）。
- *  @ingroup iolinki_device_info */
-#define IOLINK_REVISION_ID_1_0 0x10U /**< MajorRev 1, MinorRev 0（协议版本 1.0）。 */
-#define IOLINK_REVISION_ID_1_1 0x11U /**< MajorRev 1, MinorRev 1（协议版本 1.1）。 */
-
 /**
  * @defgroup iolinki_device_info 设备标识
  * @brief 设备标识数据以及强制的身份 ISDU 索引。
  * @{
  */
+
+/** @brief DPP1 0x04 RevisionID 的编码（Figure B.4）。 */
+#define IOLINK_REVISION_ID_1_0 0x10U /**< MajorRev 1, MinorRev 0（协议版本 1.0）。 */
+#define IOLINK_REVISION_ID_1_1 0x11U /**< MajorRev 1, MinorRev 1（协议版本 1.1）。 */
 
 /**
  * @brief 设备标识结构。

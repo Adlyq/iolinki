@@ -79,6 +79,7 @@ static void make_config(iolink_device_config_t* cfg, iolink_device_app_t* app,
     app->time_us = test_time_us;
     app->on_pd_input = pd_input;
 
+    /* config 只存指针，故用 static 存储。 */
     static iolink_stack_config_t stack;
 
     (void) memset(cfg, 0, sizeof(*cfg));

@@ -128,7 +128,12 @@ static uint8_t board_phy_int_active(iolink_app_t* self);
 static void board_phy_request_service(iolink_app_t* self);
 static uint64_t board_time_us(iolink_app_t* self);
 
+/* 应用自己的状态；库只看到 &g_app_state 这一个指针 */
+struct iolink_app { uint8_t pd_in[2]; };
+static struct iolink_app g_app_state;
+
 static const iolink_phy_api_t g_phy = {
+    .self = (iolink_app_t*) &g_app_state, /* 手写 vtable 在初始化器里写 self */
     .init = board_phy_init,
     .set_mode = board_phy_set_mode,
     .set_baudrate = board_phy_set_baudrate,
@@ -141,10 +146,6 @@ static const iolink_phy_api_t g_phy = {
 
 /* DS_UPLOAD_FLAG 落盘钩子；不提供则标志只保存在 RAM（见 7.1/7.3） */
 static void app_ds_flag_persist(iolink_app_t* self, bool flag);
-
-/* 应用自己的状态；库只看到 &g_app_state 这一个指针 */
-struct iolink_app { uint8_t pd_in[2]; };
-static struct iolink_app g_app_state;
 
 static const iolink_device_app_t g_app = {
     .self = (iolink_app_t*) &g_app_state,

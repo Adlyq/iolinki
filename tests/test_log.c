@@ -91,6 +91,7 @@ static uint64_t fake_time_us(iolink_app_t* self)
 
 static void make_minimal_config(iolink_device_config_t* config, iolink_device_app_t* app)
 {
+    /* config 只存指针，故用 static 存储。 */
     static iolink_stack_config_t stack;
     static iolink_phy_api_t phy;
 

@@ -102,6 +102,7 @@ static uint8_t test_int_active(iolink_app_t* self)
     return 0U;
 }
 
+/* config 只存指针；这里只建一个 config，同时存活两个会共用同一份 phy/stack。 */
 static iolink_phy_api_t g_test_phy;
 static iolink_stack_config_t g_test_stack;
 

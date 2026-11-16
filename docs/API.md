@@ -250,7 +250,7 @@ void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx, iolink_reset_hand
 
 从 `include/iolinki/phy.h` 复制 `iolink_phy_api_t`。每个回调的第一个参数都是
 `iolink_app_t* self`（应用实例，库原样转发；驱动在自己的回调里转回自己的状态类型）。
-`phy.self` 由提供 vtable 的一方写入自己的上下文：内置驱动在 `iolink_phy_*_init()`
+`phy->self` 由提供 vtable 的一方写入自己的上下文：内置驱动在 `iolink_phy_*_init()`
 里写，手写 vtable 就在初始化器里写。应用不得覆盖它（覆盖后驱动会把错误的指针转回
 自己的状态）。若应用希望一个实例只有一个指针，就把驱动上下文作为
 `struct iolink_app` 的第一个成员（偏移 0）并令 `app->self = (iolink_app_t*) &app`：

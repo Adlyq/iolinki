@@ -45,6 +45,7 @@ static const iolink_device_app_t g_test_app = {.self = NULL, .time_us = iolink_t
 
 static iolink_device_config_t make_device_config(void)
 {
+    /* config 只存指针，故用 static 存储。 */
     static iolink_stack_config_t stack;
     iolink_device_config_t config;
     (void) memset(&config, 0, sizeof(config));

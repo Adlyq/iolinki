@@ -26,7 +26,7 @@
 
 ## 规范裁决（V1.1.5 核对结果）
 
-按 PDF（`docs/IOL-Interface-Spec_10002_V1.1.5_Oct2025/`）逐条核对，**全部 18 个分歧点均采信我们的实现**（上游在每一处均为缺失或旧值/非规范）：
+按 PDF（`docs/IOL-Interface-Spec_10002_V1.1.5_Oct2025/`）逐条核对，**全部 19 个分歧点均采信我们的实现**（上游在每一处均为缺失或旧值/非规范）：
 
 | # | 分歧点 | 规范依据 | 采信 |
 |:-:|:---|:---|:-:|
@@ -48,7 +48,7 @@
 | 16 | appears/disappears + 1s 限流 + 50ms 最短 + 优先级 | 10.10.2 | 我们 |
 | 17 | MinCycleTime 编码 | B.1.3 / Figure B.2（time base 7:6 + multiplier 5:0）+ Table B.3 | 我们 |
 | 18 | RevisionID 是一个八位组（V1.1 = 0x11，V1.0 = 0x10），不是 IODD 的 16 位 0x0111 | B.1.5 / Figure B.4（bits 4-7 MajorRev，bits 0-3 MinorRev）+ Table B.1 `0x04` | 我们 |
-| 18 | DS subindex（DS_Command/State_Property/Size/Checksum） | Table B.10 | 我们（暂缓/另议） |
+| 19 | DS subindex（DS_Command/State_Property/Size/Checksum） | Table B.10 | 我们（暂缓/另议） |
 
 ---
 

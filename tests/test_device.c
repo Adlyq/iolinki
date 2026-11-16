@@ -95,6 +95,23 @@ static void test_device_init_rejects_null(void** state)
     assert_int_equal(iolink_device_init(&ctx, NULL), IOLINK_DEVICE_INIT_ERR_NULL);
 }
 
+static void test_device_init_rejects_null_phy_and_stack(void** state)
+{
+    (void) state;
+    iolink_device_ctx_t ctx;
+    iolink_stack_config_t stack;
+    iolink_phy_api_t phy;
+    iolink_device_config_t config = make_device_config(&stack, &phy);
+
+    /* phy/stack 是指针后，缺一个就必须在解引用之前拒绝。 */
+    config.phy = NULL;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_NULL);
+
+    config = make_device_config(&stack, &phy);
+    config.stack = NULL;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_NULL);
+}
+
 static void test_device_init_rejects_invalid_config(void** state)
 {
     (void) state;
@@ -528,6 +545,7 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_device_init_rejects_null),
+        cmocka_unit_test(test_device_init_rejects_null_phy_and_stack),
         cmocka_unit_test(test_device_init_rejects_invalid_config),
         cmocka_unit_test(test_device_init_maps_phy_error),
         cmocka_unit_test(test_device_init_clears_stale_phy_error),
