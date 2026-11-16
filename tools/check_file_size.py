@@ -105,13 +105,16 @@ def count_code_lines(text: str) -> int:
     return sum(1 for line in body.split("\n") if line.strip())
 
 
+class FileSizeError(Exception):
+    """A source file could not be read; the message says which."""
+
+
 def read_source(path: Path) -> str:
     """Read a source file; a BOM must not turn the first line into code."""
     try:
         return path.read_text(encoding="utf-8-sig", errors="replace")
     except OSError as exc:
-        print(f"file-size: cannot read {path}: {exc}", file=sys.stderr)
-        raise
+        raise FileSizeError(f"cannot read {path}: {exc}") from exc
 
 
 def scan() -> list[tuple[int, Path]]:
@@ -165,7 +168,11 @@ def main() -> int:
     if args.selftest:
         return selftest()
 
-    rows = scan()
+    try:
+        rows = scan()
+    except FileSizeError as exc:
+        print(f"file-size: {exc}", file=sys.stderr)
+        return 1
     if not rows:
         print("file-size: no source files found", file=sys.stderr)
         return 1
