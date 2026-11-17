@@ -17,8 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   48-slot table loses 192 B of RAM; on a 64-bit host nothing changes.
   **MAJOR**: `include/iolinki/dll.h` loses a public struct field.
 - Baudrate no longer affects plan content or publication. It used to enter plan
-  content only through `deadline_us`; the table is now compiled once at init and
-  never rebuilt, so a COM change no longer rewrites an identical table.
+  content only through `deadline_us`; the table is compiled once at init and
+  never rebuilt. (COM is now build-time fixed as well.)
 
 ### Removed (capabilities and the reply plan are fixed at init)
 - `iolink_device_set_capabilities()` is gone. Capability bits are inputs to the
@@ -96,7 +96,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fallback/restore machinery: SIO and fallback only switch the line mode, the
   UART rate never changes.
 - `iolink_dll_init()` no longer touches the UART: the PHY configures it in `init()`
-  from `IOLINK_COM_HZ`. The `set_baudrate` hook is gone.
+  from `IOLINK_COM_HZ`. **MAJOR**: `include/iolinki/phy.h` loses the
+  `set_baudrate` vtable member.
 - `IOLINK_DEVICE_INIT_ERR_BAUDRATE` is gone; an invalid COM is a compile-time
   `#error`. Later init error codes shift by one.
 

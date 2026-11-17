@@ -78,12 +78,6 @@ static void fuzz_phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mod
     (void) mode;
 }
 
-static void fuzz_phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    (void) baudrate;
-}
-
 static int fuzz_phy_rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status)
 {
     (void) self;
@@ -142,7 +136,6 @@ static const iolink_phy_api_t k_phy = {
     .self = NULL,
     .init = fuzz_phy_init,
     .set_mode = fuzz_phy_set_mode,
-    .set_baudrate = fuzz_phy_set_baudrate,
     .rx_octet = fuzz_phy_rx_octet,
     .tx_octet = fuzz_phy_tx_octet,
     .tx_done = fuzz_phy_tx_done,

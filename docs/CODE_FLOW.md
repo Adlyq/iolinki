@@ -912,9 +912,9 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 | timer | 契约条款 | 行为 | 代码 |
 | :--- | :--- | :--- | :--- |
 | `IOLINK_TIMER_MASTER_LOST` | 实现相关（ST Timer B 语义） | OPERATE 下按 MasterCycleTime 计数，饱和 0xFF，只置提示位 | `dll_timer_sync_master_lost()` / `dll_timer_expire_master_lost()` |
-| `IOLINK_TIMER_IDLE` | 实现诊断（1 s 静默链路，非规范超时） | `idle_timeouts++`，不改状态/波特率 | `dll_timer_sync_idle()` / `dll_timer_expire_idle()` |
-| `IOLINK_TIMER_T_DSIO` | Table 47 T10（60..300 ms） | 唤醒后无有效报文 → COM1 + SIO + STARTUP | `dll_timer_expire_dsio()` |
-| `IOLINK_TIMER_T_FBD` | Table 47 T8/T9；Table 43 | `3 × MasterCycleTime`（上限 500 ms）→ COM1 + SIO + STARTUP | `dll_handle_fallback_command()` / `dll_apply_isr_deadline_requests()` / `dll_timer_expire_fbd()` |
+| `IOLINK_TIMER_IDLE` | 实现诊断（1 s 静默链路，非规范超时） | `idle_timeouts++`，不改状态 | `dll_timer_sync_idle()` / `dll_timer_expire_idle()` |
+| `IOLINK_TIMER_T_DSIO` | Table 47 T10（60..300 ms） | 唤醒后无有效报文 → SIO + STARTUP（UART 速率不变） | `dll_timer_expire_dsio()` |
+| `IOLINK_TIMER_T_FBD` | Table 47 T8/T9；Table 43 | `3 × MasterCycleTime`（上限 500 ms）→ SIO + STARTUP（UART 速率不变） | `dll_handle_fallback_command()` / `dll_apply_isr_deadline_requests()` / `dll_timer_expire_fbd()` |
 | `IOLINK_TIMER_T_PD` | A.2 / Table 47（WINDOW） | 上电保护窗口：截止前排空 RX 与邮箱（丢弃的邮箱帧计 `t_pd_discards`），收到字节计 `t_pd_violations` | `dll_check_t_pd()` / `dll_drain_rx()` |
 | `IOLINK_TIMER_T_WU` | Table 47（WINDOW） | 唤醒后首帧窗口（`IOLINK_T_WU_US`），截止前不处理 | `dll_handle_sio_wakeup()` / `dll_wakeup_window_active()` |
 | `IOLINK_TIMER_T_BYTE` | A.2 / Table 47（phase 1） | 帧内字节间隙超限 → `t_byte_violations` + `framing_errors`，中止当前帧 | `dll_timer_sync_t_byte()` / `dll_timer_expire_t_byte()` |
@@ -936,7 +936,7 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 | :--- | :--- | :--- |
 | CRC 失败 | `crc_errors` / `framing_errors` / `total_retries` 递增；连续 3 次触发 COMM_CRC 脉冲事件；不改状态 | `dll_handle_frame_error()` |
 | 类型非法 | OPERATE/ESTAB 只计 `framing_errors` 并丢帧；其他状态发 COMM_FRAMING 并回 STARTUP | `dll_handle_frame_error()` |
-| T_DSIO / T_FBD 到期 | COM1 + SIO + STARTUP | `dll_timer_expire_dsio()` / `dll_timer_expire_fbd()` |
+| T_DSIO / T_FBD 到期 | SIO + STARTUP（UART 速率不变） | `dll_timer_expire_dsio()` / `dll_timer_expire_fbd()` |
 | 字节间超时 | `t_byte_violations` + COMM_TIMING 脉冲，`frame_index = 0` | `dll_timer_expire_t_byte()` |
 | ISR RX 超时 | `timeout_errors++`、COMM_TIMEOUT 脉冲、清 RX 组装、停响应定时器 | `iolink_dll_on_rx_timeout()` |
 | ISR 帧长/校验拒绝 | `isr_eager_rejects` 或 `framing_errors`；合法帧计划未命中计 `isr_plan_misses` 并丢弃 | `dll_isr_complete_frame()` / `dll_isr_frame_len_ok()` |
