@@ -238,7 +238,7 @@ flowchart TD
     F1 -- 是 --> G["iolink_device_info_ctx_init()<br/>身份与访问锁"]
     G --> G1{"绑定成功?"}
     G1 -- 否 --> E5["返回 INIT_ERR_DEVICE_INFO"]
-    G1 -- 是 --> H["iolink_dll_init(main, isr, phy)<br/>状态 STARTUP、COM2、绑定 shared.isr"]
+    G1 -- 是 --> H["iolink_dll_init(main, isr, phy)<br/>状态 STARTUP、IOLINK_COM、绑定 shared.isr"]
     H --> H1{"PHY 有 detect_wakeup?"}
     H1 -- 是 --> H2["set_mode(SIO)<br/>等待唤醒"]
     H1 -- 否 --> H3["set_mode(SDCI)<br/>直接接受 M-sequence"]
@@ -249,7 +249,7 @@ flowchart TD
     K --> L["绑定 ISDU 依赖：od / device_info<br/>direct_param_page2 / state_cb"]
     L --> M["启用 DS 时：iolink_ds_init()<br/>iolink_ds_set_flag_persist(config.ds_flag_persist)<br/>iolink_ds_bind_workspace()<br/>iolink_ds_bind_sources(config.od, config.app->self) + iolink_ds_refresh()"]
     M --> O["iolink_device_set_log()<br/>设置共享 sink，各模块只保存指针"]
-    O --> P["device_apply_stack_config()<br/>PD/OD 长度、t_pd、工作 COM、MinCycleTime<br/>timing_enforce 覆盖"]
+    O --> P["device_apply_stack_config()<br/>PD/OD 长度、t_pd、MinCycleTime<br/>timing_enforce 覆盖"]
     P --> Q["iolink_dll_publish_reply_plans()<br/>按最终配置编译一次（要求 ISR 静止）"]
     Q --> T["调用 on_startup()"]
 ```
@@ -259,7 +259,7 @@ flowchart TD
 - 初始化校验在 `device_config_validate()` 完成；本路径还会在 `device_validate_fixed_mseq()` 拒绝 `TYPE_1_1` 和与 Annex A 固定布局不一致的 PD/OD 长度。
 - `IOLINK_FEATURE_VALIDATE=1`（默认）时，同一处调用 `od_validate_app()` 走一遍应用 OD 表：缺失后端指针/回调、`TRIGGER` 带 storage 位、可写 STORAGE 字节串缺少 `block_len`、只读表项带钩子、默认值越界、`(index, subindex)` 重复、应用表占用规范索引（标签 `0x0018-0x001A` 除外）等都在这里被拒绝并返回 `IOLINK_DEVICE_INIT_ERR_OD`，不会拖到首次 ISDU 访问。表宏的常量交叉检查始终生效。
 - 能力位只在 `iolink_caps_resolve()` 解析，且必须在绑定 PHY 之后、任何 ISR 可能运行之前。校验阶段用同一函数做一致性检查：`IOLINK_CAP_REQUIRE_ISR_TX` 缺 `request_service()`、或 `IOLINK_PHY_FEATURE_TX_BUSY` 开启但 PHY 无 `tx_busy()`，都返回 `IOLINK_DEVICE_INIT_ERR_PHY`。
-- `iolink_dll_init()` 默认 COM2；若 `stack.baudrate_set`，`device_apply_stack_config()` 会通过 `iolink_dll_set_operating_baudrate()` 再设置工作 COM。
+- `iolink_dll_init()` 按编译期 `IOLINK_COM` 调用一次 `phy->set_baudrate()`；运行期没有 COM 切换，SIO/回退只切换线路模式。
 - `iolink_dll_init()` 结束时已发布 STARTUP 状态的应答计划，因此第一个启动探测可由 ISR 提前应答。
 - `device_apply_stack_config()` 之后、`on_startup()` 之前再发布一次：此时 `m_seq_type`/`od_width`/能力位都已最终化，应用只能在 `on_startup` 里使能数据中断（重建要求 ISR 静止）。
 - `on_startup()` 在初始化末尾显式调用一次；`iolink_dll_init()` 内部进入 STARTUP 时因为状态初值已是 0，`dll_set_state()` 不会重复触发。
@@ -748,11 +748,10 @@ flowchart TD
 | :--- | :--- | :--- |
 | 1 | `od_validate_app()`（`IOLINK_FEATURE_VALIDATE=1`） | `device_config_validate()`；失败返回 `IOLINK_DEVICE_INIT_ERR_OD` |
 | 2 | `phy->init()` | `iolink_device_init()` |
-| 3 | `phy->set_baudrate(COM2)` | `iolink_dll_init()` |
+| 3 | `phy->set_baudrate(IOLINK_COM)` | `iolink_dll_init()`（编译期 COM，只调用一次） |
 | 4 | `phy->set_mode(SIO/SDCI)` | `iolink_dll_init()` 依据 `IOLINK_CAP_WAKEUP` |
 | 5 | OD 表项读取（`iolink_od_read_value()`） | `iolink_ds_refresh()` 计算 `Data_Storage_Size`/`Parameter_Checksum`；`HANDLER` 表项调到应用 `read` |
-| 6 | `phy->set_baudrate(工作 COM)` | `device_apply_stack_config()` 可选 |
-| 7 | `on_startup()` | `iolink_device_init()` 末尾 |
+| 6 | `on_startup()` | `iolink_device_init()` 末尾 |
 
 ### 9.2 一个主循环内的顺序
 
@@ -802,7 +801,7 @@ sequenceDiagram
 | 接口/回调 | 调用点 | 上下文/说明 |
 | :--- | :--- | :--- |
 | `phy.init` | `iolink_device_init` | 初始化硬件 |
-| `phy.set_baudrate` | `iolink_dll_init`、`iolink_dll_set_baudrate`、`dll_restore_operating_baudrate` | 恢复 COM 时避免在应答中途切换 |
+| `phy.set_baudrate` | `iolink_dll_init` | 按编译期 `IOLINK_COM` 配置一次 UART |
 | `phy.set_mode` | `iolink_dll_init`、`iolink_dll_set_sio_mode`、`iolink_dll_set_sdci_mode`、`dll_frame_drop_if_stopped` | SIO/SDCI/INACTIVE |
 | `phy.rx_octet` / `rx_frame` | ISR | 逐字节或整帧 |
 | `phy.tx_octet` / `tx_done` / `tx_frame` | ISR（直发回退时由主上下文调用 `dll_isr_start_staged_tx()`） | 发送应答 |
@@ -1010,8 +1009,8 @@ flowchart LR
 - `last_notified_state`：主上下文记录“已交付给应用的状态”，配合 `shared.state` 做电平式通知；`startup_notification_pending` 保留 ISR 触发的 STARTUP 边沿，避免快速进入 PREOPERATE 时丢失复位通知。
 
 上下文尺寸契约（默认缓冲、64 位主机，由 `tests/test_ctx_sizes.c` 断言）：
-`iolink_device_ctx_t` 4840 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4856 B），内嵌
-`iolink_dll_ctx_t` 4648/4664 B、`iolink_isdu_ctx_t` 1336 B、`iolink_events_ctx_t` 480 B、
+`iolink_device_ctx_t` 4832 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4848 B），内嵌
+`iolink_dll_ctx_t` 4640/4656 B、`iolink_isdu_ctx_t` 1336 B、`iolink_events_ctx_t` 480 B、
 `iolink_ds_ctx_t` 352 B；`iolink_workspace_t` 1289 B。
 
 并发边界：

@@ -53,7 +53,6 @@
  *      |- dll_apply_isr_deadline_requests    设置/清除 T_FBD 与 T_DSIO
  *      |                                     （64 位截止时间由主上下文持有）
  *      |- [TX FRAME] pd_in 租约释放          在临界区中轮询 tx_busy
- *      |- dll_restore_operating_baudrate     撤销恢复到 COM1 的降级
  *      |- iolink_isdu_process                应用 ISR 累计完成的写请求并执行 ISDU 服务
  *      |- isr_isdu_read_reset                消费 ISR 的 IDLE/ABORT 读复位请求
  *      |- dll_isdu_sync_snapshot             发布 ISR 读取视图
@@ -77,12 +76,10 @@
  *      |     |        （页面/诊断/ISDU 通道） -> dll_send
  *      |     |- dll_handle_frame_error
  *      |     `- dll_finish_frame （刷新 ISDU 快照）
- *      `- dll_restore_operating_baudrate      撤销同一次调用中的 COM1 降级
  *
  * 修改主泵前值得了解的隐式结构：
  *  - dll_take_isr_master_activity() 故意运行两次（在 ISDU 服务之前和
- *    之后）；dll_restore_operating_baudrate() 同样（在提前返回之前和
- *    邮箱排空之后）。
+ *    之后）。
  *  - 三个提前返回门控（t_pd、SIO 唤醒、唤醒窗口）是
  *    唯一跳过邮箱的路径；t_byte 的到期检查只做测量，
  *    从不提前返回。保持这些门控在排空之前。
@@ -343,7 +340,6 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
      * 设备层随后会用完整的 stack/app 配置重新解析一次。 */
     ctx->shared.caps = iolink_caps_resolve(phy, NULL, NULL, NULL);
     ctx->enforce_timing = (iolink_caps_build()->timing_enforce_default != 0U);
-    ctx->operating_baudrate = IOLINK_BAUDRATE_UNSET;
     ctx->master_last_activity_ms = dll_time_ms(ctx);
     ctx->master_lost_cycles = 0U;
     ctx->master_lost_count = 0U;
@@ -366,9 +362,9 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     iolink_ring_init(&ctx->shared.isr_frame_ring, (uint8_t*) ctx->isr_frame_slot, IOLINK_MBX_SLOTS,
                      (uint8_t) sizeof(iolink_frame_rec_t));
 
-    ctx->baudrate = IOLINK_BAUDRATE_COM2;
+    /* PHY 的 UART 速率是编译期 `IOLINK_COM`：init 时按同一宏配置一次。 */
     if (ctx->shared.phy->set_baudrate != NULL) {
-        ctx->shared.phy->set_baudrate(ctx->shared.phy->self, IOLINK_BAUDRATE_COM2);
+        ctx->shared.phy->set_baudrate(ctx->shared.phy->self, (iolink_baudrate_t) (IOLINK_COM - 1U));
     }
 
     DLL_EVENTS_INIT(&ctx->shared.events);
@@ -415,22 +411,6 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     }
     /* 初始状态（STARTUP）的计划：第一个应答由 ISR 提前给出。 */
     iolink_dll_publish_reply_plans(ctx);
-}
-/** 在恢复性降级到 COM1 之后重新应用配置的工作 COM。 */
-static void dll_restore_operating_baudrate(iolink_dll_main_t* ctx)
-{
-    /* 不要在应答过程中重配 UART：等待暂存的主应答
-     * （isr_tx_pending）或 TX BYTE 字节送入
-     * （isr_tx_active）排空。TX FRAME 传输由 PHY 拥有，此处
-     * 不可见：若在传输进行时改变波特率，
-     * PHY 会在其临界区中中止它，主站会重试该请求。 */
-    if ((ctx->shared.isr_tx_active != 0U) || (ctx->shared.isr_tx_pending != 0U)) {
-        return;
-    }
-    if ((ctx->operating_baudrate != IOLINK_BAUDRATE_UNSET) &&
-        (ctx->baudrate != ctx->operating_baudrate)) {
-        (void) iolink_dll_set_baudrate(ctx, ctx->operating_baudrate);
-    }
 }
 
 /** @brief 消费 ISR 主站活动标志（仅时间戳，不计周期数）。 */
@@ -645,7 +625,6 @@ static void dll_timer_expire_dsio(iolink_dll_main_t* ctx)
     }
     ctx->wakeup_seen = false;
     ctx->shared.timeout_errors++;
-    iolink_dll_set_baudrate(ctx, IOLINK_BAUDRATE_COM1);
     iolink_dll_set_sio_mode(ctx);
     dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
     ctx->frame_index = 0U;
@@ -666,7 +645,6 @@ static void dll_timer_expire_fbd(iolink_dll_main_t* ctx)
         return;
     }
     IOLINK_LOG_WARN(&ctx->shared.log, "fallback timeout: switching to SIO");
-    iolink_dll_set_baudrate(ctx, IOLINK_BAUDRATE_COM1);
     iolink_dll_set_sio_mode(ctx);
     dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
     ctx->frame_index = 0U;
@@ -885,10 +863,6 @@ static void dll_process_body(iolink_dll_main_t* ctx)
     }
 #endif
 
-    /* 在 SIO/上电提前返回之前恢复工作 COM：
-     * 恢复性降级到 COM1 不能让 UART 停留在错误波特率。 */
-    dll_restore_operating_baudrate(ctx);
-
     iolink_isdu_process(&ctx->shared.isdu);
     /* ISR 对 IDLE/IDLE2/ABORT 读只回 0x00；读传输层复位归主泵。
      * Type-0 下该帧由 CONSUME 计划完全消费，主泵只能经此标志收到请求。 */
@@ -926,9 +900,6 @@ static void dll_process_body(iolink_dll_main_t* ctx)
     }
 
     dll_consume_isr_mailbox(ctx);
-
-    /* 撤销同一次调用中的恢复性 COM1 降级（SDCI 路径会到达此处）。 */
-    dll_restore_operating_baudrate(ctx);
 }
 
 void iolink_dll_process(iolink_dll_main_t* ctx)

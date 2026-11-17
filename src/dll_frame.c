@@ -180,46 +180,23 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
  * ------------------------------------------------------------------------- */
 
 /** @brief 返回响应时间（t_REN）上限，单位 us（Table 10：500 us，与波特率无关）。 */
-uint32_t dll_get_t_ren_limit_us(const iolink_dll_main_t* ctx)
+uint32_t dll_get_t_ren_limit_us(void)
 {
-    (void) ctx;
     return IOLINK_T_REN_US;
 }
 
-/** @brief 返回当前生效的波特率，单位 Hz。 */
+/** @brief 返回当前生效的波特率，单位 Hz（编译期 `IOLINK_COM`）。 */
 uint32_t dll_get_baud_hz(const iolink_dll_main_t* ctx)
 {
-    if (ctx == NULL) {
-        return 38400U;
-    }
-    switch (ctx->baudrate) {
-        case IOLINK_BAUDRATE_COM1:
-            return 4800U;
-        case IOLINK_BAUDRATE_COM2:
-            return 38400U;
-        case IOLINK_BAUDRATE_COM3:
-            return 230400U;
-        default:
-            return 38400U;
-    }
+    (void) ctx;
+    return IOLINK_COM_HZ;
 }
 
 /** @brief 返回当前波特率下的一个位时间（us）。 */
 uint32_t dll_get_t_bit_us(const iolink_dll_main_t* ctx)
 {
-    if (ctx == NULL) {
-        return 26U;
-    }
-    switch (ctx->baudrate) {
-        case IOLINK_BAUDRATE_COM1:
-            return 208U;
-        case IOLINK_BAUDRATE_COM2:
-            return 26U;
-        case IOLINK_BAUDRATE_COM3:
-            return 4U;
-        default:
-            return 26U;
-    }
+    (void) ctx;
+    return 1000000U / IOLINK_COM_HZ;
 }
 
 /** @brief 返回当前波特率下的字节间超时（16 个位时间），单位 us。 */
@@ -664,7 +641,7 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
         dll_send(ctx, resp, pos);
         ctx->shared.fallback_count = 0U;
         const uint64_t end_us = dll_time_us(ctx);
-        const uint32_t limit = dll_get_t_ren_limit_us(ctx);
+        const uint32_t limit = dll_get_t_ren_limit_us();
         const uint64_t ren_deadline = dll_timer_deadline(ctx, IOLINK_TIMER_T_REN);
 
         if ((ren_deadline != 0U) && ctx->enforce_timing && (limit > 0U) &&
@@ -830,7 +807,7 @@ void dll_check_cycle_time_at(iolink_dll_main_t* ctx, uint64_t frame_us)
     /* 与原实现一致：时间戳为 0（未绑定时钟）的第一拍没有参考点，不装载。 */
     if (ctx->enforce_timing && (ctx->min_cycle_time_us > 0U) && (frame_us != 0U)) {
         dll_timer_arm(ctx, IOLINK_TIMER_T_CYCLE, frame_us + ctx->min_cycle_time_us);
-        const uint32_t ren_limit = dll_get_t_ren_limit_us(ctx);
+        const uint32_t ren_limit = dll_get_t_ren_limit_us();
         if (ren_limit > 0U) {
             dll_timer_arm(ctx, IOLINK_TIMER_T_REN, frame_us + ren_limit);
         }

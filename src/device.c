@@ -90,12 +90,6 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
      * 宽度由 config.od_width 显式给出（校验阶段已拒绝 0）。 */
     ctx->dll.main.shared.od_width = stack->od_width;
 
-    /* 在根据波特率推导最小周期时间之前，先采用
-     * 配置的操作 COM（及其时序限制）。 */
-    if (stack->baudrate_set) {
-        (void) iolink_dll_set_operating_baudrate(&ctx->dll.main, stack->baudrate);
-    }
-
     /* 通告/实际提供的最小周期时间由实际的
      * M-sequence（PD/OD 长度与波特率）推导，并受应用下限约束。 */
     ctx->dll.main.min_cycle_time_us =
@@ -215,10 +209,6 @@ static int device_config_validate(const iolink_device_config_t* config)
         if (layout_err != IOLINK_DEVICE_INIT_OK) {
             return layout_err;
         }
-    }
-
-    if (stack->baudrate_set && ((uint32_t) stack->baudrate > (uint32_t) IOLINK_BAUDRATE_COM3)) {
-        return IOLINK_DEVICE_INIT_ERR_BAUDRATE;
     }
 
 #if IOLINK_NEED_CRITICAL
@@ -368,7 +358,7 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
                     "device init: m_seq=%u pd_in=%u pd_out=%u od=%u baud=%u",
                     (unsigned) config->stack->m_seq_type, (unsigned) config->stack->pd_in_len,
                     (unsigned) config->stack->pd_out_len, (unsigned) ctx->dll.main.shared.od_width,
-                    (unsigned) ctx->dll.main.baudrate);
+                    (unsigned) IOLINK_COM);
     return 0;
 }
 
@@ -702,7 +692,8 @@ iolink_phy_mode_t iolink_device_get_phy_mode(const iolink_device_ctx_t* ctx)
 
 iolink_baudrate_t iolink_device_get_baudrate(const iolink_device_ctx_t* ctx)
 {
-    return (ctx != NULL) ? iolink_dll_get_baudrate(&ctx->dll.main) : IOLINK_BAUDRATE_COM2;
+    (void) ctx;
+    return (iolink_baudrate_t) (IOLINK_COM - 1);
 }
 
 void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx, iolink_dll_stats_t* out_stats)

@@ -22,6 +22,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "iolinki/types.h"
+
 #include "iolinki/data_storage.h"
 #include "iolinki/dll.h"
 #include "iolinki/events.h"
@@ -31,8 +33,7 @@
 extern "C" {
 #endif
 
-/** @brief 设置通信波特率（初始化/恢复路径）。 */
-int iolink_dll_set_baudrate(iolink_dll_main_t* ctx, iolink_baudrate_t baudrate);
+IOLINK_ASSUME_NONNULL_BEGIN
 
 /** @brief 切换到 SIO 模式（协议状态机）。 */
 int iolink_dll_set_sio_mode(iolink_dll_main_t* ctx);
@@ -40,10 +41,15 @@ int iolink_dll_set_sio_mode(iolink_dll_main_t* ctx);
 /** @brief 切换到 SDCI 模式（协议状态机）。 */
 int iolink_dll_set_sdci_mode(iolink_dll_main_t* ctx);
 
-/** @brief 复位 ErrorCount 计数器（SystemCommand 0x80/0x82/0x83）。 */
+/** @brief 复位 ErrorCount 计数器（SystemCommand 0x80/0x82/0x83）。
+ *  @note 只清计数器，保留活动事件（Table 101 "Clear" 与 "Restore factory
+ *        settings" 的区别由调用方选择）。
+ */
 void iolink_dll_reset_error_counters(iolink_dll_main_t* ctx);
 
-/** @brief 复位诊断事件与 DeviceStatus（SystemCommand/Back-to-box）。 */
+/** @brief 复位诊断事件与 DeviceStatus（SystemCommand/Back-to-box）。
+ *  @note 同时清计数器、事件队列、Event 标志与 Table 58 存储。
+ */
 void iolink_dll_reset_diagnostics(iolink_dll_main_t* ctx);
 
 /** @brief 覆盖 A.6.4 事件窗口（初始化期）。 */
@@ -54,8 +60,12 @@ void iolink_events_set_window(iolink_events_ctx_t* ctx, uint16_t min_appear_ms,
 void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn IOLINK_NULLABLE fn,
                                 iolink_app_t* IOLINK_NULLABLE self);
 
-/** @brief 使 DPP1 映像失效，下一次读取时重建（主上下文）。 */
+/** @brief 使 DPP1 映像失效，下一次读取时重建（主上下文）。
+ *  @note 取值为纯函数，缓存由本函数失效；主上下文重建整页，ISR 只读。
+ */
 void iolink_isdu_dp_page1_invalidate(iolink_isdu_ctx_t* ctx);
+
+IOLINK_ASSUME_NONNULL_END
 
 #ifdef __cplusplus
 }

@@ -81,11 +81,6 @@ struct iolink_dll_main
     /* SIO 模式 */
     iolink_phy_mode_t phy_mode; /**< 当前工作模式（SDCI 与 SIO） */
 
-    /* 波特率支持 */
-    iolink_baudrate_t baudrate; /**< 协商后的波特率（COM1-COM3） */
-
-    iolink_baudrate_t operating_baudrate; /**< 工作 COM；未配置时为 IOLINK_BAUDRATE_UNSET */
-
     /* 统一帧组装：主站请求为 MC + CKT + PD-out + OD，因此
        按编译期最大值确定尺寸（原为固定 48，一旦
        OD 宽度可达 IOLINK_OD_MAX_SIZE 就显得过小）。 */

@@ -194,11 +194,6 @@ static void test_device_init_rejects_invalid_config(void** state)
     config = make_device_config(&stack, &phy);
     stack.od_width = IOLINK_OD_MAX_SIZE + 1U;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_OD_CAPACITY);
-
-    config = make_device_config(&stack, &phy);
-    stack.baudrate_set = true;
-    stack.baudrate = (iolink_baudrate_t) 3;
-    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_BAUDRATE);
 }
 
 static int g_phy_init_calls;
@@ -361,18 +356,6 @@ static void test_device_init_accepts_valid_config(void** state)
     assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 28U);
     assert_int_equal(iolink_device_get_pd_out_len(&dev.ctx), 2U);
 #endif
-
-    /* 除非 baudrate_set 请求，否则波特率被忽略。 */
-    stack = (iolink_stack_config_t){0};
-    stack.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    stack.pd_in_len = 2U;
-    stack.pd_out_len = 2U;
-    stack.od_width = 1U;
-    stack.baudrate_set = false;
-    stack.baudrate = (iolink_baudrate_t) 3;
-
-    will_return(mock_phy_init, 0);
-    assert_int_equal(iolink_test_device_init(&dev, &stack, NULL), IOLINK_DEVICE_INIT_OK);
 }
 
 static void test_device_pd_input_bounds(void** state)
@@ -473,7 +456,8 @@ static void test_device_introspection(void** state)
                      IOLINK_M_SEQ_TYPE_0);
 }
 
-static void test_device_config_baudrate(void** state)
+/* COM 是编译期常量：设备 getter 返回 IOLINK_COM，配置侧没有覆盖入口。 */
+static void test_device_baudrate_is_compiled(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {0};
@@ -481,15 +465,12 @@ static void test_device_config_baudrate(void** state)
     config.od_width = 2U;
     config.pd_in_len = 2U;
     config.pd_out_len = 2U;
-    config.baudrate = IOLINK_BAUDRATE_COM1;
-    config.baudrate_set = true;
 
     iolink_test_device_t dev;
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
-    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM1);
-    assert_int_equal(test_dll(&dev.ctx)->operating_baudrate, IOLINK_BAUDRATE_COM1);
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), (iolink_baudrate_t) (IOLINK_COM - 1));
 }
 
 /* 初始化时即建立 DS 镜像和校验和，即使没有已持久化的镜像也是如此，
@@ -615,7 +596,7 @@ int main(void)
         cmocka_unit_test(test_device_pd_output_read),
         cmocka_unit_test(test_device_reset_handler),
         cmocka_unit_test(test_device_introspection),
-        cmocka_unit_test(test_device_config_baudrate),
+        cmocka_unit_test(test_device_baudrate_is_compiled),
         cmocka_unit_test(test_device_od_width_required),
         cmocka_unit_test(test_device_init_builds_ds_image),
         cmocka_unit_test(test_device_process_pumps_events),

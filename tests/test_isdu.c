@@ -1084,7 +1084,6 @@ static void test_isdu_dp_page1_image_octets(void** state)
     (void) memset(&dll, 0, sizeof(dll));
     dll.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
     dll.shared.od_width = 1U; /* TYPE_2_1 的 Annex A 固定布局 */
-    dll.baudrate = IOLINK_BAUDRATE_COM2;
     dll.master_cycle_time = 0x1AU;
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
@@ -1135,7 +1134,6 @@ static void test_isdu_dp_page1_read_range(void** state)
     (void) memset(&dll, 0, sizeof(dll));
     dll.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
     dll.shared.od_width = 1U;
-    dll.baudrate = IOLINK_BAUDRATE_COM2;
     dll.master_cycle_time = 0x1AU;
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);

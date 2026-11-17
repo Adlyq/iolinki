@@ -101,4 +101,6 @@ iolink_matrix_emit_probes()
     "$cb" workspace_external "-DIOLINK_WORKSPACE_EMBEDDED=0"
     "$cb" single_no_critical "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE"
     "$cb" capacity_overrides "-DIOLINK_MBX_SLOTS=8 -DIOLINK_REPLY_PLAN_SLOTS=12"
+    "$cb" com1 "-DIOLINK_COM=1"
+    "$cb" com3 "-DIOLINK_COM=3"
 }

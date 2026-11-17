@@ -234,9 +234,32 @@ IOLINK_ASSUME_NONNULL_BEGIN
 
 /**
  * @brief 应答时间上限（T_REN），单位微秒（Table 10，最大 500 us）。
+ *
+ * 与波特率无关。设为 0 表示关闭 t_REN 强制检查（不装载 T_REN 表项）。
  */
 #ifndef IOLINK_T_REN_US
 #define IOLINK_T_REN_US 500U
+#endif
+
+/**
+ * @brief 编译期 COM（1 = COM1/4.8k，2 = COM2/38.4k，3 = COM3/230.4k）。
+ *
+ * IO-Link 设备只支持一个传输速率（V1.1.5 §5.3.3）；把它做成编译期常量让
+ * 位时间、MinCycleTime 与 UART 配置在目标上直接折叠。PHY 的 `init` 或
+ * `set_baudrate` 按同一宏配置硬件。默认：COM2
+ */
+#ifndef IOLINK_COM
+#define IOLINK_COM 2
+#endif
+#if (IOLINK_COM < 1) || (IOLINK_COM > 3)
+#error "IOLINK_COM must be 1 (COM1), 2 (COM2) or 3 (COM3)"
+#endif
+#if IOLINK_COM == 1
+#define IOLINK_COM_HZ 4800U
+#elif IOLINK_COM == 2
+#define IOLINK_COM_HZ 38400U
+#else
+#define IOLINK_COM_HZ 230400U
 #endif
 
 /**
@@ -428,11 +451,11 @@ IOLINK_ASSUME_NONNULL_BEGIN
 #endif
 
 /* =========================================================================
- * 4. 日志接口（运行时 sink）
+ * 4. 日志接口
  *
  * 打印点定义在 iolinki/log.h；输出由应用通过 iolink_log_sink_t 提供，默认静默。
- * 应用在 iolink_device_config_t 中配置，或运行时调用 iolink_device_set_log()。
- * 编译期开关（ISR 日志等）在 log.h 内。
+ * 应用在 iolink_device_config_t 的 log_level / app->log_write 中配置，初始化后
+ * 不再更改；编译期开关（ISR 日志等）在 log.h 内。
  * ========================================================================= */
 
 /** @} */ /* iolinki_config 结束 */

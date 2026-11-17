@@ -213,8 +213,6 @@ typedef struct
     uint32_t t_pd_us;               /**< 上电延迟（t_pd），单位为微秒 */
     uint8_t od_width;               /**< OD 八位组数（Table A.10），必须显式给出 1/2/8/32；
                                          0 视为配置错误（`IOLINK_DEVICE_INIT_ERR_OD_WIDTH`） */
-    iolink_baudrate_t baudrate;     /**< baudrate_set 为 true 时使用的 COM */
-    bool baudrate_set;              /**< 初始化时应用波特率；false 保持 COM2 默认值 */
     uint8_t master_lost_cycles;     /**< 触发 master_lost 前允许丢失的主站周期数；0 表示禁用 */
 
     /* --- 运行时能力 ---------------------------------------------------- */

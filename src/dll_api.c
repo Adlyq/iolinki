@@ -42,7 +42,8 @@ iolink_phy_mode_t iolink_dll_get_phy_mode(const iolink_dll_main_t* ctx)
 
 iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_main_t* ctx)
 {
-    return (ctx != NULL) ? ctx->baudrate : IOLINK_BAUDRATE_COM2;
+    (void) ctx;
+    return (iolink_baudrate_t) (IOLINK_COM - 1);
 }
 
 /** @brief 根据 M-sequence 时序计算设备 MinCycleTime（Table B.3）。
@@ -75,46 +76,6 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx)
         units = 4U; /* Table B.3 最小值为 0.4 ms。 */
     }
     return (units > 255U) ? 255U : (uint8_t) units;
-}
-
-int iolink_dll_set_baudrate(iolink_dll_main_t* ctx, iolink_baudrate_t baudrate)
-{
-    if (ctx == NULL) return -1;
-    const bool changing = (ctx->baudrate != baudrate);
-    if (changing) {
-        IOLINK_LOG_INFO(&ctx->shared.log, "baudrate %u -> %u", (unsigned) ctx->baudrate,
-                        (unsigned) baudrate);
-    }
-    ctx->baudrate = baudrate;
-    if (ctx->shared.phy->set_baudrate != NULL)
-        ctx->shared.phy->set_baudrate(ctx->shared.phy->self, baudrate);
-    if (changing) {
-        /* UART 重配时 PHY 会中止进行中的应答；
-         * 丢弃匹配的 ISR TX 状态，使其无法在下次请求时
-         * 恢复陈旧的帧。 */
-        ctx->shared.isr_tx_pending = 0U;
-        ctx->shared.isr_tx_active = 0U;
-        ctx->shared.isr_tx_has_cks = 0U;
-        ctx->shared.isr_tx_idx = 0U;
-        ctx->shared.pd_in_captured = 0xFFU;
-    }
-    ctx->t_byte_limit_us = dll_get_t_byte_limit_us(ctx);
-    ctx->min_cycle_time_us = (uint32_t) iolink_dll_compute_min_cycle_time(ctx) * 100U;
-    /* 波特率参与 MinCycleTime（DPP1 0x02）：页读缓存必须失效。 */
-    iolink_isdu_dp_page1_invalidate(&ctx->shared.isdu);
-    return 0;
-}
-
-int iolink_dll_set_operating_baudrate(iolink_dll_main_t* ctx, iolink_baudrate_t baudrate)
-{
-    if (ctx == NULL) {
-        return -1;
-    }
-    if ((uint8_t) baudrate > (uint8_t) IOLINK_BAUDRATE_COM3) {
-        return -1;
-    }
-    ctx->operating_baudrate = baudrate;
-    return iolink_dll_set_baudrate(ctx, baudrate);
 }
 
 void iolink_dll_get_pd_length(const iolink_dll_main_t* ctx, uint8_t* IOLINK_NULLABLE pd_in_len,

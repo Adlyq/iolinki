@@ -77,8 +77,6 @@ typedef struct {
     uint8_t pd_out_len;             /* Process Data Output 长度（字节） */
     uint32_t t_pd_us;               /* 上电延迟（t_pd），微秒 */
     uint8_t od_width;               /* OD 八位组数 1/2/8/32；必填，0 拒绝初始化 */
-    iolink_baudrate_t baudrate;     /* baudrate_set 为 true 时使用的 COM */
-    bool baudrate_set;              /* false 保持 COM2 默认值 */
     uint8_t master_lost_cycles;     /* 判定 master_lost 的丢失周期数；0 = 关闭 */
     uint8_t compat_flags;           /* IOLINK_STACK_COMPAT_* 位，与构建默认值按位或 */
     uint8_t flags;                  /* IOLINK_STACK_FLAG_* 位 */
@@ -259,13 +257,15 @@ vtable 的每个钩子在类型上都是可选的：`iolink_caps_resolve()` 按"
 推导能力位，库只在对应能力位成立时调用（权威定义见 `include/iolinki/phy.h`）。
 实际可用的 PHY 需要配置粒度对应的传输钩子（BYTE 模式 `rx_octet`/`tx_octet`，
 FRAME 模式 `rx_frame`/`tx_frame`）、使用 ISR 泵时的 `int_active`（缺失时
-`dll_isr_process()` 直接返回），以及硬件需要的 `init`/`set_mode`/`set_baudrate`
-（存在才调用）。`tx_done`（TX BYTE，完成通知）、`tx_busy`（TX FRAME）、
+`dll_isr_process()` 直接返回），以及硬件需要的 `init`/`set_mode`（存在才调用）；
+`set_baudrate` 只在 `iolink_dll_init()` 中以编译期 `IOLINK_COM` 调用一次。
+`tx_done`（TX BYTE，完成通知）、`tx_busy`（TX FRAME）、
 `detect_wakeup`、`set_cq_line`、`request_service`、两个定时器钩子和 `get_faults`
 是可选项。
 
 `IOLINK_BAUDRATE_COM1`、`COM2`、`COM3` 分别是 0、1、2，对应 4.8、38.4 和
-230.4 kbit/s；它们不是波特率编号本身。
+230.4 kbit/s；设备只支持一个，由 `IOLINK_COM`（1/2/3）在编译期选定。
+它们不是波特率编号本身。
 
 ```c
 static int my_phy_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status) {
@@ -617,16 +617,15 @@ typedef enum {
     IOLINK_DEVICE_INIT_ERR_PD_OUT_LEN = -4,
     IOLINK_DEVICE_INIT_ERR_OD_WIDTH = -5,
     IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6,
-    IOLINK_DEVICE_INIT_ERR_BAUDRATE = -7,
-    IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -8,
-    IOLINK_DEVICE_INIT_ERR_TIME = -9,       /* time_us 为 NULL */
-    IOLINK_DEVICE_INIT_ERR_CRITICAL = -10,  /* 仍在使用 weak 临界区默认实现 */
-    IOLINK_DEVICE_INIT_ERR_PD_INPUT = -11,  /* 回调路径上调用轮询更新 */
-    IOLINK_DEVICE_INIT_ERR_PHY = -12,       /* PHY 能力组合不可满足（如缺 request_service/tx_busy）或 init 失败 */
-    IOLINK_DEVICE_INIT_ERR_WORKSPACE = -13, /* IOLINK_WORKSPACE_EMBEDDED=0 且没有工作区 */
-    IOLINK_DEVICE_INIT_ERR_OD = -14,        /* 应用对象字典表存在未定义/自相矛盾配置 */
-    IOLINK_DEVICE_INIT_ERR_APP = -15,       /* config.app == NULL（缺少应用 trait） */
-    IOLINK_DEVICE_INIT_ERR_DEVICE_INFO = -16, /* config.device_info == NULL（设备没有默认身份） */
+    IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -7,
+    IOLINK_DEVICE_INIT_ERR_TIME = -8,       /* time_us 为 NULL */
+    IOLINK_DEVICE_INIT_ERR_CRITICAL = -9,   /* 仍在使用 weak 临界区默认实现 */
+    IOLINK_DEVICE_INIT_ERR_PD_INPUT = -10,  /* 回调路径上调用轮询更新 */
+    IOLINK_DEVICE_INIT_ERR_PHY = -11,       /* PHY 能力组合不可满足（如缺 request_service/tx_busy）或 init 失败 */
+    IOLINK_DEVICE_INIT_ERR_WORKSPACE = -12, /* IOLINK_WORKSPACE_EMBEDDED=0 且没有工作区 */
+    IOLINK_DEVICE_INIT_ERR_OD = -13,        /* 应用对象字典表存在未定义/自相矛盾配置 */
+    IOLINK_DEVICE_INIT_ERR_APP = -14,       /* config.app == NULL（缺少应用 trait） */
+    IOLINK_DEVICE_INIT_ERR_DEVICE_INFO = -15, /* config.device_info == NULL（设备没有默认身份） */
 } iolink_device_init_result_t;
 ```
 

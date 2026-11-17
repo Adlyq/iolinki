@@ -214,7 +214,7 @@ vtable 的每个成员在类型上都是可选的（`IOLINK_NULLABLE`）：`ioli
 | --- | --- | --- |
 | `init` | 实际使用中必需 | 由 `iolink_device_init()` 调用一次；负返回值会中止初始化。允许为 NULL，但链路无法工作。 |
 | `set_mode` | 实际使用中必需 | 切换 SDCI/SIO/INACTIVE。 |
-| `set_baudrate` | 实际使用中必需 | COM1/2/3。 |
+| `set_baudrate` | 可选 | 由 `iolink_dll_init()` 以编译期 `IOLINK_COM` 调用一次；若端口在 `init` 里按同一宏配置 UART，可留空。 |
 | `rx_octet` | RX BYTE 模式 | 读到 octet 返回 1，无数据返回 0，出错返回负值。 |
 | `rx_frame` | RX FRAME 模式 | 返回 PHY 持有的完整帧，在下一次调用前有效；不得返回两字节帧头或其他截断片段。 |
 | `tx_octet` | TX BYTE 模式 | 送入一个应答 octet。 |
@@ -252,7 +252,7 @@ vtable 的每个成员在类型上都是可选的（`IOLINK_NULLABLE`）：`ioli
 | `app` | 应用 trait（`iolink_device_app_t`）：实例指针 + 时钟/日志/生命周期回调的唯一来源。保留指针，必须比上下文存活更久。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_APP`。 |
 | `device_info` | 必填的身份来源，保留指针；为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_DEVICE_INFO`（库不提供默认身份）。其中的 `application_tag` 只是身份字段，标签索引由 OD 表提供。参见 8.1 节的身份限制。 |
 | `ds_flag_persist` | 仅在 `IOLINK_FEATURE_DATA_STORAGE=1` 时声明；`DS_UPLOAD_FLAG` 变化时调用，`self` 为 `app->self`。为 NULL 时标志只保存在 RAM。 |
-| `log_level` | 运行时日志阈值；`IOLINK_LOG_LEVEL_SILENT` 表示静默。日志回调在 `app->log_write`。 |
+| `log_level` | 初始化时的日志阈值；`IOLINK_LOG_LEVEL_SILENT` 表示静默。日志回调在 `app->log_write`，初始化后不可更改。 |
 | `od` | 可选的设备专用参数入口（`include/iolinki/od.h`）：const 表 + get/set 后端，ISDU 与 Data Storage 共用。 |
 | `workspace` | 可选的传输 scratch 工作区（`include/iolinki/workspace.h`）。NULL 表示使用上下文内嵌 fallback；`IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供，否则初始化返回 `IOLINK_DEVICE_INIT_ERR_WORKSPACE`。 |
 
@@ -265,13 +265,16 @@ vtable 的每个成员在类型上都是可选的（`IOLINK_NULLABLE`）：`ioli
 | `pd_in_len`, `pd_out_len` | 初始/声明的 PD 长度。 |
 | `t_pd_us` | 上电后接受帧之前的延迟。 |
 | `od_width` | OD octet 数（1/2/8/32），必须显式给出；0 返回 `IOLINK_DEVICE_INIT_ERR_OD_WIDTH`（库不按类型推导；需要 Table A.10 的默认值时用 `iolink_mseq_default_od_width()` 自己算）。 |
-| `baudrate`, `baudrate_set` | 当 `baudrate_set` 为 true 时，初始化阶段应用的 COM。 |
 | `master_lost_cycles` | 判定 `master_lost` 前的丢失周期数；0 表示关闭该提示。 |
 | `compat_flags` | `IOLINK_STACK_COMPAT_*` 兼容位，与构建期默认值按位或。 |
 | `flags` | `IOLINK_STACK_FLAG_*`：`REQUIRE_ISR_TX`、`NO_SYSTEM_COMMAND`。 |
 | `timing_enforce` | `IOLINK_STACK_TIMING_*`；`DEFAULT` 表示沿用构建档位默认值。 |
 | `reserved` | 必须为 0。 |
 | `event_min_appear_ms`, `event_min_repeat_ms` | 覆盖 A.6.4 的出现/重复窗口；0 表示沿用构建默认值。 |
+
+传输速率（COM1/2/3）不在这个结构里：它是编译期 `IOLINK_COM`（`config.h`），
+与 `IOLINK_COM_HZ`、位时间和 PHY 的 UART 配置一起折叠。设备只支持一个 COM
+（V1.1.5 §5.3.3）。
 
 初始化会用 `IOLINK_DEVICE_INIT_ERR_*` 拒绝非法组合（参见 `device.h`），包括
 `phy`/`stack` 为 NULL（`IOLINK_DEVICE_INIT_ERR_NULL`）、`device_info` 为 NULL

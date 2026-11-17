@@ -199,7 +199,7 @@ uint8_t dll_req_len_for(const iolink_dll_main_t* ctx, uint8_t mc, uint8_t ckt);
 
 uint32_t dll_get_baud_hz(const iolink_dll_main_t* ctx);
 uint32_t dll_get_t_bit_us(const iolink_dll_main_t* ctx);
-uint32_t dll_get_t_ren_limit_us(const iolink_dll_main_t* ctx);
+uint32_t dll_get_t_ren_limit_us(void);
 uint32_t dll_get_t_byte_limit_us(const iolink_dll_main_t* ctx);
 bool dll_t_pd_active(const iolink_dll_main_t* ctx);
 bool dll_drain_rx(iolink_dll_main_t* ctx);

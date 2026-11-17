@@ -344,8 +344,6 @@ static int wcet_device_setup(iolink_m_seq_type_t type, uint8_t pd_in_len, uint8_
     g_dev.stack.pd_in_len = pd_in_len;
     g_dev.stack.pd_out_len = pd_out_len;
     g_dev.stack.od_width = od_width;
-    g_dev.stack.baudrate = IOLINK_BAUDRATE_COM2;
-    g_dev.stack.baudrate_set = false;
     g_dev.stack.master_lost_cycles = 0U;
     g_dev.cfg.app = &g_app;
     g_dev.cfg.device_info = &g_device_info;

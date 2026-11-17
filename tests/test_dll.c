@@ -1609,22 +1609,22 @@ static void test_min_cycle_time_from_m_sequence(void** state)
     iolink_dll_main_t dll;
     (void) memset(&dll, 0, sizeof(dll));
 
-    /* PD 输入/输出各 28 字节、1 OD、COM3：最坏情况的写 M-sequence 为
-     * (29*14 + 31*12 + 6) us ~= 3.40 ms -> 35（单位 0.1 ms）。 */
+    /* PD 输入/输出各 28 字节、1 OD：最坏情况的写 M-sequence 随编译期 COM
+     * 折叠（COM3 ~3.40 ms -> 35，COM2 ~20.5 ms -> 205，COM1 被钳到 255）。 */
     dll.shared.od_width = 1U;
     dll.shared.pd_in_len = 28U;
     dll.shared.pd_out_len_current = 28U;
-    dll.baudrate = IOLINK_BAUDRATE_COM3;
+#if IOLINK_COM == 3
     assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 35U);
+#elif IOLINK_COM == 2
+    assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 205U);
+#else
+    assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 255U);
+#endif
 
-    /* 应用层下限更高时以它为准（5.0 ms）。 */
-    dll.min_cycle_time_app_us = 5000U;
-    assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 50U);
-
-    /* 同一帧在 COM1 下需要多得多的传输时间。 */
-    dll.min_cycle_time_app_us = 0U;
-    dll.baudrate = IOLINK_BAUDRATE_COM1;
-    assert_true(iolink_dll_compute_min_cycle_time(&dll) > 35U);
+    /* 应用层下限更高时以它为准（25.5 ms -> 255，等于编码上限）。 */
+    dll.min_cycle_time_app_us = 25500U;
+    assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 255U);
 }
 
 /* Back-to-box（10.7.5）：约 3 个主站周期后 DLL 停止通信。 */

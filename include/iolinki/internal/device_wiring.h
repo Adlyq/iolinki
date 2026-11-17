@@ -19,14 +19,19 @@
 
 #include "iolinki/device.h"
 #include "iolinki/log.h"
+#include "iolinki/types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+IOLINK_ASSUME_NONNULL_BEGIN
+
 /** @brief 绑定日志汇点（初始化期；ISR 日志启用时必须在 ISR 静止时调用）。 */
 void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_NULLABLE write,
                            iolink_log_level_t level);
+
+IOLINK_ASSUME_NONNULL_END
 
 #ifdef __cplusplus
 }

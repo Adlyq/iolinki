@@ -26,13 +26,12 @@ IOLINK_ASSUME_NONNULL_BEGIN
  *
  * sink 默认全零（静默）：`write == NULL` 或 `level == SILENT` 时
  * 不产生任何调用。应用通过 `iolink_device_app_t::log_write` /
- * log_level 在初始化时配置，或在运行时用
- * iolink_device_set_log() 更换。
+ * `config.log_level` 在初始化时配置；运行期没有更换接口。
  */
 
 /**
  * @defgroup iolinki_log 日志
- * @brief 运行时可配置的日志打印点。
+ * @brief 打印点与运行时级别比较。
  * @{
  */
 
@@ -74,8 +73,7 @@ typedef void (*iolink_log_write_fn)(iolink_app_t* IOLINK_NULLABLE self, iolink_l
  *
  * 全零表示静默。`level` 是运行时阈值：只转发级别数值不大于它的
  * 日志。结构体按值嵌入 DLL/ISDU/DS/事件上下文，由设备层在初始化
- * 和 iolink_device_set_log() 时统一写入。设备层的更新在临界区内
- * 完成，因此启用 ISR 日志时不会读到半更新的 sink。
+ * 时一次性写入（数据 ISR 静止期），此后只读。
  */
 typedef struct
 {

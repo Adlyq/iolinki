@@ -498,24 +498,8 @@ iolink_phy_mode_t iolink_dll_get_phy_mode(const iolink_dll_main_t* ctx);
  */
 void iolink_dll_request_back_to_box(iolink_dll_main_t* ctx);
 
-/** “未配置工作 COM”的哨兵值（恢复过程会保留 COM1）。 */
-#define IOLINK_BAUDRATE_UNSET ((iolink_baudrate_t) 0xFF)
-
 /**
- * @brief 设置设备的工作 COM 并立即应用
- *
- * 工作 COM 会由 iolink_dll_process() 在恢复过程
- * 掉到 COM1（空闲/回退）之后重新断言，与配置为固定 SDCI
- * 波特率的设备一致。传入 IOLINK_BAUDRATE_UNSET 可停止重复断言。
- *
- * @param ctx DLL 上下文
- * @param baudrate 工作波特率（COM1..COM3）
- * @return int 成功返回 0，参数无效返回 -1
- */
-int iolink_dll_set_operating_baudrate(iolink_dll_main_t* ctx, iolink_baudrate_t baudrate);
-
-/**
- * @brief 获取当前协商后的波特率
+ * @brief 获取当前协商后的波特率（编译期 `IOLINK_COM`）
  *
  * @param ctx DLL 上下文
  * @return iolink_baudrate_t 当前波特率

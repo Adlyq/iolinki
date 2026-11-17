@@ -87,8 +87,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `t_pd_delay_us` and `response_time_us` are gone: the first was an init-local
   temporary, the second had no reader.
 
+### Changed (COM is a compile-time constant)
+- The transmission rate is now the build-time `IOLINK_COM` (1/2/3, default 2) from
+  `include/iolinki/config.h`; `IOLINK_COM_HZ` and the bit time fold at compile
+  time. `iolink_stack_config_t::baudrate` / `baudrate_set` are gone
+  (**MAJOR**), as are `iolink_dll_set_operating_baudrate()`,
+  `IOLINK_BAUDRATE_UNSET` and the COM1 fallback/restore machinery:
+  SIO and fallback only switch the line mode, the UART rate never changes.
+- `iolink_dll_init()` calls `phy->set_baudrate()` once with `IOLINK_COM`; a port
+  that configures the UART from the same macro in `init()` can omit the hook.
+- `IOLINK_DEVICE_INIT_ERR_BAUDRATE` is gone; an invalid COM is a compile-time
+  `#error`. Later init error codes shift by one.
+
 ### Changed (initialisation wiring is no longer public API)
-- `iolink_device_set_log()`, `iolink_dll_set_baudrate()`, `iolink_dll_set_sio_mode()`,
+- `iolink_dll_set_baudrate()`, `iolink_dll_set_sio_mode()`,
   `iolink_dll_set_sdci_mode()`, `iolink_dll_reset_error_counters()`,
   `iolink_dll_reset_diagnostics()`, `iolink_events_set_window()`,
   `iolink_ds_set_flag_persist()` and `iolink_isdu_dp_page1_invalidate()` moved to
@@ -96,10 +108,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gone). They are called by the initialisation and protocol paths; applications
   configure the same behaviour through `iolink_device_config_t` /
   `iolink_stack_config_t`.
+- `iolink_device_set_log()` moved to `include/iolinki/internal/device_wiring.h`
+  (a separate header so DLL translation units do not pull `device.h`).
 - Logging is init-only: the sink and level come from `config.log_write` /
   `config.log_level`; the runtime switch and its critical section are gone.
-- `iolink_dll_set_timing_enforcement()` is gone; `device_apply_stack_config()`
-  writes the field directly. `iolink_device_set_timing_enforcement()` remains.
 
 ### Added (compile-time log level)
 - `IOLINK_LOG_COMPILE_LEVEL` (`iolinki/log.h`, default `IOLINK_LOG_COMPILE_DEBUG`)
