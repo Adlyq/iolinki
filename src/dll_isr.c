@@ -159,9 +159,8 @@ void dll_isr_tx_step(iolink_dll_main_t* ctx)
     else if ((ctx->shared.isr_tx_has_cks != 0U) &&
              (ctx->shared.isr_tx_idx == ctx->shared.isr_tx_len)) {
         /* 负载完成：输出 CKS = flags | checksum6(acc ^ flags)。 */
-        const uint8_t acc = (uint8_t) (ctx->shared.isr->isr_tx_acc ^ ctx->shared.isr->isr_tx_flags);
         const uint8_t cks =
-            (uint8_t) (ctx->shared.isr->isr_tx_flags | iolink_checksum6_from_acc(acc));
+            dll_reply_cks(ctx->shared.isr->isr_tx_acc, ctx->shared.isr->isr_tx_flags);
         (void) ctx->shared.phy->tx_octet(ctx->shared.phy->self, cks);
         ctx->shared.isr_tx_idx++;
     }
@@ -306,7 +305,7 @@ static void dll_isr_send_staged(iolink_dll_main_t* ctx, uint8_t slot, uint8_t le
     for (uint8_t i = 0U; i < len; i++) {
         acc = (uint8_t) (acc ^ payload[i]);
     }
-    payload[len] = (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
+    payload[len] = dll_reply_cks(acc, flags);
     ctx->shared.isr_tx_len = (uint8_t) (len + 1U);
     ctx->shared.isr_tx_active = 0U;
     if (ctx->shared.phy->tx_frame != NULL) {
@@ -360,7 +359,7 @@ bool dll_isr_consume_isdu_write(iolink_dll_main_t* ctx, const uint8_t* frame, ui
     }
     uint8_t od_off;
     uint8_t od_n;
-    if ((frame[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0) {
+    if (dll_ckt_is_type0(frame[1])) {
         od_off = 2U; /* Type-0 写：MC + CKT + OD */
         od_n = 1U;
     }
@@ -420,7 +419,7 @@ static bool dll_isr_start_reply_frame(iolink_dll_main_t* ctx, uint8_t* base, uin
         for (uint16_t i = 0U; i < (uint16_t) (out_len - 1U); i++) {
             acc = (uint8_t) (acc ^ base[i]);
         }
-        base[out_len - 1U] = (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
+        base[out_len - 1U] = dll_reply_cks(acc, flags);
     }
     else {
         /* 短应答：在启动 DMA 之前填入 CKS。 */
@@ -428,7 +427,7 @@ static bool dll_isr_start_reply_frame(iolink_dll_main_t* ctx, uint8_t* base, uin
         for (uint16_t i = 0U; i < (uint16_t) (out_len - 1U); i++) {
             acc = (uint8_t) (acc ^ base[i]);
         }
-        base[out_len - 1U] = (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
+        base[out_len - 1U] = dll_reply_cks(acc, flags);
         if ((ctx->shared.phy->tx_frame == NULL) ||
             (ctx->shared.phy->tx_frame(ctx->shared.phy->self, base, out_len) != 0)) {
             return false;

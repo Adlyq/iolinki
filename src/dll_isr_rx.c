@@ -206,24 +206,10 @@ static bool dll_isr_frame_len_ok(iolink_dll_main_t* ctx, const uint8_t* frame, u
         DLL_DIAG_PULSE_ISR(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_FRAMING);
         return false;
     }
-    /* Type-0 M-sequence 从不携带过程数据（OD 写恰好携带
-     * 一个 OD 八位组，Figure A.5），因此其长度不遵循
-     * OPERATE 布局。与 dll_isr_rx_byte_derive_expect() 保持一致；否则
-     * OPERATE 中的 Type-0 页读（复位请求）会按配置的 PD 长度
-     * 衡量，被计为成帧错误并丢弃，而不是
-     * 复位设备。 */
-    uint8_t expected_len;
-    if ((frame[1] & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0) {
-        const bool write = ((frame[0] & IOLINK_MC_RW_MASK) == 0U);
-        const uint8_t channel = (uint8_t) (frame[0] & IOLINK_MC_COMM_CHANNEL_MASK);
-        const bool od_write = write && ((channel == IOLINK_MC_CHANNEL_PAGE) ||
-                                        (channel == IOLINK_MC_CHANNEL_DIAGNOSIS) ||
-                                        (channel == IOLINK_MC_CHANNEL_ISDU));
-        expected_len = (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + (od_write ? 1U : 0U));
-    }
-    else {
-        expected_len = iolink_dll_expected_req_len(ctx, frame[0]);
-    }
+    /* Type-0 的长度由 MC/CKT 固定，与 OPERATE 配置的 PD/OD 宽度无关；
+       多字节类型按配置推导。两条 RX 路径共用 dll_req_len_for()，因此
+       OPERATE 中的 Type-0 页读（复位请求）不会被按 PD 长度衡量。 */
+    const uint8_t expected_len = dll_req_len_for(ctx, frame[0], frame[1]);
     if ((expected_len == 0U) || (len != expected_len)) {
         IOLINK_LOG_ISR_DEBUG(&ctx->shared.log, "frame length reject: len=%u expected=%u",
                              (unsigned) len, (unsigned) expected_len);
@@ -342,18 +328,8 @@ static void dll_isr_rx_byte_derive_expect(iolink_dll_main_t* ctx)
     }
     const uint8_t mc = (uint8_t) ctx->shared.isr->isr_rx_buf[0];
     const uint8_t ckt = (uint8_t) ctx->shared.isr->isr_rx_buf[1];
-    if ((ckt & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0) {
-        const bool wr = ((mc & IOLINK_MC_RW_MASK) == 0U);
-        const uint8_t channel = (uint8_t) (mc & IOLINK_MC_COMM_CHANNEL_MASK);
-        ctx->shared.isr->isr_rx_expect = (wr && ((channel == IOLINK_MC_CHANNEL_PAGE) ||
-                                                 (channel == IOLINK_MC_CHANNEL_DIAGNOSIS) ||
-                                                 (channel == IOLINK_MC_CHANNEL_ISDU)))
-                                             ? 3U
-                                             : 2U;
-    }
-    else {
-        ctx->shared.isr->isr_rx_expect = iolink_dll_expected_req_len(ctx, mc);
-    }
+    /* 与 FRAME 路径同一个实现：Type-0 的长度由 MC 固定，其余按配置推导。 */
+    ctx->shared.isr->isr_rx_expect = dll_req_len_for(ctx, mc, ckt);
 }
 
 /** @brief RX BYTE：已知长度已完整；将帧交给共享尾部。 */

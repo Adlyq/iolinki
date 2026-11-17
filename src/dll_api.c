@@ -235,33 +235,22 @@ void iolink_dll_set_t_ren_limit_us(iolink_dll_main_t* ctx, uint32_t limit_us)
     ctx->t_ren_override = (limit_us != 0U);
 }
 
-/* 根据当前 DLL 状态，推导首字节（MC 字节）为 @p mc_byte 的
- * M-sequence 的期望请求长度。纯只读函数，因此
- * ISR 泵可直接调用；由两条 RX 路径共享。 */
-static uint8_t dll_compute_req_len(const iolink_dll_main_t* ctx, uint8_t mc_byte)
+uint8_t dll_req_len_for(const iolink_dll_main_t* ctx, uint8_t mc, uint8_t ckt)
 {
-    const uint8_t type0_channel = (uint8_t) (mc_byte & IOLINK_MC_COMM_CHANNEL_MASK);
-    const bool type0_od_write = (dll_expected_type_bits(ctx) == IOLINK_MSEQ_TYPE_0) &&
-                                ((mc_byte & IOLINK_MC_RW_MASK) == 0U) &&
-                                ((type0_channel == IOLINK_MC_CHANNEL_PAGE) ||
-                                 (type0_channel == IOLINK_MC_CHANNEL_DIAGNOSIS) ||
-                                 (type0_channel == IOLINK_MC_CHANNEL_ISDU));
-    if (type0_od_write) {
-        /* Figure A.5：Type-0 写只携带一个 OD 字节，
-           无论 OPERATE M-sequence 使用何种 OD 宽度。 */
-        return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + 1U);
+    bool type0 = dll_ckt_is_type0(ckt);
+    if (!type0) {
+        /* 设备此刻只接受 Type-0（STARTUP/PREOPERATE）时，长度同样由 MC 决定，
+           与帧自报的类型无关。 */
+        type0 = (dll_expected_type_bits(ctx) == IOLINK_MSEQ_TYPE_0);
     }
-    /* STARTUP/PREOPERATE 期望 Type 0；ESTAB_COM 和 OPERATE 使用配置的
-       类型（C5/Table 47）。配置为多字节类型后，转换命令是唯一的
-       Type-0 交换。 */
-    uint8_t type_bits = dll_expected_type_bits(ctx);
-    bool transition_cmd = (ctx->shared.state == IOLINK_DLL_STATE_ESTAB_COM) &&
-                          (mc_byte == IOLINK_MC_TRANSITION_COMMAND);
-    if (!transition_cmd && (type_bits != IOLINK_MSEQ_TYPE_0)) {
-        const uint8_t od_req = ((mc_byte & IOLINK_MC_RW_MASK) == 0U) ? ctx->shared.od_width : 0U;
-        return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + ctx->shared.pd_out_len_current + od_req);
+    if (type0) {
+        return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + (dll_mc_is_type0_od_write(mc) ? 1U : 0U));
     }
-    return 2U;
+    if ((ctx->shared.state == IOLINK_DLL_STATE_ESTAB_COM) && (mc == IOLINK_MC_TRANSITION_COMMAND)) {
+        return IOLINK_M_SEQ_HEADER_LEN;
+    }
+    const uint8_t od_req = ((mc & IOLINK_MC_RW_MASK) == 0U) ? ctx->shared.od_width : 0U;
+    return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + ctx->shared.pd_out_len_current + od_req);
 }
 
 uint8_t iolink_dll_expected_req_len(const iolink_dll_main_t* ctx, uint8_t mc)
@@ -269,5 +258,7 @@ uint8_t iolink_dll_expected_req_len(const iolink_dll_main_t* ctx, uint8_t mc)
     if (ctx == NULL) {
         return 0U;
     }
-    return dll_compute_req_len(ctx, mc);
+    /* 公共查询问的是“若主站按当前配置发送，这条请求有多长”，
+       所以 CKT 取期望的类型位，而不是某个真实帧自报的类型。 */
+    return dll_req_len_for(ctx, mc, dll_expected_type_bits(ctx));
 }

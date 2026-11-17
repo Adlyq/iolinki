@@ -18,6 +18,7 @@
  */
 
 #include "iolinki/protocol.h"
+#include "iolinki/crc.h"
 
 /**
  * @brief DPP1 是否可读：绑定了设备身份，且该身份上下文确实已初始化。
@@ -61,6 +62,37 @@ static inline uint32_t dll_time_ms(const iolink_dll_main_t* ctx)
 static inline uint8_t dll_rx_expected_cks(const uint8_t* frame)
 {
     return (uint8_t) (frame[1] & IOLINK_MSEQ_CHECKSUM_MASK);
+}
+
+/** @brief 这个 CKT 八位组声明的 M-sequence 类型是否为 Type-0（A.1.6 类型位）。 */
+static inline bool dll_ckt_is_type0(uint8_t ckt)
+{
+    return (ckt & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0;
+}
+
+/**
+ * @brief MC 是否为 Type-0 的 OD 写（Figure A.5）。
+ *
+ * Type-0 写只携带一个 OD 八位组（参数/诊断/ISDU 通道 + 写访问），与 OPERATE
+ * 配置的 OD 宽度无关。成帧长度推导与 ISDU 写暂存都按这一条判定。
+ */
+static inline bool dll_mc_is_type0_od_write(uint8_t mc)
+{
+    const uint8_t channel = (uint8_t) (mc & IOLINK_MC_COMM_CHANNEL_MASK);
+    return ((mc & IOLINK_MC_RW_MASK) == 0U) &&
+           ((channel == IOLINK_MC_CHANNEL_PAGE) || (channel == IOLINK_MC_CHANNEL_DIAGNOSIS) ||
+            (channel == IOLINK_MC_CHANNEL_ISDU));
+}
+
+/**
+ * @brief 应答 CKS 八位组：@c flags | checksum6(acc ^ flags)。
+ *
+ * @p acc 是已经含 A.1.6 种子的负载累加器。BYTE 泵在发送过程中累加、
+ * FRAME 路径在交出缓冲区前后整帧累加，收尾公式只有这一份。
+ */
+static inline uint8_t dll_reply_cks(uint8_t acc, uint8_t flags)
+{
+    return (uint8_t) (flags | iolink_checksum6_from_acc((uint8_t) (acc ^ flags)));
 }
 
 #define IOLINK_M_SEQ_TYPE1_LEN(pd_len)                         \
@@ -147,6 +179,22 @@ typedef enum
 void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len);
 uint8_t dll_mseq_type_bits(uint8_t m_seq_type);
 uint8_t dll_expected_type_bits(const iolink_dll_main_t* ctx);
+
+/**
+ * @brief 请求 M-sequence 的期望总长度（含 MC/CKT 与 CKS 位）。
+ *
+ * @p ckt 说明这个请求自报的类型：两条 ISR 成帧检查传帧里的 CKT 八位组
+ * （“这个帧有多长”），公共查询 @ref iolink_dll_expected_req_len 传当前期望的
+ * 类型位（“若主站按配置发送会有多长”）。Type-0 的长度只由 MC 决定（读 2、
+ * OD 写 3）；多字节类型按配置的 PD-out / OD 宽度推导，ESTAB_COM 的转换命令
+ * 是唯一的 Type-0 交换。
+ *
+ * 纯只读，ISR 可直接调用。定义在 dll_api.c：两条 RX 路径与公共查询共用这一
+ * 份实现，因此它是普通函数而不是头文件内联——两次内联会在无 LTO 的镜像里
+ * 各留一份副本。
+ */
+uint8_t dll_req_len_for(const iolink_dll_main_t* ctx, uint8_t mc, uint8_t ckt);
+
 uint32_t dll_get_baud_hz(const iolink_dll_main_t* ctx);
 uint32_t dll_get_t_bit_us(const iolink_dll_main_t* ctx);
 uint32_t dll_get_t_ren_limit_us(const iolink_dll_main_t* ctx);
