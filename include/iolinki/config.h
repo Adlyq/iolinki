@@ -67,6 +67,9 @@ IOLINK_ASSUME_NONNULL_BEGIN
 #ifndef IOLINK_PD_IN_MAX_SIZE
 #define IOLINK_PD_IN_MAX_SIZE 32U
 #endif
+#if IOLINK_PD_IN_MAX_SIZE > 255U
+#error "IOLINK_PD_IN_MAX_SIZE must fit a uint8_t length"
+#endif
 
 /**
  * @brief 输出过程数据（主站 -> 设备）缓冲上限，单位字节。
@@ -75,6 +78,9 @@ IOLINK_ASSUME_NONNULL_BEGIN
  */
 #ifndef IOLINK_PD_OUT_MAX_SIZE
 #define IOLINK_PD_OUT_MAX_SIZE 32U
+#endif
+#if IOLINK_PD_OUT_MAX_SIZE > 255U
+#error "IOLINK_PD_OUT_MAX_SIZE must fit a uint8_t length"
 #endif
 
 /**

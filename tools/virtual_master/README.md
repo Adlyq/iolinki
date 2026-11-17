@@ -7,7 +7,7 @@ A software-based IO-Link Master simulator for automated testing of IO-Link Devic
 - **Virtual UART**: Uses pseudo-terminals (pty) for Master-Device communication
 - **M-Sequence Support**: Types 0, 1_1, 1_2, 2_1, 2_2 (and 1_V/2_V with fixed PD length)
 - **Variable OD Length**: Automatic handling of 1-byte and 2-byte On-request Data
-- **Variable PD Length**: Fixed PD length configuration for Type 1_V and 2_V (runtime negotiation pending)
+- **Variable PD Length**: Fixed at device init for Type 1_V and 2_V; the master must use the same value before the startup sequence (no runtime negotiation)
 - **CRC Calculation**: Matches iolinki implementation (polynomial 0x1D, seed 0x15)
 - **Master State Machine**: Implements Startup, Preoperate, Operate states
 - **ISDU Operations**: Read/Write with V1.1.5 segmentation support
@@ -199,7 +199,7 @@ python3 test_m_sequence_types.py
 - [x] M-sequence Type 2_1, 2_2 (PD + 2-byte OD)
 - [x] Variable OD length support
 - [x] ISDU V1.1.5 segmentation
-- [~] M-sequence Type 1_V, 2_V (fixed-length config only; runtime negotiation pending)
+- [x] M-sequence Type 1_V, 2_V (PD length fixed by device init; no runtime negotiation)
 - [ ] IODD parser
 - [ ] Event handling
 - [ ] Data Storage commands

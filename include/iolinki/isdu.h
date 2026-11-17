@@ -357,10 +357,8 @@ void iolink_isdu_dp_page1_invalidate(iolink_isdu_ctx_t* ctx);
  *
  * @note 一致性粒度是**单个八位组**。多字节页读请使用
  * @ref iolink_isdu_dp_page1_read_range （单次序号窗口内复制整段）。
- * DPP1 输入只允许在**启动/重新参数化阶段**改变（V1.1.5 §10.6.2：启动期
- * DeviceID 兼容切换可改通信参数；OPERATE 期间改变 PD 宽度不符合规范）。
- * 受影响的字节：0x01（MasterCycleTime，主站写入）、TYPE_2_V 的
- * 0x05/0x06、以及 0x02（宽度或波特率变化时重建，适用于所有类型）。
+ * DPP1 输入中只有 0x01（MasterCycleTime，主站写入）会在运行期变化；
+ * 0x05/0x06 由初始化配置固定，0x02 只在初始化与波特率变化时重建。
  *
  * @param ctx ISDU 上下文
  * @param addr Direct Parameter page 地址（0x00-0x0F）

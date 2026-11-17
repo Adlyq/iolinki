@@ -93,7 +93,7 @@ typedef struct iolink_dll_shared
     /* 配置 */
     uint8_t m_seq_type; /**< 支持的 M 序列类型 */
 
-    uint8_t pd_in_len; /**< 输入过程数据长度 */
+    uint8_t pd_in_len; /**< 输入过程数据长度（初始化时固定） */
 
     uint8_t od_width; /**< OPERATE 的 OD 宽度 m（Table A.10）。某帧
                            是否携带 OD 由每帧的 MC R/W 位决定

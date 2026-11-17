@@ -1490,7 +1490,7 @@ static void test_dll_pdout_only_status_valid(void** state)
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0376");
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 1};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_3, .od_width = 1, .pd_in_len = 0, .pd_out_len = 1};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
@@ -1499,27 +1499,16 @@ static void test_dll_pdout_only_status_valid(void** state)
     test_dll_shared(&dev.ctx)->state = IOLINK_DLL_STATE_OPERATE;
     test_dll(&dev.ctx)->pd_valid = false;
 
-    uint8_t read[2] = {(uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), 0x00U};
-    read[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | test_expected_checksum6(read, sizeof(read)));
+    /* 过程通道读（Type-2_3）：请求带 PD-out 字节，应答为 OD + CKS；
+     * PD-status 位在 CKS bit6。 */
+    uint8_t read[3] = {(uint8_t) (IOLINK_MC_CHANNEL_PROCESS | IOLINK_MC_RW_MASK),
+                       (uint8_t) IOLINK_MSEQ_TYPE_2, 0x5AU};
+    read[1] = (uint8_t) (read[1] | test_expected_checksum6(read, sizeof(read)));
     feed_frame_bytes(read, sizeof(read));
     deliver_frame_to_dll(&dev.ctx);
     assert_tx_len(2);
     size_t tx_len = 0U;
     const uint8_t* tx = mock_phy_tx(&tx_len);
-    assert_int_equal(tx_len, 2U);
-    assert_int_equal((tx[1] & 0x40U), 0U);
-
-    uint8_t pd_operate[3] = {IOLINK_MC_CHANNEL_PAGE, 0x00U, IOLINK_CMD_PROCESS_DATA_OPERATE};
-    pd_operate[1] =
-        (uint8_t) (IOLINK_MSEQ_TYPE_0 | test_expected_checksum6(pd_operate, sizeof(pd_operate)));
-    feed_frame_bytes(pd_operate, sizeof(pd_operate));
-    deliver_frame_to_dll(&dev.ctx);
-    assert_tx_len(1);
-
-    feed_frame_bytes(read, sizeof(read));
-    deliver_frame_to_dll(&dev.ctx);
-    assert_tx_len(2);
-    tx = mock_phy_tx(&tx_len);
     assert_int_equal(tx_len, 2U);
     assert_int_equal((tx[1] & 0x40U), 0U);
 }

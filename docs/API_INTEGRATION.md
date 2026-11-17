@@ -342,7 +342,7 @@ int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx,
 
 `pd_input_update()` 发布设备到主站的数据。`valid` 决定 CKS 中的 PD-invalid 位。
 PD 长度是初始化属性（`iolink_stack_config_t::pd_in_len`），运行期不可改变：
-@p len 必须等于配置的 PD-in 长度，`TYPE_0` 必须为 0，否则返回 -1。
+@p len 必须等于配置的 PD-in 长度，否则返回 -1。
 参数非法或所有 PD-in 缓冲区都被 ISR 占用时返回负值。
 
 > **规范的宽度约束（V1.1.5 Table B.1 / A.14）**：DPP1 0x05/0x06 是只读字段，
@@ -901,7 +901,11 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
   模式/波特率/PD 获取函数以及 `iolink_dll_stats_t`。
   状态布局拆在 `dll_main.h`（主上下文 + 共享区）、`dll_shared.h`（双上下文共享）、
   `dll_isr.h`（ISR 独占）和 `dll_ctx.h`（单次分配容器）中；直接使用 DLL 时按
-  `iolink_dll_init(&ctx.main, &ctx.isr, phy)` 初始化。
+  `iolink_dll_init(&ctx.main, &ctx.isr, phy)` 初始化，然后在数据 ISR 静止时设置
+  `shared.clock`、`shared.m_seq_type`、`shared.od_width`、`shared.pd_in_len`、
+  `shared.pd_out_len_current` 与能力位，并调用一次
+  `iolink_dll_publish_reply_plans()`——这些字段和应答计划都只在初始化时定义，
+  之后 `iolink_dll_process()` 不会重发布。
   设备层已经完成这些接线；只有实现自定义传输时才直接使用，并且需要自行负责
   事件/ISDU/DS 集成。
 - `include/iolinki/phy_tiol112.h` 和 `phy_l6362a.h`：收发器驱动。用板级 IO 回调调用

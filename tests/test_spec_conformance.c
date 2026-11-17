@@ -216,7 +216,7 @@ static void test_product_uri_absent(void** state)
 }
 
 /* Table B.8 / B.2.23：ProcessDataInput (0x0028) 返回 PDin 通道的
- * 过程数据及其运行时长度，而不是描述符/长度字节。 */
+ * 过程数据及其配置长度，而不是描述符/长度字节。 */
 static void test_process_data_input_returns_pd(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0132");

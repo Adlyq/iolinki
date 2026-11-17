@@ -11,7 +11,7 @@
 
 #### Data Link Layer
 - **M-Sequence Types**: 0, 1_1, 1_2, 2_1, 2_2
-- **Variable PD Lengths**: Type 1_V / 2_V via `set_pd_length()` and PD len config (runtime negotiation pending)
+- **Variable PD Lengths**: Type 1_V / 2_V with the length fixed by the device init configuration (no runtime negotiation)
 - **Variable OD Length**: 1-byte (Type 1) and 2-byte (Type 2)
 - **Wake-up / Idle**: Type 0 wake-up and idle sequences
 - **Event Memory**: Diagnosis-channel event memory read/ack (Table 58/59)

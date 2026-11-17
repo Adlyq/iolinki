@@ -68,6 +68,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   single init-time values, read by the ISR and by the DPP1/0x0028 paths; the
   64-bit context sizes shrink by 8 B (BYTE 4656/4848, pinned in
   `test_ctx_sizes`).
+- `iolink_device_pd_input_update()` takes the configured PD-in length as the
+  fixed contract: a different `len` returns -1 instead of silently changing the
+  announced layout. (A TYPE_0 profile normally configures 0; the library does
+  not reinterpret the configured length per M-sequence.)
 
 ### Added (compile-time log level)
 - `IOLINK_LOG_COMPILE_LEVEL` (`iolinki/log.h`, default `IOLINK_LOG_COMPILE_DEBUG`)

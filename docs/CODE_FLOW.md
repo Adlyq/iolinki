@@ -460,7 +460,7 @@ flowchart LR
         A1 --> A3["或 on_pd_input() 回调<br/>（能力位 PD_IN_CALLBACK）"]
         A2 --> A4["pd_in[free][od_width..]"]
         A3 --> A4
-        A4 --> A5["临界区发布<br/>pd_in_len / pd_valid / pd_in_active"]
+        A4 --> A5["临界区发布<br/>pd_valid / pd_in_active<br/>（长度在 init 固定）"]
         A5 --> A6["ISR 按计划组应答<br/>[OD][PD-in][CKS]"]
         A6 --> A7["Master"]
     end
@@ -476,7 +476,7 @@ flowchart LR
 规则：
 
 - `iolink_device_pd_input_update()` 与 `on_pd_input()` 在同一构建内共存，按 `on_pd_input != NULL`（能力位 `IOLINK_CAP_PD_IN_CALLBACK`）在 `device_run_app_callbacks()` 中选路；回调路径已选中时，轮询 API 返回 `IOLINK_DEVICE_INIT_ERR_PD_INPUT`，不会静默覆盖回调输出。`on_pd_input()` 的返回值直接作为 `pd_valid`，返回 `false` 会置 CKS bit6。
-- PD-in 长度是初始化属性（`iolink_stack_config_t::pd_in_len`），所有类型都不可在运行期改变；`pd_input_update()` 只接受该长度（`TYPE_0` 为 0）。
+- PD-in 长度是初始化属性（`iolink_stack_config_t::pd_in_len`），所有类型都不可在运行期改变；`pd_input_update()` 只接受该配置长度。
 - PD-out 只在 Type-1/2 请求中携带；Type-0 不携带 PD。
 - `pd_valid=false` 会置 CKS bit6，Master 可据此判断 PD 无效；没有 PD-in 的设备恒报有效。
 - `pd_in` 的缓冲数由 TX 模式决定（`IOLINK_PD_IN_BUFFERS`：TX BYTE=2、TX FRAME=3），主循环填充 ISR 未占用的副本，避免撕裂；没有空闲缓冲时保留当前 PD-in、下个周期重试并计入 `pd_in_skips`。
@@ -795,7 +795,7 @@ sequenceDiagram
 5. reset handler：`isdu.reset_pending` / `isdu.app_reset_pending`。
 6. OPERATE 下（`device_run_app_callbacks()`）：
    - `on_pd_output(app->self, ctx->dll.main.pd_out, pd_out_len_current)`；
-   - 若 `IOLINK_CAP_PD_IN_CALLBACK`：用 `device_pd_in_free_index()` 取一个 ISR 未在发送的 PD-in 缓冲区，填完后在临界区发布 `pd_in_len` / `pd_valid` / `pd_in_active`；无空闲缓冲时计 `pd_in_skips` 并在下个周期重试。
+   - 若 `IOLINK_CAP_PD_IN_CALLBACK`：用 `device_pd_in_free_index()` 取一个 ISR 未在发送的 PD-in 缓冲区，填完后在临界区发布 `pd_valid` / `pd_in_active`（长度在 init 固定）；无空闲缓冲时计 `pd_in_skips` 并在下个周期重试。
 
 ### 9.3 回调清单与实际调用点
 
@@ -1017,7 +1017,7 @@ flowchart LR
 并发边界：
 
 - `shared.isdu`、`shared.events`（含 `diag` 条件缓存）、`ds`、`timers` 的主要状态由主循环修改；`reply_plan` 只在初始化时写入后即只读；应用参数变量、`on_change` 与 `ds_flag_persist` 也只在主上下文被访问。
-- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（事件队列、诊断条件表、PD-in 索引发布、计数器清零、日志 sink），以及仅在直发回退（PHY 无 `request_service()` 且非 `IOLINK_CAP_REQUIRE_ISR_TX`）里驱动 PHY 的那一段；状态迁移与 PD 长度设置不再需要临界区。
+- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（事件队列、诊断条件表、PD-in 索引发布、计数器清零、日志 sink），以及仅在直发回退（PHY 无 `request_service()` 且非 `IOLINK_CAP_REQUIRE_ISR_TX`）里驱动 PHY 的那一段；状态迁移不再需要临界区。
 - 库不取线程锁：API 只有一个主上下文调用者；共享标量由平台临界区保护，数据交接无锁。
 - 平台默认临界区是 weak 空实现（`src/platform.c`）；`iolink_device_init()` 通过
   `iolink_platform_critical_sections_ready()` 探测并返回
@@ -1099,7 +1099,7 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `dll_process_body()`（`dll.c`，TX FRAME） | 轮询 `tx_busy` 并释放 `pd_in_captured` | 防止 ISR 在轮询与释放之间捕获新缓冲 |
 | `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零两个上下文共享的计数器 | 与 ISR 自增分开 |
 | `diag.c`（4 处） | 来源标记、ISR 脉冲消费、DeviceStatus 快照、DDS 快照 | 条件表内部不变式；ISR 只写 `isr_pulse[]` |
-| `device.c`（3 处） | `set_log` sink 更新、`on_pd_input` 发布、轮询发布，交换 `pd_in_active`/`pd_in_len`/`pd_valid` | 索引/长度标量（PD 拷贝在锁外；PD-out 读取不取锁） |
+| `device.c`（3 处） | `set_log` sink 更新、`on_pd_input` 发布、轮询发布，交换 `pd_in_active`/`pd_valid` | 索引/有效位标量；长度在 init 固定，PD 拷贝在锁外，PD-out 读取不取锁 |
 | `events.c`（10 处） | 事件队列、pending 表、事件内存 | 事件引擎内部不变式；ISR 侧只读 flag/memory |
 
 `dll_set_state()` 已不在表中：状态是单字节原子写，通知以电平式为主；但
@@ -1137,7 +1137,7 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 | `IOLINK_FEATURE_VALIDATE` | 1=初始化时走一遍应用 OD 表自检并返回 `IOLINK_DEVICE_INIT_ERR_OD`；0=省掉该自检 `.text`，表宏的编译期检查仍生效 |
 | `IOLINK_FEATURE_SYSTEM_COMMAND` | 是否编译 SystemCommand 处理 |
 | `IOLINK_FEATURE_EVENTS` | 是否编译事件引擎、诊断注册表、DDS、CKS 事件标志与故障轮询 |
-| `IOLINK_PD_IN_MAX_SIZE` / `IOLINK_PD_OUT_MAX_SIZE` / `IOLINK_OD_MAX_SIZE` | PD/OD 缓冲上限（运行时长度不得超过） |
+| `IOLINK_PD_IN_MAX_SIZE` / `IOLINK_PD_OUT_MAX_SIZE` / `IOLINK_OD_MAX_SIZE` | PD/OD 缓冲上限（配置长度不得超过） |
 | `IOLINK_MBX_SLOTS` / `IOLINK_REPLY_PLAN_SLOTS` | 帧邮箱深度（默认 4）/ 应答计划槽位（默认 48，按 4 个状态切片使用）；满时分别计 `isr_mailbox_drops` / `reply_plan_overflows` |
 | `IOLINK_ISDU_BUFFER_SIZE` | 单次 ISDU 事务上限，同时决定 `iolink_isdu_scratch_t` 各缓冲容量 |
 | `IOLINK_DS_IMAGE_MAX` | 一次序列化（DS 上传/校验和）与下载暂存的上限，同时决定 workspace 的 `ds_stage` 容量 |

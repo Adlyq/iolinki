@@ -363,10 +363,12 @@ bool iolink_dll_timer_armed(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
  * @param phy 要绑定的 PHY 实现
  * @note 两个对象都会被清零，包括时钟。直接使用 DLL 的用户必须在此调用之后
  *       设置 @c ctx->shared.clock；此外还必须在数据 ISR 静止时设置
- *       `shared.m_seq_type` / `shared.od_width` / 能力位，并调用一次
- *       `iolink_dll_publish_reply_plans()`：应答计划只在初始化时编译，本函数
- *       发布的是默认 `{Type-0, od=0}` 表，之后 `iolink_dll_process()` 不会再
- *       重发布。iolink_device_init() 会在绑定完整配置后自行完成这一步。
+ *       `shared.m_seq_type` / `shared.od_width` / `shared.pd_in_len` /
+ *       `shared.pd_out_len_current` / 能力位，并调用一次
+ *       `iolink_dll_publish_reply_plans()`：应答计划和 PD 长度都只在初始化时
+ *       定义，本函数发布的是默认 `{Type-0, od=0, PD=0}` 表，之后
+ *       `iolink_dll_process()` 不会再重发布。iolink_device_init() 会在绑定
+ *       完整配置后自行完成这一步。
  */
 void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink_phy_api_t* phy);
 
@@ -466,7 +468,8 @@ void iolink_dll_on_stack_tick(iolink_dll_main_t* ctx);
 uint8_t iolink_dll_take_service_window(iolink_dll_main_t* ctx);
 
 /**
- * @brief 获取当前 PD 长度（初始化时由 `iolink_stack_config_t` 固定）
+ * @brief 获取当前 PD 长度（初始化时由 `shared.pd_in_len` /
+ *        `shared.pd_out_len_current` 固定）
  *
  * @param ctx DLL 上下文
  * @param[out] pd_in_len 当前 PD_In 长度；可传 NULL 表示不需要该值

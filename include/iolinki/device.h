@@ -263,17 +263,16 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
  * `IOLINK_CAP_PD_IN_CALLBACK` 置位）时，本函数返回
  * `IOLINK_DEVICE_INIT_ERR_PD_INPUT`，而不是静默覆盖回调的输出。
  *
- * @note 宽度只应在**启动/重新参数化阶段**改变（V1.1.5 §10.6.2 允许启动期
- * 切换通信参数；OPERATE 期间改变 PD 宽度不符合规范）。进入 OPERATE 后长度
- * 锁定：@p len 与已通告的 PD-in 长度不一致时返回 -3，DPP1 与应答布局保持
- * 不变。允许这种阶段变化时必须从主泵上下文调用：宽度变化会重建 DPP1 映像；
- * 固定布局类型（TYPE_1_x/TYPE_2_x）的宽度变更会被拒绝，TYPE_0 不携带 PD。
+ * @note PD 长度是初始化属性（`iolink_stack_config_t::pd_in_len`），运行期
+ * 不可改变：DPP1 的 0x05/0x06 是只读通告，`@p len` 必须等于该配置长度，
+ * 否则返回 -1。成功调用只更新缓冲区、有效性与活动索引，
+ * 不修改 DPP1、MinCycleTime 或应答布局。
  *
  * @param ctx    设备上下文。
  * @param data   要发布的输入过程数据字节。
- * @param len    @p data 的长度（字节）。
+ * @param len    @p data 的长度（字节），必须等于配置的 PD-in 长度。
  * @param valid  过程数据当前是否有效。
- * @return 成功时为 0；参数/长度错误返回负值；OPERATE 期间长度不符返回 -3。
+ * @return 成功时为 0；参数/长度不符或没有空闲缓冲区时返回负值。
  */
 int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data, size_t len,
                                   bool valid);

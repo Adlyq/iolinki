@@ -116,6 +116,11 @@ static const conformance_profile_t g_profiles[] = {
     {
         .name = "type0",
         .identity = &g_full_identity,
+        /* 已知夹具偏差：TYPE_0 按 Table A.10 不携带 PD，但 Linux master runner
+         * 与 IODD oracle 复用了 full profile 的 DPP1 期望（PD 3/1、
+         * MinCycleTime 3000），因此这里保留 3/1。库把配置长度当作常量，
+         * 不对 TYPE_0 做特判；修正夹具（改用 full profile + T0-read 兼容位，
+         * 或把这里改成 0/0 并同步期望）是独立任务。 */
         .stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_0,
                   .od_width = 1,
                   .pd_in_len = 3U,

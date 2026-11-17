@@ -132,6 +132,7 @@ static void test_pd_length_is_configured(void** state)
     const uint8_t short_pd[4] = {0};
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, short_pd, sizeof(short_pd), true), -1);
     assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 8);
+    assert_int_equal(test_dll(&dev.ctx)->pd_in_skips, 0U); /* 长度检查先于租约检查 */
 
     /* OPERATE 中同样只接受已通告长度。 */
     move_to_operate_ctx(&dev.ctx);
@@ -261,6 +262,7 @@ static void test_pd_config_reflected_in_dpp1(void** state)
     /* 8 字节 PD-in -> DPP1 0x05 = 0x87（BYTE=1，Length=octets-1 = 7）；
      * MinCycleTime：COM2/OD2 下 73 个 0.1 ms 单位 -> 0x43。 */
     assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x05U), 0x87U);
+    assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x06U), 0x87U);
     assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x02U), 0x43U);
 }
 
