@@ -362,10 +362,7 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     iolink_ring_init(&ctx->shared.isr_frame_ring, (uint8_t*) ctx->isr_frame_slot, IOLINK_MBX_SLOTS,
                      (uint8_t) sizeof(iolink_frame_rec_t));
 
-    /* PHY 的 UART 速率是编译期 `IOLINK_COM`：init 时按同一宏配置一次。 */
-    if (ctx->shared.phy->set_baudrate != NULL) {
-        ctx->shared.phy->set_baudrate(ctx->shared.phy->self, (iolink_baudrate_t) (IOLINK_COM - 1U));
-    }
+    /* UART 速率由 PHY 在自己的 init 中按编译期 IOLINK_COM 配置。 */
 
     DLL_EVENTS_INIT(&ctx->shared.events);
     iolink_isdu_init(&ctx->shared.isdu);

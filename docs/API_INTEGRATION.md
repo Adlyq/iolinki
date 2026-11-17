@@ -120,7 +120,6 @@ static iolink_device_ctx_t g_device;
 
 static int  board_phy_init(iolink_app_t* self);
 static void board_phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode);
-static void board_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baud);
 static int  board_phy_rx_octet(iolink_app_t* self, uint8_t* data, uint8_t* status);
 static int  board_phy_tx_octet(iolink_app_t* self, uint8_t data);
 static void board_phy_tx_done(iolink_app_t* self);
@@ -134,9 +133,8 @@ static struct iolink_app g_app_state;
 
 static const iolink_phy_api_t g_phy = {
     .self = (iolink_app_t*) &g_app_state, /* 手写 vtable 在初始化器里写 self */
-    .init = board_phy_init,
+    .init = board_phy_init,               /* 按 IOLINK_COM_HZ 配置 UART */
     .set_mode = board_phy_set_mode,
-    .set_baudrate = board_phy_set_baudrate,
     .rx_octet = board_phy_rx_octet,       /* RX BYTE mode */
     .tx_octet = board_phy_tx_octet,       /* TX BYTE mode */
     .tx_done = board_phy_tx_done,         /* TX BYTE mode only */
@@ -214,7 +212,6 @@ vtable 的每个成员在类型上都是可选的（`IOLINK_NULLABLE`）：`ioli
 | --- | --- | --- |
 | `init` | 实际使用中必需 | 由 `iolink_device_init()` 调用一次；负返回值会中止初始化。允许为 NULL，但链路无法工作。 |
 | `set_mode` | 实际使用中必需 | 切换 SDCI/SIO/INACTIVE。 |
-| `set_baudrate` | 可选 | 由 `iolink_dll_init()` 以编译期 `IOLINK_COM` 调用一次；若端口在 `init` 里按同一宏配置 UART，可留空。 |
 | `rx_octet` | RX BYTE 模式 | 读到 octet 返回 1，无数据返回 0，出错返回负值。 |
 | `rx_frame` | RX FRAME 模式 | 返回 PHY 持有的完整帧，在下一次调用前有效；不得返回两字节帧头或其他截断片段。 |
 | `tx_octet` | TX BYTE 模式 | 送入一个应答 octet。 |

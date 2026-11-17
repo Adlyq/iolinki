@@ -51,16 +51,8 @@ static void phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t m
     (void) mode;
 }
 
-static void phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    (void) baudrate;
-}
-
-static const iolink_phy_api_t g_phy = {.init = phy_init,
-                                       .set_mode = phy_set_mode,
-                                       .set_baudrate = phy_set_baudrate,
-                                       .detect_wakeup = NULL};
+static const iolink_phy_api_t g_phy = {
+    .init = phy_init, .set_mode = phy_set_mode, .detect_wakeup = NULL};
 
 static int g_pd_calls;
 static uint8_t g_pd_pattern;

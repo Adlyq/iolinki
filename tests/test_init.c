@@ -33,15 +33,8 @@ static void local_mock_phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_p
     (void) self;
     (void) mode;
 }
-static void local_mock_phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self,
-                                        iolink_baudrate_t baudrate)
-{
-    (void) self;
-    (void) baudrate;
-}
 static const iolink_phy_api_t local_phy_mock = {.init = local_mock_phy_init,
-                                                .set_mode = local_mock_phy_set_mode,
-                                                .set_baudrate = local_mock_phy_set_baudrate};
+                                                .set_mode = local_mock_phy_set_mode};
 
 static const iolink_device_app_t g_test_app = {.self = NULL, .time_us = iolink_test_time_us};
 

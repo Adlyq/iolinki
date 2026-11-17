@@ -259,7 +259,7 @@ flowchart TD
 - 初始化校验在 `device_config_validate()` 完成；本路径还会在 `device_validate_fixed_mseq()` 拒绝 `TYPE_1_1` 和与 Annex A 固定布局不一致的 PD/OD 长度。
 - `IOLINK_FEATURE_VALIDATE=1`（默认）时，同一处调用 `od_validate_app()` 走一遍应用 OD 表：缺失后端指针/回调、`TRIGGER` 带 storage 位、可写 STORAGE 字节串缺少 `block_len`、只读表项带钩子、默认值越界、`(index, subindex)` 重复、应用表占用规范索引（标签 `0x0018-0x001A` 除外）等都在这里被拒绝并返回 `IOLINK_DEVICE_INIT_ERR_OD`，不会拖到首次 ISDU 访问。表宏的常量交叉检查始终生效。
 - 能力位只在 `iolink_caps_resolve()` 解析，且必须在绑定 PHY 之后、任何 ISR 可能运行之前。校验阶段用同一函数做一致性检查：`IOLINK_CAP_REQUIRE_ISR_TX` 缺 `request_service()`、或 `IOLINK_PHY_FEATURE_TX_BUSY` 开启但 PHY 无 `tx_busy()`，都返回 `IOLINK_DEVICE_INIT_ERR_PHY`。
-- `iolink_dll_init()` 按编译期 `IOLINK_COM` 调用一次 `phy->set_baudrate()`；运行期没有 COM 切换，SIO/回退只切换线路模式。
+- `iolink_dll_init()` 不再改 UART；PHY 在自己的 `init` 中按编译期 `IOLINK_COM` 配置。运行期没有 COM 切换，SIO/回退只切换线路模式。
 - `iolink_dll_init()` 结束时已发布 STARTUP 状态的应答计划，因此第一个启动探测可由 ISR 提前应答。
 - `device_apply_stack_config()` 之后、`on_startup()` 之前再发布一次：此时 `m_seq_type`/`od_width`/能力位都已最终化，应用只能在 `on_startup` 里使能数据中断（重建要求 ISR 静止）。
 - `on_startup()` 在初始化末尾显式调用一次；`iolink_dll_init()` 内部进入 STARTUP 时因为状态初值已是 0，`dll_set_state()` 不会重复触发。
@@ -747,11 +747,10 @@ flowchart TD
 | 顺序 | 调用 | 来源 |
 | :--- | :--- | :--- |
 | 1 | `od_validate_app()`（`IOLINK_FEATURE_VALIDATE=1`） | `device_config_validate()`；失败返回 `IOLINK_DEVICE_INIT_ERR_OD` |
-| 2 | `phy->init()` | `iolink_device_init()` |
-| 3 | `phy->set_baudrate(IOLINK_COM)` | `iolink_dll_init()`（编译期 COM，只调用一次） |
-| 4 | `phy->set_mode(SIO/SDCI)` | `iolink_dll_init()` 依据 `IOLINK_CAP_WAKEUP` |
-| 5 | OD 表项读取（`iolink_od_read_value()`） | `iolink_ds_refresh()` 计算 `Data_Storage_Size`/`Parameter_Checksum`；`HANDLER` 表项调到应用 `read` |
-| 6 | `on_startup()` | `iolink_device_init()` 末尾 |
+| 2 | `phy->init()`（按 `IOLINK_COM_HZ` 配置 UART） | `iolink_device_init()` |
+| 3 | `phy->set_mode(SIO/SDCI)` | `iolink_dll_init()` 依据 `IOLINK_CAP_WAKEUP` |
+| 4 | OD 表项读取（`iolink_od_read_value()`） | `iolink_ds_refresh()` 计算 `Data_Storage_Size`/`Parameter_Checksum`；`HANDLER` 表项调到应用 `read` |
+| 5 | `on_startup()` | `iolink_device_init()` 末尾 |
 
 ### 9.2 一个主循环内的顺序
 
@@ -801,7 +800,6 @@ sequenceDiagram
 | 接口/回调 | 调用点 | 上下文/说明 |
 | :--- | :--- | :--- |
 | `phy.init` | `iolink_device_init` | 初始化硬件 |
-| `phy.set_baudrate` | `iolink_dll_init` | 按编译期 `IOLINK_COM` 配置一次 UART |
 | `phy.set_mode` | `iolink_dll_init`、`iolink_dll_set_sio_mode`、`iolink_dll_set_sdci_mode`、`dll_frame_drop_if_stopped` | SIO/SDCI/INACTIVE |
 | `phy.rx_octet` / `rx_frame` | ISR | 逐字节或整帧 |
 | `phy.tx_octet` / `tx_done` / `tx_frame` | ISR（直发回退时由主上下文调用 `dll_isr_start_staged_tx()`） | 发送应答 |
@@ -886,8 +884,8 @@ stateDiagram-v2
 | ESTAB_COM → OPERATE | 首个周期帧（Type-1/2 或任一 Type-0 周期帧） | `g_dll_sm` 表项的 `enter_state` |
 | → PREOPERATE | 0x9A DevicePreoperate | `dll_apply_master_command()` |
 | → FALLBACK | 0x5A Fallback（需唤醒能力） | `dll_handle_fallback_command()` / `dll_isr_plan_action()` |
-| FALLBACK/OPERATE/ESTAB/PREOP → STARTUP | T_FBD 到期，切 COM1 + SIO | `dll_timer_expire_fbd()` |
-| AWAITING/STARTUP → STARTUP | T_DSIO 到期，切 COM1 + SIO | `dll_timer_expire_dsio()` |
+| FALLBACK/OPERATE/ESTAB/PREOP → STARTUP | T_FBD 到期，切 SIO（UART 速率不变） | `dll_timer_expire_fbd()` |
+| AWAITING/STARTUP → STARTUP | T_DSIO 到期，切 SIO（UART 速率不变） | `dll_timer_expire_dsio()` |
 | 任意 → STARTUP | 0x97 DeviceStartup 或非 OPERATE/ESTAB 的类型错误 | `dll_protocol_error_to_startup()` / `dll_handle_frame_error()` |
 | 任意（Back-to-box 挂起后） → COMM_DISABLED | SystemCommand 0x83 之后又服务 ≥3 帧 | `dll_frame_drop_if_stopped()` |
 | OPERATE → STARTUP | Type-0 页读且未开 IOLINK_CAP_COMPAT_T0_READ（复位请求） | `dll_sm_operate_page_read()` / `dll_isr_plan_action()`（RESET_STARTUP） |

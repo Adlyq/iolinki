@@ -5,9 +5,10 @@
 #include <string.h>
 
 #include "iolinki/iolink.h"
+#include "dll_access.h"
 #include "iolinki/phy.h"
 
-/* Mock PHY 函数 */
+/* Mock PHY 函数（UART 速率由 PHY 自己的 init 配置，库不再回调）。 */
 static int mock_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
@@ -18,25 +19,24 @@ static void mock_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t 
     (void) self;
     (void) mode;
 }
-static void mock_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    check_expected(baudrate);
-}
-static const iolink_phy_api_t mock_phy = {
-    .init = mock_init, .set_mode = mock_set_mode, .set_baudrate = mock_set_baudrate};
+static const iolink_phy_api_t mock_phy = {.init = mock_init, .set_mode = mock_set_mode};
 
-/* COM 是编译期常量：init 按 IOLINK_COM 配置一次 PHY，之后不可更改。 */
+/* COM 是编译期常量：init 后 getter 返回 IOLINK_COM，位时间/字节超时折叠。 */
 static void test_baudrate_is_compiled_in(void** state)
 {
     (void) state;
     iolink_dll_ctx_t ctx;
 
-    expect_value(mock_set_baudrate, baudrate, (iolink_baudrate_t) (IOLINK_COM - 1));
     iolink_dll_init(&ctx.main, &ctx.isr, &mock_phy);
 
     assert_int_equal(iolink_dll_get_baudrate(&ctx.main), (iolink_baudrate_t) (IOLINK_COM - 1));
-    assert_int_equal(ctx.main.t_byte_limit_us, 16U * (1000000U / IOLINK_COM_HZ));
+#if IOLINK_COM == 1
+    assert_int_equal(ctx.main.t_byte_limit_us, 3328U);
+#elif IOLINK_COM == 2
+    assert_int_equal(ctx.main.t_byte_limit_us, 416U);
+#else
+    assert_int_equal(ctx.main.t_byte_limit_us, 64U);
+#endif
 }
 
 /* MinCycleTime 随编译期 COM 折叠；PD/OD 长度是 init 常量。 */
@@ -45,7 +45,6 @@ static void test_baudrate_min_cycle_time(void** state)
     (void) state;
     iolink_dll_ctx_t ctx;
 
-    expect_any(mock_set_baudrate, baudrate);
     iolink_dll_init(&ctx.main, &ctx.isr, &mock_phy);
     ctx.main.shared.pd_in_len = 28U;
     ctx.main.shared.pd_out_len_current = 28U;

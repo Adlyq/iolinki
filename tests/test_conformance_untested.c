@@ -84,16 +84,9 @@ static void noop_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t 
     (void) mode;
 }
 
-static void noop_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    (void) baudrate;
-}
-
 static const iolink_phy_api_t k_noop_phy = {
     .init = noop_init,
     .set_mode = noop_set_mode,
-    .set_baudrate = noop_set_baudrate,
 };
 
 static void make_isdu_ctx(conformance_device_t* app, iolink_isdu_ctx_t* ctx)

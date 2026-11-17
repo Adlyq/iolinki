@@ -42,7 +42,7 @@ void iolink_critical_exit(void)
 }
 
 /* Mock PHY */
-const iolink_phy_api_t g_phy_freertos = {.init = NULL, .set_baudrate = NULL};
+const iolink_phy_api_t g_phy_freertos = {.init = NULL};
 
 static uint64_t freertos_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {

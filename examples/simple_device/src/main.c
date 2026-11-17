@@ -32,8 +32,7 @@ static uint64_t simple_time_us(iolink_app_t* IOLINK_NULLABLE self)
  * @brief Placeholder for a real hardware PHY implementation
  */
 static const iolink_phy_api_t g_hw_phy = {.init = NULL, /* No hardware yet */
-                                          .set_mode = NULL,
-                                          .set_baudrate = NULL};
+                                          .set_mode = NULL};
 
 /* 设备身份：库没有默认身份，每个设备都必须自己提供。 */
 static const iolink_device_info_t g_identity = {

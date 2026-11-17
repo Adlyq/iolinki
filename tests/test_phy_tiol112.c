@@ -83,8 +83,7 @@ static void test_driver_modes_and_turnaround(void** state)
     assert_true(board.tx_high);
     phy->set_mode(phy->self, IOLINK_PHY_MODE_SDCI);
     assert_false(board.enabled);
-    phy->set_baudrate(phy->self, IOLINK_BAUDRATE_COM3);
-    assert_int_equal(board.baud, 230400);
+    assert_int_equal(board.baud, IOLINK_COM_HZ);
     board.wake = true;
     assert_int_equal(phy->detect_wakeup(phy->self), 1);
     assert_int_equal(phy->detect_wakeup(phy->self), 0);

@@ -245,8 +245,8 @@ IOLINK_ASSUME_NONNULL_BEGIN
  * @brief 编译期 COM（1 = COM1/4.8k，2 = COM2/38.4k，3 = COM3/230.4k）。
  *
  * IO-Link 设备只支持一个传输速率（V1.1.5 §5.3.3）；把它做成编译期常量让
- * 位时间、MinCycleTime 与 UART 配置在目标上直接折叠。PHY 的 `init` 或
- * `set_baudrate` 按同一宏配置硬件。默认：COM2
+ * 位时间、MinCycleTime 与 UART 配置在目标上直接折叠。PHY 的 `init` 按同一宏
+ * 配置硬件（`IOLINK_COM_HZ`）。默认：COM2
  */
 #ifndef IOLINK_COM
 #define IOLINK_COM 2

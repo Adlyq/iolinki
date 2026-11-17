@@ -342,7 +342,7 @@ int iolink_isdu_get_response_byte(iolink_isdu_ctx_t* ctx, uint8_t* byte);
  * @note 一致性粒度是**单个八位组**。多字节页读请使用
  * @ref iolink_isdu_dp_page1_read_range （单次序号窗口内复制整段）。
  * DPP1 输入中只有 0x01（MasterCycleTime，主站写入）会在运行期变化；
- * 0x05/0x06 由初始化配置固定，0x02 只在初始化与波特率变化时重建。
+ * 0x05/0x06 由初始化配置固定，0x02 只在初始化时重建。
  *
  * @param ctx ISDU 上下文
  * @param addr Direct Parameter page 地址（0x00-0x0F）

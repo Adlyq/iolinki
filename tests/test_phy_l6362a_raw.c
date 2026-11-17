@@ -32,11 +32,10 @@ static uint32_t expected_brr(uint32_t baud)
     return (SYSCLOCK_FREQUENCY + (baud / 2U)) / baud;
 }
 
-static void boot(iolink_baudrate_t baudrate)
+static void boot(void)
 {
     mock_stm32g0_reset();
     s_model_icr_clear = false;
-    phy_l6362a_raw_set_initial_baudrate(baudrate);
     assert_int_equal(phy_l6362a_raw_hw_init(), 0);
     s_phy = phy_l6362a_raw_get();
     assert_non_null(s_phy);
@@ -76,10 +75,7 @@ static uint32_t expected_cr1(void)
 
 /* mock NVIC 的处理函数：它们在真实向量本应运行的位置执行。 */
 static uint32_t s_irq_deliveries;
-static uint32_t s_irq_brr;
-static uint32_t s_irq_dma_en;
 static uint32_t s_irq_cr1;
-static uint32_t s_irq_cr3;
 static const uint8_t s_injected_rx[] = {0x5AU, 0xA5U, 0x3CU};
 
 /* 在中断被取走之前到达的数据：在硬件上，DMA 在接收八位字节时
@@ -103,29 +99,14 @@ static void injected_rx_irq(void)
     s_irq_deliveries++;
 }
 
-static void injected_tx_dma_irq(void)
-{
-    /* 在驱动处理之前快照该向量所观察到的状态。 */
-    s_irq_brr = IOD_UART->BRR;
-    s_irq_dma_en = DMA1_Channel2->CCR & DMA_CCR_EN;
-    s_irq_cr3 = IOD_UART->CR3;
-    /* 写入 IFCR 的 CTCIF2 会在硬件上清除 DMA ISR 标志。 */
-    if ((DMA1->IFCR & DMA_IFCR_CTCIF2) != 0U) {
-        DMA1->ISR &= ~DMA_ISR_TCIF2;
-    }
-    phy_l6362a_raw_tx_dma_irq();
-    s_irq_deliveries++;
-}
-
 static void test_api_and_hw_init(void** state)
 {
     (void) state;
-    boot(IOLINK_BAUDRATE_COM3);
+    boot();
 
     assert_null(s_phy->self);
     assert_non_null(s_phy->init);
     assert_non_null(s_phy->set_mode);
-    assert_non_null(s_phy->set_baudrate);
     assert_non_null(s_phy->rx_frame);
     assert_non_null(s_phy->tx_frame);
     assert_non_null(s_phy->tx_busy);
@@ -158,7 +139,7 @@ static void test_api_and_hw_init(void** state)
     assert_int_equal(DMA1_Channel2->CCR, 0U);
 
     /* UART：9 位、偶校验、RX 超时、RX DMA 与错误中断。 */
-    assert_int_equal(IOD_UART->BRR, expected_brr(230400U));
+    assert_int_equal(IOD_UART->BRR, expected_brr(IOLINK_COM_HZ));
     assert_int_equal(IOD_UART->CR2, USART_CR2_RTOEN);
     assert_int_equal(IOD_UART->CR3, USART_CR3_EIE | USART_CR3_DMAR);
     assert_int_equal(IOD_UART->CR1, expected_cr1());
@@ -182,31 +163,11 @@ static void test_api_and_hw_init(void** state)
     /* 定时器 A 的单次触发使用 13 Tbit 窗口。 */
     s_phy->response_timer_start(NULL);
     assert_int_equal(TIM3->CNT, 0U);
-    assert_int_equal(TIM3->ARR, expected_gap_arr(230400U));
+    assert_int_equal(TIM3->ARR, expected_gap_arr(IOLINK_COM_HZ));
     assert_int_not_equal(TIM3->CR1 & TIM_CR1_CEN, 0U);
     s_phy->response_timer_stop(NULL);
     assert_int_equal(TIM3->CR1 & TIM_CR1_CEN, 0U);
     assert_int_equal(TIM3->SR & TIM_SR_UIF, 0U);
-}
-
-static void test_baudrates(void** state)
-{
-    (void) state;
-    boot(IOLINK_BAUDRATE_COM1);
-
-    assert_int_equal(IOD_UART->BRR, expected_brr(4800U));
-    s_phy->response_timer_start(NULL);
-    assert_int_equal(TIM3->ARR, expected_gap_arr(4800U));
-
-    s_phy->set_baudrate(NULL, IOLINK_BAUDRATE_COM2);
-    assert_int_equal(IOD_UART->BRR, expected_brr(38400U));
-    s_phy->response_timer_start(NULL);
-    assert_int_equal(TIM3->ARR, expected_gap_arr(38400U));
-
-    s_phy->set_baudrate(NULL, IOLINK_BAUDRATE_COM3);
-    assert_int_equal(IOD_UART->BRR, expected_brr(230400U));
-    s_phy->response_timer_start(NULL);
-    assert_int_equal(TIM3->ARR, expected_gap_arr(230400U));
 }
 
 static void test_rx_frame(void** state)
@@ -227,7 +188,7 @@ static void test_rx_frame(void** state)
     const uint8_t frame_c[] = {0xC1U, 0xC2U, 0xC3U};
     const uint8_t frame_d[] = {0xD1U, 0xD2U};
 
-    boot(IOLINK_BAUDRATE_COM3);
+    boot();
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
     phy_l6362a_raw_get_counters(&tx0, &rx0, &chk0);
 
@@ -297,7 +258,7 @@ static void test_rx_frame_wraps(void** state)
     uint8_t* dma = rx_dma_buffer();
     uint32_t i;
 
-    boot(IOLINK_BAUDRATE_COM3);
+    boot();
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
 
     rx_deliver(0U, first, sizeof(first));
@@ -341,7 +302,7 @@ static void test_tx_frame_and_completion(void** state)
     uint32_t rx1;
     uint32_t chk1;
 
-    boot(IOLINK_BAUDRATE_COM3);
+    boot();
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
     phy_l6362a_raw_get_counters(&tx0, &rx0, &chk0);
 
@@ -386,7 +347,7 @@ static void test_tx_frame_busy_is_refused(void** state)
     const uint8_t first[] = {0x11U, 0x22U, 0x33U};
     const uint8_t second[] = {0x44U, 0x55U};
 
-    boot(IOLINK_BAUDRATE_COM3);
+    boot();
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
     SCB->ICSR = SCB_ICSR_VECTACTIVE_Msk;
 
@@ -409,7 +370,7 @@ static void test_tx_frame_completes_pending_hardware(void** state)
     const uint8_t first[] = {0x11U, 0x22U, 0x33U};
     const uint8_t second[] = {0x44U, 0x55U};
 
-    boot(IOLINK_BAUDRATE_COM3);
+    boot();
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
     SCB->ICSR = SCB_ICSR_VECTACTIVE_Msk;
 
@@ -433,7 +394,7 @@ static void test_tx_dma_irq_tc_timeout_releases_line(void** state)
     (void) state;
     const uint8_t reply[] = {0x10U, 0x20U};
 
-    boot(IOLINK_BAUDRATE_COM3);
+    boot();
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
     SCB->ICSR = SCB_ICSR_VECTACTIVE_Msk;
     assert_int_equal(s_phy->tx_frame(NULL, reply, sizeof(reply)), 0);
@@ -458,39 +419,13 @@ static void test_tx_frame_requires_isr_context(void** state)
     (void) state;
     const uint8_t reply[] = {0x01U};
 
-    boot(IOLINK_BAUDRATE_COM3);
+    boot();
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
 
     SCB->ICSR = 0U;
     mock_error_handler_calls = 0U;
     assert_int_equal(s_phy->tx_frame(NULL, TEST_NULL(const uint8_t*), sizeof(reply)), -1);
     assert_int_equal(mock_error_handler_calls, 1U);
-}
-
-static void test_baudrate_change_aborts_tx(void** state)
-{
-    (void) state;
-    const uint8_t reply[] = {0x10U, 0x20U};
-
-    boot(IOLINK_BAUDRATE_COM3);
-    s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
-    SCB->ICSR = SCB_ICSR_VECTACTIVE_Msk;
-
-    assert_int_equal(s_phy->tx_frame(NULL, reply, sizeof(reply)), 0);
-    assert_int_equal(mock_txen_level, GPIO_PIN_SET);
-    assert_int_not_equal(DMA1_Channel2->CCR & DMA_CCR_EN, 0U);
-
-    DMA1->ISR = DMA_ISR_TCIF2;
-    DMA1->IFCR = 0U;
-    s_phy->set_baudrate(NULL, IOLINK_BAUDRATE_COM1);
-
-    /* 正在传输的帧在 UART 重新配置之前被中止。 */
-    assert_int_equal(DMA1_Channel2->CCR & DMA_CCR_EN, 0U);
-    assert_int_equal(IOD_UART->CR3 & USART_CR3_DMAT, 0U);
-    assert_int_not_equal(IOD_UART->CR3 & USART_CR3_DMAR, 0U);
-    assert_int_not_equal(DMA1->IFCR & DMA_IFCR_CTCIF2, 0U);
-    assert_int_equal(mock_txen_level, GPIO_PIN_RESET);
-    assert_int_equal(IOD_UART->BRR, expected_brr(4800U));
 }
 
 static void test_mode_wakeup_and_irq_feeds(void** state)
@@ -500,7 +435,7 @@ static void test_mode_wakeup_and_irq_feeds(void** state)
     uint8_t status;
     uint8_t len;
 
-    boot(IOLINK_BAUDRATE_COM3);
+    boot();
 
     /* SIO 不声明服务，并保持 RX 捕获处于武装状态。 */
     assert_int_equal(s_phy->int_active(NULL), 0U);
@@ -570,7 +505,7 @@ static void test_isr_rx_during_set_mode(void** state)
     uint8_t len;
     const uint8_t* frame;
 
-    boot(IOLINK_BAUDRATE_COM3);
+    boot();
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
     SCB->ICSR = SCB_ICSR_VECTACTIVE_Msk;
     assert_int_equal(s_phy->tx_frame(NULL, reply, sizeof(reply)), 0);
@@ -612,81 +547,6 @@ static void test_isr_rx_during_set_mode(void** state)
     assert_int_equal(s_irq_deliveries, 1U);
 }
 
-/*
- * ISR/主循环交错 2：主循环更改波特率时，TX DMA 完成
- * 处于挂起状态。它不得嵌套在临界区内；它在
- * 中止/重新配置之后运行，并观察到 DMA 已关闭的新 BRR。
- */
-static void test_isr_tx_complete_deferred_by_baudrate(void** state)
-{
-    (void) state;
-    const uint8_t reply[] = {0x10U, 0x20U, 0x30U};
-
-    boot(IOLINK_BAUDRATE_COM3);
-    s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
-    SCB->ICSR = SCB_ICSR_VECTACTIVE_Msk;
-    assert_int_equal(s_phy->tx_frame(NULL, reply, sizeof(reply)), 0);
-
-    DMA1->ISR = DMA_ISR_TCIF2;
-    IOD_UART->ISR = USART_ISR_TC;
-    DMA1->IFCR = 0U;
-
-    s_irq_deliveries = 0U;
-    s_irq_brr = 0U;
-    s_irq_dma_en = 0xFFFFFFFFU;
-    s_irq_cr3 = 0U;
-    mock_set_irq_handler(MOCK_IRQ_TX_DMA, injected_tx_dma_irq);
-    mock_inject_irq(MOCK_TRIGGER_GPIO_INIT, MOCK_IRQ_TX_DMA);
-
-    s_phy->set_baudrate(NULL, IOLINK_BAUDRATE_COM1);
-
-    assert_int_equal(s_irq_deliveries, 1U);
-    /* 已推迟：该向量在 UART 重新配置之后运行，且 DMA
-     * 中止已经完成。 */
-    assert_int_equal(s_irq_brr, expected_brr(4800U));
-    assert_int_equal(s_irq_dma_en, 0U);
-    assert_int_equal(s_irq_cr3 & USART_CR3_DMAT, 0U);
-    assert_int_equal(IOD_UART->BRR, expected_brr(4800U));
-    assert_int_equal(DMA1_Channel2->CCR & DMA_CCR_EN, 0U);
-    assert_int_equal(mock_txen_level, GPIO_PIN_RESET);
-}
-
-/*
- * ISR/主循环交错 3：波特率更改期间 RX 帧到达。
- * 被推迟的向量仍必须发布完整帧，并保持新的
- * 波特率/UART 状态不变。
- */
-static void test_isr_rx_deferred_by_baudrate(void** state)
-{
-    (void) state;
-    uint8_t status;
-    uint8_t len;
-    const uint8_t* frame;
-
-    boot(IOLINK_BAUDRATE_COM3);
-    s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
-
-    s_irq_deliveries = 0U;
-    s_model_icr_clear = true;
-    mock_set_irq_handler(MOCK_IRQ_RX, injected_rx_irq);
-    mock_set_inject_prepare(inject_rx_bytes);
-    mock_inject_irq(MOCK_TRIGGER_GPIO_INIT, MOCK_IRQ_RX);
-
-    s_phy->set_baudrate(NULL, IOLINK_BAUDRATE_COM1);
-
-    assert_int_equal(s_irq_deliveries, 1U);
-    assert_int_equal(s_irq_cr1, expected_cr1());
-    assert_int_equal(IOD_UART->BRR, expected_brr(4800U));
-    /* 该标志已被 UartConfigure() 清除；由 setter 发布了该帧。 */
-    assert_int_equal(IOD_UART->ISR & USART_ISR_RTOF, 0U);
-    assert_int_equal(s_phy->int_active(NULL), 1U);
-    frame = s_phy->rx_frame(NULL, &status, &len);
-    assert_non_null(frame);
-    assert_int_equal(len, sizeof(s_injected_rx));
-    assert_int_equal(status, IOLINK_PHY_STATUS_DATA_READY);
-    assert_memory_equal(frame, s_injected_rx, sizeof(s_injected_rx));
-}
-
 static void injected_ol_irq(void)
 {
     phy_l6362a_raw_ol_irq();
@@ -698,7 +558,7 @@ static void injected_ol_irq(void)
 static void test_ol_irq_during_mode_change(void** state)
 {
     (void) state;
-    boot(IOLINK_BAUDRATE_COM3);
+    boot();
     s_phy->set_mode(NULL, IOLINK_PHY_MODE_SDCI);
 
     s_irq_deliveries = 0U;
@@ -776,7 +636,6 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_api_and_hw_init),
-        cmocka_unit_test(test_baudrates),
         cmocka_unit_test(test_rx_frame),
         cmocka_unit_test(test_rx_frame_wraps),
         cmocka_unit_test(test_tx_frame_and_completion),
@@ -784,11 +643,8 @@ int main(void)
         cmocka_unit_test(test_tx_frame_completes_pending_hardware),
         cmocka_unit_test(test_tx_dma_irq_tc_timeout_releases_line),
         cmocka_unit_test(test_tx_frame_requires_isr_context),
-        cmocka_unit_test(test_baudrate_change_aborts_tx),
         cmocka_unit_test(test_mode_wakeup_and_irq_feeds),
         cmocka_unit_test(test_isr_rx_during_set_mode),
-        cmocka_unit_test(test_isr_tx_complete_deferred_by_baudrate),
-        cmocka_unit_test(test_isr_rx_deferred_by_baudrate),
         cmocka_unit_test(test_ol_irq_during_mode_change),
         cmocka_unit_test(test_platform_hooks),
     };

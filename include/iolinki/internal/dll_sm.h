@@ -203,9 +203,9 @@ typedef struct
     X("→ PREOPERATE", "0x9A DevicePreoperate", "`dll_apply_master_command()`")                   \
     X("→ FALLBACK", "0x5A Fallback（需唤醒能力）",                                                \
       "`dll_handle_fallback_command()` / `dll_isr_plan_action()`")                               \
-    X("FALLBACK/OPERATE/ESTAB/PREOP → STARTUP", "T_FBD 到期，切 COM1 + SIO",                     \
+    X("FALLBACK/OPERATE/ESTAB/PREOP → STARTUP", "T_FBD 到期，切 SIO（UART 速率不变）",        \
       "`dll_timer_expire_fbd()`")                                                                \
-    X("AWAITING/STARTUP → STARTUP", "T_DSIO 到期，切 COM1 + SIO",                                 \
+    X("AWAITING/STARTUP → STARTUP", "T_DSIO 到期，切 SIO（UART 速率不变）",                      \
       "`dll_timer_expire_dsio()`")                                                               \
     X("任意 → STARTUP", "0x97 DeviceStartup 或非 OPERATE/ESTAB 的类型错误",                      \
       "`dll_protocol_error_to_startup()` / `dll_handle_frame_error()`")                          \

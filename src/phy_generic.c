@@ -33,14 +33,6 @@ static void generic_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode
     /* 模板：为 SIO/SDCI 配置收发器。 */
 }
 
-/** @brief 用于配置 COM1/2/3 下 UART 速率的模板钩子。 */
-static void generic_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    (void) baudrate;
-    /* 模板：配置 COM1/2/3 的 UART 速率。 */
-}
-
 /** @brief 用于检测 C/Q 线上 80us 唤醒脉冲的模板钩子。 */
 static int generic_detect_wakeup(iolink_app_t* IOLINK_NULLABLE self)
 {
@@ -60,7 +52,6 @@ static void generic_set_cq_line(iolink_app_t* IOLINK_NULLABLE self, uint8_t stat
 static const iolink_phy_api_t g_phy_generic = {
     .init = generic_init,
     .set_mode = generic_set_mode,
-    .set_baudrate = generic_set_baudrate,
     .detect_wakeup = generic_detect_wakeup,
     .set_cq_line = generic_set_cq_line,
 };

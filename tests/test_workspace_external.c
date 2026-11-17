@@ -70,12 +70,6 @@ static void test_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t 
     (void) mode;
 }
 
-static void test_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    (void) baudrate;
-}
-
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
 static int test_rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status)
 {
@@ -119,7 +113,6 @@ static void make_config(iolink_device_config_t* config)
 
     g_test_phy.init = test_phy_init;
     g_test_phy.set_mode = test_set_mode;
-    g_test_phy.set_baudrate = test_set_baudrate;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     /* 该 fixture 只验证工作区绑定，不驱动收发；FRAME 构建下不提供帧钩子。 */
     g_test_phy.rx_frame = NULL;

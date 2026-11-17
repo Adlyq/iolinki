@@ -91,16 +91,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The transmission rate is now the build-time `IOLINK_COM` (1/2/3, default 2) from
   `include/iolinki/config.h`; `IOLINK_COM_HZ` and the bit time fold at compile
   time. `iolink_stack_config_t::baudrate` / `baudrate_set` are gone
-  (**MAJOR**), as are `iolink_dll_set_operating_baudrate()`,
-  `IOLINK_BAUDRATE_UNSET` and the COM1 fallback/restore machinery:
-  SIO and fallback only switch the line mode, the UART rate never changes.
-- `iolink_dll_init()` calls `phy->set_baudrate()` once with `IOLINK_COM`; a port
-  that configures the UART from the same macro in `init()` can omit the hook.
+  (**MAJOR**), as are `iolink_dll_set_baudrate()`,
+  `iolink_dll_set_operating_baudrate()`, `IOLINK_BAUDRATE_UNSET` and the COM1
+  fallback/restore machinery: SIO and fallback only switch the line mode, the
+  UART rate never changes.
+- `iolink_dll_init()` no longer touches the UART: the PHY configures it in `init()`
+  from `IOLINK_COM_HZ`. The `set_baudrate` hook is gone.
 - `IOLINK_DEVICE_INIT_ERR_BAUDRATE` is gone; an invalid COM is a compile-time
   `#error`. Later init error codes shift by one.
 
 ### Changed (initialisation wiring is no longer public API)
-- `iolink_dll_set_baudrate()`, `iolink_dll_set_sio_mode()`,
+- `iolink_dll_set_sio_mode()`,
   `iolink_dll_set_sdci_mode()`, `iolink_dll_reset_error_counters()`,
   `iolink_dll_reset_diagnostics()`, `iolink_events_set_window()`,
   `iolink_ds_set_flag_persist()` and `iolink_isdu_dp_page1_invalidate()` moved to

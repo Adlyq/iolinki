@@ -164,12 +164,6 @@ static void app_phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
     (void) mode;
 }
 
-static void app_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    (void) baudrate;
-}
-
 static iolink_device_ctx_t g_ctx;
 static iolink_device_config_t g_cfg;
 static iolink_phy_api_t g_phy;
@@ -223,7 +217,6 @@ void reset_handler(void)
 {
     g_phy.init = app_phy_init;
     g_phy.set_mode = app_phy_set_mode;
-    g_phy.set_baudrate = app_phy_set_baudrate;
     g_stack.m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
     g_stack.od_width = 8U;
     g_cfg.phy = &g_phy;

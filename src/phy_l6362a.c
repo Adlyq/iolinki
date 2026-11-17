@@ -32,29 +32,6 @@ static void mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t m)
     else if (m != IOLINK_PHY_MODE_INACTIVE)
         d->error = -1;
 }
-static void speed(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t b)
-{
-    iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
-    switch (b) {
-        case IOLINK_BAUDRATE_COM1:
-            d->baud = 4800;
-            break;
-        case IOLINK_BAUDRATE_COM2:
-            d->baud = 38400;
-            break;
-        case IOLINK_BAUDRATE_COM3:
-            d->baud = 230400;
-            break;
-        default:
-            d->error = -1;
-            if (d->initialized) enable(d, false);
-            return;
-    }
-    if (d->initialized && d->mode == IOLINK_PHY_MODE_SDCI) {
-        enable(d, false);
-        d->error = d->io.uart_configure(d->io.board, d->baud);
-    }
-}
 static int wake(iolink_app_t* IOLINK_NULLABLE self)
 {
     iolink_l6362a_ctx_t* d = (iolink_l6362a_ctx_t*) self;
@@ -79,11 +56,10 @@ int iolink_phy_l6362a_init(iolink_l6362a_ctx_t* d, const iolink_l6362a_io_t* io)
         return -1;
     memset(d, 0, sizeof(*d));
     d->io = *io;
-    d->baud = 4800;
+    d->baud = IOLINK_COM_HZ;
     d->phy.self = (iolink_app_t * IOLINK_NULLABLE) d;
     d->phy.init = initialize;
     d->phy.set_mode = mode;
-    d->phy.set_baudrate = speed;
     d->phy.detect_wakeup = wake;
     d->phy.set_cq_line = cq;
     return 0;

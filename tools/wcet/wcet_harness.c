@@ -87,7 +87,6 @@ typedef struct
     uint8_t service_pending; /**< request_service() 拉起的"数据中断待处理" */
     int wakeup;              /**< detect_wakeup() 的一次性唤醒标志 */
     iolink_phy_mode_t mode;
-    iolink_baudrate_t baudrate;
 } wcet_phy_state_t;
 
 typedef struct
@@ -155,7 +154,6 @@ static void wcet_phy_reset(void)
 {
     (void) memset(&g_phy, 0, sizeof(g_phy));
     g_phy.mode = IOLINK_PHY_MODE_INACTIVE;
-    g_phy.baudrate = IOLINK_BAUDRATE_COM2;
 }
 
 static int wcet_phy_init(iolink_app_t* self)
@@ -171,12 +169,6 @@ static void wcet_phy_set_mode(iolink_app_t* self, iolink_phy_mode_t mode)
 {
     (void) self;
     g_phy.mode = mode;
-}
-
-static void wcet_phy_set_baudrate(iolink_app_t* self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    g_phy.baudrate = baudrate;
 }
 
 /** @brief 逐字节交付已排队的请求；错误/帧结束标记优先于空闲。 */
@@ -270,7 +262,6 @@ static const iolink_phy_api_t g_phy_api = {
     .self = NULL,
     .init = wcet_phy_init,
     .set_mode = wcet_phy_set_mode,
-    .set_baudrate = wcet_phy_set_baudrate,
     .rx_octet = wcet_phy_rx_octet,
     .tx_octet = wcet_phy_tx_octet,
     .tx_done = wcet_phy_tx_done,

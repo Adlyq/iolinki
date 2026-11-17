@@ -257,8 +257,9 @@ vtable 的每个钩子在类型上都是可选的：`iolink_caps_resolve()` 按"
 推导能力位，库只在对应能力位成立时调用（权威定义见 `include/iolinki/phy.h`）。
 实际可用的 PHY 需要配置粒度对应的传输钩子（BYTE 模式 `rx_octet`/`tx_octet`，
 FRAME 模式 `rx_frame`/`tx_frame`）、使用 ISR 泵时的 `int_active`（缺失时
-`dll_isr_process()` 直接返回），以及硬件需要的 `init`/`set_mode`（存在才调用）；
-`set_baudrate` 只在 `iolink_dll_init()` 中以编译期 `IOLINK_COM` 调用一次。
+`dll_isr_process()` 直接返回），以及硬件需要的 `init`/`set_mode`（存在才调用）。
+PHY 的 `init` 必须按编译期 `IOLINK_COM`（`IOLINK_COM_HZ`）配置 UART；库不提供
+运行期改速钩子。
 `tx_done`（TX BYTE，完成通知）、`tx_busy`（TX FRAME）、
 `detect_wakeup`、`set_cq_line`、`request_service`、两个定时器钩子和 `get_faults`
 是可选项。

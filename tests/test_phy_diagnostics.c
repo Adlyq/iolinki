@@ -37,12 +37,6 @@ static void mock_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t 
     (void) mode;
 }
 
-static void mock_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    (void) baudrate;
-}
-
 static uint8_t mock_get_faults(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
@@ -52,7 +46,6 @@ static uint8_t mock_get_faults(iolink_app_t* IOLINK_NULLABLE self)
 static const iolink_phy_api_t mock_phy_faults = {
     .init = mock_init,
     .set_mode = mock_set_mode,
-    .set_baudrate = mock_set_baudrate,
     .detect_wakeup = NULL,
     .get_faults = mock_get_faults,
 };
@@ -61,7 +54,6 @@ static const iolink_phy_api_t mock_phy_faults = {
 static const iolink_phy_api_t mock_phy_no_faults = {
     .init = mock_init,
     .set_mode = mock_set_mode,
-    .set_baudrate = mock_set_baudrate,
     .detect_wakeup = NULL,
     .get_faults = NULL,
 };

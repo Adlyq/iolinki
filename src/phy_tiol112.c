@@ -32,31 +32,6 @@ static void set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode)
     }
 }
 
-static void set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baud)
-{
-    iolink_tiol112_ctx_t* d = (iolink_tiol112_ctx_t*) self;
-    switch (baud) {
-        case IOLINK_BAUDRATE_COM1:
-            d->baud = 4800;
-            break;
-        case IOLINK_BAUDRATE_COM2:
-            d->baud = 38400;
-            break;
-        case IOLINK_BAUDRATE_COM3:
-            d->baud = 230400;
-            break;
-        default:
-            d->error = -1;
-            if (d->initialized) d->io.set_enable(d->io.board, false);
-            return;
-    }
-    /* 在 SIO 中保持 TX 为 GPIO 模式。仅在通信时切换复用功能。 */
-    if (d->initialized && (d->mode == IOLINK_PHY_MODE_SDCI)) {
-        d->io.set_enable(d->io.board, false);
-        d->error = d->io.uart_configure(d->io.board, d->baud);
-    }
-}
-
 static int detect_wakeup(iolink_app_t* IOLINK_NULLABLE self)
 {
     iolink_tiol112_ctx_t* d = (iolink_tiol112_ctx_t*) self;
@@ -89,11 +64,10 @@ int iolink_phy_tiol112_init(iolink_tiol112_ctx_t* d, const iolink_tiol112_io_t* 
         return -1;
     memset(d, 0, sizeof(*d));
     d->io = *io;
-    d->baud = 4800;
+    d->baud = IOLINK_COM_HZ;
     d->phy.self = (iolink_app_t * IOLINK_NULLABLE) d;
     d->phy.init = initialize;
     d->phy.set_mode = set_mode;
-    d->phy.set_baudrate = set_baudrate;
     d->phy.detect_wakeup = detect_wakeup;
     d->phy.set_cq_line = set_cq;
     return 0;

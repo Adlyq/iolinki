@@ -116,13 +116,6 @@ typedef struct
      */
     void (*IOLINK_NULLABLE set_mode)(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode);
 
-    /**
-     * @brief 设置通信波特率
-     * @param baudrate 目标 COMx 速率
-     */
-    void (*IOLINK_NULLABLE set_baudrate)(iolink_app_t* IOLINK_NULLABLE self,
-                                         iolink_baudrate_t baudrate);
-
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     /**
      * @brief 读取一个完整接收帧（RX FRAME 模式）。

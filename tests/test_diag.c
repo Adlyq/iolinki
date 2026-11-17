@@ -485,16 +485,9 @@ static void diag_phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mod
     (void) mode;
 }
 
-static void diag_phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    (void) baudrate;
-}
-
 static const iolink_phy_api_t diag_phy_no_faults = {
     .init = diag_phy_init,
     .set_mode = diag_phy_set_mode,
-    .set_baudrate = diag_phy_set_baudrate,
     .detect_wakeup = NULL,
     .get_faults = NULL,
 };

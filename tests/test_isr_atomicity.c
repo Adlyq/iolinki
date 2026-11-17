@@ -167,12 +167,6 @@ static void phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t m
     (void) mode;
 }
 
-static void phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    (void) baudrate;
-}
-
 static int phy_detect_wakeup(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
@@ -183,7 +177,6 @@ static const iolink_phy_api_t s_phy = {
     .self = NULL,
     .init = phy_init,
     .set_mode = phy_set_mode,
-    .set_baudrate = phy_set_baudrate,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     .rx_frame = phy_rx_frame,
 #else

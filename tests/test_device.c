@@ -52,12 +52,6 @@ static void record_phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_m
     (void) mode;
 }
 
-static void record_phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    (void) baudrate;
-}
-
 static iolink_device_config_t make_device_config(iolink_stack_config_t* stack,
                                                  iolink_phy_api_t* phy)
 {
@@ -129,7 +123,6 @@ static void test_device_init_requires_device_info(void** state)
 
     phy.init = record_phy_init;
     phy.set_mode = record_phy_set_mode;
-    phy.set_baudrate = record_phy_set_baudrate;
     g_record_init_calls = 0;
 
     /* 设备没有默认身份：缺 device_info 就是配置错误，不能退回臆造的标识，
@@ -142,7 +135,6 @@ static void test_device_init_requires_device_info(void** state)
     config = make_device_config(&stack, &phy);
     phy.init = record_phy_init;
     phy.set_mode = record_phy_set_mode;
-    phy.set_baudrate = record_phy_set_baudrate;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
     /* 阳性对照：被接受的配置确实驱动了一次 PHY init。 */
     assert_int_equal(g_record_init_calls, 1);
@@ -251,7 +243,6 @@ static void test_device_forwards_phy_self(void** state)
     /* 库必须把 config.phy.self 原样交给 PHY 回调，而不是换成 app->self。 */
     phy.init = record_phy_init;
     phy.set_mode = record_phy_set_mode;
-    phy.set_baudrate = record_phy_set_baudrate;
     phy.self = (iolink_app_t * IOLINK_NULLABLE) & phy_ctx;
 
     g_phy_self_seen = NULL;

@@ -123,13 +123,6 @@ static void virtual_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode
     printf("[PHY-VIRTUAL] Mode set to: %d\n", (int) mode);
 }
 
-/** @brief 记录请求的波特率（对虚拟链路无影响）。 */
-static void virtual_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    printf("[PHY-VIRTUAL] Baudrate set to: %d\n", (int) baudrate);
-}
-
 /** @brief 为 ISR 组帧引擎读取一个接收到的 octet（非阻塞）。 */
 static int virtual_rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status)
 {
@@ -242,7 +235,6 @@ static int virtual_detect_wakeup(iolink_app_t* IOLINK_NULLABLE self)
 static const iolink_phy_api_t g_phy_virtual = {
     .init = virtual_init,
     .set_mode = virtual_set_mode,
-    .set_baudrate = virtual_set_baudrate,
     .rx_octet = virtual_rx_octet,
     .tx_octet = virtual_tx_octet,
     .tx_done = virtual_tx_done,

@@ -315,7 +315,7 @@ iolink_dll_state_t iolink_device_get_state(const iolink_device_ctx_t* ctx);
  * @brief 主站是否已静默达到配置的周期数。
  * @param ctx 设备上下文。
  * @return 在主站被视为丢失期间为 true（应用提示；DLL
- *         状态和波特率不会改变）。
+ *         状态不会改变）。
  */
 bool iolink_device_master_lost(const iolink_device_ctx_t* ctx);
 

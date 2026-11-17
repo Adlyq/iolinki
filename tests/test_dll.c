@@ -1622,9 +1622,18 @@ static void test_min_cycle_time_from_m_sequence(void** state)
     assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 255U);
 #endif
 
-    /* 应用层下限更高时以它为准（25.5 ms -> 255，等于编码上限）。 */
-    dll.min_cycle_time_app_us = 25500U;
+    /* 应用层下限更高时以它为准（阈值按编译期 COM 选，确保高于自然值）。 */
+#if IOLINK_COM == 3
+    dll.min_cycle_time_app_us = 5000U;
+    assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 50U);
+#elif IOLINK_COM == 2
+    dll.min_cycle_time_app_us = 21000U;
+    assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 210U);
+#else
+    /* COM1 的自然值已在上限 255，应用下限只会被钳制回 255。 */
+    dll.min_cycle_time_app_us = 30000U;
     assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 255U);
+#endif
 }
 
 /* Back-to-box（10.7.5）：约 3 个主站周期后 DLL 停止通信。 */

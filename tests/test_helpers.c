@@ -122,12 +122,6 @@ void mock_phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mod
     check_expected(mode);
 }
 
-void mock_phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    check_expected(baudrate);
-}
-
 /* 差分门：设置 IOLINK_DIFF_TRACE 后，把设备发出的每个应答帧追加到该文件。
  * 正常 ctest 运行不受影响（环境变量缺省为空）。 */
 static void trace_tx_frame(const uint8_t* data, size_t len)
@@ -509,7 +503,6 @@ static uint8_t mock_int_active(iolink_app_t* IOLINK_NULLABLE self)
 const iolink_phy_api_t g_phy_mock = {.self = NULL,
                                      .init = mock_phy_init,
                                      .set_mode = mock_phy_set_mode,
-                                     .set_baudrate = mock_phy_set_baudrate,
                                      .detect_wakeup = mock_phy_detect_wakeup,
                                      .set_cq_line = mock_phy_set_cq_line,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
@@ -670,7 +663,6 @@ void setup_mock_phy(void)
 {
     /* 使用 -1 表示无限期望，避免用例提前退出时报错。 */
     expect_any_count(mock_phy_set_mode, mode, -1);
-    expect_any_count(mock_phy_set_baudrate, baudrate, -1);
 
     /* mock_phy_init 的返回值由调用方通过 will_return 提供。 */
     g_mock_wakeup = 0;

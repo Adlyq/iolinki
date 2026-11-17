@@ -61,7 +61,6 @@ _Static_assert(IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME, "8110 board uses TX FR
 /* Private variables ---------------------------------------------------------*/
 
 static uint32_t s_baud_hz;
-static iolink_baudrate_t s_initial_baudrate = IOLINK_BAUDRATE_COM3;
 static uint32_t s_gap_us; /* frame-end byte-gap time-out (RX BYTE) */
 static iolink_phy_mode_t s_mode;
 
@@ -278,7 +277,7 @@ static void l6362_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t
 {
     (void) self;
     /* The mode transition reconfigures the UART and resets RX/TX state. Keep the
-     * ISR feeds out until the new baseline is complete, like set_baudrate(). */
+     * ISR feeds out until the new baseline is complete. */
     iolink_critical_enter();
     s_mode = mode;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
@@ -755,7 +754,6 @@ const iolink_phy_api_t* phy_l6362a_raw_get(void)
         .self = NULL,
         .init = l6362_init,
         .set_mode = l6362_set_mode,
-        .set_baudrate = l6362_set_baudrate,
     /* ISR-path PHY: the library owns framing/protocol and calls these. */
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
         .rx_frame = l6362_rx_frame,
@@ -803,11 +801,6 @@ void phy_l6362a_raw_get_counters(uint32_t* tx_bytes, uint32_t* rx_bytes, uint32_
         *rx_chk = s_rx_chk;
     }
 }
-void phy_l6362a_raw_set_initial_baudrate(iolink_baudrate_t baudrate)
-{
-    s_initial_baudrate = baudrate;
-}
-
 int phy_l6362a_raw_hw_init(void)
 {
     /* The microsecond timebase is derived from SysTick (no dedicated timer: the
@@ -842,9 +835,8 @@ int phy_l6362a_raw_hw_init(void)
     HAL_NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
 #endif
 
-    /* Board bring-up baudrate: the application selects the operating COM via
-     * phy_l6362a_raw_set_initial_baudrate() before this call. */
-    l6362_set_baudrate(NULL, s_initial_baudrate);
+    /* Board bring-up baudrate: the compile-time IOLINK_COM. */
+    l6362_set_baudrate(NULL, (iolink_baudrate_t) (IOLINK_COM - 1));
     (void) l6362_init(NULL);
 
     /* USART2 interrupt priority: same as TIM3 so the ISR pump is never preempted

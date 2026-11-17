@@ -29,12 +29,11 @@ The PHY layer provides hardware abstraction for UART communication.
 
 **Location**: `include/iolinki/phy.h`
 
-**Interface**: copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `iolink_app_t* self` first (the application instance; the library forwards it unchanged and it may be NULL for a hook that does not use it). Every member is optional: `iolink_caps_resolve()` derives the capability bits from the hooks that are present, and the library calls a hook only when the matching bit is set. In practice a usable PHY provides the transport hooks of the configured granularity (`rx_octet`/`tx_octet` in BYTE mode, `rx_frame`/`tx_frame` in FRAME mode), `int_active` when the ISR pump is used (`dll_isr_process()` returns immediately without it), and `init`, `set_mode` and `set_baudrate` when the hardware needs them — each is called only if present. `tx_done` (TX BYTE), `tx_busy` (TX FRAME), `detect_wakeup`, `set_cq_line`, `request_service`, the timer hooks and `get_faults` stay optional. `request_service()` is the key hook for the ISR TX path: without it a main-context reply cannot be handed to the ISR unless the direct-send fallback is compiled in.
+**Interface**: copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `iolink_app_t* self` first (the application instance; the library forwards it unchanged and it may be NULL for a hook that does not use it). Every member is optional: `iolink_caps_resolve()` derives the capability bits from the hooks that are present, and the library calls a hook only when the matching bit is set. In practice a usable PHY provides the transport hooks of the configured granularity (`rx_octet`/`tx_octet` in BYTE mode, `rx_frame`/`tx_frame` in FRAME mode), `int_active` when the ISR pump is used (`dll_isr_process()` returns immediately without it), and `init`/`set_mode` when the hardware needs them — each is called only if present. `tx_done` (TX BYTE), `tx_busy` (TX FRAME), `detect_wakeup`, `set_cq_line`, `request_service`, the timer hooks and `get_faults` stay optional. `request_service()` is the key hook for the ISR TX path: without it a main-context reply cannot be handed to the ISR unless the direct-send fallback is compiled in.
 
 The transmission rate is the build-time `IOLINK_COM` (1/2/3, `include/iolinki/config.h`), not a
-stack-config field: an IO-Link Device supports exactly one COM. `set_baudrate()` is called
-once from `iolink_dll_init()` with that value; a port that configures the UART from the same
-macro in `init()` may leave the hook unset.
+stack-config field: an IO-Link Device supports exactly one COM. The PHY's `init()` must
+configure the UART from `IOLINK_COM_HZ`; there is no runtime rate-change callback.
 
 In RX FRAME mode, `rx_frame()` must return only a complete PHY-delimited
 M-sequence. A two-octet header or another truncated prefix is not a frame and

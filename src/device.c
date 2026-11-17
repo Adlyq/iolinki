@@ -355,7 +355,7 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     }
 
     IOLINK_LOG_INFO(&ctx->dll.main.shared.log,
-                    "device init: m_seq=%u pd_in=%u pd_out=%u od=%u baud=%u",
+                    "device init: m_seq=%u pd_in=%u pd_out=%u od=%u com=%u",
                     (unsigned) config->stack->m_seq_type, (unsigned) config->stack->pd_in_len,
                     (unsigned) config->stack->pd_out_len, (unsigned) ctx->dll.main.shared.od_width,
                     (unsigned) IOLINK_COM);
@@ -692,8 +692,7 @@ iolink_phy_mode_t iolink_device_get_phy_mode(const iolink_device_ctx_t* ctx)
 
 iolink_baudrate_t iolink_device_get_baudrate(const iolink_device_ctx_t* ctx)
 {
-    (void) ctx;
-    return (iolink_baudrate_t) (IOLINK_COM - 1);
+    return iolink_dll_get_baudrate((ctx != NULL) ? &ctx->dll.main : NULL);
 }
 
 void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx, iolink_dll_stats_t* out_stats)

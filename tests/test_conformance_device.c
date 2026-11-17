@@ -27,16 +27,9 @@ static void noop_phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mod
     (void) mode;
 }
 
-static void noop_phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
-{
-    (void) self;
-    (void) baudrate;
-}
-
 static const iolink_phy_api_t k_noop_phy = {
     .init = noop_phy_init,
     .set_mode = noop_phy_set_mode,
-    .set_baudrate = noop_phy_set_baudrate,
 };
 
 static int test_setup(void** state)

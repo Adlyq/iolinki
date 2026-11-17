@@ -48,7 +48,6 @@ static inline uint8_t test_frame_checksum(uint8_t octet)
 /* mock 实现（导出以供 CMocka 符号使用） */
 int mock_phy_init(iolink_app_t* IOLINK_NULLABLE self);
 void mock_phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode);
-void mock_phy_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate);
 int mock_phy_send(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data, size_t len);
 int mock_phy_detect_wakeup(iolink_app_t* IOLINK_NULLABLE self);
 void mock_phy_set_cq_line(iolink_app_t* IOLINK_NULLABLE self, uint8_t state);

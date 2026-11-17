@@ -31,7 +31,7 @@ IOLINK_ASSUME_NONNULL_BEGIN
 
 /**
  * @defgroup iolinki_dll 数据链路层（DLL）
- * @brief 帧定时、M 序列交换、模式与波特率控制以及 DLL 统计。
+ * @brief 帧定时、M 序列交换、模式控制以及 DLL 统计。
  * @{
  */
 
@@ -367,8 +367,10 @@ bool iolink_dll_timer_armed(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
  *       `shared.pd_out_len_current` / 能力位，并调用一次
  *       `iolink_dll_publish_reply_plans()`：应答计划和 PD 长度都只在初始化时
  *       定义，本函数发布的是默认 `{Type-0, od=0, PD=0}` 表，之后
- *       `iolink_dll_process()` 不会再重发布。iolink_device_init() 会在绑定
- *       完整配置后自行完成这一步。
+ *       `iolink_dll_process()` 不会再重发布。直接使用 DLL 时还应设置
+ *       `ctx->min_cycle_time_us`（`iolink_dll_compute_min_cycle_time(ctx) * 100`），
+ *       否则 T_CYCLE 强制检查与 T_FBD 会退化。iolink_device_init() 会从
+ *       `stack.min_cycle_time` 完成这一步。
  */
 void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink_phy_api_t* phy);
 

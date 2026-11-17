@@ -98,9 +98,7 @@ static void test_line_polarity_and_baudrate(void** state)
     assert_false(in2);
     p->set_mode(p->self, IOLINK_PHY_MODE_SDCI);
     assert_false(en);
-    assert_int_equal(baud, 4800);
-    p->set_baudrate(p->self, IOLINK_BAUDRATE_COM3);
-    assert_int_equal(baud, 230400);
+    assert_int_equal(baud, IOLINK_COM_HZ);
 }
 
 static void test_diagnostics_overload_and_wakeup(void** state)
