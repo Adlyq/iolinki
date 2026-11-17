@@ -43,7 +43,7 @@ iolink_phy_mode_t iolink_dll_get_phy_mode(const iolink_dll_main_t* ctx)
 iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_main_t* ctx)
 {
     (void) ctx;
-    return (iolink_baudrate_t) (IOLINK_COM - 1);
+    return IOLINK_COM_BAUDRATE;
 }
 
 /** @brief 根据 M-sequence 时序计算设备 MinCycleTime（Table B.3）。

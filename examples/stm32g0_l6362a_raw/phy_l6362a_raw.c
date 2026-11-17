@@ -96,7 +96,7 @@ static uint32_t s_crit_primask;
 /* Private function prototypes -----------------------------------------------*/
 static int l6362_init(iolink_app_t* IOLINK_NULLABLE self);
 static void l6362_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode);
-static void l6362_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate);
+static void l6362_configure_uart(uint32_t hz);
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
 static int l6362_rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t* status);
 #else
@@ -331,46 +331,14 @@ static void l6362_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t
     iolink_critical_exit();
 }
 
-static void l6362_set_baudrate(iolink_app_t* IOLINK_NULLABLE self, iolink_baudrate_t baudrate)
+/** @brief 按编译期 COM 配置 UART（bring-up 调用一次）。 */
+static void l6362_configure_uart(uint32_t hz)
 {
-    (void) self;
-    uint32_t new_hz;
-    switch (baudrate) {
-        case IOLINK_BAUDRATE_COM1:
-            new_hz = 4800U;
-            break;
-        case IOLINK_BAUDRATE_COM2:
-            new_hz = 38400U;
-            break;
-        case IOLINK_BAUDRATE_COM3:
-        default:
-            new_hz = 230400U;
-            break;
-    }
-
-    /* Changing the UART while a BYTE reply is in flight would clear TXEIE/TCIE
-     * (UartConfigure writes CR1=0) and leave TX_EN asserted with no interrupt
-     * left to drive the remaining octets. Abort the reply first; the DLL
-     * abandons its matching ISR TX state. */
     iolink_critical_enter();
-    if ((new_hz != s_baud_hz) && (s_tx_in_progress != 0U)) {
-#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
-        IOD_UART->CR1 &= ~(USART_CR1_TCIE | USART_CR1_TXEIE_TXFNFIE);
-        IOD_UART->ICR = USART_ICR_TCCF;
-        s_tx_tc_seen = 0U;
-#else
-        /* FRAME TX: stop the DMA before the UART is reconfigured. */
-        DMA1_Channel2->CCR &= ~DMA_CCR_EN;
-        IOD_UART->CR3 &= ~USART_CR3_DMAT;
-        IOD_UART->ICR = USART_ICR_TCCF;
-        DMA1->IFCR = DMA_IFCR_CTCIF2;
-#endif
-        phy_txen_set(false);
-    }
-    s_baud_hz = new_hz;
+    s_baud_hz = hz;
     /* Frame-end time-out ~ 13 bit times (matches the ST single-octet engine). */
-    s_gap_us = (13U * 1000000U) / s_baud_hz;
-    UartConfigure(s_baud_hz);
+    s_gap_us = (13U * 1000000U) / hz;
+    UartConfigure(hz);
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     /* Same as in set_mode(): UartConfigure() cleared RTOCF, so a frame that
      * completed inside the critical section must be published here. A frame
@@ -835,8 +803,8 @@ int phy_l6362a_raw_hw_init(void)
     HAL_NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
 #endif
 
-    /* Board bring-up baudrate: the compile-time IOLINK_COM. */
-    l6362_set_baudrate(NULL, (iolink_baudrate_t) (IOLINK_COM - 1));
+    /* Board bring-up: the compile-time IOLINK_COM rate. */
+    l6362_configure_uart(IOLINK_COM_HZ);
     (void) l6362_init(NULL);
 
     /* USART2 interrupt priority: same as TIM3 so the ISR pump is never preempted

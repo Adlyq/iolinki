@@ -57,6 +57,9 @@ typedef enum
     IOLINK_BAUDRATE_COM3 = 2U  /**< 230.4 kbit/s */
 } iolink_baudrate_t;
 
+/** @brief 编译期 `IOLINK_COM`（1/2/3）对应的枚举值。 */
+#define IOLINK_COM_BAUDRATE ((iolink_baudrate_t) (IOLINK_COM - 1))
+
 /**
  * @brief iolink_phy_api_t.get_faults() 返回的物理故障标志。
  *
@@ -106,6 +109,8 @@ typedef struct
 
     /**
      * @brief 初始化收发器硬件
+     *
+     * 同时按编译期 `IOLINK_COM_HZ` 配置 UART 速率；库没有运行期改速钩子。
      * @return 成功返回 0，硬件失败返回负错误码
      */
     int (*IOLINK_NULLABLE init)(iolink_app_t* IOLINK_NULLABLE self);

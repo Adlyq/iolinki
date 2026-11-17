@@ -336,6 +336,7 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
     ctx->last_notified_state = IOLINK_DLL_STATE_STARTUP;
     ctx->shared.phy = phy;
+    /* UART 速率由 PHY 在自己的 init 中按编译期 IOLINK_COM 配置。 */
     /* 先解析实例能力，初始线路模式依赖"PHY 能否观测唤醒"这一位。
      * 设备层随后会用完整的 stack/app 配置重新解析一次。 */
     ctx->shared.caps = iolink_caps_resolve(phy, NULL, NULL, NULL);
@@ -361,8 +362,6 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     /* 帧邮箱：ISR 发布到环中，主泵消费。 */
     iolink_ring_init(&ctx->shared.isr_frame_ring, (uint8_t*) ctx->isr_frame_slot, IOLINK_MBX_SLOTS,
                      (uint8_t) sizeof(iolink_frame_rec_t));
-
-    /* UART 速率由 PHY 在自己的 init 中按编译期 IOLINK_COM 配置。 */
 
     DLL_EVENTS_INIT(&ctx->shared.events);
     iolink_isdu_init(&ctx->shared.isdu);
