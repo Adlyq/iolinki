@@ -390,8 +390,6 @@ uint8_t iolink_device_get_pd_in_len(const iolink_device_ctx_t* ctx);
 uint8_t iolink_device_get_pd_out_len(const iolink_device_ctx_t* ctx);
 void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx,
                                  iolink_dll_stats_t* out_stats);
-void iolink_device_set_timing_enforcement(iolink_device_ctx_t* ctx, bool enable);
-void iolink_device_set_t_ren_limit_us(iolink_device_ctx_t* ctx, uint32_t limit_us);
 ```
 
 复位处理回调会收到 `IOLINK_RESET_DEVICE`（System Command 0x80）或

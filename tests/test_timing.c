@@ -57,31 +57,6 @@ static void test_timing_constants(void** state)
     assert_int_equal(IOLINK_T_DSIO_MS, 300U);
 }
 
-static void test_t_ren_single_value_for_every_baudrate(void** state)
-{
-    (void) state;
-    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1};
-
-    setup_mock_phy();
-    will_return(mock_phy_init, 0);
-    iolink_test_device_t dev;
-    iolink_test_device_init(&dev, &config, NULL);
-
-    /* Table 10：T_REN 是设备的一项属性，与波特率无关。 */
-    const iolink_baudrate_t rates[] = {IOLINK_BAUDRATE_COM1, IOLINK_BAUDRATE_COM2,
-                                       IOLINK_BAUDRATE_COM3};
-    for (size_t i = 0U; i < (sizeof(rates) / sizeof(rates[0])); i++) {
-        assert_int_equal(iolink_dll_set_baudrate(test_dll(&dev.ctx), rates[i]), 0);
-        assert_int_equal(test_dll(&dev.ctx)->t_ren_limit_us, IOLINK_T_REN_US);
-    }
-
-    /* 显式覆盖仍然优先（保留的公共 API）。 */
-    iolink_device_set_t_ren_limit_us(&dev.ctx, 1234U);
-    assert_int_equal(test_dll(&dev.ctx)->t_ren_limit_us, 1234U);
-    assert_int_equal(iolink_dll_set_baudrate(test_dll(&dev.ctx), IOLINK_BAUDRATE_COM3), 0);
-    assert_int_equal(test_dll(&dev.ctx)->t_ren_limit_us, 1234U);
-}
-
 static void test_fake_clock_advances(void** state)
 {
     (void) state;
@@ -103,7 +78,6 @@ int main(void)
         cmocka_unit_test(test_time_get_ms),
         cmocka_unit_test(test_time_get_us),
         cmocka_unit_test(test_timing_constants),
-        cmocka_unit_test(test_t_ren_single_value_for_every_baudrate),
         cmocka_unit_test(test_fake_clock_advances),
     };
 

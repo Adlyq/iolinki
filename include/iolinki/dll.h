@@ -533,14 +533,6 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx);
  */
 void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_stats);
 
-/**
- * @brief 覆盖 t_ren 限制（对所有波特率生效）
- *
- * @param ctx DLL 上下文
- * @param limit_us 新的 t_ren 限制，单位为微秒（0 表示禁用强制检查）
- */
-void iolink_dll_set_t_ren_limit_us(iolink_dll_main_t* ctx, uint32_t limit_us);
-
 /** @} */ /* iolinki_dll 结束 */
 
 IOLINK_ASSUME_NONNULL_END

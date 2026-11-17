@@ -78,12 +78,6 @@ struct iolink_dll_main
 
     bool enforce_timing; /**< 启用定时检查（t_ren / t_cycle） */
 
-    uint32_t t_ren_limit_us; /**< 当前 t_ren 限制，单位为微秒 */
-
-    bool t_ren_override; /**< 为 true 时使用覆盖后的 t_ren 限制 */
-
-    uint32_t t_pd_delay_us; /**< 上电延时（t_pd），单位为微秒 */
-
     /* SIO 模式 */
     iolink_phy_mode_t phy_mode; /**< 当前工作模式（SDCI 与 SIO） */
 
@@ -149,16 +143,12 @@ struct iolink_dll_main
     uint32_t short_circuits; /**< 累计短路次数（走 get_faults() 时按故障
                                   边沿计数，走旧路径时按轮询周期计数） */
 
-    uint8_t sio_fallback_threshold; /**< 进入 SIO 模式的回退阈值（默认 3） */
-
     /* 定时统计 */
     uint64_t last_response_us; /**< 最后应答（或 ISR 完全消费）的帧的
                                     微秒时间戳 */
 
     uint8_t isr_consumed_seq_seen; /**< 已消费的 ISR 消费帧序号
                                         （与 shared.isr_consumed_seq 对应） */
-
-    uint32_t response_time_us; /**< 实测协议栈应答时间（t2） */
 
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_ctx_t ds; /**< 数据存储引擎 */

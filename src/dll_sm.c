@@ -25,6 +25,9 @@
  * 主泵：帧校验、分发与时序监控
  * ------------------------------------------------------------------------- */
 
+/** 连续 CRC 错误达到该数量时发一次 COMM_CRC 诊断脉冲（不切换 DL 模式）。 */
+#define DLL_CRC_DIAG_BATCH 3U
+
 /**
  * @brief 校验 A.1.6 校验和与 CKT M-sequence 类型。
  *
@@ -86,7 +89,7 @@ void dll_handle_frame_error(iolink_dll_main_t* ctx, dll_frame_result_t result)
     /* 保留诊断事件（ST 没有计数器，但应用用它
      * 作为事件标志），同时不改变 DL 模式。 */
     ctx->shared.fallback_count++;
-    if (ctx->shared.fallback_count >= ctx->sio_fallback_threshold) {
+    if (ctx->shared.fallback_count >= DLL_CRC_DIAG_BATCH) {
         ctx->shared.fallback_count = 0U;
         DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_CRC);
     }

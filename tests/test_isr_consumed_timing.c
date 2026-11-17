@@ -303,7 +303,7 @@ static int run_all(void)
         return 5;
     }
     if (iolink_dll_timer_deadline(&s_dll.main, IOLINK_TIMER_T_REN) !=
-        (t0 + (uint64_t) s_dll.main.t_ren_limit_us)) {
+        (t0 + (uint64_t) IOLINK_T_REN_US)) {
         return 6;
     }
     if (s_dll.main.isr_consumed_seq_seen != s_dll.main.shared.isr_consumed_seq) {

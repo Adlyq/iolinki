@@ -209,7 +209,7 @@ typedef struct iolink_dll_shared
 
     volatile uint8_t pd_in_captured; /**< ISR 正在流式发送的缓冲区（0xFF = 无） */
 
-    volatile uint8_t fallback_count; /**< 为切换到 SIO 的连续回退计数 */
+    volatile uint8_t fallback_count; /**< 连续 CRC 错误计数（诊断脉冲节流） */
 
     /* 子模块 */
 #if IOLINK_FEATURE_EVENTS

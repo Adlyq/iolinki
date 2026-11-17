@@ -73,6 +73,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   announced layout. (A TYPE_0 profile normally configures 0; the library does
   not reinterpret the configured length per M-sequence.)
 
+### Removed (test-only and init-only timing knobs)
+- `iolink_dll_set_t_ren_limit_us()` and `iolink_device_set_t_ren_limit_us()` are
+  gone (**MAJOR**). t_REN is the fixed Table 10 value (`IOLINK_T_REN_US`, 500 us);
+  the override fields and both setters existed only for one unit test. Use the
+  compile-time override in `config.h` if a test needs another bound.
+- `iolink_dll_set_timing_enforcement()` and
+  `iolink_device_set_timing_enforcement()` are gone (**MAJOR**): the stack
+  config (`iolink_stack_config_t::timing_enforce`) is the only input, and the
+  field is written directly during init.
+- `sio_fallback_threshold` is now the file-local `DLL_CRC_DIAG_BATCH` constant
+  (it only throttles the COMM_CRC diagnostic pulse; it never switched to SIO).
+- `t_pd_delay_us` and `response_time_us` are gone: the first was an init-local
+  temporary, the second had no reader.
+
 ### Changed (initialisation wiring is no longer public API)
 - `iolink_device_set_log()`, `iolink_dll_set_baudrate()`, `iolink_dll_set_sio_mode()`,
   `iolink_dll_set_sdci_mode()`, `iolink_dll_reset_error_counters()`,

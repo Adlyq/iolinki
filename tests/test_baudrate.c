@@ -112,19 +112,16 @@ static void test_baudrate_recomputes_limits(void** state)
     expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM3);
     assert_int_equal(iolink_dll_set_baudrate(&ctx.main, IOLINK_BAUDRATE_COM3), 0);
     assert_int_equal(ctx.main.t_byte_limit_us, 16U * 4U);
-    assert_int_equal(ctx.main.t_ren_limit_us, IOLINK_T_REN_US);
     assert_int_equal(ctx.main.min_cycle_time_us, 3500U);
 
     expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM2);
     assert_int_equal(iolink_dll_set_baudrate(&ctx.main, IOLINK_BAUDRATE_COM2), 0);
     assert_int_equal(ctx.main.t_byte_limit_us, 16U * 26U);
-    assert_int_equal(ctx.main.t_ren_limit_us, IOLINK_T_REN_US);
     assert_int_equal(ctx.main.min_cycle_time_us, 20500U);
 
     expect_value(mock_set_baudrate, baudrate, IOLINK_BAUDRATE_COM1);
     assert_int_equal(iolink_dll_set_baudrate(&ctx.main, IOLINK_BAUDRATE_COM1), 0);
     assert_int_equal(ctx.main.t_byte_limit_us, 16U * 208U);
-    assert_int_equal(ctx.main.t_ren_limit_us, IOLINK_T_REN_US);
     /* COM1 需要约 163 ms，被钳制到 0.1 ms 字节的 255 单位上限。 */
     assert_int_equal(ctx.main.min_cycle_time_us, 25500U);
 }

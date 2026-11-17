@@ -78,11 +78,11 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.main.shared.pd_out_len_current = stack->pd_out_len;
     ctx->dll.main.min_cycle_time_app_us = (uint32_t) stack->min_cycle_time * 100U;
     ctx->dll.main.master_lost_cycles = stack->master_lost_cycles;
-    ctx->dll.main.t_pd_delay_us = stack->t_pd_us;
-    if (ctx->dll.main.t_pd_delay_us > 0U) {
+    const uint32_t t_pd_us = stack->t_pd_us;
+    if (t_pd_us > 0U) {
         /* 时钟已在上文绑定：直接装载 T_PD 表项，deadline 是唯一事实源。 */
         dll_timer_arm(&ctx->dll.main, IOLINK_TIMER_T_PD,
-                      dll_time_us(&ctx->dll.main) + (uint64_t) ctx->dll.main.t_pd_delay_us);
+                      dll_time_us(&ctx->dll.main) + (uint64_t) t_pd_us);
     }
 
     /* 双泵传输：ISR 组帧请求，并基于共享状态组装应答，因此 DLL 需要
@@ -709,20 +709,6 @@ void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx, iolink_dll_stat
 {
     if (ctx != NULL) {
         iolink_dll_get_stats(&ctx->dll.main, out_stats);
-    }
-}
-
-void iolink_device_set_timing_enforcement(iolink_device_ctx_t* ctx, bool enable)
-{
-    if (ctx != NULL) {
-        ctx->dll.main.enforce_timing = enable;
-    }
-}
-
-void iolink_device_set_t_ren_limit_us(iolink_device_ctx_t* ctx, uint32_t limit_us)
-{
-    if (ctx != NULL) {
-        iolink_dll_set_t_ren_limit_us(&ctx->dll.main, limit_us);
     }
 }
 

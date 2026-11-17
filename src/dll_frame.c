@@ -179,16 +179,10 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
  * 时序、主站命令与 OPERATE 处理
  * ------------------------------------------------------------------------- */
 
-/** @brief 返回响应时间（t_REN）上限，单位 us（C6/Table 10：500 us）。 */
+/** @brief 返回响应时间（t_REN）上限，单位 us（Table 10：500 us，与波特率无关）。 */
 uint32_t dll_get_t_ren_limit_us(const iolink_dll_main_t* ctx)
 {
-    if (ctx == NULL) {
-        return 0U;
-    }
-    if (ctx->t_ren_override) {
-        return ctx->t_ren_limit_us;
-    }
-    /* Table 10：T_REN 只有一个值，最大 500 us，与波特率无关。 */
+    (void) ctx;
     return IOLINK_T_REN_US;
 }
 
@@ -670,11 +664,8 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
         dll_send(ctx, resp, pos);
         ctx->shared.fallback_count = 0U;
         const uint64_t end_us = dll_time_us(ctx);
-        const uint32_t end_tx_us = (uint32_t) end_us;
         const uint32_t limit = dll_get_t_ren_limit_us(ctx);
         const uint64_t ren_deadline = dll_timer_deadline(ctx, IOLINK_TIMER_T_REN);
-        const uint32_t start_us = (ren_deadline != 0U) ? (uint32_t) (ren_deadline - limit) : 0U;
-        ctx->response_time_us = end_tx_us - start_us;
 
         if ((ren_deadline != 0U) && ctx->enforce_timing && (limit > 0U) &&
             dll_time_passed(end_us, ren_deadline)) {

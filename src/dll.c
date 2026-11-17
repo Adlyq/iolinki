@@ -343,7 +343,6 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
      * 设备层随后会用完整的 stack/app 配置重新解析一次。 */
     ctx->shared.caps = iolink_caps_resolve(phy, NULL, NULL, NULL);
     ctx->enforce_timing = (iolink_caps_build()->timing_enforce_default != 0U);
-    ctx->sio_fallback_threshold = 3U;
     ctx->operating_baudrate = IOLINK_BAUDRATE_UNSET;
     ctx->master_last_activity_ms = dll_time_ms(ctx);
     ctx->master_lost_cycles = 0U;
@@ -392,7 +391,6 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     ctx->shared.isdu.ds_ctx = NULL;
 #endif
 
-    ctx->t_ren_limit_us = dll_get_t_ren_limit_us(ctx);
     ctx->t_byte_limit_us = dll_get_t_byte_limit_us(ctx);
 
     /*

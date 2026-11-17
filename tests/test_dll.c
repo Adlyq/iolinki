@@ -296,7 +296,7 @@ static void test_dll_wakeup_to_preoperate(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, NULL, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     /* 触发唤醒 */
     iolink_phy_mock_set_wakeup(1);
@@ -321,7 +321,7 @@ static void test_dll_preoperate_to_operate(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     /* 唤醒 */
     iolink_phy_mock_set_wakeup(1);
@@ -361,7 +361,7 @@ static void test_dll_crc_error_keeps_operate(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     /* 唤醒 */
     iolink_phy_mock_set_wakeup(1);
@@ -631,7 +631,7 @@ static void test_dll_preoperate_type0_od_write_ignores_operate_widths(void** sta
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(&dev.ctx);
@@ -672,7 +672,7 @@ static void test_dll_type0_write_is_three_octets_with_two_octet_od(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(&dev.ctx);
@@ -709,7 +709,7 @@ static void test_dll_startup_to_preoperate_read_dpp1(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, NULL, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     wake_device(&dev.ctx);
     assert_true((iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_AWAITING_COMM) ||
@@ -735,7 +735,7 @@ static void test_dll_startup_to_preoperate_write_dpp1(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, NULL, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     wake_device(&dev.ctx);
     assert_true((iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_AWAITING_COMM) ||
@@ -810,7 +810,7 @@ static void test_dll_preoperate_to_operate_read_dpp1(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, NULL, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     wake_device(&dev.ctx);
     assert_true((iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_AWAITING_COMM) ||
@@ -851,7 +851,7 @@ static void test_dll_startup_0x99_rejected(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     wake_device(&dev.ctx);
     assert_true((iolink_device_get_state(&dev.ctx) == IOLINK_DLL_STATE_AWAITING_COMM) ||
@@ -1194,7 +1194,7 @@ static void test_dll_preoperate_truncated_write(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    test_dll(&dev.ctx)->enforce_timing = false;
     test_dll_shared(&dev.ctx)->state = IOLINK_DLL_STATE_PREOPERATE;
 
     uint8_t truncated[2] = {(uint8_t) (IOLINK_MC_CHANNEL_PAGE | 0x01U), 0x00U};
@@ -1253,7 +1253,7 @@ static void test_dll_preoperate_illegal_operate_type(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    test_dll(&dev.ctx)->enforce_timing = false;
     test_dll_shared(&dev.ctx)->state = IOLINK_DLL_STATE_PREOPERATE;
     test_dll_shared(&dev.ctx)->m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
 
@@ -1284,7 +1284,7 @@ static void test_dll_preoperate_type0_same_type(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev0;
     iolink_test_device_init(&dev0, &type0, NULL);
-    iolink_device_set_timing_enforcement(&dev0.ctx, false);
+    test_dll(&dev0.ctx)->enforce_timing = false;
     test_dll_shared(&dev0.ctx)->state = IOLINK_DLL_STATE_PREOPERATE;
 
     uint8_t value = 0U;
@@ -1324,7 +1324,7 @@ static void test_dll_operate_dpp1_read_write(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, NULL, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     establish_operate_type0(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
@@ -1354,7 +1354,7 @@ static void test_dll_operate_negative_write(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, NULL, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     establish_operate_type0(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
@@ -1391,7 +1391,7 @@ static void test_dll_dpp1_mseqcap_isdu_bit(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     wake_device(&dev.ctx);
     feed_master_command(IOLINK_CMD_DEVICE_PREOPERATE);
@@ -1421,7 +1421,7 @@ static void test_dll_master_cycle_time_write_readback(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, NULL, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     wake_device(&dev.ctx);
     feed_master_command(IOLINK_CMD_DEVICE_PREOPERATE);
@@ -1452,7 +1452,7 @@ static void test_dll_operate_min_cycle_time_valid(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     establish_operate_type2v(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
@@ -1495,7 +1495,7 @@ static void test_dll_pdout_only_status_valid(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    test_dll(&dev.ctx)->enforce_timing = false;
     test_dll_shared(&dev.ctx)->state = IOLINK_DLL_STATE_OPERATE;
     test_dll(&dev.ctx)->pd_valid = false;
 
@@ -1578,7 +1578,7 @@ static void test_dll_receive_error_discards_partial_frame(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, NULL, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, false);
+    test_dll(&dev.ctx)->enforce_timing = false;
     iolink_phy_mock_set_wakeup(1);
     test_io_cycle(&dev.ctx);
 
@@ -1686,7 +1686,7 @@ static void test_dll_main_pump_type1_2_reply(void** state)
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
-    iolink_device_set_timing_enforcement(&dev.ctx, true);
+    test_dll(&dev.ctx)->enforce_timing = true;
 
     establish_operate_type2v(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);

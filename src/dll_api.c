@@ -98,7 +98,6 @@ int iolink_dll_set_baudrate(iolink_dll_main_t* ctx, iolink_baudrate_t baudrate)
         ctx->shared.isr_tx_idx = 0U;
         ctx->shared.pd_in_captured = 0xFFU;
     }
-    ctx->t_ren_limit_us = dll_get_t_ren_limit_us(ctx);
     ctx->t_byte_limit_us = dll_get_t_byte_limit_us(ctx);
     ctx->min_cycle_time_us = (uint32_t) iolink_dll_compute_min_cycle_time(ctx) * 100U;
     /* 波特率参与 MinCycleTime（DPP1 0x02）：页读缓存必须失效。 */
@@ -206,13 +205,6 @@ void iolink_dll_reset_diagnostics(iolink_dll_main_t* ctx)
     iolink_events_reset(&ctx->shared.events);
 #endif
     iolink_dll_reset_error_counters(ctx);
-}
-
-void iolink_dll_set_t_ren_limit_us(iolink_dll_main_t* ctx, uint32_t limit_us)
-{
-    if (ctx == NULL) return;
-    ctx->t_ren_limit_us = limit_us;
-    ctx->t_ren_override = (limit_us != 0U);
 }
 
 uint8_t iolink_dll_expected_req_len(const iolink_dll_main_t* ctx, uint8_t mc)

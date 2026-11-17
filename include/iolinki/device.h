@@ -342,20 +342,6 @@ iolink_baudrate_t iolink_device_get_baudrate(const iolink_device_ctx_t* ctx);
 void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx, iolink_dll_stats_t* out_stats);
 
 /**
- * @brief 启用或禁用时序强制检查。
- * @param ctx     设备上下文。
- * @param enable  为 true 时强制时序限制，为 false 时仅测量。
- */
-void iolink_device_set_timing_enforcement(iolink_device_ctx_t* ctx, bool enable);
-
-/**
- * @brief 设置响应时间（t_ren）限制。
- * @param ctx       设备上下文。
- * @param limit_us  响应时间限制，单位为微秒。
- */
-void iolink_device_set_t_ren_limit_us(iolink_device_ctx_t* ctx, uint32_t limit_us);
-
-/**
  * @brief 获取协商后的 M-sequence 类型。
  * @param ctx 设备上下文。
  * @return 活动的 M-sequence 类型。
