@@ -106,7 +106,7 @@ CROSS_TOOLCHAIN_RODATA_PERMILLE = 80
 CPU_FLAGS = ["-mcpu=cortex-m0plus", "-mthumb", "-std=c99", "-Os", "-g0", "-ffreestanding"]
 # The budget is a ROM budget, not a diagnostics budget: log messages (and the
 # format strings behind them) are compiled out here, because a device that
-# keeps them pays for them by choice. `docs/MEMORY_GUIDE.md` states the same.
+# keeps them pays for them by choice. See docs/PORTING.md ("ROM/RAM size").
 LOG_OFF = ["-DIOLINK_LOG_COMPILE_LEVEL=0"]
 COMMON_FLAGS = (
     CPU_FLAGS

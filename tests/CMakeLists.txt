@@ -212,6 +212,11 @@ iolink_test(NAME test_ctx_sizes SOURCES test_ctx_sizes.c
 iolink_test(NAME test_log SOURCES test_log.c test_log_isr_on.c
         CMOCKA NO_HELPERS)
 
+# The compile-time level must remove the messages (and their arguments), not
+# just silence them: the ROM budget in tools/size_matrix.py relies on it.
+iolink_test(NAME test_log_compiled_out SOURCES test_log_compiled_out.c
+        CMOCKA NO_HELPERS DEFS IOLINK_LOG_COMPILE_LEVEL=0)
+
 # Statistics counter sets (SHARED vs SPLIT), built under both modes.
 iolink_test(NAME test_stats_split SOURCES test_stats_split.c
         CMOCKA NO_HELPERS)

@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tools/size_baseline.csv` and `tools/size_baseline.atfe.csv` are re-recorded
   (c1_full: about 1 KB less `.text` and 0.7 KB less `.rodata`). `docs/PORTING.md`
   says so; `build_matrix.sh` gains a `logs_off` compile probe.
+- `tests/test_log_compiled_out` is built at level 0 and asserts that a sink with
+  the runtime threshold wide open is never called and that an argument with a
+  side effect is never evaluated: the property the budget relies on is guarded,
+  not assumed.
 
 ### Changed (nullability model: non-null by default)
 - Public headers declare `IOLINK_ASSUME_NONNULL_BEGIN/END` around their

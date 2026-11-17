@@ -127,6 +127,10 @@ static inline void iolink_log_sink_init(iolink_log_sink_t* sink,
  *
  * ROM 预算只按无日志构建衡量（`tools/size_matrix.py` 以 0 编译），因此诊断
  * 信息的体积不受 size 门禁限制；需要精简镜像的应用可以自己调低这个值。
+ *
+ * 取值必须是数字或下面的 `IOLINK_LOG_COMPILE_*` 宏：**不能**用运行时枚举
+ * `IOLINK_LOG_LEVEL_*`，那些标识符对预处理器不可见，会被当成 0 从而静默
+ * 关闭全部日志（`-Wundef` 会提示）。
  * @{
  */
 #define IOLINK_LOG_COMPILE_SILENT 0 /**< 不编译任何日志消息。 */
@@ -136,6 +140,10 @@ static inline void iolink_log_sink_init(iolink_log_sink_t* sink,
 #define IOLINK_LOG_COMPILE_DEBUG 4  /**< 全部（默认）。 */
 #ifndef IOLINK_LOG_COMPILE_LEVEL
 #define IOLINK_LOG_COMPILE_LEVEL IOLINK_LOG_COMPILE_DEBUG
+#endif
+#if (IOLINK_LOG_COMPILE_LEVEL < IOLINK_LOG_COMPILE_SILENT) || \
+    (IOLINK_LOG_COMPILE_LEVEL > IOLINK_LOG_COMPILE_DEBUG)
+#error "IOLINK_LOG_COMPILE_LEVEL must be 0..4 (IOLINK_LOG_COMPILE_SILENT..DEBUG)"
 #endif
 /** @} */
 
