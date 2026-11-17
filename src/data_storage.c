@@ -22,6 +22,7 @@
 #include "iolinki/data_storage.h"
 #include "iolinki/od.h"
 #include "iolinki/utils.h"
+#include "iolinki/internal/wiring.h"
 #include <string.h>
 
 #if IOLINK_FEATURE_DATA_STORAGE

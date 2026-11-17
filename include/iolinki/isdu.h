@@ -329,22 +329,6 @@ bool iolink_isdu_is_idle(const iolink_isdu_ctx_t* ctx);
 int iolink_isdu_get_response_byte(iolink_isdu_ctx_t* ctx, uint8_t* byte);
 
 /**
- * @brief 标记 Direct Parameter page 1 映像失效。
- *
- * 主泵侧在改变 DPP1 输入（MasterCycleTime、M-sequence 配置、PD 长度、
- * 设备标识等）之后调用。在主泵上下文里会**立即**重建映像；ISR 上下文
- * 只把序号置为奇数（当前 src/ 中没有 ISR 调用者），使
- * @ref iolink_isdu_direct_param_page1_octet 在重建前返回 0，而不是变更前
- * 的值，因此 ISR 绝不会发出已知过期的八位组。
- *
- * @note 整页重建与偶数发布只允许主泵侧执行：`dp_page1_seq` 的稳定序号
- * 只有一个写者；ISR 侧若调用只会把序号置为奇数（当前 src/ 中没有这种调用者）。
- *
- * @param ctx ISDU 上下文（NULL 时不做任何事）
- */
-void iolink_isdu_dp_page1_invalidate(iolink_isdu_ctx_t* ctx);
-
-/**
  * @brief 读取单个 Direct Parameter page 1 八位组。
  *
  * 从主泵维护的 16 字节 RAM 映像（@ref iolink_isdu_ctx_t::dp_page1 ）取

@@ -454,10 +454,10 @@ compiled out. A device that keeps logging pays for the strings by choice — see
 
 The stack ships print points with a runtime sink: set
 `iolink_device_app_t::log_write` (its `self` argument is `app->self`) and
-`config.log_level`, or call `iolink_device_set_log()` later. A zeroed sink is
-silent. The library does not format; the callback owns `vsnprintf` and the
-transport. ISR print points additionally require `IOLINK_LOG_ENABLE_ISR=1`.
-See `include/iolinki/log.h` and `docs/API.md`.
+`config.log_level` at initialisation. A zeroed sink is silent. The library does
+not format; the callback owns `vsnprintf` and the transport. ISR print points
+additionally require `IOLINK_LOG_ENABLE_ISR=1`. See `include/iolinki/log.h` and
+`docs/API.md`.
 
 The host `phy_virtual` example still uses `printf()` directly; a real port
 routes the sink to its UART/RTOS logger instead:

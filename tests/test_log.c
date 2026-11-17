@@ -25,6 +25,7 @@
 #include <string.h>
 
 #include "iolinki/device.h"
+#include "iolinki/internal/device_wiring.h"
 #include "iolinki/log.h"
 #include "dll_access.h"
 
@@ -147,7 +148,7 @@ static void test_device_init_binds_config_sink(void** state)
     assert_true(iolink_device_get_events_ctx(&ctx)->log->write == log_capture);
 #endif
 
-    /* The runtime switch silences an initialized device immediately. */
+    /* 初始化接线的内部入口把后续日志静默（测试直接驱动该入口）。 */
     iolink_device_set_log(&ctx, NULL, IOLINK_LOG_LEVEL_SILENT);
     reset_capture();
 #if IOLINK_FEATURE_DATA_STORAGE

@@ -104,10 +104,6 @@ typedef struct iolink_ds_ctx
 #if IOLINK_FEATURE_DATA_STORAGE
 void iolink_ds_init(iolink_ds_ctx_t* ctx);
 
-/** @brief 绑定 DS_UPLOAD_FLAG 持久化钩子（NULL 解除绑定）。 */
-void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn IOLINK_NULLABLE fn,
-                                iolink_app_t* IOLINK_NULLABLE self);
-
 /**
  * @brief 绑定外部工作区。
  *

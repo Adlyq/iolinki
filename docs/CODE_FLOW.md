@@ -1099,7 +1099,7 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `dll_process_body()`（`dll.c`，TX FRAME） | 轮询 `tx_busy` 并释放 `pd_in_captured` | 防止 ISR 在轮询与释放之间捕获新缓冲 |
 | `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零两个上下文共享的计数器 | 与 ISR 自增分开 |
 | `diag.c`（4 处） | 来源标记、ISR 脉冲消费、DeviceStatus 快照、DDS 快照 | 条件表内部不变式；ISR 只写 `isr_pulse[]` |
-| `device.c`（3 处） | `set_log` sink 更新、`on_pd_input` 发布、轮询发布，交换 `pd_in_active`/`pd_valid` | 索引/有效位标量；长度在 init 固定，PD 拷贝在锁外，PD-out 读取不取锁 |
+| `device.c`（2 处） | `on_pd_input` 回调发布、轮询发布，交换 `pd_in_active`/`pd_valid` | 索引/有效位标量；长度在 init 固定，PD 拷贝在锁外，PD-out 读取不取锁 |
 | `events.c`（10 处） | 事件队列、pending 表、事件内存 | 事件引擎内部不变式；ISR 侧只读 flag/memory |
 
 `dll_set_state()` 已不在表中：状态是单字节原子写，通知以电平式为主；但

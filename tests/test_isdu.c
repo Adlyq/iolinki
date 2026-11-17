@@ -20,6 +20,7 @@
 #include <stdio.h>
 
 #include "iolinki/isdu.h"
+#include "iolinki/internal/wiring.h"
 #include "iolinki/events.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/protocol.h"

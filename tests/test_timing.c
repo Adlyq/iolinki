@@ -21,6 +21,7 @@
 
 #include "iolinki/crc.h"
 #include "iolinki/device.h"
+#include "iolinki/internal/wiring.h"
 #include "dll_access.h"
 #include "test_helpers.h"
 

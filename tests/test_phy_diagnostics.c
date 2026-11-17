@@ -21,6 +21,7 @@
 #include "dll_access.h"
 #include "iolinki/phy.h"
 #include "iolinki/events.h"
+#include "iolinki/internal/wiring.h"
 
 static uint8_t mock_faults;
 

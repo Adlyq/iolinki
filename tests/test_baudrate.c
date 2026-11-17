@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "iolinki/iolink.h"
+#include "iolinki/internal/wiring.h"
 #include "dll_access.h"
 #include "iolinki/phy.h"
 

@@ -479,22 +479,6 @@ void iolink_dll_get_pd_length(const iolink_dll_main_t* ctx, uint8_t* IOLINK_NULL
                               uint8_t* IOLINK_NULLABLE pd_out_len);
 
 /**
- * @brief 请求切换到 SIO 模式（单线通信）
- *
- * @param ctx DLL 上下文
- * @return int 成功返回 0
- */
-int iolink_dll_set_sio_mode(iolink_dll_main_t* ctx);
-
-/**
- * @brief 请求切换到 SDCI 模式（基于 UART 的交换）
- *
- * @param ctx DLL 上下文
- * @return int 成功返回 0
- */
-int iolink_dll_set_sdci_mode(iolink_dll_main_t* ctx);
-
-/**
  * @brief 获取当前工作模式
  *
  * @param ctx DLL 上下文
@@ -513,15 +497,6 @@ iolink_phy_mode_t iolink_dll_get_phy_mode(const iolink_dll_main_t* ctx);
  * @param ctx DLL 上下文
  */
 void iolink_dll_request_back_to_box(iolink_dll_main_t* ctx);
-
-/**
- * @brief 设置通信波特率
- *
- * @param ctx DLL 上下文
- * @param baudrate 期望的波特率（COM1、COM2 或 COM3）
- * @return int 成功返回 0
- */
-int iolink_dll_set_baudrate(iolink_dll_main_t* ctx, iolink_baudrate_t baudrate);
 
 /** “未配置工作 COM”的哨兵值（恢复过程会保留 COM1）。 */
 #define IOLINK_BAUDRATE_UNSET ((iolink_baudrate_t) 0xFF)
@@ -557,41 +532,6 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx);
  * @param[out] out_stats 输出统计结构，填入计数器的快照
  */
 void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_stats);
-
-/**
- * @brief 复位设备诊断与状态（Table 101）
- *
- * 清除构成 ErrorCount（0x0020）的计数器，并丢弃事件队列、
- * Event 标志和 Table 58 事件存储，使 DeviceStatus（0x0024）和
- * DetailedDeviceStatus（0x0025）再次从 "0" 开始。用于设备
- * 复位和 Back-to-box。恢复出厂设置则改为撤销活动
- * 事件（Table 101 的 "Clear"），因此它使用
- * iolink_dll_reset_error_counters() 以及
- * iolink_events_clear_diagnosis()。应用复位不影响
- * 诊断信息。
- *
- * @param ctx DLL 上下文
- */
-void iolink_dll_reset_diagnostics(iolink_dll_main_t* ctx);
-
-/**
- * @brief 复位 ErrorCount 计数器，不改动事件引擎。
- *
- * B.2.20/Table 101：ErrorCount 统计自上次上电或复位以来的错误。
- * 由恢复出厂设置使用，它复位计数器，但撤销活动
- * 事件而不是丢弃它们。
- *
- * @param ctx DLL 上下文
- */
-void iolink_dll_reset_error_counters(iolink_dll_main_t* ctx);
-
-/**
- * @brief 启用/禁用定时强制检查（t_ren / t_cycle）
- *
- * @param ctx DLL 上下文
- * @param enable true 表示启用，false 表示禁用
- */
-void iolink_dll_set_timing_enforcement(iolink_dll_main_t* ctx, bool enable);
 
 /**
  * @brief 覆盖 t_ren 限制（对所有波特率生效）

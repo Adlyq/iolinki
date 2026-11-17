@@ -14,6 +14,7 @@
 #include "iolinki/events.h"
 #include "iolinki/device_info.h"
 #include "iolinki/data_storage.h"
+#include "iolinki/internal/wiring.h"
 #include "iolinki/port.h"
 #include "iolinki/utils.h"
 #include "isdu_internal.h"

@@ -18,6 +18,8 @@
 
 #include "iolinki/device.h"
 #include "iolinki/port.h"
+#include "iolinki/internal/device_wiring.h"
+#include "iolinki/internal/wiring.h"
 #include "dll_internal.h"
 #include "od_internal.h"
 #include <string.h>
@@ -101,10 +103,10 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
 
     /* 时序强制的默认值来自构建档位，栈配置可以显式覆盖。 */
     if (stack->timing_enforce == IOLINK_STACK_TIMING_ENFORCE) {
-        iolink_dll_set_timing_enforcement(&ctx->dll.main, true);
+        ctx->dll.main.enforce_timing = true;
     }
     else if (stack->timing_enforce == IOLINK_STACK_TIMING_MEASURE) {
-        iolink_dll_set_timing_enforcement(&ctx->dll.main, false);
+        ctx->dll.main.enforce_timing = false;
     }
     else {
         /* DEFAULT：保留 iolink_dll_init() 从能力表取的值。 */
@@ -399,12 +401,9 @@ void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_
     }
     iolink_app_t* IOLINK_NULLABLE self = (ctx->config != NULL) ? ctx->config->app->self : NULL;
 
-    /* 字段更新必须对数据 ISR 原子：启用 ISR 日志时，中断可能正在
-     * 读取同一个 sink。临界区在 SINGLE profile 中展开为空。 */
-    IOLINK_CRITICAL_ENTER();
-    /* 设备层没有自己的 sink：打印点使用 DLL 的那一份。 */
+    /* 初始化期单写者：应用只能通过 config 给出日志汇点，运行期不再改写。
+     * 一个 sink 服务全部模块：它们只保存指针，这里统一指向它。 */
     iolink_log_sink_init(&ctx->dll.main.shared.log, write, self, level);
-    /* 一个 sink 服务全部模块：它们只保存指针，这里统一指向它。 */
     ctx->dll.main.shared.isdu.log = &ctx->dll.main.shared.log;
 #if IOLINK_FEATURE_DATA_STORAGE
     ctx->dll.main.ds.log = &ctx->dll.main.shared.log;
@@ -412,7 +411,6 @@ void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_
 #if IOLINK_FEATURE_EVENTS
     ctx->dll.main.shared.events.log = &ctx->dll.main.shared.log;
 #endif
-    IOLINK_CRITICAL_EXIT();
 }
 
 /** 选择一个 ISR 未在流式发送且非活动的 PD 输入缓冲区。
@@ -717,7 +715,7 @@ void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx, iolink_dll_stat
 void iolink_device_set_timing_enforcement(iolink_device_ctx_t* ctx, bool enable)
 {
     if (ctx != NULL) {
-        iolink_dll_set_timing_enforcement(&ctx->dll.main, enable);
+        ctx->dll.main.enforce_timing = enable;
     }
 }
 

@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "iolinki/events.h"
+#include "iolinki/internal/wiring.h"
 
 #include "conformance_test.h"
 #include "test_helpers.h"

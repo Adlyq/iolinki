@@ -10,6 +10,7 @@
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
 #include "iolinki/port.h"
+#include "iolinki/internal/wiring.h"
 #include "dll_internal.h"
 #include "iolinki/internal/dll_sm.h"
 #include <string.h>

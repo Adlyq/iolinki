@@ -194,19 +194,6 @@ struct iolink_events_ctx
 void iolink_events_init(iolink_events_ctx_t* ctx);
 
 /**
- * @brief 设置 A.6.4 的两个时间窗口。
- *
- * 任一参数为 0 时保留当前值（初始为构建档位默认值）。必须在
- * `iolink_events_init()` 之后调用。
- *
- * @param ctx           事件上下文
- * @param min_appear_ms 最短“出现”窗口（ms）
- * @param min_repeat_ms 同一 EventCode 的重复上报间隔（ms）
- */
-void iolink_events_set_window(iolink_events_ctx_t* ctx, uint16_t min_appear_ms,
-                              uint16_t min_repeat_ms);
-
-/**
  * @brief 触发一个新的诊断事件
  *
  * Error 和 Warning 事件作为 “event appears” 入队一次，并保持活动

@@ -203,7 +203,7 @@ typedef void (*iolink_ds_flag_persist_fn)(iolink_app_t* self, bool flag);
 
 在 `iolink_device_config_t::ds_flag_persist` 中绑定，`self` 固定为
 `iolink_device_app_t::self`；传 NULL 表示该标志只存 RAM。直接驱动 DS 上下文时用
-`iolink_ds_set_flag_persist(ctx, fn, self)` 绑定同一钩子。
+`iolinki/internal/wiring.h` 的 `iolink_ds_set_flag_persist()` 绑定同一钩子。
 
 | 事件 | 标志 | 钩子 |
 | --- | --- | --- |

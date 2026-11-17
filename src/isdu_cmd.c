@@ -13,6 +13,7 @@
 #include "iolinki/device_info.h"
 #include "iolinki/data_storage.h"
 #include "iolinki/port.h"
+#include "iolinki/internal/wiring.h"
 #include <string.h>
 #include <stdint.h>
 #include "isdu_internal.h"

@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "iolinki/data_storage.h"
+#include "iolinki/internal/wiring.h"
 #include "iolinki/device_info.h"
 #include "iolinki/events.h"
 #include "iolinki/isdu.h"

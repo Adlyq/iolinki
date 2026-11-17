@@ -9,6 +9,7 @@
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
 #include "iolinki/port.h"
+#include "iolinki/internal/wiring.h"
 #include "dll_internal.h"
 #include "iolinki/internal/dll_sm.h"
 #include <string.h>
@@ -205,11 +206,6 @@ void iolink_dll_reset_diagnostics(iolink_dll_main_t* ctx)
     iolink_events_reset(&ctx->shared.events);
 #endif
     iolink_dll_reset_error_counters(ctx);
-}
-
-void iolink_dll_set_timing_enforcement(iolink_dll_main_t* ctx, bool enable)
-{
-    if (ctx != NULL) ctx->enforce_timing = enable;
 }
 
 void iolink_dll_set_t_ren_limit_us(iolink_dll_main_t* ctx, uint32_t limit_us)

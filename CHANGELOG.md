@@ -73,6 +73,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   announced layout. (A TYPE_0 profile normally configures 0; the library does
   not reinterpret the configured length per M-sequence.)
 
+### Changed (initialisation wiring is no longer public API)
+- `iolink_device_set_log()`, `iolink_dll_set_baudrate()`, `iolink_dll_set_sio_mode()`,
+  `iolink_dll_set_sdci_mode()`, `iolink_dll_reset_error_counters()`,
+  `iolink_dll_reset_diagnostics()`, `iolink_events_set_window()`,
+  `iolink_ds_set_flag_persist()` and `iolink_isdu_dp_page1_invalidate()` moved to
+  `include/iolinki/internal/wiring.h` (**MAJOR**: the public declarations are
+  gone). They are called by the initialisation and protocol paths; applications
+  configure the same behaviour through `iolink_device_config_t` /
+  `iolink_stack_config_t`.
+- Logging is init-only: the sink and level come from `config.log_write` /
+  `config.log_level`; the runtime switch and its critical section are gone.
+- `iolink_dll_set_timing_enforcement()` is gone; `device_apply_stack_config()`
+  writes the field directly. `iolink_device_set_timing_enforcement()` remains.
+
 ### Added (compile-time log level)
 - `IOLINK_LOG_COMPILE_LEVEL` (`iolinki/log.h`, default `IOLINK_LOG_COMPILE_DEBUG`)
   compiles messages above the chosen level away together with their format

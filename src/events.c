@@ -18,6 +18,7 @@
 #include "iolinki/events.h"
 #include "iolinki/port.h"
 #include "iolinki/utils.h"
+#include "iolinki/internal/wiring.h"
 #include <string.h>
 
 #if IOLINK_FEATURE_EVENTS

@@ -525,8 +525,6 @@ DeviceStatus 和 DDS 都不缓存：每次读取都从条件表重新计算，�
 iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx);
 
 void iolink_ds_init(iolink_ds_ctx_t* ctx);
-void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn fn,
-                                iolink_app_t* self);
 void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws);
 void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app,
                             iolink_app_t* self);
@@ -687,10 +685,9 @@ config.log_level = IOLINK_LOG_LEVEL_INFO;
 ```
 
 `IOLINK_LOG_LEVEL_SILENT`（默认）或 trait 的 `log_write == NULL` 保持静默。
-`iolink_device_set_log(ctx, write, level)` 在运行期更换汇点；`self` 参数仍为
-`app->self`。设备只有一个 sink（`shared.log`），ISDU、DS 和事件上下文只保存指向它
-的指针，因此一次 set_log 就更新全部模块；直接使用这些模块的调用方把 `ctx->log`
-指向自己的 sink 即可，NULL 表示静默。
+汇点只在初始化时由 `config.log_write` / `config.log_level` 绑定，没有运行期切换
+接口。设备只有一个 sink（`shared.log`），ISDU、DS 和事件上下文只保存指向它的
+指针；直接使用这些模块的调用方把 `ctx->log` 指向自己的 sink 即可，NULL 表示静默。
 
 库不格式化也不缓存任何内容：回调收到 printf 风格的格式串和参数，只有通过运行时
 阈值时才求值。ISR 打印点使用单独的 `IOLINK_LOG_ISR_*` 系列，只有

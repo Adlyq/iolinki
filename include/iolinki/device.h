@@ -224,20 +224,6 @@ iolink_workspace_t* IOLINK_NULLABLE iolink_device_get_workspace(const iolink_dev
 int iolink_device_get_phy_error(const iolink_device_ctx_t* ctx);
 
 /**
- * @brief 在运行时更换日志回调或阈值。
- *
- * 更新 DLL、ISDU、DS 和事件子系统共用的汇点；`self` 仍取
- * 应用 trait 的 `self` 字段。传入 `write == NULL` 或
- * `level == IOLINK_LOG_LEVEL_SILENT` 可立即静默。
- *
- * @param ctx   由 iolink_device_init() 初始化的设备上下文。
- * @param write 新的输出回调，可为 NULL。
- * @param level 新的运行时阈值。
- */
-void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_NULLABLE write,
-                           iolink_log_level_t level);
-
-/**
  * @brief 运行设备状态机的一次迭代。
  *
  * 驱动 DLL/PHY：处理待处理的帧、时序和应用事件。

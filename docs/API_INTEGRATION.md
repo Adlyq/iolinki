@@ -678,8 +678,6 @@ static const iolink_od_entry_t g_tag_entries[] = {
 iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx);
 
 void iolink_ds_init(iolink_ds_ctx_t* ctx);
-void iolink_ds_set_flag_persist(iolink_ds_ctx_t* ctx, iolink_ds_flag_persist_fn fn,
-                                iolink_app_t* self);
 void iolink_ds_bind_workspace(iolink_ds_ctx_t* ctx, iolink_workspace_t* ws);
 void iolink_ds_bind_sources(iolink_ds_ctx_t* ctx, const iolink_od_app_t* app,
                             iolink_app_t* self);
