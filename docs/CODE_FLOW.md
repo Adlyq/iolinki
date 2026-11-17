@@ -747,7 +747,7 @@ flowchart TD
 | 顺序 | 调用 | 来源 |
 | :--- | :--- | :--- |
 | 1 | `od_validate_app()`（`IOLINK_FEATURE_VALIDATE=1`） | `device_config_validate()`；失败返回 `IOLINK_DEVICE_INIT_ERR_OD` |
-| 2 | `iolink_device_init()` → PHY 让 UART 以 `IOLINK_COM_HZ` 工作（`init` 或 `set_mode(SDCI)`） | `iolink_device_init()` |
+| 2 | PHY UART 定型（`init` 或 `set_mode(SDCI)`），速率 = `IOLINK_COM_HZ` | PHY |
 | 3 | `phy->set_mode(SIO/SDCI)` | `iolink_dll_init()` 依据 `IOLINK_CAP_WAKEUP` |
 | 4 | OD 表项读取（`iolink_od_read_value()`） | `iolink_ds_refresh()` 计算 `Data_Storage_Size`/`Parameter_Checksum`；`HANDLER` 表项调到应用 `read` |
 | 5 | `on_startup()` | `iolink_device_init()` 末尾 |
