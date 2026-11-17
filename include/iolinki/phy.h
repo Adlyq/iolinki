@@ -110,7 +110,8 @@ typedef struct
     /**
      * @brief 初始化收发器硬件
      *
-     * 同时按编译期 `IOLINK_COM_HZ` 配置 UART 速率；库没有运行期改速钩子。
+     * UART 必须以编译期 `IOLINK_COM_HZ` 工作：在 `init` 中配置，或在
+     * `set_mode(SDCI)` 切换时完成（内置驱动走后者）。库没有运行期改速钩子。
      * @return 成功返回 0，硬件失败返回负错误码
      */
     int (*IOLINK_NULLABLE init)(iolink_app_t* IOLINK_NULLABLE self);

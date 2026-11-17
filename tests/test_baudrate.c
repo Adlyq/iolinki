@@ -29,7 +29,7 @@ static void test_baudrate_is_compiled_in(void** state)
 
     iolink_dll_init(&ctx.main, &ctx.isr, &mock_phy);
 
-    assert_int_equal(iolink_dll_get_baudrate(&ctx.main), (iolink_baudrate_t) (IOLINK_COM - 1));
+    assert_int_equal(iolink_dll_get_baudrate(&ctx.main), IOLINK_COM_BAUDRATE);
 #if IOLINK_COM == 1
     assert_int_equal(ctx.main.t_byte_limit_us, 3328U);
 #elif IOLINK_COM == 2

@@ -33,7 +33,9 @@ The PHY layer provides hardware abstraction for UART communication.
 
 The transmission rate is the build-time `IOLINK_COM` (1/2/3, `include/iolinki/config.h`), not a
 stack-config field: an IO-Link Device supports exactly one COM. The PHY's `init()` must
-configure the UART from `IOLINK_COM_HZ`; there is no runtime rate-change callback.
+configure the UART from `IOLINK_COM_HZ` in `init()` or when switching to SDCI
+in `set_mode()` (the built-in drivers use the latter); there is no runtime
+rate-change callback.
 
 In RX FRAME mode, `rx_frame()` must return only a complete PHY-delimited
 M-sequence. A two-octet header or another truncated prefix is not a frame and

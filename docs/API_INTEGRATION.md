@@ -133,7 +133,7 @@ static struct iolink_app g_app_state;
 
 static const iolink_phy_api_t g_phy = {
     .self = (iolink_app_t*) &g_app_state, /* 手写 vtable 在初始化器里写 self */
-    .init = board_phy_init,               /* 按 IOLINK_COM_HZ 配置 UART */
+    .init = board_phy_init,               /* 最终 UART 速率 = IOLINK_COM_HZ（可在此或 set_mode(SDCI) 配置） */
     .set_mode = board_phy_set_mode,
     .rx_octet = board_phy_rx_octet,       /* RX BYTE mode */
     .tx_octet = board_phy_tx_octet,       /* TX BYTE mode */
