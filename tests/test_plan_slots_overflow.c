@@ -37,18 +37,16 @@ static void test_plan_slot_overflow_is_counted(void** state)
     ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     ctx.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     ctx.main.shared.od_width = 2U;
-    /* init 已经发布过一次（默认配置）；这里只断言本次重发布的增量。 */
-    const uint32_t overflows_before = ctx.main.reply_plan_overflows;
     iolink_dll_publish_reply_plans(&ctx.main);
 
     /* 计划表只容得下一条；按状态切片构建的其余计划必须被计数。 */
-    assert_int_equal(ctx.main.shared.reply_plan_total, 1U);
     assert_int_equal(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_STARTUP], 1U);
     assert_int_equal(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_PREOPERATE], 0U);
     assert_int_equal(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE], 0U);
     /* Type-1/2 配置共 42 条切片行（STARTUP 11 + PREOPERATE 11 + ESTAB 10 +
-     * OPERATE 10），只容下 1 条，其余 41 条必须逐条计数。 */
-    assert_int_equal(ctx.main.reply_plan_overflows, overflows_before + 41U);
+     * OPERATE 10），只容下 1 条，其余 41 条必须逐条计数。计数描述当前这张
+     * 表，因此一次发布的结果是绝对值而不是累计值。 */
+    assert_int_equal(ctx.main.reply_plan_overflows, 41U);
     assert_int_equal(ctx.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM], 0U);
 
     iolink_dll_stats_t stats;

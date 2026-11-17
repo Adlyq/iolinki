@@ -151,7 +151,8 @@ iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* IOLINK_NULLABLE phy,
         caps |= IOLINK_CAP_REQUIRE_ISR_TX;
     }
 
-    /* 本库实现了全部四个访问锁；实例可以后续清除某一位。 */
+    /* 本库实现了全部四个访问锁，掩码固定为全部四位：访问锁没有
+     * 实例级裁剪入口，主站写入未实现的锁位会被拒绝。 */
     caps |= IOLINK_CAP_LOCKS_ALL;
 
     /* vtable 探测：按构建档位选择要观察的成员。这是全库唯一允许

@@ -278,7 +278,7 @@ typedef struct
     uint32_t isr_frames_consumed;  /**< 由 ISR 完全处理、不再进入邮箱的帧 */
     uint32_t isr_frames_handoff;   /**< 成功投递邮箱交给主泵的帧 */
     uint32_t t_pd_discards;        /**< 在 t_PD 保护窗口内丢弃的邮箱帧 */
-    uint32_t reply_plan_overflows; /**< 因计划槽位耗尽而未发布的计划条目 */
+    uint32_t reply_plan_overflows; /**< 当前计划表中因槽位耗尽而未发布的条目数 */
 } iolink_dll_stats_t;
 
 /**
@@ -362,8 +362,11 @@ bool iolink_dll_timer_armed(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
  * @param isr ISR 独占状态（通常为 @c iolink_dll_ctx_t::isr）
  * @param phy 要绑定的 PHY 实现
  * @note 两个对象都会被清零，包括时钟。直接使用 DLL 的用户必须在此调用之后
- *       设置 @c ctx->shared.clock；
- *       iolink_device_init() 会从 `iolink_device_app_t::time_us` 绑定它。
+ *       设置 @c ctx->shared.clock；此外还必须在数据 ISR 静止时设置
+ *       `shared.m_seq_type` / `shared.od_width` / 能力位，并调用一次
+ *       `iolink_dll_publish_reply_plans()`：应答计划只在初始化时编译，本函数
+ *       发布的是默认 `{Type-0, od=0}` 表，之后 `iolink_dll_process()` 不会再
+ *       重发布。iolink_device_init() 会在绑定完整配置后自行完成这一步。
  */
 void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink_phy_api_t* phy);
 
@@ -427,7 +430,9 @@ uint8_t iolink_dll_expected_req_len(const iolink_dll_main_t* ctx, uint8_t mc);
  *
  * 无待处理数据时调用是安全的；当 INT 线未被
  * 置为有效时立即返回。对没有 rx_octet() 的 PHY 为空操作。计划表尚未
- * 完整发布（初始化窗口）时同样直接返回，不改任何状态、不计数。
+ * 完整发布（初始化窗口）时同样直接返回，不改任何状态、不计数；此时也
+ * **不排空 PHY 的 RX**，因此窗口内到达的帧及其硬件状态由端口按自己的
+ * 策略处理（不保证缓存）。
  * @param ctx DLL 上下文
  */
 void iolink_dll_process_isr(iolink_dll_main_t* ctx);
@@ -463,10 +468,14 @@ uint8_t iolink_dll_take_service_window(iolink_dll_main_t* ctx);
 /**
  * @brief 为可变类型（1_V、2_V）设置当前 PD 长度
  *
+ * 只允许在进入 OPERATE **之前**调用：DPP1 的 0x05/0x06 是只读字段，
+ * OPERATE 期间 PD 长度锁定。进入 OPERATE 后调用返回 -3（状态冲突），
+ * 不会修改任何值。
+ *
  * @param ctx DLL 上下文
  * @param pd_in_len 新的 PD_In 长度
  * @param pd_out_len 新的 PD_Out 长度
- * @return int 成功返回 0，范围错误返回负值
+ * @return int 成功返回 0；参数/范围错误返回 -1；OPERATE 期间调用返回 -3
  */
 int iolink_dll_set_pd_length(iolink_dll_main_t* ctx, uint8_t pd_in_len, uint8_t pd_out_len);
 

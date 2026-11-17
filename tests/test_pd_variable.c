@@ -128,7 +128,7 @@ static void test_pd_runtime_negotiation(void** state)
 
     assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 8);
 
-    /* 缩短运行时 PD 长度；该变更可通过 getter 观察到。 */
+    /* 进入 OPERATE 之前可以缩短 PD 长度；该变更可通过 getter 观察到。 */
     assert_int_equal(iolink_device_set_pd_length(&dev.ctx, 4, 4), 0);
     assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 4);
     assert_int_equal(iolink_device_get_pd_out_len(&dev.ctx), 4);
@@ -136,6 +136,33 @@ static void test_pd_runtime_negotiation(void** state)
     /* 超过配置的最大值会被拒绝。 */
     assert_int_equal(iolink_device_set_pd_length(&dev.ctx, 16, 16), -1);
     assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 4); /* 未改变 */
+}
+
+/* OPERATE 期间 PD 长度锁定：DPP1 0x05/0x06 是只读通告，改宽必须显式失败，
+ * 而不是让主站按旧通告解读新布局（V1.1.5 §10.6.2 / A.14）。 */
+static void test_pd_length_locked_in_operate(void** state)
+{
+    (void) state;
+    iolink_stack_config_t config = {
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 8, .pd_out_len = 8};
+    iolink_test_device_t dev;
+
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
+    move_to_operate_ctx(&dev.ctx);
+
+    assert_int_equal(iolink_device_set_pd_length(&dev.ctx, 4, 4), -3);
+    assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 8);
+    assert_int_equal(iolink_device_get_pd_out_len(&dev.ctx), 8);
+
+    const uint8_t short_pd[4] = {0};
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, short_pd, sizeof(short_pd), true), -3);
+    assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 8);
+
+    const uint8_t full_pd[8] = {0};
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, full_pd, sizeof(full_pd), true), 0);
+    assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 8);
 }
 
 static void test_pd_fixed_not_negotiable(void** state)
@@ -333,7 +360,7 @@ static void test_pd_input_update_refreshes_dpp1(void** state)
     assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x02U), 0x30U);
     test_dll_shared(&dev.ctx)->in_isr = 0U;
 
-    /* DPP1 0x06（PDOut）同样跟随运行期宽度变化：8 -> 2 字节 = 0x10。 */
+    /* DPP1 0x06（PDOut）同样跟随启动阶段的宽度变化：8 -> 2 字节 = 0x10。 */
     assert_int_equal(iolink_device_set_pd_length(&dev.ctx, 1, 2), 0);
     test_dll_shared(&dev.ctx)->in_isr = 1U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(isdu, 0x06U), 0x10U);
@@ -346,6 +373,7 @@ int main(void)
         cmocka_unit_test(test_pd_variable_lengths),
         cmocka_unit_test(test_pd_invalid_flag),
         cmocka_unit_test(test_pd_runtime_negotiation),
+        cmocka_unit_test(test_pd_length_locked_in_operate),
         cmocka_unit_test(test_pd_fixed_not_negotiable),
         cmocka_unit_test(test_variable_pd_roundtrip_at_min_bounds),
         cmocka_unit_test(test_variable_pd_roundtrip_asymmetric_bounds),

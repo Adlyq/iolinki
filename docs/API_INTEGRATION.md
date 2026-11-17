@@ -289,8 +289,8 @@ PHY `init` 失败也归到 `IOLINK_DEVICE_INIT_ERR_PHY`；驱动自己的错误�
 
 `IOLINK_M_SEQ_TYPE_1_1` 属于旧版类型，初始化会以
 `IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE` 拒绝。
-`IOLINK_M_SEQ_TYPE_2_V` 是唯一可以通过 `iolink_device_set_pd_length()` 在运行时
-修改 PD 长度的类型。
+`IOLINK_M_SEQ_TYPE_2_V` 是唯一可以在进入 OPERATE **之前**修改 PD 长度的类型；
+进入 OPERATE 后 DPP1 0x05/0x06 已通告的宽度即锁定。
 
 ## 4. 设备公开 API
 
@@ -320,7 +320,7 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 排查主泵饥饿时读 `iolink_dll_get_stats()`：`isr_plan_misses`（合法帧计划未命中而被丢弃）、
 `isr_mailbox_drops`（邮箱满）、`isr_od_overruns`（已收齐请求被新 START 覆盖）、
 `t_pd_discards`（t_PD 窗口内丢弃的邮箱帧）、`reply_plan_overflows`（计划槽位耗尽）。
-`isr_plan_misses` 持续增长说明计划表缺少某种合法帧形状（或计划表已失效）；`isr_od_overruns`
+`isr_plan_misses` 持续增长说明计划表缺少某种合法帧形状；`isr_od_overruns`
 持续增长说明主泵长时间未接管已收齐的请求。`isr_frames_consumed`（由 ISR 完全处理、不再进入邮箱的帧，含按规范有意不应答的转换/复位帧）
 与 `isr_frames_handoff`（成功交给主泵的帧）给出两类终局的数量，可用来核对"ISR 接管 / 交给主泵"
 的比例；被丢弃的帧见上列的丢弃计数（坏 ISDU 写计入 `isr_eager_rejects`）。
@@ -344,13 +344,17 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx,
 
 `pd_input_update()` 发布设备到主站的数据。`valid` 决定 CKS 中的 PD-invalid 位。
 对于 `TYPE_0` 以外的固定 M-sequence 类型，长度必须等于配置的最大值；`TYPE_2_V`
-接受不超过配置最大值的任意长度；`TYPE_0` 不携带 PD，但允许调用该函数。参数非法或
+在进入 OPERATE **之前**接受不超过配置最大值的长度，进入 OPERATE 后长度锁定，
+只接受与已通告长度（`iolink_device_get_pd_in_len()`）一致的输入，否则返回 -3。
+`TYPE_0` 不携带 PD，但允许调用该函数。参数非法或
 所有 PD-in 缓冲区都被 ISR 占用时返回负值。
 
 > **规范的宽度约束（V1.1.5 §10.6.2 / A.14）**：`TYPE_2_V` 的 n/k 是设备配置属性，
 > 由 DPP1 0x05/0x06 在启动阶段通告。设备只允许在**启动阶段**（例如 DeviceID 兼容
 > 切换）改变通信参数；**OPERATE 期间改变 PD 宽度不符合规范**（主站按 DPP1/IODD
-> 固定周期布局）。需要改变宽度时，应先让通信回到启动阶段或重启端口。
+> 固定周期布局）。库据此把 OPERATE 当作锁定点：`set_pd_length()` 与
+> `pd_input_update()` 在 OPERATE 期间改变宽度都返回 -3。需要改变宽度时，应先让
+> 通信回到启动阶段或重启端口。
 
 两条 PD-in 路径在同一构建内共存：`on_pd_input` 非 NULL 时初始化选择回调路径并置位
 `IOLINK_CAP_PD_IN_CALLBACK`，此后 `pd_input_update()` 返回
@@ -360,7 +364,8 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx,
 `pd_output_read()` 最多复制 `len` 字节，并返回实际复制的字节数；参数非法时返回负值。
 `pd_out` 由同一主上下文中的帧分发写入，因此该函数直接复制，不取锁，也不进入平台临界区。
 
-`set_pd_length()` 对非法参数返回 -1，对 `TYPE_2_V` 以外的任何 M-sequence 类型返回 -2。
+`set_pd_length()` 对非法参数返回 -1，对 `TYPE_2_V` 以外的任何 M-sequence 类型返回
+-2，在 OPERATE 期间调用返回 -3（长度锁定，不修改任何值）。
 
 ### 4.3 应用回调
 
@@ -426,7 +431,8 @@ ISR 粒度、并发/统计档位、PD-in 缓冲数）。实例能力在 `iolink_
 `iolink_caps_resolve()` 一次性解析，因此运行期不需要再逐项判断 `phy->xxx != NULL`。
 能力位**只在初始化时定义**：没有运行期覆盖接口，需要不同开关时在
 `iolink_stack_config_t` 的 `compat_flags` / `flags` 里给出并重新初始化——应答计划表
-以能力位为输入，初始化后不再重编译。
+以能力位为输入，初始化后不再重编译。四个 DeviceAccessLocks 位是例外：本库实现了
+全部四个，`isdu_locks_implemented()` 恒为全部四位，没有配置项可以裁剪。
 
 应用需要做什么：按端口实际能力设置 `stack.flags` / `stack.compat_flags`，而不是
 依赖已降级为兼容宏的编译期开关；如果端口要求“所有应答由 ISR 发送”，确保 PHY 提供

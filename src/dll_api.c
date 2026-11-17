@@ -122,12 +122,17 @@ int iolink_dll_set_pd_length(iolink_dll_main_t* ctx, uint8_t pd_in_len, uint8_t 
     if ((ctx == NULL) || (pd_in_len > IOLINK_PD_IN_MAX_SIZE) ||
         (pd_out_len > IOLINK_PD_OUT_MAX_SIZE))
         return -1;
-    /* 数据 ISR 读取 pd_out_len_current 来成帧请求；
-     * 原子发布 PD-in/PD-out 对，使其无法观察到半更新。 */
-    IOLINK_CRITICAL_ENTER();
+    if (ctx->shared.state == IOLINK_DLL_STATE_OPERATE) {
+        /* DPP1 0x05/0x06 是只读字段：PD 长度在进入 OPERATE 前确定，
+         * OPERATE 期间锁定。运行期修改会让主站按旧通告解读新布局，
+         * 因此显式失败而不是悄悄改变应答长度。 */
+        return -3;
+    }
+    /* 数据 ISR 只读 `shared.pd_out_len_current`（单个自然对齐字节，写入
+     * 自身原子），`pd_in_len_current` 的读者全在主上下文；两者都不存在
+     * "成对读取"的 ISR，因此不需要临界区。 */
     ctx->pd_in_len_current = pd_in_len;
     ctx->shared.pd_out_len_current = pd_out_len;
-    IOLINK_CRITICAL_EXIT();
     /* DPP1 0x05/0x06（以及由它们推导的 MinCycleTime）是页读应答的输入。 */
     iolink_isdu_dp_page1_invalidate(&ctx->shared.isdu);
     return 0;

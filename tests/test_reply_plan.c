@@ -1035,7 +1035,9 @@ static void feed_type0_page_read(void)
 }
 
 /* 计划表是能力位的纯函数：能力位在初始化时定义，发布一次即固化。
- * 本用例钉住"改能力位 + 重发布 = 表随能力位变化"这条构建规则。 */
+ * 本用例钉住"改能力位 + 重发布 = 表随能力位变化"这条构建规则。
+ * 第一步只在构建档位默认打开 `IOLINK_CAP_COMPAT_T0_READ` 时才改变状态；
+ * 真正的证明是第二步——同一张表按新能力位重建后行为随之改变。 */
 static int test_publish_reflects_capability_bits(void)
 {
     init_operate();
@@ -1058,6 +1060,54 @@ static int test_publish_reflects_capability_bits(void)
     drain_tx();
     if (tx_observed_len() != 2U) {
         return 3; /* 页字节 + CKS */
+    }
+    return 0;
+}
+
+/* 直接使用 DLL：iolink_dll_init() 自身必须发布默认表，数据 ISR 无需再被
+ * 显式 publish 一次即可命中（设备层会在这之后按完整配置重发布）。 */
+static int test_init_publishes_default_plan(void)
+{
+    (void) memset(&s_dll, 0, sizeof(s_dll));
+    iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
+    s_dll.main.shared.clock.time_us = plan_time_us;
+    s_dll.main.pd_valid = true;
+    s_now_us = 1000000U;
+    tx_reset();
+    TEST_TX_IDLE();
+    if (iolink_atomic_load(&s_dll.main.shared.reply_plans_ready) == 0U) {
+        return 1; /* init 必须发布一次 */
+    }
+    if (s_dll.main.shared.state != IOLINK_DLL_STATE_STARTUP) {
+        return 2;
+    }
+
+    uint8_t frame[2];
+    make_frame((uint8_t) (IOLINK_MC_CHANNEL_PROCESS | IOLINK_MC_RW_MASK), IOLINK_MSEQ_TYPE_0, frame,
+               sizeof(frame));
+    feed(frame, sizeof(frame), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if (tx_observed_len() != 2U) {
+        return 3; /* 默认 Type-0 表：OD + CKS */
+    }
+    return 0;
+}
+
+/* iolink_dll_process() 不再重发布：运行期改能力位不会悄悄换掉 ISR 的表。 */
+static int test_process_does_not_republish(void)
+{
+    init_operate();
+    s_dll.main.shared.caps &= (iolink_caps_t) ~IOLINK_CAP_COMPAT_T0_READ;
+    iolink_dll_publish_reply_plans(&s_dll.main);
+    if (type0_page_read_action() != IOLINK_REPLY_ACT_RESET_STARTUP) {
+        return 1;
+    }
+
+    s_dll.main.shared.caps |= IOLINK_CAP_COMPAT_T0_READ;
+    iolink_dll_process(&s_dll.main);
+    if (type0_page_read_action() != IOLINK_REPLY_ACT_RESET_STARTUP) {
+        return 2; /* 主泵不重编译：表保持发布时的能力位语义 */
     }
     return 0;
 }
@@ -1117,6 +1167,8 @@ IOLINK_TEST_RC(test_isdu_write_invalidates_read_view)
 IOLINK_TEST_RC(test_startup_probe_plan)
 IOLINK_TEST_RC(test_type0_idle_read_resets_transport)
 IOLINK_TEST_RC(test_publish_reflects_capability_bits)
+IOLINK_TEST_RC(test_init_publishes_default_plan)
+IOLINK_TEST_RC(test_process_does_not_republish)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 IOLINK_TEST_RC(test_tx_without_done_hook)
 #endif
@@ -1154,6 +1206,8 @@ int main(void)
         cmocka_unit_test(iolink_case_test_startup_probe_plan),
         cmocka_unit_test(iolink_case_test_type0_idle_read_resets_transport),
         cmocka_unit_test(iolink_case_test_publish_reflects_capability_bits),
+        cmocka_unit_test(iolink_case_test_init_publishes_default_plan),
+        cmocka_unit_test(iolink_case_test_process_does_not_republish),
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
         cmocka_unit_test(iolink_case_test_tx_without_done_hook),
 #endif

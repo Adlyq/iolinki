@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Removed (reply plans no longer carry a timing field)
+### Removed (reply plans carry no timing field and are compiled once)
 - `iolink_reply_plan_t::deadline_us` is gone. Nothing read it at run time: the
   ISR arms t_A from `10 * dll_get_t_bit_us()` when it starts a reply
   (`dll_sm.c`), and the PHY response timer is the authority. The field was
@@ -15,34 +15,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   WCET" comment described a use that did not exist. On a 32-bit target the plan
   entry drops from 20 to 16 bytes (alignment no longer absorbs the field), so the
   48-slot table loses 192 B of RAM; on a 64-bit host nothing changes.
-- Baudrate leaves the reply-plan publication key for the same reason: it only
-  ever reached plan content through `deadline_us`. Plan content is a pure
-  function of `{M-sequence type, OD width, capability bits}`, all three fixed at
-  init, so a COM change no longer rebuilds an identical table.
+  **MAJOR**: `include/iolinki/dll.h` loses a public struct field.
+- Baudrate no longer affects plan content or publication. It used to enter plan
+  content only through `deadline_us`; the table is now compiled once at init and
+  never rebuilt, so a COM change no longer rewrites an identical table.
 
 ### Removed (capabilities and the reply plan are fixed at init)
 - `iolink_device_set_capabilities()` is gone. Capability bits are inputs to the
   reply-plan table, and the table is no longer rebuilt at run time; a runtime
-  override could therefore leave the ISR executing plans that disagree with
+  override could therefore leave the ISR executing plans that disagreed with
   `iolink_device_capabilities()`. Capabilities come from `iolink_caps_resolve()`
   once, inside init; request different switches through `iolink_stack_config_t`
   (`compat_flags` / `flags`) and re-initialise. **MAJOR**:
   `include/iolinki/device.h` loses a public function.
+- Behaviour change that came with it: the four DeviceAccessLocks bits can no
+  longer be narrowed per instance. `iolink_caps_resolve()` always sets
+  `IOLINK_CAP_LOCKS_ALL`, so `isdu_locks_implemented()` (the 0x000C writable
+  mask) is always the full four bits and a master writing an implemented lock is
+  accepted. Previously an application could clear a bit through the removed
+  setter; `iolink_stack_config_t` has no locks field, and none was added because
+  the library implements all four.
 - `iolink_dll_invalidate_reply_plans()` is gone, and so is the `reply_plan_seq`
   seqlock: `reply_plans_ready` (clear before the table is written, set after)
   replaces it, `iolink_dll_process()` no longer republishes every call, and
   `dll_isr_plan_lookup()` no longer reads a sequence number before and after
   copying the hit. `iolink_dll_publish_reply_plans()` stays public for harnesses
   that configure a context after `iolink_dll_init()`, documented as requiring a
-  quiescent data ISR. The flag gates the ISR **entry** only, so a frame that has
-  not started yet is dropped during a rebuild; it does not make a rebuild safe
+  quiescent data ISR. The flag gates the ISR **entry** only: while it is clear,
+  a frame that has not started yet is not processed at all (not counted, not
+  queued, no reply), and RX is not drained; it does not make a rebuild safe
   against an ISR already inside the pump — that is what the quiescence
   precondition covers. **MAJOR**:
   `include/iolinki/dll.h` loses a public function.
+- `reply_plan_overflows` now describes the current table rather than a running
+  total: `iolink_dll_publish_reply_plans()` resets it before compiling, so the
+  two publications inside `iolink_device_init()` (default configuration first,
+  final configuration second) cannot double-count a throwaway table.
 - Cost: on cortex-m0plus `-Os`, `dll_isr_plan_lookup()` drops from 119 to 97
   instructions and `dll_isr.o` `.text` shrinks by 44 B; `isr_plan_misses` now
   means only "the current state's slice has no matching plan", not "collided
   with a republish window".
+
+### Changed (PD length is locked in OPERATE)
+- `iolink_dll_set_pd_length()` and `iolink_device_set_pd_length()` return -3 while
+  the DLL is in OPERATE, and `iolink_device_pd_input_update()` returns -3 there
+  when `len` differs from the announced PD-in length. DPP1 0x05/0x06 are
+  read-only fields (Table B.1), so the process-data layout is fixed before
+  OPERATE; changing it afterwards leaves the master interpreting the new layout
+  with the old announcement. Startup-phase changes (the only legal window) are
+  unchanged; a fixed-layout type still returns -2 and out-of-range arguments -1.
 
 ### Added (compile-time log level)
 - `IOLINK_LOG_COMPILE_LEVEL` (`iolinki/log.h`, default `IOLINK_LOG_COMPILE_DEBUG`)

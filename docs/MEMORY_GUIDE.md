@@ -17,9 +17,9 @@ Measured on a 64-bit host with the default buffers in
 
 | Component | Size (bytes) | Description |
 | :--- | ---: | :--- |
-| **`iolink_device_ctx_t`** | **4864** | The object the application allocates (includes everything below) |
-| `iolink_device_ctx_t` (FRAME/FRAME) | 4856 | `IOLINK_ISR_*_MODE` = FRAME; `iolink_dll_ctx_t` is 4664 |
-| `iolink_dll_ctx_t` | 4672 | DLL state, timers, reply-plan table (48×24 B, four state slices), frame mailbox; embeds ISDU, Events and DS |
+| **`iolink_device_ctx_t`** | **4856** | The object the application allocates (includes everything below) |
+| `iolink_device_ctx_t` (FRAME/FRAME) | 4848 | `IOLINK_ISR_*_MODE` = FRAME; `iolink_dll_ctx_t` is 4656 |
+| `iolink_dll_ctx_t` | 4664 | DLL state, timers, reply-plan table (48×24 B, four state slices), frame mailbox; embeds ISDU, Events and DS |
 | `iolink_isdu_ctx_t` | 1336 | Transport state, buffer pointers, the DPP1 RAM image (16 B + seqlock) and the embedded ISDU scratch (1033 B) |
 | `iolink_events_ctx_t` | 480 | Event queue plus lifecycle records |
 | `iolink_ds_ctx_t` | 352 | DS state, buffer pointers, the OD set and the embedded download stage |
@@ -79,7 +79,7 @@ To move the scratch **out of the context entirely**, build with
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 4864 | **3568** |
+| `iolink_device_ctx_t` | 4856 | **3560** |
 | `iolink_isdu_ctx_t` | 1336 | **296** |
 | `iolink_ds_ctx_t` | 352 | **96** |
 | `iolink_workspace_t` (separate allocation) | — | 1289 |
@@ -90,7 +90,7 @@ instead of carrying it inside the main context. One measured example (`IOLINK_IS
 
 | Component | Embedded | External workspace |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 3904 | **3568** |
+| `iolink_device_ctx_t` | 3896 | **3560** |
 | `iolink_workspace_t` | — | 329 |
 
 > **Lease rule (ISDU response).** There is exactly one framed-response buffer.
@@ -128,7 +128,7 @@ You can tune these values to fit your MCU.
 
 ### Total RAM
 
-The default `iolink_device_ctx_t` is **4864 bytes** (64-bit host, default
+The default `iolink_device_ctx_t` is **4856 bytes** (64-bit host, default
 buffers); buffer arrays dominate it. On a 32-bit target the same layout is
 smaller. To measure your own build instead of relying on the table:
 

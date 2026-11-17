@@ -355,6 +355,14 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     device_apply_stack_config(ctx);
     ctx->master_lost_last = ctx->dll.main.master_lost;
 
+    /* 应答计划是 {M-sequence 类型, OD 宽度, 能力位} 的纯函数。`iolink_dll_init()`
+     * 已按仅 PHY 推导的能力位、默认 M-sequence 配置发布过一次；设备层随后用
+     * 完整配置重解析了能力位与栈配置，因此在这里重编译一次，使表与最终配置
+     * 一致。位置必须在 `on_startup` 之前：应用常在该钩子里使能数据中断，而
+     * 重建要求数据 ISR 静止。此后不再重发布——能力位与 M-sequence 配置只能
+     * 在初始化时定义。 */
+    iolink_dll_publish_reply_plans(&ctx->dll.main);
+
     if (config->app->on_startup != NULL) {
         config->app->on_startup(config->app->self);
     }
@@ -364,12 +372,6 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
                     (unsigned) config->stack->m_seq_type, (unsigned) config->stack->pd_in_len,
                     (unsigned) config->stack->pd_out_len, (unsigned) ctx->dll.main.shared.od_width,
                     (unsigned) ctx->dll.main.baudrate);
-    /* 应答计划是 {M-sequence 类型, OD 宽度, 能力位} 的纯函数。`iolink_dll_init()`
-     * 已按仅 PHY 推导的能力位发布过一次；设备层随后用完整配置重解析了
-     * 能力位，因此在这里（所有绑定完成、数据 ISR 尚未启用）重编译一次，使表与
-     * 最终能力位一致。此后不再重发布：能力位与 M-sequence 配置只能在初始化时
-     * 定义。 */
-    iolink_dll_publish_reply_plans(&ctx->dll.main);
     return 0;
 }
 
@@ -611,9 +613,9 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     if (iolink_caps_has(ctx->dll.main.shared.caps, IOLINK_CAP_PD_IN_CALLBACK)) {
         return IOLINK_DEVICE_INIT_ERR_PD_INPUT;
     }
-    /* Annex A 固定类型的 PD 输入长度不可变。TYPE_2_V 可在
-     * 配置的最大值内变化；两种情况都不得悄悄改变
-     * 应答长度而偏离通告的布局。 */
+    /* Annex A 固定类型的 PD 输入长度不可变。TYPE_2_V 只能在进入
+     * OPERATE 之前改变宽度；OPERATE 期间 PD 长度锁定（DPP1 0x05/0x06
+     * 只读），两种情况下都不得悄悄改变应答长度而偏离通告的布局。 */
     if (ctx->dll.main.shared.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) {
         if (len > ctx->dll.main.pd_in_len_max) {
             return -1;
@@ -624,6 +626,12 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
         /* 固定 Annex A 类型：PD 输入宽度不可变。TYPE_0
          * 完全不带 PD，因此通用更新无害且保持宽松。 */
         return -1;
+    }
+    if ((ctx->dll.main.shared.state == IOLINK_DLL_STATE_OPERATE) &&
+        ((uint8_t) len != ctx->dll.main.shared.pd_in_len)) {
+        /* OPERATE 期间长度已锁定：只接受与已通告长度一致的输入，
+         * 不再修改 DPP1 或应答布局。 */
+        return -3;
     }
 
     /* PD 输入位于应答缓冲区中 OD 头之后；填写一个
@@ -647,8 +655,9 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     ctx->dll.main.shared.pd_in_active = inactive;
     IOLINK_CRITICAL_EXIT();
     if (len_changed) {
-        /* TYPE_2_V 允许运行期改变 PD-in 宽度：DPP1 的 0x05/0x02 必须跟着
-         * 失效重建（失效在临界区外执行，整页构建不占用关中断区间）。 */
+        /* TYPE_2_V 在进入 OPERATE 前可改变 PD-in 宽度：DPP1 的 0x05/0x02
+         * 必须跟着失效重建（失效在临界区外执行，整页构建不占用关中断区间）。
+         * OPERATE 期间长度已锁定，上面的检查保证这里不会触发。 */
         iolink_isdu_dp_page1_invalidate(&ctx->dll.main.shared.isdu);
     }
 

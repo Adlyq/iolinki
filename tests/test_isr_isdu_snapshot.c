@@ -251,7 +251,7 @@ static int test_eager_isdu_snapshot(void)
     dll.main.shared.pd_out_len_current = 2U;
     dll.main.pd_in_len_current = 0U;
     /* 计划表是 {类型, OD 宽度, 能力位} 的纯函数，只在初始化时编译；本用例
-       在 init 之后才设定配置，因此显式提交一次（ISR 尚未运行）。 */
+     * 在 init 之后才设定配置，因此显式提交一次（ISR 尚未运行）。 */
     iolink_dll_publish_reply_plans(&dll.main);
 
     dll.main.shared.isdu.state = ISDU_STATE_RESPONSE_READY;

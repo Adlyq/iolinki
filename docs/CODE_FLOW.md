@@ -250,7 +250,8 @@ flowchart TD
     L --> M["启用 DS 时：iolink_ds_init()<br/>iolink_ds_set_flag_persist(config.ds_flag_persist)<br/>iolink_ds_bind_workspace()<br/>iolink_ds_bind_sources(config.od, config.app->self) + iolink_ds_refresh()"]
     M --> O["iolink_device_set_log()<br/>设置共享 sink，各模块只保存指针"]
     O --> P["device_apply_stack_config()<br/>PD/OD 长度、t_pd、工作 COM、MinCycleTime<br/>timing_enforce 覆盖"]
-    P --> T["调用 on_startup()"]
+    P --> Q["iolink_dll_publish_reply_plans()<br/>按最终配置编译一次（要求 ISR 静止）"]
+    Q --> T["调用 on_startup()"]
 ```
 
 要点：
@@ -260,6 +261,7 @@ flowchart TD
 - 能力位只在 `iolink_caps_resolve()` 解析，且必须在绑定 PHY 之后、任何 ISR 可能运行之前。校验阶段用同一函数做一致性检查：`IOLINK_CAP_REQUIRE_ISR_TX` 缺 `request_service()`、或 `IOLINK_PHY_FEATURE_TX_BUSY` 开启但 PHY 无 `tx_busy()`，都返回 `IOLINK_DEVICE_INIT_ERR_PHY`。
 - `iolink_dll_init()` 默认 COM2；若 `stack.baudrate_set`，`device_apply_stack_config()` 会通过 `iolink_dll_set_operating_baudrate()` 再设置工作 COM。
 - `iolink_dll_init()` 结束时已发布 STARTUP 状态的应答计划，因此第一个启动探测可由 ISR 提前应答。
+- `device_apply_stack_config()` 之后、`on_startup()` 之前再发布一次：此时 `m_seq_type`/`od_width`/能力位都已最终化，应用只能在 `on_startup` 里使能数据中断（重建要求 ISR 静止）。
 - `on_startup()` 在初始化末尾显式调用一次；`iolink_dll_init()` 内部进入 STARTUP 时因为状态初值已是 0，`dll_set_state()` 不会重复触发。
 - PD-in 路径由能力位 `IOLINK_CAP_PD_IN_CALLBACK` 在运行期选择（`on_pd_input` 非 NULL 时置位），不再是编译期二选一；轮询 API 仍被声明，混用时返回错误码。
 
@@ -1008,14 +1010,14 @@ flowchart LR
 - `last_notified_state`：主上下文记录“已交付给应用的状态”，配合 `shared.state` 做电平式通知；`startup_notification_pending` 保留 ISR 触发的 STARTUP 边沿，避免快速进入 PREOPERATE 时丢失复位通知。
 
 上下文尺寸契约（默认缓冲、64 位主机，由 `tests/test_ctx_sizes.c` 断言）：
-`iolink_device_ctx_t` 4864 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4880 B），内嵌
-`iolink_dll_ctx_t` 4672/4688 B、`iolink_isdu_ctx_t` 1336 B、`iolink_events_ctx_t` 480 B、
+`iolink_device_ctx_t` 4856 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4872 B），内嵌
+`iolink_dll_ctx_t` 4664/4680 B、`iolink_isdu_ctx_t` 1336 B、`iolink_events_ctx_t` 480 B、
 `iolink_ds_ctx_t` 352 B；`iolink_workspace_t` 1289 B。
 
 并发边界：
 
 - `shared.isdu`、`shared.events`（含 `diag` 条件缓存）、`ds`、`timers` 的主要状态由主循环修改；`reply_plan` 只在初始化时写入后即只读；应用参数变量、`on_change` 与 `ds_flag_persist` 也只在主上下文被访问。
-- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（事件队列、诊断条件表、PD-in 索引发布、`set_pd_length`、计数器清零、日志 sink），以及仅在直发回退（PHY 无 `request_service()` 且非 `IOLINK_CAP_REQUIRE_ISR_TX`）里驱动 PHY 的那一段；状态迁移不再需要临界区。
+- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（事件队列、诊断条件表、PD-in 索引发布、计数器清零、日志 sink），以及仅在直发回退（PHY 无 `request_service()` 且非 `IOLINK_CAP_REQUIRE_ISR_TX`）里驱动 PHY 的那一段；状态迁移与 PD 长度设置不再需要临界区。
 - 库不取线程锁：API 只有一个主上下文调用者；共享标量由平台临界区保护，数据交接无锁。
 - 平台默认临界区是 weak 空实现（`src/platform.c`）；`iolink_device_init()` 通过
   `iolink_platform_critical_sections_ready()` 探测并返回
@@ -1095,7 +1097,6 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `dll_send()`（`dll_frame.c`） | `isr_tx_payload` 暂存（≤`IOLINK_M_SEQ_MAX_LEN`） | 主→ISR 应答移交；暂存本身无锁（主上下文单写者 + 发布字 `isr_tx_pending`），只有直发回退（PHY 无 `request_service()`，非 `IOLINK_CAP_REQUIRE_ISR_TX`）在临界区内驱动 PHY |
 | `dll_isdu_sync_snapshot()`（`dll_reply.c`） | 清除 `isr_isdu_invalidated` | 与 ISR 置位握手分离，避免清掉尚未入环的失效请求 |
 | `dll_process_body()`（`dll.c`，TX FRAME） | 轮询 `tx_busy` 并释放 `pd_in_captured` | 防止 ISR 在轮询与释放之间捕获新缓冲 |
-| `iolink_dll_set_pd_length()`（`dll_api.c`） | PD-in/PD-out 长度对 | 2 字节 RMW |
 | `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零两个上下文共享的计数器 | 与 ISR 自增分开 |
 | `diag.c`（4 处） | 来源标记、ISR 脉冲消费、DeviceStatus 快照、DDS 快照 | 条件表内部不变式；ISR 只写 `isr_pulse[]` |
 | `device.c`（3 处） | `set_log` sink 更新、`on_pd_input` 发布、轮询发布，交换 `pd_in_active`/`pd_in_len`/`pd_valid` | 索引/长度标量（PD 拷贝在锁外；PD-out 读取不取锁） |

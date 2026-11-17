@@ -23,7 +23,6 @@
 #include "iolinki/capability.h"
 #include "iolinki/device.h"
 #include "iolinki/dll.h"
-#include "dll_access.h"
 #include "test_helpers.h"
 
 static void test_build_profile_matches_macros(void** state)

@@ -113,7 +113,7 @@ cmake --build build/isr_latency --parallel
 | `type12_pd_read_tail` | `SRC_TEMPLATE` + `PD_TAIL` | OD 头 + 32B PD-in 长应答 |
 | `type1_page_read_od32` | `SRC_PAGE` + `PD_TAIL` | OD 32 字节页读（32 次 DPP1 映像索引） |
 | `isdu_write_segment` | `iolink_isdu_od_write` | 写段位置去重累计 |
-| `plan_miss` | 未命中路径 | 计划表已失效时的合法帧：丢弃 + 计 `isr_plan_misses`，不入邮箱 |
+| `plan_miss` | 未命中路径 | 没有任何计划切片的合法帧（各切片长度清零）：丢弃 + 计 `isr_plan_misses`，不入邮箱 |
 | `invalid_frame` | 校验失败路径 | 坏 CKS，无应答 |
 
 场景健全性（应答长度、`isr_plan_misses`、首字节）在测量前校验一次，不一致

@@ -282,6 +282,20 @@ static inline void iolink_atomic_store(volatile IOLINK_ATOMIC_UINT_T* word,
 #endif
 
 /**
+ * @brief 禁止内联（用于必须只保留一份副本的内部函数）。
+ *
+ * ARM Compiler 5 用 `__declspec(noinline)`，GCC/Clang 用属性；两者都
+ * 已在本头文件的其它编译器差异里照顾到。
+ */
+#if defined(__CC_ARM)
+#define IOLINK_NOINLINE __declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+#define IOLINK_NOINLINE __attribute__((noinline))
+#else
+#define IOLINK_NOINLINE
+#endif
+
+/**
  * @brief 同样适用于 C99 模式的编译期断言。
  *
  * C99 下 `-Wpedantic` 会拒绝 C11 的 `_Static_assert`，而交付

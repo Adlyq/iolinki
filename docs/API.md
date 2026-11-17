@@ -220,6 +220,8 @@ bool iolink_caps_built(const iolink_build_caps_t* caps, uint32_t mask);
 `SYSTEM_COMMAND`、`ISR_LOG`、`ISR_TX_ONLY`）。`iolink_caps_t` 是绑定 PHY 后由 `iolink_caps_resolve()` 一次性解析的实例掩码，
 **只在初始化时定义**，运行期通过 `iolink_device_capabilities()` 读取；没有覆盖入口，
 需要不同开关时在 `iolink_stack_config_t` 里给（`compat_flags` / `flags`）并重新初始化。
+四个 DeviceAccessLocks 位不在 `iolink_stack_config_t` 里：本库实现了全部四个，
+掩码固定为全部四位，不能按实例裁剪。
 
 实例位：`IOLINK_CAP_RX`、`_TX`、`_WAKEUP`、`_SIO_CQ`、`_TX_BUSY`、
 `_REQUEST_SERVICE`、`_PHY_FAULTS`（由 PHY vtable 探测）、`_PD_IN_CALLBACK`、

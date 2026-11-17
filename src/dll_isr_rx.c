@@ -176,8 +176,7 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
          * IOLINK_LOG_ENABLE_ISR 编译开关消失，默认零开销。 */
         if (ctx->shared.state == IOLINK_DLL_STATE_OPERATE) {
             IOLINK_LOG_ISR_WARN(&ctx->shared.log,
-                                "no reply plan in OPERATE (withdrawn or unknown shape): "
-                                "mc=0x%02X len=%u",
+                                "no reply plan in OPERATE (unknown shape): mc=0x%02X len=%u",
                                 (unsigned) frame[0], (unsigned) len);
         }
         else {

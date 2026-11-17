@@ -264,15 +264,16 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
  * `IOLINK_DEVICE_INIT_ERR_PD_INPUT`，而不是静默覆盖回调的输出。
  *
  * @note 宽度只应在**启动/重新参数化阶段**改变（V1.1.5 §10.6.2 允许启动期
- * 切换通信参数；OPERATE 期间改变 PD 宽度不符合规范）。允许这种阶段变化时
- * 必须从主泵上下文调用：宽度变化会重建 DPP1 映像；固定布局类型
- * （TYPE_1_x/TYPE_2_x）的宽度变更会被拒绝，TYPE_0 不携带 PD。
+ * 切换通信参数；OPERATE 期间改变 PD 宽度不符合规范）。进入 OPERATE 后长度
+ * 锁定：@p len 与已通告的 PD-in 长度不一致时返回 -3，DPP1 与应答布局保持
+ * 不变。允许这种阶段变化时必须从主泵上下文调用：宽度变化会重建 DPP1 映像；
+ * 固定布局类型（TYPE_1_x/TYPE_2_x）的宽度变更会被拒绝，TYPE_0 不携带 PD。
  *
  * @param ctx    设备上下文。
  * @param data   要发布的输入过程数据字节。
  * @param len    @p data 的长度（字节）。
  * @param valid  过程数据当前是否有效。
- * @return 成功时为 0，出错时为负值。
+ * @return 成功时为 0；参数/长度错误返回负值；OPERATE 期间长度不符返回 -3。
  */
 int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data, size_t len,
                                   bool valid);
@@ -392,10 +393,15 @@ uint8_t iolink_device_get_pd_out_len(const iolink_device_ctx_t* ctx);
 
 /**
  * @brief 设置输入和输出过程数据长度。
+ *
+ * 只允许在进入 OPERATE **之前**调用：DPP1 的 0x05/0x06 是只读字段，
+ * OPERATE 期间 PD 长度锁定。
+ *
  * @param ctx         设备上下文。
  * @param pd_in_len   输入过程数据长度（字节）。
  * @param pd_out_len  输出过程数据长度（字节）。
- * @return 成功时为 0，出错时为负值。
+ * @return 成功时为 0；参数/范围错误返回 -1；固定布局类型返回 -2；
+ *         OPERATE 期间调用返回 -3。
  */
 int iolink_device_set_pd_length(iolink_device_ctx_t* ctx, uint8_t pd_in_len, uint8_t pd_out_len);
 

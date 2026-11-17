@@ -44,12 +44,13 @@ typedef enum
  * 这张表时（就绪标志为 0）。
  * @p state 只作记录与调试用途：匹配的可见范围由状态切片决定。
  */
-/* 只在发布时调用（每次键变化一次，绝不每帧）：强制不内联，让它只保留一份
+/* 只在发布时调用（每次发布一次，绝不每帧）：强制不内联，让它只保留一份
  * 副本——内联进两个状态族的构建函数会各复制一遍，实测净多 128 B 文本。 */
-static void __attribute__((noinline)) dll_plan_push(
-    iolink_dll_main_t* ctx, uint8_t* count, uint8_t state, uint8_t match_mask, uint8_t match_value,
-    uint8_t addr_max, uint8_t req_len, uint8_t ckt_mask, uint8_t ckt_value, uint8_t source,
-    uint8_t len, uint8_t flags, uint8_t action, const uint8_t* data)
+static void IOLINK_NOINLINE dll_plan_push(iolink_dll_main_t* ctx, uint8_t* count, uint8_t state,
+                                          uint8_t match_mask, uint8_t match_value, uint8_t addr_max,
+                                          uint8_t req_len, uint8_t ckt_mask, uint8_t ckt_value,
+                                          uint8_t source, uint8_t len, uint8_t flags,
+                                          uint8_t action, const uint8_t* data)
 {
     if (count == NULL) {
         return;
@@ -231,6 +232,10 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
      * 没有运行期并发协议：先撤下"就绪"标志，整张表写完后原子置回，ISR 入口
      * 只在标志为 1 时进入传输泵。 */
     iolink_atomic_store(&ctx->shared.reply_plans_ready, 0U);
+    /* 该计数描述"当前这张表被截断了几条"，不是跨多次发布的累计值：
+     * 设备初始化会发布两次（先默认配置、后最终配置），保留累计值会把
+     * 被丢弃的那张表的截断也算进去。 */
+    ctx->reply_plan_overflows = 0U;
     uint8_t count = 0U;
     const bool type0 = (ctx->shared.m_seq_type == IOLINK_M_SEQ_TYPE_0);
 
@@ -312,7 +317,6 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
             (uint8_t) (count - ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_OPERATE]);
     }
 
-    ctx->shared.reply_plan_total = count;
     iolink_atomic_store(&ctx->shared.reply_plans_ready, 1U);
 }
 

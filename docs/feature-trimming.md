@@ -22,6 +22,8 @@ source of "why did my build not behave as configured" reports.
    initialisation**: there is no runtime override, because the reply-plan table
    is compiled from them and never rebuilt. Ask for different switches through
    `iolink_stack_config_t` (`compat_flags`, `flags`) and re-initialise.
+   The four DeviceAccessLocks bits are not configurable: the library implements
+   all four, so `isdu_locks_implemented()` is always the full mask.
    Hardware bits (RX/TX, wake-up, SIO C/Q, `request_service`) come from the
    vtable only. A capability the image was not built with is masked out
    (the bit reads 0) instead of failing init; the reachable init checks are
@@ -72,7 +74,7 @@ compile-only and the remaining cross-combinations are syntax-only probes.
 | `IOLINK_CAP_DS_LEGACY_SUB0` | `compat_defaults` | `stack.compat_flags` |
 | event timing | build profile | `stack.event_min_appear_ms` / `_repeat_ms` (0 = build default) |
 | timing enforcement | build profile | `stack.timing_enforce` (`DEFAULT` = build profile) |
-| access locks | manifest | `IOLINK_CAP_LOCK_*` |
+| access locks | manifest | fixed: all four are implemented |
 
 All of them are resolved once per instance by `iolink_caps_resolve()`; no
 compile-time switch selects a behaviour.
