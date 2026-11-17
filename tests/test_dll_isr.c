@@ -83,7 +83,12 @@ static void test_expected_req_len_operate(void** state)
        长度仍是 MC + CKT（C5/Table 47）。 */
     dll.main.shared.state = IOLINK_DLL_STATE_ESTAB_COM;
     assert_int_equal(iolink_dll_expected_req_len(&dll.main, IOLINK_MC_TRANSITION_COMMAND), 2U);
-    assert_int_equal(iolink_dll_expected_req_len(&dll.main, 0x00U), 6U);
+
+    /* STARTUP/PREOPERATE 只接受 Type-0：配置成多字节类型也一样按 MC 定长，
+       这就是 dll_req_len_for() 把“帧自报 Type-0”与“期望 Type-0”并起来的原因。 */
+    dll.main.shared.state = IOLINK_DLL_STATE_STARTUP;
+    assert_int_equal(iolink_dll_expected_req_len(&dll.main, 0x60U), 3U);
+    assert_int_equal(iolink_dll_expected_req_len(&dll.main, 0x80U), 2U);
 
     /* NULL 上下文是安全的。 */
     assert_int_equal(iolink_dll_expected_req_len(TEST_NULL(const iolink_dll_main_t*), 0x80U), 0U);

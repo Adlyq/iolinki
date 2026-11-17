@@ -361,9 +361,10 @@ flowchart TD
 
 ### 6.1 请求长度如何确定
 
-ISR 路径在第二个字节（CKT）到达后，用 `iolink_dll_expected_req_len()`（内部 `dll_compute_req_len()`）决定长度：
+ISR 路径在第二个字节（CKT）到达后，用 `dll_req_len_for(ctx, mc, ckt)` 决定长度。两个 ISR 成帧检查传帧里自报的 CKT 八位组；公共查询
+`iolink_dll_expected_req_len()` 传当前**期望**的类型位（`dll_expected_type_bits()`），回答的是“若主站按配置发送会有多长”。两者共用同一份实现：
 
-- Type-0：读 2 字节；Page/Diagnosis/ISDU 写 3 字节（Figure A.5：Type-0 写固定只带一个 OD 字节，与 OPERATE 的 OD 宽度无关）；
+- Type-0（帧自报，或设备此刻只接受 Type-0）：读 2 字节；Page/Diagnosis/ISDU 写 3 字节（Figure A.5：Type-0 写固定只带一个 OD 字节，与 OPERATE 的 OD 宽度无关）；
 - Type-1/2：`2 + pd_out_len_current + (写 ? od_width : 0)`；
 - ESTAB_COM 中的 transition command（`MC = 0x0F`）：2 字节。
 
@@ -1039,7 +1040,7 @@ flowchart LR
 | `iolink_diag_service()`、`iolink_diag_set_level()`、`iolink_diag_device_status()`、`iolink_diag_dds_snapshot()` | 主上下文 | 条件表与派生视图只在主上下文读写 |
 | `dll_send()` | 主上下文 | 主泵暂存应答，ISR 负责发送 |
 
-ISR 还允许调用以下只读/时序 helper：`iolink_dll_expected_req_len()`、`iolink_checksum6_from_acc()`、`iolink_isdu_direct_param_page1_octet()`、已绑定的时间源（`iolink_device_app_t::time_us` 回调）、`iolink_events_flag()`、`iolink_events_memory_read()`、`iolink_ring_claim/publish`。
+ISR 还允许调用以下只读/时序 helper：`dll_req_len_for()`（组帧长度，纯只读）、`iolink_checksum6_from_acc()`、`iolink_isdu_direct_param_page1_octet()`、已绑定的时间源（`iolink_device_app_t::time_us` 回调）、`iolink_events_flag()`、`iolink_events_memory_read()`、`iolink_ring_claim/publish`。
 
 禁止在 ISR 分区调用：`iolink_isdu_process()`、事件写路径（`iolink_event_trigger()`、`iolink_events_process()`、`iolink_event_clear()`）、诊断服务/派生（`iolink_diag_service()` 等）、`iolink_dll_flush_state_callbacks()`、应用回调（`state_cb`、`od.read/write` 等）。
 

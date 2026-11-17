@@ -235,24 +235,6 @@ void iolink_dll_set_t_ren_limit_us(iolink_dll_main_t* ctx, uint32_t limit_us)
     ctx->t_ren_override = (limit_us != 0U);
 }
 
-uint8_t dll_req_len_for(const iolink_dll_main_t* ctx, uint8_t mc, uint8_t ckt)
-{
-    bool type0 = dll_ckt_is_type0(ckt);
-    if (!type0) {
-        /* 设备此刻只接受 Type-0（STARTUP/PREOPERATE）时，长度同样由 MC 决定，
-           与帧自报的类型无关。 */
-        type0 = (dll_expected_type_bits(ctx) == IOLINK_MSEQ_TYPE_0);
-    }
-    if (type0) {
-        return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + (dll_mc_is_type0_od_write(mc) ? 1U : 0U));
-    }
-    if ((ctx->shared.state == IOLINK_DLL_STATE_ESTAB_COM) && (mc == IOLINK_MC_TRANSITION_COMMAND)) {
-        return IOLINK_M_SEQ_HEADER_LEN;
-    }
-    const uint8_t od_req = ((mc & IOLINK_MC_RW_MASK) == 0U) ? ctx->shared.od_width : 0U;
-    return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + ctx->shared.pd_out_len_current + od_req);
-}
-
 uint8_t iolink_dll_expected_req_len(const iolink_dll_main_t* ctx, uint8_t mc)
 {
     if (ctx == NULL) {

@@ -120,8 +120,7 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
     if (!valid) {
         /* 与历史即时路径统计一致：非 Type-0 形状的坏帧计为拒绝，
          * 错误/回退处理仍由主泵负责。 */
-        if (dll_phy_has_tx(&ctx->shared) &&
-            ((frame[1] & IOLINK_MSEQ_TYPE_MASK) != IOLINK_MSEQ_TYPE_0)) {
+        if (dll_phy_has_tx(&ctx->shared) && !dll_ckt_is_type0(frame[1])) {
             ctx->shared.isr->isr_eager_rejects++;
         }
         /* 非法帧不解释内容、不计计划未命中：交给主泵做错误/状态处理。 */
@@ -210,7 +209,7 @@ static bool dll_isr_frame_len_ok(iolink_dll_main_t* ctx, const uint8_t* frame, u
        多字节类型按配置推导。两条 RX 路径共用 dll_req_len_for()，因此
        OPERATE 中的 Type-0 页读（复位请求）不会被按 PD 长度衡量。 */
     const uint8_t expected_len = dll_req_len_for(ctx, frame[0], frame[1]);
-    if ((expected_len == 0U) || (len != expected_len)) {
+    if (len != expected_len) {
         IOLINK_LOG_ISR_DEBUG(&ctx->shared.log, "frame length reject: len=%u expected=%u",
                              (unsigned) len, (unsigned) expected_len);
         IOLINK_STAT_ISR(ctx, framing_errors)++;

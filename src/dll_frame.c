@@ -91,12 +91,34 @@ uint8_t dll_expected_type_bits(const iolink_dll_main_t* ctx)
 }
 
 /**
- * @brief 返回给定 M-sequence 类型位对应的期望请求长度。
+ * @brief 请求 M-sequence 的期望总长度（含 MC/CKT 与 CKS 位）。
  *
- * 请求为 MC + CKT + PD-out 宽度 + OD 宽度；校验和承载在
- * CKT 字节中（A.1.6），因此没有尾随的校验和字节。Type-0
- * 报文不携带 PD，只有一个仅在写访问时写入的 OD 字节。
+ * @p ckt 说明这个请求自报的类型：两条 ISR 成帧检查传帧里的 CKT 八位组
+ * （“这个帧有多长”），公共查询 @ref iolink_dll_expected_req_len 传当前期望的
+ * 类型位（“若主站按配置发送会有多长”）。Type-0 的长度只由 MC 决定（读 2、
+ * OD 写 3）；多字节类型按配置的 PD-out / OD 宽度推导，ESTAB_COM 的转换命令
+ * 是唯一的 Type-0 交换。
+ *
+ * 纯只读，ISR 可直接调用。普通函数而非头文件内联：两次内联会在无 LTO 的
+ * 镜像里各留一份副本。
  */
+uint8_t dll_req_len_for(const iolink_dll_main_t* ctx, uint8_t mc, uint8_t ckt)
+{
+    bool type0 = dll_ckt_is_type0(ckt);
+    if (!type0) {
+        /* 设备此刻只接受 Type-0（STARTUP/PREOPERATE）时，长度同样由 MC 决定，
+           与帧自报的类型无关。 */
+        type0 = (dll_expected_type_bits(ctx) == IOLINK_MSEQ_TYPE_0);
+    }
+    if (type0) {
+        return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + (dll_mc_is_type0_od_write(mc) ? 1U : 0U));
+    }
+    if ((ctx->shared.state == IOLINK_DLL_STATE_ESTAB_COM) && (mc == IOLINK_MC_TRANSITION_COMMAND)) {
+        return IOLINK_M_SEQ_HEADER_LEN;
+    }
+    const uint8_t od_req = ((mc & IOLINK_MC_RW_MASK) == 0U) ? ctx->shared.od_width : 0U;
+    return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + ctx->shared.pd_out_len_current + od_req);
+}
 
 /**
  * @brief 通过 ISR 传送层发送设备应答。

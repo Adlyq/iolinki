@@ -74,7 +74,8 @@ static inline bool dll_ckt_is_type0(uint8_t ckt)
  * @brief MC 是否为 Type-0 的 OD 写（Figure A.5）。
  *
  * Type-0 写只携带一个 OD 八位组（参数/诊断/ISDU 通道 + 写访问），与 OPERATE
- * 配置的 OD 宽度无关。成帧长度推导与 ISDU 写暂存都按这一条判定。
+ * 配置的 OD 宽度无关。成帧长度推导按这一条判定；ISDU 写暂存先按 CKT 判形状，
+ * 只在 Type-0 帧上才取这一个 OD 八位组。
  */
 static inline bool dll_mc_is_type0_od_write(uint8_t mc)
 {
@@ -189,9 +190,8 @@ uint8_t dll_expected_type_bits(const iolink_dll_main_t* ctx);
  * OD 写 3）；多字节类型按配置的 PD-out / OD 宽度推导，ESTAB_COM 的转换命令
  * 是唯一的 Type-0 交换。
  *
- * 纯只读，ISR 可直接调用。定义在 dll_api.c：两条 RX 路径与公共查询共用这一
- * 份实现，因此它是普通函数而不是头文件内联——两次内联会在无 LTO 的镜像里
- * 各留一份副本。
+ * 纯只读，ISR 可直接调用；定义在 dll_frame.c（与 dll_expected_type_bits 同处），
+ * 两条 RX 路径与公共查询共用这一份实现。
  */
 uint8_t dll_req_len_for(const iolink_dll_main_t* ctx, uint8_t mc, uint8_t ckt);
 

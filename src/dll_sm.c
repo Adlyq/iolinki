@@ -136,7 +136,7 @@ static iolink_dll_event_t dll_sm_classify(const iolink_dll_main_t* ctx)
 {
     const uint8_t mc = ctx->frame_buf[0];
     const uint8_t ckt = ctx->frame_buf[1];
-    const bool type0 = ((ckt & IOLINK_MSEQ_TYPE_MASK) == IOLINK_MSEQ_TYPE_0);
+    const bool type0 = dll_ckt_is_type0(ckt);
     const bool write = ((mc & IOLINK_MC_RW_MASK) == 0U);
     const uint8_t channel = (uint8_t) (mc & IOLINK_MC_COMM_CHANNEL_MASK);
 
