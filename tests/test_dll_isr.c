@@ -79,8 +79,8 @@ static void test_expected_req_len_operate(void** state)
     assert_int_equal(iolink_dll_expected_req_len(&dll2.main, 0x80U), 5U);
     assert_int_equal(iolink_dll_expected_req_len(&dll2.main, 0x00U), 6U);
 
-    /* ESTAB_COM 的转换命令是唯一的 Type-0 交换：即使配置为多字节类型，
-       长度仍是 MC + CKT（C5/Table 47）。 */
+    /* 配置为多字节时，这里唯一按 Type-0 定长的交换：即使配置为多字节类型，
+       转换命令仍是 MC + CKT（C5/Table 47）。 */
     dll.main.shared.state = IOLINK_DLL_STATE_ESTAB_COM;
     assert_int_equal(iolink_dll_expected_req_len(&dll.main, IOLINK_MC_TRANSITION_COMMAND), 2U);
     /* 非转换命令在 ESTAB_COM 仍走配置的多字节布局（2 + pd_out + 写时的 OD），
