@@ -90,18 +90,7 @@ uint8_t dll_expected_type_bits(const iolink_dll_main_t* ctx)
     return IOLINK_MSEQ_TYPE_0;
 }
 
-/**
- * @brief 请求 M-sequence 的期望总长度（含 MC/CKT 与 CKS 位）。
- *
- * @p ckt 说明这个请求自报的类型：两条 ISR 成帧检查传帧里的 CKT 八位组
- * （“这个帧有多长”），公共查询 @ref iolink_dll_expected_req_len 传当前期望的
- * 类型位（“若主站按配置发送会有多长”）。Type-0 的长度只由 MC 决定（读 2、
- * OD 写 3）；多字节类型按配置的 PD-out / OD 宽度推导，ESTAB_COM 的转换命令
- * 是唯一的 Type-0 交换。
- *
- * 纯只读，ISR 可直接调用。普通函数而非头文件内联：两次内联会在无 LTO 的
- * 镜像里各留一份副本。
- */
+/* 契约与参数含义见 dll_internal.h 的声明。 */
 uint8_t dll_req_len_for(const iolink_dll_main_t* ctx, uint8_t mc, uint8_t ckt)
 {
     bool type0 = dll_ckt_is_type0(ckt);
