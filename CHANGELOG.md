@@ -56,14 +56,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   means only "the current state's slice has no matching plan", not "collided
   with a republish window".
 
-### Changed (PD length is locked in OPERATE)
-- `iolink_dll_set_pd_length()` and `iolink_device_set_pd_length()` return -3 while
-  the DLL is in OPERATE, and `iolink_device_pd_input_update()` returns -3 there
-  when `len` differs from the announced PD-in length. DPP1 0x05/0x06 are
-  read-only fields (Table B.1), so the process-data layout is fixed before
-  OPERATE; changing it afterwards leaves the master interpreting the new layout
-  with the old announcement. Startup-phase changes (the only legal window) are
-  unchanged; a fixed-layout type still returns -2 and out-of-range arguments -1.
+### Removed (PD length is fixed at init)
+- `iolink_dll_set_pd_length()` and `iolink_device_set_pd_length()` are gone
+  (**MAJOR**). DPP1 0x05/0x06 are read-only fields (Table B.1), so the process
+  data length is a device property fixed by `iolink_stack_config_t`; there is no
+  run-time width change in any state. `iolink_device_pd_input_update()` requires
+  `len` to equal the configured PD-in length and rejects anything else with -1,
+  instead of silently changing the announced layout (and the DPP1 image).
+- The `pd_in_len_current`, `pd_in_len_max`, `pd_out_len_max` and `pd_out_len`
+  mirrors are gone. `shared.pd_in_len` and `shared.pd_out_len_current` are the
+  single init-time values, read by the ISR and by the DPP1/0x0028 paths; the
+  64-bit context sizes shrink by 8 B (BYTE 4656/4848, pinned in
+  `test_ctx_sizes`).
 
 ### Added (compile-time log level)
 - `IOLINK_LOG_COMPILE_LEVEL` (`iolinki/log.h`, default `IOLINK_LOG_COMPILE_DEBUG`)

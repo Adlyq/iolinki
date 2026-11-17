@@ -258,7 +258,6 @@ static void init_state(iolink_dll_state_t state)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 0U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_in_len_current = 0U;
     s_dll.main.pd_valid = true;
     s_dll.main.shared.state = state;
     s_now_us = 1000000U;

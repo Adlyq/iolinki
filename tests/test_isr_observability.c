@@ -282,7 +282,7 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     dll->main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     dll->main.shared.od_width = 1U;
     dll->main.shared.pd_out_len_current = 0U;
-    dll->main.pd_in_len_current = 0U;
+    dll->main.shared.pd_in_len = 0U;
     dll->main.pd_valid = true;
     /* 计划表只在初始化时编译；本文件直接驱动 ISR 且在 init 之后才配置，
      * 故显式发布一次。 */
@@ -361,7 +361,7 @@ static void init_type0_ctx(iolink_dll_ctx_t* dll)
     dll->main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     dll->main.shared.od_width = 1U;
     dll->main.shared.pd_out_len_current = 0U;
-    dll->main.pd_in_len_current = 0U;
+    dll->main.shared.pd_in_len = 0U;
     dll->main.pd_valid = true;
     dll->main.shared.isdu.state = ISDU_STATE_RESPONSE_READY;
     dll->main.shared.isdu.resp_buf[0] = 0x11U;

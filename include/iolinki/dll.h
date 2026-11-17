@@ -77,7 +77,7 @@ typedef void (*iolink_dll_state_cb_t)(void* IOLINK_OPAQUE IOLINK_NULLABLE user,
 /** 本库成帧的最大 M 序列长度（请求或应答），以字节计。 */
 #define IOLINK_M_SEQ_MAX_LEN (IOLINK_PD_OUT_MAX_SIZE + IOLINK_OD_MAX_SIZE + 2U)
 
-/* PD 应答发送缓冲区：[OD][PD-in][CKS]。按运行时 PD-in 长度
+/* PD 应答发送缓冲区：[OD][PD-in][CKS]。按配置的 PD-in 长度
  * 加上 OD 头与尾部校验和来确定尺寸。 */
 #define IOLINK_PD_REPLY_MAX (IOLINK_OD_MAX_SIZE + IOLINK_PD_IN_MAX_SIZE + 1U)
 
@@ -466,21 +466,7 @@ void iolink_dll_on_stack_tick(iolink_dll_main_t* ctx);
 uint8_t iolink_dll_take_service_window(iolink_dll_main_t* ctx);
 
 /**
- * @brief 为可变类型（1_V、2_V）设置当前 PD 长度
- *
- * 只允许在进入 OPERATE **之前**调用：DPP1 的 0x05/0x06 是只读字段，
- * OPERATE 期间 PD 长度锁定。进入 OPERATE 后调用返回 -3（状态冲突），
- * 不会修改任何值。
- *
- * @param ctx DLL 上下文
- * @param pd_in_len 新的 PD_In 长度
- * @param pd_out_len 新的 PD_Out 长度
- * @return int 成功返回 0；参数/范围错误返回 -1；OPERATE 期间调用返回 -3
- */
-int iolink_dll_set_pd_length(iolink_dll_main_t* ctx, uint8_t pd_in_len, uint8_t pd_out_len);
-
-/**
- * @brief 获取当前 PD 长度
+ * @brief 获取当前 PD 长度（初始化时由 `iolink_stack_config_t` 固定）
  *
  * @param ctx DLL 上下文
  * @param[out] pd_in_len 当前 PD_In 长度；可传 NULL 表示不需要该值

@@ -73,7 +73,7 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
 
     ctx->dll.main.shared.m_seq_type = (uint8_t) stack->m_seq_type;
     ctx->dll.main.shared.pd_in_len = stack->pd_in_len;
-    ctx->dll.main.pd_out_len = stack->pd_out_len;
+    ctx->dll.main.shared.pd_out_len_current = stack->pd_out_len;
     ctx->dll.main.min_cycle_time_app_us = (uint32_t) stack->min_cycle_time * 100U;
     ctx->dll.main.master_lost_cycles = stack->master_lost_cycles;
     ctx->dll.main.t_pd_delay_us = stack->t_pd_us;
@@ -82,11 +82,6 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
         dll_timer_arm(&ctx->dll.main, IOLINK_TIMER_T_PD,
                       dll_time_us(&ctx->dll.main) + (uint64_t) ctx->dll.main.t_pd_delay_us);
     }
-
-    ctx->dll.main.pd_in_len_current = ctx->dll.main.shared.pd_in_len;
-    ctx->dll.main.shared.pd_out_len_current = ctx->dll.main.pd_out_len;
-    ctx->dll.main.pd_in_len_max = ctx->dll.main.shared.pd_in_len;
-    ctx->dll.main.pd_out_len_max = ctx->dll.main.pd_out_len;
 
     /* 双泵传输：ISR 组帧请求，并基于共享状态组装应答，因此 DLL 需要
      * OD 宽度来确定应答布局（Table A.10 的 OPERATE 编码跟随该宽度）。
@@ -574,10 +569,9 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
         const bool valid = ctx->config->app->on_pd_input(
             ctx->config->app->self,
             &ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.od_width],
-            ctx->dll.main.pd_in_len_current);
+            ctx->dll.main.shared.pd_in_len);
 
         IOLINK_CRITICAL_ENTER();
-        ctx->dll.main.shared.pd_in_len = ctx->dll.main.pd_in_len_current;
         ctx->dll.main.pd_valid = valid;
         ctx->dll.main.shared.pd_in_active = inactive;
         IOLINK_CRITICAL_EXIT();
@@ -613,25 +607,11 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     if (iolink_caps_has(ctx->dll.main.shared.caps, IOLINK_CAP_PD_IN_CALLBACK)) {
         return IOLINK_DEVICE_INIT_ERR_PD_INPUT;
     }
-    /* Annex A 固定类型的 PD 输入长度不可变。TYPE_2_V 只能在进入
-     * OPERATE 之前改变宽度；OPERATE 期间 PD 长度锁定（DPP1 0x05/0x06
-     * 只读），两种情况下都不得悄悄改变应答长度而偏离通告的布局。 */
-    if (ctx->dll.main.shared.m_seq_type == IOLINK_M_SEQ_TYPE_2_V) {
-        if (len > ctx->dll.main.pd_in_len_max) {
-            return -1;
-        }
-    }
-    else if ((ctx->dll.main.shared.m_seq_type != IOLINK_M_SEQ_TYPE_0) &&
-             (len != ctx->dll.main.pd_in_len_max)) {
-        /* 固定 Annex A 类型：PD 输入宽度不可变。TYPE_0
-         * 完全不带 PD，因此通用更新无害且保持宽松。 */
+    /* PD 长度是初始化属性（`iolink_stack_config_t`）：DPP1 0x05/0x06 是只读
+     * 通告，任何阶段都不改变。这里只接受与配置一致的载荷长度，避免应答
+     * 布局偏离已通告的 IODD/DPP1。 */
+    if ((uint8_t) len != ctx->dll.main.shared.pd_in_len) {
         return -1;
-    }
-    if ((ctx->dll.main.shared.state == IOLINK_DLL_STATE_OPERATE) &&
-        ((uint8_t) len != ctx->dll.main.shared.pd_in_len)) {
-        /* OPERATE 期间长度已锁定：只接受与已通告长度一致的输入，
-         * 不再修改 DPP1 或应答布局。 */
-        return -3;
     }
 
     /* PD 输入位于应答缓冲区中 OD 头之后；填写一个
@@ -644,22 +624,13 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     }
     /* 在临界区之外填写空闲缓冲区：ISR 只会
      * 捕获 pd_in_active，因此既非活动也未被捕获的缓冲区
-     * 不会被它读取。只有发布（长度、有效性、索引）必须
-     * 对 ISR 是原子的。 */
-    const bool len_changed = (ctx->dll.main.pd_in_len_current != (uint8_t) len);
+     * 不会被它读取。只有发布（有效性、索引）必须对 ISR 是原子的；
+     * 长度在初始化后不再变化。 */
     (void) memcpy(&ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.od_width], data, len);
     IOLINK_CRITICAL_ENTER();
-    ctx->dll.main.shared.pd_in_len = (uint8_t) len;
-    ctx->dll.main.pd_in_len_current = (uint8_t) len;
     ctx->dll.main.pd_valid = valid;
     ctx->dll.main.shared.pd_in_active = inactive;
     IOLINK_CRITICAL_EXIT();
-    if (len_changed) {
-        /* TYPE_2_V 在进入 OPERATE 前可改变 PD-in 宽度：DPP1 的 0x05/0x02
-         * 必须跟着失效重建（失效在临界区外执行，整页构建不占用关中断区间）。
-         * OPERATE 期间长度已锁定，上面的检查保证这里不会触发。 */
-        iolink_isdu_dp_page1_invalidate(&ctx->dll.main.shared.isdu);
-    }
 
     return 0;
 }
@@ -783,19 +754,4 @@ uint8_t iolink_device_get_pd_out_len(const iolink_device_ctx_t* ctx)
     }
 
     return pd_out_len;
-}
-
-int iolink_device_set_pd_length(iolink_device_ctx_t* ctx, uint8_t pd_in_len, uint8_t pd_out_len)
-{
-    if (ctx == NULL) {
-        return -1;
-    }
-    /* 固定 Annex A 类型的 PD 布局不可变；只有 TYPE_2_V 可变。 */
-    if (ctx->dll.main.shared.m_seq_type != IOLINK_M_SEQ_TYPE_2_V) {
-        return -2;
-    }
-    if ((pd_in_len > ctx->dll.main.pd_in_len_max) || (pd_out_len > ctx->dll.main.pd_out_len_max)) {
-        return -1;
-    }
-    return iolink_dll_set_pd_length(&ctx->dll.main, pd_in_len, pd_out_len);
 }

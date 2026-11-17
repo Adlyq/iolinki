@@ -289,8 +289,8 @@ PHY `init` 失败也归到 `IOLINK_DEVICE_INIT_ERR_PHY`；驱动自己的错误�
 
 `IOLINK_M_SEQ_TYPE_1_1` 属于旧版类型，初始化会以
 `IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE` 拒绝。
-`IOLINK_M_SEQ_TYPE_2_V` 是唯一可以在进入 OPERATE **之前**修改 PD 长度的类型；
-进入 OPERATE 后 DPP1 0x05/0x06 已通告的宽度即锁定。
+`IOLINK_M_SEQ_TYPE_2_V` 是唯一允许 0…32 任意固定 PD 宽度的类型；宽度和所有
+M-sequence 类型一样在初始化时确定，运行期不可改变。
 
 ## 4. 设备公开 API
 
@@ -338,23 +338,17 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx,
                                   const uint8_t* data, size_t len, bool valid);
 int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx,
                                  uint8_t* data, size_t len);
-int iolink_device_set_pd_length(iolink_device_ctx_t* ctx,
-                                uint8_t pd_in_len, uint8_t pd_out_len);
 ```
 
 `pd_input_update()` 发布设备到主站的数据。`valid` 决定 CKS 中的 PD-invalid 位。
-对于 `TYPE_0` 以外的固定 M-sequence 类型，长度必须等于配置的最大值；`TYPE_2_V`
-在进入 OPERATE **之前**接受不超过配置最大值的长度，进入 OPERATE 后长度锁定，
-只接受与已通告长度（`iolink_device_get_pd_in_len()`）一致的输入，否则返回 -3。
-`TYPE_0` 不携带 PD，但允许调用该函数。参数非法或
-所有 PD-in 缓冲区都被 ISR 占用时返回负值。
+PD 长度是初始化属性（`iolink_stack_config_t::pd_in_len`），运行期不可改变：
+@p len 必须等于配置的 PD-in 长度，`TYPE_0` 必须为 0，否则返回 -1。
+参数非法或所有 PD-in 缓冲区都被 ISR 占用时返回负值。
 
-> **规范的宽度约束（V1.1.5 §10.6.2 / A.14）**：`TYPE_2_V` 的 n/k 是设备配置属性，
-> 由 DPP1 0x05/0x06 在启动阶段通告。设备只允许在**启动阶段**（例如 DeviceID 兼容
-> 切换）改变通信参数；**OPERATE 期间改变 PD 宽度不符合规范**（主站按 DPP1/IODD
-> 固定周期布局）。库据此把 OPERATE 当作锁定点：`set_pd_length()` 与
-> `pd_input_update()` 在 OPERATE 期间改变宽度都返回 -3。需要改变宽度时，应先让
-> 通信回到启动阶段或重启端口。
+> **规范的宽度约束（V1.1.5 Table B.1 / A.14）**：DPP1 0x05/0x06 是只读字段，
+> `TYPE_2_V` 的 n/k 也是设备配置属性，由 DPP1 在启动阶段通告。因此 PD 宽度在
+> 初始化时确定，库不提供运行期改宽接口；需要不同宽度时在 `iolink_stack_config_t`
+> 里给出并重新初始化。
 
 两条 PD-in 路径在同一构建内共存：`on_pd_input` 非 NULL 时初始化选择回调路径并置位
 `IOLINK_CAP_PD_IN_CALLBACK`，此后 `pd_input_update()` 返回
@@ -363,9 +357,6 @@ int iolink_device_set_pd_length(iolink_device_ctx_t* ctx,
 
 `pd_output_read()` 最多复制 `len` 字节，并返回实际复制的字节数；参数非法时返回负值。
 `pd_out` 由同一主上下文中的帧分发写入，因此该函数直接复制，不取锁，也不进入平台临界区。
-
-`set_pd_length()` 对非法参数返回 -1，对 `TYPE_2_V` 以外的任何 M-sequence 类型返回
--2，在 OPERATE 期间调用返回 -3（长度锁定，不修改任何值）。
 
 ### 4.3 应用回调
 

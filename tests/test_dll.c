@@ -1623,7 +1623,7 @@ static void test_min_cycle_time_from_m_sequence(void** state)
     /* PD 输入/输出各 28 字节、1 OD、COM3：最坏情况的写 M-sequence 为
      * (29*14 + 31*12 + 6) us ~= 3.40 ms -> 35（单位 0.1 ms）。 */
     dll.shared.od_width = 1U;
-    dll.pd_in_len_current = 28U;
+    dll.shared.pd_in_len = 28U;
     dll.shared.pd_out_len_current = 28U;
     dll.baudrate = IOLINK_BAUDRATE_COM3;
     assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 35U);

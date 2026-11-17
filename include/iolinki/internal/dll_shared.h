@@ -191,7 +191,7 @@ typedef struct iolink_dll_shared
                                           request_service() 而已丢弃的
                                           应答 */
 
-    uint8_t pd_out_len_current; /**< 当前运行时 PD_Out 长度 */
+    uint8_t pd_out_len_current; /**< 初始化时固定的 PD_Out 长度 */
 
     volatile uint32_t last_byte_us; /**< 最后字节时间戳的低 32 位；两个
                                          上下文都以抗回绕的无符号差值

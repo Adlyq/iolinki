@@ -34,7 +34,7 @@ static void init_dll(iolink_dll_ctx_t* dll, iolink_m_seq_type_t type, uint8_t od
     dll->main.shared.phy = &g_phy_mock;
     dll->main.shared.m_seq_type = (uint8_t) type;
     dll->main.shared.od_width = od_width;
-    dll->main.pd_in_len_current = pd_in;
+    dll->main.shared.pd_in_len = pd_in;
     dll->main.shared.pd_out_len_current = pd_out;
 }
 

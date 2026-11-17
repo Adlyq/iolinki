@@ -48,8 +48,6 @@ struct iolink_dll_main
 
     volatile uint8_t fallback_clear_request; /**< 已应用非 FALLBACK 命令：清除 T_FBD */
 
-    uint8_t pd_out_len; /**< 输出过程数据长度 */
-
     uint8_t isdu_pub_gen; /**< ISDU 应答代数（每份新应答翻转） */
 
     uint8_t isdu_pub_state; /**< 上次看到的 ISDU 状态（检测新应答边沿） */
@@ -85,13 +83,6 @@ struct iolink_dll_main
     bool t_ren_override; /**< 为 true 时使用覆盖后的 t_ren 限制 */
 
     uint32_t t_pd_delay_us; /**< 上电延时（t_pd），单位为微秒 */
-
-    /* 可变 PD 支持（用于 Type 1_V 和 2_V） */
-    uint8_t pd_in_len_current; /**< 当前运行时 PD_In 长度 */
-
-    uint8_t pd_in_len_max; /**< 允许的 PD_In 最大长度 */
-
-    uint8_t pd_out_len_max; /**< 允许的 PD_Out 最大长度 */
 
     /* SIO 模式 */
     iolink_phy_mode_t phy_mode; /**< 当前工作模式（SDCI 与 SIO） */

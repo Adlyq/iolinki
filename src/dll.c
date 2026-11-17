@@ -359,10 +359,6 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
        双字节变体（OPERATE M-sequence 代码 5）。 */
     ctx->shared.isr_isdu_last_flowctrl = 0xFFU; /* 尚未见到 START */
 
-    ctx->pd_in_len_current = ctx->shared.pd_in_len;
-    ctx->shared.pd_out_len_current = ctx->pd_out_len;
-    ctx->pd_in_len_max = ctx->shared.pd_in_len;
-    ctx->pd_out_len_max = ctx->pd_out_len;
     ctx->pd_valid = true;
     ctx->shared.pd_in_captured = 0xFFU; /* 无进行中的应答 */
 

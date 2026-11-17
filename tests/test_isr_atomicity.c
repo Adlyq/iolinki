@@ -251,8 +251,6 @@ static void reset_ctx(void)
     s_ctx.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     s_ctx.main.shared.od_width = 1U;
     s_ctx.main.shared.pd_in_len = 0U;
-    s_ctx.main.pd_out_len = 0U;
-    s_ctx.main.pd_in_len_current = 0U;
     s_ctx.main.shared.pd_out_len_current = 0U;
     s_ctx.main.pd_valid = true;
     /* 应答计划只在初始化时编译；本用例在 init 之后改了类型/宽度，因此
@@ -460,10 +458,8 @@ static void test_busy_tx_frame_keeps_frame_for_main(void** state)
     reset_ctx();
     s_ctx.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
     s_ctx.main.shared.od_width = 1U;
-    s_ctx.main.pd_out_len = 1U;
     s_ctx.main.shared.pd_out_len_current = 1U;
     s_ctx.main.shared.pd_in_len = 1U;
-    s_ctx.main.pd_in_len_current = 1U;
     /* 计划表按配置发布：改了 PD/OD 宽度后必须重发，否则请求长度
      * 与计划里的 req_len 不一致，帧会按"计划未命中"丢弃。 */
     iolink_dll_publish_reply_plans(&s_ctx.main);

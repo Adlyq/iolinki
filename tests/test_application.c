@@ -26,10 +26,12 @@ static void test_pd_input_update_flow(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
+    const iolink_stack_config_t stack = {
+        .m_seq_type = IOLINK_M_SEQ_TYPE_2_2, .od_width = 1, .pd_in_len = 2, .pd_out_len = 0};
 
     setup_mock_phy();
     will_return(mock_phy_init, 0);
-    assert_int_equal(iolink_test_device_init(&dev, NULL, NULL), 0);
+    assert_int_equal(iolink_test_device_init(&dev, &stack, NULL), 0);
 
     uint8_t data[] = {0xAA, 0xBB};
     int res = iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true);

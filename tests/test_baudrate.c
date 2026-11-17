@@ -104,7 +104,7 @@ static void test_baudrate_recomputes_limits(void** state)
 
     expect_any(mock_set_baudrate, baudrate);
     iolink_dll_init(&ctx.main, &ctx.isr, &mock_phy);
-    ctx.main.pd_in_len_current = 28U;
+    ctx.main.shared.pd_in_len = 28U;
     ctx.main.shared.pd_out_len_current = 28U;
     ctx.main.shared.od_width = 1U;
 

@@ -265,7 +265,6 @@ static void init_operate_type0(void)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 0U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_in_len_current = 0U;
     s_dll.main.pd_valid = true;
     s_dll.main.enforce_timing = true;
     s_dll.main.min_cycle_time_us = 1000U;

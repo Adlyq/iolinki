@@ -138,10 +138,10 @@ void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
         const iolink_dll_main_t* dll = ctx->dll_ctx;
         if (input) {
             /* B.2.23：该对象携带 PDin 通道的过程数据
-               及其运行时长。PD 状态位（A.1.5）承载
+               及其配置长度。PD 状态位（A.1.5）承载
                有效性；B.2.23 未定义其无效时的不同应答，
                因此按原样返回缓冲区（ST 参考实现行为）。 */
-            len = dll->pd_in_len_current;
+            len = dll->shared.pd_in_len;
             if (len > IOLINK_PD_IN_MAX_SIZE) {
                 len = (uint8_t) IOLINK_PD_IN_MAX_SIZE;
             }

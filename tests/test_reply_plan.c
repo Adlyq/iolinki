@@ -282,7 +282,6 @@ static void init_operate(void)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 1U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_in_len_current = 1U;
     s_dll.main.pd_valid = true;
     s_dll.main.shared.pd_in_active = 0U;
     s_dll.main.shared.pd_in[0][1] = 0x5AU; /* PD-in 槽位（OD 头之后） */
@@ -305,7 +304,6 @@ static void init_preoperate(void)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 0U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_in_len_current = 0U;
     s_dll.main.pd_valid = true;
     s_now_us = 1000000U;
     tx_reset();
@@ -325,7 +323,6 @@ static void init_preoperate_rx_only(void)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 0U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_in_len_current = 0U;
     s_dll.main.pd_valid = true;
     s_now_us = 1000000U;
     tx_reset();
@@ -530,7 +527,6 @@ static int test_page_read_without_identity_is_dropped(void)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 0U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_in_len_current = 0U;
     s_dll.main.pd_valid = true;
     s_now_us = 1000000U;
     tx_reset();
@@ -895,7 +891,6 @@ static int test_startup_probe_plan(void)
     s_dll.main.shared.od_width = 2U;
     s_dll.main.shared.pd_in_len = 1U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_in_len_current = 1U;
     s_now_us = 1000000U;
     tx_reset();
     TEST_TX_IDLE();
@@ -1128,7 +1123,6 @@ static int test_tx_without_done_hook(void)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 1U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_in_len_current = 1U;
     s_dll.main.pd_valid = true;
     s_dll.main.shared.pd_in_active = 0U;
     s_dll.main.shared.pd_in[0][1] = 0x5AU;

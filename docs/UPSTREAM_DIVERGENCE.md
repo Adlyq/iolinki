@@ -116,7 +116,7 @@
 ### `ProcessDataInput 0x0028` / `ProcessDataOutput 0x0029` 语义（`已裁决 → PR#3`）
 
 - 上游：返回 1 字节"PD 长度描述符"。
-- 我们：返回 PDin/PDout 通道的 Process Data，长度取运行时通道长度（`a9251fb`、`b5c3711`）。
+- 我们：返回 PDin/PDout 通道的 Process Data，长度取配置的 PD 通道长度（`a9251fb`、`b5c3711`）。
 - **规范裁决**：Table B.8 + B.2.23/B.2.24。条款未定义"PD 无效/首帧前"的应答，按 ST
   参考实现返回当前缓冲；有效性由 CKS 的 PD status 位（A.1.5）表达，不作为 ISDU 错误。
   无 PD 时返回空正响应。已通过上游 PR #46 提交，并在本次复核中把 own_dev 的实现从

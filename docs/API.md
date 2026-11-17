@@ -196,6 +196,8 @@ int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, 
 ```
 
 `pd_input_update` 发布 Device-to-Master 过程数据（`valid` 驱动 CKS 的 PD-invalid 位）。
+PD 长度在初始化时由 `iolink_stack_config_t` 固定：`len` 必须等于配置的 PD-in 长度
+（`TYPE_0` 为 0），否则返回 -1。
 两条 PD-in 路径在同一构建内共存：非 NULL 的 `on_pd_input` 在初始化时选择回调路径并
 置位实例位 `IOLINK_CAP_PD_IN_CALLBACK`；否则应用用本函数轮询发布。选择回调路径后，
 `pd_input_update` 返回 `IOLINK_DEVICE_INIT_ERR_PD_INPUT`，而不是静默覆盖回调输出。

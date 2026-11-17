@@ -171,7 +171,6 @@ static void init_preop(void)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 0U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_in_len_current = 0U;
     s_dll.main.pd_valid = true;
     harness_reset();
     iolink_dll_publish_reply_plans(&s_dll.main);
@@ -187,7 +186,6 @@ static void init_op_t1_od32(void)
     s_dll.main.shared.od_width = 32U;
     s_dll.main.shared.pd_in_len = 0U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_in_len_current = 0U;
     s_dll.main.pd_valid = true;
     s_dll.main.shared.pd_in_active = 0U;
     harness_reset();
@@ -204,7 +202,6 @@ static void init_op_t2_pd32(void)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 32U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_in_len_current = 32U;
     s_dll.main.pd_valid = true;
     s_dll.main.shared.pd_in_active = 0U;
     for (uint8_t i = 0U; i < 32U; i++) {

@@ -55,7 +55,7 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx)
         return 0U;
     }
     const uint32_t baud = dll_get_baud_hz(ctx);
-    const uint32_t pdi = ctx->pd_in_len_current;
+    const uint32_t pdi = ctx->shared.pd_in_len;
     const uint32_t pdo = ctx->shared.pd_out_len_current;
     const uint32_t od = ctx->shared.od_width;
     /* 写请求：MC+CKT + PD-out + OD；应答：PD-in + CKS。
@@ -117,32 +117,11 @@ int iolink_dll_set_operating_baudrate(iolink_dll_main_t* ctx, iolink_baudrate_t 
     return iolink_dll_set_baudrate(ctx, baudrate);
 }
 
-int iolink_dll_set_pd_length(iolink_dll_main_t* ctx, uint8_t pd_in_len, uint8_t pd_out_len)
-{
-    if ((ctx == NULL) || (pd_in_len > IOLINK_PD_IN_MAX_SIZE) ||
-        (pd_out_len > IOLINK_PD_OUT_MAX_SIZE))
-        return -1;
-    if (ctx->shared.state == IOLINK_DLL_STATE_OPERATE) {
-        /* DPP1 0x05/0x06 是只读字段：PD 长度在进入 OPERATE 前确定，
-         * OPERATE 期间锁定。运行期修改会让主站按旧通告解读新布局，
-         * 因此显式失败而不是悄悄改变应答长度。 */
-        return -3;
-    }
-    /* 数据 ISR 只读 `shared.pd_out_len_current`（单个自然对齐字节，写入
-     * 自身原子），`pd_in_len_current` 的读者全在主上下文；两者都不存在
-     * "成对读取"的 ISR，因此不需要临界区。 */
-    ctx->pd_in_len_current = pd_in_len;
-    ctx->shared.pd_out_len_current = pd_out_len;
-    /* DPP1 0x05/0x06（以及由它们推导的 MinCycleTime）是页读应答的输入。 */
-    iolink_isdu_dp_page1_invalidate(&ctx->shared.isdu);
-    return 0;
-}
-
 void iolink_dll_get_pd_length(const iolink_dll_main_t* ctx, uint8_t* IOLINK_NULLABLE pd_in_len,
                               uint8_t* IOLINK_NULLABLE pd_out_len)
 {
     if (ctx == NULL) return;
-    if (pd_in_len) *pd_in_len = ctx->pd_in_len_current;
+    if (pd_in_len) *pd_in_len = ctx->shared.pd_in_len;
     if (pd_out_len) *pd_out_len = ctx->shared.pd_out_len_current;
 }
 

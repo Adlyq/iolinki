@@ -391,20 +391,6 @@ uint8_t iolink_device_get_pd_in_len(const iolink_device_ctx_t* ctx);
  */
 uint8_t iolink_device_get_pd_out_len(const iolink_device_ctx_t* ctx);
 
-/**
- * @brief 设置输入和输出过程数据长度。
- *
- * 只允许在进入 OPERATE **之前**调用：DPP1 的 0x05/0x06 是只读字段，
- * OPERATE 期间 PD 长度锁定。
- *
- * @param ctx         设备上下文。
- * @param pd_in_len   输入过程数据长度（字节）。
- * @param pd_out_len  输出过程数据长度（字节）。
- * @return 成功时为 0；参数/范围错误返回 -1；固定布局类型返回 -2；
- *         OPERATE 期间调用返回 -3。
- */
-int iolink_device_set_pd_length(iolink_device_ctx_t* ctx, uint8_t pd_in_len, uint8_t pd_out_len);
-
 /** @} */ /* end of iolinki_device */
 
 IOLINK_ASSUME_NONNULL_END

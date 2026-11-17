@@ -323,7 +323,7 @@ static void test_device_init_validates_config_not_context(void** state)
     (void) memset(&ctx, 0, sizeof(ctx));
     test_dll_shared(&ctx)->m_seq_type = 7U;
     test_dll_shared(&ctx)->pd_in_len = IOLINK_PD_IN_MAX_SIZE + 1U;
-    test_dll(&ctx)->pd_out_len = IOLINK_PD_OUT_MAX_SIZE + 1U;
+    test_dll_shared(&ctx)->pd_out_len_current = IOLINK_PD_OUT_MAX_SIZE + 1U;
     test_dll_shared(&ctx)->od_width = 3U;
 
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
@@ -389,7 +389,7 @@ static void test_device_pd_input_bounds(void** state)
 
     const uint8_t pd[2] = {0x11U, 0x22U};
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), true), 0);
-    assert_int_equal(test_dll(&dev.ctx)->pd_in_len_current, 2U);
+    assert_int_equal(test_dll_shared(&dev.ctx)->pd_in_len, 2U);
     const iolink_dll_shared_t* shared = test_dll_shared(&dev.ctx);
     assert_memory_equal(&shared->pd_in[shared->pd_in_active][shared->od_width], pd, sizeof(pd));
 }
@@ -471,28 +471,6 @@ static void test_device_introspection(void** state)
                      IOLINK_DLL_STATE_STARTUP);
     assert_int_equal(iolink_device_get_m_seq_type(TEST_NULL(const iolink_device_ctx_t*)),
                      IOLINK_M_SEQ_TYPE_0);
-}
-
-static void test_device_set_pd_length_fixed(void** state)
-{
-    (void) state;
-    iolink_test_device_t fixed;
-    init_device(&fixed, IOLINK_M_SEQ_TYPE_1_2, 0U, 0U);
-    /* 只有可变类型接受运行时长度变更（Table A.10）。 */
-    assert_int_equal(iolink_device_set_pd_length(&fixed.ctx, 1U, 1U), -2);
-    assert_int_equal(iolink_device_set_pd_length(TEST_NULL(iolink_device_ctx_t*), 1U, 1U), -1);
-}
-
-static void test_device_set_pd_length_variable(void** state)
-{
-    (void) state;
-    iolink_test_device_t var;
-    init_device(&var, IOLINK_M_SEQ_TYPE_2_V, 4U, 4U);
-    assert_int_equal(iolink_device_set_pd_length(&var.ctx, 2U, 2U), 0);
-    assert_int_equal(iolink_device_get_pd_in_len(&var.ctx), 2U);
-    assert_int_equal(iolink_device_get_pd_out_len(&var.ctx), 2U);
-    /* 超出配置的最大值。 */
-    assert_int_equal(iolink_device_set_pd_length(&var.ctx, 5U, 5U), -1);
 }
 
 static void test_device_config_baudrate(void** state)
@@ -639,8 +617,6 @@ int main(void)
         cmocka_unit_test(test_device_introspection),
         cmocka_unit_test(test_device_config_baudrate),
         cmocka_unit_test(test_device_od_width_required),
-        cmocka_unit_test(test_device_set_pd_length_fixed),
-        cmocka_unit_test(test_device_set_pd_length_variable),
         cmocka_unit_test(test_device_init_builds_ds_image),
         cmocka_unit_test(test_device_process_pumps_events),
     };

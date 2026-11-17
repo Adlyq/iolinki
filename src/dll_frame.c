@@ -375,7 +375,7 @@ bool dll_apply_master_command(iolink_dll_main_t* ctx, uint8_t cmd)
  * 有效；否则上报当前 pd_valid 状态。 */
 uint8_t dll_pd_status_flags(const iolink_dll_main_t* ctx)
 {
-    if ((ctx->pd_in_len_current == 0U) && (ctx->shared.pd_out_len_current > 0U)) {
+    if ((ctx->shared.pd_in_len == 0U) && (ctx->shared.pd_out_len_current > 0U)) {
         return 0U;
     }
     return ctx->pd_valid ? 0U : 0x40U;

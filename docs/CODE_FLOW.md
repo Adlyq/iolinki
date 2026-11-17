@@ -476,7 +476,7 @@ flowchart LR
 规则：
 
 - `iolink_device_pd_input_update()` 与 `on_pd_input()` 在同一构建内共存，按 `on_pd_input != NULL`（能力位 `IOLINK_CAP_PD_IN_CALLBACK`）在 `device_run_app_callbacks()` 中选路；回调路径已选中时，轮询 API 返回 `IOLINK_DEVICE_INIT_ERR_PD_INPUT`，不会静默覆盖回调输出。`on_pd_input()` 的返回值直接作为 `pd_valid`，返回 `false` 会置 CKS bit6。
-- 固定 Annex A 类型的 PD-in 长度不可变；`TYPE_2_V` 可在 `pd_in_len_max` 内变化。
+- PD-in 长度是初始化属性（`iolink_stack_config_t::pd_in_len`），所有类型都不可在运行期改变；`pd_input_update()` 只接受该长度（`TYPE_0` 为 0）。
 - PD-out 只在 Type-1/2 请求中携带；Type-0 不携带 PD。
 - `pd_valid=false` 会置 CKS bit6，Master 可据此判断 PD 无效；没有 PD-in 的设备恒报有效。
 - `pd_in` 的缓冲数由 TX 模式决定（`IOLINK_PD_IN_BUFFERS`：TX BYTE=2、TX FRAME=3），主循环填充 ISR 未占用的副本，避免撕裂；没有空闲缓冲时保留当前 PD-in、下个周期重试并计入 `pd_in_skips`。
@@ -1010,8 +1010,8 @@ flowchart LR
 - `last_notified_state`：主上下文记录“已交付给应用的状态”，配合 `shared.state` 做电平式通知；`startup_notification_pending` 保留 ISR 触发的 STARTUP 边沿，避免快速进入 PREOPERATE 时丢失复位通知。
 
 上下文尺寸契约（默认缓冲、64 位主机，由 `tests/test_ctx_sizes.c` 断言）：
-`iolink_device_ctx_t` 4856 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4872 B），内嵌
-`iolink_dll_ctx_t` 4664/4680 B、`iolink_isdu_ctx_t` 1336 B、`iolink_events_ctx_t` 480 B、
+`iolink_device_ctx_t` 4848 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4864 B），内嵌
+`iolink_dll_ctx_t` 4656/4672 B、`iolink_isdu_ctx_t` 1336 B、`iolink_events_ctx_t` 480 B、
 `iolink_ds_ctx_t` 352 B；`iolink_workspace_t` 1289 B。
 
 并发边界：

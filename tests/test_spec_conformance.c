@@ -224,11 +224,10 @@ static void test_process_data_input_returns_pd(void** state)
     iolink_device_ctx_t dev;
     (void) memset(&dev, 0, sizeof(dev));
 
-    /* 只有公共 setter 会配置长度：它更新运行时
-       字段，因此这里改用 pd_in_len 会把应答截断为 0。 */
+    /* PD 长度由初始化配置给出：直接写入共享区的已通告长度。 */
     iolink_dll_shared_t* shared = test_dll_shared(&dev);
-    assert_int_equal(iolink_dll_set_pd_length(test_dll(&dev), 2U, 0U), 0);
-    assert_int_equal(shared->pd_in_len, 0U);
+    shared->pd_in_len = 2U;
+    shared->pd_out_len_current = 0U;
     test_dll(&dev)->pd_valid = true;
     shared->pd_in[0][shared->od_width + 0U] = 0x11U;
     shared->pd_in[0][shared->od_width + 1U] = 0x22U;
@@ -249,7 +248,7 @@ static void test_process_data_input_invalid_still_serves_buffer(void** state)
     iolink_device_ctx_t dev;
     (void) memset(&dev, 0, sizeof(dev));
     iolink_dll_shared_t* shared = test_dll_shared(&dev);
-    test_dll(&dev)->pd_in_len_current = 2U;
+    shared->pd_in_len = 2U;
     test_dll(&dev)->pd_valid = false;
     shared->pd_in[0][shared->od_width + 0U] = 0x11U;
     shared->pd_in[0][shared->od_width + 1U] = 0x22U;
@@ -297,7 +296,6 @@ static void test_process_data_80xx_is_positive(void** state)
     (void) state;
     iolink_device_ctx_t dev;
     (void) memset(&dev, 0, sizeof(dev));
-    test_dll(&dev)->pd_in_len_current = 2U;
     test_dll_shared(&dev)->pd_in_len = 2U;
     test_dll(&dev)->pd_valid = true;
     test_dll_shared(&dev)->pd_in[0][test_dll_shared(&dev)->od_width + 0U] = 0x80U;
