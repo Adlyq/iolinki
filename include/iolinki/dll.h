@@ -193,7 +193,7 @@ typedef enum
 #define IOLINK_REPLY_FLAG_DEFER 0x20U
 
 /**
- * @brief 一条应答计划：请求指纹 + 应答来源 + 时序预算。
+ * @brief 一条应答计划：请求指纹 + 应答来源。
  *
  * 匹配规则（全部满足才命中）：
  *  - `(mc & match_mask) == match_value`
@@ -204,7 +204,6 @@ typedef enum
 typedef struct
 {
     const uint8_t* IOLINK_NULLABLE data; /**< @ref IOLINK_REPLY_SRC_TEMPLATE 的模板字节 */
-    uint16_t deadline_us;                /**< t_A 预算（10 个位时间）；时序审计/WCET 用 */
     uint8_t match_mask;                  /**< MC 字节参与匹配的位 */
     uint8_t match_value;                 /**< MC 字节匹配值 */
     uint8_t ckt_mask;                    /**< CKT 类型位掩码（0 = 不比较类型） */

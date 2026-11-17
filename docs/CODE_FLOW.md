@@ -344,6 +344,7 @@ flowchart TD
 
 - **内容语义只归主泵**：`iolink_dll_publish_reply_plans()` 一次编译出 **4 个状态切片**（STARTUP/AWAITING、PREOPERATE、ESTAB_COM、OPERATE）并用 seqlock（`reply_plan_seq` 奇偶）发布；ISR 只扫描当前状态切片。发布键只有 `{M-sequence 类型, OD 宽度, 波特率}`：状态迁移不再触发重发布。计划内容还依赖运行时能力位（如 `IOLINK_CAP_COMPAT_T0_READ`），因此 `iolink_device_set_capabilities()` 调用 `iolink_dll_invalidate_reply_plans()` 把 `reply_plan_seq` 清 0，ISR 立刻按“无计划”处理，下一轮主泵重发布。
   - **计划未命中的合法帧：不应答、计 `isr_plan_misses` 并丢弃**——主泵不再接手合法帧。
+  - **重发布窗口内的帧同样计为计划未命中并丢弃**：`reply_plan_seq` 为奇数时主泵正在覆盖槽位，`iolink_dll_invalidate_reply_plans()` 把它清 0；`dll_isr_plan_lookup()` 每次查表最多重试 3 次，读不到稳定的偶数序号就返回“未命中”。因此能力位变化（`iolink_device_set_capabilities()` → 清 0 → 下一轮重发布）与每次键变化后的重发布，都会有一段窗口里合法帧得不到应答。主站侧表现为超时重发；设备侧只体现在 `isr_plan_misses`（不区分“没有这条计划”与“撞上窗口”，也**不**计 `framing_errors`），排障时不要把它当作组帧问题。窗口长度与一次发布的工作量同阶（写满 4 个切片）。
   - **计划命中但执行失败**（线路忙、ISDU 写尚未进入传输层）：帧以 `eager=0` 发布到邮箱，由主泵兜底。
   - `IOLINK_REPLY_FLAG_DEFER`：计划命中但 ISR 故意不应答（例如启动期 MasterCommand 的接受/拒绝依赖命令字节与兼容模式），帧原样交主泵。
   - ESTAB_COM 的首帧即使计划带 `CONSUME` 也仍发布给主泵，由主泵完成到 OPERATE 的迁移。

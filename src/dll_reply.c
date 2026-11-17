@@ -44,10 +44,12 @@ typedef enum
  * 只在 seqlock 的奇数窗口内调用（计划表正在被主泵覆盖）。
  * @p state 只作记录与调试用途：匹配的可见范围由状态切片决定。
  */
-static void dll_plan_push(iolink_dll_main_t* ctx, uint8_t* count, uint8_t state, uint8_t match_mask,
-                          uint8_t match_value, uint8_t addr_max, uint8_t req_len, uint8_t ckt_mask,
-                          uint8_t ckt_value, uint8_t source, uint8_t len, uint8_t flags,
-                          uint8_t action, const uint8_t* data)
+/* 只在发布时调用（每次键变化一次，绝不每帧）：强制不内联，让它只保留一份
+ * 副本——内联进两个状态族的构建函数会各复制一遍，实测净多 128 B 文本。 */
+static void __attribute__((noinline)) dll_plan_push(
+    iolink_dll_main_t* ctx, uint8_t* count, uint8_t state, uint8_t match_mask, uint8_t match_value,
+    uint8_t addr_max, uint8_t req_len, uint8_t ckt_mask, uint8_t ckt_value, uint8_t source,
+    uint8_t len, uint8_t flags, uint8_t action, const uint8_t* data)
 {
     if (count == NULL) {
         return;
@@ -60,7 +62,6 @@ static void dll_plan_push(iolink_dll_main_t* ctx, uint8_t* count, uint8_t state,
     }
     iolink_reply_plan_t* plan = &ctx->shared.reply_plan[*count];
     plan->data = data;
-    plan->deadline_us = (uint16_t) (10U * dll_get_t_bit_us(ctx)); /* t_A = 10 位时间 */
     plan->match_mask = match_mask;
     plan->match_value = match_value;
     plan->ckt_mask = ckt_mask;
@@ -237,13 +238,14 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
     if (ctx == NULL) {
         return;
     }
-    /* 键 = {M-sequence 类型, OD 宽度, 波特率}：计划表与 t_A 预算都是这三项
-     * 的纯函数。状态不再参与键：每个 ISR 可达状态一份切片，一次发布；
-     * 状态迁移不再需要主泵重发布。能力位变化仍须先调用
+    /* 键 = {M-sequence 类型, OD 宽度}：计划内容是这两项加运行时能力位的纯
+     * 函数。波特率不再参与——它此前只透过 `deadline_us` 影响计划内容，而 t_A
+     * 预算改由 ISR 在应答开始时按 10 * t_bit_us 现算，换波特率不再需要重发布
+     * 同一张表。状态也不参与键：每个 ISR 可达状态一份切片，一次发布，状态迁移
+     * 不需要主泵重发布。能力位变化仍须先调用
      * iolink_dll_invalidate_reply_plans()，否则键不变会让这里提前返回。 */
     const uint16_t key = (uint16_t) (0x8000U | ((unsigned) (ctx->shared.m_seq_type & 0x0FU)) |
-                                     ((unsigned) (ctx->shared.od_width & 0x1FU) << 4) |
-                                     ((unsigned) ((uint8_t) ctx->baudrate & 0x03U) << 9));
+                                     ((unsigned) (ctx->shared.od_width & 0x1FU) << 4));
     const IOLINK_ATOMIC_UINT_T seq = iolink_atomic_load(&ctx->shared.reply_plan_seq);
     if ((seq != 0U) && (key == ctx->reply_plan_key)) {
         return; /* 计划表是键的纯函数：没有变化就不写 */

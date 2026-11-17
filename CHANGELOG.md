@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed (reply plans no longer carry a timing field)
+- `iolink_reply_plan_t::deadline_us` is gone. Nothing read it at run time: the
+  ISR arms t_A from `10 * dll_get_t_bit_us()` when it starts a reply
+  (`dll_sm.c`), and the PHY response timer is the authority. The field was
+  written once per plan and asserted only by a unit test, and its "timing audit /
+  WCET" comment described a use that did not exist. On a 32-bit target the plan
+  entry drops from 20 to 16 bytes (alignment no longer absorbs the field), so the
+  48-slot table loses 192 B of RAM; on a 64-bit host nothing changes.
+- Baudrate leaves the reply-plan publication key for the same reason: it only
+  ever reached plan content through `deadline_us`. Plan content is a pure
+  function of `{M-sequence type, OD width, capability bits}` — the first two
+  fixed at init — so a COM change no longer rebuilds an identical table.
+- `docs/CODE_FLOW.md` now states what a frame that arrives while the reply plan
+  is being republished observes: the seqlock window is a plan miss, so the frame
+  is dropped without a reply and counted in `isr_plan_misses` — the master sees
+  a retry, not a framing error.
+
 ### Added (compile-time log level)
 - `IOLINK_LOG_COMPILE_LEVEL` (`iolinki/log.h`, default `IOLINK_LOG_COMPILE_DEBUG`)
   compiles messages above the chosen level away together with their format

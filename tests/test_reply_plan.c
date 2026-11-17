@@ -1005,21 +1005,6 @@ static int test_type0_idle_read_resets_transport(void)
     return 0;
 }
 
-/* 计划携带 t_A 预算：COM2 下为 10 * 26 us = 260 us。 */
-static int test_plan_deadline_metadata(void)
-{
-    init_operate();
-    if (s_dll.main.shared.reply_plan_total == 0U) {
-        return 1;
-    }
-    for (uint8_t i = 0U; i < s_dll.main.shared.reply_plan_total; i++) {
-        if (s_dll.main.shared.reply_plan[i].deadline_us != 260U) {
-            return 2;
-        }
-    }
-    return 0;
-}
-
 /** @brief OPERATE 切片中 Type-0 页读槽位的动作；未找到返回 0xFF。 */
 static uint8_t type0_page_read_action(void)
 {
@@ -1164,7 +1149,6 @@ IOLINK_TEST_RC(test_seqlock_window_is_a_miss)
 IOLINK_TEST_RC(test_isdu_write_invalidates_read_view)
 IOLINK_TEST_RC(test_startup_probe_plan)
 IOLINK_TEST_RC(test_type0_idle_read_resets_transport)
-IOLINK_TEST_RC(test_plan_deadline_metadata)
 IOLINK_TEST_RC(test_capability_change_invalidates_plan)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 IOLINK_TEST_RC(test_tx_without_done_hook)
@@ -1202,7 +1186,6 @@ int main(void)
         cmocka_unit_test(iolink_case_test_isdu_write_invalidates_read_view),
         cmocka_unit_test(iolink_case_test_startup_probe_plan),
         cmocka_unit_test(iolink_case_test_type0_idle_read_resets_transport),
-        cmocka_unit_test(iolink_case_test_plan_deadline_metadata),
         cmocka_unit_test(iolink_case_test_capability_change_invalidates_plan),
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
         cmocka_unit_test(iolink_case_test_tx_without_done_hook),
