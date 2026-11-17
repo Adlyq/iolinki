@@ -394,7 +394,7 @@ void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx,
 
 复位处理回调会收到 `IOLINK_RESET_DEVICE`（System Command 0x80）或
 `IOLINK_RESET_APPLICATION`（0x81）。本栈不会自行复位 MCU。`master_lost` 只是给应用的
-提示，不会改变 DLL 状态或波特率。
+提示，不会改变 DLL 状态。
 
 `iolink_dll_stats_t` 提供 CRC、超时、帧错误、时序错误、t_ren/t_cycle/t_byte/t_pd
 违规、重试以及物理故障计数器，并暴露 ISR 传输路径的 `isr_od_overruns`、

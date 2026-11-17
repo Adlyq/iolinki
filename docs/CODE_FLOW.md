@@ -41,7 +41,7 @@
 4. 参数知识只有一份：`src/od.c` 的 const 对象字典描述索引、数据类型、访问权限、写语义、`storage` 位与默认值。ISDU 分发、DS 成员判定与内建处理器选择都从这张表派生；三个标签也由应用以普通表项提供。
 5. ISDU 写请求和读应答是分离的：写请求由 ISR 按 FlowCTRL 位置去重累计到 `shared.isdu`，`iolink_isdu_process()` 在后续主循环校验 CHKPDU、解析并执行服务；读请求从已发布的成帧应答视图读取（单一 `frame` 缓冲 + 租约 + 代数位）。
 6. Event 的 “appears” 会立即入队并冻结事件内存、置 CKS bit7；“disappears” 由 `iolink_device_process()` 在 ISDU 传输空闲时自动调用 `iolink_events_process()` 发出（见 `device_service_events_and_ds()`）。DeviceStatus（0x0024）与 DetailedDeviceStatus（0x0025）由 `src/diag.c` 从同一条件集派生。
-7. `master_lost` 只是应用提示，**不改变 DLL 状态和波特率**；真正回到 SIO/STARTUP 的是 T_DSIO、T_FBD、DeviceStartup 等路径。
+7. `master_lost` 只是应用提示，**不改变 DLL 状态**；真正回到 SIO/STARTUP 的是 T_DSIO、T_FBD、DeviceStartup 等路径。
 8. 库不拥有 NVM：所有参数写入只改 RAM 并调用表项 `on_change`，持久化由应用在钩子里完成；DS 只维护 `DS_UPLOAD_FLAG` 的 RAM 值，并经 `config.ds_flag_persist` 通知应用落盘。
 
 ---
@@ -135,7 +135,7 @@ flowchart TB
 | `src/dll_frame.c` | 帧路径：M-sequence 类型判定、应答发送、MasterCommand/Fallback/页通道、OD 与 PD 处理、PHY 故障轮询 | 是（主上下文） |
 | `src/dll_sm.c` | 状态机骨架 `g_dll_sm`、事件分类、校验失败处理与完整帧流水线 | 是（主上下文） |
 | `src/dll_reply.c` | 应答计划编译/发布（初始化时一次写就）、ISDU 响应快照、主站活动与周期时间推算 | 是（主上下文） |
-| `src/dll_api.c` | `iolink_dll_*` 查询与配置入口（状态、波特率、PD 长度、统计、定时器契约） | 否（仅配置/查询） |
+| `src/dll_api.c` | `iolink_dll_*` 查询与初始化配置入口（状态、波特率/PD 查询、统计、定时器契约） | 否（仅配置/查询） |
 | `src/dll_isr.c` | ISR 传输：重入保护、计划查表/执行、ISDU 写暂存、暂存 TX 的字节喂送、ISR 入口 | 是（中断上下文） |
 | `src/dll_isr_rx.c` | ISR 接收：帧长度/校验、逐帧完成决策、RX FRAME 与 RX BYTE 组装 | 是（中断上下文） |
 | `src/isdu.c` | ISDU 请求收集、头部解析、分段执行、OD 读写入口、索引分发与响应组帧 | 是 |
@@ -229,7 +229,7 @@ flowchart TD
     B -- 是 --> B2{"IOLINK_WORKSPACE_EMBEDDED=0<br/>且 workspace == NULL?"}
     B2 -- 是 --> E4["返回 IOLINK_DEVICE_INIT_ERR_WORKSPACE"]
     B2 -- 否 --> C["device_config_validate()"]
-    C --> C1{"phy / stack / device_info / time_us<br/>M-seq 类型 / PD 长度 / OD 宽度 / 固定布局<br/>波特率 / 临界区 / 应用 OD 表 / 能力位"}
+    C --> C1{"phy / stack / device_info / time_us<br/>M-seq 类型 / PD 长度 / OD 宽度 / 固定布局<br/>临界区 / 应用 OD 表 / 能力位"}
     C1 -- 否 --> E2["返回对应负错误码"]
     C1 -- 是 --> D["清零 ctx，保存 config 指针"]
     D --> F["phy->init(self)"]
@@ -327,7 +327,7 @@ flowchart TD
     B -- 是 --> Z["return，等待授权"]
     B -- 否 --> C["iolink_dll_process()"]
     C --> C1["dll_process_body()"]
-    C1 --> C2["消费 ISR 活动时间戳<br/>应用 ISR 截止时间请求<br/>TX FRAME 释放 pd_in 租约<br/>恢复工作波特率"]
+    C1 --> C2["消费 ISR 活动时间戳<br/>应用 ISR 截止时间请求<br/>TX FRAME 释放 pd_in 租约"]
     C2 --> D["iolink_isdu_process()<br/>接管 COMPLETE 写请求<br/>校验 CHKPDU、解析并执行"]
     D --> E["生成/发布应答"]
     E --> F["dll_isdu_sync_snapshot()<br/>发布 ISR 读视图"]
@@ -780,13 +780,12 @@ sequenceDiagram
 
 1. Timer B 授权检查（`device_service_window_ready()`）；没有授权直接返回。
 2. `iolink_dll_process()` → `dll_process_body()`：
-   - 消费 ISR 活动时间戳、应用 ISR 截止时间请求、TX FRAME 下释放 PD-in 租约、恢复工作波特率；
+   - 消费 ISR 活动时间戳、应用 ISR 截止时间请求、TX FRAME 下释放 PD-in 租约；
    - `iolink_isdu_process()` 接管 ISR 已收齐的写请求（CHKPDU 校验 + 解析 + 执行），随后 `dll_isdu_sync_snapshot()` 刷新 ISR 读视图；
    - `dll_poll_diagnostics()`：先 `iolink_diag_service()` 消费 ISR 脉冲，再采样 `get_faults()` 电平源；
    - 再次采样 ISR 活动，然后 `dll_timer_sync_master_lost()` / `dll_timer_sync_idle()` / `dll_timer_sync_t_byte()`，执行 `dll_timers_dispatch(phase 0)`；
    - 门控：`dll_check_t_pd()`、`dll_handle_sio_wakeup()`、`dll_timers_dispatch(phase 1)`、`dll_wakeup_window_active()`，任一命中即提前返回（这是唯一跳过邮箱的路径）；
    - `dll_consume_isr_mailbox()` → `dll_process_complete_frame()` → `dll_handle_frame_error()` / `dll_finish_frame()`；
-   - 再次恢复工作波特率。
    不重发布应答计划：计划表是 `{M-sequence 类型, OD 宽度, 能力位}` 的纯函数，只在初始化时编译。返回后 `iolink_dll_flush_state_callbacks()` 电平式交付当前状态（ISR 期间的多次迁移合并为最终状态；ISR 进入 STARTUP 的复位通知优先单独投递）。
 3. `device_service_events_and_ds()`：ISDU 传输空闲时驱动 `iolink_ds_process()` / `iolink_events_process()`，并在 DS 响应读完后把 `upload_event_pending` 转成 `iolink_diag_raise_code()` 的 DS_UPLOAD_REQ 事件。
 4. master-lost/online 边沿回调：只在 `state == OPERATE` 时比较 `master_lost` 与 `master_lost_last`；离开 OPERATE 时清空旧状态。
@@ -895,7 +894,7 @@ stateDiagram-v2
 
 - 迁移由 `include/iolinki/internal/dll_sm.h` 描述：帧事件用 `DLL_SM_ROWS`（7 个状态 × 8 类事件，`src/dll_sm.c` 展开成 `g_dll_sm[state][event]`），定时器/管理类迁移（上表）用 `DLL_SM_ADMIN_ROWS`。`tools/gen_dll_statemachine.py` 解析这两份宏，生成 mermaid/CSV/覆盖测试与本节表格；`--check`（ctest `dll_statemachine_gen_check`）会拒绝过期的表格。帧事件迁移改 `DLL_SM_ROWS` 即可生效（表在 `src/dll_sm.c` 展开）；定时器/管理类迁移的**触发代码**分散在 `src/dll.c`、`src/dll_frame.c` 与 `src/dll_isr.c`，改代码时要同步 `DLL_SM_ADMIN_ROWS`。
 - 首个有效帧把 STARTUP/AWAITING_COMM 迁到 PREOPERATE 后，如果该帧本身就是 transition command（`MC=0x0F`），同一次 `dll_process_complete_frame()` 会继续调用 `dll_handle_preoperate()`，因此可以一帧内连续进入 ESTAB_COM。
-- `master_lost` 只在 OPERATE 且 `master_lost_cycles != 0` 时计算，超过阈值只置提示位并触发 `on_master_lost`，**不改变状态和波特率**（`dll_timer_expire_master_lost()`，`iolink_device_master_lost()`）。
+- `master_lost` 只在 OPERATE 且 `master_lost_cycles != 0` 时计算，超过阈值只置提示位并触发 `on_master_lost`，**不改变状态**（`dll_timer_expire_master_lost()`，`iolink_device_master_lost()`）。
 - CRC 错误不会单独导致 STARTUP；类型非法在 OPERATE/ESTAB 只计数并丢帧，避免链路抖动。
 - `COMM_DISABLED` 会把 PHY 置为 `INACTIVE`，之后主循环不再处理帧，直到重新上电。
 - 无 `detect_wakeup` 的 PHY 在初始化时直接进入 SDCI，因此不会出现 AWAITING_COMM/T_DSIO 路径。

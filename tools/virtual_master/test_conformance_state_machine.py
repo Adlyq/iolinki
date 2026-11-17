@@ -139,12 +139,13 @@ class TestStateMachineConformance(unittest.TestCase):
 
     def test_04_communication_fallback_behavior(self):
         """
-        Test Case: COM Rate Fallback
-        Requirement: IO-Link V1.1.5 Section 6.2.2 - Baud Rate Negotiation
+        Test Case: Communication on the compiled COM
+        Requirement: a Device supports exactly one COM (V1.1.5 §5.3.3); the
+        rate is fixed at build time by IOLINK_COM.
 
         Validates:
-        - Device supports COM1 (4.8 kbaud) as mandatory
-        - Communication works at different baud rates
+        - Startup and an ISDU read work on that COM
+        - There is no runtime rate negotiation
         """
         print("\n[TEST] Communication Fallback Behavior")
 
