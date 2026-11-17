@@ -54,7 +54,7 @@
 - IODD parsing
 - Device capability detection
 - Timing validation (t_A, t_ren, t_cycle)
-- Baudrate negotiation
+- Baudrate negotiation (the device COM is compile-time fixed)
 - SIO mode support
 
 ## API Reference

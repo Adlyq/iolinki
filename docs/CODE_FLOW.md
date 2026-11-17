@@ -786,7 +786,7 @@ sequenceDiagram
    - 再次采样 ISR 活动，然后 `dll_timer_sync_master_lost()` / `dll_timer_sync_idle()` / `dll_timer_sync_t_byte()`，执行 `dll_timers_dispatch(phase 0)`；
    - 门控：`dll_check_t_pd()`、`dll_handle_sio_wakeup()`、`dll_timers_dispatch(phase 1)`、`dll_wakeup_window_active()`，任一命中即提前返回（这是唯一跳过邮箱的路径）；
    - `dll_consume_isr_mailbox()` → `dll_process_complete_frame()` → `dll_handle_frame_error()` / `dll_finish_frame()`；
-   不重发布应答计划：计划表是 `{M-sequence 类型, OD 宽度, 能力位}` 的纯函数，只在初始化时编译。返回后 `iolink_dll_flush_state_callbacks()` 电平式交付当前状态（ISR 期间的多次迁移合并为最终状态；ISR 进入 STARTUP 的复位通知优先单独投递）。
+   - 不重发布应答计划：计划表是 `{M-sequence 类型, OD 宽度, 能力位}` 的纯函数，只在初始化时编译。返回后 `iolink_dll_flush_state_callbacks()` 电平式交付当前状态（ISR 期间的多次迁移合并为最终状态；ISR 进入 STARTUP 的复位通知优先单独投递）。
 3. `device_service_events_and_ds()`：ISDU 传输空闲时驱动 `iolink_ds_process()` / `iolink_events_process()`，并在 DS 响应读完后把 `upload_event_pending` 转成 `iolink_diag_raise_code()` 的 DS_UPLOAD_REQ 事件。
 4. master-lost/online 边沿回调：只在 `state == OPERATE` 时比较 `master_lost` 与 `master_lost_last`；离开 OPERATE 时清空旧状态。
 5. reset handler：`isdu.reset_pending` / `isdu.app_reset_pending`。

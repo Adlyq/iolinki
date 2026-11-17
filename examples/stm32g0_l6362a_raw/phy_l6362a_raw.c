@@ -173,10 +173,10 @@ static void UartConfigure(uint32_t baud)
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
 /** Publish the DMA octets received since the previous frame end.
  *
- * Called from the RTOF vector and from the mode/baudrate setters. The setters
- * run inside a PRIMASK critical section and UartConfigure() clears RTOCF, so a
- * frame that completed while interrupts were masked would otherwise be lost when
- * the deferred RTOF vector finds the flag already clear. */
+ * Called from the RTOF vector and from the init-time UART configuration. The
+ * latter runs inside a PRIMASK critical section and UartConfigure() clears RTOCF,
+ * so a frame that completed while interrupts were masked would otherwise be lost
+ * when the deferred RTOF vector finds the flag already clear. */
 static void RxPublishFrame(bool err)
 {
     uint16_t cur = (uint16_t) (L6362_RX_DMA_SIZE - (DMA1_Channel1->CNDTR & 0xFFFFU));

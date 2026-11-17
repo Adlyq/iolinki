@@ -147,7 +147,7 @@ class TestStateMachineConformance(unittest.TestCase):
         - Startup and an ISDU read work on that COM
         - There is no runtime rate negotiation
         """
-        print("\n[TEST] Communication Fallback Behavior")
+        print("\n[TEST] Communication on the compiled COM")
 
         self.process = subprocess.Popen(
             [self.demo_bin, self.device_tty, "0", "0"],
