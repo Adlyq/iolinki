@@ -426,6 +426,12 @@ reference firmware is built with. `tools/size_matrix.py --toolchain` (or
 `tools/size_baseline.csv` instead. Numbers from the two are not comparable: the
 gate only compares a measurement against the baseline of its own toolchain.
 
+The baseline is a **ROM budget, not a diagnostics budget**: the matrix is built
+with `-DIOLINK_LOG_COMPILE_LEVEL=0`, so log messages and their format strings are
+compiled out. A device that keeps logging pays for the strings by choice — see
+`IOLINK_LOG_COMPILE_LEVEL` in `iolinki/log.h` for the compile-time level and
+`iolink_log_sink_t` for the runtime one.
+
 ## Hardware Requirements
 
 ### Minimum MCU Specs

@@ -117,14 +117,52 @@ static inline void iolink_log_sink_init(iolink_log_sink_t* sink,
         }                                                                        \
     } while (0)
 
+/**
+ * @name 编译期日志级别
+ *
+ * 与运行时的 `iolink_log_level_t` 是两件事：运行时级别只缩小输出量，格式
+ * 字符串仍然留在镜像里；这里把高于所选级别的消息**整条**编译掉（连同它的
+ * 格式字符串）。默认 @c IOLINK_LOG_COMPILE_DEBUG（全部保留，行为与不带该
+ * 宏时相同）。
+ *
+ * ROM 预算只按无日志构建衡量（`tools/size_matrix.py` 以 0 编译），因此诊断
+ * 信息的体积不受 size 门禁限制；需要精简镜像的应用可以自己调低这个值。
+ * @{
+ */
+#define IOLINK_LOG_COMPILE_SILENT 0 /**< 不编译任何日志消息。 */
+#define IOLINK_LOG_COMPILE_ERROR 1  /**< 只保留 ERROR。 */
+#define IOLINK_LOG_COMPILE_WARN 2   /**< ERROR + WARN。 */
+#define IOLINK_LOG_COMPILE_INFO 3   /**< ERROR + WARN + INFO。 */
+#define IOLINK_LOG_COMPILE_DEBUG 4  /**< 全部（默认）。 */
+#ifndef IOLINK_LOG_COMPILE_LEVEL
+#define IOLINK_LOG_COMPILE_LEVEL IOLINK_LOG_COMPILE_DEBUG
+#endif
+/** @} */
+
 /** @brief 输出 ERROR 级日志。 */
+#if IOLINK_LOG_COMPILE_LEVEL >= IOLINK_LOG_COMPILE_ERROR
 #define IOLINK_LOG_ERROR(sink, ...) IOLINK_LOG_WRITE((sink), IOLINK_LOG_LEVEL_ERROR, __VA_ARGS__)
+#else
+#define IOLINK_LOG_ERROR(sink, ...) ((void) (sink))
+#endif
 /** @brief 输出 WARN 级日志。 */
+#if IOLINK_LOG_COMPILE_LEVEL >= IOLINK_LOG_COMPILE_WARN
 #define IOLINK_LOG_WARN(sink, ...) IOLINK_LOG_WRITE((sink), IOLINK_LOG_LEVEL_WARN, __VA_ARGS__)
+#else
+#define IOLINK_LOG_WARN(sink, ...) ((void) (sink))
+#endif
 /** @brief 输出 INFO 级日志。 */
+#if IOLINK_LOG_COMPILE_LEVEL >= IOLINK_LOG_COMPILE_INFO
 #define IOLINK_LOG_INFO(sink, ...) IOLINK_LOG_WRITE((sink), IOLINK_LOG_LEVEL_INFO, __VA_ARGS__)
+#else
+#define IOLINK_LOG_INFO(sink, ...) ((void) (sink))
+#endif
 /** @brief 输出 DEBUG 级日志。 */
+#if IOLINK_LOG_COMPILE_LEVEL >= IOLINK_LOG_COMPILE_DEBUG
 #define IOLINK_LOG_DEBUG(sink, ...) IOLINK_LOG_WRITE((sink), IOLINK_LOG_LEVEL_DEBUG, __VA_ARGS__)
+#else
+#define IOLINK_LOG_DEBUG(sink, ...) ((void) (sink))
+#endif
 
 /**
  * @brief 启用数据 ISR 路径上的日志（默认 0）。

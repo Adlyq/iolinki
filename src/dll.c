@@ -754,10 +754,8 @@ static void dll_timer_sync_t_byte(iolink_dll_main_t* ctx)
 static void dll_timer_expire_t_byte(iolink_dll_main_t* ctx)
 {
     dll_timer_cancel(ctx, IOLINK_TIMER_T_BYTE);
-    const uint32_t last_byte_us = ctx->shared.last_byte_us;
-    const uint32_t now_us = (uint32_t) dll_time_us(ctx);
     IOLINK_LOG_DEBUG(&ctx->shared.log, "t_byte violation: %lu us",
-                     (unsigned long) ((uint32_t) (now_us - last_byte_us)));
+                     (unsigned long) ((uint32_t) (dll_time_us(ctx) - ctx->shared.last_byte_us)));
     ctx->timing_errors++;
     ctx->t_byte_violations++;
     ctx->shared.framing_errors++;

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (compile-time log level)
+- `IOLINK_LOG_COMPILE_LEVEL` (`iolinki/log.h`, default `IOLINK_LOG_COMPILE_DEBUG`)
+  compiles messages above the chosen level away together with their format
+  strings. The runtime `iolink_log_sink_t::level` still filters what a compiled-in
+  message prints; it never removed the string from the image, so a build that
+  wants a smaller flash image had no way to drop diagnostics.
+- The ROM/RAM baseline is a ROM budget, not a diagnostics budget:
+  `tools/size_matrix.py` now measures with `-DIOLINK_LOG_COMPILE_LEVEL=0` and both
+  `tools/size_baseline.csv` and `tools/size_baseline.atfe.csv` are re-recorded
+  (c1_full: about 1 KB less `.text` and 0.7 KB less `.rodata`). `docs/PORTING.md`
+  says so; `build_matrix.sh` gains a `logs_off` compile probe.
+
 ### Changed (nullability model: non-null by default)
 - Public headers declare `IOLINK_ASSUME_NONNULL_BEGIN/END` around their
   declarations (`_Pragma("clang assume_nonnull ...")` on clang, empty on gcc),

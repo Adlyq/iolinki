@@ -104,7 +104,15 @@ CROSS_TOOLCHAIN_RODATA_PERMILLE = 80
 
 # Cortex-M0+ without LTO: the STM32G0 examples' target and options.
 CPU_FLAGS = ["-mcpu=cortex-m0plus", "-mthumb", "-std=c99", "-Os", "-g0", "-ffreestanding"]
-COMMON_FLAGS = CPU_FLAGS + ["-I" + str(ROOT / "include"), "-ffunction-sections", "-fdata-sections"]
+# The budget is a ROM budget, not a diagnostics budget: log messages (and the
+# format strings behind them) are compiled out here, because a device that
+# keeps them pays for them by choice. `docs/MEMORY_GUIDE.md` states the same.
+LOG_OFF = ["-DIOLINK_LOG_COMPILE_LEVEL=0"]
+COMMON_FLAGS = (
+    CPU_FLAGS
+    + ["-I" + str(ROOT / "include"), "-ffunction-sections", "-fdata-sections"]
+    + LOG_OFF
+)
 
 SOURCES = [
     "src/capability.c",

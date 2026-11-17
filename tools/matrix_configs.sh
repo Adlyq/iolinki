@@ -97,6 +97,7 @@ iolink_matrix_emit_probes()
     "$cb" no_events "-DIOLINK_FEATURE_EVENTS=0"
     "$cb" no_validate "-DIOLINK_FEATURE_VALIDATE=0"
     "$cb" isr_log "-DIOLINK_LOG_ENABLE_ISR=1"
+    "$cb" logs_off "-DIOLINK_LOG_COMPILE_LEVEL=0"
     "$cb" workspace_external "-DIOLINK_WORKSPACE_EMBEDDED=0"
     "$cb" single_no_critical "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE"
     "$cb" capacity_overrides "-DIOLINK_MBX_SLOTS=8 -DIOLINK_REPLY_PLAN_SLOTS=12"
