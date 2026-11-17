@@ -284,7 +284,8 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     dll->main.shared.pd_out_len_current = 0U;
     dll->main.pd_in_len_current = 0U;
     dll->main.pd_valid = true;
-    /* 主泵按当前状态发布应答计划；本文件直接驱动 ISR，故显式发布。 */
+    /* 计划表只在初始化时编译；本文件直接驱动 ISR 且在 init 之后才配置，
+     * 故显式发布一次。 */
     iolink_dll_publish_reply_plans(&dll->main);
     now_us = 1000000U;
     rx_n = 0U;
@@ -375,6 +376,9 @@ static void init_type0_ctx(iolink_dll_ctx_t* dll)
     tx_active = 0U;
 #endif
     iolink_dll_process(&dll->main); /* 同步 ISDU 快照 */
+    /* 计划表在初始化时编译；本用例在 init 之后改了配置，因此显式重发一次
+     * （ISR 尚未运行）。 */
+    iolink_dll_publish_reply_plans(&dll->main);
 }
 
 /* PREOPERATE 下的 Type-0 ISDU 读由 ISR 直接应答。 */
@@ -860,7 +864,6 @@ static int test_type0_commands_fast_path(void)
 
     /* DeviceOperate（0x99，page 写地址 0）：ESTAB_COM + 仅 CKS。 */
     dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
-    iolink_dll_publish_reply_plans(&dll.main);
     frame[0] = IOLINK_MC_CHANNEL_PAGE;
     frame[1] = IOLINK_MSEQ_TYPE_0;
     frame[2] = IOLINK_CMD_DEVICE_OPERATE;
@@ -881,7 +884,6 @@ static int test_type0_commands_fast_path(void)
     /* Fallback（0x5A）：FALLBACK + 仅 CKS。ISR 只标记该请求；
      * 64 位 T_FBD 截止时间由主泵根据 MinCycleTime 设置。 */
     dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
-    iolink_dll_publish_reply_plans(&dll.main);
     frame[2] = IOLINK_CMD_FALLBACK;
     frame[1] = IOLINK_MSEQ_TYPE_0;
     frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, 3U));
@@ -908,7 +910,6 @@ static int test_type0_commands_fast_path(void)
 
     /* 启动探测（STARTUP 下的 page 读）：PREOP + OD/CKS。 */
     dll.main.shared.state = IOLINK_DLL_STATE_STARTUP;
-    iolink_dll_publish_reply_plans(&dll.main);
     make_type0((uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), frame, 2U);
     tx_reset();
     feed_chk(frame, 2U);

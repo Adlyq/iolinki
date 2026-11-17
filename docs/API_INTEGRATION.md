@@ -411,7 +411,6 @@ void iolink_device_set_t_ren_limit_us(iolink_device_ctx_t* ctx, uint32_t limit_u
 
 ```c
 iolink_caps_t iolink_device_capabilities(const iolink_device_ctx_t* ctx);
-iolink_caps_t iolink_device_set_capabilities(iolink_device_ctx_t* ctx, iolink_caps_t caps);
 
 const iolink_build_caps_t* iolink_caps_build(void);
 iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* phy, const iolink_stack_config_t* stack,
@@ -425,11 +424,9 @@ bool iolink_caps_built(const iolink_build_caps_t* caps, uint32_t mask);
 （`IOLINK_CAP_*`），`iolink_caps_build()` 返回只读的构建档位（`IOLINK_CAPB_*`、
 ISR 粒度、并发/统计档位、PD-in 缓冲数）。实例能力在 `iolink_device_init()` 内由
 `iolink_caps_resolve()` 一次性解析，因此运行期不需要再逐项判断 `phy->xxx != NULL`。
-
-`iolink_device_set_capabilities()` 只接受运行时开关位（兼容位、SystemCommand、
-四个访问锁位）。与 PHY vtable、构建档位或 `on_pd_input` 绑定的位会按当前配置重新
-解析，调用方无法伪造；构建时未编入的 `IOLINK_CAP_EVENTS` /
-`IOLINK_CAP_SYSTEM_COMMAND` 始终保持清零。返回实际生效的掩码。
+能力位**只在初始化时定义**：没有运行期覆盖接口，需要不同开关时在
+`iolink_stack_config_t` 的 `compat_flags` / `flags` 里给出并重新初始化——应答计划表
+以能力位为输入，初始化后不再重编译。
 
 应用需要做什么：按端口实际能力设置 `stack.flags` / `stack.compat_flags`，而不是
 依赖已降级为兼容宏的编译期开关；如果端口要求“所有应答由 ISR 发送”，确保 PHY 提供

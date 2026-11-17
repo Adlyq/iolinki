@@ -130,16 +130,17 @@ typedef struct iolink_dll_shared
     uint8_t isr_isdu_last_flowctrl; /**< 最后接受的 FlowCTRL（0xFF = 无） */
 
     /**
-     * @name 应答计划表（主泵单写者 / ISR 读者）
+     * @name 应答计划表（初始化时单次写入 / ISR 只读）
      *
-     * `reply_plan_seq` 是发布字兼 seqlock 序号：奇数表示主泵正在覆盖
-     * 槽位，偶数表示计划表稳定，0 表示计划表已失效（尚未发布或刚被
-     * `iolink_dll_invalidate_reply_plans()` 撤回）。ISR 在拷贝命中项前后
-     * 各读一次，只有两次相同且为非零偶数时才执行计划。计划表内容见
-     * `iolink_reply_plan_t` 与 `iolink_dll_publish_reply_plans()`。
+     * 计划内容是 {M-sequence 类型, OD 宽度, 能力位} 的纯函数，三项都只在
+     * 初始化期间定义。`reply_plans_ready` 由 `iolink_dll_publish_reply_plans()`
+     * 在整张表写完后置 1、写入前清 0：ISR 入口只在它为 1 时进入传输泵，
+     * 初始化窗口内到达的帧因此完全不被处理。该标志只保护入口，重建仍要求
+     * 数据 ISR 静止（初始化或重新初始化）：没有运行期并发协议，查表也就不
+     * 需要序号校验。
      * @{
      */
-    volatile IOLINK_ATOMIC_UINT_T reply_plan_seq;            /**< seqlock 发布字 */
+    volatile IOLINK_ATOMIC_UINT_T reply_plans_ready;         /**< 计划表已完整发布 */
     uint8_t reply_plan_total;                                /**< 有效槽位总数 */
     uint8_t reply_plan_off[IOLINK_PLAN_SLOT_COUNT];          /**< 每状态切片起点 */
     uint8_t reply_plan_cnt[IOLINK_PLAN_SLOT_COUNT];          /**< 每状态切片长度 */

@@ -56,7 +56,7 @@
  *     iolink_isdu_od_write（按 FlowCTRL 位置去重累计），并置
  *     isr_isdu_invalidated；CHKPDU/解析/执行由主泵完成。
  *  2. 应答计划：dll_isr_plan_lookup 在 dll_reply.c 发布的计划表中查找
- *     命中项（seqlock 读者）；dll_isr_plan_execute 按计划执行
+ *     命中项（只读，表在 ISR 运行期间不改变）；dll_isr_plan_execute 按计划执行
  *     动作 -> 取源 -> 追加 CKS -> 喂字节。
  *  3. 合法帧计划未命中：不应答、不解释内容，关闭 t_A 看门狗并直接
  *     丢弃（计划表是"哪些请求可被服务"的唯一出处）。
@@ -488,11 +488,11 @@ static int dll_plan_slot_of(iolink_dll_state_t state)
 }
 
 /**
- * @brief 在已发布的计划表中查找命中项（单写者 seqlock 读者）。
+ * @brief 在已发布的计划表中查找命中项。
  *
- * 发布字为奇数表示主泵正在覆盖槽位，读者不得使用；拷贝命中项前后
- * 各读一次发布字，只有两次相同才接受。三次重试仍冲突时返回 false，
- * 本帧按"计划未命中"处理（丢弃）。
+ * 计划表在初始化时一次写就，ISR 运行期间不再改变（重建要求数据 ISR
+ * 静止），因此查表不需要序号校验：只需扫描当前状态切片并拷贝命中项。
+ * 切片内没有匹配项时返回 false，本帧按"计划未命中"处理（丢弃）。
  */
 bool dll_isr_plan_lookup(const iolink_dll_main_t* ctx, const uint8_t* frame, uint8_t len,
                          iolink_reply_plan_t* out)
@@ -508,14 +508,7 @@ bool dll_isr_plan_lookup(const iolink_dll_main_t* ctx, const uint8_t* frame, uin
     if (slot < 0) {
         return false; /* FALLBACK / 未定义状态：没有可提前应答的计划 */
     }
-    for (uint8_t attempt = 0U; attempt < 3U; attempt++) {
-        const IOLINK_ATOMIC_UINT_T seq = iolink_atomic_load(&ctx->shared.reply_plan_seq);
-        if ((seq == 0U) || ((seq & 1U) != 0U)) {
-            /* 0 = 计划表已失效（尚未发布或刚被主泵撤回）：本帧按计划
-             * 未命中丢弃；奇数 = 主泵正在覆盖槽位。 */
-            continue;
-        }
-        bool found = false;
+    {
         const uint8_t off = ctx->shared.reply_plan_off[slot];
         const uint8_t room =
             (off <= IOLINK_REPLY_PLAN_SLOTS) ? (uint8_t) (IOLINK_REPLY_PLAN_SLOTS - off) : 0U;
@@ -531,11 +524,7 @@ bool dll_isr_plan_lookup(const iolink_dll_main_t* ctx, const uint8_t* frame, uin
                 continue;
             }
             *out = *plan;
-            found = true;
-            break;
-        }
-        if (iolink_atomic_load(&ctx->shared.reply_plan_seq) == seq) {
-            return found;
+            return true;
         }
     }
     return false;
@@ -741,7 +730,10 @@ static void dll_isr_process(iolink_dll_main_t* ctx)
 
 void iolink_dll_process_isr(iolink_dll_main_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->shared.isr == NULL)) {
+    if ((ctx == NULL) || (ctx->shared.isr == NULL) ||
+        (iolink_atomic_load(&ctx->shared.reply_plans_ready) == 0U)) {
+        /* 尚未 iolink_dll_init()，或应答计划表尚未完整发布（初始化窗口内）：
+         * 传输泵不参与，绝不读取半更新的计划。 */
         return;
     }
     if (ctx->shared.in_isr != 0U) {

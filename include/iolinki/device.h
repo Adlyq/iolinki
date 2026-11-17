@@ -112,8 +112,7 @@ typedef struct
 {
     const iolink_phy_api_t* IOLINK_NONNULL
         phy; /**< 物理层驱动 API（通常取自 `iolink_phy_*_get()`），必须
-   比上下文存活更久：`iolink_device_set_capabilities()`
-   仍读它。`phy->self` 由提供 vtable 的一方写入自己的
+   比上下文存活更久：帧处理期间仍读它。`phy->self` 由提供 vtable 的一方写入自己的
    上下文（内置驱动在 `iolink_phy_*_init()` 里写），
    应用不覆盖它（覆盖会让驱动把错误指针转回自己的
    状态）。为 NULL 时初始化返回
@@ -122,8 +121,8 @@ typedef struct
                                              NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_NULL`。 */
     const iolink_device_app_t* IOLINK_NONNULL
         app; /**< 应用 trait：实例指针与生命周期/PD/时钟/日志回调
-   的唯一来源，必须比上下文存活更久（仍被
-   `iolink_device_set_capabilities()` 读取）。`app` 为
+   的唯一来源，必须比上下文存活更久（帧处理与
+   应用回调期间仍读它）。`app` 为
    NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_APP`；
    `app->time_us` 为 NULL 时返回
    `IOLINK_DEVICE_INIT_ERR_TIME`。 */
@@ -284,20 +283,6 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
  * @return 实例能力位掩码；ctx 为 NULL 时为 0。
  */
 iolink_caps_t iolink_device_capabilities(const iolink_device_ctx_t* ctx);
-
-/**
- * @brief 覆盖本实例的能力位。
- *
- * 只允许修改**运行时开关**位（兼容位、SystemCommand、访问锁）。
- * 与 PHY/构建档位绑定的位（RX/TX/WAKEUP/REQUIRE_ISR_TX 等）会被
- * 重新按当前 vtable 解析，调用方无法伪造。ISDU 引擎通过指向共享区
- * 的指针读取，因此修改立即生效（必须从主上下文调用）。
- *
- * @param ctx  设备上下文。
- * @param caps 新的能力位。
- * @return 实际生效的能力位。
- */
-iolink_caps_t iolink_device_set_capabilities(iolink_device_ctx_t* ctx, iolink_caps_t caps);
 
 /**
  * @brief 读取最新的输出过程数据（主站 -> 设备）。

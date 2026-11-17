@@ -144,12 +144,16 @@ typedef struct
  * @name 应答计划
  *
  * 主泵是 M-sequence 内容语义的唯一所有者：它把"哪种请求、用哪段
- * 字节、多长、以什么方式应答"编译成一张计划表并原子发布；数据 ISR
- * 只做 查计划 -> 取源字节 -> 追加 CKS -> 喂字节，不再解读请求内容。
+ * 字节、多长、以什么方式应答"编译成一张计划表。表内容只取决于
+ * {M-sequence 类型, OD 宽度, 能力位}，三项都在初始化时定义，因此计划表
+ * 在 `iolink_dll_init()` / `iolink_device_init()` 内编译一次后不再改变；
+ * 数据 ISR 只做 查计划 -> 取源字节 -> 追加 CKS -> 喂字节，不再解读请求内容。
  *
- * 计划表通过 `reply_plan_seq` 发布（seqlock：奇数表示主泵正在写，
- * 偶数表示稳定）。ISR 在拷贝命中项前后各读一次发布字，不一致就
- * 重试；重试仍不一致则视为"计划未命中"。
+ * 发布只有一个"就绪"标志 `reply_plans_ready`：编译前撤下、写完后置位，
+ * ISR 入口只在置位时进入传输泵，因此初始化窗口内到达的帧不会被处理。
+ * 该标志只保护**入口**：已经在泵内的调用不受它保护，所以重建必须满足
+ * "数据 ISR 静止"这一前提（初始化/重新初始化时中断尚未启用）。正因为
+ * 重建不会与查表并发，查表不需要任何序号校验。
  *
  * 计划未命中的语义：ISR 不应答、不解释内容，关闭 t_A 看门狗并**丢弃**
  * 该帧。合法帧不再交给主泵——计划表是"哪些请求可被服务"的唯一出处，
@@ -366,60 +370,35 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
 /**
  * @brief 处理 DLL 逻辑
  *
- * 处理字节级数据并执行状态机迁移。主泵在每次调用结束时按当前
- * DLL 状态、M-sequence 配置与 OD 宽度重新发布应答计划
- * （见 `iolink_dll_publish_reply_plans()`），因此数据 ISR 下一次看到的
- * 计划与主泵的分发视图一致。
+ * 处理字节级数据并执行状态机迁移。应答计划不在这里重编译：计划表是
+ * {M-sequence 类型, OD 宽度, 能力位} 的纯函数，三项都只在初始化期间定义，
+ * 各状态的差异由计划表的**状态切片**表达（见
+ * `iolink_dll_publish_reply_plans()`）。
  *
  * @param ctx 要处理的 DLL 上下文
  */
 void iolink_dll_process(iolink_dll_main_t* ctx);
 
 /**
- * @brief 按当前状态重新发布应答计划表。
+ * @brief 编译并发布应答计划表（只允许在数据 ISR 静止时调用）。
  *
- * 只允许在**主上下文**中调用（`iolink_dll_init()` 与
- * `iolink_dll_process()` 会自动调用）。计划表是
- * {DLL 状态, M-sequence 类型, OD 宽度, 波特率} 的纯函数：键未变化时
- * 本函数直接返回，不做任何写入。
+ * 计划内容是 {M-sequence 类型, OD 宽度, 能力位} 的纯函数。三项都只能在
+ * 初始化时定义：**能力位不支持运行期修改**，M-sequence 类型与 OD 宽度来自
+ * `iolink_stack_config_t`。`iolink_dll_init()` 与 `iolink_device_init()` 各调用
+ * 一次，之后不再重编译。
  *
- * 键只覆盖上述四项，**不覆盖**实例能力位。因此凡是运行期会改变计划
- * 内容的器件状态（当前只有 `IOLINK_CAP_COMPAT_T0_READ`：OPERATE 中的
- * Type-0 页读是兼容应答还是复位请求），都必须在修改后调用
- * `iolink_dll_invalidate_reply_plans()`，再由本函数重发布；否则键
- * 匹配会让本次调用提前返回，数据 ISR 继续执行旧计划。
+ * 发布协议只有一个"就绪"标志：进入函数时把 `reply_plans_ready` 撤到 0，
+ * 整张表写完后原子置 1；数据 ISR 的入口只在它为 1 时进入传输泵。因此
+ * 调用本函数期间**开始**的帧不会被处理（也不会计为任何错误）。
  *
- * 发布协议是单写者 seqlock：主泵先把 `reply_plan_seq` 变成奇数，
- * 覆盖计划槽位，再用下一次递增变回偶数；数据 ISR 只在偶数且前后
- * 两次读取相同的窗口内使用计划。因此 ISR 绝不会执行半更新的计划，
- * 最坏情况是判定为"计划未命中"并丢弃该帧。
+ * 标志只保护 ISR 入口，不保护已经在传输泵内的调用：在数据 ISR 可能运行
+ * 时重建计划表仍会与查表并发。这是本函数要求"数据 ISR 静止"的原因——
+ * `iolink_dll_init()` / `iolink_device_init()` 在中断启用前完成这次编译。
+ * 因为没有运行期并发协议，ISR 查表不需要任何序号校验。
  *
  * @param ctx DLL 上下文
  */
 void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx);
-
-/**
- * @brief 使已发布的应答计划表失效（仅主上下文）。
- *
- * 把主上下文记录的发布键清零，并把 `reply_plan_seq` 原子写 0。从这一刻
- * 起数据 ISR 把每一帧都当作"计划未命中"：不应答、关闭 t_A 看门狗并丢弃
- * 该帧（非法帧仍交给主泵做错误处理），直到下一次
- * `iolink_dll_publish_reply_plans()` 重发完整计划表。
- *
- * 调用时机：任何**运行期**改变计划内容的器件状态之后，且必须在下一个
- * 主站帧可能到达之前。当前计划内容依赖的状态为
- * {DLL 状态, M-sequence 类型, OD 宽度, 波特率}（由发布键自动跟踪）
- * 与 `IOLINK_CAP_COMPAT_T0_READ`（本函数所覆盖的运行时能力位）。
- * `iolink_device_set_capabilities()` 的调用方必须在本函数之后尽快让主泵
- * 再调用一次 `iolink_dll_publish_reply_plans()`（`iolink_dll_process()`
- * 会在每轮结束时自动完成）。
- *
- * 本函数与发布函数都是主上下文单写者操作：ISR 只读取发布字，因此
- * `seq` 从偶数直落 0 不会产生撕裂读，最坏结果是丢弃一帧合法请求。
- *
- * @param ctx DLL 上下文
- */
-void iolink_dll_invalidate_reply_plans(iolink_dll_main_t* ctx);
 
 /**
  * @brief MC 字节为 @p mc 的主站请求的期望长度（字节）。
@@ -447,7 +426,8 @@ uint8_t iolink_dll_expected_req_len(const iolink_dll_main_t* ctx, uint8_t mc);
  * 事件 / 厂商相关部分）；这些仍留在主泵中。
  *
  * 无待处理数据时调用是安全的；当 INT 线未被
- * 置为有效时立即返回。对没有 rx_octet() 的 PHY 为空操作。
+ * 置为有效时立即返回。对没有 rx_octet() 的 PHY 为空操作。计划表尚未
+ * 完整发布（初始化窗口）时同样直接返回，不改任何状态、不计数。
  * @param ctx DLL 上下文
  */
 void iolink_dll_process_isr(iolink_dll_main_t* ctx);

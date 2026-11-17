@@ -364,6 +364,12 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
                     (unsigned) config->stack->m_seq_type, (unsigned) config->stack->pd_in_len,
                     (unsigned) config->stack->pd_out_len, (unsigned) ctx->dll.main.shared.od_width,
                     (unsigned) ctx->dll.main.baudrate);
+    /* 应答计划是 {M-sequence 类型, OD 宽度, 能力位} 的纯函数。`iolink_dll_init()`
+     * 已按仅 PHY 推导的能力位发布过一次；设备层随后用完整配置重解析了
+     * 能力位，因此在这里（所有绑定完成、数据 ISR 尚未启用）重编译一次，使表与
+     * 最终能力位一致。此后不再重发布：能力位与 M-sequence 配置只能在初始化时
+     * 定义。 */
+    iolink_dll_publish_reply_plans(&ctx->dll.main);
     return 0;
 }
 
@@ -699,35 +705,6 @@ iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx)
 iolink_caps_t iolink_device_capabilities(const iolink_device_ctx_t* ctx)
 {
     return (ctx != NULL) ? ctx->dll.main.shared.caps : (iolink_caps_t) 0U;
-}
-
-iolink_caps_t iolink_device_set_capabilities(iolink_device_ctx_t* ctx, iolink_caps_t caps)
-{
-    if ((ctx == NULL) || (ctx->config == NULL)) {
-        return (iolink_caps_t) 0U;
-    }
-    /* 与 PHY vtable、应用回调绑定的位由 resolve() 重新推导，调用方
-     * 只能修改运行时开关（兼容位、SystemCommand、访问锁）。 */
-    const iolink_caps_t bound_mask = IOLINK_CAP_RX | IOLINK_CAP_TX | IOLINK_CAP_WAKEUP |
-                                     IOLINK_CAP_SIO_CQ | IOLINK_CAP_TX_BUSY |
-                                     IOLINK_CAP_REQUEST_SERVICE | IOLINK_CAP_PHY_FAULTS |
-                                     IOLINK_CAP_REQUIRE_ISR_TX | IOLINK_CAP_PD_IN_CALLBACK;
-    const iolink_caps_t bound =
-        iolink_caps_resolve(ctx->config->phy, ctx->config->stack, ctx->config->app, NULL);
-    const iolink_build_caps_t* build = iolink_caps_build();
-
-    caps = (caps & (iolink_caps_t) ~bound_mask) | (bound & bound_mask);
-    if (!iolink_caps_built(build, IOLINK_CAPB_EVENTS)) {
-        caps &= (iolink_caps_t) ~IOLINK_CAP_EVENTS;
-    }
-    if (!iolink_caps_built(build, IOLINK_CAPB_SYSTEM_COMMAND)) {
-        caps &= (iolink_caps_t) ~IOLINK_CAP_SYSTEM_COMMAND;
-    }
-    ctx->dll.main.shared.caps = caps;
-    /* 应答计划的内容依赖能力位（例如 IOLINK_CAP_COMPAT_T0_READ），
-     * 而发布键不包含能力位；必须先失效，下一轮主泵才会重发布。 */
-    iolink_dll_invalidate_reply_plans(&ctx->dll.main);
-    return caps;
 }
 
 bool iolink_device_master_lost(const iolink_device_ctx_t* ctx)

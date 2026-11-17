@@ -17,12 +17,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   48-slot table loses 192 B of RAM; on a 64-bit host nothing changes.
 - Baudrate leaves the reply-plan publication key for the same reason: it only
   ever reached plan content through `deadline_us`. Plan content is a pure
-  function of `{M-sequence type, OD width, capability bits}` — the first two
-  fixed at init — so a COM change no longer rebuilds an identical table.
-- `docs/CODE_FLOW.md` now states what a frame that arrives while the reply plan
-  is being republished observes: the seqlock window is a plan miss, so the frame
-  is dropped without a reply and counted in `isr_plan_misses` — the master sees
-  a retry, not a framing error.
+  function of `{M-sequence type, OD width, capability bits}`, all three fixed at
+  init, so a COM change no longer rebuilds an identical table.
+
+### Removed (capabilities and the reply plan are fixed at init)
+- `iolink_device_set_capabilities()` is gone. Capability bits are inputs to the
+  reply-plan table, and the table is no longer rebuilt at run time; a runtime
+  override could therefore leave the ISR executing plans that disagree with
+  `iolink_device_capabilities()`. Capabilities come from `iolink_caps_resolve()`
+  once, inside init; request different switches through `iolink_stack_config_t`
+  (`compat_flags` / `flags`) and re-initialise. **MAJOR**:
+  `include/iolinki/device.h` loses a public function.
+- `iolink_dll_invalidate_reply_plans()` is gone, and so is the `reply_plan_seq`
+  seqlock: `reply_plans_ready` (clear before the table is written, set after)
+  replaces it, `iolink_dll_process()` no longer republishes every call, and
+  `dll_isr_plan_lookup()` no longer reads a sequence number before and after
+  copying the hit. `iolink_dll_publish_reply_plans()` stays public for harnesses
+  that configure a context after `iolink_dll_init()`, documented as requiring a
+  quiescent data ISR. The flag gates the ISR **entry** only, so a frame that has
+  not started yet is dropped during a rebuild; it does not make a rebuild safe
+  against an ISR already inside the pump — that is what the quiescence
+  precondition covers. **MAJOR**:
+  `include/iolinki/dll.h` loses a public function.
+- Cost: on cortex-m0plus `-Os`, `dll_isr_plan_lookup()` drops from 119 to 97
+  instructions and `dll_isr.o` `.text` shrinks by 44 B; `isr_plan_misses` now
+  means only "the current state's slice has no matching plan", not "collided
+  with a republish window".
 
 ### Added (compile-time log level)
 - `IOLINK_LOG_COMPILE_LEVEL` (`iolinki/log.h`, default `IOLINK_LOG_COMPILE_DEBUG`)

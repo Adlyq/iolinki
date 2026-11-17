@@ -250,6 +250,9 @@ static int test_eager_isdu_snapshot(void)
     dll.main.shared.od_width = 2U;
     dll.main.shared.pd_out_len_current = 2U;
     dll.main.pd_in_len_current = 0U;
+    /* 计划表是 {类型, OD 宽度, 能力位} 的纯函数，只在初始化时编译；本用例
+       在 init 之后才设定配置，因此显式提交一次（ISR 尚未运行）。 */
+    iolink_dll_publish_reply_plans(&dll.main);
 
     dll.main.shared.isdu.state = ISDU_STATE_RESPONSE_READY;
     dll.main.shared.isdu.resp_buf[0] = 0xD4U;
@@ -414,7 +417,8 @@ static int test_type0_diagnosis_read_isr(void)
     dll.main.shared.od_width = 1U;
     dll.main.shared.pd_out_len_current = 0U;
     dll.main.pd_in_len_current = 0U;
-    /* 主泵按当前状态发布应答计划；本用例直接驱动 ISR，故显式发布。 */
+    /* 计划表只在初始化时编译；本用例在 init 之后才配置，故显式发布一次
+     * （ISR 尚未运行）。 */
     iolink_dll_publish_reply_plans(&dll.main);
     now_us = 1000000U;
     dll.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));

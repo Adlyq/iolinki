@@ -8,9 +8,9 @@
 
 /**
  * @file test_reply_plan.c
- * @brief 应答计划：主泵发布、ISR 执行、失效与丢弃语义。
+ * @brief 应答计划：初始化发布、ISR 执行与丢弃语义。
  *
- * 这些用例把"主泵发布计划"和"ISR 执行计划"分开驱动，覆盖：
+ * 这些用例把"初始化时发布计划"和"ISR 执行计划"分开驱动，覆盖：
  *  - 命中计划的即时应答（t_A 路径）；
  *  - 合法帧计划未命中：不应答、计数并丢弃，邮箱不接收该帧；
  *  - 非法帧仍进入邮箱，由主泵完成错误/状态处理且不计计划未命中；
@@ -19,8 +19,7 @@
  *  - 未接管的 COMPLETE 请求被新 START 覆盖时计数，且不得被主泵当作有效请求执行；
  *  - t_PD 保护窗口内丢弃的邮箱帧可观测；
  *  - ISDU 写暂存后的读视图失效（防"写后立刻读"读到旧值）；
- *  - seqlock 发布窗口：主泵正在覆盖计划表时 ISR 不得执行半更新计划；
- *  - 计划携带的 t_A 预算元数据。
+ *  - 计划表未完整发布（初始化窗口）：数据 ISR 完全不参与，不计数不投邮箱。
  */
 
 #include <stdint.h>
@@ -399,8 +398,10 @@ static int test_plan_hit_executes_reply(void)
 static int test_valid_miss_is_dropped(void)
 {
     init_operate();
-    /* 撤回全部计划：发布字为 0 表示"没有计划表"。 */
-    s_dll.main.shared.reply_plan_seq = 0U;
+    /* 撤回全部计划：每个状态切片长度清零（计划表本身仍在）。 */
+    for (uint8_t i = 0U; i < (uint8_t) IOLINK_PLAN_SLOT_COUNT; i++) {
+        s_dll.main.shared.reply_plan_cnt[i] = 0U;
+    }
 
     feed_process_read();
     iolink_dll_process_isr(&s_dll.main);
@@ -717,7 +718,6 @@ static int test_plan_hit_without_tx_is_deferred(void)
 {
     /* 公共入口对 NULL 上下文是空操作。 */
     iolink_dll_publish_reply_plans(TEST_NULL(iolink_dll_main_t*));
-    iolink_dll_invalidate_reply_plans(TEST_NULL(iolink_dll_main_t*));
 
     init_preoperate_rx_only();
     uint8_t frame[2];
@@ -745,7 +745,9 @@ static int test_plan_hit_without_tx_is_deferred(void)
 static int test_t_pd_discards_are_counted(void)
 {
     init_operate();
-    s_dll.main.shared.reply_plan_seq = 0U;
+    for (uint8_t i = 0U; i < (uint8_t) IOLINK_PLAN_SLOT_COUNT; i++) {
+        s_dll.main.shared.reply_plan_cnt[i] = 0U;
+    }
 
     /* 非法帧仍进邮箱（合法帧计划未命中会被丢弃，无法触发该路径）。 */
     feed_process_read();
@@ -773,12 +775,11 @@ static int test_t_pd_discards_are_counted(void)
     return 0;
 }
 
-/* 主泵正在覆盖计划表（发布字为奇数）：不得执行半更新计划。 */
-static int test_seqlock_window_is_a_miss(void)
+/* 计划表未完整发布时数据 ISR 完全不参与：不应答、不计数、不投邮箱。 */
+static int test_unpublished_plans_block_the_isr(void)
 {
     init_operate();
-    const IOLINK_ATOMIC_UINT_T stable = s_dll.main.shared.reply_plan_seq;
-    s_dll.main.shared.reply_plan_seq = (IOLINK_ATOMIC_UINT_T) (stable + 1U); /* 写入中 */
+    iolink_atomic_store(&s_dll.main.shared.reply_plans_ready, 0U);
 
     feed_process_read();
     iolink_dll_process_isr(&s_dll.main);
@@ -786,14 +787,14 @@ static int test_seqlock_window_is_a_miss(void)
     if (tx_observed_len() != 0U) {
         return 1;
     }
-    if (s_dll.main.shared.isr_plan_misses != 1U) {
-        return 2;
+    if (s_dll.main.shared.isr_plan_misses != 0U) {
+        return 2; /* 未初始化不是"计划未命中"，不计任何统计 */
     }
     if (iolink_ring_peek(&s_dll.main.shared.isr_frame_ring) != NULL) {
-        return 3; /* 合法帧不发布：计划未命中即丢弃 */
+        return 3; /* 传输泵未运行：帧连邮箱都不进 */
     }
 
-    s_dll.main.shared.reply_plan_seq = stable;
+    iolink_atomic_store(&s_dll.main.shared.reply_plans_ready, 1U);
     feed_process_read();
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
@@ -898,7 +899,10 @@ static int test_startup_probe_plan(void)
     s_now_us = 1000000U;
     tx_reset();
     TEST_TX_IDLE();
-    iolink_dll_process(&s_dll.main); /* 主泵窗口：按当前配置发布计划切片 */
+    /* 计划表只在初始化时编译；本用例在 init 之后改了类型/宽度，因此显式
+     * 重发一次（ISR 尚未运行）。process() 只负责同步 ISDU 快照。 */
+    iolink_dll_publish_reply_plans(&s_dll.main);
+    iolink_dll_process(&s_dll.main);
 
     uint8_t frame[2];
     make_frame((uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), IOLINK_MSEQ_TYPE_0,
@@ -1030,67 +1034,30 @@ static void feed_type0_page_read(void)
     feed(frame, sizeof(frame), 0U);
 }
 
-/* 运行期能力位变化必须使计划失效：键不含能力位，不失效就会继续用旧计划。 */
-static int test_capability_change_invalidates_plan(void)
+/* 计划表是能力位的纯函数：能力位在初始化时定义，发布一次即固化。
+ * 本用例钉住"改能力位 + 重发布 = 表随能力位变化"这条构建规则。 */
+static int test_publish_reflects_capability_bits(void)
 {
     init_operate();
     /* 非兼容模式：OPERATE 中的 Type-0 页读是复位请求（不应答）。 */
     s_dll.main.shared.caps &= (iolink_caps_t) ~IOLINK_CAP_COMPAT_T0_READ;
-    iolink_dll_invalidate_reply_plans(&s_dll.main);
     iolink_dll_publish_reply_plans(&s_dll.main);
     if (type0_page_read_action() != IOLINK_REPLY_ACT_RESET_STARTUP) {
         return 1;
     }
-    const IOLINK_ATOMIC_UINT_T seq_before = s_dll.main.shared.reply_plan_seq;
-    if ((seq_before == 0U) || ((seq_before & 1U) != 0U)) {
-        return 2;
-    }
 
-    /* 模拟 iolink_device_set_capabilities()：只改 caps。键不变，
-     * 未发失效请求时发布必须提前返回，表内容保持旧语义。 */
+    /* 兼容模式：同一张表按新能力位重建，页读改为普通应答。 */
     s_dll.main.shared.caps |= IOLINK_CAP_COMPAT_T0_READ;
     iolink_dll_publish_reply_plans(&s_dll.main);
-    if (type0_page_read_action() != IOLINK_REPLY_ACT_RESET_STARTUP) {
-        return 3;
-    }
-    if (s_dll.main.shared.reply_plan_seq != seq_before) {
-        return 4;
-    }
-
-    /* 失效：发布字清 0，ISR 把该请求当"计划未命中"丢弃。 */
-    iolink_dll_invalidate_reply_plans(&s_dll.main);
-    if (s_dll.main.shared.reply_plan_seq != 0U) {
-        return 5;
-    }
-    if (s_dll.main.reply_plan_key != 0U) {
-        return 6;
-    }
-    tx_reset();
-    feed_type0_page_read();
-    iolink_dll_process_isr(&s_dll.main);
-    drain_tx();
-    if (tx_observed_len() != 0U) {
-        return 7; /* 失效期间没有即时应答 */
-    }
-    if (s_dll.main.shared.isr_plan_misses != 1U) {
-        return 8;
-    }
-
-    /* 重发布：计划表随新能力位改变，ISR 恢复即时应答。 */
-    iolink_dll_publish_reply_plans(&s_dll.main);
     if (type0_page_read_action() != IOLINK_REPLY_ACT_NONE) {
-        return 9; /* 兼容模式：普通页读应答 */
-    }
-    const IOLINK_ATOMIC_UINT_T seq_after = s_dll.main.shared.reply_plan_seq;
-    if ((seq_after == 0U) || ((seq_after & 1U) != 0U)) {
-        return 10;
+        return 2;
     }
     tx_reset();
     feed_type0_page_read();
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
     if (tx_observed_len() != 2U) {
-        return 11; /* 页字节 + CKS */
+        return 3; /* 页字节 + CKS */
     }
     return 0;
 }
@@ -1145,11 +1112,11 @@ IOLINK_TEST_RC(test_isdu_write_retry_storm_is_deduped)
 IOLINK_TEST_RC(test_new_start_overwrites_undrained_request)
 IOLINK_TEST_RC(test_invalid_frame_is_published)
 IOLINK_TEST_RC(test_t_pd_discards_are_counted)
-IOLINK_TEST_RC(test_seqlock_window_is_a_miss)
+IOLINK_TEST_RC(test_unpublished_plans_block_the_isr)
 IOLINK_TEST_RC(test_isdu_write_invalidates_read_view)
 IOLINK_TEST_RC(test_startup_probe_plan)
 IOLINK_TEST_RC(test_type0_idle_read_resets_transport)
-IOLINK_TEST_RC(test_capability_change_invalidates_plan)
+IOLINK_TEST_RC(test_publish_reflects_capability_bits)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 IOLINK_TEST_RC(test_tx_without_done_hook)
 #endif
@@ -1182,11 +1149,11 @@ int main(void)
         cmocka_unit_test(iolink_case_test_new_start_overwrites_undrained_request),
         cmocka_unit_test(iolink_case_test_invalid_frame_is_published),
         cmocka_unit_test(iolink_case_test_t_pd_discards_are_counted),
-        cmocka_unit_test(iolink_case_test_seqlock_window_is_a_miss),
+        cmocka_unit_test(iolink_case_test_unpublished_plans_block_the_isr),
         cmocka_unit_test(iolink_case_test_isdu_write_invalidates_read_view),
         cmocka_unit_test(iolink_case_test_startup_probe_plan),
         cmocka_unit_test(iolink_case_test_type0_idle_read_resets_transport),
-        cmocka_unit_test(iolink_case_test_capability_change_invalidates_plan),
+        cmocka_unit_test(iolink_case_test_publish_reflects_capability_bits),
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
         cmocka_unit_test(iolink_case_test_tx_without_done_hook),
 #endif

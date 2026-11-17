@@ -942,9 +942,9 @@ void iolink_dll_process(iolink_dll_main_t* ctx)
         return;
     }
     dll_process_body(ctx);
-    /* 主泵是 M-sequence 内容语义的唯一所有者：把本轮的
-     * 分发视图编译成计划，供数据 ISR 下一帧执行。 */
-    iolink_dll_publish_reply_plans(ctx);
+    /* 应答计划不在这里重发布：它是 {M-sequence 类型, OD 宽度, 能力位} 的
+     * 纯函数，三项都只在初始化期间定义，各状态的差异由计划表的**状态切片**
+     * 表达。运行期重编译只会重写同样的内容，并让 ISR 冒读到半更新表的风险。 */
     /* 基于电平的应用通知：状态钩子对设备层和直接 DLL
      * 用户的唯一运行位置。设备层在其事件/DS 服务之后
      * 不再 flush。 */

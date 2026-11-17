@@ -141,8 +141,7 @@ typedef struct
 
     /* Direct Parameter page 1（0x00-0x0F）RAM 映像。
      * 并发契约：主泵是唯一写者，数据 ISR 只读。
-     * `dp_page1_seq` 是 seqlock 发布字（与 dll_shared.h 中
-     * `reply_plan_seq` 同义）：奇数表示主泵正在覆盖映像或映像已失效，
+     * `dp_page1_seq` 是 seqlock 发布字：奇数表示主泵正在覆盖映像或映像已失效，
      * 偶数表示内容稳定。ISR 只做「读序号 → 读字节 → 再读序号」的校验，
      * 绝不重建整页；整页构建只发生在主泵上下文。 */
     uint8_t dp_page1[16];          /**< DPP1 映像（主泵写、ISR 读） */

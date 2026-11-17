@@ -18,10 +18,12 @@ source of "why did my build not behave as configured" reports.
 
    `iolink_caps_resolve()` is the single resolution point
    (`include/iolinki/capability.h`). Read the result with
-   `iolink_device_capabilities()`; override the mutable bits with
-   `iolink_device_set_capabilities()`. Hardware bits (RX/TX, wake-up, SIO C/Q,
-   `request_service`) cannot be forged: `resolve()` re-probes the vtable on
-   every override. A capability the image was not built with is masked out
+   `iolink_device_capabilities()`. Capabilities are defined **once, at
+   initialisation**: there is no runtime override, because the reply-plan table
+   is compiled from them and never rebuilt. Ask for different switches through
+   `iolink_stack_config_t` (`compat_flags`, `flags`) and re-initialise.
+   Hardware bits (RX/TX, wake-up, SIO C/Q, `request_service`) come from the
+   vtable only. A capability the image was not built with is masked out
    (the bit reads 0) instead of failing init; the reachable init checks are
    `REQUIRE_ISR_TX` without `request_service()` and TX-FRAME+TX_BUSY without
    the hook, both `IOLINK_DEVICE_INIT_ERR_PHY`.
@@ -60,7 +62,7 @@ compile-only and the remaining cross-combinations are syntax-only probes.
 
 | Capability | Resolved from | Override |
 | --- | --- | --- |
-| `IOLINK_CAP_SYSTEM_COMMAND` | build profile | `stack.flags` / `iolink_device_set_capabilities()` |
+| `IOLINK_CAP_SYSTEM_COMMAND` | build profile | `stack.flags` (init only) |
 | `IOLINK_CAP_WAKEUP` | PHY vtable (`detect_wakeup`) | hardware bound |
 | `IOLINK_CAP_SIO_CQ` | PHY vtable (`set_cq_line`) | hardware bound |
 | `IOLINK_CAP_PD_IN_CALLBACK` | `app->on_pd_input` | application |

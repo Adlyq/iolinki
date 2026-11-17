@@ -172,9 +172,8 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
         ctx->shared.isr_plan_misses++;
 #if IOLINK_LOG_ENABLE_ISR
         /* 计数是主信号，日志只是辅助。FALLBACK/COMM_DISABLED 下"无计划"是
-         * 常态，记 DEBUG；OPERATE 下合法帧却没有计划更可疑，记 WARN。计划表
-         * 被 iolink_dll_invalidate_reply_plans() 撤回时同样走这里，所以文案
-         * 不把原因说死。整块随 IOLINK_LOG_ENABLE_ISR 编译开关消失，默认零开销。 */
+         * 常态，记 DEBUG；OPERATE 下合法帧却没有计划更可疑，记 WARN。整块随
+         * IOLINK_LOG_ENABLE_ISR 编译开关消失，默认零开销。 */
         if (ctx->shared.state == IOLINK_DLL_STATE_OPERATE) {
             IOLINK_LOG_ISR_WARN(&ctx->shared.log,
                                 "no reply plan in OPERATE (withdrawn or unknown shape): "

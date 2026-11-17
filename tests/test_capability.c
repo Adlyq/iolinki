@@ -8,7 +8,7 @@
 
 /**
  * @file test_capability.c
- * @brief 能力表：构建档位、唯一解析点与运行时覆盖规则。
+ * @brief 能力表：构建档位、唯一解析点与初始化时定义规则。
  *
  * 套件只在 BYTE/BYTE 结构配置下构建，因此 vtable 探测用字节钩子。
  */
@@ -162,7 +162,9 @@ static void test_resolve_merges_runtime_switches(void** state)
     assert_true(iolink_caps_has(caps, IOLINK_CAP_DS_LEGACY_SUB0));
 }
 
-static void test_instance_caps_cannot_forge_hardware(void** state)
+/* 实例能力位由 vtable 与构建档位推导：配置侧无法伪造硬件位，也没有
+ * 运行期覆盖入口（能力位只在初始化时定义）。 */
+static void test_instance_caps_come_from_the_vtable(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
@@ -172,31 +174,16 @@ static void test_instance_caps_cannot_forge_hardware(void** state)
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
 
-    const iolink_caps_t before = iolink_device_capabilities(&dev.ctx);
-    assert_true(iolink_caps_has(before, IOLINK_CAP_RX));
-
-    /* vtable 绑定的位由 resolve() 重新推导：既不能伪造，也不能删除。 */
-    const iolink_caps_t set =
-        iolink_device_set_capabilities(&dev.ctx, IOLINK_CAP_SYSTEM_COMMAND | IOLINK_CAP_EVENTS);
-    assert_true(iolink_caps_has(set, IOLINK_CAP_RX));
+    const iolink_caps_t caps = iolink_device_capabilities(&dev.ctx);
+    assert_true(iolink_caps_has(caps, IOLINK_CAP_RX));
+    /* mock PHY 未提供 request_service()：该位只能来自 vtable。 */
+    assert_false(iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE));
 #if IOLINK_FEATURE_SYSTEM_COMMAND
-    assert_true(iolink_caps_has(set, IOLINK_CAP_SYSTEM_COMMAND));
+    assert_true(iolink_caps_has(caps, IOLINK_CAP_SYSTEM_COMMAND));
 #endif
 #if IOLINK_FEATURE_EVENTS
-    assert_true(iolink_caps_has(set, IOLINK_CAP_EVENTS));
+    assert_true(iolink_caps_has(caps, IOLINK_CAP_EVENTS));
 #endif
-
-    /* 伪造硬件位（mock PHY 未提供 request_service）必须被 resolve 丢弃。 */
-    const iolink_caps_t forged =
-        iolink_device_set_capabilities(&dev.ctx, IOLINK_CAP_REQUEST_SERVICE);
-    assert_false(iolink_caps_has(forged, IOLINK_CAP_REQUEST_SERVICE));
-    assert_true(iolink_caps_has(forged, IOLINK_CAP_RX));
-
-    /* 运行时关闭 SystemCommand 是允许的。 */
-    const iolink_caps_t off =
-        iolink_device_set_capabilities(&dev.ctx, set & (iolink_caps_t) ~IOLINK_CAP_SYSTEM_COMMAND);
-    assert_false(iolink_caps_has(off, IOLINK_CAP_SYSTEM_COMMAND));
-    assert_int_equal(iolink_device_capabilities(&dev.ctx), off);
 }
 
 /* resolve() 的 build 覆盖入口：合成档位下的三级优先级。 */
@@ -239,29 +226,6 @@ static void test_require_isr_tx_needs_request_service(void** state)
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), IOLINK_DEVICE_INIT_ERR_PHY);
 }
 
-/* 设备层的接线：iolink_device_set_capabilities() 必须让已发布的应答计划
- * 失效，否则计划键（状态/类型/宽度/波特率）不变时 ISR 会继续执行旧计划。 */
-static void test_capability_override_invalidates_plans(void** state)
-{
-    (void) state;
-    iolink_test_device_t dev;
-    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1};
-
-    setup_mock_phy();
-    will_return(mock_phy_init, 0);
-    assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
-
-    iolink_dll_publish_reply_plans(test_dll(&dev.ctx));
-    assert_true(iolink_atomic_load(&test_dll_shared(&dev.ctx)->reply_plan_seq) != 0U);
-
-    iolink_device_set_capabilities(
-        &dev.ctx, iolink_device_capabilities(&dev.ctx) | IOLINK_CAP_COMPAT_T0_READ);
-    assert_int_equal(iolink_atomic_load(&test_dll_shared(&dev.ctx)->reply_plan_seq), 0U);
-
-    iolink_dll_publish_reply_plans(test_dll(&dev.ctx));
-    assert_true(iolink_atomic_load(&test_dll_shared(&dev.ctx)->reply_plan_seq) != 0U);
-}
-
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -269,8 +233,7 @@ int main(void)
         cmocka_unit_test(test_resolve_probes_the_built_vtable),
         cmocka_unit_test(test_resolve_merges_runtime_switches),
         cmocka_unit_test(test_resolve_uses_build_override),
-        cmocka_unit_test(test_instance_caps_cannot_forge_hardware),
-        cmocka_unit_test(test_capability_override_invalidates_plans),
+        cmocka_unit_test(test_instance_caps_come_from_the_vtable),
         cmocka_unit_test(test_require_isr_tx_needs_request_service),
     };
     return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);

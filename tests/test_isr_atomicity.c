@@ -255,7 +255,8 @@ static void reset_ctx(void)
     s_ctx.main.pd_in_len_current = 0U;
     s_ctx.main.shared.pd_out_len_current = 0U;
     s_ctx.main.pd_valid = true;
-    /* 应答计划由主泵按当前状态发布；直接改状态后必须重发一次。 */
+    /* 应答计划只在初始化时编译；本用例在 init 之后改了类型/宽度，因此
+     * 在这里显式重发一次（ISR 尚未运行）。 */
     iolink_dll_publish_reply_plans(&s_ctx.main);
 }
 
@@ -293,7 +294,6 @@ static void test_reply_staging_pokes_phy_outside_critical(void** state)
 
     reset_ctx();
     s_ctx.main.shared.state = IOLINK_DLL_STATE_STARTUP;
-    iolink_dll_publish_reply_plans(&s_ctx.main);
     make_frame(frame, sizeof(frame));
     feed_frame(frame, sizeof(frame));
 
@@ -384,7 +384,6 @@ static void test_state_notification_is_level_based(void** state)
     s_ctx.main.state_cb = state_cb;
     s_ctx.main.state_cb_user = NULL;
     s_ctx.main.shared.state = IOLINK_DLL_STATE_STARTUP;
-    iolink_dll_publish_reply_plans(&s_ctx.main); /* 主泵按当前状态重发计划 */
     s_state_count = 0U;
     s_cb_in_isr = false;
 
@@ -397,10 +396,6 @@ static void test_state_notification_is_level_based(void** state)
     }
     assert_int_equal(s_ctx.main.shared.state, IOLINK_DLL_STATE_PREOPERATE);
     assert_int_equal(s_state_count, 0U); /* 推迟到主窗口 */
-
-    /* ISR 侧状态迁移后，主泵会在下一个窗口重新发布计划；
-     * 本用例直接驱动 ISR，因此在此显式模拟该发布。 */
-    iolink_dll_publish_reply_plans(&s_ctx.main);
 
     /* 迁移命令：PREOPERATE -> ESTAB_COM，发生在主泵运行之前。 */
     make_frame(trans, sizeof(trans));

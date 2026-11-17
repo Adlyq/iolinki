@@ -153,7 +153,7 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     dll->main.shared.pd_out_len_current = 0U;
     dll->main.pd_in_len_current = 0U;
     dll->main.pd_valid = true;
-    /* 主泵按当前状态发布应答计划；直接改状态后必须重发一次。 */
+    /* 计划表只在初始化时编译；本用例在 init 之后改了类型/宽度，故显式重发。 */
     iolink_dll_publish_reply_plans(&dll->main);
     g_frame_ready = 0U;
     tx_reset();

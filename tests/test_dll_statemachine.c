@@ -8,7 +8,7 @@
 
 /**
  * @file test_dll_statemachine.c
- * @brief 状态机表：相位性质、计划状态戳与迁移后的失效/重发布。
+ * @brief 状态机表：相位性质、计划状态戳与迁移后的状态切片。
  *
  * 性质："任何状态下都不会对错误 M-sequence 相位的帧发字节"。
  * 做法：对每个 DL 状态 × {Type-0/1/2} × {过程/页通道} 的合法长度帧，
@@ -368,7 +368,7 @@ static int test_phase_property(void)
 
 /* 计划表按状态切片：状态迁移后 ISR 直接使用新状态切片，不需要主泵
  * 重发布；ESTAB_COM 的首帧应答后仍交主泵完成迁移。 */
-static int test_plan_state_stamp_and_republish(void)
+static int test_plan_state_stamp(void)
 {
     init_state(IOLINK_DLL_STATE_PREOPERATE);
 
@@ -383,7 +383,6 @@ static int test_plan_state_stamp_and_republish(void)
             return 2;
         }
     }
-    const IOLINK_ATOMIC_UINT_T seq_before = s_dll.main.shared.reply_plan_seq;
 
     /* 过渡命令由 ISR 计划消费并把状态推进到 ESTAB_COM（不应答）。 */
     uint8_t frame[2];
@@ -414,14 +413,12 @@ static int test_plan_state_stamp_and_republish(void)
         return 6; /* 已应答但必须交给主泵 */
     }
 
-    /* 主泵消费该帧：ESTAB -> OPERATE。计划表不重发布（键与状态无关）。 */
+    /* 主泵消费该帧：ESTAB -> OPERATE。计划表不重发布：各状态有独立切片，
+     * 状态迁移与计划内容无关（本用例下面直接使用 OPERATE 切片即证明这点）。 */
     iolink_dll_process(&s_dll.main);
     drain_tx();
     if (s_dll.main.shared.state != IOLINK_DLL_STATE_OPERATE) {
         return 7;
-    }
-    if (s_dll.main.shared.reply_plan_seq != seq_before) {
-        return 8; /* 状态迁移不触发重发布 */
     }
 
     /* OPERATE 切片：配置类型的过程读由 ISR 即时应答。 */
@@ -467,7 +464,7 @@ static int test_table_accessors(void)
 
 IOLINK_TEST_RC(test_table_accessors)
 IOLINK_TEST_RC(test_phase_property)
-IOLINK_TEST_RC(test_plan_state_stamp_and_republish)
+IOLINK_TEST_RC(test_plan_state_stamp)
 
 static int group_teardown(void** state)
 {
@@ -490,7 +487,7 @@ int main(void)
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(iolink_case_test_table_accessors),
         cmocka_unit_test(iolink_case_test_phase_property),
-        cmocka_unit_test(iolink_case_test_plan_state_stamp_and_republish),
+        cmocka_unit_test(iolink_case_test_plan_state_stamp),
     };
     return cmocka_run_group_tests(tests, NULL, group_teardown);
 }

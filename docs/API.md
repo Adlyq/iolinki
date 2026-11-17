@@ -205,7 +205,6 @@ int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, 
 
 ```c
 iolink_caps_t iolink_device_capabilities(const iolink_device_ctx_t* ctx);
-iolink_caps_t iolink_device_set_capabilities(iolink_device_ctx_t* ctx, iolink_caps_t caps);
 
 const iolink_build_caps_t* iolink_caps_build(void);
 iolink_caps_t iolink_caps_resolve(const iolink_phy_api_t* phy, const iolink_stack_config_t* stack,
@@ -218,20 +217,15 @@ bool iolink_caps_built(const iolink_build_caps_t* caps, uint32_t mask);
 能力表分两层。`iolink_build_caps_t`（`iolink_caps_build()`，`const` 位于 `.rodata`）
 描述本镜像的编译结果：ISR RX/TX 粒度（`IOLINK_CAP_ISR_RX_*` / `IOLINK_CAP_ISR_TX_*`）、
 并发/统计档位、PD-in 缓冲数以及 `IOLINK_CAPB_*` 构建特性位（`DATA_STORAGE`、`EVENTS`、
-`SYSTEM_COMMAND`、`ISR_LOG`、`ISR_TX_ONLY`）。`iolink_caps_t` 是绑定 PHY 后由
-`iolink_caps_resolve()` 一次性解析的实例掩码，运行期通过 `iolink_device_capabilities()`
-读取。
+`SYSTEM_COMMAND`、`ISR_LOG`、`ISR_TX_ONLY`）。`iolink_caps_t` 是绑定 PHY 后由 `iolink_caps_resolve()` 一次性解析的实例掩码，
+**只在初始化时定义**，运行期通过 `iolink_device_capabilities()` 读取；没有覆盖入口，
+需要不同开关时在 `iolink_stack_config_t` 里给（`compat_flags` / `flags`）并重新初始化。
 
 实例位：`IOLINK_CAP_RX`、`_TX`、`_WAKEUP`、`_SIO_CQ`、`_TX_BUSY`、
 `_REQUEST_SERVICE`、`_PHY_FAULTS`（由 PHY vtable 探测）、`_PD_IN_CALLBACK`、
 `_SYSTEM_COMMAND`、`_EVENTS`、`_COMPAT_V10_OP`、`_COMPAT_T0_READ`、`_DS_LEGACY_SUB0`、
 `_REQUIRE_ISR_TX`，以及四个 DeviceAccessLocks 位 `_LOCK_PARAM`、`_LOCK_DS`、
 `_LOCK_LOCAL_PARAM`、`_LOCK_LOCAL_UI`（合称 `IOLINK_CAP_LOCKS_ALL`）。
-
-`iolink_device_set_capabilities()` 只接受对运行时开关（兼容位、SystemCommand、访问锁）
-的修改。与 PHY vtable、构建档位或 `on_pd_input` 绑定的位会按当前配置重新推导，调用方
-无法伪造；未编译进相应子系统时 `IOLINK_CAP_EVENTS` 和 `IOLINK_CAP_SYSTEM_COMMAND`
-保持清零。函数返回实际生效的掩码。
 
 `iolink_device_init()` 用 `IOLINK_DEVICE_INIT_ERR_PHY` 拒绝两种不一致组合：
 `IOLINK_CAP_REQUIRE_ISR_TX` 但 PHY 没有 `request_service()` 钩子，以及 TX FRAME 构建

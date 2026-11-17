@@ -227,11 +227,13 @@ static void init_preop_isdu_read(void)
     iolink_dll_process(&s_dll.main); /* 发布读视图快照 */
 }
 
-/** @brief PREOPERATE，但计划表已失效：任何合法帧都按"计划未命中"丢弃。 */
+/** @brief PREOPERATE，但没有任何计划切片：任何合法帧都按"计划未命中"丢弃。 */
 static void init_preop_no_plans(void)
 {
     init_preop();
-    s_dll.main.shared.reply_plan_seq = (IOLINK_ATOMIC_UINT_T) 0U;
+    for (uint8_t i = 0U; i < (uint8_t) IOLINK_PLAN_SLOT_COUNT; i++) {
+        s_dll.main.shared.reply_plan_cnt[i] = 0U;
+    }
 }
 
 static scenario_t s_scenarios[MAX_SCENARIOS];
