@@ -1,5 +1,8 @@
 # API 参考
 
+本文件是精简 API 参考：函数签名、参数、返回值与错误码。集成步骤、ISR 传输契约和
+平台适配见 [API_INTEGRATION.md](API_INTEGRATION.md)。
+
 本栈基于上下文（没有单例）：应用分配一个 `iolink_device_ctx_t` 并把它传给每次调用。
 只要每个实例使用自己的上下文，多个设备实例可以共存。权威声明见
 `include/iolinki/device.h`、`include/iolinki/application.h`、`include/iolinki/events.h`、
@@ -28,9 +31,7 @@ iolink_workspace_t* iolink_device_get_workspace(const iolink_device_ctx_t* ctx);
 保持有效。
 
 **返回值**：成功返回 `0`，配置无效返回负的 `iolink_device_init_result_t`
-（`IOLINK_DEVICE_INIT_ERR_*`）。PHY `init` 回调失败映射为
-`IOLINK_DEVICE_INIT_ERR_PHY`；驱动自己的错误码用
-`iolink_device_get_phy_error()` 读取（默认日志是静默的）。
+（`IOLINK_DEVICE_INIT_ERR_*`，完整清单与语义见“错误码”）。
 
 #### 工作区
 
@@ -197,8 +198,9 @@ int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, 
 PD 长度在初始化时由 `iolink_stack_config_t` 固定：`len` 必须等于配置的 PD-in 长度
 （`TYPE_0` 为 0），否则返回 -1。
 两条 PD-in 路径在同一构建内共存：非 NULL 的 `on_pd_input` 在初始化时选择回调路径并
-置位实例位 `IOLINK_CAP_PD_IN_CALLBACK`；否则应用用本函数轮询发布。选择回调路径后，
-`pd_input_update` 返回 `IOLINK_DEVICE_INIT_ERR_PD_INPUT`，而不是静默覆盖回调输出。
+置位实例位 `IOLINK_CAP_PD_IN_CALLBACK`；否则应用用本函数轮询发布。`iolink_device_init()`
+**不**检查两条路径是否同时提供，也不因混用而失败；回调路径生效后，本函数在运行期返回
+`IOLINK_DEVICE_INIT_ERR_PD_INPUT`，而不是静默覆盖回调输出。
 `pd_output_read` 返回最新的 Master-to-Device 数据。
 
 ### 能力
@@ -611,6 +613,10 @@ DS 的语义是**对象字典的投影**：参数集合就是标准表与应用�
 
 ## 错误码
 
+`iolink_device_init()` 的返回值枚举。块内由 `include/iolinki/device.h` 生成
+（`tools/gen_docs.py`），不手改；数字与枚举取值的唯一出处是该头文件。
+
+<!-- BEGIN GENERATED: device_error_codes (tools/gen_docs.py) -->
 ```c
 typedef enum {
     IOLINK_DEVICE_INIT_OK = 0,
@@ -631,10 +637,62 @@ typedef enum {
     IOLINK_DEVICE_INIT_ERR_DEVICE_INFO = -15, /* config.device_info == NULL（设备没有默认身份） */
 } iolink_device_init_result_t;
 ```
+<!-- END GENERATED -->
+
+负值表示初始化被拒绝。`IOLINK_DEVICE_INIT_ERR_PD_INPUT` 是唯一在运行期返回的成员：
+回调 PD-in 路径生效后，`iolink_device_pd_input_update()` 用它拒绝轮询调用（见“过程数据”）。
+PHY `init` 回调的失败统一映射为 `IOLINK_DEVICE_INIT_ERR_PHY`，驱动自己的错误码用
+`iolink_device_get_phy_error()` 读取，不会混进本枚举。
 
 ISDU 附加错误码（`IOLINK_ISDU_ERROR_*`，例如 `IDX_NOTAVAIL` `0x11`、
 `SUBINDEX_NOT_AVAIL` `0x12`、`WRITE_PROTECTED`/访问拒绝 `0x23`、
 `FUNCTION_NOT_AVAIL` `0x35`）定义在 `include/iolinki/protocol.h`。
+
+## DLL 统计（裸 DLL 集成）
+
+不经过设备层的裸 DLL 集成用 `iolink_dll_get_stats()` 取统计快照；设备层通过
+`iolink_device_get_dll_stats()` 转发同一个结构。计数器的写入点散布在主泵与数据 ISR，
+`IOLINK_STATS_MODE=SPLIT` 时两侧各保留一份并在读取时求和，`SHARED`（默认）时共用字段、
+可能丢失一次并发更新（权威说明见 `include/iolinki/dll.h`）。
+
+```c
+void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_stats);
+void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx, iolink_dll_stats_t* out_stats);
+iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_main_t* ctx);
+```
+
+`iolink_dll_get_baudrate()` 当前仍接收 `const iolink_dll_main_t* ctx`，但实现按编译期
+`IOLINK_COM` 返回 `IOLINK_COM_BAUDRATE`，不使用该参数。
+
+<!-- BEGIN GENERATED: dll_stats (tools/gen_docs.py) -->
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `crc_errors` | `uint32_t` | 累计 CRC 错误数 |
+| `timeout_errors` | `uint32_t` | 累计超时数：数据 ISR 的 t_A 超时与主泵的 T_DSIO 超时 |
+| `framing_errors` | `uint32_t` | 累计成帧错误数 |
+| `timing_errors` | `uint32_t` | 累计定时违规次数 |
+| `t_ren_violations` | `uint32_t` | t_ren 违规次数 |
+| `t_cycle_violations` | `uint32_t` | t_cycle 违规次数 |
+| `t_byte_violations` | `uint32_t` | 字节间定时违规次数 |
+| `t_pd_violations` | `uint32_t` | t_pd 违规次数 |
+| `total_retries` | `uint32_t` | CRC/协议错误处理路径的自增计数（见下方说明） |
+| `voltage_faults` | `uint32_t` | 电压故障计数：`get_faults()` 路径按故障边沿计，旧路径按轮询周期计 |
+| `overtemp_faults` | `uint32_t` | 过温故障计数：`get_faults()` 路径按故障边沿计，旧路径恒为 0 |
+| `short_circuits` | `uint32_t` | 短路计数：`get_faults()` 路径按故障边沿计，旧路径按轮询周期计 |
+| `isr_tx_dropped` | `uint32_t` | 传输层无法发送的应答数（主上下文与数据 ISR 都计入） |
+| `idle_timeouts` | `uint32_t` | 1 s 空闲链路诊断次数（不是 t_A 超时） |
+| `isr_od_overruns` | `uint32_t` | 已收齐的 ISDU 写请求被新 START 覆盖的次数 |
+| `isr_plan_misses` | `uint32_t` | 未命中应答计划而被丢弃的合法帧数 |
+| `isr_mailbox_drops` | `uint32_t` | 因帧邮箱满而丢弃的帧数 |
+| `isr_frames_consumed` | `uint32_t` | 由数据 ISR 完全处理、不再进入邮箱的帧数 |
+| `isr_frames_handoff` | `uint32_t` | 成功交给主泵的帧数 |
+| `t_pd_discards` | `uint32_t` | t_PD 保护窗口内丢弃的邮箱帧数 |
+| `reply_plan_overflows` | `uint32_t` | 计划表中因槽位耗尽而未发布的条目数 |
+<!-- END GENERATED -->
+
+`total_retries` 不是独立的报文重试计数：CRC 校验失败时它与 `crc_errors` 同步自增
+（`src/dll_sm.c`），协议错误转 STARTUP 时也自增（`src/dll_frame.c`）；库内没有重发路径。
+字段名与真实语义的差异按当前实现记录于此，不做推断。
 
 ## 平台抽象
 
@@ -645,8 +703,9 @@ ISDU 附加错误码（`IOLINK_ISDU_ERROR_*`，例如 `IDX_NOTAVAIL` `0x11`、
 `iolink_dll_init()` 之后自行绑定 `ctx->shared.clock`；直接使用事件引擎的调用方把
 `ctx->clock` 指向自己的 `iolink_clock_t`（`NULL` 读作时间 0）。临界区
 使用 `include/iolinki/port.h` 中的 `iolink_critical_enter()` /
-`iolink_critical_exit()`；`iolink_device_init()` 以 `IOLINK_DEVICE_INIT_ERR_CRITICAL`
-拒绝库自带的 weak no-op 默认实现。
+`iolink_critical_exit()`；需要临界区的档位（`IOLINK_NEED_CRITICAL` 非零）下，
+`iolink_device_init()` 以 `IOLINK_DEVICE_INIT_ERR_CRITICAL` 拒绝库自带的 weak no-op
+默认实现。
 
 ## 构建配置
 
@@ -687,7 +746,7 @@ config.log_level = IOLINK_LOG_LEVEL_INFO;
 ```
 
 `IOLINK_LOG_LEVEL_SILENT`（默认）或 trait 的 `log_write == NULL` 保持静默。
-汇点只在初始化时由 `config.log_write` / `config.log_level` 绑定，没有运行期切换
+汇点只在初始化时由 `config.app->log_write` / `config.log_level` 绑定，没有运行期切换
 接口。设备只有一个 sink（`shared.log`），ISDU、DS 和事件上下文只保存指向它的
 指针；直接使用这些模块的调用方把 `ctx->log` 指向自己的 sink 即可，NULL 表示静默。
 
