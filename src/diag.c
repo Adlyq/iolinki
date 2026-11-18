@@ -325,7 +325,8 @@ uint8_t iolink_diag_device_status(iolink_events_ctx_t* IOLINK_NULLABLE events)
 
     uint8_t worst = 0U;
     uint8_t worst_prio = 5U;
-    IOLINK_CRITICAL_ENTER();
+    /* `pending[]` 只有主上下文读写（ISR 只写 `isr_pulse[]`），因此这里
+     * 不需要与中断串行化。 */
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         const iolink_event_pending_t* p = &events->pending[i];
         /* present || reported：disappears 仍在队列/DDS 中时状态不回 0。 */
@@ -340,7 +341,6 @@ uint8_t iolink_diag_device_status(iolink_events_ctx_t* IOLINK_NULLABLE events)
             worst = status;
         }
     }
-    IOLINK_CRITICAL_EXIT();
     return worst;
 }
 
@@ -352,7 +352,6 @@ uint8_t iolink_diag_dds_snapshot(iolink_events_ctx_t* events, iolink_diag_dds_en
     }
 
     uint8_t n = 0U;
-    IOLINK_CRITICAL_ENTER();
     for (uint8_t i = 0U; (i < IOLINK_EVENT_PENDING_MAX) && (n < max); i++) {
         const iolink_event_pending_t* p = &events->pending[i];
         if (!p->active || !p->reported || (p->type == IOLINK_EVENT_TYPE_NOTIFICATION)) {
@@ -362,7 +361,6 @@ uint8_t iolink_diag_dds_snapshot(iolink_events_ctx_t* events, iolink_diag_dds_en
         out[n].qualifier = iolink_event_qualifier(p->code, p->type, IOLINK_EVENT_MODE_APPEARS);
         n++;
     }
-    IOLINK_CRITICAL_EXIT();
     return n;
 }
 

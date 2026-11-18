@@ -35,6 +35,9 @@ struct iolink_dll_main
 
     volatile bool master_lost; /**< 主站通信丢失（应用层提示） */
 
+    bool log_locked; /**< 日志汇点已由初始化配置固定：之后再改写会与数据 ISR
+                          的日志读取竞争。 */
+
     uint32_t master_lost_activity_ms; /**< 上次武装 MASTER_LOST 时的活动时间戳
                                            （用于识别新活动边沿） */
 

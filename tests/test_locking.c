@@ -45,28 +45,20 @@ static void test_event_locking(void** state)
 
     iolink_event_t ev;
     iolink_events_pop(&ctx, &ev);
+    (void) iolink_events_peek(&ctx, &ev);
 
-    assert_int_equal(g_enter_count, 0);
-    assert_int_equal(g_exit_count, 0);
-
-    /* 队列读/clear 仍与数据 ISR 串行化。 */
+    /* 队列与 pending 表都归主上下文：读/clear 同样不需要与中断串行化。 */
     iolink_event_trigger(&ctx, 0x1000, IOLINK_EVENT_TYPE_ERROR);
     iolink_event_clear(&ctx, 0x1000);
 
-#if IOLINK_NEED_CRITICAL
-    assert_int_equal(g_enter_count, 1);
-    assert_int_equal(g_exit_count, 1);
-#else
-    /* SINGLE 配置：协议栈不引用临界区，因此上面的强符号覆盖
-     * 绝不应被执行。 */
     assert_int_equal(g_enter_count, 0);
     assert_int_equal(g_exit_count, 0);
-#endif
 }
 
 /* 诊断来源随触发一起写入：一次 diag_raise 与普通事件触发的临界区次数
- * 完全相同，不存在“返回后再查一次 pending[]”的第二处。 */
-static void test_diag_raise_adds_no_critical_section(void** state)
+ * 完全相同，不存在“返回后再查一次 pending[]”的第二处。DeviceStatus 与
+ * DDS 快照只读主上下文独占的 pending 表，同样不取临界区。 */
+static void test_diag_paths_add_no_critical_section(void** state)
 {
     (void) state;
     iolink_events_ctx_t ctx;
@@ -84,13 +76,22 @@ static void test_diag_raise_adds_no_critical_section(void** state)
 
     assert_int_equal(g_enter_count, trigger_enters);
     assert_int_equal(g_exit_count, trigger_exits);
+
+    g_enter_count = 0;
+    g_exit_count = 0;
+    (void) iolink_diag_device_status(&ctx);
+    iolink_diag_dds_entry_t entries[IOLINK_EVENT_PENDING_MAX];
+    (void) iolink_diag_dds_snapshot(&ctx, entries, IOLINK_EVENT_PENDING_MAX);
+
+    assert_int_equal(g_enter_count, 0);
+    assert_int_equal(g_exit_count, 0);
 }
 
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_event_locking),
-        cmocka_unit_test(test_diag_raise_adds_no_critical_section),
+        cmocka_unit_test(test_diag_paths_add_no_critical_section),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

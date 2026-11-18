@@ -91,8 +91,9 @@ void iolink_critical_exit(void);
 （`IOLINK_NEED_CRITICAL` 非零，即 `IOLINK_CONCURRENCY` 不低于 `ISR`）下，
 `iolink_device_init()` 会探测这两个钩子；如果仍在用 weak 默认实现，初始化返回
 `IOLINK_DEVICE_INIT_ERR_CRITICAL`。实现必须可嵌套（`exit` 恢复对应 `enter` 保存的
-屏蔽状态），并能在 ISR 双泵下保护库实际取锁的短操作：诊断条件表、事件队列的
-读/clear、计数器清零、SIO 切换的应答槽清理与 ISR 相位复位
+屏蔽状态），并能在 ISR 双泵下保护库实际取锁的短操作：诊断条件表的 `isr_pulse`
+消费与整表复位、`IOLINK_STATS_MODE=SPLIT` 下的计数器清零、应答暂存的发布/取走、
+SIO 切换的应答槽清理、读复位旗标与 ISR 相位复位
 （见 `docs/CODE_FLOW.md` 第 12 节的临界区审计）。PD-in 发布不取锁：主上下文
 用一次原子存储发布 `m_pd_pub`，数据 ISR 只加载一次。
 
@@ -256,7 +257,7 @@ vtable 的每个成员在类型上都是可选的（`IOLINK_NULLABLE`）：`ioli
 | `app` | 应用 trait（`iolink_device_app_t`）：实例指针 + 时钟/日志/生命周期回调的唯一来源。保留指针，必须比上下文存活更久。为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_APP`。 |
 | `device_info` | 必填的身份来源，保留指针；为 NULL 时初始化返回 `IOLINK_DEVICE_INIT_ERR_DEVICE_INFO`（库不提供默认身份）。其中的 `application_tag` 只是身份字段，标签索引由 OD 表提供。参见 8.1 节的身份限制。 |
 | `ds_flag_persist` | 仅在 `IOLINK_FEATURE_DATA_STORAGE=1` 时声明；`DS_UPLOAD_FLAG` 变化时调用，`self` 为 `app->self`。为 NULL 时标志只保存在 RAM。 |
-| `log_level` | 初始化时的日志阈值；`IOLINK_LOG_LEVEL_SILENT` 表示静默。日志回调在 `app->log_write`，初始化后不可更改。 |
+| `log_level` | 初始化时的日志阈值；`IOLINK_LOG_LEVEL_SILENT` 表示静默。日志回调在 `app->log_write`；初始化返回后汇点固定，再调用 `iolink_device_set_log()` 是空操作（数据 ISR 会读这些字段）。 |
 | `od` | 可选的设备专用参数入口（`include/iolinki/od.h`）：const 表 + get/set 后端，ISDU 与 Data Storage 共用。 |
 | `workspace` | 可选的传输 scratch 工作区（`include/iolinki/workspace.h`）。NULL 表示使用上下文内嵌 fallback；`IOLINK_WORKSPACE_EMBEDDED=0` 时必须提供，否则初始化返回 `IOLINK_DEVICE_INIT_ERR_WORKSPACE`。 |
 
@@ -508,11 +509,11 @@ void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t 
 写入口（`iolink_event_trigger`、`iolink_event_clear`、`iolink_events_process`、
 `iolink_events_reset`、`iolink_events_memory_write`、`iolink_events_pop`、
 `iolink_events_clear_diagnosis`）是主上下文专属：事件引擎只有一个写者，主上下文在
-`i_in_isr` 置位时会被拒绝。只读入口（`iolink_events_pending`、`iolink_events_flag`、
-`iolink_events_memory_read`、`iolink_events_peek`、`iolink_events_get_all`、
-`iolink_events_get_dropped_count`）可从任一侧读取：ISR 看到的是双映像 + 发布索引
-保证的完整一代。ISR 侧的写只有两处：`iolink_events_reset_request()`（登记复位，
-由 `iolink_dll_process()` 应用）与 `iolink_diag_pulse_isr()` 的单字节 one-shot。
+`i_in_isr` 置位时会被拒绝。只读入口分两类：`iolink_events_flag`、`iolink_events_pending`、
+`iolink_events_memory_read`、`iolink_events_get_dropped_count` 可从任一侧读取（ISR 看到的是
+双映像 + 发布索引保证的完整一代）；`iolink_events_peek` 与 `iolink_events_get_all` 读主
+上下文独占的队列，只能在主上下文调用。ISR 侧的写只有两处：`iolink_events_reset_request()`
+（登记复位，由 `iolink_dll_process()` 应用）与 `iolink_diag_pulse_isr()` 的单字节 one-shot。
 
 `iolink_device_process()` 会在 ISDU 传输空闲时调用 `iolink_events_process()`，
 因此正常集成无需自行调用。使用 `iolink_event_trigger()` 触发错误/警告，

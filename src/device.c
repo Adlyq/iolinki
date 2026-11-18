@@ -362,6 +362,11 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
      * 在初始化时定义。 */
     (void) iolink_dll_publish_reply_plans(&ctx->dll.main);
 
+    /* 日志汇点固定在配置里：此后 `iolink_device_set_log()` 是空操作，数据
+     * ISR 读到的 `write`/`self`/`level` 不会再被主上下文改写。必须在
+     * `on_startup` 之前锁定——应用常在该钩子里使能数据中断。 */
+    ctx->dll.main.log_locked = true;
+
     if (config->app->on_startup != NULL) {
         config->app->on_startup(config->app->self);
     }
@@ -395,10 +400,14 @@ iolink_workspace_t* IOLINK_NULLABLE iolink_device_get_workspace(const iolink_dev
 void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_NULLABLE write,
                            iolink_log_level_t level)
 {
+    /* 日志汇点固定在配置里：此后 `iolink_device_set_log()` 是空操作，数据
+     * ISR 读到的 `write`/`self`/`level` 不会再被主上下文改写。 */
+    if (ctx->dll.main.log_locked) {
+        return;
+    }
     iolink_app_t* IOLINK_NULLABLE self = (ctx->config != NULL) ? ctx->config->app->self : NULL;
 
-    /* 初始化期单写者：应用只能通过 config 给出日志汇点，运行期不再改写。
-     * 一个 sink 服务全部模块：它们只保存指针，这里统一指向它。 */
+    /* 一个 sink 服务全部模块：它们只保存指针，这里统一指向它。 */
     iolink_log_sink_init(&ctx->dll.main.shared.c_log, write, self, level);
     ctx->dll.main.shared.b_isdu.log = &ctx->dll.main.shared.c_log;
 #if IOLINK_FEATURE_DATA_STORAGE

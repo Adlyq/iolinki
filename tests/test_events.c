@@ -620,6 +620,32 @@ static void test_isr_writer_is_rejected(void** state)
     assert_int_equal(ctx.count, 1U);
 }
 
+static void test_pop_to_empty_clears_the_published_image(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    events_init(&ctx);
+
+    /* 一个已发布（冻结）的 Error + 一个排队等待的事件。 */
+    iolink_event_trigger(&ctx, 0x1801U, IOLINK_EVENT_TYPE_ERROR);
+    iolink_event_trigger(&ctx, 0x1803U, IOLINK_EVENT_TYPE_ERROR);
+    assert_true(iolink_events_flag(&ctx));
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
+
+    /* 排空队列时，每次 pop 之后 flag 都必须与队列一致；最后一个 pop 还必须
+     * 撤下已发布的映像，否则 ISR 仍会读到已确认的事件。 */
+    iolink_event_t ev;
+    uint8_t popped = 0U;
+    while (iolink_events_pop(&ctx, &ev)) {
+        popped++;
+        assert_int_equal(iolink_events_flag(&ctx), ctx.count > 0U);
+    }
+    assert_int_equal(popped, 2U);
+    assert_int_equal(ctx.count, 0U);
+    assert_false(iolink_events_flag(&ctx));
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x00U);
+}
+
 static void test_event_flag_invariant(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0071");
@@ -879,6 +905,7 @@ int main(void)
         cmocka_unit_test(test_isr_reset_request_is_masked_until_applied),
         cmocka_unit_test(test_isr_writer_is_rejected),
         cmocka_unit_test(test_event_flag_invariant),
+        cmocka_unit_test(test_pop_to_empty_clears_the_published_image),
         cmocka_unit_test(test_notification_dedup),
         cmocka_unit_test(test_event_clear_diagnosis),
         cmocka_unit_test(test_event_clear_diagnosis_skips_unreported_event),

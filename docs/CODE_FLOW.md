@@ -898,7 +898,7 @@ sequenceDiagram
 | `phy.response_timer_start/stop` | ISR RX/TX | t_A 看门狗 |
 | `phy.stack_timer_start` | ISR 发完即时应答时（TX BYTE 帧末）/ 命中计划的 `RESTART_TIMER_B` | 请求 Timer B 授权主循环服务窗口 |
 | `phy.detect_wakeup` | `dll_handle_sio_wakeup()` | SIO 唤醒检测 |
-| `iolink_critical_enter/exit` | 诊断条件表与 `isr_pulse` 消费、事件队列读/clear、计数器清零、应答暂存发布/取走、SIO 切换清理、Timer A 相位复位 | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
+| `iolink_critical_enter/exit` | 诊断条件表的 `isr_pulse` 消费与整表复位、计数器清零、应答暂存发布/取走、SIO 切换清理、读复位旗标、Timer A 相位复位 | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
 | `on_state_change` | `device_state_cb()` | 当前状态（电平式；主上下文迁移立即投递，ISR 迁移合并） |
 | `on_startup` | 初始化末尾 + 进入 STARTUP | 初始化时显式调用一次 |
 | `on_preoperate` / `on_operate` | `device_state_cb()` | 进入对应状态时 |
@@ -1117,7 +1117,7 @@ RX FRAME + TX BYTE 为 4872 B / 5056 B；`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT`
 并发边界：
 
 - `shared.b_isdu`、`shared.b_events`（含 `diag` 条件缓存）、`ds`、`timers` 的主要状态由主循环修改；`c_reply_plan` 只在初始化时写入后即只读；应用参数变量、`on_change` 与 `ds_flag_persist` 也只在主上下文被访问。
-- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（诊断条件表与 `isr_pulse` 消费、事件队列读/clear、计数器清零、SIO 切换的应答槽清理、ISR RX 相位复位、应答暂存的发布/取走）；状态迁移、PD-in 发布与 ISDU 写入口接管都不需要临界区。
+- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（诊断条件表的 `isr_pulse` 消费与整表复位、`SPLIT` 档的计数器清零、应答暂存的发布/取走、SIO 切换的应答槽清理、读复位旗标、ISR RX 相位复位）；事件队列与 `pending[]` 的读写、PD-in 发布、状态迁移与 ISDU 写入口接管都不需要临界区。
 - 库不取线程锁：API 只有一个主上下文调用者；共享标量由平台临界区保护，数据交接无锁。
 - 平台默认临界区是 weak 空实现（`src/platform.c`）；`iolink_device_init()` 通过
   `iolink_platform_critical_sections_ready()` 探测并返回
@@ -1208,9 +1208,14 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `dll_send()`（`dll_frame.c`） | `m_isr_tx_payload` 暂存（≤`IOLINK_M_SEQ_MAX_LEN`） | 主→ISR 应答移交；检查 `b_isr_tx_active`、槽位推进、载荷复制与发布在同一个短临界区内完成（被拒绝的暂存不得碰在途槽）；`request_service()` 与 T_A 取消除外 |
 | `iolink_dll_set_sio_mode()`（`dll_api.c`） | 清 `b_isr_tx_pending`/`b_isr_tx_active`/`b_isr_tx_idx`/`b_pd_in_captured` | 四个字段由 ISR 写：清理与中断互斥，否则 ISR 可在半帧处重新置上 active/idx。被丢弃的暂存/在途应答计 `b_isr_tx_dropped`（主上下文自增）；`phy.set_mode` 在区外调用 |
 | `iolink_dll_on_rx_timeout()`（`dll_isr.c`） | RX 组装状态 `isr_rx_cnt`/`isr_rx_expect` 的成对复位 | Timer A 与数据 ISR 的相位一致；短、无回调，向量优先级契约见 `docs/PORTING.md` |
-| `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零两个上下文共享的计数器 | 与 ISR 自增分开 |
-| `diag.c`（3 处） | ISR 脉冲消费、DeviceStatus 快照、DDS 快照 | 条件表内部不变式；ISR 只写 `isr_pulse[]` |
-| `events.c`（3 处） | `iolink_event_clear()`、`iolink_events_peek()`、`iolink_events_get_all()` | 队列读/clear 与 ISR 串行化；写路径（trigger/process/clear_diagnosis/reset/memory_write/pop）是主上下文单写者，不需要临界区 |
+| `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零 ISR 自有计数器 `isr_stat`（仅 SPLIT 档） | `isr_stat` 归数据 ISR 单写，清零必须与增量互斥；SHARED 档不取锁（最多丢一次诊断计数） |
+| `iolink_diag_service()`（`diag.c`） | ISR one-shot `isr_pulse[]` 的读-清 | 脉冲只允许被消费一次；除该字节外条件表归主上下文单写 |
+| `iolink_events_reset()`（`events.c`） | 条件表整表清零（含 ISR 单字节写的 `isr_pulse[]`） | 与 ISR 的 one-shot 脉冲互斥；事件引擎其余字段由主上下文单写 |
+
+`iolink_event_clear()`、`iolink_events_peek()`、`iolink_events_get_all()`、
+`iolink_diag_device_status()`、`iolink_diag_dds_snapshot()` 已不在表中：它们读写的
+`pending[]` 与 `queue[]` 只有主上下文访问，数据 ISR 只读 `flag`、`count` 与已发布的
+Table 58 映像。
 
 `dll_set_state_shared()` 已不在表中：状态是单字节原子写，通知以电平式为主；但
 ISR 迁入 STARTUP 时设置 `i_startup_notification_pending`，由主上下文优先投递

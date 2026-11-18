@@ -27,7 +27,10 @@ extern "C" {
 
 IOLINK_ASSUME_NONNULL_BEGIN
 
-/** @brief 绑定日志汇点（初始化期；ISR 日志启用时必须在 ISR 静止时调用）。 */
+/** @brief 绑定日志汇点（仅初始化期）。
+ *  @note `iolink_device_init()` 返回后该汇点已锁定，再调用本函数是空操作：
+ *        数据 ISR 读取同一组 `write`/`self`/`level` 字段。重新初始化会解锁。
+ */
 void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_NULLABLE write,
                            iolink_log_level_t level);
 

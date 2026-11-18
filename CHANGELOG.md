@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (the log sink is locked after initialisation)
+- `iolink_device_set_log()` is now a no-op once `iolink_device_init()` returns:
+  the data ISR reads `shared.log.write`/`self`/`level`, so a runtime rebind
+  raced with it. `iolink_dll_main_t` gained a `log_locked` flag (it fits the
+  existing padding, so no context size changed) that re-initialisation clears.
+  The sink comes from `config.app->log_write` and `config.log_level` only.
+
+### Tests (the event queue drain ordering is pinned)
+- `iolink_events_pop()` documents why it drains the queue without a lock
+  (`count` → `flag` → empty image) and `tests/test_events.c` pins that draining
+  to empty withdraws the published Table 58 image and keeps
+  `flag == (count > 0)` after every pop.
+
+### Changed (the error-counter reset only locks the SPLIT counters)
+- `iolink_dll_reset_error_counters()` no longer takes a critical section in the
+  default `IOLINK_STATS_MODE=SHARED` build: clearing the counters while the ISR
+  increments one can lose that update, which is the contract the counters
+  already declare (diagnostics only). Under `SPLIT` the ISR-owned `isr_stat` is
+  still cleared inside `IOLINK_CRITICAL_ENTER/EXIT()`, so its single writer
+  holds.
+
+### Changed (the event queue and pending table need no lock)
+- `iolink_event_clear()`, `iolink_events_peek()`, `iolink_events_get_all()`,
+  `iolink_diag_device_status()` and `iolink_diag_dds_snapshot()` no longer take
+  `IOLINK_CRITICAL_ENTER/EXIT()`. They read or write `pending[]` and `queue[]`,
+  which only the main context touches; the data ISR reads `flag`, `count` and
+  the published Table 58 image. The event-side critical sections that remain
+  are the table-wide clear in `iolink_events_reset()` (it must not lose an ISR
+  one-shot pulse) and the pulse consumption in `iolink_diag_service()`.
+- `iolink_events_peek()` and `iolink_events_get_all()` are main-context only:
+  they read the queue. `iolink_events_flag()`, `iolink_events_pending()`,
+  `iolink_events_memory_read()` and `iolink_events_get_dropped_count()` stay
+  readable from either side.
+- `tests/test_locking.c` pins zero critical-section entries for these paths;
+  they previously asserted one entry for `iolink_event_clear()`.
+
 ### Changed (MAJOR: PD-in publication is one single-writer word)
 - `iolink_dll_main_t::pd_valid` and `iolink_dll_shared_t::pd_in_active` are
   gone. Process input is published through `iolink_dll_shared_t::pd_pub`
