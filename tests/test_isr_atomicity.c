@@ -383,6 +383,27 @@ static void test_sio_switch_clears_isr_tx_state(void** state)
     assert_false(s_mode_in_critical); /* PHY 调用留在临界区之外 */
 }
 
+/* 事件引擎的单写者判据必须真的绑定到 ISR 深度标志：删掉绑定后，ISR 内
+ * 误写事件引擎将不再被拒绝，而其它用例都不会失败。 */
+static void test_events_are_bound_to_the_isr_depth_flag(void** state)
+{
+    (void) state;
+    reset_ctx();
+#if IOLINK_FEATURE_EVENTS
+    iolink_events_ctx_t* events = &s_ctx.main.shared.events;
+    assert_ptr_equal(events->isr_active, &s_ctx.main.shared.in_isr);
+
+    iolink_event_trigger(events, 0x1800U, IOLINK_EVENT_TYPE_NOTIFICATION);
+    const uint8_t count = events->count;
+    assert_true(count > 0U);
+
+    s_ctx.main.shared.in_isr = 1U;
+    iolink_event_trigger(events, 0x1801U, IOLINK_EVENT_TYPE_NOTIFICATION);
+    assert_int_equal(events->count, count);
+    s_ctx.main.shared.in_isr = 0U;
+#endif
+}
+
 static uint32_t s_nested_calls;
 static void nested_pump_hook(void)
 {
@@ -740,6 +761,7 @@ int main(void)
         cmocka_unit_test(test_reply_staging_pokes_phy_outside_critical),
         cmocka_unit_test(test_sio_switch_clears_isr_tx_state),
         cmocka_unit_test(test_nested_pump_is_deferred),
+        cmocka_unit_test(test_events_are_bound_to_the_isr_depth_flag),
         cmocka_unit_test(test_state_notification_is_level_based),
         cmocka_unit_test(test_isr_startup_notification_is_not_coalesced),
         cmocka_unit_test(test_isr_startup_defers_event_reset_to_main),
