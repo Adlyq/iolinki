@@ -136,9 +136,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   write-abort path also asks the main context to reset the read transport
   (`isr_isdu_read_reset`, Table 52), which the main pump now applies
   unconditionally: `isdu_read_reset()` touches only read-transport fields, so
-  the read-reset critical section and its write-entry phase guard are gone
-  ("read ABORT immediately followed by write START" can no longer drop the
-  write). `isdu_transport_reset()` is removed; `isdu_read_reset()` is the only
+  the write-entry phase guard is gone ("read ABORT immediately followed by
+  write START" can no longer drop the write). The flag itself is still set by
+  the ISR and cleared by the pump, so the read-clear stays inside one short
+  critical section (the fast path takes no lock when nothing is pending). `isdu_transport_reset()` is removed; `isdu_read_reset()` is the only
   read-side reset.
 - `iolink_isdu_execute_system_command()` (Direct Parameter page 1) still drops
   a staged read response but no longer discards an already received ISDU write:
@@ -325,6 +326,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to run at the same priority or in the same vector, and states how a port that
   cannot do that must serialise the entries itself. Regression:
   `test_isr_atomicity` pins the single-phase reset.
+
+### Fixed (the staged-reply hand-off is one operation)
+- `dll_send()` used to check `isr_tx_active` and publish the staging as two
+  separate steps: a data interrupt between them could start an immediate reply,
+  and the next ISR entry then replaced that in-flight frame from the middle. The
+  slot advance, payload copy, metadata and `isr_tx_pending` now happen inside
+  one short critical section, and a rejected staging no longer touches the slot
+  (`isr_tx_next` only advances when the reply is accepted, so two consecutive
+  rejections cannot rotate back onto the in-flight slot and rewrite its bytes).
+  The ISR take reads the metadata and clears `isr_tx_pending` under the same
+  lock, and drops plus counts a staging that arrives while a frame is still
+  streaming. `SINGLE` closes the previous frame with `tx_done()` before starting
+  the next one and counts that discard. With no TX hook in the selected mode the
+  reply is counted as dropped instead of vanishing.
+
+### Fixed (an abandoned ISDU write is retired on a communication restart)
+- A write START publishes a generation whose ack only advances on completion or
+  abort, so a master that started a write and went silent left the read path at
+  `0x00` and the events/DS gate closed across link restarts. A main-context
+  STARTUP now retires an unfinished generation and resets the read transport
+  (an ISR-triggered STARTUP defers both to the pump through
+  `isdu_restart_pending`); a completed request is still executed by the same
+  pump pass instead of being discarded. Claiming a request with no bound
+  workspace advances the ack instead of hanging.
 
 ### Fixed (staged reply length and CKS are ISR-owned)
 - The staged reply's length and CKS flag were shared between the main pump and

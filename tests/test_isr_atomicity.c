@@ -404,6 +404,63 @@ static void test_events_are_bound_to_the_isr_depth_flag(void** state)
 #endif
 }
 
+/* ISR 取走暂存时若仍有帧在流式发送（主泵抢在检查之后发布，SMP 下可达），
+ * 必须丢弃并计数，而不是从 0 重发、把在途帧从中间截断。 */
+static void test_isr_drops_a_staged_reply_while_a_frame_is_streaming(void** state)
+{
+    (void) state;
+    uint8_t probe[2] = {(uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x02U), 0x00U};
+    reset_ctx();
+    s_ctx.main.shared.state = IOLINK_DLL_STATE_STARTUP;
+
+    make_frame(probe, sizeof(probe));
+    feed_frame(probe, sizeof(probe));
+    iolink_dll_process_isr(&s_ctx.main);
+    assert_int_equal(s_ctx.main.shared.isr_tx_active, 1U);
+
+    const uint32_t dropped = IOLINK_STAT_TOTAL(&s_ctx.main, isr_tx_dropped);
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+    const uint32_t octets = s_octet_n;
+#endif
+
+    /* 白盒：模拟主泵在“检查 active”之后才发布暂存。 */
+    s_ctx.main.shared.isr_tx_pending_slot = 0U;
+    s_ctx.main.shared.stage_len = 1U;
+    s_ctx.main.shared.stage_has_cks = 0U;
+    s_ctx.main.shared.isr_tx_pending = 1U;
+
+    iolink_dll_process_isr(&s_ctx.main);
+
+    assert_int_equal(s_ctx.main.shared.isr_tx_pending, 0U);
+    assert_int_equal(IOLINK_STAT_TOTAL(&s_ctx.main, isr_tx_dropped), dropped + 1U);
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+    /* 本次进入只处理丢弃，不动在途帧；随后它在自己的节奏里完成。 */
+    assert_int_equal(s_octet_n, octets);
+    for (uint8_t i = 0U; (i < 8U) && (s_ctx.main.shared.isr_tx_active != 0U); i++) {
+        iolink_dll_process_isr(&s_ctx.main);
+    }
+    assert_int_equal(s_ctx.main.shared.isr_tx_active, 0U);
+    assert_int_equal(s_frames_done, 1U);
+#endif
+}
+
+/* 通信重启必须让未收齐的写请求退休，否则读路径与事件/DS 门控会永久停在
+ * “写未完成”。这里固定的是 dll_process_body() 的消费点，而不只是函数本身。 */
+static void test_isdu_restart_retires_an_unfinished_write(void** state)
+{
+    (void) state;
+    reset_ctx();
+    iolink_isdu_ctx_t* isdu = &s_ctx.main.shared.isdu;
+    const uint8_t first = 0x36U;
+    iolink_isdu_od_write(isdu, IOLINK_FLOWCTRL_START, &first, 1U);
+    assert_false(iolink_isdu_is_idle(isdu));
+
+    s_ctx.main.shared.isdu_restart_pending = 1U;
+    iolink_dll_process(&s_ctx.main);
+
+    assert_true(iolink_isdu_is_idle(isdu));
+}
+
 static uint32_t s_nested_calls;
 static void nested_pump_hook(void)
 {
@@ -762,6 +819,7 @@ int main(void)
         cmocka_unit_test(test_sio_switch_clears_isr_tx_state),
         cmocka_unit_test(test_nested_pump_is_deferred),
         cmocka_unit_test(test_events_are_bound_to_the_isr_depth_flag),
+        cmocka_unit_test(test_isdu_restart_retires_an_unfinished_write),
         cmocka_unit_test(test_state_notification_is_level_based),
         cmocka_unit_test(test_isr_startup_notification_is_not_coalesced),
         cmocka_unit_test(test_isr_startup_defers_event_reset_to_main),
@@ -770,6 +828,7 @@ int main(void)
 #else
         cmocka_unit_test(test_staged_reply_keeps_own_length_and_cks),
         cmocka_unit_test(test_staging_rejected_while_reply_streaming),
+        cmocka_unit_test(test_isr_drops_a_staged_reply_while_a_frame_is_streaming),
 #endif
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
         cmocka_unit_test(test_rx_timeout_resets_assembly_in_one_phase),

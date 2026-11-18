@@ -117,6 +117,9 @@ typedef struct iolink_dll_shared
      */
     volatile uint8_t isr_cycle_served;
 
+    /** @brief ISR 触发了 STARTUP：主泵据此作废在途 ISDU 写并复位读传输层。 */
+    volatile uint8_t isdu_restart_pending;
+
     /* 配置 */
     uint8_t m_seq_type; /**< 支持的 M 序列类型 */
 

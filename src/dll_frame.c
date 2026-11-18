@@ -118,14 +118,14 @@ uint8_t dll_req_len_for(const iolink_dll_main_t* ctx, uint8_t mc, uint8_t ckt)
  * CKS）由共享处理函数构建，因此两种方式的帧布局
  * 相同。
  *
- * 协议栈只有单个主上下文调用者，因此暂存无需锁：
- * 主泵拥有槽位 0/1；数据 ISR 拥有自己的槽位。暂存元数据
- * （槽位、长度、CKS 标志）归主上下文，ISR 只在 isr_tx_pending
- * 发布后一次性取走（数据先行顺序加编译器屏障），并在自己的
- * 流式状态里持有副本，因此主泵之后的暂存不会改变在途帧。
- * 数据 ISR 正在流式发送时不接受新暂存：覆盖会砍断在途帧，
- * 该应答按丢弃计数。只有 SINGLE 档从主上下文驱动 PHY（该档没有
- * 数据 ISR）；ISR/SMP 档的应答只能由 request_service() 通知的 ISR 发送。
+ * 槽位 0/1 归主上下文独占，ISR 有自己的槽位。槽位选择、载荷复制、
+ * 暂存元数据与 `isr_tx_pending` 的发布在同一个短临界区内完成：
+ * “ISR 是否正在流式发送”的检查与发布必须是一次操作，且被拒绝的
+ * 暂存不得推进槽位或写载荷——TX BYTE 的在途帧按指针引用发送槽，
+ * 写到它就会换掉尚未发出的字节。ISR 取走时同样在临界区内一次性
+ * 复制元数据并清标志，随后在自己的流式状态里持有副本。
+ * 只有 SINGLE 档从主上下文驱动 PHY（该档没有数据 ISR）；ISR/SMP 档的
+ * 应答只能由 request_service() 通知的 ISR 发送。
  */
 void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
 {
@@ -140,12 +140,7 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
         ctx->frame_replied_by_isr = 0U;
         return;
     }
-    /* 仅主上下文槽位：ISR 有自己的槽位，因此该计数器只有
-     * 单个写者，无需读-改-写原子操作。槽内容在发布前写完。 */
-    const uint8_t slot = ctx->isr_tx_next;
-    ctx->isr_tx_next = (uint8_t) (ctx->isr_tx_next ^ 1U);
-    (void) memcpy(ctx->shared.isr_tx_payload[slot], data, len);
-
+    uint8_t slot = 0U;
     /* 检查“ISR 正在流式发送”与发布暂存必须对 ISR 是一次操作：
      * 分开做时，ISR 可在检查之后启动即时应答，再由下一次取走把在途帧从
      * 中间替换掉（在途帧因此丢掉后半段与 CKS）。SINGLE 档没有数据 ISR，
@@ -161,6 +156,10 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
         ctx->shared.isr_tx_dropped++;
     }
     else {
+        /* 槽位与载荷只在接受后推进：被拒绝的暂存不得碰在途槽。 */
+        slot = ctx->isr_tx_next;
+        ctx->isr_tx_next = (uint8_t) (ctx->isr_tx_next ^ 1U);
+        (void) memcpy(ctx->shared.isr_tx_payload[slot], data, len);
         ctx->shared.isr_tx_pending_slot = slot;
         ctx->shared.stage_len = (uint8_t) len;
         ctx->shared.stage_has_cks = 0U;
@@ -193,6 +192,7 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
             ctx->shared.phy->tx_done(ctx->shared.phy->self);
         }
         ctx->shared.isr_tx_active = 0U;
+        ctx->shared.isr_tx_dropped++; /* 上一帧未发完即被收尾 */
     }
     dll_isr_start_staged_tx(ctx, slot, (uint8_t) len, 0U);
 #else

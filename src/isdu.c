@@ -516,20 +516,25 @@ bool isdu_request_pending(const iolink_isdu_ctx_t* ctx)
 }
 
 /**
- * @brief 写入口是否有一代尚未被主泵处理（含正在累计、无内容的那些代）。
+ * @brief 放弃尚未收齐的写请求（通信重启时由主泵调用）。
  *
- * 主泵据此让已发布的读视图失效：写 START 已经让旧应答不再可信，哪怕
- * 请求还没收齐。判断只读发布字与自己的 ack 序号，不读任何 ISR 相位字段。
+ * 只退休没有内容的代（`len == 0`：正在累计或已撤回）。已经收齐的请求
+ * （`len > 0`）不在这里丢弃——它仍由同轮 `iolink_isdu_process()` 认领并
+ * 执行，避免逐段 ACK 过的请求被静默吃掉。
+ *
+ * 主泵单写：只把 ack 抬到 ISR 已经发布过的代号，绝不超前于 `req_pub`。
+ * 发布代号因此仍由 ISR 推进，累计相位也仍归 ISR；下一轮的 START 会重置它。
  */
 void isdu_abandon_write(iolink_isdu_ctx_t* ctx)
 {
     if (ctx == NULL) {
         return;
     }
-    /* 主泵单写。把 ack 推到当前发布代号即“这一代按已中止处理”：
-     * 未收齐的 receiving 代因此退休，读视图可以重新发布；
-     * 之后 ISR 若收齐该写，会发布一个新的代号走正常路径。 */
-    ctx->req_ack_gen = IOLINK_ISDU_REQ_PUB_GEN(iolink_atomic_load(&ctx->req_pub));
+    const IOLINK_ATOMIC_UINT_T pub = iolink_atomic_load(&ctx->req_pub);
+    if (IOLINK_ISDU_REQ_PUB_LEN(pub) != 0U) {
+        return;
+    }
+    ctx->req_ack_gen = IOLINK_ISDU_REQ_PUB_GEN(pub);
 }
 
 /**

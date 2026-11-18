@@ -317,6 +317,13 @@ void dll_set_state(iolink_dll_main_t* ctx, iolink_dll_state_t new_state)
 #endif
         if (ctx->shared.in_isr != 0U) {
             ctx->startup_notification_pending = 1U;
+            ctx->shared.isdu_restart_pending = 1U;
+        }
+        else {
+            /* 主上下文重启：立即作废在途写并复位读传输层，避免重启前的
+             * 应答视图在下一轮被重新发布。 */
+            isdu_abandon_write(&ctx->shared.isdu);
+            isdu_read_reset(&ctx->shared.isdu);
         }
     }
     if (ctx->shared.in_isr == 0U) {
@@ -576,9 +583,8 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
  *
  * 复位只经 `isdu_read_reset()` 清空读方向的字段（`state`/`header`/应答
  * 缓冲/错误码）。写入口（累计槽、`req_idx`/`req_total`、`stage_state`、
- * 发布字）归数据 ISR，主泵从不改写，所以这里既不需要临界区，也不会
- * 丢掉 ISR 刚建立的新写请求——主站"读 ABORT 后立刻写 START"的竞争在
- * 所有权层面消失，而不是靠相位守卫。
+ * 发布字）归数据 ISR，主泵从不改写，所以复位本身不会踩掉 ISR 刚建立的
+ * 新写请求；只有旗标的读-清需要临界区（见下）。
  */
 static void dll_apply_isr_isdu_read_reset(iolink_dll_main_t* ctx)
 {
@@ -928,10 +934,13 @@ static void dll_process_body(iolink_dll_main_t* ctx)
     dll_apply_isr_consumed_frame(ctx);
     dll_apply_isr_deadline_requests(ctx);
 
-    if (ctx->shared.state == IOLINK_DLL_STATE_STARTUP) {
-        /* 通信重启让未完成的写请求作废：把 ack 推到当前代号，未收齐的
-         * receiving 代才不会永久挂住读路径与事件/DS 门控。 */
+    if (ctx->shared.isdu_restart_pending != 0U) {
+        /* ISR 触发的重启：未收齐的写请求作废（已收齐的仍由本轮处理），
+         * 读传输层回到 Idle——否则重启前的 RESPONSE_READY 视图会被重新
+         * 发布，主站新一轮的读 START 拿到上一轮的应答。 */
+        ctx->shared.isdu_restart_pending = 0U;
         isdu_abandon_write(&ctx->shared.isdu);
+        isdu_read_reset(&ctx->shared.isdu);
     }
     iolink_isdu_process(&ctx->shared.isdu);
     /* ISR 对 IDLE/IDLE2/ABORT 读只回 0x00；读传输层复位归主泵。

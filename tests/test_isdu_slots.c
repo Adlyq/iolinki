@@ -320,12 +320,62 @@ static void test_ack_lets_isr_reuse_slot(void** state)
     assert_int_equal(s_ctx.req_overruns, 0U);
 }
 
+/* ④ 主泵正在解析“已发布槽”时，新 START 落另一个槽：不计数，且被解析的
+ *   槽内容不被改写。busy 选槽保护只有白盒设置 req_busy_sel 才能覆盖。 */
+static void test_start_prefers_the_free_slot_while_published_is_parsed(void** state)
+{
+    (void) state;
+    engine_init();
+
+    uint8_t req_a[6];
+    uint8_t req_b[6];
+    const uint8_t len_a = make_write(req_a, 0x0040U, 0x11U);
+    const uint8_t len_b = make_write(req_b, 0x0041U, 0x22U);
+
+    feed_write(req_a, len_a);
+    const uint8_t sel = pub_sel();
+    const uint8_t overruns = s_ctx.req_overruns;
+
+    s_ctx.req_busy_sel = sel; /* 主泵正在解析已发布槽 */
+    feed_write(req_b, len_b);
+
+    assert_int_equal(s_ctx.req_slot, (uint8_t) (1U - sel));
+    assert_int_equal(s_ctx.req_overruns, overruns);
+    assert_memory_equal(slot_buf(sel), req_a, len_a);
+}
+
+/* ⑤ 另一个槽被解析时只能写已发布槽：未接管的请求被取代并计数。 */
+static void test_start_replaces_the_unclaimed_slot_and_counts(void** state)
+{
+    (void) state;
+    engine_init();
+
+    uint8_t req_a[6];
+    uint8_t req_b[6];
+    const uint8_t len_a = make_write(req_a, 0x0040U, 0x11U);
+    const uint8_t len_b = make_write(req_b, 0x0041U, 0x22U);
+
+    feed_write(req_a, len_a);
+    const uint8_t sel = pub_sel();
+    const uint8_t overruns = s_ctx.req_overruns;
+
+    s_ctx.req_busy_sel = (uint8_t) (1U - sel); /* 主泵在解析另一个槽 */
+    feed_write(req_b, len_b);
+
+    assert_int_equal(s_ctx.req_slot, sel);
+    assert_int_equal(s_ctx.req_overruns, (uint8_t) (overruns + 1U));
+    /* 被取代的是未接管的那条，槽内容已是新请求。 */
+    assert_memory_equal(slot_buf(sel), req_b, len_b);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_next_request_during_service_uses_other_slot),
         cmocka_unit_test(test_unclaimed_request_is_replaced_and_counted),
         cmocka_unit_test(test_ack_lets_isr_reuse_slot),
+        cmocka_unit_test(test_start_prefers_the_free_slot_while_published_is_parsed),
+        cmocka_unit_test(test_start_replaces_the_unclaimed_slot_and_counts),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
