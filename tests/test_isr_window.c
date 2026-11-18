@@ -17,8 +17,9 @@
 
 static int reset_calls;
 
-static void reset_cb(iolink_reset_type_t type)
+static void reset_cb(iolink_app_t* IOLINK_NULLABLE self, iolink_reset_type_t type)
 {
+    (void) self;
     (void) type;
     reset_calls++;
 }
@@ -35,14 +36,14 @@ static void test_main_window_gated_by_tick(void** state)
     will_return(mock_phy_init, 0);
 
     iolink_test_device_t dev;
-    assert_int_equal(iolink_test_device_init(&dev, NULL, NULL), 0);
+    static const iolink_device_app_t app = {.time_us = iolink_test_time_us, .on_reset = reset_cb};
+    assert_int_equal(iolink_test_device_init(&dev, NULL, &app), 0);
 
     /* 安装带 Timer B 钩子的 PHY，使门控生效。 */
     iolink_phy_api_t gated = g_phy_mock;
     gated.stack_timer_start = timer_b_start;
     test_dll_shared(&dev.ctx)->phy = &gated;
 
-    iolink_device_set_reset_handler(&dev.ctx, reset_cb);
     test_dll_shared(&dev.ctx)->isdu.reset_pending = true;
     reset_calls = 0;
 

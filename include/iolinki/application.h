@@ -98,6 +98,15 @@ typedef struct
     void (*IOLINK_NULLABLE on_master_lost)(iolink_app_t* IOLINK_NULLABLE self); /**< 主站通信丢失 */
     void (*IOLINK_NULLABLE on_master_online)(
         iolink_app_t* IOLINK_NULLABLE self); /**< 主站通信恢复 */
+
+    /**
+     * @brief 主站通过 SystemCommand 0x80/0x81 请求复位。
+     *
+     * 在主上下文中运行；协议栈不会自行重启设备，动作由应用决定。
+     * NULL 表示应用不处理复位请求。
+     * @param type `IOLINK_RESET_DEVICE` 或 `IOLINK_RESET_APPLICATION`
+     */
+    void (*IOLINK_NULLABLE on_reset)(iolink_app_t* IOLINK_NULLABLE self, iolink_reset_type_t type);
 } iolink_device_app_t;
 IOLINK_ASSUME_NONNULL_END
 

@@ -527,18 +527,20 @@ static void device_notify_master_lost(iolink_device_ctx_t* ctx)
 /** @brief 将延迟的 ISDU 复位请求递交给应用。 */
 static void device_dispatch_resets(iolink_device_ctx_t* ctx)
 {
+    const iolink_device_app_t* app = ctx->config->app;
+
     if (ctx->dll.main.shared.isdu.reset_pending) {
         ctx->dll.main.shared.isdu.reset_pending = false;
         IOLINK_LOG_WARN(&ctx->dll.main.shared.log, "device reset requested by master");
-        if (ctx->reset_handler != NULL) {
-            ctx->reset_handler(IOLINK_RESET_DEVICE);
+        if (app->on_reset != NULL) {
+            app->on_reset(app->self, IOLINK_RESET_DEVICE);
         }
     }
     if (ctx->dll.main.shared.isdu.app_reset_pending) {
         ctx->dll.main.shared.isdu.app_reset_pending = false;
         IOLINK_LOG_WARN(&ctx->dll.main.shared.log, "application reset requested by master");
-        if (ctx->reset_handler != NULL) {
-            ctx->reset_handler(IOLINK_RESET_APPLICATION);
+        if (app->on_reset != NULL) {
+            app->on_reset(app->self, IOLINK_RESET_APPLICATION);
         }
     }
 }
@@ -649,14 +651,6 @@ int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, 
     (void) memcpy(data, ctx->dll.main.pd_out, read_len);
 
     return (int) read_len;
-}
-
-void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx,
-                                     iolink_reset_handler_t IOLINK_NULLABLE handler)
-{
-    if (ctx != NULL) {
-        ctx->reset_handler = handler;
-    }
 }
 
 #if IOLINK_FEATURE_EVENTS

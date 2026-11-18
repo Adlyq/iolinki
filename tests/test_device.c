@@ -28,9 +28,12 @@
 
 static int g_reset_count;
 static iolink_reset_type_t g_last_reset;
+static int g_reset_sentinel;
+static iolink_app_t* IOLINK_NULLABLE g_reset_self;
 
-static void device_reset_handler(iolink_reset_type_t type)
+static void device_reset_handler(iolink_app_t* IOLINK_NULLABLE self, iolink_reset_type_t type)
 {
+    g_reset_self = self;
     g_reset_count++;
     g_last_reset = type;
 }
@@ -409,21 +412,33 @@ static void test_device_reset_handler(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
-    init_device(&dev, IOLINK_M_SEQ_TYPE_0, 0U, 0U);
+    iolink_stack_config_t stack = {0};
+    static iolink_device_app_t app = {
+        .time_us = iolink_test_time_us,
+        .on_reset = device_reset_handler,
+    };
 
-    iolink_device_set_reset_handler(&dev.ctx, device_reset_handler);
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    stack.od_width = 1U;
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    app.self = (iolink_app_t * IOLINK_NULLABLE) & g_reset_sentinel;
+    assert_int_equal(iolink_test_device_init(&dev, &stack, &app), 0);
 
     g_reset_count = 0;
+    g_reset_self = NULL;
     g_last_reset = IOLINK_RESET_APPLICATION;
     test_dll_isdu(&dev.ctx)->reset_pending = true;
     iolink_device_process(&dev.ctx);
     assert_int_equal(g_reset_count, 1);
     assert_int_equal(g_last_reset, IOLINK_RESET_DEVICE);
+    assert_ptr_equal(g_reset_self, (iolink_app_t * IOLINK_NULLABLE) & g_reset_sentinel);
 
     test_dll_isdu(&dev.ctx)->app_reset_pending = true;
     iolink_device_process(&dev.ctx);
     assert_int_equal(g_reset_count, 2);
     assert_int_equal(g_last_reset, IOLINK_RESET_APPLICATION);
+    assert_ptr_equal(g_reset_self, (iolink_app_t * IOLINK_NULLABLE) & g_reset_sentinel);
 }
 
 static void test_device_introspection(void** state)

@@ -155,11 +155,10 @@ typedef struct
     iolink_dll_ctx_t dll;                 /**< 数据链路层上下文。 */
     iolink_device_info_ctx_t device_info; /**< 设备标识上下文。 */
     const iolink_device_config_t* config; /**< 指向所提供配置的指针（唯一配置来源）。 */
-    iolink_reset_handler_t IOLINK_NULLABLE reset_handler; /**< 应用重置处理函数（可以为 NULL）。 */
-    bool master_lost_last;                                /**< 上一次的主站丢失状态（回调边沿） */
-    int phy_error;                                        /**< 最近一次 PHY init 失败的原始驱动码
-                                                               （0 = 无失败；日志关闭时仍可读） */
-    uint8_t direct_param_page2[16];                       /**< Direct Parameter Page 2 存储。 */
+    bool master_lost_last;                /**< 上一次的主站丢失状态（回调边沿） */
+    int phy_error;                        /**< 最近一次 PHY init 失败的原始驱动码
+                                               （0 = 无失败；日志关闭时仍可读） */
+    uint8_t direct_param_page2[16];       /**< Direct Parameter Page 2 存储。 */
 } iolink_device_ctx_t;
 
 /**
@@ -278,14 +277,6 @@ iolink_caps_t iolink_device_capabilities(const iolink_device_ctx_t* ctx);
  * @return 已复制的字节数（没有时为 0），出错时为负值。
  */
 int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, size_t len);
-
-/**
- * @brief 注册在主站重置命令时调用的处理函数。
- * @param ctx      设备上下文。
- * @param handler  重置处理函数回调（可以为 NULL 以清除）。
- */
-void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx,
-                                     iolink_reset_handler_t IOLINK_NULLABLE handler);
 
 #if IOLINK_FEATURE_EVENTS
 /**

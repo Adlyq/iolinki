@@ -233,13 +233,6 @@ typedef enum
     IOLINK_RESET_APPLICATION = 1 /**< System Command 0x81（应用复位） */
 } iolink_reset_type_t;
 
-/**
- * @brief 主站请求复位时调用的应用回调。
- *
- * @param type IOLINK_RESET_DEVICE 或 IOLINK_RESET_APPLICATION
- */
-typedef void (*iolink_reset_handler_t)(iolink_reset_type_t type);
-
 /** @} */ /* end of iolinki_core */
 
 IOLINK_ASSUME_NONNULL_END
