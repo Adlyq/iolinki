@@ -44,7 +44,8 @@ struct iolink_dll_main
 
     volatile bool back_to_box_pending; /**< 已请求 Back-to-box；正在倒计帧数 */
 
-    volatile uint8_t back_to_box_cycles; /**< 自请求 Back-to-box 以来已见的帧数 */
+    volatile uint8_t back_to_box_cycles; /**< 自请求 Back-to-box 以来已服务的
+                                             MasterCycle 数（只由主上下文推进） */
 
     volatile uint8_t fallback_clear_request; /**< 已应用非 FALLBACK 命令：清除 T_FBD */
 

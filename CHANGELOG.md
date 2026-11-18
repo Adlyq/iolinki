@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (Back-to-box cycles have a single writer)
+- `dll_mark_master_activity()` was called from the data ISR on the CONSUME path
+  and did `back_to_box_cycles++`, a read-modify-write on a field the main
+  context also advances. A lost update delayed the 10.7.5 "stop after 3
+  MasterCycles" decision. The function is now timestamp-only and renamed
+  `dll_mark_master_activity_ts()` (it no longer has a counting variant); ISR
+  frames set the one-shot `shared.isr_cycle_served` after their bookkeeping, and
+  the pump consumes it in `dll_apply_isr_deadline_requests()`: clear, then
+  `dll_count_served_cycle()` once if a Back-to-box is pending. A pump pass
+  therefore advances the counter at most once even when the ISR served several
+  frames in between (the count errs conservative — it never stops early).
+  Main-context frames keep advancing the counter directly in
+  `dll_process_complete_frame()`. The SIO wakeup path no longer counts a cycle:
+  no request was served.
+- `iolink_dll_shared_t` gains `isr_cycle_served` (one byte, absorbed by existing
+  padding: context sizes are unchanged).
+
 ### Fixed (SIO switching clears the ISR reply state under the lock)
 - `iolink_dll_set_sio_mode()` cleared `isr_tx_pending`/`isr_tx_active`/
   `isr_tx_has_cks`/`isr_tx_idx`/`pd_in_captured` with five plain stores. The data

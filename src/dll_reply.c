@@ -422,8 +422,9 @@ uint32_t dll_master_cycle_us(const iolink_dll_main_t* ctx)
 
 /** @brief 刷新主站活动时间戳。
  *
- * 用于数据 ISR 看到帧、但 Back-to-box 周期计数仍必须由
- * 实际服务该请求的一方精确推进一次的场景。 */
+ * 数据 ISR 看到帧结束、或主上下文完成一帧时调用；只刷新时间戳与
+ * 主站丢失提示，不涉及 Back-to-box 周期计数（该计数归主上下文独占，
+ * 见 @ref dll_count_served_cycle 与 `shared.isr_cycle_served`）。 */
 void dll_mark_master_activity_ts(iolink_dll_main_t* ctx)
 {
     ctx->master_last_activity_ms = dll_time_ms(ctx);
@@ -431,16 +432,15 @@ void dll_mark_master_activity_ts(iolink_dll_main_t* ctx)
     ctx->master_lost = false;
 }
 
-/** @brief ST 风格主站活动：帧结束/RX 超时会重启计数器。 */
-void dll_mark_master_activity(iolink_dll_main_t* ctx)
+/** @brief 服务了一个 MasterCycle：推进 Back-to-box 计数（10.7.5）。
+ *
+ * 只由主上下文调用：主上下文自己处理的帧直接调用；ISR 完全消费的帧经
+ * `shared.isr_cycle_served` 交接后由主泵调用。 */
+void dll_count_served_cycle(iolink_dll_main_t* ctx)
 {
-    dll_mark_master_activity_ts(ctx);
-
     /* 10.7.5：统计 Back-to-box 之后服务的帧数，以便设备在停止前
        至少继续应答 3 个 MasterCycle（参见
-       dll_process_complete_frame，它执行实际停止）。每个
-       服务周期精确计数一次：其自身应答的请求由 ISR 计数，
-       否则由 dll_process_complete_frame 计数。 */
+       dll_process_complete_frame，它执行实际停止）。 */
     if (ctx->back_to_box_pending) {
         ctx->back_to_box_cycles++;
     }
