@@ -11,6 +11,7 @@
 #include "iolinki/utils.h"
 #include "iolinki/port.h"
 #include "dll_internal.h"
+#include "isdu_internal.h"
 #include "iolinki/internal/dll_sm.h"
 #include <string.h>
 
@@ -221,10 +222,20 @@ static void dll_plan_push_type0(iolink_dll_main_t* ctx, uint8_t* count, uint8_t 
         0U, IOLINK_REPLY_FLAG_CONSUME | IOLINK_REPLY_FLAG_STAGED, IOLINK_REPLY_ACT_NONE, NULL);
 }
 
-void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
+int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
 {
     if (ctx == NULL) {
-        return;
+        return IOLINK_DLL_PUBLISH_ERR_NULL;
+    }
+    if (ctx->shared.isr == NULL) {
+        /* iolink_dll_init() 尚未成功完成：没有可发布的上下文。 */
+        return IOLINK_DLL_PUBLISH_ERR_UNINIT;
+    }
+    /* 计划表由数据 ISR 查表读取：重建必须与泵互斥。这里显式拒绝误从数据
+     * ISR 的调用，而不是静默重写正在被查的表。 */
+    if (ctx->shared.in_isr != 0U) {
+        IOLINK_LOG_ISR_ERROR(&ctx->shared.log, "reply plan publish rejected inside the data ISR");
+        return IOLINK_DLL_PUBLISH_ERR_ISR;
     }
     /* 计划内容是 {M-sequence 类型, OD 宽度, 能力位} 的纯函数，三项都只在
      * 初始化期间定义；各状态的应答差异由**状态切片**表达，状态迁移不需要
@@ -318,6 +329,7 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
     }
 
     iolink_atomic_store(&ctx->shared.reply_plans_ready, 1U);
+    return IOLINK_DLL_PUBLISH_OK;
 }
 
 /**
@@ -332,9 +344,9 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
  *  - 每份**新**应答翻转代数位（位 10）。长度与缓冲区选择完全相同的
  *    两份应答因此仍是不同的发布字，ISR 的段索引序列会被打断；
  *  - 写失效用单调序号：ISR 每接受一个写 START/ABORT 就自增
- *    `isr_isdu_write_gen`。写入口相位未回到 IDLE 时这里发布
+ *    `isr_isdu_write_gen`。发布代号尚未被 ack 时这里发布
  *    len = 0（无服务），绝不让旧应答继续充当"当前值"；写被应用或
- *    中止后（IDLE）先发布新视图，再把 `isdu_write_gen_applied` 追平，
+ *    中止后先发布新视图，再把 `isdu_write_gen_applied` 追平，
  *    确认必须放在发布之后：否则 ISR 可能在两者之间看到两值相等而
  *    读到旧视图。
  */
@@ -364,15 +376,11 @@ void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx)
          * 占用同一成帧缓冲再重建。 */
         ctx->shared.isdu.resp_pub = sel;
     }
-    /* 写入口相位：RECEPTION/COMPLETE/ABORT 表示写尚未被主泵应用，
-     * 已发布读视图必须显示"无服务"；IDLE 表示写已应用或已中止。
-     * 先取序号（获取语义）再读相位：ISR 先发布相位、再自增序号，因此读到
-     * 新序号时这里读到的相位必然已是该写的相位。 */
+    /* 写入口：发布字已有一代未被主泵处理（正在累计或已收齐待解析）时，
+     * 写尚未生效，已发布读视图必须显示"无服务"。判据只读发布字与主泵
+     * 自己的 ack 序号——数据 ISR 的累计字段（stage_state 等）不参与。 */
     const IOLINK_ATOMIC_UINT_T write_gen = iolink_atomic_load(&ctx->shared.isr_isdu_write_gen);
-    const uint8_t stage = ctx->shared.isdu.stage_state;
-    const bool write_pending = (stage == (uint8_t) IOLINK_ISDU_STAGE_RECEPTION) ||
-                               (stage == (uint8_t) IOLINK_ISDU_STAGE_COMPLETE) ||
-                               (stage == (uint8_t) IOLINK_ISDU_STAGE_ABORT);
+    const bool write_pending = isdu_write_in_progress(&ctx->shared.isdu);
     if (write_pending) {
         /* 写尚未应用：显式发布"无服务"，绝不重发旧应答。 */
         count = 0U;

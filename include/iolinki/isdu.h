@@ -16,6 +16,7 @@
 #include "iolinki/config.h"
 #include "iolinki/od.h"
 #include "iolinki/device_info.h"
+#include "iolinki/port.h"
 #include "iolinki/workspace.h"
 #include "iolinki/types.h"
 
@@ -71,19 +72,49 @@ typedef enum
 } isdu_state_t;
 
 /**
- * @brief 写请求的入口暂存相位（ISR 写、主泵读）。
+ * @brief 写请求的入口暂存相位（数据 ISR 独占）。
  *
- * 写方向的 FlowCTRL 序与字节累计归数据 ISR；主泵只在 COMPLETE 时接管
- * （校验 CHKPDU + 解析 + 执行）。这是双泵共享单缓冲的握手状态，见
- * @ref iolink_isdu_od_write 与 @ref iolink_isdu_process 的契约。
+ * 写方向的 FlowCTRL 序与字节累计归数据 ISR：START 建相位、COUNT 推进、
+ * 收齐后由 ISR 把 `{len, sel, gen}` 发布给主泵。主泵不再解析 ISR 正在写
+ * 的任何字段，也不再改写本相位——因此这里没有"等待主泵复位"的状态。
+ *
+ * @ref IOLINK_ISDU_STAGE_COMPLETE 是**闩锁**：请求已发布、槽内容稳定，
+ * 直到下一次 START（重新进入 RECEPTION）或 ABORT（回到 IDLE）才改变。
+ * 它不表示"主泵尚未处理"，后者由发布字与 ack 序号的比较表达。
  */
 typedef enum
 {
-    IOLINK_ISDU_STAGE_IDLE = 0U,      /**< 无请求在累计；req_buf 空闲 */
+    IOLINK_ISDU_STAGE_IDLE = 0U,      /**< 没有请求在累计；槽可复用 */
     IOLINK_ISDU_STAGE_RECEPTION = 1U, /**< ISR 正在累计写段 */
-    IOLINK_ISDU_STAGE_COMPLETE = 2U,  /**< 请求收齐，等待主泵接管 */
-    IOLINK_ISDU_STAGE_ABORT = 3U      /**< 收到 ABORT，等待主泵复位传输层 */
+    IOLINK_ISDU_STAGE_COMPLETE = 2U   /**< 请求已收齐并发布，槽内容稳定 */
 } iolink_isdu_stage_state_t;
+
+/**
+ * @name 写请求发布字（数据 ISR -> 主泵）
+ *
+ * ISR 在写 START 与请求收齐时各发布一次：把"哪个槽、多长、哪一代"打包成
+ * 一个自然原子的字，主泵一次加载就得到一致的元组，不再与 ISR 共用累计
+ * 字段。槽内容先写完，发布字后写（`IOLINK_FENCE()` + 单次原子存储）。
+ *
+ * 位布局：`len[7:0] | sel[8] | gen[24:9] | receiving[25]`。每次发布都把
+ * `gen` 前进一格，因此"`gen != req_ack_gen`"精确表示"写入口有一代主泵
+ * 尚未处理"。写正在累计时 `receiving` 置位、`len` 为 0：主泵既不解析也
+ * 不 ack 这一代，读视图因此在整个写期间保持失效；收齐（或中止）后才发布
+ * 可 ack 的一代，`len` 是请求字节数（0 = 中止/撤回），主泵只在 `len > 0`
+ * 时解析槽内容。`gen` 是 16 位自由计数，只有连续错过 65536 次发布才会
+ * 回绕到同一个值：那时该请求会被跳过，且写期间的读视图可能短暂重新有效，
+ * 但绝不会解析撕裂的数据。
+ * @{
+ */
+#define IOLINK_ISDU_REQ_PUB_LEN(word) ((uint8_t) ((word) & 0xFFU))
+#define IOLINK_ISDU_REQ_PUB_SEL(word) ((uint8_t) (((word) >> 8) & 0x01U))
+#define IOLINK_ISDU_REQ_PUB_GEN(word) ((uint16_t) (((word) >> 9) & 0xFFFFU))
+#define IOLINK_ISDU_REQ_PUB_RECEIVING(word) ((uint8_t) (((word) >> 25) & 0x01U))
+#define IOLINK_ISDU_REQ_PUB_WORD(len, sel, gen, receiving)                                      \
+    ((IOLINK_ATOMIC_UINT_T) (uint8_t) (len) | ((IOLINK_ATOMIC_UINT_T) ((sel) ? 1U : 0U) << 8) | \
+     ((IOLINK_ATOMIC_UINT_T) (uint16_t) (gen) << 9) |                                           \
+     ((IOLINK_ATOMIC_UINT_T) ((receiving) ? 1U : 0U) << 25))
+/** @} */
 
 /**
  * @brief ISDU 服务上下文
@@ -94,7 +125,7 @@ typedef struct
 {
     isdu_state_t state; /**< 当前状态机位置 */
 
-    volatile uint8_t stage_state; /**< 写入口暂存相位（ISR 写、主泵读） */
+    volatile uint8_t stage_state; /**< 写入口暂存相位（ISR 独占；主泵从不读写） */
 
     /* 传输缓冲位于 `workspace`（或上下文内嵌 fallback）中。
      * 容量随缓冲一起记录，避免运行期再出现第二份尺寸常量。 */
@@ -108,9 +139,17 @@ typedef struct
     size_t response_idx;                   /**< 已从应答缓冲区发送的字节数 */
     size_t response_len;                   /**< 应答缓冲区中的总字节数 */
 
-    /* 规范 ISDU 传输（C3，Table 52） */
-    uint8_t* IOLINK_NULLABLE req_buf; /**< 原始 ISDU 请求八位组（含 CHKPDU） */
-    size_t req_size;                  /**< @ref req_buf 的容量 */
+    /* 规范 ISDU 传输（C3，Table 52）。
+     *
+     * 写入口是双槽 + 发布字：`req_base` 指向两槽请求缓冲的起点，槽 k 的
+     * 地址 = `req_base + k * req_size`；`req_buf` 指向**当前累计槽**
+     * （ISR 单写）。ISR 在 START 时优先避开主泵正在解析的槽；另一个槽若
+     * 持有"已发布未 ack"的请求，则由新请求取代并计数。收齐后发布
+     * `req_pub`，主泵解析发布字指向的槽
+     * （`req_busy_sel` 标记期间占用）。 */
+    uint8_t* IOLINK_NULLABLE req_base; /**< 两槽请求缓冲的起点（绑定后不变） */
+    uint8_t* IOLINK_NULLABLE req_buf;  /**< 请求八位组的当前累计槽（含 CHKPDU） */
+    size_t req_size;                   /**< 单槽容量；也是两槽之间的步长 */
     /* 成帧应答，单缓冲 + 租约：引擎在缓冲空闲时构建，
      * 数据 ISR 在租约期内读取。`resp_store[0/1]` 是同一个缓冲的两个
      * 视图槽，只为保持 ISR 发布字中 sel 位的既有编码。 */
@@ -119,13 +158,21 @@ typedef struct
     uint8_t* IOLINK_NULLABLE resp_buf;      /**< 正在构建的缓冲区 */
     uint8_t resp_sel;                       /**< resp_buf 的视图索引 */
     uint8_t resp_pub;                       /**< 最后一个完整（已发布）应答的视图索引 */
-    size_t req_idx;                         /**< req_buf 中已采集的八位组数 */
-    size_t req_total;                       /**< 由 Length/ExtLength 得出的预期 ISDU 总长度 */
-    size_t resp_idx;                        /**< 已从 resp_buf 发出的八位组数 */
-    size_t resp_total;                      /**< resp_buf 中的总八位组数 */
-    uint8_t last_flowctrl;                  /**< 上一条 ISDU 报文的 FlowCTRL */
-    bool flowctrl_seen;                     /**< 自 START 以来已收到 FlowCTRL */
-    uint8_t error_code;                     /**< IO-Link ISDU 错误码（0x80XX） */
+    size_t req_idx;                         /**< 当前累计槽中已采集的八位组数（ISR 单写） */
+    size_t req_total; /**< 由 Length/ExtLength 得出的预期 ISDU 总长度（ISR 单写） */
+
+    volatile IOLINK_ATOMIC_UINT_T req_pub; /**< 写请求发布字 `{len, sel, gen, receiving}`
+                                                （ISR 单写） */
+    volatile uint16_t req_ack_gen;         /**< 主泵已处理到的发布代号（主泵单写） */
+    volatile uint8_t req_busy_sel;         /**< 主泵正在解析的槽；0xFF = 无（主泵单写） */
+    uint8_t req_slot;                      /**< ISR 当前累计槽（0/1） */
+    uint32_t req_overruns; /**< 已发布未接管的请求被新 START 覆盖的次数（ISR 单写） */
+
+    size_t resp_idx;       /**< 已从 resp_buf 发出的八位组数 */
+    size_t resp_total;     /**< resp_buf 中的总八位组数 */
+    uint8_t last_flowctrl; /**< 上一条 ISDU 报文的 FlowCTRL（ISR 单写） */
+    bool flowctrl_seen;    /**< 自 START 以来已收到 FlowCTRL（ISR 单写） */
+    uint8_t error_code;    /**< IO-Link ISDU 错误码（0x80XX） */
 
     /* 指向外部依赖的指针 */
     bool response_negative; /**< 由 isdu_respond_error 设置；用于区分 0x80 两八位组载荷。 */
@@ -179,8 +226,10 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx);
  * fallback 存储。必须在 `iolink_isdu_init()` 之后调用；绑定不会清空
  * 传输状态。设备层由 `iolink_device_init()` 按 `config.workspace` 自动完成。
  *
- * 传输缓冲指针由数据 ISR 读取，因此绑定必须在数据泵静止时进行。从数据
- * ISR 内调用会被拒绝：指针与传输状态都不改变。
+ * 传输缓冲指针由数据 ISR 读取，因此和 `iolink_dll_publish_reply_plans()`
+ * 一样要求主上下文调用、数据泵静止。从数据 ISR 内
+ * （`shared.in_isr != 0`）调用会被拒绝：不改变任何指针与传输状态，并记录
+ * 一条 ISR 错误。
  *
  * @p ws 为 NULL 表示解绑：没有内嵌 fallback 的构建
  * （`IOLINK_WORKSPACE_EMBEDDED=0`）会显式清零全部缓冲指针与容量，
@@ -220,9 +269,14 @@ void iolink_isdu_bind_caps(iolink_isdu_ctx_t* ctx, const iolink_caps_t* IOLINK_N
 /**
  * @brief 处理 ISDU 引擎逻辑（主上下文）。
  *
- * 若数据 ISR 已把一条写请求累计到 `IOLINK_ISDU_STAGE_COMPLETE`，本函数在
- * 临界区内校验 CHKPDU、解析请求头并复制载荷，然后释放 `req_buf`；随后
- * 执行服务分发并生成应答。慢速应用回调不会在临界区内运行。
+ * 若数据 ISR 已发布一条可认领的写请求（`req_pub` 的代号与 `req_ack_gen`
+ * 不同、`len > 0`、且不处于"正在累计"），本函数认领该槽、校验 CHKPDU、
+ * 解析请求头并复制载荷，然后执行服务分发并生成应答。整个过程**不加
+ * 临界区**：ISR 不会写主泵正在解析的槽（`req_busy_sel`），主泵也不会写
+ * ISR 的累计相位。慢速应用回调因而可以在这条路径上运行。
+ *
+ * 每次调用最多认领一条已发布请求，从而使 `req_busy_sel` 认领期间 ISR
+ * 的选槽判定始终成立。
  *
  * @param ctx 要处理的 ISDU 上下文
  */
@@ -241,22 +295,29 @@ void iolink_isdu_process(iolink_isdu_ctx_t* ctx);
 void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd);
 
 /**
- * @brief 数据 ISR 的 ISDU 写入口：累计请求字节并判定完成。
+ * @brief 数据 ISR 的 ISDU 写入口：累计请求字节并发布收齐的请求。
  *
  * 本函数只做「传输」：按 FlowCTRL 位置去重、累计原始请求八位组、
  * 判定声明长度是否收齐。它不解析头、不校验 CHKPDU、不执行服务——
- * 这些由主泵在 @ref IOLINK_ISDU_STAGE_COMPLETE 时通过
- * @ref iolink_isdu_process 完成。
+ * 收齐后把 `{len, sel, gen}` 发布到 `req_pub`，由主泵在
+ * @ref iolink_isdu_process 中锁外完成。
  *
  * 去重是**按位置**的（借鉴 ST ministack）：仅当 FlowCTRL 等于
  * `(last + 1) & 0x0F` 时推进写位置；重复段与过早的乱序段被忽略
  * （载荷丢弃，已累计字节不受影响），因此主站重发风暴不会消耗新缓冲，
  * 也不会破坏已收齐的请求。
  *
- * ABORT 释放写入口相位（不清读传输层）；IDLE/IDLE2 与保留值被忽略。
- * START 复位并开始新的累计；没有 START 的 COUNT 被忽略。
+ * 选槽规则（ISR 单写）：START 先避开主泵正在解析的槽（`req_busy_sel`）；
+ * 另一个槽若持有"已发布未 ack"的请求，则由新请求取代并计数。然后发布
+ * `len=0, receiving=1` 的一代——读
+ * 视图因此失效，主泵也不会读到正在累计的半条请求。于是两条请求可以同时
+ * 在途（主泵执行一条、ISR 累计下一条）；只有"已发布但主泵尚未接管"的
+ * 请求会被新 START 取代：它不会执行，取代计入 `req_overruns`（经
+ * `iolink_dll_get_stats()` 的 `isr_od_overruns` 可观测）——丢弃不是静默的。
+ * ABORT 拒绝请求数据、释放累计相位、撤回尚未接管的请求，并让主泵
+ * 复位读传输层（Table 52：传输返回 Idle）。IDLE/IDLE2 与保留值被忽略。
  *
- * @note 只在数据 ISR 上下文调用。主泵只读 COMPLETE 状态并接管。
+ * @note 只在数据 ISR 上下文调用。
  *
  * @param ctx ISDU 上下文
  * @param flowctrl FlowCTRL 值（mc & 0x1F）
@@ -313,11 +374,12 @@ uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* IOLINK
 /**
  * @brief ISDU 传输是否空闲。
  *
- * 空闲表示没有请求正在被采集、执行或读出；设备
+ * 空闲表示没有请求正在被采集、执行或读出：读状态机为 IDLE、数据 ISR
+ * 没有正在累计的写请求，也没有"已发布但主泵尚未处理"的写请求。设备
  * 层据此只在 ISDU 交互之间运行事件/DS 引擎。
  *
  * @param ctx ISDU 上下文（只读）
- * @return 引擎处于 ISDU_STATE_IDLE 时为 true
+ * @return 引擎处于 ISDU_STATE_IDLE 且写入口无在途请求时为 true
  */
 bool iolink_isdu_is_idle(const iolink_isdu_ctx_t* ctx);
 

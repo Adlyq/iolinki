@@ -168,6 +168,18 @@ iolink_test(NAME test_plan_slots_overflow
     SOURCES test_plan_slots_overflow.c
     LIBS iolink_plan_slots_fixture
     CMOCKA NO_HELPERS)
+# ISDU 双请求槽（发布字 / ack / 忙槽）的并发切点。
+iolink_test(NAME test_isdu_slots
+    SOURCES test_isdu_slots.c
+    CMOCKA NO_HELPERS)
+# 小 ISDU 缓冲：槽容量 70 字节下的双槽布局同样要完成请求。
+add_library(iolink_isdu_slots_fixture STATIC ${IOLINK_SOURCES})
+target_include_directories(iolink_isdu_slots_fixture PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_compile_definitions(iolink_isdu_slots_fixture PUBLIC IOLINK_ISDU_BUFFER_SIZE=64)
+iolink_test(NAME test_isdu_slots_small
+    SOURCES test_isdu_slots_small.c
+    LIBS iolink_isdu_slots_fixture
+    CMOCKA NO_HELPERS)
 # CONSUME 计划帧不进邮箱：ISR 交接帧时间戳，主泵补做 T_CYCLE/T_REN 记账。
 iolink_test(NAME test_isr_consumed_timing SOURCES test_isr_consumed_timing.c
         CMOCKA NO_HELPERS)
@@ -235,6 +247,10 @@ target_compile_definitions(iolink_tx_busy_fixture PUBLIC
     IOLINK_PHY_FEATURE_TX_BUSY=1)
 iolink_test(NAME test_tx_busy SOURCES test_tx_busy.c LIBS iolink_tx_busy_fixture
     CMOCKA NO_HELPERS)
+
+# 主站静默期：同一 FRAME+TX_BUSY 构建上，PD-in 租约只由 ISR 释放。
+iolink_test(NAME test_pd_lease_frame SOURCES test_pd_lease_frame.c
+    LIBS iolink_tx_busy_fixture CMOCKA)
 
 # PD-input path: the callback and the polling API now coexist in one
 # binary, so the test needs no fixture build of the sources.

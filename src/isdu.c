@@ -116,8 +116,9 @@ static void isdu_attach_scratch(iolink_isdu_ctx_t* ctx, iolink_isdu_scratch_t* s
     ctx->buffer_size = sizeof(scratch->payload);
     ctx->response_buf = scratch->response;
     ctx->response_size = sizeof(scratch->response);
-    ctx->req_buf = scratch->request;
-    ctx->req_size = sizeof(scratch->request);
+    ctx->req_base = scratch->request;
+    ctx->req_size = IOLINK_ISDU_BUFFER_SIZE + 6U;
+    ctx->req_buf = &ctx->req_base[(size_t) ctx->req_slot * ctx->req_size];
     ctx->resp_frame = scratch->frame;
     /* 租约模型只有一份成帧缓冲：两个视图槽指向同一块内存，sel 位
      * 仍按既有发布字编码交替，但不再复制第二份应答。 */
@@ -135,6 +136,7 @@ static void isdu_clear_scratch(iolink_isdu_ctx_t* ctx)
     ctx->response_buf = NULL;
     ctx->response_size = 0U;
     ctx->req_buf = NULL;
+    ctx->req_base = NULL;
     ctx->req_size = 0U;
     ctx->resp_frame = NULL;
     ctx->resp_store[0] = NULL;
@@ -175,6 +177,8 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx)
     ctx->state = ISDU_STATE_IDLE;
     ctx->resp_sel = 0U;
     ctx->resp_pub = 0U;
+    /* 清零后没有任何槽被主泵占用：显式写成"无"（0 是合法槽号）。 */
+    ctx->req_busy_sel = 0xFFU;
     /* 清零后的映像没有内容：标记失效，由第一次主泵读取/处理重建。 */
     iolink_isdu_dp_page1_invalidate(ctx);
 #if IOLINK_WORKSPACE_EMBEDDED
@@ -247,14 +251,8 @@ void isdu_respond_result(iolink_isdu_ctx_t* ctx, iolink_result_t result)
    完整的 ISDU 请求后执行它。 */
 static void handle_standard_commands(iolink_isdu_ctx_t* ctx);
 
-/**
- * @brief 释放写入口相位（req_buf 累计位置、FlowCTRL 水位与 stage_state）。
- *
- * 这些字段属于数据 ISR 的写入口：START 建立、COUNT 推进，主泵只在
- * COMPLETE/ABORT 接管时交还。主泵独占的读传输层字段
- * （`state`/`header`/响应缓冲）不在此复位。
- */
-void isdu_stage_release(iolink_isdu_ctx_t* ctx)
+/** @brief 释放 ISR 的写入口相位（累计位置、FlowCTRL 水位与相位）。 */
+static void isdu_stage_release(iolink_isdu_ctx_t* ctx)
 {
     ctx->req_idx = 0U;
     ctx->req_total = 0U;
@@ -279,17 +277,17 @@ static void isdu_read_fields_reset(iolink_isdu_ctx_t* ctx)
     ctx->header.subindex = 0U;
 }
 
-/** @brief 只复位主泵的读传输层；写入口相位保持原样。 */
+/**
+ * @brief 复位主泵独占的读传输层。
+ *
+ * 读方向的 IDLE/ABORT、读完成与错误恢复都走这里。写入口
+ * （`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`/发布字）是数据
+ * ISR 独占的，本函数不碰它们，因此不需要临界区：主站"读 ABORT 后立刻
+ * 写 START"时，ISR 已建立的新请求不会被主泵清掉。
+ */
 void isdu_read_reset(iolink_isdu_ctx_t* ctx)
 {
     isdu_read_fields_reset(ctx);
-}
-
-/** @brief 将 ISDU 请求传输层复位到空闲状态（读传输层 + 写入口相位）。 */
-void isdu_transport_reset(iolink_isdu_ctx_t* ctx)
-{
-    isdu_read_fields_reset(ctx);
-    isdu_stage_release(ctx);
 }
 
 /** @brief 由最先收到的字节声明的 ISDU 总字节数（A.5.3/A.14）。
@@ -318,11 +316,13 @@ static size_t isdu_declared_total(const uint8_t* buf, size_t have)
 }
 
 /**
- * @brief 解码完整的请求缓冲区并执行所寻址的服务。
+ * @brief 解码一条已发布的请求并执行所寻址的服务。
  *
  * 从原始字节填充 ctx->header 与 ctx->buffer，然后通过
  * handle_standard_commands() 分发；处理器会留下 2 字节的否定标记
  * （response_buf[0]==0x80）或 response_buf/response_len 中的肯定载荷。
+ *
+ * @p buf 是主泵已认领的请求槽（ISR 不会覆盖），@p total 是它已发布的长度。
  */
 /** @brief 将服务半字节解码为读/写头部类型。 */
 static bool isdu_decode_service(iolink_isdu_ctx_t* ctx, uint8_t service)
@@ -402,10 +402,9 @@ static void isdu_copy_payload(iolink_isdu_ctx_t* ctx, const uint8_t* buf, size_t
     ctx->header.length = (uint8_t) ctx->buffer_idx;
 }
 
-static void isdu_execute_request(iolink_isdu_ctx_t* ctx, size_t total)
+static void isdu_execute_request(iolink_isdu_ctx_t* ctx, const uint8_t* buf, size_t total)
 {
     ctx->response_negative = false;
-    const uint8_t* buf = ctx->req_buf;
     const uint8_t service = (uint8_t) (buf[0] >> 4);
     size_t pos = 1U;
     const size_t payload_end = total - 1U; /* CHKPDU 无法提供 index/subindex。 */
@@ -503,19 +502,117 @@ static void isdu_emit_busy(iolink_isdu_ctx_t* ctx)
     ctx->resp_idx = 0U;
 }
 
+/**
+ * @brief 发布字当前是否指向一条主泵尚未处理**且已收齐**的请求。
+ *
+ * 读侧只做一次原子加载：ISR 先写完槽内容、再发布代号，因此
+ * `gen != ack` 且 `len > 0` 时该槽内容必然完整。
+ */
+bool isdu_request_pending(const iolink_isdu_ctx_t* ctx)
+{
+    const IOLINK_ATOMIC_UINT_T pub = iolink_atomic_load(&ctx->req_pub);
+    return (IOLINK_ISDU_REQ_PUB_LEN(pub) != 0U) &&
+           (IOLINK_ISDU_REQ_PUB_GEN(pub) != ctx->req_ack_gen);
+}
+
+/**
+ * @brief 放弃尚未收齐的写请求（通信重启时由主泵调用）。
+ *
+ * 只退休没有内容的代（`len == 0`：正在累计或已撤回）。已经收齐的请求
+ * （`len > 0`）不在这里丢弃——它仍由同轮 `iolink_isdu_process()` 认领并
+ * 执行，避免逐段 ACK 过的请求被静默吃掉。
+ *
+ * 主泵单写：只把 ack 抬到 ISR 已经发布过的代号，绝不超前于 `req_pub`。
+ * 发布代号因此仍由 ISR 推进，累计相位也仍归 ISR；下一轮的 START 会重置它。
+ */
+void isdu_abandon_write(iolink_isdu_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    const IOLINK_ATOMIC_UINT_T pub = iolink_atomic_load(&ctx->req_pub);
+    if (IOLINK_ISDU_REQ_PUB_LEN(pub) != 0U) {
+        return;
+    }
+    ctx->req_ack_gen = IOLINK_ISDU_REQ_PUB_GEN(pub);
+}
+
+/**
+ * @brief 写请求是否尚未被主泵接管（发布代号与 ack 不等）。
+ *
+ * 主泵据此让已发布的读视图失效：写 START 已经让旧应答不再可信，哪怕
+ * 请求还没收齐。判断只读发布字与自己的 ack 序号，不读任何 ISR 相位字段。
+ */
+bool isdu_write_in_progress(const iolink_isdu_ctx_t* ctx)
+{
+    return IOLINK_ISDU_REQ_PUB_GEN(iolink_atomic_load(&ctx->req_pub)) != ctx->req_ack_gen;
+}
+
+/** @brief 发布 `{len, 当前槽, 新代号}`；槽内容（或撤回）必须先写完。 */
+static void isdu_req_publish(iolink_isdu_ctx_t* ctx, uint8_t len, bool receiving)
+{
+    const uint16_t gen =
+        (uint16_t) (IOLINK_ISDU_REQ_PUB_GEN(iolink_atomic_load(&ctx->req_pub)) + 1U);
+    iolink_atomic_store(&ctx->req_pub,
+                        IOLINK_ISDU_REQ_PUB_WORD(len, ctx->req_slot, gen, receiving ? 1U : 0U));
+}
+
+/** @brief 发布 `len=0` 的可 ack 一代：撤回未接管的请求（覆盖/中止）。 */
+static void isdu_req_publish_withdrawn(iolink_isdu_ctx_t* ctx)
+{
+    isdu_req_publish(ctx, 0U, false);
+}
+
+/**
+ * @brief 为一条新写请求挑选槽，并发布"正在累计"的一代。
+ *
+ * 槽选择的第一原则是**绝不写主泵正在解析的槽**（`req_busy_sel`），其次才
+ * 避开"已发布未 ack"的那条：
+ *  - 发布槽正在被解析：新请求进另一个槽，两条互不干扰；
+ *  - 另一个槽正在被解析：只能写发布槽。若它持有尚未接管的请求，
+ *    新 START 取代它并计 `req_overruns`——旧请求不会执行，丢弃不是静默的；
+ *  - 主泵没在解析：写非发布槽，已发布的那条（若有）被取代并同样计数。
+ * 选好槽后立即发布 `len=0` 的新一代：主泵因此不会读到正在累计的半条请求，
+ * 已发布的读视图也同时失效（`isdu_write_in_progress`）。
+ */
+static void isdu_req_begin(iolink_isdu_ctx_t* ctx)
+{
+    const IOLINK_ATOMIC_UINT_T pub = iolink_atomic_load(&ctx->req_pub);
+    const uint8_t pub_sel = IOLINK_ISDU_REQ_PUB_SEL(pub);
+    const uint8_t peer = (uint8_t) (1U - pub_sel);
+    const uint8_t busy = ctx->req_busy_sel;
+
+    ctx->req_slot = (busy == peer) ? pub_sel : peer;
+    if (isdu_request_pending(ctx) && (busy != pub_sel)) {
+        /* 已发布未接管的请求被这一条取代（不可再被解析）。 */
+        ctx->req_overruns++;
+    }
+
+    /* 释放序：先从 busy_sel 得出"这个槽不归主泵"，再写槽内容。SMP 档下
+     * 没有这道屏障，本上下文的写可以被重排到读 busy_sel 之前。 */
+    IOLINK_FENCE();
+    ctx->req_buf = &ctx->req_base[(size_t) ctx->req_slot * ctx->req_size];
+    isdu_req_publish(ctx, 0U, true);
+    isdu_stage_release(ctx);
+}
+
 void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_t* od,
                           uint8_t od_len)
 {
-    if ((ctx == NULL) || (ctx->buffer == NULL) || (od == NULL)) {
+    if ((ctx == NULL) || (ctx->buffer == NULL) || (od == NULL) || (ctx->req_buf == NULL)) {
         return;
     }
 
-    /* Table 52：ABORT（0x1F）拒绝请求数据并释放写入口相位，与方向无关；
-       读传输层的复位归读路径。IDLE/IDLE2 及保留值 0x13..0x1E 不是写操作，
-       它们由读路径处理。 */
+    /* Table 52：ABORT（0x1F）拒绝请求数据、让传输返回 Idle，与方向无关。
+       累计相位与尚未接管的请求都由 ISR 自己丢弃；读传输层的复位经一次性
+       标志交给主泵（与读 IDLE/ABORT 同一条路径），主泵因此仍是读字段的
+       唯一写者。IDLE/IDLE2 及保留值 0x13..0x1E 不是写操作，由读路径处理。 */
     if (flowctrl == IOLINK_FLOWCTRL_ABORT) {
+        isdu_req_publish_withdrawn(ctx);
         isdu_stage_release(ctx);
-        ctx->stage_state = IOLINK_ISDU_STAGE_ABORT;
+        if (ctx->dll_ctx != NULL) {
+            ctx->dll_ctx->shared.isr_isdu_read_reset = 1U;
+        }
         return;
     }
     if (flowctrl >= IOLINK_FLOWCTRL_IDLE) {
@@ -523,7 +620,7 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
     }
 
     if (flowctrl == IOLINK_FLOWCTRL_START) {
-        isdu_stage_release(ctx);
+        isdu_req_begin(ctx);
         /* 仅在上一应答已发布时才轮换组帧应答缓冲区；
          * 否则替换尚未发布的构建结果。 */
         if (ctx->resp_sel == ctx->resp_pub) {
@@ -562,8 +659,10 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
     }
 
     if ((ctx->req_total > 0U) && (ctx->req_idx >= ctx->req_total)) {
-        /* 累计完成：主泵在 iolink_isdu_process() 中校验 CHKPDU 并执行。 */
+        /* 累计完成：先让槽内容可见，再发布可 ack 的一代；主泵在锁外校验
+         * CHKPDU 并执行（见 iolink_isdu_process）。 */
         ctx->stage_state = IOLINK_ISDU_STAGE_COMPLETE;
+        isdu_req_publish(ctx, (uint8_t) ctx->req_total, false);
     }
 }
 
@@ -587,10 +686,9 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* IOLI
     }
 
     if (flowctrl == IOLINK_FLOWCTRL_START) {
-        /* 应答读取开始。若某服务正在执行（或写请求已收齐、等待主泵
+        /* 应答读取开始。若某服务正在执行（或写请求已收齐、主泵尚未
            接管），应用尚未应答，则应答 Busy（0x01）（Table A.14）。 */
-        if ((ctx->state == ISDU_STATE_SERVICE_EXECUTE) ||
-            (ctx->stage_state == IOLINK_ISDU_STAGE_COMPLETE)) {
+        if ((ctx->state == ISDU_STATE_SERVICE_EXECUTE) || isdu_request_pending(ctx)) {
             isdu_emit_busy(ctx);
         }
         else if (ctx->state == ISDU_STATE_RESPONSE_READY) {
@@ -689,22 +787,65 @@ static void handle_standard_commands(iolink_isdu_ctx_t* ctx)
  * 公开 API
  * ------------------------------------------------------------------------- */
 
-/** @brief 校验并解析 ISR 累计完成的写请求（调用方持临界区）。 */
-static bool isdu_apply_staged_request(iolink_isdu_ctx_t* ctx)
+/**
+ * @brief 认领发布字指向的请求槽。
+ *
+ * 返回非 NULL 表示主泵已接管该槽：`req_busy_sel` 已经写成该槽号，ISR
+ * 在选槽时会避开它。`gen` 是认领时的代号，处理完必须写回 `req_ack_gen`。
+ *
+ * 主泵每次 `iolink_isdu_process()` 最多认领一条，因此"busy 非 0xFF ⇒ 主泵
+ * 不再读发布字"这条不变式成立，ISR 可以在此时覆盖另一条已发布的请求。
+ */
+static const uint8_t* isdu_req_claim(iolink_isdu_ctx_t* ctx, uint16_t* gen, uint8_t* len)
+{
+    const IOLINK_ATOMIC_UINT_T pub = iolink_atomic_load(&ctx->req_pub);
+    const uint16_t pub_gen = IOLINK_ISDU_REQ_PUB_GEN(pub);
+    if (pub_gen == ctx->req_ack_gen) {
+        return NULL;
+    }
+    if (IOLINK_ISDU_REQ_PUB_RECEIVING(pub) != 0U) {
+        /* 写正在累计：这一代不可 ack（否则读视图会在写期间被重新发布）。 */
+        return NULL;
+    }
+    const uint8_t pub_len = IOLINK_ISDU_REQ_PUB_LEN(pub);
+    if (pub_len == 0U) {
+        /* 中止/撤回：没有内容可解析，只推进 ack。 */
+        ctx->req_ack_gen = pub_gen;
+        return NULL;
+    }
+    const uint8_t sel = IOLINK_ISDU_REQ_PUB_SEL(pub);
+    if (ctx->req_base == NULL) {
+        /* 没有请求缓冲（工作区已解绑）：显式丢弃这一代，不能让 ack 停在
+         * 旧值上——否则读路径与事件/DS 门控会永久停在“写未完成”。 */
+        ctx->req_ack_gen = pub_gen;
+        return NULL;
+    }
+    const uint8_t* req = &ctx->req_base[(size_t) sel * ctx->req_size];
+    ctx->req_busy_sel = sel;
+    IOLINK_FENCE();
+    *gen = pub_gen;
+    *len = pub_len;
+    return req;
+}
+
+/**
+ * @brief 校验已发布请求的 CHKPDU 并解码。
+ *
+ * A.5.6 / Table 84：CHKPDU 无效使请求无效；丢弃请求并回到空闲。
+ * 不要为格式错误的请求合成否定 ISDU 应答。
+ */
+static bool isdu_apply_published_request(iolink_isdu_ctx_t* ctx, const uint8_t* req, size_t len)
 {
     uint8_t x = 0U;
-    for (size_t i = 0U; i < ctx->req_total; i++) {
-        x ^= ctx->req_buf[i];
+    for (size_t i = 0U; i < len; i++) {
+        x ^= req[i];
     }
     if (x != 0U) {
-        /* A.5.6 / Table 84：CHKPDU 无效使请求无效；丢弃请求并回到空闲。
-         * 不要为格式错误的请求合成否定 ISDU 应答。 */
         ctx->error_code = IOLINK_ISDU_ERROR_IDX_NOT_AVAIL;
-        isdu_transport_reset(ctx);
+        isdu_read_reset(ctx);
         return false;
     }
-    isdu_execute_request(ctx, ctx->req_total);
-    ctx->stage_state = IOLINK_ISDU_STAGE_IDLE; /* 把 req_buf 交还 ISR */
+    isdu_execute_request(ctx, req, len);
     return true;
 }
 
@@ -724,35 +865,29 @@ void iolink_isdu_process(iolink_isdu_ctx_t* ctx)
         return;
     }
 
-    /* 快路径：没有待接管的写请求时不进临界区（PHY 服务钩子必须能在
-     * 区外运行）。COMPLETE/ABORT 的权威判定在临界区内重读一次，
-     * 避免 ISR 在「读到 COMPLETE」与「进入临界区」之间开始新的 START，
-     * 让主泵用被改写的 req_buf/req_total 解析一条撕裂的请求。 */
-    uint8_t stage = ctx->stage_state;
-    bool applied = false;
-    if ((stage == IOLINK_ISDU_STAGE_COMPLETE) || (stage == IOLINK_ISDU_STAGE_ABORT)) {
-        IOLINK_CRITICAL_ENTER();
-        stage = ctx->stage_state;
-        if (stage == IOLINK_ISDU_STAGE_ABORT) {
-            isdu_transport_reset(ctx);
+    /* 锁外接管：发布字给出自洽的 {len, sel, gen}，busy 让 ISR 避开该槽。
+     * 校验、解析、服务分发与应用回调全部不在临界区内。 */
+    uint16_t gen = 0U;
+    uint8_t len = 0U;
+    const uint8_t* req = isdu_req_claim(ctx, &gen, &len);
+    if (req != NULL) {
+        const bool applied = isdu_apply_published_request(ctx, req, len);
+        /* 解析读完了槽：先推进 ack（ISR 据此可以正常轮换），再放开槽。 */
+        IOLINK_FENCE();
+        ctx->req_ack_gen = gen;
+        ctx->req_busy_sel = 0xFFU;
+        if (applied) {
+            IOLINK_LOG_DEBUG(ctx->log, "isdu req idx=0x%04X sub=%u len=%u write=%u",
+                             (unsigned) ctx->header.index, (unsigned) ctx->header.subindex,
+                             (unsigned) ctx->header.length,
+                             (unsigned) (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE));
         }
-        else if (stage == IOLINK_ISDU_STAGE_COMPLETE) {
-            applied = isdu_apply_staged_request(ctx);
-        }
-        IOLINK_CRITICAL_EXIT();
-    }
-
-    if (applied) {
-        IOLINK_LOG_DEBUG(ctx->log, "isdu req idx=0x%04X sub=%u len=%u write=%u",
-                         (unsigned) ctx->header.index, (unsigned) ctx->header.subindex,
-                         (unsigned) ctx->header.length,
-                         (unsigned) (ctx->header.type == IOLINK_ISDU_SERVICE_TYPE_WRITE));
     }
 
     if (ctx->state == ISDU_STATE_SERVICE_EXECUTE) {
         handle_standard_commands(ctx);
         if (ctx->state != ISDU_STATE_RESPONSE_READY) {
-            isdu_transport_reset(ctx);
+            isdu_read_reset(ctx);
         }
         else {
             isdu_frame_response(ctx);
@@ -811,6 +946,5 @@ uint8_t iolink_isdu_snapshot_response(const iolink_isdu_ctx_t* ctx, bool* IOLINK
 
 bool iolink_isdu_is_idle(const iolink_isdu_ctx_t* ctx)
 {
-    return (ctx != NULL) && (ctx->state == ISDU_STATE_IDLE) &&
-           (ctx->stage_state == IOLINK_ISDU_STAGE_IDLE);
+    return (ctx != NULL) && (ctx->state == ISDU_STATE_IDLE) && !isdu_write_in_progress(ctx);
 }

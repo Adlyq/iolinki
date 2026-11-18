@@ -527,7 +527,8 @@ static void test_isdu_wire_write_abort(void** state)
     iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_START, (const uint8_t[]){0x93U}, 1U);
     iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_ABORT, (const uint8_t[]){0x00U}, 1U);
 
-    /* ISR 只置 ABORT 相位；主泵接管后复位并回到空闲。 */
+    /* Table 52：ABORT 由 ISR 直接结算——请求数据被拒绝、累计相位释放，
+     * 并发布"已撤回"的一代。主泵 ack 这一代之后传输回到 Idle。 */
     assert_false(iolink_isdu_is_idle(&ctx));
     iolink_isdu_process(&ctx);
     assert_true(iolink_isdu_is_idle(&ctx));

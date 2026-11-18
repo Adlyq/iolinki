@@ -89,8 +89,11 @@ void iolink_critical_exit(void);
 
 `src/platform.c` 中的 weak no-op 只用于让库可链接。`iolink_device_init()` 会探测
 这两个钩子；如果仍在用 weak 默认实现，初始化返回
-`IOLINK_DEVICE_INIT_ERR_CRITICAL`。实现必须可嵌套，并能在 ISR 双泵下保护邮箱、
-ISDU 快照和应答暂存区。
+`IOLINK_DEVICE_INIT_ERR_CRITICAL`。实现必须可嵌套（`exit` 恢复对应 `enter` 保存的
+屏蔽状态），并能在 ISR 双泵下保护库实际取锁的短操作：诊断条件表、事件队列的
+读/clear、计数器清零、SIO 切换的应答槽清理与 ISR 相位复位
+（见 `docs/CODE_FLOW.md` 第 12 节的临界区审计）。PD-in 发布不取锁：主上下文
+用一次原子存储发布 `pd_pub`，数据 ISR 只加载一次。
 
 `iolink_device_app_t::time_us` 是必需的。`iolink_device_init()` 在 `config.app`
 为 NULL 时返回 `IOLINK_DEVICE_INIT_ERR_APP`，在 `app->time_us` 为 NULL 时返回
@@ -217,7 +220,7 @@ vtable 的每个成员在类型上都是可选的（`IOLINK_NULLABLE`）：`ioli
 | `tx_octet` | TX BYTE 模式 | 送入一个应答 octet。 |
 | `tx_frame` | TX FRAME 模式 | 发送完整应答，通常使用 DMA。 |
 | `tx_done` | TX BYTE 模式 | 发完最后一字节后释放线路；RX BYTE 的 gap 也会用它释放接收引擎。TX FRAME 下该成员不存在，由 PHY 自己在传输完成中断里收尾。 |
-| `tx_busy` | TX FRAME 可选 | 线路仍被占用时返回非 0；库据此推迟 ISR 应答并在主泵释放 PD-in 缓冲。为 NULL 时只能等下一次 capture 复用缓冲。 |
+| `tx_busy` | TX FRAME 可选 | 线路仍被占用时返回非 0；库据此推迟 ISR 应答，并由数据 ISR 在入口发现线路空闲时释放 PD-in 缓冲租约。为 NULL 时只能等下一次 capture 复用缓冲。 |
 | `int_active` | ISR 泵需要 | 数据中断电平；`dll_isr_process()` 在它或 RX 能力缺失时直接返回，不泵送。 |
 | `request_service` | ISR/SMP 档必需 | 主上下文暂存应答后唤醒数据 ISR。`ISR`/`SMP` 档下具备 TX 能力的 PHY 缺少它会被初始化拒绝；`SINGLE` 档没有数据 ISR，主上下文直接驱动 TX 钩子，此时它只在设置 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 时必需。 |
 | `response_timer_start/stop` | 可选 | 硬件 t_A 定时器。为 NULL 时使用软件时间戳。 |
@@ -318,14 +321,16 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 - 主站收到的是 ISR 按计划表给出的应答，不依赖主泵节奏；
 - 计划未命中的合法帧被丢弃（主站按自己的重试机制重发），不会产生迟到应答；
 - ISDU 写请求在数据 ISR 内按 FlowCTRL 位置去重累计：重发段只回 ACK、不消耗新位置，
-  因此主站重发风暴不会耗尽缓冲。若主泵尚未接管上一条已收齐的请求就收到新的 START，
-  前一条被覆盖并计入 `isr_od_overruns`。
+  因此主站重发风暴不会耗尽缓冲。写入口有**两个请求槽**：主泵解析一条已发布的请求时，
+  ISR 可以继续把下一条累计进另一个槽。只有两个槽都不可用（一条已发布未被接管、另一条
+  正在被解析）时，新 START 才覆盖那条已发布的请求并计入 `isr_od_overruns`——被覆盖的
+  请求不会被执行。
 
 排查主泵饥饿时读 `iolink_dll_get_stats()`：`isr_plan_misses`（合法帧计划未命中而被丢弃）、
-`isr_mailbox_drops`（邮箱满）、`isr_od_overruns`（已收齐请求被新 START 覆盖）、
+`isr_mailbox_drops`（邮箱满）、`isr_od_overruns`（已收齐但未被接管的请求被新 START 覆盖）、
 `t_pd_discards`（t_PD 窗口内丢弃的邮箱帧）、`reply_plan_overflows`（计划槽位耗尽）。
 `isr_plan_misses` 持续增长说明计划表缺少某种合法帧形状；`isr_od_overruns`
-持续增长说明主泵长时间未接管已收齐的请求。`isr_frames_consumed`（由 ISR 完全处理、不再进入邮箱的帧，含按规范有意不应答的转换/复位帧）
+持续增长说明主泵长时间未接管已收齐的请求（双槽只能吸收一条在途请求）。`isr_frames_consumed`（由 ISR 完全处理、不再进入邮箱的帧，含按规范有意不应答的转换/复位帧）
 与 `isr_frames_handoff`（成功交给主泵的帧）给出两类终局的数量，可用来核对"ISR 接管 / 交给主泵"
 的比例；被丢弃的帧见上列的丢弃计数（坏 ISDU 写计入 `isr_eager_rejects`）。
 
@@ -496,10 +501,14 @@ uint8_t iolink_events_memory_read(iolink_events_ctx_t* ctx, uint8_t addr);
 void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t value);
 ```
 
-除 `iolink_events_pending()` / `iolink_events_flag()` / `iolink_events_memory_read()`
-外的入口都是主上下文专属：事件引擎只有一个写者。数据 ISR 只读取事件标志与
-Table 58 事件存储器（双映像 + 发布索引，因此永远看到完整的一代），并在需要
-复位时经 `iolink_events_reset_request()` 登记请求，由 `iolink_dll_process()` 应用。
+写入口（`iolink_event_trigger`、`iolink_event_clear`、`iolink_events_process`、
+`iolink_events_reset`、`iolink_events_memory_write`、`iolink_events_pop`、
+`iolink_events_clear_diagnosis`）是主上下文专属：事件引擎只有一个写者，主上下文在
+`in_isr` 置位时会被拒绝。只读入口（`iolink_events_pending`、`iolink_events_flag`、
+`iolink_events_memory_read`、`iolink_events_peek`、`iolink_events_get_all`、
+`iolink_events_get_dropped_count`）可从任一侧读取：ISR 看到的是双映像 + 发布索引
+保证的完整一代。ISR 侧的写只有两处：`iolink_events_reset_request()`（登记复位，
+由 `iolink_dll_process()` 应用）与 `iolink_diag_pulse_isr()` 的单字节 one-shot。
 
 `iolink_device_process()` 会在 ISDU 传输空闲时调用 `iolink_events_process()`，
 因此正常集成无需自行调用。使用 `iolink_event_trigger()` 触发错误/警告，
@@ -618,9 +627,10 @@ void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd);
 （`IOLINK_WORKSPACE_EMBEDDED=0` 时为未绑定状态）。
 只要调用者保证复制过程相对数据中断是原子的，`iolink_isdu_snapshot_response()`
 就是 ISR 安全的。`iolink_isdu_od_write()` 是数据 ISR 的写入口：只按 FlowCTRL 位置
-去重累计，不校验 CHKPDU、不解析、不执行；`iolink_isdu_process()` 在主上下文接管已
-收齐的请求（CHKPDU 校验 + 解析 + 执行）。直接使用引擎的测试可以在同一上下文依次
-调用两者，其余函数均在主上下文调用。
+去重累计，不校验 CHKPDU、不解析、不执行；收齐后把 `{len, sel, gen}` 发布到上下文内
+的发布字，主泵 `iolink_isdu_process()` 在**锁外**认领该槽并完成 CHKPDU 校验、解析与
+执行（两个请求槽因此允许下一条请求在主泵执行期间继续累计）。直接使用引擎的测试可以
+在同一上下文依次调用两者，其余函数均在主上下文调用。
 
 ## 7. 参数、Data Storage 与持久化
 
@@ -910,7 +920,10 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
   `shared.clock`、`shared.m_seq_type`、`shared.od_width`、`shared.pd_in_len`、
   `shared.pd_out_len_current` 与能力位，并调用一次
   `iolink_dll_publish_reply_plans()`——这些字段和应答计划都只在初始化时定义，
-  之后 `iolink_dll_process()` 不会重发布。
+  之后 `iolink_dll_process()` 不会重发布。该发布入口返回 0
+  （`IOLINK_DLL_PUBLISH_OK`）表示表已发布；`ctx` 为 NULL、上下文未经
+  `iolink_dll_init()` 初始化或在数据 ISR 内调用时返回负的
+  `iolink_dll_publish_result_t`，且不改动已有的表。
   设备层已经完成这些接线；只有实现自定义传输时才直接使用，并且需要自行负责
   事件/ISDU/DS 集成。
 - `include/iolinki/phy_tiol112.h` 和 `phy_l6362a.h`：收发器驱动。用板级 IO 回调调用
