@@ -256,6 +256,7 @@ PHY 上下文，以及 `on_change`/`ds_flag_persist` 访问的应用 NVM。
 | `iolink_dll_shared_t.isr_frame_ring` | `i_` | isr | main | 帧邮箱；ISR 生产、主泵消费 |
 | `iolink_dll_shared_t.isr_mailbox_drops` | `i_` | isr | main | 邮箱满而丢弃的帧数 |
 | `iolink_dll_shared_t.isr_plan_misses` | `i_` | isr | main | 未命中应答计划的合法帧数 |
+| `iolink_dll_shared_t.isr_eager_rejects` | `i_` | isr | main | ISR 早期拒绝的帧；主上下文只经统计读取 |
 | `iolink_dll_shared_t.isr_frames_consumed` | `i_` | isr | main | ISR 完全处理的帧数 |
 | `iolink_dll_shared_t.isr_frames_handoff` | `i_` | isr | main | 交给主泵的帧数 |
 | `iolink_dll_shared_t.isr_stat` | `b_` | both | both | 仅 IOLINK_STATS_MODE=SPLIT：ISR 自增，主泵复位并求和读取 |
