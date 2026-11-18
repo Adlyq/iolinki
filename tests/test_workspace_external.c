@@ -100,6 +100,12 @@ static uint8_t test_int_active(iolink_app_t* IOLINK_NULLABLE self)
     return 0U;
 }
 
+static void test_request_service(iolink_app_t* IOLINK_NULLABLE self)
+{
+    (void) self;
+    /* 该 fixture 只验证工作区绑定，不驱动应答；钩子仅为满足 TX 契约。 */
+}
+
 /* config 只存指针；这里只建一个 config，同时存活两个会共用同一份 phy/stack。 */
 static iolink_phy_api_t g_test_phy;
 static iolink_stack_config_t g_test_stack;
@@ -126,6 +132,7 @@ static void make_config(iolink_device_config_t* config)
     g_test_phy.tx_done = test_tx_done;
 #endif
     g_test_phy.int_active = test_int_active;
+    g_test_phy.request_service = test_request_service;
     config->phy = &g_test_phy;
     config->app = &g_app;
     config->device_info = &k_test_identity;

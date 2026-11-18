@@ -173,6 +173,12 @@ static size_t tx_observed_len(void)
     return s_tx_n;
 }
 
+static void sm_request_service(iolink_app_t* IOLINK_NULLABLE self)
+{
+    (void) self;
+    /* 宿主机没有中断源：应答由 drain_tx() 排空。 */
+}
+
 static uint8_t sm_int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
@@ -200,6 +206,7 @@ static const iolink_phy_api_t s_phy = {
     .tx_done = sm_tx_done,
 #endif
     .int_active = sm_int_active,
+    .request_service = sm_request_service,
 };
 
 static void make_frame(uint8_t mc, uint8_t type_bits, uint8_t* frame, size_t len)
@@ -224,7 +231,7 @@ static void feed(const uint8_t* frame, size_t len)
 
 static void drain_tx(void)
 {
-    while (s_dll.main.shared.isr_tx_active != 0U) {
+    while ((s_dll.main.shared.isr_tx_pending != 0U) || (s_dll.main.shared.isr_tx_active != 0U)) {
         iolink_dll_process_isr(&s_dll.main);
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
