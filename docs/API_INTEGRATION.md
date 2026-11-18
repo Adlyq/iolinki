@@ -492,6 +492,11 @@ uint8_t iolink_events_memory_read(iolink_events_ctx_t* ctx, uint8_t addr);
 void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t value);
 ```
 
+除 `iolink_events_pending()` / `iolink_events_flag()` / `iolink_events_memory_read()`
+外的入口都是主上下文专属：事件引擎只有一个写者。数据 ISR 只读取事件标志与
+Table 58 事件存储器（双映像 + 发布索引，因此永远看到完整的一代），并在需要
+复位时经 `iolink_events_reset_request()` 登记请求，由 `iolink_dll_process()` 应用。
+
 `iolink_device_process()` 会在 ISDU 传输空闲时调用 `iolink_events_process()`，
 因此正常集成无需自行调用。使用 `iolink_event_trigger()` 触发错误/警告，
 使用 `iolink_event_clear()` 撤销；通知事件仅发送一次。事件引擎实现

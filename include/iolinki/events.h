@@ -29,6 +29,13 @@ IOLINK_STATIC_ASSERT(IOLINK_EVENT_PENDING_MAX > 0U, "IOLINK_EVENT_PENDING_MAX mu
 /**
  * @defgroup iolinki_events 事件处理
  * @brief 事件代码、出现/消失模式、事件队列与设备事件存储器。
+ *
+ * 写入口（`iolink_event_trigger()`、`iolink_event_clear()`、
+ * `iolink_events_process()`、`iolink_events_clear_diagnosis()`、
+ * `iolink_events_reset()`、`iolink_events_memory_write()`、
+ * `iolink_events_pop()`）都是主上下文专属；数据 ISR 只读
+ * `iolink_events_flag()` / `iolink_events_memory_read()`，并可通过
+ * `iolink_events_reset_request()` 登记一次复位请求。
  * @{
  */
 
@@ -147,6 +154,11 @@ typedef struct
  * 管理待处理事件的内部队列（按严重级别排序），以及诊断通信
  * 通道上暴露的 Table 58 事件存储器。`pending[]` 是诊断条件的权威表：
  * DeviceStatus 与 DetailedDeviceStatus 都由它派生（见 diag.h）。
+ *
+ * 写者只有一个主上下文；数据 ISR 只读事件标志与事件存储器，并在需要
+ * 复位时登记请求（`reset_req`）。事件存储器因此是双映像 + 发布索引：
+ * 主上下文写未发布的那一代，屏障后发布索引，ISR 取索引再取字节，
+ * 永远看到完整的一代。
  */
 struct iolink_events_ctx
 {
@@ -163,16 +175,29 @@ struct iolink_events_ctx
     uint16_t min_appear_ms; /**< 最短“出现”窗口（ms） */
     uint16_t min_repeat_ms; /**< 同一 EventCode 的重复上报间隔（ms） */
 
-    /* Table 58 事件存储器：StatusCode(1) + 6 个槽位 * (Qualifier, CodeMSB, CodeLSB)。 */
-    uint8_t memory[19];              /**< 事件存储器映像（0x00-0x12） */
+    /* Table 58 事件存储器：StatusCode(1) + 6 个槽位 * (Qualifier, CodeMSB, CodeLSB)。
+     * 两个映像由主上下文交替写入，`memory_pub` 指向当前发布的那一代。 */
+    uint8_t memory[2][19];           /**< 事件存储器映像（0x00-0x12），双缓冲 */
+    volatile uint8_t memory_pub;     /**< 当前发布的映像索引（0 或 1） */
     bool frozen;                     /**< Event 标志置位期间存储器被冻结（Table 60） */
     bool flag;                       /**< Event 标志（CKS 第 7 位） */
     uint8_t frozen_slots;            /**< 存储器被冻结时已填充的存储槽位数量。 */
     iolink_event_t frozen_events[6]; /**< 冻结存储器中实际呈现的事件 */
     uint8_t frozen_count;            /**< frozen_events 中有效的条目数 */
 
+    /* ISR → 主：复位请求。ISR 只置起 `reset_req`；主上下文应用复位后把
+     * `reset_applied` 追上。两者不等期间，读侧把标志与存储器报告为
+     * “无事件”，复位前的内容不会经 CKS 位或诊断通道泄漏。 */
+    volatile uint8_t reset_req;     /**< ISR 登记的复位请求（与 reset_applied 不等即挂起） */
+    volatile uint8_t reset_applied; /**< 主上下文已应用复位（等于 reset_req） */
+
     /* 诊断注册表的 RAM 侧（ISR one-shot 脉冲、PULSE 窗口、边沿计数）。 */
     iolink_conditions_t diag;
+
+    /* 所属 DLL 的 ISR 深度标志，由 iolink_dll_init() 绑定。非 NULL 时，
+     * 主上下文专属的写入口在中断上下文中被拒绝。独立使用事件引擎时保持
+     * NULL：此时没有 ISR 写者，也不存在竞争。 */
+    const volatile uint8_t* IOLINK_NULLABLE isr_active;
 
     /* 由设备层绑定的应用时钟。独立使用事件引擎的用户必须在
      * iolink_events_init() 之后设置它；NULL 被读取为时间 0。 */
@@ -281,7 +306,12 @@ uint32_t iolink_events_get_dropped_count(const iolink_events_ctx_t* ctx);
  * A.6.4：当通信中断或被取消时，队列中的事件会被丢弃。
  * 同时清除事件存储器和标志。
  *
+ * 数据 ISR 不调用本函数：它用 `reset_req` 登记请求，由主泵在投递状态
+ * 回调之前应用。本函数同时把 `reset_applied` 追到 `reset_req`，因此无论
+ * 请求来源如何，应用之后读侧都会重新看到空的存储器。
+ *
  * @param ctx 事件上下文
+ * @note 主上下文专属入口。
  */
 void iolink_events_reset(iolink_events_ctx_t* ctx);
 
@@ -297,7 +327,8 @@ bool iolink_events_pending(const iolink_events_ctx_t* ctx);
  * @brief 读取 CKS 第 7 位中发送的 Event 标志（7.3.8.2）。
  *
  * 当事件被写入事件存储器后该标志置位，并由主站对 StatusCode
- * （事件存储器地址 0）的写入清除。
+ * （事件存储器地址 0）的写入清除。数据 ISR 直接读取本函数；
+ * 存在尚未应用的复位请求时返回 false。
  *
  * @param ctx 事件上下文
  * @return Event 标志置位期间为 true
@@ -310,6 +341,9 @@ bool iolink_events_flag(const iolink_events_ctx_t* ctx);
  * 地址 0 是 StatusCode type 2（Figure A.22）：第 7 位 Event Details = 1，
  * 第 0-5 位每个活动槽位 1..6 对应一位。槽位 n 占用地址 3n-2
  * （EventQualifier）、3n-1（EventCode MSB）和 3n（EventCode LSB）。
+ *
+ * 数据 ISR 直接读取本函数：它先取发布索引再取该字节，因此读到的是
+ * 完整的一代映像。存在尚未应用的复位请求时返回 0。
  *
  * @param ctx 事件上下文
  * @param addr 事件存储器地址（0x00-0x12）

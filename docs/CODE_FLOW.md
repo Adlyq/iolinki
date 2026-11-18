@@ -722,7 +722,7 @@ flowchart TD
 - `DeviceStatus`（0x0024，Table B.13）与 `DetailedDeviceStatus`（0x0025，Table B.14）都由诊断注册表
   从同一条件集派生（`iolink_diag_device_status()` / `iolink_diag_dds_snapshot()`）：
   Error/Warning 且 `present || reported`，Notification 不提升状态、不进入 DDS。
-- `STARTUP` 状态会调用 `iolink_events_reset()` 丢弃事件（A.6.4）。
+- `STARTUP` 状态会丢弃事件（A.6.4）：主上下文迁移直接调用 `iolink_events_reset()`，ISR 迁移只经 `iolink_events_reset_request()` 登记请求，由主泵在投递状态回调之前应用。
 - 物理诊断轮询 `phy->get_faults()` 位图：`dll_poll_phy_faults()` 把每个位交给
   `iolink_diag_set_level()`，按“当前电平 vs 条件锁存”产生边沿
   （UNDERVOLTAGE→0x5111、OVERVOLTAGE→0x5110、OVERTEMP→0x4000、
@@ -808,7 +808,7 @@ sequenceDiagram
 | `phy.response_timer_start/stop` | ISR RX/TX | t_A 看门狗 |
 | `phy.stack_timer_start` | ISR 收到有效帧后 / 计划的 `RESTART_TIMER_B` | 请求 Timer B 授权主循环服务窗口 |
 | `phy.detect_wakeup` | `dll_handle_sio_wakeup()` | SIO 唤醒检测 |
-| `iolink_critical_enter/exit` | 事件引擎、诊断条件表、PD 索引/长度等标量；直发回退时驱动 PHY（经 `IOLINK_CRITICAL_ENTER/EXIT()`） | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
+| `iolink_critical_enter/exit` | 诊断条件表、PD 索引/长度等标量、事件队列读/clear；直发回退时驱动 PHY（经 `IOLINK_CRITICAL_ENTER/EXIT()`） | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
 | `on_state_change` | `device_state_cb()` | 当前状态（电平式；主上下文迁移立即投递，ISR 迁移合并） |
 | `on_startup` | 初始化末尾 + 进入 STARTUP | 初始化时显式调用一次 |
 | `on_preoperate` / `on_operate` | `device_state_cb()` | 进入对应状态时 |
@@ -1006,14 +1006,14 @@ flowchart LR
 - `last_notified_state`：主上下文记录“已交付给应用的状态”，配合 `shared.state` 做电平式通知；`startup_notification_pending` 保留 ISR 触发的 STARTUP 边沿，避免快速进入 PREOPERATE 时丢失复位通知。
 
 上下文尺寸契约（默认缓冲、64 位主机，由 `tests/test_ctx_sizes.c` 断言）：
-`iolink_device_ctx_t` 4832 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4848 B），内嵌
-`iolink_dll_ctx_t` 4640/4656 B、`iolink_isdu_ctx_t` 1336 B、`iolink_events_ctx_t` 480 B、
+`iolink_device_ctx_t` 4856 B（`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时 4872 B），内嵌
+`iolink_dll_ctx_t` 4664/4680 B、`iolink_isdu_ctx_t` 1336 B、`iolink_events_ctx_t` 504 B、
 `iolink_ds_ctx_t` 352 B；`iolink_workspace_t` 1289 B。
 
 并发边界：
 
 - `shared.isdu`、`shared.events`（含 `diag` 条件缓存）、`ds`、`timers` 的主要状态由主循环修改；`reply_plan` 只在初始化时写入后即只读；应用参数变量、`on_change` 与 `ds_flag_persist` 也只在主上下文被访问。
-- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（事件队列、诊断条件表、PD-in 索引发布、计数器清零、日志 sink），以及仅在直发回退（PHY 无 `request_service()` 且非 `IOLINK_CAP_REQUIRE_ISR_TX`）里驱动 PHY 的那一段；状态迁移不再需要临界区。
+- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（诊断条件表、事件队列读/clear、PD-in 索引发布、计数器清零、日志 sink），以及仅在直发回退（PHY 无 `request_service()` 且非 `IOLINK_CAP_REQUIRE_ISR_TX`）里驱动 PHY 的那一段；状态迁移不再需要临界区。
 - 库不取线程锁：API 只有一个主上下文调用者；共享标量由平台临界区保护，数据交接无锁。
 - 平台默认临界区是 weak 空实现（`src/platform.c`）；`iolink_device_init()` 通过
   `iolink_platform_critical_sections_ready()` 探测并返回
@@ -1030,19 +1030,20 @@ flowchart LR
 | `iolink_dll_on_stack_tick()` | ISR-only | Timer B tick 入口 |
 | `dll_isr_*()`（`dll_isr_start_staged_tx()` 除外） | ISR-only | 重入状态、RX 组装/校验、`dll_isr_plan_lookup()` / `dll_isr_plan_source()` / `dll_isr_plan_action()` / `dll_isr_plan_execute()`、ISDU 快照读与写暂存、邮箱发布 |
 | `dll_isr_start_staged_tx()` | 双上下文 | 主路径由 `dll_send()` 在直发回退时调用；ISR 路径由 `dll_isr_tx_pending()` 调用 |
-| `dll_set_state()` | 双上下文 | ISR 内不 flush 回调；迁入 STARTUP 时仍会调用 `iolink_events_reset()`（含临界区与 memset） |
+| `dll_set_state()` | 双上下文 | ISR 内不 flush 回调；迁入 STARTUP 时主上下文直接复位事件，ISR 只调用 `iolink_events_reset_request()` |
 | `dll_mark_master_activity()` | 双上下文 | ISR 在帧结束时刷新活动时间戳并推进 Back-to-box 计数 |
 | `dll_pd_status_flags()`、`dll_apply_master_command()`、`dll_type_allowed()` | 双上下文 | 只读 ctx 或状态迁移 |
 | `iolink_diag_pulse_isr()` | ISR-only | 写 `isr_pulse[]` 单字节 one-shot |
+| `iolink_events_reset_request()` | ISR-only | 置起 `reset_req`（与 `reset_applied` 不等）；ISR 对事件引擎的唯一写 |
 | `dll_process_complete_frame()`、`dll_consume_isr_mailbox()`、`dll_frame_validate()`、`dll_timers_dispatch()`、`dll_timer_expire_*()`、`dll_check_*()` | 主上下文 | 主泵调度与定时监督 |
 | `iolink_diag_service()`、`iolink_diag_set_level()`、`iolink_diag_device_status()`、`iolink_diag_dds_snapshot()` | 主上下文 | 条件表与派生视图只在主上下文读写 |
 | `dll_send()` | 主上下文 | 主泵暂存应答，ISR 负责发送 |
 
-ISR 还允许调用以下只读/时序 helper：`dll_req_len_for()`（组帧长度，纯只读）、`iolink_checksum6_from_acc()`、`iolink_isdu_direct_param_page1_octet()`、已绑定的时间源（`iolink_device_app_t::time_us` 回调）、`iolink_events_flag()`、`iolink_events_memory_read()`、`iolink_ring_claim/publish`。
+ISR 还允许调用以下只读/时序 helper：`dll_req_len_for()`（组帧长度，纯只读）、`iolink_checksum6_from_acc()`、`iolink_isdu_direct_param_page1_octet()`、已绑定的时间源（`iolink_device_app_t::time_us` 回调）、`iolink_events_flag()`、`iolink_events_memory_read()`、`iolink_events_reset_request()`、`iolink_ring_claim/publish`。
 
-禁止在 ISR 分区调用：`iolink_isdu_process()`、事件写路径（`iolink_event_trigger()`、`iolink_events_process()`、`iolink_event_clear()`）、诊断服务/派生（`iolink_diag_service()` 等）、`iolink_dll_flush_state_callbacks()`、应用回调（`state_cb`、`od.read/write` 等）。
+禁止在 ISR 分区调用：`iolink_isdu_process()`、事件写路径（`iolink_event_trigger()`、`iolink_events_process()`、`iolink_event_clear()`、`iolink_events_reset()`、`iolink_events_memory_write()`、`iolink_events_pop()`）、诊断服务/派生（`iolink_diag_service()` 等）、`iolink_dll_flush_state_callbacks()`、应用回调（`state_cb`、`od.read/write` 等）。
 
-例外：`dll_set_state(STARTUP)` 会在 ISR 内调用 `iolink_events_reset()`。该函数自带临界区，是当前 ISR 路径唯一的事件写操作；修改事件层时不要移除其重入保护。
+`dll_set_state(STARTUP)` 在 ISR 内只调用 `iolink_events_reset_request()`：它使 `reset_req != reset_applied`，是 ISR 对事件引擎的唯一写操作。主泵（`dll_process_body()` 开头、`iolink_dll_flush_state_callbacks()` 开头）在诊断轮询与回调投递之前应用复位；两者不等期间 `iolink_events_flag()` 返回 `false`、`iolink_events_memory_read()` 返回 `0`，因此复位前的内容不会经 CKS 位或 Table 58 泄漏。
 
 ### 12.2 异步原语分级与最小依赖
 
@@ -1084,6 +1085,8 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `shared.isdu` 写入口（`req_buf`/`stage_state`） | ISR | 主上下文（仅 COMPLETE，临界区） | 相位 + 临界区 | 主上下文解析后置 `stage_state=IDLE`；新 START 覆盖未接管请求计 `isr_od_overruns` |
 | `shared.state` + `last_notified_state` + `startup_notification_pending` | 主上下文 + ISR（单字节写） | 主上下文 | 电平比较 + STARTUP 边沿标志 | 每次 flush 记录已交付状态；ISR 触发 STARTUP 时优先通知 |
 | `iolink_conditions_t` | 主上下文（`isr_pulse[]` 由 ISR 单字节写） | 主上下文 | one-shot 字节 | `iolink_diag_service()` 在临界区消费 |
+| `events.memory[2][19]` + `memory_pub` | 主上下文 | ISR（CKS 位、Table 58） | 双映像 + 发布索引（写后备、屏障、发布） | 主上下文写完才发布；旧映像发布后不再被写 |
+| `events.reset_req` / `reset_applied` | ISR 置起 / 主泵追上 | ISR（读侧掩码）、主泵 | 请求/已应用握手 | 不等期间 flag/memory 报告“无事件”；主泵应用复位后追平 |
 | 计数器 | 两个上下文 | 读侧 | — | `SHARED` 共享自增（可能丢一次更新）；`SPLIT` 分上下文求和 |
 
 剩余临界区审计（每处都必须能归类，否则应在所有权表里补一行）：
@@ -1094,13 +1097,13 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `dll_isdu_sync_snapshot()`（`dll_reply.c`） | 清除 `isr_isdu_invalidated` | 与 ISR 置位握手分离，避免清掉尚未入环的失效请求 |
 | `dll_process_body()`（`dll.c`，TX FRAME） | 轮询 `tx_busy` 并释放 `pd_in_captured` | 防止 ISR 在轮询与释放之间捕获新缓冲 |
 | `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零两个上下文共享的计数器 | 与 ISR 自增分开 |
-| `diag.c`（4 处） | 来源标记、ISR 脉冲消费、DeviceStatus 快照、DDS 快照 | 条件表内部不变式；ISR 只写 `isr_pulse[]` |
+| `diag.c`（3 处） | ISR 脉冲消费、DeviceStatus 快照、DDS 快照 | 条件表内部不变式；ISR 只写 `isr_pulse[]` |
 | `device.c`（2 处） | `on_pd_input` 回调发布、轮询发布，交换 `pd_in_active`/`pd_valid` | 索引/有效位标量；长度在 init 固定，PD 拷贝在锁外，PD-out 读取不取锁 |
-| `events.c`（10 处） | 事件队列、pending 表、事件内存 | 事件引擎内部不变式；ISR 侧只读 flag/memory |
+| `events.c`（3 处） | `iolink_event_clear()`、`iolink_events_peek()`、`iolink_events_get_all()` | 队列读/clear 与 ISR 串行化；写路径（trigger/process/clear_diagnosis/reset/memory_write/pop）是主上下文单写者，不需要临界区 |
 
 `dll_set_state()` 已不在表中：状态是单字节原子写，通知以电平式为主；但
 ISR 迁入 STARTUP 时设置 `startup_notification_pending`，由主上下文优先投递
-STARTUP。迁入 STARTUP 时的 `iolink_events_reset()` 自带嵌套临界区。`isdu.c`
+STARTUP，并在同一次 flush 之前先应用 ISR 登记的事件复位。`isdu.c`
 当前没有任何临界区：它的快照/派生视图已经移交 `diag.c`，且 ISDU 状态只由主泵写。
 
 计数器在 `IOLINK_STATS_MODE=SHARED`（默认）下由两个上下文写同一组字段，
@@ -1197,7 +1200,7 @@ ISR 迁移通常在下一次 flush 投递并合并为最终状态，但 OPERATE 
 | DS 初始化/来源绑定 | `iolink_ds_init()`、`iolink_ds_bind_sources()` |
 | 参数写入/持久化通知 | `iolink_od_write_value()`、表项 `validate`/`on_change` |
 | DS_UPLOAD_FLAG 持久化 | `iolink_ds_request_upload()`、`iolink_ds_clear_upload()`、`iolink_ds_set_flag_persist()` |
-| 事件 | `iolink_event_trigger()`、`iolink_events_process()`、`iolink_events_reset()` |
+| 事件 | `iolink_event_trigger()`、`iolink_events_process()`、`iolink_events_reset()`、`iolink_events_reset_request()`（ISR 侧） |
 | 诊断派生视图 | `iolink_diag_set_level()`、`iolink_diag_service()`、`iolink_diag_device_status()`、`iolink_diag_dds_snapshot()` |
 | 能力位 | `iolink_caps_resolve()`、`iolink_caps_has()`（初始化时定义，无运行期覆盖入口） |
 | 工作区绑定 | `iolink_isdu_bind_workspace()`、`iolink_ds_bind_workspace()` |

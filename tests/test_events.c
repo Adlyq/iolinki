@@ -21,6 +21,8 @@
 #include "iolinki/events.h"
 #include "iolinki/internal/wiring.h"
 
+#include "events_internal.h"
+
 #include "conformance_test.h"
 #include "test_helpers.h"
 
@@ -516,6 +518,108 @@ static void test_events_reset_clears(void** state)
     assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x00U);
 }
 
+/* 事件存储器是双映像 + 发布索引：重建期间主上下文只写未发布的那一代，
+ * 因此读侧（数据 ISR）永远看到完整的一代，而不是重建到一半的字节。 */
+static void test_event_memory_generation_is_complete(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    events_init(&ctx);
+
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x02U), 0x10U);
+
+    /* 第二个事件在冻结期间入队（未呈现）。 */
+    iolink_event_trigger(&ctx, 0x2000U, IOLINK_EVENT_TYPE_ERROR);
+
+    /* 模拟重建进行到一半：为下一代替换而写的后备映像里已经是新内容。 */
+    const uint8_t scratch = (uint8_t) (1U - ctx.memory_pub);
+    ctx.memory[scratch][0x00U] = 0xFFU;
+    ctx.memory[scratch][0x02U] = 0xEEU;
+
+    /* 读侧只经发布索引取值：半成品不可见。 */
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x02U), 0x10U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x03U), 0x00U);
+
+    /* 确认之后，剩下的 0x2000 构成新的一代并整体发布：刚写完的后备映像
+     * 成为发布映像。 */
+    iolink_events_memory_write(&ctx, 0x00U, 0x00U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x02U), 0x20U);
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x03U), 0x00U);
+    assert_int_equal(ctx.memory_pub, scratch);
+}
+
+/* ISR 只能在 STARTUP 迁移里登记复位请求：在请求被应用之前，事件标志与
+ * 事件存储器对读侧表现为“无事件”，队列内容则留给主泵处理。 */
+static void test_isr_reset_request_is_masked_until_applied(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    events_init(&ctx);
+
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    assert_true(iolink_events_flag(&ctx));
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
+
+    iolink_events_reset_request(&ctx);
+
+    /* 复位前的 CKS 位与 Table 58 一律不可见。 */
+    assert_false(iolink_events_flag(&ctx));
+    for (uint8_t addr = 0U; addr < (uint8_t) sizeof(ctx.memory[0]); addr++) {
+        assert_int_equal(iolink_events_memory_read(&ctx, addr), 0x00U);
+    }
+    /* ISR 不改写任何其它状态：队列仍等主泵处置。 */
+    assert_int_equal(ctx.count, 1U);
+    assert_int_equal(ctx.pending_count, 1U);
+
+    /* 挂起期间重复登记等价于一次：两个字节不会被推回到相等。 */
+    iolink_events_reset_request(&ctx);
+    iolink_events_reset_request(&ctx);
+    assert_int_not_equal(ctx.reset_req, ctx.reset_applied);
+    assert_false(iolink_events_flag(&ctx));
+
+    /* 主泵应用一次：队列被丢弃，读侧恢复正常。 */
+    iolink_events_reset(&ctx);
+    assert_int_equal(ctx.count, 0U);
+    assert_int_equal(ctx.pending_count, 0U);
+    assert_int_equal(ctx.reset_applied, ctx.reset_req);
+    assert_false(iolink_events_flag(&ctx));
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x00U);
+
+    /* 复位之后事件引擎照常工作。 */
+    iolink_event_trigger(&ctx, 0x4000U, IOLINK_EVENT_TYPE_WARNING);
+    assert_true(iolink_events_flag(&ctx));
+    assert_int_equal(iolink_events_memory_read(&ctx, 0x00U), 0x81U);
+}
+
+/* 事件引擎只有一个主上下文写者：DLL 绑定 ISR 深度标志之后，误从数据
+ * ISR 调用的写入口被拒绝，而不是与主泵竞争。 */
+static void test_isr_writer_is_rejected(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    events_init(&ctx);
+
+    volatile uint8_t in_isr = 1U;
+    ctx.isr_active = &in_isr;
+
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(ctx.count, 0U);
+    assert_int_equal(ctx.pending_count, 0U);
+    assert_false(iolink_events_flag(&ctx));
+
+    /* 复位请求是该上下文里唯一允许的 ISR 写。 */
+    iolink_events_reset_request(&ctx);
+
+    in_isr = 0U;
+    iolink_events_reset(&ctx);
+    iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    assert_int_equal(ctx.count, 1U);
+}
+
 static void test_event_flag_invariant(void** state)
 {
     IOLINK_CONFORMANCE_CASE("SDCI_TC_0071");
@@ -771,6 +875,9 @@ int main(void)
         cmocka_unit_test(test_event_recently_sent),
         cmocka_unit_test(test_event_pending_full_observable),
         cmocka_unit_test(test_events_reset_clears),
+        cmocka_unit_test(test_event_memory_generation_is_complete),
+        cmocka_unit_test(test_isr_reset_request_is_masked_until_applied),
+        cmocka_unit_test(test_isr_writer_is_rejected),
         cmocka_unit_test(test_event_flag_invariant),
         cmocka_unit_test(test_notification_dedup),
         cmocka_unit_test(test_event_clear_diagnosis),

@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (the event memory is published, not locked)
+- The Table 58 event memory is now a double image with a published index:
+  `iolink_events_ctx_t::memory[2][19]` plus `volatile uint8_t memory_pub`. The
+  main context writes the unpublished image, fences, then publishes the index;
+  `iolink_events_memory_read()` loads the index, fences, and reads one byte. A
+  reader (the data ISR) therefore always sees one complete generation instead of
+  a byte-by-byte snapshot taken under the lock.
+- `iolink_events_reset_request()` (`src/events_internal.h`) is the only write the
+  data ISR may perform on the event engine: it raises `volatile uint8_t
+  reset_req` above `reset_applied`. `dll_set_state(STARTUP)` calls it when the
+  transition happens in the ISR; a main-context transition still calls
+  `iolink_events_reset()` directly.
+- The main pump applies the request (`dll_process_body()` and
+  `iolink_dll_flush_state_callbacks()`, both before any diagnostics or state
+  callback) by running the full reset and setting
+  `reset_applied = reset_req`. While the two counters differ,
+  `iolink_events_flag()` reports `false` and `iolink_events_memory_read()`
+  reports `0`, so the 0x97 DeviceStartup frame carries no pre-reset CKS Event
+  bit and Table 58 reads no pre-reset content.
+- The main-only write entries (trigger, clear, process, clear_diagnosis, reset,
+  memory_write, pop) are rejected while the bound `isr_active` flag is set;
+  `iolink_dll_init()` binds it to the DLL's own ISR-depth flag.
+  **MAJOR**: `include/iolinki/events.h` gains `memory_pub`, `reset_req`,
+  `reset_applied` and `isr_active`, and `memory` becomes a double image
+  (`iolink_events_ctx_t` 480 → 504 B on a 64-bit host).
+- `iolink_event_trigger()`, `iolink_events_process()`,
+  `iolink_events_clear_diagnosis()`, `iolink_events_reset()`,
+  `iolink_events_memory_write()` and `iolink_events_pop()` no longer take a
+  platform critical section. The queue read paths (`iolink_events_peek()`,
+  `iolink_events_get_all()`, `iolink_event_clear()`) keep theirs.
+
 ### Changed (event timestamps are sampled before the lock)
 - `iolink_event_trigger()`, `iolink_events_process()` and
   `iolink_events_clear_diagnosis()` now read the bound application clock once,

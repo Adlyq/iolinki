@@ -14,6 +14,7 @@
 #include "iolinki/port.h"
 #include "iolinki/internal/wiring.h"
 #include "dll_internal.h"
+#include "events_internal.h"
 #include "iolinki/internal/dll_sm.h"
 #include <string.h>
 
@@ -244,6 +245,23 @@ const iolink_timer_contract_t* iolink_dll_timer_contract(uint8_t* IOLINK_NULLABL
  * 状态转换与回调
  * ------------------------------------------------------------------------- */
 
+#if IOLINK_FEATURE_EVENTS
+/**
+ * @brief 应用数据 ISR 登记的事件复位请求（主上下文）。
+ *
+ * 事件引擎只有一个主上下文写者，ISR 迁入 STARTUP 时只置起复位请求
+ * （`reset_req`）。这里在投递状态回调、以及任何事件/诊断写入之前应用它：
+ * 请求与已应用标记不等期间，flag/memory 读侧已经把内容掩码为“无事件”，
+ * 因此复位前的事件不会经 CKS 位或 Table 58 泄漏。
+ */
+static void dll_events_apply_isr_reset(iolink_dll_main_t* ctx)
+{
+    if (ctx->shared.events.reset_req != ctx->shared.events.reset_applied) {
+        iolink_events_reset(&ctx->shared.events);
+    }
+}
+#endif
+
 /**
  * @brief 集中的状态转换。
  *
@@ -280,12 +298,17 @@ void dll_set_state(iolink_dll_main_t* ctx, iolink_dll_state_t new_state)
         ctx->master_lost = false;
     }
     if (new_state == IOLINK_DLL_STATE_STARTUP) {
-        /* A.6.4：排队的事件在通信被中断时会被丢弃，
-           或被取消。iolink_events_reset() 自带一个短的
-           临界区，因此不需要外层的。条件表清空后，下一轮
-           PHY 采样会对仍存在的故障重新产生上升沿。 */
+        /* A.6.4：排队的事件在通信被中断时会被丢弃，或被取消。事件引擎的
+           写状态归主上下文，因此 ISR 侧的迁移只登记复位请求，由主泵在
+           投递回调之前应用。条件表清空后，下一轮 PHY 采样会对仍存在的
+           故障重新产生上升沿。 */
 #if IOLINK_FEATURE_EVENTS
-        iolink_events_reset(&ctx->shared.events);
+        if (ctx->shared.in_isr != 0U) {
+            iolink_events_reset_request(&ctx->shared.events);
+        }
+        else {
+            iolink_events_reset(&ctx->shared.events);
+        }
 #endif
         if (ctx->shared.in_isr != 0U) {
             ctx->startup_notification_pending = 1U;
@@ -300,7 +323,14 @@ void dll_set_state(iolink_dll_main_t* ctx, iolink_dll_state_t new_state)
 
 void iolink_dll_flush_state_callbacks(iolink_dll_main_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->state_cb == NULL)) {
+    if (ctx == NULL) {
+        return;
+    }
+#if IOLINK_FEATURE_EVENTS
+    /* ISR 侧的复位请求必须早于应用能看到任何事件内容。 */
+    dll_events_apply_isr_reset(ctx);
+#endif
+    if (ctx->state_cb == NULL) {
         return;
     }
     /* 来自 ISR 的 STARTUP 转换是一个边沿，不能在主上下文
@@ -364,6 +394,11 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
                      (uint8_t) sizeof(iolink_frame_rec_t));
 
     DLL_EVENTS_INIT(&ctx->shared.events);
+#if IOLINK_FEATURE_EVENTS
+    /* 事件引擎唯一的 ISR 写入口是复位请求。绑定本上下文的 ISR 深度标志，
+       使误从数据 ISR 调用的写入口被拒绝，而不是与主泵竞争。 */
+    ctx->shared.events.isr_active = &ctx->shared.in_isr;
+#endif
     iolink_isdu_init(&ctx->shared.isdu);
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_init(&ctx->ds);
@@ -838,6 +873,11 @@ static void dll_timers_dispatch(iolink_dll_main_t* ctx, uint8_t phase)
 /** @brief 主泵主体；公共入口随后投递状态。 */
 static void dll_process_body(iolink_dll_main_t* ctx)
 {
+#if IOLINK_FEATURE_EVENTS
+    /* ISR 迁入 STARTUP 只登记了复位请求：在诊断轮询（会重新置位条件）
+       之前应用，使事件引擎的写状态始终只属于本上下文。 */
+    dll_events_apply_isr_reset(ctx);
+#endif
     dll_take_isr_master_activity(ctx);
     dll_apply_isr_consumed_frame(ctx);
     dll_apply_isr_deadline_requests(ctx);

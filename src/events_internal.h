@@ -39,6 +39,18 @@ IOLINK_ASSUME_NONNULL_BEGIN
 void iolink_event_trigger_src(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type,
                               uint8_t src);
 
+/**
+ * @brief 登记一次事件复位请求（ISR 侧的唯一写操作）。
+ *
+ * 只把 `reset_req` 与 `reset_applied` 区分开；事件引擎的其它字段全部归
+ * 主上下文。主泵在投递状态回调之前应用复位，并把 `reset_applied` 追上。
+ * 两者不等期间，事件标志与事件存储器对读侧表现为“无事件”。
+ *
+ * @param ctx 事件上下文
+ * @note 可在中断上下文调用。
+ */
+void iolink_events_reset_request(iolink_events_ctx_t* ctx);
+
 #endif /* IOLINK_FEATURE_EVENTS */
 
 IOLINK_ASSUME_NONNULL_END

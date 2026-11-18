@@ -70,23 +70,28 @@ IOLINK_STATIC_ASSERT(sizeof(iolink_workspace_t) == sizeof(iolink_isdu_scratch_t)
                      "workspace must contain the ISDU scratch");
 #endif
 
+IOLINK_STATIC_ASSERT(sizeof(((iolink_events_ctx_t*) 0)->memory[0]) == 19U,
+                     "the event memory image must cover 0x00-0x12");
+IOLINK_STATIC_ASSERT(sizeof(((iolink_events_ctx_t*) 0)->memory) == 2U * 19U,
+                     "the event memory must be a double image");
+
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
 #if IOLINK_STATS_MODE == IOLINK_STATS_SHARED
 #if IOLINK_PD_IN_BUFFERS == 3U
-IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4632u, "dll ctx (STATS_SHARED, FRAME) changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4824u,
+IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4656u, "dll ctx (STATS_SHARED, FRAME) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4848u,
                      "device ctx (STATS_SHARED, FRAME) changed");
 #else
-IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4640u, "dll ctx (STATS_SHARED) changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4832u, "device ctx (STATS_SHARED) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4664u, "dll ctx (STATS_SHARED) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4856u, "device ctx (STATS_SHARED) changed");
 #endif
 #else
-IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4656u, "dll ctx (STATS_SPLIT) changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4848u, "device ctx (STATS_SPLIT) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4680u, "dll ctx (STATS_SPLIT) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4872u, "device ctx (STATS_SPLIT) changed");
 #endif
 IOLINK_STATIC_ASSERT(sizeof(iolink_isdu_ctx_t) == 1336u, "isdu ctx changed");
 IOLINK_STATIC_ASSERT(sizeof(iolink_ds_ctx_t) == 352u, "ds ctx changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_events_ctx_t) == 480u, "events ctx changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_events_ctx_t) == 504u, "events ctx changed");
 IOLINK_STATIC_ASSERT(sizeof(iolink_workspace_t) == 1289u, "workspace changed");
 
 /* 布局契约：共享区必须是主上下文的首成员，ISR 状态紧随其后。
