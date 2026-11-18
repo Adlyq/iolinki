@@ -1,0 +1,5 @@
+struct,field,category,writer,reader,note
+iolink_dll_shared_t,m_scalar,m_,main,isr,fixture main-owned handoff
+iolink_dll_shared_t,i_scalar,i_,isr,main,fixture ISR-owned handoff
+iolink_dll_shared_t,b_scalar,b_,both,both,fixture shared flag
+iolink_dll_shared_t,c_scalar,c_,init,both,fixture init-only config

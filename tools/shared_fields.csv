@@ -1,0 +1,55 @@
+struct,field,category,writer,reader,note
+iolink_dll_shared_t,isr,c_,init,both,组装箱绑定；init 写入后两个上下文只读该指针
+iolink_dll_shared_t,state,b_,both,both,当前 DLL 状态；两个上下文都会迁移
+iolink_dll_shared_t,isr_isdu_write_gen,i_,isr,main,ISR 发布已接受的写 START/ABORT 序号
+iolink_dll_shared_t,phy,c_,init,both,已绑定的 PHY API；两个上下文只读
+iolink_dll_shared_t,caps,c_,init,both,实例能力位；init 解析后只读
+iolink_dll_shared_t,isdu_write_gen_applied,m_,main,isr,主泵已应用的 ISDU 写序号
+iolink_dll_shared_t,clock,c_,init,both,应用时钟；两个上下文只读
+iolink_dll_shared_t,last_activity_ms,b_,both,both,最后活动时间戳；ISR 收帧与主泵超时都会刷新
+iolink_dll_shared_t,isr_master_activity,i_,isr,main,ISR 观察到帧结束的一次性标志；主泵清除
+iolink_dll_shared_t,isr_consumed_us,i_,isr,main,ISR 完全消费帧的时间戳（先写）
+iolink_dll_shared_t,isr_consumed_seq,i_,isr,main,消费帧发布序号（后写）
+iolink_dll_shared_t,isr_dsio_clear,i_,isr,main,启动探测一次性握手；主泵清除
+iolink_dll_shared_t,isr_fallback_pending,i_,isr,main,ISR 接受 FALLBACK 的一次性请求；主泵清除
+iolink_dll_shared_t,isr_cycle_served,i_,isr,main,ISR 已服务一个周期的交接标志；主泵清除
+iolink_dll_shared_t,isdu_restart_pending,i_,isr,main,ISR 进入 STARTUP 的复位请求；主泵消费并清除
+iolink_dll_shared_t,m_seq_type,c_,init,both,支持的 M 序列类型
+iolink_dll_shared_t,pd_in_len,c_,init,both,输入过程数据长度
+iolink_dll_shared_t,od_width,c_,init,both,OPERATE 的 OD 宽度 m
+iolink_dll_shared_t,isr_isdu_pub,m_,main,isr,ISDU 读视图发布字；ISR 采纳
+iolink_dll_shared_t,isr_isdu_read_reset,i_,isr,main,ISDU 读传输层复位请求；主泵清除
+iolink_dll_shared_t,isr_isdu_last_flowctrl,i_,isr,isr,ISR 单写单读的 FlowCTRL 记忆；batch 2: move to iolink_dll_isr_t
+iolink_dll_shared_t,reply_plans_ready,c_,init,isr,计划表完整发布标志；ISR 入口只读
+iolink_dll_shared_t,reply_plan_off,c_,init,isr,每状态切片起点；init 发布后只读
+iolink_dll_shared_t,reply_plan_cnt,c_,init,isr,每状态切片长度；init 发布后只读
+iolink_dll_shared_t,reply_plan,c_,init,isr,计划槽位；init 发布后只读
+iolink_dll_shared_t,isr_frame_ring,i_,isr,main,帧邮箱；ISR 生产、主泵消费
+iolink_dll_shared_t,isr_mailbox_drops,i_,isr,main,邮箱满而丢弃的帧数
+iolink_dll_shared_t,isr_plan_misses,i_,isr,main,未命中应答计划的合法帧数
+iolink_dll_shared_t,isr_frames_consumed,i_,isr,main,ISR 完全处理的帧数
+iolink_dll_shared_t,isr_frames_handoff,i_,isr,main,交给主泵的帧数
+iolink_dll_shared_t,isr_stat,b_,both,both,仅 IOLINK_STATS_MODE=SPLIT：ISR 自增，主泵复位并求和读取
+iolink_dll_shared_t,in_isr,i_,isr,main,ISR 泵运行标志；主上下文只读
+iolink_dll_shared_t,isr_tx_payload,m_,main,isr,槽 0/1 由主上下文暂存；槽 2 归 ISR 自用
+iolink_dll_shared_t,isr_tx_pending_slot,m_,main,isr,暂存应答所在槽位
+iolink_dll_shared_t,stage_len,m_,main,isr,暂存载荷字节数
+iolink_dll_shared_t,stage_has_cks,m_,main,isr,暂存载荷是否追加 CKS
+iolink_dll_shared_t,isr_tx_idx,b_,both,both,流式字节索引；两个上下文都会复位或推进
+iolink_dll_shared_t,isr_tx_active,b_,both,both,排空进行中标志；两个上下文都会置位或复位
+iolink_dll_shared_t,isr_tx_pending,b_,both,both,主上下文暂存已发布；ISR 取走后清除
+iolink_dll_shared_t,isr_tx_dropped,b_,both,main,丢弃的应答计数；两个上下文都会自增
+iolink_dll_shared_t,pd_out_len_current,c_,init,both,PD_Out 长度
+iolink_dll_shared_t,last_byte_us,b_,both,both,最后字节时间戳；两个上下文都会刷新
+iolink_dll_shared_t,pd_in,m_,main,isr,PD-in 应答缓冲区；ISR 在捕获槽写 OD 头（指针介导）
+iolink_dll_shared_t,pd_pub,m_,main,isr,PD-in 发布字；ISR 按代读取
+iolink_dll_shared_t,pd_valid_cmd,b_,both,both,PD 有效位命令字；两个上下文都会写
+iolink_dll_shared_t,pd_in_captured,b_,both,both,ISR 捕获并释放；主泵在模式切换的临界区内复位为 0xFF
+iolink_dll_shared_t,fallback_count,b_,both,both,连续 CRC 错误计数；两个上下文都会复位或推进
+iolink_dll_shared_t,events,b_,both,both,诊断事件引擎；ISR 只发布脉冲，主泵处理
+iolink_dll_shared_t,isdu,b_,both,both,ISDU 引擎；ISR 走写入口与读范围
+iolink_dll_shared_t,framing_errors,b_,both,main,ISR 经统计宏自增；主泵复位并读取
+iolink_dll_shared_t,timeout_errors,b_,both,main,ISR 经统计宏自增；主泵复位并读取
+iolink_dll_shared_t,log,c_,init,both,日志汇点；init 绑定后两个上下文只读
+iolink_dll_main_t,startup_notification_pending,i_,isr,main,batch 2: move to iolink_dll_shared_t
+iolink_dll_isr_t,stack_tick_pending,i_,isr,main,Timer B 授权标志；ISR 置位，主上下文在服务窗口消费并清除

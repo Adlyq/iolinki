@@ -1,0 +1,4 @@
+# Public-API allowlist: <symbol>  # reason
+#
+# Excuse a public function that is intentionally reachable from outside this
+# tree (integration hook, adapter surface). A stale entry is a hard failure.
