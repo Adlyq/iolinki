@@ -159,8 +159,8 @@ rejects such a PHY instead of degrading silently.
 
 The RTOS tier was removed: an RTOS build uses `ISR` (or `SMP` on multiple
 cores) and must still keep exactly one task calling the API. The stack derives
-`IOLINK_NEED_FENCE` and `IOLINK_NEED_CRITICAL` from the profile. A missing or
-invalid combination is a compile error with an actionable message, for example:
+`IOLINK_NEED_FENCE` and `IOLINK_NEED_CRITICAL` from the profile. An inconsistent
+profile/fence pair is a compile error with an actionable message, for example:
 
 ```
 port.h:160:2: error: #error "IOLINK_CONCURRENCY=SMP requires IOLINK_FENCE_LEVEL=IOLINK_FENCE_SMP"
@@ -298,7 +298,10 @@ in the middle of an M-sequence.
 
 #### Verification
 
-- `tests/test_port_capabilities.c` compiles and runs under every profile.
+- `tests/test_port_capabilities.c` runs in the `ISR` (`host_default`) and `SMP`
+  (`host_smp_split`) rows of the matrix. `SINGLE` is built as a library row and
+  as a compile-only probe (`target_minimal`, `single_no_critical`), and no test
+  binary runs there.
 - `tools/build_matrix.sh` builds the `SINGLE` and `SMP` profiles and checks
   that the `SINGLE` library archive has **no undefined
   `iolink_critical_*` symbols**.
@@ -313,11 +316,18 @@ contexts:
 | Mode | Behaviour | Cost |
 | :--- | :--- | :--- |
 | `SHARED` (default) | one counter set, both contexts increment it; an increment that is preempted between its load and its store can be lost (diagnostics only) | none |
-| `SPLIT` | the ISR keeps its own copy (`ctx->isr_stat`), `iolink_dll_get_stats()` returns the sum; no update is lost | a few bytes of RAM |
+| `SPLIT` | the ISR keeps its own counter set (`ctx->isr_stat`), `iolink_dll_get_stats()` returns the sum | one counter set of RAM |
 
-Neither mode takes a critical section for the counters. `SPLIT` is verified by
-`tests/test_stats_split.c` and by the `host_smp_split` matrix configuration,
-which runs the whole suite with split counters and SMP barriers.
+Neither mode takes a critical section for the counters. `SPLIT` removes the
+two-writer increment on a single counter by giving each context its own set, so
+a counter update is no longer lost to a preempted load/store pair. It is **not**
+a general concurrency fix: `iolink_dll_get_stats()` still reads the other
+context's set without a lock, so a snapshot can mix values from different
+moments, and every other shared field (state, activity timestamps, publish
+words, staging slots) keeps the single-writer and barrier rules described above.
+`SPLIT` is verified by `tests/test_stats_split.c` and by the `host_smp_split`
+matrix configuration, which runs the whole suite with split counters and SMP
+barriers.
 
 ### 2.3 Measuring the interrupt-off window
 
@@ -492,10 +502,22 @@ compiled out. A device that keeps logging pays for the strings by choice — see
 
 ### Minimum MCU Specs
 
+There is no single RAM/Flash minimum: the numbers depend on the feature set and
+on where the transport scratch lives. Use the measured tables instead of a
+headline figure.
+
 - **CPU**: 16 MHz+ ARM Cortex-M0 or equivalent
-- **RAM**: 4 KB minimum
-- **Flash**: 16 KB minimum
-- **Peripherals**: 1x UART fixed to the build-time `IOLINK_COM` rate
+- **RAM**: one `iolink_device_ctx_t` (5144 bytes on a 64-bit host with the
+  default buffers) plus the application's own buffers and task stack; the
+  external-workspace build moves the 1551-byte scratch out of the context. See
+  [MEMORY_GUIDE.md](MEMORY_GUIDE.md).
+- **Flash**: the full stack and the trimmed minimal build are measured per
+  configuration in `tools/size_baseline.atfe.csv` (and
+  `tools/size_baseline.csv` for the GNU toolchain); read the row for your
+  configuration and leave headroom. Both baselines are built with
+  `-DIOLINK_LOG_COMPILE_LEVEL=0`, so logging strings are extra.
+- **Peripherals**: 1x UART fixed to the build-time `IOLINK_COM` rate, plus the
+  data-interrupt source when the ISR pump is used
 
 ### Recommended MCU Families
 
@@ -546,18 +568,24 @@ config.log_level = IOLINK_LOG_LEVEL_INFO; /* SILENT disables */
 
 ### Common Issues
 
-1. **No communication**: Check UART baudrate and pin configuration
+1. **No communication**: Check UART baudrate (`IOLINK_COM_HZ`) and pin configuration
 2. **CRC errors**: Verify byte order and timing
-3. **Stack overflow**: Increase task stack size
-4. **Timing issues**: Ensure `iolink_device_process(ctx)` is called every 1ms
+3. **Stack overflow**: Increase task stack size (see [MEMORY_GUIDE.md](MEMORY_GUIDE.md))
+4. **Timing issues**: Call `iolink_device_process(ctx)` from exactly one task, often
+   enough for the configured `iolink_stack_config_t::min_cycle_time`; the 1 ms
+   delay in the host examples is a convenience, not a COM3 budget
 
 ## Testing on New Platform
 
-1. **Build test**: Verify compilation
+1. **Build test**: Verify compilation, then run `./tools/build_matrix.sh` if the
+   port introduces a switch or an `#if`
 2. **PHY test**: Test UART loopback
 3. **CRC test**: Run CRC unit tests
 4. **Integration test**: Use Virtual Master
 5. **Hardware test**: Connect to real IO-Link Master
+
+Which gates a change must pass is listed in [TESTING.md](TESTING.md); the compile
+matrix is mandatory for any new `IOLINK_*` switch or `#if`.
 
 ## Example Ports
 

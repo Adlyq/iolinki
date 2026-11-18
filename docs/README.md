@@ -7,7 +7,8 @@ stack is [iolinki-master](https://github.com/w1ne/iolinki-master).
 
 - **[README](../README.md)** — project overview, installation and quick start
 - **[SPEC_CONFORMANCE](SPEC_CONFORMANCE.md)** — spec clause → implementation →
-  test matrix; the single source of truth for what is implemented
+  test overview; the per-case status and residual reasons live in
+  [`tests/conformance_audit.csv`](../tests/conformance_audit.csv)
 - **[API](API.md)** and **[API_INTEGRATION](API_INTEGRATION.md)** — public API
   reference and integration workflow (lifetimes, ISR/PHY wiring, limitations)
 

@@ -77,9 +77,13 @@ STM32G0 ports and the conformance device.
 ### Running Tests
 
 ```bash
-cd build
-ctest --output-on-failure
+cmake -B build && cmake --build build
+ctest --test-dir build --output-on-failure
+./tools/gates.sh quick    # format, file size, shellcheck, ownership, nullability, test conventions
 ```
+
+The gate groups and the change-to-gate mapping are in
+[TESTING](docs/TESTING.md).
 
 ### Development Tools (pre-commit)
 
@@ -100,7 +104,24 @@ To ensure code quality, `iolinki` uses `pre-commit` hooks. These hooks run `clan
    pre-commit run --all-files
    ```
 
-## Running Tests
+## Test Environments
+
+### Quality gates (local)
+
+`tools/gates.sh` runs only the groups you name and stops at the first failure
+(`--keep-going` runs the rest and summarises):
+
+```bash
+./tools/gates.sh quick        # seconds, no build
+./tools/gates.sh quick build test gcc
+./tools/gates.sh quick build test gcc static docs package --keep-going
+./tools/gates.sh all          # every group
+```
+
+The groups are `quick`, `build`, `test`, `gcc`, `sanitize`, `memcheck`,
+`analyzer`, `static`, `docs`, `matrix`, `perf`, `package` and `fuzz`; what each
+one checks, and which gates a given change must run, is in
+[TESTING](docs/TESTING.md).
 
 ### Docker (Primary & Recommended)
 Docker is the primary and recommended environment for running all `iolinki` tests. This ensures a consistent environment with all tools (CMocka, Cppcheck, Doxygen, Clang-Format) pre-configured.
@@ -115,7 +136,7 @@ To run tests locally, ensure you have `libcmocka-dev` installed:
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
-cd build && ctest --output-on-failure
+ctest --test-dir build --output-on-failure
 ```
 
 ### Full Validation Suite (All Platforms + Conformance)
@@ -130,10 +151,10 @@ Conformance status is tracked case by case, not by a headline test count:
 - **[Spec conformance matrix](docs/SPEC_CONFORMANCE.md)** — feature -> implementation -> test.
 - **[Machine-readable audit](tests/conformance_audit.csv)** — authoritative per-case status.
 
-Current disposition: **111 direct / 19 n/a / 12 out-of-scope** of 142 Test Spec
-case IDs. The 12 out-of-scope items are physical/HIL or product-IODD work; they
-are not claimed as library conformance. There are no in-scope `partial` or `gap`
-entries.
+Current disposition, counted from the `status` column of the audit CSV:
+**116 direct / 19 n/a / 7 out-of-scope** of 142 Test Spec case IDs. The 7
+out-of-scope items are physical/HIL or product-IODD work; they are not claimed
+as library conformance. There are no in-scope `partial` or `gap` entries.
 
 Run the host suite and the traceability gate with:
 
@@ -145,7 +166,7 @@ cmake -B build && cmake --build build
 ### Building for Bare Metal
 
 ```bash
-cmake -B build/bare -DIOLINK_PLATFORM=BAREMETAL
+cmake -B build/bare -DIOLINK_PLATFORM=BAREMETAL -DBUILD_TESTING=OFF
 cmake --build build/bare
 ./build/bare/examples/bare_metal_app/bare_metal_app
 ```
