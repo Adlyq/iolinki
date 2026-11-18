@@ -982,6 +982,8 @@ stateDiagram-v2
 
 补充：
 
+- 0x97 DeviceStartup：ISR 计划动作只置 `shared.isr_device_startup_requested` 并按计划确认该写；`dll_protocol_error_to_startup()`（`invalid_frames` 记账 + STARTUP 迁移）由主泵在下一个 `iolink_dll_process()` 周期开头执行，因此状态迁移至多晚一个主泵周期。
+- 0x98/0x99/0x9A 的目标状态推导只有一份（`dll_master_command_target()`）：ISR 走 `dll_apply_master_command(shared)` 并调用 `dll_set_state_shared()`，主上下文走 `dll_apply_master_command_main()` 并调用 `dll_set_state()`（保留 master-lost 簿记与逐状态回调）。
 - 迁移由 `include/iolinki/internal/dll_sm.h` 描述：帧事件用 `DLL_SM_ROWS`（7 个状态 × 8 类事件，`src/dll_sm.c` 展开成 `g_dll_sm[state][event]`），定时器/管理类迁移（上表）用 `DLL_SM_ADMIN_ROWS`。`tools/gen_dll_statemachine.py` 解析这两份宏，生成 mermaid/CSV/覆盖测试与本节表格；`--check`（ctest `dll_statemachine_gen_check`）会拒绝过期的表格。帧事件迁移改 `DLL_SM_ROWS` 即可生效（表在 `src/dll_sm.c` 展开）；定时器/管理类迁移的**触发代码**分散在 `src/dll.c`、`src/dll_frame.c` 与 `src/dll_isr.c`，改代码时要同步 `DLL_SM_ADMIN_ROWS`。
 - 首个有效帧把 STARTUP/AWAITING_COMM 迁到 PREOPERATE 后，如果该帧本身就是 transition command（`MC=0x0F`），同一次 `dll_process_complete_frame()` 会继续调用 `dll_handle_preoperate()`，因此可以一帧内连续进入 ESTAB_COM。
 - `master_lost` 只在 OPERATE 且 `master_lost_cycles != 0` 时计算，超过阈值只置提示位并触发 `on_master_lost`，**不改变状态**（`dll_timer_expire_master_lost()`，`iolink_device_master_lost()`）。
@@ -1025,7 +1027,7 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 | 条件 | 代码行为 | 位置 |
 | :--- | :--- | :--- |
 | CRC 失败 | `crc_errors` / `framing_errors` / `invalid_frames` 递增；`fallback_count` 达到 3 时触发 COMM_CRC 脉冲并清零；不改状态 | `dll_handle_frame_error()` |
-| DeviceStartup（0x97） | `invalid_frames` 递增、`frame_index` 清零；非 STARTUP 时迁移 STARTUP | `dll_protocol_error_to_startup()` |
+| DeviceStartup（0x97） | `invalid_frames` 递增、`frame_index` 清零；非 STARTUP 时迁移 STARTUP（ISR 路径只登记 `isr_device_startup_requested`，由下一个主泵周期执行） | `dll_protocol_error_to_startup()` |
 | 类型非法 | OPERATE/ESTAB 只计 `framing_errors` 并丢帧；其他状态发 COMM_FRAMING 并回 STARTUP | `dll_handle_frame_error()` |
 | T_DSIO / T_FBD 到期 | SIO + STARTUP（UART 速率不变） | `dll_timer_expire_dsio()` / `dll_timer_expire_fbd()` |
 | 字节间超时 | `t_byte_violations` + COMM_TIMING 脉冲，`frame_index = 0` | `dll_timer_expire_t_byte()` |
