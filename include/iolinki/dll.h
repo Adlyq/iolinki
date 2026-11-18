@@ -345,12 +345,6 @@ typedef struct
 
 /** @brief 取时序契约表（只读，进程生命周期内稳定）；@p count 可传 NULL。 */
 const iolink_timer_contract_t* iolink_dll_timer_contract(uint8_t* IOLINK_NULLABLE count);
-
-/** @brief 查询一个 timer 的绝对截止时间（0 = 未装载）。 */
-uint64_t iolink_dll_timer_deadline(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
-
-/** @brief 查询一个 timer 是否已装载。 */
-bool iolink_dll_timer_armed(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
 /** @} */
 
 /**
@@ -434,23 +428,11 @@ typedef enum
 int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx);
 
 /**
- * @brief MC 字节为 @p mc 的主站请求的期望长度（字节）。
- *
- * 纯函数、ISR 安全且只读：仅由 DLL 状态 / 配置的类型和
- * MC 字节推导得出。库的 ISR 泵用它界定输入的
- * M 序列；主泵对同一帧复用该结果。
- * @param ctx DLL 上下文（只读）
- * @param mc  请求的主站命令（第一个）字节
- * @return 期望的请求长度，以字节计（Type-0 报文为 2）。
- */
-uint8_t iolink_dll_expected_req_len(const iolink_dll_main_t* ctx, uint8_t mc);
-
-/**
  * @brief 面向原始字节（单字节收发器）PHY 的 ISR 侧泵。
  *
  * 由 PHY 数据中断处理程序调用。它通过
- * phy->rx_octet() 拉取接收到的字节，对 M 序列成帧（使用纯函数
- * iolink_dll_expected_req_len()），按应答计划直接应答，并把仍需主泵
+ * phy->rx_octet() 拉取接收到的字节，对 M 序列成帧（使用内部的
+ * 期望长度推导），按应答计划直接应答，并把仍需主泵
  * 处理的帧（校验失败，或由计划应答但需要副作用的帧）发布到由
  * iolink_dll_process() 消费的邮箱，从共享状态组装应答并
  * 通过 phy->tx_octet()/tx_done()（TX BYTE）或 phy->tx_frame()
@@ -513,18 +495,6 @@ void iolink_dll_get_pd_length(const iolink_dll_main_t* ctx, uint8_t* IOLINK_NULL
  * @return iolink_phy_mode_t 当前模式
  */
 iolink_phy_mode_t iolink_dll_get_phy_mode(const iolink_dll_main_t* ctx);
-
-/**
- * @brief 请求执行 Back-to-box 序列（10.7.5）。
- *
- * ISDU 处理程序在成功应答 0x83
- * SystemCommand 后调用它。DLL 至少会继续服务帧 3 个 MasterCycle，
- * 随后停止并禁用通信（COMM_DISABLED）以及 PHY 输出
- * 驱动器，直到下一次上电。
- *
- * @param ctx DLL 上下文
- */
-void iolink_dll_request_back_to_box(iolink_dll_main_t* ctx);
 
 /**
  * @brief 获取当前协商后的波特率（编译期 `IOLINK_COM`）

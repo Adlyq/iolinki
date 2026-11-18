@@ -993,12 +993,9 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 | `include/iolinki/diag.h` | `iolink_diag_clear_code()` | 应用级条件释放（iolink_event_clear 的薄封装）。 |
 | `include/iolinki/diag.h` | `iolink_diag_edge_count()` | 某来源累计的边沿/脉冲次数（统计投影）。 |
 | `include/iolinki/dll.h` | `iolink_dll_timer_contract()` | 取时序契约表（只读，进程生命周期内稳定）；count 可传 NULL。 |
-| `include/iolinki/dll.h` | `iolink_dll_timer_deadline()` | 查询一个 timer 的绝对截止时间（0 = 未装载）。 |
-| `include/iolinki/dll.h` | `iolink_dll_timer_armed()` | 查询一个 timer 是否已装载。 |
 | `include/iolinki/dll.h` | `iolink_dll_init()` | 初始化 DLL 上下文 |
 | `include/iolinki/dll.h` | `iolink_dll_process()` | 处理 DLL 逻辑 |
 | `include/iolinki/dll.h` | `iolink_dll_publish_reply_plans()` | 编译并发布应答计划表（主上下文调用，数据 ISR 静止）。 |
-| `include/iolinki/dll.h` | `iolink_dll_expected_req_len()` | MC 字节为 mc 的主站请求的期望长度（字节）。 |
 | `include/iolinki/dll.h` | `iolink_dll_process_isr()` | 面向原始字节（单字节收发器）PHY 的 ISR 侧泵。 |
 | `include/iolinki/dll.h` | `iolink_dll_flush_state_callbacks()` | 把当前 DLL 状态交付给状态变更钩子。 |
 | `include/iolinki/dll.h` | `iolink_dll_on_rx_timeout()` | Timer A（t_A 单次定时）在无应答的情况下到期。 |
@@ -1006,7 +1003,6 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 | `include/iolinki/dll.h` | `iolink_dll_take_service_window()` | 消费 Timer B 的授权（1 = 用户代码可以运行）。 |
 | `include/iolinki/dll.h` | `iolink_dll_get_pd_length()` | 获取当前 PD 长度（初始化时由 `shared.pd_in_len` / `shared.pd_out_len_current` 固定） |
 | `include/iolinki/dll.h` | `iolink_dll_get_phy_mode()` | 获取当前工作模式 |
-| `include/iolinki/dll.h` | `iolink_dll_request_back_to_box()` | 请求执行 Back-to-box 序列（10.7.5）。 |
 | `include/iolinki/dll.h` | `iolink_dll_get_baudrate()` | 获取当前协商后的波特率（编译期 `IOLINK_COM`） |
 | `include/iolinki/dll.h` | `iolink_dll_compute_min_cycle_time()` | 根据 M 序列定时计算设备的 MinCycleTime（单位 0.1 ms）。 |
 | `include/iolinki/dll.h` | `iolink_dll_get_stats()` | 获取 DLL 统计 |
@@ -1094,6 +1090,12 @@ ISR 静止时设置 `shared.clock`、`shared.m_seq_type`、`shared.od_width`、`
 （双上下文共享）、`dll_isr.h`（ISR 独占）和 `dll_ctx.h`（单次分配容器）中；直接使用
 DLL 时还要自行负责事件/ISDU/DS 集成。统计字段与 `iolink_dll_get_baudrate()` 的当前
 签名见 [API.md 的「DLL 统计（裸 DLL 集成）」](API.md)。
+
+`dll.h` 的公共入口按头文件的非空契约接收上下文：传 NULL 是调用方错误，不会被当作
+"取默认值"或静默忽略（只有显式声明为 `IOLINK_NULLABLE` 的参数按其自身语义处理）。
+只供库内与测试观测的入口 —— `iolink_dll_timer_deadline()`、`iolink_dll_timer_armed()`、
+`iolink_dll_expected_req_len()` 与 `iolink_dll_request_back_to_box()` —— 声明在
+`include/iolinki/internal/wiring.h`，不属于公开面。
 
 ### 11.2 收发器、PHY 模板与常量头
 

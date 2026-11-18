@@ -17,7 +17,8 @@
  * 一次，而不是散落在每个用例中。
  *
  * `iolinki/internal/dll_ctx.h` 只允许在本文件中直接包含（由
- * `tools/check_test_whitebox.sh` 校验）。
+ * `tools/check_test_whitebox.sh` 校验）。内部接收入口在
+ * `iolinki/internal/wiring.h`，同样从这里统一引入。
  */
 
 #ifndef TEST_DLL_ACCESS_H_
@@ -25,6 +26,7 @@
 
 #include "iolinki/device.h"
 #include "iolinki/internal/dll_ctx.h"
+#include "iolinki/internal/wiring.h"
 
 /** @brief 设备上下文内嵌的完整 DLL 上下文。 */
 static inline iolink_dll_ctx_t* test_dll_ctx(iolink_device_ctx_t* ctx)
