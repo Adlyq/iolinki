@@ -233,7 +233,7 @@ PHY 上下文，以及 `on_change`/`ds_flag_persist` 访问的应用 NVM。
 
 - `master_last_activity_ms`、`master_lost_count`、`master_lost` 位于 `iolink_dll_main_t`，当前是**双上下文写**：
   - 数据 ISR：`src/dll_isr_rx.c` 的 CONSUME 分支在即时应答成功后调用 `dll_mark_master_activity_ts()`（实现在 `src/dll_reply.c`），一次写这三个字段；`dll_set_state()` 进入 `IOLINK_DLL_STATE_OPERATE` 时也写它们，而 ISR 的计划动作可以经 `dll_apply_master_command()`（0x98/0x99）进入 OPERATE。
-  - 主上下文：`dll_process_complete_frame()`、`dll_take_isr_master_activity()`、`dll_timer_sync_master_lost()` 与 `dll_set_state()` 写同一组字段。
+  - 主上下文：`dll_process_complete_frame()`、`dll_take_isr_master_activity()`、`dll_handle_sio_wakeup()`、`dll_timer_sync_master_lost()` 与 `dll_set_state()` 写同一组字段。
   - 因此它们不是主上下文私有状态；`dll_timer_sync_master_lost()` 必须接受"刚被 ISR 清零"的结果，而 `iolink_device_master_lost()` 读到的是最后一次写入的值。
 - `startup_notification_pending` 同样位于 `iolink_dll_main_t`：ISR 在 `dll_set_state(STARTUP)` 时置 1，主上下文的 `iolink_dll_flush_state_callbacks()` 读后清 0。
 - `total_retries` 与 `frame_index` 会被 ISR 的 0x97 计划动作经 `dll_apply_master_command()` → `dll_protocol_error_to_startup()` 写入；`total_retries` 也在主上下文的 `dll_handle_frame_error()` 中自增。
