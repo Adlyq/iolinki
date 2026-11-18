@@ -315,6 +315,10 @@ iolink_test(NAME test_app_pd SOURCES test_app_pd.c CMOCKA)
 iolink_test(NAME test_pd_lease SOURCES test_pd_lease.c CMOCKA)
 set_tests_properties(test_pd_lease PROPERTIES SKIP_RETURN_CODE 77)
 iolink_test(NAME test_isdu_buffers SOURCES test_isdu_buffers.c CMOCKA NO_HELPERS)
+# ISDU 传输层复位的作用域：读复位不释放写入口相位（isdu_internal.h）。
+iolink_test(NAME test_isdu_stage SOURCES test_isdu_stage.c
+    INCLUDES ${CMAKE_SOURCE_DIR}/src
+    CMOCKA NO_HELPERS)
 iolink_test(NAME test_sio_fallback SOURCES test_sio_fallback.c CMOCKA)
 iolink_test(NAME test_master_lost SOURCES test_master_lost.c CMOCKA)
 

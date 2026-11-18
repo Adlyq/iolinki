@@ -18,6 +18,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the capability bit for the mock and keeps the `IOLINK_CAP_REQUIRE_ISR_TX`
   rejection covered with a local PHY that has TX but no `request_service()`.
 
+### Fixed (DPP1 image reads acquire the sequence; workspace rebinding refuses in the ISR)
+- `iolink_isdu_direct_param_page1_octet()` and
+  `iolink_isdu_dp_page1_read_range()` order their loads the way the writer
+  orders its stores: sequence, `IOLINK_FENCE()`, image, `IOLINK_FENCE()`,
+  sequence re-read. Under `IOLINK_CONCURRENCY=SMP` that is the acquire a
+  seqlock reader needs; under `ISR` it is a compiler barrier with no run-time
+  cost. The 3-attempt retry and the "0 / all zero" outcome are unchanged.
+- `iolink_isdu_bind_workspace()` is refused (pointers and transport state
+  unchanged) when it is called from the data ISR, where the request/response
+  buffers it rewrites are in use. Binding stays a quiescent-pump operation;
+  the public header now states it.
+
+### Changed (ISDU read reset keeps the write entry phase)
+- `isdu_transport_reset()` still resets the whole ISDU transport, and now names
+  its two owners explicitly: the main-context read transport fields and the
+  write-entry phase (`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`). A new
+  `isdu_read_reset()` resets only the read side, and the read paths of
+  `iolink_isdu_od_read()` (IDLE, IDLE2, ABORT and a drained response) use it.
+  A read reset no longer clears a write request the data ISR has just started,
+  so a master that aborts an idle read and immediately starts a write keeps the
+  request instead of having every acknowledged COUNT dropped.
+- `isdu_stage_release()` names the write-entry phase reset that
+  `iolink_isdu_od_write()` and the main pump (on COMPLETE/ABORT takeover) use.
+- The read path no longer writes the write entry's FlowCTRL watermark: a read
+  COUNT is accepted while `resp_total != 0`, i.e. after a read START, so read
+  segment sequencing cannot move the write dedupe position.
+  The wire bytes of every read/write sequence are unchanged.
+
 ### Removed (reply plans carry no timing field and are compiled once)
 - `iolink_reply_plan_t::deadline_us` is gone. Nothing read it at run time: the
   ISR arms t_A from `10 * dll_get_t_bit_us()` when it starts a reply

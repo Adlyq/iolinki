@@ -148,6 +148,12 @@ void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* IOLI
     if (ctx == NULL) {
         return;
     }
+    /* 传输缓冲指针由数据 ISR 读取：绑定只在数据泵静止时合法。从数据 ISR
+     * 内调用是显式失败——不改变任何指针，也不留下半个绑定。 */
+    if ((ctx->dll_ctx != NULL) && (ctx->dll_ctx->shared.in_isr != 0U)) {
+        IOLINK_LOG_ISR_ERROR(ctx->log, "isdu bind_workspace rejected inside the data ISR");
+        return;
+    }
     ctx->workspace = ws;
     if (ws != NULL) {
         isdu_attach_scratch(ctx, &ws->isdu);
@@ -242,12 +248,13 @@ void isdu_respond_result(iolink_isdu_ctx_t* ctx, iolink_result_t result)
 static void handle_standard_commands(iolink_isdu_ctx_t* ctx);
 
 /**
- * @brief 复位写入口暂存状态（ISR 上下文安全；不触碰主泵独占字段）。
+ * @brief 释放写入口相位（req_buf 累计位置、FlowCTRL 水位与 stage_state）。
  *
- * 只清 req_buf 的累计位置与 FlowCTRL 水位，并把 stage_state 置回 IDLE。
- * 主泵的 `state`/`header`/响应缓冲不在此复位，避免 ISR 与主泵争用。
+ * 这些字段属于数据 ISR 的写入口：START 建立、COUNT 推进，主泵只在
+ * COMPLETE/ABORT 接管时交还。主泵独占的读传输层字段
+ * （`state`/`header`/响应缓冲）不在此复位。
  */
-static void isdu_stage_reset(iolink_isdu_ctx_t* ctx)
+void isdu_stage_release(iolink_isdu_ctx_t* ctx)
 {
     ctx->req_idx = 0U;
     ctx->req_total = 0U;
@@ -255,8 +262,8 @@ static void isdu_stage_reset(iolink_isdu_ctx_t* ctx)
     ctx->stage_state = IOLINK_ISDU_STAGE_IDLE;
 }
 
-/** @brief 将 ISDU 请求传输层复位到空闲状态（主泵上下文）。 */
-void isdu_transport_reset(iolink_isdu_ctx_t* ctx)
+/** @brief 复位主泵独占的读传输层字段。 */
+static void isdu_read_fields_reset(iolink_isdu_ctx_t* ctx)
 {
     ctx->response_negative = false;
     ctx->state = ISDU_STATE_IDLE;
@@ -270,7 +277,19 @@ void isdu_transport_reset(iolink_isdu_ctx_t* ctx)
     ctx->header.length = 0U;
     ctx->header.index = 0U;
     ctx->header.subindex = 0U;
-    isdu_stage_reset(ctx);
+}
+
+/** @brief 只复位主泵的读传输层；写入口相位保持原样。 */
+void isdu_read_reset(iolink_isdu_ctx_t* ctx)
+{
+    isdu_read_fields_reset(ctx);
+}
+
+/** @brief 将 ISDU 请求传输层复位到空闲状态（读传输层 + 写入口相位）。 */
+void isdu_transport_reset(iolink_isdu_ctx_t* ctx)
+{
+    isdu_read_fields_reset(ctx);
+    isdu_stage_release(ctx);
 }
 
 /** @brief 由最先收到的字节声明的 ISDU 总字节数（A.5.3/A.14）。
@@ -491,11 +510,11 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
         return;
     }
 
-    /* Table 52：ABORT（0x1F）拒绝请求数据，并将传输层
-       复位到空闲，与方向无关。IDLE/IDLE2 及保留值
-       0x13..0x1E 不是写操作；它们由读路径处理。 */
+    /* Table 52：ABORT（0x1F）拒绝请求数据并释放写入口相位，与方向无关；
+       读传输层的复位归读路径。IDLE/IDLE2 及保留值 0x13..0x1E 不是写操作，
+       它们由读路径处理。 */
     if (flowctrl == IOLINK_FLOWCTRL_ABORT) {
-        isdu_stage_reset(ctx);
+        isdu_stage_release(ctx);
         ctx->stage_state = IOLINK_ISDU_STAGE_ABORT;
         return;
     }
@@ -504,7 +523,7 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
     }
 
     if (flowctrl == IOLINK_FLOWCTRL_START) {
-        isdu_stage_reset(ctx);
+        isdu_stage_release(ctx);
         /* 仅在上一应答已发布时才轮换组帧应答缓冲区；
          * 否则替换尚未发布的构建结果。 */
         if (ctx->resp_sel == ctx->resp_pub) {
@@ -559,11 +578,11 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* IOLI
     }
 
     if (flowctrl == IOLINK_FLOWCTRL_ABORT) {
-        isdu_transport_reset(ctx);
+        isdu_read_reset(ctx);
         return;
     }
     if ((flowctrl == IOLINK_FLOWCTRL_IDLE) || (flowctrl == IOLINK_FLOWCTRL_IDLE2)) {
-        isdu_transport_reset(ctx);
+        isdu_read_reset(ctx);
         return;
     }
 
@@ -585,15 +604,14 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* IOLI
             ctx->resp_total = 1U;
             ctx->resp_idx = 0U;
         }
-        ctx->last_flowctrl = flowctrl;
-        ctx->flowctrl_seen = true;
     }
     else if (flowctrl < IOLINK_FLOWCTRL_START) {
-        /* 读操作上的 COUNT 按顺序继续应答。 */
-        if (!ctx->flowctrl_seen) {
+        /* 读操作上的 COUNT 按顺序继续应答；RESPONSE_READY 是读相位本身，
+         * 不与写入口的 FlowCTRL 水位共用，避免读段推进改写写请求的去重
+         * 位置。 */
+        if (ctx->resp_total == 0U) {
             return;
         }
-        ctx->last_flowctrl = flowctrl;
     }
     else {
         /* 保留值不是有效的读 FlowCTRL。 */
@@ -610,7 +628,7 @@ void iolink_isdu_od_read(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, uint8_t* IOLI
     }
 
     if ((ctx->state == ISDU_STATE_RESPONSE_READY) && (ctx->resp_idx >= ctx->resp_total)) {
-        isdu_transport_reset(ctx);
+        isdu_read_reset(ctx);
     }
 }
 

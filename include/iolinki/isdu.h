@@ -179,6 +179,9 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx);
  * fallback 存储。必须在 `iolink_isdu_init()` 之后调用；绑定不会清空
  * 传输状态。设备层由 `iolink_device_init()` 按 `config.workspace` 自动完成。
  *
+ * 传输缓冲指针由数据 ISR 读取，因此绑定必须在数据泵静止时进行。从数据
+ * ISR 内调用会被拒绝：指针与传输状态都不改变。
+ *
  * @p ws 为 NULL 表示解绑：没有内嵌 fallback 的构建
  * （`IOLINK_WORKSPACE_EMBEDDED=0`）会显式清零全部缓冲指针与容量，
  * 之后 `iolink_isdu_process()` 不处理请求、`iolink_isdu_snapshot_response()`
@@ -250,8 +253,8 @@ void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd);
  * （载荷丢弃，已累计字节不受影响），因此主站重发风暴不会消耗新缓冲，
  * 也不会破坏已收齐的请求。
  *
- * ABORT 复位传输层；IDLE/IDLE2 与保留值被忽略。START 复位并开始
- * 新的累计；没有 START 的 COUNT 被忽略。
+ * ABORT 释放写入口相位（不清读传输层）；IDLE/IDLE2 与保留值被忽略。
+ * START 复位并开始新的累计；没有 START 的 COUNT 被忽略。
  *
  * @note 只在数据 ISR 上下文调用。主泵只读 COMPLETE 状态并接管。
  *
@@ -270,6 +273,9 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
  * 用单个 Busy 八位组（0x01，Table A.14）应答。应答就绪后，
  * 成帧的 ISDU 八位组会在携带 COUNT 的多次读中相继送出。IDLE
  * 返回 Idle；ABORT 丢弃该服务。
+ *
+ * IDLE/IDLE2/ABORT 与读完成只复位读传输层：数据 ISR 已累计的写请求
+ * （含刚收到的写 START）保持原样。
  *
  * @param ctx ISDU 上下文
  * @param flowctrl FlowCTRL 值（mc & 0x1F）

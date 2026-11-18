@@ -741,14 +741,17 @@ uint8_t iolink_isdu_direct_param_page1_octet(iolink_isdu_ctx_t* ctx, uint8_t add
     }
 
     /* seqlock 读：读序号 → 取字节 → 再读序号校验；最多 3 次。
-     * 映像字节通过 volatile 视图读取，不会被重排到序号检查之外。 */
+     * 序号加载与映像读取之间、映像读取与序号复读之间各有一个屏障：
+     * 映像字节不会被重排到序号检查之外，复读也不会读到旧序号。 */
     const volatile uint8_t* image = ctx->dp_page1;
     for (uint8_t attempt = 0U; attempt < 3U; attempt++) {
         const uint8_t seq = ctx->dp_page1_seq;
+        IOLINK_FENCE();
         if ((seq & 1U) != 0U) {
             continue; /* 主泵正在更新，或映像已失效 */
         }
         const uint8_t value = image[addr];
+        IOLINK_FENCE();
         if (ctx->dp_page1_seq == seq) {
             return value;
         }
@@ -773,6 +776,7 @@ bool iolink_isdu_dp_page1_read_range(iolink_isdu_ctx_t* ctx, uint8_t addr, uint8
     const volatile uint8_t* image = ctx->dp_page1;
     for (uint8_t attempt = 0U; attempt < 3U; attempt++) {
         const uint8_t seq = ctx->dp_page1_seq;
+        IOLINK_FENCE();
         if ((seq & 1U) != 0U) {
             continue; /* 主泵正在更新，或映像已失效 */
         }
@@ -780,6 +784,7 @@ bool iolink_isdu_dp_page1_read_range(iolink_isdu_ctx_t* ctx, uint8_t addr, uint8
             const uint16_t a = (uint16_t) addr + (uint16_t) i;
             out[i] = (a < (uint16_t) sizeof(ctx->dp_page1)) ? image[a] : 0U;
         }
+        IOLINK_FENCE();
         if (ctx->dp_page1_seq == seq) {
             return true; /* 整段来自同一代 */
         }

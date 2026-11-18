@@ -31,7 +31,26 @@ uint16_t isdu_locks_implemented(const iolink_isdu_ctx_t* ctx);
 void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error);
 /** @brief 将统一结果翻译为 ISDU 否定应答。 */
 void isdu_respond_result(iolink_isdu_ctx_t* ctx, iolink_result_t result);
+/**
+ * @brief 整个传输层复位：主泵的读传输层字段与写入口相位都清零。
+ *
+ * 初始化与错误恢复路径使用；它会同时丢弃数据 ISR 正在累计的写请求。
+ */
 void isdu_transport_reset(iolink_isdu_ctx_t* ctx);
+/**
+ * @brief 只复位主泵独占的读传输层（`state`/`header`/应答缓冲/错误码）。
+ *
+ * 读方向的 IDLE/ABORT 与读完成复位走这里。写入口相位
+ * （`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`）保持原样。
+ */
+void isdu_read_reset(iolink_isdu_ctx_t* ctx);
+/**
+ * @brief 释放写入口相位：`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`。
+ *
+ * 这些字段归数据 ISR 的写入口（@ref iolink_isdu_od_write）：START 建立、
+ * COUNT 推进，主泵只在 COMPLETE/ABORT 接管时交还。不触碰读传输层。
+ */
+void isdu_stage_release(iolink_isdu_ctx_t* ctx);
 void isdu_factory_reset(iolink_isdu_ctx_t* ctx);
 /** @} */
 
