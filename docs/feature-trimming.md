@@ -41,7 +41,7 @@ source of "why did my build not behave as configured" reports.
 | `IOLINK_ISR_RX_MODE` / `IOLINK_ISR_TX_MODE` | BYTE/BYTE | FRAME transports: different PHY vtable and ISR buffering |
 | `IOLINK_PHY_FEATURE_TX_BUSY` | 0 | TX-FRAME line-state hook (two vs three PD-in slots) |
 | `IOLINK_CONCURRENCY` | ISR | SINGLE / SMP synchronisation primitives |
-| `IOLINK_STATS_MODE` | `IOLINK_STATS_SHARED` | `IOLINK_STATS_SPLIT`: per-context counter sets (+16 B) |
+| `IOLINK_STATS_MODE` | `IOLINK_STATS_SHARED` | `IOLINK_STATS_SPLIT`: per-context counter sets. `iolink_dll_shared_t` grows by 12 B (three `uint32_t`), while `sizeof(iolink_device_ctx_t)` grows by 8 B because existing padding absorbs the rest (host and Cortex-M0+ layouts; see `tests/test_ctx_sizes.c`) |
 
 The matrix uses six structural configurations, defined once in
 `tools/matrix_configs.sh`:
