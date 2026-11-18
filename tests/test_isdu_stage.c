@@ -11,9 +11,9 @@
  * @brief ISDU 传输层复位的作用域：读复位不释放写入口相位。
  *
  * 读方向（IDLE/IDLE2/ABORT/读完成）只复位主泵独占的读传输层，数据 ISR
- * 已建立的写请求（`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`）
- * 保持原样——主泵从不改写这些字段，这是无锁接管的全部前提。另外覆盖
- * DPP1 映像在失效序号下的 ISR 读，以及数据 ISR 内的 workspace 重绑定拒绝。
+ * 已建立的写请求（`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`）保持
+ * 原样；整个传输层复位（初始化与错误恢复）才同时释放两者。另外覆盖 DPP1
+ * 映像在失效序号下的 ISR 读，以及数据 ISR 内的 workspace 重绑定拒绝。
  */
 
 #include <stdarg.h>
@@ -58,7 +58,7 @@ static void expect_write_protected(iolink_isdu_ctx_t* ctx)
     assert_int_equal(resp[3], (uint8_t) (resp[0] ^ resp[1] ^ resp[2]));
 }
 
-/* 读复位只清读传输层；写入口相位与发布字都保持原样。 */
+/* 读复位只清读传输层；整个传输层复位才释放写入口相位。 */
 static void test_read_reset_keeps_write_phase(void** state)
 {
     (void) state;
@@ -78,28 +78,13 @@ static void test_read_reset_keeps_write_phase(void** state)
     assert_true(ctx.flowctrl_seen);
     assert_int_equal(ctx.stage_state, IOLINK_ISDU_STAGE_RECEPTION);
     assert_int_equal(ctx.state, ISDU_STATE_IDLE);
-    /* 读复位不推进 ack：写入口那一代仍然未处理。 */
-    assert_int_equal(ctx.req_ack_gen, 0U);
-    assert_int_not_equal(IOLINK_ISDU_REQ_PUB_GEN(ctx.req_pub), ctx.req_ack_gen);
-}
 
-/* 未收齐的 receiving 代必须能被主泵退休：主站发写 START 后静默（不发
- * COUNT、也不 ABORT）时，ack 若永远追不上发布代号，读路径会一直回 0x00，
- * 事件/DS 门控也会一直认为“写未完成”。通信重启时按已中止处理。 */
-static void test_abandoned_write_generation_is_retired(void** state)
-{
-    (void) state;
-    iolink_isdu_ctx_t ctx;
-    iolink_isdu_init(&ctx);
+    isdu_transport_reset(&ctx);
 
-    iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_START, &k_page1_write[0], 1U);
-    assert_true(isdu_write_in_progress(&ctx));
-    assert_false(iolink_isdu_is_idle(&ctx));
-
-    isdu_abandon_write(&ctx);
-
-    assert_false(isdu_write_in_progress(&ctx));
-    assert_true(iolink_isdu_is_idle(&ctx));
+    assert_int_equal(ctx.req_idx, 0U);
+    assert_int_equal(ctx.req_total, 0U);
+    assert_false(ctx.flowctrl_seen);
+    assert_int_equal(ctx.stage_state, IOLINK_ISDU_STAGE_IDLE);
 }
 
 /* 读 IDLE 不丢弃 ISR 正在累计的写请求：补齐 COUNT 后仍能执行。 */
@@ -144,9 +129,7 @@ static void test_read_idle_keeps_complete_request(void** state)
     assert_int_equal(ctx.req_idx, sizeof(k_page1_write));
 
     iolink_isdu_process(&ctx);
-    /* 相位闩锁在 COMPLETE（ISR 单写），主泵以 ack 代号表达"已处理"。 */
-    assert_int_equal(ctx.stage_state, IOLINK_ISDU_STAGE_COMPLETE);
-    assert_int_equal(ctx.req_ack_gen, IOLINK_ISDU_REQ_PUB_GEN(ctx.req_pub));
+    assert_int_equal(ctx.stage_state, IOLINK_ISDU_STAGE_IDLE);
     expect_write_protected(&ctx);
 }
 
@@ -247,7 +230,6 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_read_reset_keeps_write_phase),
-        cmocka_unit_test(test_abandoned_write_generation_is_retired),
         cmocka_unit_test(test_read_idle_keeps_pending_write),
         cmocka_unit_test(test_read_idle_keeps_complete_request),
         cmocka_unit_test(test_dpp1_stable_image_reads),

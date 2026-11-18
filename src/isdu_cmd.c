@@ -147,9 +147,8 @@ void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
                 len = (uint8_t) IOLINK_PD_IN_MAX_SIZE;
             }
             if (len > 0U) {
-                /* 与 ISR 捕获同一条规则：active 取自一次发布字加载。 */
-                const uint8_t active = IOLINK_PD_PUB_ACTIVE(dll_pd_pub_load(&dll->shared));
-                const uint8_t* pdi = &dll->shared.pd_in[active][dll->shared.od_width];
+                const uint8_t* pdi =
+                    &dll->shared.pd_in[dll->shared.pd_in_active][dll->shared.od_width];
                 (void) memcpy(ctx->response_buf, pdi, len);
             }
         }
@@ -432,9 +431,8 @@ void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
     }
     handle_system_command(ctx, cmd);
     /* Direct Parameter page 1 上的 SystemCommand 不产生肯定或
-       否定应答（7.3.5.3）；丢弃主泵为 ISDU 处理器暂存的任何应答。
-       写入口与发布字归数据 ISR，这里不碰。 */
-    isdu_read_reset(ctx);
+       否定应答（7.3.5.3）；丢弃 ISDU 处理器暂存的任何内容。 */
+    isdu_transport_reset(ctx);
 }
 
 /* -------------------------------------------------------------------------

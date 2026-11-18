@@ -43,19 +43,16 @@ IOLINK_ASSUME_NONNULL_BEGIN
 /**
  * @brief ISDU 事务 scratch 缓冲。
  *
- * 四个子缓冲分别对应传输层的请求八位组、解码后的载荷、应用层应答载荷
- * 以及最终成帧的应答。请求缓冲是**两个槽**（每槽一条完整请求）：数据
- * ISR 在一条请求收齐后把它发布给主泵，同时可以继续累计下一条（见
- * `iolink/isdu.h` 的发布字与 `docs/CODE_FLOW.md` 的所有权表）。成帧应答
- * 只有**一份**：租约模型保证数据 ISR 在缓冲被重新构建前已经释放。
+ * 四个缓冲分别对应传输层的请求八位组、解码后的载荷、应用层应答载荷
+ * 以及最终成帧的应答。成帧应答只有**一份**：租约模型保证数据 ISR 在
+ * 缓冲被重新构建前已经释放（见 `docs/MEMORY_GUIDE.md` 的租约规则）。
  */
 typedef struct
 {
-    /* 两个请求槽连续存放；槽 k 的地址 = &request[0] + k * req_size。 */
-    uint8_t request[2U * (IOLINK_ISDU_BUFFER_SIZE + 6U)]; /**< 原始 ISDU 请求（含 CHKPDU） */
-    uint8_t payload[IOLINK_ISDU_BUFFER_SIZE];             /**< 解码后的请求载荷 */
-    uint8_t response[IOLINK_ISDU_BUFFER_SIZE];            /**< 应用层应答载荷 */
-    uint8_t frame[IOLINK_ISDU_BUFFER_SIZE + 3U]; /**< 成帧应答（I-Service/Length/CHKPDU） */
+    uint8_t request[IOLINK_ISDU_BUFFER_SIZE + 6U]; /**< 原始 ISDU 请求（含 CHKPDU） */
+    uint8_t payload[IOLINK_ISDU_BUFFER_SIZE];      /**< 解码后的请求载荷 */
+    uint8_t response[IOLINK_ISDU_BUFFER_SIZE];     /**< 应用层应答载荷 */
+    uint8_t frame[IOLINK_ISDU_BUFFER_SIZE + 3U];   /**< 成帧应答（I-Service/Length/CHKPDU） */
 } iolink_isdu_scratch_t;
 
 /**

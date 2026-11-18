@@ -149,10 +149,9 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
         if (replied && ((plan.flags & IOLINK_REPLY_FLAG_CONSUME) != 0U) && !estab_com) {
             dll_mark_master_activity_ts(ctx); /* 本帧由 ISR 完全处理 */
             /* 该帧不进邮箱，主泵看不到它：把帧结束时间戳交接给主泵，
-             * 由它在下一轮补做 T_CYCLE/T_REN 记账。先写时间戳，穿过
-             * IOLINK_FENCE() 后再自增序号作为发布（release）边沿。 */
+             * 由它在下一轮补做 T_CYCLE/T_REN 记账。先写时间戳，再自增
+             * 序号作为发布边沿（单字对齐存储，无撕裂读）。 */
             ctx->shared.isr_consumed_us = (uint32_t) dll_time_us(ctx);
-            IOLINK_FENCE();
             ctx->shared.isr_consumed_seq = (uint8_t) (ctx->shared.isr_consumed_seq + 1U);
             ctx->shared.isr_frames_consumed++;
             /* 本周期已被服务：Back-to-box 计数归主上下文，这里只置

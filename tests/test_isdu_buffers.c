@@ -89,14 +89,12 @@ static void test_workspace_binding_moves_buffers(void** state)
     iolink_isdu_bind_workspace(&isdu, &ws);
     assert_ptr_equal(isdu.buffer, ws.isdu.payload);
     assert_ptr_equal(isdu.response_buf, ws.isdu.response);
-    assert_ptr_equal(isdu.req_base, ws.isdu.request);
     assert_ptr_equal(isdu.req_buf, ws.isdu.request);
     assert_ptr_equal(isdu.resp_frame, ws.isdu.frame);
     assert_ptr_equal(isdu.resp_store[0], ws.isdu.frame);
     assert_ptr_equal(isdu.resp_store[1], ws.isdu.frame);
     assert_int_equal(isdu.buffer_size, sizeof(ws.isdu.payload));
-    /* 单槽容量是两槽请求缓冲的一半；步长按它计算。 */
-    assert_int_equal(isdu.req_size, sizeof(ws.isdu.request) / 2U);
+    assert_int_equal(isdu.req_size, sizeof(ws.isdu.request));
 }
 
 int main(void)

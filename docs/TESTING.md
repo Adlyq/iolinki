@@ -167,12 +167,7 @@ untested code:
   `iolink_phy_virtual` is a byte stream and its `get()` returns NULL in a FRAME
   build, so the example cannot initialise.
 
-The FRAME counterpart of the PD-in lease is covered rather than skipped:
-`tests/test_pd_lease_frame.c` links the `iolink_tx_busy_fixture` (TX FRAME with
-`tx_busy()`), so it runs under every suite transport and pins the lease release
-at the ISR entry together with the silent-period `pd_in_skips`.
-
-`test_ctx_sizes` pins both layouts: 4944/5136 bytes on BYTE and 4936/5128 bytes
+`test_ctx_sizes` pins both layouts: 4664/4856 bytes on BYTE and 4656/4848 bytes
 on FRAME/FRAME for the DLL and device contexts.
 
 Mixed-granularity layouts (`FRAME_BYTE`, `BYTE_FRAME`) remain compile-only: they

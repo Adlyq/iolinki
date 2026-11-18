@@ -80,17 +80,16 @@ typedef struct iolink_dll_shared
      *
      * 这类帧不进邮箱，主泵因此看不到它们；但 T_CYCLE/T_REN 记账与
      * `last_response_us` 仍须覆盖每一个 MasterCycle。ISR 先写
-     * `isr_consumed_us`（32 位微秒，单字对齐存储），穿过 `IOLINK_FENCE()`
-     * 后再自增 `isr_consumed_seq` 作为发布（release）边沿。主泵按
-     * seq -> `IOLINK_FENCE()` -> us -> `IOLINK_FENCE()` -> seq 的顺序做双读
-     * 校验（acquire），两次 seq 相同才采纳该时间戳，并在
+     * `isr_consumed_us`（32 位微秒，单字对齐存储），再自增
+     * `isr_consumed_seq` 作为发布边沿。主泵读 seq -> us -> seq 做双读
+     * 校验，两次 seq 相同才采纳该时间戳，并在
      * `iolink_dll_main_t::isr_consumed_seq_seen` 记录已消费的序号。
      *
-     * 原子性：release/acquire 保证读到新序号的主泵一定读到对应的新时间戳，
-     * `IOLINK_CONCURRENCY=SMP` 下（两个内核或两个线程）因此不再依赖"写者
-     * 在中断返回后对读者可见"这一单核假设。双读的作用是检测"读取期间 ISR
-     * 又交接了一帧"（seq 变化即重试）。8 位序号是自由计数、永不清零；主泵
-     * 两次运行之间恰好消费 256 帧时会漏掉一次更新，只影响一次 T_CYCLE 检查。
+     * 原子性：两步写都在同一次数据中断内完成，主上下文只能在最外层
+     * 中断返回后运行，因此读侧永远不会把新时间戳归到旧序号上；双读的
+     * 作用是检测"读取期间 ISR 又交接了一帧"（seq 变化即重试）。8 位
+     * 序号是自由计数、永不清零；主泵两次运行之间恰好消费 256 帧时会
+     * 漏掉一次更新，只影响一次 T_CYCLE 检查。
      */
     volatile uint32_t isr_consumed_us; /**< ISR 消费帧的时间戳低 32 位 */
 
@@ -116,9 +115,6 @@ typedef struct iolink_dll_shared
      * （ISR 在此期间消费多帧时计数偏保守：只会晚停，绝不早停）。
      */
     volatile uint8_t isr_cycle_served;
-
-    /** @brief ISR 触发了 STARTUP：主泵据此作废在途 ISDU 写并复位读传输层。 */
-    volatile uint8_t isdu_restart_pending;
 
     /* 配置 */
     uint8_t m_seq_type; /**< 支持的 M 序列类型 */
@@ -169,6 +165,9 @@ typedef struct iolink_dll_shared
 
     uint32_t isr_mailbox_drops; /**< 因邮箱已满而丢弃的帧 */
 
+    uint32_t isr_od_overruns; /**< 上一条写请求尚未被主泵接管时又收到 START，
+                                   导致前一条被覆盖的次数 */
+
     uint32_t isr_plan_misses; /**< ISR 未命中应答计划而丢弃的合法帧 */
 
     uint32_t isr_frames_consumed; /**< 由 ISR 完全处理、不再进入邮箱的帧
@@ -218,21 +217,15 @@ typedef struct iolink_dll_shared
 
     /* 过程数据缓冲区。PD-in 缓冲区同时用作应答发送缓冲区：
      * 布局为 [OD][PD-in][CKS]。主上下文填充一个既非活动
-     * 也未被 ISR 持有的缓冲区，然后发布 `pd_pub`；ISR 在应答
-     * 开始时捕获同一代的 active 与 valid 并流式发送（零拷贝）。缓冲区数量
+     * 也未被 ISR 持有的缓冲区，然后原子地切换；ISR 在应答
+     * 开始时捕获活动副本并流式发送（零拷贝）。缓冲区数量
      * 取决于 TX 模式（见 IOLINK_PD_IN_BUFFERS）：若无空闲缓冲区，
      * 主上下文保留当前 PD-in 并在下一个周期重试。 */
     uint8_t pd_in[IOLINK_PD_IN_BUFFERS][IOLINK_PD_REPLY_MAX]; /**< [OD][PD-in][CKS] 应答缓冲区 */
 
-    volatile IOLINK_ATOMIC_UINT_T pd_pub; /**< PD-in 发布字 `{active, valid, gen}`
-                                              （主上下文单写） */
+    volatile uint8_t pd_in_active; /**< 活动 PD 应答缓冲区索引 */
 
-    volatile IOLINK_ATOMIC_UINT_T pd_valid_cmd; /**< PD 有效位命令字
-                                                    `{value, base_gen, valid}`（数据 ISR 单写） */
-
-    volatile uint8_t pd_in_captured; /**< ISR 正在流式发送的缓冲区（0xFF = 无）；
-                                          TX BYTE 帧末释放，TX FRAME 由 ISR 在下次
-                                          进入时按 tx_busy() 释放 */
+    volatile uint8_t pd_in_captured; /**< ISR 正在流式发送的缓冲区（0xFF = 无） */
 
     volatile uint8_t fallback_count; /**< 连续 CRC 错误计数（诊断脉冲节流） */
 
@@ -249,79 +242,6 @@ typedef struct iolink_dll_shared
 
     iolink_log_sink_t log; /**< 日志汇点（默认静默；设备层绑定） */
 } iolink_dll_shared_t;
-
-/**
- * @name PD-in 发布字
- *
- * 主上下文是 @ref iolink_dll_shared_t::pd_pub 的唯一写者：填完应答缓冲区后
- * 一次原子存储发布 `{active, valid, gen}`（release 屏障在 `iolink_atomic_store()`
- * 内）。数据 ISR 只做一次加载，因此它捕获的 active 与随后上报的 valid 取自
- * 同一代；每次发布把 `gen` 前进一格。
- *
- * 位布局：`active[7:0] | valid[8] | gen[23:16]`。
- * @{
- */
-#define IOLINK_PD_PUB_ACTIVE(word) ((uint8_t) ((word) & 0xFFU))
-#define IOLINK_PD_PUB_VALID(word) ((uint8_t) (((word) >> 8) & 0x01U))
-#define IOLINK_PD_PUB_GEN(word) ((uint8_t) (((word) >> 16) & 0xFFU))
-#define IOLINK_PD_PUB_WORD(active, valid, gen)           \
-    ((IOLINK_ATOMIC_UINT_T) (uint8_t) (active) |         \
-     ((IOLINK_ATOMIC_UINT_T) ((valid) ? 1U : 0U) << 8) | \
-     ((IOLINK_ATOMIC_UINT_T) (uint8_t) (gen) << 16))
-/** @} */
-
-/**
- * @name PD 有效位命令字
- *
- * 数据 ISR 是 @ref iolink_dll_shared_t::pd_valid_cmd 的唯一写者：执行
- * 0x98 `PROCESS_DATA_OPERATE` / 0x99 `DEVICE_OPERATE` 时记录命令值与当时
- * @ref iolink_dll_shared_t::pd_pub 的 `gen`。读侧只在 `base_gen` 仍等于当前
- * gen 时采用命令值，因此该覆盖只影响命令所在的那一代：主上下文下一次发布
- * 即恢复应用给出的有效位。失效的命令由 ISR 自己撤回（见 dll_isr.c）。
- *
- * 位布局：`value[0] | base_gen[15:8] | valid[16]`。
- * @{
- */
-#define IOLINK_PD_CMD_VALUE(word) ((uint8_t) ((word) & 0x01U))
-#define IOLINK_PD_CMD_BASE_GEN(word) ((uint8_t) (((word) >> 8) & 0xFFU))
-#define IOLINK_PD_CMD_VALID(word) ((uint8_t) (((word) >> 16) & 0x01U))
-#define IOLINK_PD_CMD_WORD(value, base_gen)       \
-    ((IOLINK_ATOMIC_UINT_T) ((value) ? 1U : 0U) | \
-     ((IOLINK_ATOMIC_UINT_T) (uint8_t) (base_gen) << 8) | ((IOLINK_ATOMIC_UINT_T) 1U << 16))
-/** @} */
-
-/** @brief 读取当前一代的 PD-in 发布字（active 与 valid 同代）。 */
-static inline IOLINK_ATOMIC_UINT_T dll_pd_pub_load(const iolink_dll_shared_t* shared)
-{
-    return iolink_atomic_load(&shared->pd_pub);
-}
-
-/**
- * @brief @p pub 这一代的有效位：命令字覆盖它记录的那一代，其余情况取应用值。
- *
- * 两个字段各自单写者，因此读侧不需要 RMW：先加载发布字、再加载命令字，
- * 命令字只有在代号仍然对得上时才生效。
- */
-static inline bool dll_pd_valid_at(const iolink_dll_shared_t* shared, IOLINK_ATOMIC_UINT_T pub)
-{
-    const IOLINK_ATOMIC_UINT_T cmd = iolink_atomic_load(&shared->pd_valid_cmd);
-    if ((IOLINK_PD_CMD_VALID(cmd) != 0U) &&
-        (IOLINK_PD_CMD_BASE_GEN(cmd) == IOLINK_PD_PUB_GEN(pub))) {
-        return IOLINK_PD_CMD_VALUE(cmd) != 0U;
-    }
-    return IOLINK_PD_PUB_VALID(pub) != 0U;
-}
-
-/**
- * @brief 发布一次 PD-in（主上下文单写），`gen` 自动前进一格。
- *
- * 调用方必须在应答缓冲区填完之后调用；屏障由 `iolink_atomic_store()` 提供。
- */
-static inline void dll_pd_publish(iolink_dll_shared_t* shared, uint8_t active, bool valid)
-{
-    const uint8_t gen = (uint8_t) (IOLINK_PD_PUB_GEN(shared->pd_pub) + 1U);
-    iolink_atomic_store(&shared->pd_pub, IOLINK_PD_PUB_WORD(active, valid, gen));
-}
 
 /**
  * @brief PHY 传输能力辅助函数。

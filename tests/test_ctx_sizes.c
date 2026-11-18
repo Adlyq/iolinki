@@ -49,8 +49,7 @@ IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) >= sizeof(iolink_isdu_ctx_t) +
 
 /* 工作区的每个缓冲都是显式契约；任何容量变化必须同步本文件与
  * docs/MEMORY_GUIDE.md。 */
-IOLINK_STATIC_ASSERT(sizeof(((iolink_isdu_scratch_t*) 0)->request) ==
-                         2U * (IOLINK_ISDU_BUFFER_SIZE + 6U),
+IOLINK_STATIC_ASSERT(sizeof(((iolink_isdu_scratch_t*) 0)->request) == IOLINK_ISDU_BUFFER_SIZE + 6U,
                      "ISDU request scratch changed");
 IOLINK_STATIC_ASSERT(sizeof(((iolink_isdu_scratch_t*) 0)->payload) == IOLINK_ISDU_BUFFER_SIZE,
                      "ISDU payload scratch changed");
@@ -58,8 +57,8 @@ IOLINK_STATIC_ASSERT(sizeof(((iolink_isdu_scratch_t*) 0)->response) == IOLINK_IS
                      "ISDU response scratch changed");
 IOLINK_STATIC_ASSERT(sizeof(((iolink_isdu_scratch_t*) 0)->frame) == IOLINK_ISDU_BUFFER_SIZE + 3U,
                      "ISDU frame scratch changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_isdu_scratch_t) == 5U * IOLINK_ISDU_BUFFER_SIZE + 15U,
-                     "ISDU scratch must be five buffers without padding");
+IOLINK_STATIC_ASSERT(sizeof(iolink_isdu_scratch_t) == 4U * IOLINK_ISDU_BUFFER_SIZE + 9U,
+                     "ISDU scratch must be four buffers without padding");
 #if IOLINK_FEATURE_DATA_STORAGE
 IOLINK_STATIC_ASSERT(sizeof(((iolink_workspace_t*) 0)->ds_stage) == IOLINK_DS_IMAGE_MAX,
                      "DS stage scratch changed");
@@ -79,21 +78,21 @@ IOLINK_STATIC_ASSERT(sizeof(((iolink_events_ctx_t*) 0)->memory) == 2U * 19U,
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
 #if IOLINK_STATS_MODE == IOLINK_STATS_SHARED
 #if IOLINK_PD_IN_BUFFERS == 3U
-IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4944u, "dll ctx (STATS_SHARED, FRAME) changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 5136u,
+IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4656u, "dll ctx (STATS_SHARED, FRAME) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4848u,
                      "device ctx (STATS_SHARED, FRAME) changed");
 #else
-IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4952u, "dll ctx (STATS_SHARED) changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 5144u, "device ctx (STATS_SHARED) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4664u, "dll ctx (STATS_SHARED) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4856u, "device ctx (STATS_SHARED) changed");
 #endif
 #else
-IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4960u, "dll ctx (STATS_SPLIT) changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 5152u, "device ctx (STATS_SPLIT) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_dll_ctx_t) == 4680u, "dll ctx (STATS_SPLIT) changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_device_ctx_t) == 4872u, "device ctx (STATS_SPLIT) changed");
 #endif
-IOLINK_STATIC_ASSERT(sizeof(iolink_isdu_ctx_t) == 1616u, "isdu ctx changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_isdu_ctx_t) == 1336u, "isdu ctx changed");
 IOLINK_STATIC_ASSERT(sizeof(iolink_ds_ctx_t) == 352u, "ds ctx changed");
 IOLINK_STATIC_ASSERT(sizeof(iolink_events_ctx_t) == 504u, "events ctx changed");
-IOLINK_STATIC_ASSERT(sizeof(iolink_workspace_t) == 1551u, "workspace changed");
+IOLINK_STATIC_ASSERT(sizeof(iolink_workspace_t) == 1289u, "workspace changed");
 
 /* 布局契约：共享区必须是主上下文的首成员，ISR 状态紧随其后。
  * 使用显式的 typedef 名称，避免 C99 下按 __LINE__ 命名的断言在跨头文件

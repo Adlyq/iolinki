@@ -15,7 +15,6 @@
 #include "iolinki/internal/wiring.h"
 #include "dll_internal.h"
 #include "events_internal.h"
-#include "isdu_internal.h"
 #include "iolinki/internal/dll_sm.h"
 #include <string.h>
 
@@ -55,9 +54,10 @@
  *      |- dll_apply_isr_deadline_requests    设置/清除 T_FBD 与 T_DSIO
  *      |                                     （64 位截止时间由主上下文持有）
  *      |                                     并消费 isr_cycle_served（Back-to-box 计数）
+ *      |- [TX FRAME] pd_in 租约释放          在临界区中轮询 tx_busy
  *      |- iolink_isdu_process                应用 ISR 累计完成的写请求并执行 ISDU 服务
  *      |- dll_apply_isr_isdu_read_reset      消费 ISR 的 IDLE/ABORT 读复位请求
- *      |                                     （只复位读传输层）
+ *      |                                     （仅当写入口为 IDLE）
  *      |- dll_isdu_sync_snapshot             发布 ISR 读取视图
  *      |- dll_poll_diagnostics
  *      |- dll_take_isr_master_activity       第二次采样：一帧可能已在上述步骤中
@@ -92,13 +92,11 @@
  *
  * 与数据 ISR 的交接（dll_isr.c）：
  *  - 主上下文 -> ISR：isr_tx_payload[0..1] + isr_tx_pending（dll_send）、ISDU
- *    发布字 isr_isdu_pub/resp_store（dll_isdu_sync_snapshot）、
- *    isdu.req_ack_gen/isdu.req_busy_sel（主泵对已发布写请求的 ack 与占用）
- *    以及 pd_pub（PD-in 发布字 `{active, valid, gen}`）。
+ *    发布字 isr_isdu_pub/resp_store（dll_isdu_sync_snapshot）以及
+ *    pd_in_active（PD-in 发布）。
  *  - ISR -> 主上下文：isr_frame_ring（dll_consume_isr_mailbox）、
- *    isdu.req_pub（双请求槽的写请求发布字）、isr_master_activity、
- *    isr_isdu_read_reset（IDLE/ABORT 读与写 ABORT 的传输层复位）、
- *    pd_valid_cmd（0x98/0x99 对 PD 有效位的本代覆盖）、
+ *    shared.isdu.stage_state（写请求累计完成/中止）、isr_master_activity、
+ *    isr_isdu_read_reset（IDLE/ABORT 读的传输层复位）、
  *    isr_consumed_us/isr_consumed_seq（CONSUME 帧的 T_CYCLE/T_REN 记账）、
  *    isr_cycle_served（ISR 服务的 MasterCycle，Back-to-box 计数由主泵推进）
  *    以及截止时间标志。
@@ -317,13 +315,6 @@ void dll_set_state(iolink_dll_main_t* ctx, iolink_dll_state_t new_state)
 #endif
         if (ctx->shared.in_isr != 0U) {
             ctx->startup_notification_pending = 1U;
-            ctx->shared.isdu_restart_pending = 1U;
-        }
-        else {
-            /* 主上下文重启：立即作废在途写并复位读传输层，避免重启前的
-             * 应答视图在下一轮被重新发布。 */
-            isdu_abandon_write(&ctx->shared.isdu);
-            isdu_read_reset(&ctx->shared.isdu);
         }
     }
     if (ctx->shared.in_isr == 0U) {
@@ -398,10 +389,7 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
        双字节变体（OPERATE M-sequence 代码 5）。 */
     ctx->shared.isr_isdu_last_flowctrl = 0xFFU; /* 尚未见到 START */
 
-    /* PD-in 初值：缓冲区 0、有效（应用第一次发布之前），没有命令覆盖。
-     * 发布字与命令字此后分别由主上下文与数据 ISR 单写。 */
-    iolink_atomic_store(&ctx->shared.pd_pub, IOLINK_PD_PUB_WORD(0U, true, 0U));
-    iolink_atomic_store(&ctx->shared.pd_valid_cmd, 0U);
+    ctx->pd_valid = true;
     ctx->shared.pd_in_captured = 0xFFU; /* 无进行中的应答 */
 
     /* 帧邮箱：ISR 发布到环中，主泵消费。 */
@@ -456,7 +444,7 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
         iolink_dll_set_sdci_mode(ctx);
     }
     /* 初始状态（STARTUP）的计划：第一个应答由 ISR 提前给出。 */
-    (void) iolink_dll_publish_reply_plans(ctx);
+    iolink_dll_publish_reply_plans(ctx);
 }
 
 /** @brief 消费 ISR 主站活动标志（仅时间戳，不计周期数）。 */
@@ -464,9 +452,9 @@ static void dll_take_isr_master_activity(iolink_dll_main_t* ctx)
 {
     if (ctx->shared.isr_master_activity != 0U) {
         ctx->shared.isr_master_activity = 0U;
-        /* 只刷新活动时间戳。Back-to-box 计数由主上下文独占推进：
-         * ISR 应答的帧经 isr_cycle_served 交接，主上下文应答的帧在
-         * dll_process_complete_frame 中直接推进。 */
+        /* 仅时间戳：Back-to-box 周期计数每个服务请求
+         * 精确推进一次（此处用于 ISR 应答的帧，或在
+         * dll_process_complete_frame 中用于主上下文应答的帧）。 */
         dll_mark_master_activity_ts(ctx);
     }
 }
@@ -474,10 +462,9 @@ static void dll_take_isr_master_activity(iolink_dll_main_t* ctx)
 /**
  * @brief 取 ISR 完全消费（CONSUME 计划）帧的交接时间戳。
  *
- * 单写者交接：ISR 先写 32 位时间戳，穿过 IOLINK_FENCE() 后再自增序号作为
- * 发布（release）边沿。这里做 seq -> fence -> us -> fence -> seq 双读
- * （acquire），只有两次序号相同才采纳时间戳；序号已变化说明 ISR 在读取
- * 过程中又发布了一帧，重试（最多 3 次），失败则留给下一轮。
+ * 单写者交接：ISR 先写 32 位时间戳，再自增序号作为发布边沿。这里做
+ * seq -> us -> seq 双读，只有两次序号相同才采纳时间戳；序号已变化说明
+ * ISR 在读取过程中又发布了一帧，重试（最多 3 次），失败则留给下一轮。
  *
  * @param ctx      DLL 上下文
  * @param[out] stamp_us ISR 记录的帧结束时间低 32 位
@@ -488,12 +475,10 @@ static bool dll_take_isr_consumed_frame(iolink_dll_main_t* ctx, uint32_t* stamp_
     bool taken = false;
     for (uint8_t attempt = 0U; (attempt < 3U) && !taken; attempt++) {
         const uint8_t seq = ctx->shared.isr_consumed_seq;
-        IOLINK_FENCE(); /* 获取：fence 之后的读取必须看到该序号对应的数据 */
         if (seq == ctx->isr_consumed_seq_seen) {
             break; /* 没有新帧 */
         }
         const uint32_t stamp = ctx->shared.isr_consumed_us;
-        IOLINK_FENCE(); /* 复读序号前的屏障：序号变化必须能被看见 */
         if (ctx->shared.isr_consumed_seq == seq) {
             ctx->isr_consumed_seq_seen = seq;
             *stamp_us = stamp;
@@ -571,7 +556,7 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
     if (ctx->shared.isr_cycle_served != 0U) {
         /* ISR 完全服务了一个 MasterCycle：计数归主上下文（ISR 只置标志），
          * 一个泵周期最多推进一次。
-         * 后续的 ISDU 服务与邮箱消费都在此之后运行，因此本轮的
+         * 后续的 tx_busy 轮询与 ISDU 服务都在此之后运行，因此本轮的
          * Back-to-box 停止判定能看到这次推进。 */
         ctx->shared.isr_cycle_served = 0U;
         dll_count_served_cycle(ctx);
@@ -581,24 +566,25 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
 /**
  * @brief 应用数据 ISR 的 ISDU 读传输层复位请求。
  *
- * 复位只经 `isdu_read_reset()` 清空读方向的字段（`state`/`header`/应答
- * 缓冲/错误码）。写入口（累计槽、`req_idx`/`req_total`、`stage_state`、
- * 发布字）归数据 ISR，主泵从不改写，所以复位本身不会踩掉 ISR 刚建立的
- * 新写请求；只有旗标的读-清需要临界区（见下）。
+ * 复位经 `isdu_transport_reset()` 清空写入口的 `req_idx`/`req_total`/
+ * `flowctrl_seen`/`stage_state`。ISR 在同一个中断里也可能刚收到一个写
+ * START 并重建了入口（主站"读 ABORT 后立刻写 START"）：此时若照常复位，
+ * 全部 COUNT 已被 ACK 的请求会被整段丢弃。因此只有写入口仍为 IDLE 时
+ * 才应用复位，否则保留请求标志，等下一轮写入口回到 IDLE 再应用。
+ *
+ * 判定、清标志与复位在同一临界区内完成，ISR 无法在"读到 IDLE"与
+ * "执行复位"之间开始新的写 START。区内只有字段清零，没有 PHY 或
+ * 应用回调。
  */
 static void dll_apply_isr_isdu_read_reset(iolink_dll_main_t* ctx)
 {
-    /* 快路径：没有请求时不取锁。旗标仍是双向的（ISR 置 1、主泵清 0），
-     * 有请求时读-清必须在同一临界区内，否则清 0 会吞掉刚好在两条指令
-     * 之间到达的复位请求，主站 ABORT/IDLE 之后的下一次读就会重新拿到
-     * 上一次的应答。 */
     if (ctx->shared.isr_isdu_read_reset == 0U) {
         return;
     }
     IOLINK_CRITICAL_ENTER();
-    if (ctx->shared.isr_isdu_read_reset != 0U) {
+    if (ctx->shared.isdu.stage_state == IOLINK_ISDU_STAGE_IDLE) {
         ctx->shared.isr_isdu_read_reset = 0U;
-        isdu_read_reset(&ctx->shared.isdu);
+        iolink_isdu_od_read(&ctx->shared.isdu, IOLINK_FLOWCTRL_IDLE, NULL, 0U);
     }
     IOLINK_CRITICAL_EXIT();
 }
@@ -934,14 +920,23 @@ static void dll_process_body(iolink_dll_main_t* ctx)
     dll_apply_isr_consumed_frame(ctx);
     dll_apply_isr_deadline_requests(ctx);
 
-    if (ctx->shared.isdu_restart_pending != 0U) {
-        /* ISR 触发的重启：未收齐的写请求作废（已收齐的仍由本轮处理），
-         * 读传输层回到 Idle——否则重启前的 RESPONSE_READY 视图会被重新
-         * 发布，主站新一轮的读 START 拿到上一轮的应答。 */
-        ctx->shared.isdu_restart_pending = 0U;
-        isdu_abandon_write(&ctx->shared.isdu);
-        isdu_read_reset(&ctx->shared.isdu);
+    /* 捕获的 PD-in 缓冲区在应答完成时由 TX BYTE 泵释放。
+     * TX FRAME 类型的 PHY 可通过 tx_busy() 报告传输结束；
+     * 没有该钩子时，库无法区分“仍在线上”与
+     * “收发器停滞”，因此会保持租约直到下次捕获，并由
+     * pd_in_skips 暴露停滞。该临界区防止数据 ISR 在
+     * 轮询与释放之间捕获新缓冲区。 */
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    if ((ctx->shared.phy != NULL) && (ctx->shared.phy->tx_busy != NULL)) {
+        IOLINK_CRITICAL_ENTER();
+        if ((ctx->shared.pd_in_captured != 0xFFU) &&
+            (ctx->shared.phy->tx_busy(ctx->shared.phy->self) == 0U)) {
+            ctx->shared.pd_in_captured = 0xFFU;
+        }
+        IOLINK_CRITICAL_EXIT();
     }
+#endif
+
     iolink_isdu_process(&ctx->shared.isdu);
     /* ISR 对 IDLE/IDLE2/ABORT 读只回 0x00；读传输层复位归主泵。
      * Type-0 下该帧由 CONSUME 计划完全消费，主泵只能经此标志收到请求。 */

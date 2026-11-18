@@ -112,7 +112,7 @@ overridden on its own. The `capacity_overrides` probe in
 `tools/matrix_configs.sh` compiles a build with the slot counts changed, so the
 `#ifndef` guards are exercised outside the unit test too.
 
-Since P8 the ISDU buffers live in `iolink_workspace_t` (1295 B at the default
+Since P8 the ISDU buffers live in `iolink_workspace_t` (1033 B at the default
 256-byte buffer); lowering `IOLINK_ISDU_BUFFER_SIZE` shrinks the workspace, not
 the context (see docs/MEMORY_GUIDE.md).
 

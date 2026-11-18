@@ -7,155 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed (MAJOR: PD-in publication is one single-writer word)
-- `iolink_dll_main_t::pd_valid` and `iolink_dll_shared_t::pd_in_active` are
-  gone. Process input is published through `iolink_dll_shared_t::pd_pub`
-  (`{active[7:0], valid[8], gen[23:16]}`, main-context writer) and the
-  data-ISR writer `pd_valid_cmd` (`{value[0], base_gen[15:8], valid[16]}`).
-  This is a layout change of both structs: `iolink_dll_ctx_t` and
-  `iolink_device_ctx_t` grow by 8 bytes (4944 -> 4952 and 5136 -> 5144 in the
-  64-bit default build, FRAME/FRAME 4936 -> 4944 and 5128 -> 5136).
-- `src/device.c` no longer takes `IOLINK_CRITICAL_ENTER/EXIT()` for the PD-in
-  publish. The callback and the polling API fill a buffer outside any lock and
-  then write `pd_pub` with `IOLINK_FENCE()` plus one atomic store; the data ISR
-  loads that word once per reply, so the buffer it captures and the CKS
-  PD-valid bit it reports always belong to the same generation.
-- 0x98 `PROCESS_DATA_OPERATE` / 0x99 `DEVICE_OPERATE` still override the valid
-  bit, but only for the generation in which they were applied: the data ISR
-  records the command value together with the current `pd_pub` generation in
-  `pd_valid_cmd`, and every reader falls back to the application value as soon
-  as the generation moves on. A main-context command application (STARTUP probe
-  / verbose OPERATE path) publishes a new generation instead. The ISR retires a
-  stale command word on its next entry, so the 8-bit generation cannot wrap
-  back onto an expired command.
-- `tests/test_reply_plan.c` pins the same-generation capture and the
-  generation-scoped 0x98/0x99 override including the CKS bit; the context-size
-  contract and `docs/MEMORY_GUIDE.md` record the +8 bytes.
-
-### Changed (BEHAVIOUR CHANGE: the data ISR owns the PD-in lease release)
-- TX FRAME: `dll_process_body()` no longer polls `tx_busy()`, and the
-  `IOLINK_CRITICAL_ENTER/EXIT()` pair that guarded the poll and the
-  `pd_in_captured` reset is gone with it. The data ISR releases the lease at
-  entry (`dll_isr_process()`, before any new capture) when `tx_busy()` reports
-  the line idle, so `pd_in_captured` has a single writer.
-- **Behaviour change:** during master silence no data interrupt arrives, so the
-  lease of the last reply is held until the next ISR entry instead of being
-  returned by the next main-pump pass. The main pump can still fill the other
-  buffer; only two PD-in updates during the same silence make the second one
-  fail and count `pd_in_skips` (the released lease used to allow it). An
-  in-flight buffer is still never overwritten: the release requires `tx_busy()`
-  to report an idle line.
-- A TX FRAME PHY without `tx_busy()` is unchanged: the transfer end stays
-  unobservable, the lease is kept until the next capture and
-  `IOLINK_PD_IN_BUFFERS` stays at three. TX BYTE keeps releasing at frame end.
-- `tests/test_tx_busy.c` and `tests/test_pd_lease.c` assert the new release
-  point; the new `tests/test_pd_lease_frame.c` pins the silent-period skip and
-  the intact in-flight data.
-### Fixed (documentation matches the lock-free hand-off model)
-- `include/iolinki/port.h`, `docs/PORTING.md` and `docs/API_INTEGRATION.md`
-  claimed the critical section protects the frame mailbox, the ISDU snapshot,
-  reply staging or the event-queue write path. None of those take a section:
-  they are slot rings, publish words and leases. They now list the operations
-  that do take one — diagnostic condition table, event queue read/clear,
-  counter reset, the SIO-mode reply-slot cleanup and the ISR RX phase reset —
-  and drop the removed "a DLL state transition resets the event queue under the
-  lock" example from the nesting requirement.
-- `docs/CODE_FLOW.md`: the remaining-critical-section audit no longer names the
-  removed `isr_tx_has_cks` field (the SIO-mode entry clears four fields) or a
-  "log sink" section that does not exist, and the hook table states that
-  `iolink_dll_publish_reply_plans()` rejects a call from the data ISR.
-- `docs/API.md` documents the quiescent-entry contract shared by
-  `iolink_dll_init()`, `iolink_dll_publish_reply_plans()` and
-  `iolink_isdu_bind_workspace()`, including which of them can refuse at run
-  time.
-- `include/iolinki/diag.h` names both halves of the `isr_pulse[]` one-shot: the
-  ISR only stores 1, `iolink_diag_service()` reads and clears it inside one
-  short section.
-
-### Changed (MAJOR: `iolink_dll_publish_reply_plans()` reports misuse)
-- The reply-plan publisher returns `int` (`iolink_dll_publish_result_t`)
-  instead of `void`: `IOLINK_DLL_PUBLISH_OK` (0) when the table was published,
-  otherwise `IOLINK_DLL_PUBLISH_ERR_NULL` (`ctx == NULL`),
-  `IOLINK_DLL_PUBLISH_ERR_UNINIT` (the context never completed
-  `iolink_dll_init()`, detected by the unbound `shared.isr`) or
-  `IOLINK_DLL_PUBLISH_ERR_ISR` (`shared.in_isr != 0`). A rejected call writes
-  no plan slot, leaves `reply_plans_ready` alone and, for the ISR case, logs an
-  ISR error. Rebuilding the table from the data ISR used to rewrite the table
-  the pump was scanning, with no counter and no error.
-- The two in-library call sites (`iolink_dll_init()`, `iolink_device_init()`)
-  keep publishing at init time and ignore the result of the unreachable
-  refusal paths.
-- `include/iolinki/dll.h` and `include/iolinki/isdu.h` now state one
-  precondition for `iolink_dll_init()`, `iolink_dll_publish_reply_plans()` and
-  `iolink_isdu_bind_workspace()`: main context, data pump quiescent. The latter
-  two refuse a call from the data ISR at run time; `iolink_dll_init()` cannot,
-  because it clears the object that holds `shared.in_isr`.
-- Tests: `tests/test_reply_plan.c` pins the NULL, uninitialised and in-ISR
-  outcomes and checks that a refused call leaves the previous table and the
-  ready flag unchanged.
-
-### Fixed (CONSUME frame timestamp handoff publishes with a fence)
-- `dll_isr_complete_frame()` now writes `isr_consumed_us`, passes
-  `IOLINK_FENCE()` and only then bumps `isr_consumed_seq`, so the sequence
-  number is a release edge rather than a second plain store.
-  `dll_take_isr_consumed_frame()` reads `seq -> IOLINK_FENCE() -> us ->
-  IOLINK_FENCE() -> seq`, which makes the double-read acceptance test hold
-  under `IOLINK_CONCURRENCY=SMP` (two cores or two threads) instead of relying
-  on "the writer's interrupt return is visible to the reader". The 8-bit
-  free-running sequence, the "exactly 256 frames between two main passes miss
-  one update" behaviour and the context layout are unchanged.
-  `tests/test_isr_consumed_timing.c` pins the publish order with a stepping
-  clock and covers the accept, no-new-frame, multi-publish and 8-bit wrap
-  paths.
-### Changed (MAJOR: ISDU write entry is two request slots + a publication word)
-- **`iolink_isdu_scratch_t::request` is now two slots** of
-  `IOLINK_ISDU_BUFFER_SIZE + 6` bytes (one being accumulated by the data ISR,
-  one published for the main pump). This is a layout change of a public
-  struct: `iolink_workspace_t` grows by `IOLINK_ISDU_BUFFER_SIZE + 6` bytes
-  (1289 -> 1551 at the default 256-byte buffer); `iolink_isdu_ctx_t` grows by
-  the same amount when the scratch is embedded (1336 -> 1616), plus 18 bytes
-  of slot bookkeeping (24 bytes with `IOLINK_WORKSPACE_EMBEDDED=0`).
-  `IOLINK_ISDU_STAGE_ABORT` is gone: the ISR settles an ABORT itself.
-- The data ISR owns the write entry end to end (slot selection, accumulation
-  state, `stage_state`) and publishes `{len, sel, gen, receiving}` in a single
-  natural-atomic word (`iolink_isdu_ctx_t::req_pub`); the main pump only loads
-  that word. It claims the published slot (`req_busy_sel`), validates the
-  CHKPDU, parses the header and copies the payload **outside any critical
-  section**, then records `req_ack_gen` and releases the slot before running
-  the service and the application callbacks. `iolink_isdu_process()` no longer
-  takes a critical section and never re-reads `stage_state`.
-- While the main pump works on one request the ISR can complete the next one in
-  the other slot. A START never writes the slot being parsed; it replaces a
-  published but unclaimed request instead, which is withdrawn (`len = 0` with
-  a fresh generation) and counted in `iolink_isdu_ctx_t::req_overruns`,
-  exported unchanged as `iolink_dll_get_stats().isr_od_overruns`. A replaced
-  request is never executed.
-- `iolink_isdu_od_write()` publishes a `receiving` generation as soon as a
-  write START is accepted, so the main pump keeps the published read view
-  empty for the whole transfer without reading any ISR phase field. The
-  write-abort path also asks the main context to reset the read transport
-  (`isr_isdu_read_reset`, Table 52), which the main pump now applies
-  unconditionally: `isdu_read_reset()` touches only read-transport fields, so
-  the write-entry phase guard is gone ("read ABORT immediately followed by
-  write START" can no longer drop the write). The flag itself is still set by
-  the ISR and cleared by the pump, so the read-clear stays inside one short
-  critical section (the fast path takes no lock when nothing is pending). `isdu_transport_reset()` is removed; `isdu_read_reset()` is the only
-  read-side reset.
-- `iolink_isdu_execute_system_command()` (Direct Parameter page 1) still drops
-  a staged read response but no longer discards an already received ISDU write:
-  every segment of that write was acknowledged, and the write entry now belongs
-  to the data ISR alone.
-- Ordering: slot contents are written before the publication word
-  (`IOLINK_FENCE()` + one atomic store) and the claiming side stores
-  `req_busy_sel` before reading the slot, so under
-  `IOLINK_CONCURRENCY=SMP` a reader never pairs a fresh generation with stale
-  bytes, and the ISR never overwrites a slot the main pump is parsing.
-- Tests: `tests/test_isdu_slots.c` drives the three cut points (new request
-  during service execution, replacement of an unclaimed request, slot reuse
-  after the ack);
-  `tests/test_isdu_slots_small.c` repeats the flow against a
-  `IOLINK_ISDU_BUFFER_SIZE=64` build.
-
 ### Changed (ISDU write invalidation uses a monotonic sequence)
 - The clearable `isr_isdu_invalidated` flag is gone. The data ISR bumps
   `isr_isdu_write_gen` on every accepted write START/ABORT; the main pump records
@@ -214,11 +65,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the public header now states it.
 
 ### Changed (ISDU read reset keeps the write entry phase)
-- The read transport reset is now a separate entry, `isdu_read_reset()`, that
-  touches only the main-context read fields; the write-entry phase
-  (`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`) belongs to the data ISR
-  and is never reset from the pump. The read paths of `iolink_isdu_od_read()`
-  (IDLE, IDLE2, ABORT and a drained response) use it.
+- `isdu_transport_reset()` still resets the whole ISDU transport, and now names
+  its two owners explicitly: the main-context read transport fields and the
+  write-entry phase (`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`). A new
+  `isdu_read_reset()` resets only the read side, and the read paths of
+  `iolink_isdu_od_read()` (IDLE, IDLE2, ABORT and a drained response) use it.
   A read reset no longer clears a write request the data ISR has just started,
   so a master that aborts an idle read and immediately starts a write keeps the
   request instead of having every acknowledged COUNT dropped.
@@ -257,14 +108,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed (an ISDU read reset no longer discards an in-flight write request)
 - `dll_process_body()` applied the ISR's IDLE/IDLE2/ABORT read-reset request
-  unconditionally. The read reset used to clear the whole transport, including
-  `req_idx`/`req_total`/`flowctrl_seen`/`stage_state` — the write entry the data
-  ISR may have just rebuilt in the same exchange. A master that aborted a read and immediately started a write saw
-  every COUNT acknowledged while the request was dropped whole. The write entry
-  now belongs to the ISR, which removes the race at the ownership level; the
-  flag itself is still set by the ISR and cleared by the pump, so the read-clear
-  runs in one short critical section (the fast path stays lock free when no
-  request is pending).
+  unconditionally. `iolink_isdu_od_read(IDLE)` ends in `isdu_transport_reset()`
+  → `isdu_stage_reset()`, which clears `req_idx`/`req_total`/`flowctrl_seen`/
+  `stage_state` — the write entry the data ISR may have just rebuilt in the same
+  exchange. A master that aborted a read and immediately started a write saw
+  every COUNT acknowledged while the request was dropped whole. The request is
+  now applied only when the write entry is back in `IOLINK_ISDU_STAGE_IDLE`,
+  otherwise the flag stays set for the next pump pass. The check, the flag clear
+  and the reset run in one critical section, so the ISR cannot open a new write
+  START in between; the section only clears fields (no PHY or application
+  callbacks).
 ### Added (the event memory is published, not locked)
 - The Table 58 event memory is now a double image with a published index:
   `iolink_events_ctx_t::memory[2][19]` plus `volatile uint8_t memory_pub`. The
@@ -273,9 +126,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reader (the data ISR) therefore always sees one complete generation instead of
   a byte-by-byte snapshot taken under the lock.
 - `iolink_events_reset_request()` (`src/events_internal.h`) is the only write the
-  data ISR performs on the event engine proper: it raises `volatile uint8_t
-  reset_req` above `reset_applied`. (The one-shot `diag.isr_pulse[]` bytes
-  remain ISR-written and are consumed by `iolink_diag_service()`.) `dll_set_state(STARTUP)` calls it when the
+  data ISR may perform on the event engine: it raises `volatile uint8_t
+  reset_req` above `reset_applied`. `dll_set_state(STARTUP)` calls it when the
   transition happens in the ISR; a main-context transition still calls
   `iolink_events_reset()` directly.
 - The main pump applies the request (`dll_process_body()` and
@@ -315,6 +167,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `iolink_event_trigger()` is unchanged in signature and passes
   `IOLINK_DIAG_SRC_NONE`.
 
+### Removed (reply plans carry no timing field and are compiled once)
 ### Fixed (Timer A timeout resets RX assembly in one phase)
 - `iolink_dll_on_rx_timeout()` (Timer A) cleared `isr_rx_cnt`/`isr_rx_expect`
   with two bare stores although those fields belong to the data ISR: a pump that
@@ -326,30 +179,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to run at the same priority or in the same vector, and states how a port that
   cannot do that must serialise the entries itself. Regression:
   `test_isr_atomicity` pins the single-phase reset.
-
-### Fixed (the staged-reply hand-off is one operation)
-- `dll_send()` used to check `isr_tx_active` and publish the staging as two
-  separate steps: a data interrupt between them could start an immediate reply,
-  and the next ISR entry then replaced that in-flight frame from the middle. The
-  slot advance, payload copy, metadata and `isr_tx_pending` now happen inside
-  one short critical section, and a rejected staging no longer touches the slot
-  (`isr_tx_next` only advances when the reply is accepted, so two consecutive
-  rejections cannot rotate back onto the in-flight slot and rewrite its bytes).
-  The ISR take reads the metadata and clears `isr_tx_pending` under the same
-  lock, and drops plus counts a staging that arrives while a frame is still
-  streaming. `SINGLE` closes the previous frame with `tx_done()` before starting
-  the next one and counts that discard. With no TX hook in the selected mode the
-  reply is counted as dropped instead of vanishing.
-
-### Fixed (an abandoned ISDU write is retired on a communication restart)
-- A write START publishes a generation whose ack only advances on completion or
-  abort, so a master that started a write and went silent left the read path at
-  `0x00` and the events/DS gate closed across link restarts. A main-context
-  STARTUP now retires an unfinished generation and resets the read transport
-  (an ISR-triggered STARTUP defers both to the pump through
-  `isdu_restart_pending`); a completed request is still executed by the same
-  pump pass instead of being discarded. Claiming a request with no bound
-  workspace advances the ack instead of hanging.
 
 ### Fixed (staged reply length and CKS are ISR-owned)
 - The staged reply's length and CKS flag were shared between the main pump and
@@ -364,14 +193,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `isr_tx_pending`; `dll_isr_tx_step()` reads nothing else. `dll_send()` also
   rejects a staging while `isr_tx_active != 0` and counts it in
   `isr_tx_dropped`, and `dll_isr_start_staged_tx()` takes the CKS flag as a
-  parameter (TX BYTE no longer ignores the length). The 64-bit host context
-  layout is unchanged; on a 32-bit target the two new ISR fields add 4 bytes to
-  `iolink_dll_isr_t` in the TX BYTE configuration.
+  parameter (TX BYTE no longer ignores the length). Context sizes are unchanged.
   Regression: `test_isr_atomicity` covers a staging overwritten mid-stream and a
   rejected staging during an in-flight reply.
 
 
-### Removed (reply plans carry no timing field and are compiled once)
 - `iolink_reply_plan_t::deadline_us` is gone. Nothing read it at run time: the
   ISR arms t_A from `10 * dll_get_t_bit_us()` when it starts a reply
   (`dll_sm.c`), and the PHY response timer is the authority. The field was
