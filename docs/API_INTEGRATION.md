@@ -1093,6 +1093,10 @@ DLL 时还要自行负责事件/ISDU/DS 集成。统计字段与 `iolink_dll_get
 
 `dll.h` 的公共入口按头文件的非空契约接收上下文：传 NULL 是调用方错误，不会被当作
 "取默认值"或静默忽略（只有显式声明为 `IOLINK_NULLABLE` 的参数按其自身语义处理）。
+数据 ISR 的三个入口 —— `iolink_dll_process_isr()`、`iolink_dll_on_rx_timeout()`、
+`iolink_dll_on_stack_tick()` —— 参数是 `iolink_dll_shared_t*`：设备层由
+`iolink_device_process_isr()` 转发 `&ctx->dll.main.shared`，裸 DLL 集成传
+`&ctx->shared`，因此 ISR 翻译单元在编译期看不到主上下文字段。
 只供库内与测试观测的入口 —— `iolink_dll_expected_req_len()` 与
 `iolink_dll_request_back_to_box()` —— 声明在
 `include/iolinki/internal/wiring.h`，不属于公开面。定时表查询只有内部实现
