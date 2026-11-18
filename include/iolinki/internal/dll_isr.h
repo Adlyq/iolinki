@@ -44,9 +44,6 @@ struct iolink_dll_isr
     uint8_t isr_rx_expect;                    /**< 期望长度（0 = 未知） */
 #endif
 
-    uint32_t isr_eager_rejects; /**< eager 路径拒绝的帧
-                                     （校验和/类型错误） */
-
     volatile uint8_t stack_tick_pending; /**< Timer B 节拍已授权一个
                                               主上下文服务窗口 */
 

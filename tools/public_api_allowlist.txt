@@ -6,5 +6,4 @@
 iolink_dll_timer_contract      # integrator-facing timing contract table; only the timer tests consume it in-tree
 iolink_dll_on_rx_timeout       # Timer A hook the application forwards into; no in-tree main loop installs it
 iolink_dll_on_stack_tick       # Timer B hook the application forwards into; no in-tree main loop installs it
-iolink_dll_get_baudrate        # introspection getter for integrators; the library itself never needs it
 iolink_phy_generic_get         # PHY vtable template for integrators; shipped as a starting point, not used in-tree

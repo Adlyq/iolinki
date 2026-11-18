@@ -699,7 +699,7 @@ static int test_eager_reject(void)
     feed(frame, sizeof(frame));
     iolink_dll_process_isr(&dll.main);
 
-    if (dll.isr.isr_eager_rejects != 1U) {
+    if (dll.main.shared.isr_eager_rejects != 1U) {
         return 1;
     }
     if (tx_observed_len() != 0U) {
@@ -714,6 +714,12 @@ static int test_eager_reject(void)
     }
     if (dll.main.shared.isr_frames_handoff != 1U) {
         return 5;
+    }
+    /* 同一计数经公共统计快照可见：主上下文无需访问 ISR 结构。 */
+    iolink_dll_stats_t stats;
+    iolink_dll_get_stats(&dll.main, &stats);
+    if (stats.isr_eager_rejects != 1U) {
+        return 6;
     }
     return 0;
 }
@@ -736,7 +742,7 @@ static int test_valid_eager(void)
     tx_frame_sync();
 #endif
 
-    if ((dll.main.shared.isr_mailbox_drops != 0U) || (dll.isr.isr_eager_rejects != 0U)) {
+    if ((dll.main.shared.isr_mailbox_drops != 0U) || (dll.main.shared.isr_eager_rejects != 0U)) {
         return 1;
     }
     const iolink_frame_rec_t* rec =
@@ -784,7 +790,7 @@ static int test_isdu_write_bad_crc_not_consumed(void)
     if (dll.main.shared.isdu.req_idx != 0U) {
         return 1;
     }
-    if ((dll.isr.isr_eager_rejects != 1U) ||
+    if ((dll.main.shared.isr_eager_rejects != 1U) ||
         !iolink_ring_is_empty(&dll.main.shared.isr_frame_ring)) {
         return 2;
     }
@@ -1163,7 +1169,7 @@ static int test_byte_gap_incomplete(void)
         if (!iolink_ring_is_empty(&dll.main.shared.isr_frame_ring)) {
             return 7; /* 绝不为主泵发布 */
         }
-        if (dll.isr.isr_eager_rejects != 0U) {
+        if (dll.main.shared.isr_eager_rejects != 0U) {
             return 8; /* 间隔路径不执行即时校验 */
         }
         if (tx_done_calls != 1U) {

@@ -85,7 +85,7 @@ void dll_handle_frame_error(iolink_dll_main_t* ctx, dll_frame_result_t result)
      * SIO 保留给 Fallback MasterCommand 和 T_DSIO 超时。 */
     ctx->crc_errors++;
     ctx->shared.framing_errors++;
-    ctx->total_retries++;
+    ctx->invalid_frames++;
     /* 保留诊断事件（ST 没有计数器，但应用用它
      * 作为事件标志），同时不改变 DL 模式。 */
     ctx->shared.fallback_count++;

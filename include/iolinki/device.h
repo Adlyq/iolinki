@@ -279,7 +279,7 @@ iolink_device_pd_result_t iolink_device_pd_input_update(iolink_device_ctx_t* ctx
 /**
  * @brief 取本实例的能力位。
  * @param ctx 设备上下文。
- * @return 实例能力位掩码；ctx 为 NULL 时为 0。
+ * @return 实例能力位掩码。
  */
 iolink_caps_t iolink_device_capabilities(const iolink_device_ctx_t* ctx);
 

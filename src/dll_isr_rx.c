@@ -112,7 +112,7 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
         /* 只缓冲有效请求：损坏的 ISDU 写绝不能到达
          * 传输层（ST 在 StackBaseOdWrite 之前校验）。 */
         if (!valid) {
-            ctx->shared.isr->isr_eager_rejects++;
+            ctx->shared.isr_eager_rejects++;
             return;
         }
         staged = dll_isr_consume_isdu_write(ctx, frame, len);
@@ -121,7 +121,7 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
         /* 与历史即时路径统计一致：非 Type-0 形状的坏帧计为拒绝，
          * 错误/回退处理仍由主泵负责。 */
         if (dll_phy_has_tx(&ctx->shared) && !dll_ckt_is_type0(frame[1])) {
-            ctx->shared.isr->isr_eager_rejects++;
+            ctx->shared.isr_eager_rejects++;
         }
         /* 非法帧不解释内容、不计计划未命中：交给主泵做错误/状态处理。 */
         (void) dll_isr_publish_frame(ctx, frame, len, 0U);

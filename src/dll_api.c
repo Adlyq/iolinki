@@ -24,9 +24,6 @@
 
 void iolink_dll_request_back_to_box(iolink_dll_main_t* ctx)
 {
-    if (ctx == NULL) {
-        return;
-    }
     ctx->back_to_box_pending = true;
     ctx->back_to_box_cycles = 0U;
 }
@@ -37,12 +34,11 @@ void iolink_dll_request_back_to_box(iolink_dll_main_t* ctx)
 
 iolink_phy_mode_t iolink_dll_get_phy_mode(const iolink_dll_main_t* ctx)
 {
-    return (ctx != NULL) ? ctx->phy_mode : IOLINK_PHY_MODE_SIO;
+    return ctx->phy_mode;
 }
 
-iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_main_t* ctx)
+iolink_baudrate_t iolink_dll_get_baudrate(void)
 {
-    (void) ctx;
     return IOLINK_COM_BAUDRATE;
 }
 
@@ -54,9 +50,6 @@ iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_main_t* ctx)
  * 向上取整到 0.1 ms 单位，并钳制到 Table B.3 的 0.4 ms 下限与应用下限。 */
 uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx)
 {
-    if (ctx == NULL) {
-        return 0U;
-    }
     const uint32_t baud = dll_get_baud_hz(ctx);
     const uint32_t pdi = ctx->shared.pd_in_len;
     const uint32_t pdo = ctx->shared.pd_out_len_current;
@@ -89,7 +82,6 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx)
 void iolink_dll_get_pd_length(const iolink_dll_main_t* ctx, uint8_t* IOLINK_NULLABLE pd_in_len,
                               uint8_t* IOLINK_NULLABLE pd_out_len)
 {
-    if (ctx == NULL) return;
     if (pd_in_len) *pd_in_len = ctx->shared.pd_in_len;
     if (pd_out_len) *pd_out_len = ctx->shared.pd_out_len_current;
 }
@@ -131,7 +123,6 @@ int iolink_dll_set_sdci_mode(iolink_dll_main_t* ctx)
 
 void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_stats)
 {
-    if ((ctx == NULL) || (out_stats == NULL)) return;
     out_stats->crc_errors = ctx->crc_errors;
     out_stats->timeout_errors = IOLINK_STAT_TOTAL(ctx, timeout_errors);
     out_stats->idle_timeouts = ctx->idle_timeouts;
@@ -141,24 +132,24 @@ void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_
     out_stats->t_cycle_violations = ctx->t_cycle_violations;
     out_stats->t_byte_violations = ctx->t_byte_violations;
     out_stats->t_pd_violations = ctx->t_pd_violations;
-    out_stats->total_retries = ctx->total_retries;
+    out_stats->invalid_frames = ctx->invalid_frames;
     out_stats->voltage_faults = ctx->voltage_faults;
     out_stats->overtemp_faults = ctx->overtemp_faults;
     out_stats->short_circuits = ctx->short_circuits;
     out_stats->isr_tx_dropped = IOLINK_STAT_TOTAL(ctx, isr_tx_dropped);
     out_stats->isr_od_overruns = ctx->shared.isdu.req_overruns;
     out_stats->isr_plan_misses = ctx->shared.isr_plan_misses;
+    out_stats->isr_eager_rejects = ctx->shared.isr_eager_rejects;
     out_stats->isr_mailbox_drops = ctx->shared.isr_mailbox_drops;
     out_stats->isr_frames_consumed = ctx->shared.isr_frames_consumed;
     out_stats->isr_frames_handoff = ctx->shared.isr_frames_handoff;
     out_stats->t_pd_discards = ctx->t_pd_discards;
     out_stats->reply_plan_overflows = ctx->reply_plan_overflows;
+    out_stats->pd_in_skips = ctx->pd_in_skips;
 }
 
 void iolink_dll_reset_error_counters(iolink_dll_main_t* ctx)
 {
-    if (ctx == NULL) return;
-
     IOLINK_CRITICAL_ENTER();
     ctx->crc_errors = 0U;
     ctx->shared.timeout_errors = 0U;
@@ -173,8 +164,6 @@ void iolink_dll_reset_error_counters(iolink_dll_main_t* ctx)
 
 void iolink_dll_reset_diagnostics(iolink_dll_main_t* ctx)
 {
-    if (ctx == NULL) return;
-
     /* B.2.20/Table 101：ErrorCount 统计上电或复位以来的错误，
        诊断/状态由重置 SystemCommand 清除。事件
        引擎拥有 DeviceStatus 和 DetailedDeviceStatus；reset() 保留
@@ -187,10 +176,7 @@ void iolink_dll_reset_diagnostics(iolink_dll_main_t* ctx)
 
 uint8_t iolink_dll_expected_req_len(const iolink_dll_main_t* ctx, uint8_t mc)
 {
-    if (ctx == NULL) {
-        return 0U;
-    }
-    /* 公共查询问的是“若主站按当前配置发送，这条请求有多长”，
+    /* 本查询问的是“若主站按当前配置发送，这条请求有多长”，
        所以 CKT 取期望的类型位，而不是某个真实帧自报的类型。 */
     return dll_req_len_for(ctx, mc, dll_expected_type_bits(ctx));
 }

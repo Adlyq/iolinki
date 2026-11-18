@@ -92,9 +92,6 @@ static void test_expected_req_len_operate(void** state)
     dll.main.shared.state = IOLINK_DLL_STATE_STARTUP;
     assert_int_equal(iolink_dll_expected_req_len(&dll.main, 0x60U), 3U);
     assert_int_equal(iolink_dll_expected_req_len(&dll.main, 0x80U), 2U);
-
-    /* NULL 上下文是安全的。 */
-    assert_int_equal(iolink_dll_expected_req_len(TEST_NULL(const iolink_dll_main_t*), 0x80U), 0U);
 }
 
 /* 未调用 iolink_dll_init() 时 shared.isr 为 NULL；所有 ISR 入口必须安全返回，
