@@ -93,6 +93,39 @@ jobs:
       - name: Test
         run: ctest --test-dir build/release --output-on-failure
 
+  # Static analysis that needs a compiler: the gcc-only diagnostics, the unit
+  # suite under the sanitizers, the clang static analyzer and the ISR/main
+  # field ownership gate.
+  #
+  # `context` is report-only while the context split is in progress: it exits 0
+  # and prints the findings. The change that removes the last finding switches
+  # the checker to `--enforce` in tools/gates.sh; this job then fails on any
+  # new violation without a workflow edit.
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential clang libcmocka-dev
+      - name: gcc diagnostics, sanitizers, analyzer, field ownership
+        run: ./tools/gates.sh gcc sanitize analyzer context
+
+  # Documentation cannot drift from the code: the generated blocks (error
+  # codes, stats fields, public API, field ownership) are compared verbatim
+  # against their sources and Doxygen must stay warning-free.
+  docs-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen
+      - name: Generated documentation blocks and Doxygen
+        run: ./tools/gates.sh docs
+
   # Lint the maintained CI/test scripts. Keep this list in sync with the
   # shellcheck step in tools/gates.sh.
   lint-scripts:
