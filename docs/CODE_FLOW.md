@@ -177,10 +177,11 @@ flowchart LR
     SH --> CAP["caps<br/>iolink_caps_t"]
     SH --> ISDU["isdu<br/>iolink_isdu_ctx_t"]
     SH --> EV["events<br/>iolink_events_ctx_t"]
-    SH --> BUF["frame_buf / pd_in / pd_out / isr_tx_payload"]
+    SH --> BUF["pd_in[] / isr_tx_payload"]
     SH --> RING["isr_frame_ring"]
     SH --> PLAN["reply_plan[] + reply_plans_ready"]
     MAIN --> DS["dll.main.ds<br/>iolink_ds_ctx_t"]
+    MAIN --> FB["frame_buf / pd_out / req_len"]
     MAIN --> TMR["timers[] + next_deadline"]
     EV --> COND["diag<br/>iolink_conditions_t"]
 
@@ -236,6 +237,7 @@ PHY 上下文，以及 `on_change`/`ds_flag_persist` 访问的应用 NVM。
   - 因此它们不是主上下文私有状态；`dll_timer_sync_master_lost()` 必须接受"刚被 ISR 清零"的结果，而 `iolink_device_master_lost()` 读到的是最后一次写入的值。
 - `startup_notification_pending` 同样位于 `iolink_dll_main_t`：ISR 在 `dll_set_state(STARTUP)` 时置 1，主上下文的 `iolink_dll_flush_state_callbacks()` 读后清 0。
 - `total_retries` 与 `frame_index` 会被 ISR 的 0x97 计划动作经 `dll_apply_master_command()` → `dll_protocol_error_to_startup()` 写入；`total_retries` 也在主上下文的 `dll_handle_frame_error()` 中自增。
+- `fallback_clear_request` 同样位于 `iolink_dll_main_t`：`dll_apply_master_command()` 在 0x98/0x99/0x9A 时置 1，而该函数会从 ISR 的 `IOLINK_REPLY_ACT_MASTER_COMMAND` 计划动作调用；主泵在 `dll_apply_isr_deadline_requests()` 中清 0，并在离开 FALLBACK 时取消 T_FBD。
 - 其余 `iolink_dll_main_t` 字段（`timers`/`next_deadline`、`frame_buf`/`req_len`、`ds`、`last_notified_state`、`pd_out` 等）只在主上下文读写；`iolink_dll_isr_t` 只由数据 ISR 读写。
 
 对象级的移交机制与租约（谁在什么时候把哪个缓冲交给谁）见 12.2 节。
@@ -355,10 +357,10 @@ flowchart TD
     E --> F["dll_isdu_sync_snapshot()<br/>发布 ISR 读视图"]
     F --> G["dll_poll_diagnostics()<br/>dll_timer_sync_*<br/>dll_timers_dispatch(phase 0)"]
     G --> G1{"t_pd 窗口 或<br/>SIO 唤醒处理命中?"}
-    G1 -- 是（提前返回） --> H
+    G1 -- "是（提前返回）" --> H
     G1 -- 否 --> G2["dll_timers_dispatch(phase 1)"]
     G2 --> G3{"唤醒窗口内?"}
-    G3 -- 是（提前返回） --> H
+    G3 -- "是（提前返回）" --> H
     G3 -- 否 --> G4["dll_consume_isr_mailbox()"]
     G4 --> K["dll_process_complete_frame()<br/>校验 → 状态机表分发"]
     K --> K1["dll_handle_frame_error()<br/>dll_finish_frame()"]
@@ -832,7 +834,7 @@ sequenceDiagram
 | `phy.request_service` | `dll_send()` 暂存后 | 请求 PHY 触发数据中断 |
 | `phy.int_active` | ISR 门控 | 判断收发器是否请求服务 |
 | `phy.response_timer_start/stop` | ISR RX/TX | t_A 看门狗 |
-| `phy.stack_timer_start` | ISR 收到有效帧后 / 计划的 `RESTART_TIMER_B` | 请求 Timer B 授权主循环服务窗口 |
+| `phy.stack_timer_start` | ISR 发完即时应答时（TX BYTE 帧末）/ 命中计划的 `RESTART_TIMER_B` | 请求 Timer B 授权主循环服务窗口 |
 | `phy.detect_wakeup` | `dll_handle_sio_wakeup()` | SIO 唤醒检测 |
 | `iolink_critical_enter/exit` | 诊断条件表与 `isr_pulse` 消费、事件队列读/clear、计数器清零、应答暂存发布/取走、SIO 切换清理、Timer A 相位复位 | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
 | `on_state_change` | `device_state_cb()` | 当前状态（电平式；主上下文迁移立即投递，ISR 迁移合并） |
