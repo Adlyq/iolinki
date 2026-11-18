@@ -421,7 +421,7 @@ void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_
  */
 static uint8_t device_pd_in_free_index(const iolink_dll_main_t* dll)
 {
-    const uint8_t active = dll->shared.pd_in_active;
+    const uint8_t active = IOLINK_PD_PUB_ACTIVE(dll_pd_pub_load(&dll->shared));
     const uint8_t captured = dll->shared.pd_in_captured;
     for (uint8_t i = 0U; i < IOLINK_PD_IN_BUFFERS; i++) {
         if ((i != active) && (i != captured)) {
@@ -554,25 +554,21 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
                                        ctx->dll.main.shared.pd_out_len_current);
     }
     if (iolink_caps_has(ctx->dll.main.shared.caps, IOLINK_CAP_PD_IN_CALLBACK)) {
-        /* 填写一个 ISR 未在流式发送的缓冲区，然后原子地发布，
-         * 使 ISR 永远不会发送撕裂的 PD 输入。回调的返回值
-         * 即 PD 有效标志。 */
+        /* 填写一个 ISR 未在流式发送的缓冲区，然后发布，使 ISR
+         * 永远不会发送撕裂的 PD 输入。回调的返回值即 PD 有效标志。 */
         const uint8_t inactive = device_pd_in_free_index(&ctx->dll.main);
         if (inactive == 0xFFU) {
             ctx->dll.main.pd_in_skips++; /* 每个备用缓冲区都被租用 */
             return;                      /* 保留当前 PD 输入并在下一周期重试 */
         }
-        /* 在临界区之外填写空闲缓冲区：在此期间 ISR
-         * 继续发送已捕获的副本。 */
+        /* 填写空闲缓冲区时 ISR 继续发送已捕获的副本；发布本身只是
+         * 一次原子存储，没有临界区。 */
         const bool valid = ctx->config->app->on_pd_input(
             ctx->config->app->self,
             &ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.od_width],
             ctx->dll.main.shared.pd_in_len);
 
-        IOLINK_CRITICAL_ENTER();
-        ctx->dll.main.pd_valid = valid;
-        ctx->dll.main.shared.pd_in_active = inactive;
-        IOLINK_CRITICAL_EXIT();
+        dll_pd_publish(&ctx->dll.main.shared, inactive, valid);
     }
 }
 
@@ -613,22 +609,18 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     }
 
     /* PD 输入位于应答缓冲区中 OD 头之后；填写一个
-     * ISR 未在流式发送的缓冲区，并用原子索引交换发布。没有空闲
+     * ISR 未在流式发送的缓冲区，然后发布。没有空闲
      * 缓冲区意味着 ISR 仍占用全部缓冲区：保留当前 PD 输入。 */
     const uint8_t inactive = device_pd_in_free_index(&ctx->dll.main);
     if (inactive == 0xFFU) {
         ctx->dll.main.pd_in_skips++; /* 每个备用缓冲区都被租用：稍后重试 */
         return -1;
     }
-    /* 在临界区之外填写空闲缓冲区：ISR 只会
-     * 捕获 pd_in_active，因此既非活动也未被捕获的缓冲区
-     * 不会被它读取。只有发布（有效性、索引）必须对 ISR 是原子的；
-     * 长度在初始化后不再变化。 */
+    /* ISR 只会捕获已发布的索引，因此既非活动也未被捕获的缓冲区
+     * 不会被它读取。填充在发布之前完成，发布是一次原子存储
+     * （fence + store），不需要临界区；PD 长度在初始化后不再变化。 */
     (void) memcpy(&ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.od_width], data, len);
-    IOLINK_CRITICAL_ENTER();
-    ctx->dll.main.pd_valid = valid;
-    ctx->dll.main.shared.pd_in_active = inactive;
-    IOLINK_CRITICAL_EXIT();
+    dll_pd_publish(&ctx->dll.main.shared, inactive, valid);
 
     return 0;
 }

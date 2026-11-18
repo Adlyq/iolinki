@@ -289,8 +289,7 @@ static void init_operate(void)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 1U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_valid = true;
-    s_dll.main.shared.pd_in_active = 0U;
+    test_pd_publish(&s_dll.main, 0U, true);
     s_dll.main.shared.pd_in[0][1] = 0x5AU; /* PD-in 槽位（OD 头之后） */
     s_now_us = 1000000U;
     tx_reset();
@@ -311,7 +310,7 @@ static void init_preoperate(void)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 0U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_valid = true;
+    test_pd_set_valid(&s_dll.main, true);
     s_now_us = 1000000U;
     tx_reset();
     TEST_TX_IDLE();
@@ -330,7 +329,7 @@ static void init_preoperate_rx_only(void)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 0U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_valid = true;
+    test_pd_set_valid(&s_dll.main, true);
     s_now_us = 1000000U;
     tx_reset();
     TEST_TX_IDLE();
@@ -523,6 +522,93 @@ static int test_type0_page_write_is_answered(void)
     return 0;
 }
 
+/* PD-in 发布字：ISR 捕获的 active 与它上报的有效位取自同一次加载，
+ * 主上下文的下一次发布只影响之后的那一代。 */
+static int test_pd_publish_is_single_word(void)
+{
+    init_operate();
+
+    /* 第一代：active 0、有效。 */
+    tx_reset();
+    feed_process_read();
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if ((tx_observed_len() != 3U) || (s_tx_q[1] != 0x5AU) || ((s_tx_q[2] & 0x40U) != 0U)) {
+        return 1;
+    }
+
+    /* 第二代：active 1、无效。应答同时切换缓冲区与 CKS 位。 */
+    s_dll.main.shared.pd_in[1][s_dll.main.shared.od_width] = 0xA5U;
+    test_pd_publish(&s_dll.main, 1U, false);
+    tx_reset();
+    feed_process_read();
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if ((tx_observed_len() != 3U) || (s_tx_q[1] != 0xA5U) || ((s_tx_q[2] & 0x40U) == 0U)) {
+        return 2;
+    }
+    return 0;
+}
+
+/* 0x98/0x99 的 PD 有效位覆盖只作用于命令所在的那一代：主上下文下一次
+ * 发布即恢复应用值（Type-0 下这两条命令由数据 ISR 应用）。 */
+static int test_pd_valid_command_is_generation_scoped(void)
+{
+    init_preoperate();
+
+    /* 0x99 DeviceOperate：仅 CKS 应答，PD 无效位置位。 */
+    uint8_t cmd[3];
+    make_frame(IOLINK_MC_CHANNEL_PAGE, IOLINK_MSEQ_TYPE_0, cmd, sizeof(cmd));
+    cmd[2] = IOLINK_CMD_DEVICE_OPERATE;
+    cmd[1] = IOLINK_MSEQ_TYPE_0;
+    cmd[1] = (uint8_t) (cmd[1] | test_expected_checksum6(cmd, sizeof(cmd)));
+    tx_reset();
+    feed(cmd, sizeof(cmd), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if ((tx_observed_len() != 1U) || ((s_tx_q[0] & 0x40U) == 0U)) {
+        return 1;
+    }
+    if (test_pd_valid(&s_dll.main)) {
+        return 2; /* 命令对本代生效 */
+    }
+
+    /* 应用发布新的一代：命令作废，恢复应用给出的有效位。 */
+    test_pd_publish(&s_dll.main, 0U, true);
+    if (!test_pd_valid(&s_dll.main)) {
+        return 3;
+    }
+    /* 数据 ISR 下一次进入时撤回已过代的命令字（单写者清理，因此 8 位
+     * 代号回绕后不会重新对上一条早已失效的命令）。 */
+    iolink_dll_process_isr(&s_dll.main);
+    if (iolink_atomic_load(&s_dll.main.shared.pd_valid_cmd) != 0U) {
+        return 4;
+    }
+
+    /* 应用改报无效，随后收到 0x98：命令在本代内抬回有效。 */
+    test_pd_publish(&s_dll.main, 0U, false);
+    cmd[2] = IOLINK_CMD_PROCESS_DATA_OPERATE;
+    cmd[1] = IOLINK_MSEQ_TYPE_0;
+    cmd[1] = (uint8_t) (cmd[1] | test_expected_checksum6(cmd, sizeof(cmd)));
+    tx_reset();
+    feed(cmd, sizeof(cmd), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if ((tx_observed_len() != 1U) || ((s_tx_q[0] & 0x40U) != 0U)) {
+        return 5;
+    }
+    if (!test_pd_valid(&s_dll.main)) {
+        return 6;
+    }
+
+    /* 主上下文下一次发布即恢复应用值（不会永久粘住）。 */
+    test_pd_publish(&s_dll.main, 0U, false);
+    if (test_pd_valid(&s_dll.main)) {
+        return 7;
+    }
+    return 0;
+}
+
 /* 没有绑定设备身份时，DPP1 页读必须保持沉默：既不能发全零页（ISR 快路），
  * 也不能由主泵的启动探测补一个臆造页。 */
 static int test_page_read_without_identity_is_dropped(void)
@@ -534,7 +620,7 @@ static int test_page_read_without_identity_is_dropped(void)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 0U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_valid = true;
+    test_pd_set_valid(&s_dll.main, true);
     s_now_us = 1000000U;
     tx_reset();
     TEST_TX_IDLE();
@@ -1294,7 +1380,7 @@ static int test_init_publishes_default_plan(void)
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     s_dll.main.shared.clock.time_us = plan_time_us;
-    s_dll.main.pd_valid = true;
+    test_pd_set_valid(&s_dll.main, true);
     s_now_us = 1000000U;
     tx_reset();
     TEST_TX_IDLE();
@@ -1351,8 +1437,7 @@ static int test_tx_without_done_hook(void)
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 1U;
     s_dll.main.shared.pd_out_len_current = 0U;
-    s_dll.main.pd_valid = true;
-    s_dll.main.shared.pd_in_active = 0U;
+    test_pd_publish(&s_dll.main, 0U, true);
     s_dll.main.shared.pd_in[0][1] = 0x5AU;
     s_now_us = 1000000U;
     tx_reset();
@@ -1397,6 +1482,8 @@ IOLINK_TEST_RC(test_process_does_not_republish)
 IOLINK_TEST_RC(test_tx_without_done_hook)
 #endif
 IOLINK_TEST_RC(test_type0_page_write_is_answered)
+IOLINK_TEST_RC(test_pd_publish_is_single_word)
+IOLINK_TEST_RC(test_pd_valid_command_is_generation_scoped)
 IOLINK_TEST_RC(test_page_read_without_identity_is_dropped)
 IOLINK_TEST_RC(test_operate_page_read_uses_identity)
 IOLINK_TEST_RC(test_plan_hit_without_tx_is_deferred)
@@ -1438,6 +1525,8 @@ int main(void)
         cmocka_unit_test(iolink_case_test_tx_without_done_hook),
 #endif
         cmocka_unit_test(iolink_case_test_type0_page_write_is_answered),
+        cmocka_unit_test(iolink_case_test_pd_publish_is_single_word),
+        cmocka_unit_test(iolink_case_test_pd_valid_command_is_generation_scoped),
         cmocka_unit_test(iolink_case_test_page_read_without_identity_is_dropped),
         cmocka_unit_test(iolink_case_test_operate_page_read_uses_identity),
         cmocka_unit_test(iolink_case_test_plan_hit_without_tx_is_deferred),

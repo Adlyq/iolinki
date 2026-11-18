@@ -91,8 +91,9 @@ void iolink_critical_exit(void);
 这两个钩子；如果仍在用 weak 默认实现，初始化返回
 `IOLINK_DEVICE_INIT_ERR_CRITICAL`。实现必须可嵌套（`exit` 恢复对应 `enter` 保存的
 屏蔽状态），并能在 ISR 双泵下保护库实际取锁的短操作：诊断条件表、事件队列的
-读/clear、PD-in 索引发布、计数器清零、SIO 切换的应答槽清理与 ISR 相位复位
-（见 `docs/CODE_FLOW.md` 第 12 节的临界区审计）。
+读/clear、计数器清零、SIO 切换的应答槽清理与 ISR 相位复位
+（见 `docs/CODE_FLOW.md` 第 12 节的临界区审计）。PD-in 发布不取锁：主上下文
+用一次原子存储发布 `pd_pub`，数据 ISR 只加载一次。
 
 `iolink_device_app_t::time_us` 是必需的。`iolink_device_init()` 在 `config.app`
 为 NULL 时返回 `IOLINK_DEVICE_INIT_ERR_APP`，在 `app->time_us` 为 NULL 时返回

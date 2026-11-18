@@ -268,13 +268,13 @@ static void test_t_pd_window_drops_frames(void** state)
     (void) memcpy(rec->data, frame, sizeof(frame));
     iolink_ring_publish(&ctx.main.shared.isr_frame_ring);
 
-    ctx.main.pd_valid = false;
+    test_pd_set_valid(&ctx.main, false);
     const uint32_t framing_before = ctx.main.shared.framing_errors;
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.t_pd_violations, 1U);
     assert_int_equal(ctx.main.shared.framing_errors, framing_before);
     assert_int_equal(ctx.main.shared.state, IOLINK_DLL_STATE_OPERATE);
-    assert_true(ctx.main.pd_valid);
+    assert_true(test_pd_valid(&ctx.main));
     assert_int_equal(ctx.main.last_valid_frame_ms, (uint32_t) (g_now / 1000U));
     assert_int_equal(ctx.main.last_response_us, g_now);
 }

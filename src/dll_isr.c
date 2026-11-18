@@ -280,14 +280,17 @@ static void dll_isr_isdu_od(iolink_dll_main_t* ctx, uint8_t flowctrl, uint8_t* o
     }
 }
 
-/* CKS 状态标志：事件（bit7）+ PD 无效（bit6）。ISR 安全（普通读取）。 */
-static uint8_t dll_isr_status_flags(const iolink_dll_main_t* ctx)
+/* CKS 状态标志：事件（bit7）+ PD 无效（bit6）。ISR 安全（普通读取）。
+ *
+ * @p pub 是本帧开始时加载的 PD-in 发布字：状态位与稍后捕获的
+ * active 索引因此取自同一代，主上下文的发布不会让一条应答混用两代。 */
+static uint8_t dll_isr_status_flags(const iolink_dll_main_t* ctx, IOLINK_ATOMIC_UINT_T pub)
 {
     uint8_t flags = 0U;
     if (DLL_EVENTS_FLAG(&ctx->shared.events)) {
         flags |= 0x80U;
     }
-    flags |= dll_pd_status_flags(ctx);
+    flags |= dll_pd_status_flags_at(ctx, pub);
     return flags;
 }
 
@@ -682,7 +685,8 @@ bool dll_isr_plan_execute(iolink_dll_main_t* ctx, const iolink_reply_plan_t* pla
         return true;
     }
 
-    const uint8_t flags = dll_isr_status_flags(ctx);
+    const IOLINK_ATOMIC_UINT_T pd = dll_pd_pub_load(&ctx->shared);
+    const uint8_t flags = dll_isr_status_flags(ctx, pd);
 
     if ((plan->flags & IOLINK_REPLY_FLAG_PD_TAIL) != 0U) {
         /* 长应答零拷贝：OD 头写入活动 PD-in 槽位，PD 尾部紧随其后。
@@ -691,7 +695,8 @@ bool dll_isr_plan_execute(iolink_dll_main_t* ctx, const iolink_reply_plan_t* pla
         if (dll_isr_phy_busy(ctx) || (plan->len > ctx->shared.od_width)) {
             return false;
         }
-        const uint8_t captured = ctx->shared.pd_in_active;
+        /* 与状态位同一个发布字：捕获的缓冲区就是这一代的 active 槽。 */
+        const uint8_t captured = IOLINK_PD_PUB_ACTIVE(pd);
         uint8_t* buf = ctx->shared.pd_in[captured];
         if (!dll_isr_plan_source(ctx, plan, addr, buf)) {
             return false;
@@ -734,11 +739,33 @@ static void dll_isr_tx_pending(iolink_dll_main_t* ctx)
     dll_isr_start_staged_tx(ctx, slot, len, has_cks);
 }
 
+/**
+ * @brief 撤回已过代的 PD 有效位命令（ISR 单写者）。
+ *
+ * 命令字只覆盖它记录的那一代；主上下文下一次发布之后它即失效。撤回由
+ * 它唯一的写者完成：否则 8 位代号回绕到同一个值时，一条早已失效的命令
+ * 会重新对上当前一代。每次进入泵都检查一次，回绕因此需要连续
+ * 256 次发布之间没有任何数据中断。
+ */
+static void dll_isr_retire_pd_cmd(iolink_dll_main_t* ctx)
+{
+    const IOLINK_ATOMIC_UINT_T cmd = iolink_atomic_load(&ctx->shared.pd_valid_cmd);
+    if (IOLINK_PD_CMD_VALID(cmd) == 0U) {
+        return;
+    }
+    if (IOLINK_PD_CMD_BASE_GEN(cmd) == IOLINK_PD_PUB_GEN(dll_pd_pub_load(&ctx->shared))) {
+        return;
+    }
+    iolink_atomic_store(&ctx->shared.pd_valid_cmd, 0U);
+}
+
 static void dll_isr_process(iolink_dll_main_t* ctx)
 {
     if ((ctx == NULL) || !dll_phy_has_rx(&ctx->shared) || (ctx->shared.phy->int_active == NULL)) {
         return;
     }
+
+    dll_isr_retire_pd_cmd(ctx);
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     /* 上一次应答的租约在本入口回收，且必须在任何新捕获之前：

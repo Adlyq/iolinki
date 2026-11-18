@@ -55,8 +55,7 @@ static void test_lease_recovery_and_skip_counter(void** state)
 
     /* 模拟在应答中途卡住的收发器：尽管没有应答在传输中，ISR 的捕获
      * 仍被记录。 */
-    test_dll_shared(&dev.ctx)->pd_in_captured =
-        (uint8_t) (test_dll_shared(&dev.ctx)->pd_in_active ^ 1U);
+    test_dll_shared(&dev.ctx)->pd_in_captured = (uint8_t) (test_pd_active(test_dll(&dev.ctx)) ^ 1U);
     test_dll_shared(&dev.ctx)->isr_tx_active = 0U;
 
     /* 无空闲缓冲区：每次更新都被跳过并计数，绝不静默。 */

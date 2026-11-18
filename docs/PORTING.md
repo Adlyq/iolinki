@@ -182,6 +182,28 @@ are a volatile access plus that barrier, so a port that needs real
 acquire/release instructions selects the `SMP` grade (or a device barrier) and
 supplies the matching `*_IMPL()` macro.
 
+#### PD-in publish contract
+
+Process input reaches the data ISR through one publish word per update. The main
+context fills a buffer that is neither the published one nor the one the ISR has
+captured, then writes `shared.pd_pub` (`{active, valid, gen}`) with
+`IOLINK_FENCE()` plus a single atomic store. The data ISR loads that word once
+per reply and uses the same generation for the buffer it captures and for the
+CKS PD-valid bit, so the hand-off needs no critical section and a port provides
+no primitive for it beyond the atomic width and barrier grades above. Two
+consequences: the word must be naturally aligned (the `IOLINK_ATOMIC_UINT_T`
+contract), and at the `DEVICE`/`SMP` grades the barrier must really order the
+buffer writes before the store, because the PHY/DMA streams the PD bytes from
+that buffer while the main context prepares the next one.
+
+`0x98`/`0x99` (PROCESS_DATA_OPERATE / DEVICE_OPERATE) override the valid bit
+from the data ISR through a second single-writer word, `shared.pd_valid_cmd`,
+tagged with the `pd_pub` generation it applies to. The override therefore lives
+exactly one generation: the next application update restores the value the
+application published, and the ISR drops the stale command word on its next
+entry. Ports do not need to do anything for it; it is one more 32-bit word in
+the shared region.
+
 #### Critical-section contract
 
 `iolink_critical_enter()` / `iolink_critical_exit()` must:

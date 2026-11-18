@@ -541,7 +541,7 @@ static void test_isdu_pdin_descriptor_read(void** state)
      * 0x0028 必须在该长度下提供过程数据）。 */
     dll.shared.pd_in_len = 3U;
     dll.shared.pd_out_len_current = 0U;
-    dll.pd_valid = true;
+    test_pd_publish(&dll, 0U, true);
     dll.shared.pd_in[0][dll.shared.od_width + 0U] = 0x11U;
     dll.shared.pd_in[0][dll.shared.od_width + 1U] = 0x22U;
     dll.shared.pd_in[0][dll.shared.od_width + 2U] = 0x33U;

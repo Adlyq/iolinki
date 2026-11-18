@@ -147,8 +147,9 @@ void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
                 len = (uint8_t) IOLINK_PD_IN_MAX_SIZE;
             }
             if (len > 0U) {
-                const uint8_t* pdi =
-                    &dll->shared.pd_in[dll->shared.pd_in_active][dll->shared.od_width];
+                /* 与 ISR 捕获同一条规则：active 取自一次发布字加载。 */
+                const uint8_t active = IOLINK_PD_PUB_ACTIVE(dll_pd_pub_load(&dll->shared));
+                const uint8_t* pdi = &dll->shared.pd_in[active][dll->shared.od_width];
                 (void) memcpy(ctx->response_buf, pdi, len);
             }
         }

@@ -228,7 +228,7 @@ static void test_process_data_input_returns_pd(void** state)
     iolink_dll_shared_t* shared = test_dll_shared(&dev);
     shared->pd_in_len = 2U;
     shared->pd_out_len_current = 0U;
-    test_dll(&dev)->pd_valid = true;
+    test_pd_set_valid(test_dll(&dev), true);
     shared->pd_in[0][shared->od_width + 0U] = 0x11U;
     shared->pd_in[0][shared->od_width + 1U] = 0x22U;
 
@@ -249,7 +249,7 @@ static void test_process_data_input_invalid_still_serves_buffer(void** state)
     (void) memset(&dev, 0, sizeof(dev));
     iolink_dll_shared_t* shared = test_dll_shared(&dev);
     shared->pd_in_len = 2U;
-    test_dll(&dev)->pd_valid = false;
+    test_pd_set_valid(test_dll(&dev), false);
     shared->pd_in[0][shared->od_width + 0U] = 0x11U;
     shared->pd_in[0][shared->od_width + 1U] = 0x22U;
 
@@ -297,7 +297,7 @@ static void test_process_data_80xx_is_positive(void** state)
     iolink_device_ctx_t dev;
     (void) memset(&dev, 0, sizeof(dev));
     test_dll_shared(&dev)->pd_in_len = 2U;
-    test_dll(&dev)->pd_valid = true;
+    test_pd_set_valid(test_dll(&dev), true);
     test_dll_shared(&dev)->pd_in[0][test_dll_shared(&dev)->od_width + 0U] = 0x80U;
     test_dll_shared(&dev)->pd_in[0][test_dll_shared(&dev)->od_width + 1U] = 0x42U;
 

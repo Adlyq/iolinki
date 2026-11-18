@@ -152,7 +152,7 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     dll->main.shared.od_width = 1U;
     dll->main.shared.pd_out_len_current = 0U;
     dll->main.shared.pd_in_len = 0U;
-    dll->main.pd_valid = true;
+    test_pd_set_valid(&dll->main, true);
     /* 计划表只在初始化时编译；本用例在 init 之后改了类型/宽度，故显式重发。 */
     iolink_dll_publish_reply_plans(&dll->main);
     g_frame_ready = 0U;

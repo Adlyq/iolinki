@@ -215,13 +215,17 @@ typedef struct iolink_dll_shared
 
     /* 过程数据缓冲区。PD-in 缓冲区同时用作应答发送缓冲区：
      * 布局为 [OD][PD-in][CKS]。主上下文填充一个既非活动
-     * 也未被 ISR 持有的缓冲区，然后原子地切换；ISR 在应答
-     * 开始时捕获活动副本并流式发送（零拷贝）。缓冲区数量
+     * 也未被 ISR 持有的缓冲区，然后发布 `pd_pub`；ISR 在应答
+     * 开始时捕获同一代的 active 与 valid 并流式发送（零拷贝）。缓冲区数量
      * 取决于 TX 模式（见 IOLINK_PD_IN_BUFFERS）：若无空闲缓冲区，
      * 主上下文保留当前 PD-in 并在下一个周期重试。 */
     uint8_t pd_in[IOLINK_PD_IN_BUFFERS][IOLINK_PD_REPLY_MAX]; /**< [OD][PD-in][CKS] 应答缓冲区 */
 
-    volatile uint8_t pd_in_active; /**< 活动 PD 应答缓冲区索引 */
+    volatile IOLINK_ATOMIC_UINT_T pd_pub; /**< PD-in 发布字 `{active, valid, gen}`
+                                              （主上下文单写） */
+
+    volatile IOLINK_ATOMIC_UINT_T pd_valid_cmd; /**< PD 有效位命令字
+                                                    `{value, base_gen, valid}`（数据 ISR 单写） */
 
     volatile uint8_t pd_in_captured; /**< ISR 正在流式发送的缓冲区（0xFF = 无）；
                                           TX BYTE 帧末释放，TX FRAME 由 ISR 在下次
@@ -242,6 +246,79 @@ typedef struct iolink_dll_shared
 
     iolink_log_sink_t log; /**< 日志汇点（默认静默；设备层绑定） */
 } iolink_dll_shared_t;
+
+/**
+ * @name PD-in 发布字
+ *
+ * 主上下文是 @ref iolink_dll_shared_t::pd_pub 的唯一写者：填完应答缓冲区后
+ * 一次原子存储发布 `{active, valid, gen}`（release 屏障在 `iolink_atomic_store()`
+ * 内）。数据 ISR 只做一次加载，因此它捕获的 active 与随后上报的 valid 取自
+ * 同一代；每次发布把 `gen` 前进一格。
+ *
+ * 位布局：`active[7:0] | valid[8] | gen[23:16]`。
+ * @{
+ */
+#define IOLINK_PD_PUB_ACTIVE(word) ((uint8_t) ((word) & 0xFFU))
+#define IOLINK_PD_PUB_VALID(word) ((uint8_t) (((word) >> 8) & 0x01U))
+#define IOLINK_PD_PUB_GEN(word) ((uint8_t) (((word) >> 16) & 0xFFU))
+#define IOLINK_PD_PUB_WORD(active, valid, gen)           \
+    ((IOLINK_ATOMIC_UINT_T) (uint8_t) (active) |         \
+     ((IOLINK_ATOMIC_UINT_T) ((valid) ? 1U : 0U) << 8) | \
+     ((IOLINK_ATOMIC_UINT_T) (uint8_t) (gen) << 16))
+/** @} */
+
+/**
+ * @name PD 有效位命令字
+ *
+ * 数据 ISR 是 @ref iolink_dll_shared_t::pd_valid_cmd 的唯一写者：执行
+ * 0x98 `PROCESS_DATA_OPERATE` / 0x99 `DEVICE_OPERATE` 时记录命令值与当时
+ * @ref iolink_dll_shared_t::pd_pub 的 `gen`。读侧只在 `base_gen` 仍等于当前
+ * gen 时采用命令值，因此该覆盖只影响命令所在的那一代：主上下文下一次发布
+ * 即恢复应用给出的有效位。失效的命令由 ISR 自己撤回（见 dll_isr.c）。
+ *
+ * 位布局：`value[0] | base_gen[15:8] | valid[16]`。
+ * @{
+ */
+#define IOLINK_PD_CMD_VALUE(word) ((uint8_t) ((word) & 0x01U))
+#define IOLINK_PD_CMD_BASE_GEN(word) ((uint8_t) (((word) >> 8) & 0xFFU))
+#define IOLINK_PD_CMD_VALID(word) ((uint8_t) (((word) >> 16) & 0x01U))
+#define IOLINK_PD_CMD_WORD(value, base_gen)       \
+    ((IOLINK_ATOMIC_UINT_T) ((value) ? 1U : 0U) | \
+     ((IOLINK_ATOMIC_UINT_T) (uint8_t) (base_gen) << 8) | ((IOLINK_ATOMIC_UINT_T) 1U << 16))
+/** @} */
+
+/** @brief 读取当前一代的 PD-in 发布字（active 与 valid 同代）。 */
+static inline IOLINK_ATOMIC_UINT_T dll_pd_pub_load(const iolink_dll_shared_t* shared)
+{
+    return iolink_atomic_load(&shared->pd_pub);
+}
+
+/**
+ * @brief @p pub 这一代的有效位：命令字覆盖它记录的那一代，其余情况取应用值。
+ *
+ * 两个字段各自单写者，因此读侧不需要 RMW：先加载发布字、再加载命令字，
+ * 命令字只有在代号仍然对得上时才生效。
+ */
+static inline bool dll_pd_valid_at(const iolink_dll_shared_t* shared, IOLINK_ATOMIC_UINT_T pub)
+{
+    const IOLINK_ATOMIC_UINT_T cmd = iolink_atomic_load(&shared->pd_valid_cmd);
+    if ((IOLINK_PD_CMD_VALID(cmd) != 0U) &&
+        (IOLINK_PD_CMD_BASE_GEN(cmd) == IOLINK_PD_PUB_GEN(pub))) {
+        return IOLINK_PD_CMD_VALUE(cmd) != 0U;
+    }
+    return IOLINK_PD_PUB_VALID(pub) != 0U;
+}
+
+/**
+ * @brief 发布一次 PD-in（主上下文单写），`gen` 自动前进一格。
+ *
+ * 调用方必须在应答缓冲区填完之后调用；屏障由 `iolink_atomic_store()` 提供。
+ */
+static inline void dll_pd_publish(iolink_dll_shared_t* shared, uint8_t active, bool valid)
+{
+    const uint8_t gen = (uint8_t) (IOLINK_PD_PUB_GEN(shared->pd_pub) + 1U);
+    iolink_atomic_store(&shared->pd_pub, IOLINK_PD_PUB_WORD(active, valid, gen));
+}
 
 /**
  * @brief PHY 传输能力辅助函数。

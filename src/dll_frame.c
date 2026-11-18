@@ -306,6 +306,25 @@ void dll_handle_fallback_command(iolink_dll_main_t* ctx)
 }
 
 /**
+ * @brief 将 MasterCommand 的 PD 有效位副作用落到对应的单写者字段。
+ *
+ * 数据 ISR 执行 0x98/0x99 时是 `pd_valid_cmd` 的写者：命令字记录值与
+ * 当时 `pd_pub` 的代号，主上下文下一次发布即让该覆盖失效。主上下文自己
+ * 执行同一命令时本就是 `pd_pub` 的写者，直接发布新的一代（代号前进，
+ * 任何在途命令随之失效），语义与"只在本代有效"一致。
+ */
+static void dll_pd_valid_command(iolink_dll_main_t* ctx, bool valid)
+{
+    const IOLINK_ATOMIC_UINT_T pub = dll_pd_pub_load(&ctx->shared);
+    if (ctx->shared.in_isr != 0U) {
+        iolink_atomic_store(&ctx->shared.pd_valid_cmd,
+                            IOLINK_PD_CMD_WORD(valid, IOLINK_PD_PUB_GEN(pub)));
+        return;
+    }
+    dll_pd_publish(&ctx->shared, IOLINK_PD_PUB_ACTIVE(pub), valid);
+}
+
+/**
  * @brief 以 ST 风格将 MasterCommand（Table B.2）应用到 DL 状态。
  *
  * 对 FALLBACK（0x5A）返回 false，它需要 T_FBD 截止时间，并由
@@ -326,12 +345,12 @@ bool dll_apply_master_command(iolink_dll_main_t* ctx, uint8_t cmd)
             return true;
         case IOLINK_CMD_PROCESS_DATA_OPERATE:
             ctx->fallback_clear_request = 1U;
-            ctx->pd_valid = true;
+            dll_pd_valid_command(ctx, true);
             dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
             return true;
         case IOLINK_CMD_DEVICE_OPERATE:
             ctx->fallback_clear_request = 1U;
-            ctx->pd_valid = false;
+            dll_pd_valid_command(ctx, false);
             /* 来自 PREOPERATE 的 DeviceOperate 会建立通信
                （ESTAB_COM）；随后的 PDOperate 0x98 进入 OPERATE。
                在 OPERATE/ESTAB 中它只是幂等的确认。 */
@@ -352,13 +371,19 @@ bool dll_apply_master_command(iolink_dll_main_t* ctx, uint8_t cmd)
 /** @brief 主上下文中的 MasterCommand 页面写入：应用状态并发送 CKS。 */
 /* CKS PD 状态位：位 6 为 0 表示“Process Data valid”。
  * 没有输入 PD 的设备不可能有无效输入 PD，因此始终上报
- * 有效；否则上报当前 pd_valid 状态。 */
-uint8_t dll_pd_status_flags(const iolink_dll_main_t* ctx)
+ * 有效；否则上报 @p pub 这一代的 PD 有效位（含 ISR 命令字的覆盖）。
+ * 数据 ISR 用它与自己捕获的发布字共用一次加载。 */
+uint8_t dll_pd_status_flags_at(const iolink_dll_main_t* ctx, IOLINK_ATOMIC_UINT_T pub)
 {
     if ((ctx->shared.pd_in_len == 0U) && (ctx->shared.pd_out_len_current > 0U)) {
         return 0U;
     }
-    return ctx->pd_valid ? 0U : 0x40U;
+    return dll_pd_valid_at(&ctx->shared, pub) ? 0U : 0x40U;
+}
+
+uint8_t dll_pd_status_flags(const iolink_dll_main_t* ctx)
+{
+    return dll_pd_status_flags_at(ctx, dll_pd_pub_load(&ctx->shared));
 }
 
 void dll_handle_master_command(iolink_dll_main_t* ctx, uint8_t cmd)
@@ -625,13 +650,15 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
        （位 0-5）；没有前置状态字节（A.1.5）。 */
     uint8_t resp[IOLINK_PD_IN_MAX_SIZE + IOLINK_OD_MAX_SIZE + 1];
     uint16_t pos = 0U;
+    /* OD 字节与 PD-in 字节、以及 CKS 的有效位都来自同一次发布字加载。 */
+    const IOLINK_ATOMIC_UINT_T pd = dll_pd_pub_load(&ctx->shared);
     if (!write && (resp_od > 0U)) {
         (void) memcpy(&resp[pos], od_out, resp_od);
         pos += resp_od;
     }
     if (ctx->shared.pd_in_len > 0U) {
-        (void) memcpy(&resp[pos],
-                      &ctx->shared.pd_in[ctx->shared.pd_in_active][ctx->shared.od_width],
+        const uint8_t active = IOLINK_PD_PUB_ACTIVE(pd);
+        (void) memcpy(&resp[pos], &ctx->shared.pd_in[active][ctx->shared.od_width],
                       ctx->shared.pd_in_len);
         pos += ctx->shared.pd_in_len;
     }
@@ -640,7 +667,7 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
     if (DLL_EVENTS_FLAG(&ctx->shared.events)) {
         cks |= 0x80U;
     }
-    cks |= dll_pd_status_flags(ctx);
+    cks |= dll_pd_status_flags_at(ctx, pd);
     resp[pos] = cks;
     resp[pos] = (uint8_t) (resp[pos] | iolink_checksum6(resp, pos + 1U));
     pos++;

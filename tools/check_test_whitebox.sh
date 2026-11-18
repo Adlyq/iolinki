@@ -136,7 +136,7 @@ selftest() {
     local sample scanned
 
     local bad_access=(
-        'ctx.dll.main.pd_valid = true;'
+        'ctx.dll.main.master_lost = true;'
         'dev.ctx->dll.main.shared.state'
         'iolink_dll_ctx_t* c = &ctx->dll;'
         'iolink_dll_ctx_t* c = &device->dll;'
@@ -150,7 +150,7 @@ selftest() {
          void f(iolink_device_ctx_t* c) { (void) c->dll; }'
     )
     local good_access=(
-        'test_dll(&ctx)->pd_valid = true;'
+        'test_dll(&ctx)->master_lost = true;'
         'iolink_dll_ctx_t dll;'
         'dll.main.shared.state = 0;'
         'iolink_device_get_dll_stats(&ctx, &stats);'

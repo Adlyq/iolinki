@@ -56,4 +56,28 @@ static inline iolink_isdu_ctx_t* test_dll_isdu(iolink_device_ctx_t* ctx)
     return &ctx->dll.main.shared.isdu;
 }
 
+/** @brief 主上下文发布一次 PD-in（与 `device.c` 同一个发布字）。 */
+static inline void test_pd_publish(iolink_dll_main_t* dll, uint8_t active, bool valid)
+{
+    dll_pd_publish(&dll->shared, active, valid);
+}
+
+/** @brief 当前一代的 active 索引。 */
+static inline uint8_t test_pd_active(const iolink_dll_main_t* dll)
+{
+    return IOLINK_PD_PUB_ACTIVE(dll_pd_pub_load(&dll->shared));
+}
+
+/** @brief 保留当前 active 索引，只发布有效位。 */
+static inline void test_pd_set_valid(iolink_dll_main_t* dll, bool valid)
+{
+    dll_pd_publish(&dll->shared, test_pd_active(dll), valid);
+}
+
+/** @brief 当前有效位（含数据 ISR 命令字的覆盖）。 */
+static inline bool test_pd_valid(const iolink_dll_main_t* dll)
+{
+    return dll_pd_valid_at(&dll->shared, dll_pd_pub_load(&dll->shared));
+}
+
 #endif /* TEST_DLL_ACCESS_H_ */

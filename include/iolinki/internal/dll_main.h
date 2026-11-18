@@ -68,8 +68,6 @@ struct iolink_dll_main
 
     uint8_t isr_tx_next; /**< 主泵下一个填充的槽位（0/1） */
 
-    bool pd_valid; /**< 当前 PD_In 有效状态 */
-
     uint8_t master_cycle_time; /**< DPP1 0x01，由主站写入的周期时间字节
                                     （Table B.1/B.3）；0 = 尚未写入 */
 

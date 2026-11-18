@@ -1493,7 +1493,7 @@ static void test_dll_pdout_only_status_valid(void** state)
     iolink_test_device_init(&dev, &config, NULL);
     test_dll(&dev.ctx)->enforce_timing = false;
     test_dll_shared(&dev.ctx)->state = IOLINK_DLL_STATE_OPERATE;
-    test_dll(&dev.ctx)->pd_valid = false;
+    test_pd_set_valid(test_dll(&dev.ctx), false);
 
     /* 过程通道读（Type-2_3）：请求带 PD-out 字节，应答为 OD + CKS；
      * PD-status 位在 CKS bit6。 */
@@ -1776,8 +1776,9 @@ static void test_dll_main_pump_type1_2_reply(void** state)
 
     iolink_dll_shared_t* shared = test_dll_shared(&dev.ctx);
     shared->pd_in_len = 2U;
-    shared->pd_in[shared->pd_in_active][shared->od_width] = 0xAAU;
-    shared->pd_in[shared->pd_in_active][shared->od_width + 1U] = 0x55U;
+    const uint8_t active = test_pd_active(test_dll(&dev.ctx));
+    shared->pd_in[active][shared->od_width] = 0xAAU;
+    shared->pd_in[active][shared->od_width + 1U] = 0x55U;
 
     /* 把该请求发布到邮箱环形缓冲区（即数据 ISR 所做的工作）。 */
     iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&shared->isr_frame_ring);

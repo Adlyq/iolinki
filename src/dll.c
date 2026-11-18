@@ -95,10 +95,11 @@
  *  - 主上下文 -> ISR：isr_tx_payload[0..1] + isr_tx_pending（dll_send）、ISDU
  *    发布字 isr_isdu_pub/resp_store（dll_isdu_sync_snapshot）、
  *    isdu.req_ack_gen/isdu.req_busy_sel（主泵对已发布写请求的 ack 与占用）
- *    以及 pd_in_active（PD-in 发布）。
+ *    以及 pd_pub（PD-in 发布字 `{active, valid, gen}`）。
  *  - ISR -> 主上下文：isr_frame_ring（dll_consume_isr_mailbox）、
  *    isdu.req_pub（双请求槽的写请求发布字）、isr_master_activity、
  *    isr_isdu_read_reset（IDLE/ABORT 读与写 ABORT 的传输层复位）、
+ *    pd_valid_cmd（0x98/0x99 对 PD 有效位的本代覆盖）、
  *    isr_consumed_us/isr_consumed_seq（CONSUME 帧的 T_CYCLE/T_REN 记账）、
  *    isr_cycle_served（ISR 服务的 MasterCycle，Back-to-box 计数由主泵推进）
  *    以及截止时间标志。
@@ -391,7 +392,10 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
        双字节变体（OPERATE M-sequence 代码 5）。 */
     ctx->shared.isr_isdu_last_flowctrl = 0xFFU; /* 尚未见到 START */
 
-    ctx->pd_valid = true;
+    /* PD-in 初值：缓冲区 0、有效（应用第一次发布之前），没有命令覆盖。
+     * 发布字与命令字此后分别由主上下文与数据 ISR 单写。 */
+    iolink_atomic_store(&ctx->shared.pd_pub, IOLINK_PD_PUB_WORD(0U, true, 0U));
+    iolink_atomic_store(&ctx->shared.pd_valid_cmd, 0U);
     ctx->shared.pd_in_captured = 0xFFU; /* 无进行中的应答 */
 
     /* 帧邮箱：ISR 发布到环中，主泵消费。 */

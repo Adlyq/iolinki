@@ -277,7 +277,7 @@ static void reset_ctx(void)
     s_ctx.main.shared.od_width = 1U;
     s_ctx.main.shared.pd_in_len = 0U;
     s_ctx.main.shared.pd_out_len_current = 0U;
-    s_ctx.main.pd_valid = true;
+    test_pd_set_valid(&s_ctx.main, true);
     /* 应答计划只在初始化时编译；本用例在 init 之后改了类型/宽度，因此
      * 在这里显式重发一次（ISR 尚未运行）。 */
     iolink_dll_publish_reply_plans(&s_ctx.main);

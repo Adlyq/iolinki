@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (MAJOR: PD-in publication is one single-writer word)
+- `iolink_dll_main_t::pd_valid` and `iolink_dll_shared_t::pd_in_active` are
+  gone. Process input is published through `iolink_dll_shared_t::pd_pub`
+  (`{active[7:0], valid[8], gen[23:16]}`, main-context writer) and the
+  data-ISR writer `pd_valid_cmd` (`{value[0], base_gen[15:8], valid[16]}`).
+  This is a layout change of both structs: `iolink_dll_ctx_t` and
+  `iolink_device_ctx_t` grow by 8 bytes (4944 -> 4952 and 5136 -> 5144 in the
+  64-bit default build, FRAME/FRAME 4936 -> 4944 and 5128 -> 5136).
+- `src/device.c` no longer takes `IOLINK_CRITICAL_ENTER/EXIT()` for the PD-in
+  publish. The callback and the polling API fill a buffer outside any lock and
+  then write `pd_pub` with `IOLINK_FENCE()` plus one atomic store; the data ISR
+  loads that word once per reply, so the buffer it captures and the CKS
+  PD-valid bit it reports always belong to the same generation.
+- 0x98 `PROCESS_DATA_OPERATE` / 0x99 `DEVICE_OPERATE` still override the valid
+  bit, but only for the generation in which they were applied: the data ISR
+  records the command value together with the current `pd_pub` generation in
+  `pd_valid_cmd`, and every reader falls back to the application value as soon
+  as the generation moves on. A main-context command application (STARTUP probe
+  / verbose OPERATE path) publishes a new generation instead. The ISR retires a
+  stale command word on its next entry, so the 8-bit generation cannot wrap
+  back onto an expired command.
+- `tests/test_reply_plan.c` pins the same-generation capture and the
+  generation-scoped 0x98/0x99 override including the CKS bit; the context-size
+  contract and `docs/MEMORY_GUIDE.md` record the +8 bytes.
+
 ### Changed (BEHAVIOUR CHANGE: the data ISR owns the PD-in lease release)
 - TX FRAME: `dll_process_body()` no longer polls `tx_busy()`, and the
   `IOLINK_CRITICAL_ENTER/EXIT()` pair that guarded the poll and the
@@ -31,10 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   claimed the critical section protects the frame mailbox, the ISDU snapshot,
   reply staging or the event-queue write path. None of those take a section:
   they are slot rings, publish words and leases. They now list the operations
-  that do take one — diagnostic condition table, event queue read/clear, PD-in
-  index publication, counter reset, the SIO-mode reply-slot cleanup and the ISR
-  RX phase reset — and drop the removed "a DLL state transition resets the
-  event queue under the lock" example from the nesting requirement.
+  that do take one — diagnostic condition table, event queue read/clear,
+  counter reset, the SIO-mode reply-slot cleanup and the ISR RX phase reset —
+  and drop the removed "a DLL state transition resets the event queue under the
+  lock" example from the nesting requirement.
 - `docs/CODE_FLOW.md`: the remaining-critical-section audit no longer names the
   removed `isr_tx_has_cks` field (the SIO-mode entry clears four fields) or a
   "log sink" section that does not exist, and the hook table states that
