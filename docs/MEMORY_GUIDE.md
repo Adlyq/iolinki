@@ -13,22 +13,23 @@ which in turn embeds the ISDU, Events and Data Storage contexts, so the numbers
 below are nested—do not add them together.
 
 Measured on a 64-bit host with the default buffers in
-`include/iolinki/config.h`:
+`include/iolinki/config.h` (`sizeof` of the public types; the default, SPLIT and
+FRAME variants are pinned by `tests/test_ctx_sizes.c`):
 
 | Component | Size (bytes) | Description |
 | :--- | ---: | :--- |
 | **`iolink_device_ctx_t`** | **5144** | The object the application allocates (includes everything below) |
-| `iolink_device_ctx_t` (FRAME/FRAME) | 5136 | `IOLINK_ISR_*_MODE` = FRAME; `iolink_dll_ctx_t` is 4944 |
+| `iolink_device_ctx_t` (FRAME/FRAME) | 5136 | `IOLINK_ISR_*_MODE` = FRAME without `tx_busy()` (three PD-in buffers instead of two); `iolink_dll_ctx_t` is 4944 |
 | `iolink_dll_ctx_t` | 4952 | DLL state, timers, reply-plan table (48×24 B, four state slices), frame mailbox; embeds ISDU, Events and DS |
 | `iolink_isdu_ctx_t` | 1616 | Transport state, the two request-slot publication words, the DPP1 RAM image (16 B + seqlock) and the embedded ISDU scratch (1295 B) |
 | `iolink_events_ctx_t` | 504 | Event queue, lifecycle records, the double event-memory image and the ISR reset-request handshake |
 | `iolink_ds_ctx_t` | 352 | DS state, buffer pointers, the OD set and the embedded download stage |
-| **PHY API** | 20-30 bytes | Function pointers (usually const/flash, but pointer storage in RAM) |
+| `iolink_phy_api_t` | 112 (usually `.rodata`) | Driver vtable, not part of the device context; only the pointer in `iolink_device_config_t` costs RAM (8 B on 64-bit) |
 
-`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 8 bytes (two counter sets plus padding).
-32-bit targets are smaller because pointers are 4 bytes. One exception:
-`iolink_device_ctx_t::phy_error` (an `int`) can add 4 bytes there, because the
-64-bit layout absorbs it in existing padding.
+`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 8 bytes to `iolink_device_ctx_t`
+(5152 total: two counter sets plus padding). 32-bit targets are smaller because
+pointers are 4 bytes. One exception: `iolink_device_ctx_t::phy_error` (an `int`)
+can add 4 bytes there, because the 64-bit layout absorbs it in existing padding.
 
 The DLL state is owned by two sibling structures inside `iolink_dll_ctx_t`:
 `iolink_dll_main_t` (which nests the main/ISR shared region) and
@@ -45,7 +46,7 @@ ISR-exclusive fields.
 
 ### Workspace
 
-Transport scratch is no longer mixed into long-lived state. The optional
+Transport scratch is kept out of long-lived state. The optional
 `iolink_workspace_t` (`include/iolinki/workspace.h`) holds:
 
 | Region | Bytes (default) | Lifetime |
@@ -67,15 +68,16 @@ cfg.workspace = &g_ws;
 iolink_device_init(&ctx, &cfg);                 /* cfg.workspace binds the scratch */
 ```
 
-Passing `NULL` (or leaving the field zero) keeps the historical behaviour: each
-context uses its embedded fallback scratch, so the API stays compatible.
-`iolink_device_get_workspace()` returns the bound pointer or `NULL` for the
-embedded case.
+Passing `NULL` (or leaving the field zero) means "use the scratch embedded in the
+context": each context then carries its own fallback buffers and
+`iolink_device_get_workspace()` returns `NULL`. With
+`IOLINK_WORKSPACE_EMBEDDED=0` there is no embedded fallback.
 
 To move the scratch **out of the context entirely**, build with
 `-DIOLINK_WORKSPACE_EMBEDDED=0`. The context then keeps only pointers and
 `iolink_device_init()` rejects a missing workspace with
-`IOLINK_DEVICE_INIT_ERR_WORKSPACE` (-13). Measured on the same host:
+`IOLINK_DEVICE_INIT_ERR_WORKSPACE` (-12). Measured on the same host (this
+configuration is compiled by the matrix but not pinned by `test_ctx_sizes.c`):
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
@@ -86,7 +88,10 @@ To move the scratch **out of the context entirely**, build with
 
 The trimmed build is the small-MCU path: place the 1551-byte workspace in
 DTCM/CCM (or size it down with `IOLINK_ISDU_BUFFER_SIZE` / `IOLINK_DS_IMAGE_MAX`)
-instead of carrying it inside the main context. One measured example (`IOLINK_ISDU_BUFFER_SIZE=64`, `IOLINK_DS_IMAGE_MAX=64`):
+instead of carrying it inside the main context. One measured example
+(`IOLINK_ISDU_BUFFER_SIZE=64`, `IOLINK_DS_IMAGE_MAX=64`, same `sizeof` probe;
+this buffer configuration is not part of the build matrix and its sizes are not
+asserted by `test_ctx_sizes.c`):
 
 | Component | Embedded | External workspace |
 | :--- | ---: | ---: |
@@ -99,17 +104,18 @@ instead of carrying it inside the main context. One measured example (`IOLINK_IS
 > Service and never reads the buffer while it is being rebuilt. A completed
 > response is published together with its generation bit, so a "write then
 > read" of the same length still interrupts the ISR's segment sequence and can
-> never replay stale bytes. `resp_store[0/1]` remain as two view indices, but
-> both point at the same buffer; the double copy is gone. Application code must
-> not keep a pointer to the framed buffer across calls.
+> never replay stale bytes. `resp_store[0/1]` are two view indices into that
+> same buffer. Application code must not keep a pointer to the framed buffer
+> across calls.
 
-> **DS streaming rule.** `iolink_ds_ctx_t` no longer carries a resident 256-byte
+> **DS streaming rule.** `iolink_ds_ctx_t` does not carry a resident 256-byte
 > image. Uploads, `Data_Storage_Size` and `Parameter_Checksum` serialize the
 > current parameter set on demand (`iolink_ds_serialize()` /
 > `iolink_ds_refresh()`); the only persistent use of `ds_stage` is the atomic
 > download staging (`ParamDownload*`) and NVM persistence. `iolink_ds_get_image()`
-> still works when a workspace/embedded stage is bound and returns `NULL` in the
-> streaming-only configuration.
+> builds and returns the image when a workspace (or the embedded fallback) is
+> bound, and returns `NULL` when no staging buffer is available
+> (`IOLINK_WORKSPACE_EMBEDDED=0` without an external workspace).
 
 ### Configurable Memory (via `include/iolinki/config.h`)
 
@@ -120,8 +126,8 @@ You can tune these values to fit your MCU.
 | `IOLINK_ISDU_BUFFER_SIZE` | 256 | **1295** bytes | `request`(2 × 262) + `payload`(256) + `response`(256) + `frame`(259) |
 | `IOLINK_WORKSPACE_EMBEDDED` | 1 | 0 or 1551 | 1 = keep fallback scratch in the contexts; 0 = require an external workspace |
 | `IOLINK_EVENT_QUEUE_SIZE` | 4 | scales with queue | `iolink_event_t` queue plus `IOLINK_EVENT_PENDING_MAX` (8) lifecycle records, two 19-byte Table 58 memory images and a 6-entry frozen snapshot |
-| `IOLINK_PD_IN_MAX_SIZE` | 32 | 195 bytes | Three reply buffers of `od_max + pd_in + 1` (65 each) |
-| `IOLINK_PD_OUT_MAX_SIZE` | 32 | 32 bytes | Output Process Data buffer (also sizes the ISR RX buffer) |
+| `IOLINK_PD_IN_MAX_SIZE` | 32 | 130 bytes | `IOLINK_PD_IN_BUFFERS` PD-in reply buffers of `od_max + pd_in + 1` (65 each); the default BYTE profile uses 2, FRAME/FRAME without `tx_busy()` uses 3 (195) |
+| `IOLINK_PD_OUT_MAX_SIZE` | 32 | 32 bytes direct | `pd_out`; it also sets `IOLINK_M_SEQ_MAX_LEN`, which sizes the three ISR payload buffers, the ISR RX buffer, `frame_buf` and each mailbox record (4 × 68 B by default) |
 | `IOLINK_DS_IMAGE_MAX` | 256 | 256 bytes | DS serialization/download stage |
 | `IOLINK_MBX_SLOTS` | 4 | 272 bytes | Receive-frame mailbox depth; power of two in [2, 128], each record is 68 B |
 | `IOLINK_REPLY_PLAN_SLOTS` | 48 | 1152 bytes | Reply-plan entries published to the ISR (48 × 24 B, four state slices) |
@@ -157,6 +163,10 @@ The stack is designed to be shallow. The deepest call path typically occurs duri
 *   `iolink_device_process` -> `iolink_dll_process` -> `iolink_isdu_process` -> `handle_standard_commands`
 *   **Estimated Max Stack Depth**: ~256 bytes (standard frame)
 
+> **These are engineering estimates, not a repository baseline.** The library
+> code has no checked-in stack measurement; measure the target build with
+> `-fstack-usage` (or the toolchain's equivalent) before sizing a task stack.
+
 > **Recommendation**: Allocate at least **512 bytes** for the stack to be safe.
 
 ### RTOS Stack Guidelines
@@ -187,7 +197,7 @@ build. The default CMake build sets no `CMAKE_BUILD_TYPE` (no optimisation) and
 The checksum in `src/crc.c` is computed on the fly (XOR + 6-bit compression);
 there are no lookup tables to size.
 
-## 4. Optimization Tips
+## 3. Optimization Tips
 
 ### Reducing RAM
 1.  **Reduce ISDU Buffer**: Use `64` or `32` bytes if you don't need large parameter transfers.
@@ -202,7 +212,7 @@ there are no lookup tables to size.
     measures both modes, and the split costs ~24 B under `-flto` instead of ~750 B.
 3.  **Remove Unused Features**: The linker will garbage-collect unused functions if you compile with `-ffunction-sections -fdata-sections` and link with `--gc-sections`.
 
-## 5. Verification
+## 4. Verification
 
 To verify memory usage on GCC-based toolchains:
 
