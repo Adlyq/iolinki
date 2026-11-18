@@ -70,7 +70,7 @@ bool dll_type_allowed(const iolink_dll_shared_t* ctx, const uint8_t* frame)
         if ((ch == IOLINK_MC_CHANNEL_PAGE) && (rx_type == IOLINK_MSEQ_TYPE_0)) {
             return true;
         }
-        exp_type = dll_mseq_type_bits(ctx->m_seq_type);
+        exp_type = dll_mseq_type_bits(ctx->c_m_seq_type);
     }
     return rx_type == exp_type;
 }
@@ -84,7 +84,7 @@ bool dll_type_allowed(const iolink_dll_shared_t* ctx, const uint8_t* frame)
 uint8_t dll_expected_type_bits(const iolink_dll_shared_t* ctx)
 {
     if ((ctx->state == IOLINK_DLL_STATE_OPERATE) || (ctx->state == IOLINK_DLL_STATE_ESTAB_COM)) {
-        return dll_mseq_type_bits(ctx->m_seq_type);
+        return dll_mseq_type_bits(ctx->c_m_seq_type);
     }
     return IOLINK_MSEQ_TYPE_0;
 }
@@ -104,8 +104,8 @@ uint8_t dll_req_len_for(const iolink_dll_shared_t* ctx, uint8_t mc, uint8_t ckt)
     if ((ctx->state == IOLINK_DLL_STATE_ESTAB_COM) && (mc == IOLINK_MC_TRANSITION_COMMAND)) {
         return IOLINK_M_SEQ_HEADER_LEN;
     }
-    const uint8_t od_req = ((mc & IOLINK_MC_RW_MASK) == 0U) ? ctx->od_width : 0U;
-    return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + ctx->pd_out_len_current + od_req);
+    const uint8_t od_req = ((mc & IOLINK_MC_RW_MASK) == 0U) ? ctx->c_od_width : 0U;
+    return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + ctx->c_pd_out_len_current + od_req);
 }
 
 /**
@@ -127,10 +127,10 @@ uint8_t dll_req_len_for(const iolink_dll_shared_t* ctx, uint8_t mc, uint8_t ckt)
  */
 void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
 {
-    if ((ctx == NULL) || (ctx->shared.phy == NULL) || (data == NULL) || (len == 0U)) {
+    if ((ctx == NULL) || (ctx->shared.c_phy == NULL) || (data == NULL) || (len == 0U)) {
         return;
     }
-    if (len > sizeof(ctx->shared.isr_tx_payload[0])) {
+    if (len > sizeof(ctx->shared.m_isr_tx_payload[0])) {
         return;
     }
     /* 该帧已由 ISR 即时应答：主泵只消费内容，绝不再发第二帧。 */
@@ -157,10 +157,10 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
     else {
         /* 槽位与载荷只在接受后推进：被拒绝的暂存不得碰在途槽。 */
         ctx->isr_tx_next = (uint8_t) (ctx->isr_tx_next ^ 1U);
-        (void) memcpy(ctx->shared.isr_tx_payload[slot], data, len);
-        ctx->shared.isr_tx_pending_slot = slot;
-        ctx->shared.stage_len = (uint8_t) len;
-        ctx->shared.stage_has_cks = 0U;
+        (void) memcpy(ctx->shared.m_isr_tx_payload[slot], data, len);
+        ctx->shared.m_isr_tx_pending_slot = slot;
+        ctx->shared.m_stage_len = (uint8_t) len;
+        ctx->shared.m_stage_has_cks = 0U;
         IOLINK_FENCE();                  /* 暂存字节先于发布 */
         ctx->shared.isr_tx_pending = 1U; /* 最后发布 */
     }
@@ -171,12 +171,12 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
     /* 应答开始边沿：关闭 t_A 软件镜像（PHY 的 response_timer_stop 另行停止）。 */
     dll_timer_cancel(ctx, IOLINK_TIMER_T_A);
 
-    if (ctx->shared.phy->request_service != NULL) {
+    if (ctx->shared.c_phy->request_service != NULL) {
         /* 在发布之后、且在任何关中断窗口之外通知 PHY：
          * 该钩子属于端口代码（可能进行 SPI 访问或获取锁）。
          * 其间自然产生的数据中断只会排空暂存
          * 应答，随后额外的服务请求便无事可做。 */
-        ctx->shared.phy->request_service(ctx->shared.phy->self);
+        ctx->shared.c_phy->request_service(ctx->shared.c_phy->self);
         return;
     }
 
@@ -186,8 +186,8 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
      * 否则 isr_tx_active 会永久保持。 */
     ctx->shared.isr_tx_pending = 0U;
     if (ctx->shared.isr_tx_active != 0U) {
-        if (ctx->shared.phy->tx_done != NULL) {
-            ctx->shared.phy->tx_done(ctx->shared.phy->self);
+        if (ctx->shared.c_phy->tx_done != NULL) {
+            ctx->shared.c_phy->tx_done(ctx->shared.c_phy->self);
         }
         ctx->shared.isr_tx_active = 0U;
         ctx->shared.isr_tx_dropped++; /* 上一帧未发完即被收尾 */
@@ -245,16 +245,16 @@ bool dll_t_pd_active(const iolink_dll_main_t* ctx)
 /** @brief 排空 PHY 中所有待处理的 RX 字节；若读到任何字节则返回 true。 */
 bool dll_drain_rx(iolink_dll_main_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->shared.phy == NULL)) {
+    if ((ctx == NULL) || (ctx->shared.c_phy == NULL)) {
         return false;
     }
     /* ISR 泵填充邮箱；排空它会丢弃在 t_pd 保护窗口
      * 有效期间到达的帧。丢弃数量必须可观测：现场用它区分
      * “主泵被阻塞”与“暂存环满”。 */
-    if (!iolink_ring_is_empty(&ctx->shared.isr_frame_ring)) {
-        const uint32_t dropped = iolink_ring_count(&ctx->shared.isr_frame_ring);
-        while (iolink_ring_peek(&ctx->shared.isr_frame_ring) != NULL) {
-            iolink_ring_release(&ctx->shared.isr_frame_ring);
+    if (!iolink_ring_is_empty(&ctx->shared.i_isr_frame_ring)) {
+        const uint32_t dropped = iolink_ring_count(&ctx->shared.i_isr_frame_ring);
+        while (iolink_ring_peek(&ctx->shared.i_isr_frame_ring) != NULL) {
+            iolink_ring_release(&ctx->shared.i_isr_frame_ring);
         }
         ctx->t_pd_discards += dropped;
         return true;
@@ -309,7 +309,7 @@ void dll_handle_fallback_command(iolink_dll_main_t* ctx)
                 t_fbd_ms = IOLINK_T_FBD_MAX_MS;
             }
         }
-        IOLINK_LOG_WARN(&ctx->shared.log, "fallback command: SIO in %lu ms",
+        IOLINK_LOG_WARN(&ctx->shared.c_log, "fallback command: SIO in %lu ms",
                         (unsigned long) t_fbd_ms);
         /* 绝对截止时间仍按毫秒基准换算，与原比较（now_ms >= deadline_ms）逐拍一致。 */
         dll_timer_arm(ctx, IOLINK_TIMER_T_FBD,
@@ -384,7 +384,7 @@ bool dll_apply_master_command(iolink_dll_shared_t* ctx, uint8_t cmd)
     if (cmd == IOLINK_CMD_DEVICE_STARTUP) {
         /* 协议错误记账（invalid_frames/frame_index）与 STARTUP 迁移都是
          * 主上下文字段：只登记一次性请求，本帧应答仍按计划发出。 */
-        ctx->isr_device_startup_requested = 1U;
+        ctx->i_isr_device_startup_requested = 1U;
         return true;
     }
     iolink_dll_state_t target = ctx->state;
@@ -442,7 +442,7 @@ bool dll_apply_master_command_main(iolink_dll_main_t* ctx, uint8_t cmd)
  * 数据 ISR 用它与自己捕获的发布字共用一次加载。 */
 uint8_t dll_pd_status_flags_at(const iolink_dll_shared_t* ctx, IOLINK_ATOMIC_UINT_T pub)
 {
-    if ((ctx->pd_in_len == 0U) && (ctx->pd_out_len_current > 0U)) {
+    if ((ctx->c_pd_in_len == 0U) && (ctx->c_pd_out_len_current > 0U)) {
         return 0U;
     }
     return dll_pd_valid_at(ctx, pub) ? 0U : 0x40U;
@@ -533,7 +533,7 @@ static bool dll_dispatch_od(iolink_dll_main_t* ctx, uint8_t mc, const uint8_t* o
         }
         if (((mc & IOLINK_MC_RW_MASK) == 0U) && (od_len > 0U) &&
             ((mc & IOLINK_MC_ADDR_MASK) == 0x01U)) {
-            ctx->shared.master_cycle_time = od_in[0];
+            ctx->shared.m_master_cycle_time = od_in[0];
             /* DPP1 0x01 是页读应答的输入：ISR 的页读缓存必须失效。 */
             iolink_isdu_dp_page1_invalidate(&ctx->shared.isdu);
         }
@@ -687,7 +687,7 @@ static bool dll_handle_eager_isdu_read(iolink_dll_main_t* ctx, bool write)
 static void dll_dispatch_od_reply(iolink_dll_main_t* ctx, bool write, uint16_t od_offset,
                                   uint8_t* od_out)
 {
-    const uint8_t od_w = ctx->shared.od_width; /* 来自 opt-in 补丁的 1/2/8/32 */
+    const uint8_t od_w = ctx->shared.c_od_width; /* 来自 opt-in 补丁的 1/2/8/32 */
     const uint8_t req_od = write ? od_w : 0U;
 
     uint8_t od_in[IOLINK_OD_MAX_SIZE];
@@ -708,7 +708,7 @@ static void dll_dispatch_od_reply(iolink_dll_main_t* ctx, bool write, uint16_t o
 /** @brief 构建并发送 Type-1/2 帧的 [OD][PD-in]CKS 应答。 */
 static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t* od_out)
 {
-    const uint8_t resp_od = write ? 0U : ctx->shared.od_width;
+    const uint8_t resp_od = write ? 0U : ctx->shared.c_od_width;
 
     /* Figure A.9/A.10/A.13/A.14：对 READ M-sequence 的应答为
        [OD 字节][PD-in 字节] CKS；对 WRITE M-sequence 的应答不携带
@@ -723,11 +723,11 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
         (void) memcpy(&resp[pos], od_out, resp_od);
         pos += resp_od;
     }
-    if (ctx->shared.pd_in_len > 0U) {
+    if (ctx->shared.c_pd_in_len > 0U) {
         const uint8_t active = IOLINK_PD_PUB_ACTIVE(pd);
-        (void) memcpy(&resp[pos], &ctx->shared.pd_in[active][ctx->shared.od_width],
-                      ctx->shared.pd_in_len);
-        pos += ctx->shared.pd_in_len;
+        (void) memcpy(&resp[pos], &ctx->shared.m_pd_in[active][ctx->shared.c_od_width],
+                      ctx->shared.c_pd_in_len);
+        pos += ctx->shared.c_pd_in_len;
     }
 
     uint8_t cks = 0x00U;
@@ -761,10 +761,10 @@ void dll_handle_operate_type1_2(iolink_dll_main_t* ctx)
 {
     /* Type-1/2 主站报文：MC | CKT | PD | OD；校验和在 CKT 中。 */
     const uint16_t pd_offset = IOLINK_M_SEQ_HEADER_LEN;
-    const uint16_t od_offset = (uint16_t) (pd_offset + ctx->shared.pd_out_len_current);
+    const uint16_t od_offset = (uint16_t) (pd_offset + ctx->shared.c_pd_out_len_current);
 
-    if (ctx->shared.pd_out_len_current > 0U) {
-        (void) memcpy(ctx->pd_out, &ctx->frame_buf[pd_offset], ctx->shared.pd_out_len_current);
+    if (ctx->shared.c_pd_out_len_current > 0U) {
+        (void) memcpy(ctx->pd_out, &ctx->frame_buf[pd_offset], ctx->shared.c_pd_out_len_current);
     }
 
     const bool write = ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U);
@@ -816,7 +816,7 @@ void dll_handle_operate_type1_2(iolink_dll_main_t* ctx)
 static void dll_poll_phy_faults(iolink_dll_main_t* ctx)
 {
 #if IOLINK_FEATURE_EVENTS
-    const uint8_t faults = ctx->shared.phy->get_faults(ctx->shared.phy->self);
+    const uint8_t faults = ctx->shared.c_phy->get_faults(ctx->shared.c_phy->self);
 
     if (DLL_DIAG_SET_LEVEL(&ctx->shared.events, IOLINK_DIAG_SRC_PHY_UNDERVOLTAGE,
                            (faults & IOLINK_PHY_FAULT_UNDERVOLTAGE) != 0U)) {
@@ -851,12 +851,12 @@ void dll_poll_diagnostics(iolink_dll_main_t* ctx)
     /* ISR 只发布 one-shot；这里在主上下文完成条件锁存与事件发布。 */
     DLL_DIAG_SERVICE(&ctx->shared.events, dll_time_ms(&ctx->shared));
 
-    if (ctx->shared.phy == NULL) {
+    if (ctx->shared.c_phy == NULL) {
         return;
     }
 
     /* 故障位掩码是唯一的物理诊断通道。 */
-    if (ctx->shared.phy->get_faults != NULL) {
+    if (ctx->shared.c_phy->get_faults != NULL) {
         dll_poll_phy_faults(ctx);
     }
 }
@@ -874,8 +874,8 @@ bool dll_frame_drop_if_stopped(iolink_dll_main_t* ctx)
            通信和输出驱动器，直到下次上电。 */
         ctx->back_to_box_pending = false;
         dll_set_state(ctx, IOLINK_DLL_STATE_COMM_DISABLED);
-        if ((ctx->shared.phy != NULL) && (ctx->shared.phy->set_mode != NULL)) {
-            ctx->shared.phy->set_mode(ctx->shared.phy->self, IOLINK_PHY_MODE_INACTIVE);
+        if ((ctx->shared.c_phy != NULL) && (ctx->shared.c_phy->set_mode != NULL)) {
+            ctx->shared.c_phy->set_mode(ctx->shared.c_phy->self, IOLINK_PHY_MODE_INACTIVE);
         }
         ctx->frame_index = 0U;
         return true;

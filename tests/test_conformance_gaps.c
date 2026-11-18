@@ -192,7 +192,7 @@ static void test_0089_master_cycle_time_readback(void** state)
     iolink_device_ctx_t dev;
     (void) memset(&dev, 0, sizeof(dev));
     iolink_dll_main_t* dll = test_dll(&dev);
-    dll->shared.master_cycle_time = 0x4FU;
+    dll->shared.m_master_cycle_time = 0x4FU;
 
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);
@@ -204,7 +204,7 @@ static void test_0089_master_cycle_time_readback(void** state)
     uint8_t value[2] = {0};
     int n = isdu_collect_response(&ctx, value, sizeof(value));
     assert_int_equal(n, 1);
-    assert_int_equal(value[0], dll->shared.master_cycle_time);
+    assert_int_equal(value[0], dll->shared.m_master_cycle_time);
 }
 
 /* ------------------------------------------------------------------------- */

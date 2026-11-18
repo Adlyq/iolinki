@@ -46,9 +46,9 @@ static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
 static bool publish_frame(iolink_dll_ctx_t* ctx, uint8_t tag, uint8_t len)
 {
     iolink_frame_rec_t* rec =
-        (iolink_frame_rec_t*) iolink_ring_claim(&ctx->main.shared.isr_frame_ring);
+        (iolink_frame_rec_t*) iolink_ring_claim(&ctx->main.shared.i_isr_frame_ring);
     if (rec == NULL) {
-        ctx->main.shared.isr_mailbox_drops++;
+        ctx->main.shared.i_isr_mailbox_drops++;
         return false;
     }
     rec->len = len;
@@ -56,13 +56,13 @@ static bool publish_frame(iolink_dll_ctx_t* ctx, uint8_t tag, uint8_t len)
     for (uint8_t i = 0U; i < len; i++) {
         rec->data[i] = (uint8_t) (tag + i);
     }
-    iolink_ring_publish(&ctx->main.shared.isr_frame_ring);
+    iolink_ring_publish(&ctx->main.shared.i_isr_frame_ring);
     return true;
 }
 
 static void reset_rings(iolink_dll_ctx_t* ctx)
 {
-    iolink_ring_init(&ctx->main.shared.isr_frame_ring, (uint8_t*) ctx->main.isr_frame_slot,
+    iolink_ring_init(&ctx->main.shared.i_isr_frame_ring, (uint8_t*) ctx->main.isr_frame_slot,
                      IOLINK_MBX_SLOTS, (uint8_t) sizeof(iolink_frame_rec_t));
 }
 
@@ -80,7 +80,7 @@ static void test_frame_cutpoints(void** state)
         assert_true(publish_frame(&ctx, 0x10U, 4U));
 
         const iolink_frame_rec_t* rec =
-            (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.main.shared.isr_frame_ring);
+            (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.main.shared.i_isr_frame_ring);
         assert_non_null(rec);
 
         if (cut == 0U) {
@@ -93,7 +93,7 @@ static void test_frame_cutpoints(void** state)
         if (cut == 1U) {
             assert_true(publish_frame(&ctx, 0x20U, 3U)); /* copy 之后被抢占 */
         }
-        iolink_ring_release(&ctx.main.shared.isr_frame_ring);
+        iolink_ring_release(&ctx.main.shared.i_isr_frame_ring);
         if (cut == 2U) {
             assert_true(publish_frame(&ctx, 0x20U, 3U)); /* release 之后被抢占 */
         }
@@ -107,17 +107,17 @@ static void test_frame_cutpoints(void** state)
 
         /* 第二条记录完整无损，且排在队首。 */
         const iolink_frame_rec_t* next =
-            (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.main.shared.isr_frame_ring);
+            (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.main.shared.i_isr_frame_ring);
         assert_non_null(next);
         assert_int_equal(next->len, 3U);
         assert_int_equal(next->eager, 0U);
         for (uint8_t i = 0U; i < next->len; i++) {
             assert_int_equal(next->data[i], (uint8_t) (0x20U + i));
         }
-        iolink_ring_release(&ctx.main.shared.isr_frame_ring);
-        assert_true(iolink_ring_is_empty(&ctx.main.shared.isr_frame_ring));
+        iolink_ring_release(&ctx.main.shared.i_isr_frame_ring);
+        assert_true(iolink_ring_is_empty(&ctx.main.shared.i_isr_frame_ring));
     }
-    assert_int_equal(ctx.main.shared.isr_mailbox_drops, 0U);
+    assert_int_equal(ctx.main.shared.i_isr_mailbox_drops, 0U);
 }
 
 /* 环满时拒绝生产者，而不是覆盖已租用的槽位。 */
@@ -132,20 +132,20 @@ static void test_frame_full_rejects(void** state)
         assert_true(publish_frame(&ctx, (uint8_t) (0x30U + i), 2U));
     }
     assert_false(publish_frame(&ctx, 0x50U, 2U));
-    assert_int_equal(ctx.main.shared.isr_mailbox_drops, 1U);
-    assert_int_equal(iolink_ring_count(&ctx.main.shared.isr_frame_ring), IOLINK_MBX_SLOTS);
+    assert_int_equal(ctx.main.shared.i_isr_mailbox_drops, 1U);
+    assert_int_equal(iolink_ring_count(&ctx.main.shared.i_isr_frame_ring), IOLINK_MBX_SLOTS);
 
     /* 排队记录按 FIFO 保持完整。 */
     const iolink_frame_rec_t* first =
-        (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.main.shared.isr_frame_ring);
+        (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.main.shared.i_isr_frame_ring);
     assert_non_null(first);
     assert_int_equal(first->data[0], 0x30U);
-    iolink_ring_release(&ctx.main.shared.isr_frame_ring);
+    iolink_ring_release(&ctx.main.shared.i_isr_frame_ring);
     const iolink_frame_rec_t* second =
-        (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.main.shared.isr_frame_ring);
+        (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.main.shared.i_isr_frame_ring);
     assert_non_null(second);
     assert_int_equal(second->data[0], 0x31U);
-    iolink_ring_release(&ctx.main.shared.isr_frame_ring);
+    iolink_ring_release(&ctx.main.shared.i_isr_frame_ring);
 }
 
 /* 在主泵进入 iolink_dll_process()、尚未消费邮箱时
@@ -175,12 +175,12 @@ static void test_main_pass_cutpoint(void** state)
     };
 
     iolink_dll_init(&ctx.main, &ctx.isr, &phy);
-    ctx.main.shared.clock.time_us = test_time_us;
+    ctx.main.shared.c_clock.time_us = test_time_us;
     ctx.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.main.enforce_timing = false;
-    ctx.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    ctx.main.shared.od_width = 1U;
+    ctx.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    ctx.main.shared.c_od_width = 1U;
     now_us = 1000000U;
 
     reset_rings(&ctx);
@@ -190,17 +190,17 @@ static void test_main_pass_cutpoint(void** state)
     g_publish_on_poll = 1U;
     iolink_dll_process(&ctx.main); /* 轮询诊断 -> 发布 B -> 消费 A */
 
-    assert_int_equal(iolink_ring_count(&ctx.main.shared.isr_frame_ring), 1U);
-    assert_int_equal(ctx.main.shared.isr_mailbox_drops, 0U);
+    assert_int_equal(iolink_ring_count(&ctx.main.shared.i_isr_frame_ring), 1U);
+    assert_int_equal(ctx.main.shared.i_isr_mailbox_drops, 0U);
     const iolink_frame_rec_t* pending =
-        (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.main.shared.isr_frame_ring);
+        (const iolink_frame_rec_t*) iolink_ring_peek(&ctx.main.shared.i_isr_frame_ring);
     assert_non_null(pending);
     assert_int_equal(pending->len, 2U);
     assert_int_equal(pending->data[0], 0x90U);
     assert_int_equal(pending->data[1], 0x91U);
 
     iolink_dll_process(&ctx.main); /* 消费 B */
-    assert_true(iolink_ring_is_empty(&ctx.main.shared.isr_frame_ring));
+    assert_true(iolink_ring_is_empty(&ctx.main.shared.i_isr_frame_ring));
 }
 
 int main(void)

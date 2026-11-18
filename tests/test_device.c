@@ -270,7 +270,7 @@ static void test_device_binds_instance_context(void** state)
 
     /* 设备层必须把同一个实例指针交给时钟、ISDU 与 DS 的 OD 钩子；
        否则 OD HANDLER 会收到 NULL 并回 0x11。 */
-    assert_ptr_equal(test_dll_shared(&dev.ctx)->clock.self,
+    assert_ptr_equal(test_dll_shared(&dev.ctx)->c_clock.self,
                      (iolink_app_t * IOLINK_NULLABLE) & sentinel);
     assert_ptr_equal(test_dll_isdu(&dev.ctx)->od_self, (iolink_app_t * IOLINK_NULLABLE) & sentinel);
     assert_ptr_equal(test_dll(&dev.ctx)->ds.self, (iolink_app_t * IOLINK_NULLABLE) & sentinel);
@@ -309,10 +309,10 @@ static void test_device_init_validates_config_not_context(void** state)
     /* 未初始化上下文中的值不得参与校验：只有
      * 调用者提供的配置才是权威来源。 */
     (void) memset(&ctx, 0, sizeof(ctx));
-    test_dll_shared(&ctx)->m_seq_type = 7U;
-    test_dll_shared(&ctx)->pd_in_len = IOLINK_PD_IN_MAX_SIZE + 1U;
-    test_dll_shared(&ctx)->pd_out_len_current = IOLINK_PD_OUT_MAX_SIZE + 1U;
-    test_dll_shared(&ctx)->od_width = 3U;
+    test_dll_shared(&ctx)->c_m_seq_type = 7U;
+    test_dll_shared(&ctx)->c_pd_in_len = IOLINK_PD_IN_MAX_SIZE + 1U;
+    test_dll_shared(&ctx)->c_pd_out_len_current = IOLINK_PD_OUT_MAX_SIZE + 1U;
+    test_dll_shared(&ctx)->c_od_width = 3U;
 
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
 }
@@ -367,10 +367,10 @@ static void test_device_pd_input_bounds(void** state)
     const uint8_t pd[2] = {0x11U, 0x22U};
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), true),
                      IOLINK_DEVICE_PD_OK);
-    assert_int_equal(test_dll_shared(&dev.ctx)->pd_in_len, 2U);
+    assert_int_equal(test_dll_shared(&dev.ctx)->c_pd_in_len, 2U);
     const iolink_dll_shared_t* shared = test_dll_shared(&dev.ctx);
-    assert_memory_equal(&shared->pd_in[test_pd_active(test_dll(&dev.ctx))][shared->od_width], pd,
-                        sizeof(pd));
+    assert_memory_equal(&shared->m_pd_in[test_pd_active(test_dll(&dev.ctx))][shared->c_od_width],
+                        pd, sizeof(pd));
 }
 
 static void test_device_pd_valid_flag(void** state)
@@ -564,7 +564,7 @@ static void test_device_od_width_required(void** state)
     stack.pd_in_len = 0U;
     stack.pd_out_len = 0U;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
-    assert_int_equal(test_dll_shared(&ctx)->od_width, 2U);
+    assert_int_equal(test_dll_shared(&ctx)->c_od_width, 2U);
 
     /* TYPE_2_V 是可变的：应用选 8 字节就按 8 字节布线，
      * DPP1 的 M-sequenceCapability 也随之编码 OPERATE code 6。 */
@@ -573,7 +573,7 @@ static void test_device_od_width_required(void** state)
     stack.pd_in_len = 2U;
     stack.pd_out_len = 2U;
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
-    assert_int_equal(test_dll_shared(&ctx)->od_width, 8U);
+    assert_int_equal(test_dll_shared(&ctx)->c_od_width, 8U);
     /* 0x01 = 支持 ISDU，bits1-3 = code 6（TYPE_2_V / 8 字节 OD）。 */
     assert_int_equal(iolink_isdu_direct_param_page1_octet(test_dll_isdu(&ctx), 0x03U), 0x0DU);
 }

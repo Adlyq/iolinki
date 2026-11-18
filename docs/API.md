@@ -719,8 +719,8 @@ COM 切换，因此不接收上下文参数。
 `iolink_device_app_t::time_us` 是 `iolink_device_init()` 的必需项（`NULL` 以
 `IOLINK_DEVICE_INIT_ERR_TIME` 拒绝），协议栈用它完成全部 DLL、ISR 和事件计时。没有
 单独的平台时间 API；设备层只创建一个 `iolink_clock_t`（回调 + 实例指针，
-`shared.clock`），事件引擎的 `ctx->clock` 指向它。直接使用 DLL 的调用方必须在
-`iolink_dll_init()` 之后自行绑定 `ctx->shared.clock`；直接使用事件引擎的调用方把
+`shared.c_clock`），事件引擎的 `ctx->clock` 指向它。直接使用 DLL 的调用方必须在
+`iolink_dll_init()` 之后自行绑定 `ctx->shared.c_clock`；直接使用事件引擎的调用方把
 `ctx->clock` 指向自己的 `iolink_clock_t`（`NULL` 读作时间 0）。临界区
 使用 `include/iolinki/port.h` 中的 `iolink_critical_enter()` /
 `iolink_critical_exit()`；需要临界区的档位（`IOLINK_NEED_CRITICAL` 非零）下，
@@ -767,7 +767,7 @@ config.log_level = IOLINK_LOG_LEVEL_INFO;
 
 `IOLINK_LOG_LEVEL_SILENT`（默认）或 trait 的 `log_write == NULL` 保持静默。
 汇点只在初始化时由 `config.app->log_write` / `config.log_level` 绑定，没有运行期切换
-接口。设备只有一个 sink（`shared.log`），ISDU、DS 和事件上下文只保存指向它的
+接口。设备只有一个 sink（`shared.c_log`），ISDU、DS 和事件上下文只保存指向它的
 指针；直接使用这些模块的调用方把 `ctx->log` 指向自己的 sink 即可，NULL 表示静默。
 
 库不格式化也不缓存任何内容：回调收到 printf 风格的格式串和参数，只有通过运行时
@@ -790,5 +790,5 @@ CPU 级的 `iolink_critical_*`（IRQ 屏蔽）。也不要用自己的锁包裹�
 `iolink_dll_publish_reply_plans()` 在数据 ISR 内调用时返回
 `IOLINK_DLL_PUBLISH_ERR_ISR`（`iolink_dll_publish_result_t`），
 `iolink_isdu_bind_workspace()` 在数据 ISR 内直接拒绝并记录，两者都不改动已有状态。
-`iolink_dll_init()` 没有这个判定：`shared.in_isr` 就在它清零的上下文里，误从数据 ISR
+`iolink_dll_init()` 没有这个判定：`shared.i_in_isr` 就在它清零的上下文里，误从数据 ISR
 调用会直接破坏正在运行的泵。

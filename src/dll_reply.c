@@ -62,7 +62,7 @@ static void IOLINK_NOINLINE dll_plan_push(iolink_dll_main_t* ctx, uint8_t* count
         ctx->reply_plan_overflows++;
         return;
     }
-    iolink_reply_plan_t* plan = &ctx->shared.reply_plan[*count];
+    iolink_reply_plan_t* plan = &ctx->shared.c_reply_plan[*count];
     plan->data = data;
     plan->match_mask = match_mask;
     plan->match_value = match_value;
@@ -86,9 +86,9 @@ static void IOLINK_NOINLINE dll_plan_push(iolink_dll_main_t* ctx, uint8_t* count
  */
 static void dll_plan_push_type12(iolink_dll_main_t* ctx, uint8_t* count, uint8_t state)
 {
-    const uint8_t od_w = ctx->shared.od_width;
+    const uint8_t od_w = ctx->shared.c_od_width;
     const uint8_t addr_max = IOLINK_MC_ADDR_MASK;
-    const uint8_t ckt = dll_mseq_type_bits(ctx->shared.m_seq_type);
+    const uint8_t ckt = dll_mseq_type_bits(ctx->shared.c_m_seq_type);
 
     /* 读：OD（按通道来源，宽度 od_width）+ PD-in。 */
     dll_plan_push(ctx, count, state, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
@@ -178,7 +178,7 @@ static void dll_plan_push_type0(iolink_dll_main_t* ctx, uint8_t* count, uint8_t 
                   IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_ISDU_SEG, 1U,
                   IOLINK_REPLY_FLAG_CONSUME, read_action, NULL);
     /* ISDU 读 IDLE/IDLE2/ABORT（0x11..0x1F）：回 0x00 并请求主泵复位读
-     * 传输层（shared.isr_isdu_read_reset）。线性查找顺序保证上面的
+     * 传输层（shared.i_isr_isdu_read_reset）。线性查找顺序保证上面的
      * START/COUNT 计划先命中，本条兜住其余读。 */
     dll_plan_push(ctx, count, state, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
                   IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU, IOLINK_MC_ADDR_MASK, 0U,
@@ -227,14 +227,14 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
     if (ctx == NULL) {
         return IOLINK_DLL_PUBLISH_ERR_NULL;
     }
-    if (ctx->shared.isr == NULL) {
+    if (ctx->shared.c_isr == NULL) {
         /* iolink_dll_init() 尚未成功完成：没有可发布的上下文。 */
         return IOLINK_DLL_PUBLISH_ERR_UNINIT;
     }
     /* 计划表由数据 ISR 查表读取：重建必须与泵互斥。这里显式拒绝误从数据
      * ISR 的调用，而不是静默重写正在被查的表。 */
-    if (ctx->shared.in_isr != 0U) {
-        IOLINK_LOG_ISR_ERROR(&ctx->shared.log, "reply plan publish rejected inside the data ISR");
+    if (ctx->shared.i_in_isr != 0U) {
+        IOLINK_LOG_ISR_ERROR(&ctx->shared.c_log, "reply plan publish rejected inside the data ISR");
         return IOLINK_DLL_PUBLISH_ERR_ISR;
     }
     /* 计划内容是 {M-sequence 类型, OD 宽度, 能力位} 的纯函数，三项都只在
@@ -242,30 +242,30 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
      * 重发布。因此本函数只在初始化（或数据 ISR 静止时的重新初始化）里调用，
      * 没有运行期并发协议：先撤下"就绪"标志，整张表写完后原子置回，ISR 入口
      * 只在标志为 1 时进入传输泵。 */
-    iolink_atomic_store(&ctx->shared.reply_plans_ready, 0U);
+    iolink_atomic_store(&ctx->shared.c_reply_plans_ready, 0U);
     /* 该计数描述"当前这张表被截断了几条"，不是跨多次发布的累计值：
      * 设备初始化会发布两次（先默认配置、后最终配置），保留累计值会把
      * 被丢弃的那张表的截断也算进去。 */
     ctx->reply_plan_overflows = 0U;
     uint8_t count = 0U;
-    const bool type0 = (ctx->shared.m_seq_type == IOLINK_M_SEQ_TYPE_0);
+    const bool type0 = (ctx->shared.c_m_seq_type == IOLINK_M_SEQ_TYPE_0);
 
     /* 切片 0：STARTUP / AWAITING_COMM。 */
-    ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_STARTUP] = count;
+    ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_STARTUP] = count;
     dll_plan_push_type0(ctx, &count, (uint8_t) IOLINK_DLL_STATE_STARTUP, DLL_PLAN_MODE_STARTUP);
-    ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_STARTUP] =
-        (uint8_t) (count - ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_STARTUP]);
+    ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_STARTUP] =
+        (uint8_t) (count - ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_STARTUP]);
 
     /* 切片 1：PREOPERATE。 */
-    ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_PREOPERATE] = count;
+    ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_PREOPERATE] = count;
     dll_plan_push_type0(ctx, &count, (uint8_t) IOLINK_DLL_STATE_PREOPERATE,
                         DLL_PLAN_MODE_PREOPERATE);
-    ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_PREOPERATE] =
-        (uint8_t) (count - ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_PREOPERATE]);
+    ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_PREOPERATE] =
+        (uint8_t) (count - ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_PREOPERATE]);
 
     /* 切片 2：ESTAB_COM。Type-1/2 配置下首帧可能是 Type-0 页读（C5），
      * 由 ISR 应答后仍交主泵完成迁移；Type-0 配置与 OPERATE 内容相同。 */
-    ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM] = count;
+    ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM] = count;
     if (!type0) {
         dll_plan_push_type12(ctx, &count, (uint8_t) IOLINK_DLL_STATE_ESTAB_COM);
         dll_plan_push(ctx, &count, (uint8_t) IOLINK_DLL_STATE_ESTAB_COM,
@@ -279,28 +279,28 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
                       IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK, IOLINK_MC_CHANNEL_PAGE,
                       IOLINK_MC_ADDR_MASK, 3U, IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0,
                       IOLINK_REPLY_SRC_NONE, 0U, 0U, IOLINK_REPLY_ACT_NONE, NULL);
-        ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM] =
-            (uint8_t) (count - ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM]);
+        ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM] =
+            (uint8_t) (count - ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM]);
     }
     else {
         dll_plan_push_type0(ctx, &count, (uint8_t) IOLINK_DLL_STATE_ESTAB_COM,
                             DLL_PLAN_MODE_OPERATE);
-        ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM] =
-            (uint8_t) (count - ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM]);
+        ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM] =
+            (uint8_t) (count - ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM]);
     }
 
     /* 切片 3：OPERATE。 */
     if (type0) {
         /* Type-0 配置的 ESTAB 与 OPERATE 内容相同，共享同一切片。 */
-        ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_OPERATE] =
-            ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM];
-        ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE] =
-            ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM];
+        ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_OPERATE] =
+            ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM];
+        ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE] =
+            ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM];
     }
     else {
-        ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_OPERATE] = count;
+        ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_OPERATE] = count;
         dll_plan_push_type12(ctx, &count, (uint8_t) IOLINK_DLL_STATE_OPERATE);
-        if (iolink_caps_has(ctx->shared.caps, IOLINK_CAP_COMPAT_T0_READ)) {
+        if (iolink_caps_has(ctx->shared.c_caps, IOLINK_CAP_COMPAT_T0_READ)) {
             /* 兼容模式：OPERATE 中的 Type-0 页读仍按普通页读应答。 */
             dll_plan_push(ctx, &count, (uint8_t) IOLINK_DLL_STATE_OPERATE,
                           IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
@@ -324,11 +324,11 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
                       IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK, IOLINK_MC_CHANNEL_PAGE,
                       IOLINK_MC_ADDR_MASK, 3U, IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0,
                       IOLINK_REPLY_SRC_NONE, 0U, 0U, IOLINK_REPLY_ACT_NONE, NULL);
-        ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE] =
-            (uint8_t) (count - ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_OPERATE]);
+        ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE] =
+            (uint8_t) (count - ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_OPERATE]);
     }
 
-    iolink_atomic_store(&ctx->shared.reply_plans_ready, 1U);
+    iolink_atomic_store(&ctx->shared.c_reply_plans_ready, 1U);
     return IOLINK_DLL_PUBLISH_OK;
 }
 
@@ -344,7 +344,7 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
  *  - 每份**新**应答翻转代数位（位 10）。长度与缓冲区选择完全相同的
  *    两份应答因此仍是不同的发布字，ISR 的段索引序列会被打断；
  *  - 写失效用单调序号：ISR 每接受一个写 START/ABORT 就自增
- *    `isr_isdu_write_gen`。发布代号尚未被 ack 时这里发布
+ *    `i_isr_isdu_write_gen`。发布代号尚未被 ack 时这里发布
  *    len = 0（无服务），绝不让旧应答继续充当"当前值"；写被应用或
  *    中止后先发布新视图，再把 `isdu_write_gen_applied` 追平，
  *    确认必须放在发布之后：否则 ISR 可能在两者之间看到两值相等而
@@ -379,7 +379,7 @@ void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx)
     /* 写入口：发布字已有一代未被主泵处理（正在累计或已收齐待解析）时，
      * 写尚未生效，已发布读视图必须显示"无服务"。判据只读发布字与主泵
      * 自己的 ack 序号——数据 ISR 的累计字段（stage_state 等）不参与。 */
-    const IOLINK_ATOMIC_UINT_T write_gen = iolink_atomic_load(&ctx->shared.isr_isdu_write_gen);
+    const IOLINK_ATOMIC_UINT_T write_gen = iolink_atomic_load(&ctx->shared.i_isr_isdu_write_gen);
     const bool write_pending = isdu_write_in_progress(&ctx->shared.isdu);
     if (write_pending) {
         /* 写尚未应用：显式发布"无服务"，绝不重发旧应答。 */
@@ -388,15 +388,15 @@ void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx)
     }
 
     const IOLINK_ATOMIC_UINT_T word = IOLINK_ISDU_PUB_WORD_GEN(count, busy, sel, ctx->isdu_pub_gen);
-    if (word != ctx->shared.isr_isdu_pub) {
+    if (word != ctx->shared.m_isr_isdu_pub) {
         /* 最后发布：响应字节已在 resp_store[sel] 中。 */
-        iolink_atomic_store(&ctx->shared.isr_isdu_pub, word);
+        iolink_atomic_store(&ctx->shared.m_isr_isdu_pub, word);
     }
-    if (!write_pending && (write_gen != ctx->shared.isdu_write_gen_applied)) {
+    if (!write_pending && (write_gen != ctx->shared.m_isdu_write_gen_applied)) {
         /* 写已应用或已中止：新视图已在上方发布，现在确认它的序号。
          * 释放顺序保证 ISR 看到 applied == gen 时发布字已是新视图。 */
         IOLINK_FENCE();
-        ctx->shared.isdu_write_gen_applied = write_gen;
+        ctx->shared.m_isdu_write_gen_applied = write_gen;
     }
 }
 
@@ -425,7 +425,7 @@ static uint16_t dll_decode_cycle_time_ticks(uint8_t value)
  */
 uint32_t dll_master_cycle_us(const iolink_dll_main_t* ctx)
 {
-    uint16_t ticks = dll_decode_cycle_time_ticks(ctx->shared.master_cycle_time);
+    uint16_t ticks = dll_decode_cycle_time_ticks(ctx->shared.m_master_cycle_time);
     if (ticks == 0U) {
         ticks = (uint16_t) ((ctx->min_cycle_time_us + (IOLINK_CYCLE_TIME_UNIT_US - 1U)) /
                             IOLINK_CYCLE_TIME_UNIT_US);
@@ -436,10 +436,10 @@ uint32_t dll_master_cycle_us(const iolink_dll_main_t* ctx)
 /** @brief 刷新主站活动时间戳。
  *
  * 只由主上下文调用：主上下文自己完成的帧直接调用；ISR 完全消费的帧与
- * 进了邮箱的帧一样，由 ISR 置 `shared.isr_master_activity`，主泵在
+ * 进了邮箱的帧一样，由 ISR 置 `shared.i_isr_master_activity`，主泵在
  * `dll_take_isr_master_activity()` 中消费该标志后调用这里。只刷新时间戳与
  * 主站丢失提示，不涉及 Back-to-box 周期计数（该计数归主上下文独占，
- * 见 @ref dll_count_served_cycle 与 `shared.isr_cycle_served`）。 */
+ * 见 @ref dll_count_served_cycle 与 `shared.i_isr_cycle_served`）。 */
 void dll_mark_master_activity_ts(iolink_dll_main_t* ctx)
 {
     ctx->master_last_activity_ms = dll_time_ms(&ctx->shared);
@@ -450,7 +450,7 @@ void dll_mark_master_activity_ts(iolink_dll_main_t* ctx)
 /** @brief 服务了一个 MasterCycle：推进 Back-to-box 计数（10.7.5）。
  *
  * 只由主上下文调用：主上下文自己处理的帧直接调用；ISR 完全消费的帧经
- * `shared.isr_cycle_served` 交接后由主泵调用。 */
+ * `shared.i_isr_cycle_served` 交接后由主泵调用。 */
 void dll_count_served_cycle(iolink_dll_main_t* ctx)
 {
     /* 10.7.5：统计 Back-to-box 之后服务的帧数，以便设备在停止前

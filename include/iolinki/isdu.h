@@ -228,7 +228,7 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx);
  *
  * 传输缓冲指针由数据 ISR 读取，因此和 `iolink_dll_publish_reply_plans()`
  * 一样要求主上下文调用、数据泵静止。从数据 ISR 内
- * （`shared.in_isr != 0`）调用会被拒绝：不改变任何指针与传输状态，并记录
+ * （`shared.i_in_isr != 0`）调用会被拒绝：不改变任何指针与传输状态，并记录
  * 一条 ISR 错误。
  *
  * @p ws 为 NULL 表示解绑：没有内嵌 fallback 的构建

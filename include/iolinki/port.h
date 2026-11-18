@@ -163,7 +163,7 @@ IOLINK_ASSUME_NONNULL_BEGIN
  * 槽位）。平台临界区只包住标量与条件表的短操作：
  * 诊断条件表的脉冲消费与快照、事件队列的读/clear、
  * 计数器清零、SIO 切换时的应答槽清理
- * 与 ISR 的 RX 相位复位。PD-in 发布不需要临界区：`pd_pub` 与
+ * 与 ISR 的 RX 相位复位。PD-in 发布不需要临界区：`m_pd_pub` 与
  * `pd_valid_cmd` 各有单写者，ISR 只做一次原子加载。`dll_send()` 的应答暂存用一个短临界区
  * 把“ISR 是否正在流式发送”的检查与槽位/载荷/发布合成一次操作（区内
  * 含一次不超过 `IOLINK_M_SEQ_MAX_LEN` 的载荷复制）；ISR/SMP 档的应答由数据 ISR

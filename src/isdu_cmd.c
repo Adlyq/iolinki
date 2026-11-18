@@ -142,21 +142,21 @@ void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
                及其配置长度。PD 状态位（A.1.5）承载
                有效性；B.2.23 未定义其无效时的不同应答，
                因此按原样返回缓冲区（ST 参考实现行为）。 */
-            len = dll->shared.pd_in_len;
+            len = dll->shared.c_pd_in_len;
             if (len > IOLINK_PD_IN_MAX_SIZE) {
                 len = (uint8_t) IOLINK_PD_IN_MAX_SIZE;
             }
             if (len > 0U) {
                 /* 与 ISR 捕获同一条规则：active 取自一次发布字加载。 */
                 const uint8_t active = IOLINK_PD_PUB_ACTIVE(dll_pd_pub_load(&dll->shared));
-                const uint8_t* pdi = &dll->shared.pd_in[active][dll->shared.od_width];
+                const uint8_t* pdi = &dll->shared.m_pd_in[active][dll->shared.c_od_width];
                 (void) memcpy(ctx->response_buf, pdi, len);
             }
         }
         else {
             /* B.2.24：PDout 通道同理。在收到第一帧 PDout 之前，
                返回按配置长度零初始化的缓冲区。 */
-            len = dll->shared.pd_out_len_current;
+            len = dll->shared.c_pd_out_len_current;
             if (len > sizeof(dll->pd_out)) {
                 len = (uint8_t) sizeof(dll->pd_out);
             }
@@ -624,15 +624,15 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, const iolink_device
     if (ctx->dll_ctx != NULL) {
         const iolink_dll_main_t* dll = ctx->dll_ctx;
         iolink_dll_get_pd_length(dll, &pd_in, &pd_out);
-        m_seq = dll->shared.m_seq_type;
-        od_width = dll->shared.od_width;
+        m_seq = dll->shared.c_m_seq_type;
+        od_width = dll->shared.c_od_width;
     }
 
     (void) memset(page, 0, 16);
     /* 0x01 MasterCycleTime 是主站在启动期间写入的值。 */
     if (ctx->dll_ctx != NULL) {
         const iolink_dll_main_t* dll = ctx->dll_ctx;
-        page[0x01] = dll->shared.master_cycle_time;
+        page[0x01] = dll->shared.m_master_cycle_time;
     }
     {
         uint16_t min_cyc = (ctx->dll_ctx != NULL)
@@ -663,7 +663,7 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, const iolink_device
 bool dp_page1_main_context(const iolink_isdu_ctx_t* ctx)
 {
     const iolink_dll_main_t* dll = ctx->dll_ctx;
-    return (dll == NULL) || (dll->shared.in_isr == 0U);
+    return (dll == NULL) || (dll->shared.i_in_isr == 0U);
 }
 
 /** @brief 重建 DPP1 映像并按 seqlock 发布（主泵单写者）。
@@ -708,7 +708,7 @@ void dp_page1_ensure(iolink_isdu_ctx_t* ctx)
     if ((ctx->dp_page1_src != ctx->dll_ctx) || (ctx->dp_page1_info != ctx->device_info)) {
         stale = true; /* 绑定/重绑上下文：映像必须按新上下文重建 */
     }
-    if ((dll != NULL) && (ctx->dp_page1[0x01] != dll->shared.master_cycle_time)) {
+    if ((dll != NULL) && (ctx->dp_page1[0x01] != dll->shared.m_master_cycle_time)) {
         stale = true;
     }
     if (stale) {

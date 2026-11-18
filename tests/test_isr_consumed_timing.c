@@ -73,7 +73,7 @@ static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
         s_clock_step++;
         if (s_clock_obs_n < CLOCK_OBS_MAX) {
             s_clock_obs[s_clock_obs_n].value = (uint32_t) now;
-            s_clock_obs[s_clock_obs_n].seq = s_dll.main.shared.isr_consumed_seq;
+            s_clock_obs[s_clock_obs_n].seq = s_dll.main.shared.i_isr_consumed_seq;
             s_clock_obs_n++;
         }
     }
@@ -258,13 +258,14 @@ static bool run_consumed_page_read(void)
     make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x02U), IOLINK_MSEQ_TYPE_0,
                frame, sizeof(frame));
     feed(frame, sizeof(frame));
-    const uint8_t seq_before = s_dll.main.shared.isr_consumed_seq;
+    const uint8_t seq_before = s_dll.main.shared.i_isr_consumed_seq;
     iolink_dll_process_isr(&s_dll.main.shared);
     drain_tx();
     /* 读取捕获长度即算一次查看：teardown 要求每次交付都被查看过。 */
     const size_t tx_len = tx_observed_len();
-    return (tx_len == 2U) && (s_dll.main.shared.isr_consumed_seq == (uint8_t) (seq_before + 1U)) &&
-           iolink_ring_is_empty(&s_dll.main.shared.isr_frame_ring);
+    return (tx_len == 2U) &&
+           (s_dll.main.shared.i_isr_consumed_seq == (uint8_t) (seq_before + 1U)) &&
+           iolink_ring_is_empty(&s_dll.main.shared.i_isr_frame_ring);
 }
 
 /* DPP1 需要绑定的设备身份：DLL 层没有默认身份，页读依赖它。 */
@@ -287,12 +288,12 @@ static void init_operate_type0(void)
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     bind_test_identity(&s_dll.main);
-    s_dll.main.shared.clock.time_us = test_time_us;
+    s_dll.main.shared.c_clock.time_us = test_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
-    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    s_dll.main.shared.od_width = 1U;
-    s_dll.main.shared.pd_in_len = 0U;
-    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    s_dll.main.shared.c_od_width = 1U;
+    s_dll.main.shared.c_pd_in_len = 0U;
+    s_dll.main.shared.c_pd_out_len_current = 0U;
     test_pd_set_valid(&s_dll.main, true);
     s_dll.main.enforce_timing = true;
     s_dll.main.min_cycle_time_us = 1000U;
@@ -317,7 +318,7 @@ static int run_all(void)
     if (!run_consumed_page_read()) {
         return 1;
     }
-    if (s_dll.main.shared.isr_consumed_us != (uint32_t) t0) {
+    if (s_dll.main.shared.i_isr_consumed_us != (uint32_t) t0) {
         return 2;
     }
     run_main_pass();
@@ -333,7 +334,7 @@ static int run_all(void)
     if (dll_timer_deadline(&s_dll.main, IOLINK_TIMER_T_REN) != (t0 + (uint64_t) IOLINK_T_REN_US)) {
         return 6;
     }
-    if (s_dll.main.isr_consumed_seq_seen != s_dll.main.shared.isr_consumed_seq) {
+    if (s_dll.main.isr_consumed_seq_seen != s_dll.main.shared.i_isr_consumed_seq) {
         return 7;
     }
 
@@ -428,15 +429,15 @@ static int run_handoff_order(void)
     s_now_us += 1000U;
     s_clock_obs_n = 0U;
     s_clock_step = 1U;
-    const uint8_t seq_before = s_dll.main.shared.isr_consumed_seq;
+    const uint8_t seq_before = s_dll.main.shared.i_isr_consumed_seq;
     if (!run_consumed_page_read()) {
         return 1;
     }
     s_clock_step = 0U;
-    if (s_dll.main.shared.isr_consumed_seq != (uint8_t) (seq_before + 1U)) {
+    if (s_dll.main.shared.i_isr_consumed_seq != (uint8_t) (seq_before + 1U)) {
         return 2;
     }
-    const uint32_t stamp = s_dll.main.shared.isr_consumed_us;
+    const uint32_t stamp = s_dll.main.shared.i_isr_consumed_us;
     const size_t obs = clock_obs_find(stamp);
     if (obs == CLOCK_OBS_MAX) {
         return 3; /* 时间戳必须来自一次时钟读取 */
@@ -467,18 +468,18 @@ static int run_handoff_order(void)
     if (!run_consumed_page_read()) {
         return 8;
     }
-    const uint32_t stamp2 = s_dll.main.shared.isr_consumed_us;
+    const uint32_t stamp2 = s_dll.main.shared.i_isr_consumed_us;
     s_now_us = (uint64_t) stamp2 + 200U;
     if (!run_consumed_page_read()) {
         return 9;
     }
-    const uint32_t stamp3 = s_dll.main.shared.isr_consumed_us;
+    const uint32_t stamp3 = s_dll.main.shared.i_isr_consumed_us;
     if (stamp3 == stamp2) {
         return 10;
     }
     s_now_us = (uint64_t) stamp3 + 150U;
     run_main_pass();
-    if (s_dll.main.isr_consumed_seq_seen != s_dll.main.shared.isr_consumed_seq) {
+    if (s_dll.main.isr_consumed_seq_seen != s_dll.main.shared.i_isr_consumed_seq) {
         return 11;
     }
     if (s_dll.main.last_response_us != (uint64_t) stamp3) {
@@ -486,13 +487,13 @@ static int run_handoff_order(void)
     }
 
     /* 5. 8 位自由计数回绕：回绕后的序号仍被采纳。 */
-    s_dll.main.shared.isr_consumed_seq = 0xFEU;
+    s_dll.main.shared.i_isr_consumed_seq = 0xFEU;
     s_dll.main.isr_consumed_seq_seen = 0xFEU;
     s_now_us = (uint64_t) stamp3 + 1000U;
     if (!run_consumed_page_read()) {
         return 13;
     }
-    if (s_dll.main.shared.isr_consumed_seq != 0xFFU) {
+    if (s_dll.main.shared.i_isr_consumed_seq != 0xFFU) {
         return 14;
     }
     s_now_us = (uint64_t) stamp3 + 1150U;
@@ -504,10 +505,10 @@ static int run_handoff_order(void)
     if (!run_consumed_page_read()) {
         return 16;
     }
-    if (s_dll.main.shared.isr_consumed_seq != 0x00U) {
+    if (s_dll.main.shared.i_isr_consumed_seq != 0x00U) {
         return 17;
     }
-    const uint32_t stamp_wrap = s_dll.main.shared.isr_consumed_us;
+    const uint32_t stamp_wrap = s_dll.main.shared.i_isr_consumed_us;
     s_now_us = (uint64_t) stamp_wrap + 150U;
     run_main_pass();
     if (s_dll.main.isr_consumed_seq_seen != 0x00U) {

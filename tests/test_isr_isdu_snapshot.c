@@ -244,12 +244,12 @@ static int test_eager_isdu_snapshot(void)
     };
 
     iolink_dll_init(&dll.main, &dll.isr, &phy);
-    dll.main.shared.clock.time_us = test_time_us;
+    dll.main.shared.c_clock.time_us = test_time_us;
     dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
-    dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    dll.main.shared.od_width = 2U;
-    dll.main.shared.pd_out_len_current = 2U;
-    dll.main.shared.pd_in_len = 0U;
+    dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    dll.main.shared.c_od_width = 2U;
+    dll.main.shared.c_pd_out_len_current = 2U;
+    dll.main.shared.c_pd_in_len = 0U;
     /* 计划表是 {类型, OD 宽度, 能力位} 的纯函数，只在初始化时编译；本用例
      * 在 init 之后才设定配置，因此显式提交一次（ISR 尚未运行）。 */
     iolink_dll_publish_reply_plans(&dll.main);
@@ -264,8 +264,8 @@ static int test_eager_isdu_snapshot(void)
     now_us = 1000000U;
     dll.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));
     iolink_dll_process(&dll.main); /* 刷新 ISR 快照 */
-    if ((IOLINK_ISDU_PUB_LEN(dll.main.shared.isr_isdu_pub) != 4U) ||
-        (IOLINK_ISDU_PUB_BUSY(dll.main.shared.isr_isdu_pub) != 0U)) {
+    if ((IOLINK_ISDU_PUB_LEN(dll.main.shared.m_isr_isdu_pub) != 4U) ||
+        (IOLINK_ISDU_PUB_BUSY(dll.main.shared.m_isr_isdu_pub) != 0U)) {
         return 1;
     }
 
@@ -309,7 +309,7 @@ static int test_eager_isdu_snapshot(void)
     }
 
     /* Busy START。 */
-    dll.main.shared.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 1U, 0U);
+    dll.main.shared.m_isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 1U, 0U);
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_reset();
     exchange(&dll, frame, sizeof(frame), 0U);
@@ -318,7 +318,7 @@ static int test_eager_isdu_snapshot(void)
     }
 
     /* No Service START（没有已暂存的响应）。 */
-    dll.main.shared.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 0U, 0U);
+    dll.main.shared.m_isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 0U, 0U);
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_reset();
     exchange(&dll, frame, sizeof(frame), 0U);
@@ -352,12 +352,12 @@ static int test_request_service_staging(void)
     };
 
     iolink_dll_init(&dll.main, &dll.isr, &phy);
-    dll.main.shared.clock.time_us = test_time_us;
+    dll.main.shared.c_clock.time_us = test_time_us;
     dll.main.shared.state = IOLINK_DLL_STATE_STARTUP;
-    dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    dll.main.shared.od_width = 1U;
-    dll.main.shared.pd_out_len_current = 0U;
-    dll.main.shared.pd_in_len = 0U;
+    dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    dll.main.shared.c_od_width = 1U;
+    dll.main.shared.c_pd_out_len_current = 0U;
+    dll.main.shared.c_pd_in_len = 0U;
     now_us = 1000000U;
     dll.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));
     iolink_dll_publish_reply_plans(&dll.main);
@@ -411,12 +411,12 @@ static int test_type0_diagnosis_read_isr(void)
     };
 
     iolink_dll_init(&dll.main, &dll.isr, &phy);
-    dll.main.shared.clock.time_us = test_time_us;
+    dll.main.shared.c_clock.time_us = test_time_us;
     dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
-    dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    dll.main.shared.od_width = 1U;
-    dll.main.shared.pd_out_len_current = 0U;
-    dll.main.shared.pd_in_len = 0U;
+    dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    dll.main.shared.c_od_width = 1U;
+    dll.main.shared.c_pd_out_len_current = 0U;
+    dll.main.shared.c_pd_in_len = 0U;
     /* 计划表只在初始化时编译；本用例在 init 之后才配置，故显式发布一次
      * （ISR 尚未运行）。 */
     iolink_dll_publish_reply_plans(&dll.main);

@@ -283,13 +283,13 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     g_phy.detect_wakeup = mock_detect_wakeup;
     iolink_dll_init(&dll->main, &dll->isr, &g_phy);
     bind_test_identity(&dll->main);
-    dll->main.shared.clock.time_us = test_time_us;
+    dll->main.shared.c_clock.time_us = test_time_us;
     dll->main.phy_mode = IOLINK_PHY_MODE_SDCI;
     dll->main.shared.state = IOLINK_DLL_STATE_OPERATE;
-    dll->main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    dll->main.shared.od_width = 1U;
-    dll->main.shared.pd_out_len_current = 0U;
-    dll->main.shared.pd_in_len = 0U;
+    dll->main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    dll->main.shared.c_od_width = 1U;
+    dll->main.shared.c_pd_out_len_current = 0U;
+    dll->main.shared.c_pd_in_len = 0U;
     test_pd_set_valid(&dll->main, true);
     /* 计划表只在初始化时编译；本文件直接驱动 ISR 且在 init 之后才配置，
      * 故显式发布一次。 */
@@ -366,13 +366,13 @@ static void init_type0_ctx(iolink_dll_ctx_t* dll)
     g_phy.detect_wakeup = mock_detect_wakeup;
     iolink_dll_init(&dll->main, &dll->isr, &g_phy);
     bind_test_identity(&dll->main);
-    dll->main.shared.clock.time_us = test_time_us;
+    dll->main.shared.c_clock.time_us = test_time_us;
     dll->main.phy_mode = IOLINK_PHY_MODE_SDCI;
     dll->main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
-    dll->main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    dll->main.shared.od_width = 1U;
-    dll->main.shared.pd_out_len_current = 0U;
-    dll->main.shared.pd_in_len = 0U;
+    dll->main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    dll->main.shared.c_od_width = 1U;
+    dll->main.shared.c_pd_out_len_current = 0U;
+    dll->main.shared.c_pd_in_len = 0U;
     test_pd_set_valid(&dll->main, true);
     dll->main.shared.isdu.state = ISDU_STATE_RESPONSE_READY;
     dll->main.shared.isdu.resp_buf[0] = 0x11U;
@@ -397,7 +397,7 @@ static int test_type0_isdu_read_fast_path(void)
 {
     iolink_dll_ctx_t dll;
     init_type0_ctx(&dll);
-    if (IOLINK_ISDU_PUB_LEN(dll.main.shared.isr_isdu_pub) != 2U) {
+    if (IOLINK_ISDU_PUB_LEN(dll.main.shared.m_isr_isdu_pub) != 2U) {
         return 1;
     }
 
@@ -416,7 +416,7 @@ static int test_type0_isdu_read_fast_path(void)
     if ((tx_observed_len() != 2U) || (tx_q[0] != 0x11U)) {
         return 2;
     }
-    if (!iolink_ring_is_empty(&dll.main.shared.isr_frame_ring)) {
+    if (!iolink_ring_is_empty(&dll.main.shared.i_isr_frame_ring)) {
         return 3; /* 快速路径不得发布 */
     }
     return 0;
@@ -445,11 +445,11 @@ static int test_0053_reserved_flowctrl_no_service(void)
             return (int) (fc - 0x10U);
         }
         /* ISR 只回 0x00；传输层复位经一次性标志交给主泵。 */
-        if (dll.main.shared.isr_isdu_read_reset == 0U) {
+        if (dll.main.shared.i_isr_isdu_read_reset == 0U) {
             return 0x40 + (int) (fc - 0x10U);
         }
         iolink_dll_process(&dll.main);
-        if (dll.main.shared.isr_isdu_read_reset != 0U) {
+        if (dll.main.shared.i_isr_isdu_read_reset != 0U) {
             return 0x60 + (int) (fc - 0x10U);
         }
     }
@@ -503,7 +503,7 @@ static int test_0309_isdu_segment_repeat(void)
     dll.main.shared.isdu.resp_total = (uint8_t) sizeof(response);
     (void) memcpy(dll.main.shared.isdu.resp_buf, response, sizeof(response));
     iolink_dll_process(&dll.main);
-    if (IOLINK_ISDU_PUB_LEN(dll.main.shared.isr_isdu_pub) != (uint8_t) sizeof(response)) {
+    if (IOLINK_ISDU_PUB_LEN(dll.main.shared.m_isr_isdu_pub) != (uint8_t) sizeof(response)) {
         return 6;
     }
 
@@ -585,10 +585,10 @@ static int test_type0_page_read_fast_path(void)
         return 1;
     }
     /* 该帧由 ISR 完全处理：计入消费，不进入邮箱。 */
-    if (dll.main.shared.isr_frames_consumed != 1U) {
+    if (dll.main.shared.i_isr_frames_consumed != 1U) {
         return 2;
     }
-    if (dll.main.shared.isr_frames_handoff != 0U) {
+    if (dll.main.shared.i_isr_frames_handoff != 0U) {
         return 3;
     }
     /* 公共统计与共享区一致（覆盖 get_stats 的两个拷贝）。 */
@@ -643,14 +643,14 @@ static int test_type0_isdu_write_fast_path(void)
 static void push_mailbox(iolink_dll_ctx_t* dll, const uint8_t* frame, uint8_t len)
 {
     iolink_frame_rec_t* rec =
-        (iolink_frame_rec_t*) iolink_ring_claim(&dll->main.shared.isr_frame_ring);
+        (iolink_frame_rec_t*) iolink_ring_claim(&dll->main.shared.i_isr_frame_ring);
     if (rec == NULL) {
         return;
     }
     rec->len = len;
     rec->eager = 0U;
     (void) memcpy(rec->data, frame, len);
-    iolink_ring_publish(&dll->main.shared.isr_frame_ring);
+    iolink_ring_publish(&dll->main.shared.i_isr_frame_ring);
 }
 
 /* 邮箱中已有帧：新的即时帧必须被记为丢弃。 */
@@ -675,7 +675,7 @@ static int test_mailbox_drop(void)
     tx_frame_sync();
 #endif
 
-    if (dll.main.shared.isr_mailbox_drops != 1U) {
+    if (dll.main.shared.i_isr_mailbox_drops != 1U) {
         return 1;
     }
     /* 即时应答不再依赖邮箱：邮箱满只会丢弃主泵的副本，
@@ -699,20 +699,20 @@ static int test_eager_reject(void)
     feed(frame, sizeof(frame));
     iolink_dll_process_isr(&dll.main.shared);
 
-    if (dll.main.shared.isr_eager_rejects != 1U) {
+    if (dll.main.shared.i_isr_eager_rejects != 1U) {
         return 1;
     }
     if (tx_observed_len() != 0U) {
         return 2; /* 损坏的帧不会得到即时应答 */
     }
-    if (iolink_ring_count(&dll.main.shared.isr_frame_ring) != 1U) {
+    if (iolink_ring_count(&dll.main.shared.i_isr_frame_ring) != 1U) {
         return 3; /* 已发布，以便主泵校验或回退 */
     }
     /* 坏帧不被应答，但必须交给主泵：consumed 不变，handoff 加一。 */
-    if (dll.main.shared.isr_frames_consumed != 0U) {
+    if (dll.main.shared.i_isr_frames_consumed != 0U) {
         return 4;
     }
-    if (dll.main.shared.isr_frames_handoff != 1U) {
+    if (dll.main.shared.i_isr_frames_handoff != 1U) {
         return 5;
     }
     /* 同一计数经公共统计快照可见：主上下文无需访问 ISR 结构。 */
@@ -742,12 +742,13 @@ static int test_valid_eager(void)
     tx_frame_sync();
 #endif
 
-    if ((dll.main.shared.isr_mailbox_drops != 0U) || (dll.main.shared.isr_eager_rejects != 0U)) {
+    if ((dll.main.shared.i_isr_mailbox_drops != 0U) ||
+        (dll.main.shared.i_isr_eager_rejects != 0U)) {
         return 1;
     }
     const iolink_frame_rec_t* rec =
-        (const iolink_frame_rec_t*) iolink_ring_peek(&dll.main.shared.isr_frame_ring);
-    if ((iolink_ring_count(&dll.main.shared.isr_frame_ring) != 1U) || (rec == NULL) ||
+        (const iolink_frame_rec_t*) iolink_ring_peek(&dll.main.shared.i_isr_frame_ring);
+    if ((iolink_ring_count(&dll.main.shared.i_isr_frame_ring) != 1U) || (rec == NULL) ||
         (rec->eager != 1U)) {
         return 2;
     }
@@ -756,17 +757,17 @@ static int test_valid_eager(void)
         return 3;
     }
     /* ISR 应答了，但帧仍进入邮箱由主泵做副作用：不算消费，只算交接。 */
-    if (dll.main.shared.isr_frames_consumed != 0U) {
+    if (dll.main.shared.i_isr_frames_consumed != 0U) {
         return 4;
     }
-    if (dll.main.shared.isr_frames_handoff != 1U) {
+    if (dll.main.shared.i_isr_frames_handoff != 1U) {
         return 5;
     }
     /* 公共统计必须与共享区一致（覆盖 get_stats 的拷贝）。 */
     iolink_dll_stats_t stats = {0};
     iolink_dll_get_stats(&dll.main, &stats);
-    if ((stats.isr_frames_consumed != dll.main.shared.isr_frames_consumed) ||
-        (stats.isr_frames_handoff != dll.main.shared.isr_frames_handoff)) {
+    if ((stats.isr_frames_consumed != dll.main.shared.i_isr_frames_consumed) ||
+        (stats.isr_frames_handoff != dll.main.shared.i_isr_frames_handoff)) {
         return 6;
     }
     return 0;
@@ -790,8 +791,8 @@ static int test_isdu_write_bad_crc_not_consumed(void)
     if (dll.main.shared.isdu.req_idx != 0U) {
         return 1;
     }
-    if ((dll.main.shared.isr_eager_rejects != 1U) ||
-        !iolink_ring_is_empty(&dll.main.shared.isr_frame_ring)) {
+    if ((dll.main.shared.i_isr_eager_rejects != 1U) ||
+        !iolink_ring_is_empty(&dll.main.shared.i_isr_frame_ring)) {
         return 2;
     }
     return 0;
@@ -839,15 +840,15 @@ static int test_isdu_write_consumed_by_isr(void)
         return 2;
     }
     /* 四个写段都由 ISR 应答；帧仍要交给主泵执行，因此只计交接。 */
-    if (dll.main.shared.isr_frames_consumed != 0U) {
+    if (dll.main.shared.i_isr_frames_consumed != 0U) {
         return 7;
     }
-    if (dll.main.shared.isr_frames_handoff != 4U) {
+    if (dll.main.shared.i_isr_frames_handoff != 4U) {
         return 8;
     }
     /* 对只读索引的写会产生一个已组帧的否定响应。 */
     if ((dll.main.shared.isdu.state != ISDU_STATE_RESPONSE_READY) ||
-        (IOLINK_ISDU_PUB_LEN(dll.main.shared.isr_isdu_pub) == 0U)) {
+        (IOLINK_ISDU_PUB_LEN(dll.main.shared.m_isr_isdu_pub) == 0U)) {
         return 3;
     }
     /* 请求收齐后主泵已接管：发布字已 ack（相位闩锁留在 COMPLETE）。 */
@@ -917,12 +918,12 @@ static int test_type0_commands_fast_path(void)
     tx_frame_sync();
 #endif
     if ((dll.main.shared.state != IOLINK_DLL_STATE_FALLBACK) || (tx_observed_len() != 1U) ||
-        (dll.main.shared.isr_fallback_pending == 0U) ||
+        (dll.main.shared.i_isr_fallback_pending == 0U) ||
         dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD)) {
         return 3;
     }
     iolink_dll_process(&dll.main);
-    if ((dll.main.shared.isr_fallback_pending != 0U) ||
+    if ((dll.main.shared.i_isr_fallback_pending != 0U) ||
         !dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD)) {
         return 5;
     }
@@ -943,10 +944,10 @@ static int test_type0_commands_fast_path(void)
         return 4;
     }
     /* 四帧都由 ISR 定案：转换命令按规范不应答，另外三条回 OD/CKS。 */
-    if (dll.main.shared.isr_frames_consumed != 4U) {
+    if (dll.main.shared.i_isr_frames_consumed != 4U) {
         return 5;
     }
-    if (dll.main.shared.isr_frames_handoff != 0U) {
+    if (dll.main.shared.i_isr_frames_handoff != 0U) {
         return 6;
     }
     return 0;
@@ -1011,14 +1012,14 @@ static int test_device_startup_deferred_to_main(void)
     tx_frame_sync();
 #endif
     if ((dll.main.shared.state != IOLINK_DLL_STATE_PREOPERATE) ||
-        (dll.main.shared.isr_device_startup_requested == 0U) ||
+        (dll.main.shared.i_isr_device_startup_requested == 0U) ||
         (dll.main.invalid_frames != invalid_before) || (tx_observed_len() != 1U)) {
         return 1; /* ISR 提前改状态、漏记账或漏确认 */
     }
 
     iolink_dll_process(&dll.main);
     if ((dll.main.shared.state != IOLINK_DLL_STATE_STARTUP) ||
-        (dll.main.shared.isr_device_startup_requested != 0U) ||
+        (dll.main.shared.i_isr_device_startup_requested != 0U) ||
         (dll.main.invalid_frames != (invalid_before + 1U))) {
         return 2; /* 主泵未消费该请求 */
     }
@@ -1026,7 +1027,7 @@ static int test_device_startup_deferred_to_main(void)
 }
 
 /* ISR 完全消费（CONSUME）的帧不直接写主上下文的主站活动字段：
- * ISR 只置 `shared.isr_master_activity`，由主泵在
+ * ISR 只置 `shared.i_isr_master_activity`，由主泵在
  * `dll_take_isr_master_activity()` 中刷新 `master_last_activity_ms`、
  * `master_lost_count` 与 `master_lost`。 */
 static int test_consume_frame_activity_is_main_only(void)
@@ -1050,10 +1051,10 @@ static int test_consume_frame_activity_is_main_only(void)
     if (tx_observed_len() != 2U) {
         return 1;
     }
-    if (dll.main.shared.isr_frames_consumed != 1U) {
+    if (dll.main.shared.i_isr_frames_consumed != 1U) {
         return 2; /* 该场景必须走 CONSUME 路径 */
     }
-    if (dll.main.shared.isr_master_activity != 1U) {
+    if (dll.main.shared.i_isr_master_activity != 1U) {
         return 3;
     }
     /* ISR 阶段不得改写主上下文字段。 */
@@ -1063,7 +1064,7 @@ static int test_consume_frame_activity_is_main_only(void)
     }
 
     iolink_dll_process(&dll.main);
-    if (dll.main.shared.isr_master_activity != 0U) {
+    if (dll.main.shared.i_isr_master_activity != 0U) {
         return 5; /* 主泵未消费活动标志 */
     }
     /* PREOPERATE 下没有别的路径写该时间戳：只有 take 路径会刷新它。 */
@@ -1180,7 +1181,7 @@ static int test_byte_gap_incomplete(void)
         if ((dll.isr.isr_rx_cnt != 0U) || (dll.isr.isr_rx_expect != 0U)) {
             return 2;
         }
-        if (!iolink_ring_is_empty(&dll.main.shared.isr_frame_ring)) {
+        if (!iolink_ring_is_empty(&dll.main.shared.i_isr_frame_ring)) {
             return 3;
         }
         if (tx_done_calls != 1U) {
@@ -1204,10 +1205,10 @@ static int test_byte_gap_incomplete(void)
         if ((dll.isr.isr_rx_cnt != 0U) || (dll.isr.isr_rx_expect != 0U)) {
             return 6;
         }
-        if (!iolink_ring_is_empty(&dll.main.shared.isr_frame_ring)) {
+        if (!iolink_ring_is_empty(&dll.main.shared.i_isr_frame_ring)) {
             return 7; /* 绝不为主泵发布 */
         }
-        if (dll.main.shared.isr_eager_rejects != 0U) {
+        if (dll.main.shared.i_isr_eager_rejects != 0U) {
             return 8; /* 间隔路径不执行即时校验 */
         }
         if (tx_done_calls != 1U) {

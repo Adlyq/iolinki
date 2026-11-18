@@ -97,7 +97,7 @@ IOLINK_ASSUME_NONNULL_BEGIN
  * @brief 接收帧邮箱深度（数据 ISR -> 主泵），单位槽。
  *
  * 必须为 2 的幂且至少为 2（SPSC 环用掩码取模）。槽位吸收主泵处理
- * 上一帧期间到达的请求；环满时新帧被丢弃并计入 `isr_mailbox_drops`。
+ * 上一帧期间到达的请求；环满时新帧被丢弃并计入 `i_isr_mailbox_drops`。
  * 默认：4
  */
 #ifndef IOLINK_MBX_SLOTS

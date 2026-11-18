@@ -51,9 +51,9 @@ iolink_baudrate_t iolink_dll_get_baudrate(void)
 uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx)
 {
     const uint32_t baud = dll_get_baud_hz(ctx);
-    const uint32_t pdi = ctx->shared.pd_in_len;
-    const uint32_t pdo = ctx->shared.pd_out_len_current;
-    const uint32_t od = ctx->shared.od_width;
+    const uint32_t pdi = ctx->shared.c_pd_in_len;
+    const uint32_t pdo = ctx->shared.c_pd_out_len_current;
+    const uint32_t od = ctx->shared.c_od_width;
     /* 写请求：MC+CKT + PD-out + OD；应答：PD-in + CKS。
      * 读请求：MC+CKT + PD-out（无 OD）；应答：OD + PD-in + CKS。
      * 这适用于所有 Annex A 类型：固定类型只是在不携带的
@@ -69,7 +69,7 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx)
     const uint32_t t = (t_write > t_read) ? t_write : t_read;
     uint32_t units = (t + (IOLINK_CYCLE_TIME_UNIT_US - 1U)) / IOLINK_CYCLE_TIME_UNIT_US;
     const uint32_t app_units =
-        (ctx->shared.min_cycle_time_app_us + (IOLINK_CYCLE_TIME_UNIT_US - 1U)) /
+        (ctx->shared.c_min_cycle_time_app_us + (IOLINK_CYCLE_TIME_UNIT_US - 1U)) /
         IOLINK_CYCLE_TIME_UNIT_US;
     if (units < app_units) {
         units = app_units;
@@ -83,15 +83,15 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx)
 void iolink_dll_get_pd_length(const iolink_dll_main_t* ctx, uint8_t* IOLINK_NULLABLE pd_in_len,
                               uint8_t* IOLINK_NULLABLE pd_out_len)
 {
-    if (pd_in_len) *pd_in_len = ctx->shared.pd_in_len;
-    if (pd_out_len) *pd_out_len = ctx->shared.pd_out_len_current;
+    if (pd_in_len) *pd_in_len = ctx->shared.c_pd_in_len;
+    if (pd_out_len) *pd_out_len = ctx->shared.c_pd_out_len_current;
 }
 
 int iolink_dll_set_sio_mode(iolink_dll_main_t* ctx)
 {
     if (ctx == NULL) return -1;
-    if (ctx->shared.phy->set_mode != NULL)
-        ctx->shared.phy->set_mode(ctx->shared.phy->self, IOLINK_PHY_MODE_SIO);
+    if (ctx->shared.c_phy->set_mode != NULL)
+        ctx->shared.c_phy->set_mode(ctx->shared.c_phy->self, IOLINK_PHY_MODE_SIO);
     ctx->phy_mode = IOLINK_PHY_MODE_SIO;
     /* SIO 转换会中止 PHY 中任何进行中的应答；丢弃
      * 匹配的 ISR TX 状态，使陈旧的 active 索引不会泄漏到下一个
@@ -116,8 +116,8 @@ int iolink_dll_set_sio_mode(iolink_dll_main_t* ctx)
 int iolink_dll_set_sdci_mode(iolink_dll_main_t* ctx)
 {
     if (ctx == NULL) return -1;
-    if (ctx->shared.phy->set_mode != NULL)
-        ctx->shared.phy->set_mode(ctx->shared.phy->self, IOLINK_PHY_MODE_SDCI);
+    if (ctx->shared.c_phy->set_mode != NULL)
+        ctx->shared.c_phy->set_mode(ctx->shared.c_phy->self, IOLINK_PHY_MODE_SDCI);
     ctx->phy_mode = IOLINK_PHY_MODE_SDCI;
     return 0;
 }
@@ -139,11 +139,11 @@ void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_
     out_stats->short_circuits = ctx->short_circuits;
     out_stats->isr_tx_dropped = IOLINK_STAT_TOTAL(ctx, isr_tx_dropped);
     out_stats->isr_od_overruns = ctx->shared.isdu.req_overruns;
-    out_stats->isr_plan_misses = ctx->shared.isr_plan_misses;
-    out_stats->isr_eager_rejects = ctx->shared.isr_eager_rejects;
-    out_stats->isr_mailbox_drops = ctx->shared.isr_mailbox_drops;
-    out_stats->isr_frames_consumed = ctx->shared.isr_frames_consumed;
-    out_stats->isr_frames_handoff = ctx->shared.isr_frames_handoff;
+    out_stats->isr_plan_misses = ctx->shared.i_isr_plan_misses;
+    out_stats->isr_eager_rejects = ctx->shared.i_isr_eager_rejects;
+    out_stats->isr_mailbox_drops = ctx->shared.i_isr_mailbox_drops;
+    out_stats->isr_frames_consumed = ctx->shared.i_isr_frames_consumed;
+    out_stats->isr_frames_handoff = ctx->shared.i_isr_frames_handoff;
     out_stats->t_pd_discards = ctx->t_pd_discards;
     out_stats->reply_plan_overflows = ctx->reply_plan_overflows;
     out_stats->pd_in_skips = ctx->pd_in_skips;

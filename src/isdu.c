@@ -152,7 +152,7 @@ void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* IOLI
     }
     /* 传输缓冲指针由数据 ISR 读取：绑定只在数据泵静止时合法。从数据 ISR
      * 内调用是显式失败——不改变任何指针，也不留下半个绑定。 */
-    if ((ctx->dll_ctx != NULL) && (ctx->dll_ctx->shared.in_isr != 0U)) {
+    if ((ctx->dll_ctx != NULL) && (ctx->dll_ctx->shared.i_in_isr != 0U)) {
         IOLINK_LOG_ISR_ERROR(ctx->log, "isdu bind_workspace rejected inside the data ISR");
         return;
     }
@@ -442,8 +442,8 @@ static void isdu_lease_begin(iolink_isdu_ctx_t* ctx)
         return;
     }
     const IOLINK_ATOMIC_UINT_T busy = IOLINK_ISDU_PUB_WORD(0U, 1U, 0U);
-    if (iolink_atomic_load(&dll->shared.isr_isdu_pub) != busy) {
-        iolink_atomic_store(&dll->shared.isr_isdu_pub, busy);
+    if (iolink_atomic_load(&dll->shared.m_isr_isdu_pub) != busy) {
+        iolink_atomic_store(&dll->shared.m_isr_isdu_pub, busy);
     }
 }
 
@@ -611,7 +611,7 @@ void iolink_isdu_od_write(iolink_isdu_ctx_t* ctx, uint8_t flowctrl, const uint8_
         isdu_req_publish_withdrawn(ctx);
         isdu_stage_release(ctx);
         if (ctx->dll_ctx != NULL) {
-            ctx->dll_ctx->shared.isr_isdu_read_reset = 1U;
+            ctx->dll_ctx->shared.i_isr_isdu_read_reset = 1U;
         }
         return;
     }

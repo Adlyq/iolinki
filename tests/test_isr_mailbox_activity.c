@@ -35,14 +35,14 @@ static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
 static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len)
 {
     iolink_frame_rec_t* rec =
-        (iolink_frame_rec_t*) iolink_ring_claim(&ctx->main.shared.isr_frame_ring);
+        (iolink_frame_rec_t*) iolink_ring_claim(&ctx->main.shared.i_isr_frame_ring);
     if (rec == NULL) {
         return;
     }
     rec->len = len;
     rec->eager = 0U;
     (void) memcpy(rec->data, frame, len);
-    iolink_ring_publish(&ctx->main.shared.isr_frame_ring);
+    iolink_ring_publish(&ctx->main.shared.i_isr_frame_ring);
 }
 
 /* 一个合法的 Type-0 请求：携带 A.1.6 校验和的 MC + CKT。 */
@@ -58,7 +58,7 @@ static int run_all(void)
     const iolink_phy_api_t phy = {0};
     iolink_dll_ctx_t ctx;
     iolink_dll_init(&ctx.main, &ctx.isr, &phy);
-    ctx.main.shared.clock.time_us = test_time_us;
+    ctx.main.shared.c_clock.time_us = test_time_us;
 
     ctx.main.shared.state = IOLINK_DLL_STATE_ESTAB_COM;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;

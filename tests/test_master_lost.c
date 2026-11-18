@@ -111,13 +111,13 @@ static void test_master_lost_after_n_cycles(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
 
     /* 一次帧结束活动会清零计数器（ST StartCallbackTimer）。 */
-    test_dll_shared(&dev.ctx)->isr_master_activity = 1U;
+    test_dll_shared(&dev.ctx)->i_isr_master_activity = 1U;
     iolink_device_process(&dev.ctx);
     assert_false(iolink_device_master_lost(&dev.ctx));
     assert_int_equal(online_calls, 1);
 
     /* 只要活动持续到达，就仍视为在线。 */
-    test_dll_shared(&dev.ctx)->isr_master_activity = 1U;
+    test_dll_shared(&dev.ctx)->i_isr_master_activity = 1U;
     g_now_ms = 1007U;
     iolink_device_process(&dev.ctx);
     assert_false(iolink_device_master_lost(&dev.ctx));
@@ -131,7 +131,7 @@ static void test_master_lost_uses_master_cycle_time(void** state)
     move_to_operate_ctx(&dev.ctx);
 
     /* DPP1 0x01 = 10 -> 10 * 100 us = 1 ms（而非 2 ms 的 MinCycleTime）。 */
-    test_dll(&dev.ctx)->shared.master_cycle_time = 10U;
+    test_dll(&dev.ctx)->shared.m_master_cycle_time = 10U;
     g_now_ms = 4U;
     iolink_device_process(&dev.ctx);
     assert_true(iolink_device_master_lost(&dev.ctx));
@@ -188,7 +188,7 @@ static void test_isr_frame_counts_as_master_activity(void** state)
     /* ISR 侧的监控时间戳必须已经知道主站仍存活。
      * 否则丢失窗口会从主泵最后一次运行的时刻开始度量，繁忙的
      * 主窗口就会被误判为主站静默。 */
-    assert_int_equal(test_dll_shared(&dev.ctx)->isr_master_activity, 1U);
+    assert_int_equal(test_dll_shared(&dev.ctx)->i_isr_master_activity, 1U);
 
     g_now_ms += 10U;
     iolink_device_process(&dev.ctx);
@@ -207,7 +207,7 @@ static void test_master_lost_waits_for_known_cycle_time(void** state)
     init_device(&dev, 3U, NULL);
     move_to_operate_ctx(&dev.ctx);
 
-    test_dll(&dev.ctx)->shared.master_cycle_time = 0U;
+    test_dll(&dev.ctx)->shared.m_master_cycle_time = 0U;
     test_dll(&dev.ctx)->min_cycle_time_us = 0U;
 
     g_now_ms = 10U;

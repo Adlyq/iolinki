@@ -45,16 +45,16 @@ static void test_config_defaults(void** state)
     /* 验证 DLL 过程数据缓冲区 */
     iolink_dll_main_t main_ctx;
     const iolink_dll_main_t* dll = &main_ctx;
-    assert_true(sizeof(dll->shared.pd_in[0]) == IOLINK_PD_REPLY_MAX);
+    assert_true(sizeof(dll->shared.m_pd_in[0]) == IOLINK_PD_REPLY_MAX);
     assert_true(sizeof(dll->pd_out) == IOLINK_PD_OUT_MAX_SIZE);
 
     /* 验证 ISR 交接容量默认值与派生槽位数。 */
     assert_true(IOLINK_MBX_SLOTS == 4);
     assert_true(IOLINK_REPLY_PLAN_SLOTS == 48);
     assert_true(sizeof(dll->isr_frame_slot) / sizeof(dll->isr_frame_slot[0]) == IOLINK_MBX_SLOTS);
-    assert_true(sizeof(dll->shared.reply_plan) / sizeof(dll->shared.reply_plan[0]) ==
+    assert_true(sizeof(dll->shared.c_reply_plan) / sizeof(dll->shared.c_reply_plan[0]) ==
                 IOLINK_REPLY_PLAN_SLOTS);
-    assert_true(sizeof(dll->shared.isr_tx_payload) / sizeof(dll->shared.isr_tx_payload[0]) ==
+    assert_true(sizeof(dll->shared.m_isr_tx_payload) / sizeof(dll->shared.m_isr_tx_payload[0]) ==
                 IOLINK_TX_SLOTS);
     assert_true(IOLINK_TX_SLOTS == IOLINK_TX_ISR_SLOT + 1);
 }

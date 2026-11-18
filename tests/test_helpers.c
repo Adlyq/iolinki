@@ -859,7 +859,7 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     iolink_m_seq_type_t type = iolink_device_get_m_seq_type(ctx);
     uint8_t pd_out_len = iolink_device_get_pd_out_len(ctx);
     uint8_t pd_in_len = iolink_device_get_pd_in_len(ctx);
-    uint8_t od_w = test_dll_shared(ctx)->od_width; /* 实际的 OPERATE OD 宽度（1/2/8/32） */
+    uint8_t od_w = test_dll_shared(ctx)->c_od_width; /* 实际的 OPERATE OD 宽度（1/2/8/32） */
 
     if (type == IOLINK_M_SEQ_TYPE_0) {
         uint8_t idle_mc = 0x00;

@@ -73,10 +73,10 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
 {
     const iolink_stack_config_t* stack = ctx->config->stack;
 
-    ctx->dll.main.shared.m_seq_type = (uint8_t) stack->m_seq_type;
-    ctx->dll.main.shared.pd_in_len = stack->pd_in_len;
-    ctx->dll.main.shared.pd_out_len_current = stack->pd_out_len;
-    ctx->dll.main.shared.min_cycle_time_app_us =
+    ctx->dll.main.shared.c_m_seq_type = (uint8_t) stack->m_seq_type;
+    ctx->dll.main.shared.c_pd_in_len = stack->pd_in_len;
+    ctx->dll.main.shared.c_pd_out_len_current = stack->pd_out_len;
+    ctx->dll.main.shared.c_min_cycle_time_app_us =
         (uint32_t) stack->min_cycle_time * IOLINK_CYCLE_TIME_UNIT_US;
     ctx->dll.main.master_lost_cycles = stack->master_lost_cycles;
     const uint32_t t_pd_us = stack->t_pd_us;
@@ -89,7 +89,7 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     /* 双泵传输：ISR 组帧请求，并基于共享状态组装应答，因此 DLL 需要
      * OD 宽度来确定应答布局（Table A.10 的 OPERATE 编码跟随该宽度）。
      * 宽度由 config.od_width 显式给出（校验阶段已拒绝 0）。 */
-    ctx->dll.main.shared.od_width = stack->od_width;
+    ctx->dll.main.shared.c_od_width = stack->od_width;
 
     /* 通告/实际提供的最小周期时间由实际的
      * M-sequence（PD/OD 长度与波特率）推导，并受应用下限约束。 */
@@ -307,18 +307,19 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     }
     iolink_dll_init(&ctx->dll.main, &ctx->dll.isr, config->phy);
     /* 实例能力在绑定 PHY 之后、任何 ISR 可能运行之前解析一次。 */
-    ctx->dll.main.shared.caps = iolink_caps_resolve(config->phy, config->stack, config->app, NULL);
+    ctx->dll.main.shared.c_caps =
+        iolink_caps_resolve(config->phy, config->stack, config->app, NULL);
     /* ISDU 的传输缓冲：外部工作区或默认内嵌 fallback。 */
     iolink_isdu_bind_workspace(&ctx->dll.main.shared.isdu, workspace);
     /* ISDU 与事件引擎按实例能力位选运行时路径。 */
-    iolink_isdu_bind_caps(&ctx->dll.main.shared.isdu, &ctx->dll.main.shared.caps);
+    iolink_isdu_bind_caps(&ctx->dll.main.shared.isdu, &ctx->dll.main.shared.c_caps);
     /* 在推导任何截止时间之前绑定应用时钟。设备层
      * 要求该时钟（NULL 已在上文被拒绝）。事件引擎共享
      * 同一时钟，使事件时序与 DLL 一致。 */
-    ctx->dll.main.shared.clock.time_us = config->app->time_us;
-    ctx->dll.main.shared.clock.self = config->app->self;
+    ctx->dll.main.shared.c_clock.time_us = config->app->time_us;
+    ctx->dll.main.shared.c_clock.self = config->app->self;
 #if IOLINK_FEATURE_EVENTS
-    ctx->dll.main.shared.events.clock = &ctx->dll.main.shared.clock;
+    ctx->dll.main.shared.events.clock = &ctx->dll.main.shared.c_clock;
     /* A.6.4 的两个窗口是运行时能力：栈配置非 0 时覆盖构建默认值。 */
     iolink_events_set_window(&ctx->dll.main.shared.events, config->stack->event_min_appear_ms,
                              config->stack->event_min_repeat_ms);
@@ -365,11 +366,11 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
         config->app->on_startup(config->app->self);
     }
 
-    IOLINK_LOG_INFO(&ctx->dll.main.shared.log,
+    IOLINK_LOG_INFO(&ctx->dll.main.shared.c_log,
                     "device init: m_seq=%u pd_in=%u pd_out=%u od=%u com=%u",
                     (unsigned) config->stack->m_seq_type, (unsigned) config->stack->pd_in_len,
-                    (unsigned) config->stack->pd_out_len, (unsigned) ctx->dll.main.shared.od_width,
-                    (unsigned) IOLINK_COM);
+                    (unsigned) config->stack->pd_out_len,
+                    (unsigned) ctx->dll.main.shared.c_od_width, (unsigned) IOLINK_COM);
     return 0;
 }
 
@@ -398,13 +399,13 @@ void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_
 
     /* 初始化期单写者：应用只能通过 config 给出日志汇点，运行期不再改写。
      * 一个 sink 服务全部模块：它们只保存指针，这里统一指向它。 */
-    iolink_log_sink_init(&ctx->dll.main.shared.log, write, self, level);
-    ctx->dll.main.shared.isdu.log = &ctx->dll.main.shared.log;
+    iolink_log_sink_init(&ctx->dll.main.shared.c_log, write, self, level);
+    ctx->dll.main.shared.isdu.log = &ctx->dll.main.shared.c_log;
 #if IOLINK_FEATURE_DATA_STORAGE
-    ctx->dll.main.ds.log = &ctx->dll.main.shared.log;
+    ctx->dll.main.ds.log = &ctx->dll.main.shared.c_log;
 #endif
 #if IOLINK_FEATURE_EVENTS
-    ctx->dll.main.shared.events.log = &ctx->dll.main.shared.log;
+    ctx->dll.main.shared.events.log = &ctx->dll.main.shared.c_log;
 #endif
 }
 
@@ -432,8 +433,8 @@ static uint8_t device_pd_in_free_index(const iolink_dll_main_t* dll)
  */
 static bool device_service_window_ready(iolink_device_ctx_t* ctx)
 {
-    if ((ctx->dll.main.shared.phy != NULL) &&
-        (ctx->dll.main.shared.phy->stack_timer_start != NULL) &&
+    if ((ctx->dll.main.shared.c_phy != NULL) &&
+        (ctx->dll.main.shared.c_phy->stack_timer_start != NULL) &&
         (iolink_dll_take_service_window(&ctx->dll.main) == 0U)) {
         return false;
     }
@@ -526,14 +527,14 @@ static void device_dispatch_resets(iolink_device_ctx_t* ctx)
 
     if (ctx->dll.main.shared.isdu.reset_pending) {
         ctx->dll.main.shared.isdu.reset_pending = false;
-        IOLINK_LOG_WARN(&ctx->dll.main.shared.log, "device reset requested by master");
+        IOLINK_LOG_WARN(&ctx->dll.main.shared.c_log, "device reset requested by master");
         if (app->on_reset != NULL) {
             app->on_reset(app->self, IOLINK_RESET_DEVICE);
         }
     }
     if (ctx->dll.main.shared.isdu.app_reset_pending) {
         ctx->dll.main.shared.isdu.app_reset_pending = false;
-        IOLINK_LOG_WARN(&ctx->dll.main.shared.log, "application reset requested by master");
+        IOLINK_LOG_WARN(&ctx->dll.main.shared.c_log, "application reset requested by master");
         if (app->on_reset != NULL) {
             app->on_reset(app->self, IOLINK_RESET_APPLICATION);
         }
@@ -549,7 +550,7 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
     if (ctx->config->app->on_pd_output != NULL) {
         ctx->config->app->on_pd_output(ctx->config->app->self, ctx->dll.main.pd_out);
     }
-    if (iolink_caps_has(ctx->dll.main.shared.caps, IOLINK_CAP_PD_IN_CALLBACK)) {
+    if (iolink_caps_has(ctx->dll.main.shared.c_caps, IOLINK_CAP_PD_IN_CALLBACK)) {
         /* 填写一个 ISR 未在流式发送的缓冲区，然后发布，使 ISR
          * 永远不会发送撕裂的 PD 输入。回调的返回值即 PD 有效标志。 */
         const uint8_t inactive = device_pd_in_free_index(&ctx->dll.main);
@@ -559,7 +560,7 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
         }
         /* 填写空闲缓冲区时 ISR 继续发送已捕获的副本；发布本身只是
          * 一次原子存储，没有临界区。回调长度取自配置的 `pd_in_len`。 */
-        uint8_t* pd_in = &ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.od_width];
+        uint8_t* pd_in = &ctx->dll.main.shared.m_pd_in[inactive][ctx->dll.main.shared.c_od_width];
         const bool valid = ctx->config->app->on_pd_input(ctx->config->app->self, pd_in);
 
         dll_pd_publish(&ctx->dll.main.shared, inactive, valid);
@@ -589,13 +590,13 @@ iolink_device_pd_result_t iolink_device_pd_input_update(iolink_device_ctx_t* ctx
     }
     /* 回调路径已选中时拒绝轮询调用：两条路径混用会让线上 PD 在
      * 回调输出与调用方数据之间跳变。 */
-    if (iolink_caps_has(ctx->dll.main.shared.caps, IOLINK_CAP_PD_IN_CALLBACK)) {
+    if (iolink_caps_has(ctx->dll.main.shared.c_caps, IOLINK_CAP_PD_IN_CALLBACK)) {
         return IOLINK_DEVICE_PD_ERR_MODE;
     }
     /* PD 长度是初始化属性（`iolink_stack_config_t`）：DPP1 0x05/0x06 是只读
      * 通告，任何阶段都不改变。这里只接受与配置一致的载荷长度，避免应答
      * 布局偏离已通告的 IODD/DPP1。 */
-    if (len != (size_t) ctx->dll.main.shared.pd_in_len) {
+    if (len != (size_t) ctx->dll.main.shared.c_pd_in_len) {
         return IOLINK_DEVICE_PD_ERR_LEN;
     }
 
@@ -610,7 +611,8 @@ iolink_device_pd_result_t iolink_device_pd_input_update(iolink_device_ctx_t* ctx
     /* ISR 只会捕获已发布的索引，因此既非活动也未被捕获的缓冲区
      * 不会被它读取。填充在发布之前完成，发布是一次原子存储
      * （fence + store），不需要临界区；PD 长度在初始化后不再变化。 */
-    (void) memcpy(&ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.od_width], data, len);
+    (void) memcpy(&ctx->dll.main.shared.m_pd_in[inactive][ctx->dll.main.shared.c_od_width], data,
+                  len);
     dll_pd_publish(&ctx->dll.main.shared, inactive, valid);
 
     return IOLINK_DEVICE_PD_OK;
@@ -631,9 +633,9 @@ int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, 
 
     /* pd_out 由同一（主）上下文中的帧分发写入，因此在
      * 单调用方约定下无需加锁。 */
-    read_len = (len < ctx->dll.main.shared.pd_out_len_current)
+    read_len = (len < ctx->dll.main.shared.c_pd_out_len_current)
                    ? (uint8_t) len
-                   : ctx->dll.main.shared.pd_out_len_current;
+                   : ctx->dll.main.shared.c_pd_out_len_current;
     (void) memcpy(data, ctx->dll.main.pd_out, read_len);
 
     return (int) read_len;
@@ -654,7 +656,7 @@ iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx)
 
 iolink_caps_t iolink_device_capabilities(const iolink_device_ctx_t* ctx)
 {
-    return ctx->dll.main.shared.caps;
+    return ctx->dll.main.shared.c_caps;
 }
 
 bool iolink_device_master_lost(const iolink_device_ctx_t* ctx)
@@ -685,7 +687,7 @@ void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx, iolink_dll_stat
 
 iolink_m_seq_type_t iolink_device_get_m_seq_type(const iolink_device_ctx_t* ctx)
 {
-    return (iolink_m_seq_type_t) ctx->dll.main.shared.m_seq_type;
+    return (iolink_m_seq_type_t) ctx->dll.main.shared.c_m_seq_type;
 }
 
 uint8_t iolink_device_get_pd_in_len(const iolink_device_ctx_t* ctx)

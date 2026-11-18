@@ -56,10 +56,10 @@ static void test_capacity_overrides(void** state)
     const iolink_dll_main_t* dll = &main_ctx;
     assert_int_equal(sizeof(dll->isr_frame_slot) / sizeof(dll->isr_frame_slot[0]),
                      IOLINK_MBX_SLOTS);
-    assert_int_equal(sizeof(dll->shared.reply_plan) / sizeof(dll->shared.reply_plan[0]),
+    assert_int_equal(sizeof(dll->shared.c_reply_plan) / sizeof(dll->shared.c_reply_plan[0]),
                      IOLINK_REPLY_PLAN_SLOTS);
     /* 主泵槽位 0/1 + ISR 槽位：派生量不允许被单独覆盖。 */
-    assert_int_equal(sizeof(dll->shared.isr_tx_payload) / sizeof(dll->shared.isr_tx_payload[0]),
+    assert_int_equal(sizeof(dll->shared.m_isr_tx_payload) / sizeof(dll->shared.m_isr_tx_payload[0]),
                      IOLINK_TX_SLOTS);
     assert_int_equal(IOLINK_TX_SLOTS, IOLINK_TX_ISR_SLOT + 1);
 

@@ -52,9 +52,9 @@ static void test_baudrate_min_cycle_time(void** state)
     iolink_dll_ctx_t ctx;
 
     iolink_dll_init(&ctx.main, &ctx.isr, &mock_phy);
-    ctx.main.shared.pd_in_len = 28U;
-    ctx.main.shared.pd_out_len_current = 28U;
-    ctx.main.shared.od_width = 1U;
+    ctx.main.shared.c_pd_in_len = 28U;
+    ctx.main.shared.c_pd_out_len_current = 28U;
+    ctx.main.shared.c_od_width = 1U;
 
 #if IOLINK_COM == 3
     assert_int_equal(iolink_dll_compute_min_cycle_time(&ctx.main), 35U);

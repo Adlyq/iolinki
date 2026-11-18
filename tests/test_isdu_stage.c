@@ -197,7 +197,7 @@ static void test_dpp1_odd_sequence_reads_zero(void** state)
     (void) iolink_isdu_direct_param_page1_octet(&ctx, 0x04U); /* 建立稳定映像 */
 
     (void) memset(&s_dll, 0, sizeof(s_dll));
-    s_dll.main.shared.in_isr = 1U;
+    s_dll.main.shared.i_in_isr = 1U;
     ctx.dll_ctx = &s_dll.main;
 
     /* 稳定的一代仍可读：ISR 侧只读，不重建整页。 */
@@ -228,7 +228,7 @@ static void test_bind_workspace_rejected_in_isr(void** state)
     assert_non_null(builtin_req);
 
     (void) memset(&s_dll, 0, sizeof(s_dll));
-    s_dll.main.shared.in_isr = 1U;
+    s_dll.main.shared.i_in_isr = 1U;
     ctx.dll_ctx = &s_dll.main;
 
     iolink_isdu_bind_workspace(&ctx, &ws);
@@ -236,7 +236,7 @@ static void test_bind_workspace_rejected_in_isr(void** state)
     assert_ptr_equal(ctx.buffer, builtin_buffer);
     assert_ptr_equal(ctx.req_buf, builtin_req);
 
-    s_dll.main.shared.in_isr = 0U;
+    s_dll.main.shared.i_in_isr = 0U;
     iolink_isdu_bind_workspace(&ctx, &ws);
     assert_ptr_equal(ctx.workspace, &ws);
     assert_ptr_equal(ctx.buffer, ws.isdu.payload);

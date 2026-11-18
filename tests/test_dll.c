@@ -1251,7 +1251,7 @@ static void test_dll_preoperate_illegal_operate_type(void** state)
     iolink_test_device_init(&dev, &config, NULL);
     test_dll(&dev.ctx)->enforce_timing = false;
     test_dll_shared(&dev.ctx)->state = IOLINK_DLL_STATE_PREOPERATE;
-    test_dll_shared(&dev.ctx)->m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
+    test_dll_shared(&dev.ctx)->c_m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
 
     uint8_t value = 0U;
     assert_false(preoperate_read_with_type(&dev.ctx, IOLINK_MSEQ_TYPE_2, 0x02U, false, &value));
@@ -1607,9 +1607,9 @@ static void test_min_cycle_time_from_m_sequence(void** state)
 
     /* PD 输入/输出各 28 字节、1 OD：最坏情况的写 M-sequence 随编译期 COM
      * 折叠（COM3 ~3.40 ms -> 35，COM2 ~20.5 ms -> 205，COM1 被钳到 255）。 */
-    dll.shared.od_width = 1U;
-    dll.shared.pd_in_len = 28U;
-    dll.shared.pd_out_len_current = 28U;
+    dll.shared.c_od_width = 1U;
+    dll.shared.c_pd_in_len = 28U;
+    dll.shared.c_pd_out_len_current = 28U;
 #if IOLINK_COM == 3
     assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 35U);
 #elif IOLINK_COM == 2
@@ -1620,14 +1620,14 @@ static void test_min_cycle_time_from_m_sequence(void** state)
 
     /* 应用层下限更高时以它为准（阈值按编译期 COM 选，确保高于自然值）。 */
 #if IOLINK_COM == 3
-    dll.shared.min_cycle_time_app_us = 5000U;
+    dll.shared.c_min_cycle_time_app_us = 5000U;
     assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 50U);
 #elif IOLINK_COM == 2
-    dll.shared.min_cycle_time_app_us = 21000U;
+    dll.shared.c_min_cycle_time_app_us = 21000U;
     assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 210U);
 #else
     /* COM1 的自然值已在上限 255，应用下限只会被钳制回 255。 */
-    dll.shared.min_cycle_time_app_us = 30000U;
+    dll.shared.c_min_cycle_time_app_us = 30000U;
     assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 255U);
 #endif
 }
@@ -1703,7 +1703,7 @@ static void test_back_to_box_counts_isr_served_cycles_once_per_pump(void** state
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
 
     iolink_dll_main_t* dll = test_dll(&dev.ctx);
-    const uint32_t consumed_before = test_dll_shared(&dev.ctx)->isr_frames_consumed;
+    const uint32_t consumed_before = test_dll_shared(&dev.ctx)->i_isr_frames_consumed;
     iolink_dll_request_back_to_box(dll);
     assert_int_equal(dll->back_to_box_cycles, 0U);
 
@@ -1717,7 +1717,7 @@ static void test_back_to_box_counts_isr_served_cycles_once_per_pump(void** state
         assert_tx_len(2); /* DPP1 字节 + CKS */
     }
     mock_phy_clear_rx();
-    assert_int_equal(test_dll_shared(&dev.ctx)->isr_frames_consumed, consumed_before + 2U);
+    assert_int_equal(test_dll_shared(&dev.ctx)->i_isr_frames_consumed, consumed_before + 2U);
     assert_int_equal(dll->back_to_box_cycles, 0U);
 
     /* 一个泵周期推进一次。 */
@@ -1775,18 +1775,18 @@ static void test_dll_main_pump_type1_2_reply(void** state)
     frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_2 | test_expected_checksum6(frame, sizeof(frame)));
 
     iolink_dll_shared_t* shared = test_dll_shared(&dev.ctx);
-    shared->pd_in_len = 2U;
+    shared->c_pd_in_len = 2U;
     const uint8_t active = test_pd_active(test_dll(&dev.ctx));
-    shared->pd_in[active][shared->od_width] = 0xAAU;
-    shared->pd_in[active][shared->od_width + 1U] = 0x55U;
+    shared->m_pd_in[active][shared->c_od_width] = 0xAAU;
+    shared->m_pd_in[active][shared->c_od_width + 1U] = 0x55U;
 
     /* 把该请求发布到邮箱环形缓冲区（即数据 ISR 所做的工作）。 */
-    iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&shared->isr_frame_ring);
+    iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&shared->i_isr_frame_ring);
     assert_non_null(rec);
     rec->len = (uint8_t) sizeof(frame);
     rec->eager = 0U; /* 无 ISR 应答：必须由主循环泵回复 */
     (void) memcpy(rec->data, frame, sizeof(frame));
-    iolink_ring_publish(&shared->isr_frame_ring);
+    iolink_ring_publish(&shared->i_isr_frame_ring);
 
     iolink_device_process(&dev.ctx);
     test_pump_tx_idle(&dev.ctx);
