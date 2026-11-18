@@ -1,0 +1,3 @@
+struct,field,category,writer,reader,note
+iolink_dll_shared_t,b_state,b_,主上下文与 ISR,主上下文与 ISR,状态机
+iolink_dll_shared_t,i_seq,i_,ISR,主上下文,发布序号
