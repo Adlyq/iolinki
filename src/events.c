@@ -506,7 +506,12 @@ void iolink_events_reset(iolink_events_ctx_t* ctx)
     ctx->frozen_count = 0U;
     (void) memset(ctx->frozen_events, 0, sizeof(ctx->frozen_events));
     event_memory_clear(ctx);
+    /* 条件表含 ISR 单字节写的 `isr_pulse[]`：整表清零必须与中断互斥，
+     * 否则复位窗口内到达的一次脉冲会被 memset 覆盖而丢失（对应 EventCode
+     * 不再上报）。其余字段由主上下文单写，不需要锁。 */
+    IOLINK_CRITICAL_ENTER();
     iolink_diag_reset(ctx);
+    IOLINK_CRITICAL_EXIT();
     /* 本次复位消费所有已登记的 ISR 请求：读侧掩码从此刻起解除。 */
     ctx->reset_applied = ctx->reset_req;
 }
