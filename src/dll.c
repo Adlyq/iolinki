@@ -387,6 +387,7 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     ctx->master_lost_cycles = 0U;
     ctx->master_lost_count = 0U;
     ctx->master_lost = false;
+    ctx->log_locked = false; /* 重新初始化允许按新配置绑定日志汇点 */
     ctx->master_lost_activity_ms = ctx->master_last_activity_ms;
     ctx->next_deadline = 0U;
     for (uint8_t i = 0U; i < (uint8_t) IOLINK_TIMER_COUNT; i++) {

@@ -688,7 +688,9 @@ config.log_level = IOLINK_LOG_LEVEL_INFO;
 
 `IOLINK_LOG_LEVEL_SILENT`（默认）或 trait 的 `log_write == NULL` 保持静默。
 汇点只在初始化时由 `config.log_write` / `config.log_level` 绑定，没有运行期切换
-接口。设备只有一个 sink（`shared.log`），ISDU、DS 和事件上下文只保存指向它的
+接口：初始化返回后 `iolink_device_set_log()` 是空操作，因为数据 ISR 会读
+`shared.log` 的 `write`/`self`/`level`，运行期改写会与它竞争。设备只有一个 sink
+（`shared.log`），ISDU、DS 和事件上下文只保存指向它的
 指针；直接使用这些模块的调用方把 `ctx->log` 指向自己的 sink 即可，NULL 表示静默。
 
 库不格式化也不缓存任何内容：回调收到 printf 风格的格式串和参数，只有通过运行时

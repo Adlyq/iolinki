@@ -148,13 +148,12 @@ static void test_device_init_binds_config_sink(void** state)
     assert_true(iolink_device_get_events_ctx(&ctx)->log->write == log_capture);
 #endif
 
-    /* 初始化接线的内部入口把后续日志静默（测试直接驱动该入口）。 */
+    /* 初始化之后汇点由配置固定：再改写会被忽略，否则数据 ISR 读到的
+     * write/self/level 会被主上下文改写。 */
     iolink_device_set_log(&ctx, NULL, IOLINK_LOG_LEVEL_SILENT);
-    reset_capture();
-#if IOLINK_FEATURE_DATA_STORAGE
-    iolink_ds_check(iolink_device_get_ds_ctx(&ctx), 0U); /* would log an upload request */
-#endif
-    assert_int_equal(g_calls, 0);
+    assert_true(test_dll_shared(&ctx)->log.write == log_capture);
+    assert_int_equal(test_dll_shared(&ctx)->log.level, IOLINK_LOG_LEVEL_INFO);
+    assert_true(test_dll_isdu(&ctx)->log->write == log_capture);
 }
 
 static void test_device_init_failure_logs_through_config(void** state)

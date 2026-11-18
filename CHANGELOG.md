@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (the log sink is locked after initialisation)
+- `iolink_device_set_log()` is now a no-op once `iolink_device_init()` returns:
+  the data ISR reads `shared.log.write`/`self`/`level`, so a runtime rebind
+  raced with it. `iolink_dll_main_t` gained a `log_locked` flag (it fits the
+  existing padding, so no context size changed) that re-initialisation clears.
+  The sink comes from `config.app->log_write` and `config.log_level` only.
+
 ### Tests (the event queue drain ordering is pinned)
 - `iolink_events_pop()` documents why it drains the queue without a lock
   (`count` → `flag` → empty image) and `tests/test_events.c` pins that draining
