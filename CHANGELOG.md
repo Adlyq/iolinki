@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (DPP1 image reads acquire the sequence; workspace rebinding refuses in the ISR)
+- `iolink_isdu_direct_param_page1_octet()` and
+  `iolink_isdu_dp_page1_read_range()` order their loads the way the writer
+  orders its stores: sequence, `IOLINK_FENCE()`, image, `IOLINK_FENCE()`,
+  sequence re-read. Under `IOLINK_CONCURRENCY=SMP` that is the acquire a
+  seqlock reader needs; under `ISR` it is a compiler barrier with no run-time
+  cost. The 3-attempt retry and the "0 / all zero" outcome are unchanged.
+- `iolink_isdu_bind_workspace()` is refused (pointers and transport state
+  unchanged) when it is called from the data ISR, where the request/response
+  buffers it rewrites are in use. Binding stays a quiescent-pump operation;
+  the public header now states it.
+
 ### Changed (ISDU read reset keeps the write entry phase)
 - `isdu_transport_reset()` still resets the whole ISDU transport, and now names
   its two owners explicitly: the main-context read transport fields and the

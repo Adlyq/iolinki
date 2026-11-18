@@ -148,6 +148,12 @@ void iolink_isdu_bind_workspace(iolink_isdu_ctx_t* ctx, iolink_workspace_t* IOLI
     if (ctx == NULL) {
         return;
     }
+    /* 传输缓冲指针由数据 ISR 读取：绑定只在数据泵静止时合法。从数据 ISR
+     * 内调用是显式失败——不改变任何指针，也不留下半个绑定。 */
+    if ((ctx->dll_ctx != NULL) && (ctx->dll_ctx->shared.in_isr != 0U)) {
+        IOLINK_LOG_ISR_ERROR(ctx->log, "isdu bind_workspace rejected inside the data ISR");
+        return;
+    }
     ctx->workspace = ws;
     if (ws != NULL) {
         isdu_attach_scratch(ctx, &ws->isdu);
