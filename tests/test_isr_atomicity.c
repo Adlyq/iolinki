@@ -602,6 +602,31 @@ static void test_staging_rejected_while_reply_streaming(void** state)
 }
 #endif /* IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE */
 
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+/* Timer A 入口复位 RX 组装状态：两个字段必须作为一个相位清掉，
+ * 不能被数据中断在中间重新播种半帧。 */
+static void test_rx_timeout_resets_assembly_in_one_phase(void** state)
+{
+    (void) state;
+    reset_ctx();
+    /* 半帧：两个头部字节已累积，期望长度已知。 */
+    s_ctx.isr.isr_rx_cnt = 2U;
+    s_ctx.isr.isr_rx_expect = 3U;
+#if IOLINK_NEED_CRITICAL
+    const uint32_t crit_before = s_crit_enters;
+#endif
+
+    iolink_dll_on_rx_timeout(&s_ctx.main);
+
+    assert_int_equal(s_ctx.isr.isr_rx_cnt, 0U);
+    assert_int_equal(s_ctx.isr.isr_rx_expect, 0U);
+#if IOLINK_NEED_CRITICAL
+    assert_int_equal(s_crit_enters, crit_before + 1U);
+#endif
+    assert_int_equal(s_crit_enters, s_crit_exits);
+}
+#endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -614,6 +639,9 @@ int main(void)
 #else
         cmocka_unit_test(test_staged_reply_keeps_own_length_and_cks),
         cmocka_unit_test(test_staging_rejected_while_reply_streaming),
+#endif
+#if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+        cmocka_unit_test(test_rx_timeout_resets_assembly_in_one_phase),
 #endif
     };
     return cmocka_run_group_tests(tests, NULL, NULL);

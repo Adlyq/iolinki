@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (Timer A timeout resets RX assembly in one phase)
+- `iolink_dll_on_rx_timeout()` (Timer A) cleared `isr_rx_cnt`/`isr_rx_expect`
+  with two bare stores although those fields belong to the data ISR: a pump that
+  ran between the two writes re-seeded a half frame, and the following byte
+  stream was assembled against a stale expected length. Both stores now sit in
+  one short `IOLINK_CRITICAL_ENTER/EXIT()` window (no callbacks, no waits). The
+  critical section cannot protect against a timeout vector that *preempts* the
+  data pump, so `docs/PORTING.md` now requires the data interrupt and Timer A/B
+  to run at the same priority or in the same vector, and states how a port that
+  cannot do that must serialise the entries itself. Regression:
+  `test_isr_atomicity` pins the single-phase reset.
+
 ### Fixed (staged reply length and CKS are ISR-owned)
 - The staged reply's length and CKS flag were shared between the main pump and
   the data ISR: `dll_send()` wrote `isr_tx_len`/`isr_tx_has_cks` while the ISR

@@ -766,8 +766,13 @@ void iolink_dll_on_rx_timeout(iolink_dll_main_t* ctx)
     IOLINK_STAT_ISR(ctx, timeout_errors)++;
     DLL_DIAG_PULSE_ISR(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_TIMEOUT);
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
+    /* RX 组装状态只归数据 ISR，而本入口是 Timer A：两个字段必须作为
+     * 一个相位复位，否则数据中断可能在其间重新播种半帧。短、无回调；
+     * 向量优先级本身由端口保证（docs/PORTING.md）。 */
+    IOLINK_CRITICAL_ENTER();
     ctx->shared.isr->isr_rx_cnt = 0U;
     ctx->shared.isr->isr_rx_expect = 0U;
+    IOLINK_CRITICAL_EXIT();
 #endif
     if ((ctx->shared.phy != NULL) && (ctx->shared.phy->response_timer_stop != NULL)) {
         ctx->shared.phy->response_timer_stop(ctx->shared.phy->self);

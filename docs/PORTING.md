@@ -246,6 +246,26 @@ On POSIX, a signal handler must not take a mutex, which is one reason the
 `SINGLE` profile (no critical section) is the right choice for a hosted port
 that drives the pump from a signal handler.
 
+#### Interrupt priority: data interrupt vs Timer A/B
+
+`iolink_dll_process_isr()` (the data interrupt) owns the RX assembly state
+(`isr_rx_buf`, `isr_rx_cnt`, `isr_rx_acc`, `isr_rx_expect`); Timer A
+(`iolink_dll_on_rx_timeout()`) and Timer B (`iolink_dll_on_stack_tick()`) are
+separate entry points into the same DLL context. The timeout handler resets
+`isr_rx_cnt`/`isr_rx_expect` inside one short critical section, but that only
+makes the pair atomic against a pump that *it* preempts: a timeout vector at a
+higher priority than the data interrupt can still interrupt the pump between two
+received octets and resynchronise the stream on a half frame, which the library
+cannot detect.
+
+Therefore: **configure the data interrupt and Timer A/B at the same priority, or
+route them through the same vector** (one handler that dispatches on the flag).
+If the MCU cannot do either, the port must serialise the entries itself: for
+example mask Timer A while the pump runs and apply the pending timeout from the
+data-interrupt handler after `iolink_dll_process_isr()` returns, or move the
+timeout service into the same handler. Never let Timer A preempt the data pump
+in the middle of an M-sequence.
+
 #### Verification
 
 - `tests/test_port_capabilities.c` compiles and runs under every profile.
