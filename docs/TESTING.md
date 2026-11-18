@@ -107,14 +107,25 @@ the reason instead of one startup failure per binary; the Docker image installs
 valgrind 3.18 cannot parse DWARF 5.
 
 No level up to L2 builds a structural configuration or re-measures size,
-coverage or the WCET proxy, so a green L2 says nothing about those. Add a group
-when the change can break it:
+coverage or the WCET proxy, so a green L2 says nothing about those. Choose the
+groups from what the change can break, not from the level:
 
-| The change touches | Add |
+#### Change type → required gates
+
+| The change touches | Run before it is ready |
 | --- | --- |
-| any `#if`, an `IOLINK_*` switch, or a public header | `matrix` (required, see the delivery rule in §3) |
-| a hot path, or anything that can move ROM/RAM or coverage | `perf` |
-| a PHY driver or an example firmware | nothing locally (`package` is already in L2); the `stm32g0-example` arm build exists only in CI |
+| A public header (`include/iolinki/*.h`), the `iolink_phy_api_t` vtable, or a field of a public struct | `./tools/gates.sh quick build test gcc fuzz` |
+| A compile-time switch, an `#if` in `src/`/`include/`, or an `IOLINK_*` configuration macro | `./tools/build_matrix.sh`, plus `./tools/gates.sh quick` (delivery rule in §3) |
+| A specification constant, a state-machine transition, or ISDU/event/DS behaviour | `./tools/gates.sh test` (there is no `context` group yet; the ISR-context checks ship inside `test`) |
+| Documentation only (`*.md`) | `./tools/gates.sh docs` |
+| A tool, a CI workflow or a shell script | `./tools/gates.sh quick` |
+| A hot path, or anything that can move ROM/RAM or coverage | `./tools/gates.sh perf` |
+| A PHY driver or an example firmware | nothing locally (`package` is already in L2); the `stm32g0-example` arm build exists only in CI |
+
+`gcc` and `fuzz` are part of the public-header row because a header change
+reaches the second compiler's diagnostics and the parser harnesses. `sanitize`,
+`memcheck`, `analyzer` and `static` are acceptance gates rather than per-commit
+gates: the combined run before delivery includes them.
 
 `all` is not the release gate either: it does not build the
 `examples/stm32g0_l6362a_raw` firmware with `arm-none-eabi`, run
@@ -172,11 +183,23 @@ The FRAME counterpart of the PD-in lease is covered rather than skipped:
 `tx_busy()`), so it runs under every suite transport and pins the lease release
 at the ISR entry together with the silent-period `pd_in_skips`.
 
-`test_ctx_sizes` pins both layouts: 4944/5136 bytes on BYTE and 4936/5128 bytes
-on FRAME/FRAME for the DLL and device contexts.
+`test_ctx_sizes` pins the layout: 4952/5144 bytes on BYTE and 4944/5136 bytes on
+FRAME/FRAME for the DLL and device contexts. The transport changes both the
+PD-in buffer count (`IOLINK_PD_IN_BUFFERS`) and the ISR RX assembly buffer, so
+do not derive one pair from the other; see [MEMORY_GUIDE.md](MEMORY_GUIDE.md) for
+the component breakdown and the `IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` variant.
 
 Mixed-granularity layouts (`FRAME_BYTE`, `BYTE_FRAME`) remain compile-only: they
 have no test transport contract, so their rows stay tests=no.
+
+Non-default COM rates are compile-only as well. `tools/matrix_configs.sh` emits
+`com1` (`-DIOLINK_COM=1`) and `com3` (`-DIOLINK_COM=3`) as combination probes,
+which run `cc -fsyntax-only` over the core sources; neither rate has a runnable
+configuration, a ctest target or a test transport. **Only compilation is
+verified** — the `#if IOLINK_COM` branches are never executed by the suite, so a
+COM1/COM3 build passing the matrix says nothing about its runtime behaviour.
+This paragraph and the probe list change together if a rate ever becomes
+runnable.
 
 `IOLINK_STATS_MODE` is a CMake cache variable, not a `CMAKE_C_FLAGS` macro:
 leave it empty for the `config.h` default (`IOLINK_STATS_SHARED`), or set
@@ -212,7 +235,7 @@ configuration to the script when you introduce a new build switch.
 
 ### 4. Test conventions
 
-Every registered test binary is a cmocka program:
+Every registered C test binary is a cmocka program:
 
 - one `static void test_x(void** state)` per case, cmocka assertion macros, and
   `cmocka_run_group_tests()` as the entry point. A failing case aborts only
@@ -223,6 +246,12 @@ Every registered test binary is a cmocka program:
   definition, so it takes no trailing semicolon;
 - `assert()` from `<assert.h>` is not used, so the suite does not depend on
   `-UNDEBUG` to keep its checks alive.
+
+Two `ctest` entries are not C binaries: `dll_statemachine_gen_check` re-runs
+`tools/gen_dll_statemachine.py --check`, so the state-machine table and its
+documentation stay generated, and `od_iodd_export` runs
+`tests/test_od_iodd_export.py`, which checks that the IODD export comes from the
+C object-dictionary table rather than from JSON variables.
 
 A reply that no case asserts is a failure, not a silent extra. The shared mock
 (`tests/test_helpers.c`) counts delivered and asserted replies and every group
@@ -323,26 +352,28 @@ checksummed release tarballs.
 The CI workflow (`.github/workflows/ci.yml`) runs on every push and PR to
 `own_dev`/`develop`:
 
-1.  **docker-validation**: `tools/gates.sh quick build static docs package`
-    + Linux/BAREMETAL builds + `ctest` + the virtual-master suite
-    (`test_automated_mandatory`, `test_pd_variable`,
+1.  **docker-validation**: `./run_all_tests_docker.sh host`, i.e.
+    `tools/gates.sh quick build static docs package`,
+    `tools/size_matrix.py --check --selftest`, `tools/gates.sh memcheck`, then
+    `.docker_test_entrypoint.sh` (Linux and BAREMETAL builds, `ctest`, and the
+    virtual-master suite: `test_automated_mandatory`, `test_pd_variable`,
     `test_conformance_error_injection`, `test_conformance_isdu`,
     `test_conformance_state_machine`, `test_conformance_timing`).
 2.  **release-build**: strict `-Werror` build and `ctest` at `-O3`.
 3.  **build-matrix**: every structural configuration builds with clang
-    (`IOLINKI_CC`), plus the syntax-only probes and the link-time profile gate
-    (`tools/build_matrix.sh`).
-4.  **differential gate**: `tools/diff_matrix.sh` compares the frame transcripts
-    of the runnable configurations byte for byte.
-5.  **coverage / size / WCET**: `tools/coverage.sh --check`,
-    `tools/size_matrix.py --check --selftest` and `tools/wcet_run.sh --check`
-    enforce the floors and the host-side path-length proxy. The size job
-    installs the GNU toolchain from apt, so it pins `IOLINKI_SIZE_TOOLCHAIN=gcc`
-    and gates `tools/size_baseline.csv`; the ATFE baseline is measured where
-    ATFE is installed.
-6.  **stm32g0-example**: STM32G0/TIOL112 firmware built with `arm-none-eabi`.
-7.  **lint-scripts** and **sbom-tools**: shellcheck and Python tool tests.
-8.  **fuzz**: `tools/gates.sh fuzz` builds the three libFuzzer harnesses and
+    (`IOLINKI_CC`), plus the syntax-only probes, the link-time profile gate
+    (`tools/build_matrix.sh`), the differential gate (`tools/diff_matrix.sh`)
+    and the file-size, ownership, white-box and install/consume checks.
+4.  **coverage-baseline / wcet-path-proxy / size-baseline**: three separate
+    jobs. `tools/coverage.sh --check` enforces the line-coverage floor,
+    `tools/wcet_run.sh --check` the host-side path-length proxy and
+    `tools/size_matrix.py --check --selftest --table` the ROM/RAM budget. The
+    size job installs the GNU toolchain from apt, so it pins
+    `IOLINKI_SIZE_TOOLCHAIN=gcc` and gates `tools/size_baseline.csv`; the ATFE
+    baseline is measured where ATFE is installed.
+5.  **stm32g0-example**: STM32G0/TIOL112 firmware built with `arm-none-eabi`.
+6.  **lint-scripts** and **sbom-tools**: shellcheck and Python tool tests.
+7.  **fuzz**: `tools/gates.sh fuzz` builds the three libFuzzer harnesses and
     runs each for `FUZZ_SECONDS` (60 s in CI). A crash, a parser that stops
     making progress (`-timeout=10`), a sanitizer report or a leaked allocation
     fails the job; the offending input is uploaded from
