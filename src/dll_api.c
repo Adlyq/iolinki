@@ -37,9 +37,8 @@ iolink_phy_mode_t iolink_dll_get_phy_mode(const iolink_dll_main_t* ctx)
     return ctx->phy_mode;
 }
 
-iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_main_t* ctx)
+iolink_baudrate_t iolink_dll_get_baudrate(void)
 {
-    (void) ctx;
     return IOLINK_COM_BAUDRATE;
 }
 

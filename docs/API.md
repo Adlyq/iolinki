@@ -675,11 +675,11 @@ ISDU 附加错误码（`IOLINK_ISDU_ERROR_*`，例如 `IDX_NOTAVAIL` `0x11`、
 ```c
 void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_stats);
 void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx, iolink_dll_stats_t* out_stats);
-iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_main_t* ctx);
+iolink_baudrate_t iolink_dll_get_baudrate(void);
 ```
 
-`iolink_dll_get_baudrate()` 当前仍接收 `const iolink_dll_main_t* ctx`，但实现按编译期
-`IOLINK_COM` 返回 `IOLINK_COM_BAUDRATE`，不使用该参数。
+`iolink_dll_get_baudrate()` 按编译期 `IOLINK_COM` 返回 `IOLINK_COM_BAUDRATE`，没有运行期
+COM 切换，因此不接收上下文参数。
 
 <!-- BEGIN GENERATED: dll_stats (tools/gen_docs.py) -->
 | 字段 | 类型 | 含义 |

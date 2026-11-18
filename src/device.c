@@ -675,7 +675,7 @@ iolink_phy_mode_t iolink_device_get_phy_mode(const iolink_device_ctx_t* ctx)
 iolink_baudrate_t iolink_device_get_baudrate(const iolink_device_ctx_t* ctx)
 {
     (void) ctx;
-    return IOLINK_COM_BAUDRATE;
+    return iolink_dll_get_baudrate();
 }
 
 void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx, iolink_dll_stats_t* out_stats)

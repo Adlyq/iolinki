@@ -499,10 +499,9 @@ iolink_phy_mode_t iolink_dll_get_phy_mode(const iolink_dll_main_t* ctx);
 /**
  * @brief 获取当前协商后的波特率（编译期 `IOLINK_COM`）
  *
- * @param ctx DLL 上下文
  * @return iolink_baudrate_t 当前波特率
  */
-iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_main_t* ctx);
+iolink_baudrate_t iolink_dll_get_baudrate(void);
 
 /** 根据 M 序列定时计算设备的 MinCycleTime（单位 0.1 ms）。 */
 uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx);
