@@ -18,7 +18,8 @@
 #   C6 host_smp_split BYTE/BYTE, SMP + SMP fence, SPLIT stats, full stack
 #
 # C1, C2, C3, C4 and C6 run tests; C3/C4 register only the trimmed-behaviour
-# contract. C2 passes -DIOLINK_TEST_TRANSPORT=FRAME
+# contract.  host_isr_log is a C1 variant that also runs the suite with
+# IOLINK_LOG_ENABLE_ISR=1 (the former syntax-only probe). C2 passes -DIOLINK_TEST_TRANSPORT=FRAME
 # (build_matrix.sh derives it from the mode), which drops the targets that pin
 # a BYTE transport contract; see docs/TESTING.md. C2 carries no
 # IOLINK_PHY_FEATURE_TX_BUSY=1 because that build requires every PHY under test

@@ -199,7 +199,9 @@ int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, 
 返回 `iolink_device_pd_result_t`：`IOLINK_DEVICE_PD_OK`（0）、
 `_ERR_ARG`（ctx/data 为 NULL）、`_ERR_MODE`（回调路径已生效）、
 `_ERR_LEN`（`len` 不等于配置的 PD-in 长度，`TYPE_0` 为 0）、
-`_ERR_BUSY`（没有空闲 PD-in 缓冲区，同时计入 `pd_in_skips`）。
+`_ERR_BUSY`（没有空闲 PD-in 缓冲区，同时计入 `pd_in_skips`）。检查顺序为
+`_ERR_ARG` → `_ERR_MODE` → `_ERR_LEN` → `_ERR_BUSY`；`_ERR_ARG` 是防御性兜底，
+调用方不应传入 NULL。
 两条 PD-in 路径在同一构建内共存：非 NULL 的 `on_pd_input` 在初始化时选择回调路径并
 置位实例位 `IOLINK_CAP_PD_IN_CALLBACK`；否则应用用本函数轮询发布。`iolink_device_init()`
 **不**检查两条路径是否同时提供，也不因混用而失败；回调路径生效后，本函数在运行期返回
@@ -650,7 +652,7 @@ typedef enum
     IOLINK_DEVICE_PD_ERR_MODE = -1, /**< 回调路径已生效（`IOLINK_CAP_PD_IN_CALLBACK`） */
     IOLINK_DEVICE_PD_ERR_LEN = -2,  /**< `len` 与配置的 PD-in 长度不一致 */
     IOLINK_DEVICE_PD_ERR_BUSY = -3, /**< 没有空闲 PD-in 缓冲区（已计入 `pd_in_skips`） */
-    IOLINK_DEVICE_PD_ERR_ARG = -4,  /**< ctx 或 data 为 NULL */
+    IOLINK_DEVICE_PD_ERR_ARG = -4, /**< 防御性兜底：ctx 或 data 为 NULL（调用方违约，不属于契约） */
 } iolink_device_pd_result_t;
 ```
 <!-- END GENERATED -->

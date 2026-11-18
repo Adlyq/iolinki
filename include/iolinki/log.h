@@ -26,7 +26,8 @@ IOLINK_ASSUME_NONNULL_BEGIN
  *
  * sink 默认全零（静默）：`write == NULL` 或 `level == SILENT` 时
  * 不产生任何调用。应用通过 `iolink_device_app_t::log_write` /
- * `config.log_level` 在初始化时配置；运行期没有更换接口。
+ * `config.log_level` 在初始化时配置；编译进 ISR 日志时汇点在初始化后锁定，
+ * 默认构建允许主上下文运行期改绑。
  */
 
 /**

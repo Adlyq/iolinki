@@ -181,10 +181,12 @@ static void test_fallback_uses_master_cycle_time(void** state)
     test_io_cycle(&dev.ctx);
     assert_tx_len(1);
 
-    test_clock_advance_ms(10U);
+    /* 3 * 12.8 ms = 38.4 ms: the deadline is rounded up to 39 ms. At 38 ms the
+     * device must still be in SDCI (a floor rounding to 38 ms would fail here). */
+    test_clock_advance_ms(38U);
     test_io_cycle(&dev.ctx);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
-    test_clock_advance_ms(40U);
+    test_clock_advance_ms(1U);
     test_io_cycle(&dev.ctx);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
 }

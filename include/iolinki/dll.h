@@ -401,7 +401,7 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
  * 各状态的差异由计划表的**状态切片**表达（见
  * `iolink_dll_publish_reply_plans()`）。
  *
- * @param ctx 要处理的 DLL 上下文
+ * @param ctx 要处理的 DLL 上下文；必须非空（NULL 属调用方错误）
  */
 void iolink_dll_process(iolink_dll_main_t* ctx);
 

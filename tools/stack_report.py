@@ -396,6 +396,15 @@ def selftest() -> int:
             file=sys.stderr,
         )
 
+    other_toolchain = dict(data)
+    other_toolchain["toolchain"] = "other-gcc 0.0"
+    if compare(other_toolchain, data):
+        failures += 1
+        print(
+            "selftest FAIL: a toolchain-string change alone failed the numeric gate",
+            file=sys.stderr,
+        )
+
     exact = compare(data, data)
     if exact:
         failures += 1

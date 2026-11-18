@@ -385,7 +385,7 @@ NULL）、`_ERR_MODE`（回调路径已生效）、`_ERR_LEN`、`_ERR_BUSY`（�
 | `on_preoperate(self)`, `on_operate(self)` | 进入对应状态。 |
 | `on_reset(self, type)` | SystemCommand 0x80/0x81 请求复位；`type` 为 `IOLINK_RESET_DEVICE` 或 `IOLINK_RESET_APPLICATION`。NULL = 不处理。 |
 | `on_pd_input(self, data)` | 提供时（非 NULL），每个 OPERATE 周期调用；填写一个 ISR 未占用的 PD-in 缓冲区（长度 = 配置的 `pd_in_len`），返回值作为 PD-valid 标志。未提供时改用 `iolink_device_pd_input_update()`。 |
-| `on_pd_output(self, data)` | 每个 OPERATE 周期调用，携带最新的主站输出数据（长度 = 配置的 `pd_out_len`）。 |
+| `on_pd_output(self, data)` | 每个 OPERATE 周期调用，携带最新的主站输出数据（长度 = 配置的 `pd_out_len`）；`pd_out_len == 0` 时仍会调用，应用必须以配置长度判定有效字节数。 |
 | `on_state_change(self, state)` | 当前 DLL 状态（电平式）：状态变化时调用一次，主上下文迁移立即投递，ISR 期间的多次迁移合并为最终状态；例外是 ISR 进入 STARTUP 的复位迁移，会先于最终状态单独投递。 |
 | `on_master_lost(self)`, `on_master_online(self)` | 主站静默提示的边沿。 |
 

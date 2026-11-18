@@ -424,8 +424,8 @@ static void test_device_process_without_config_is_safe(void** state)
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &stack, &app), 0);
 
-    /* A context whose configuration was never bound (or failed to bind) must
-     * not make the main pump dereference config through the reset path. */
+    /* A zeroed context whose configuration was never bound must not make the
+     * main pump dereference config through the reset path. */
     dev.ctx.config = NULL;
     test_dll_isdu(&dev.ctx)->reset_pending = true;
     iolink_device_process(&dev.ctx);
@@ -447,8 +447,10 @@ static void test_device_reset_without_handler(void** state)
 
     /* No on_reset in the trait: the request is consumed and nothing runs. */
     test_dll_isdu(&dev.ctx)->reset_pending = true;
+    test_dll_isdu(&dev.ctx)->app_reset_pending = true;
     iolink_device_process(&dev.ctx);
     assert_false(test_dll_isdu(&dev.ctx)->reset_pending);
+    assert_false(test_dll_isdu(&dev.ctx)->app_reset_pending);
 }
 
 static void test_device_reset_handler(void** state)

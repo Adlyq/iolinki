@@ -250,7 +250,7 @@ typedef enum
     IOLINK_DEVICE_PD_ERR_MODE = -1, /**< 回调路径已生效（`IOLINK_CAP_PD_IN_CALLBACK`） */
     IOLINK_DEVICE_PD_ERR_LEN = -2,  /**< `len` 与配置的 PD-in 长度不一致 */
     IOLINK_DEVICE_PD_ERR_BUSY = -3, /**< 没有空闲 PD-in 缓冲区（已计入 `pd_in_skips`） */
-    IOLINK_DEVICE_PD_ERR_ARG = -4,  /**< ctx 或 data 为 NULL */
+    IOLINK_DEVICE_PD_ERR_ARG = -4, /**< 防御性兜底：ctx 或 data 为 NULL（调用方违约，不属于契约） */
 } iolink_device_pd_result_t;
 
 /**

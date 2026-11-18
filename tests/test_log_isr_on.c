@@ -18,7 +18,9 @@
 #include <cmocka.h>
 #include <string.h>
 
+#ifndef IOLINK_LOG_ENABLE_ISR
 #define IOLINK_LOG_ENABLE_ISR 1
+#endif
 
 #include "iolinki/log.h"
 

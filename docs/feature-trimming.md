@@ -55,6 +55,7 @@ The matrix uses six structural configurations, defined once in
 | C4 | `host_no_events` | BYTE/BYTE | ISR/SHARED | no events | LINUX Debug |
 | C5 | `target_minimal` | BYTE/BYTE | SINGLE/SHARED | no DS, no events | BAREMETAL Release |
 | C6 | `host_smp_split` | BYTE/BYTE | SMP/SMP barrier/SPLIT | full | LINUX Debug |
+| C1v | `host_isr_log` | BYTE/BYTE | ISR + COMPILER | full | LINUX Debug, `IOLINK_LOG_ENABLE_ISR=1` |
 
 The full unit suite runs on C1, C1r, C2 and C6. C3/C4 run
 `tests/test_trimmed_contract.c`, which asserts the replies a trimmed stack still

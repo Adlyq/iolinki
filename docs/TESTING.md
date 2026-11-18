@@ -154,7 +154,7 @@ installs the tools in the Docker image and the job setup, and
 
 ### 3. Run the Compile Matrix
 Every supported structural configuration must build. The matrix is defined once
-in `tools/matrix_configs.sh`: six structural configurations (`host_default`,
+in `tools/matrix_configs.sh`: six structural configurations, plus the `host_isr_log` variant that runs the suite with `IOLINK_LOG_ENABLE_ISR=1` (`host_default`,
 `host_frame`, `host_no_ds`, `host_no_events`, `target_minimal` and
 `host_smp_split`, plus the Release variant `host_default_release`), the syntax-only
 combination probes, the link-time profile probes and the bare-metal platform.

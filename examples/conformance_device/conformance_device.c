@@ -169,6 +169,7 @@ int conformance_device_power_cycle(conformance_device_t* app, const iolink_phy_a
 
 void conformance_device_close(const conformance_device_t* app)
 {
+    /* No resources are owned by the example; kept for the power-cycle symmetry. */
     (void) app;
 }
 

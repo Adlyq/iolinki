@@ -276,14 +276,18 @@ static void test_isr_family_is_off_by_default(void** state)
     IOLINK_LOG_ISR_INFO(&sink, "isr %d", 3);
     IOLINK_LOG_ISR_DEBUG(&sink, "isr %d", 4);
     assert_int_equal(g_calls, 0);
+}
+#endif
 
+static void test_isr_family_on(void** state)
+{
+    (void) state;
     /* The enabled translation unit reaches the same callback. */
     reset_capture();
     test_log_isr_on_run();
     assert_int_equal(g_calls, 1);
     assert_string_equal(g_last_msg, "isr on 7");
 }
-#endif
 
 static void test_device_setter_propagates(void** state)
 {
@@ -336,7 +340,10 @@ int main(void)
         cmocka_unit_test(test_forwarding_and_user),
         cmocka_unit_test(test_arguments_not_evaluated_when_filtered),
 #if !IOLINK_LOG_ENABLE_ISR
+#if !IOLINK_LOG_ENABLE_ISR
         cmocka_unit_test(test_isr_family_is_off_by_default),
+#endif
+        cmocka_unit_test(test_isr_family_on),
 #endif
         cmocka_unit_test(test_device_setter_propagates),
         cmocka_unit_test(test_device_init_binds_config_sink),
