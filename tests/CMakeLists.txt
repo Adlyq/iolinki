@@ -286,7 +286,7 @@ iolink_test(NAME test_od_app
     CMOCKA)
 # 应用 OD 表参与 DS 集合（设备层接线、暂存/序列化/恢复、整份预校验）。
 iolink_test(NAME test_ds_app_od SOURCES test_ds_app_od.c CMOCKA)
-iolink_test(NAME test_events SOURCES test_events.c CMOCKA)
+iolink_test(NAME test_events SOURCES test_events.c INCLUDES ${CMAKE_SOURCE_DIR}/src CMOCKA)
 # 诊断注册表：Table D.1 内容、电平/脉冲语义、视图一致性与复位。
 iolink_test(NAME test_diag SOURCES test_diag.c CMOCKA)
 iolink_test(NAME test_ds SOURCES test_ds.c CMOCKA)

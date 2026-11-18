@@ -672,6 +672,69 @@ static void test_rx_timeout_resets_assembly_in_one_phase(void** state)
 }
 #endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
 
+/* ISR 内的 STARTUP 迁移不得写事件引擎：它只登记复位请求，并且在那一帧上
+ * 事件标志/事件存储器已经报告“无事件”；主泵在投递状态回调之前应用复位。 */
+static bool s_cb_saw_applied_reset;
+
+static void reset_order_cb(void* user, iolink_dll_state_t state)
+{
+    (void) user;
+    (void) state;
+    const iolink_events_ctx_t* events = &s_ctx.main.shared.events;
+    s_cb_saw_applied_reset = (events->reset_req == events->reset_applied) && (events->count == 0U);
+}
+
+static void test_isr_startup_defers_event_reset_to_main(void** state)
+{
+    (void) state;
+    uint8_t frame[2] = {(uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x02U), 0x00U};
+    iolink_events_ctx_t* events = &s_ctx.main.shared.events;
+
+    reset_ctx();
+    /* Type-1/2 配置才有 Tables 57/67 的 OPERATE 复位行；Type-0 配置的
+       OPERATE 与 ESTAB 共享切片，页读按普通读取应答。 */
+    s_ctx.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
+    s_ctx.main.shared.od_width = 1U;
+    s_ctx.main.shared.pd_out_len_current = 1U;
+    s_ctx.main.shared.pd_in_len = 1U;
+    iolink_dll_publish_reply_plans(&s_ctx.main);
+    iolink_event_trigger(events, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
+    assert_true(iolink_events_flag(events));
+    assert_int_equal(iolink_events_memory_read(events, 0x00U), 0x81U);
+
+    /* 应用已看到 OPERATE，因此 ISR 侧进入 STARTUP 是一个新边沿。 */
+    s_ctx.main.state_cb = reset_order_cb;
+    s_ctx.main.state_cb_user = NULL;
+    s_ctx.main.last_notified_state = IOLINK_DLL_STATE_OPERATE;
+    s_cb_saw_applied_reset = false;
+
+    /* OPERATE 中的 Type-0 页读：ISR 复位到 STARTUP，不应答。 */
+    make_frame(frame, sizeof(frame));
+    feed_frame(frame, sizeof(frame));
+    iolink_dll_process_isr(&s_ctx.main);
+    while (s_ctx.main.shared.isr_tx_active != 0U) {
+        iolink_dll_process_isr(&s_ctx.main);
+    }
+
+    assert_int_equal(s_ctx.main.shared.state, IOLINK_DLL_STATE_STARTUP);
+    assert_int_equal(s_ctx.main.startup_notification_pending, 1U);
+    /* ISR 只登记了请求：事件引擎的其余状态仍等主泵处置。 */
+    assert_int_not_equal(events->reset_req, events->reset_applied);
+    assert_int_equal(events->count, 1U);
+    assert_false(iolink_events_flag(events));
+    assert_int_equal(iolink_events_memory_read(events, 0x00U), 0x00U);
+
+    /* 主泵消费：复位先被应用，再投递 STARTUP。 */
+    iolink_dll_process(&s_ctx.main);
+
+    assert_int_equal(events->reset_req, events->reset_applied);
+    assert_int_equal(events->count, 0U);
+    assert_int_equal(events->pending_count, 0U);
+    assert_false(iolink_events_flag(events));
+    assert_int_equal(iolink_events_memory_read(events, 0x00U), 0x00U);
+    assert_true(s_cb_saw_applied_reset);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -680,6 +743,7 @@ int main(void)
         cmocka_unit_test(test_nested_pump_is_deferred),
         cmocka_unit_test(test_state_notification_is_level_based),
         cmocka_unit_test(test_isr_startup_notification_is_not_coalesced),
+        cmocka_unit_test(test_isr_startup_defers_event_reset_to_main),
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
         cmocka_unit_test(test_busy_tx_frame_keeps_frame_for_main),
 #else

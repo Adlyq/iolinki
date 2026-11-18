@@ -167,7 +167,7 @@ untested code:
   `iolink_phy_virtual` is a byte stream and its `get()` returns NULL in a FRAME
   build, so the example cannot initialise.
 
-`test_ctx_sizes` pins both layouts: 4640/4832 bytes on BYTE and 4632/4824 bytes
+`test_ctx_sizes` pins both layouts: 4664/4856 bytes on BYTE and 4656/4848 bytes
 on FRAME/FRAME for the DLL and device contexts.
 
 Mixed-granularity layouts (`FRAME_BYTE`, `BYTE_FRAME`) remain compile-only: they

@@ -19,6 +19,7 @@
 #include "iolinki/port.h"
 #include "iolinki/utils.h"
 #include "iolinki/internal/wiring.h"
+#include "events_internal.h"
 #include <string.h>
 
 #if IOLINK_FEATURE_EVENTS
@@ -105,22 +106,57 @@ uint8_t iolink_event_qualifier(uint16_t code, iolink_event_type_t type, iolink_e
     return q;
 }
 
+/** @brief 主上下文专属入口的准入判据。
+ *
+ * 事件引擎的写状态（队列、pending 表、两个存储器映像）只有主上下文一个
+ * 写者。DLL 把自身的 ISR 深度标志绑定到 `isr_active`，因此误从数据 ISR
+ * 调用写入口时会在此被拒绝，而不是与主泵竞争。独立使用事件引擎时
+ * `isr_active` 为 NULL：那种配置没有 ISR 写者。 */
+static bool events_main_context(const iolink_events_ctx_t* ctx)
+{
+    return (ctx->isr_active == NULL) || (*ctx->isr_active == 0U);
+}
+
+/** @brief 正在重建的（未发布的）映像。 */
+static uint8_t* event_memory_scratch(iolink_events_ctx_t* ctx)
+{
+    return ctx->memory[1U - ctx->memory_pub];
+}
+
+/** @brief 发布刚写完的映像。
+ *
+ * 主上下文是唯一写者：发布之后旧映像不再被写，读者经 `memory_pub` 取到
+ * 的永远是完整的一代。 */
+static void event_memory_publish(iolink_events_ctx_t* ctx)
+{
+    IOLINK_FENCE();
+    ctx->memory_pub = (uint8_t) (1U - ctx->memory_pub);
+}
+
+/** @brief 发布一个空映像（队列已无事件）。 */
+static void event_memory_clear(iolink_events_ctx_t* ctx)
+{
+    (void) memset(event_memory_scratch(ctx), 0, sizeof(ctx->memory[0]));
+    event_memory_publish(ctx);
+}
+
 /** @brief 用队列中最旧的事件重建 Table 58 事件存储器。
  *
  * 最多填充六个槽位；StatusCode 为每个活动槽位携带一位。
- * 调用方需持有临界区。返回写入的槽位数量。 */
+ * 映像写在后备缓冲中，写完才发布索引。返回写入的槽位数量。 */
 static uint8_t event_memory_rebuild(iolink_events_ctx_t* ctx)
 {
-    (void) memset(ctx->memory, 0, sizeof(ctx->memory));
+    uint8_t* memory = event_memory_scratch(ctx);
+    (void) memset(memory, 0, sizeof(ctx->memory[0]));
     uint8_t slots = ctx->count;
     if (slots > 6U) {
         slots = 6U;
     }
     for (uint8_t i = 0U; i < slots; i++) {
         const iolink_event_t* ev = &ctx->queue[i];
-        ctx->memory[1U + i * 3U] = iolink_event_qualifier(ev->code, ev->type, ev->mode);
-        ctx->memory[2U + i * 3U] = (uint8_t) (ev->code >> 8);
-        ctx->memory[3U + i * 3U] = (uint8_t) (ev->code & 0xFFU);
+        memory[1U + i * 3U] = iolink_event_qualifier(ev->code, ev->type, ev->mode);
+        memory[2U + i * 3U] = (uint8_t) (ev->code >> 8);
+        memory[3U + i * 3U] = (uint8_t) (ev->code & 0xFFU);
     }
     /* StatusCode type 2：Event Details = 1，bits 0-5 每个活动槽位一位
        （Figure A.22/A.23：bit 0 为 Event 1，bit 1 为 Event 2，...）。 */
@@ -128,11 +164,12 @@ static uint8_t event_memory_rebuild(iolink_events_ctx_t* ctx)
     for (uint8_t i = 0U; i < slots; i++) {
         active |= (uint8_t) (1U << i);
     }
-    ctx->memory[0] = (uint8_t) (0x80U | active);
+    memory[0] = (uint8_t) (0x80U | active);
     ctx->frozen_count = slots;
     for (uint8_t i = 0U; i < slots; i++) {
         ctx->frozen_events[i] = ctx->queue[i];
     }
+    event_memory_publish(ctx);
     return slots;
 }
 
@@ -264,17 +301,18 @@ static bool event_code_queued(const iolink_events_ctx_t* ctx, uint16_t code)
     return false;
 }
 
-void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type)
+void iolink_event_trigger_src(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type,
+                              uint8_t src)
 {
-    if (ctx == NULL) {
+    if ((ctx == NULL) || !events_main_context(ctx)) {
         return;
     }
 
     IOLINK_LOG_DEBUG(ctx->log, "event trigger code=0x%04X type=%u", (unsigned) code,
                      (unsigned) type);
 
-    IOLINK_CRITICAL_ENTER();
-
+    /* 时钟回调属于应用代码，必须在关中断之前采样；本次触发只使用这一个
+       时间戳。 */
     const uint32_t now = events_now_ms(ctx);
 
     /* 注册表登记的代码使用规范 EventType；未登记（厂商/应用）代码
@@ -289,7 +327,6 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
             event_queue_insert(ctx, code, type, IOLINK_EVENT_MODE_SINGLE_SHOT);
         }
         event_publish(ctx);
-        IOLINK_CRITICAL_EXIT();
         return;
     }
 
@@ -297,7 +334,6 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
     if ((p != NULL) && p->present) {
         /* 已置位：10.10.2 忽略同一根因的后续事件，因此不会将
            第二个“事件出现”入队。 */
-        IOLINK_CRITICAL_EXIT();
         return;
     }
 
@@ -308,7 +344,6 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
             /* 所有生命周期槽位都保存着活动事件：让丢失可观测，
                而不是静默丢弃该原因。 */
             ctx->dropped_count++;
-            IOLINK_CRITICAL_EXIT();
             return;
         }
         p->code = code;
@@ -320,6 +355,10 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
         /* 10.10.2：同一 Event 的生命周期内 mode/type/instance 保持静态。
            重触发不得改写已上报 appears 的类型。 */
         p->type = type;
+    }
+    if (src != IOLINK_DIAG_SRC_NONE) {
+        /* 调用方声明了来源：随槽位一起写入，避免触发之后再查一次条件表。 */
+        p->source = src;
     }
     ctx->pending_count++;
 
@@ -333,12 +372,16 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
        iolink_events_process() 处理。 */
 
     event_publish(ctx);
-    IOLINK_CRITICAL_EXIT();
+}
+
+void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type)
+{
+    iolink_event_trigger_src(ctx, code, type, IOLINK_DIAG_SRC_NONE);
 }
 
 void iolink_event_clear(iolink_events_ctx_t* ctx, uint16_t code)
 {
-    if (ctx == NULL) {
+    if ((ctx == NULL) || !events_main_context(ctx)) {
         return;
     }
 
@@ -358,12 +401,14 @@ void iolink_event_clear(iolink_events_ctx_t* ctx, uint16_t code)
 
 void iolink_events_process(iolink_events_ctx_t* ctx)
 {
-    if (ctx == NULL) {
+    if ((ctx == NULL) || !events_main_context(ctx)) {
         return;
     }
 
-    IOLINK_CRITICAL_ENTER();
+    /* 时钟回调属于应用代码，必须在关中断之前采样；本轮处理只使用这一个
+       时间戳。 */
     const uint32_t now = events_now_ms(ctx);
+
     bool queued = false;
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         iolink_event_pending_t* p = &ctx->pending[i];
@@ -396,16 +441,17 @@ void iolink_events_process(iolink_events_ctx_t* ctx)
     if (queued) {
         event_publish(ctx);
     }
-    IOLINK_CRITICAL_EXIT();
 }
 
 void iolink_events_clear_diagnosis(iolink_events_ctx_t* ctx)
 {
-    if (ctx == NULL) {
+    if ((ctx == NULL) || !events_main_context(ctx)) {
         return;
     }
 
-    IOLINK_CRITICAL_ENTER();
+    /* 时钟回调属于应用代码，必须在关中断之前采样；本次清理只使用这一个
+       时间戳。 */
+    const uint32_t now = events_now_ms(ctx);
 
     /* Table 101 “Clear”：队列中的通知不携带诊断信息，在仍未确认时
        会被丢弃。 */
@@ -422,7 +468,6 @@ void iolink_events_clear_diagnosis(iolink_events_ctx_t* ctx)
     /* 撤销所有已置位的错误/警告。复位是刻意的，因此“事件消失”会
        立即入队，而不等待常规的 A.6.4/10.10.2 间隔；DeviceStatus 随
        复位一并清除。 */
-    const uint32_t now = events_now_ms(ctx);
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         iolink_event_pending_t* p = &ctx->pending[i];
         if (!p->active || !p->present) {
@@ -440,38 +485,58 @@ void iolink_events_clear_diagnosis(iolink_events_ctx_t* ctx)
     if (ctx->count == 0U) {
         ctx->frozen = false;
         ctx->frozen_count = 0U;
-        (void) memset(ctx->memory, 0, sizeof(ctx->memory));
+        event_memory_clear(ctx);
     }
     event_publish(ctx);
-    IOLINK_CRITICAL_EXIT();
 }
 
 void iolink_events_reset(iolink_events_ctx_t* ctx)
 {
-    if (ctx == NULL) {
+    if ((ctx == NULL) || !events_main_context(ctx)) {
         return;
     }
 
-    IOLINK_CRITICAL_ENTER();
     ctx->count = 0U;
     ctx->pending_count = 0U;
     ctx->dropped_count = 0U;
     (void) memset(ctx->pending, 0, sizeof(ctx->pending));
-    (void) memset(ctx->memory, 0, sizeof(ctx->memory));
     ctx->frozen = false;
     ctx->flag = false;
     ctx->frozen_slots = 0U;
     ctx->frozen_count = 0U;
     (void) memset(ctx->frozen_events, 0, sizeof(ctx->frozen_events));
+    event_memory_clear(ctx);
     iolink_diag_reset(ctx);
-    IOLINK_CRITICAL_EXIT();
+    /* 本次复位消费所有已登记的 ISR 请求：读侧掩码从此刻起解除。 */
+    ctx->reset_applied = ctx->reset_req;
+}
+
+void iolink_events_reset_request(iolink_events_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    /* ISR 唯一允许的写：只把“有一次复位待应用”登记为 req != applied，
+       不碰事件引擎的其它字段。挂起期间重复登记是等价的，因此不需要计数
+       到回绕——两者在主泵应用之前不可能重新相等。 */
+    if (ctx->reset_req == ctx->reset_applied) {
+        ctx->reset_req = (uint8_t) (ctx->reset_applied + 1U);
+    }
 }
 
 bool iolink_events_flag(const iolink_events_ctx_t* ctx)
 {
+    if (ctx == NULL) {
+        return false;
+    }
+    /* 存在尚未应用的 ISR 复位请求：复位前的内容一律不可见（CKS 第 7 位
+       不能把复位前的旧事件带出去）。 */
+    if (ctx->reset_req != ctx->reset_applied) {
+        return false;
+    }
     /* 绝不在队列为空时通告事件标志。各设置函数保持
        flag == (count > 0)；此保护也覆盖并发的 ISR 读取。 */
-    return ((ctx != NULL) && ctx->flag && (ctx->count > 0U));
+    return ctx->flag && (ctx->count > 0U);
 }
 
 uint32_t iolink_events_get_dropped_count(const iolink_events_ctx_t* ctx)
@@ -481,15 +546,18 @@ uint32_t iolink_events_get_dropped_count(const iolink_events_ctx_t* ctx)
 
 uint8_t iolink_events_memory_read(iolink_events_ctx_t* ctx, uint8_t addr)
 {
-    if ((ctx == NULL) || (addr >= sizeof(ctx->memory))) {
+    if ((ctx == NULL) || (addr >= sizeof(ctx->memory[0]))) {
         return 0U;
     }
-    IOLINK_CRITICAL_ENTER();
-    /* 事件标志置位时存储器已被冻结（Table 60 T3），因此读出的
-       始终是一致快照。 */
-    const uint8_t value = ctx->memory[addr];
-    IOLINK_CRITICAL_EXIT();
-    return value;
+    /* 复位请求未应用时不得暴露复位前的映像（Table 58 只能读到“空”）。 */
+    if (ctx->reset_req != ctx->reset_applied) {
+        return 0U;
+    }
+    /* 取发布索引 → 屏障 → 取一个字节：主上下文发布新的一代之后不再写
+       旧映像，因此该字节必然来自完整的一代。 */
+    const uint8_t pub = ctx->memory_pub;
+    IOLINK_FENCE();
+    return ctx->memory[pub][addr];
 }
 
 static void event_queue_remove(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_mode_t mode)
@@ -508,11 +576,10 @@ static void event_queue_remove(iolink_events_ctx_t* ctx, uint16_t code, iolink_e
 void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t value)
 {
     (void) value;
-    if ((ctx == NULL) || (addr != 0U)) {
+    if ((ctx == NULL) || (addr != 0U) || !events_main_context(ctx)) {
         return;
     }
 
-    IOLINK_CRITICAL_ENTER();
     /* Table 60 T5：确认会释放存储器并清除标志。仅确认实际呈现过的
        槽位（frozen_slots）；冻结期间入队的事件会在下面重建并再次
        可见。 */
@@ -549,10 +616,9 @@ void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t 
         ctx->flag = true;
     }
     else {
-        (void) memset(ctx->memory, 0, sizeof(ctx->memory));
+        event_memory_clear(ctx);
         ctx->flag = false;
     }
-    IOLINK_CRITICAL_EXIT();
 }
 
 bool iolink_events_pending(const iolink_events_ctx_t* ctx)
@@ -563,13 +629,11 @@ bool iolink_events_pending(const iolink_events_ctx_t* ctx)
 
 bool iolink_events_pop(iolink_events_ctx_t* ctx, iolink_event_t* event)
 {
-    if ((ctx == NULL) || (event == NULL)) {
+    if ((ctx == NULL) || (event == NULL) || !events_main_context(ctx)) {
         return false;
     }
 
     bool ret = false;
-    IOLINK_CRITICAL_ENTER();
-
     if (ctx->count > 0U) {
         *event = ctx->queue[0];
         for (uint8_t i = 1U; i < ctx->count; i++) {
@@ -582,12 +646,11 @@ bool iolink_events_pop(iolink_events_ctx_t* ctx, iolink_event_t* event)
             ctx->flag = false;
             ctx->frozen = false;
             ctx->frozen_slots = 0U;
-            (void) memset(ctx->memory, 0, sizeof(ctx->memory));
+            event_memory_clear(ctx);
         }
         ret = true;
     }
 
-    IOLINK_CRITICAL_EXIT();
     return ret;
 }
 

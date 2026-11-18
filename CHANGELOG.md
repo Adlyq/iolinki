@@ -64,7 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed (SIO switching clears the ISR reply state under the lock)
 - `iolink_dll_set_sio_mode()` cleared `isr_tx_pending`/`isr_tx_active`/
-  `isr_tx_has_cks`/`isr_tx_idx`/`pd_in_captured` with five plain stores. The data
+  `isr_tx_idx`/`pd_in_captured` with plain stores. The data
   ISR writes the same fields, so a switch between two byte steps left a
   half-frame with `tx_done` never called (and a staged reply silently dropped),
   with nothing counted. The cleanup now runs in one critical section; a staged
@@ -84,6 +84,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the reset run in one critical section, so the ISR cannot open a new write
   START in between; the section only clears fields (no PHY or application
   callbacks).
+### Added (the event memory is published, not locked)
+- The Table 58 event memory is now a double image with a published index:
+  `iolink_events_ctx_t::memory[2][19]` plus `volatile uint8_t memory_pub`. The
+  main context writes the unpublished image, fences, then publishes the index;
+  `iolink_events_memory_read()` loads the index, fences, and reads one byte. A
+  reader (the data ISR) therefore always sees one complete generation instead of
+  a byte-by-byte snapshot taken under the lock.
+- `iolink_events_reset_request()` (`src/events_internal.h`) is the only write the
+  data ISR may perform on the event engine: it raises `volatile uint8_t
+  reset_req` above `reset_applied`. `dll_set_state(STARTUP)` calls it when the
+  transition happens in the ISR; a main-context transition still calls
+  `iolink_events_reset()` directly.
+- The main pump applies the request (`dll_process_body()` and
+  `iolink_dll_flush_state_callbacks()`, both before any diagnostics or state
+  callback) by running the full reset and setting
+  `reset_applied = reset_req`. While the two counters differ,
+  `iolink_events_flag()` reports `false` and `iolink_events_memory_read()`
+  reports `0`, so the 0x97 DeviceStartup frame carries no pre-reset CKS Event
+  bit and Table 58 reads no pre-reset content.
+- The main-only write entries (trigger, clear, process, clear_diagnosis, reset,
+  memory_write, pop) are rejected while the bound `isr_active` flag is set;
+  `iolink_dll_init()` binds it to the DLL's own ISR-depth flag.
+  **MAJOR**: `include/iolinki/events.h` gains `memory_pub`, `reset_req`,
+  `reset_applied` and `isr_active`, and `memory` becomes a double image
+  (`iolink_events_ctx_t` 480 → 504 B on a 64-bit host).
+- `iolink_event_trigger()`, `iolink_events_process()`,
+  `iolink_events_clear_diagnosis()`, `iolink_events_reset()`,
+  `iolink_events_memory_write()` and `iolink_events_pop()` no longer take a
+  platform critical section. The queue read paths (`iolink_events_peek()`,
+  `iolink_events_get_all()`, `iolink_event_clear()`) keep theirs.
+
+### Changed (event timestamps are sampled before the lock)
+- `iolink_event_trigger()`, `iolink_events_process()` and
+  `iolink_events_clear_diagnosis()` now read the bound application clock once,
+  before `IOLINK_CRITICAL_ENTER()`. The callback is application code, so the
+  time spent with interrupts disabled is now bounded by the event bookkeeping
+  itself instead of the clock read; each call still uses that single timestamp
+  throughout.
+
+### Changed (the diagnostic source is written with the event, not after it)
+- `iolink_diag_set_level()` and `iolink_diag_pulse()` used to call
+  `iolink_event_trigger()` and then take a second critical section to look the
+  code up in `pending[]` again just to store its source. The source is now
+  passed into the trigger (`src/events_internal.h`: `iolink_event_trigger_src()`)
+  and written in the same critical section that allocates the slot, so a
+  diagnostic raise costs one short lock instead of two. The public
+  `iolink_event_trigger()` is unchanged in signature and passes
+  `IOLINK_DIAG_SRC_NONE`.
 
 ### Removed (reply plans carry no timing field and are compiled once)
 ### Fixed (Timer A timeout resets RX assembly in one phase)
