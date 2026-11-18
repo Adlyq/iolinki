@@ -917,23 +917,6 @@ static void dll_process_body(iolink_dll_main_t* ctx)
     dll_apply_isr_consumed_frame(ctx);
     dll_apply_isr_deadline_requests(ctx);
 
-    /* 捕获的 PD-in 缓冲区在应答完成时由 TX BYTE 泵释放。
-     * TX FRAME 类型的 PHY 可通过 tx_busy() 报告传输结束；
-     * 没有该钩子时，库无法区分“仍在线上”与
-     * “收发器停滞”，因此会保持租约直到下次捕获，并由
-     * pd_in_skips 暴露停滞。该临界区防止数据 ISR 在
-     * 轮询与释放之间捕获新缓冲区。 */
-#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-    if ((ctx->shared.phy != NULL) && (ctx->shared.phy->tx_busy != NULL)) {
-        IOLINK_CRITICAL_ENTER();
-        if ((ctx->shared.pd_in_captured != 0xFFU) &&
-            (ctx->shared.phy->tx_busy(ctx->shared.phy->self) == 0U)) {
-            ctx->shared.pd_in_captured = 0xFFU;
-        }
-        IOLINK_CRITICAL_EXIT();
-    }
-#endif
-
     iolink_isdu_process(&ctx->shared.isdu);
     /* ISR 对 IDLE/IDLE2/ABORT 读只回 0x00；读传输层复位归主泵。
      * Type-0 下该帧由 CONSUME 计划完全消费，主泵只能经此标志收到请求。 */

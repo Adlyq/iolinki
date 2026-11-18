@@ -217,7 +217,7 @@ vtable 的每个成员在类型上都是可选的（`IOLINK_NULLABLE`）：`ioli
 | `tx_octet` | TX BYTE 模式 | 送入一个应答 octet。 |
 | `tx_frame` | TX FRAME 模式 | 发送完整应答，通常使用 DMA。 |
 | `tx_done` | TX BYTE 模式 | 发完最后一字节后释放线路；RX BYTE 的 gap 也会用它释放接收引擎。TX FRAME 下该成员不存在，由 PHY 自己在传输完成中断里收尾。 |
-| `tx_busy` | TX FRAME 可选 | 线路仍被占用时返回非 0；库据此推迟 ISR 应答并在主泵释放 PD-in 缓冲。为 NULL 时只能等下一次 capture 复用缓冲。 |
+| `tx_busy` | TX FRAME 可选 | 线路仍被占用时返回非 0；库据此推迟 ISR 应答，并由数据 ISR 在入口发现线路空闲时释放 PD-in 缓冲租约。为 NULL 时只能等下一次 capture 复用缓冲。 |
 | `int_active` | ISR 泵需要 | 数据中断电平；`dll_isr_process()` 在它或 RX 能力缺失时直接返回，不泵送。 |
 | `request_service` | ISR/SMP 档必需 | 主上下文暂存应答后唤醒数据 ISR。`ISR`/`SMP` 档下具备 TX 能力的 PHY 缺少它会被初始化拒绝；`SINGLE` 档没有数据 ISR，主上下文直接驱动 TX 钩子，此时它只在设置 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 时必需。 |
 | `response_timer_start/stop` | 可选 | 硬件 t_A 定时器。为 NULL 时使用软件时间戳。 |

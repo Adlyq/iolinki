@@ -248,6 +248,10 @@ target_compile_definitions(iolink_tx_busy_fixture PUBLIC
 iolink_test(NAME test_tx_busy SOURCES test_tx_busy.c LIBS iolink_tx_busy_fixture
     CMOCKA NO_HELPERS)
 
+# 主站静默期：同一 FRAME+TX_BUSY 构建上，PD-in 租约只由 ISR 释放。
+iolink_test(NAME test_pd_lease_frame SOURCES test_pd_lease_frame.c
+    LIBS iolink_tx_busy_fixture CMOCKA)
+
 # PD-input path: the callback and the polling API now coexist in one
 # binary, so the test needs no fixture build of the sources.
 iolink_test(NAME test_app_pd_callback SOURCES test_app_pd_callback.c

@@ -10,13 +10,14 @@
  * @file test_pd_lease.c
  * @brief PD-in 缓冲区借用：跳过计数与过期借用恢复。
  *
- * TX BYTE 在库内部结束应答，因此主泵可以判断记录下来的
+ * TX BYTE 在 ISR 内部结束应答（帧末 tx_done），因此记录下来的
  * PD-in 捕获已不再被流式发送。在帧中途卡住的收发器
  * 不得让 PD-in 更新在本次会话剩余时间内
  * 冻结。
  *
  * "无空闲缓冲区"只在 TX BYTE 的两缓冲区布局可达：TX FRAME 里 PHY 用
- * tx_busy() 报告帧结束，主泵因此能主动释放租约。
+ * tx_busy() 报告帧结束，数据 ISR 因此能在下次进入时释放租约
+ * （见 test_pd_lease_frame.c）；没有该钩子时第三个缓冲区吸收更新。
  */
 
 #include <stdarg.h>
@@ -35,7 +36,8 @@ static void test_lease_recovery_and_skip_counter(void** state)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     /* 该场景手工占用"活动缓冲区之外的唯一缓冲区"，只在两缓冲区的 TX BYTE
      * 布局可达。TX FRAME 下 PHY 通过 tx_busy() 报告帧结束（mock 随即报告
-     * 线路空闲），主泵会主动释放租约；三缓冲区布局又总有一个可写槽位。 */
+     * 线路空闲），数据 ISR 在下次进入时释放租约；三缓冲区布局又总有一个
+     * 可写槽位。 */
     skip();
 #endif
     const iolink_stack_config_t config = {

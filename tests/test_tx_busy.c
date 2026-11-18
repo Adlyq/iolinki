@@ -4,8 +4,8 @@
  * TX FRAME 线路状态钩子（tx_busy）：
  *  - 当 PHY 报告线路繁忙（前一帧仍在线路上）时，即时（eager）ISR 应答
  *    被推迟到主泵处理；
- *  - 一旦 PHY 报告线路空闲，PD-in 应答缓冲区租约立即释放，
- *    因此两个缓冲区就足够；
+ *  - 数据 ISR 在下次进入时若发现 PHY 报告线路空闲，就释放 PD-in
+ *    应答缓冲区租约，因此两个缓冲区就足够；
  *  - 带该钩子的 TX_FRAME 构建使用两个 PD-in 缓冲区。
  *
  * 针对库的 FRAME/FRAME 副本构建，并定义
@@ -186,8 +186,8 @@ static void test_busy_defers_eager_reply(void** state)
     assert_int_equal(dll.main.shared.isr_tx_pending, 0U);
 }
 
-/* 传输仍在线路上时，应答缓冲区的租约保持占用；一旦 tx_busy()
- * 报告线路空闲，就由主泵释放。 */
+/* 传输仍在线路上时，应答缓冲区的租约保持占用；主泵不再轮询
+ * tx_busy()，租约由数据 ISR 在下次进入时发现线路空闲后释放。 */
 static void test_lease_released_when_line_free(void** state)
 {
     (void) state;
@@ -201,11 +201,15 @@ static void test_lease_released_when_line_free(void** state)
     assert_int_not_equal(dll.main.shared.pd_in_captured, 0xFFU);
 
     g_line_busy = 1U; /* 仍在线路上 */
+    iolink_dll_process_isr(&dll.main);
+    assert_int_not_equal(dll.main.shared.pd_in_captured, 0xFFU);
+
+    /* 主泵周期不释放租约：释放路径只属于 ISR。 */
+    g_line_busy = 0U; /* PHY 已观察到传输完成 */
     iolink_dll_process(&dll.main);
     assert_int_not_equal(dll.main.shared.pd_in_captured, 0xFFU);
 
-    g_line_busy = 0U; /* PHY 观察到传输完成 */
-    iolink_dll_process(&dll.main);
+    iolink_dll_process_isr(&dll.main); /* 下次 ISR 进入时回收 */
     assert_int_equal(dll.main.shared.pd_in_captured, 0xFFU);
 }
 

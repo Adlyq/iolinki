@@ -223,7 +223,9 @@ typedef struct iolink_dll_shared
 
     volatile uint8_t pd_in_active; /**< 活动 PD 应答缓冲区索引 */
 
-    volatile uint8_t pd_in_captured; /**< ISR 正在流式发送的缓冲区（0xFF = 无） */
+    volatile uint8_t pd_in_captured; /**< ISR 正在流式发送的缓冲区（0xFF = 无）；
+                                          TX BYTE 帧末释放，TX FRAME 由 ISR 在下次
+                                          进入时按 tx_busy() 释放 */
 
     volatile uint8_t fallback_count; /**< 连续 CRC 错误计数（诊断脉冲节流） */
 

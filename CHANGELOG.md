@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (BEHAVIOUR CHANGE: the data ISR owns the PD-in lease release)
+- TX FRAME: `dll_process_body()` no longer polls `tx_busy()`, and the
+  `IOLINK_CRITICAL_ENTER/EXIT()` pair that guarded the poll and the
+  `pd_in_captured` reset is gone with it. The data ISR releases the lease at
+  entry (`dll_isr_process()`, before any new capture) when `tx_busy()` reports
+  the line idle, so `pd_in_captured` has a single writer.
+- **Behaviour change:** during master silence no data interrupt arrives, so the
+  lease of the last reply is held until the next ISR entry instead of being
+  returned by the next main-pump pass. The main pump can still fill the other
+  buffer; only two PD-in updates during the same silence make the second one
+  fail and count `pd_in_skips` (the released lease used to allow it). An
+  in-flight buffer is still never overwritten: the release requires `tx_busy()`
+  to report an idle line.
+- A TX FRAME PHY without `tx_busy()` is unchanged: the transfer end stays
+  unobservable, the lease is kept until the next capture and
+  `IOLINK_PD_IN_BUFFERS` stays at three. TX BYTE keeps releasing at frame end.
+- `tests/test_tx_busy.c` and `tests/test_pd_lease.c` assert the new release
+  point; the new `tests/test_pd_lease_frame.c` pins the silent-period skip and
+  the intact in-flight data.
+
 ### Fixed (CONSUME frame timestamp handoff publishes with a fence)
 - `dll_isr_complete_frame()` now writes `isr_consumed_us`, passes
   `IOLINK_FENCE()` and only then bumps `isr_consumed_seq`, so the sequence

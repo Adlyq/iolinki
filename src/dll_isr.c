@@ -621,6 +621,21 @@ static bool dll_isr_phy_busy(const iolink_dll_main_t* ctx)
     return (ctx->shared.phy->tx_busy != NULL) &&
            (ctx->shared.phy->tx_busy(ctx->shared.phy->self) != 0U);
 }
+
+/** @brief 回收上一应答的 PD-in 租约（TX FRAME）。
+ *
+ * 帧末没有库回调可以释放租约，因此由 ISR 在下一次进入时按 tx_busy()
+ * 判定：线路空闲说明那次应答已经结束，缓冲区重新对主泵可用。
+ * 没有 tx_busy() 的 PHY 无法观测传输结束，租约保持到下一次捕获，
+ * 由 `IOLINK_PD_IN_BUFFERS` 的第三个缓冲区吸收主泵的更新。
+ */
+static void dll_isr_release_pd_lease(iolink_dll_main_t* ctx)
+{
+    if ((ctx->shared.pd_in_captured != 0xFFU) && (ctx->shared.phy->tx_busy != NULL) &&
+        (ctx->shared.phy->tx_busy(ctx->shared.phy->self) == 0U)) {
+        ctx->shared.pd_in_captured = 0xFFU;
+    }
+}
 #else
 static bool dll_isr_phy_busy(const iolink_dll_main_t* ctx)
 {
@@ -724,6 +739,12 @@ static void dll_isr_process(iolink_dll_main_t* ctx)
     if ((ctx == NULL) || !dll_phy_has_rx(&ctx->shared) || (ctx->shared.phy->int_active == NULL)) {
         return;
     }
+
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    /* 上一次应答的租约在本入口回收，且必须在任何新捕获之前：
+     * 主站静默期间没有中断，租约会一直保留到本次进入。 */
+    dll_isr_release_pd_lease(ctx);
+#endif
 
     /* 在 int_active 门控之前检查：软件请求的服务没有
      * 自身的收发器 RX/TX 活动可报告。 */

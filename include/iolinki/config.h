@@ -442,8 +442,8 @@ IOLINK_ASSUME_NONNULL_BEGIN
  * TX BYTE 在库内部结束传输，会在帧结束时释放 ISR 持有的
  * 缓冲区（pd_in_captured = 0xFF），因此两个缓冲区就够用。
  * TX FRAME 把缓冲区交给 DMA，除非 PHY 提供 tx_busy()，否则库无法
- * 观察到传输状态：提供该钩子时，一旦线路空闲就释放租约
- * （两个缓冲区）；不提供时该槽位会一直保持租约直到下一次
+ * 观察到传输状态：提供该钩子时，数据 ISR 在下一次进入时发现线路空闲
+ * 就释放租约（两个缓冲区）；不提供时该槽位会一直保持租约直到下一次
  * 捕获，因此用第三个缓冲区吸收主泵的更新。 */
 #if (IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME) && !IOLINK_PHY_FEATURE_TX_BUSY
 #define IOLINK_PD_IN_BUFFERS 3U
