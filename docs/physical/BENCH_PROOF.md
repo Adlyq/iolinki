@@ -21,7 +21,7 @@ Fail the record if the first master frame is the legacy `0x0F` transition or a b
 
 Connect a commercial IO-Link sensor through an out-of-tree PHY adapter. Record the sensor part number in `counterpart` and the `iolinki-master` commit in `commit`.
 
-Pass: the port reaches OPERATE and `iolink_master_write_gateway_line` prints a line whose VendorID and DeviceID match that sensor. Store that line in `gateway_line`.
+Pass: the port reaches OPERATE and the iolinki-master write-gateway call prints a line whose VendorID and DeviceID match that sensor. Store that line in `gateway_line`.
 
 A pass against the co-designed iolinki device does not count. `counterpart` must name the commercial part.
 

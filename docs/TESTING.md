@@ -175,8 +175,8 @@ untested code:
   output.
 - The PTY host examples (`conformance_device_smoke`, `conformance_device_master`,
   `conformance_device_iodd_oracle`) are registered only for the BYTE transport:
-  `iolink_phy_virtual` is a byte stream and its `get()` returns NULL in a FRAME
-  build, so the example cannot initialise.
+  `iolink_phy_virtual_get()` returns NULL in a FRAME build because the virtual
+  PHY is a byte stream, so the example cannot initialise.
 
 The FRAME counterpart of the PD-in lease is covered rather than skipped:
 `tests/test_pd_lease_frame.c` links the `iolink_tx_busy_fixture` (TX FRAME with

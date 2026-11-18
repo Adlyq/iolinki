@@ -74,8 +74,9 @@ remote, fix on `own_dev`, and re-tag.
 Never merge or rebase onto it: this branch carries a different transport (ISR
 two-pump only), a different NVM/storage backend, and spec corrections upstream
 may not have adopted. A merge would reintroduce removed APIs
-(`src/frame.c`, `phy->send`/`phy->recv_byte`,
-`IOLINK_PHY_FEATURE_ISR_PUMP`) and silently drop behaviour.
+(`src/frame.c`, `phy->send`/`phy->recv_byte`) and the
+IOLINK_PHY_FEATURE_ISR_PUMP build switch (which this branch does not define),
+and silently drop behaviour.
 
 ### Adopting an upstream change
 
