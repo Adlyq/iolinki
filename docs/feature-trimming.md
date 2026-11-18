@@ -27,8 +27,9 @@ source of "why did my build not behave as configured" reports.
    Hardware bits (RX/TX, wake-up, SIO C/Q, `request_service`) come from the
    vtable only. A capability the image was not built with is masked out
    (the bit reads 0) instead of failing init; the reachable init checks are
-   `REQUIRE_ISR_TX` without `request_service()` and TX-FRAME+TX_BUSY without
-   the hook, both `IOLINK_DEVICE_INIT_ERR_PHY`.
+   `REQUIRE_ISR_TX` without `request_service()`, a TX-capable PHY without
+   `request_service()` under the `ISR`/`SMP` profiles, and TX-FRAME+TX_BUSY
+   without the hook, all `IOLINK_DEVICE_INIT_ERR_PHY`.
 
 ## Compile-time switches (retained)
 

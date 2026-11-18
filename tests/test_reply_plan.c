@@ -185,6 +185,12 @@ static size_t tx_observed_len(void)
     return s_tx_n;
 }
 
+static void plan_request_service(iolink_app_t* IOLINK_NULLABLE self)
+{
+    (void) self;
+    /* 宿主机没有中断源：应答由 drain_tx() 排空。 */
+}
+
 static uint8_t plan_int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
@@ -213,6 +219,7 @@ static const iolink_phy_api_t s_phy = {
     .tx_done = plan_tx_done,
 #endif
     .int_active = plan_int_active,
+    .request_service = plan_request_service,
 };
 
 /** @brief 只收不发的 PHY（用于"计划命中但无法执行"的兜底路径）。 */
@@ -247,7 +254,7 @@ static void feed(const uint8_t* frame, size_t len, uint8_t chk)
 
 static void drain_tx(void)
 {
-    while (s_dll.main.shared.isr_tx_active != 0U) {
+    while ((s_dll.main.shared.isr_tx_pending != 0U) || (s_dll.main.shared.isr_tx_active != 0U)) {
         iolink_dll_process_isr(&s_dll.main);
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME

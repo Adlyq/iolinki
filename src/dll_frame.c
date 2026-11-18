@@ -124,8 +124,8 @@ uint8_t dll_req_len_for(const iolink_dll_main_t* ctx, uint8_t mc, uint8_t ckt)
  * 发布后一次性取走（数据先行顺序加编译器屏障），并在自己的
  * 流式状态里持有副本，因此主泵之后的暂存不会改变在途帧。
  * 数据 ISR 正在流式发送时不接受新暂存：覆盖会砍断在途帧，
- * 该应答按丢弃计数。只有旧的直接发送回退路径会从此上下文
- * 驱动 PHY，因此会排除数据中断。
+ * 该应答按丢弃计数。只有 SINGLE 档从主上下文驱动 PHY（该档没有
+ * 数据 ISR）；ISR/SMP 档的应答只能由 request_service() 通知的 ISR 发送。
  */
 void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
 {
@@ -169,20 +169,18 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
         return;
     }
 
-    if (!iolink_caps_has(ctx->shared.caps, IOLINK_CAP_REQUIRE_ISR_TX)) {
-        /* 适用于无 service 钩子的 PHY 的旧回退路径（流式/主机测试）。
-         * 它从此上下文驱动 TX 钩子，因此数据中断不能与
-         * 传输交错。 */
-        IOLINK_CRITICAL_ENTER();
-        ctx->shared.isr_tx_pending = 0U;
-        dll_isr_start_staged_tx(ctx, slot, (uint8_t) len, 0U);
-        IOLINK_CRITICAL_EXIT();
-        return;
-    }
-    /* 仅有 ISR、且没有 request_service() 的 PHY：应答无法发送。
-     * 对其计数，使配置错误可被观测而非静默。 */
+#if IOLINK_CONCURRENCY == IOLINK_CONCURRENCY_SINGLE
+    /* SINGLE 档没有数据 ISR：主上下文是唯一发送者，只能自己驱动
+     * TX 钩子。暂存在发布之后由本上下文取走，不与其他上下文交错。 */
+    ctx->shared.isr_tx_pending = 0U;
+    dll_isr_start_staged_tx(ctx, slot, (uint8_t) len, 0U);
+#else
+    /* ISR/SMP 档没有 request_service()：暂存应答无人发送。
+     * iolink_device_init() 已拒绝这种 PHY；直接使用 DLL 的调用方
+     * 违反同一契约，此处计数丢弃，使配置错误可被观测而非静默。 */
     ctx->shared.isr_tx_pending = 0U;
     ctx->shared.isr_tx_dropped++;
+#endif
 }
 
 /* -------------------------------------------------------------------------

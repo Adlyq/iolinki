@@ -227,9 +227,19 @@ static int device_config_validate(const iolink_device_config_t* config)
     if (iolink_caps_has(caps, IOLINK_CAP_REQUIRE_ISR_TX) &&
         !iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE)) {
         /* 端口要求所有应答由 ISR 发送，但 PHY 没有 request_service()：
-         * 回退路径不可用，应答会全部丢弃。 */
+         * ISR 无法被唤醒，应答会全部丢弃。 */
         return IOLINK_DEVICE_INIT_ERR_PHY;
     }
+
+#if IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_ISR
+    if (iolink_caps_has(caps, IOLINK_CAP_TX) &&
+        !iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE) &&
+        !iolink_caps_has(caps, IOLINK_CAP_REQUIRE_ISR_TX)) {
+        /* ISR/SMP 档的应答只能由数据 ISR 发送；没有 request_service()
+         * 的 PHY 无法唤醒 ISR，暂存的应答永远不会被发送。 */
+        return IOLINK_DEVICE_INIT_ERR_PHY;
+    }
+#endif
 
     if ((IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME) && IOLINK_PHY_FEATURE_TX_BUSY &&
         !iolink_caps_has(caps, IOLINK_CAP_TX_BUSY)) {

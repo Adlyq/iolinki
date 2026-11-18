@@ -370,7 +370,9 @@ bool iolink_dll_timer_armed(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
  *       `iolink_dll_process()` 不会再重发布。直接使用 DLL 时还应设置
  *       `ctx->min_cycle_time_us`（`iolink_dll_compute_min_cycle_time(ctx) * 100`），
  *       否则 T_CYCLE 强制检查与 T_FBD 会退化。iolink_device_init() 会从
- *       `stack.min_cycle_time` 完成这一步。
+ *       `stack.min_cycle_time` 完成这一步。ISR/SMP 档还要求具备 TX 能力的
+ *       PHY 提供 `request_service()`：暂存应答只能由数据 ISR 发送，本函数
+ *       不校验能力位，`iolink_device_init()` 会拒绝缺少该钩子的配置。
  */
 void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink_phy_api_t* phy);
 

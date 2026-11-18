@@ -112,6 +112,12 @@ static unsigned tx_frame_count(void)
     return tx_frames;
 }
 
+static void request_service(iolink_app_t* IOLINK_NULLABLE self)
+{
+    (void) self;
+    /* 宿主机没有中断源：应答由 run_cycles() 的服务循环排空。 */
+}
+
 static uint8_t int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
@@ -138,7 +144,7 @@ static int run_cycles(iolink_dll_ctx_t* ctx, unsigned cycles, uint64_t step_us)
         push_mailbox(ctx, frame, (uint8_t) sizeof(frame));
 
         iolink_dll_process(&ctx->main);
-        while (ctx->main.shared.isr_tx_active != 0U) {
+        while ((ctx->main.shared.isr_tx_pending != 0U) || (ctx->main.shared.isr_tx_active != 0U)) {
             iolink_dll_process_isr(&ctx->main);
         }
 
@@ -178,6 +184,7 @@ static int run_all(void)
         .tx_done = tx_done,
 #endif
         .int_active = int_active,
+        .request_service = request_service,
     };
 
     iolink_dll_init(&ctx.main, &ctx.isr, &phy);

@@ -212,6 +212,12 @@ static uint8_t int_active(iolink_app_t* IOLINK_NULLABLE self)
 #endif
 }
 
+static void request_service(iolink_app_t* IOLINK_NULLABLE self)
+{
+    (void) self;
+    /* 宿主机没有中断源：暂存应答由用例的服务循环排空。 */
+}
+
 static void feed(const uint8_t* frame, size_t n)
 {
     (void) memcpy(rx_q, frame, n);
@@ -270,6 +276,7 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     g_phy.tx_done = tx_done;
 #endif
     g_phy.int_active = int_active;
+    g_phy.request_service = request_service;
     g_phy.response_timer_start = timer_a_start;
     g_phy.response_timer_stop = timer_a_stop;
     g_phy.stack_timer_start = timer_b_start;
@@ -349,6 +356,7 @@ static void init_type0_ctx(iolink_dll_ctx_t* dll)
     g_phy.tx_done = tx_done;
 #endif
     g_phy.int_active = int_active;
+    g_phy.request_service = request_service;
     g_phy.response_timer_start = timer_a_start;
     g_phy.response_timer_stop = timer_a_stop;
     g_phy.stack_timer_start = timer_b_start;

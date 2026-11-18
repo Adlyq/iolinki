@@ -229,9 +229,10 @@ bool iolink_caps_built(const iolink_build_caps_t* caps, uint32_t mask);
 `_REQUIRE_ISR_TX`，以及四个 DeviceAccessLocks 位 `_LOCK_PARAM`、`_LOCK_DS`、
 `_LOCK_LOCAL_PARAM`、`_LOCK_LOCAL_UI`（合称 `IOLINK_CAP_LOCKS_ALL`）。
 
-`iolink_device_init()` 用 `IOLINK_DEVICE_INIT_ERR_PHY` 拒绝两种不一致组合：
-`IOLINK_CAP_REQUIRE_ISR_TX` 但 PHY 没有 `request_service()` 钩子，以及 TX FRAME 构建
-在 `IOLINK_PHY_FEATURE_TX_BUSY=1` 下没有 `tx_busy()` 钩子。
+`iolink_device_init()` 用 `IOLINK_DEVICE_INIT_ERR_PHY` 拒绝三种不一致组合：
+`IOLINK_CAP_REQUIRE_ISR_TX` 但 PHY 没有 `request_service()` 钩子；`ISR`/`SMP`
+档下 PHY 具备 TX 能力却没有 `request_service()` 钩子（主泵无法唤醒发送方）；
+以及 TX FRAME 构建在 `IOLINK_PHY_FEATURE_TX_BUSY=1` 下没有 `tx_busy()` 钩子。
 
 ### 复位处理
 

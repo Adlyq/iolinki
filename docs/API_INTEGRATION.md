@@ -219,7 +219,7 @@ vtable 的每个成员在类型上都是可选的（`IOLINK_NULLABLE`）：`ioli
 | `tx_done` | TX BYTE 模式 | 发完最后一字节后释放线路；RX BYTE 的 gap 也会用它释放接收引擎。TX FRAME 下该成员不存在，由 PHY 自己在传输完成中断里收尾。 |
 | `tx_busy` | TX FRAME 可选 | 线路仍被占用时返回非 0；库据此推迟 ISR 应答并在主泵释放 PD-in 缓冲。为 NULL 时只能等下一次 capture 复用缓冲。 |
 | `int_active` | ISR 泵需要 | 数据中断电平；`dll_isr_process()` 在它或 RX 能力缺失时直接返回，不泵送。 |
-| `request_service` | 推荐 | 主上下文暂存应答后唤醒数据 ISR。设置 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX`（或构建默认 `IOLINK_PHY_FEATURE_ISR_TX_ONLY=1`）时必需，缺少会在初始化阶段被拒绝。 |
+| `request_service` | ISR/SMP 档必需 | 主上下文暂存应答后唤醒数据 ISR。`ISR`/`SMP` 档下具备 TX 能力的 PHY 缺少它会被初始化拒绝；`SINGLE` 档没有数据 ISR，主上下文直接驱动 TX 钩子，此时它只在设置 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 时必需。 |
 | `response_timer_start/stop` | 可选 | 硬件 t_A 定时器。为 NULL 时使用软件时间戳。 |
 | `stack_timer_start` | 可选 | 周期性的主上下文服务窗口（Timer B 到期时调用 `iolink_dll_on_stack_tick()`）。 |
 | `detect_wakeup` | 可选 | 存在时 DLL 从 SIO 开始，并负责唤醒/SDCI 转换。 |
@@ -233,10 +233,13 @@ vtable 的每个成员在类型上都是可选的（`IOLINK_NULLABLE`）：`ioli
 “所有应答只能由 ISR 发送”是运行时能力位 `IOLINK_CAP_REQUIRE_ISR_TX`，由
 `iolink_stack_config_t::flags` 的 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 打开，构建期
 `IOLINK_PHY_FEATURE_ISR_TX_ONLY=1` 只是它的默认值。该位打开而 PHY 没有
-`request_service()` 时，`iolink_device_init()` 返回 `IOLINK_DEVICE_INIT_ERR_PHY`
-（DLL 内部另有计数 `dll.isr_tx_dropped` 的防御路径，正常配置不会走到）。
-该位关闭时，没有 `request_service()` 的 PHY 会获得从调用者上下文直接发送的回退路径；
-这只适用于主机测试，不适用于必须满足 t_A 的真实设备。
+`request_service()` 时，`iolink_device_init()` 返回 `IOLINK_DEVICE_INIT_ERR_PHY`。
+
+`ISR`/`SMP` 档还要求所有具备 TX 能力的 PHY 提供 `request_service()`：主泵
+只能暂存应答，发送必须由数据 ISR 完成，没有该钩子就没有任何路径能唤醒 ISR。
+缺少它时 `iolink_device_init()` 同样返回 `IOLINK_DEVICE_INIT_ERR_PHY`。
+只有 `SINGLE` 档没有数据 ISR，`dll_send()` 才在主上下文中直接驱动 TX 钩子
+（该分支只在该档编译）。
 
 ## 3. 设备配置参考
 
@@ -280,8 +283,9 @@ vtable 的每个成员在类型上都是可选的（`IOLINK_NULLABLE`）：`ioli
 `IOLINK_WORKSPACE_EMBEDDED=0` 但未提供工作区
 （`IOLINK_DEVICE_INIT_ERR_WORKSPACE`）、应用对象字典表自检失败
 （`IOLINK_DEVICE_INIT_ERR_OD`，见 4.6 节），以及能力位要求了 PHY 未提供的钩子
-（`IOLINK_DEVICE_INIT_ERR_PHY`：`REQUIRE_ISR_TX` 缺少 `request_service()`，或
-TX FRAME 构建设置 `IOLINK_PHY_FEATURE_TX_BUSY=1` 但 PHY 没有 `tx_busy()`）。
+（`IOLINK_DEVICE_INIT_ERR_PHY`：`REQUIRE_ISR_TX` 缺少 `request_service()`；
+`ISR`/`SMP` 档下具备 TX 能力却没有 `request_service()`；或 TX FRAME 构建设置
+`IOLINK_PHY_FEATURE_TX_BUSY=1` 但 PHY 没有 `tx_busy()`）。
 PHY `init` 失败也归到 `IOLINK_DEVICE_INIT_ERR_PHY`；驱动自己的错误码不会混进
 这个枚举，需要用 `iolink_device_get_phy_error()` 读取（默认日志是静默的）。
 该 getter 同时区分两种 `INIT_ERR_PHY`：非 0 表示驱动 `init` 真的失败了（重试

@@ -149,6 +149,12 @@ static uint8_t test_int_active(iolink_app_t* IOLINK_NULLABLE self)
 #endif
 }
 
+static void test_request_service(iolink_app_t* IOLINK_NULLABLE self)
+{
+    (void) self;
+    /* 宿主机没有中断源：应答由 drain_tx() 排空。 */
+}
+
 static const iolink_phy_api_t s_phy = {
     .self = (iolink_app_t * IOLINK_NULLABLE) & s_dll,
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
@@ -163,6 +169,7 @@ static const iolink_phy_api_t s_phy = {
     .tx_done = test_tx_done,
 #endif
     .int_active = test_int_active,
+    .request_service = test_request_service,
 };
 
 /** @brief 补全一条 M-sequence：CKT 承载类型位 + A.1.6 CKS。 */
@@ -201,7 +208,7 @@ static void feed(const uint8_t* frame, size_t len)
 
 static void drain_tx(void)
 {
-    while (s_dll.main.shared.isr_tx_active != 0U) {
+    while ((s_dll.main.shared.isr_tx_pending != 0U) || (s_dll.main.shared.isr_tx_active != 0U)) {
         iolink_dll_process_isr(&s_dll.main);
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME

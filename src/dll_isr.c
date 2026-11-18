@@ -27,9 +27,8 @@
  *
  * 本文件命名约定：dll_isr_* 仅可在 ISR 上下文中调用；
  * 普通 dll_* 辅助函数与主泵共享（上下文约定表见
- * docs/CODE_FLOW.md 第 12.1 节）。例外：dll_isr_start_staged_tx()
- * 也会在主泵通过 dll_send() 的直接发送
- * 回退路径中被调用。
+ * docs/CODE_FLOW.md 第 12.1 节）。例外：SINGLE 档下
+ * dll_isr_start_staged_tx() 也由主泵的 dll_send() 调用（该档没有数据 ISR）。
  *
  * ISR 泵（入口 iolink_dll_process_isr）：
  *
@@ -79,7 +78,7 @@
 /**
  * @brief 开始发送已暂存的回复槽位。
  *
- * 由 dll_send() 的直接发送回退路径（没有 request_service() 的 PHY）
+ * 由 SINGLE 档的 dll_send()（没有数据 ISR，主上下文自己发送）
  * 与 ISR 待回复路径共享，因此两者以相同方式驱动 TX 钩子。
  *
  * @p len / @p has_cks 写入 ISR 独占的流式状态；BYTE 传输此后的每一步
@@ -101,7 +100,7 @@ void dll_isr_start_staged_tx(iolink_dll_main_t* ctx, uint8_t slot, uint8_t len, 
         if (ctx->shared.phy->tx_frame(ctx->shared.phy->self, ctx->shared.isr_tx_payload[slot],
                                       len) != 0) {
             IOLINK_LOG_ISR_WARN(&ctx->shared.log, "tx_frame failed: len=%u", (unsigned) len);
-            /* 由主泵回退路径与 ISR 泵共享：将丢弃归属到
+            /* 由 SINGLE 档主泵与 ISR 泵共享：将丢弃归属到
              * 正在运行的上下文，使 SPLIT 计数器保持精确。 */
             if (ctx->shared.in_isr != 0U) {
                 IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
