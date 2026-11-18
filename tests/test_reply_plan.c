@@ -800,7 +800,18 @@ static int test_unpublished_plans_block_the_isr(void)
     return 0;
 }
 
-/* ISDU 写暂存后，读视图必须失效：下一次 START 只能返回"无服务"。 */
+/* 三字节 Type-2 ISDU 写段：MC + CKT/CKS + 一个 OD 八位组。 */
+static void make_isdu_write_segment(uint8_t* frame, uint8_t flowctrl, uint8_t octet)
+{
+    frame[0] = (uint8_t) (IOLINK_MC_CHANNEL_ISDU | flowctrl);
+    frame[1] = IOLINK_MSEQ_TYPE_2;
+    frame[2] = octet;
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, 3U));
+}
+
+/* ISDU 写暂存后，读视图必须失效：写被应用前只能读到"无服务"。
+ * 序号协议：ISR 每次接受写 START/ABORT 就自增 isr_isdu_write_gen，
+ * 主泵在应用（或中止）并发布新视图之后才把 isdu_write_gen_applied 追平。 */
 static int test_isdu_write_invalidates_read_view(void)
 {
     init_operate();
@@ -815,7 +826,11 @@ static int test_isdu_write_invalidates_read_view(void)
     if (IOLINK_ISDU_PUB_LEN(s_dll.main.shared.isr_isdu_pub) != 4U) {
         return 1;
     }
+    if (s_dll.main.shared.isr_isdu_write_gen != s_dll.main.shared.isdu_write_gen_applied) {
+        return 2; /* 没有待应用的写：两值必须一致 */
+    }
     const uint8_t gen_before = IOLINK_ISDU_PUB_GEN(s_dll.main.shared.isr_isdu_pub);
+    const uint32_t write_gen_before = s_dll.main.shared.isr_isdu_write_gen;
 
     /* 先读一次 START：拿到旧应答的首字节（od_width = 1）。 */
     uint8_t frame[3];
@@ -827,34 +842,39 @@ static int test_isdu_write_invalidates_read_view(void)
     drain_tx();
     /* OPERATE 长应答：[OD][PD-in]CKS。 */
     if ((tx_observed_len() != 3U) || (s_tx_q[0] != 0xD4U) || (s_tx_q[1] != 0x5AU)) {
-        return 2;
+        return 3;
     }
 
-    /* 完整的 ISDU 写请求（0x14 0x10 0x00 0x04）：START + 3 个 COUNT。
-     * 只发 START/COUNT 才进入写入口；单独的 COUNT 不构成请求。 */
+    /* 完整的 ISDU 写请求（0x14 0x10 0x00 0x04），先只发 START：
+     * 写入口停在 RECEPTION，主泵因此不能应用它。 */
     static const uint8_t octets[4] = {0x14U, 0x10U, 0x00U, 0x04U};
-    for (uint8_t i = 0U; i < 4U; i++) {
-        const uint8_t fc = (i == 0U) ? (uint8_t) IOLINK_FLOWCTRL_START : (uint8_t) i;
-        uint8_t wr[3];
-        make_frame((uint8_t) (IOLINK_MC_CHANNEL_ISDU | fc), IOLINK_MSEQ_TYPE_2, wr, sizeof(wr));
-        wr[2] = octets[i];
-        wr[1] = IOLINK_MSEQ_TYPE_2;
-        wr[1] = (uint8_t) (wr[1] | test_expected_checksum6(wr, sizeof(wr)));
-        const uint64_t delivered_before = s_tx_delivered;
-
-        feed(wr, sizeof(wr), 0U);
-        iolink_dll_process_isr(&s_dll.main);
-        drain_tx();
-        if (tx_observed_len() != 2U) {
-            return 7;
-        }
-        /* 每个写段都必须被 ISR 以恰好一个应答立即确认。 */
-        if (s_tx_delivered != (delivered_before + 1U)) {
-            return 7;
-        }
+    uint8_t wr[3];
+    make_isdu_write_segment(wr, (uint8_t) IOLINK_FLOWCTRL_START, octets[0]);
+    feed(wr, sizeof(wr), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if (tx_observed_len() != 2U) {
+        return 4; /* 写段必须被 ISR 立即确认 */
     }
-    if (s_dll.main.shared.isr_isdu_invalidated != 1U) {
-        return 3; /* 写已暂存：主泵必须重建读视图 */
+    if (s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) {
+        return 5;
+    }
+    if (s_dll.main.shared.isr_isdu_write_gen != (write_gen_before + 1U)) {
+        return 6; /* 每个被接受的写 START/ABORT 恰好自增一次 */
+    }
+    if (s_dll.main.shared.isdu_write_gen_applied != write_gen_before) {
+        return 7; /* 主泵尚未应用：不得提前追平 */
+    }
+
+    /* 写未应用：主泵多轮 sync 都必须发布"无服务"，绝不重发旧应答。 */
+    for (uint8_t i = 0U; i < 3U; i++) {
+        iolink_dll_process(&s_dll.main);
+        if (IOLINK_ISDU_PUB_LEN(s_dll.main.shared.isr_isdu_pub) != 0U) {
+            return 8;
+        }
+        if (s_dll.main.shared.isdu_write_gen_applied != write_gen_before) {
+            return 9;
+        }
     }
 
     /* 主泵尚未应用该写：START 只能读到"无服务"（0x00）。 */
@@ -865,17 +885,94 @@ static int test_isdu_write_invalidates_read_view(void)
     iolink_dll_process_isr(&s_dll.main);
     drain_tx();
     if ((tx_observed_len() != 3U) || (s_tx_q[0] != 0x00U)) {
-        return 4; /* 不得再返回 0xD4（旧应答） */
+        return 10; /* 不得再返回 0xD4（旧应答） */
     }
 
-    /* 主泵应用写并产出新应答：失效旗标清除，代数翻转。 */
+    /* 补齐剩余的写段：写入口进入 COMPLETE；只有 START/ABORT 自增序号，
+     * COUNT 段不改变它。 */
+    for (uint8_t i = 1U; i < 4U; i++) {
+        make_isdu_write_segment(wr, i, octets[i]);
+        const uint64_t delivered_before = s_tx_delivered;
+        feed(wr, sizeof(wr), 0U);
+        iolink_dll_process_isr(&s_dll.main);
+        drain_tx();
+        if (tx_observed_len() != 2U) {
+            return 11;
+        }
+        if (s_tx_delivered != (delivered_before + 1U)) {
+            return 11;
+        }
+    }
+    if (s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE) {
+        return 12;
+    }
+    if (s_dll.main.shared.isr_isdu_write_gen != (write_gen_before + 1U)) {
+        return 12;
+    }
+
+    /* 写已收齐但尚未应用：读仍然是"无服务"。 */
+    tx_reset();
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START),
+               IOLINK_MSEQ_TYPE_2, frame, 2U);
+    feed(frame, 2U, 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if ((tx_observed_len() != 3U) || (s_tx_q[0] != 0x00U)) {
+        return 13;
+    }
+
+    /* 主泵应用写并产出新应答：序号追平，读视图恢复。 */
     iolink_dll_process(&s_dll.main);
-    if (s_dll.main.shared.isr_isdu_invalidated != 0U) {
-        return 5;
+    if (s_dll.main.shared.isdu_write_gen_applied != s_dll.main.shared.isr_isdu_write_gen) {
+        return 14;
+    }
+    if (IOLINK_ISDU_PUB_LEN(s_dll.main.shared.isr_isdu_pub) == 0U) {
+        return 15; /* 写已确认：新应答必须已发布 */
     }
     const uint8_t gen_after = IOLINK_ISDU_PUB_GEN(s_dll.main.shared.isr_isdu_pub);
     if ((gen_after == gen_before) && (IOLINK_ISDU_PUB_LEN(s_dll.main.shared.isr_isdu_pub) == 4U)) {
-        return 6; /* 旧视图被重新发布：代数必须能区分两份应答 */
+        return 16; /* 旧视图被重新发布：代数必须能区分两份应答 */
+    }
+
+    tx_reset();
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START),
+               IOLINK_MSEQ_TYPE_2, frame, 2U);
+    feed(frame, 2U, 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    const uint8_t expected_first =
+        s_dll.main.shared.isdu.resp_store[IOLINK_ISDU_PUB_SEL(s_dll.main.shared.isr_isdu_pub)][0];
+    if ((tx_observed_len() != 3U) || (s_tx_q[0] != expected_first) || (s_tx_q[0] == 0x00U)) {
+        return 17; /* 闸门必须已解除：读到的是应用该写之后的应答 */
+    }
+
+    /* ABORT 也是一个写实例：序号自增、视图立即失效，主泵处理后恢复。 */
+    const uint32_t gen_after_apply = s_dll.main.shared.isr_isdu_write_gen;
+    make_isdu_write_segment(wr, (uint8_t) IOLINK_FLOWCTRL_ABORT, 0x00U);
+    feed(wr, sizeof(wr), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if (tx_observed_len() != 2U) {
+        return 18;
+    }
+    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_ABORT) ||
+        (s_dll.main.shared.isr_isdu_write_gen != (gen_after_apply + 1U)) ||
+        (s_dll.main.shared.isdu_write_gen_applied != gen_after_apply)) {
+        return 19;
+    }
+
+    tx_reset();
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START),
+               IOLINK_MSEQ_TYPE_2, frame, 2U);
+    feed(frame, 2U, 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if ((tx_observed_len() != 3U) || (s_tx_q[0] != 0x00U)) {
+        return 20;
+    }
+    iolink_dll_process(&s_dll.main);
+    if (s_dll.main.shared.isdu_write_gen_applied != s_dll.main.shared.isr_isdu_write_gen) {
+        return 21;
     }
     return 0;
 }

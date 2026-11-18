@@ -331,9 +331,12 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
  * 失效协议（防"写后立刻读"返回旧值）：
  *  - 每份**新**应答翻转代数位（位 10）。长度与缓冲区选择完全相同的
  *    两份应答因此仍是不同的发布字，ISR 的段索引序列会被打断；
- *  - ISR 暂存 ISDU 写后置 `isr_isdu_invalidated`；在写被应用并产出
- *    新应答之前，这里发布 len = 0（无服务），绝不让旧应答继续充当
- *    "当前值"。
+ *  - 写失效用单调序号：ISR 每接受一个写 START/ABORT 就自增
+ *    `isr_isdu_write_gen`。写入口相位未回到 IDLE 时这里发布
+ *    len = 0（无服务），绝不让旧应答继续充当"当前值"；写被应用或
+ *    中止后（IDLE）先发布新视图，再把 `isdu_write_gen_applied` 追平，
+ *    确认必须放在发布之后：否则 ISR 可能在两者之间看到两值相等而
+ *    读到旧视图。
  */
 void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx)
 {
@@ -362,21 +365,15 @@ void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx)
         ctx->shared.isdu.resp_pub = sel;
     }
     /* 写入口相位：RECEPTION/COMPLETE/ABORT 表示写尚未被主泵应用，
-     * 已发布读视图必须显示"无服务"；IDLE 表示写已应用或已中止。 */
+     * 已发布读视图必须显示"无服务"；IDLE 表示写已应用或已中止。
+     * 先取序号（获取语义）再读相位：ISR 先发布相位、再自增序号，因此读到
+     * 新序号时这里读到的相位必然已是该写的相位。 */
+    const IOLINK_ATOMIC_UINT_T write_gen = iolink_atomic_load(&ctx->shared.isr_isdu_write_gen);
     const uint8_t stage = ctx->shared.isdu.stage_state;
     const bool write_pending = (stage == (uint8_t) IOLINK_ISDU_STAGE_RECEPTION) ||
                                (stage == (uint8_t) IOLINK_ISDU_STAGE_COMPLETE) ||
                                (stage == (uint8_t) IOLINK_ISDU_STAGE_ABORT);
-    /* 失效旗标的清除条件：写入口已回到空闲（主泵已应用或已中止），
-     * 即本轮发布的是"已应用该写之后"的视图。临界区把
-     * "ISR 置旗标"与"主泵检查相位 + 清旗标"分开，
-     * 避免清掉一个尚未被主泵接管的失效请求。 */
-    if ((ctx->shared.isr_isdu_invalidated != 0U) && !write_pending) {
-        IOLINK_CRITICAL_ENTER();
-        ctx->shared.isr_isdu_invalidated = 0U;
-        IOLINK_CRITICAL_EXIT();
-    }
-    if ((ctx->shared.isr_isdu_invalidated != 0U) && write_pending) {
+    if (write_pending) {
         /* 写尚未应用：显式发布"无服务"，绝不重发旧应答。 */
         count = 0U;
         sel = 0U;
@@ -386,6 +383,12 @@ void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx)
     if (word != ctx->shared.isr_isdu_pub) {
         /* 最后发布：响应字节已在 resp_store[sel] 中。 */
         iolink_atomic_store(&ctx->shared.isr_isdu_pub, word);
+    }
+    if (!write_pending && (write_gen != ctx->shared.isdu_write_gen_applied)) {
+        /* 写已应用或已中止：新视图已在上方发布，现在确认它的序号。
+         * 释放顺序保证 ISR 看到 applied == gen 时发布字已是新视图。 */
+        IOLINK_FENCE();
+        ctx->shared.isdu_write_gen_applied = write_gen;
     }
 }
 

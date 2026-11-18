@@ -45,11 +45,25 @@ typedef struct iolink_dll_shared
 
     volatile iolink_dll_state_t state; /**< 当前 DLL 状态 */
 
+    /**
+     * @brief ISDU 写失效序号（ISR 单写、自由计数）。
+     *
+     * ISR 每接受一个有效的写 START/ABORT 就自增一次（先发布写入口相位，
+     * 再发布本序号）。主泵在把该写应用或中止、并发布新读视图之后，把
+     * `isdu_write_gen_applied` 追到同一个值。两者不等期间 ISR 读路径一律
+     * 回 0x00，"写后立刻读"因此不会读到旧应答；主站最多多看到一次
+     * "无服务"。序号宽度必须容纳主泵可能错过的全部写实例，不能用 8 位。
+     */
+    volatile IOLINK_ATOMIC_UINT_T isr_isdu_write_gen;
+
     const iolink_phy_api_t* phy; /**< 已绑定的 PHY API 实现 */
 
     /* 实例能力位。iolink_caps_resolve() 在 init 时一次性解析；
      * 主上下文与 ISR 都只读它（位掩码是自然对齐的单字加载）。 */
     iolink_caps_t caps;
+
+    /** @brief 主泵已应用的 ISDU 写序号（与 `isr_isdu_write_gen` 配对）。 */
+    volatile uint32_t isdu_write_gen_applied;
 
     /* 应用时钟，来自 iolink_device_app_t::time_us。DLL 与
      * 事件引擎的每个时间戳都使用它。数据 ISR 会读取它，因此
@@ -117,17 +131,6 @@ typedef struct iolink_dll_shared
      * 原子字发布，使 ISR 绝不会观察到半更新的元组；ISR 拥有
      * FlowCTRL 段索引，并在 START 处采纳新的字。 */
     volatile IOLINK_ATOMIC_UINT_T isr_isdu_pub; /**< len | busy<<8 | sel<<9 | gen<<10 */
-
-    /**
-     * @brief ISDU 读取视图失效请求（ISR -> 主泵，一次性）。
-     *
-     * ISR 在一个 ISDU 写 START（或 ABORT）后置 1：在写被主泵应用并
-     * 重新发布应答之前，已发布的读视图不得再被当作"当前应答"使用
-     * （防"写后立刻读"读到旧值）。主泵在写入口相位回到 IDLE 后清 0；
-     * 尚未产出新应答时发布 len = 0（无服务）。与 isr_dsio_clear 相同
-     * 的一次性握手：任一方置 1 幂等，只有主泵清 0。
-     */
-    volatile uint8_t isr_isdu_invalidated;
 
     /**
      * @brief ISDU 读传输层复位请求（ISR -> 主泵，一次性）。

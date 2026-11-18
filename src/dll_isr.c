@@ -53,8 +53,8 @@
  * dll_isr_complete_frame（两种 RX 粒度共用的每帧决策点，
  * 按以下顺序执行）：
  *  1. ISDU 写：dll_isr_consume_isdu_write 直接调用
- *     iolink_isdu_od_write（按 FlowCTRL 位置去重累计），并置
- *     isr_isdu_invalidated；CHKPDU/解析/执行由主泵完成。
+ *     iolink_isdu_od_write（按 FlowCTRL 位置去重累计），并自增
+ *     isr_isdu_write_gen；CHKPDU/解析/执行由主泵完成。
  *  2. 应答计划：dll_isr_plan_lookup 在 dll_reply.c 发布的计划表中查找
  *     命中项（只读，表在 ISR 运行期间不改变）；dll_isr_plan_execute 按计划执行
  *     动作 -> 取源 -> 追加 CKS -> 喂字节。
@@ -70,7 +70,7 @@
  *    连同其八位组一起携带 eager=1。
  *  - ctx->shared.isdu 的写入口（req_buf/req_idx/req_total/FlowCTRL 水位与
  *    stage_state）归数据 ISR；主泵只在 stage_state=COMPLETE 时于临界区
- *    内读取 req_buf。已发布的读视图与其失效旗标仍由主泵发布。
+ *    内读取 req_buf。已发布的读视图与其写序号仍由两边按序号协议交接。
  *  - 应答计划表同样归主泵所有：ISR 只读，绝不修改。
  *  - 64 位截止时间与 last_response_us 归主泵所有：ISR 只设置一次性
  *    标志或写 32 位时间戳，主泵用无符号差值重建 64 位绝对时间。
@@ -203,11 +203,18 @@ static void dll_isr_isdu_od(iolink_dll_main_t* ctx, uint8_t flowctrl, uint8_t* o
         return;
     }
 
-    /* 失效协议：ISDU 写已暂存但尚未被主泵应用时，读视图不能继续
-     * 充当"当前应答"。零填充上一步已给出 0x00（无服务），主站会重试。 */
-    if (ctx->shared.isr_isdu_invalidated != 0U) {
+    /* 失效协议：写序号与主泵的已应用序号不等，说明 ISR 已接受一个写
+     * START/ABORT，而主泵尚未应用（或中止）它。零填充上一步已给出 0x00
+     * （无服务），主站会重试。读序：先读本上下文写入的序号，再读主泵的
+     * applied，相等时才读发布字。主泵先发布新视图、再追平 applied，因此
+     * 两者相等时读到的必是已确认视图；不等时最多多拒一次，绝不放行
+     * 写之前的旧视图。 */
+    const IOLINK_ATOMIC_UINT_T write_gen = ctx->shared.isr_isdu_write_gen;
+    const uint32_t write_applied = ctx->shared.isdu_write_gen_applied;
+    if (write_gen != write_applied) {
         return;
     }
+    IOLINK_FENCE();
 
     /* 一次原子加载得到一致的 {length, busy, buffer} 元组。 */
     const IOLINK_ATOMIC_UINT_T pub = iolink_atomic_load(&ctx->shared.isr_isdu_pub);
@@ -374,18 +381,23 @@ bool dll_isr_consume_isdu_write(iolink_dll_main_t* ctx, const uint8_t* frame, ui
     }
 
     const uint8_t flowctrl = (uint8_t) (frame[0] & IOLINK_MC_ADDR_MASK);
-    if ((flowctrl == IOLINK_FLOWCTRL_START) || (flowctrl == IOLINK_FLOWCTRL_ABORT)) {
-        if ((flowctrl == IOLINK_FLOWCTRL_START) &&
-            (ctx->shared.isdu.stage_state == IOLINK_ISDU_STAGE_COMPLETE)) {
-            /* 上一条已收齐但主泵尚未接管：新 START 覆盖它。 */
-            ctx->shared.isr_od_overruns++;
-        }
-        /* 失效协议：写尚未被主泵应用，已发布的读视图不得继续
-         * 充当"当前应答"。主泵应用并发布新视图后清旗标。 */
-        ctx->shared.isr_isdu_invalidated = 1U;
+    const bool write_phase =
+        (flowctrl == IOLINK_FLOWCTRL_START) || (flowctrl == IOLINK_FLOWCTRL_ABORT);
+    if (write_phase && (flowctrl == IOLINK_FLOWCTRL_START) &&
+        (ctx->shared.isdu.stage_state == IOLINK_ISDU_STAGE_COMPLETE)) {
+        /* 上一条已收齐但主泵尚未接管：新 START 覆盖它。 */
+        ctx->shared.isr_od_overruns++;
     }
 
     iolink_isdu_od_write(&ctx->shared.isdu, flowctrl, &frame[od_off], od_n);
+    if (write_phase) {
+        /* 失效协议：先发布写入口相位（START/ABORT），再用序号发布这次写；
+         * 主泵读到新序号时必然已经看到新相位。在它应用（或中止）该写并
+         * 发布新读视图之前，读路径因 gen != applied 一律回 0x00。序号只有
+         * 本上下文自增，普通自增即可。 */
+        IOLINK_FENCE();
+        ctx->shared.isr_isdu_write_gen++;
+    }
     return true;
 }
 

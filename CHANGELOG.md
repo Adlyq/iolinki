@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (ISDU write invalidation uses a monotonic sequence)
+- The clearable `isr_isdu_invalidated` flag is gone. The data ISR bumps
+  `isr_isdu_write_gen` on every accepted write START/ABORT; the main pump records
+  `isdu_write_gen_applied` after it has applied (or aborted) that write and
+  published the new read view. While the write entry has not returned to IDLE,
+  the ISR read path answers `0x00` and `dll_isdu_sync_snapshot()` publishes
+  `len = 0`, so a read that follows a write cannot return the previous response.
+  The acknowledgement is written only after the new view is published, so an ISR
+  that observes equal sequence numbers always reads the new view (at worst one
+  extra "no service"). `dll_isdu_sync_snapshot()` no longer takes a critical
+  section. Both fields fit in alignment holes of `iolink_dll_shared_t`; context
+  sizes are unchanged.
+
 ### Changed (PHY mocks hand main-context replies to the ISR pump)
 - The shared test mock (`g_phy_mock`), the frame fuzzer, the ISR latency
   harness, the generic template PHY and both host examples now provide
