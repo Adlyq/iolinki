@@ -43,6 +43,17 @@ static void diag_events_init(iolink_events_ctx_t* events)
     events->clock = &g_diag_clock;
 }
 
+/** @brief @p code 的 pending 槽位记录下来的来源（无槽位时为 NONE）。 */
+static uint8_t diag_pending_source(const iolink_events_ctx_t* events, uint16_t code)
+{
+    for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
+        if (events->pending[i].active && (events->pending[i].code == code)) {
+            return events->pending[i].source;
+        }
+    }
+    return IOLINK_DIAG_SRC_NONE;
+}
+
 /** @brief 独立于实现的 Table D.1 期望表。 */
 static const struct
 {
@@ -154,6 +165,8 @@ static void test_level_source_edges(void** state)
     assert_true(iolink_diag_set_level(&events, IOLINK_DIAG_SRC_PHY_OVERTEMP, true));
     assert_int_equal(iolink_diag_edge_count(&events, IOLINK_DIAG_SRC_PHY_OVERTEMP), 1U);
     assert_int_equal(events.pending_count, 1U);
+    /* 来源标记由触发本身写入，不依赖触发之后的第二次查表。 */
+    assert_int_equal(diag_pending_source(&events, 0x4000U), IOLINK_DIAG_SRC_PHY_OVERTEMP);
 
     iolink_event_t ev;
     assert_true(iolink_events_pop(&events, &ev));
@@ -195,6 +208,7 @@ static void test_pulse_hold_window(void** state)
 
     iolink_diag_pulse(&events, IOLINK_DIAG_SRC_COMM_CRC);
     assert_int_equal(iolink_diag_edge_count(&events, IOLINK_DIAG_SRC_COMM_CRC), 1U);
+    assert_int_equal(diag_pending_source(&events, 0x1801U), IOLINK_DIAG_SRC_COMM_CRC);
 
     iolink_event_t ev;
     assert_true(iolink_events_pop(&events, &ev));

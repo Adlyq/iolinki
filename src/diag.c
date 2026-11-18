@@ -19,6 +19,7 @@
 
 #include "iolinki/diag.h"
 
+#include "events_internal.h"
 #include "iolinki/events.h"
 #include "iolinki/port.h"
 #include "iolinki/utils.h"
@@ -106,20 +107,6 @@ static iolink_event_pending_t* diag_cond_find(iolink_events_ctx_t* events, uint1
     return NULL;
 }
 
-/** @brief 条件的唯一触发入口：生命周期由事件引擎维护，这里只补齐来源标记。 */
-static void diag_raise(iolink_events_ctx_t* events, iolink_diag_src_t src, uint16_t code,
-                       uint8_t type)
-{
-    iolink_event_trigger(events, code, (iolink_event_type_t) type);
-    /* 触发可能因槽位满而被丢弃；来源标记只在该 code 仍有槽位时写入。 */
-    IOLINK_CRITICAL_ENTER();
-    iolink_event_pending_t* p = diag_cond_find(events, code);
-    if (p != NULL) {
-        p->source = (uint8_t) src;
-    }
-    IOLINK_CRITICAL_EXIT();
-}
-
 /** @brief 在给定时间戳上处理一次脉冲（主上下文，供 service() 复用）。 */
 static void diag_pulse_at(iolink_events_ctx_t* events, iolink_diag_src_t src, uint32_t now)
 {
@@ -129,7 +116,7 @@ static void diag_pulse_at(iolink_events_ctx_t* events, iolink_diag_src_t src, ui
     }
     events->diag.quiet_since_ms[(uint8_t) src] = now;
     events->diag.edges[(uint8_t) src]++;
-    diag_raise(events, src, desc->code, desc->type);
+    iolink_event_trigger_src(events, desc->code, (iolink_event_type_t) desc->type, (uint8_t) src);
 }
 
 uint8_t iolink_diag_registry_size(void)
@@ -213,7 +200,8 @@ bool iolink_diag_set_level(iolink_events_ctx_t* events, iolink_diag_src_t src, b
             return false; /* 稳态：同一条件不再重复上报（10.10.2）。 */
         }
         events->diag.edges[(uint8_t) src]++;
-        diag_raise(events, src, desc->code, desc->type);
+        iolink_event_trigger_src(events, desc->code, (iolink_event_type_t) desc->type,
+                                 (uint8_t) src);
         return true;
     }
     if (present) {

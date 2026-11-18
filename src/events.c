@@ -19,6 +19,7 @@
 #include "iolinki/port.h"
 #include "iolinki/utils.h"
 #include "iolinki/internal/wiring.h"
+#include "events_internal.h"
 #include <string.h>
 
 #if IOLINK_FEATURE_EVENTS
@@ -264,7 +265,8 @@ static bool event_code_queued(const iolink_events_ctx_t* ctx, uint16_t code)
     return false;
 }
 
-void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type)
+void iolink_event_trigger_src(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type,
+                              uint8_t src)
 {
     if (ctx == NULL) {
         return;
@@ -323,6 +325,10 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
            重触发不得改写已上报 appears 的类型。 */
         p->type = type;
     }
+    if (src != IOLINK_DIAG_SRC_NONE) {
+        /* 调用方声明了来源：随槽位一起写入，避免触发之后再查一次条件表。 */
+        p->source = src;
+    }
     ctx->pending_count++;
 
     if (!p->reported && event_appears_elapsed(ctx, p, now)) {
@@ -336,6 +342,11 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
 
     event_publish(ctx);
     IOLINK_CRITICAL_EXIT();
+}
+
+void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_type_t type)
+{
+    iolink_event_trigger_src(ctx, code, type, IOLINK_DIAG_SRC_NONE);
 }
 
 void iolink_event_clear(iolink_events_ctx_t* ctx, uint16_t code)

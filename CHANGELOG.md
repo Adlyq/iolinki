@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself instead of the clock read; each call still uses that single timestamp
   throughout.
 
+### Changed (the diagnostic source is written with the event, not after it)
+- `iolink_diag_set_level()` and `iolink_diag_pulse()` used to call
+  `iolink_event_trigger()` and then take a second critical section to look the
+  code up in `pending[]` again just to store its source. The source is now
+  passed into the trigger (`src/events_internal.h`: `iolink_event_trigger_src()`)
+  and written in the same critical section that allocates the slot, so a
+  diagnostic raise costs one short lock instead of two. The public
+  `iolink_event_trigger()` is unchanged in signature and passes
+  `IOLINK_DIAG_SRC_NONE`.
+
 ### Removed (reply plans carry no timing field and are compiled once)
 - `iolink_reply_plan_t::deadline_us` is gone. Nothing read it at run time: the
   ISR arms t_A from `10 * dll_get_t_bit_us()` when it starts a reply

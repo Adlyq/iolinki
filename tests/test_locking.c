@@ -11,6 +11,7 @@
 #include <setjmp.h>
 #include <stdint.h>
 #include <cmocka.h>
+#include "iolinki/diag.h"
 #include "iolinki/events.h"
 #include "iolinki/port.h"
 
@@ -62,10 +63,33 @@ static void test_event_locking(void** state)
 #endif
 }
 
+/* 诊断来源随触发一起写入：一次 diag_raise 只有触发本身那一处临界区，
+ * 不存在“返回后再查一次 pending[]”的第二处。 */
+static void test_diag_raise_uses_one_critical_section(void** state)
+{
+    (void) state;
+    iolink_events_ctx_t ctx;
+    iolink_events_init(&ctx);
+
+    g_enter_count = 0;
+    g_exit_count = 0;
+
+    iolink_diag_pulse(&ctx, IOLINK_DIAG_SRC_COMM_CRC);
+
+#if IOLINK_NEED_CRITICAL
+    assert_int_equal(g_enter_count, 1);
+    assert_int_equal(g_exit_count, 1);
+#else
+    assert_int_equal(g_enter_count, 0);
+    assert_int_equal(g_exit_count, 0);
+#endif
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_event_locking),
+        cmocka_unit_test(test_diag_raise_uses_one_critical_section),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
