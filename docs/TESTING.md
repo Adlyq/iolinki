@@ -183,7 +183,7 @@ The FRAME counterpart of the PD-in lease is covered rather than skipped:
 `tx_busy()`), so it runs under every suite transport and pins the lease release
 at the ISR entry together with the silent-period `pd_in_skips`.
 
-`test_ctx_sizes` pins the layout: 4952/5144 bytes on BYTE and 4944/5136 bytes on
+`test_ctx_sizes` pins the layout: 4952/5136 bytes on BYTE and 4944/5128 bytes on
 FRAME/FRAME for the DLL and device contexts. The transport changes both the
 PD-in buffer count (`IOLINK_PD_IN_BUFFERS`) and the ISR RX assembly buffer, so
 do not derive one pair from the other; see [MEMORY_GUIDE.md](MEMORY_GUIDE.md) for
