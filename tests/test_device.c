@@ -451,7 +451,13 @@ static void test_device_introspection(void** state)
 
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_STARTUP);
     assert_int_equal(iolink_device_get_m_seq_type(&dev.ctx), IOLINK_M_SEQ_TYPE_2_V);
-    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_COM_BAUDRATE);
+#if IOLINK_COM == 1
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM1);
+#elif IOLINK_COM == 2
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM2);
+#else
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM3);
+#endif
     assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 2U);
     assert_int_equal(iolink_device_get_pd_out_len(&dev.ctx), 3U);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
@@ -479,7 +485,13 @@ static void test_device_baudrate_is_compiled(void** state)
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
-    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_COM_BAUDRATE);
+#if IOLINK_COM == 1
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM1);
+#elif IOLINK_COM == 2
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM2);
+#else
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM3);
+#endif
 }
 
 /* 初始化时即建立 DS 镜像和校验和，即使没有已持久化的镜像也是如此，
