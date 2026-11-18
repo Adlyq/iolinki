@@ -64,7 +64,7 @@ static void test_silent_period_lease_is_isr_owned(void** state)
                      IOLINK_DEVICE_PD_ERR_BUSY);
     assert_int_equal(test_dll(&dev.ctx)->pd_in_skips, 1U);
     /* 在途数据保持不变。 */
-    assert_memory_equal(&shared->pd_in[captured][shared->c_od_width], first, sizeof(first));
+    assert_memory_equal(&shared->m_pd_in[captured][shared->c_od_width], first, sizeof(first));
 
     /* 主泵周期不再轮询 tx_busy()：线路空闲也不释放租约。 */
     iolink_device_process(&dev.ctx);
@@ -76,7 +76,7 @@ static void test_silent_period_lease_is_isr_owned(void** state)
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, third, sizeof(third), true),
                      IOLINK_DEVICE_PD_OK);
     assert_int_equal(test_dll(&dev.ctx)->pd_in_skips, 1U);
-    assert_memory_equal(&shared->pd_in[test_pd_active(test_dll(&dev.ctx))][shared->c_od_width],
+    assert_memory_equal(&shared->m_pd_in[test_pd_active(test_dll(&dev.ctx))][shared->c_od_width],
                         third, sizeof(third));
 }
 

@@ -201,7 +201,7 @@ static void init_preop(void)
     s_dll.main.shared.c_pd_out_len_current = 0U;
     /* 主站写入的 MasterCycleTime 由 DPP1 0x01 镜像：用一个可辨识的值使
      * 页读场景的首字节断言能区分"读到页字节"与"空映像"。 */
-    s_dll.main.shared.master_cycle_time = 0xA1U;
+    s_dll.main.shared.m_master_cycle_time = 0xA1U;
     dll_pd_publish(&s_dll.main.shared, 0U, true);
     /* 主上下文建一次 DPP1 映像：ISR 只读稳定副本，绝不重建整页。 */
     iolink_dll_process(&s_dll.main);
@@ -238,7 +238,7 @@ static void init_op_t2_pd32(void)
     s_dll.main.shared.c_pd_out_len_current = 0U;
     dll_pd_publish(&s_dll.main.shared, 0U, true);
     for (uint8_t i = 0U; i < 32U; i++) {
-        s_dll.main.shared.pd_in[0][1U + i] = (uint8_t) (0x5AU + i);
+        s_dll.main.shared.m_pd_in[0][1U + i] = (uint8_t) (0x5AU + i);
     }
     harness_reset();
     iolink_dll_publish_reply_plans(&s_dll.main);

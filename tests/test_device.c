@@ -369,8 +369,8 @@ static void test_device_pd_input_bounds(void** state)
                      IOLINK_DEVICE_PD_OK);
     assert_int_equal(test_dll_shared(&dev.ctx)->c_pd_in_len, 2U);
     const iolink_dll_shared_t* shared = test_dll_shared(&dev.ctx);
-    assert_memory_equal(&shared->pd_in[test_pd_active(test_dll(&dev.ctx))][shared->c_od_width], pd,
-                        sizeof(pd));
+    assert_memory_equal(&shared->m_pd_in[test_pd_active(test_dll(&dev.ctx))][shared->c_od_width],
+                        pd, sizeof(pd));
 }
 
 static void test_device_pd_valid_flag(void** state)

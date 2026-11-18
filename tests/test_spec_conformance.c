@@ -229,8 +229,8 @@ static void test_process_data_input_returns_pd(void** state)
     shared->c_pd_in_len = 2U;
     shared->c_pd_out_len_current = 0U;
     test_pd_set_valid(test_dll(&dev), true);
-    shared->pd_in[0][shared->c_od_width + 0U] = 0x11U;
-    shared->pd_in[0][shared->c_od_width + 1U] = 0x22U;
+    shared->m_pd_in[0][shared->c_od_width + 0U] = 0x11U;
+    shared->m_pd_in[0][shared->c_od_width + 1U] = 0x22U;
 
     uint8_t out[8] = {0};
     int n = read_object_with_dll(0x0028U, test_dll(&dev), out, sizeof(out));
@@ -250,8 +250,8 @@ static void test_process_data_input_invalid_still_serves_buffer(void** state)
     iolink_dll_shared_t* shared = test_dll_shared(&dev);
     shared->c_pd_in_len = 2U;
     test_pd_set_valid(test_dll(&dev), false);
-    shared->pd_in[0][shared->c_od_width + 0U] = 0x11U;
-    shared->pd_in[0][shared->c_od_width + 1U] = 0x22U;
+    shared->m_pd_in[0][shared->c_od_width + 0U] = 0x11U;
+    shared->m_pd_in[0][shared->c_od_width + 1U] = 0x22U;
 
     uint8_t out[8] = {0};
     int n = read_object_with_dll(0x0028U, test_dll(&dev), out, sizeof(out));
@@ -298,8 +298,8 @@ static void test_process_data_80xx_is_positive(void** state)
     (void) memset(&dev, 0, sizeof(dev));
     test_dll_shared(&dev)->c_pd_in_len = 2U;
     test_pd_set_valid(test_dll(&dev), true);
-    test_dll_shared(&dev)->pd_in[0][test_dll_shared(&dev)->c_od_width + 0U] = 0x80U;
-    test_dll_shared(&dev)->pd_in[0][test_dll_shared(&dev)->c_od_width + 1U] = 0x42U;
+    test_dll_shared(&dev)->m_pd_in[0][test_dll_shared(&dev)->c_od_width + 0U] = 0x80U;
+    test_dll_shared(&dev)->m_pd_in[0][test_dll_shared(&dev)->c_od_width + 1U] = 0x42U;
 
     iolink_isdu_ctx_t ctx;
     iolink_isdu_init(&ctx);

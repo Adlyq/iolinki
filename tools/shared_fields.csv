@@ -4,7 +4,7 @@ iolink_dll_shared_t,state,b_,both,both,当前 DLL 状态；两个上下文都会
 iolink_dll_shared_t,isr_isdu_write_gen,i_,isr,main,ISR 发布已接受的写 START/ABORT 序号
 iolink_dll_shared_t,c_phy,c_,init,both,已绑定的 PHY API；两个上下文只读
 iolink_dll_shared_t,c_caps,c_,init,both,实例能力位；init 解析后只读
-iolink_dll_shared_t,isdu_write_gen_applied,m_,main,isr,主泵已应用的 ISDU 写序号
+iolink_dll_shared_t,m_isdu_write_gen_applied,m_,main,isr,主泵已应用的 ISDU 写序号
 iolink_dll_shared_t,c_clock,c_,init,both,应用时钟；两个上下文只读
 iolink_dll_shared_t,last_activity_ms,b_,both,both,最后活动时间戳；ISR 收帧与主泵超时都会刷新
 iolink_dll_shared_t,isr_master_activity,i_,isr,main,ISR 观察到帧结束的一次性标志；主泵清除
@@ -21,8 +21,8 @@ iolink_dll_shared_t,c_m_seq_type,c_,init,both,支持的 M 序列类型
 iolink_dll_shared_t,c_pd_in_len,c_,init,both,输入过程数据长度
 iolink_dll_shared_t,c_od_width,c_,init,both,OPERATE 的 OD 宽度 m
 iolink_dll_shared_t,c_min_cycle_time_app_us,c_,init,both,周期时间的应用层下限
-iolink_dll_shared_t,master_cycle_time,m_,main,isr,DPP1 MasterCycleTime 字节（Table B.1/B.3）；0 = 尚未写入
-iolink_dll_shared_t,isr_isdu_pub,m_,main,isr,ISDU 读视图发布字；ISR 采纳
+iolink_dll_shared_t,m_master_cycle_time,m_,main,isr,DPP1 MasterCycleTime 字节（Table B.1/B.3）；0 = 尚未写入
+iolink_dll_shared_t,m_isr_isdu_pub,m_,main,isr,ISDU 读视图发布字；ISR 采纳
 iolink_dll_shared_t,isr_isdu_read_reset,i_,isr,main,ISDU 读传输层复位请求；主泵清除
 iolink_dll_shared_t,c_reply_plans_ready,c_,init,isr,计划表完整发布标志；ISR 入口只读
 iolink_dll_shared_t,c_reply_plan_off,c_,init,isr,每状态切片起点；init 发布后只读
@@ -36,18 +36,18 @@ iolink_dll_shared_t,isr_frames_consumed,i_,isr,main,ISR 完全处理的帧数
 iolink_dll_shared_t,isr_frames_handoff,i_,isr,main,交给主泵的帧数
 iolink_dll_shared_t,isr_stat,b_,both,both,仅 IOLINK_STATS_MODE=SPLIT：ISR 自增，主泵复位并求和读取
 iolink_dll_shared_t,in_isr,i_,isr,main,ISR 泵运行标志；主上下文只读
-iolink_dll_shared_t,isr_tx_payload,m_,main,isr,槽 0/1 由主上下文暂存；槽 2 归 ISR 自用
-iolink_dll_shared_t,isr_tx_pending_slot,m_,main,isr,暂存应答所在槽位
-iolink_dll_shared_t,stage_len,m_,main,isr,暂存载荷字节数
-iolink_dll_shared_t,stage_has_cks,m_,main,isr,暂存载荷是否追加 CKS
+iolink_dll_shared_t,m_isr_tx_payload,m_,main,isr,槽 0/1 由主上下文暂存；槽 2 归 ISR 自用
+iolink_dll_shared_t,m_isr_tx_pending_slot,m_,main,isr,暂存应答所在槽位
+iolink_dll_shared_t,m_stage_len,m_,main,isr,暂存载荷字节数
+iolink_dll_shared_t,m_stage_has_cks,m_,main,isr,暂存载荷是否追加 CKS
 iolink_dll_shared_t,isr_tx_idx,b_,both,both,流式字节索引；两个上下文都会复位或推进
 iolink_dll_shared_t,isr_tx_active,b_,both,both,排空进行中标志；两个上下文都会置位或复位
 iolink_dll_shared_t,isr_tx_pending,b_,both,both,主上下文暂存已发布；ISR 取走后清除
 iolink_dll_shared_t,isr_tx_dropped,b_,both,main,丢弃的应答计数；两个上下文都会自增
 iolink_dll_shared_t,c_pd_out_len_current,c_,init,both,PD_Out 长度
 iolink_dll_shared_t,last_byte_us,b_,both,both,最后字节时间戳；两个上下文都会刷新
-iolink_dll_shared_t,pd_in,m_,main,isr,PD-in 应答缓冲区；ISR 在捕获槽写 OD 头（指针介导）
-iolink_dll_shared_t,pd_pub,m_,main,isr,PD-in 发布字；ISR 按代读取
+iolink_dll_shared_t,m_pd_in,m_,main,isr,PD-in 应答缓冲区；ISR 在捕获槽写 OD 头（指针介导）
+iolink_dll_shared_t,m_pd_pub,m_,main,isr,PD-in 发布字；ISR 按代读取
 iolink_dll_shared_t,pd_valid_cmd,b_,both,both,PD 有效位命令字；两个上下文都会写
 iolink_dll_shared_t,pd_in_captured,b_,both,both,ISR 捕获并释放；主泵在模式切换的临界区内复位为 0xFF
 iolink_dll_shared_t,fallback_count,b_,both,both,连续 CRC 错误计数；两个上下文都会复位或推进

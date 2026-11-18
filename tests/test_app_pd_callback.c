@@ -111,8 +111,8 @@ static void test_polling_path_without_callback(void** state)
     const iolink_dll_shared_t* shared = test_dll_shared(&ctx);
     const uint8_t active = test_pd_active(test_dll(&ctx));
     assert_int_equal(shared->c_pd_in_len, 2U);
-    assert_int_equal(shared->pd_in[active][shared->c_od_width], 0x11U);
-    assert_int_equal(shared->pd_in[active][shared->c_od_width + 1U], 0x22U);
+    assert_int_equal(shared->m_pd_in[active][shared->c_od_width], 0x11U);
+    assert_int_equal(shared->m_pd_in[active][shared->c_od_width + 1U], 0x22U);
 }
 
 static void test_callback_path_selected_by_presence(void** state)
@@ -147,8 +147,8 @@ static void test_callback_path_selected_by_presence(void** state)
     const iolink_dll_shared_t* shared = test_dll_shared(&ctx);
     const uint8_t active = test_pd_active(test_dll(&ctx));
     assert_int_equal(shared->c_pd_in_len, 2U);
-    assert_int_equal(shared->pd_in[active][shared->c_od_width], 0xA5U);
-    assert_int_equal(shared->pd_in[active][shared->c_od_width + 1U], 0xA5U);
+    assert_int_equal(shared->m_pd_in[active][shared->c_od_width], 0xA5U);
+    assert_int_equal(shared->m_pd_in[active][shared->c_od_width + 1U], 0xA5U);
 }
 
 static void test_build_profile_is_consistent(void** state)

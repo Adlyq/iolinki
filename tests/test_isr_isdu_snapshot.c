@@ -264,8 +264,8 @@ static int test_eager_isdu_snapshot(void)
     now_us = 1000000U;
     dll.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));
     iolink_dll_process(&dll.main); /* 刷新 ISR 快照 */
-    if ((IOLINK_ISDU_PUB_LEN(dll.main.shared.isr_isdu_pub) != 4U) ||
-        (IOLINK_ISDU_PUB_BUSY(dll.main.shared.isr_isdu_pub) != 0U)) {
+    if ((IOLINK_ISDU_PUB_LEN(dll.main.shared.m_isr_isdu_pub) != 4U) ||
+        (IOLINK_ISDU_PUB_BUSY(dll.main.shared.m_isr_isdu_pub) != 0U)) {
         return 1;
     }
 
@@ -309,7 +309,7 @@ static int test_eager_isdu_snapshot(void)
     }
 
     /* Busy START。 */
-    dll.main.shared.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 1U, 0U);
+    dll.main.shared.m_isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 1U, 0U);
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_reset();
     exchange(&dll, frame, sizeof(frame), 0U);
@@ -318,7 +318,7 @@ static int test_eager_isdu_snapshot(void)
     }
 
     /* No Service START（没有已暂存的响应）。 */
-    dll.main.shared.isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 0U, 0U);
+    dll.main.shared.m_isr_isdu_pub = IOLINK_ISDU_PUB_WORD(0U, 0U, 0U);
     make_frame(0xF0U, IOLINK_MSEQ_TYPE_2, frame, sizeof(frame));
     tx_reset();
     exchange(&dll, frame, sizeof(frame), 0U);

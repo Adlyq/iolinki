@@ -424,9 +424,9 @@ static void test_isr_drops_a_staged_reply_while_a_frame_is_streaming(void** stat
     const uint32_t octets = s_octet_n;
 
     /* 白盒：模拟主泵在“检查 active”之后才发布暂存。 */
-    s_ctx.main.shared.isr_tx_pending_slot = 0U;
-    s_ctx.main.shared.stage_len = 1U;
-    s_ctx.main.shared.stage_has_cks = 0U;
+    s_ctx.main.shared.m_isr_tx_pending_slot = 0U;
+    s_ctx.main.shared.m_stage_len = 1U;
+    s_ctx.main.shared.m_stage_has_cks = 0U;
     s_ctx.main.shared.isr_tx_pending = 1U;
 
     iolink_dll_process_isr(&s_ctx.main.shared);
@@ -659,10 +659,10 @@ static void test_staged_reply_keeps_own_length_and_cks(void** state)
     /* 主泵生成应答（载荷自带 CKS）并暂存。 */
     iolink_dll_process(&s_ctx.main);
     assert_int_equal(s_ctx.main.shared.isr_tx_pending, 1U);
-    assert_int_equal(s_ctx.main.shared.stage_len, 1U);
-    assert_int_equal(s_ctx.main.shared.stage_has_cks, 0U);
+    assert_int_equal(s_ctx.main.shared.m_stage_len, 1U);
+    assert_int_equal(s_ctx.main.shared.m_stage_has_cks, 0U);
     const uint8_t staged =
-        s_ctx.main.shared.isr_tx_payload[s_ctx.main.shared.isr_tx_pending_slot][0];
+        s_ctx.main.shared.m_isr_tx_payload[s_ctx.main.shared.m_isr_tx_pending_slot][0];
 
     /* ISR 取走暂存并发出第一个八位组。 */
     iolink_dll_process_isr(&s_ctx.main.shared);
@@ -672,9 +672,9 @@ static void test_staged_reply_keeps_own_length_and_cks(void** state)
     assert_int_equal(s_octets[0], staged);
 
     /* 模拟主泵为下一帧改写暂存元数据：在途帧只读 ISR 自己的副本。 */
-    s_ctx.main.shared.stage_len = 3U;
-    s_ctx.main.shared.stage_has_cks = 1U;
-    s_ctx.main.shared.isr_tx_pending_slot = IOLINK_TX_ISR_SLOT;
+    s_ctx.main.shared.m_stage_len = 3U;
+    s_ctx.main.shared.m_stage_has_cks = 1U;
+    s_ctx.main.shared.m_isr_tx_pending_slot = IOLINK_TX_ISR_SLOT;
 
     drain_isr_stream();
 

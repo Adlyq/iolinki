@@ -149,7 +149,7 @@ void isdu_read_process_data(iolink_isdu_ctx_t* ctx, bool input)
             if (len > 0U) {
                 /* 与 ISR 捕获同一条规则：active 取自一次发布字加载。 */
                 const uint8_t active = IOLINK_PD_PUB_ACTIVE(dll_pd_pub_load(&dll->shared));
-                const uint8_t* pdi = &dll->shared.pd_in[active][dll->shared.c_od_width];
+                const uint8_t* pdi = &dll->shared.m_pd_in[active][dll->shared.c_od_width];
                 (void) memcpy(ctx->response_buf, pdi, len);
             }
         }
@@ -632,7 +632,7 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, const iolink_device
     /* 0x01 MasterCycleTime 是主站在启动期间写入的值。 */
     if (ctx->dll_ctx != NULL) {
         const iolink_dll_main_t* dll = ctx->dll_ctx;
-        page[0x01] = dll->shared.master_cycle_time;
+        page[0x01] = dll->shared.m_master_cycle_time;
     }
     {
         uint16_t min_cyc = (ctx->dll_ctx != NULL)
@@ -708,7 +708,7 @@ void dp_page1_ensure(iolink_isdu_ctx_t* ctx)
     if ((ctx->dp_page1_src != ctx->dll_ctx) || (ctx->dp_page1_info != ctx->device_info)) {
         stale = true; /* 绑定/重绑上下文：映像必须按新上下文重建 */
     }
-    if ((dll != NULL) && (ctx->dp_page1[0x01] != dll->shared.master_cycle_time)) {
+    if ((dll != NULL) && (ctx->dp_page1[0x01] != dll->shared.m_master_cycle_time)) {
         stale = true;
     }
     if (stale) {

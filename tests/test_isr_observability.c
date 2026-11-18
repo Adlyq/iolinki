@@ -397,7 +397,7 @@ static int test_type0_isdu_read_fast_path(void)
 {
     iolink_dll_ctx_t dll;
     init_type0_ctx(&dll);
-    if (IOLINK_ISDU_PUB_LEN(dll.main.shared.isr_isdu_pub) != 2U) {
+    if (IOLINK_ISDU_PUB_LEN(dll.main.shared.m_isr_isdu_pub) != 2U) {
         return 1;
     }
 
@@ -503,7 +503,7 @@ static int test_0309_isdu_segment_repeat(void)
     dll.main.shared.isdu.resp_total = (uint8_t) sizeof(response);
     (void) memcpy(dll.main.shared.isdu.resp_buf, response, sizeof(response));
     iolink_dll_process(&dll.main);
-    if (IOLINK_ISDU_PUB_LEN(dll.main.shared.isr_isdu_pub) != (uint8_t) sizeof(response)) {
+    if (IOLINK_ISDU_PUB_LEN(dll.main.shared.m_isr_isdu_pub) != (uint8_t) sizeof(response)) {
         return 6;
     }
 
@@ -847,7 +847,7 @@ static int test_isdu_write_consumed_by_isr(void)
     }
     /* 对只读索引的写会产生一个已组帧的否定响应。 */
     if ((dll.main.shared.isdu.state != ISDU_STATE_RESPONSE_READY) ||
-        (IOLINK_ISDU_PUB_LEN(dll.main.shared.isr_isdu_pub) == 0U)) {
+        (IOLINK_ISDU_PUB_LEN(dll.main.shared.m_isr_isdu_pub) == 0U)) {
         return 3;
     }
     /* 请求收齐后主泵已接管：发布字已 ack（相位闩锁留在 COMPLETE）。 */

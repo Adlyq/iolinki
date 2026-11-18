@@ -388,7 +388,7 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
 
     /* PD-in 初值：缓冲区 0、有效（应用第一次发布之前），没有命令覆盖。
      * 发布字与命令字此后分别由主上下文与数据 ISR 单写。 */
-    iolink_atomic_store(&ctx->shared.pd_pub, IOLINK_PD_PUB_WORD(0U, true, 0U));
+    iolink_atomic_store(&ctx->shared.m_pd_pub, IOLINK_PD_PUB_WORD(0U, true, 0U));
     iolink_atomic_store(&ctx->shared.pd_valid_cmd, 0U);
     ctx->shared.pd_in_captured = 0xFFU; /* 无进行中的应答 */
 

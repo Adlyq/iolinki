@@ -177,7 +177,7 @@ flowchart LR
     SH --> CAP["c_caps<br/>iolink_caps_t"]
     SH --> ISDU["isdu<br/>iolink_isdu_ctx_t"]
     SH --> EV["events<br/>iolink_events_ctx_t"]
-    SH --> BUF["pd_in[] / isr_tx_payload"]
+    SH --> BUF["m_pd_in[] / m_isr_tx_payload"]
     SH --> RING["isr_frame_ring"]
     SH --> PLAN["c_reply_plan[] + c_reply_plans_ready"]
     MAIN --> DS["dll.main.ds<br/>iolink_ds_ctx_t"]
@@ -233,7 +233,7 @@ PHY 上下文，以及 `on_change`/`ds_flag_persist` 访问的应用 NVM。
 | `iolink_dll_shared_t.isr_isdu_write_gen` | `i_` | isr | main | ISR 发布已接受的写 START/ABORT 序号 |
 | `iolink_dll_shared_t.c_phy` | `c_` | init | both | 已绑定的 PHY API；两个上下文只读 |
 | `iolink_dll_shared_t.c_caps` | `c_` | init | both | 实例能力位；init 解析后只读 |
-| `iolink_dll_shared_t.isdu_write_gen_applied` | `m_` | main | isr | 主泵已应用的 ISDU 写序号 |
+| `iolink_dll_shared_t.m_isdu_write_gen_applied` | `m_` | main | isr | 主泵已应用的 ISDU 写序号 |
 | `iolink_dll_shared_t.c_clock` | `c_` | init | both | 应用时钟；两个上下文只读 |
 | `iolink_dll_shared_t.last_activity_ms` | `b_` | both | both | 最后活动时间戳；ISR 收帧与主泵超时都会刷新 |
 | `iolink_dll_shared_t.isr_master_activity` | `i_` | isr | main | ISR 观察到帧结束的一次性标志；主泵清除 |
@@ -250,8 +250,8 @@ PHY 上下文，以及 `on_change`/`ds_flag_persist` 访问的应用 NVM。
 | `iolink_dll_shared_t.c_pd_in_len` | `c_` | init | both | 输入过程数据长度 |
 | `iolink_dll_shared_t.c_od_width` | `c_` | init | both | OPERATE 的 OD 宽度 m |
 | `iolink_dll_shared_t.c_min_cycle_time_app_us` | `c_` | init | both | 周期时间的应用层下限 |
-| `iolink_dll_shared_t.master_cycle_time` | `m_` | main | isr | DPP1 MasterCycleTime 字节（Table B.1/B.3）；0 = 尚未写入 |
-| `iolink_dll_shared_t.isr_isdu_pub` | `m_` | main | isr | ISDU 读视图发布字；ISR 采纳 |
+| `iolink_dll_shared_t.m_master_cycle_time` | `m_` | main | isr | DPP1 MasterCycleTime 字节（Table B.1/B.3）；0 = 尚未写入 |
+| `iolink_dll_shared_t.m_isr_isdu_pub` | `m_` | main | isr | ISDU 读视图发布字；ISR 采纳 |
 | `iolink_dll_shared_t.isr_isdu_read_reset` | `i_` | isr | main | ISDU 读传输层复位请求；主泵清除 |
 | `iolink_dll_shared_t.c_reply_plans_ready` | `c_` | init | isr | 计划表完整发布标志；ISR 入口只读 |
 | `iolink_dll_shared_t.c_reply_plan_off` | `c_` | init | isr | 每状态切片起点；init 发布后只读 |
@@ -265,18 +265,18 @@ PHY 上下文，以及 `on_change`/`ds_flag_persist` 访问的应用 NVM。
 | `iolink_dll_shared_t.isr_frames_handoff` | `i_` | isr | main | 交给主泵的帧数 |
 | `iolink_dll_shared_t.isr_stat` | `b_` | both | both | 仅 IOLINK_STATS_MODE=SPLIT：ISR 自增，主泵复位并求和读取 |
 | `iolink_dll_shared_t.in_isr` | `i_` | isr | main | ISR 泵运行标志；主上下文只读 |
-| `iolink_dll_shared_t.isr_tx_payload` | `m_` | main | isr | 槽 0/1 由主上下文暂存；槽 2 归 ISR 自用 |
-| `iolink_dll_shared_t.isr_tx_pending_slot` | `m_` | main | isr | 暂存应答所在槽位 |
-| `iolink_dll_shared_t.stage_len` | `m_` | main | isr | 暂存载荷字节数 |
-| `iolink_dll_shared_t.stage_has_cks` | `m_` | main | isr | 暂存载荷是否追加 CKS |
+| `iolink_dll_shared_t.m_isr_tx_payload` | `m_` | main | isr | 槽 0/1 由主上下文暂存；槽 2 归 ISR 自用 |
+| `iolink_dll_shared_t.m_isr_tx_pending_slot` | `m_` | main | isr | 暂存应答所在槽位 |
+| `iolink_dll_shared_t.m_stage_len` | `m_` | main | isr | 暂存载荷字节数 |
+| `iolink_dll_shared_t.m_stage_has_cks` | `m_` | main | isr | 暂存载荷是否追加 CKS |
 | `iolink_dll_shared_t.isr_tx_idx` | `b_` | both | both | 流式字节索引；两个上下文都会复位或推进 |
 | `iolink_dll_shared_t.isr_tx_active` | `b_` | both | both | 排空进行中标志；两个上下文都会置位或复位 |
 | `iolink_dll_shared_t.isr_tx_pending` | `b_` | both | both | 主上下文暂存已发布；ISR 取走后清除 |
 | `iolink_dll_shared_t.isr_tx_dropped` | `b_` | both | main | 丢弃的应答计数；两个上下文都会自增 |
 | `iolink_dll_shared_t.c_pd_out_len_current` | `c_` | init | both | PD_Out 长度 |
 | `iolink_dll_shared_t.last_byte_us` | `b_` | both | both | 最后字节时间戳；两个上下文都会刷新 |
-| `iolink_dll_shared_t.pd_in` | `m_` | main | isr | PD-in 应答缓冲区；ISR 在捕获槽写 OD 头（指针介导） |
-| `iolink_dll_shared_t.pd_pub` | `m_` | main | isr | PD-in 发布字；ISR 按代读取 |
+| `iolink_dll_shared_t.m_pd_in` | `m_` | main | isr | PD-in 应答缓冲区；ISR 在捕获槽写 OD 头（指针介导） |
+| `iolink_dll_shared_t.m_pd_pub` | `m_` | main | isr | PD-in 发布字；ISR 按代读取 |
 | `iolink_dll_shared_t.pd_valid_cmd` | `b_` | both | both | PD 有效位命令字；两个上下文都会写 |
 | `iolink_dll_shared_t.pd_in_captured` | `b_` | both | both | ISR 捕获并释放；主泵在模式切换的临界区内复位为 0xFF |
 | `iolink_dll_shared_t.fallback_count` | `b_` | both | both | 连续 CRC 错误计数；两个上下文都会复位或推进 |
@@ -298,7 +298,7 @@ PHY 上下文，以及 `on_change`/`ds_flag_persist` 访问的应用 NVM。
 - `startup_notification_pending` 位于 `shared`（`i_`）：ISR 在 `dll_set_state_shared(STARTUP)` 时置 1，主上下文的 `iolink_dll_flush_state_callbacks()` 读后清 0。
 - `invalid_frames` 与 `frame_index` 只由主上下文写。ISR 收到 0x97 DeviceStartup 时只置一次性请求 `shared.isr_device_startup_requested`；主泵在 `dll_process_body()` 开头消费它并调用 `dll_protocol_error_to_startup()`（该帧的 CKS 应答仍由 ISR 按计划发出）。
 - `fallback_clear_request` 位于 `shared`（`b_`）：ISR 的 `IOLINK_REPLY_ACT_MASTER_COMMAND` 计划动作与主上下文的 MasterCommand 路径都会置 1；主泵在 `dll_apply_isr_deadline_requests()` 中清 0，并在离开 FALLBACK 时取消 T_FBD。
-- `master_cycle_time`（DPP1 0x01）与 `min_cycle_time_app_us` 也位于 `shared`：前者由主泵的页写处理写入、ISR 的 DPP1 页读读取；后者只在设备初始化时写入。
+- `m_master_cycle_time`（DPP1 0x01）与 `min_cycle_time_app_us` 也位于 `shared`：前者由主泵的页写处理写入、ISR 的 DPP1 页读读取；后者只在设备初始化时写入。
 - 其余 `iolink_dll_main_t` 字段（`timers`/`next_deadline`、`frame_buf`/`req_len`、`ds`、`last_notified_state`、`pd_out` 等）只在主上下文读写；`iolink_dll_isr_t` 只由数据 ISR 读写（`stack_tick_pending` 由主上下文在服务窗口消费，见类型注释）。
 
 对象级的移交机制与租约（谁在什么时候把哪个缓冲交给谁）见 12.2 节。
@@ -441,7 +441,7 @@ flowchart TD
   - ESTAB_COM 的首帧即使计划带 `CONSUME` 也仍发布给主泵，由主泵完成到 OPERATE 的迁移。
   - 非法帧（校验/类型错误）始终发布给主泵做错误/状态处理，不计计划未命中。
 - `ctx->shared.isdu` 的**写入口**（两个请求槽、`req_idx`/`req_total`、FlowCTRL 水位、`stage_state`、发布字 `req_pub`）整体归数据 ISR；主泵只读发布字，认领发布字指向的槽（`req_busy_sel`）后在**锁外**做 CHKPDU 校验、解析与服务执行，完成后写 `req_ack_gen` 并放开槽。主泵从不改写累计相位，因此接管不需要临界区，ISR 也不会覆盖正在解析的槽。已发布的成帧应答视图（`len | busy | sel | gen`）与读 FlowCTRL 段索引仍归主泵/ISR 读路径。DPP1 页读走主泵维护的 RAM 映像（`iolink_isdu_ctx_t::dp_page1`，seqlock 保护、`build_direct_param_page1()` 单一构建口径）；ISR 用 `iolink_isdu_dp_page1_read_range()` 在**单个序号窗口**内复制整段载荷（整帧同代，不逐字节重建/双读），主泵在配置/参数写入点调用 `iolink_isdu_dp_page1_invalidate()` 立即重建。
-- ISDU 写由 ISR 直接调用 `iolink_isdu_od_write()` 累计（按 FlowCTRL 位置去重）：只有“下一个期望段”推进位置，重发与过早的乱序段照常 ACK 但不修改缓冲，因此重发风暴不会耗尽缓冲。每接受一个 START/ABORT 就自增 `isr_isdu_write_gen`；`isr_isdu_write_gen != isdu_write_gen_applied` 期间写尚未被主泵应用，主泵发布 `len=0`（无服务）、ISR 读路径回 `0x00`，因此“写后立刻读”不会读到旧值。上一条已收齐（`COMPLETE`）但主泵尚未接管时又来 START，前一条被覆盖并计 `isr_od_overruns`。
+- ISDU 写由 ISR 直接调用 `iolink_isdu_od_write()` 累计（按 FlowCTRL 位置去重）：只有“下一个期望段”推进位置，重发与过早的乱序段照常 ACK 但不修改缓冲，因此重发风暴不会耗尽缓冲。每接受一个 START/ABORT 就自增 `isr_isdu_write_gen`；`isr_isdu_write_gen != m_isdu_write_gen_applied` 期间写尚未被主泵应用，主泵发布 `len=0`（无服务）、ISR 读路径回 `0x00`，因此“写后立刻读”不会读到旧值。上一条已收齐（`COMPLETE`）但主泵尚未接管时又来 START，前一条被覆盖并计 `isr_od_overruns`。
 - **64 位截止时间只由主上下文写**。ISR 只置一次性标志：`isr_dsio_clear`、`isr_fallback_pending`、`isr_master_activity`、`isr_isdu_read_reset`、`isr_cycle_served`；诊断侧只写 `iolink_conditions_t::isr_pulse[]` 单字节 one-shot。这类标志由设置方置 1、只由主泵清 0，重复置位幂等。`shared.isr_master_activity` 属于同一组：ISR 在 RX 完成路径与 Timer A 超时入口（`iolink_dll_on_rx_timeout()`）置 1，`master_last_activity_ms`/`master_lost_count`/`master_lost` 由主泵消费该标志时刷新（见 3.1 节）。
 - 顺序约束：即时应答在邮箱发布**之前**启动（t_A），记录随后连同 `eager` 标志一起入环；TX BYTE 下每个中断只喂一个八位组后让出，TX FRAME 由 PHY 拥有整帧传输；重入用 `in_isr` + `isr_reentry_pending` 延迟到外层调用，保证泵状态只有一个写入者。
 - 邮箱是 `IOLINK_MBX_SLOTS` 个槽（默认 4）的 SPSC 环（`include/iolinki/internal/ring.h`）：环满（所有槽都未消费）时新帧计入 `isr_mailbox_drops` 并被丢弃。记录携带自身长度与 `eager` 标志，主泵据此快照 `frame_replied_by_isr`，因此无需跨帧状态。每帧的终局另有 `isr_frames_consumed`（ISR 完全处理、不进邮箱，含静默的转换/复位帧）与 `isr_frames_handoff`（成功入环）两个计数；丢弃的去向仍是 `isr_plan_misses`、`isr_mailbox_drops` 与早期拒绝坏 ISDU 写的 `isr_eager_rejects`。
@@ -547,9 +547,9 @@ flowchart LR
     subgraph IN["Device → Master (PD-in)"]
         A1["应用传感器数据"] --> A2["iolink_device_pd_input_update()"]
         A1 --> A3["或 on_pd_input() 回调<br/>（能力位 PD_IN_CALLBACK）"]
-        A2 --> A4["pd_in[free][c_od_width..]"]
+        A2 --> A4["m_pd_in[free][c_od_width..]"]
         A3 --> A4
-        A4 --> A5["fence + 发布字 pd_pub<br/>{active, valid, gen}<br/>（长度在 init 固定）"]
+        A4 --> A5["fence + 发布字 m_pd_pub<br/>{active, valid, gen}<br/>（长度在 init 固定）"]
         A5 --> A6["ISR 按计划组应答<br/>[OD][PD-in][CKS]"]
         A6 --> A7["Master"]
     end
@@ -567,8 +567,8 @@ flowchart LR
 - `iolink_device_pd_input_update()` 与 `on_pd_input()` 在同一构建内共存，按 `on_pd_input != NULL`（能力位 `IOLINK_CAP_PD_IN_CALLBACK`）在 `device_run_app_callbacks()` 中选路；回调路径已选中时，轮询 API 返回 `IOLINK_DEVICE_PD_ERR_MODE`，不会静默覆盖回调输出。`on_pd_input()` 的返回值直接作为该次发布的有效位，返回 `false` 会置 CKS bit6。
 - PD-in 长度是初始化属性（`iolink_stack_config_t::pd_in_len`），所有类型都不可在运行期改变；`pd_input_update()` 只接受该配置长度。
 - PD-out 只在 Type-1/2 请求中携带；Type-0 不携带 PD。
-- 有效位为 `false` 会置 CKS bit6，Master 可据此判断 PD 无效；没有 PD-in 的设备恒报有效。0x98 `PROCESS_DATA_OPERATE` / 0x99 `DEVICE_OPERATE` 会临时把有效位置为 `true` / `false`，但只对一个发布代号有效：数据 ISR 执行时把命令值与当时的 `pd_pub.gen` 写进 `pd_valid_cmd`，主上下文下一次 PD-in 发布即恢复应用值；主上下文自己执行时直接发布新的一代。
-- `pd_in` 的缓冲数由 TX 模式决定（`IOLINK_PD_IN_BUFFERS`：TX BYTE=2、TX FRAME=3），主循环填充 ISR 未占用的副本，避免撕裂；没有空闲缓冲时保留当前 PD-in、下个周期重试并计入 `pd_in_skips`。
+- 有效位为 `false` 会置 CKS bit6，Master 可据此判断 PD 无效；没有 PD-in 的设备恒报有效。0x98 `PROCESS_DATA_OPERATE` / 0x99 `DEVICE_OPERATE` 会临时把有效位置为 `true` / `false`，但只对一个发布代号有效：数据 ISR 执行时把命令值与当时的 `m_pd_pub.gen` 写进 `pd_valid_cmd`，主上下文下一次 PD-in 发布即恢复应用值；主上下文自己执行时直接发布新的一代。
+- `m_pd_in` 的缓冲数由 TX 模式决定（`IOLINK_PD_IN_BUFFERS`：TX BYTE=2、TX FRAME=3），主循环填充 ISR 未占用的副本，避免撕裂；没有空闲缓冲时保留当前 PD-in、下个周期重试并计入 `pd_in_skips`。
 
 ### 6.5 ISR 快路径与主路径的分工
 
@@ -655,7 +655,7 @@ sequenceDiagram
   - `IDLE` → No Service `0x00`。
 - `COUNT`：继续从 `resp_idx` 顺序读取；若剩余不足 `od_len`，补 `0x00`。
 - 读完后 `RESPONSE_READY → IDLE`。
-- ISR 双泵另有一套快照分段逻辑 `dll_isr_isdu_od()`：它读取主泵 `dll_isdu_sync_snapshot()` 发布的原子字 `isr_isdu_pub`（`len | busy | sel | gen`），并在 START 处整体采纳新字；此后由 ISR 拥有 `iolink_dll_isr_t` 中的 `isr_isdu_idx` / `isr_isdu_seg_idx` / `isr_isdu_last_flowctrl`，不修改主 ISDU 传输状态。成帧应答只有**一份** `frame` 缓冲，`resp_store[0/1]` 只是两个视图槽；主泵重建缓冲前先发布 `{len=0, busy=1}` 租约，写完再带新代数位发布。ISDU 写暂存后写序号 `isr_isdu_write_gen` 领先于 `isdu_write_gen_applied`：主泵发布 `len=0`，ISR 也回 `0x00`，杜绝“写后立刻读”读到旧应答；主泵应用该写并发布新视图后才追平序号。
+- ISR 双泵另有一套快照分段逻辑 `dll_isr_isdu_od()`：它读取主泵 `dll_isdu_sync_snapshot()` 发布的原子字 `m_isr_isdu_pub`（`len | busy | sel | gen`），并在 START 处整体采纳新字；此后由 ISR 拥有 `iolink_dll_isr_t` 中的 `isr_isdu_idx` / `isr_isdu_seg_idx` / `isr_isdu_last_flowctrl`，不修改主 ISDU 传输状态。成帧应答只有**一份** `frame` 缓冲，`resp_store[0/1]` 只是两个视图槽；主泵重建缓冲前先发布 `{len=0, busy=1}` 租约，写完再带新代数位发布。ISDU 写暂存后写序号 `isr_isdu_write_gen` 领先于 `m_isdu_write_gen_applied`：主泵发布 `len=0`，ISR 也回 `0x00`，杜绝“写后立刻读”读到旧应答；主泵应用该写并发布新视图后才追平序号。
 
 响应组帧（`isdu_frame_response()`）：
 
@@ -882,7 +882,7 @@ sequenceDiagram
 5. reset handler：`isdu.reset_pending` / `isdu.app_reset_pending`。
 6. OPERATE 下（`device_run_app_callbacks()`）：
    - `on_pd_output(app->self, ctx->dll.main.pd_out)`；
-   - 若 `IOLINK_CAP_PD_IN_CALLBACK`：用 `device_pd_in_free_index()` 取一个 ISR 未在发送的 PD-in 缓冲区，填完后发布一次 PD-in 发布字 `pd_pub`（`{active, valid, gen}`，`IOLINK_FENCE()` + 单次原子存储；长度在 init 固定）；无空闲缓冲时计 `pd_in_skips` 并在下个周期重试。
+   - 若 `IOLINK_CAP_PD_IN_CALLBACK`：用 `device_pd_in_free_index()` 取一个 ISR 未在发送的 PD-in 缓冲区，填完后发布一次 PD-in 发布字 `m_pd_pub`（`{active, valid, gen}`，`IOLINK_FENCE()` + 单次原子存储；长度在 init 固定）；无空闲缓冲时计 `pd_in_skips` 并在下个周期重试。
 
 ### 9.3 回调清单与实际调用点
 
@@ -1020,7 +1020,7 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 - `deadline == 0` 表示未装载；所有比较都走 `dll_time_reached()` / `dll_time_passed()` 的回绕安全减法（选择最早截止时间用同一族的符号差判定）。
 - ISR 在 `CONSUME` 计划下应答的帧不经过主泵帧尾：ISR 把帧时间的低 32 位写入 `shared.isr_consumed_us`，穿过 `IOLINK_FENCE()`（release）再自增 `isr_consumed_seq`；主泵读 `isr_consumed_seq` 后用 `IOLINK_FENCE()`（acquire）读时间戳，复读序号前同样有屏障，然后在下一次 process 用该时间戳补做 `dll_check_cycle_time_at()` 并更新 `last_response_us`，因此 T_CYCLE/T_REN 与最坏时序统计不会漏掉这些帧（重建依赖主泵两次运行间隔 < 2^31 us）。SMP 档下的双读校验依赖这对屏障：没有它，读到新序号的读者仍可能看到旧时间戳。
 - `device_apply_stack_config()` 在时钟绑定之后直接装载 T_PD 表项（`dll_timer_arm()`），截止时间表是唯一事实源；不存在单独的兼容字段。
-- T_FBD 的条款文字（`g_timer_contract[]`）写作 "3 × MasterCycleTime"，实现取的是 `min_cycle_time_us`（M-sequence 布局推导出的设备最小周期，受应用下限约束）；DPP1 的 `master_cycle_time` 只用于 MASTER_LOST 的周期估算（`dll_master_cycle_us()`）。两者都为 0 时 `dll_master_cycle_us()` 返回 0，MASTER_LOST 因此不武装（没有可信周期就不做丢失提示），等周期时间可知后的下一次同步再恢复。`min_cycle_time_us` 为 0 时 T_FBD 退到 500 ms 上限。
+- T_FBD 的条款文字（`g_timer_contract[]`）写作 "3 × MasterCycleTime"，实现取的是 `min_cycle_time_us`（M-sequence 布局推导出的设备最小周期，受应用下限约束）；DPP1 的 `m_master_cycle_time` 只用于 MASTER_LOST 的周期估算（`dll_master_cycle_us()`）。两者都为 0 时 `dll_master_cycle_us()` 返回 0，MASTER_LOST 因此不武装（没有可信周期就不做丢失提示），等周期时间可知后的下一次同步再恢复。`min_cycle_time_us` 为 0 时 T_FBD 退到 500 ms 上限。
 
 错误路径与计数：
 
@@ -1055,20 +1055,20 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 flowchart LR
     subgraph MAIN["主上下文（dll.main / shared）"]
         M1["应用 PD-in 数据"]
-        M2["shared.pd_in[IOLINK_PD_IN_BUFFERS][OD+PD+1]"]
-        M3["pd_pub（{active, valid, gen}）/ pd_in_captured"]
-        M4["shared.isr_tx_payload[IOLINK_TX_SLOTS]<br/>应答暂存"]
+        M2["shared.m_pd_in[IOLINK_PD_IN_BUFFERS][OD+PD+1]"]
+        M3["m_pd_pub（{active, valid, gen}）/ pd_in_captured"]
+        M4["shared.m_isr_tx_payload[IOLINK_TX_SLOTS]<br/>应答暂存"]
         M5["shared.isdu 写入口<br/>两槽 req_base + req_pub（ISR 写）"]
         M8["shared.isdu<br/>执行/响应状态机（主泵）"]
-        M6["shared.isr_isdu_pub<br/>单一 frame + 租约"]
+        M6["shared.m_isr_isdu_pub<br/>单一 frame + 租约"]
         M7["shared.isr_frame_ring<br/>邮箱槽环"]
         M9["shared.c_reply_plan[IOLINK_REPLY_PLAN_SLOTS]<br/>+ c_reply_plan_off/cnt[4] + c_reply_plans_ready"]
         M11["shared.isdu.dp_page1[16]<br/>DPP1 映像（seqlock）"]
         M10["timers[IOLINK_TIMER_COUNT] + next_deadline"]
     end
     subgraph ISR["数据 ISR（dll.isr）"]
-        I0["回收 pd_in 租约<br/>TX FRAME + tx_busy()"]
-        I1["一次加载 pd_pub<br/>捕获 active + valid"]
+        I0["回收 m_pd_in 租约<br/>TX FRAME + tx_busy()"]
+        I1["一次加载 m_pd_pub<br/>捕获 active + valid"]
         I2["逐字节/整帧发送"]
         I3["收集 RX 到 isr_rx_buf"]
         I4["读取已发布 frame"]
@@ -1093,12 +1093,12 @@ flowchart LR
 
 实际的缓冲关系：
 
-- `pd_in[IOLINK_PD_IN_BUFFERS][IOLINK_PD_REPLY_MAX]`：布局为 `[OD...][PD-in...][CKS]`，主循环填一个既不是当前 `pd_pub.active` 也不是 `pd_in_captured` 的缓冲区，再用一次原子存储发布 `pd_pub`（`IOLINK_FENCE()` + 单次字写入，打包 `{active, valid, gen}`）；ISR 在应答开始时只加载这个字一次，用同一代的 `active` 捕获缓冲区零拷贝发送。`device_pd_in_free_index()` 负责选空闲缓冲，租约只由数据 ISR 释放：TX BYTE 在帧末释放，2 个缓冲即可；TX FRAME 没有帧末回调，ISR 在**下一次进入**时读取 `tx_busy()`，线路空闲才把 `pd_in_captured` 复位为 `0xFF`（同样 2 个缓冲）。没有 `tx_busy()` 时传输结束不可观测，租约保持到下一次捕获，第三个缓冲区吸收主泵的更新。主站静默期没有数据中断，租约因此也保持到下一帧：主泵仍可填另一个缓冲区，只有静默期内连续两次 PD-in 更新才会跳过并计入 `pd_in_skips`。
-- `pd_pub` 的 `gen` 每发布一次前进一格。数据 ISR 执行 0x98/0x99 时把命令值与当时的 `gen` 写进 `pd_valid_cmd`；读侧（CKS 状态位、`device_pd_in_free_index()`、ISDU 0x0028 直参读）只在 `base_gen == pd_pub.gen` 时采用命令值，因此命令只覆盖它所在的那一代。命令字由 ISR 在每次进入泵时撤回已过代的条目（同一写者），8 位代号回绕不会重新生效。
+- `m_pd_in[IOLINK_PD_IN_BUFFERS][IOLINK_PD_REPLY_MAX]`：布局为 `[OD...][PD-in...][CKS]`，主循环填一个既不是当前 `m_pd_pub.active` 也不是 `pd_in_captured` 的缓冲区，再用一次原子存储发布 `m_pd_pub`（`IOLINK_FENCE()` + 单次字写入，打包 `{active, valid, gen}`）；ISR 在应答开始时只加载这个字一次，用同一代的 `active` 捕获缓冲区零拷贝发送。`device_pd_in_free_index()` 负责选空闲缓冲，租约只由数据 ISR 释放：TX BYTE 在帧末释放，2 个缓冲即可；TX FRAME 没有帧末回调，ISR 在**下一次进入**时读取 `tx_busy()`，线路空闲才把 `pd_in_captured` 复位为 `0xFF`（同样 2 个缓冲）。没有 `tx_busy()` 时传输结束不可观测，租约保持到下一次捕获，第三个缓冲区吸收主泵的更新。主站静默期没有数据中断，租约因此也保持到下一帧：主泵仍可填另一个缓冲区，只有静默期内连续两次 PD-in 更新才会跳过并计入 `pd_in_skips`。
+- `m_pd_pub` 的 `gen` 每发布一次前进一格。数据 ISR 执行 0x98/0x99 时把命令值与当时的 `gen` 写进 `pd_valid_cmd`；读侧（CKS 状态位、`device_pd_in_free_index()`、ISDU 0x0028 直参读）只在 `base_gen == m_pd_pub.gen` 时采用命令值，因此命令只覆盖它所在的那一代。命令字由 ISR 在每次进入泵时撤回已过代的条目（同一写者），8 位代号回绕不会重新生效。
 - `pd_out[IOLINK_PD_OUT_MAX_SIZE]`：Type-1/2 帧处理时从 `frame_buf` 复制最新 PD-out；应用通过 `iolink_device_pd_output_read()` 读取。
-- `isr_tx_payload[IOLINK_TX_SLOTS]`（`IOLINK_TX_ISR_SLOT + 1`，默认 3）：应答暂存槽。主上下文在槽 0/1 之间交替（单写者，无 RMW）；最后一个槽（`IOLINK_TX_ISR_SLOT`，默认 2）专供 ISR 自己的即时应答，两个上下文不共享槽计数。暂存的长度/CKS 标志（`stage_len`/`stage_has_cks`）归主上下文，数据 ISR 在取走 `isr_tx_pending` 时把它们与槽索引一次搬进自己独占的 `tx_stream_len`/`tx_stream_has_cks`；TX BYTE 的每一步只读该副本，因此主泵的下一次暂存不会改变在途帧的长度或追加/跳过 CKS（正在流式发送时暂存被拒绝并计 `isr_tx_dropped`）。
+- `m_isr_tx_payload[IOLINK_TX_SLOTS]`（`IOLINK_TX_ISR_SLOT + 1`，默认 3）：应答暂存槽。主上下文在槽 0/1 之间交替（单写者，无 RMW）；最后一个槽（`IOLINK_TX_ISR_SLOT`，默认 2）专供 ISR 自己的即时应答，两个上下文不共享槽计数。暂存的长度/CKS 标志（`m_stage_len`/`m_stage_has_cks`）归主上下文，数据 ISR 在取走 `isr_tx_pending` 时把它们与槽索引一次搬进自己独占的 `tx_stream_len`/`tx_stream_has_cks`；TX BYTE 的每一步只读该副本，因此主泵的下一次暂存不会改变在途帧的长度或追加/跳过 CKS（正在流式发送时暂存被拒绝并计 `isr_tx_dropped`）。
 - `isr_frame_slot[IOLINK_MBX_SLOTS]` + `isr_frame_ring`（默认 4 槽）：帧邮箱是 SPSC 槽环（`include/iolinki/internal/ring.h`）。ISR 把长度、`eager` 标志和帧字节一起写入一个槽后发布 `in`；主循环 `peek` → 复制 → `release`。环满时丢帧并计 `isr_mailbox_drops`，但主循环忙时不会连带丢弃下一帧，也不需要临界区。
-- `isr_isdu_pub`（发布字）：主泵把 `{len, busy, sel, gen}` 打包成一个原子字发布；ISR 在 START 时整体采纳并自己维护 FlowCTRL 段索引。成帧应答只有**一份** `frame` 缓冲，`resp_store[0/1]` 只是两个视图槽；租约（先发布 `{len=0,busy=1}`）保证 ISR 不会读到半重建的应答，代数位保证长度/槽位相同的新应答仍会打断旧段序列。
+- `m_isr_isdu_pub`（发布字）：主泵把 `{len, busy, sel, gen}` 打包成一个原子字发布；ISR 在 START 时整体采纳并自己维护 FlowCTRL 段索引。成帧应答只有**一份** `frame` 缓冲，`resp_store[0/1]` 只是两个视图槽；租约（先发布 `{len=0,busy=1}`）保证 ISR 不会读到半重建的应答，代数位保证长度/槽位相同的新应答仍会打断旧段序列。
 - `shared.isdu` 写入口：`req_base` 指向 `isdu.request` 的**两个槽**（每槽 `IOLINK_ISDU_BUFFER_SIZE + 6`），`req_buf` 是当前累计槽；`req_idx`/`req_total`/FlowCTRL 水位/`stage_state`/发布字 `req_pub` 由 ISR 单写。位置去重使重发段不占新位置。发布字是唯一交接点：`{len, sel, gen, receiving}`，主泵以 `req_ack_gen` 表示“处理到哪一代”、`req_busy_sel` 表示正在解析的槽（0xFF = 无）。新 START 可继续在其他槽累计；只有“覆盖已发布但主泵尚未接管的请求”才计 `req_overruns`。
 - `c_reply_plan[IOLINK_REPLY_PLAN_SLOTS]` + `c_reply_plan_off/cnt[4]` + `c_reply_plans_ready`：主泵在初始化时一次编译 4 个状态切片（内容是 `{M-sequence 类型, OD 宽度, 能力位}` 的纯函数，三项都只在初始化定义），此后不再改变。发布只有一个就绪标志：编译前撤下、完成后置位，ISR 入口只在置位时进入传输泵，因此初始化窗口内开始的帧不会被处理。标志只保护入口，重建仍要求数据 ISR 静止，所以不需要序号校验。
 - `isdu.dp_page1[16]` + `dp_page1_seq`：Direct Parameter Page 1 的 RAM 映像。主泵在配置/参数写入点重建（`iolink_isdu_dp_page1_invalidate()`）；ISR 页读只做索引 + seqlock 双读，不再逐字节构建整页。
@@ -1132,20 +1132,20 @@ RX FRAME + TX BYTE 为 4872 B / 5056 B；`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT`
 | `iolink_dll_process_isr(shared)` | ISR-only | 数据中断入口 |
 | `iolink_dll_on_rx_timeout(shared)` | ISR-only | Timer A 超时入口 |
 | `iolink_dll_on_stack_tick(shared)` | ISR-only | Timer B tick 入口 |
-| `dll_isr_*()`（`dll_isr_start_staged_tx()` 除外） | ISR-only | 重入状态、RX 组装/校验、PD-in 租约回收（`tx_busy()`）与 `pd_pub` 一次加载捕获、已过代 `pd_valid_cmd` 的撤回、`dll_isr_plan_lookup()` / `dll_isr_plan_source()` / `dll_isr_plan_action()` / `dll_isr_plan_execute()`、ISDU 快照读与写暂存、邮箱发布 |
+| `dll_isr_*()`（`dll_isr_start_staged_tx()` 除外） | ISR-only | 重入状态、RX 组装/校验、PD-in 租约回收（`tx_busy()`）与 `m_pd_pub` 一次加载捕获、已过代 `pd_valid_cmd` 的撤回、`dll_isr_plan_lookup()` / `dll_isr_plan_source()` / `dll_isr_plan_action()` / `dll_isr_plan_execute()`、ISDU 快照读与写暂存、邮箱发布 |
 | `dll_isr_start_staged_tx(shared)` | 双上下文 | SINGLE 档由 `dll_send()` 调用（该档没有数据 ISR）；ISR 路径由 `dll_isr_tx_pending()` 调用 |
 | `dll_set_state_shared(shared)` | ISR-only | 只写共享区：`state`、STARTUP 时的 `iolink_events_reset_request()`、`isdu_restart_pending`、`startup_notification_pending`；不 flush 回调 |
 | `dll_set_state(main)` | 主上下文 | 共享区迁移 + master-lost 簿记 + 事件/ISDU 复位 + `iolink_dll_flush_state_callbacks()` |
 | `dll_mark_master_activity_ts()` | 主上下文 | 帧结束时刷新活动时间戳与 master_lost 提示；ISR 只置 `shared.isr_master_activity`，由 `dll_take_isr_master_activity()` 消费 |
 | `dll_count_served_cycle()` | 主上下文 | 推进 `back_to_box_cycles`：主上下文自己处理的帧直接调用；ISR 完全消费的帧经 `isr_cycle_served` 交接后由主泵调用 |
-| `dll_apply_master_command(shared)` / `dll_apply_master_command_main(main)` | ISR / 主上下文 | 两侧共用 `dll_master_command_target()` 推导目标状态；ISR 写 `pd_valid_cmd`，主上下文发布新一代 `pd_pub` |
+| `dll_apply_master_command(shared)` / `dll_apply_master_command_main(main)` | ISR / 主上下文 | 两侧共用 `dll_master_command_target()` 推导目标状态；ISR 写 `pd_valid_cmd`，主上下文发布新一代 `m_pd_pub` |
 | `dll_type_allowed(shared)`、`dll_pd_status_flags_at(shared)`、`dll_req_len_for(shared)`、`dll_expected_type_bits(shared)`、`dll_phy_has_*()` | 双上下文安全 | 只读共享区与应答发布字 |
 | `dll_service_window_take(shared)` | 主上下文调用 | `iolink_dll_take_service_window()` 的共享区实现（公共入口在 `dll.c`），消费 `stack_tick_pending` |
 | `iolink_diag_pulse_isr()` | ISR-only | 写 `isr_pulse[]` 单字节 one-shot |
 | `iolink_events_reset_request()` | ISR-only | 置起 `reset_req`（与 `reset_applied` 不等）；ISR 对事件引擎的唯一写 |
 | `dll_process_complete_frame()`、`dll_consume_isr_mailbox()`、`dll_frame_validate()`、`dll_timers_dispatch()`、`dll_timer_expire_*()`、`dll_check_*()` | 主上下文 | 主泵调度与定时监督 |
 | `iolink_diag_service()`、`iolink_diag_set_level()`、`iolink_diag_device_status()`、`iolink_diag_dds_snapshot()` | 主上下文 | 条件表与派生视图只在主上下文读写 |
-| `dll_send()` | 主上下文 | 主泵暂存应答（`stage_len`/`stage_has_cks` + 发布字 `isr_tx_pending`），ISR 负责发送；ISR 正在流式发送时拒绝暂存并计 `isr_tx_dropped` |
+| `dll_send()` | 主上下文 | 主泵暂存应答（`m_stage_len`/`m_stage_has_cks` + 发布字 `isr_tx_pending`），ISR 负责发送；ISR 正在流式发送时拒绝暂存并计 `isr_tx_dropped` |
 
 ISR 还允许调用以下只读/时序 helper：`dll_req_len_for()`（组帧长度，纯只读）、`iolink_checksum6_from_acc()`、`iolink_isdu_direct_param_page1_octet()`、已绑定的时间源（`iolink_device_app_t::time_us` 回调）、`iolink_events_flag()`、`iolink_events_memory_read()`、`iolink_events_reset_request()`、`iolink_ring_claim/publish`。
 
@@ -1181,12 +1181,12 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | 对象 | 写者（可写所有权） | 读者 | 移交机制 | 租约/回收 |
 | :--- | :--- | :--- | :--- | :--- |
 | `isr_frame_slot[IOLINK_MBX_SLOTS]` + `isr_frame_ring` | ISR | 主上下文 | 槽环 `in`/`out`（各单写者）；记录含 `len` / `eager` | 主上下文 `release` 后归还 |
-| `isr_tx_payload[0..1]` + `isr_tx_pending_slot`/`stage_len`/`stage_has_cks` + 发布字 `isr_tx_pending` | 主上下文 | ISR | 槽索引 + `request_service()`；检查/槽位/载荷/发布与 ISR 的取走各在同一个短临界区内完成 | ISR 取走后清 pending；在途帧未完时丢弃并计 `isr_tx_dropped` |
+| `m_isr_tx_payload[0..1]` + `m_isr_tx_pending_slot`/`m_stage_len`/`m_stage_has_cks` + 发布字 `isr_tx_pending` | 主上下文 | ISR | 槽索引 + `request_service()`；检查/槽位/载荷/发布与 ISR 的取走各在同一个短临界区内完成 | ISR 取走后清 pending；在途帧未完时丢弃并计 `isr_tx_dropped` |
 | `isr_tx_idx`/`isr_tx_active` + `iolink_dll_isr_t::tx_stream_len`/`tx_stream_has_cks` | ISR | ISR | — | TX BYTE 帧末 `tx_done` 清 active；在途期间 `dll_send()` 拒绝暂存并计 `isr_tx_dropped` |
-| `isr_tx_payload[IOLINK_TX_ISR_SLOT]`（ISR 专用槽） | ISR | ISR | 固定槽 | 帧末 `tx_done` |
-| `pd_in[]` + `pd_pub` + `pd_valid_cmd` + `pd_in_captured` | 主上下文（填充、`pd_pub`）/ 数据 ISR（`pd_valid_cmd`、`pd_in_captured` 的置位与释放） | ISR（一次加载 `pd_pub` 捕获 active 与 valid）、主上下文（选空闲缓冲） | 发布字（fence + 单次原子存储）；命令字按 `gen` 匹配 | `pd_in_captured` 归 ISR 独占：TX BYTE 帧末释放，TX FRAME 在 ISR 下次进入时按 `tx_busy()` 释放；无该钩子时保持到下次捕获。`pd_valid_cmd` 只覆盖它记录的发布代号，主上下文下一次发布即失效，ISR 在下次进入时撤回 |
-| `isdu.resp_frame`（单一 `frame`）+ `isr_isdu_pub` | 主上下文（引擎） | ISR | 原子发布字 `{len,busy,sel,gen}` | 重建前发布 `{len=0,busy=1}` 租约；ISR 在 START 采纳新字 |
-| `isr_isdu_write_gen` + `isdu_write_gen_applied` | ISR 自增 gen / 主泵写 applied | ISR 读 applied，主泵读 gen | 单调序号比较（无临界区） | ISR 每接受一个写 START/ABORT 自增 gen；主泵在写入口无未处理代（`isdu_write_in_progress()` 为假）并发布新视图后写 `applied = gen`。未追平期间主泵发布 `len=0`、ISR 读路径回 `0x00` |
+| `m_isr_tx_payload[IOLINK_TX_ISR_SLOT]`（ISR 专用槽） | ISR | ISR | 固定槽 | 帧末 `tx_done` |
+| `m_pd_in[]` + `m_pd_pub` + `pd_valid_cmd` + `pd_in_captured` | 主上下文（填充、`m_pd_pub`）/ 数据 ISR（`pd_valid_cmd`、`pd_in_captured` 的置位与释放） | ISR（一次加载 `m_pd_pub` 捕获 active 与 valid）、主上下文（选空闲缓冲） | 发布字（fence + 单次原子存储）；命令字按 `gen` 匹配 | `pd_in_captured` 归 ISR 独占：TX BYTE 帧末释放，TX FRAME 在 ISR 下次进入时按 `tx_busy()` 释放；无该钩子时保持到下次捕获。`pd_valid_cmd` 只覆盖它记录的发布代号，主上下文下一次发布即失效，ISR 在下次进入时撤回 |
+| `isdu.resp_frame`（单一 `frame`）+ `m_isr_isdu_pub` | 主上下文（引擎） | ISR | 原子发布字 `{len,busy,sel,gen}` | 重建前发布 `{len=0,busy=1}` 租约；ISR 在 START 采纳新字 |
+| `isr_isdu_write_gen` + `m_isdu_write_gen_applied` | ISR 自增 gen / 主泵写 applied | ISR 读 applied，主泵读 gen | 单调序号比较（无临界区） | ISR 每接受一个写 START/ABORT 自增 gen；主泵在写入口无未处理代（`isdu_write_in_progress()` 为假）并发布新视图后写 `applied = gen`。未追平期间主泵发布 `len=0`、ISR 读路径回 `0x00` |
 | `isr_isdu_read_reset` | ISR 置 1 / 主泵清 0 | 主泵 | 一次性握手（读-清在临界区内） | 主泵清 0 并调用 `isdu_read_reset()` 复位读传输层；它不接触写入口，因此读 ABORT 后立刻写 START 不会丢请求 |
 | `back_to_box_cycles` | 主上下文（`dll_count_served_cycle()`） | 主上下文 | ISR 经 `isr_cycle_served` 交接 | ISR 完全消费的帧由主泵在每个泵周期推进一次；主上下文自己的帧直接推进 |
 | `master_last_activity_ms` + `master_lost_count` + `master_lost` | 主上下文（`dll_take_isr_master_activity()`、`dll_process_complete_frame()`、`dll_timer_sync_master_lost()`、`dll_set_state(OPERATE)`） | 主上下文、`iolink_device_master_lost()` | ISR 只置 `isr_master_activity` 标志 | 刷新由主泵在 take 时完成；ISR 的计划动作只调用 `dll_set_state_shared()`，簿记在下一个主泵周期按当前状态补齐 |
@@ -1205,7 +1205,7 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 
 | 位置 | 内容 | 归类 |
 | :--- | :--- | :--- |
-| `dll_send()`（`dll_frame.c`） | `isr_tx_payload` 暂存（≤`IOLINK_M_SEQ_MAX_LEN`） | 主→ISR 应答移交；检查 `isr_tx_active`、槽位推进、载荷复制与发布在同一个短临界区内完成（被拒绝的暂存不得碰在途槽）；`request_service()` 与 T_A 取消除外 |
+| `dll_send()`（`dll_frame.c`） | `m_isr_tx_payload` 暂存（≤`IOLINK_M_SEQ_MAX_LEN`） | 主→ISR 应答移交；检查 `isr_tx_active`、槽位推进、载荷复制与发布在同一个短临界区内完成（被拒绝的暂存不得碰在途槽）；`request_service()` 与 T_A 取消除外 |
 | `iolink_dll_set_sio_mode()`（`dll_api.c`） | 清 `isr_tx_pending`/`isr_tx_active`/`isr_tx_idx`/`pd_in_captured` | 四个字段由 ISR 写：清理与中断互斥，否则 ISR 可在半帧处重新置上 active/idx。被丢弃的暂存/在途应答计 `isr_tx_dropped`（主上下文自增）；`phy.set_mode` 在区外调用 |
 | `iolink_dll_on_rx_timeout()`（`dll_isr.c`） | RX 组装状态 `isr_rx_cnt`/`isr_rx_expect` 的成对复位 | Timer A 与数据 ISR 的相位一致；短、无回调，向量优先级契约见 `docs/PORTING.md` |
 | `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零两个上下文共享的计数器 | 与 ISR 自增分开 |
@@ -1216,8 +1216,8 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 ISR 迁入 STARTUP 时设置 `startup_notification_pending`，由主上下文优先投递
 STARTUP，并在同一次 flush 之前先应用 ISR 登记的事件复位。`dll_isdu_sync_snapshot()`
 已不在表中：写失效改用序号比较（`isr_isdu_write_gen` 与
-`isdu_write_gen_applied`），发布新视图与追平序号之间不需要关中断。
-`device.c` 的两处 PD-in 发布也已不在表中：`pd_pub` 是主上下文单写者的发布字，
+`m_isdu_write_gen_applied`），发布新视图与追平序号之间不需要关中断。
+`device.c` 的两处 PD-in 发布也已不在表中：`m_pd_pub` 是主上下文单写者的发布字，
 ISR 只加载一次，不再需要关中断；0x98/0x99 的有效位覆盖走同样单写者的
 `pd_valid_cmd`，按发布代号匹配。
 

@@ -560,7 +560,7 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
         }
         /* 填写空闲缓冲区时 ISR 继续发送已捕获的副本；发布本身只是
          * 一次原子存储，没有临界区。回调长度取自配置的 `pd_in_len`。 */
-        uint8_t* pd_in = &ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.c_od_width];
+        uint8_t* pd_in = &ctx->dll.main.shared.m_pd_in[inactive][ctx->dll.main.shared.c_od_width];
         const bool valid = ctx->config->app->on_pd_input(ctx->config->app->self, pd_in);
 
         dll_pd_publish(&ctx->dll.main.shared, inactive, valid);
@@ -611,7 +611,7 @@ iolink_device_pd_result_t iolink_device_pd_input_update(iolink_device_ctx_t* ctx
     /* ISR 只会捕获已发布的索引，因此既非活动也未被捕获的缓冲区
      * 不会被它读取。填充在发布之前完成，发布是一次原子存储
      * （fence + store），不需要临界区；PD 长度在初始化后不再变化。 */
-    (void) memcpy(&ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.c_od_width], data,
+    (void) memcpy(&ctx->dll.main.shared.m_pd_in[inactive][ctx->dll.main.shared.c_od_width], data,
                   len);
     dll_pd_publish(&ctx->dll.main.shared, inactive, valid);
 

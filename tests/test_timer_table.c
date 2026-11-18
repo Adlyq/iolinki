@@ -160,7 +160,7 @@ static void test_same_instant_priority(void** state)
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.main.master_lost_cycles = 3U;
     ctx.main.min_cycle_time_us = 1000U;
-    ctx.main.shared.master_cycle_time = 0U;
+    ctx.main.shared.m_master_cycle_time = 0U;
     /* MASTER_LOST 截止时间 = last_activity + 3 × cycle = g_now。 */
     ctx.main.master_last_activity_ms = (uint32_t) ((g_now - 3000U) / 1000U);
     ctx.main.shared.last_activity_ms = 1000U;
@@ -287,7 +287,7 @@ static void test_millisecond_wrap(void** state)
     ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.main.min_cycle_time_us = 1000U;
-    ctx.main.shared.master_cycle_time = 0U;
+    ctx.main.shared.m_master_cycle_time = 0U;
     ctx.main.master_lost_cycles = 2U;
 
     /* 现在 = 2^32 ms + 5 s；截断后的毫秒值是 5000。 */

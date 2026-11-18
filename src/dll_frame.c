@@ -130,7 +130,7 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
     if ((ctx == NULL) || (ctx->shared.c_phy == NULL) || (data == NULL) || (len == 0U)) {
         return;
     }
-    if (len > sizeof(ctx->shared.isr_tx_payload[0])) {
+    if (len > sizeof(ctx->shared.m_isr_tx_payload[0])) {
         return;
     }
     /* 该帧已由 ISR 即时应答：主泵只消费内容，绝不再发第二帧。 */
@@ -157,10 +157,10 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
     else {
         /* 槽位与载荷只在接受后推进：被拒绝的暂存不得碰在途槽。 */
         ctx->isr_tx_next = (uint8_t) (ctx->isr_tx_next ^ 1U);
-        (void) memcpy(ctx->shared.isr_tx_payload[slot], data, len);
-        ctx->shared.isr_tx_pending_slot = slot;
-        ctx->shared.stage_len = (uint8_t) len;
-        ctx->shared.stage_has_cks = 0U;
+        (void) memcpy(ctx->shared.m_isr_tx_payload[slot], data, len);
+        ctx->shared.m_isr_tx_pending_slot = slot;
+        ctx->shared.m_stage_len = (uint8_t) len;
+        ctx->shared.m_stage_has_cks = 0U;
         IOLINK_FENCE();                  /* 暂存字节先于发布 */
         ctx->shared.isr_tx_pending = 1U; /* 最后发布 */
     }
@@ -533,7 +533,7 @@ static bool dll_dispatch_od(iolink_dll_main_t* ctx, uint8_t mc, const uint8_t* o
         }
         if (((mc & IOLINK_MC_RW_MASK) == 0U) && (od_len > 0U) &&
             ((mc & IOLINK_MC_ADDR_MASK) == 0x01U)) {
-            ctx->shared.master_cycle_time = od_in[0];
+            ctx->shared.m_master_cycle_time = od_in[0];
             /* DPP1 0x01 是页读应答的输入：ISR 的页读缓存必须失效。 */
             iolink_isdu_dp_page1_invalidate(&ctx->shared.isdu);
         }
@@ -725,7 +725,7 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
     }
     if (ctx->shared.c_pd_in_len > 0U) {
         const uint8_t active = IOLINK_PD_PUB_ACTIVE(pd);
-        (void) memcpy(&resp[pos], &ctx->shared.pd_in[active][ctx->shared.c_od_width],
+        (void) memcpy(&resp[pos], &ctx->shared.m_pd_in[active][ctx->shared.c_od_width],
                       ctx->shared.c_pd_in_len);
         pos += ctx->shared.c_pd_in_len;
     }

@@ -388,15 +388,15 @@ void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx)
     }
 
     const IOLINK_ATOMIC_UINT_T word = IOLINK_ISDU_PUB_WORD_GEN(count, busy, sel, ctx->isdu_pub_gen);
-    if (word != ctx->shared.isr_isdu_pub) {
+    if (word != ctx->shared.m_isr_isdu_pub) {
         /* 最后发布：响应字节已在 resp_store[sel] 中。 */
-        iolink_atomic_store(&ctx->shared.isr_isdu_pub, word);
+        iolink_atomic_store(&ctx->shared.m_isr_isdu_pub, word);
     }
-    if (!write_pending && (write_gen != ctx->shared.isdu_write_gen_applied)) {
+    if (!write_pending && (write_gen != ctx->shared.m_isdu_write_gen_applied)) {
         /* 写已应用或已中止：新视图已在上方发布，现在确认它的序号。
          * 释放顺序保证 ISR 看到 applied == gen 时发布字已是新视图。 */
         IOLINK_FENCE();
-        ctx->shared.isdu_write_gen_applied = write_gen;
+        ctx->shared.m_isdu_write_gen_applied = write_gen;
     }
 }
 
@@ -425,7 +425,7 @@ static uint16_t dll_decode_cycle_time_ticks(uint8_t value)
  */
 uint32_t dll_master_cycle_us(const iolink_dll_main_t* ctx)
 {
-    uint16_t ticks = dll_decode_cycle_time_ticks(ctx->shared.master_cycle_time);
+    uint16_t ticks = dll_decode_cycle_time_ticks(ctx->shared.m_master_cycle_time);
     if (ticks == 0U) {
         ticks = (uint16_t) ((ctx->min_cycle_time_us + (IOLINK_CYCLE_TIME_UNIT_US - 1U)) /
                             IOLINK_CYCLE_TIME_UNIT_US);

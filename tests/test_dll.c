@@ -1777,8 +1777,8 @@ static void test_dll_main_pump_type1_2_reply(void** state)
     iolink_dll_shared_t* shared = test_dll_shared(&dev.ctx);
     shared->c_pd_in_len = 2U;
     const uint8_t active = test_pd_active(test_dll(&dev.ctx));
-    shared->pd_in[active][shared->c_od_width] = 0xAAU;
-    shared->pd_in[active][shared->c_od_width + 1U] = 0x55U;
+    shared->m_pd_in[active][shared->c_od_width] = 0xAAU;
+    shared->m_pd_in[active][shared->c_od_width + 1U] = 0x55U;
 
     /* 把该请求发布到邮箱环形缓冲区（即数据 ISR 所做的工作）。 */
     iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&shared->isr_frame_ring);

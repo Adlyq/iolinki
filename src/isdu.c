@@ -442,8 +442,8 @@ static void isdu_lease_begin(iolink_isdu_ctx_t* ctx)
         return;
     }
     const IOLINK_ATOMIC_UINT_T busy = IOLINK_ISDU_PUB_WORD(0U, 1U, 0U);
-    if (iolink_atomic_load(&dll->shared.isr_isdu_pub) != busy) {
-        iolink_atomic_store(&dll->shared.isr_isdu_pub, busy);
+    if (iolink_atomic_load(&dll->shared.m_isr_isdu_pub) != busy) {
+        iolink_atomic_store(&dll->shared.m_isr_isdu_pub, busy);
     }
 }
 

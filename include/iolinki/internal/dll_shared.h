@@ -106,41 +106,41 @@ struct iolink_dll_shared
      * ===================================================================== */
 
     /** @brief 主泵已应用的 ISDU 写序号（与 `isr_isdu_write_gen` 配对）。 */
-    volatile uint32_t isdu_write_gen_applied;
+    volatile uint32_t m_isdu_write_gen_applied;
 
     /* ISR ISDU 读取视图。主泵将 {length, busy, buffer} 作为一个
      * 原子字发布，使 ISR 绝不会观察到半更新的元组；ISR 拥有
      * FlowCTRL 段索引，并在 START 处采纳新的字。 */
-    volatile IOLINK_ATOMIC_UINT_T isr_isdu_pub; /**< len | busy<<8 | sel<<9 | gen<<10 */
+    volatile IOLINK_ATOMIC_UINT_T m_isr_isdu_pub; /**< len | busy<<8 | sel<<9 | gen<<10 */
 
     /* 应答发送，每次数据请求喂送一个字节。主泵
      * 在槽位 0/1 之间交替，使在途的 TX-FRAME DMA 缓冲区在
      * 准备下一个应答期间保持稳定；槽位 2 保留给
      * 数据 ISR 自行生成的应答，因此两个上下文之间不共享
      * 槽位计数器（PHY 会对传输进行串行化）。 */
-    uint8_t isr_tx_payload[IOLINK_TX_SLOTS][IOLINK_M_SEQ_MAX_LEN];
+    uint8_t m_isr_tx_payload[IOLINK_TX_SLOTS][IOLINK_M_SEQ_MAX_LEN];
 
     /* 主上下文独占的暂存元数据：主泵在 isr_tx_pending 发布之前写好，
      * 数据 ISR 只在取走暂存时一次性读入自己独占的流式状态
      * （iolink_dll_isr_t::tx_stream_len / tx_stream_has_cks）。 */
-    volatile uint8_t isr_tx_pending_slot; /**< 暂存的主上下文应答所在槽位 */
+    volatile uint8_t m_isr_tx_pending_slot; /**< 暂存的主上下文应答所在槽位 */
 
-    volatile uint8_t stage_len; /**< 暂存载荷字节数 */
+    volatile uint8_t m_stage_len; /**< 暂存载荷字节数 */
 
-    volatile uint8_t stage_has_cks; /**< 1 = 发送时追加计算出的 CKS */
+    volatile uint8_t m_stage_has_cks; /**< 1 = 发送时追加计算出的 CKS */
 
     /* 过程数据缓冲区。PD-in 缓冲区同时用作应答发送缓冲区：
      * 布局为 [OD][PD-in][CKS]。主上下文填充一个既非活动
-     * 也未被 ISR 持有的缓冲区，然后发布 `pd_pub`；ISR 在应答
+     * 也未被 ISR 持有的缓冲区，然后发布 `m_pd_pub`；ISR 在应答
      * 开始时捕获同一代的 active 与 valid 并流式发送（零拷贝）。缓冲区数量
      * 取决于 TX 模式（见 IOLINK_PD_IN_BUFFERS）：若无空闲缓冲区，
      * 主上下文保留当前 PD-in 并在下一个周期重试。 */
-    uint8_t pd_in[IOLINK_PD_IN_BUFFERS][IOLINK_PD_REPLY_MAX]; /**< [OD][PD-in][CKS] 应答缓冲区 */
+    uint8_t m_pd_in[IOLINK_PD_IN_BUFFERS][IOLINK_PD_REPLY_MAX]; /**< [OD][PD-in][CKS] 应答缓冲区 */
 
-    volatile IOLINK_ATOMIC_UINT_T pd_pub; /**< PD-in 发布字 `{active, valid, gen}`
+    volatile IOLINK_ATOMIC_UINT_T m_pd_pub; /**< PD-in 发布字 `{active, valid, gen}`
                                               （主上下文单写） */
 
-    uint8_t master_cycle_time; /**< DPP1 0x01，由主站写入的周期时间字节
+    uint8_t m_master_cycle_time; /**< DPP1 0x01，由主站写入的周期时间字节
                                     （Table B.1/B.3）；0 = 尚未写入 */
 
     /* =====================================================================
@@ -155,7 +155,7 @@ struct iolink_dll_shared
      *
      * ISR 每接受一个有效的写 START/ABORT 就自增一次（先发布写入口相位，
      * 再发布本序号）。主泵在把该写应用或中止、并发布新读视图之后，把
-     * `isdu_write_gen_applied` 追到同一个值。两者不等期间 ISR 读路径一律
+     * `m_isdu_write_gen_applied` 追到同一个值。两者不等期间 ISR 读路径一律
      * 回 0x00，"写后立刻读"因此不会读到旧应答；主站最多多看到一次
      * "无服务"。序号宽度必须容纳主泵可能错过的全部写实例，不能用 8 位。
      */
@@ -298,7 +298,7 @@ struct iolink_dll_shared
 /**
  * @name PD-in 发布字
  *
- * 主上下文是 @ref iolink_dll_shared_t::pd_pub 的唯一写者：填完应答缓冲区后
+ * 主上下文是 @ref iolink_dll_shared_t::m_pd_pub 的唯一写者：填完应答缓冲区后
  * 一次原子存储发布 `{active, valid, gen}`（release 屏障在 `iolink_atomic_store()`
  * 内）。数据 ISR 只做一次加载，因此它捕获的 active 与随后上报的 valid 取自
  * 同一代；每次发布把 `gen` 前进一格。
@@ -320,7 +320,7 @@ struct iolink_dll_shared
  *
  * 数据 ISR 是 @ref iolink_dll_shared_t::pd_valid_cmd 的唯一写者：执行
  * 0x98 `PROCESS_DATA_OPERATE` / 0x99 `DEVICE_OPERATE` 时记录命令值与当时
- * @ref iolink_dll_shared_t::pd_pub 的 `gen`。读侧只在 `base_gen` 仍等于当前
+ * @ref iolink_dll_shared_t::m_pd_pub 的 `gen`。读侧只在 `base_gen` 仍等于当前
  * gen 时采用命令值，因此该覆盖只影响命令所在的那一代：主上下文下一次发布
  * 即恢复应用给出的有效位。失效的命令由 ISR 自己撤回（见 dll_isr.c）。
  *
@@ -338,7 +338,7 @@ struct iolink_dll_shared
 /** @brief 读取当前一代的 PD-in 发布字（active 与 valid 同代）。 */
 static inline IOLINK_ATOMIC_UINT_T dll_pd_pub_load(const iolink_dll_shared_t* shared)
 {
-    return iolink_atomic_load(&shared->pd_pub);
+    return iolink_atomic_load(&shared->m_pd_pub);
 }
 
 /**
@@ -364,8 +364,8 @@ static inline bool dll_pd_valid_at(const iolink_dll_shared_t* shared, IOLINK_ATO
  */
 static inline void dll_pd_publish(iolink_dll_shared_t* shared, uint8_t active, bool valid)
 {
-    const uint8_t gen = (uint8_t) (IOLINK_PD_PUB_GEN(shared->pd_pub) + 1U);
-    iolink_atomic_store(&shared->pd_pub, IOLINK_PD_PUB_WORD(active, valid, gen));
+    const uint8_t gen = (uint8_t) (IOLINK_PD_PUB_GEN(shared->m_pd_pub) + 1U);
+    iolink_atomic_store(&shared->m_pd_pub, IOLINK_PD_PUB_WORD(active, valid, gen));
 }
 
 /**
