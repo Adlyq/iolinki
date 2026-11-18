@@ -344,6 +344,9 @@ iolink_test(NAME test_crc_vectors SOURCES test_crc_vectors.c CMOCKA)
 iolink_test(NAME test_device SOURCES test_device.c CMOCKA)
 iolink_test(NAME test_ident_indices SOURCES test_ident_indices.c CMOCKA)
 iolink_test(NAME test_protocol_constants SOURCES test_protocol_constants.c CMOCKA)
+# 规范常量表：CSV 与 C 表必须双向一致（路径由编译定义传入）。
+iolink_test(NAME test_spec_constants SOURCES test_spec_constants.c NO_HELPERS
+    DEFS "IOLINK_SPEC_CONSTANTS_CSV=\"${CMAKE_CURRENT_SOURCE_DIR}/spec_constants.csv\"")
 iolink_test(NAME test_system_commands SOURCES test_system_commands.c CMOCKA)
 iolink_test(NAME test_config_trim SOURCES test_config_trim.c CMOCKA)
 # Spec-conformance assertions for the B.2 / Table B.x object rules.
