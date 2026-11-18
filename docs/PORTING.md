@@ -507,7 +507,7 @@ on where the transport scratch lives. Use the measured tables instead of a
 headline figure.
 
 - **CPU**: 16 MHz+ ARM Cortex-M0 or equivalent
-- **RAM**: one `iolink_device_ctx_t` (5136 bytes on a 64-bit host with the
+- **RAM**: one `iolink_device_ctx_t` (5120 bytes on a 64-bit host with the
   default buffers) plus the application's own buffers and task stack; the
   external-workspace build moves the 1551-byte scratch out of the context. See
   [MEMORY_GUIDE.md](MEMORY_GUIDE.md).

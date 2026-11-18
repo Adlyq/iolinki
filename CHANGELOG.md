@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (MAJOR: device API, DLL surface and context boundary)
+- **Breaking:** the application trait owns reset handling. `iolink_device_app_t`
+  gains `on_reset(self, type)`; `iolink_device_set_reset_handler()`,
+  `iolink_reset_handler_t` and `iolink_device_ctx_t::reset_handler` are gone.
+- **Breaking:** the PD callbacks no longer take a length:
+  `on_pd_input(self, data)` and `on_pd_output(self, const uint8_t*)`. The
+  length is the configured `pd_in_len` / `pd_out_len_current` and cannot change
+  at runtime.
+- **Breaking:** `iolink_device_pd_input_update()` returns
+  `iolink_device_pd_result_t` (`OK`/`ERR_ARG`/`ERR_MODE`/`ERR_LEN`/`ERR_BUSY`).
+  `IOLINK_DEVICE_INIT_ERR_PD_INPUT` is removed; initialisation never returned it.
+- **Breaking:** `iolink_dll_get_baudrate()` takes no argument. The DLL
+  introspection entry points `iolink_dll_expected_req_len()`,
+  `iolink_dll_timer_deadline()`, `iolink_dll_timer_armed()` and
+  `iolink_dll_request_back_to_box()` moved to `include/iolinki/internal/wiring.h`.
+- **Breaking:** the data-ISR entry points (`iolink_dll_process_isr`,
+  `iolink_dll_on_rx_timeout`, `iolink_dll_on_stack_tick`) take
+  `iolink_dll_shared_t*`; the ISR translation units no longer include
+  `dll_main.h`. The shared slice is sectioned by writer/reader and every field
+  carries its category prefix (`c_`, `m_`, `i_`, `b_`), enforced by
+  `tools/check_dead_fields.py`. `IOLINK_STAT_ISR`/`IOLINK_STAT_TOTAL` take the
+  shared and ISR-stat field names separately, so both stats modes stay valid.
+- **Breaking:** non-null public entry points no longer accept a NULL context and
+  return a default. A missing required context is a contract violation, not a
+  silent fallback.
+- `iolink_dll_stats_t::total_retries` is now `invalid_frames`: it counts CRC
+  failures and protocol-invalid frames, not retransmissions (the library has no
+  retransmission path). The stats gain `isr_eager_rejects` (moved into the
+  shared slice) and `pd_in_skips`.
+- Dead DLL state is removed: `wakeup_seen`, `retry_count`, `max_retries`,
+  `isr_tx_slot`, `last_valid_frame_ms` and `pd_out_seen`. The data ISR no longer
+  writes the master-activity fields; the main pump refreshes them in
+  `dll_take_isr_master_activity()`. An ISR-serviced `0x97 DeviceStartup` now
+  transitions on the next main-pump pass (the acknowledgement is unchanged).
+- `dll_master_cycle_us()` returns 0 instead of an invented 2 ms when both cycle
+  times are unknown; master-lost detection waits for a known cycle time.
+- `examples/freertos_app` is removed (it was not part of any build and needs the
+  FreeRTOS sources to compile).
+
+### Tooling and tests
+- `tests/spec_constants.csv` pins 111 specification constants (t_A, T_FSYNC,
+  T_FBD/T_CYCLE, the Annex A layout, Table B.8/B.9/B.12/C.1, the DPP1 offsets)
+  and `test_spec_constants` fails both ways when the CSV and the code drift; the
+  timing literals in `src/` are named `IOLINK_*` constants in `protocol.h`.
+- `tools/gen_docs.py` generates the error-code enum, the DLL stats table, the
+  public-API table and the shared-ownership table (`--check`/`--write`/
+  `--selftest`); `tools/check_docs_refs.py` checks symbols, links, script paths
+  and error-code numbers.
+- `tools/check_dead_fields.py`, `tools/check_public_api.py`,
+  `tools/check_context.py` and `tools/stack_report.py` are enforced (the context
+  gate reports zero violations). `tools/gates.sh` gained the `context` group;
+  `quick` checks docs references, dead fields and the public API; `docs` checks
+  the generated blocks; `perf` checks the target stack baseline. CI gained
+  `static-analysis` and `docs-drift` jobs.
+- `tools/isr_latency` now binds a device identity and builds the DPP1 image, so
+  the page-read scenario actually receives a reply; it checks the first reply
+  byte and the reply CKS.
+
 ### Changed (the log sink is locked after initialisation)
 - `iolink_device_set_log()` is now a no-op once `iolink_device_init()` returns:
   the data ISR reads `shared.log.write`/`self`/`level`, so a runtime rebind

@@ -18,17 +18,17 @@ FRAME variants are pinned by `tests/test_ctx_sizes.c`):
 
 | Component | Size (bytes) | Description |
 | :--- | ---: | :--- |
-| **`iolink_device_ctx_t`** | **5136** | The object the application allocates (includes everything below) |
-| `iolink_device_ctx_t` (FRAME/FRAME) | 5128 | `IOLINK_ISR_*_MODE` = FRAME without `tx_busy()` (three PD-in buffers instead of two); `iolink_dll_ctx_t` is 4944 |
-| `iolink_dll_ctx_t` | 4952 | DLL state, timers, reply-plan table (48×24 B, four state slices), frame mailbox; embeds ISDU, Events and DS |
+| **`iolink_device_ctx_t`** | **5120** | The object the application allocates (includes everything below) |
+| `iolink_device_ctx_t` (FRAME/FRAME) | 5120 | `IOLINK_ISR_*_MODE` = FRAME without `tx_busy()` (three PD-in buffers instead of two); `iolink_dll_ctx_t` is 4936 |
+| `iolink_dll_ctx_t` | 4936 | DLL state, timers, reply-plan table (48×24 B, four state slices), frame mailbox; embeds ISDU, Events and DS |
 | `iolink_isdu_ctx_t` | 1616 | Transport state, the two request-slot publication words, the DPP1 RAM image (16 B + seqlock) and the embedded ISDU scratch (1295 B) |
 | `iolink_events_ctx_t` | 504 | Event queue, lifecycle records, the double event-memory image and the ISR reset-request handshake |
 | `iolink_ds_ctx_t` | 352 | DS state, buffer pointers, the OD set and the embedded download stage |
 | `iolink_phy_api_t` | 112 (usually `.rodata`) | Driver vtable, not part of the device context; only the pointer in `iolink_device_config_t` costs RAM (8 B on 64-bit) |
 
 `IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 8 bytes to `iolink_device_ctx_t` on
-both the 64-bit host (5144 total) and the Cortex-M0+ target (4320 → 4328 B with
-arm-none-eabi-gcc, 4448 → 4456 B with clang): `iolink_dll_shared_t` gains a
+both the 64-bit host (5128 total) and the Cortex-M0+ target (4288 → 4304 B with
+arm-none-eabi-gcc, 4416 → 4424 B with clang): `iolink_dll_shared_t` gains a
 12-byte ISR counter set, partly absorbed by existing padding. 32-bit targets are
 smaller because pointers are 4 bytes. One exception: `iolink_device_ctx_t::phy_error`
 (an `int`) can add 4 bytes there, because the 64-bit layout absorbs it in existing
@@ -84,13 +84,13 @@ configuration is compiled by the matrix but not pinned by `test_ctx_sizes.c`):
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 5136 | **3584** |
+| `iolink_device_ctx_t` | 5120 | **3568** |
 | `iolink_isdu_ctx_t` | 1616 | **320** |
 | `iolink_ds_ctx_t` | 352 | **96** |
 | `iolink_workspace_t` (separate allocation) | — | 1551 |
 
-On Cortex-M0+ the same pair measures 4320 → 2768 B (`iolink_device_ctx_t`, with
-arm-none-eabi-gcc) and 4448 → 2896 B (clang).
+On Cortex-M0+ the same pair measures 4288 → 2736 B (`iolink_device_ctx_t`, with
+arm-none-eabi-gcc) and 4416 → 2864 B (clang).
 
 The trimmed build is the small-MCU path: place the 1551-byte workspace in
 DTCM/CCM (or size it down with `IOLINK_ISDU_BUFFER_SIZE` / `IOLINK_DS_IMAGE_MAX`)
@@ -101,7 +101,7 @@ asserted by `test_ctx_sizes.c`):
 
 | Component | Embedded | External workspace |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 3984 | **3584** |
+| `iolink_device_ctx_t` | 3968 | **3568** |
 | `iolink_workspace_t` | — | 399 |
 
 > **Lease rule (ISDU response).** There is exactly one framed-response buffer.
@@ -140,7 +140,7 @@ You can tune these values to fit your MCU.
 
 ### Total RAM
 
-The default `iolink_device_ctx_t` is **5136 bytes** (64-bit host, default
+The default `iolink_device_ctx_t` is **5120 bytes** (64-bit host, default
 buffers); buffer arrays dominate it. On a 32-bit target the same layout is
 smaller. To measure your own build instead of relying on the table:
 
