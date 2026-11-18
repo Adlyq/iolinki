@@ -173,23 +173,26 @@ typedef struct iolink_dll_shared
      * 槽位计数器（PHY 会对传输进行串行化）。 */
     uint8_t isr_tx_payload[IOLINK_TX_SLOTS][IOLINK_M_SEQ_MAX_LEN];
 
+    /* 主上下文独占的暂存元数据：主泵在 isr_tx_pending 发布之前写好，
+     * 数据 ISR 只在取走暂存时一次性读入自己独占的流式状态
+     * （iolink_dll_isr_t::tx_stream_len / tx_stream_has_cks）。 */
     volatile uint8_t isr_tx_pending_slot; /**< 暂存的主上下文应答所在槽位 */
 
-    volatile uint8_t isr_tx_len; /**< 持有的载荷字节数 */
+    volatile uint8_t stage_len; /**< 暂存载荷字节数 */
 
-    volatile uint8_t isr_tx_idx; /**< 下一个字节索引 */
+    volatile uint8_t stage_has_cks; /**< 1 = 发送时追加计算出的 CKS */
 
-    volatile uint8_t isr_tx_has_cks; /**< 1 = 追加计算出的 CKS */
+    volatile uint8_t isr_tx_idx; /**< 下一个字节索引（ISR 流式状态） */
 
-    volatile uint8_t isr_tx_active; /**< 排空期间为 1 */
+    volatile uint8_t isr_tx_active; /**< 排空期间为 1（ISR 流式状态） */
 
     volatile uint8_t isr_tx_pending; /**< 1 = 主上下文处理器暂存了
                                           一个原样应答；
                                           ISR 必须发送它 */
 
     volatile uint8_t isr_tx_dropped; /**< 因仅 ISR 的 PHY 缺少
-                                          request_service() 而已丢弃的
-                                          应答 */
+                                          request_service()，或暂存与在途
+                                          应答冲突而丢弃的应答 */
 
     uint8_t pd_out_len_current; /**< 初始化时固定的 PD_Out 长度 */
 

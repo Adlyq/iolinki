@@ -119,9 +119,12 @@ uint8_t dll_req_len_for(const iolink_dll_main_t* ctx, uint8_t mc, uint8_t ckt)
  * 相同。
  *
  * 协议栈只有单个主上下文调用者，因此暂存无需锁：
- * 主泵拥有槽位 0/1；数据 ISR 拥有自己的槽位。ISR 只在
- * isr_tx_pending 发布后读取暂存应答（数据先行顺序加
- * 编译器屏障）。只有旧的直接发送回退路径会从此上下文
+ * 主泵拥有槽位 0/1；数据 ISR 拥有自己的槽位。暂存元数据
+ * （槽位、长度、CKS 标志）归主上下文，ISR 只在 isr_tx_pending
+ * 发布后一次性取走（数据先行顺序加编译器屏障），并在自己的
+ * 流式状态里持有副本，因此主泵之后的暂存不会改变在途帧。
+ * 数据 ISR 正在流式发送时不接受新暂存：覆盖会砍断在途帧，
+ * 该应答按丢弃计数。只有旧的直接发送回退路径会从此上下文
  * 驱动 PHY，因此会排除数据中断。
  */
 void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
@@ -139,14 +142,21 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
     }
     /* 应答开始边沿：关闭 t_A 软件镜像（PHY 的 response_timer_stop 另行停止）。 */
     dll_timer_cancel(ctx, IOLINK_TIMER_T_A);
+    /* 数据 ISR 正在流式发送一帧应答：流式长度/CKS 只归 ISR，
+     * 此时暂存会在取走时替换在途帧。拒绝并计数，使丢弃可观测，
+     * 在途帧保持完整。 */
+    if (ctx->shared.isr_tx_active != 0U) {
+        ctx->shared.isr_tx_dropped++;
+        return;
+    }
     /* 仅主上下文槽位：ISR 有自己的槽位，因此该计数器只有
      * 单个写者，无需读-改-写原子操作。 */
     const uint8_t slot = ctx->isr_tx_next;
     ctx->isr_tx_next = (uint8_t) (ctx->isr_tx_next ^ 1U);
     (void) memcpy(ctx->shared.isr_tx_payload[slot], data, len);
     ctx->shared.isr_tx_pending_slot = slot;
-    ctx->shared.isr_tx_len = (uint8_t) len;
-    ctx->shared.isr_tx_has_cks = 0U;
+    ctx->shared.stage_len = (uint8_t) len;
+    ctx->shared.stage_has_cks = 0U;
     IOLINK_FENCE();                  /* 暂存字节先于发布 */
     ctx->shared.isr_tx_pending = 1U; /* 最后发布 */
 
@@ -165,7 +175,7 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
          * 传输交错。 */
         IOLINK_CRITICAL_ENTER();
         ctx->shared.isr_tx_pending = 0U;
-        dll_isr_start_staged_tx(ctx, slot, (uint8_t) len);
+        dll_isr_start_staged_tx(ctx, slot, (uint8_t) len, 0U);
         IOLINK_CRITICAL_EXIT();
         return;
     }

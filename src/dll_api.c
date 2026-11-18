@@ -97,7 +97,6 @@ int iolink_dll_set_sio_mode(iolink_dll_main_t* ctx)
      * SDCI 会话（SIO 中 int_active() 为 false，因此没有东西会完成它）。 */
     ctx->shared.isr_tx_pending = 0U;
     ctx->shared.isr_tx_active = 0U;
-    ctx->shared.isr_tx_has_cks = 0U;
     ctx->shared.isr_tx_idx = 0U;
     ctx->shared.pd_in_captured = 0xFFU;
     return 0;

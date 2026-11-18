@@ -60,6 +60,15 @@ struct iolink_dll_isr
 
     volatile uint8_t isr_tx_slot; /**< 正在发送的槽位 */
 
+    /* 流式应答的长度与 CKS 标志：只在 ISR 内写。主上下文暂存的元数据
+     * （dll_shared.h 的 stage_len/stage_has_cks）在 isr_tx_pending 取走时
+     * 一次读入这里，此后不再回读，因此在途帧不受后续暂存影响。 */
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+    volatile uint8_t tx_stream_len; /**< 当前流式应答的载荷字节数 */
+
+    volatile uint8_t tx_stream_has_cks; /**< 1 = 载荷之后追加计算出的 CKS */
+#endif
+
     volatile uint8_t isr_tx_flags; /**< CKS 状态标志 */
 
     volatile uint8_t isr_tx_acc; /**< 运行中的校验和累加器 */
