@@ -28,17 +28,18 @@ name, prints each group's wall time, and stops at the first failure
 
 | Group | Checks |
 | --- | --- |
-| `quick` | clang-format, per-file size (800 code lines, comments excluded), shellcheck, DLL ownership isolation, nullability regions (`check_nullability.sh`), test conventions (`check_test_whitebox.sh`, `check_test_gates.sh`) |
+| `quick` | clang-format, per-file size (800 code lines, comments excluded), shellcheck, DLL ownership isolation, nullability regions (`check_nullability.sh`), test conventions (`check_test_whitebox.sh`, `check_test_gates.sh`), documentation references (`check_docs_refs.py`), dead fields (`check_dead_fields.py`, report-only) and the public-API surface (`check_public_api.py`, report-only); the three tree-wide checks run concurrently so the group stays at a few seconds |
 | `build` | strict `-Werror` compilation with clang, Debug (`-O0`) and Release (`-O3`) |
+| `context` | field ownership between the ISR and main contexts: the call graph of `src/` built from the clang AST and classified against `tools/shared_fields.csv` (`check_context.py`, report-only, ~3 s) |
 | `test` | strict Debug build plus `ctest` |
 | `gcc` | the gcc-only strict diagnostics (`-DIOLINK_STRICT_GCC=ON`, library target) and `gcc -fanalyzer` as a report-only step |
 | `sanitize` | the unit suite under AddressSanitizer, UndefinedBehaviorSanitizer and `implicit-conversion` (clang only; a sanitizer report fails the run) |
 | `memcheck` | the unit binaries under valgrind memcheck (uninitialised reads, invalid accesses); the PTY conformance examples are covered by `test` |
 | `analyzer` | the clang static analyzer over `src/` (`clang --analyze`); a finding fails the group |
 | `static` | cppcheck and the MISRA addon (report-only unless `IOLINKI_MISRA_ENFORCE=1`) |
-| `docs` | Doxygen warnings |
+| `docs` | the generated documentation blocks (`gen_docs.py --check`: error codes, stats fields, public API, field ownership) and Doxygen warnings |
 | `matrix` | `tools/build_matrix.sh` (clang) and `tools/diff_matrix.sh` |
-| `perf` | `tools/coverage.sh --check` (clang), `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` (ATFE; the ROM/RAM matrix is built with `-DIOLINK_LOG_COMPILE_LEVEL=0`, so the budget covers protocol code, not diagnostics) |
+| `perf` | `tools/coverage.sh --check` (clang), `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` (ATFE; the ROM/RAM matrix is built with `-DIOLINK_LOG_COMPILE_LEVEL=0`, so the budget covers protocol code, not diagnostics) and `tools/stack_report.py --selftest --check` against `tools/stack_baseline.json` (target stack frames, Arm gcc or ATFE) |
 | `package` | the exported package is installed into a scratch prefix and a two-file consumer is built against it |
 | `fuzz` | libFuzzer over the three parsers that take untrusted bytes (received octets, ISDU payloads, OD indices/values); 60 s per target (`FUZZ_SECONDS` overrides), a crash, timeout or leak fails the group |
 | `all` | every group above |
@@ -48,7 +49,7 @@ usual points of a change; each level adds groups to the one above it:
 
 | Level | When | Command | Cost |
 | --- | --- | --- | --- |
-| L0 | after every save | `./tools/gates.sh quick` | ~2 s, no build |
+| L0 | after every save | `./tools/gates.sh quick` | ~4 s, no build |
 | L1 | before every commit | `./tools/gates.sh quick build test gcc` | ~45 s |
 | L2 | before a push | `./tools/gates.sh quick build test gcc static docs package --keep-going` | ~3 min |
 | L3 | before a release, or a full local run | `./tools/gates.sh all` | ~9 min |
@@ -106,6 +107,16 @@ the reason instead of one startup failure per binary; the Docker image installs
 `valgrind` and `libc6-dbg` and runs the group for real, with `-gdwarf-4` because
 valgrind 3.18 cannot parse DWARF 5.
 
+Three checks report before they enforce: `check_context.py` (fields written
+across the ISR/main boundary), `check_dead_fields.py` (fields production never
+reads) and `check_public_api.py` (public functions referenced only from tests or
+missing from the generated API table). Each exits 0 and prints its findings;
+together they are the work list of the context split and the field migration.
+The change that removes the last finding switches the same invocation in
+`tools/gates.sh` to `--enforce`, so enforcement needs no new rule later. Until
+then the findings stay visible in every `quick` and `context` run, and CI prints
+them from `static-analysis` and `docker-validation`.
+
 No level up to L2 builds a structural configuration or re-measures size,
 coverage or the WCET proxy, so a green L2 says nothing about those. Choose the
 groups from what the change can break, not from the level:
@@ -114,18 +125,21 @@ groups from what the change can break, not from the level:
 
 | The change touches | Run before it is ready |
 | --- | --- |
-| A public header (`include/iolinki/*.h`), the `iolink_phy_api_t` vtable, or a field of a public struct | `./tools/gates.sh quick build test gcc fuzz` |
+| A public header (`include/iolinki/*.h`), the `iolink_phy_api_t` vtable, or a field of a public struct | `./tools/gates.sh quick build test gcc context fuzz` |
 | A compile-time switch, an `#if` in `src/`/`include/`, or an `IOLINK_*` configuration macro | `./tools/build_matrix.sh`, plus `./tools/gates.sh quick` (delivery rule in §3) |
-| A specification constant, a state-machine transition, or ISDU/event/DS behaviour | `./tools/gates.sh test` (there is no `context` group yet; the ISR-context checks ship inside `test`) |
-| Documentation only (`*.md`) | `./tools/gates.sh docs` |
+| How the ISR and main contexts share state (`dll_shared.h`, `dll_main.h`, `dll_isr.h`, `tools/shared_fields.csv`) | `./tools/gates.sh quick context test`, and `context` must stay at zero findings (`--enforce` once the split lands) |
+| A specification constant, a state-machine transition, or ISDU/event/DS behaviour | `./tools/gates.sh test` |
+| Documentation only (`*.md`) | `./tools/gates.sh docs` (the generated blocks are compared, not regenerated) |
 | A tool, a CI workflow or a shell script | `./tools/gates.sh quick` |
-| A hot path, or anything that can move ROM/RAM or coverage | `./tools/gates.sh perf` |
+| A hot path, or anything that can move ROM/RAM, stack depth or coverage | `./tools/gates.sh perf` |
 | A PHY driver or an example firmware | nothing locally (`package` is already in L2); the `stm32g0-example` arm build exists only in CI |
 
-`gcc` and `fuzz` are part of the public-header row because a header change
-reaches the second compiler's diagnostics and the parser harnesses. `sanitize`,
-`memcheck`, `analyzer` and `static` are acceptance gates rather than per-commit
-gates: the combined run before delivery includes them.
+`gcc`, `context` and `fuzz` are part of the public-header row because a header
+change reaches the second compiler's diagnostics, the ISR/main field ownership
+gate and the parser harnesses. `sanitize`, `memcheck`, `analyzer` and `static`
+are acceptance gates rather than per-commit gates: the combined run before
+delivery includes them, and CI runs `sanitize` and `analyzer` in
+`static-analysis`.
 
 `all` is not the release gate either: it does not build the
 `examples/stm32g0_l6362a_raw` firmware with `arm-none-eabi`, run
@@ -135,10 +149,10 @@ suite), validate the IODDs or generate SBOMs. A release is "CI green on
 `./run_all_tests_docker.sh`.
 
 A missing optional tool (clang-format, cppcheck, doxygen, shellcheck, the Arm
-toolchain for the size gate) reports `SKIP`. A skipped group checks nothing, so
-a level only counts when its groups actually ran: CI installs the tools in the
-Docker image and the job setup, and `./run_all_tests_docker.sh` reproduces that
-environment locally.
+toolchain for the size and stack-frame baselines) reports `SKIP`. A skipped
+group checks nothing, so a level only counts when its groups actually ran: CI
+installs the tools in the Docker image and the job setup, and
+`./run_all_tests_docker.sh` reproduces that environment locally.
 
 ### 3. Run the Compile Matrix
 Every supported structural configuration must build. The matrix is defined once
@@ -364,16 +378,26 @@ The CI workflow (`.github/workflows/ci.yml`) runs on every push and PR to
     (`IOLINKI_CC`), plus the syntax-only probes, the link-time profile gate
     (`tools/build_matrix.sh`), the differential gate (`tools/diff_matrix.sh`)
     and the file-size, ownership, white-box and install/consume checks.
-4.  **coverage-baseline / wcet-path-proxy / size-baseline**: three separate
+4.  **static-analysis**: `tools/gates.sh gcc sanitize analyzer context` — the
+    gcc-only diagnostics, the unit suite under the sanitizers, the clang static
+    analyzer and the ISR/main field ownership gate. `context` is report-only
+    until the context split removes its findings; the step then fails on a new
+    violation without a workflow change. It is meant to be a required check.
+5.  **docs-drift**: `tools/gates.sh docs`, i.e. the generated blocks compared
+    verbatim by `tools/gen_docs.py --check` and a warning-free Doxygen run. It
+    is meant to be a required check.
+6.  **coverage-baseline / wcet-path-proxy / size-baseline**: three separate
     jobs. `tools/coverage.sh --check` enforces the line-coverage floor,
     `tools/wcet_run.sh --check` the host-side path-length proxy and
     `tools/size_matrix.py --check --selftest --table` the ROM/RAM budget. The
     size job installs the GNU toolchain from apt, so it pins
     `IOLINKI_SIZE_TOOLCHAIN=gcc` and gates `tools/size_baseline.csv`; the ATFE
-    baseline is measured where ATFE is installed.
-5.  **stm32g0-example**: STM32G0/TIOL112 firmware built with `arm-none-eabi`.
-6.  **lint-scripts** and **sbom-tools**: shellcheck and Python tool tests.
-7.  **fuzz**: `tools/gates.sh fuzz` builds the three libFuzzer harnesses and
+    baseline is measured where ATFE is installed. The target stack-frame
+    baseline (`tools/stack_report.py --check`) has no CI job of its own: it
+    needs the cross compiler and runs in `perf` where the toolchain exists.
+7.  **stm32g0-example**: STM32G0/TIOL112 firmware built with `arm-none-eabi`.
+8.  **lint-scripts** and **sbom-tools**: shellcheck and Python tool tests.
+9.  **fuzz**: `tools/gates.sh fuzz` builds the three libFuzzer harnesses and
     runs each for `FUZZ_SECONDS` (60 s in CI). A crash, a parser that stops
     making progress (`-timeout=10`), a sanitizer report or a leaked allocation
     fails the job; the offending input is uploaded from
