@@ -703,3 +703,13 @@ CPU 级的 `iolink_critical_*`（IRQ 屏蔽）。也不要用自己的锁包裹�
 库自己掌握。`iolink_device_init()` 会验证平台临界区是真实实现。多个设备实例通过为
 每个实例使用独立的 `iolink_device_ctx_t` 来实现，各自拥有自己的主上下文调用者和
 数据 ISR。
+
+初始化与重配置入口改写数据 ISR 正在读的指针或表，因此都要求主上下文调用、数据
+泵静止：`iolink_dll_init()`、`iolink_dll_publish_reply_plans()` 与
+`iolink_isdu_bind_workspace()` 只能在使能数据中断之前，或端口已经停止数据泵之后
+调用。运行期能判定的误调会显式失败：
+`iolink_dll_publish_reply_plans()` 在数据 ISR 内调用时返回
+`IOLINK_DLL_PUBLISH_ERR_ISR`（`iolink_dll_publish_result_t`），
+`iolink_isdu_bind_workspace()` 在数据 ISR 内直接拒绝并记录，两者都不改动已有状态。
+`iolink_dll_init()` 没有这个判定：`shared.in_isr` 就在它清零的上下文里，误从数据 ISR
+调用会直接破坏正在运行的泵。

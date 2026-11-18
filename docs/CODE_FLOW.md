@@ -831,7 +831,7 @@ sequenceDiagram
 | `iolink_dll_on_stack_tick(ctx)` | PHY 的 Timer B 中断 | 授权一次主循环服务窗口；`iolink_device_process()` 在 `stack_timer_start != NULL` 时会等待该授权 |
 | `iolink_dll_take_service_window(ctx)` | `iolink_device_process()` | 消费/查询 Timer B 授权 |
 | `iolink_dll_process_isr(ctx)` | PHY 数据中断 | ISR 双泵入口 |
-| `iolink_dll_publish_reply_plans(ctx)` | `iolink_dll_init()` / `iolink_device_init()` | 编译并发布应答计划（只在数据 ISR 静止时） |
+| `iolink_dll_publish_reply_plans(ctx)` | `iolink_dll_init()` / `iolink_device_init()` | 编译并发布应答计划（主上下文，数据 ISR 静止；误从数据 ISR 调用返回负错误码） |
 | `iolink_dll_flush_state_callbacks(ctx)` | `iolink_dll_process()` 末尾 | 电平式交付当前状态（无变化则不调用） |
 
 ### 9.5 事件与 DS 的应用侧调用
@@ -1014,7 +1014,7 @@ flowchart LR
 并发边界：
 
 - `shared.isdu`、`shared.events`（含 `diag` 条件缓存）、`ds`、`timers` 的主要状态由主循环修改；`reply_plan` 只在初始化时写入后即只读；应用参数变量、`on_change` 与 `ds_flag_persist` 也只在主上下文被访问。
-- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（诊断条件表、事件队列读/clear、PD-in 索引发布、计数器清零、日志 sink）；状态迁移不再需要临界区。
+- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（诊断条件表、事件队列读/clear、PD-in 索引发布、计数器清零、SIO 切换的应答槽清理、ISR RX 相位复位）；状态迁移不再需要临界区。
 - 库不取线程锁：API 只有一个主上下文调用者；共享标量由平台临界区保护，数据交接无锁。
 - 平台默认临界区是 weak 空实现（`src/platform.c`）；`iolink_device_init()` 通过
   `iolink_platform_critical_sections_ready()` 探测并返回
@@ -1098,7 +1098,7 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | 位置 | 内容 | 归类 |
 | :--- | :--- | :--- |
 | `dll_send()`（`dll_frame.c`） | `isr_tx_payload` 暂存（≤`IOLINK_M_SEQ_MAX_LEN`） | 主→ISR 应答移交；暂存本身无锁（主上下文单写者 + 发布字 `isr_tx_pending`）；只有 SINGLE 档在发布后由此上下文直接驱动 PHY（无数据 ISR，也不取临界区） |
-| `iolink_dll_set_sio_mode()`（`dll_api.c`） | 清 `isr_tx_pending`/`isr_tx_active`/`isr_tx_has_cks`/`isr_tx_idx`/`pd_in_captured` | 五个字段由 ISR 写：清理与中断互斥，否则 ISR 可在半帧处重新置上 active/idx。被丢弃的暂存/在途应答计 `isr_tx_dropped`（主上下文自增）；`phy.set_mode` 在区外调用 |
+| `iolink_dll_set_sio_mode()`（`dll_api.c`） | 清 `isr_tx_pending`/`isr_tx_active`/`isr_tx_idx`/`pd_in_captured` | 四个字段由 ISR 写：清理与中断互斥，否则 ISR 可在半帧处重新置上 active/idx。被丢弃的暂存/在途应答计 `isr_tx_dropped`（主上下文自增）；`phy.set_mode` 在区外调用 |
 | `dll_process_body()`（`dll.c`，TX FRAME） | 轮询 `tx_busy` 并释放 `pd_in_captured` | 防止 ISR 在轮询与释放之间捕获新缓冲 |
 | `iolink_dll_on_rx_timeout()`（`dll_isr.c`） | RX 组装状态 `isr_rx_cnt`/`isr_rx_expect` 的成对复位 | Timer A 与数据 ISR 的相位一致；短、无回调，向量优先级契约见 `docs/PORTING.md` |
 | `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零两个上下文共享的计数器 | 与 ISR 自增分开 |

@@ -189,9 +189,9 @@ supplies the matching `*_IMPL()` macro.
    syscall priority (FreeRTOS `configMAX_SYSCALL_INTERRUPT_PRIORITY`): the data
    interrupt must be configured at that level, or the port must mask it
    directly, otherwise the section does not exclude the pump;
-2. be **nesting-safe**: the stack may enter while already inside one (a DLL
-   state transition that resets the event queue), and a DLL state transition
-   can itself be taken from the data ISR;
+2. be **nesting-safe**: `exit` restores what the matching `enter` captured, so
+   a section may be taken while interrupts are already masked. The library's
+   own call sites are flat — no section is entered from inside another;
 3. be **callable from interrupt context**;
 4. stay short (a few instructions): the data interrupt must answer within t_A,
    which is ~43 µs at COM3.

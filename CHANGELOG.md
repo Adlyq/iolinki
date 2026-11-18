@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (documentation matches the lock-free hand-off model)
+- `include/iolinki/port.h`, `docs/PORTING.md` and `docs/API_INTEGRATION.md`
+  claimed the critical section protects the frame mailbox, the ISDU snapshot,
+  reply staging or the event-queue write path. None of those take a section:
+  they are slot rings, publish words and leases. They now list the operations
+  that do take one — diagnostic condition table, event queue read/clear, PD-in
+  index publication, counter reset, the SIO-mode reply-slot cleanup and the ISR
+  RX phase reset — and drop the removed "a DLL state transition resets the
+  event queue under the lock" example from the nesting requirement.
+- `docs/CODE_FLOW.md`: the remaining-critical-section audit no longer names the
+  removed `isr_tx_has_cks` field (the SIO-mode entry clears four fields) or a
+  "log sink" section that does not exist, and the hook table states that
+  `iolink_dll_publish_reply_plans()` rejects a call from the data ISR.
+- `docs/API.md` documents the quiescent-entry contract shared by
+  `iolink_dll_init()`, `iolink_dll_publish_reply_plans()` and
+  `iolink_isdu_bind_workspace()`, including which of them can refuse at run
+  time.
+- `include/iolinki/diag.h` names both halves of the `isr_pulse[]` one-shot: the
+  ISR only stores 1, `iolink_diag_service()` reads and clears it inside one
+  short section.
+
 ### Changed (MAJOR: `iolink_dll_publish_reply_plans()` reports misuse)
 - The reply-plan publisher returns `int` (`iolink_dll_publish_result_t`)
   instead of `void`: `IOLINK_DLL_PUBLISH_OK` (0) when the table was published,
