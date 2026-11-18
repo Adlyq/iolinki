@@ -263,7 +263,9 @@ typedef struct
     uint32_t t_cycle_violations;   /**< t_cycle 违规次数 */
     uint32_t t_byte_violations;    /**< 字节间定时违规次数 */
     uint32_t t_pd_violations;      /**< t_pd 违规次数 */
-    uint32_t total_retries;        /**< 累计重试次数 */
+    uint32_t invalid_frames;       /**< 判为无效的已收帧：CRC 校验失败（与 `crc_errors` 同步
+                                        自增）与协议错误转 STARTUP 时各计一次。不是重传次数
+                                        ——库内没有重发路径 */
     uint32_t voltage_faults;       /**< 累计电压故障数（走 get_faults() 时按故障
                                        边沿计数，走旧路径时按轮询周期计数） */
     uint32_t overtemp_faults;      /**< 累计过温故障数（走 get_faults() 时按故障
@@ -275,11 +277,15 @@ typedef struct
     uint32_t isr_od_overruns;      /**< 已收齐的写请求被新 START 覆盖的次数
                                         （ISDU 引擎的 `req_overruns`） */
     uint32_t isr_plan_misses;      /**< 未命中应答计划而被丢弃的合法帧 */
+    uint32_t isr_eager_rejects;    /**< ISR 早期拒绝的帧：校验失败的 ISDU 写，以及
+                                        带 TX 能力的 PHY 上非 Type-0 形状的校验失败帧 */
     uint32_t isr_mailbox_drops;    /**< 因帧邮箱满而丢弃的帧 */
     uint32_t isr_frames_consumed;  /**< 由 ISR 完全处理、不再进入邮箱的帧 */
     uint32_t isr_frames_handoff;   /**< 成功投递邮箱交给主泵的帧 */
     uint32_t t_pd_discards;        /**< 在 t_PD 保护窗口内丢弃的邮箱帧 */
     uint32_t reply_plan_overflows; /**< 当前计划表中因槽位耗尽而未发布的条目数 */
+    uint32_t pd_in_skips;          /**< 全部 PD-in 缓冲区都被数据 ISR 租用时跳过的发布
+                                        次数（回调与轮询路径共用该计数，下一周期重试） */
 } iolink_dll_stats_t;
 
 /**

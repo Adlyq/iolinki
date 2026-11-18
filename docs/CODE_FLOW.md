@@ -237,7 +237,7 @@ PHY 上下文，以及 `on_change`/`ds_flag_persist` 访问的应用 NVM。
   - 唯一残留的 ISR 侧写是 `dll_set_state()` 进入 `IOLINK_DLL_STATE_OPERATE` 的分支：ISR 的计划动作可经 `dll_apply_master_command()`（0x98/0x99）进入 OPERATE。
   - CONSUME 帧因此与进邮箱的帧共用同一条活动刷新路径；`iolink_device_master_lost()` 读到的是主上下文最后一次写入的值。
 - `startup_notification_pending` 同样位于 `iolink_dll_main_t`：ISR 在 `dll_set_state(STARTUP)` 时置 1，主上下文的 `iolink_dll_flush_state_callbacks()` 读后清 0。
-- `total_retries` 与 `frame_index` 会被 ISR 的 0x97 计划动作经 `dll_apply_master_command()` → `dll_protocol_error_to_startup()` 写入；`total_retries` 也在主上下文的 `dll_handle_frame_error()` 中自增。
+- `invalid_frames` 与 `frame_index` 会被 ISR 的 0x97 计划动作经 `dll_apply_master_command()` → `dll_protocol_error_to_startup()` 写入；`invalid_frames` 也在主上下文的 `dll_handle_frame_error()` 中自增。
 - `fallback_clear_request` 同样位于 `iolink_dll_main_t`：`dll_apply_master_command()` 在 0x98/0x99/0x9A 时置 1，而该函数会从 ISR 的 `IOLINK_REPLY_ACT_MASTER_COMMAND` 计划动作调用；主泵在 `dll_apply_isr_deadline_requests()` 中清 0，并在离开 FALLBACK 时取消 T_FBD。
 - 其余 `iolink_dll_main_t` 字段（`timers`/`next_deadline`、`frame_buf`/`req_len`、`ds`、`last_notified_state`、`pd_out` 等）只在主上下文读写；`iolink_dll_isr_t` 只由数据 ISR 读写。
 
@@ -393,8 +393,8 @@ flowchart TD
 
 ### 6.1 请求长度如何确定
 
-ISR 路径在第二个字节（CKT）到达后，用 `dll_req_len_for(ctx, mc, ckt)` 决定长度。两个 ISR 成帧检查传帧里自报的 CKT 八位组；公共查询
-`iolink_dll_expected_req_len()` 传当前**期望**的类型位（`dll_expected_type_bits()`），回答的是“若主站按配置发送会有多长”。两者共用同一份实现：
+ISR 路径在第二个字节（CKT）到达后，用 `dll_req_len_for(ctx, mc, ckt)` 决定长度。两个 ISR 成帧检查传帧里自报的 CKT 八位组；内部查询
+`iolink_dll_expected_req_len()`（`include/iolinki/internal/wiring.h`）传当前**期望**的类型位（`dll_expected_type_bits()`），回答的是“若主站按配置发送会有多长”。两者共用同一份实现：
 
 - Type-0（帧自报，或设备此刻只接受 Type-0）：读 2 字节；Page/Diagnosis/ISDU 写 3 字节（Figure A.5：Type-0 写固定只带一个 OD 字节，与 OPERATE 的 OD 宽度无关）；
 - Type-1/2：`2 + pd_out_len_current + (写 ? od_width : 0)`；
@@ -418,7 +418,7 @@ flowchart TD
     G --> H{"校验结果"}
     H -- "DLL_FRAME_VALID" --> I["装载 T_A 表项<br/>dll_handle_valid_frame()"]
     H -- "DLL_FRAME_TYPE_ERROR" --> J["framing_errors++<br/>OPERATE/ESTAB 只计数<br/>其他状态 → STARTUP"]
-    H -- "DLL_FRAME_INVALID" --> K["crc_errors / framing_errors / total_retries 递增<br/>连续 3 次触发 COMM_CRC<br/>不改状态"]
+    H -- "DLL_FRAME_INVALID" --> K["crc_errors / framing_errors / invalid_frames 递增<br/>连续 3 次触发 COMM_CRC<br/>不改状态"]
     I --> L{"dll_reject_startup_operate()<br/>（V1.0 兼容关闭时）"}
     L -- 拒绝 --> M["直接返回（跳过帧尾清理）"]
     L -- 通过 --> N["dll_sm_classify() → DLL_EV_*"]
@@ -964,8 +964,8 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 
 | 条件 | 代码行为 | 位置 |
 | :--- | :--- | :--- |
-| CRC 失败 | `crc_errors` / `framing_errors` / `total_retries` 递增；`fallback_count` 达到 3 时触发 COMM_CRC 脉冲并清零；不改状态 | `dll_handle_frame_error()` |
-| DeviceStartup（0x97） | `total_retries` 递增、`frame_index` 清零；非 STARTUP 时迁移 STARTUP | `dll_protocol_error_to_startup()` |
+| CRC 失败 | `crc_errors` / `framing_errors` / `invalid_frames` 递增；`fallback_count` 达到 3 时触发 COMM_CRC 脉冲并清零；不改状态 | `dll_handle_frame_error()` |
+| DeviceStartup（0x97） | `invalid_frames` 递增、`frame_index` 清零；非 STARTUP 时迁移 STARTUP | `dll_protocol_error_to_startup()` |
 | 类型非法 | OPERATE/ESTAB 只计 `framing_errors` 并丢帧；其他状态发 COMM_FRAMING 并回 STARTUP | `dll_handle_frame_error()` |
 | T_DSIO / T_FBD 到期 | SIO + STARTUP（UART 速率不变） | `dll_timer_expire_dsio()` / `dll_timer_expire_fbd()` |
 | 字节间超时 | `t_byte_violations` + COMM_TIMING 脉冲，`frame_index = 0` | `dll_timer_expire_t_byte()` |
@@ -978,11 +978,11 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 | 应答计划槽位耗尽 | `reply_plan_overflows++`；该请求按计划未命中丢弃 | `dll_plan_push()` |
 
 错误计数通过 `iolink_dll_get_stats()` 暴露；部分错误同时触发诊断脉冲，事件 flag 进入 CKS bit7。
-`isr_plan_misses` 与 `isr_mailbox_drops` 位于 `iolink_dll_shared_t`，因此
+`isr_plan_misses`、`isr_mailbox_drops` 与 `isr_eager_rejects` 位于 `iolink_dll_shared_t`，因此
 `iolink_dll_get_stats()` 能直接读取；写请求覆盖计数属于双槽模型本身，位于
 `iolink_isdu_ctx_t::req_overruns`（ISR 单写），统计入口原样转出为 `isr_od_overruns`。
 
-`total_retries` 不是重传计数：库里没有重发/重试机制，该字段只在上面两条路径
+`invalid_frames` 不是重传计数：库里没有重发/重试机制，该字段只在上面两条路径
 自增（CRC 失败与 0x97 DeviceStartup）。
 
 ---

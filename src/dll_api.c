@@ -132,18 +132,20 @@ void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_
     out_stats->t_cycle_violations = ctx->t_cycle_violations;
     out_stats->t_byte_violations = ctx->t_byte_violations;
     out_stats->t_pd_violations = ctx->t_pd_violations;
-    out_stats->total_retries = ctx->total_retries;
+    out_stats->invalid_frames = ctx->invalid_frames;
     out_stats->voltage_faults = ctx->voltage_faults;
     out_stats->overtemp_faults = ctx->overtemp_faults;
     out_stats->short_circuits = ctx->short_circuits;
     out_stats->isr_tx_dropped = IOLINK_STAT_TOTAL(ctx, isr_tx_dropped);
     out_stats->isr_od_overruns = ctx->shared.isdu.req_overruns;
     out_stats->isr_plan_misses = ctx->shared.isr_plan_misses;
+    out_stats->isr_eager_rejects = ctx->shared.isr_eager_rejects;
     out_stats->isr_mailbox_drops = ctx->shared.isr_mailbox_drops;
     out_stats->isr_frames_consumed = ctx->shared.isr_frames_consumed;
     out_stats->isr_frames_handoff = ctx->shared.isr_frames_handoff;
     out_stats->t_pd_discards = ctx->t_pd_discards;
     out_stats->reply_plan_overflows = ctx->reply_plan_overflows;
+    out_stats->pd_in_skips = ctx->pd_in_skips;
 }
 
 void iolink_dll_reset_error_counters(iolink_dll_main_t* ctx)

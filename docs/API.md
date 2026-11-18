@@ -692,7 +692,7 @@ COM 切换，因此不接收上下文参数。
 | `t_cycle_violations` | `uint32_t` | t_cycle 违规次数 |
 | `t_byte_violations` | `uint32_t` | 字节间定时违规次数 |
 | `t_pd_violations` | `uint32_t` | t_pd 违规次数 |
-| `total_retries` | `uint32_t` | 累计重试次数 |
+| `invalid_frames` | `uint32_t` | 判为无效的已收帧：CRC 校验失败（与 `crc_errors` 同步自增）与协议错误转 STARTUP 时各计一次。不是重传次数——库内没有重发路径 |
 | `voltage_faults` | `uint32_t` | 累计电压故障数（走 get_faults() 时按故障边沿计数，走旧路径时按轮询周期计数） |
 | `overtemp_faults` | `uint32_t` | 累计过温故障数（走 get_faults() 时按故障边沿计数，走旧路径时为 0） |
 | `short_circuits` | `uint32_t` | 累计短路次数（走 get_faults() 时按故障边沿计数，走旧路径时按轮询周期计数） |
@@ -700,16 +700,19 @@ COM 切换，因此不接收上下文参数。
 | `idle_timeouts` | `uint32_t` | 1 s 空闲链路诊断（不是 t_A 超时） |
 | `isr_od_overruns` | `uint32_t` | 已收齐的写请求被新 START 覆盖的次数（ISDU 引擎的 `req_overruns`） |
 | `isr_plan_misses` | `uint32_t` | 未命中应答计划而被丢弃的合法帧 |
+| `isr_eager_rejects` | `uint32_t` | ISR 早期拒绝的帧：校验失败的 ISDU 写，以及带 TX 能力的 PHY 上非 Type-0 形状的校验失败帧 |
 | `isr_mailbox_drops` | `uint32_t` | 因帧邮箱满而丢弃的帧 |
 | `isr_frames_consumed` | `uint32_t` | 由 ISR 完全处理、不再进入邮箱的帧 |
 | `isr_frames_handoff` | `uint32_t` | 成功投递邮箱交给主泵的帧 |
 | `t_pd_discards` | `uint32_t` | 在 t_PD 保护窗口内丢弃的邮箱帧 |
 | `reply_plan_overflows` | `uint32_t` | 当前计划表中因槽位耗尽而未发布的条目数 |
+| `pd_in_skips` | `uint32_t` | 全部 PD-in 缓冲区都被数据 ISR 租用时跳过的发布次数（回调与轮询路径共用该计数，下一周期重试） |
 <!-- END GENERATED -->
 
-`total_retries` 不是独立的报文重试计数：CRC 校验失败时它与 `crc_errors` 同步自增
+`invalid_frames` 不是重传计数：CRC 校验失败时它与 `crc_errors` 同步自增
 （`src/dll_sm.c`），协议错误转 STARTUP 时也自增（`src/dll_frame.c`）；库内没有重发路径。
-字段名与真实语义的差异按当前实现记录于此，不做推断。
+`isr_eager_rejects` 与 `pd_in_skips` 原先只能从内部结构读取，现在随同一快照上报：
+前者是 ISR 在组帧阶段就拒绝的帧，后者是 PD-in 缓冲区全被租用时跳过的发布次数。
 
 ## 平台抽象
 

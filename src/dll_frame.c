@@ -276,7 +276,7 @@ static void dll_protocol_error_to_startup(iolink_dll_main_t* ctx)
     }
 
     ctx->shared.fallback_count = 0U;
-    ctx->total_retries++;
+    ctx->invalid_frames++;
     ctx->frame_index = 0U;
     if (ctx->shared.state != IOLINK_DLL_STATE_STARTUP) {
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);

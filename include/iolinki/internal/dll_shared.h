@@ -171,6 +171,10 @@ typedef struct iolink_dll_shared
 
     uint32_t isr_plan_misses; /**< ISR 未命中应答计划而丢弃的合法帧 */
 
+    uint32_t isr_eager_rejects; /**< ISR 早期拒绝的帧（校验失败的 ISDU 写，以及带
+                                     TX 能力的 PHY 上非 Type-0 形状的校验失败帧）；
+                                     主上下文只经 iolink_dll_get_stats() 读取 */
+
     uint32_t isr_frames_consumed; /**< 由 ISR 完全处理、不再进入邮箱的帧
                                       （含按规范有意不应答的转换/复位帧） */
 

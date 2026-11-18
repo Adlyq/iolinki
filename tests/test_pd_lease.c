@@ -68,6 +68,11 @@ static void test_lease_recovery_and_skip_counter(void** state)
                      IOLINK_DEVICE_PD_ERR_BUSY);
     assert_int_equal(test_dll(&dev.ctx)->pd_in_skips, 2U);
 
+    /* 跳过次数随统计快照上报，应用无需访问内部结构。 */
+    iolink_dll_stats_t stats;
+    iolink_device_get_dll_stats(&dev.ctx, &stats);
+    assert_int_equal(stats.pd_in_skips, 2U);
+
     /* 在无法证明传输已失效时（卡住的 PHY 必须复位），库有意保留借用；
      * 一旦槽位被释放（即 ISR 在帧结束时所做的），
      * 发布便恢复工作。 */

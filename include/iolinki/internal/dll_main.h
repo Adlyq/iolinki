@@ -116,7 +116,8 @@ struct iolink_dll_main
 
     uint32_t reply_plan_overflows; /**< 因计划槽位耗尽而未发布的计划条目数 */
 
-    uint32_t total_retries; /**< 累计重试次数 */
+    uint32_t invalid_frames; /**< 判为无效的已收帧：CRC 校验失败与协议错误转
+                                  STARTUP 各计一次（不是重传次数） */
 
     uint32_t voltage_faults; /**< 累计电压故障数（走 get_faults() 时按故障
                                   边沿计数，走旧路径时按轮询周期计数） */
