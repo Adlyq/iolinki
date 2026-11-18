@@ -405,7 +405,9 @@ static void test_events_are_bound_to_the_isr_depth_flag(void** state)
 }
 
 /* ISR 取走暂存时若仍有帧在流式发送（主泵抢在检查之后发布，SMP 下可达），
- * 必须丢弃并计数，而不是从 0 重发、把在途帧从中间截断。 */
+ * 必须丢弃并计数，而不是从 0 重发、把在途帧从中间截断。
+ * TX FRAME 没有逐字节流式状态，因此只在 TX BYTE 下成立。 */
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 static void test_isr_drops_a_staged_reply_while_a_frame_is_streaming(void** state)
 {
     (void) state;
@@ -419,9 +421,7 @@ static void test_isr_drops_a_staged_reply_while_a_frame_is_streaming(void** stat
     assert_int_equal(s_ctx.main.shared.isr_tx_active, 1U);
 
     const uint32_t dropped = IOLINK_STAT_TOTAL(&s_ctx.main, isr_tx_dropped);
-#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
     const uint32_t octets = s_octet_n;
-#endif
 
     /* 白盒：模拟主泵在“检查 active”之后才发布暂存。 */
     s_ctx.main.shared.isr_tx_pending_slot = 0U;
@@ -433,7 +433,6 @@ static void test_isr_drops_a_staged_reply_while_a_frame_is_streaming(void** stat
 
     assert_int_equal(s_ctx.main.shared.isr_tx_pending, 0U);
     assert_int_equal(IOLINK_STAT_TOTAL(&s_ctx.main, isr_tx_dropped), dropped + 1U);
-#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
     /* 本次进入只处理丢弃，不动在途帧；随后它在自己的节奏里完成。 */
     assert_int_equal(s_octet_n, octets);
     for (uint8_t i = 0U; (i < 8U) && (s_ctx.main.shared.isr_tx_active != 0U); i++) {
@@ -441,8 +440,8 @@ static void test_isr_drops_a_staged_reply_while_a_frame_is_streaming(void** stat
     }
     assert_int_equal(s_ctx.main.shared.isr_tx_active, 0U);
     assert_int_equal(s_frames_done, 1U);
-#endif
 }
+#endif
 
 /* 通信重启必须让未收齐的写请求退休，否则读路径与事件/DS 门控会永久停在
  * “写未完成”。这里固定的是 dll_process_body() 的消费点，而不只是函数本身。 */
