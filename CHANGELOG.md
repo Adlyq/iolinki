@@ -66,12 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the page-read scenario actually receives a reply; it checks the first reply
   byte and the reply CKS.
 
-### Changed (the log sink is locked after initialisation)
-- `iolink_device_set_log()` is now a no-op once `iolink_device_init()` returns:
-  the data ISR reads `shared.log.write`/`self`/`level`, so a runtime rebind
-  raced with it. `iolink_dll_main_t` gained a `log_locked` flag (it fits the
-  existing padding, so no context size changed) that re-initialisation clears.
-  The sink comes from `config.app->log_write` and `config.log_level` only.
+### Changed (the log sink is locked when ISR logging is compiled in)
+- With `IOLINK_LOG_ENABLE_ISR=1`, `iolink_device_set_log()` is a no-op once
+  `iolink_device_init()` returns: the data ISR reads `shared.c_log.write`/
+  `self`/`level`, so a runtime rebind raced with it. `iolink_dll_main_t` gained
+  a `log_locked` flag (it fits the existing padding, so no context size
+  changed) that re-initialisation clears. In the default build there is no ISR
+  reader, so the main context may rebind the sink at runtime. The initial sink
+  comes from `config.app->log_write` and `config.log_level` only.
 
 ### Tests (the event queue drain ordering is pinned)
 - `iolink_events_pop()` documents why it drains the queue without a lock

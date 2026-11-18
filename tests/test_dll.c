@@ -1679,7 +1679,7 @@ static void test_dll_isr_back_to_box_counts_each_frame_once(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_COMM_DISABLED);
 }
 
-/* Back-to-box（10.7.5）单写者：ISR 完全消费一帧后只置 isr_cycle_served，
+/* Back-to-box（10.7.5）单写者：ISR 完全消费一帧后只置 i_isr_cycle_served，
  * back_to_box_cycles 只由主泵推进（每个泵周期最多一次），主上下文自己处理
  * 的帧仍直接推进；计数达到 3 后的停机判定不变。 */
 static void test_back_to_box_counts_isr_served_cycles_once_per_pump(void** state)

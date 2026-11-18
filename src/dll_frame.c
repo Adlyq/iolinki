@@ -119,7 +119,7 @@ uint8_t dll_req_len_for(const iolink_dll_shared_t* ctx, uint8_t mc, uint8_t ckt)
  * 相同。
  *
  * 槽位 0/1 归主上下文独占，ISR 有自己的槽位。槽位选择、载荷复制、
- * 暂存元数据与 `isr_tx_pending` 的发布在同一个短临界区内完成：
+ * 暂存元数据与 `b_isr_tx_pending` 的发布在同一个短临界区内完成：
  * “ISR 是否正在流式发送”的检查与发布必须是一次操作，且被拒绝的
  * 暂存不得推进槽位或写载荷——TX BYTE 的在途帧按指针引用发送槽，
  * 写到它就会换掉尚未发出的字节。ISR 取走时同样在临界区内一次性
@@ -185,7 +185,7 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
 #if IOLINK_CONCURRENCY == IOLINK_CONCURRENCY_SINGLE
     /* SINGLE 档没有数据 ISR：主上下文是唯一发送者，只能自己驱动
      * TX 钩子。上一帧没有上下文可以推进它，因此先结束它再开始新帧，
-     * 否则 isr_tx_active 会永久保持。 */
+     * 否则 b_isr_tx_active 会永久保持。 */
     ctx->shared.b_isr_tx_pending = 0U;
     if (ctx->shared.b_isr_tx_active != 0U) {
         if (ctx->shared.c_phy->tx_done != NULL) {
@@ -353,7 +353,7 @@ static bool dll_master_command_target(uint8_t cmd, iolink_dll_state_t current,
 /**
  * @brief 主上下文：将 MasterCommand 的 PD 有效位副作用落到发布字。
  *
- * 主上下文本就是 `pd_pub` 的写者：命令直接发布新的一代（代号前进，
+ * 主上下文本就是 `m_pd_pub` 的写者：命令直接发布新的一代（代号前进，
  * 任何在途命令随之失效），语义与"只在本代有效"一致。
  */
 static void dll_pd_valid_command(iolink_dll_main_t* ctx, bool valid)
@@ -365,7 +365,7 @@ static void dll_pd_valid_command(iolink_dll_main_t* ctx, bool valid)
 /**
  * @brief 数据 ISR：将 PD 有效位写进命令字（ISR 是该字段的唯一写者）。
  *
- * 命令字记录值与当时 `pd_pub` 的代号，主上下文下一次发布即让该覆盖失效。
+ * 命令字记录值与当时 `m_pd_pub` 的代号，主上下文下一次发布即让该覆盖失效。
  */
 static void dll_pd_valid_command_isr(iolink_dll_shared_t* shared, bool valid)
 {

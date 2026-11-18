@@ -315,7 +315,7 @@ def load_shared_fields(root: Path) -> list[dict[str, str]]:
     """Read the ownership table that also defines the shared-field prefixes."""
     path = root / "tools/shared_fields.csv"
     if not path.is_file():
-        return []
+        raise DeadFieldError("tools/shared_fields.csv is missing")
     rows = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line or line.startswith("#"):
@@ -402,12 +402,6 @@ def run(root: Path, allowlist: Path, enforce: bool) -> int:
     findings, decls = compile_findings(root)
     allow = load_allowlist(allowlist)
     prefix_findings = compile_prefix_findings(root, decls)
-    for finding in prefix_findings:
-        print(
-            f"dead-field: {finding.key} has an invalid category prefix "
-            f"({finding.detail})",
-            file=sys.stderr,
-        )
     remaining = apply_allowlist(findings, allow) + prefix_findings
     for finding in remaining:
         print(

@@ -80,7 +80,7 @@ Groups:
            the public-API surface                       (seconds, no build)
   build    strict -Werror compilation with clang, Debug (-O0) and Release (-O3)
   context  field ownership between the ISR and main contexts, from the clang
-           AST (report-only until the context split lands, ~3 s)
+           AST (~3 s)
   test     strict Debug build plus the unit suite (ctest)
   gcc      the gcc-only strict diagnostic set, plus -fanalyzer as a report
   sanitize the unit suite under AddressSanitizer + UndefinedBehaviorSanitizer
@@ -227,6 +227,10 @@ check_dead_fields() {
 }
 
 check_public_api() {
+    if ! have clang; then
+        skip "clang missing (the public-API scan needs the preprocessor)"
+        return 0
+    fi
     python3 tools/check_public_api.py --selftest && python3 tools/check_public_api.py --enforce
 }
 
@@ -618,8 +622,8 @@ check_size_baseline() {
 # cross toolchain as the size baseline; without one it reports SKIP instead of a
 # measurement, exactly like the size gate.
 check_stack_baseline() {
-    if ! have arm-none-eabi-gcc && [ ! -x /opt/atfe/bin/clang ]; then
-        skip "no target compiler for the stack report (arm-none-eabi-gcc or ATFE)"
+    if ! have arm-none-eabi-gcc; then
+        skip "no target compiler for the stack report (install arm-none-eabi-gcc)"
         return 0
     fi
     python3 tools/stack_report.py --selftest && python3 tools/stack_report.py --check

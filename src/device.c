@@ -400,11 +400,13 @@ iolink_workspace_t* IOLINK_NULLABLE iolink_device_get_workspace(const iolink_dev
 void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_NULLABLE write,
                            iolink_log_level_t level)
 {
-    /* 日志汇点固定在配置里：此后 `iolink_device_set_log()` 是空操作，数据
-     * ISR 读到的 `write`/`self`/`level` 不会再被主上下文改写。 */
+    /* 只有编译进 ISR 日志时，数据 ISR 才会读 `c_log`；此时初始化返回后的
+     * 改绑必须被拒绝。默认构建里主上下文是唯一读者，运行期改绑是安全的。 */
+#if IOLINK_LOG_ENABLE_ISR
     if (ctx->dll.main.log_locked) {
         return;
     }
+#endif
     iolink_app_t* IOLINK_NULLABLE self = (ctx->config != NULL) ? ctx->config->app->self : NULL;
 
     /* 一个 sink 服务全部模块：它们只保存指针，这里统一指向它。 */

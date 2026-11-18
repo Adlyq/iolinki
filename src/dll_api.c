@@ -151,10 +151,11 @@ void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_
 
 void iolink_dll_reset_error_counters(iolink_dll_main_t* ctx)
 {
-#if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
-    /* `b_isr_stat` 归数据 ISR 单写：主上下文清零必须与中断互斥，否则会与该
-     * 增量交错。SHARED 档不需要临界区——清零与一次自增并发时最多丢一次
-     * 更新，与计数器“仅诊断、可丢”的既有契约一致。 */
+    /* `b_isr_stat` 归数据 ISR 单写：SPLIT 档的主上下文清零必须与中断互斥，
+     * 否则会与该增量交错。单核 SHARED 档不需要临界区——清零与一次自增并发
+     * 时最多丢一次更新，与计数器“仅诊断、可丢”的既有契约一致；SMP 下另一
+     * 核仍可能并发自增，因此保留临界区。 */
+#if (IOLINK_STATS_MODE == IOLINK_STATS_SPLIT) || (IOLINK_CONCURRENCY == IOLINK_CONCURRENCY_SMP)
     IOLINK_CRITICAL_ENTER();
 #endif
     ctx->crc_errors = 0U;
@@ -164,6 +165,8 @@ void iolink_dll_reset_error_counters(iolink_dll_main_t* ctx)
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
     ctx->shared.b_isr_stat.timeout_errors = 0U;
     ctx->shared.b_isr_stat.framing_errors = 0U;
+#endif
+#if (IOLINK_STATS_MODE == IOLINK_STATS_SPLIT) || (IOLINK_CONCURRENCY == IOLINK_CONCURRENCY_SMP)
     IOLINK_CRITICAL_EXIT();
 #endif
 }

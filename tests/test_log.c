@@ -148,12 +148,18 @@ static void test_device_init_binds_config_sink(void** state)
     assert_true(iolink_device_get_events_ctx(&ctx)->log->write == log_capture);
 #endif
 
-    /* 初始化之后汇点由配置固定：再改写会被忽略，否则数据 ISR 读到的
-     * write/self/level 会被主上下文改写。 */
+    /* 初始化之后汇点由配置固定（仅 IOLINK_LOG_ENABLE_ISR 构建需要：
+     * 数据 ISR 会读 c_log；默认构建允许主上下文运行期改绑）。 */
     iolink_device_set_log(&ctx, NULL, IOLINK_LOG_LEVEL_SILENT);
+#if IOLINK_LOG_ENABLE_ISR
     assert_true(test_dll_shared(&ctx)->c_log.write == log_capture);
     assert_int_equal(test_dll_shared(&ctx)->c_log.level, IOLINK_LOG_LEVEL_INFO);
     assert_true(test_dll_isdu(&ctx)->log->write == log_capture);
+#else
+    assert_true(test_dll_shared(&ctx)->c_log.write == NULL);
+    assert_int_equal(test_dll_shared(&ctx)->c_log.level, IOLINK_LOG_LEVEL_SILENT);
+    assert_ptr_equal(test_dll_isdu(&ctx)->log, &test_dll_shared(&ctx)->c_log);
+#endif
 }
 
 static void test_device_init_failure_logs_through_config(void** state)

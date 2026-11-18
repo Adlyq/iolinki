@@ -440,7 +440,7 @@ IOLINK_ASSUME_NONNULL_BEGIN
 /* PD-in 应答缓冲区：活动的、正在填充的，以及被 ISR 持有的。
  *
  * TX BYTE 在库内部结束传输，会在帧结束时释放 ISR 持有的
- * 缓冲区（pd_in_captured = 0xFF），因此两个缓冲区就够用。
+ * 缓冲区（b_pd_in_captured = 0xFF），因此两个缓冲区就够用。
  * TX FRAME 把缓冲区交给 DMA，除非 PHY 提供 tx_busy()，否则库无法
  * 观察到传输状态：提供该钩子时，数据 ISR 在下一次进入时发现线路空闲
  * 就释放租约（两个缓冲区）；不提供时该槽位会一直保持租约直到下一次

@@ -103,13 +103,17 @@ typedef struct
 } iolink_dll_isr_stats_t;
 
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
-/** @brief 在 ISR 上下文中执行自增的计数器槽位（参数是共享区）。 */
+/** @brief 在 ISR 上下文中执行自增的计数器槽位（参数是共享区）。
+ *  `shared_field` 只在 SHARED 档求值，`stat_field` 只在 SPLIT 档求值；
+ *  两个名字都必须存在于对应位置。 */
 #define IOLINK_STAT_ISR(shared, shared_field, stat_field) ((shared)->b_isr_stat.stat_field)
-/** @brief 包含 ISR 自有计数的计数值（只读，参数是主上下文）。 */
+/** @brief 包含 ISR 自有计数的计数值（只读，参数是主上下文）。
+ *  `shared_field`/`stat_field` 的求值档位同 IOLINK_STAT_ISR。 */
 #define IOLINK_STAT_TOTAL(ctx, shared_field, stat_field) \
     ((ctx)->shared.shared_field + (ctx)->shared.b_isr_stat.stat_field)
 #else
-/** @brief 在 ISR 上下文中执行自增的计数器槽位（参数是共享区）。 */
+/** @brief 在 ISR 上下文中执行自增的计数器槽位（参数是共享区）。
+ *  `shared_field` 只在 SHARED 档求值，`stat_field` 只在 SPLIT 档求值。 */
 #define IOLINK_STAT_ISR(shared, shared_field, stat_field) ((shared)->shared_field)
 /** @brief 包含 ISR 自有计数的计数值（只读，参数是主上下文）。 */
 #define IOLINK_STAT_TOTAL(ctx, shared_field, stat_field) ((ctx)->shared.shared_field)
@@ -150,7 +154,7 @@ typedef struct
  * 在 `iolink_dll_init()` / `iolink_device_init()` 内编译一次后不再改变；
  * 数据 ISR 只做 查计划 -> 取源字节 -> 追加 CKS -> 喂字节，不再解读请求内容。
  *
- * 发布只有一个"就绪"标志 `reply_plans_ready`：编译前撤下、写完后置位，
+ * 发布只有一个"就绪"标志 `c_reply_plans_ready`：编译前撤下、写完后置位，
  * ISR 入口只在置位时进入传输泵，因此初始化窗口内到达的帧不会被处理。
  * 该标志只保护**入口**：已经在泵内的调用不受它保护，所以重建必须满足
  * "数据 ISR 静止"这一前提（初始化/重新初始化时中断尚未启用）。正因为
@@ -418,7 +422,7 @@ typedef enum
  * `iolink_stack_config_t`。`iolink_dll_init()` 与 `iolink_device_init()` 各调用
  * 一次，之后不再重编译。
  *
- * 发布协议只有一个"就绪"标志：进入函数时把 `reply_plans_ready` 撤到 0，
+ * 发布协议只有一个"就绪"标志：进入函数时把 `c_reply_plans_ready` 撤到 0，
  * 整张表写完后原子置 1；数据 ISR 的入口只在它为 1 时进入传输泵。因此
  * 调用本函数期间**开始**的帧不会被处理（也不会计为任何错误）。
  *
@@ -426,7 +430,7 @@ typedef enum
  * 时重建计划表仍会与查表并发。因此本函数和 `iolink_dll_init()` /
  * `iolink_isdu_bind_workspace()` 一样要求数据泵静止，并且和后者一样在
  * 运行期拒绝误从数据 ISR 的调用：返回 ::IOLINK_DLL_PUBLISH_ERR_ISR 并记录
- * 一条 ISR 错误，此时不写任何计划槽、也不改动 `reply_plans_ready`。
+ * 一条 ISR 错误，此时不写任何计划槽、也不改动 `c_reply_plans_ready`。
  * `iolink_dll_init()` / `iolink_device_init()` 在中断启用前完成这次编译。
  * 因为没有运行期并发协议，ISR 查表不需要任何序号校验。
  *

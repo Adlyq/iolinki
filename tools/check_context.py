@@ -297,7 +297,7 @@ def declared_fields(root: Path) -> dict[str, set[str]]:
             fields.setdefault(decl.struct, set()).add(decl.field)
     for required in ALLOWED_STRUCTS:
         if required not in fields:
-            raise ContextError(f"{relative}: struct {required} not found")
+            raise ContextError(f"struct {required} not found in the internal headers")
     return fields
 
 
@@ -752,7 +752,7 @@ def analyse(
                 continue
             if category is not None:
                 if category == "c_":
-                    if key not in init_contexts:
+                    if (key not in init_contexts) or ("ISR" in members):
                         report(
                             "non-init-writes-c",
                             key,

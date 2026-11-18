@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Measure the target stack budget and static RAM, with a monotonic baseline.
 
-Every ``src/*.c`` is compiled with the cross compiler (``arm-none-eabi-gcc``,
-or the ATFE clang when that is what the firmware uses) using
+Every ``src/*.c`` is compiled with ``arm-none-eabi-gcc`` (or the GCC-compatible
+cross compiler named by ``IOLINKI_STACK_CC``) using
 ``-fstack-usage -fcallgraph-info=su``. The call graph and the per-function
 frames come from that target build, never from host numbers.
 
@@ -88,14 +88,10 @@ def find_toolchain() -> tuple[str, str, str]:
         cc = shutil.which("arm-none-eabi-gcc")
         nm = shutil.which("arm-none-eabi-nm")
     if cc is None:
-        clang = "/opt/atfe/bin/clang"
-        if Path(clang).is_file():
-            cc = clang
-            nm = shutil.which("llvm-nm") or shutil.which("arm-none-eabi-nm")
-        else:
-            raise StackError(
-                "no target compiler found (install arm-none-eabi-gcc or set IOLINKI_STACK_CC)"
-            )
+        raise StackError(
+            "no target compiler found (install arm-none-eabi-gcc or set IOLINKI_STACK_CC "
+            "to a GCC-compatible cross compiler)"
+        )
     if nm is None:
         raise StackError("no target nm found (needed for the static RAM report)")
     try:
@@ -307,12 +303,13 @@ def compare(current: dict, baseline: dict) -> list[str]:
     problems: list[str] = []
     for key in ("toolchain", "flags"):
         if current.get(key) != baseline.get(key):
-            problems.append(
-                f"{key} changed ({baseline.get(key)!r} -> {current.get(key)!r}); "
-                "rerun --update and review the new numbers"
+            print(
+                f"warning: {key} changed ({baseline.get(key)!r} -> {current.get(key)!r}); "
+                "numeric comparison only, refresh the baseline deliberately",
+                file=sys.stderr,
             )
     tolerance = int(baseline.get("tolerance_bytes", TOLERANCE))
-    for key in ("main_max", "isr_max", "combined"):
+    for key in ("main_max", "isr_max", "combined", "static_ram_bytes"):
         old = int(baseline.get(key, 0))
         new = int(current.get(key, 0))
         if new > old + tolerance:

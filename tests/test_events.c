@@ -603,8 +603,8 @@ static void test_isr_writer_is_rejected(void** state)
     iolink_events_ctx_t ctx;
     events_init(&ctx);
 
-    volatile uint8_t in_isr = 1U;
-    ctx.isr_active = &in_isr;
+    volatile uint8_t i_in_isr = 1U;
+    ctx.isr_active = &i_in_isr;
 
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(ctx.count, 0U);
@@ -614,7 +614,7 @@ static void test_isr_writer_is_rejected(void** state)
     /* 复位请求是该上下文里唯一允许的 ISR 写。 */
     iolink_events_reset_request(&ctx);
 
-    in_isr = 0U;
+    i_in_isr = 0U;
     iolink_events_reset(&ctx);
     iolink_event_trigger(&ctx, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     assert_int_equal(ctx.count, 1U);

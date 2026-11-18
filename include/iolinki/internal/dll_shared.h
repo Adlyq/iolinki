@@ -39,7 +39,7 @@ typedef enum
 /**
  * @brief 共享区（主上下文内嵌，ISR 入口只看它）。
  *
- * 完整定义见 dll_shared.h。数据 ISR 的入口与内部泵只接受本类型，
+ * 数据 ISR 的入口与内部泵只接受本类型，
  * 因此 ISR 翻译单元在编译期看不到 @ref iolink_dll_main_t 的字段。
  */
 struct iolink_dll_shared
@@ -83,7 +83,7 @@ struct iolink_dll_shared
      * @name 应答计划表（初始化时单次写入 / ISR 只读）
      *
      * 计划内容是 {M-sequence 类型, OD 宽度, 能力位} 的纯函数，三项都只在
-     * 初始化期间定义。`reply_plans_ready` 由 `iolink_dll_publish_reply_plans()`
+     * 初始化期间定义。`c_reply_plans_ready` 由 `iolink_dll_publish_reply_plans()`
      * 在整张表写完后置 1、写入前清 0：ISR 入口只在它为 1 时进入传输泵，
      * 初始化窗口内到达的帧因此完全不被处理。该标志只保护入口，重建仍要求
      * 数据 ISR 静止（初始化或重新初始化）：没有运行期并发协议，查表也就不
@@ -102,7 +102,8 @@ struct iolink_dll_shared
      * 区域 2：main -> ISR（m_）
      *
      * 主上下文写、数据 ISR 读。ISR 不得回写这些字段；需要回执时使用
-     * 区域 3 的一次性标志。
+     * 区域 3 的一次性标志。例外见 tools/shared_fields.csv：ISR 自用的
+     * 应答槽 2 与捕获的 PD-in 槽是由指针传入后写入的，静态门禁看不到。
      * ===================================================================== */
 
     /** @brief 主泵已应用的 ISDU 写序号（与 `i_isr_isdu_write_gen` 配对）。 */
@@ -120,7 +121,7 @@ struct iolink_dll_shared
      * 槽位计数器（PHY 会对传输进行串行化）。 */
     uint8_t m_isr_tx_payload[IOLINK_TX_SLOTS][IOLINK_M_SEQ_MAX_LEN];
 
-    /* 主上下文独占的暂存元数据：主泵在 isr_tx_pending 发布之前写好，
+    /* 主上下文独占的暂存元数据：主泵在 b_isr_tx_pending 发布之前写好，
      * 数据 ISR 只在取走暂存时一次性读入自己独占的流式状态
      * （iolink_dll_isr_t::tx_stream_len / tx_stream_has_cks）。 */
     volatile uint8_t m_isr_tx_pending_slot; /**< 暂存的主上下文应答所在槽位 */
@@ -220,7 +221,7 @@ struct iolink_dll_shared
      * ISR 在 ISDU 读的 FlowCTRL 为 IDLE/IDLE2/ABORT（0x11..0x1F）时仍回
      * 0x00（无服务），并置 1 请求主泵复位读传输层。Type-0 下这类读由
      * CONSUME 计划完全消费，主泵看不到该帧，复位只能经此标志传达。
-     * 与 isr_dsio_clear 相同的一次性握手：ISR 置位幂等，只有主泵清 0。
+     * 与 i_isr_dsio_clear 相同的一次性握手：ISR 置位幂等，只有主泵清 0。
      */
     volatile uint8_t i_isr_isdu_read_reset;
 
@@ -242,7 +243,8 @@ struct iolink_dll_shared
     uint32_t i_isr_frames_handoff; /**< 成功投递邮箱交给主泵的帧 */
 
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
-    iolink_dll_isr_stats_t b_isr_stat; /**< ISR 自有的计数器组（SPLIT 模式） */
+    /* SPLIT 专用：ISR 自增、主泵读取/清零，因此按 b_ 归类。 */
+    iolink_dll_isr_stats_t b_isr_stat;
 #endif
 
     /* =====================================================================
@@ -272,12 +274,14 @@ struct iolink_dll_shared
                                           request_service()，或暂存与在途
                                           应答冲突而丢弃的应答 */
 
-    volatile IOLINK_ATOMIC_UINT_T b_pd_valid_cmd; /**< PD 有效位命令字
-                                                    `{value, base_gen, valid}`（数据 ISR 单写） */
+    volatile IOLINK_ATOMIC_UINT_T
+        b_pd_valid_cmd; /**< PD 有效位命令字
+                          `{value, base_gen, valid}`（ISR 写；主上下文仅在初始化时清 0） */
 
     volatile uint8_t b_pd_in_captured; /**< ISR 正在流式发送的缓冲区（0xFF = 无）；
                                           TX BYTE 帧末释放，TX FRAME 由 ISR 在下次
-                                          进入时按 tx_busy() 释放 */
+                                          进入时按 tx_busy() 释放；SIO 切换时主
+                                          上下文在临界区内清 0xFF */
 
     volatile uint8_t b_fallback_count; /**< 连续 CRC 错误计数（诊断脉冲节流） */
 

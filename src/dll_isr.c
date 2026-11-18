@@ -40,14 +40,14 @@
  *
  * ISR 泵（入口 iolink_dll_process_isr）：
  *
- *   iolink_dll_process_isr              重入保护：in_isr 加上
+ *   iolink_dll_process_isr              重入保护：i_in_isr 加上
  *   |                                   isr_reentry_pending 循环
  *   +- dll_isr_process
- *      |- isr_tx_pending -> dll_isr_tx_pending -> dll_isr_start_staged_tx
+ *      |- b_isr_tx_pending -> dll_isr_tx_pending -> dll_isr_start_staged_tx
  *      |                    （发送由主泵暂存的回复）
  *      |- int_active() == 0 -> return  （电平复查）
  *      +- dll_isr_drain                每轮一个服务事件，最多 64 轮
- *         |- [TX BYTE] isr_tx_active -> dll_isr_tx_step （一个八位组，break）
+ *         |- [TX BYTE] b_isr_tx_active -> dll_isr_tx_step （一个八位组，break）
  *         |- [RX FRAME] dll_isr_drain_rx_frame
  *         |  +- phy->rx_frame -> dll_isr_frame_len_ok ->
  *         |     dll_isr_frame_valid -> dll_isr_complete_frame

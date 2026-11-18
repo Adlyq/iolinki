@@ -684,7 +684,7 @@ static void test_staged_reply_keeps_own_length_and_cks(void** state)
     assert_int_equal(s_frames_done, 1U);
 }
 
-/* isr_tx_active 期间 dll_send() 必须拒绝暂存并计数：接受它会改写
+/* b_isr_tx_active 期间 dll_send() 必须拒绝暂存并计数：接受它会改写
  * 流式长度/CKS，使在途帧提前 tx_done（丢掉 CKS、提前释放 PD-in 租约）。 */
 static void test_staging_rejected_while_reply_streaming(void** state)
 {

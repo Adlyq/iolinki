@@ -36,7 +36,7 @@ static iolink_dll_ctx_t s_dll;
 static uint64_t s_now_us;
 
 /* 交接发布顺序的观察点：步进时钟每被调用一次返回值 +1，并记录该次调用
- * 看到的 isr_consumed_seq。成为 isr_consumed_us 的那次读取必须看到旧
+ * 看到的 i_isr_consumed_seq。成为 i_isr_consumed_us 的那次读取必须看到旧
  * 序号，否则说明序号自增（发布边沿）排到了时间戳之前。 */
 #define CLOCK_OBS_MAX 8U
 static uint64_t s_clock_step;
@@ -416,7 +416,7 @@ static size_t clock_obs_find(uint32_t value)
 /**
  * @brief 固定 CONSUME 帧时间戳的发布顺序与双读采纳/拒绝路径。
  *
- * 发布侧：成为 `isr_consumed_us` 的那次时钟读取必须看到旧序号，序号在
+ * 发布侧：成为 `i_isr_consumed_us` 的那次时钟读取必须看到旧序号，序号在
  * 时间戳之后才自增，因此序号是 release 边沿。读取侧：新序号被采纳一次，
  * 同一序号不会重复采纳，一轮主泵只采纳最新交接，8 位自由计数回绕不
  * 影响采纳。

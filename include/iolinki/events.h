@@ -381,6 +381,8 @@ bool iolink_events_pop(iolink_events_ctx_t* ctx, iolink_event_t* event);
  *
  * 用于 OD 事件内容，以检查下一个事件代码。
  *
+ * @note 主上下文专属：读取主上下文独占的队列。
+ *
  * @param ctx 事件上下文
  * @param event [out] 用于存放事件详情的指针
  * @return 有可用事件时为 true，队列为空时为 false
@@ -403,6 +405,8 @@ uint8_t iolink_event_qualifier(uint16_t code, iolink_event_type_t type, iolink_e
 
 /**
  * @brief 将所有待处理事件复制到缓冲区而不弹出它们
+ *
+ * @note 主上下文专属：读取主上下文独占的队列。
  *
  * @param ctx 事件上下文
  * @param out_events [out] 用于存放事件副本的缓冲区

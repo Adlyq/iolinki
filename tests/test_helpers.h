@@ -81,7 +81,7 @@ int test_tx_all_asserted(void** state);
 void test_io_cycle(iolink_device_ctx_t* ctx);
 
 /* 排空 ISR 侧所有待发送的应答：先取走 request_service() 发布的暂存槽位
- * （isr_tx_pending），再按传输粒度完成整帧（isr_tx_active）。宿主机没有
+ * （b_isr_tx_pending），再按传输粒度完成整帧（b_isr_tx_active）。宿主机没有
  * 中断源，因此用泵调用代替数据中断。 */
 void test_pump_tx_idle(iolink_device_ctx_t* ctx);
 

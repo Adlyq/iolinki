@@ -4,7 +4,7 @@
  * 回归测试：ISR 邮箱路径必须刷新活动时间戳。
  *
  * 此前邮箱分支在消费已发布的帧时没有更新
- * last_activity_ms/last_byte_us，导致 1 s 无活动监控在每个超时 tick 上
+ * b_last_activity_ms/b_last_byte_us，导致 1 s 无活动监控在每个超时 tick 上
  * 都把健康的 ESTAB_COM 链路复位到 STARTUP。
  *
  * ISR 双泵邮箱活动检查。

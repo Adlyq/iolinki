@@ -58,7 +58,7 @@ struct iolink_dll_isr
                                      m_isr_tx_payload */
 
     /* 流式应答的长度与 CKS 标志：只在 ISR 内写。主上下文暂存的元数据
-     * （dll_shared.h 的 m_stage_len/m_stage_has_cks）在 isr_tx_pending 取走时
+     * （dll_shared.h 的 m_stage_len/m_stage_has_cks）在 b_isr_tx_pending 取走时
      * 一次读入这里，此后不再回读，因此在途帧不受后续暂存影响。 */
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
     volatile uint8_t tx_stream_len; /**< 当前流式应答的载荷字节数 */

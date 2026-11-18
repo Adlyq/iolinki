@@ -45,6 +45,7 @@ ALLOWLIST = Path("tools/docs_refs_allowlist.txt")
 DEVICE_HEADER = Path("include/iolinki/device.h")
 
 SYMBOL_RE = re.compile(r"\b(?:iolink_[A-Za-z0-9_]+|IOLINK_[A-Za-z0-9_]+)\b")
+SHARED_FIELD_RE = re.compile(r"(?:iolink_dll_shared_t::|(?<![A-Za-z0-9_])shared(?:->|\.))([a-z_][a-z0-9_]*)")
 INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
 LINK_RE = re.compile(r"\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 HTML_LINK_RE = re.compile(r"<a\s+[^>]*href=\"([^\"]+)\"", re.IGNORECASE)
@@ -236,6 +237,40 @@ def is_allowed(entries: list[AllowEntry], path: str, symbol: str) -> bool:
 # --- Rules ------------------------------------------------------------------
 
 
+def load_shared_fields(root: Path) -> set[str]:
+    path = root / "tools/shared_fields.csv"
+    if not path.is_file():
+        raise RefsError("tools/shared_fields.csv is missing (needed to validate shared-field names)")
+    fields: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        cells = [cell.strip() for cell in line.split(",")]
+        if len(cells) >= 2 and cells[0] == "iolink_dll_shared_t":
+            fields.add(cells[1])
+    return fields
+
+
+def check_shared_fields(
+    rel: str, text: str, fields: set[str], allow: list[AllowEntry]
+) -> list[Violation]:
+    violations: list[Violation] = []
+    for number, line in iter_unfenced_lines(text):
+        for span in INLINE_CODE_RE.findall(line):
+            for match in SHARED_FIELD_RE.finditer(span):
+                field = match.group(1)
+                if field in fields or is_allowed(allow, rel, field):
+                    continue
+                violations.append(
+                    Violation(
+                        "symbol",
+                        rel,
+                        number,
+                        f"unknown shared field {field!r} in inline code "
+                        "(not in tools/shared_fields.csv)",
+                    )
+                )
+    return violations
+
+
 def check_symbols(path: Path, rel: str, text: str, symbols: set[str], allow: list[AllowEntry]):
     violations: list[Violation] = []
     for number, line in iter_unfenced_lines(text):
@@ -394,12 +429,14 @@ def check_error_codes(path: Path, rel: str, text: str, codes: dict[str, int]):
 def collect(root: Path) -> tuple[list[Violation], list[AllowEntry]]:
     allow = read_allowlist(root)
     symbols = build_symbol_index(root)
+    shared_fields = load_shared_fields(root)
     codes = extract_error_codes(root)
     violations: list[Violation] = []
     for path in iter_docs(root):
         rel = relative(root, path)
         text = path.read_text(encoding="utf-8", errors="replace")
         violations += check_symbols(path, rel, text, symbols, allow)
+        violations += check_shared_fields(rel, text, shared_fields, allow)
         violations += check_links(path, rel, text)
         violations += check_error_codes(path, rel, text, codes)
     violations += check_script_paths(root)
@@ -451,6 +488,20 @@ def selftest() -> int:
         expect(
             any(v.kind == "symbol" and "iolink_fixture_missing_symbol" in v.message for v in violations),
             "missing symbol was not reported",
+        )
+        good.write_text(baseline, encoding="utf-8")
+
+        good.write_text(
+            baseline + "\n`shared.b_ok` and `shared.bad_field`\n", encoding="utf-8"
+        )
+        violations, _ = collect(workspace)
+        expect(
+            any(v.kind == "symbol" and "bad_field" in v.message for v in violations),
+            "unknown shared field was not reported",
+        )
+        expect(
+            not any("b_ok" in v.message for v in violations),
+            "known shared field was reported",
         )
         good.write_text(baseline, encoding="utf-8")
 

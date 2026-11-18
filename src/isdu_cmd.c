@@ -656,7 +656,7 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, const iolink_device
 
 /** @brief 当前调用是否处于可安全重建 DPP1 映像的主泵上下文。
  *
- * 数据 ISR 在 `iolink_dll_shared_t::in_isr` 置位期间运行；独立引擎
+ * 数据 ISR 在 `iolink_dll_shared_t::i_in_isr` 置位期间运行；独立引擎
  * （未绑定 DLL）没有 ISR 读者。重建因此只发生在主泵侧，ISR 侧永远
  * 只读稳定副本。
  */

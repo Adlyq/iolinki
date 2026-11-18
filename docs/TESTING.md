@@ -39,7 +39,7 @@ name, prints each group's wall time, and stops at the first failure
 | `static` | cppcheck and the MISRA addon (report-only unless `IOLINKI_MISRA_ENFORCE=1`) |
 | `docs` | the generated documentation blocks (`gen_docs.py --check`: error codes, stats fields, public API, field ownership) and Doxygen warnings |
 | `matrix` | `tools/build_matrix.sh` (clang) and `tools/diff_matrix.sh` |
-| `perf` | `tools/coverage.sh --check` (clang), `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` (ATFE; the ROM/RAM matrix is built with `-DIOLINK_LOG_COMPILE_LEVEL=0`, so the budget covers protocol code, not diagnostics) and `tools/stack_report.py --selftest --check` against `tools/stack_baseline.json` (target stack frames, Arm gcc or ATFE) |
+| `perf` | `tools/coverage.sh --check` (clang), `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` (ATFE; the ROM/RAM matrix is built with `-DIOLINK_LOG_COMPILE_LEVEL=0`, so the budget covers protocol code, not diagnostics) and `tools/stack_report.py --selftest --check` against `tools/stack_baseline.json` (target stack frames, `arm-none-eabi-gcc`) |
 | `package` | the exported package is installed into a scratch prefix and a two-file consumer is built against it |
 | `fuzz` | libFuzzer over the three parsers that take untrusted bytes (received octets, ISDU payloads, OD indices/values); 60 s per target (`FUZZ_SECONDS` overrides), a crash, timeout or leak fails the group |
 | `all` | every group above |
@@ -378,9 +378,9 @@ The CI workflow (`.github/workflows/ci.yml`) runs on every push and PR to
     and the file-size, ownership, white-box and install/consume checks.
 4.  **static-analysis**: `tools/gates.sh gcc sanitize analyzer context` — the
     gcc-only diagnostics, the unit suite under the sanitizers, the clang static
-    analyzer and the ISR/main field ownership gate. `context` is report-only
-    until the context split removes its findings; the step then fails on a new
-    violation without a workflow change. It is meant to be a required check.
+    analyzer and the ISR/main field ownership gate. `context` is enforced: a
+    new cross-context field write or read fails the job. It is meant to be a
+    required check.
 5.  **docs-drift**: `tools/gates.sh docs`, i.e. the generated blocks compared
     verbatim by `tools/gen_docs.py --check` and a warning-free Doxygen run. It
     is meant to be a required check.

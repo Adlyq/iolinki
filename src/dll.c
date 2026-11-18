@@ -54,7 +54,7 @@
  *      |                                     （补做 T_CYCLE/T_REN 记账）
  *      |- dll_apply_isr_deadline_requests    设置/清除 T_FBD 与 T_DSIO
  *      |                                     （64 位截止时间由主上下文持有）
- *      |                                     并消费 isr_cycle_served（Back-to-box 计数）
+ *      |                                     并消费 i_isr_cycle_served（Back-to-box 计数）
  *      |- iolink_isdu_process                应用 ISR 累计完成的写请求并执行 ISDU 服务
  *      |- dll_apply_isr_isdu_read_reset      消费 ISR 的 IDLE/ABORT 读复位请求
  *      |                                     （只复位读传输层）
@@ -91,16 +91,16 @@
  *    机、PD-out 拷贝和计数器仍必须运行。
  *
  * 与数据 ISR 的交接（dll_isr.c）：
- *  - 主上下文 -> ISR：isr_tx_payload[0..1] + isr_tx_pending（dll_send）、ISDU
+ *  - 主上下文 -> ISR：m_isr_tx_payload[0..1] + b_isr_tx_pending（dll_send）、ISDU
  *    发布字 isr_isdu_pub/resp_store（dll_isdu_sync_snapshot）、
  *    isdu.req_ack_gen/isdu.req_busy_sel（主泵对已发布写请求的 ack 与占用）
- *    以及 pd_pub（PD-in 发布字 `{active, valid, gen}`）。
- *  - ISR -> 主上下文：isr_frame_ring（dll_consume_isr_mailbox）、
- *    isdu.req_pub（双请求槽的写请求发布字）、isr_master_activity、
- *    isr_isdu_read_reset（IDLE/ABORT 读与写 ABORT 的传输层复位）、
- *    pd_valid_cmd（0x98/0x99 对 PD 有效位的本代覆盖）、
- *    isr_consumed_us/isr_consumed_seq（CONSUME 帧的 T_CYCLE/T_REN 记账）、
- *    isr_cycle_served（ISR 服务的 MasterCycle，Back-to-box 计数由主泵推进）
+ *    以及 m_pd_pub（PD-in 发布字 `{active, valid, gen}`）。
+ *  - ISR -> 主上下文：i_isr_frame_ring（dll_consume_isr_mailbox）、
+ *    isdu.req_pub（双请求槽的写请求发布字）、i_isr_master_activity、
+ *    i_isr_isdu_read_reset（IDLE/ABORT 读与写 ABORT 的传输层复位）、
+ *    b_pd_valid_cmd（0x98/0x99 对 PD 有效位的本代覆盖）、
+ *    i_isr_consumed_us/i_isr_consumed_seq（CONSUME 帧的 T_CYCLE/T_REN 记账）、
+ *    i_isr_cycle_served（ISR 服务的 MasterCycle，Back-to-box 计数由主泵推进）
  *    以及截止时间标志。
  *
  * ISR 双泵传送层位于 dll_isr.c；完整上下文契约与缓冲区归属表见
@@ -454,7 +454,7 @@ static void dll_take_isr_master_activity(iolink_dll_main_t* ctx)
     if (ctx->shared.i_isr_master_activity != 0U) {
         ctx->shared.i_isr_master_activity = 0U;
         /* 只刷新活动时间戳。Back-to-box 计数由主上下文独占推进：
-         * ISR 应答的帧经 isr_cycle_served 交接，主上下文应答的帧在
+         * ISR 应答的帧经 i_isr_cycle_served 交接，主上下文应答的帧在
          * dll_process_complete_frame 中直接推进。 */
         dll_mark_master_activity_ts(ctx);
     }
@@ -499,7 +499,7 @@ static bool dll_take_isr_consumed_frame(iolink_dll_main_t* ctx, uint32_t* stamp_
  * CONSUME 帧不进邮箱，主泵看不到它们，但每个 MasterCycle 都必须经过
  * MinCycleTime/T_REN 检查并刷新 `last_response_us`。32 位时间戳用无符号
  * 差值重建 64 位绝对时间：`now - (uint32_t) (now - stamp)`。该重建依赖
- * "主泵两次运行间隔 < 2^31 us"（约 35 分钟），与 `last_byte_us` 的既有
+ * "主泵两次运行间隔 < 2^31 us"（约 35 分钟），与 `b_last_byte_us` 的既有
  * uint32 假设同级；超时未运行主泵时链路本就已按主站丢失处理。
  */
 static void dll_apply_isr_consumed_frame(iolink_dll_main_t* ctx)
@@ -520,7 +520,7 @@ static void dll_apply_isr_consumed_frame(iolink_dll_main_t* ctx)
  * 两个 64 位截止时间由主上下文持有，因此绝不从
  * 中断上下文写入 64 位值（撕裂读会触发虚假的 T_DSIO/T_FBD）。
  * ISR 设置标志；主泵在同一轮的任何截止时间检查之前，
- * 在此设置或清除截止时间。`isr_cycle_served` 同样在此消费：
+ * 在此设置或清除截止时间。`i_isr_cycle_served` 同样在此消费：
  * Back-to-box 的周期计数归主上下文独占，ISR 只置一次性标志。
  */
 static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
@@ -669,15 +669,15 @@ static void dll_timer_expire_master_lost(iolink_dll_main_t* ctx)
 /** @brief 同步 1 s 空闲诊断 timer（活动时间戳由主/ISR 共同推进）。 */
 static void dll_timer_sync_idle(iolink_dll_main_t* ctx)
 {
-    const uint32_t last_activity_ms = ctx->shared.b_last_activity_ms;
-    if (last_activity_ms == 0U) {
+    const uint32_t b_last_activity_ms = ctx->shared.b_last_activity_ms;
+    if (b_last_activity_ms == 0U) {
         dll_timer_cancel(ctx, IOLINK_TIMER_IDLE);
         return;
     }
     /* 原条件为 now_ms - last > 1000（32 位无符号差值）。这里用同一差值
      * 换算绝对微秒截止时间，跨 49 天毫秒回绕仍成立。 */
     const uint64_t now_us = dll_time_us(&ctx->shared);
-    const uint32_t elapsed = (uint32_t) (now_us / 1000U) - last_activity_ms;
+    const uint32_t elapsed = (uint32_t) (now_us / 1000U) - b_last_activity_ms;
     const uint64_t deadline =
         (elapsed > 1000U) ? now_us : now_us + (uint64_t) (1001U - elapsed) * 1000U;
     dll_timer_arm(ctx, IOLINK_TIMER_IDLE, deadline);
@@ -790,14 +790,14 @@ static bool dll_handle_sio_wakeup(iolink_dll_main_t* ctx)
 /** @brief ST Timer A：帧内字节间隙会中止该帧并重新监听。 */
 static void dll_timer_sync_t_byte(iolink_dll_main_t* ctx)
 {
-    const uint32_t last_byte_us = ctx->shared.b_last_byte_us;
+    const uint32_t b_last_byte_us = ctx->shared.b_last_byte_us;
     if ((ctx->frame_index == 0U) || (!ctx->enforce_timing) || (ctx->t_byte_limit_us == 0U) ||
-        (last_byte_us == 0U)) {
+        (b_last_byte_us == 0U)) {
         dll_timer_cancel(ctx, IOLINK_TIMER_T_BYTE);
         return;
     }
     const uint64_t now_us = dll_time_us(&ctx->shared);
-    const uint32_t elapsed = (uint32_t) now_us - last_byte_us;
+    const uint32_t elapsed = (uint32_t) now_us - b_last_byte_us;
     uint64_t deadline;
     if (elapsed > ctx->t_byte_limit_us) {
         deadline = now_us; /* 已超限：本次分发立即到期 */

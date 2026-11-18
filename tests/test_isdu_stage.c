@@ -35,7 +35,7 @@
  * WRITE_PROTECTED。 */
 static const uint8_t k_page1_write[6] = {0x36U, 0x00U, 0x00U, 0x00U, 0x42U, 0x74U};
 
-/* 只用于把 `in_isr` 置位的伪 DLL 上下文：没有初始化，不驱动 DLL 逻辑。 */
+/* 只用于把 `i_in_isr` 置位的伪 DLL 上下文：没有初始化，不驱动 DLL 逻辑。 */
 static iolink_dll_ctx_t s_dll;
 
 static void feed_isdu_write(iolink_isdu_ctx_t* ctx, const uint8_t* req, size_t len)

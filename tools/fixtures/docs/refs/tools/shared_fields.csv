@@ -1,0 +1,2 @@
+struct,field,category,writer,reader,note
+iolink_dll_shared_t,b_ok,b_,main,isr,fixture field

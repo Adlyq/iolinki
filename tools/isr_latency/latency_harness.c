@@ -120,7 +120,7 @@ static void lat_tx_done(iolink_app_t* self)
 
 /* 主上下文暂存应答后请求"数据中断"。宿主机没有中断源：场景显式调用
  * iolink_dll_process_isr()，该入口在 int_active 门控之前排空
- * isr_tx_pending。这里不驱动任何东西，也不得在本上下文重入泵，否则
+ * b_isr_tx_pending。这里不驱动任何东西，也不得在本上下文重入泵，否则
  * 会把两个上下文的时延混进同一个测量窗口。 */
 static void lat_request_service(iolink_app_t* self)
 {

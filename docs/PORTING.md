@@ -316,7 +316,7 @@ contexts:
 | Mode | Behaviour | Cost |
 | :--- | :--- | :--- |
 | `SHARED` (default) | one counter set, both contexts increment it; an increment that is preempted between its load and its store can be lost (diagnostics only) | none |
-| `SPLIT` | the ISR keeps its own counter set (`ctx->isr_stat`), `iolink_dll_get_stats()` returns the sum | one counter set of RAM |
+| `SPLIT` | the ISR keeps its own counter set (`shared.b_isr_stat`), `iolink_dll_get_stats()` returns the sum | one counter set of RAM |
 
 Neither mode takes a critical section for the counters. `SPLIT` removes the
 two-writer increment on a single counter by giving each context its own set, so
