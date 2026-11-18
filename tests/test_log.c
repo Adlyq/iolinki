@@ -340,11 +340,9 @@ int main(void)
         cmocka_unit_test(test_forwarding_and_user),
         cmocka_unit_test(test_arguments_not_evaluated_when_filtered),
 #if !IOLINK_LOG_ENABLE_ISR
-#if !IOLINK_LOG_ENABLE_ISR
         cmocka_unit_test(test_isr_family_is_off_by_default),
 #endif
         cmocka_unit_test(test_isr_family_on),
-#endif
         cmocka_unit_test(test_device_setter_propagates),
         cmocka_unit_test(test_device_init_binds_config_sink),
         cmocka_unit_test(test_device_init_failure_logs_through_config),
