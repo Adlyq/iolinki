@@ -35,7 +35,7 @@ static void test_pd_input_update_flow(void** state)
 
     uint8_t data[] = {0xAA, 0xBB};
     int res = iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true);
-    assert_int_equal(res, 0);
+    assert_int_equal(res, IOLINK_DEVICE_PD_OK);
 
     /* 通过输出读取检查内部状态（作为简单代理） */
     /* 注意：PD 输出是从主站读入的，因此这不是直接的镜像。
@@ -79,11 +79,10 @@ static void cb_operate(iolink_app_t* IOLINK_NULLABLE self)
     assert_ptr_equal(self, g_expected_user);
     g_cb_operate++;
 }
-static void cb_pd_output(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t len)
+static void cb_pd_output(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data)
 {
     assert_ptr_equal(self, g_expected_user);
     (void) data;
-    (void) len;
     g_cb_pd_output++;
 }
 static void cb_state_change(iolink_app_t* IOLINK_NULLABLE self, iolink_dll_state_t state)

@@ -361,11 +361,13 @@ static void test_device_pd_input_bounds(void** state)
     const uint8_t data[IOLINK_PD_IN_MAX_SIZE + 1U] = {0};
 
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, TEST_NULL(const uint8_t*), 2U, true),
-                     -1);
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true), -1);
+                     IOLINK_DEVICE_PD_ERR_ARG);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true),
+                     IOLINK_DEVICE_PD_ERR_LEN);
 
     const uint8_t pd[2] = {0x11U, 0x22U};
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), true), 0);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), true),
+                     IOLINK_DEVICE_PD_OK);
     assert_int_equal(test_dll_shared(&dev.ctx)->pd_in_len, 2U);
     const iolink_dll_shared_t* shared = test_dll_shared(&dev.ctx);
     assert_memory_equal(&shared->pd_in[test_pd_active(test_dll(&dev.ctx))][shared->od_width], pd,

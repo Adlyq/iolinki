@@ -15,19 +15,23 @@
 
 #include "iolinki/config.h"
 #include "iolinki/dll.h"
+#include "iolinki/iolink.h"
 #include "iolinki/log.h"
 #include "iolinki/types.h"
 
 /**
  * @brief PD 输入路径（运行时选择，默认值与完整说明见 config.h）。
  *
- * 两条路径不再互斥：`iolink_device_pd_input_update()` 始终可用；如果
- * `iolink_device_app_t::on_pd_input` 非 NULL，DLL 会在每个 OPERATE
- * 周期改用它填充空闲的 PD-in 缓冲区。混用（同一次初始化既给回调又
- * 轮询）会在 `iolink_device_init()` 被拒绝：能力位
- * `IOLINK_CAP_PD_IN_CALLBACK` 一旦置位，轮询调用返回
- * `IOLINK_DEVICE_INIT_ERR_PD_INPUT` 的同类约束由
- * `iolink_device_pd_input_update()` 的返回值表达（见 device.c）。
+ * 路径只由 `iolink_device_app_t::on_pd_input` 是否为 NULL 决定。
+ * `iolink_device_init()` 不检查也不拒绝两条路径的混用：回调非 NULL 时
+ * 置位能力位 `IOLINK_CAP_PD_IN_CALLBACK`，DLL 在每个 OPERATE 周期用它
+ * 填充空闲的 PD-in 缓冲区；此时轮询 API
+ * `iolink_device_pd_input_update()` 在运行期返回
+ * `IOLINK_DEVICE_PD_ERR_MODE`，不会静默覆盖回调输出。
+ *
+ * PD 长度是初始化属性（`iolink_stack_config_t::pd_in_len` /
+ * `pd_out_len`），不逐次传参：回调按配置长度填写/读取缓冲区，
+ * 轮询调用必须传入相同的 PD-in 长度。
  */
 
 /**
@@ -57,7 +61,9 @@
  * 生命周期回调在 DLL 进入对应状态时触发一次；PD 回调在每次处理的
  * OPERATE 周期触发。`on_pd_output` 报告从主站收到的输出过程数据
  * （主站 -> 设备）。on_pd_input() 填充一个空闲的 PD-in 缓冲区
- * （设备 -> 主站），其返回值成为 PD 有效标志。
+ * （设备 -> 主站），其返回值成为 PD 有效标志。PD 缓冲区长度取自
+ * `iolink_stack_config_t`（`pd_in_len` / `pd_out_len`），不在回调参数里
+ * 重复传递。
  *
  * `time_us` 是唯一必需的成员：DLL、ISR 泵和事件引擎的每个时间戳都
  * 取自它，缺失时 iolink_device_init() 返回
@@ -83,12 +89,14 @@ typedef struct
     void (*IOLINK_NULLABLE on_preoperate)(
         iolink_app_t* IOLINK_NULLABLE self); /**< 已进入 PREOPERATE */
     void (*IOLINK_NULLABLE on_operate)(iolink_app_t* IOLINK_NULLABLE self); /**< 已进入 OPERATE */
-    bool (*IOLINK_NULLABLE on_pd_input)(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data,
-                                        uint8_t len); /**< 填充输入 PD；
-                                                           false 表示无效。
+    bool (*IOLINK_NULLABLE on_pd_input)(iolink_app_t* IOLINK_NULLABLE self,
+                                        uint8_t* data); /**< 填充一个空闲的输入 PD 缓冲区（长度 =
+                                                           配置的 `pd_in_len`）；false 表示无效。
                                                            NULL = 使用轮询 API。 */
-    void (*IOLINK_NULLABLE on_pd_output)(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data,
-                                         uint8_t len); /**< 已收到输出 PD */
+    void (*IOLINK_NULLABLE on_pd_output)(
+        iolink_app_t* IOLINK_NULLABLE self,
+        const uint8_t* data); /**< 已收到输出 PD（长度 = 配置的
+                                  `pd_out_len`）；指针只在调用期间有效。 */
     void (*IOLINK_NULLABLE on_state_change)(
         iolink_app_t* IOLINK_NULLABLE self,
         iolink_dll_state_t state); /**< 基于电平通知时的当前 DLL 状态。

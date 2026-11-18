@@ -552,8 +552,7 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
         return;
     }
     if (ctx->config->app->on_pd_output != NULL) {
-        ctx->config->app->on_pd_output(ctx->config->app->self, ctx->dll.main.pd_out,
-                                       ctx->dll.main.shared.pd_out_len_current);
+        ctx->config->app->on_pd_output(ctx->config->app->self, ctx->dll.main.pd_out);
     }
     if (iolink_caps_has(ctx->dll.main.shared.caps, IOLINK_CAP_PD_IN_CALLBACK)) {
         /* 填写一个 ISR 未在流式发送的缓冲区，然后发布，使 ISR
@@ -564,11 +563,9 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
             return;                      /* 保留当前 PD 输入并在下一周期重试 */
         }
         /* 填写空闲缓冲区时 ISR 继续发送已捕获的副本；发布本身只是
-         * 一次原子存储，没有临界区。 */
-        const bool valid = ctx->config->app->on_pd_input(
-            ctx->config->app->self,
-            &ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.od_width],
-            ctx->dll.main.shared.pd_in_len);
+         * 一次原子存储，没有临界区。回调长度取自配置的 `pd_in_len`。 */
+        uint8_t* pd_in = &ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.od_width];
+        const bool valid = ctx->config->app->on_pd_input(ctx->config->app->self, pd_in);
 
         dll_pd_publish(&ctx->dll.main.shared, inactive, valid);
     }
@@ -592,22 +589,22 @@ void iolink_device_process(iolink_device_ctx_t* ctx)
     device_run_app_callbacks(ctx);
 }
 
-int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data, size_t len,
-                                  bool valid)
+iolink_device_pd_result_t iolink_device_pd_input_update(iolink_device_ctx_t* ctx,
+                                                        const uint8_t* data, size_t len, bool valid)
 {
-    if ((ctx == NULL) || (data == NULL) || (len > IOLINK_PD_IN_MAX_SIZE)) {
-        return -1;
+    if ((ctx == NULL) || (data == NULL)) {
+        return IOLINK_DEVICE_PD_ERR_ARG;
     }
     /* 回调路径已选中时拒绝轮询调用：两条路径混用会让线上 PD 在
      * 回调输出与调用方数据之间跳变。 */
     if (iolink_caps_has(ctx->dll.main.shared.caps, IOLINK_CAP_PD_IN_CALLBACK)) {
-        return IOLINK_DEVICE_INIT_ERR_PD_INPUT;
+        return IOLINK_DEVICE_PD_ERR_MODE;
     }
     /* PD 长度是初始化属性（`iolink_stack_config_t`）：DPP1 0x05/0x06 是只读
      * 通告，任何阶段都不改变。这里只接受与配置一致的载荷长度，避免应答
      * 布局偏离已通告的 IODD/DPP1。 */
-    if ((uint8_t) len != ctx->dll.main.shared.pd_in_len) {
-        return -1;
+    if (len != (size_t) ctx->dll.main.shared.pd_in_len) {
+        return IOLINK_DEVICE_PD_ERR_LEN;
     }
 
     /* PD 输入位于应答缓冲区中 OD 头之后；填写一个
@@ -616,7 +613,7 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     const uint8_t inactive = device_pd_in_free_index(&ctx->dll.main);
     if (inactive == 0xFFU) {
         ctx->dll.main.pd_in_skips++; /* 每个备用缓冲区都被租用：稍后重试 */
-        return -1;
+        return IOLINK_DEVICE_PD_ERR_BUSY;
     }
     /* ISR 只会捕获已发布的索引，因此既非活动也未被捕获的缓冲区
      * 不会被它读取。填充在发布之前完成，发布是一次原子存储
@@ -624,7 +621,7 @@ int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
     (void) memcpy(&ctx->dll.main.shared.pd_in[inactive][ctx->dll.main.shared.od_width], data, len);
     dll_pd_publish(&ctx->dll.main.shared, inactive, valid);
 
-    return 0;
+    return IOLINK_DEVICE_PD_OK;
 }
 
 void iolink_device_process_isr(iolink_device_ctx_t* ctx)
