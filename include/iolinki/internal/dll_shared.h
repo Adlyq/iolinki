@@ -80,16 +80,17 @@ typedef struct iolink_dll_shared
      *
      * 这类帧不进邮箱，主泵因此看不到它们；但 T_CYCLE/T_REN 记账与
      * `last_response_us` 仍须覆盖每一个 MasterCycle。ISR 先写
-     * `isr_consumed_us`（32 位微秒，单字对齐存储），再自增
-     * `isr_consumed_seq` 作为发布边沿。主泵读 seq -> us -> seq 做双读
-     * 校验，两次 seq 相同才采纳该时间戳，并在
+     * `isr_consumed_us`（32 位微秒，单字对齐存储），穿过 `IOLINK_FENCE()`
+     * 后再自增 `isr_consumed_seq` 作为发布（release）边沿。主泵按
+     * seq -> `IOLINK_FENCE()` -> us -> `IOLINK_FENCE()` -> seq 的顺序做双读
+     * 校验（acquire），两次 seq 相同才采纳该时间戳，并在
      * `iolink_dll_main_t::isr_consumed_seq_seen` 记录已消费的序号。
      *
-     * 原子性：两步写都在同一次数据中断内完成，主上下文只能在最外层
-     * 中断返回后运行，因此读侧永远不会把新时间戳归到旧序号上；双读的
-     * 作用是检测"读取期间 ISR 又交接了一帧"（seq 变化即重试）。8 位
-     * 序号是自由计数、永不清零；主泵两次运行之间恰好消费 256 帧时会
-     * 漏掉一次更新，只影响一次 T_CYCLE 检查。
+     * 原子性：release/acquire 保证读到新序号的主泵一定读到对应的新时间戳，
+     * `IOLINK_CONCURRENCY=SMP` 下（两个内核或两个线程）因此不再依赖"写者
+     * 在中断返回后对读者可见"这一单核假设。双读的作用是检测"读取期间 ISR
+     * 又交接了一帧"（seq 变化即重试）。8 位序号是自由计数、永不清零；主泵
+     * 两次运行之间恰好消费 256 帧时会漏掉一次更新，只影响一次 T_CYCLE 检查。
      */
     volatile uint32_t isr_consumed_us; /**< ISR 消费帧的时间戳低 32 位 */
 

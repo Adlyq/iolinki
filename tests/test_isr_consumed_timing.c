@@ -35,6 +35,18 @@
 static iolink_dll_ctx_t s_dll;
 static uint64_t s_now_us;
 
+/* 交接发布顺序的观察点：步进时钟每被调用一次返回值 +1，并记录该次调用
+ * 看到的 isr_consumed_seq。成为 isr_consumed_us 的那次读取必须看到旧
+ * 序号，否则说明序号自增（发布边沿）排到了时间戳之前。 */
+#define CLOCK_OBS_MAX 8U
+static uint64_t s_clock_step;
+static struct
+{
+    uint32_t value;
+    uint8_t seq;
+} s_clock_obs[CLOCK_OBS_MAX];
+static size_t s_clock_obs_n;
+
 static uint8_t s_rx_q[RX_MAX];
 static size_t s_rx_n;
 static size_t s_rx_i;
@@ -56,7 +68,16 @@ static uint64_t s_tx_leaked; /* 开始新捕获时仍未查看的交付 */
 static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
-    return s_now_us;
+    const uint64_t now = s_now_us + s_clock_step;
+    if (s_clock_step != 0U) {
+        s_clock_step++;
+        if (s_clock_obs_n < CLOCK_OBS_MAX) {
+            s_clock_obs[s_clock_obs_n].value = (uint32_t) now;
+            s_clock_obs[s_clock_obs_n].seq = s_dll.main.shared.isr_consumed_seq;
+            s_clock_obs_n++;
+        }
+    }
+    return now;
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
@@ -380,6 +401,127 @@ static int run_all(void)
 
 IOLINK_TEST_RC(run_all)
 
+/* 在观察记录里找到返回值等于 @p value 的那次时钟读取。 */
+static size_t clock_obs_find(uint32_t value)
+{
+    for (size_t i = 0U; i < s_clock_obs_n; i++) {
+        if (s_clock_obs[i].value == value) {
+            return i;
+        }
+    }
+    return CLOCK_OBS_MAX;
+}
+
+/**
+ * @brief 固定 CONSUME 帧时间戳的发布顺序与双读采纳/拒绝路径。
+ *
+ * 发布侧：成为 `isr_consumed_us` 的那次时钟读取必须看到旧序号，序号在
+ * 时间戳之后才自增，因此序号是 release 边沿。读取侧：新序号被采纳一次，
+ * 同一序号不会重复采纳，一轮主泵只采纳最新交接，8 位自由计数回绕不
+ * 影响采纳。
+ */
+static int run_handoff_order(void)
+{
+    init_operate_type0();
+    s_dll.main.enforce_timing = false;
+
+    /* 1. 发布顺序：时间戳先于序号自增。 */
+    s_now_us += 1000U;
+    s_clock_obs_n = 0U;
+    s_clock_step = 1U;
+    const uint8_t seq_before = s_dll.main.shared.isr_consumed_seq;
+    if (!run_consumed_page_read()) {
+        return 1;
+    }
+    s_clock_step = 0U;
+    if (s_dll.main.shared.isr_consumed_seq != (uint8_t) (seq_before + 1U)) {
+        return 2;
+    }
+    const uint32_t stamp = s_dll.main.shared.isr_consumed_us;
+    const size_t obs = clock_obs_find(stamp);
+    if (obs == CLOCK_OBS_MAX) {
+        return 3; /* 时间戳必须来自一次时钟读取 */
+    }
+    if (s_clock_obs[obs].seq != seq_before) {
+        return 4; /* 序号先自增：旧时间戳会配到新序号上 */
+    }
+
+    /* 2. 采纳路径：主泵用交接时间戳补记 last_response_us。 */
+    s_now_us = (uint64_t) stamp + 150U;
+    run_main_pass();
+    if (s_dll.main.isr_consumed_seq_seen != (uint8_t) (seq_before + 1U)) {
+        return 5;
+    }
+    if (s_dll.main.last_response_us != (uint64_t) stamp) {
+        return 6;
+    }
+
+    /* 3. 拒绝路径：没有新序号时不重复采纳同一交接。 */
+    s_now_us += 200U;
+    run_main_pass();
+    if (s_dll.main.last_response_us != (uint64_t) stamp) {
+        return 7;
+    }
+
+    /* 4. 两次发布之间只跑一轮主泵：只采纳最新交接。 */
+    s_now_us = (uint64_t) stamp + 1000U;
+    if (!run_consumed_page_read()) {
+        return 8;
+    }
+    const uint32_t stamp2 = s_dll.main.shared.isr_consumed_us;
+    s_now_us = (uint64_t) stamp2 + 200U;
+    if (!run_consumed_page_read()) {
+        return 9;
+    }
+    const uint32_t stamp3 = s_dll.main.shared.isr_consumed_us;
+    if (stamp3 == stamp2) {
+        return 10;
+    }
+    s_now_us = (uint64_t) stamp3 + 150U;
+    run_main_pass();
+    if (s_dll.main.isr_consumed_seq_seen != s_dll.main.shared.isr_consumed_seq) {
+        return 11;
+    }
+    if (s_dll.main.last_response_us != (uint64_t) stamp3) {
+        return 12;
+    }
+
+    /* 5. 8 位自由计数回绕：回绕后的序号仍被采纳。 */
+    s_dll.main.shared.isr_consumed_seq = 0xFEU;
+    s_dll.main.isr_consumed_seq_seen = 0xFEU;
+    s_now_us = (uint64_t) stamp3 + 1000U;
+    if (!run_consumed_page_read()) {
+        return 13;
+    }
+    if (s_dll.main.shared.isr_consumed_seq != 0xFFU) {
+        return 14;
+    }
+    s_now_us = (uint64_t) stamp3 + 1150U;
+    run_main_pass();
+    if (s_dll.main.isr_consumed_seq_seen != 0xFFU) {
+        return 15;
+    }
+    s_now_us = (uint64_t) stamp3 + 2000U;
+    if (!run_consumed_page_read()) {
+        return 16;
+    }
+    if (s_dll.main.shared.isr_consumed_seq != 0x00U) {
+        return 17;
+    }
+    const uint32_t stamp_wrap = s_dll.main.shared.isr_consumed_us;
+    s_now_us = (uint64_t) stamp_wrap + 150U;
+    run_main_pass();
+    if (s_dll.main.isr_consumed_seq_seen != 0x00U) {
+        return 18;
+    }
+    if (s_dll.main.last_response_us != (uint64_t) stamp_wrap) {
+        return 19;
+    }
+    return 0;
+}
+
+IOLINK_TEST_RC(run_handoff_order)
+
 static int group_teardown(void** state)
 {
     (void) state;
@@ -397,6 +539,7 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(iolink_case_run_all),
+        cmocka_unit_test(iolink_case_run_handoff_order),
     };
     return cmocka_run_group_tests(tests, NULL, group_teardown);
 }

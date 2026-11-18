@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (CONSUME frame timestamp handoff publishes with a fence)
+- `dll_isr_complete_frame()` now writes `isr_consumed_us`, passes
+  `IOLINK_FENCE()` and only then bumps `isr_consumed_seq`, so the sequence
+  number is a release edge rather than a second plain store.
+  `dll_take_isr_consumed_frame()` reads `seq -> IOLINK_FENCE() -> us ->
+  IOLINK_FENCE() -> seq`, which makes the double-read acceptance test hold
+  under `IOLINK_CONCURRENCY=SMP` (two cores or two threads) instead of relying
+  on "the writer's interrupt return is visible to the reader". The 8-bit
+  free-running sequence, the "exactly 256 frames between two main passes miss
+  one update" behaviour and the context layout are unchanged.
+  `tests/test_isr_consumed_timing.c` pins the publish order with a stepping
+  clock and covers the accept, no-new-frame, multi-publish and 8-bit wrap
+  paths.
+
 ### Changed (ISDU write invalidation uses a monotonic sequence)
 - The clearable `isr_isdu_invalidated` flag is gone. The data ISR bumps
   `isr_isdu_write_gen` on every accepted write START/ABORT; the main pump records

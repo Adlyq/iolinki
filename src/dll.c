@@ -462,9 +462,10 @@ static void dll_take_isr_master_activity(iolink_dll_main_t* ctx)
 /**
  * @brief 取 ISR 完全消费（CONSUME 计划）帧的交接时间戳。
  *
- * 单写者交接：ISR 先写 32 位时间戳，再自增序号作为发布边沿。这里做
- * seq -> us -> seq 双读，只有两次序号相同才采纳时间戳；序号已变化说明
- * ISR 在读取过程中又发布了一帧，重试（最多 3 次），失败则留给下一轮。
+ * 单写者交接：ISR 先写 32 位时间戳，穿过 IOLINK_FENCE() 后再自增序号作为
+ * 发布（release）边沿。这里做 seq -> fence -> us -> fence -> seq 双读
+ * （acquire），只有两次序号相同才采纳时间戳；序号已变化说明 ISR 在读取
+ * 过程中又发布了一帧，重试（最多 3 次），失败则留给下一轮。
  *
  * @param ctx      DLL 上下文
  * @param[out] stamp_us ISR 记录的帧结束时间低 32 位
@@ -475,10 +476,12 @@ static bool dll_take_isr_consumed_frame(iolink_dll_main_t* ctx, uint32_t* stamp_
     bool taken = false;
     for (uint8_t attempt = 0U; (attempt < 3U) && !taken; attempt++) {
         const uint8_t seq = ctx->shared.isr_consumed_seq;
+        IOLINK_FENCE(); /* 获取：fence 之后的读取必须看到该序号对应的数据 */
         if (seq == ctx->isr_consumed_seq_seen) {
             break; /* 没有新帧 */
         }
         const uint32_t stamp = ctx->shared.isr_consumed_us;
+        IOLINK_FENCE(); /* 复读序号前的屏障：序号变化必须能被看见 */
         if (ctx->shared.isr_consumed_seq == seq) {
             ctx->isr_consumed_seq_seen = seq;
             *stamp_us = stamp;

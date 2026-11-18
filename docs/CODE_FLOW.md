@@ -926,7 +926,7 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 - `IOLINK_TIMER_KIND_DEADLINE` 的表项进入 `next_deadline`，由 `dll_timers_dispatch(ctx, phase)` 在到期时按表序执行；`phase 0` 在 t_pd / SIO 唤醒门控之前，`phase 1` 在两者之后、唤醒窗口门控之前（`t_byte` 只在 phase 1 执行，且只做测量、从不提前返回）。
 - `IOLINK_TIMER_KIND_WINDOW` 的表项不进 `next_deadline`，只由各自的边沿检查比较（`dll_t_pd_active()`、`dll_wakeup_window_active()`、`dll_check_cycle_time()` 等）。
 - `deadline == 0` 表示未装载；所有比较都走 `dll_time_reached()` / `dll_time_passed()` 的回绕安全减法（选择最早截止时间用同一族的符号差判定）。
-- ISR 在 `CONSUME` 计划下应答的帧不经过主泵帧尾：ISR 把帧时间的低 32 位写入 `shared.isr_consumed_us` 并自增 `isr_consumed_seq`，主泵在下一次 process 用该时间戳补做 `dll_check_cycle_time_at()` 并更新 `last_response_us`，因此 T_CYCLE/T_REN 与最坏时序统计不会漏掉这些帧（重建依赖主泵两次运行间隔 < 2^31 us）。
+- ISR 在 `CONSUME` 计划下应答的帧不经过主泵帧尾：ISR 把帧时间的低 32 位写入 `shared.isr_consumed_us`，穿过 `IOLINK_FENCE()`（release）再自增 `isr_consumed_seq`；主泵读 `isr_consumed_seq` 后用 `IOLINK_FENCE()`（acquire）读时间戳，复读序号前同样有屏障，然后在下一次 process 用该时间戳补做 `dll_check_cycle_time_at()` 并更新 `last_response_us`，因此 T_CYCLE/T_REN 与最坏时序统计不会漏掉这些帧（重建依赖主泵两次运行间隔 < 2^31 us）。SMP 档下的双读校验依赖这对屏障：没有它，读到新序号的读者仍可能看到旧时间戳。
 - `device_apply_stack_config()` 在时钟绑定之后直接装载 T_PD 表项（`dll_timer_arm()`），截止时间表是唯一事实源；不存在单独的兼容字段。
 
 错误路径与计数：
