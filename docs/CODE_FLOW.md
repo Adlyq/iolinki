@@ -1104,7 +1104,7 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `dll_send()`（`dll_frame.c`） | `isr_tx_payload` 暂存（≤`IOLINK_M_SEQ_MAX_LEN`） | 主→ISR 应答移交；检查 `isr_tx_active`、槽位推进、载荷复制与发布在同一个短临界区内完成（被拒绝的暂存不得碰在途槽）；`request_service()` 与 T_A 取消除外 |
 | `iolink_dll_set_sio_mode()`（`dll_api.c`） | 清 `isr_tx_pending`/`isr_tx_active`/`isr_tx_idx`/`pd_in_captured` | 四个字段由 ISR 写：清理与中断互斥，否则 ISR 可在半帧处重新置上 active/idx。被丢弃的暂存/在途应答计 `isr_tx_dropped`（主上下文自增）；`phy.set_mode` 在区外调用 |
 | `iolink_dll_on_rx_timeout()`（`dll_isr.c`） | RX 组装状态 `isr_rx_cnt`/`isr_rx_expect` 的成对复位 | Timer A 与数据 ISR 的相位一致；短、无回调，向量优先级契约见 `docs/PORTING.md` |
-| `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零两个上下文共享的计数器 | 与 ISR 自增分开 |
+| `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零 ISR 自有计数器 `isr_stat`（仅 SPLIT 档） | `isr_stat` 归数据 ISR 单写，清零必须与增量互斥；SHARED 档不取锁（最多丢一次诊断计数） |
 | `iolink_diag_service()`（`diag.c`） | ISR one-shot `isr_pulse[]` 的读-清 | 脉冲只允许被消费一次；除该字节外条件表归主上下文单写 |
 | `iolink_events_reset()`（`events.c`） | 条件表整表清零（含 ISR 单字节写的 `isr_pulse[]`） | 与 ISR 的 one-shot 脉冲互斥；事件引擎其余字段由主上下文单写 |
 

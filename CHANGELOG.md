@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (the error-counter reset only locks the SPLIT counters)
+- `iolink_dll_reset_error_counters()` no longer takes a critical section in the
+  default `IOLINK_STATS_MODE=SHARED` build: clearing the counters while the ISR
+  increments one can lose that update, which is the contract the counters
+  already declare (diagnostics only). Under `SPLIT` the ISR-owned `isr_stat` is
+  still cleared inside `IOLINK_CRITICAL_ENTER/EXIT()`, so its single writer
+  holds.
+
 ### Changed (the event queue and pending table need no lock)
 - `iolink_event_clear()`, `iolink_events_peek()`, `iolink_events_get_all()`,
   `iolink_diag_device_status()` and `iolink_diag_dds_snapshot()` no longer take

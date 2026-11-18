@@ -43,7 +43,9 @@ int iolink_dll_set_sdci_mode(iolink_dll_main_t* ctx);
 
 /** @brief 复位 ErrorCount 计数器（SystemCommand 0x80/0x82/0x83）。
  *  @note 只清计数器，保留活动事件（Table 101 "Clear" 与 "Restore factory
- *        settings" 的区别由调用方选择）。
+ *        settings" 的区别由调用方选择）。与 ISR 的一次自增并发时最多丢一次
+ *        更新（仅影响诊断）；`IOLINK_STATS_MODE=SPLIT` 下清零 ISR 自有的
+ *        `isr_stat` 仍与中断互斥。
  */
 void iolink_dll_reset_error_counters(iolink_dll_main_t* ctx);
 
