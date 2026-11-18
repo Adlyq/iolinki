@@ -501,10 +501,14 @@ uint8_t iolink_events_memory_read(iolink_events_ctx_t* ctx, uint8_t addr);
 void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t value);
 ```
 
-除 `iolink_events_pending()` / `iolink_events_flag()` / `iolink_events_memory_read()`
-外的入口都是主上下文专属：事件引擎只有一个写者。数据 ISR 只读取事件标志与
-Table 58 事件存储器（双映像 + 发布索引，因此永远看到完整的一代），并在需要
-复位时经 `iolink_events_reset_request()` 登记请求，由 `iolink_dll_process()` 应用。
+写入口（`iolink_event_trigger`、`iolink_event_clear`、`iolink_events_process`、
+`iolink_events_reset`、`iolink_events_memory_write`、`iolink_events_pop`、
+`iolink_events_clear_diagnosis`）是主上下文专属：事件引擎只有一个写者，主上下文在
+`in_isr` 置位时会被拒绝。只读入口（`iolink_events_pending`、`iolink_events_flag`、
+`iolink_events_memory_read`、`iolink_events_peek`、`iolink_events_get_all`、
+`iolink_events_get_dropped_count`）可从任一侧读取：ISR 看到的是双映像 + 发布索引
+保证的完整一代。ISR 侧的写只有两处：`iolink_events_reset_request()`（登记复位，
+由 `iolink_dll_process()` 应用）与 `iolink_diag_pulse_isr()` 的单字节 one-shot。
 
 `iolink_device_process()` 会在 ISDU 传输空闲时调用 `iolink_events_process()`，
 因此正常集成无需自行调用。使用 `iolink_event_trigger()` 触发错误/警告，

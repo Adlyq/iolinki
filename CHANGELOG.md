@@ -213,11 +213,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the public header now states it.
 
 ### Changed (ISDU read reset keeps the write entry phase)
-- `isdu_transport_reset()` still resets the whole ISDU transport, and now names
-  its two owners explicitly: the main-context read transport fields and the
-  write-entry phase (`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`). A new
-  `isdu_read_reset()` resets only the read side, and the read paths of
-  `iolink_isdu_od_read()` (IDLE, IDLE2, ABORT and a drained response) use it.
+- The read transport reset is now a separate entry, `isdu_read_reset()`, that
+  touches only the main-context read fields; the write-entry phase
+  (`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`) belongs to the data ISR
+  and is never reset from the pump. The read paths of `iolink_isdu_od_read()`
+  (IDLE, IDLE2, ABORT and a drained response) use it.
   A read reset no longer clears a write request the data ISR has just started,
   so a master that aborts an idle read and immediately starts a write keeps the
   request instead of having every acknowledged COUNT dropped.
@@ -256,16 +256,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed (an ISDU read reset no longer discards an in-flight write request)
 - `dll_process_body()` applied the ISR's IDLE/IDLE2/ABORT read-reset request
-  unconditionally. `iolink_isdu_od_read(IDLE)` ends in `isdu_transport_reset()`
-  → `isdu_stage_reset()`, which clears `req_idx`/`req_total`/`flowctrl_seen`/
-  `stage_state` — the write entry the data ISR may have just rebuilt in the same
-  exchange. A master that aborted a read and immediately started a write saw
-  every COUNT acknowledged while the request was dropped whole. The request is
-  now applied only when the write entry is back in `IOLINK_ISDU_STAGE_IDLE`,
-  otherwise the flag stays set for the next pump pass. The check, the flag clear
-  and the reset run in one critical section, so the ISR cannot open a new write
-  START in between; the section only clears fields (no PHY or application
-  callbacks).
+  unconditionally. The read reset used to clear the whole transport, including
+  `req_idx`/`req_total`/`flowctrl_seen`/`stage_state` — the write entry the data
+  ISR may have just rebuilt in the same exchange. A master that aborted a read and immediately started a write saw
+  every COUNT acknowledged while the request was dropped whole. The write entry
+  now belongs to the ISR, which removes the race at the ownership level; the
+  flag itself is still set by the ISR and cleared by the pump, so the read-clear
+  runs in one short critical section (the fast path stays lock free when no
+  request is pending).
 ### Added (the event memory is published, not locked)
 - The Table 58 event memory is now a double image with a published index:
   `iolink_events_ctx_t::memory[2][19]` plus `volatile uint8_t memory_pub`. The
@@ -274,8 +272,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reader (the data ISR) therefore always sees one complete generation instead of
   a byte-by-byte snapshot taken under the lock.
 - `iolink_events_reset_request()` (`src/events_internal.h`) is the only write the
-  data ISR may perform on the event engine: it raises `volatile uint8_t
-  reset_req` above `reset_applied`. `dll_set_state(STARTUP)` calls it when the
+  data ISR performs on the event engine proper: it raises `volatile uint8_t
+  reset_req` above `reset_applied`. (The one-shot `diag.isr_pulse[]` bytes
+  remain ISR-written and are consumed by `iolink_diag_service()`.) `dll_set_state(STARTUP)` calls it when the
   transition happens in the ISR; a main-context transition still calls
   `iolink_events_reset()` directly.
 - The main pump applies the request (`dll_process_body()` and
@@ -315,7 +314,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `iolink_event_trigger()` is unchanged in signature and passes
   `IOLINK_DIAG_SRC_NONE`.
 
-### Removed (reply plans carry no timing field and are compiled once)
 ### Fixed (Timer A timeout resets RX assembly in one phase)
 - `iolink_dll_on_rx_timeout()` (Timer A) cleared `isr_rx_cnt`/`isr_rx_expect`
   with two bare stores although those fields belong to the data ISR: a pump that
@@ -341,11 +339,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `isr_tx_pending`; `dll_isr_tx_step()` reads nothing else. `dll_send()` also
   rejects a staging while `isr_tx_active != 0` and counts it in
   `isr_tx_dropped`, and `dll_isr_start_staged_tx()` takes the CKS flag as a
-  parameter (TX BYTE no longer ignores the length). Context sizes are unchanged.
+  parameter (TX BYTE no longer ignores the length). The 64-bit host context
+  layout is unchanged; on a 32-bit target the two new ISR fields add 4 bytes to
+  `iolink_dll_isr_t` in the TX BYTE configuration.
   Regression: `test_isr_atomicity` covers a staging overwritten mid-stream and a
   rejected staging during an in-flight reply.
 
 
+### Removed (reply plans carry no timing field and are compiled once)
 - `iolink_reply_plan_t::deadline_us` is gone. Nothing read it at run time: the
   ISR arms t_A from `10 * dll_get_t_bit_us()` when it starts a reply
   (`dll_sm.c`), and the PHY response timer is the authority. The field was

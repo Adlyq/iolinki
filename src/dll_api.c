@@ -95,7 +95,7 @@ int iolink_dll_set_sio_mode(iolink_dll_main_t* ctx)
     /* SIO 转换会中止 PHY 中任何进行中的应答；丢弃
      * 匹配的 ISR TX 状态，使陈旧的 active 索引不会泄漏到下一个
      * SDCI 会话（SIO 中 int_active() 为 false，因此没有东西会完成它）。
-     * 这五个字段由数据 ISR 写，因此清理必须与中断互斥：否则中断可在
+     * 这四个字段由数据 ISR 写，因此清理必须与中断互斥：否则中断可在
      * 半帧处重新置上 active/idx，留下一个 tx_done 永不调用的挂起帧。
      * PHY 调用留在锁外（端口代码可能很慢）。丢弃本身必须可观测：
      * 暂存应答或在途帧被清掉时计一次 isr_tx_dropped；该字段由主上下文

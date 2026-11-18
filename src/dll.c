@@ -55,10 +55,9 @@
  *      |- dll_apply_isr_deadline_requests    设置/清除 T_FBD 与 T_DSIO
  *      |                                     （64 位截止时间由主上下文持有）
  *      |                                     并消费 isr_cycle_served（Back-to-box 计数）
- *      |- [TX FRAME] pd_in 租约释放          在临界区中轮询 tx_busy
  *      |- iolink_isdu_process                应用 ISR 累计完成的写请求并执行 ISDU 服务
  *      |- dll_apply_isr_isdu_read_reset      消费 ISR 的 IDLE/ABORT 读复位请求
- *      |                                     （仅当写入口为 IDLE）
+ *      |                                     （只复位读传输层）
  *      |- dll_isdu_sync_snapshot             发布 ISR 读取视图
  *      |- dll_poll_diagnostics
  *      |- dll_take_isr_master_activity       第二次采样：一帧可能已在上述步骤中
@@ -458,9 +457,9 @@ static void dll_take_isr_master_activity(iolink_dll_main_t* ctx)
 {
     if (ctx->shared.isr_master_activity != 0U) {
         ctx->shared.isr_master_activity = 0U;
-        /* 仅时间戳：Back-to-box 周期计数每个服务请求
-         * 精确推进一次（此处用于 ISR 应答的帧，或在
-         * dll_process_complete_frame 中用于主上下文应答的帧）。 */
+        /* 只刷新活动时间戳。Back-to-box 计数由主上下文独占推进：
+         * ISR 应答的帧经 isr_cycle_served 交接，主上下文应答的帧在
+         * dll_process_complete_frame 中直接推进。 */
         dll_mark_master_activity_ts(ctx);
     }
 }
@@ -565,7 +564,7 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
     if (ctx->shared.isr_cycle_served != 0U) {
         /* ISR 完全服务了一个 MasterCycle：计数归主上下文（ISR 只置标志），
          * 一个泵周期最多推进一次。
-         * 后续的 tx_busy 轮询与 ISDU 服务都在此之后运行，因此本轮的
+         * 后续的 ISDU 服务与邮箱消费都在此之后运行，因此本轮的
          * Back-to-box 停止判定能看到这次推进。 */
         ctx->shared.isr_cycle_served = 0U;
         dll_count_served_cycle(ctx);

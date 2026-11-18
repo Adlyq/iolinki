@@ -489,7 +489,7 @@ flowchart LR
 | Type-0 transition command（PREOPERATE） | 计划动作 `IOLINK_REPLY_ACT_ENTER_ESTAB_COM`，带 `CLOSE_WINDOW \| RESTART_TIMER_B \| CONSUME`：不应答 | 帧不入邮箱 |
 | Type-0 Page/Diag/Process READ | `IOLINK_REPLY_SRC_PAGE`（单窗口整段复制）/ `EVENT_MEM` / `TEMPLATE`，`CONSUME` | 帧不入邮箱 |
 | Type-0 ISDU READ（FlowCTRL 为 START/COUNT） | `IOLINK_REPLY_SRC_ISDU_SEG`，ISR 自己推进段索引；`CONSUME` | 帧不入邮箱 |
-| Type-0 ISDU READ（IDLE/IDLE2/ABORT） | 计划命中：ISR 回 `0x00` 并置 `isr_isdu_read_reset`；`CONSUME` | 主泵仅在写入口回到 `IOLINK_ISDU_STAGE_IDLE` 时消费该标志，`iolink_isdu_od_read()` 复位读传输层并刷新快照；否则保留到下一轮（避免丢掉同一交换里新建的写请求） |
+| Type-0 ISDU READ（IDLE/IDLE2/ABORT） | 计划命中：ISR 回 `0x00` 并置 `isr_isdu_read_reset`；`CONSUME` | 主泵在临界区内读-清该旗标并调用 `isdu_read_reset()`（只复位读传输层，写入口相位归 ISR，不会被踩）；快路径无请求时不取锁 |
 | Type-0 Page WRITE addr 0 | 计划动作 `IOLINK_REPLY_ACT_MASTER_COMMAND`：ISR 应用命令并回 CKS | `CONSUME` 帧不入邮箱 |
 | Type-0 Page WRITE addr 1..0x1F | 计划回 CKS（`SRC_NONE`，无 `CONSUME`） | eager 帧仍入邮箱；主泵应用 DPP 写，`frame_replied_by_isr` 抑制第二次应答 |
 | Type-0 Diag WRITE | 计划回 CKS（`SRC_NONE`，无 `CONSUME`） | eager 帧仍入邮箱；主泵确认事件读取，不重发应答 |
@@ -808,7 +808,7 @@ sequenceDiagram
 | `phy.response_timer_start/stop` | ISR RX/TX | t_A 看门狗 |
 | `phy.stack_timer_start` | ISR 收到有效帧后 / 计划的 `RESTART_TIMER_B` | 请求 Timer B 授权主循环服务窗口 |
 | `phy.detect_wakeup` | `dll_handle_sio_wakeup()` | SIO 唤醒检测 |
-| `iolink_critical_enter/exit` | 诊断条件表、PD 索引/长度等标量、事件队列读/clear | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
+| `iolink_critical_enter/exit` | 诊断条件表与 `isr_pulse` 消费、事件队列读/clear、计数器清零、应答暂存发布/取走、SIO 切换清理、Timer A 相位复位 | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
 | `on_state_change` | `device_state_cb()` | 当前状态（电平式；主上下文迁移立即投递，ISR 迁移合并） |
 | `on_startup` | 初始化末尾 + 进入 STARTUP | 初始化时显式调用一次 |
 | `on_preoperate` / `on_operate` | `device_state_cb()` | 进入对应状态时 |
@@ -1093,7 +1093,7 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `shared.isdu` 写入口（双请求槽 + `req_idx`/`req_total`/`stage_state` + 发布字 `req_pub`） | 数据 ISR | 主上下文（只读发布字） | 原子发布字 `{len, sel, gen, receiving}`；无临界区 | 主泵认领槽（`req_busy_sel`）→ 解析 → `req_ack_gen = gen` → 放开槽；`len=0` 的可 ack 代只推进 ack，`receiving` 代既不解析也不 ack。槽内覆盖最旧请求计 `req_overruns` |
 | `shared.state` + `last_notified_state` + `startup_notification_pending` | 主上下文 + ISR（单字节写） | 主上下文 | 电平比较 + STARTUP 边沿标志 | 每次 flush 记录已交付状态；ISR 触发 STARTUP 时优先通知 |
 | `iolink_conditions_t` | 主上下文（`isr_pulse[]` 由 ISR 单字节写） | 主上下文 | one-shot 字节 | `iolink_diag_service()` 在临界区消费 |
-| `events.memory[2][19]` + `memory_pub` | 主上下文 | ISR（CKS 位、Table 58） | 双映像 + 发布索引（写后备、屏障、发布） | 主上下文写完才发布；旧映像发布后不再被写 |
+| `events.memory[2][19]` + `memory_pub` | 主上下文 | ISR（CKS 位、Table 58） | 双映像 + 发布索引（写后备、屏障、发布） | 读者与写者同核不并发；ISR 每次只读一个字节，因此后备映像可以在下一次重建时被重写 |
 | `events.reset_req` / `reset_applied` | ISR 置起 / 主泵追上 | ISR（读侧掩码）、主泵 | 请求/已应用握手 | 不等期间 flag/memory 报告“无事件”；主泵应用复位后追平 |
 | 计数器 | 两个上下文 | 读侧 | — | `SHARED` 共享自增（可能丢一次更新）；`SPLIT` 分上下文求和 |
 

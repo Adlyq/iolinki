@@ -344,9 +344,9 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
  *  - 每份**新**应答翻转代数位（位 10）。长度与缓冲区选择完全相同的
  *    两份应答因此仍是不同的发布字，ISR 的段索引序列会被打断；
  *  - 写失效用单调序号：ISR 每接受一个写 START/ABORT 就自增
- *    `isr_isdu_write_gen`。写入口相位未回到 IDLE 时这里发布
+ *    `isr_isdu_write_gen`。发布代号尚未被 ack 时这里发布
  *    len = 0（无服务），绝不让旧应答继续充当"当前值"；写被应用或
- *    中止后（IDLE）先发布新视图，再把 `isdu_write_gen_applied` 追平，
+ *    中止后先发布新视图，再把 `isdu_write_gen_applied` 追平，
  *    确认必须放在发布之后：否则 ISR 可能在两者之间看到两值相等而
  *    读到旧视图。
  */

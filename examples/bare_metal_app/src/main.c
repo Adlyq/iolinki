@@ -72,6 +72,9 @@ int main(void)
     while (1) {
         /* Process Stack */
         iolink_device_process(&ctx);
+        /* 模拟数据中断：默认 ISR 档的应答由泵发送（本示例的虚拟 PHY 提供
+         * request_service()，但不会自己产生中断）。 */
+        iolink_device_process_isr(&ctx);
 
         /* Simulate System Tick (Time Passage) */
         sys_tick_handler();
