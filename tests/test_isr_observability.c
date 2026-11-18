@@ -981,6 +981,54 @@ static int test_fallback_clear_is_staged(void)
     return 0;
 }
 
+/* ISR 完全消费（CONSUME）的帧不直接写主上下文的主站活动字段：
+ * ISR 只置 `shared.isr_master_activity`，由主泵在
+ * `dll_take_isr_master_activity()` 中刷新 `master_last_activity_ms`、
+ * `master_lost_count` 与 `master_lost`。 */
+static int test_consume_frame_activity_is_main_only(void)
+{
+    iolink_dll_ctx_t dll;
+    init_type0_ctx(&dll);
+    dll.main.master_last_activity_ms = 0x1111U;
+    dll.main.master_lost_count = 7U;
+    dll.main.master_lost = true;
+
+    uint8_t frame[2];
+    make_type0((uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK), frame, sizeof(frame));
+    feed_chk(frame, sizeof(frame));
+    iolink_dll_process_isr(&dll.main);
+    while ((dll.main.shared.isr_tx_pending != 0U) || (dll.main.shared.isr_tx_active != 0U)) {
+        iolink_dll_process_isr(&dll.main);
+    }
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    tx_frame_sync();
+#endif
+    if (tx_observed_len() != 2U) {
+        return 1;
+    }
+    if (dll.main.shared.isr_frames_consumed != 1U) {
+        return 2; /* 该场景必须走 CONSUME 路径 */
+    }
+    if (dll.main.shared.isr_master_activity != 1U) {
+        return 3;
+    }
+    /* ISR 阶段不得改写主上下文字段。 */
+    if ((dll.main.master_last_activity_ms != 0x1111U) || (dll.main.master_lost_count != 7U) ||
+        !dll.main.master_lost) {
+        return 4;
+    }
+
+    iolink_dll_process(&dll.main);
+    if (dll.main.shared.isr_master_activity != 0U) {
+        return 5; /* 主泵未消费活动标志 */
+    }
+    /* PREOPERATE 下没有别的路径写该时间戳：只有 take 路径会刷新它。 */
+    if (dll.main.master_last_activity_ms != (uint32_t) (now_us / 1000U)) {
+        return 6;
+    }
+    return 0;
+}
+
 /* 阶段 4a：Timer A 在第一个八位组上启动，并在应答前停止；
  * 应答完成时启动 Timer B。 */
 static int test_timer_interlock(void)
@@ -1147,6 +1195,7 @@ IOLINK_TEST_RC(test_stack_tick_window)
 IOLINK_TEST_RC(test_byte_gap_incomplete)
 #endif
 IOLINK_TEST_RC(test_fallback_clear_is_staged)
+IOLINK_TEST_RC(test_consume_frame_activity_is_main_only)
 
 static int group_teardown(void** state)
 {
@@ -1185,6 +1234,7 @@ int main(void)
         cmocka_unit_test(iolink_case_test_byte_gap_incomplete),
 #endif
         cmocka_unit_test(iolink_case_test_fallback_clear_is_staged),
+        cmocka_unit_test(iolink_case_test_consume_frame_activity_is_main_only),
     };
     return cmocka_run_group_tests(tests, NULL, group_teardown);
 }

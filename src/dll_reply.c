@@ -433,7 +433,9 @@ uint32_t dll_master_cycle_us(const iolink_dll_main_t* ctx)
 
 /** @brief 刷新主站活动时间戳。
  *
- * 数据 ISR 看到帧结束、或主上下文完成一帧时调用；只刷新时间戳与
+ * 只由主上下文调用：主上下文自己完成的帧直接调用；ISR 完全消费的帧与
+ * 进了邮箱的帧一样，由 ISR 置 `shared.isr_master_activity`，主泵在
+ * `dll_take_isr_master_activity()` 中消费该标志后调用这里。只刷新时间戳与
  * 主站丢失提示，不涉及 Back-to-box 周期计数（该计数归主上下文独占，
  * 见 @ref dll_count_served_cycle 与 `shared.isr_cycle_served`）。 */
 void dll_mark_master_activity_ts(iolink_dll_main_t* ctx)
