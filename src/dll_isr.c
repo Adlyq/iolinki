@@ -743,8 +743,12 @@ bool dll_isr_plan_execute(iolink_dll_main_t* ctx, const iolink_reply_plan_t* pla
     return true;
 }
 
-/** @brief 主上下文处理器暂存了一个逐字回复；现在发送它。 */
-static void dll_isr_tx_pending(iolink_dll_main_t* ctx)
+/** @brief 主上下文处理器暂存了一个逐字回复；现在发送它。
+ *
+ * @return true 表示本次处理已经结束（发送已启动或已丢弃）；false 表示因
+ *         在途帧仍在发送而丢弃，调用方应继续正常的服务流程。
+ */
+static bool dll_isr_tx_pending(iolink_dll_main_t* ctx)
 {
     /* 取走暂存必须与主泵的发布互斥：三字段分读时，主泵的新一轮暂存会让
      * 这里拿到撕裂的 {slot, len, has_cks}，或把新发布连同 pending 一起吞掉。
@@ -764,12 +768,13 @@ static void dll_isr_tx_pending(iolink_dll_main_t* ctx)
     IOLINK_CRITICAL_EXIT();
     if (busy) {
         IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
-        return;
+        return false;
     }
     if (ctx->shared.phy->response_timer_stop != NULL) {
         ctx->shared.phy->response_timer_stop(ctx->shared.phy->self);
     }
     dll_isr_start_staged_tx(ctx, slot, len, has_cks);
+    return true;
 }
 
 /**
@@ -809,8 +814,11 @@ static void dll_isr_process(iolink_dll_main_t* ctx)
     /* 在 int_active 门控之前检查：软件请求的服务没有
      * 自身的收发器 RX/TX 活动可报告。 */
     if (ctx->shared.isr_tx_pending != 0U) {
-        dll_isr_tx_pending(ctx);
-        return;
+        if (dll_isr_tx_pending(ctx)) {
+            return;
+        }
+        /* 忙时只丢弃并计数：继续走下面的服务流程，让在途帧在本中断里
+         * 照常推进一个八位组（边沿触发的 PHY 不保证再次请求服务）。 */
     }
 
     /* 电平复查：数据中断可能锁存串扰边沿；在零

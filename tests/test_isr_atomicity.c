@@ -322,8 +322,8 @@ static void test_reply_staging_pokes_phy_outside_critical(void** state)
 
     iolink_dll_process_isr(&s_ctx.main);
 
-    /* dll_send() 用一次短临界区把“ISR 是否正在流式发送”的检查与
-     * {槽位, 长度, CKS, pending} 的发布合成一次操作；载荷复制与
+    /* dll_send() 用一次短临界区把“ISR 是否正在流式发送”的检查、
+     * 槽位推进、载荷复制与 {长度, CKS, pending} 的发布合成一次操作；
      * request_service() 钩子必须留在区外（端口钩子可能很慢）。
      * 通过在应答该 DEFER 帧（STARTUP 的 MasterCommand 页写）前后
      * 统计进入次数来固定这一点。
@@ -433,8 +433,8 @@ static void test_isr_drops_a_staged_reply_while_a_frame_is_streaming(void** stat
 
     assert_int_equal(s_ctx.main.shared.isr_tx_pending, 0U);
     assert_int_equal(IOLINK_STAT_TOTAL(&s_ctx.main, isr_tx_dropped), dropped + 1U);
-    /* 本次进入只处理丢弃，不动在途帧；随后它在自己的节奏里完成。 */
-    assert_int_equal(s_octet_n, octets);
+    /* 丢弃之后同一中断继续推进在途帧（边沿触发的 PHY 不保证再请求服务）。 */
+    assert_int_equal(s_octet_n, octets + 1U);
     for (uint8_t i = 0U; (i < 8U) && (s_ctx.main.shared.isr_tx_active != 0U); i++) {
         iolink_dll_process_isr(&s_ctx.main);
     }
@@ -711,9 +711,12 @@ static void test_staging_rejected_while_reply_streaming(void** state)
 
     /* 主泵此刻消费页写并调用 dll_send()：暂存被拒绝并计数。 */
     const uint32_t dropped_before = s_ctx.main.shared.isr_tx_dropped;
+    const uint8_t next_before = s_ctx.main.isr_tx_next;
     iolink_dll_process(&s_ctx.main);
     assert_int_equal(s_ctx.main.shared.isr_tx_dropped, dropped_before + 1U);
     assert_int_equal(s_ctx.main.shared.isr_tx_pending, 0U);
+    /* 被拒的暂存不得推进主上下文槽位：否则下一次被拒会转回在途槽。 */
+    assert_int_equal(s_ctx.main.isr_tx_next, next_before);
 
     /* 在途帧仍按自己的长度和 CKS 完成，没有被截断成新暂存应答。 */
     drain_isr_stream();
