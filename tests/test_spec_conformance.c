@@ -351,7 +351,6 @@ static void test_process_data_output_returns_pd(void** state)
     test_dll_shared(&dev)->pd_out_len_current = 2U;
     test_dll(&dev)->pd_out[0] = 0xAAU;
     test_dll(&dev)->pd_out[1] = 0xBBU;
-    test_dll(&dev)->pd_out_seen = true;
 
     uint8_t out[8] = {0};
     int n = read_object_with_dll(0x0029U, test_dll(&dev), out, sizeof(out));

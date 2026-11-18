@@ -706,7 +706,6 @@ static void dll_timer_expire_dsio(iolink_dll_main_t* ctx)
          (ctx->shared.state != IOLINK_DLL_STATE_STARTUP))) {
         return;
     }
-    ctx->wakeup_seen = false;
     ctx->shared.timeout_errors++;
     iolink_dll_set_sio_mode(ctx);
     dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
@@ -765,7 +764,6 @@ static bool dll_handle_sio_wakeup(iolink_dll_main_t* ctx)
     }
     if ((ctx->frame_index == 0U) && dll_phy_has_wakeup(&ctx->shared)) {
         if (dll_phy_detect_wakeup(&ctx->shared) > 0) {
-            ctx->wakeup_seen = true;
             dll_set_state(ctx, IOLINK_DLL_STATE_AWAITING_COMM);
             const uint64_t now_us = dll_time_us(ctx);
             dll_timer_arm(ctx, IOLINK_TIMER_T_WU, now_us + IOLINK_T_WU_US);

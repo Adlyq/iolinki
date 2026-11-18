@@ -22,8 +22,9 @@ t_A = t_hw_帧结束检测 + t_soft + t_hw_TX起播 ≤ 10 × Tbit
 | t_hw TX 起播 | ≤ 10 µs | 目标端 GPIO + 逻辑分析仪（暂缓） |
 
 本工具的窗口在合成 PHY 上等于"整帧字节 + 帧结束 + 应答组装 + 首字节
-发送"（BYTE 模式下一次 `process_isr` 调用完成这些工作，见
-`dll_isr_drain()`）。另报 `call_*` 细分项（帧末单次调用时长）。
+发送"（BYTE 模式下帧接收与应答组装都在一次 `process_isr` 调用内完成；
+`dll_isr_drain()` 每轮只喂一个应答八位组，窗口止于首字节）。另报
+`call_*` 细分项（帧末单次调用时长）。
 
 ## 环境要求（横向比较的前提）
 
@@ -107,7 +108,7 @@ cmake --build build/isr_latency --parallel
 
 | 场景 | ISR 路径 | 说明 |
 | :--- | :--- | :--- |
-| `type0_page_read` | `IOLINK_REPLY_SRC_PAGE` | DPP1 整段复制（RAM 映像 + 单次 seqlock 窗口） |
+| `type0_page_read` | `IOLINK_REPLY_SRC_PAGE` | DPP1 整段复制（RAM 映像 + 单次 seqlock 窗口）；首字节断言为 DPP1 0x01 的 MasterCycleTime 镜像 `0xA1` |
 | `type0_page_write_cks` | `SRC_NONE` + 短应答 | CKS-only 页写确认 |
 | `type0_isdu_read_start` | `SRC_ISDU_SEG` | 读视图采纳 + 1 字节 OD |
 | `type12_pd_read_tail` | `SRC_TEMPLATE` + `PD_TAIL` | OD 头 + 32B PD-in 长应答 |
@@ -116,8 +117,11 @@ cmake --build build/isr_latency --parallel
 | `plan_miss` | 未命中路径 | 没有任何计划切片的合法帧（各切片长度清零）：丢弃 + 计 `isr_plan_misses`，不入邮箱 |
 | `invalid_frame` | 校验失败路径 | 坏 CKS，无应答 |
 
-场景健全性（应答长度、`isr_plan_misses`、首字节）在测量前校验一次，不一致
-立即退出，避免"看起来正常"的错误指标。
+场景健全性（应答长度、`isr_plan_misses`、首字节、应答 CKS）在测量前校验
+一次，不一致立即退出，避免"看起来正常"的错误指标。CKS 用
+`iolink_checksum6()` 对已发送的负载字节（不含末字节）重算并与末字节比较；
+不应答的场景没有 CKS 可校验。场景在初始化时绑定一个固定设备身份，否则
+DPP1 页读没有映像，ISR 不会应答。
 
 ## 门
 

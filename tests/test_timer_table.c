@@ -275,7 +275,6 @@ static void test_t_pd_window_drops_frames(void** state)
     assert_int_equal(ctx.main.shared.framing_errors, framing_before);
     assert_int_equal(ctx.main.shared.state, IOLINK_DLL_STATE_OPERATE);
     assert_true(test_pd_valid(&ctx.main));
-    assert_int_equal(ctx.main.last_valid_frame_ms, (uint32_t) (g_now / 1000U));
     assert_int_equal(ctx.main.last_response_us, g_now);
 }
 

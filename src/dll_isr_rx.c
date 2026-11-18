@@ -147,8 +147,10 @@ static inline void dll_isr_complete_frame(iolink_dll_main_t* ctx, const uint8_t*
         }
         replied = dll_isr_plan_execute(ctx, &plan, frame, len, staged);
         if (replied && ((plan.flags & IOLINK_REPLY_FLAG_CONSUME) != 0U) && !estab_com) {
-            dll_mark_master_activity_ts(ctx); /* 本帧由 ISR 完全处理 */
-            /* 该帧不进邮箱，主泵看不到它：把帧结束时间戳交接给主泵，
+            /* 活动标志已在 RX 完成路径置位（shared.isr_master_activity），
+             * 由主泵在 dll_take_isr_master_activity() 中刷新活动时间戳与
+             * 主站丢失提示；这里不重复写主上下文字段。
+             * 该帧不进邮箱，主泵看不到它：把帧结束时间戳交接给主泵，
              * 由它在下一轮补做 T_CYCLE/T_REN 记账。先写时间戳，穿过
              * IOLINK_FENCE() 后再自增序号作为发布（release）边沿。 */
             ctx->shared.isr_consumed_us = (uint32_t) dll_time_us(ctx);
@@ -381,7 +383,12 @@ static bool dll_isr_drain_rx_byte(iolink_dll_main_t* ctx)
 #endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
 
 /**
- * @brief 排空一个背靠背突发，设有上限，使卡死的线路无法无限自旋。
+ * @brief 处理本次中断请求的服务事件，设有迭代上限。
+ *
+ * 每轮只处理一个服务事件并让出：TX BYTE 喂一个应答八位组，RX FRAME 取走
+ * 一帧，RX BYTE 推进八位组直到本帧完成、遇到 CHK/间隙或读空。上限 64 次
+ * 只保证单个请求不会把中断钩子拖住：合法请求最多
+ * `IOLINK_M_SEQ_MAX_LEN` 个八位组，正常路径在单帧内返回。
  */
 void dll_isr_drain(iolink_dll_main_t* ctx)
 {

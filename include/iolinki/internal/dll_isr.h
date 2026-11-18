@@ -58,8 +58,6 @@ struct iolink_dll_isr
                                      短应答/主上下文应答为
                                      isr_tx_payload */
 
-    volatile uint8_t isr_tx_slot; /**< 正在发送的槽位 */
-
     /* 流式应答的长度与 CKS 标志：只在 ISR 内写。主上下文暂存的元数据
      * （dll_shared.h 的 stage_len/stage_has_cks）在 isr_tx_pending 取走时
      * 一次读入这里，此后不再回读，因此在途帧不受后续暂存影响。 */
