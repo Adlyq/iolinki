@@ -1106,10 +1106,11 @@ flowchart LR
 - `last_notified_state`：主上下文记录“已交付给应用的状态”，配合 `shared.state` 做电平式通知；`startup_notification_pending` 保留 ISR 触发的 STARTUP 边沿，避免快速进入 PREOPERATE 时丢失复位通知。
 
 上下文尺寸契约（默认缓冲、64 位主机，由 `tests/test_ctx_sizes.c` 断言）：
-`iolink_dll_ctx_t` 4936 B，内嵌 `iolink_isdu_ctx_t` 1616 B、
-`iolink_events_ctx_t` 504 B、`iolink_ds_ctx_t` 352 B；
-`iolink_device_ctx_t` 5120 B；`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` 时为
-4944 B / 5128 B；`iolink_workspace_t` 1551 B。
+`iolink_dll_ctx_t` 4936 B、`iolink_device_ctx_t` 5120 B（默认 RX BYTE + TX BYTE），
+内嵌 `iolink_isdu_ctx_t` 1616 B、`iolink_events_ctx_t` 504 B、
+`iolink_ds_ctx_t` 352 B；RX BYTE + TX FRAME 为 5000 B / 5184 B，
+RX FRAME + TX BYTE 为 4872 B / 5056 B；`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT`
+在上述每种组合上各 +8 B；`iolink_workspace_t` 1551 B。
 
 并发边界：
 
