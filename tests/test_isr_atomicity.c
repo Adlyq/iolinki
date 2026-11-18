@@ -23,6 +23,7 @@
 #include "crc_oracle.h"
 #include "dll_access.h"
 #include "iolinki/iolink.h"
+#include "iolinki/internal/wiring.h"
 #include "iolinki/port.h"
 #include "iolinki/protocol.h"
 
@@ -107,6 +108,8 @@ static uint8_t phy_int_active(iolink_app_t* IOLINK_NULLABLE self)
 static uint32_t s_service_calls;
 static bool s_service_in_critical;
 static void (*s_timer_start_hook)(void);
+static uint32_t s_mode_calls;
+static bool s_mode_in_critical;
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
 /* 只由 FRAME 传输的"线路繁忙"用例读取：BYTE 传输没有
@@ -165,6 +168,8 @@ static void phy_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t m
 {
     (void) self;
     (void) mode;
+    s_mode_in_critical = s_in_critical;
+    s_mode_calls++;
 }
 
 static int phy_detect_wakeup(iolink_app_t* IOLINK_NULLABLE self)
@@ -231,6 +236,8 @@ static void reset_ctx(void)
     s_service_calls = 0U;
     s_service_in_critical = false;
     s_timer_start_hook = NULL;
+    s_mode_calls = 0U;
+    s_mode_in_critical = false;
     s_crit_enters = 0U;
     s_crit_exits = 0U;
     s_in_critical = false;
@@ -313,8 +320,48 @@ static void test_reply_staging_pokes_phy_outside_critical(void** state)
     assert_true(s_ctx.main.shared.isr_tx_pending != 0U);
 }
 
-static uint32_t s_nested_calls;
+/* SIO 切换丢弃 ISR TX 状态：清理必须与数据中断互斥、PHY 调用留在锁外，
+ * 且被丢弃的暂存/在途应答可观测（TX BYTE 下否则就是一个 tx_done 永不
+ * 调用的半帧）。 */
+static void test_sio_switch_clears_isr_tx_state(void** state)
+{
+    (void) state;
+    reset_ctx();
 
+    /* 没有暂存/在途应答时，切换不计数。 */
+    const uint32_t mode_before = s_mode_calls;
+    assert_int_equal(iolink_dll_set_sio_mode(&s_ctx.main), 0);
+    assert_int_equal(s_ctx.main.phy_mode, IOLINK_PHY_MODE_SIO);
+    assert_int_equal(s_mode_calls, mode_before + 1U);
+    assert_false(s_mode_in_critical);
+    assert_int_equal(IOLINK_STAT_TOTAL(&s_ctx.main, isr_tx_dropped), 0U);
+
+    /* 一条已暂存应答 + 一条在途帧（TX BYTE 的半帧状态）。 */
+    s_ctx.main.shared.isr_tx_pending = 1U;
+    s_ctx.main.shared.isr_tx_active = 1U;
+    s_ctx.main.shared.isr_tx_has_cks = 1U;
+    s_ctx.main.shared.isr_tx_idx = 3U;
+    s_ctx.main.shared.pd_in_captured = 0U;
+
+#if IOLINK_NEED_CRITICAL
+    const uint32_t crit_before = s_crit_enters;
+#endif
+    assert_int_equal(iolink_dll_set_sio_mode(&s_ctx.main), 0);
+
+    assert_int_equal(s_ctx.main.shared.isr_tx_pending, 0U);
+    assert_int_equal(s_ctx.main.shared.isr_tx_active, 0U);
+    assert_int_equal(s_ctx.main.shared.isr_tx_has_cks, 0U);
+    assert_int_equal(s_ctx.main.shared.isr_tx_idx, 0U);
+    assert_int_equal(s_ctx.main.shared.pd_in_captured, 0xFFU);
+    assert_int_equal(IOLINK_STAT_TOTAL(&s_ctx.main, isr_tx_dropped), 1U);
+#if IOLINK_NEED_CRITICAL
+    assert_int_equal(s_crit_enters, crit_before + 1U);
+#endif
+    assert_int_equal(s_crit_enters, s_crit_exits);
+    assert_false(s_mode_in_critical); /* PHY 调用留在临界区之外 */
+}
+
+static uint32_t s_nested_calls;
 static void nested_pump_hook(void)
 {
     s_nested_calls++;
@@ -486,6 +533,7 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_reply_staging_pokes_phy_outside_critical),
+        cmocka_unit_test(test_sio_switch_clears_isr_tx_state),
         cmocka_unit_test(test_nested_pump_is_deferred),
         cmocka_unit_test(test_state_notification_is_level_based),
         cmocka_unit_test(test_isr_startup_notification_is_not_coalesced),

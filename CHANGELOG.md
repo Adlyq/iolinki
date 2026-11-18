@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (SIO switching clears the ISR reply state under the lock)
+- `iolink_dll_set_sio_mode()` cleared `isr_tx_pending`/`isr_tx_active`/
+  `isr_tx_has_cks`/`isr_tx_idx`/`pd_in_captured` with five plain stores. The data
+  ISR writes the same fields, so a switch between two byte steps left a
+  half-frame with `tx_done` never called (and a staged reply silently dropped),
+  with nothing counted. The cleanup now runs in one critical section; a staged
+  or in-flight reply that it discards counts once as `isr_tx_dropped`
+  (main-context field; `SPLIT` mode still sums it with the ISR copy in
+  `iolink_dll_get_stats()`). `phy.set_mode` stays outside the lock.
+
 ### Fixed (an ISDU read reset no longer discards an in-flight write request)
 - `dll_process_body()` applied the ISR's IDLE/IDLE2/ABORT read-reset request
   unconditionally. `iolink_isdu_od_read(IDLE)` ends in `isdu_transport_reset()`
