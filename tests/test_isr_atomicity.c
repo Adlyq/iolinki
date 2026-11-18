@@ -364,7 +364,6 @@ static void test_sio_switch_clears_isr_tx_state(void** state)
     /* 一条已暂存应答 + 一条在途帧（TX BYTE 的半帧状态）。 */
     s_ctx.main.shared.isr_tx_pending = 1U;
     s_ctx.main.shared.isr_tx_active = 1U;
-    s_ctx.main.shared.isr_tx_has_cks = 1U;
     s_ctx.main.shared.isr_tx_idx = 3U;
     s_ctx.main.shared.pd_in_captured = 0U;
 
@@ -375,7 +374,6 @@ static void test_sio_switch_clears_isr_tx_state(void** state)
 
     assert_int_equal(s_ctx.main.shared.isr_tx_pending, 0U);
     assert_int_equal(s_ctx.main.shared.isr_tx_active, 0U);
-    assert_int_equal(s_ctx.main.shared.isr_tx_has_cks, 0U);
     assert_int_equal(s_ctx.main.shared.isr_tx_idx, 0U);
     assert_int_equal(s_ctx.main.shared.pd_in_captured, 0xFFU);
     assert_int_equal(IOLINK_STAT_TOTAL(&s_ctx.main, isr_tx_dropped), 1U);
