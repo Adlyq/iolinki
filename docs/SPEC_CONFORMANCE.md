@@ -31,12 +31,51 @@ cosmetic and neither may be renamed:
   [`tests/conformance_audit.csv`](../tests/conformance_audit.csv) is
   authoritative; an annotation without a CSV row fails
   `tools/check_conformance_traceability.py`. Case IDs quoted in this document
-  must exist in that CSV.
+  must exist in `conformance_audit.csv`; the checker also accepts an identifier
+  that exists in `tests/spec_constants.csv`, so a single anchor never has to be
+  maintained in two files.
 - **Clause labels** — the specification's own numbering (`A.1.6`, `10.10.2`,
   `B.2.22`, `B.3`, `B.8`, `B.9`, `B.13`, `C.1`, `D.1`, `Table 10`, ...). These
-  labels are stable anchors: the constants table planned as
-  `tests/spec_constants.csv` joins its `clause` column on them, so change a
-  label only when the referenced clause itself changes.
+  labels are stable anchors: the constants table in
+  [`tests/spec_constants.csv`](../tests/spec_constants.csv) joins its `clause`
+  column on them, so change a label only when the referenced clause itself
+  changes.
+
+## Spec constants
+
+[`tests/spec_constants.csv`](../tests/spec_constants.csv) maps a specification
+clause to one implementation symbol and its expected value. `test_spec_constants`
+compiles the same symbols into a C lookup table and enforces both directions:
+a CSV row without a C entry fails, a C entry without a CSV row fails, and a
+value mismatch prints the clause, symbol, expected and actual values. Both
+sides therefore change together; the CSV is the reviewable data, the C table is
+the compiled oracle.
+
+Every `clause` label must come from the hand-maintained list in
+`tools/check_conformance_traceability.py` (the checker does not parse the PDF),
+and every symbol below must exist in the CSV. `direct` rows of the audit CSV
+must be reachable from this document by case ID, test file or test function.
+
+| Clause | Constants |
+|---|---|
+| `Table 10` | `IOLINK_T_WU_US`, `IOLINK_T_REN_US` |
+| `Table 42` | `IOLINK_T_DSIO_MS` |
+| `10.10.2` | `IOLINK_EVENT_MIN_APPEAR_MS`, `IOLINK_EVENT_MIN_REPEAT_MS` |
+| `7.3.3.2` | `IOLINK_M_SEQ_HEADER_LEN`, `IOLINK_M_SEQ_TYPE0_LEN`, `IOLINK_M_SEQ_MIN_LEN` |
+| `A.1.2` | `IOLINK_MC_RW_MASK`, `IOLINK_MC_COMM_CHANNEL_MASK`, `IOLINK_MC_ADDR_MASK` |
+| `Table A.1` | `IOLINK_MC_CHANNEL_PROCESS`, `IOLINK_MC_CHANNEL_PAGE`, `IOLINK_MC_CHANNEL_DIAGNOSIS`, `IOLINK_MC_CHANNEL_ISDU` |
+| `A.1.3` | `IOLINK_MSEQ_TYPE_MASK`, `IOLINK_MSEQ_CHECKSUM_MASK` |
+| `Table A.3` | `IOLINK_MSEQ_TYPE_0`, `IOLINK_MSEQ_TYPE_1`, `IOLINK_MSEQ_TYPE_2`, `IOLINK_MSEQ_TYPE_RESERVED` |
+| `Table A.6` | `IOLINK_EVENT_BIT_STATUS` |
+| `Table 52` | `IOLINK_FLOWCTRL_START`, `IOLINK_FLOWCTRL_IDLE`, `IOLINK_FLOWCTRL_IDLE2`, `IOLINK_FLOWCTRL_ABORT`, `IOLINK_FLOWCTRL_COUNT_MASK` |
+| `Table B.2` | `IOLINK_CMD_FALLBACK`, `IOLINK_CMD_MASTER_IDENT`, `IOLINK_CMD_DEVICE_IDENT`, `IOLINK_CMD_DEVICE_STARTUP`, `IOLINK_CMD_PROCESS_DATA_OPERATE`, `IOLINK_CMD_DEVICE_OPERATE`, `IOLINK_CMD_DEVICE_PREOPERATE` |
+| `Table A.12` | `IOLINK_ISDU_SERVICE_READ`, `IOLINK_ISDU_SERVICE_WRITE` |
+| `Table B.8` | `IOLINK_IDX_DIRECT_PARAMETERS_1`, `IOLINK_IDX_DIRECT_PARAMETERS_2`, `IOLINK_IDX_SYSTEM_COMMAND`, `IOLINK_IDX_DATA_STORAGE`, `IOLINK_IDX_DEVICE_ACCESS_LOCKS`, `IOLINK_IDX_PROFILE_CHARACTERISTIC`, `IOLINK_IDX_VENDOR_NAME`, `IOLINK_IDX_VENDOR_TEXT`, `IOLINK_IDX_PRODUCT_NAME`, `IOLINK_IDX_PRODUCT_ID`, `IOLINK_IDX_PRODUCT_TEXT`, `IOLINK_IDX_SERIAL_NUMBER`, `IOLINK_IDX_HARDWARE_REVISION`, `IOLINK_IDX_FIRMWARE_REVISION`, `IOLINK_IDX_APPLICATION_TAG`, `IOLINK_IDX_FUNCTION_TAG`, `IOLINK_IDX_LOCATION_TAG`, `IOLINK_IDX_PRODUCT_URI`, `IOLINK_IDX_ERROR_COUNT`, `IOLINK_IDX_DEVICE_STATUS`, `IOLINK_IDX_DETAILED_DEVICE_STATUS`, `IOLINK_IDX_PROCESS_DATA_INPUT`, `IOLINK_IDX_PROCESS_DATA_OUTPUT`, `IOLINK_IDX_OFFSET_TIME`, `IOLINK_IDX_ERROR_STATS` |
+| `Table B.9` | `IOLINK_CMD_PARAM_UPLOAD_START`, `IOLINK_CMD_PARAM_UPLOAD_END`, `IOLINK_CMD_PARAM_DOWNLOAD_START`, `IOLINK_CMD_PARAM_DOWNLOAD_END`, `IOLINK_CMD_PARAM_DOWNLOAD_STORE`, `IOLINK_CMD_PARAM_BREAK`, `IOLINK_CMD_DEVICE_RESET`, `IOLINK_CMD_APPLICATION_RESET`, `IOLINK_CMD_RESTORE_FACTORY_SETTINGS`, `IOLINK_CMD_BACK_TO_BOX` |
+| `Table B.12` | `IOLINK_LOCK_PARAM`, `IOLINK_LOCK_DS`, `IOLINK_LOCK_LOCAL_PARAM`, `IOLINK_LOCK_LOCAL_UI` |
+| `Table C.1` | `IOLINK_ISDU_ERROR_IDX_NOT_AVAIL`, `IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL`, `IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL`, `IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_LOCAL_CTRL`, `IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_DEV_CTRL`, `IOLINK_ISDU_ERROR_NOT_ACCESSIBLE`, `IOLINK_ISDU_ERROR_WRITE_PROTECTED`, `IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG`, `IOLINK_ISDU_ERROR_PAR_VAL_GT_LIM`, `IOLINK_ISDU_ERROR_PAR_VAL_LT_LIM`, `IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN`, `IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN`, `IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL`, `IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL`, `IOLINK_ISDU_ERROR_PARAM_SET_INVALID`, `IOLINK_ISDU_ERROR_PARAM_INCONSISTENT`, `IOLINK_ISDU_ERROR_APP_DEV_NOT_READY` |
+| `Table B.13` | `IOLINK_DEVICE_STATUS_OK`, `IOLINK_DEVICE_STATUS_MAINTENANCE`, `IOLINK_DEVICE_STATUS_OUT_OF_SPEC`, `IOLINK_DEVICE_STATUS_FUNCTIONAL_CHECK`, `IOLINK_DEVICE_STATUS_FAILURE` |
+| `B.1.5` | `IOLINK_REVISION_ID_1_0`, `IOLINK_REVISION_ID_1_1` |
 
 ## Transport
 
@@ -168,6 +207,34 @@ previously missing:
   `APP_*`/`HW_*` duplicates and the stale `COMM_ERR_*` 0x18xx aliases are gone.
   `IOLINK_EVENT_COMM_*` is the single vendor communication-event set.
 - ISDU "busy" answers use `SERV_NOTAVAIL` 0x20, not 0x30 (`PAR_VALOUTOFRNG`).
+
+## Direct case visibility index
+
+Every `direct` row of the audit CSV is reachable from this document by case ID,
+test file or test function. The rows below are the ones no area table names
+directly; each still carries its `IOLINK_CONFORMANCE_CASE` annotation in the
+test function itself.
+
+| Case ID | Test evidence | Pins |
+|---|---|---|
+| `SDCI_TC_0053` | `test_isr_observability` | Reserved FlowCTRL in the ISDU idle state answers "no service" |
+| `SDCI_TC_0063` | `test_conformance_untested` | Write-length overrun keeps the previous parameter value |
+| `SDCI_TC_0064` | `test_conformance_untested` | Write with a wrong length keeps the previous parameter value |
+| `SDCI_TC_0068` | `test_isr_observability` | Aborted read response handling |
+| `SDCI_TC_0122` | `test_conformance_untested` | Valid ApplicationSpecificTag write |
+| `SDCI_TC_0123` | `test_conformance_untested` | Over-long tag write is rejected without losing the value |
+| `SDCI_TC_0124` | `test_conformance_untested` | ErrorCount increments and resets |
+| `SDCI_TC_0128` | `test_conformance_untested` | DeviceStatus in OPERATE |
+| `SDCI_TC_0131` | `test_conformance_untested` | DetailedDeviceStatus is active after a restart |
+| `SDCI_TC_0145` | `test_conformance_untested` | Download break by reset |
+| `SDCI_TC_0146` | `test_conformance_device` | Illegal download breaks the block parameterization |
+| `SDCI_TC_0155` | `test_conformance_untested` | Restore-factory-settings sequence |
+| `SDCI_TC_0309` | `test_isr_observability` | ISDU segment repeat |
+| `SDCI_TC_0316` | `test_conformance_untested` | Device reset sequence |
+| `SDCI_TC_0317` | `test_conformance_untested` | Application reset sequence |
+| `SDCI_TC_0318` | `test_conformance_untested` | Back-to-box sequence |
+| `SDCI_TC_0329` | `test_conformance_untested` | Upload break by reset |
+| `SDCI_TC_0373` | `test_conformance_device` | Event-driven DeviceStatus |
 
 ## Related
 
