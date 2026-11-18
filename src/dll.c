@@ -54,7 +54,8 @@
  *      |                                     （64 位截止时间由主上下文持有）
  *      |- [TX FRAME] pd_in 租约释放          在临界区中轮询 tx_busy
  *      |- iolink_isdu_process                应用 ISR 累计完成的写请求并执行 ISDU 服务
- *      |- isr_isdu_read_reset                消费 ISR 的 IDLE/ABORT 读复位请求
+ *      |- dll_apply_isr_isdu_read_reset      消费 ISR 的 IDLE/ABORT 读复位请求
+ *      |                                     （仅当写入口为 IDLE）
  *      |- dll_isdu_sync_snapshot             发布 ISR 读取视图
  *      |- dll_poll_diagnostics
  *      |- dll_take_isr_master_activity       第二次采样：一帧可能已在上述步骤中
@@ -516,6 +517,32 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
     }
 }
 
+/**
+ * @brief 应用数据 ISR 的 ISDU 读传输层复位请求。
+ *
+ * 复位经 `isdu_transport_reset()` 清空写入口的 `req_idx`/`req_total`/
+ * `flowctrl_seen`/`stage_state`。ISR 在同一个中断里也可能刚收到一个写
+ * START 并重建了入口（主站"读 ABORT 后立刻写 START"）：此时若照常复位，
+ * 全部 COUNT 已被 ACK 的请求会被整段丢弃。因此只有写入口仍为 IDLE 时
+ * 才应用复位，否则保留请求标志，等下一轮写入口回到 IDLE 再应用。
+ *
+ * 判定、清标志与复位在同一临界区内完成，ISR 无法在"读到 IDLE"与
+ * "执行复位"之间开始新的写 START。区内只有字段清零，没有 PHY 或
+ * 应用回调。
+ */
+static void dll_apply_isr_isdu_read_reset(iolink_dll_main_t* ctx)
+{
+    if (ctx->shared.isr_isdu_read_reset == 0U) {
+        return;
+    }
+    IOLINK_CRITICAL_ENTER();
+    if (ctx->shared.isdu.stage_state == IOLINK_ISDU_STAGE_IDLE) {
+        ctx->shared.isr_isdu_read_reset = 0U;
+        iolink_isdu_od_read(&ctx->shared.isdu, IOLINK_FLOWCTRL_IDLE, NULL, 0U);
+    }
+    IOLINK_CRITICAL_EXIT();
+}
+
 /** @brief 同步主站丢失 timer：活动边沿推进截止时间，丢失后保持直到新活动。 */
 static void dll_timer_sync_master_lost(iolink_dll_main_t* ctx)
 {
@@ -862,10 +889,7 @@ static void dll_process_body(iolink_dll_main_t* ctx)
     iolink_isdu_process(&ctx->shared.isdu);
     /* ISR 对 IDLE/IDLE2/ABORT 读只回 0x00；读传输层复位归主泵。
      * Type-0 下该帧由 CONSUME 计划完全消费，主泵只能经此标志收到请求。 */
-    if (ctx->shared.isr_isdu_read_reset != 0U) {
-        ctx->shared.isr_isdu_read_reset = 0U;
-        iolink_isdu_od_read(&ctx->shared.isdu, IOLINK_FLOWCTRL_IDLE, NULL, 0U);
-    }
+    dll_apply_isr_isdu_read_reset(ctx);
     /* 服务可能已在此完成：刷新 ISR 响应快照。 */
     dll_isdu_sync_snapshot(ctx);
     dll_poll_diagnostics(ctx);

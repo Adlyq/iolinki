@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (an ISDU read reset no longer discards an in-flight write request)
+- `dll_process_body()` applied the ISR's IDLE/IDLE2/ABORT read-reset request
+  unconditionally. `iolink_isdu_od_read(IDLE)` ends in `isdu_transport_reset()`
+  → `isdu_stage_reset()`, which clears `req_idx`/`req_total`/`flowctrl_seen`/
+  `stage_state` — the write entry the data ISR may have just rebuilt in the same
+  exchange. A master that aborted a read and immediately started a write saw
+  every COUNT acknowledged while the request was dropped whole. The request is
+  now applied only when the write entry is back in `IOLINK_ISDU_STAGE_IDLE`,
+  otherwise the flag stays set for the next pump pass. The check, the flag clear
+  and the reset run in one critical section, so the ISR cannot open a new write
+  START in between; the section only clears fields (no PHY or application
+  callbacks).
+
 ### Removed (reply plans carry no timing field and are compiled once)
 - `iolink_reply_plan_t::deadline_us` is gone. Nothing read it at run time: the
   ISR arms t_A from `10 * dll_get_t_bit_us()` when it starts a reply
