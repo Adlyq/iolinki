@@ -537,7 +537,7 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
             uint32_t t_fbd_ms = IOLINK_T_FBD_MAX_MS;
             const uint32_t cycle_us = dll_master_cycle_us(ctx);
             if (cycle_us > 0U) {
-                t_fbd_ms = (IOLINK_T_FBD_MASTER_CYCLES * cycle_us) / 1000U;
+                t_fbd_ms = (IOLINK_T_FBD_MASTER_CYCLES * cycle_us + 999U) / 1000U;
                 if (t_fbd_ms > IOLINK_T_FBD_MAX_MS) {
                     t_fbd_ms = IOLINK_T_FBD_MAX_MS;
                 }

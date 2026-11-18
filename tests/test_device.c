@@ -361,6 +361,8 @@ static void test_device_pd_input_bounds(void** state)
 
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, TEST_NULL(const uint8_t*), 2U, true),
                      IOLINK_DEVICE_PD_ERR_ARG);
+    assert_int_equal(iolink_device_pd_input_update(TEST_NULL(iolink_device_ctx_t*), data, 2U, true),
+                     IOLINK_DEVICE_PD_ERR_ARG);
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true),
                      IOLINK_DEVICE_PD_ERR_LEN);
 
@@ -428,6 +430,25 @@ static void test_device_process_without_config_is_safe(void** state)
     test_dll_isdu(&dev.ctx)->reset_pending = true;
     iolink_device_process(&dev.ctx);
     assert_true(test_dll_isdu(&dev.ctx)->reset_pending);
+}
+
+static void test_device_reset_without_handler(void** state)
+{
+    (void) state;
+    iolink_test_device_t dev;
+    iolink_stack_config_t stack = {0};
+    static iolink_device_app_t app = {.time_us = iolink_test_time_us};
+
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    stack.od_width = 1U;
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_test_device_init(&dev, &stack, &app), 0);
+
+    /* No on_reset in the trait: the request is consumed and nothing runs. */
+    test_dll_isdu(&dev.ctx)->reset_pending = true;
+    iolink_device_process(&dev.ctx);
+    assert_false(test_dll_isdu(&dev.ctx)->reset_pending);
 }
 
 static void test_device_reset_handler(void** state)
@@ -630,6 +651,7 @@ int main(void)
         cmocka_unit_test(test_device_pd_valid_flag),
         cmocka_unit_test(test_device_pd_output_read),
         cmocka_unit_test(test_device_process_without_config_is_safe),
+        cmocka_unit_test(test_device_reset_without_handler),
         cmocka_unit_test(test_device_reset_handler),
         cmocka_unit_test(test_device_introspection),
         cmocka_unit_test(test_device_baudrate_is_compiled),

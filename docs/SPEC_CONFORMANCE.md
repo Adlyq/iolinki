@@ -110,7 +110,7 @@ must be reachable from this document by case ID, test file or test function.
 | 0x000C | DeviceAccessLocks (RecordT; only subindex 0 is accessible, B.2.4) | PASS | `test_ident_indices`, `test_ds`, `test_spec_conformance`, `test_isdu` |
 | 0x000D | ProfileCharacteristic (ArrayT of UIntegerT16, profile-conditional; subindex 0/1) | PASS | `test_ident_indices`, `test_isdu` |
 | 0x0010-0x0017 | Identification strings | PASS | `test_ident_indices`, `test_spec_conformance` |
-| 0x0018-0x001A | Application/Function/Location tags (optional / profile-conditional; default DS set) | PASS | `test_isdu`, `test_system_commands` |
+| 0x0018-0x001A | Application/Function/Location tags (optional / profile-conditional; enters the DS set only when the application declares it) | PASS | `test_isdu`, `test_system_commands` |
 | 0x001B | ProductURI (conditional) | PASS | `test_product_uri_index` |
 | 0x0020 | ErrorCount (optional) | PASS | `test_error_count_index` |
 | 0x0024 | DeviceStatus (Table B.13: 0..4) | PASS | `test_isdu`, `test_events` |

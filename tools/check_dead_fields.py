@@ -330,8 +330,6 @@ def load_shared_fields(root: Path) -> list[dict[str, str]]:
 def compile_prefix_findings(root: Path, decls: list[FieldDecl]) -> list[Finding]:
     """Every shared field must be categorised in the CSV and carry that prefix."""
     rows = load_shared_fields(root)
-    if not rows:
-        return []
     findings: list[Finding] = []
     categorised = {(row["struct"], row["field"]): row["category"] for row in rows}
     for row in rows:

@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   return a default. A missing required context is a contract violation, not a
   silent fallback.
 - `iolink_dll_stats_t::total_retries` is now `invalid_frames`: it counts CRC
-  failures and protocol-invalid frames, not retransmissions (the library has no
+  failures and 0x97 DeviceStartup frames, not retransmissions (the library has no
   retransmission path). The stats gain `isr_eager_rejects` (moved into the
   shared slice) and `pd_in_skips`.
 - Dead DLL state is removed: `wakeup_seen`, `retry_count`, `max_retries`,
@@ -54,8 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timing literals in `src/` are named `IOLINK_*` constants in `protocol.h`.
 - `tools/gen_docs.py` generates the error-code enum, the DLL stats table, the
   public-API table and the shared-ownership table (`--check`/`--write`/
-  `--selftest`); `tools/check_docs_refs.py` checks symbols, links, script paths
-  and error-code numbers.
+  `--selftest`); `tools/check_docs_refs.py` checks symbols, links, script paths,
+  shared-field names and error-code numbers.
 - `tools/check_dead_fields.py`, `tools/check_public_api.py`,
   `tools/check_context.py` and `tools/stack_report.py` are enforced (the context
   gate reports zero violations). `tools/gates.sh` gained the `context` group;

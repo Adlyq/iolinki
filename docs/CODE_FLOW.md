@@ -898,7 +898,7 @@ sequenceDiagram
 | `phy.response_timer_start/stop` | ISR RX/TX | t_A 看门狗 |
 | `phy.stack_timer_start` | ISR 发完即时应答时（TX BYTE 帧末）/ 命中计划的 `RESTART_TIMER_B` | 请求 Timer B 授权主循环服务窗口 |
 | `phy.detect_wakeup` | `dll_handle_sio_wakeup()` | SIO 唤醒检测 |
-| `iolink_critical_enter/exit` | 诊断条件表的 `isr_pulse` 消费与整表复位、`SPLIT` 档的计数器清零、应答暂存发布/取走、SIO 切换清理、读复位旗标、Timer A 相位复位 | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
+| `iolink_critical_enter/exit` | 诊断条件表的 `isr_pulse` 消费与整表复位、`SPLIT` 档或 `IOLINK_CONCURRENCY=SMP` 下的计数器清零、应答暂存发布/取走、SIO 切换清理、读复位旗标、Timer A 相位复位 | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
 | `on_state_change` | `device_state_cb()` | 当前状态（电平式；主上下文迁移立即投递，ISR 迁移合并） |
 | `on_startup` | 初始化末尾 + 进入 STARTUP | 初始化时显式调用一次 |
 | `on_preoperate` / `on_operate` | `device_state_cb()` | 进入对应状态时 |
@@ -1005,7 +1005,7 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 | `IOLINK_TIMER_MASTER_LOST` | 实现相关（ST Timer B 语义） | OPERATE 下按 MasterCycleTime 计数，饱和 0xFF，只置提示位 | `dll_timer_sync_master_lost()` / `dll_timer_expire_master_lost()` |
 | `IOLINK_TIMER_IDLE` | 实现诊断（1 s 静默链路，非规范超时） | `idle_timeouts++`，不改状态 | `dll_timer_sync_idle()` / `dll_timer_expire_idle()` |
 | `IOLINK_TIMER_T_DSIO` | Table 47 T10（60..300 ms） | 唤醒后无有效报文 → SIO + STARTUP（UART 速率不变） | `dll_timer_expire_dsio()` |
-| `IOLINK_TIMER_T_FBD` | Table 47 T8/T9；Table 43 | 实现按 `min_cycle_time_us × 3`（上限 500 ms）装载 → SIO + STARTUP（UART 速率不变） | `dll_handle_fallback_command()` / `dll_apply_isr_deadline_requests()` / `dll_timer_expire_fbd()` |
+| `IOLINK_TIMER_T_FBD` | Table 47 T8/T9；Table 43 | 按 `dll_master_cycle_us()`（DPP1 MasterCycleTime 优先，未知时退到 MinCycleTime）× 3 装载（上限 500 ms）→ SIO + STARTUP（UART 速率不变） | `dll_handle_fallback_command()` / `dll_apply_isr_deadline_requests()` / `dll_timer_expire_fbd()` |
 | `IOLINK_TIMER_T_PD` | A.2 / Table 47（WINDOW） | 上电保护窗口：截止前排空 RX 与邮箱（丢弃的邮箱帧计 `t_pd_discards`），收到字节计 `t_pd_violations` | `dll_check_t_pd()` / `dll_drain_rx()` |
 | `IOLINK_TIMER_T_WU` | Table 47（WINDOW） | 唤醒后首帧窗口（`IOLINK_T_WU_US`），截止前不处理 | `dll_handle_sio_wakeup()` / `dll_wakeup_window_active()` |
 | `IOLINK_TIMER_T_BYTE` | A.2 / Table 47（phase 1） | 帧内字节间隙超限 → `t_byte_violations` + `b_framing_errors`，中止当前帧 | `dll_timer_sync_t_byte()` / `dll_timer_expire_t_byte()` |
@@ -1020,7 +1020,7 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 - `deadline == 0` 表示未装载；所有比较都走 `dll_time_reached()` / `dll_time_passed()` 的回绕安全减法（选择最早截止时间用同一族的符号差判定）。
 - ISR 在 `CONSUME` 计划下应答的帧不经过主泵帧尾：ISR 把帧时间的低 32 位写入 `shared.i_isr_consumed_us`，穿过 `IOLINK_FENCE()`（release）再自增 `i_isr_consumed_seq`；主泵读 `i_isr_consumed_seq` 后用 `IOLINK_FENCE()`（acquire）读时间戳，复读序号前同样有屏障，然后在下一次 process 用该时间戳补做 `dll_check_cycle_time_at()` 并更新 `last_response_us`，因此 T_CYCLE/T_REN 与最坏时序统计不会漏掉这些帧（重建依赖主泵两次运行间隔 < 2^31 us）。SMP 档下的双读校验依赖这对屏障：没有它，读到新序号的读者仍可能看到旧时间戳。
 - `device_apply_stack_config()` 在时钟绑定之后直接装载 T_PD 表项（`dll_timer_arm()`），截止时间表是唯一事实源；不存在单独的兼容字段。
-- T_FBD 的条款文字（`g_timer_contract[]`）写作 "3 × MasterCycleTime"，实现取的是 `min_cycle_time_us`（M-sequence 布局推导出的设备最小周期，受应用下限约束）；DPP1 的 `m_master_cycle_time` 只用于 MASTER_LOST 的周期估算（`dll_master_cycle_us()`）。两者都为 0 时 `dll_master_cycle_us()` 返回 0，MASTER_LOST 因此不武装（没有可信周期就不做丢失提示），等周期时间可知后的下一次同步再恢复。`min_cycle_time_us` 为 0 时 T_FBD 退到 500 ms 上限。
+- T_FBD 的实现按 `dll_master_cycle_us()` 取周期：优先 DPP1 的 `m_master_cycle_time`，未知时退到 `min_cycle_time_us`（M-sequence 布局推导出的设备最小周期，受应用下限约束）。两者都为 0 时 `dll_master_cycle_us()` 返回 0，T_FBD 退到 500 ms 上限，MASTER_LOST 也不武装（没有可信周期就不做丢失提示），等周期时间可知后的下一次同步再恢复。
 
 错误路径与计数：
 
@@ -1117,7 +1117,7 @@ RX FRAME + TX BYTE 为 4872 B / 5056 B；`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT`
 并发边界：
 
 - `shared.b_isdu`、`shared.b_events`（含 `diag` 条件缓存）、`ds`、`timers` 的主要状态由主循环修改；`c_reply_plan` 只在初始化时写入后即只读；应用参数变量、`on_change` 与 `ds_flag_persist` 也只在主上下文被访问。
-- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（诊断条件表的 `isr_pulse` 消费与整表复位、`SPLIT` 档的计数器清零、应答暂存的发布/取走、SIO 切换的应答槽清理、读复位旗标、ISR RX 相位复位）；事件队列与 `pending[]` 的读写、PD-in 发布、状态迁移与 ISDU 写入口接管都不需要临界区。
+- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（诊断条件表的 `isr_pulse` 消费与整表复位、`SPLIT` 档或 `IOLINK_CONCURRENCY=SMP` 下的计数器清零、应答暂存的发布/取走、SIO 切换的应答槽清理、读复位旗标、ISR RX 相位复位）；事件队列与 `pending[]` 的读写、PD-in 发布、状态迁移与 ISDU 写入口接管都不需要临界区。
 - 库不取线程锁：API 只有一个主上下文调用者；共享标量由平台临界区保护，数据交接无锁。
 - 平台默认临界区是 weak 空实现（`src/platform.c`）；`iolink_device_init()` 通过
   `iolink_platform_critical_sections_ready()` 探测并返回
@@ -1208,7 +1208,7 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `dll_send()`（`dll_frame.c`） | `m_isr_tx_payload` 暂存（≤`IOLINK_M_SEQ_MAX_LEN`） | 主→ISR 应答移交；检查 `b_isr_tx_active`、槽位推进、载荷复制与发布在同一个短临界区内完成（被拒绝的暂存不得碰在途槽）；`request_service()` 与 T_A 取消除外 |
 | `iolink_dll_set_sio_mode()`（`dll_api.c`） | 清 `b_isr_tx_pending`/`b_isr_tx_active`/`b_isr_tx_idx`/`b_pd_in_captured` | 四个字段由 ISR 写：清理与中断互斥，否则 ISR 可在半帧处重新置上 active/idx。被丢弃的暂存/在途应答计 `b_isr_tx_dropped`（主上下文自增）；`phy.set_mode` 在区外调用 |
 | `iolink_dll_on_rx_timeout()`（`dll_isr.c`） | RX 组装状态 `isr_rx_cnt`/`isr_rx_expect` 的成对复位 | Timer A 与数据 ISR 的相位一致；短、无回调，向量优先级契约见 `docs/PORTING.md` |
-| `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零 ISR 自有计数器 `b_isr_stat`（仅 SPLIT 档） | `b_isr_stat` 归数据 ISR 单写，清零必须与增量互斥；SHARED 档不取锁（最多丢一次诊断计数） |
+| `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零 ISR 自有计数器 `b_isr_stat`（仅 SPLIT 档） | `b_isr_stat` 归数据 ISR 单写，清零必须与增量互斥；SHARED 档在单核下不取锁（最多丢一次诊断计数），`IOLINK_CONCURRENCY=SMP` 下仍取锁 |
 | `iolink_diag_service()`（`diag.c`） | ISR one-shot `isr_pulse[]` 的读-清 | 脉冲只允许被消费一次；除该字节外条件表归主上下文单写 |
 | `iolink_events_reset()`（`events.c`） | 条件表整表清零（含 ISR 单字节写的 `isr_pulse[]`） | 与 ISR 的 one-shot 脉冲互斥；事件引擎其余字段由主上下文单写 |
 

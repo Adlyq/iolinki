@@ -56,6 +56,10 @@ iolink_matrix_emit()
     "$cb" host_smp_split BYTE_BYTE Debug yes \
         "-DIOLINK_STATS_MODE=IOLINK_STATS_SPLIT" \
         "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SMP -DIOLINK_FENCE_LEVEL=IOLINK_FENCE_SMP -DIOLINK_FENCE_SMP_IMPL=__sync_synchronize"
+    # Variant of C1: ISR logging changes the log-sink contract (the sink is
+    # locked once init returns), so build and run the suite with it instead of
+    # only syntax-checking the macro.
+    "$cb" host_isr_log BYTE_BYTE Debug yes "" "-DIOLINK_LOG_ENABLE_ISR=1"
 }
 
 # Configurations the differential gate rebuilds. It compares protocol reply
@@ -96,7 +100,6 @@ iolink_matrix_emit_probes()
     "$cb" no_data_storage "-DIOLINK_FEATURE_DATA_STORAGE=0"
     "$cb" no_events "-DIOLINK_FEATURE_EVENTS=0"
     "$cb" no_validate "-DIOLINK_FEATURE_VALIDATE=0"
-    "$cb" isr_log "-DIOLINK_LOG_ENABLE_ISR=1"
     "$cb" logs_off "-DIOLINK_LOG_COMPILE_LEVEL=0"
     "$cb" workspace_external "-DIOLINK_WORKSPACE_EMBEDDED=0"
     "$cb" single_no_critical "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE"

@@ -622,8 +622,8 @@ check_size_baseline() {
 # cross toolchain as the size baseline; without one it reports SKIP instead of a
 # measurement, exactly like the size gate.
 check_stack_baseline() {
-    if ! have arm-none-eabi-gcc; then
-        skip "no target compiler for the stack report (install arm-none-eabi-gcc)"
+    if [ -z "${IOLINKI_STACK_CC:-}" ] && ! have arm-none-eabi-gcc; then
+        skip "no target compiler for the stack report (install arm-none-eabi-gcc or set IOLINKI_STACK_CC)"
         return 0
     fi
     python3 tools/stack_report.py --selftest && python3 tools/stack_report.py --check

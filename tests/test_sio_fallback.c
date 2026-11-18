@@ -53,6 +53,8 @@ static void test_crc_errors_do_not_enter_sio(void** state)
 
     /* 无 SIO 回退：CRC 错误不影响 DL 模式。 */
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
+    assert_int_equal(test_dll(&dev.ctx)->crc_errors, 3U);
+    assert_int_equal(test_dll(&dev.ctx)->invalid_frames, 3U);
 }
 
 static void test_valid_frame_after_crc_errors(void** state)

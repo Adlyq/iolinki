@@ -107,10 +107,7 @@ def compile_unit(cc: str, root: Path, relative: str, output: Path) -> tuple[bool
     path = root / relative
     if not path.is_file():
         return False, f"{relative}: missing"
-    command = [cc]
-    if "clang" in Path(cc).name:
-        command.append("--target=arm-none-eabi")
-    command += CFLAGS + [
+    command = [cc] + CFLAGS + [
         f"-I{root / 'include'}",
         f"-I{root / 'src'}",
         "-c",

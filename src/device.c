@@ -362,9 +362,9 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
      * 在初始化时定义。 */
     (void) iolink_dll_publish_reply_plans(&ctx->dll.main);
 
-    /* 日志汇点固定在配置里：此后 `iolink_device_set_log()` 是空操作，数据
-     * ISR 读到的 `write`/`self`/`level` 不会再被主上下文改写。必须在
-     * `on_startup` 之前锁定——应用常在该钩子里使能数据中断。 */
+    /* 编译进 ISR 日志时，汇点固定在配置里：此后 `iolink_device_set_log()`
+     * 是空操作，数据 ISR 读到的 `write`/`self`/`level` 不会再被主上下文改写。
+     * 必须在 `on_startup` 之前锁定——应用常在该钩子里使能数据中断。 */
     ctx->dll.main.log_locked = true;
 
     if (config->app->on_startup != NULL) {

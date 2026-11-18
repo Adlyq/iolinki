@@ -532,9 +532,10 @@ headline figure.
 
 The stack ships print points with a runtime sink: set
 `iolink_device_app_t::log_write` (its `self` argument is `app->self`) and
-`config.log_level` at initialisation. A zeroed sink is silent, and the sink is
-fixed once `iolink_device_init()` returns — a later `iolink_device_set_log()`
-call is a no-op because the data ISR reads the same sink fields. The library does
+`config.log_level` at initialisation. A zeroed sink is silent. With `IOLINK_LOG_ENABLE_ISR=1` the sink is fixed once
+`iolink_device_init()` returns (a later `iolink_device_set_log()` call is a
+no-op because the data ISR reads the same sink fields); the default build has
+no ISR reader and allows the main context to rebind it. The library does
 not format; the callback owns `vsnprintf` and the transport. ISR print points
 additionally require `IOLINK_LOG_ENABLE_ISR=1`. See `include/iolinki/log.h` and
 `docs/API.md`.

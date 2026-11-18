@@ -263,6 +263,7 @@ static void test_arguments_not_evaluated_when_filtered(void** state)
     assert_int_equal(g_side_effects, 1);
 }
 
+#if !IOLINK_LOG_ENABLE_ISR
 static void test_isr_family_is_off_by_default(void** state)
 {
     (void) state;
@@ -282,6 +283,7 @@ static void test_isr_family_is_off_by_default(void** state)
     assert_int_equal(g_calls, 1);
     assert_string_equal(g_last_msg, "isr on 7");
 }
+#endif
 
 static void test_device_setter_propagates(void** state)
 {
@@ -333,7 +335,9 @@ int main(void)
         cmocka_unit_test(test_level_filter),
         cmocka_unit_test(test_forwarding_and_user),
         cmocka_unit_test(test_arguments_not_evaluated_when_filtered),
+#if !IOLINK_LOG_ENABLE_ISR
         cmocka_unit_test(test_isr_family_is_off_by_default),
+#endif
         cmocka_unit_test(test_device_setter_propagates),
         cmocka_unit_test(test_device_init_binds_config_sink),
         cmocka_unit_test(test_device_init_failure_logs_through_config),

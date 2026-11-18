@@ -710,7 +710,9 @@ COM 切换，因此不接收上下文参数。
 <!-- END GENERATED -->
 
 `invalid_frames` 不是重传计数：CRC 校验失败时它与 `crc_errors` 同步自增
-（`src/dll_sm.c`），协议错误转 STARTUP 时也自增（`src/dll_frame.c`）；库内没有重发路径。
+（`src/dll_sm.c`），0x97 DeviceStartup 时也自增（`src/dll_frame.c` 的
+`dll_protocol_error_to_startup()`）；校验和有效但类型非法转 STARTUP 的帧不计入。
+库内没有重发路径。
 `isr_eager_rejects` 与 `pd_in_skips` 原先只能从内部结构读取，现在随同一快照上报：
 前者是 ISR 在组帧阶段就拒绝的帧，后者是 PD-in 缓冲区全被租用时跳过的发布次数。
 

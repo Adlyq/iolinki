@@ -79,8 +79,9 @@ Two compilers run, and they are not interchangeable:
   only, because `-Wstack-usage`/`-Wframe-larger-than` describe the library, not
   the host examples.
 
-Baselines record the toolchain that produced them and are never compared across
-compilers:
+Size baselines record the toolchain that produced them and are never compared
+across compilers; the stack baseline compares the numeric frames across
+toolchains and only warns when the toolchain string differs:
 - `tools/size_baseline.atfe.csv` is measured with ATFE (the
   `tools/size_matrix.py` default); `tools/size_baseline.csv` keeps the
   GNU-toolchain numbers and `IOLINKI_SIZE_TOOLCHAIN=gcc` reproduces them.
@@ -124,7 +125,7 @@ groups from what the change can break, not from the level:
 | --- | --- |
 | A public header (`include/iolinki/*.h`), the `iolink_phy_api_t` vtable, or a field of a public struct | `./tools/gates.sh quick build test gcc context fuzz` |
 | A compile-time switch, an `#if` in `src/`/`include/`, or an `IOLINK_*` configuration macro | `./tools/build_matrix.sh`, plus `./tools/gates.sh quick` (delivery rule in §3) |
-| How the ISR and main contexts share state (`dll_shared.h`, `dll_main.h`, `dll_isr.h`, `tools/shared_fields.csv`) | `./tools/gates.sh quick context test`, and `context` must stay at zero findings (`--enforce` once the split lands) |
+| How the ISR and main contexts share state (`dll_shared.h`, `dll_main.h`, `dll_isr.h`, `tools/shared_fields.csv`) | `./tools/gates.sh quick context test`, and `context` must stay at zero findings |
 | A specification constant, a state-machine transition, or ISDU/event/DS behaviour | `./tools/gates.sh test` |
 | Documentation only (`*.md`) | `./tools/gates.sh quick docs` (`quick` checks the symbol/link references, `docs` the generated blocks; neither regenerates them) |
 | A tool, a CI workflow or a shell script | `./tools/gates.sh quick` |

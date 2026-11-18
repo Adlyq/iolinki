@@ -137,6 +137,9 @@ static void test_callback_path_selected_by_presence(void** state)
     /* 回调路径生效后，轮询调用在运行期被显式拒绝。 */
     assert_int_equal(iolink_device_pd_input_update(&ctx, data, sizeof(data), true),
                      IOLINK_DEVICE_PD_ERR_MODE);
+    /* The mode check precedes the length check. */
+    assert_int_equal(iolink_device_pd_input_update(&ctx, data, sizeof(data) - 1U, true),
+                     IOLINK_DEVICE_PD_ERR_MODE);
 
     /* 在 OPERATE 下驱动一次主循环：回调发布 PD-in。 */
     test_dll_shared(&ctx)->b_state = IOLINK_DLL_STATE_OPERATE;
