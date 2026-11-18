@@ -189,18 +189,21 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);  /* 数据 ISR */
 ### 过程数据
 
 ```c
-int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data,
-                                  size_t len, bool valid);
+iolink_device_pd_result_t iolink_device_pd_input_update(iolink_device_ctx_t* ctx,
+                                                        const uint8_t* data, size_t len,
+                                                        bool valid);
 int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, size_t len);
 ```
 
-`pd_input_update` 发布 Device-to-Master 过程数据（`valid` 驱动 CKS 的 PD-invalid 位）。
-PD 长度在初始化时由 `iolink_stack_config_t` 固定：`len` 必须等于配置的 PD-in 长度
-（`TYPE_0` 为 0），否则返回 -1。
+`pd_input_update` 发布 Device-to-Master 过程数据（`valid` 驱动 CKS 的 PD-invalid 位），
+返回 `iolink_device_pd_result_t`：`IOLINK_DEVICE_PD_OK`（0）、
+`_ERR_ARG`（ctx/data 为 NULL）、`_ERR_MODE`（回调路径已生效）、
+`_ERR_LEN`（`len` 不等于配置的 PD-in 长度，`TYPE_0` 为 0）、
+`_ERR_BUSY`（没有空闲 PD-in 缓冲区，同时计入 `pd_in_skips`）。
 两条 PD-in 路径在同一构建内共存：非 NULL 的 `on_pd_input` 在初始化时选择回调路径并
 置位实例位 `IOLINK_CAP_PD_IN_CALLBACK`；否则应用用本函数轮询发布。`iolink_device_init()`
 **不**检查两条路径是否同时提供，也不因混用而失败；回调路径生效后，本函数在运行期返回
-`IOLINK_DEVICE_INIT_ERR_PD_INPUT`，而不是静默覆盖回调输出。
+`IOLINK_DEVICE_PD_ERR_MODE`，而不是静默覆盖回调输出。
 `pd_output_read` 返回最新的 Master-to-Device 数据。
 
 ### 能力
@@ -238,13 +241,9 @@ bool iolink_caps_built(const iolink_build_caps_t* caps, uint32_t mask);
 
 ### 复位处理
 
-```c
-typedef void (*iolink_reset_handler_t)(iolink_reset_type_t type);
-void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx, iolink_reset_handler_t handler);
-```
-
-在 SystemCommand `0x80`（`IOLINK_RESET_DEVICE`）/ `0x81`（`IOLINK_RESET_APPLICATION`）
-时调用。协议栈不会自行重启设备。
+SystemCommand `0x80`（`IOLINK_RESET_DEVICE`）/ `0x81`（`IOLINK_RESET_APPLICATION`）
+到达时，设备层调用 `iolink_device_app_t::on_reset(self, type)`；成员为 NULL 表示应用
+不处理复位。协议栈不会自行重启设备。
 
 ## PHY 层 API
 
@@ -297,11 +296,12 @@ typedef struct {
     void (*on_startup)(iolink_app_t* self);
     void (*on_preoperate)(iolink_app_t* self);
     void (*on_operate)(iolink_app_t* self);
-    bool (*on_pd_input)(iolink_app_t* self, uint8_t* data, uint8_t len); /* 非 NULL 选择回调路径 */
-    void (*on_pd_output)(iolink_app_t* self, uint8_t* data, uint8_t len);
+    bool (*on_pd_input)(iolink_app_t* self, uint8_t* data);  /* 非 NULL 选择回调路径 */
+    void (*on_pd_output)(iolink_app_t* self, const uint8_t* data);
     void (*on_state_change)(iolink_app_t* self, iolink_dll_state_t state);
     void (*on_master_lost)(iolink_app_t* self);
     void (*on_master_online)(iolink_app_t* self);
+    void (*on_reset)(iolink_app_t* self, iolink_reset_type_t type); /* 0x80 / 0x81 */
 } iolink_device_app_t;
 ```
 
@@ -310,7 +310,8 @@ typedef struct {
 每个回调都收到同一个 `self`，应用不需要借助全局变量访问自己的状态。
 通过 `iolink_device_config_t.app` 注册，没有单独的注册函数。`on_pd_input`
 填写一个空闲 PD-in 缓冲，其返回值成为 PD-valid 标志；保持 `NULL` 表示应用改用
-`iolink_device_pd_input_update()` 发布 PD-in。
+`iolink_device_pd_input_update()` 发布 PD-in。PD 缓冲区长度取自
+`iolink_stack_config_t`（`pd_in_len` / `pd_out_len`），不在回调参数里重复传递。
 
 **示例**：
 
@@ -318,7 +319,7 @@ typedef struct {
 struct iolink_app { uint8_t pd[3]; };
 
 static void on_operate(iolink_app_t* self) { struct iolink_app* a = (struct iolink_app*) self; }
-static void on_pd_output(iolink_app_t* self, uint8_t* data, uint8_t len) { (void)self; (void)data; (void)len; }
+static void on_pd_output(iolink_app_t* self, const uint8_t* data) { (void)self; (void)data; }
 
 static const iolink_device_app_t g_app = {
     .self = (iolink_app_t*) &g_app_state,
@@ -613,8 +614,9 @@ DS 的语义是**对象字典的投影**：参数集合就是标准表与应用�
 
 ## 错误码
 
-`iolink_device_init()` 的返回值枚举。块内由 `include/iolinki/device.h` 生成
-（`tools/gen_docs.py`），不手改；数字与枚举取值的唯一出处是该头文件。
+`iolink_device_init()` 的返回值枚举，以及 `iolink_device_pd_input_update()` 的运行期
+结果码。块内由 `include/iolinki/device.h` 生成（`tools/gen_docs.py`），不手改；
+数字与枚举取值的唯一出处是该头文件。
 
 <!-- BEGIN GENERATED: device_error_codes (tools/gen_docs.py) -->
 ```c
@@ -630,8 +632,6 @@ typedef enum
     IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -7, /**< PD/OD 长度与 M-sequence 类型不兼容 */
     IOLINK_DEVICE_INIT_ERR_TIME = -8,        /**< time_us 回调为 NULL */
     IOLINK_DEVICE_INIT_ERR_CRITICAL = -9,    /**< 平台临界区为弱默认实现 */
-    IOLINK_DEVICE_INIT_ERR_PD_INPUT =
-        -10, /**< PD 回调路径与轮询调用混用（能力位已置位时调用轮询 API） */
     IOLINK_DEVICE_INIT_ERR_PHY =
         -11, /**< PHY 能力组合不可满足（例如要求 ISR 发送却没有 `request_service`，
                   ISR/SMP 档有 TX 能力却没有 `request_service`，或构建承诺
@@ -643,11 +643,21 @@ typedef enum
     IOLINK_DEVICE_INIT_ERR_DEVICE_INFO =
         -15, /**< 未提供设备身份（`config->device_info == NULL`） */
 } iolink_device_init_result_t;
+
+typedef enum
+{
+    IOLINK_DEVICE_PD_OK = 0,        /**< PD 输入已发布 */
+    IOLINK_DEVICE_PD_ERR_MODE = -1, /**< 回调路径已生效（`IOLINK_CAP_PD_IN_CALLBACK`） */
+    IOLINK_DEVICE_PD_ERR_LEN = -2,  /**< `len` 与配置的 PD-in 长度不一致 */
+    IOLINK_DEVICE_PD_ERR_BUSY = -3, /**< 没有空闲 PD-in 缓冲区（已计入 `pd_in_skips`） */
+    IOLINK_DEVICE_PD_ERR_ARG = -4,  /**< ctx 或 data 为 NULL */
+} iolink_device_pd_result_t;
 ```
 <!-- END GENERATED -->
 
-负值表示初始化被拒绝。`IOLINK_DEVICE_INIT_ERR_PD_INPUT` 是唯一在运行期返回的成员：
-回调 PD-in 路径生效后，`iolink_device_pd_input_update()` 用它拒绝轮询调用（见“过程数据”）。
+负值表示初始化被拒绝。`iolink_device_init()` 不返回任何运行期结果码：
+PD 发布的失败由 `iolink_device_pd_input_update()` 返回的 `iolink_device_pd_result_t`
+（`IOLINK_DEVICE_PD_ERR_*`）表达，见“过程数据”。
 PHY `init` 回调的失败统一映射为 `IOLINK_DEVICE_INIT_ERR_PHY`，驱动自己的错误码用
 `iolink_device_get_phy_error()` 读取，不会混进本枚举。
 

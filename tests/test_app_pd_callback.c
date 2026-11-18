@@ -4,8 +4,8 @@
  * PD 输入路径（同一构建内的运行时选择）：
  *  - 应用不提供 on_pd_input 时走轮询 API iolink_device_pd_input_update()；
  *  - 提供 on_pd_input 时能力位 IOLINK_CAP_PD_IN_CALLBACK 置位，DLL 每
- *    OPERATE 周期调用回调，轮询 API 被拒绝（ERR_PD_INPUT）而不是静默
- *    覆盖回调输出；
+ *    OPERATE 周期调用回调，轮询 API 在运行期返回 IOLINK_DEVICE_PD_ERR_MODE
+ *    而不是静默覆盖回调输出；
  *  - 构建档位（capability.h）与实例能力位一致。
  *
  * 两条路径现在编进同一个二进制，不再需要独立的 fixture 库。
@@ -56,19 +56,19 @@ static const iolink_phy_api_t g_phy = {
 
 static int g_pd_calls;
 static uint8_t g_pd_pattern;
+static uint8_t g_pd_len;
 static void* g_expected_user;
 
-static bool on_pd_input(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8_t len)
+static bool on_pd_input(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data)
 {
     assert_ptr_equal(self, g_expected_user);
     g_pd_calls++;
-    (void) memset(data, g_pd_pattern, len);
+    (void) memset(data, g_pd_pattern, g_pd_len);
     return true;
 }
 
 static void make_config(iolink_device_config_t* cfg, iolink_device_app_t* app,
-                        bool (*pd_input)(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data,
-                                         uint8_t len))
+                        bool (*pd_input)(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data))
 {
     (void) memset(app, 0, sizeof(*app));
     app->self = g_expected_user;
@@ -105,7 +105,8 @@ static void test_polling_path_without_callback(void** state)
     const iolink_caps_t caps = iolink_device_capabilities(&ctx);
     assert_false(iolink_caps_has(caps, IOLINK_CAP_PD_IN_CALLBACK));
 
-    assert_int_equal(iolink_device_pd_input_update(&ctx, data, sizeof(data), true), 0);
+    assert_int_equal(iolink_device_pd_input_update(&ctx, data, sizeof(data), true),
+                     IOLINK_DEVICE_PD_OK);
     assert_true(test_pd_valid(test_dll(&ctx)));
     const iolink_dll_shared_t* shared = test_dll_shared(&ctx);
     const uint8_t active = test_pd_active(test_dll(&ctx));
@@ -124,6 +125,7 @@ static void test_callback_path_selected_by_presence(void** state)
 
     g_pd_calls = 0;
     g_pd_pattern = 0xA5U;
+    g_pd_len = 2U;
     static int user_sentinel;
     g_expected_user = &user_sentinel;
     make_config(&cfg, &app, on_pd_input);
@@ -132,9 +134,9 @@ static void test_callback_path_selected_by_presence(void** state)
     const iolink_caps_t caps = iolink_device_capabilities(&ctx);
     assert_true(iolink_caps_has(caps, IOLINK_CAP_PD_IN_CALLBACK));
 
-    /* 混用被显式拒绝：轮询 API 返回 PD 输入错误码。 */
+    /* 回调路径生效后，轮询调用在运行期被显式拒绝。 */
     assert_int_equal(iolink_device_pd_input_update(&ctx, data, sizeof(data), true),
-                     IOLINK_DEVICE_INIT_ERR_PD_INPUT);
+                     IOLINK_DEVICE_PD_ERR_MODE);
 
     /* 在 OPERATE 下驱动一次主循环：回调发布 PD-in。 */
     test_dll_shared(&ctx)->state = IOLINK_DLL_STATE_OPERATE;

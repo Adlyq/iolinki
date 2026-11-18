@@ -83,11 +83,9 @@ static void conformance_observe_reset(conformance_device_t* app, conformance_res
     }
 }
 
-static conformance_device_t* g_reset_observer = NULL;
-
-static void conformance_reset_handler(iolink_reset_type_t type)
+static void conformance_reset_handler(iolink_app_t* IOLINK_NULLABLE self, iolink_reset_type_t type)
 {
-    conformance_device_t* app = g_reset_observer;
+    conformance_device_t* app = (conformance_device_t*) self;
     if (app == NULL) {
         return;
     }
@@ -132,6 +130,7 @@ int conformance_device_init(conformance_device_t* app, const conformance_profile
     app->config.phy = phy;
     app->app_trait.self = (iolink_app_t * IOLINK_NULLABLE) app;
     app->app_trait.time_us = conformance_time_us;
+    app->app_trait.on_reset = conformance_reset_handler;
     app->config.app = &app->app_trait;
     app->config.stack = &profile->stack;
     app->config.device_info = profile->identity;
@@ -142,8 +141,6 @@ int conformance_device_init(conformance_device_t* app, const conformance_profile
     if (rc != 0) {
         return rc;
     }
-    iolink_device_set_reset_handler(&app->device, conformance_reset_handler);
-    g_reset_observer = app;
 
     return 0;
 }
@@ -172,11 +169,7 @@ int conformance_device_power_cycle(conformance_device_t* app, const iolink_phy_a
 
 void conformance_device_close(const conformance_device_t* app)
 {
-    if (app != NULL) {
-        if (g_reset_observer == app) {
-            g_reset_observer = NULL;
-        }
-    }
+    (void) app;
 }
 
 int conformance_device_tick(conformance_device_t* app, bool button)

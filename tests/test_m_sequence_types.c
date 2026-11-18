@@ -94,7 +94,8 @@ static void run_fixed_case(const fixed_case_t* c)
     for (uint8_t i = 0U; i < c->pd_out; i++) {
         pd_out[i] = (uint8_t) (0x10U + i);
     }
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd_in, c->pd_in, true), 0);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd_in, c->pd_in, true),
+                     IOLINK_DEVICE_PD_OK);
 
     /* --- READ：请求 = MC、CKT、PD-out（无 OD）；应答 = OD、PD-in、CKS。 */
     (void) memset(frame, 0, sizeof(frame));

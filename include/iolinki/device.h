@@ -155,11 +155,10 @@ typedef struct
     iolink_dll_ctx_t dll;                 /**< 数据链路层上下文。 */
     iolink_device_info_ctx_t device_info; /**< 设备标识上下文。 */
     const iolink_device_config_t* config; /**< 指向所提供配置的指针（唯一配置来源）。 */
-    iolink_reset_handler_t IOLINK_NULLABLE reset_handler; /**< 应用重置处理函数（可以为 NULL）。 */
-    bool master_lost_last;                                /**< 上一次的主站丢失状态（回调边沿） */
-    int phy_error;                                        /**< 最近一次 PHY init 失败的原始驱动码
-                                                               （0 = 无失败；日志关闭时仍可读） */
-    uint8_t direct_param_page2[16];                       /**< Direct Parameter Page 2 存储。 */
+    bool master_lost_last;                /**< 上一次的主站丢失状态（回调边沿） */
+    int phy_error;                        /**< 最近一次 PHY init 失败的原始驱动码
+                                               （0 = 无失败；日志关闭时仍可读） */
+    uint8_t direct_param_page2[16];       /**< Direct Parameter Page 2 存储。 */
 } iolink_device_ctx_t;
 
 /**
@@ -181,8 +180,6 @@ typedef enum
     IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -7, /**< PD/OD 长度与 M-sequence 类型不兼容 */
     IOLINK_DEVICE_INIT_ERR_TIME = -8,        /**< time_us 回调为 NULL */
     IOLINK_DEVICE_INIT_ERR_CRITICAL = -9,    /**< 平台临界区为弱默认实现 */
-    IOLINK_DEVICE_INIT_ERR_PD_INPUT =
-        -10, /**< PD 回调路径与轮询调用混用（能力位已置位时调用轮询 API） */
     IOLINK_DEVICE_INIT_ERR_PHY =
         -11, /**< PHY 能力组合不可满足（例如要求 ISR 发送却没有 `request_service`，
                   ISR/SMP 档有 TX 能力却没有 `request_service`，或构建承诺
@@ -242,26 +239,42 @@ void iolink_device_process(iolink_device_ctx_t* ctx);
 void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 
 /**
+ * @brief iolink_device_pd_input_update() 的运行期结果代码。
+ *
+ * 与 ::iolink_device_init_result_t 分离：这些值由发布过程产生，
+ * 不表示初始化被拒绝。::IOLINK_DEVICE_PD_OK 为 0，其余为负值。
+ */
+typedef enum
+{
+    IOLINK_DEVICE_PD_OK = 0,        /**< PD 输入已发布 */
+    IOLINK_DEVICE_PD_ERR_MODE = -1, /**< 回调路径已生效（`IOLINK_CAP_PD_IN_CALLBACK`） */
+    IOLINK_DEVICE_PD_ERR_LEN = -2,  /**< `len` 与配置的 PD-in 长度不一致 */
+    IOLINK_DEVICE_PD_ERR_BUSY = -3, /**< 没有空闲 PD-in 缓冲区（已计入 `pd_in_skips`） */
+    IOLINK_DEVICE_PD_ERR_ARG = -4,  /**< ctx 或 data 为 NULL */
+} iolink_device_pd_result_t;
+
+/**
  * @brief 更新输入过程数据（设备 -> 主站）。
  *
  * 轮询 API 与 `on_pd_input` 回调在同一次构建中共存，按应用是否
  * 提供回调在初始化时选择路径。已选择回调路径（能力位
  * `IOLINK_CAP_PD_IN_CALLBACK` 置位）时，本函数返回
- * `IOLINK_DEVICE_INIT_ERR_PD_INPUT`，而不是静默覆盖回调的输出。
+ * `IOLINK_DEVICE_PD_ERR_MODE`，而不是静默覆盖回调的输出。
  *
  * @note PD 长度是初始化属性（`iolink_stack_config_t::pd_in_len`），运行期
  * 不可改变：DPP1 的 0x05/0x06 是只读通告，`@p len` 必须等于该配置长度，
- * 否则返回 -1。成功调用只更新缓冲区、有效性与活动索引，
+ * 否则返回 `IOLINK_DEVICE_PD_ERR_LEN`。成功调用只更新缓冲区、有效性与活动索引，
  * 不修改 DPP1、MinCycleTime 或应答布局。
  *
  * @param ctx    设备上下文。
  * @param data   要发布的输入过程数据字节。
- * @param len    @p data 的长度（字节），必须等于配置的 PD-in 长度。
+ * @param len    `@p data` 的长度（字节），必须等于配置的 PD-in 长度。
  * @param valid  过程数据当前是否有效。
- * @return 成功时为 0；参数/长度不符或没有空闲缓冲区时返回负值。
+ * @return ::iolink_device_pd_result_t 值。
  */
-int iolink_device_pd_input_update(iolink_device_ctx_t* ctx, const uint8_t* data, size_t len,
-                                  bool valid);
+iolink_device_pd_result_t iolink_device_pd_input_update(iolink_device_ctx_t* ctx,
+                                                        const uint8_t* data, size_t len,
+                                                        bool valid);
 
 /**
  * @brief 取本实例的能力位。
@@ -278,14 +291,6 @@ iolink_caps_t iolink_device_capabilities(const iolink_device_ctx_t* ctx);
  * @return 已复制的字节数（没有时为 0），出错时为负值。
  */
 int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, size_t len);
-
-/**
- * @brief 注册在主站重置命令时调用的处理函数。
- * @param ctx      设备上下文。
- * @param handler  重置处理函数回调（可以为 NULL 以清除）。
- */
-void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx,
-                                     iolink_reset_handler_t IOLINK_NULLABLE handler);
 
 #if IOLINK_FEATURE_EVENTS
 /**

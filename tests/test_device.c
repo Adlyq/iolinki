@@ -28,9 +28,12 @@
 
 static int g_reset_count;
 static iolink_reset_type_t g_last_reset;
+static int g_reset_sentinel;
+static iolink_app_t* IOLINK_NULLABLE g_reset_self;
 
-static void device_reset_handler(iolink_reset_type_t type)
+static void device_reset_handler(iolink_app_t* IOLINK_NULLABLE self, iolink_reset_type_t type)
 {
+    g_reset_self = self;
     g_reset_count++;
     g_last_reset = type;
 }
@@ -358,11 +361,13 @@ static void test_device_pd_input_bounds(void** state)
     const uint8_t data[IOLINK_PD_IN_MAX_SIZE + 1U] = {0};
 
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, TEST_NULL(const uint8_t*), 2U, true),
-                     -1);
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true), -1);
+                     IOLINK_DEVICE_PD_ERR_ARG);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true),
+                     IOLINK_DEVICE_PD_ERR_LEN);
 
     const uint8_t pd[2] = {0x11U, 0x22U};
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), true), 0);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, pd, sizeof(pd), true),
+                     IOLINK_DEVICE_PD_OK);
     assert_int_equal(test_dll_shared(&dev.ctx)->pd_in_len, 2U);
     const iolink_dll_shared_t* shared = test_dll_shared(&dev.ctx);
     assert_memory_equal(&shared->pd_in[test_pd_active(test_dll(&dev.ctx))][shared->od_width], pd,
@@ -409,21 +414,33 @@ static void test_device_reset_handler(void** state)
 {
     (void) state;
     iolink_test_device_t dev;
-    init_device(&dev, IOLINK_M_SEQ_TYPE_0, 0U, 0U);
+    iolink_stack_config_t stack = {0};
+    static iolink_device_app_t app = {
+        .time_us = iolink_test_time_us,
+        .on_reset = device_reset_handler,
+    };
 
-    iolink_device_set_reset_handler(&dev.ctx, device_reset_handler);
+    stack.m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    stack.od_width = 1U;
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    app.self = (iolink_app_t * IOLINK_NULLABLE) & g_reset_sentinel;
+    assert_int_equal(iolink_test_device_init(&dev, &stack, &app), 0);
 
     g_reset_count = 0;
+    g_reset_self = NULL;
     g_last_reset = IOLINK_RESET_APPLICATION;
     test_dll_isdu(&dev.ctx)->reset_pending = true;
     iolink_device_process(&dev.ctx);
     assert_int_equal(g_reset_count, 1);
     assert_int_equal(g_last_reset, IOLINK_RESET_DEVICE);
+    assert_ptr_equal(g_reset_self, (iolink_app_t * IOLINK_NULLABLE) & g_reset_sentinel);
 
     test_dll_isdu(&dev.ctx)->app_reset_pending = true;
     iolink_device_process(&dev.ctx);
     assert_int_equal(g_reset_count, 2);
     assert_int_equal(g_last_reset, IOLINK_RESET_APPLICATION);
+    assert_ptr_equal(g_reset_self, (iolink_app_t * IOLINK_NULLABLE) & g_reset_sentinel);
 }
 
 static void test_device_introspection(void** state)
@@ -434,7 +451,13 @@ static void test_device_introspection(void** state)
 
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_STARTUP);
     assert_int_equal(iolink_device_get_m_seq_type(&dev.ctx), IOLINK_M_SEQ_TYPE_2_V);
-    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_COM_BAUDRATE);
+#if IOLINK_COM == 1
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM1);
+#elif IOLINK_COM == 2
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM2);
+#else
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM3);
+#endif
     assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 2U);
     assert_int_equal(iolink_device_get_pd_out_len(&dev.ctx), 3U);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
@@ -462,7 +485,13 @@ static void test_device_baudrate_is_compiled(void** state)
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
-    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_COM_BAUDRATE);
+#if IOLINK_COM == 1
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM1);
+#elif IOLINK_COM == 2
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM2);
+#else
+    assert_int_equal(iolink_device_get_baudrate(&dev.ctx), IOLINK_BAUDRATE_COM3);
+#endif
 }
 
 /* 初始化时即建立 DS 镜像和校验和，即使没有已持久化的镜像也是如此，

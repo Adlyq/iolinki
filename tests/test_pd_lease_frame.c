@@ -45,7 +45,8 @@ static void test_silent_period_lease_is_isr_owned(void** state)
     iolink_dll_shared_t* shared = test_dll_shared(&dev.ctx);
 
     /* 首次发布：存在空闲缓冲区，未跳过。 */
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, first, sizeof(first), true), 0);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, first, sizeof(first), true),
+                     IOLINK_DEVICE_PD_OK);
     assert_int_equal(test_dll(&dev.ctx)->pd_in_skips, 0U);
 
     /* ISR 捕获活动缓冲区并交给 DMA；主站静默，没有新的数据中断。 */
@@ -53,12 +54,14 @@ static void test_silent_period_lease_is_isr_owned(void** state)
     shared->pd_in_captured = captured;
 
     /* 静默期第一次更新：另一个缓冲区仍可填，租约不阻塞它。 */
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, second, sizeof(second), true), 0);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, second, sizeof(second), true),
+                     IOLINK_DEVICE_PD_OK);
     assert_int_not_equal(test_pd_active(test_dll(&dev.ctx)), captured);
     assert_int_equal(test_dll(&dev.ctx)->pd_in_skips, 0U);
 
     /* 静默期第二次更新：两个缓冲区都被占用，跳过并计数。 */
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, third, sizeof(third), true), -1);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, third, sizeof(third), true),
+                     IOLINK_DEVICE_PD_ERR_BUSY);
     assert_int_equal(test_dll(&dev.ctx)->pd_in_skips, 1U);
     /* 在途数据保持不变。 */
     assert_memory_equal(&shared->pd_in[captured][shared->od_width], first, sizeof(first));
@@ -70,7 +73,8 @@ static void test_silent_period_lease_is_isr_owned(void** state)
     /* 下一次 ISR 进入时 tx_busy() == 0：回收租约，更新恢复。 */
     iolink_device_process_isr(&dev.ctx);
     assert_int_equal(shared->pd_in_captured, 0xFFU);
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, third, sizeof(third), true), 0);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, third, sizeof(third), true),
+                     IOLINK_DEVICE_PD_OK);
     assert_int_equal(test_dll(&dev.ctx)->pd_in_skips, 1U);
     assert_memory_equal(&shared->pd_in[test_pd_active(test_dll(&dev.ctx))][shared->od_width], third,
                         sizeof(third));

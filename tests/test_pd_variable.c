@@ -100,7 +100,8 @@ static void test_pd_invalid_flag(void** state)
 
     /* 把 PD-in 标记为有效后重发同一 WRITE：CKS 第 6 位必须清零。 */
     const uint8_t valid_pd[1] = {0xA5U};
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, valid_pd, 1U, true), 0);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, valid_pd, 1U, true),
+                     IOLINK_DEVICE_PD_OK);
     for (size_t i = 0; i < sizeof(frame); i++) {
         mock_phy_feed_byte(frame[i]);
     }
@@ -130,17 +131,20 @@ static void test_pd_length_is_configured(void** state)
     assert_int_equal(iolink_device_get_pd_out_len(&dev.ctx), 8);
 
     const uint8_t short_pd[4] = {0};
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, short_pd, sizeof(short_pd), true), -1);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, short_pd, sizeof(short_pd), true),
+                     IOLINK_DEVICE_PD_ERR_LEN);
     assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 8);
     assert_int_equal(test_dll(&dev.ctx)->pd_in_skips, 0U); /* 长度检查先于租约检查 */
 
     /* OPERATE 中同样只接受已通告长度。 */
     move_to_operate_ctx(&dev.ctx);
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, short_pd, sizeof(short_pd), true), -1);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, short_pd, sizeof(short_pd), true),
+                     IOLINK_DEVICE_PD_ERR_LEN);
     assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 8);
 
     const uint8_t full_pd[8] = {0};
-    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, full_pd, sizeof(full_pd), true), 0);
+    assert_int_equal(iolink_device_pd_input_update(&dev.ctx, full_pd, sizeof(full_pd), true),
+                     IOLINK_DEVICE_PD_OK);
     assert_int_equal(iolink_device_get_pd_in_len(&dev.ctx), 8);
 }
 
@@ -169,7 +173,8 @@ static void run_pd_roundtrip(iolink_test_device_t* dev, uint8_t pd_in_len, uint8
     for (uint8_t i = 0U; i < pd_in_len; i++) {
         pd_in[i] = (uint8_t) (0x80U + i);
     }
-    assert_int_equal(iolink_device_pd_input_update(&dev->ctx, pd_in, pd_in_len, true), 0);
+    assert_int_equal(iolink_device_pd_input_update(&dev->ctx, pd_in, pd_in_len, true),
+                     IOLINK_DEVICE_PD_OK);
 
     /* 主站报文：MC、CKT、PD-out、OD。校验和位于 CKT 中。 */
     const size_t frame_len = (size_t) 2U + pd_out_len + od_len;
