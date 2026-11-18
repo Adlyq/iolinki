@@ -267,7 +267,7 @@ static void dll_events_apply_isr_reset(iolink_dll_main_t* ctx)
  * 通知保留，以免快速的 STARTUP -> PREOPERATE 序列对应用隐藏
  * 协议复位。
  *
- * 两个上下文各有一个入口：数据 ISR 只调用 @ref dll_set_state_shared，
+ * 两个上下文各有一个入口：数据 ISR 只调用 @ref dll_set_state_shared ，
  * 它只写共享区；主上下文调用本函数，额外维护主站丢失簿记、事件/ISDU
  * 复位并投递回调。
  */

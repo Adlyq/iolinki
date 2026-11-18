@@ -13,7 +13,7 @@
  * @file dll_shared_internal.h
  * @brief 主上下文与数据 ISR 都能包含的内部定义。
  *
- * 本文件只依赖 @ref iolink_dll_shared_t：数据 ISR 翻译单元（dll_isr*.c）
+ * 本文件只依赖 @ref iolink_dll_shared_t ：数据 ISR 翻译单元（dll_isr*.c）
  * 包含它，因此这里不得出现 `iolink_dll_main_t` 的字段访问或主上下文
  * 专属入口。主上下文专属声明在 dll_internal.h 的其余部分。
  */
@@ -145,7 +145,7 @@ typedef struct
 /**
  * @name 两个上下文共享的跨 TU 入口
  *
- * 参数一律是 @ref iolink_dll_shared_t：数据 ISR 只能看到共享区，主上下文
+ * 参数一律是 @ref iolink_dll_shared_t ：数据 ISR 只能看到共享区，主上下文
  * 以 `&ctx->shared` 传入。均为库私有，不属于公共 iolink_ API。
  * @{
  */

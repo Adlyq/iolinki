@@ -36,7 +36,7 @@
 
 void dll_set_state(iolink_dll_main_t* ctx, iolink_dll_state_t new_state);
 
-/** @brief 主上下文侧应用 MasterCommand（ISR 侧用 @ref dll_apply_master_command）。 */
+/** @brief 主上下文侧应用 MasterCommand（ISR 侧用 @ref dll_apply_master_command ）。 */
 bool dll_apply_master_command_main(iolink_dll_main_t* ctx, uint8_t cmd);
 
 void dll_protocol_error_to_startup(iolink_dll_main_t* ctx);
