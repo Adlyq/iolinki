@@ -49,11 +49,23 @@ static void generic_set_cq_line(iolink_app_t* IOLINK_NULLABLE self, uint8_t stat
     /* 模板：在 SIO 模式下驱动 C/Q 线高/低。 */
 }
 
+/** @brief 请求数据中断的模板钩子。
+ *
+ * 主上下文暂存应答后调用；端口必须在这里触发 IO-Link 数据中断，使
+ * `iolink_dll_process_isr()` 发送该暂存应答。模板没有中断源，因此为空操作。
+ */
+static void generic_request_service(iolink_app_t* IOLINK_NULLABLE self)
+{
+    (void) self;
+    /* 模板：触发 IO-Link 数据中断。 */
+}
+
 static const iolink_phy_api_t g_phy_generic = {
     .init = generic_init,
     .set_mode = generic_set_mode,
     .detect_wakeup = generic_detect_wakeup,
     .set_cq_line = generic_set_cq_line,
+    .request_service = generic_request_service,
 };
 
 const iolink_phy_api_t* iolink_phy_generic_get(void)

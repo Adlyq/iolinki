@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (PHY mocks hand main-context replies to the ISR pump)
+- The shared test mock (`g_phy_mock`), the frame fuzzer, the ISR latency
+  harness, the generic template PHY and both host examples now provide
+  `request_service()`. The test pump (`test_io_cycle()` and the helpers built on
+  it) drains the staged reply through `iolink_dll_process_isr()` instead of
+  letting `dll_send()` drive the PHY directly, so the harness models the port
+  contract the ISR profiles expect. Library behaviour is unchanged: the
+  direct-send fallback is still compiled in. `tests/test_capability.c` asserts
+  the capability bit for the mock and keeps the `IOLINK_CAP_REQUIRE_ISR_TX`
+  rejection covered with a local PHY that has TX but no `request_service()`.
+
 ### Removed (reply plans carry no timing field and are compiled once)
 - `iolink_reply_plan_t::deadline_us` is gone. Nothing read it at run time: the
   ISR arms t_A from `10 * dll_get_t_bit_us()` when it starts a reply

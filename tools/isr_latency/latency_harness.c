@@ -118,6 +118,15 @@ static void lat_tx_done(iolink_app_t* self)
     s_tx_active = 0U;
 }
 
+/* 主上下文暂存应答后请求"数据中断"。宿主机没有中断源：场景显式调用
+ * iolink_dll_process_isr()，该入口在 int_active 门控之前排空
+ * isr_tx_pending。这里不驱动任何东西，也不得在本上下文重入泵，否则
+ * 会把两个上下文的时延混进同一个测量窗口。 */
+static void lat_request_service(iolink_app_t* self)
+{
+    (void) self;
+}
+
 static uint8_t lat_int_active(iolink_app_t* self)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
@@ -132,6 +141,7 @@ static const iolink_phy_api_t s_phy = {
     .tx_octet = lat_tx_octet,
     .tx_done = lat_tx_done,
     .int_active = lat_int_active,
+    .request_service = lat_request_service,
 };
 
 /* ------------------------------------------------------------------ */

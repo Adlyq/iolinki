@@ -58,6 +58,7 @@ typedef struct
 static fuzz_phy_state_t g_phy;
 static uint64_t g_now_us;
 static uint32_t g_wakeup_pulses;
+static bool g_service_requested;
 static iolink_device_ctx_t g_device;
 
 static uint64_t fuzz_time_us(iolink_app_t* IOLINK_NULLABLE self)
@@ -122,6 +123,16 @@ static uint8_t fuzz_phy_int_active(iolink_app_t* IOLINK_NULLABLE self)
     return ((g_phy.pos < g_phy.len) || g_phy.tx_active) ? 1U : 0U;
 }
 
+static void fuzz_phy_request_service(iolink_app_t* IOLINK_NULLABLE self)
+{
+    (void) self;
+    /* There is no interrupt source in this harness: latch the request and let
+     * the explicit pump call consume it. `iolink_dll_process_isr()` drains
+     * `isr_tx_pending` before its `int_active` gate, so the staged reply is
+     * sent on the next cycle instead of in the main context. */
+    g_service_requested = true;
+}
+
 static int fuzz_phy_detect_wakeup(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
@@ -140,6 +151,7 @@ static const iolink_phy_api_t k_phy = {
     .tx_octet = fuzz_phy_tx_octet,
     .tx_done = fuzz_phy_tx_done,
     .int_active = fuzz_phy_int_active,
+    .request_service = fuzz_phy_request_service,
     .detect_wakeup = fuzz_phy_detect_wakeup,
 };
 
@@ -188,6 +200,7 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
     g_phy.len = (size > (size_t) IOLINK_M_SEQ_MAX_LEN) ? (size_t) IOLINK_M_SEQ_MAX_LEN : size;
     g_now_us = 0U;
     g_wakeup_pulses = 1U;
+    g_service_requested = false;
 
     if (iolink_device_init(&g_device, &k_config) != IOLINK_DEVICE_INIT_OK) {
         /* The configuration is constant and valid; a rejection means the
@@ -196,10 +209,14 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
     }
 
     for (uint32_t i = 0U; i < FUZZ_MAX_CYCLES; i++) {
+        g_service_requested = false;
         iolink_device_process_isr(&g_device);
         iolink_device_process(&g_device);
         g_now_us += 250U;
-        if ((g_phy.pos >= g_phy.len) && !g_phy.tx_active && (i >= 8U)) {
+        /* A reply the main context staged but the pump has not sent yet still
+         * owes octets on the line, so it keeps the input alive like a reply in
+         * progress. */
+        if ((g_phy.pos >= g_phy.len) && !g_phy.tx_active && !g_service_requested && (i >= 8U)) {
             break;
         }
     }

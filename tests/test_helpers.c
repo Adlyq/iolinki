@@ -178,6 +178,15 @@ void mock_phy_set_cq_line(iolink_app_t* IOLINK_NULLABLE self, uint8_t state)
     g_mock_cq_state = state;
 }
 
+/* 主上下文暂存应答后请求"数据中断"。宿主机测试没有真实中断源：
+ * 中断由 test_io_cycle() 或用例显式调用 iolink_dll_process_isr() 模拟，
+ * 而该入口在 int_active 门控之前就排空 isr_tx_pending。因此这里不
+ * 驱动任何东西，也不得在本上下文中重入泵。 */
+static void mock_phy_request_service(iolink_app_t* IOLINK_NULLABLE self)
+{
+    (void) self;
+}
+
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
 /* TX FRAME：库在 tx_frame() 返回之后才把帧尾 CKS 写进同一个缓冲区
  * （长应答的 DMA 时序，见 dll_isr_start_reply_frame），因此交付必须推迟到
@@ -517,7 +526,8 @@ const iolink_phy_api_t g_phy_mock = {.self = NULL,
                                      .tx_octet = mock_tx_octet,
                                      .tx_done = mock_tx_done,
 #endif
-                                     .int_active = mock_int_active};
+                                     .int_active = mock_int_active,
+                                     .request_service = mock_phy_request_service};
 
 /* 显式测试环境（替代进程级单例）。调用方拥有存储并负责初始化。 */
 void test_params_init(iolink_test_params_t* params, iolink_device_info_ctx_t* info)
@@ -681,8 +691,24 @@ void setup_mock_phy(void)
     mock_phy_clear_rx();
 }
 
+void test_pump_tx_idle(iolink_device_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    while ((test_dll_shared(ctx)->isr_tx_pending != 0U) ||
+           (test_dll_shared(ctx)->isr_tx_active != 0U)) {
+        iolink_device_process_isr(ctx);
+    }
+}
+
 /* 为一个请求驱动两个泵：ISR 泵交付/组帧请求（并排空应答），随后主泵
- * 消费邮箱并运行协议（主泵负责的应答在此发送）。
+ * 消费邮箱并运行协议。
+ *
+ * 主泵负责的应答由 dll_send() 暂存并发布 isr_tx_pending，然后通过
+ * request_service() 请求数据中断。宿主机上的 mock 没有真实中断源，因此
+ * test_pump_tx_idle() 用泵调用代替该中断：iolink_dll_process_isr() 在
+ * int_active 门控之前就排空暂存应答。
  *
  * 两种传输都成立：TX FRAME 的应答在 PHY 交付整帧时即完成，
  * isr_tx_active 保持 0，轮询循环自然成为空转。 */
@@ -696,9 +722,7 @@ void test_io_cycle(iolink_device_ctx_t* ctx)
      * FRAME 已随整帧消费）。 */
     mock_phy_clear_rx();
     iolink_device_process(ctx);
-    while (test_dll_shared(ctx)->isr_tx_active != 0U) {
-        iolink_device_process_isr(ctx);
-    }
+    test_pump_tx_idle(ctx);
 }
 
 uint64_t iolink_test_time_us(iolink_app_t* IOLINK_NULLABLE self)

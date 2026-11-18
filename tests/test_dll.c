@@ -778,9 +778,7 @@ static void deliver_frame_to_main(iolink_device_ctx_t* ctx)
         iolink_device_process_isr(ctx);
     }
     iolink_device_process(ctx);
-    while (test_dll_shared(ctx)->isr_tx_active != 0U) {
-        iolink_device_process_isr(ctx);
-    }
+    test_pump_tx_idle(ctx);
     mock_phy_clear_rx();
 }
 
@@ -794,9 +792,7 @@ static void deliver_frame_to_dll(iolink_device_ctx_t* ctx)
     }
     test_dll(ctx)->phy_mode = IOLINK_PHY_MODE_SDCI;
     iolink_dll_process(test_dll(ctx));
-    while (test_dll_shared(ctx)->isr_tx_active != 0U) {
-        iolink_device_process_isr(ctx);
-    }
+    test_pump_tx_idle(ctx);
     mock_phy_clear_rx();
 }
 
@@ -1718,9 +1714,7 @@ static void test_dll_main_pump_type1_2_reply(void** state)
     iolink_ring_publish(&shared->isr_frame_ring);
 
     iolink_device_process(&dev.ctx);
-    while (shared->isr_tx_active != 0U) {
-        iolink_device_process_isr(&dev.ctx);
-    }
+    test_pump_tx_idle(&dev.ctx);
     assert_tx_len(5); /* OD 2 + PD-in 2 + CKS */
 
     size_t tx_len = 0U;

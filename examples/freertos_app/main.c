@@ -41,8 +41,16 @@ void iolink_critical_exit(void)
     taskEXIT_CRITICAL();
 }
 
+/* 主上下文暂存应答后请求数据中断。示例 PHY 尚未接入收发器，因此只保留
+ * 模板钩子：真实端口在这里触发 IO-Link 数据中断。 */
+static void freertos_phy_request_service(iolink_app_t* IOLINK_NULLABLE self)
+{
+    (void) self;
+}
+
 /* Mock PHY */
-const iolink_phy_api_t g_phy_freertos = {.init = NULL};
+const iolink_phy_api_t g_phy_freertos = {.init = NULL,
+                                         .request_service = freertos_phy_request_service};
 
 static uint64_t freertos_time_us(iolink_app_t* IOLINK_NULLABLE self)
 {

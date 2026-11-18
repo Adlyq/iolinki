@@ -96,14 +96,14 @@ static void test_resolve_probes_the_built_vtable(void** state)
     iolink_phy_api_t no_cq = g_phy_mock;
     no_cq.set_cq_line = NULL;
     assert_false(iolink_caps_has(iolink_caps_resolve(&no_cq, NULL, NULL, NULL), IOLINK_CAP_SIO_CQ));
-    /* mock PHY 没有这些可选钩子：能力位必须为 0。 */
+    /* mock PHY 没有故障查询这类可选钩子：能力位必须为 0。 */
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     /* TX FRAME 的 mock 上报线路占用（tx_frame 之后到 DMA 完成之前）。 */
     assert_true(iolink_caps_has(caps, IOLINK_CAP_TX_BUSY));
 #else
     assert_false(iolink_caps_has(caps, IOLINK_CAP_TX_BUSY));
 #endif
-    assert_false(iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE));
+    assert_true(iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE));
     assert_false(iolink_caps_has(caps, IOLINK_CAP_PHY_FAULTS));
 
     /* 缺发送钩子：TX 能力必须消失（不是"有 rx 钩子就算"）。 */
@@ -175,8 +175,8 @@ static void test_instance_caps_come_from_the_vtable(void** state)
 
     const iolink_caps_t caps = iolink_device_capabilities(&dev.ctx);
     assert_true(iolink_caps_has(caps, IOLINK_CAP_RX));
-    /* mock PHY 未提供 request_service()：该位只能来自 vtable。 */
-    assert_false(iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE));
+    /* mock PHY 提供 request_service()：该位只能来自 vtable。 */
+    assert_true(iolink_caps_has(caps, IOLINK_CAP_REQUEST_SERVICE));
 #if IOLINK_FEATURE_SYSTEM_COMMAND
     assert_true(iolink_caps_has(caps, IOLINK_CAP_SYSTEM_COMMAND));
 #endif
@@ -212,17 +212,70 @@ static void test_resolve_uses_build_override(void** state)
         iolink_caps_has(iolink_caps_resolve(NULL, NULL, NULL, &fake), IOLINK_CAP_REQUIRE_ISR_TX));
 }
 
+/* 本地 PHY：有 TX，但没有 request_service()。REQUIRE_ISR_TX 要求每个
+ * 应答都由 ISR 发送，这样的 PHY 必须在初始化阶段被拒绝。 */
+static int no_service_init(iolink_app_t* IOLINK_NULLABLE self)
+{
+    (void) self;
+    return 0;
+}
+
+static void no_service_set_mode(iolink_app_t* IOLINK_NULLABLE self, iolink_phy_mode_t mode)
+{
+    (void) self;
+    (void) mode;
+}
+
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+static int no_service_tx_frame(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data, size_t len)
+{
+    (void) self;
+    (void) data;
+    (void) len;
+    return 0;
+}
+#else
+static int no_service_tx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t data)
+{
+    (void) self;
+    (void) data;
+    return 0;
+}
+
+static void no_service_tx_done(iolink_app_t* IOLINK_NULLABLE self)
+{
+    (void) self;
+}
+#endif
+
+static const iolink_phy_api_t s_no_service_phy = {
+    .init = no_service_init,
+    .set_mode = no_service_set_mode,
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    .tx_frame = no_service_tx_frame,
+#else
+    .tx_octet = no_service_tx_octet,
+    .tx_done = no_service_tx_done,
+#endif
+};
+
 /* REQUIRE_ISR_TX 但 PHY 没有 request_service()：init 必须拒绝。 */
 static void test_require_isr_tx_needs_request_service(void** state)
 {
     (void) state;
-    iolink_test_device_t dev;
-    iolink_stack_config_t config = {.m_seq_type = IOLINK_M_SEQ_TYPE_0,
-                                    .od_width = 1,
-                                    .flags = IOLINK_STACK_FLAG_REQUIRE_ISR_TX};
+    iolink_device_ctx_t ctx;
+    iolink_stack_config_t stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_0,
+                                   .od_width = 1,
+                                   .flags = IOLINK_STACK_FLAG_REQUIRE_ISR_TX};
+    const iolink_device_config_t config = {
+        .phy = &s_no_service_phy,
+        .stack = &stack,
+        .app = iolink_test_default_app(),
+        .device_info = iolink_test_identity(),
+    };
 
     /* 校验在 PHY 初始化之前完成，因此不需要任何 mock 期望。 */
-    assert_int_equal(iolink_test_device_init(&dev, &config, NULL), IOLINK_DEVICE_INIT_ERR_PHY);
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_PHY);
 }
 
 int main(void)
