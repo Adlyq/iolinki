@@ -83,6 +83,25 @@ static void test_read_reset_keeps_write_phase(void** state)
     assert_int_not_equal(IOLINK_ISDU_REQ_PUB_GEN(ctx.req_pub), ctx.req_ack_gen);
 }
 
+/* 未收齐的 receiving 代必须能被主泵退休：主站发写 START 后静默（不发
+ * COUNT、也不 ABORT）时，ack 若永远追不上发布代号，读路径会一直回 0x00，
+ * 事件/DS 门控也会一直认为“写未完成”。通信重启时按已中止处理。 */
+static void test_abandoned_write_generation_is_retired(void** state)
+{
+    (void) state;
+    iolink_isdu_ctx_t ctx;
+    iolink_isdu_init(&ctx);
+
+    iolink_isdu_od_write(&ctx, IOLINK_FLOWCTRL_START, &k_page1_write[0], 1U);
+    assert_true(isdu_write_in_progress(&ctx));
+    assert_false(iolink_isdu_is_idle(&ctx));
+
+    isdu_abandon_write(&ctx);
+
+    assert_false(isdu_write_in_progress(&ctx));
+    assert_true(iolink_isdu_is_idle(&ctx));
+}
+
 /* 读 IDLE 不丢弃 ISR 正在累计的写请求：补齐 COUNT 后仍能执行。 */
 static void test_read_idle_keeps_pending_write(void** state)
 {
@@ -228,6 +247,7 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_read_reset_keeps_write_phase),
+        cmocka_unit_test(test_abandoned_write_generation_is_retired),
         cmocka_unit_test(test_read_idle_keeps_pending_write),
         cmocka_unit_test(test_read_idle_keeps_complete_request),
         cmocka_unit_test(test_dpp1_stable_image_reads),

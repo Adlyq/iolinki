@@ -583,11 +583,19 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
  */
 static void dll_apply_isr_isdu_read_reset(iolink_dll_main_t* ctx)
 {
+    /* 快路径：没有请求时不取锁。旗标仍是双向的（ISR 置 1、主泵清 0），
+     * 有请求时读-清必须在同一临界区内，否则清 0 会吞掉刚好在两条指令
+     * 之间到达的复位请求，主站 ABORT/IDLE 之后的下一次读就会重新拿到
+     * 上一次的应答。 */
     if (ctx->shared.isr_isdu_read_reset == 0U) {
         return;
     }
-    ctx->shared.isr_isdu_read_reset = 0U;
-    isdu_read_reset(&ctx->shared.isdu);
+    IOLINK_CRITICAL_ENTER();
+    if (ctx->shared.isr_isdu_read_reset != 0U) {
+        ctx->shared.isr_isdu_read_reset = 0U;
+        isdu_read_reset(&ctx->shared.isdu);
+    }
+    IOLINK_CRITICAL_EXIT();
 }
 
 /** @brief 同步主站丢失 timer：活动边沿推进截止时间，丢失后保持直到新活动。 */
@@ -921,6 +929,11 @@ static void dll_process_body(iolink_dll_main_t* ctx)
     dll_apply_isr_consumed_frame(ctx);
     dll_apply_isr_deadline_requests(ctx);
 
+    if (ctx->shared.state == IOLINK_DLL_STATE_STARTUP) {
+        /* 通信重启让未完成的写请求作废：把 ack 推到当前代号，未收齐的
+         * receiving 代才不会永久挂住读路径与事件/DS 门控。 */
+        isdu_abandon_write(&ctx->shared.isdu);
+    }
     iolink_isdu_process(&ctx->shared.isdu);
     /* ISR 对 IDLE/IDLE2/ABORT 读只回 0x00；读传输层复位归主泵。
      * Type-0 下该帧由 CONSUME 计划完全消费，主泵只能经此标志收到请求。 */

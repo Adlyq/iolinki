@@ -521,6 +521,23 @@ bool isdu_request_pending(const iolink_isdu_ctx_t* ctx)
  * 主泵据此让已发布的读视图失效：写 START 已经让旧应答不再可信，哪怕
  * 请求还没收齐。判断只读发布字与自己的 ack 序号，不读任何 ISR 相位字段。
  */
+void isdu_abandon_write(iolink_isdu_ctx_t* ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    /* 主泵单写。把 ack 推到当前发布代号即“这一代按已中止处理”：
+     * 未收齐的 receiving 代因此退休，读视图可以重新发布；
+     * 之后 ISR 若收齐该写，会发布一个新的代号走正常路径。 */
+    ctx->req_ack_gen = IOLINK_ISDU_REQ_PUB_GEN(iolink_atomic_load(&ctx->req_pub));
+}
+
+/**
+ * @brief 写请求是否尚未被主泵接管（发布代号与 ack 不等）。
+ *
+ * 主泵据此让已发布的读视图失效：写 START 已经让旧应答不再可信，哪怕
+ * 请求还没收齐。判断只读发布字与自己的 ack 序号，不读任何 ISR 相位字段。
+ */
 bool isdu_write_in_progress(const iolink_isdu_ctx_t* ctx)
 {
     return IOLINK_ISDU_REQ_PUB_GEN(iolink_atomic_load(&ctx->req_pub)) != ctx->req_ack_gen;
@@ -793,6 +810,9 @@ static const uint8_t* isdu_req_claim(iolink_isdu_ctx_t* ctx, uint16_t* gen, uint
     }
     const uint8_t sel = IOLINK_ISDU_REQ_PUB_SEL(pub);
     if (ctx->req_base == NULL) {
+        /* 没有请求缓冲（工作区已解绑）：显式丢弃这一代，不能让 ack 停在
+         * 旧值上——否则读路径与事件/DS 门控会永久停在“写未完成”。 */
+        ctx->req_ack_gen = pub_gen;
         return NULL;
     }
     const uint8_t* req = &ctx->req_base[(size_t) sel * ctx->req_size];

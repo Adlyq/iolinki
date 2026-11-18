@@ -53,6 +53,7 @@ bool isdu_request_pending(const iolink_isdu_ctx_t* ctx);
  * 序号，不读数据 ISR 的相位字段。
  */
 bool isdu_write_in_progress(const iolink_isdu_ctx_t* ctx);
+void isdu_abandon_write(iolink_isdu_ctx_t* ctx);
 void isdu_factory_reset(iolink_isdu_ctx_t* ctx);
 /** @} */
 
