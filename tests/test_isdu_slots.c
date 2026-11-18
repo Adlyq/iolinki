@@ -334,7 +334,7 @@ static void test_start_prefers_the_free_slot_while_published_is_parsed(void** st
 
     feed_write(req_a, len_a);
     const uint8_t sel = pub_sel();
-    const uint8_t overruns = s_ctx.req_overruns;
+    const uint32_t overruns = s_ctx.req_overruns;
 
     s_ctx.req_busy_sel = sel; /* 主泵正在解析已发布槽 */
     feed_write(req_b, len_b);
@@ -357,13 +357,13 @@ static void test_start_replaces_the_unclaimed_slot_and_counts(void** state)
 
     feed_write(req_a, len_a);
     const uint8_t sel = pub_sel();
-    const uint8_t overruns = s_ctx.req_overruns;
+    const uint32_t overruns = s_ctx.req_overruns;
 
     s_ctx.req_busy_sel = (uint8_t) (1U - sel); /* 主泵在解析另一个槽 */
     feed_write(req_b, len_b);
 
     assert_int_equal(s_ctx.req_slot, sel);
-    assert_int_equal(s_ctx.req_overruns, (uint8_t) (overruns + 1U));
+    assert_int_equal(s_ctx.req_overruns, overruns + 1U);
     /* 被取代的是未接管的那条，槽内容已是新请求。 */
     assert_memory_equal(slot_buf(sel), req_b, len_b);
 }
