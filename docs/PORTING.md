@@ -197,7 +197,7 @@ buffer writes before the store, because the PHY/DMA streams the PD bytes from
 that buffer while the main context prepares the next one.
 
 `0x98`/`0x99` (PROCESS_DATA_OPERATE / DEVICE_OPERATE) override the valid bit
-from the data ISR through a second single-writer word, `shared.pd_valid_cmd`,
+from the data ISR through a second single-writer word, `shared.b_pd_valid_cmd`,
 tagged with the `m_pd_pub` generation it applies to. The override therefore lives
 exactly one generation: the next application update restores the value the
 application published, and the ISR drops the stale command word on its next

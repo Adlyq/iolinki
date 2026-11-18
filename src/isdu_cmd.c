@@ -295,7 +295,7 @@ static void isdu_system_reset(iolink_isdu_ctx_t* ctx, uint8_t cmd)
                 iolink_events_clear_diagnosis(ctx->event_ctx);
             }
             else if (ctx->dll_ctx != NULL) {
-                iolink_events_clear_diagnosis(&(ctx->dll_ctx)->shared.events);
+                iolink_events_clear_diagnosis(&(ctx->dll_ctx)->shared.b_events);
             }
 #endif
             break;

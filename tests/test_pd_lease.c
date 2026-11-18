@@ -56,8 +56,9 @@ static void test_lease_recovery_and_skip_counter(void** state)
 
     /* 模拟在应答中途卡住的收发器：尽管没有应答在传输中，ISR 的捕获
      * 仍被记录。 */
-    test_dll_shared(&dev.ctx)->pd_in_captured = (uint8_t) (test_pd_active(test_dll(&dev.ctx)) ^ 1U);
-    test_dll_shared(&dev.ctx)->isr_tx_active = 0U;
+    test_dll_shared(&dev.ctx)->b_pd_in_captured =
+        (uint8_t) (test_pd_active(test_dll(&dev.ctx)) ^ 1U);
+    test_dll_shared(&dev.ctx)->b_isr_tx_active = 0U;
 
     /* 无空闲缓冲区：每次更新都被跳过并计数，绝不静默。 */
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true),
@@ -76,7 +77,7 @@ static void test_lease_recovery_and_skip_counter(void** state)
     /* 在无法证明传输已失效时（卡住的 PHY 必须复位），库有意保留借用；
      * 一旦槽位被释放（即 ISR 在帧结束时所做的），
      * 发布便恢复工作。 */
-    test_dll_shared(&dev.ctx)->pd_in_captured = 0xFFU;
+    test_dll_shared(&dev.ctx)->b_pd_in_captured = 0xFFU;
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, data, sizeof(data), true),
                      IOLINK_DEVICE_PD_OK);
     assert_int_equal(test_dll(&dev.ctx)->pd_in_skips, 2U);

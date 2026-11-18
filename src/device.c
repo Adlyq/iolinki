@@ -108,7 +108,7 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     }
     /* 以上赋值直接写共享区（m_seq_type / PD 长度 / od_width / 应用下限），
      * 因此在这里统一重建一次 DPP1 映像，保证首次 ISR 页读看到的是配置值。 */
-    iolink_isdu_dp_page1_invalidate(&ctx->dll.main.shared.isdu);
+    iolink_isdu_dp_page1_invalidate(&ctx->dll.main.shared.b_isdu);
 }
 
 /** @brief 一种固定的 Annex A 布局：PD 输入/输出与可接受的 OD 宽度。 */
@@ -310,40 +310,40 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
     ctx->dll.main.shared.c_caps =
         iolink_caps_resolve(config->phy, config->stack, config->app, NULL);
     /* ISDU 的传输缓冲：外部工作区或默认内嵌 fallback。 */
-    iolink_isdu_bind_workspace(&ctx->dll.main.shared.isdu, workspace);
+    iolink_isdu_bind_workspace(&ctx->dll.main.shared.b_isdu, workspace);
     /* ISDU 与事件引擎按实例能力位选运行时路径。 */
-    iolink_isdu_bind_caps(&ctx->dll.main.shared.isdu, &ctx->dll.main.shared.c_caps);
+    iolink_isdu_bind_caps(&ctx->dll.main.shared.b_isdu, &ctx->dll.main.shared.c_caps);
     /* 在推导任何截止时间之前绑定应用时钟。设备层
      * 要求该时钟（NULL 已在上文被拒绝）。事件引擎共享
      * 同一时钟，使事件时序与 DLL 一致。 */
     ctx->dll.main.shared.c_clock.time_us = config->app->time_us;
     ctx->dll.main.shared.c_clock.self = config->app->self;
 #if IOLINK_FEATURE_EVENTS
-    ctx->dll.main.shared.events.clock = &ctx->dll.main.shared.c_clock;
+    ctx->dll.main.shared.b_events.clock = &ctx->dll.main.shared.c_clock;
     /* A.6.4 的两个窗口是运行时能力：栈配置非 0 时覆盖构建默认值。 */
-    iolink_events_set_window(&ctx->dll.main.shared.events, config->stack->event_min_appear_ms,
+    iolink_events_set_window(&ctx->dll.main.shared.b_events, config->stack->event_min_appear_ms,
                              config->stack->event_min_repeat_ms);
 #endif
     /* iolink_dll_init() 在时钟绑定之前已采样了平台时钟。 */
     ctx->dll.main.master_last_activity_ms = dll_time_ms(&ctx->dll.main.shared);
-    ctx->dll.main.shared.isdu.direct_param_page2 = ctx->direct_param_page2;
-    ctx->dll.main.shared.isdu.device_info = &ctx->device_info;
-    ctx->dll.main.shared.isdu.od = config->od;
-    ctx->dll.main.shared.isdu.od_self = config->app->self;
+    ctx->dll.main.shared.b_isdu.direct_param_page2 = ctx->direct_param_page2;
+    ctx->dll.main.shared.b_isdu.device_info = &ctx->device_info;
+    ctx->dll.main.shared.b_isdu.od = config->od;
+    ctx->dll.main.shared.b_isdu.od_self = config->app->self;
     ctx->dll.main.state_cb = device_state_cb;
     ctx->dll.main.state_cb_user = ctx;
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_init(&ctx->dll.main.ds);
     iolink_ds_set_flag_persist(&ctx->dll.main.ds, config->ds_flag_persist, config->app->self);
     iolink_ds_bind_workspace(&ctx->dll.main.ds, workspace);
-    ctx->dll.main.shared.isdu.ds_ctx = &ctx->dll.main.ds;
+    ctx->dll.main.shared.b_isdu.ds_ctx = &ctx->dll.main.ds;
     /* DS 参数访问统一走 OD 表：标准标签经参数上下文，应用参数经表项
        后端。DS 成员由表项 storage 位掩码决定（标准表 + config->od）。 */
     iolink_ds_bind_sources(&ctx->dll.main.ds, config->od, config->app->self);
     /* 按当前参数集刷新 Size/Checksum，使 0x0003 在首次上传前有效。 */
     iolink_ds_refresh(&ctx->dll.main.ds);
 #else
-    ctx->dll.main.shared.isdu.ds_ctx = NULL;
+    ctx->dll.main.shared.b_isdu.ds_ctx = NULL;
 #endif
     /* 运行时日志 sink：一个配置被复制到所有会打印的子系统。
      * 必须在 iolink_dll_init()/iolink_ds_init() 之后绑定，因为这些
@@ -389,7 +389,7 @@ int iolink_device_get_phy_error(const iolink_device_ctx_t* ctx)
 
 iolink_workspace_t* IOLINK_NULLABLE iolink_device_get_workspace(const iolink_device_ctx_t* ctx)
 {
-    return ctx->dll.main.shared.isdu.workspace;
+    return ctx->dll.main.shared.b_isdu.workspace;
 }
 
 void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_NULLABLE write,
@@ -400,12 +400,12 @@ void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_
     /* 初始化期单写者：应用只能通过 config 给出日志汇点，运行期不再改写。
      * 一个 sink 服务全部模块：它们只保存指针，这里统一指向它。 */
     iolink_log_sink_init(&ctx->dll.main.shared.c_log, write, self, level);
-    ctx->dll.main.shared.isdu.log = &ctx->dll.main.shared.c_log;
+    ctx->dll.main.shared.b_isdu.log = &ctx->dll.main.shared.c_log;
 #if IOLINK_FEATURE_DATA_STORAGE
     ctx->dll.main.ds.log = &ctx->dll.main.shared.c_log;
 #endif
 #if IOLINK_FEATURE_EVENTS
-    ctx->dll.main.shared.events.log = &ctx->dll.main.shared.c_log;
+    ctx->dll.main.shared.b_events.log = &ctx->dll.main.shared.c_log;
 #endif
 }
 
@@ -418,7 +418,7 @@ void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_
 static uint8_t device_pd_in_free_index(const iolink_dll_main_t* dll)
 {
     const uint8_t active = IOLINK_PD_PUB_ACTIVE(dll_pd_pub_load(&dll->shared));
-    const uint8_t captured = dll->shared.pd_in_captured;
+    const uint8_t captured = dll->shared.b_pd_in_captured;
     for (uint8_t i = 0U; i < IOLINK_PD_IN_BUFFERS; i++) {
         if ((i != active) && (i != captured)) {
             return i;
@@ -468,7 +468,7 @@ static bool device_events_need_service(const iolink_events_ctx_t* events)
  */
 static void device_service_events_and_ds(iolink_device_ctx_t* ctx)
 {
-    if (!iolink_isdu_is_idle(&ctx->dll.main.shared.isdu)) {
+    if (!iolink_isdu_is_idle(&ctx->dll.main.shared.b_isdu)) {
         return;
     }
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -477,8 +477,8 @@ static void device_service_events_and_ds(iolink_device_ctx_t* ctx)
     }
 #endif
 #if IOLINK_FEATURE_EVENTS
-    if (device_events_need_service(&ctx->dll.main.shared.events)) {
-        iolink_events_process(&ctx->dll.main.shared.events);
+    if (device_events_need_service(&ctx->dll.main.shared.b_events)) {
+        iolink_events_process(&ctx->dll.main.shared.b_events);
     }
 #endif
 #if IOLINK_FEATURE_DATA_STORAGE && IOLINK_FEATURE_EVENTS
@@ -488,7 +488,7 @@ static void device_service_events_and_ds(iolink_device_ctx_t* ctx)
      * 进行中插入诊断读取。 */
     if (ctx->dll.main.ds.upload_event_pending) {
         ctx->dll.main.ds.upload_event_pending = false;
-        iolink_diag_raise_code(&ctx->dll.main.shared.events, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST);
+        iolink_diag_raise_code(&ctx->dll.main.shared.b_events, IOLINK_EVENTCODE_DS_UPLOAD_REQUEST);
     }
 #endif
 }
@@ -499,7 +499,7 @@ static void device_notify_master_lost(iolink_device_ctx_t* ctx)
     if (ctx->config == NULL) {
         return;
     }
-    if (ctx->dll.main.shared.state != IOLINK_DLL_STATE_OPERATE) {
+    if (ctx->dll.main.shared.b_state != IOLINK_DLL_STATE_OPERATE) {
         /* 启动/预操作暂停不是丢失事件。离开 OPERATE 时
            抑制该边沿并忘记任何过期状态。 */
         ctx->master_lost_last = false;
@@ -525,15 +525,15 @@ static void device_dispatch_resets(iolink_device_ctx_t* ctx)
 {
     const iolink_device_app_t* app = ctx->config->app;
 
-    if (ctx->dll.main.shared.isdu.reset_pending) {
-        ctx->dll.main.shared.isdu.reset_pending = false;
+    if (ctx->dll.main.shared.b_isdu.reset_pending) {
+        ctx->dll.main.shared.b_isdu.reset_pending = false;
         IOLINK_LOG_WARN(&ctx->dll.main.shared.c_log, "device reset requested by master");
         if (app->on_reset != NULL) {
             app->on_reset(app->self, IOLINK_RESET_DEVICE);
         }
     }
-    if (ctx->dll.main.shared.isdu.app_reset_pending) {
-        ctx->dll.main.shared.isdu.app_reset_pending = false;
+    if (ctx->dll.main.shared.b_isdu.app_reset_pending) {
+        ctx->dll.main.shared.b_isdu.app_reset_pending = false;
         IOLINK_LOG_WARN(&ctx->dll.main.shared.c_log, "application reset requested by master");
         if (app->on_reset != NULL) {
             app->on_reset(app->self, IOLINK_RESET_APPLICATION);
@@ -544,7 +544,7 @@ static void device_dispatch_resets(iolink_device_ctx_t* ctx)
 /** @brief 在 OPERATE 状态下运行应用过程数据回调。 */
 static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
 {
-    if ((ctx->config == NULL) || (ctx->dll.main.shared.state != IOLINK_DLL_STATE_OPERATE)) {
+    if ((ctx->config == NULL) || (ctx->dll.main.shared.b_state != IOLINK_DLL_STATE_OPERATE)) {
         return;
     }
     if (ctx->config->app->on_pd_output != NULL) {
@@ -644,7 +644,7 @@ int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, 
 #if IOLINK_FEATURE_EVENTS
 iolink_events_ctx_t* iolink_device_get_events_ctx(iolink_device_ctx_t* ctx)
 {
-    return &ctx->dll.main.shared.events;
+    return &ctx->dll.main.shared.b_events;
 }
 #endif
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -666,7 +666,7 @@ bool iolink_device_master_lost(const iolink_device_ctx_t* ctx)
 
 iolink_dll_state_t iolink_device_get_state(const iolink_device_ctx_t* ctx)
 {
-    return ctx->dll.main.shared.state;
+    return ctx->dll.main.shared.b_state;
 }
 
 iolink_phy_mode_t iolink_device_get_phy_mode(const iolink_device_ctx_t* ctx)

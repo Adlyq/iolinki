@@ -73,8 +73,8 @@ static bool dll_isr_publish_frame(iolink_dll_shared_t* ctx, const uint8_t* frame
 {
     if ((frame == NULL) || (len > IOLINK_M_SEQ_MAX_LEN)) {
         IOLINK_LOG_ISR_DEBUG(&ctx->c_log, "frame publish rejected: len=%u", (unsigned) len);
-        IOLINK_STAT_ISR(ctx, framing_errors)++;
-        DLL_DIAG_PULSE_ISR(&ctx->events, IOLINK_DIAG_SRC_COMM_FRAMING);
+        IOLINK_STAT_ISR(ctx, b_framing_errors, framing_errors)++;
+        DLL_DIAG_PULSE_ISR(&ctx->b_events, IOLINK_DIAG_SRC_COMM_FRAMING);
         return false;
     }
     iolink_frame_rec_t* record = (iolink_frame_rec_t*) iolink_ring_claim(&ctx->i_isr_frame_ring);
@@ -129,7 +129,7 @@ static inline void dll_isr_complete_frame(iolink_dll_shared_t* ctx, const uint8_
 
     /* ESTAB_COM 的首帧必须让主泵看到才能完成到 OPERATE 的迁移：
      * ISR 只负责即时应答，不消费该帧。 */
-    const bool estab_com = (ctx->state == IOLINK_DLL_STATE_ESTAB_COM);
+    const bool estab_com = (ctx->b_state == IOLINK_DLL_STATE_ESTAB_COM);
 
     iolink_reply_plan_t plan;
     bool replied = false;
@@ -179,7 +179,7 @@ static inline void dll_isr_complete_frame(iolink_dll_shared_t* ctx, const uint8_
         /* 计数是主信号，日志只是辅助。FALLBACK/COMM_DISABLED 下"无计划"是
          * 常态，记 DEBUG；OPERATE 下合法帧却没有计划更可疑，记 WARN。整块随
          * IOLINK_LOG_ENABLE_ISR 编译开关消失，默认零开销。 */
-        if (ctx->state == IOLINK_DLL_STATE_OPERATE) {
+        if (ctx->b_state == IOLINK_DLL_STATE_OPERATE) {
             IOLINK_LOG_ISR_WARN(&ctx->c_log,
                                 "no reply plan in OPERATE (unknown shape): mc=0x%02X len=%u",
                                 (unsigned) frame[0], (unsigned) len);
@@ -204,8 +204,8 @@ static inline void dll_isr_complete_frame(iolink_dll_shared_t* ctx, const uint8_
 static bool dll_isr_frame_len_ok(iolink_dll_shared_t* ctx, const uint8_t* frame, uint8_t len)
 {
     if ((len < 2U) || (len > IOLINK_M_SEQ_MAX_LEN)) {
-        IOLINK_STAT_ISR(ctx, framing_errors)++;
-        DLL_DIAG_PULSE_ISR(&ctx->events, IOLINK_DIAG_SRC_COMM_FRAMING);
+        IOLINK_STAT_ISR(ctx, b_framing_errors, framing_errors)++;
+        DLL_DIAG_PULSE_ISR(&ctx->b_events, IOLINK_DIAG_SRC_COMM_FRAMING);
         return false;
     }
     /* Type-0 的长度由 MC/CKT 固定，与 OPERATE 配置的 PD/OD 宽度无关；
@@ -215,8 +215,8 @@ static bool dll_isr_frame_len_ok(iolink_dll_shared_t* ctx, const uint8_t* frame,
     if (len != expected_len) {
         IOLINK_LOG_ISR_DEBUG(&ctx->c_log, "frame length reject: len=%u expected=%u", (unsigned) len,
                              (unsigned) expected_len);
-        IOLINK_STAT_ISR(ctx, framing_errors)++;
-        DLL_DIAG_PULSE_ISR(&ctx->events, IOLINK_DIAG_SRC_COMM_FRAMING);
+        IOLINK_STAT_ISR(ctx, b_framing_errors, framing_errors)++;
+        DLL_DIAG_PULSE_ISR(&ctx->b_events, IOLINK_DIAG_SRC_COMM_FRAMING);
         return false;
     }
     return true;
@@ -282,15 +282,15 @@ static void dll_isr_rx_byte_gap(iolink_dll_shared_t* ctx)
         IOLINK_LOG_ISR_DEBUG(&ctx->c_log, "incomplete frame: got %u of %u bytes",
                              (unsigned) ctx->c_isr->isr_rx_cnt,
                              (unsigned) ctx->c_isr->isr_rx_expect);
-        IOLINK_STAT_ISR(ctx, framing_errors)++;
-        DLL_DIAG_PULSE_ISR(&ctx->events, IOLINK_DIAG_SRC_COMM_FRAMING);
+        IOLINK_STAT_ISR(ctx, b_framing_errors, framing_errors)++;
+        DLL_DIAG_PULSE_ISR(&ctx->b_events, IOLINK_DIAG_SRC_COMM_FRAMING);
     }
     dll_isr_rx_byte_reset(ctx);
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
     /* 释放收发器的接收引擎，除非有回复正在传输
      * （TX 排空会调用 tx_done）。在 TX FRAME 构建中没有 tx_done：
      * PHY 拥有两端传输并自行释放接收器。 */
-    if ((ctx->isr_tx_active == 0U) && (ctx->c_phy->tx_done != NULL)) {
+    if ((ctx->b_isr_tx_active == 0U) && (ctx->c_phy->tx_done != NULL)) {
         ctx->c_phy->tx_done(ctx->c_phy->self);
     }
 #endif
@@ -361,8 +361,8 @@ static bool dll_isr_drain_rx_byte(iolink_dll_shared_t* ctx)
     if (ok < 0) {
         /* 传输错误：丢弃部分帧并计数。 */
         IOLINK_LOG_ISR_WARN(&ctx->c_log, "rx_octet error: %d", ok);
-        IOLINK_STAT_ISR(ctx, framing_errors)++;
-        DLL_DIAG_PULSE_ISR(&ctx->events, IOLINK_DIAG_SRC_COMM_FRAMING);
+        IOLINK_STAT_ISR(ctx, b_framing_errors, framing_errors)++;
+        DLL_DIAG_PULSE_ISR(&ctx->b_events, IOLINK_DIAG_SRC_COMM_FRAMING);
         dll_isr_rx_byte_reset(ctx);
         return true;
     }
@@ -395,7 +395,7 @@ void dll_isr_drain(iolink_dll_shared_t* ctx)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
         /* 回复排空（TX BYTE）：收发器请求下一个回复八位组。
          * 只喂一个并让出（下一个请求作为另一个 IRQ 到达）。 */
-        if (ctx->isr_tx_active != 0U) {
+        if (ctx->b_isr_tx_active != 0U) {
             dll_isr_tx_step(ctx);
             break;
         }

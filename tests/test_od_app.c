@@ -600,8 +600,8 @@ static void test_od_device_specific_fallback(void** state)
 
     (void) memset(&dev, 0, sizeof(dev));
     test_dll(&dev)->crc_errors = 0x11223344U;
-    test_dll_shared(&dev)->timeout_errors = 0xAABBCCDDU;
-    test_dll_shared(&dev)->framing_errors = 0x01020304U;
+    test_dll_shared(&dev)->b_timeout_errors = 0xAABBCCDDU;
+    test_dll_shared(&dev)->b_framing_errors = 0x01020304U;
     test_dll(&dev)->timing_errors = 0x05060708U;
 
     test_env_init(&g_od_env, NULL);

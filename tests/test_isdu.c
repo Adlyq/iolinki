@@ -127,8 +127,8 @@ static void test_isdu_device_status_without_event_registry(void** state)
 
     /* 绑定了 DLL 但没有事件主机时同样如此：DeviceStatus 只认注册表，
        不会静默回落到 DLL 的共享事件表。 */
-    iolink_events_init(&dll_ctx.shared.events);
-    iolink_event_trigger(&dll_ctx.shared.events, IOLINK_EVENT_COMM_CRC, IOLINK_EVENT_TYPE_ERROR);
+    iolink_events_init(&dll_ctx.shared.b_events);
+    iolink_event_trigger(&dll_ctx.shared.b_events, IOLINK_EVENT_COMM_CRC, IOLINK_EVENT_TYPE_ERROR);
     iolink_isdu_init(&ctx);
     iolink_isdu_bind_workspace(&ctx, &ws);
     ctx.dll_ctx = &dll_ctx;
@@ -209,8 +209,8 @@ static void test_isdu_error_stats_read(void** state)
     iolink_dll_main_t dll_ctx;
     (void) memset(&dll_ctx, 0, sizeof(dll_ctx));
     dll_ctx.crc_errors = 0x11223344U;
-    dll_ctx.shared.timeout_errors = 0xAABBCCDDU;
-    dll_ctx.shared.framing_errors = 0x01020304U;
+    dll_ctx.shared.b_timeout_errors = 0xAABBCCDDU;
+    dll_ctx.shared.b_framing_errors = 0x01020304U;
     dll_ctx.timing_errors = 0x05060708U;
 
     test_env_init(&g_test_env, NULL);

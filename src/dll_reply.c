@@ -335,7 +335,7 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
 /**
  * @brief 为 ISR 读泵发布成帧的 ISDU 响应视图。
  *
- * 单写者交接：ctx->shared.isdu（以及响应视图槽）由主泵
+ * 单写者交接：ctx->shared.b_isdu（以及响应视图槽）由主泵
  * 拥有；ISR 读取最后发布的缓冲区。{length, busy,
  * buffer} 作为一个原子字传递，因此无需临界区、无需拷贝，
  * ISR 总是读到完整、稳定的响应。
@@ -355,32 +355,34 @@ void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx)
     if (ctx == NULL) {
         return;
     }
-    const uint8_t state = (uint8_t) ctx->shared.isdu.state;
+    const uint8_t state = (uint8_t) ctx->shared.b_isdu.state;
     const bool ready = (state == (uint8_t) ISDU_STATE_RESPONSE_READY);
     /* 新应答：引擎切换响应视图槽（resp_sel 与已发布的不同），
      * 或刚刚进入 RESPONSE_READY。两种信号都意味着"内容已换"。 */
-    const bool new_response = ready && ((ctx->shared.isdu.resp_sel != ctx->shared.isdu.resp_pub) ||
-                                        (ctx->isdu_pub_state != state));
+    const bool new_response =
+        ready && ((ctx->shared.b_isdu.resp_sel != ctx->shared.b_isdu.resp_pub) ||
+                  (ctx->isdu_pub_state != state));
     ctx->isdu_pub_state = state;
 
     const bool busy = (state == (uint8_t) ISDU_STATE_SERVICE_EXECUTE);
     uint8_t count = 0U;
-    uint8_t sel = ctx->shared.isdu.resp_pub;
+    uint8_t sel = ctx->shared.b_isdu.resp_pub;
     if (ready) {
         if (new_response) {
             ctx->isdu_pub_gen ^= 1U; /* 新应答：让 ISR 丢弃采纳的段索引 */
         }
-        count = (ctx->shared.isdu.resp_total > 255U) ? 255U : (uint8_t) ctx->shared.isdu.resp_total;
-        sel = ctx->shared.isdu.resp_sel;
+        count =
+            (ctx->shared.b_isdu.resp_total > 255U) ? 255U : (uint8_t) ctx->shared.b_isdu.resp_total;
+        sel = ctx->shared.b_isdu.resp_sel;
         /* 完成的响应成为已发布响应；下一次应答会先以租约
          * 占用同一成帧缓冲再重建。 */
-        ctx->shared.isdu.resp_pub = sel;
+        ctx->shared.b_isdu.resp_pub = sel;
     }
     /* 写入口：发布字已有一代未被主泵处理（正在累计或已收齐待解析）时，
      * 写尚未生效，已发布读视图必须显示"无服务"。判据只读发布字与主泵
      * 自己的 ack 序号——数据 ISR 的累计字段（stage_state 等）不参与。 */
     const IOLINK_ATOMIC_UINT_T write_gen = iolink_atomic_load(&ctx->shared.i_isr_isdu_write_gen);
-    const bool write_pending = isdu_write_in_progress(&ctx->shared.isdu);
+    const bool write_pending = isdu_write_in_progress(&ctx->shared.b_isdu);
     if (write_pending) {
         /* 写尚未应用：显式发布"无服务"，绝不重发旧应答。 */
         count = 0U;

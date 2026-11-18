@@ -100,15 +100,15 @@ int iolink_dll_set_sio_mode(iolink_dll_main_t* ctx)
      * 半帧处重新置上 active/idx，留下一个 tx_done 永不调用的挂起帧。
      * PHY 调用留在锁外（端口代码可能很慢）。丢弃本身必须可观测：
      * 暂存应答或在途帧被清掉时计一次 isr_tx_dropped；该字段由主上下文
-     * 自增（SPLIT 模式下 ISR 只写 isr_stat.isr_tx_dropped，读取端求和）。 */
+     * 自增（SPLIT 模式下 ISR 只写 b_isr_stat.isr_tx_dropped，读取端求和）。 */
     IOLINK_CRITICAL_ENTER();
-    if ((ctx->shared.isr_tx_pending != 0U) || (ctx->shared.isr_tx_active != 0U)) {
-        ctx->shared.isr_tx_dropped++;
+    if ((ctx->shared.b_isr_tx_pending != 0U) || (ctx->shared.b_isr_tx_active != 0U)) {
+        ctx->shared.b_isr_tx_dropped++;
     }
-    ctx->shared.isr_tx_pending = 0U;
-    ctx->shared.isr_tx_active = 0U;
-    ctx->shared.isr_tx_idx = 0U;
-    ctx->shared.pd_in_captured = 0xFFU;
+    ctx->shared.b_isr_tx_pending = 0U;
+    ctx->shared.b_isr_tx_active = 0U;
+    ctx->shared.b_isr_tx_idx = 0U;
+    ctx->shared.b_pd_in_captured = 0xFFU;
     IOLINK_CRITICAL_EXIT();
     return 0;
 }
@@ -125,9 +125,9 @@ int iolink_dll_set_sdci_mode(iolink_dll_main_t* ctx)
 void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_stats)
 {
     out_stats->crc_errors = ctx->crc_errors;
-    out_stats->timeout_errors = IOLINK_STAT_TOTAL(ctx, timeout_errors);
+    out_stats->timeout_errors = IOLINK_STAT_TOTAL(ctx, b_timeout_errors, timeout_errors);
     out_stats->idle_timeouts = ctx->idle_timeouts;
-    out_stats->framing_errors = IOLINK_STAT_TOTAL(ctx, framing_errors);
+    out_stats->framing_errors = IOLINK_STAT_TOTAL(ctx, b_framing_errors, framing_errors);
     out_stats->timing_errors = ctx->timing_errors;
     out_stats->t_ren_violations = ctx->t_ren_violations;
     out_stats->t_cycle_violations = ctx->t_cycle_violations;
@@ -137,8 +137,8 @@ void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_
     out_stats->voltage_faults = ctx->voltage_faults;
     out_stats->overtemp_faults = ctx->overtemp_faults;
     out_stats->short_circuits = ctx->short_circuits;
-    out_stats->isr_tx_dropped = IOLINK_STAT_TOTAL(ctx, isr_tx_dropped);
-    out_stats->isr_od_overruns = ctx->shared.isdu.req_overruns;
+    out_stats->isr_tx_dropped = IOLINK_STAT_TOTAL(ctx, b_isr_tx_dropped, isr_tx_dropped);
+    out_stats->isr_od_overruns = ctx->shared.b_isdu.req_overruns;
     out_stats->isr_plan_misses = ctx->shared.i_isr_plan_misses;
     out_stats->isr_eager_rejects = ctx->shared.i_isr_eager_rejects;
     out_stats->isr_mailbox_drops = ctx->shared.i_isr_mailbox_drops;
@@ -153,12 +153,12 @@ void iolink_dll_reset_error_counters(iolink_dll_main_t* ctx)
 {
     IOLINK_CRITICAL_ENTER();
     ctx->crc_errors = 0U;
-    ctx->shared.timeout_errors = 0U;
-    ctx->shared.framing_errors = 0U;
+    ctx->shared.b_timeout_errors = 0U;
+    ctx->shared.b_framing_errors = 0U;
     ctx->timing_errors = 0U;
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
-    ctx->shared.isr_stat.timeout_errors = 0U;
-    ctx->shared.isr_stat.framing_errors = 0U;
+    ctx->shared.b_isr_stat.timeout_errors = 0U;
+    ctx->shared.b_isr_stat.framing_errors = 0U;
 #endif
     IOLINK_CRITICAL_EXIT();
 }
@@ -170,7 +170,7 @@ void iolink_dll_reset_diagnostics(iolink_dll_main_t* ctx)
        引擎拥有 DeviceStatus 和 DetailedDeviceStatus；reset() 保留
        绑定的时钟。 */
 #if IOLINK_FEATURE_EVENTS
-    iolink_events_reset(&ctx->shared.events);
+    iolink_events_reset(&ctx->shared.b_events);
 #endif
     iolink_dll_reset_error_counters(ctx);
 }

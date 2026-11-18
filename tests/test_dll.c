@@ -774,7 +774,7 @@ static void test_dll_startup_to_preoperate_write_dpp1(void** state)
 static void deliver_frame_to_main(iolink_device_ctx_t* ctx)
 {
     iolink_device_process_isr(ctx);
-    while (test_dll_shared(ctx)->isr_tx_active != 0U) {
+    while (test_dll_shared(ctx)->b_isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
     }
     iolink_device_process(ctx);
@@ -787,7 +787,7 @@ static void deliver_frame_to_main(iolink_device_ctx_t* ctx)
 static void deliver_frame_to_dll(iolink_device_ctx_t* ctx)
 {
     iolink_device_process_isr(ctx);
-    while (test_dll_shared(ctx)->isr_tx_active != 0U) {
+    while (test_dll_shared(ctx)->b_isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
     }
     test_dll(ctx)->phy_mode = IOLINK_PHY_MODE_SDCI;
@@ -1191,7 +1191,7 @@ static void test_dll_preoperate_truncated_write(void** state)
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
     test_dll(&dev.ctx)->enforce_timing = false;
-    test_dll_shared(&dev.ctx)->state = IOLINK_DLL_STATE_PREOPERATE;
+    test_dll_shared(&dev.ctx)->b_state = IOLINK_DLL_STATE_PREOPERATE;
 
     uint8_t truncated[2] = {(uint8_t) (IOLINK_MC_CHANNEL_PAGE | 0x01U), 0x00U};
     truncated[1] =
@@ -1250,7 +1250,7 @@ static void test_dll_preoperate_illegal_operate_type(void** state)
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
     test_dll(&dev.ctx)->enforce_timing = false;
-    test_dll_shared(&dev.ctx)->state = IOLINK_DLL_STATE_PREOPERATE;
+    test_dll_shared(&dev.ctx)->b_state = IOLINK_DLL_STATE_PREOPERATE;
     test_dll_shared(&dev.ctx)->c_m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
 
     uint8_t value = 0U;
@@ -1281,7 +1281,7 @@ static void test_dll_preoperate_type0_same_type(void** state)
     iolink_test_device_t dev0;
     iolink_test_device_init(&dev0, &type0, NULL);
     test_dll(&dev0.ctx)->enforce_timing = false;
-    test_dll_shared(&dev0.ctx)->state = IOLINK_DLL_STATE_PREOPERATE;
+    test_dll_shared(&dev0.ctx)->b_state = IOLINK_DLL_STATE_PREOPERATE;
 
     uint8_t value = 0U;
     for (int pass = 0; pass < 3; pass++) {
@@ -1492,7 +1492,7 @@ static void test_dll_pdout_only_status_valid(void** state)
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
     test_dll(&dev.ctx)->enforce_timing = false;
-    test_dll_shared(&dev.ctx)->state = IOLINK_DLL_STATE_OPERATE;
+    test_dll_shared(&dev.ctx)->b_state = IOLINK_DLL_STATE_OPERATE;
     test_pd_set_valid(test_dll(&dev.ctx), false);
 
     /* 过程通道读（Type-2_3）：请求带 PD-out 字节，应答为 OD + CKS；
@@ -1711,7 +1711,7 @@ static void test_back_to_box_counts_isr_served_cycles_once_per_pump(void** state
     for (int i = 0; i < 2; i++) {
         feed_type0_page_read(0x02U);
         iolink_device_process_isr(&dev.ctx);
-        while (test_dll_shared(&dev.ctx)->isr_tx_active != 0U) {
+        while (test_dll_shared(&dev.ctx)->b_isr_tx_active != 0U) {
             iolink_device_process_isr(&dev.ctx);
         }
         assert_tx_len(2); /* DPP1 字节 + CKS */
@@ -1731,7 +1731,7 @@ static void test_back_to_box_counts_isr_served_cycles_once_per_pump(void** state
     for (int i = 0; i < 2; i++) {
         feed_type0_page_read(0x02U);
         iolink_device_process_isr(&dev.ctx);
-        while (test_dll_shared(&dev.ctx)->isr_tx_active != 0U) {
+        while (test_dll_shared(&dev.ctx)->b_isr_tx_active != 0U) {
             iolink_device_process_isr(&dev.ctx);
         }
         assert_tx_len(2);
@@ -1744,7 +1744,7 @@ static void test_back_to_box_counts_isr_served_cycles_once_per_pump(void** state
     /* 主上下文自己处理的帧仍直接推进，并触发 3 周期后的停止。 */
     feed_type0_page_write(0x02U, 0x5AU);
     iolink_device_process_isr(&dev.ctx);
-    while (test_dll_shared(&dev.ctx)->isr_tx_active != 0U) {
+    while (test_dll_shared(&dev.ctx)->b_isr_tx_active != 0U) {
         iolink_device_process_isr(&dev.ctx);
     }
     assert_tx_len(1); /* 页写应答只有 CKS */

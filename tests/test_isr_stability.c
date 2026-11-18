@@ -121,7 +121,7 @@ static void request_service(iolink_app_t* IOLINK_NULLABLE self)
 static uint8_t int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
-    return ((ctx != NULL) && (ctx->main.shared.isr_tx_active != 0U)) ? 1U : 0U;
+    return ((ctx != NULL) && (ctx->main.shared.b_isr_tx_active != 0U)) ? 1U : 0U;
 }
 
 /* 一个合法的 Type-0 请求：携带 A.1.6 校验和的 MC + CKT。 */
@@ -144,23 +144,24 @@ static int run_cycles(iolink_dll_ctx_t* ctx, unsigned cycles, uint64_t step_us)
         push_mailbox(ctx, frame, (uint8_t) sizeof(frame));
 
         iolink_dll_process(&ctx->main);
-        while ((ctx->main.shared.isr_tx_pending != 0U) || (ctx->main.shared.isr_tx_active != 0U)) {
+        while ((ctx->main.shared.b_isr_tx_pending != 0U) ||
+               (ctx->main.shared.b_isr_tx_active != 0U)) {
             iolink_dll_process_isr(&ctx->main.shared);
         }
 
         if (!iolink_ring_is_empty(&ctx->main.shared.i_isr_frame_ring)) {
             return 1; /* 邮箱未被消费 */
         }
-        if (ctx->main.shared.timeout_errors != 0U) {
+        if (ctx->main.shared.b_timeout_errors != 0U) {
             return 2; /* 空闲监控被触发 */
         }
         if (ctx->main.crc_errors != 0U) {
             return 3;
         }
-        if (ctx->main.shared.framing_errors != 0U) {
+        if (ctx->main.shared.b_framing_errors != 0U) {
             return 4;
         }
-        if (ctx->main.shared.state == IOLINK_DLL_STATE_STARTUP) {
+        if (ctx->main.shared.b_state == IOLINK_DLL_STATE_STARTUP) {
             return 5;
         }
     }
@@ -189,17 +190,17 @@ static int run_all(void)
 
     iolink_dll_init(&ctx.main, &ctx.isr, &phy);
     ctx.main.shared.c_clock.time_us = test_time_us;
-    ctx.main.shared.state = IOLINK_DLL_STATE_ESTAB_COM;
+    ctx.main.shared.b_state = IOLINK_DLL_STATE_ESTAB_COM;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.main.enforce_timing = false;
     now_us = 1000000U;
-    ctx.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));
+    ctx.main.shared.b_last_activity_ms = ((uint32_t) (now_us / 1000U));
 
     /* 场景 A：每周期 1 ms，仿真 60 秒（60k 帧）。 */
     if (run_cycles(&ctx, 60000U, 1000U) != 0) {
         return 10;
     }
-    if (ctx.main.shared.state != IOLINK_DLL_STATE_OPERATE) {
+    if (ctx.main.shared.b_state != IOLINK_DLL_STATE_OPERATE) {
         return 11;
     }
     if (tx_frame_count() != 60000U) {
@@ -211,15 +212,15 @@ static int run_all(void)
 
     /* 场景 B：跨越 32 位毫秒时间戳回绕。 */
     now_us = ((uint64_t) UINT32_MAX - 5U) * 1000U;
-    ctx.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));
-    ctx.main.shared.timeout_errors = 0U;
+    ctx.main.shared.b_last_activity_ms = ((uint32_t) (now_us / 1000U));
+    ctx.main.shared.b_timeout_errors = 0U;
     if (run_cycles(&ctx, 20U, 600000U) != 0) {
         return 20;
     }
-    if (ctx.main.shared.state != IOLINK_DLL_STATE_OPERATE) {
+    if (ctx.main.shared.b_state != IOLINK_DLL_STATE_OPERATE) {
         return 21;
     }
-    if (ctx.main.shared.timeout_errors != 0U) {
+    if (ctx.main.shared.b_timeout_errors != 0U) {
         return 22;
     }
     if (tx_frame_count() != 60020U) {

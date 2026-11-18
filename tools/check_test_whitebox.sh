@@ -137,7 +137,7 @@ selftest() {
 
     local bad_access=(
         'ctx.dll.main.master_lost = true;'
-        'dev.ctx->dll.main.shared.state'
+        'dev.ctx->dll.main.shared.b_state'
         'iolink_dll_ctx_t* c = &ctx->dll;'
         'iolink_dll_ctx_t* c = &device->dll;'
         'size_t off = offsetof(iolink_device_ctx_t, dll);'
@@ -152,7 +152,7 @@ selftest() {
     local good_access=(
         'test_dll(&ctx)->master_lost = true;'
         'iolink_dll_ctx_t dll;'
-        'dll.main.shared.state = 0;'
+        'dll.main.shared.b_state = 0;'
         'iolink_device_get_dll_stats(&ctx, &stats);'
         'iolink_device_get_pd_in_len(&ctx);'
         'offsetof(iolink_device_ctx_t, dll_ctx)'

@@ -156,14 +156,14 @@ static void test_same_instant_priority(void** state)
     iolink_dll_ctx_t ctx;
     init_ctx(&ctx);
     g_now = 4000000U;
-    ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    ctx.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.main.master_lost_cycles = 3U;
     ctx.main.min_cycle_time_us = 1000U;
     ctx.main.shared.m_master_cycle_time = 0U;
     /* MASTER_LOST 截止时间 = last_activity + 3 × cycle = g_now。 */
     ctx.main.master_last_activity_ms = (uint32_t) ((g_now - 3000U) / 1000U);
-    ctx.main.shared.last_activity_ms = 1000U;
+    ctx.main.shared.b_last_activity_ms = 1000U;
 
     /* 三个 DEADLINE 项同刻（g_now）到期，t_PD 处于过去（门控关闭）。 */
     dll_timer_arm(&ctx.main, IOLINK_TIMER_T_FBD, g_now);
@@ -174,7 +174,7 @@ static void test_same_instant_priority(void** state)
     /* 表序 = 原检查顺序：MASTER_LOST -> IDLE -> T_FBD。 */
     assert_true(ctx.main.master_lost);
     assert_int_equal(ctx.main.idle_timeouts, 1U);
-    assert_int_equal(ctx.main.shared.state, IOLINK_DLL_STATE_STARTUP);
+    assert_int_equal(ctx.main.shared.b_state, IOLINK_DLL_STATE_STARTUP);
     assert_int_equal(ctx.main.phy_mode, IOLINK_PHY_MODE_SIO);
     assert_false(dll_timer_armed(&ctx.main, IOLINK_TIMER_MASTER_LOST));
     assert_false(dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
@@ -189,11 +189,11 @@ static void test_t_byte_rearm_and_cancel(void** state)
     (void) state;
     iolink_dll_ctx_t ctx;
     init_ctx(&ctx);
-    ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    ctx.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.main.frame_index = 1U;
     ctx.main.t_byte_limit_us = 1000U;
-    ctx.main.shared.last_byte_us = (uint32_t) g_now;
+    ctx.main.shared.b_last_byte_us = (uint32_t) g_now;
 
     iolink_dll_process(&ctx.main);
     const uint64_t deadline = dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_BYTE);
@@ -201,7 +201,7 @@ static void test_t_byte_rearm_and_cancel(void** state)
 
     /* 新字节：截止时间随 last_byte 推进（同一 limit）。 */
     g_now += 400U;
-    ctx.main.shared.last_byte_us = (uint32_t) g_now;
+    ctx.main.shared.b_last_byte_us = (uint32_t) g_now;
     iolink_dll_process(&ctx.main);
     const uint64_t advanced = dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_BYTE);
     assert_int_equal(advanced, g_now + 1001U);
@@ -220,7 +220,7 @@ static void test_t_byte_rearm_and_cancel(void** state)
 
     /* 帧结束后重新开始组装：再次装载。 */
     ctx.main.frame_index = 1U;
-    ctx.main.shared.last_byte_us = (uint32_t) g_now;
+    ctx.main.shared.b_last_byte_us = (uint32_t) g_now;
     iolink_dll_process(&ctx.main);
     assert_true(dll_timer_armed(&ctx.main, IOLINK_TIMER_T_BYTE));
 
@@ -237,7 +237,7 @@ static void test_t_pd_window_drops_frames(void** state)
     (void) state;
     iolink_dll_ctx_t ctx;
     init_ctx(&ctx);
-    ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    ctx.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     dll_timer_arm(&ctx.main, IOLINK_TIMER_T_PD, g_now + 500U);
 
@@ -269,11 +269,11 @@ static void test_t_pd_window_drops_frames(void** state)
     iolink_ring_publish(&ctx.main.shared.i_isr_frame_ring);
 
     test_pd_set_valid(&ctx.main, false);
-    const uint32_t framing_before = ctx.main.shared.framing_errors;
+    const uint32_t framing_before = ctx.main.shared.b_framing_errors;
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.t_pd_violations, 1U);
-    assert_int_equal(ctx.main.shared.framing_errors, framing_before);
-    assert_int_equal(ctx.main.shared.state, IOLINK_DLL_STATE_OPERATE);
+    assert_int_equal(ctx.main.shared.b_framing_errors, framing_before);
+    assert_int_equal(ctx.main.shared.b_state, IOLINK_DLL_STATE_OPERATE);
     assert_true(test_pd_valid(&ctx.main));
     assert_int_equal(ctx.main.last_response_us, g_now);
 }
@@ -284,7 +284,7 @@ static void test_millisecond_wrap(void** state)
     (void) state;
     iolink_dll_ctx_t ctx;
     init_ctx(&ctx);
-    ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    ctx.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.main.min_cycle_time_us = 1000U;
     ctx.main.shared.m_master_cycle_time = 0U;
@@ -292,7 +292,7 @@ static void test_millisecond_wrap(void** state)
 
     /* 现在 = 2^32 ms + 5 s；截断后的毫秒值是 5000。 */
     g_now = ((uint64_t) 0x100000000ULL + 5000ULL) * 1000ULL;
-    ctx.main.shared.last_activity_ms = (uint32_t) (g_now / 1000U) - 200U;
+    ctx.main.shared.b_last_activity_ms = (uint32_t) (g_now / 1000U) - 200U;
     ctx.main.master_last_activity_ms = (uint32_t) (g_now / 1000U);
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.idle_timeouts, 0U);
@@ -313,11 +313,11 @@ static void test_idle_deadline_boundary(void** state)
     iolink_dll_ctx_t ctx;
     init_ctx(&ctx);
     g_now = 4000000U;
-    ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    ctx.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.main.master_lost_cycles = 0U;
 
-    ctx.main.shared.last_activity_ms = (uint32_t) (g_now / 1000U) - 1000U;
+    ctx.main.shared.b_last_activity_ms = (uint32_t) (g_now / 1000U) - 1000U;
     iolink_dll_process(&ctx.main);
     assert_int_equal(dll_timer_deadline(&ctx.main, IOLINK_TIMER_IDLE), g_now + 1000U);
     assert_true(dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
@@ -330,7 +330,7 @@ static void test_idle_deadline_boundary(void** state)
 
     /* 更长的静默（2 s）同样必须判为过期；把截止时间算成"未来"的实现
      * 会在这里漏掉。 */
-    ctx.main.shared.last_activity_ms = (uint32_t) (g_now / 1000U) - 2000U;
+    ctx.main.shared.b_last_activity_ms = (uint32_t) (g_now / 1000U) - 2000U;
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.idle_timeouts, 2U);
     assert_false(dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));

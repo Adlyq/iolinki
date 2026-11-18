@@ -242,7 +242,7 @@ struct iolink_dll_shared
     uint32_t i_isr_frames_handoff; /**< 成功投递邮箱交给主泵的帧 */
 
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
-    iolink_dll_isr_stats_t isr_stat; /**< ISR 自有的计数器组（SPLIT 模式） */
+    iolink_dll_isr_stats_t b_isr_stat; /**< ISR 自有的计数器组（SPLIT 模式） */
 #endif
 
     /* =====================================================================
@@ -252,46 +252,46 @@ struct iolink_dll_shared
      * 协议保护。
      * ===================================================================== */
 
-    volatile iolink_dll_state_t state; /**< 当前 DLL 状态 */
+    volatile iolink_dll_state_t b_state; /**< 当前 DLL 状态 */
 
-    volatile uint32_t last_activity_ms; /**< 最后收到字节的时间戳 */
+    volatile uint32_t b_last_activity_ms; /**< 最后收到字节的时间戳 */
 
-    volatile uint32_t last_byte_us; /**< 最后字节时间戳的低 32 位；两个
+    volatile uint32_t b_last_byte_us; /**< 最后字节时间戳的低 32 位；两个
                                          上下文都以抗回绕的无符号差值
                                          比较它（t_byte 至多为毫秒级） */
 
-    volatile uint8_t isr_tx_idx; /**< 下一个字节索引（ISR 流式状态） */
+    volatile uint8_t b_isr_tx_idx; /**< 下一个字节索引（ISR 流式状态） */
 
-    volatile uint8_t isr_tx_active; /**< 排空期间为 1（ISR 流式状态） */
+    volatile uint8_t b_isr_tx_active; /**< 排空期间为 1（ISR 流式状态） */
 
-    volatile uint8_t isr_tx_pending; /**< 1 = 主上下文处理器暂存了
+    volatile uint8_t b_isr_tx_pending; /**< 1 = 主上下文处理器暂存了
                                           一个原样应答；
                                           ISR 必须发送它 */
 
-    volatile uint8_t isr_tx_dropped; /**< 因仅 ISR 的 PHY 缺少
+    volatile uint8_t b_isr_tx_dropped; /**< 因仅 ISR 的 PHY 缺少
                                           request_service()，或暂存与在途
                                           应答冲突而丢弃的应答 */
 
-    volatile IOLINK_ATOMIC_UINT_T pd_valid_cmd; /**< PD 有效位命令字
+    volatile IOLINK_ATOMIC_UINT_T b_pd_valid_cmd; /**< PD 有效位命令字
                                                     `{value, base_gen, valid}`（数据 ISR 单写） */
 
-    volatile uint8_t pd_in_captured; /**< ISR 正在流式发送的缓冲区（0xFF = 无）；
+    volatile uint8_t b_pd_in_captured; /**< ISR 正在流式发送的缓冲区（0xFF = 无）；
                                           TX BYTE 帧末释放，TX FRAME 由 ISR 在下次
                                           进入时按 tx_busy() 释放 */
 
-    volatile uint8_t fallback_count; /**< 连续 CRC 错误计数（诊断脉冲节流） */
+    volatile uint8_t b_fallback_count; /**< 连续 CRC 错误计数（诊断脉冲节流） */
 
-    volatile uint8_t fallback_clear_request; /**< 已应用非 FALLBACK 命令：清除 T_FBD */
+    volatile uint8_t b_fallback_clear_request; /**< 已应用非 FALLBACK 命令：清除 T_FBD */
 
-    iolink_isdu_ctx_t isdu; /**< ISDU 服务引擎 */
+    iolink_isdu_ctx_t b_isdu; /**< ISDU 服务引擎 */
 
-    uint32_t framing_errors; /**< 累计成帧错误数（ISR 在 SHARED 统计模式下直接自增） */
+    uint32_t b_framing_errors; /**< 累计成帧错误数（ISR 在 SHARED 统计模式下直接自增） */
 
-    uint32_t timeout_errors; /**< 累计 t_A 超时数（ISR 在 SHARED 统计模式下直接自增） */
+    uint32_t b_timeout_errors; /**< 累计 t_A 超时数（ISR 在 SHARED 统计模式下直接自增） */
 
     /* 子模块 */
 #if IOLINK_FEATURE_EVENTS
-    iolink_events_ctx_t events; /**< 诊断事件引擎 */
+    iolink_events_ctx_t b_events; /**< 诊断事件引擎 */
 #endif
 };
 
@@ -318,7 +318,7 @@ struct iolink_dll_shared
 /**
  * @name PD 有效位命令字
  *
- * 数据 ISR 是 @ref iolink_dll_shared_t::pd_valid_cmd 的唯一写者：执行
+ * 数据 ISR 是 @ref iolink_dll_shared_t::b_pd_valid_cmd 的唯一写者：执行
  * 0x98 `PROCESS_DATA_OPERATE` / 0x99 `DEVICE_OPERATE` 时记录命令值与当时
  * @ref iolink_dll_shared_t::m_pd_pub 的 `gen`。读侧只在 `base_gen` 仍等于当前
  * gen 时采用命令值，因此该覆盖只影响命令所在的那一代：主上下文下一次发布
@@ -349,7 +349,7 @@ static inline IOLINK_ATOMIC_UINT_T dll_pd_pub_load(const iolink_dll_shared_t* sh
  */
 static inline bool dll_pd_valid_at(const iolink_dll_shared_t* shared, IOLINK_ATOMIC_UINT_T pub)
 {
-    const IOLINK_ATOMIC_UINT_T cmd = iolink_atomic_load(&shared->pd_valid_cmd);
+    const IOLINK_ATOMIC_UINT_T cmd = iolink_atomic_load(&shared->b_pd_valid_cmd);
     if ((IOLINK_PD_CMD_VALID(cmd) != 0U) &&
         (IOLINK_PD_CMD_BASE_GEN(cmd) == IOLINK_PD_PUB_GEN(pub))) {
         return IOLINK_PD_CMD_VALUE(cmd) != 0U;

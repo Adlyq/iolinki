@@ -696,8 +696,8 @@ void test_pump_tx_idle(iolink_device_ctx_t* ctx)
     if (ctx == NULL) {
         return;
     }
-    while ((test_dll_shared(ctx)->isr_tx_pending != 0U) ||
-           (test_dll_shared(ctx)->isr_tx_active != 0U)) {
+    while ((test_dll_shared(ctx)->b_isr_tx_pending != 0U) ||
+           (test_dll_shared(ctx)->b_isr_tx_active != 0U)) {
         iolink_device_process_isr(ctx);
     }
 }
@@ -715,7 +715,7 @@ void test_pump_tx_idle(iolink_device_ctx_t* ctx)
 void test_io_cycle(iolink_device_ctx_t* ctx)
 {
     iolink_device_process_isr(ctx);
-    while (test_dll_shared(ctx)->isr_tx_active != 0U) {
+    while (test_dll_shared(ctx)->b_isr_tx_active != 0U) {
         iolink_device_process_isr(ctx);
     }
     /* 丢弃遗留的帧结束标记（BYTE 按长度完成帧后仍留一个 CHK；

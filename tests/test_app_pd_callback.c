@@ -139,7 +139,7 @@ static void test_callback_path_selected_by_presence(void** state)
                      IOLINK_DEVICE_PD_ERR_MODE);
 
     /* 在 OPERATE 下驱动一次主循环：回调发布 PD-in。 */
-    test_dll_shared(&ctx)->state = IOLINK_DLL_STATE_OPERATE;
+    test_dll_shared(&ctx)->b_state = IOLINK_DLL_STATE_OPERATE;
     iolink_device_process(&ctx);
 
     assert_int_equal(g_pd_calls, 1);

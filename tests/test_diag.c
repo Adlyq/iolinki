@@ -513,17 +513,17 @@ static void test_dll_service_publishes_isr_pulse(void** state)
     iolink_dll_init(&ctx.main, &ctx.isr, &diag_phy_no_faults);
 
     /* ISR 观察到的组帧错误只写 one-shot，不触发事件。 */
-    iolink_diag_pulse_isr(&ctx.main.shared.events, IOLINK_DIAG_SRC_COMM_FRAMING);
-    assert_int_equal(ctx.main.shared.events.count, 0U);
+    iolink_diag_pulse_isr(&ctx.main.shared.b_events, IOLINK_DIAG_SRC_COMM_FRAMING);
+    assert_int_equal(ctx.main.shared.b_events.count, 0U);
 
     iolink_dll_process(&ctx.main);
 
     /* 主泵 service 后事件上线，DeviceStatus 由注册表（0x1803 = Error）派生。 */
-    assert_int_equal(ctx.main.shared.events.pending_count, 1U);
-    assert_int_equal(iolink_diag_device_status(&ctx.main.shared.events), 4U);
+    assert_int_equal(ctx.main.shared.b_events.pending_count, 1U);
+    assert_int_equal(iolink_diag_device_status(&ctx.main.shared.b_events), 4U);
 
     iolink_event_t ev;
-    assert_true(iolink_events_pop(&ctx.main.shared.events, &ev));
+    assert_true(iolink_events_pop(&ctx.main.shared.b_events, &ev));
     assert_int_equal(ev.code, IOLINK_EVENT_COMM_FRAMING);
     assert_int_equal(ev.type, IOLINK_EVENT_TYPE_ERROR);
 }

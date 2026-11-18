@@ -104,14 +104,15 @@ typedef struct
 
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
 /** @brief 在 ISR 上下文中执行自增的计数器槽位（参数是共享区）。 */
-#define IOLINK_STAT_ISR(shared, field) ((shared)->isr_stat.field)
+#define IOLINK_STAT_ISR(shared, shared_field, stat_field) ((shared)->b_isr_stat.stat_field)
 /** @brief 包含 ISR 自有计数的计数值（只读，参数是主上下文）。 */
-#define IOLINK_STAT_TOTAL(ctx, field) ((ctx)->shared.field + (ctx)->shared.isr_stat.field)
+#define IOLINK_STAT_TOTAL(ctx, shared_field, stat_field) \
+    ((ctx)->shared.shared_field + (ctx)->shared.b_isr_stat.stat_field)
 #else
 /** @brief 在 ISR 上下文中执行自增的计数器槽位（参数是共享区）。 */
-#define IOLINK_STAT_ISR(shared, field) ((shared)->field)
+#define IOLINK_STAT_ISR(shared, shared_field, stat_field) ((shared)->shared_field)
 /** @brief 包含 ISR 自有计数的计数值（只读，参数是主上下文）。 */
-#define IOLINK_STAT_TOTAL(ctx, field) ((ctx)->shared.field)
+#define IOLINK_STAT_TOTAL(ctx, shared_field, stat_field) ((ctx)->shared.shared_field)
 #endif
 
 /**

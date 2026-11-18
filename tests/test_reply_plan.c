@@ -199,7 +199,7 @@ static uint8_t plan_int_active(iolink_app_t* IOLINK_NULLABLE self)
     /* 只有完整帧才是 PHY 可交付的事件。 */
     return ((s_rx_n != 0U) && (s_rx_i < s_rx_n)) ? 1U : 0U;
 #else
-    return ((s_rx_i < s_rx_n) || (s_chk_pending != 0U) || (ctx->main.shared.isr_tx_active != 0U))
+    return ((s_rx_i < s_rx_n) || (s_chk_pending != 0U) || (ctx->main.shared.b_isr_tx_active != 0U))
                ? 1U
                : 0U;
 #endif
@@ -254,7 +254,8 @@ static void feed(const uint8_t* frame, size_t len, uint8_t chk)
 
 static void drain_tx(void)
 {
-    while ((s_dll.main.shared.isr_tx_pending != 0U) || (s_dll.main.shared.isr_tx_active != 0U)) {
+    while ((s_dll.main.shared.b_isr_tx_pending != 0U) ||
+           (s_dll.main.shared.b_isr_tx_active != 0U)) {
         iolink_dll_process_isr(&s_dll.main.shared);
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
@@ -274,7 +275,7 @@ static void bind_test_identity(iolink_dll_main_t* main)
         .revision_id = IOLINK_REVISION_ID_1_1,
     };
     assert_int_equal(iolink_device_info_ctx_init(&s_identity_ctx, &identity), 0);
-    main->shared.isdu.device_info = &s_identity_ctx;
+    main->shared.b_isdu.device_info = &s_identity_ctx;
 }
 
 /** @brief OPERATE / TYPE_2_V：PD-in 1、PD-out 0、OD 1。 */
@@ -284,7 +285,7 @@ static void init_operate(void)
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     bind_test_identity(&s_dll.main);
     s_dll.main.shared.c_clock.time_us = plan_time_us;
-    s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    s_dll.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     s_dll.main.shared.c_od_width = 1U;
     s_dll.main.shared.c_pd_in_len = 1U;
@@ -305,7 +306,7 @@ static void init_preoperate(void)
     bind_test_identity(&s_dll.main);
 
     s_dll.main.shared.c_clock.time_us = plan_time_us;
-    s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
+    s_dll.main.shared.b_state = IOLINK_DLL_STATE_PREOPERATE;
     s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
     s_dll.main.shared.c_od_width = 1U;
     s_dll.main.shared.c_pd_in_len = 0U;
@@ -324,7 +325,7 @@ static void init_preoperate_rx_only(void)
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy_rx_only);
     bind_test_identity(&s_dll.main);
     s_dll.main.shared.c_clock.time_us = plan_time_us;
-    s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
+    s_dll.main.shared.b_state = IOLINK_DLL_STATE_PREOPERATE;
     s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
     s_dll.main.shared.c_od_width = 1U;
     s_dll.main.shared.c_pd_in_len = 0U;
@@ -432,7 +433,7 @@ static int test_valid_miss_is_dropped(void)
     /* 另一种确实无计划的形态：FALLBACK 状态不发布任何计划切片
      * （T_FBD 由主泵计时），合法 Type-0 帧只能按未命中丢弃。 */
     init_preoperate();
-    s_dll.main.shared.state = IOLINK_DLL_STATE_FALLBACK;
+    s_dll.main.shared.b_state = IOLINK_DLL_STATE_FALLBACK;
     uint8_t write[2];
     make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x01U), IOLINK_MSEQ_TYPE_0,
                write, sizeof(write));
@@ -581,7 +582,7 @@ static int test_pd_valid_command_is_generation_scoped(void)
     /* 数据 ISR 下一次进入时撤回已过代的命令字（单写者清理，因此 8 位
      * 代号回绕后不会重新对上一条早已失效的命令）。 */
     iolink_dll_process_isr(&s_dll.main.shared);
-    if (iolink_atomic_load(&s_dll.main.shared.pd_valid_cmd) != 0U) {
+    if (iolink_atomic_load(&s_dll.main.shared.b_pd_valid_cmd) != 0U) {
         return 4;
     }
 
@@ -691,16 +692,17 @@ static int test_isdu_write_retry_storm_is_deduped(void)
         }
     }
 
-    if ((s_dll.main.shared.isdu.req_idx != 4U) || (s_dll.main.shared.isdu.req_buf[1] != 0x10U) ||
-        (s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE)) {
+    if ((s_dll.main.shared.b_isdu.req_idx != 4U) ||
+        (s_dll.main.shared.b_isdu.req_buf[1] != 0x10U) ||
+        (s_dll.main.shared.b_isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE)) {
         return 3; /* 重发没有推进位置，也没有覆盖已接受的 COUNT1 */
     }
 
     /* 主泵接管并执行：请求被 ack，应答就绪。 */
     iolink_dll_process(&s_dll.main);
-    if ((s_dll.main.shared.isdu.req_ack_gen !=
-         IOLINK_ISDU_REQ_PUB_GEN(s_dll.main.shared.isdu.req_pub)) ||
-        (s_dll.main.shared.isdu.state != ISDU_STATE_RESPONSE_READY)) {
+    if ((s_dll.main.shared.b_isdu.req_ack_gen !=
+         IOLINK_ISDU_REQ_PUB_GEN(s_dll.main.shared.b_isdu.req_pub)) ||
+        (s_dll.main.shared.b_isdu.state != ISDU_STATE_RESPONSE_READY)) {
         return 4;
     }
     return 0;
@@ -729,10 +731,10 @@ static int test_new_start_overwrites_undrained_request(void)
             return 8;
         }
     }
-    if (s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE) {
+    if (s_dll.main.shared.b_isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE) {
         return 1;
     }
-    if (s_dll.main.shared.isdu.req_overruns != 0U) {
+    if (s_dll.main.shared.b_isdu.req_overruns != 0U) {
         return 2;
     }
 
@@ -750,20 +752,20 @@ static int test_new_start_overwrites_undrained_request(void)
     if (tx_observed_len() == 0U) {
         return 3;
     }
-    if (s_dll.main.shared.isdu.req_overruns != 1U) {
+    if (s_dll.main.shared.b_isdu.req_overruns != 1U) {
         return 4;
     }
-    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
-        (s_dll.main.shared.isdu.req_buf[0] != 0x93U)) {
+    if ((s_dll.main.shared.b_isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
+        (s_dll.main.shared.b_isdu.req_buf[0] != 0x93U)) {
         return 5;
     }
 
     /* 相位契约：主泵只能在 COMPLETE 时接管。新请求处于 RECEPTION，
      * iolink_isdu_process() 不得把被覆盖的旧请求当作有效请求执行。 */
     iolink_dll_process(&s_dll.main);
-    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
-        (s_dll.main.shared.isdu.state != ISDU_STATE_IDLE) ||
-        (s_dll.main.shared.isdu.req_buf[0] != 0x93U)) {
+    if ((s_dll.main.shared.b_isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
+        (s_dll.main.shared.b_isdu.state != ISDU_STATE_IDLE) ||
+        (s_dll.main.shared.b_isdu.req_buf[0] != 0x93U)) {
         return 6;
     }
 
@@ -907,12 +909,12 @@ static int test_isdu_write_invalidates_read_view(void)
 {
     init_operate();
     /* 已完成的应答（4 字节）作为当前读视图。 */
-    s_dll.main.shared.isdu.state = ISDU_STATE_RESPONSE_READY;
-    s_dll.main.shared.isdu.resp_buf[0] = 0xD4U;
-    s_dll.main.shared.isdu.resp_buf[1] = 0x12U;
-    s_dll.main.shared.isdu.resp_buf[2] = 0x34U;
-    s_dll.main.shared.isdu.resp_buf[3] = 0xF2U;
-    s_dll.main.shared.isdu.resp_total = 4U;
+    s_dll.main.shared.b_isdu.state = ISDU_STATE_RESPONSE_READY;
+    s_dll.main.shared.b_isdu.resp_buf[0] = 0xD4U;
+    s_dll.main.shared.b_isdu.resp_buf[1] = 0x12U;
+    s_dll.main.shared.b_isdu.resp_buf[2] = 0x34U;
+    s_dll.main.shared.b_isdu.resp_buf[3] = 0xF2U;
+    s_dll.main.shared.b_isdu.resp_total = 4U;
     iolink_dll_process(&s_dll.main); /* 发布快照（代数 +1） */
     if (IOLINK_ISDU_PUB_LEN(s_dll.main.shared.m_isr_isdu_pub) != 4U) {
         return 1;
@@ -947,7 +949,7 @@ static int test_isdu_write_invalidates_read_view(void)
     if (tx_observed_len() != 2U) {
         return 4; /* 写段必须被 ISR 立即确认 */
     }
-    if (s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) {
+    if (s_dll.main.shared.b_isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) {
         return 5;
     }
     if (s_dll.main.shared.i_isr_isdu_write_gen != (write_gen_before + 1U)) {
@@ -994,7 +996,7 @@ static int test_isdu_write_invalidates_read_view(void)
             return 11;
         }
     }
-    if (s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE) {
+    if (s_dll.main.shared.b_isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE) {
         return 12;
     }
     if (s_dll.main.shared.i_isr_isdu_write_gen != (write_gen_before + 1U)) {
@@ -1033,7 +1035,8 @@ static int test_isdu_write_invalidates_read_view(void)
     iolink_dll_process_isr(&s_dll.main.shared);
     drain_tx();
     const uint8_t expected_first =
-        s_dll.main.shared.isdu.resp_store[IOLINK_ISDU_PUB_SEL(s_dll.main.shared.m_isr_isdu_pub)][0];
+        s_dll.main.shared.b_isdu
+            .resp_store[IOLINK_ISDU_PUB_SEL(s_dll.main.shared.m_isr_isdu_pub)][0];
     if ((tx_observed_len() != 3U) || (s_tx_q[0] != expected_first) || (s_tx_q[0] == 0x00U)) {
         return 17; /* 闸门必须已解除：读到的是应用该写之后的应答 */
     }
@@ -1047,7 +1050,7 @@ static int test_isdu_write_invalidates_read_view(void)
     if (tx_observed_len() != 2U) {
         return 18;
     }
-    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_IDLE) ||
+    if ((s_dll.main.shared.b_isdu.stage_state != IOLINK_ISDU_STAGE_IDLE) ||
         (s_dll.main.shared.i_isr_isdu_write_gen != (gen_after_apply + 1U)) ||
         (s_dll.main.shared.m_isdu_write_gen_applied != gen_after_apply)) {
         return 19;
@@ -1095,7 +1098,7 @@ static int test_startup_probe_plan(void)
     iolink_dll_process_isr(&s_dll.main.shared);
     drain_tx();
 
-    if (s_dll.main.shared.state != IOLINK_DLL_STATE_PREOPERATE) {
+    if (s_dll.main.shared.b_state != IOLINK_DLL_STATE_PREOPERATE) {
         return 1;
     }
     if (s_dll.main.shared.i_isr_dsio_clear == 0U) {
@@ -1114,12 +1117,12 @@ static int test_type0_idle_read_resets_transport(void)
     init_preoperate();
 
     /* 先发布一个 4 字节应答，使"无服务"与旧应答可区分。 */
-    s_dll.main.shared.isdu.state = ISDU_STATE_RESPONSE_READY;
-    s_dll.main.shared.isdu.resp_buf[0] = 0xD4U;
-    s_dll.main.shared.isdu.resp_buf[1] = 0x12U;
-    s_dll.main.shared.isdu.resp_buf[2] = 0x34U;
-    s_dll.main.shared.isdu.resp_buf[3] = 0xF2U;
-    s_dll.main.shared.isdu.resp_total = 4U;
+    s_dll.main.shared.b_isdu.state = ISDU_STATE_RESPONSE_READY;
+    s_dll.main.shared.b_isdu.resp_buf[0] = 0xD4U;
+    s_dll.main.shared.b_isdu.resp_buf[1] = 0x12U;
+    s_dll.main.shared.b_isdu.resp_buf[2] = 0x34U;
+    s_dll.main.shared.b_isdu.resp_buf[3] = 0xF2U;
+    s_dll.main.shared.b_isdu.resp_total = 4U;
     iolink_dll_process(&s_dll.main); /* 发布读视图 */
     if (IOLINK_ISDU_PUB_LEN(s_dll.main.shared.m_isr_isdu_pub) != 4U) {
         return 1;
@@ -1187,7 +1190,7 @@ static int test_type0_idle_read_resets_transport(void)
     if (s_dll.main.shared.i_isr_isdu_read_reset != 0U) {
         return 9;
     }
-    if (!iolink_isdu_is_idle(&s_dll.main.shared.isdu)) {
+    if (!iolink_isdu_is_idle(&s_dll.main.shared.b_isdu)) {
         return 10;
     }
     return 0;
@@ -1231,8 +1234,8 @@ static int test_read_reset_keeps_write_entry(void)
     if (tx_observed_len() == 0U) {
         return 3; /* 写段必须被 ISR ACK */
     }
-    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
-        (s_dll.main.shared.isdu.req_total != 4U)) {
+    if ((s_dll.main.shared.b_isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
+        (s_dll.main.shared.b_isdu.req_total != 4U)) {
         return 4;
     }
 
@@ -1241,8 +1244,8 @@ static int test_read_reset_keeps_write_entry(void)
     if (s_dll.main.shared.i_isr_isdu_read_reset != 0U) {
         return 5;
     }
-    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
-        (s_dll.main.shared.isdu.req_idx != 1U) || (s_dll.main.shared.isdu.req_total != 4U)) {
+    if ((s_dll.main.shared.b_isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
+        (s_dll.main.shared.b_isdu.req_idx != 1U) || (s_dll.main.shared.b_isdu.req_total != 4U)) {
         return 6;
     }
 
@@ -1258,18 +1261,18 @@ static int test_read_reset_keeps_write_entry(void)
             return 7;
         }
     }
-    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE) ||
-        (s_dll.main.shared.isdu.req_idx != 4U)) {
+    if ((s_dll.main.shared.b_isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE) ||
+        (s_dll.main.shared.b_isdu.req_idx != 4U)) {
         return 8; /* 请求被整段丢弃：读复位动了写入口 */
     }
 
     /* 5. 主泵接管：写被 ack，否定应答就绪（等待主站读出后才回到空闲）。 */
     iolink_dll_process(&s_dll.main);
-    if (s_dll.main.shared.isdu.req_ack_gen !=
-        IOLINK_ISDU_REQ_PUB_GEN(s_dll.main.shared.isdu.req_pub)) {
+    if (s_dll.main.shared.b_isdu.req_ack_gen !=
+        IOLINK_ISDU_REQ_PUB_GEN(s_dll.main.shared.b_isdu.req_pub)) {
         return 9;
     }
-    if (s_dll.main.shared.isdu.state != ISDU_STATE_RESPONSE_READY) {
+    if (s_dll.main.shared.b_isdu.state != ISDU_STATE_RESPONSE_READY) {
         return 10;
     }
     return 0;
@@ -1388,7 +1391,7 @@ static int test_init_publishes_default_plan(void)
     if (iolink_atomic_load(&s_dll.main.shared.c_reply_plans_ready) == 0U) {
         return 1; /* init 必须发布一次 */
     }
-    if (s_dll.main.shared.state != IOLINK_DLL_STATE_STARTUP) {
+    if (s_dll.main.shared.b_state != IOLINK_DLL_STATE_STARTUP) {
         return 2;
     }
 
@@ -1433,7 +1436,7 @@ static int test_tx_without_done_hook(void)
     iolink_dll_init(&s_dll.main, &s_dll.isr, &phy);
     bind_test_identity(&s_dll.main);
     s_dll.main.shared.c_clock.time_us = plan_time_us;
-    s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    s_dll.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     s_dll.main.shared.c_od_width = 1U;
     s_dll.main.shared.c_pd_in_len = 1U;

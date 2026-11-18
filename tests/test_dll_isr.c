@@ -44,7 +44,7 @@ static void test_expected_req_len_type0(void** state)
     (void) state;
     iolink_dll_ctx_t dll;
     init_dll(&dll, IOLINK_M_SEQ_TYPE_0, 1U, 0U, 0U);
-    dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
+    dll.main.shared.b_state = IOLINK_DLL_STATE_PREOPERATE;
 
     /* 读取和过程通道访问仅使用 MC + CKT 报头。 */
     assert_int_equal(iolink_dll_expected_req_len(&dll.main, 0x80U), 2U);
@@ -62,7 +62,7 @@ static void test_expected_req_len_operate(void** state)
     (void) state;
     iolink_dll_ctx_t dll;
     init_dll(&dll, IOLINK_M_SEQ_TYPE_1_2, 2U, 2U, 2U);
-    dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    dll.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
 
     /* READ（MC bit 7 = 1）：报头 + PD-out，无 OD。 */
     assert_int_equal(iolink_dll_expected_req_len(&dll.main, 0x80U), 4U);
@@ -75,13 +75,13 @@ static void test_expected_req_len_operate(void** state)
 
     iolink_dll_ctx_t dll2;
     init_dll(&dll2, IOLINK_M_SEQ_TYPE_2_2, 1U, 0U, 3U);
-    dll2.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    dll2.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
     assert_int_equal(iolink_dll_expected_req_len(&dll2.main, 0x80U), 5U);
     assert_int_equal(iolink_dll_expected_req_len(&dll2.main, 0x00U), 6U);
 
     /* 配置为多字节时，这里唯一按 Type-0 定长的交换：即使配置为多字节类型，
        转换命令仍是 MC + CKT（C5/Table 47）。 */
-    dll.main.shared.state = IOLINK_DLL_STATE_ESTAB_COM;
+    dll.main.shared.b_state = IOLINK_DLL_STATE_ESTAB_COM;
     assert_int_equal(iolink_dll_expected_req_len(&dll.main, IOLINK_MC_TRANSITION_COMMAND), 2U);
     /* 非转换命令在 ESTAB_COM 仍走配置的多字节布局（2 + pd_out + 写时的 OD），
        钉住上面那条判定的 `mc` 合取项。 */
@@ -89,7 +89,7 @@ static void test_expected_req_len_operate(void** state)
 
     /* STARTUP/PREOPERATE 只接受 Type-0：配置成多字节类型也一样按 MC 定长，
        这就是 dll_req_len_for() 把“帧自报 Type-0”与“期望 Type-0”并起来的原因。 */
-    dll.main.shared.state = IOLINK_DLL_STATE_STARTUP;
+    dll.main.shared.b_state = IOLINK_DLL_STATE_STARTUP;
     assert_int_equal(iolink_dll_expected_req_len(&dll.main, 0x60U), 3U);
     assert_int_equal(iolink_dll_expected_req_len(&dll.main, 0x80U), 2U);
 }

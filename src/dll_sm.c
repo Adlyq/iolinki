@@ -64,16 +64,16 @@ dll_frame_result_t dll_frame_validate(iolink_dll_main_t* ctx)
 void dll_handle_frame_error(iolink_dll_main_t* ctx, dll_frame_result_t result)
 {
     IOLINK_LOG_DEBUG(&ctx->shared.c_log, "frame error: result=%d state=%u", (int) result,
-                     (unsigned) ctx->shared.state);
+                     (unsigned) ctx->shared.b_state);
     if (result == DLL_FRAME_TYPE_ERROR) {
         ctx->frame_replied_by_isr = 0U;
-        ctx->shared.framing_errors++;
+        ctx->shared.b_framing_errors++;
         ctx->frame_index = 0U;
-        if ((ctx->shared.state == IOLINK_DLL_STATE_OPERATE) ||
-            (ctx->shared.state == IOLINK_DLL_STATE_ESTAB_COM)) {
+        if ((ctx->shared.b_state == IOLINK_DLL_STATE_OPERATE) ||
+            (ctx->shared.b_state == IOLINK_DLL_STATE_ESTAB_COM)) {
             return;
         }
-        DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_FRAMING);
+        DLL_DIAG_PULSE(&ctx->shared.b_events, IOLINK_DIAG_SRC_COMM_FRAMING);
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
         return;
     }
@@ -84,14 +84,14 @@ void dll_handle_frame_error(iolink_dll_main_t* ctx, dll_frame_result_t result)
      * 开始下一个 M-sequence）不能使链路下线。
      * SIO 保留给 Fallback MasterCommand 和 T_DSIO 超时。 */
     ctx->crc_errors++;
-    ctx->shared.framing_errors++;
+    ctx->shared.b_framing_errors++;
     ctx->invalid_frames++;
     /* 保留诊断事件（ST 没有计数器，但应用用它
      * 作为事件标志），同时不改变 DL 模式。 */
-    ctx->shared.fallback_count++;
-    if (ctx->shared.fallback_count >= DLL_CRC_DIAG_BATCH) {
-        ctx->shared.fallback_count = 0U;
-        DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_CRC);
+    ctx->shared.b_fallback_count++;
+    if (ctx->shared.b_fallback_count >= DLL_CRC_DIAG_BATCH) {
+        ctx->shared.b_fallback_count = 0U;
+        DLL_DIAG_PULSE(&ctx->shared.b_events, IOLINK_DIAG_SRC_COMM_CRC);
     }
 }
 
@@ -112,7 +112,7 @@ static bool dll_reject_startup_operate(iolink_dll_main_t* ctx, bool was_establis
         ((ctx->frame_buf[0] & IOLINK_MC_ADDR_MASK) == 0x00U) &&
         ((ctx->frame_buf[2] == IOLINK_CMD_DEVICE_OPERATE) ||
          (ctx->frame_buf[2] == IOLINK_CMD_PROCESS_DATA_OPERATE))) {
-        ctx->shared.framing_errors++;
+        ctx->shared.b_framing_errors++;
         ctx->frame_index = 0U;
         return true;
     }
@@ -219,7 +219,7 @@ static bool dll_sm_pd_exchange(iolink_dll_main_t* ctx)
 /** @brief OPERATE 中的过渡命令非法：计数但不改变 DL 模式（ST rc=2 语义）。 */
 static bool dll_sm_transition_illegal(iolink_dll_main_t* ctx)
 {
-    ctx->shared.framing_errors++;
+    ctx->shared.b_framing_errors++;
     return true;
 }
 
@@ -230,7 +230,7 @@ static bool dll_sm_operate_page_read(iolink_dll_main_t* ctx)
         /* Table 57/67（SDCI_TC_0038/0049）：不复位兼容模式下，OPERATE 期间
            的 Type-0 页读是复位请求：不应答，返回 STARTUP。 */
         if (ctx->shared.c_m_seq_type != IOLINK_M_SEQ_TYPE_0) {
-            ctx->shared.framing_errors++;
+            ctx->shared.b_framing_errors++;
             ctx->frame_index = 0U;
             dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
             return false; /* 复位路径跳过公共尾部清理 */
@@ -265,8 +265,8 @@ const iolink_dll_sm_cell_t* IOLINK_NULLABLE iolink_dll_sm_cell(iolink_dll_state_
  */
 bool dll_handle_valid_frame(iolink_dll_main_t* ctx)
 {
-    const bool was_establishing = (ctx->shared.state == IOLINK_DLL_STATE_AWAITING_COMM) ||
-                                  (ctx->shared.state == IOLINK_DLL_STATE_STARTUP);
+    const bool was_establishing = (ctx->shared.b_state == IOLINK_DLL_STATE_AWAITING_COMM) ||
+                                  (ctx->shared.b_state == IOLINK_DLL_STATE_STARTUP);
     if (!iolink_caps_has(ctx->shared.c_caps, IOLINK_CAP_COMPAT_V10_OP) &&
         dll_reject_startup_operate(ctx, was_establishing)) {
         return false;
@@ -274,7 +274,7 @@ bool dll_handle_valid_frame(iolink_dll_main_t* ctx)
     (void) was_establishing;
 
     const iolink_dll_event_t event = dll_sm_classify(ctx);
-    const iolink_dll_sm_cell_t* cell = &g_dll_sm[(uint8_t) ctx->shared.state][(uint8_t) event];
+    const iolink_dll_sm_cell_t* cell = &g_dll_sm[(uint8_t) ctx->shared.b_state][(uint8_t) event];
     if (cell->enter_state != DLL_SM_STATE_KEEP) {
         dll_set_state(ctx, (iolink_dll_state_t) cell->enter_state);
         if (cell->enter_state == (uint8_t) IOLINK_DLL_STATE_PREOPERATE) {

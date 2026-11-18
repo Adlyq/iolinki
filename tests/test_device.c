@@ -278,7 +278,7 @@ static void test_device_binds_instance_context(void** state)
     assert_ptr_equal(test_dll(&dev.ctx)->ds.flag_self, (iolink_app_t * IOLINK_NULLABLE) & sentinel);
 #endif
 #if IOLINK_FEATURE_EVENTS
-    assert_ptr_equal(test_dll_shared(&dev.ctx)->events.clock->self,
+    assert_ptr_equal(test_dll_shared(&dev.ctx)->b_events.clock->self,
                      (iolink_app_t * IOLINK_NULLABLE) & sentinel);
 #endif
 }

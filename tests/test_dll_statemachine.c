@@ -186,7 +186,7 @@ static uint8_t sm_int_active(iolink_app_t* IOLINK_NULLABLE self)
     (void) ctx;
     return ((s_rx_n != 0U) && (s_rx_i < s_rx_n)) ? 1U : 0U;
 #else
-    return ((s_rx_i < s_rx_n) || (s_chk_pending != 0U) || (ctx->main.shared.isr_tx_active != 0U))
+    return ((s_rx_i < s_rx_n) || (s_chk_pending != 0U) || (ctx->main.shared.b_isr_tx_active != 0U))
                ? 1U
                : 0U;
 #endif
@@ -231,7 +231,8 @@ static void feed(const uint8_t* frame, size_t len)
 
 static void drain_tx(void)
 {
-    while ((s_dll.main.shared.isr_tx_pending != 0U) || (s_dll.main.shared.isr_tx_active != 0U)) {
+    while ((s_dll.main.shared.b_isr_tx_pending != 0U) ||
+           (s_dll.main.shared.b_isr_tx_active != 0U)) {
         iolink_dll_process_isr(&s_dll.main.shared);
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
@@ -252,7 +253,7 @@ static void bind_test_identity(iolink_dll_main_t* main)
         .revision_id = IOLINK_REVISION_ID_1_1,
     };
     assert_int_equal(iolink_device_info_ctx_init(&s_identity_ctx, &identity), 0);
-    main->shared.isdu.device_info = &s_identity_ctx;
+    main->shared.b_isdu.device_info = &s_identity_ctx;
 }
 
 static void init_state(iolink_dll_state_t state)
@@ -266,7 +267,7 @@ static void init_state(iolink_dll_state_t state)
     s_dll.main.shared.c_pd_in_len = 0U;
     s_dll.main.shared.c_pd_out_len_current = 0U;
     test_pd_set_valid(&s_dll.main, true);
-    s_dll.main.shared.state = state;
+    s_dll.main.shared.b_state = state;
     s_now_us = 1000000U;
     iolink_dll_publish_reply_plans(&s_dll.main);
 }
@@ -397,7 +398,7 @@ static int test_plan_state_stamp(void)
     feed(frame, 2U);
     iolink_dll_process_isr(&s_dll.main.shared);
     drain_tx();
-    if (s_dll.main.shared.state != IOLINK_DLL_STATE_ESTAB_COM) {
+    if (s_dll.main.shared.b_state != IOLINK_DLL_STATE_ESTAB_COM) {
         return 3;
     }
     if (tx_observed_len() != 0U) {
@@ -424,7 +425,7 @@ static int test_plan_state_stamp(void)
      * 状态迁移与计划内容无关（本用例下面直接使用 OPERATE 切片即证明这点）。 */
     iolink_dll_process(&s_dll.main);
     drain_tx();
-    if (s_dll.main.shared.state != IOLINK_DLL_STATE_OPERATE) {
+    if (s_dll.main.shared.b_state != IOLINK_DLL_STATE_OPERATE) {
         return 7;
     }
 

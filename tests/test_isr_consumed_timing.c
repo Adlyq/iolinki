@@ -166,7 +166,7 @@ static uint8_t test_int_active(iolink_app_t* IOLINK_NULLABLE self)
     (void) ctx;
     return ((s_rx_n != 0U) && (s_rx_i < s_rx_n)) ? 1U : 0U;
 #else
-    return ((s_rx_i < s_rx_n) || (ctx->main.shared.isr_tx_active != 0U)) ? 1U : 0U;
+    return ((s_rx_i < s_rx_n) || (ctx->main.shared.b_isr_tx_active != 0U)) ? 1U : 0U;
 #endif
 }
 
@@ -229,7 +229,8 @@ static void feed(const uint8_t* frame, size_t len)
 
 static void drain_tx(void)
 {
-    while ((s_dll.main.shared.isr_tx_pending != 0U) || (s_dll.main.shared.isr_tx_active != 0U)) {
+    while ((s_dll.main.shared.b_isr_tx_pending != 0U) ||
+           (s_dll.main.shared.b_isr_tx_active != 0U)) {
         iolink_dll_process_isr(&s_dll.main.shared);
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
@@ -280,7 +281,7 @@ static void bind_test_identity(iolink_dll_main_t* main)
         .revision_id = IOLINK_REVISION_ID_1_1,
     };
     assert_int_equal(iolink_device_info_ctx_init(&s_identity_ctx, &identity), 0);
-    main->shared.isdu.device_info = &s_identity_ctx;
+    main->shared.b_isdu.device_info = &s_identity_ctx;
 }
 
 static void init_operate_type0(void)
@@ -289,7 +290,7 @@ static void init_operate_type0(void)
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     bind_test_identity(&s_dll.main);
     s_dll.main.shared.c_clock.time_us = test_time_us;
-    s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    s_dll.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
     s_dll.main.shared.c_od_width = 1U;
     s_dll.main.shared.c_pd_in_len = 0U;
@@ -299,7 +300,7 @@ static void init_operate_type0(void)
     s_dll.main.min_cycle_time_us = 1000U;
     /* 低 32 位与高 32 位都非零：交接必须经无符号差值还原完整的 64 位时间。 */
     s_now_us = ((uint64_t) 0x1ULL << 32) + 5000000ULL;
-    s_dll.main.shared.last_activity_ms = (uint32_t) (s_now_us / 1000U);
+    s_dll.main.shared.b_last_activity_ms = (uint32_t) (s_now_us / 1000U);
     iolink_dll_publish_reply_plans(&s_dll.main);
 }
 

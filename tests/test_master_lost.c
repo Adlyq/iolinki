@@ -180,7 +180,7 @@ static void test_isr_frame_counts_as_master_activity(void** state)
     mock_phy_feed_byte(frame[2]);
     mock_phy_feed_chk();
     iolink_device_process_isr(&dev.ctx);
-    while (test_dll_shared(&dev.ctx)->isr_tx_active != 0U) {
+    while (test_dll_shared(&dev.ctx)->b_isr_tx_active != 0U) {
         iolink_device_process_isr(&dev.ctx);
     }
     assert_tx_len(2U); /* PD-in（1）+ CKS */

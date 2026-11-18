@@ -130,7 +130,7 @@ static void lat_request_service(iolink_app_t* self)
 static uint8_t lat_int_active(iolink_app_t* self)
 {
     const iolink_dll_ctx_t* ctx = (const iolink_dll_ctx_t*) self;
-    return ((s_rx_i < s_rx_n) || (s_chk_pending != 0U) || (ctx->main.shared.isr_tx_active != 0U))
+    return ((s_rx_i < s_rx_n) || (s_chk_pending != 0U) || (ctx->main.shared.b_isr_tx_active != 0U))
                ? 1U
                : 0U;
 }
@@ -185,7 +185,7 @@ static void harness_bind_identity(void)
         .revision_id = IOLINK_REVISION_ID_1_1,
     };
     (void) iolink_device_info_ctx_init(&s_identity_ctx, &identity);
-    s_dll.main.shared.isdu.device_info = &s_identity_ctx;
+    s_dll.main.shared.b_isdu.device_info = &s_identity_ctx;
 }
 
 static void init_preop(void)
@@ -194,7 +194,7 @@ static void init_preop(void)
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     harness_bind_identity();
     s_dll.main.shared.c_clock.time_us = plan_time_us;
-    s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
+    s_dll.main.shared.b_state = IOLINK_DLL_STATE_PREOPERATE;
     s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
     s_dll.main.shared.c_od_width = 1U;
     s_dll.main.shared.c_pd_in_len = 0U;
@@ -215,7 +215,7 @@ static void init_op_t1_od32(void)
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     harness_bind_identity();
     s_dll.main.shared.c_clock.time_us = plan_time_us;
-    s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    s_dll.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
     s_dll.main.shared.c_od_width = 32U;
     s_dll.main.shared.c_pd_in_len = 0U;
@@ -231,7 +231,7 @@ static void init_op_t2_pd32(void)
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     harness_bind_identity();
     s_dll.main.shared.c_clock.time_us = plan_time_us;
-    s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    s_dll.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     s_dll.main.shared.c_od_width = 1U;
     s_dll.main.shared.c_pd_in_len = 32U;
@@ -248,12 +248,12 @@ static void init_preop_isdu_read(void)
 {
     init_preop();
     /* 已完成的 4 字节应答作为当前读视图（与 test_reply_plan 相同契约）。 */
-    s_dll.main.shared.isdu.state = ISDU_STATE_RESPONSE_READY;
-    s_dll.main.shared.isdu.resp_buf[0] = 0xD4U;
-    s_dll.main.shared.isdu.resp_buf[1] = 0x12U;
-    s_dll.main.shared.isdu.resp_buf[2] = 0x34U;
-    s_dll.main.shared.isdu.resp_buf[3] = 0xF2U;
-    s_dll.main.shared.isdu.resp_total = 4U;
+    s_dll.main.shared.b_isdu.state = ISDU_STATE_RESPONSE_READY;
+    s_dll.main.shared.b_isdu.resp_buf[0] = 0xD4U;
+    s_dll.main.shared.b_isdu.resp_buf[1] = 0x12U;
+    s_dll.main.shared.b_isdu.resp_buf[2] = 0x34U;
+    s_dll.main.shared.b_isdu.resp_buf[3] = 0xF2U;
+    s_dll.main.shared.b_isdu.resp_total = 4U;
     iolink_dll_process(&s_dll.main); /* 发布读视图快照 */
 }
 
@@ -392,7 +392,7 @@ static void measure_once(const scenario_t* sc, uint64_t* win_ns, uint64_t* call_
 
     /* BYTE 模式若把首字节留到后续泵拍，最多补 96 拍。 */
     uint32_t guard = 0U;
-    while ((s_t1_set == 0) && (s_dll.main.shared.isr_tx_active != 0U) && (guard < 96U)) {
+    while ((s_t1_set == 0) && (s_dll.main.shared.b_isr_tx_active != 0U) && (guard < 96U)) {
         iolink_dll_process_isr(&s_dll.main.shared);
         guard++;
     }
@@ -413,7 +413,7 @@ static int scenario_sanity(const scenario_t* sc)
     s_chk_pending = 1U;
     iolink_dll_process_isr(&s_dll.main.shared);
     uint32_t guard = 0U;
-    while ((s_dll.main.shared.isr_tx_active != 0U) && (guard < 96U)) {
+    while ((s_dll.main.shared.b_isr_tx_active != 0U) && (guard < 96U)) {
         iolink_dll_process_isr(&s_dll.main.shared);
         guard++;
     }

@@ -26,14 +26,14 @@
 static void prepare_ctx(iolink_dll_ctx_t* ctx)
 {
     (void) memset(ctx, 0, sizeof(*ctx));
-    ctx->main.shared.framing_errors = 3U;
-    ctx->main.shared.timeout_errors = 5U;
-    ctx->main.shared.isr_tx_dropped = 2U;
+    ctx->main.shared.b_framing_errors = 3U;
+    ctx->main.shared.b_timeout_errors = 5U;
+    ctx->main.shared.b_isr_tx_dropped = 2U;
 
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
-    ctx->main.shared.isr_stat.framing_errors = 4U;
-    ctx->main.shared.isr_stat.timeout_errors = 6U;
-    ctx->main.shared.isr_stat.isr_tx_dropped = 3U;
+    ctx->main.shared.b_isr_stat.framing_errors = 4U;
+    ctx->main.shared.b_isr_stat.timeout_errors = 6U;
+    ctx->main.shared.b_isr_stat.isr_tx_dropped = 3U;
 #endif
 }
 
@@ -49,15 +49,15 @@ static void test_public_stats_mirror_the_totals(void** state)
     (void) memset(&ctx, 0, sizeof(ctx));
 
     /* Main-context events. */
-    ctx.main.shared.framing_errors = 3U;
-    ctx.main.shared.timeout_errors = 2U;
-    ctx.main.shared.isr_tx_dropped = 1U;
+    ctx.main.shared.b_framing_errors = 3U;
+    ctx.main.shared.b_timeout_errors = 2U;
+    ctx.main.shared.b_isr_tx_dropped = 1U;
 
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
     /* ISR-side events in the ISR-owned counter set. */
-    ctx.main.shared.isr_stat.framing_errors = 2U;
-    ctx.main.shared.isr_stat.timeout_errors = 4U;
-    ctx.main.shared.isr_stat.isr_tx_dropped = 5U;
+    ctx.main.shared.b_isr_stat.framing_errors = 2U;
+    ctx.main.shared.b_isr_stat.timeout_errors = 4U;
+    ctx.main.shared.b_isr_stat.isr_tx_dropped = 5U;
 #endif
 
     iolink_dll_get_stats(&ctx.main, &stats);
@@ -86,11 +86,11 @@ static void test_stats_totals_per_mode(void** state)
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
     /* ISR 槽位与主上下文字段相互独立：对其自增
      * 不会改动主计数器（这正是 split 的意义）。 */
-    assert_ptr_not_equal(&IOLINK_STAT_ISR(&ctx.main, framing_errors),
-                         &ctx.main.shared.framing_errors);
-    IOLINK_STAT_ISR(&ctx.main, framing_errors)++;
-    assert_int_equal(ctx.main.shared.framing_errors, 3U);
-    assert_int_equal(ctx.main.shared.isr_stat.framing_errors, 5U);
+    assert_ptr_not_equal(&IOLINK_STAT_ISR(&ctx.main.shared, b_framing_errors, framing_errors),
+                         &ctx.main.shared.b_framing_errors);
+    IOLINK_STAT_ISR(&ctx.main.shared, b_framing_errors, framing_errors)++;
+    assert_int_equal(ctx.main.shared.b_framing_errors, 3U);
+    assert_int_equal(ctx.main.shared.b_isr_stat.framing_errors, 5U);
 #endif
 
     iolink_dll_get_stats(&ctx.main, &stats);
@@ -103,7 +103,7 @@ static void test_stats_totals_per_mode(void** state)
     assert_int_equal(stats.framing_errors, 3U);
     assert_int_equal(stats.timeout_errors, 5U);
     /* 只有一个集合：ISR 直接自增主上下文字段本身。 */
-    assert_int_equal(stats.isr_tx_dropped, ctx.main.shared.isr_tx_dropped);
+    assert_int_equal(stats.isr_tx_dropped, ctx.main.shared.b_isr_tx_dropped);
     assert_int_equal(stats.isr_tx_dropped, 2U);
 #endif
 }

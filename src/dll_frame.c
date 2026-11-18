@@ -65,8 +65,9 @@ bool dll_type_allowed(const iolink_dll_shared_t* ctx, const uint8_t* frame)
     const uint8_t ch = (uint8_t) (frame[0] & IOLINK_MC_COMM_CHANNEL_MASK);
     uint8_t exp_type = IOLINK_MSEQ_TYPE_0;
 
-    if ((ctx->state == IOLINK_DLL_STATE_OPERATE) || ((ctx->state == IOLINK_DLL_STATE_ESTAB_COM) &&
-                                                     (frame[0] != IOLINK_MC_TRANSITION_COMMAND))) {
+    if ((ctx->b_state == IOLINK_DLL_STATE_OPERATE) ||
+        ((ctx->b_state == IOLINK_DLL_STATE_ESTAB_COM) &&
+         (frame[0] != IOLINK_MC_TRANSITION_COMMAND))) {
         if ((ch == IOLINK_MC_CHANNEL_PAGE) && (rx_type == IOLINK_MSEQ_TYPE_0)) {
             return true;
         }
@@ -83,7 +84,8 @@ bool dll_type_allowed(const iolink_dll_shared_t* ctx, const uint8_t* frame)
  */
 uint8_t dll_expected_type_bits(const iolink_dll_shared_t* ctx)
 {
-    if ((ctx->state == IOLINK_DLL_STATE_OPERATE) || (ctx->state == IOLINK_DLL_STATE_ESTAB_COM)) {
+    if ((ctx->b_state == IOLINK_DLL_STATE_OPERATE) ||
+        (ctx->b_state == IOLINK_DLL_STATE_ESTAB_COM)) {
         return dll_mseq_type_bits(ctx->c_m_seq_type);
     }
     return IOLINK_MSEQ_TYPE_0;
@@ -101,7 +103,7 @@ uint8_t dll_req_len_for(const iolink_dll_shared_t* ctx, uint8_t mc, uint8_t ckt)
     if (type0) {
         return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + (dll_mc_is_type0_od_write(mc) ? 1U : 0U));
     }
-    if ((ctx->state == IOLINK_DLL_STATE_ESTAB_COM) && (mc == IOLINK_MC_TRANSITION_COMMAND)) {
+    if ((ctx->b_state == IOLINK_DLL_STATE_ESTAB_COM) && (mc == IOLINK_MC_TRANSITION_COMMAND)) {
         return IOLINK_M_SEQ_HEADER_LEN;
     }
     const uint8_t od_req = ((mc & IOLINK_MC_RW_MASK) == 0U) ? ctx->c_od_width : 0U;
@@ -147,12 +149,12 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
     bool rejected;
     IOLINK_CRITICAL_ENTER();
 #if IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_ISR
-    rejected = (ctx->shared.isr_tx_active != 0U);
+    rejected = (ctx->shared.b_isr_tx_active != 0U);
 #else
     rejected = false;
 #endif
     if (rejected) {
-        ctx->shared.isr_tx_dropped++;
+        ctx->shared.b_isr_tx_dropped++;
     }
     else {
         /* 槽位与载荷只在接受后推进：被拒绝的暂存不得碰在途槽。 */
@@ -161,8 +163,8 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
         ctx->shared.m_isr_tx_pending_slot = slot;
         ctx->shared.m_stage_len = (uint8_t) len;
         ctx->shared.m_stage_has_cks = 0U;
-        IOLINK_FENCE();                  /* 暂存字节先于发布 */
-        ctx->shared.isr_tx_pending = 1U; /* 最后发布 */
+        IOLINK_FENCE();                    /* 暂存字节先于发布 */
+        ctx->shared.b_isr_tx_pending = 1U; /* 最后发布 */
     }
     IOLINK_CRITICAL_EXIT();
     if (rejected) {
@@ -184,21 +186,21 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
     /* SINGLE 档没有数据 ISR：主上下文是唯一发送者，只能自己驱动
      * TX 钩子。上一帧没有上下文可以推进它，因此先结束它再开始新帧，
      * 否则 isr_tx_active 会永久保持。 */
-    ctx->shared.isr_tx_pending = 0U;
-    if (ctx->shared.isr_tx_active != 0U) {
+    ctx->shared.b_isr_tx_pending = 0U;
+    if (ctx->shared.b_isr_tx_active != 0U) {
         if (ctx->shared.c_phy->tx_done != NULL) {
             ctx->shared.c_phy->tx_done(ctx->shared.c_phy->self);
         }
-        ctx->shared.isr_tx_active = 0U;
-        ctx->shared.isr_tx_dropped++; /* 上一帧未发完即被收尾 */
+        ctx->shared.b_isr_tx_active = 0U;
+        ctx->shared.b_isr_tx_dropped++; /* 上一帧未发完即被收尾 */
     }
     dll_isr_start_staged_tx(&ctx->shared, slot, (uint8_t) len, 0U);
 #else
     /* ISR/SMP 档没有 request_service()：暂存应答无人发送。
      * iolink_device_init() 已拒绝这种 PHY；直接使用 DLL 的调用方
      * 违反同一契约，此处计数丢弃，使配置错误可被观测而非静默。 */
-    ctx->shared.isr_tx_pending = 0U;
-    ctx->shared.isr_tx_dropped++;
+    ctx->shared.b_isr_tx_pending = 0U;
+    ctx->shared.b_isr_tx_dropped++;
 #endif
 }
 
@@ -273,10 +275,10 @@ void dll_protocol_error_to_startup(iolink_dll_main_t* ctx)
         return;
     }
 
-    ctx->shared.fallback_count = 0U;
+    ctx->shared.b_fallback_count = 0U;
     ctx->invalid_frames++;
     ctx->frame_index = 0U;
-    if (ctx->shared.state != IOLINK_DLL_STATE_STARTUP) {
+    if (ctx->shared.b_state != IOLINK_DLL_STATE_STARTUP) {
         dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
     }
 }
@@ -367,7 +369,7 @@ static void dll_pd_valid_command(iolink_dll_main_t* ctx, bool valid)
 static void dll_pd_valid_command_isr(iolink_dll_shared_t* shared, bool valid)
 {
     const IOLINK_ATOMIC_UINT_T pub = dll_pd_pub_load(shared);
-    iolink_atomic_store(&shared->pd_valid_cmd, IOLINK_PD_CMD_WORD(valid, IOLINK_PD_PUB_GEN(pub)));
+    iolink_atomic_store(&shared->b_pd_valid_cmd, IOLINK_PD_CMD_WORD(valid, IOLINK_PD_PUB_GEN(pub)));
 }
 
 /**
@@ -387,18 +389,18 @@ bool dll_apply_master_command(iolink_dll_shared_t* ctx, uint8_t cmd)
         ctx->i_isr_device_startup_requested = 1U;
         return true;
     }
-    iolink_dll_state_t target = ctx->state;
-    if (!dll_master_command_target(cmd, ctx->state, &target)) {
+    iolink_dll_state_t target = ctx->b_state;
+    if (!dll_master_command_target(cmd, ctx->b_state, &target)) {
         return true;
     }
-    ctx->fallback_clear_request = 1U;
+    ctx->b_fallback_clear_request = 1U;
     if (cmd == IOLINK_CMD_PROCESS_DATA_OPERATE) {
         dll_pd_valid_command_isr(ctx, true);
     }
     else if (cmd == IOLINK_CMD_DEVICE_OPERATE) {
         dll_pd_valid_command_isr(ctx, false);
     }
-    if (target != ctx->state) {
+    if (target != ctx->b_state) {
         dll_set_state_shared(ctx, target);
     }
     return true;
@@ -418,18 +420,18 @@ bool dll_apply_master_command_main(iolink_dll_main_t* ctx, uint8_t cmd)
         dll_protocol_error_to_startup(ctx);
         return true;
     }
-    iolink_dll_state_t target = ctx->shared.state;
-    if (!dll_master_command_target(cmd, ctx->shared.state, &target)) {
+    iolink_dll_state_t target = ctx->shared.b_state;
+    if (!dll_master_command_target(cmd, ctx->shared.b_state, &target)) {
         return true;
     }
-    ctx->shared.fallback_clear_request = 1U;
+    ctx->shared.b_fallback_clear_request = 1U;
     if (cmd == IOLINK_CMD_PROCESS_DATA_OPERATE) {
         dll_pd_valid_command(ctx, true);
     }
     else if (cmd == IOLINK_CMD_DEVICE_OPERATE) {
         dll_pd_valid_command(ctx, false);
     }
-    if (target != ctx->shared.state) {
+    if (target != ctx->shared.b_state) {
         dll_set_state(ctx, target);
     }
     return true;
@@ -464,7 +466,7 @@ void dll_handle_master_command(iolink_dll_main_t* ctx, uint8_t cmd)
 
     uint8_t resp[1];
     resp[0] = 0x00U;
-    if (DLL_EVENTS_FLAG(&ctx->shared.events)) {
+    if (DLL_EVENTS_FLAG(&ctx->shared.b_events)) {
         resp[0] |= 0x80U;
     }
     resp[0] |= dll_pd_status_flags(ctx);
@@ -479,7 +481,7 @@ void dll_handle_preoperate(iolink_dll_main_t* ctx, uint8_t mc, uint8_t ck)
     (void) ck;
     if (mc == IOLINK_MC_TRANSITION_COMMAND) {
         dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
-        ctx->shared.fallback_count = 0U;
+        ctx->shared.b_fallback_count = 0U;
         /* 按规范，转换命令无需响应 */
     }
 }
@@ -499,7 +501,7 @@ void dll_handle_page_channel_read(iolink_dll_main_t* ctx, uint8_t mc)
         return;
     }
     uint8_t resp[2];
-    resp[0] = iolink_isdu_direct_param_page1_octet(&ctx->shared.isdu,
+    resp[0] = iolink_isdu_direct_param_page1_octet(&ctx->shared.b_isdu,
                                                    (uint8_t) (mc & IOLINK_MC_ADDR_MASK));
     resp[1] = 0x00U;
     resp[1] = iolink_checksum6(resp, 2U);
@@ -535,12 +537,12 @@ static bool dll_dispatch_od(iolink_dll_main_t* ctx, uint8_t mc, const uint8_t* o
             ((mc & IOLINK_MC_ADDR_MASK) == 0x01U)) {
             ctx->shared.m_master_cycle_time = od_in[0];
             /* DPP1 0x01 是页读应答的输入：ISR 的页读缓存必须失效。 */
-            iolink_isdu_dp_page1_invalidate(&ctx->shared.isdu);
+            iolink_isdu_dp_page1_invalidate(&ctx->shared.b_isdu);
         }
         if (((mc & IOLINK_MC_RW_MASK) == 0U) && (od_len > 0U) &&
             ((mc & IOLINK_MC_ADDR_MASK) == 0x0FU)) {
             /* 7.3.5.3：通过 Direct Parameter 页面 1 的 SystemCommand（无响应）。 */
-            iolink_isdu_execute_system_command(&ctx->shared.isdu, od_in[0]);
+            iolink_isdu_execute_system_command(&ctx->shared.b_isdu, od_in[0]);
         }
         if (((mc & IOLINK_MC_RW_MASK) != 0U) && (od_len > 0U)) {
             /* 周期帧的 OD 槽位必须填满。没有可用的设备身份时不构造臆造页，
@@ -548,7 +550,7 @@ static bool dll_dispatch_od(iolink_dll_main_t* ctx, uint8_t mc, const uint8_t* o
              * dll_handle_operate_type0() 直接不应答。 */
             od_out[0] = dll_dp_page1_available(&ctx->shared)
                             ? iolink_isdu_direct_param_page1_octet(
-                                  &ctx->shared.isdu, (uint8_t) (mc & IOLINK_MC_ADDR_MASK))
+                                  &ctx->shared.b_isdu, (uint8_t) (mc & IOLINK_MC_ADDR_MASK))
                             : 0U;
         }
         return true;
@@ -564,11 +566,11 @@ static bool dll_dispatch_od(iolink_dll_main_t* ctx, uint8_t mc, const uint8_t* o
 #endif
         if ((mc & IOLINK_MC_RW_MASK) != 0U) {
             for (uint8_t i = 0U; i < od_len; i++) {
-                od_out[i] = DLL_EVENTS_MEMORY_READ(&ctx->shared.events, (uint8_t) (addr + i));
+                od_out[i] = DLL_EVENTS_MEMORY_READ(&ctx->shared.b_events, (uint8_t) (addr + i));
             }
         }
         else if (od_len > 0U) {
-            DLL_EVENTS_MEMORY_WRITE(&ctx->shared.events, addr, od_in[0]);
+            DLL_EVENTS_MEMORY_WRITE(&ctx->shared.b_events, addr, od_in[0]);
         }
         return true;
     }
@@ -580,7 +582,7 @@ static bool dll_dispatch_od(iolink_dll_main_t* ctx, uint8_t mc, const uint8_t* o
            顶部排空它，因此写入在此绝不会被应用两次。 */
         if ((mc & IOLINK_MC_RW_MASK) != 0U) {
             const uint8_t flowctrl = (uint8_t) (mc & IOLINK_MC_ADDR_MASK);
-            iolink_isdu_od_read(&ctx->shared.isdu, flowctrl, od_out, od_len);
+            iolink_isdu_od_read(&ctx->shared.b_isdu, flowctrl, od_out, od_len);
         }
         return true;
     }
@@ -608,7 +610,7 @@ void dll_handle_operate_type0(iolink_dll_main_t* ctx, uint8_t mc, uint8_t cks)
 
     uint8_t resp[2];
     uint8_t ck_flags = 0x00U;
-    if (DLL_EVENTS_FLAG(&ctx->shared.events)) {
+    if (DLL_EVENTS_FLAG(&ctx->shared.b_events)) {
         ck_flags |= 0x80U;
     }
     ck_flags |= dll_pd_status_flags(ctx);
@@ -646,7 +648,7 @@ void dll_handle_type0_od_write(iolink_dll_main_t* ctx, uint8_t mc, uint8_t od_in
 
     uint8_t resp[1];
     resp[0] = 0x00U;
-    if (DLL_EVENTS_FLAG(&ctx->shared.events)) {
+    if (DLL_EVENTS_FLAG(&ctx->shared.b_events)) {
         resp[0] |= 0x80U;
     }
     resp[0] |= dll_pd_status_flags(ctx);
@@ -675,7 +677,7 @@ static bool dll_handle_eager_isdu_read(iolink_dll_main_t* ctx, bool write)
     if ((flowctrl == IOLINK_FLOWCTRL_IDLE) || (flowctrl == IOLINK_FLOWCTRL_IDLE2) ||
         (flowctrl == IOLINK_FLOWCTRL_ABORT)) {
         uint8_t dummy = 0U;
-        iolink_isdu_od_read(&ctx->shared.isdu, flowctrl, &dummy, 0U); /* 仅重置 */
+        iolink_isdu_od_read(&ctx->shared.b_isdu, flowctrl, &dummy, 0U); /* 仅重置 */
         dll_isdu_sync_snapshot(ctx);
     }
     ctx->frame_replied_by_isr = 0U;
@@ -731,7 +733,7 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
     }
 
     uint8_t cks = 0x00U;
-    if (DLL_EVENTS_FLAG(&ctx->shared.events)) {
+    if (DLL_EVENTS_FLAG(&ctx->shared.b_events)) {
         cks |= 0x80U;
     }
     cks |= dll_pd_status_flags_at(&ctx->shared, pd);
@@ -741,7 +743,7 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
 
     if (dll_phy_has_tx(&ctx->shared)) {
         dll_send(ctx, resp, pos);
-        ctx->shared.fallback_count = 0U;
+        ctx->shared.b_fallback_count = 0U;
         const uint64_t end_us = dll_time_us(&ctx->shared);
         const uint32_t limit = dll_get_t_ren_limit_us();
         const uint64_t ren_deadline = dll_timer_deadline(ctx, IOLINK_TIMER_T_REN);
@@ -750,7 +752,7 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
             dll_time_passed(end_us, ren_deadline)) {
             ctx->timing_errors++;
             ctx->t_ren_violations++;
-            DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_TIMING);
+            DLL_DIAG_PULSE(&ctx->shared.b_events, IOLINK_DIAG_SRC_COMM_TIMING);
         }
         dll_timer_cancel(ctx, IOLINK_TIMER_T_REN);
     }
@@ -779,7 +781,7 @@ void dll_handle_operate_type1_2(iolink_dll_main_t* ctx)
         ((ctx->frame_buf[0] & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PROCESS)) {
         /* ISR 泵已在帧结束时发送了过程通道
          * 预暂存的周期应答。 */
-        ctx->shared.fallback_count = 0U;
+        ctx->shared.b_fallback_count = 0U;
         ctx->last_response_us = dll_time_us(&ctx->shared);
         ctx->frame_replied_by_isr = 0U;
         return;
@@ -818,19 +820,19 @@ static void dll_poll_phy_faults(iolink_dll_main_t* ctx)
 #if IOLINK_FEATURE_EVENTS
     const uint8_t faults = ctx->shared.c_phy->get_faults(ctx->shared.c_phy->self);
 
-    if (DLL_DIAG_SET_LEVEL(&ctx->shared.events, IOLINK_DIAG_SRC_PHY_UNDERVOLTAGE,
+    if (DLL_DIAG_SET_LEVEL(&ctx->shared.b_events, IOLINK_DIAG_SRC_PHY_UNDERVOLTAGE,
                            (faults & IOLINK_PHY_FAULT_UNDERVOLTAGE) != 0U)) {
         ctx->voltage_faults++;
     }
-    if (DLL_DIAG_SET_LEVEL(&ctx->shared.events, IOLINK_DIAG_SRC_PHY_OVERVOLTAGE,
+    if (DLL_DIAG_SET_LEVEL(&ctx->shared.b_events, IOLINK_DIAG_SRC_PHY_OVERVOLTAGE,
                            (faults & IOLINK_PHY_FAULT_OVERVOLTAGE) != 0U)) {
         ctx->voltage_faults++;
     }
-    if (DLL_DIAG_SET_LEVEL(&ctx->shared.events, IOLINK_DIAG_SRC_PHY_OVERTEMP,
+    if (DLL_DIAG_SET_LEVEL(&ctx->shared.b_events, IOLINK_DIAG_SRC_PHY_OVERTEMP,
                            (faults & IOLINK_PHY_FAULT_OVERTEMP) != 0U)) {
         ctx->overtemp_faults++;
     }
-    if (DLL_DIAG_SET_LEVEL(&ctx->shared.events, IOLINK_DIAG_SRC_PHY_SHORT_CIRCUIT,
+    if (DLL_DIAG_SET_LEVEL(&ctx->shared.b_events, IOLINK_DIAG_SRC_PHY_SHORT_CIRCUIT,
                            (faults & IOLINK_PHY_FAULT_SHORT_CIRCUIT) != 0U)) {
         ctx->short_circuits++;
     }
@@ -849,7 +851,7 @@ void dll_poll_diagnostics(iolink_dll_main_t* ctx)
     }
 
     /* ISR 只发布 one-shot；这里在主上下文完成条件锁存与事件发布。 */
-    DLL_DIAG_SERVICE(&ctx->shared.events, dll_time_ms(&ctx->shared));
+    DLL_DIAG_SERVICE(&ctx->shared.b_events, dll_time_ms(&ctx->shared));
 
     if (ctx->shared.c_phy == NULL) {
         return;
@@ -880,7 +882,7 @@ bool dll_frame_drop_if_stopped(iolink_dll_main_t* ctx)
         ctx->frame_index = 0U;
         return true;
     }
-    if (ctx->shared.state == IOLINK_DLL_STATE_COMM_DISABLED) {
+    if (ctx->shared.b_state == IOLINK_DLL_STATE_COMM_DISABLED) {
         /* 通信已停止，直到下次上电（10.7.5）。 */
         ctx->frame_index = 0U;
         return true;
@@ -903,7 +905,7 @@ void dll_check_cycle_time_at(iolink_dll_main_t* ctx, uint64_t frame_us)
         !dll_time_reached(frame_us, cycle_deadline)) {
         ctx->timing_errors++;
         ctx->t_cycle_violations++;
-        DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_TIMING);
+        DLL_DIAG_PULSE(&ctx->shared.b_events, IOLINK_DIAG_SRC_COMM_TIMING);
     }
     /* 与原实现一致：时间戳为 0（未绑定时钟）的第一拍没有参考点，不装载。 */
     if (ctx->enforce_timing && (ctx->min_cycle_time_us > 0U) && (frame_us != 0U)) {

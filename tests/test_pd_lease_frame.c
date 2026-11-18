@@ -51,7 +51,7 @@ static void test_silent_period_lease_is_isr_owned(void** state)
 
     /* ISR 捕获活动缓冲区并交给 DMA；主站静默，没有新的数据中断。 */
     const uint8_t captured = test_pd_active(test_dll(&dev.ctx));
-    shared->pd_in_captured = captured;
+    shared->b_pd_in_captured = captured;
 
     /* 静默期第一次更新：另一个缓冲区仍可填，租约不阻塞它。 */
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, second, sizeof(second), true),
@@ -68,11 +68,11 @@ static void test_silent_period_lease_is_isr_owned(void** state)
 
     /* 主泵周期不再轮询 tx_busy()：线路空闲也不释放租约。 */
     iolink_device_process(&dev.ctx);
-    assert_int_equal(shared->pd_in_captured, captured);
+    assert_int_equal(shared->b_pd_in_captured, captured);
 
     /* 下一次 ISR 进入时 tx_busy() == 0：回收租约，更新恢复。 */
     iolink_device_process_isr(&dev.ctx);
-    assert_int_equal(shared->pd_in_captured, 0xFFU);
+    assert_int_equal(shared->b_pd_in_captured, 0xFFU);
     assert_int_equal(iolink_device_pd_input_update(&dev.ctx, third, sizeof(third), true),
                      IOLINK_DEVICE_PD_OK);
     assert_int_equal(test_dll(&dev.ctx)->pd_in_skips, 1U);

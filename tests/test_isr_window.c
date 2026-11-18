@@ -44,13 +44,13 @@ static void test_main_window_gated_by_tick(void** state)
     gated.stack_timer_start = timer_b_start;
     test_dll_shared(&dev.ctx)->c_phy = &gated;
 
-    test_dll_shared(&dev.ctx)->isdu.reset_pending = true;
+    test_dll_shared(&dev.ctx)->b_isdu.reset_pending = true;
     reset_calls = 0;
 
     /* 尚无 tick：主窗口不得执行。 */
     iolink_device_process(&dev.ctx);
     assert_int_equal(reset_calls, 0);
-    assert_true(test_dll_shared(&dev.ctx)->isdu.reset_pending);
+    assert_true(test_dll_shared(&dev.ctx)->b_isdu.reset_pending);
 
     /* 一次 tick 只授权一个窗口。 */
     iolink_dll_on_stack_tick(&test_dll(&dev.ctx)->shared);

@@ -251,8 +251,8 @@ const iolink_timer_contract_t* iolink_dll_timer_contract(uint8_t* IOLINK_NULLABL
  */
 static void dll_events_apply_isr_reset(iolink_dll_main_t* ctx)
 {
-    if (ctx->shared.events.reset_req != ctx->shared.events.reset_applied) {
-        iolink_events_reset(&ctx->shared.events);
+    if (ctx->shared.b_events.reset_req != ctx->shared.b_events.reset_applied) {
+        iolink_events_reset(&ctx->shared.b_events);
     }
 }
 #endif
@@ -273,22 +273,22 @@ static void dll_events_apply_isr_reset(iolink_dll_main_t* ctx)
  */
 void dll_set_state_shared(iolink_dll_shared_t* shared, iolink_dll_state_t new_state)
 {
-    if (shared->state == new_state) {
+    if (shared->b_state == new_state) {
         return;
     }
     /* ISR 驱动的迁移只在显式启用 ISR 日志时输出。 */
-    IOLINK_LOG_ISR_DEBUG(&shared->c_log, "dll state (isr) %u -> %u", (unsigned) shared->state,
+    IOLINK_LOG_ISR_DEBUG(&shared->c_log, "dll state (isr) %u -> %u", (unsigned) shared->b_state,
                          (unsigned) new_state);
     /* 单次对齐存储：数据 ISR 可能随时读取该状态，且
      * 两个上下文都可能转换它（ISR 快速路径为 t_A 这么做）。 */
-    shared->state = new_state;
+    shared->b_state = new_state;
     if (new_state == IOLINK_DLL_STATE_STARTUP) {
         /* A.6.4：排队的事件在通信被中断时会被丢弃，或被取消。事件引擎的
            写状态归主上下文，因此 ISR 侧的迁移只登记复位请求，由主泵在
            投递回调之前应用。条件表清空后，下一轮 PHY 采样会对仍存在的
            故障重新产生上升沿。 */
 #if IOLINK_FEATURE_EVENTS
-        iolink_events_reset_request(&shared->events);
+        iolink_events_reset_request(&shared->b_events);
 #endif
         shared->i_startup_notification_pending = 1U;
         shared->i_isdu_restart_pending = 1U;
@@ -297,12 +297,12 @@ void dll_set_state_shared(iolink_dll_shared_t* shared, iolink_dll_state_t new_st
 
 void dll_set_state(iolink_dll_main_t* ctx, iolink_dll_state_t new_state)
 {
-    if (ctx->shared.state == new_state) {
+    if (ctx->shared.b_state == new_state) {
         return;
     }
-    IOLINK_LOG_INFO(&ctx->shared.c_log, "dll state %u -> %u", (unsigned) ctx->shared.state,
+    IOLINK_LOG_INFO(&ctx->shared.c_log, "dll state %u -> %u", (unsigned) ctx->shared.b_state,
                     (unsigned) new_state);
-    ctx->shared.state = new_state;
+    ctx->shared.b_state = new_state;
     if (new_state == IOLINK_DLL_STATE_OPERATE) {
         /* 主站丢失监控仅在 OPERATE 内有意义；
          * 启动序列可能合法地暂停数个周期。 */
@@ -313,12 +313,12 @@ void dll_set_state(iolink_dll_main_t* ctx, iolink_dll_state_t new_state)
     if (new_state == IOLINK_DLL_STATE_STARTUP) {
         /* A.6.4：主上下文迁移立即清空事件引擎的写状态。 */
 #if IOLINK_FEATURE_EVENTS
-        iolink_events_reset(&ctx->shared.events);
+        iolink_events_reset(&ctx->shared.b_events);
 #endif
         /* 主上下文重启：立即作废在途写并复位读传输层，避免重启前的
          * 应答视图在下一轮被重新发布。 */
-        isdu_abandon_write(&ctx->shared.isdu);
-        isdu_read_reset(&ctx->shared.isdu);
+        isdu_abandon_write(&ctx->shared.b_isdu);
+        isdu_read_reset(&ctx->shared.b_isdu);
     }
     /* 主上下文：立即投递，因此发生在一次帧
      * 分发内的转换序列仍会逐状态上报。 */
@@ -349,7 +349,7 @@ void iolink_dll_flush_state_callbacks(iolink_dll_main_t* ctx)
     }
 
     /* 基于电平的通知：只投递当前状态一次。 */
-    const iolink_dll_state_t state = ctx->shared.state;
+    const iolink_dll_state_t state = ctx->shared.b_state;
     if (state == ctx->last_notified_state) {
         return;
     }
@@ -389,36 +389,36 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     /* PD-in 初值：缓冲区 0、有效（应用第一次发布之前），没有命令覆盖。
      * 发布字与命令字此后分别由主上下文与数据 ISR 单写。 */
     iolink_atomic_store(&ctx->shared.m_pd_pub, IOLINK_PD_PUB_WORD(0U, true, 0U));
-    iolink_atomic_store(&ctx->shared.pd_valid_cmd, 0U);
-    ctx->shared.pd_in_captured = 0xFFU; /* 无进行中的应答 */
+    iolink_atomic_store(&ctx->shared.b_pd_valid_cmd, 0U);
+    ctx->shared.b_pd_in_captured = 0xFFU; /* 无进行中的应答 */
 
     /* 帧邮箱：ISR 发布到环中，主泵消费。 */
     iolink_ring_init(&ctx->shared.i_isr_frame_ring, (uint8_t*) ctx->isr_frame_slot,
                      IOLINK_MBX_SLOTS, (uint8_t) sizeof(iolink_frame_rec_t));
 
-    DLL_EVENTS_INIT(&ctx->shared.events);
+    DLL_EVENTS_INIT(&ctx->shared.b_events);
 #if IOLINK_FEATURE_EVENTS
     /* 事件引擎唯一的 ISR 写入口是复位请求。绑定本上下文的 ISR 深度标志，
        使误从数据 ISR 调用的写入口被拒绝，而不是与主泵竞争。 */
-    ctx->shared.events.isr_active = &ctx->shared.i_in_isr;
+    ctx->shared.b_events.isr_active = &ctx->shared.i_in_isr;
 #endif
-    iolink_isdu_init(&ctx->shared.isdu);
+    iolink_isdu_init(&ctx->shared.b_isdu);
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_init(&ctx->ds);
 #endif
 #if IOLINK_FEATURE_EVENTS
-    ctx->shared.isdu.event_ctx = &ctx->shared.events;
+    ctx->shared.b_isdu.event_ctx = &ctx->shared.b_events;
 #else
-    ctx->shared.isdu.event_ctx = NULL;
+    ctx->shared.b_isdu.event_ctx = NULL;
 #endif
-    ctx->shared.isdu.dll_ctx = ctx;
+    ctx->shared.b_isdu.dll_ctx = ctx;
     /* 绑定上下文后立即按真实配置建立 DPP1 映像（否则首次 ISR 页读会看到
      * "失效"状态并回 0）。 */
-    iolink_isdu_dp_page1_invalidate(&ctx->shared.isdu);
+    iolink_isdu_dp_page1_invalidate(&ctx->shared.b_isdu);
 #if IOLINK_FEATURE_DATA_STORAGE
-    ctx->shared.isdu.ds_ctx = &ctx->ds;
+    ctx->shared.b_isdu.ds_ctx = &ctx->ds;
 #else
-    ctx->shared.isdu.ds_ctx = NULL;
+    ctx->shared.b_isdu.ds_ctx = NULL;
 #endif
 
     ctx->t_byte_limit_us = dll_get_t_byte_limit_us(ctx);
@@ -528,7 +528,7 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
         ctx->shared.i_isr_fallback_pending = 0U;
         /* 仅在 DL 模式仍为 FALLBACK 时设置：后续命令可能
          * 已离开该模式，此时 T_FBD 截止时间将是虚假的。 */
-        if (ctx->shared.state == IOLINK_DLL_STATE_FALLBACK) {
+        if (ctx->shared.b_state == IOLINK_DLL_STATE_FALLBACK) {
             /* Table 47 T8/T9：T_FBD 为 3 个 MasterCycleTime，上限 500 ms。
              * 参考点是本次主上下文轮询，比帧结束晚一轮；
              * 这只会延长 T_FBD（绝不缩短它），
@@ -545,10 +545,10 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
                           (uint64_t) (dll_time_us(&ctx->shared) / 1000U + t_fbd_ms) * 1000U);
         }
     }
-    if (ctx->shared.fallback_clear_request != 0U) {
-        ctx->shared.fallback_clear_request = 0U;
+    if (ctx->shared.b_fallback_clear_request != 0U) {
+        ctx->shared.b_fallback_clear_request = 0U;
         /* 已应用非 FALLBACK 的命令：丢弃任何待处理的 T_FBD。 */
-        if (ctx->shared.state != IOLINK_DLL_STATE_FALLBACK) {
+        if (ctx->shared.b_state != IOLINK_DLL_STATE_FALLBACK) {
             dll_timer_cancel(ctx, IOLINK_TIMER_T_FBD);
         }
     }
@@ -586,7 +586,7 @@ static void dll_apply_isr_isdu_read_reset(iolink_dll_main_t* ctx)
     IOLINK_CRITICAL_ENTER();
     if (ctx->shared.i_isr_isdu_read_reset != 0U) {
         ctx->shared.i_isr_isdu_read_reset = 0U;
-        isdu_read_reset(&ctx->shared.isdu);
+        isdu_read_reset(&ctx->shared.b_isdu);
     }
     IOLINK_CRITICAL_EXIT();
 }
@@ -601,7 +601,7 @@ static void dll_timer_sync_master_lost(iolink_dll_main_t* ctx)
 {
     const bool was_lost = ctx->master_lost;
     const uint32_t cycle_us = dll_master_cycle_us(ctx);
-    if ((ctx->shared.state == IOLINK_DLL_STATE_OPERATE) && (ctx->master_lost_cycles != 0U) &&
+    if ((ctx->shared.b_state == IOLINK_DLL_STATE_OPERATE) && (ctx->master_lost_cycles != 0U) &&
         (cycle_us != 0U)) {
         if (ctx->master_lost && (ctx->master_lost_activity_ms == ctx->master_last_activity_ms)) {
             return; /* 已判定丢失且无新活动：保持，不重复装载 */
@@ -637,7 +637,7 @@ static void dll_timer_sync_master_lost(iolink_dll_main_t* ctx)
 static void dll_timer_expire_master_lost(iolink_dll_main_t* ctx)
 {
     dll_timer_cancel(ctx, IOLINK_TIMER_MASTER_LOST);
-    if ((ctx->shared.state != IOLINK_DLL_STATE_OPERATE) || (ctx->master_lost_cycles == 0U)) {
+    if ((ctx->shared.b_state != IOLINK_DLL_STATE_OPERATE) || (ctx->master_lost_cycles == 0U)) {
         return;
     }
     const uint32_t cycle_us = dll_master_cycle_us(ctx);
@@ -667,7 +667,7 @@ static void dll_timer_expire_master_lost(iolink_dll_main_t* ctx)
 /** @brief 同步 1 s 空闲诊断 timer（活动时间戳由主/ISR 共同推进）。 */
 static void dll_timer_sync_idle(iolink_dll_main_t* ctx)
 {
-    const uint32_t last_activity_ms = ctx->shared.last_activity_ms;
+    const uint32_t last_activity_ms = ctx->shared.b_last_activity_ms;
     if (last_activity_ms == 0U) {
         dll_timer_cancel(ctx, IOLINK_TIMER_IDLE);
         return;
@@ -693,7 +693,7 @@ static void dll_timer_expire_idle(iolink_dll_main_t* ctx)
     /* 静默链路不是响应时间违规：单独计数，使
      * timeout_errors 仍是真正的 t_A 指标。 */
     ctx->idle_timeouts++;
-    ctx->shared.last_activity_ms = dll_time_ms(&ctx->shared);
+    ctx->shared.b_last_activity_ms = dll_time_ms(&ctx->shared);
 }
 
 /**
@@ -704,11 +704,11 @@ static void dll_timer_expire_dsio(iolink_dll_main_t* ctx)
 {
     dll_timer_cancel(ctx, IOLINK_TIMER_T_DSIO);
     if ((ctx->phy_mode == IOLINK_PHY_MODE_SIO) ||
-        ((ctx->shared.state != IOLINK_DLL_STATE_AWAITING_COMM) &&
-         (ctx->shared.state != IOLINK_DLL_STATE_STARTUP))) {
+        ((ctx->shared.b_state != IOLINK_DLL_STATE_AWAITING_COMM) &&
+         (ctx->shared.b_state != IOLINK_DLL_STATE_STARTUP))) {
         return;
     }
-    ctx->shared.timeout_errors++;
+    ctx->shared.b_timeout_errors++;
     iolink_dll_set_sio_mode(ctx);
     dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
     ctx->frame_index = 0U;
@@ -722,10 +722,10 @@ static void dll_timer_expire_dsio(iolink_dll_main_t* ctx)
 static void dll_timer_expire_fbd(iolink_dll_main_t* ctx)
 {
     dll_timer_cancel(ctx, IOLINK_TIMER_T_FBD);
-    if ((ctx->shared.state != IOLINK_DLL_STATE_FALLBACK) &&
-        (ctx->shared.state != IOLINK_DLL_STATE_OPERATE) &&
-        (ctx->shared.state != IOLINK_DLL_STATE_ESTAB_COM) &&
-        (ctx->shared.state != IOLINK_DLL_STATE_PREOPERATE)) {
+    if ((ctx->shared.b_state != IOLINK_DLL_STATE_FALLBACK) &&
+        (ctx->shared.b_state != IOLINK_DLL_STATE_OPERATE) &&
+        (ctx->shared.b_state != IOLINK_DLL_STATE_ESTAB_COM) &&
+        (ctx->shared.b_state != IOLINK_DLL_STATE_PREOPERATE)) {
         return;
     }
     IOLINK_LOG_WARN(&ctx->shared.c_log, "fallback timeout: switching to SIO");
@@ -748,7 +748,7 @@ static bool dll_check_t_pd(iolink_dll_main_t* ctx)
     if (dll_drain_rx(ctx)) {
         ctx->timing_errors++;
         ctx->t_pd_violations++;
-        DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_TIMING);
+        DLL_DIAG_PULSE(&ctx->shared.b_events, IOLINK_DIAG_SRC_COMM_TIMING);
     }
     return true;
 }
@@ -778,7 +778,7 @@ static bool dll_handle_sio_wakeup(iolink_dll_main_t* ctx)
             /* 唤醒会开启一个新的通信建立窗口。
                重置不活动计时器，使先前交换后的再次唤醒
                不会被陈旧的活动时间戳立刻终止。 */
-            ctx->shared.last_activity_ms = dll_time_ms(&ctx->shared);
+            ctx->shared.b_last_activity_ms = dll_time_ms(&ctx->shared);
             dll_mark_master_activity_ts(ctx); /* ST StackOnWakeUp 重启 Timer B */
         }
     }
@@ -788,7 +788,7 @@ static bool dll_handle_sio_wakeup(iolink_dll_main_t* ctx)
 /** @brief ST Timer A：帧内字节间隙会中止该帧并重新监听。 */
 static void dll_timer_sync_t_byte(iolink_dll_main_t* ctx)
 {
-    const uint32_t last_byte_us = ctx->shared.last_byte_us;
+    const uint32_t last_byte_us = ctx->shared.b_last_byte_us;
     if ((ctx->frame_index == 0U) || (!ctx->enforce_timing) || (ctx->t_byte_limit_us == 0U) ||
         (last_byte_us == 0U)) {
         dll_timer_cancel(ctx, IOLINK_TIMER_T_BYTE);
@@ -812,11 +812,11 @@ static void dll_timer_expire_t_byte(iolink_dll_main_t* ctx)
     dll_timer_cancel(ctx, IOLINK_TIMER_T_BYTE);
     IOLINK_LOG_DEBUG(
         &ctx->shared.c_log, "t_byte violation: %lu us",
-        (unsigned long) ((uint32_t) (dll_time_us(&ctx->shared) - ctx->shared.last_byte_us)));
+        (unsigned long) ((uint32_t) (dll_time_us(&ctx->shared) - ctx->shared.b_last_byte_us)));
     ctx->timing_errors++;
     ctx->t_byte_violations++;
-    ctx->shared.framing_errors++;
-    DLL_DIAG_PULSE(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_TIMING);
+    ctx->shared.b_framing_errors++;
+    DLL_DIAG_PULSE(&ctx->shared.b_events, IOLINK_DIAG_SRC_COMM_TIMING);
     /* 中止当前帧并重新监听；DL 模式不变。 */
     ctx->frame_index = 0U;
 }
@@ -824,7 +824,7 @@ static void dll_timer_expire_t_byte(iolink_dll_main_t* ctx)
 /** @brief T_WU：在唤醒窗口内继续等待第一条报文。 */
 static bool dll_wakeup_window_active(iolink_dll_main_t* ctx)
 {
-    if ((ctx->shared.state == IOLINK_DLL_STATE_AWAITING_COMM) && (ctx->enforce_timing)) {
+    if ((ctx->shared.b_state == IOLINK_DLL_STATE_AWAITING_COMM) && (ctx->enforce_timing)) {
         return dll_timer_armed(ctx, IOLINK_TIMER_T_WU) &&
                !dll_timer_due(ctx, IOLINK_TIMER_T_WU, dll_time_us(&ctx->shared));
     }
@@ -862,8 +862,8 @@ static void dll_consume_isr_mailbox(iolink_dll_main_t* ctx)
     /* 邮箱帧是接收流量：刷新不活动时间戳和字节间隙
        时间戳，与流式 RX 路径完全一致。否则 1 s 空闲
        监控会复位健康的 ISR 链路。 */
-    ctx->shared.last_activity_ms = dll_time_ms(&ctx->shared);
-    ctx->shared.last_byte_us = (uint32_t) dll_time_us(&ctx->shared);
+    ctx->shared.b_last_activity_ms = dll_time_ms(&ctx->shared);
+    ctx->shared.b_last_byte_us = (uint32_t) dll_time_us(&ctx->shared);
     dll_process_complete_frame(ctx);
 }
 
@@ -946,10 +946,10 @@ static void dll_process_body(iolink_dll_main_t* ctx)
          * 读传输层回到 Idle——否则重启前的 RESPONSE_READY 视图会被重新
          * 发布，主站新一轮的读 START 拿到上一轮的应答。 */
         ctx->shared.i_isdu_restart_pending = 0U;
-        isdu_abandon_write(&ctx->shared.isdu);
-        isdu_read_reset(&ctx->shared.isdu);
+        isdu_abandon_write(&ctx->shared.b_isdu);
+        isdu_read_reset(&ctx->shared.b_isdu);
     }
-    iolink_isdu_process(&ctx->shared.isdu);
+    iolink_isdu_process(&ctx->shared.b_isdu);
     /* ISR 对 IDLE/IDLE2/ABORT 读只回 0x00；读传输层复位归主泵。
      * Type-0 下该帧由 CONSUME 计划完全消费，主泵只能经此标志收到请求。 */
     dll_apply_isr_isdu_read_reset(ctx);

@@ -32,7 +32,7 @@
  */
 static inline bool dll_dp_page1_available(const iolink_dll_shared_t* shared)
 {
-    const iolink_device_info_ctx_t* info = shared->isdu.device_info;
+    const iolink_device_info_ctx_t* info = shared->b_isdu.device_info;
     return (info != NULL) && (info->configured != NULL);
 }
 

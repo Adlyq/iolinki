@@ -55,7 +55,7 @@ static inline iolink_dll_shared_t* test_dll_shared(iolink_device_ctx_t* ctx)
 /** @brief 内嵌的 ISDU 上下文。 */
 static inline iolink_isdu_ctx_t* test_dll_isdu(iolink_device_ctx_t* ctx)
 {
-    return &ctx->dll.main.shared.isdu;
+    return &ctx->dll.main.shared.b_isdu;
 }
 
 /** @brief 主上下文发布一次 PD-in（与 `device.c` 同一个发布字）。 */

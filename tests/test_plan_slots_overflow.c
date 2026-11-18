@@ -34,7 +34,7 @@ static void test_plan_slot_overflow_is_counted(void** state)
     (void) memset(&ctx, 0, sizeof(ctx));
     iolink_dll_init(&ctx.main, &ctx.isr, &s_phy);
 
-    ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
+    ctx.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
     ctx.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
     ctx.main.shared.c_od_width = 2U;
     iolink_dll_publish_reply_plans(&ctx.main);

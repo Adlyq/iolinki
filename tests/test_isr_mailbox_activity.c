@@ -60,11 +60,11 @@ static int run_all(void)
     iolink_dll_init(&ctx.main, &ctx.isr, &phy);
     ctx.main.shared.c_clock.time_us = test_time_us;
 
-    ctx.main.shared.state = IOLINK_DLL_STATE_ESTAB_COM;
+    ctx.main.shared.b_state = IOLINK_DLL_STATE_ESTAB_COM;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.main.enforce_timing = false;
     now_us = 1000000U;
-    ctx.main.shared.last_activity_ms = ((uint32_t) (now_us / 1000U));
+    ctx.main.shared.b_last_activity_ms = ((uint32_t) (now_us / 1000U));
 
     uint8_t frame[2];
     make_type0_frame(0x80U, frame); /* Type-0 READ */
@@ -77,8 +77,8 @@ static int run_all(void)
 
         /* 邮箱帧属于活跃流量：它不得触发空闲计时器。
            显式检查保证在设置 NDEBUG 时该测试仍然有效。 */
-        if ((ctx.main.shared.timeout_errors != 0U) ||
-            (ctx.main.shared.state == IOLINK_DLL_STATE_STARTUP)) {
+        if ((ctx.main.shared.b_timeout_errors != 0U) ||
+            (ctx.main.shared.b_state == IOLINK_DLL_STATE_STARTUP)) {
             return 1;
         }
     }
