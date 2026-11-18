@@ -13,7 +13,7 @@ This document defines the coding style and engineering practices for the `iolink
 - **Functions**: `snake_case` (e.g., `iolink_dll_process`).
 - **Variables**: `snake_case`. Private/local variables do not require the prefix.
 - **Types**: `snake_case` with `_t` suffix (e.g., `iolink_dll_ctx_t`).
-- **Macros**: `UPPER_SNAKE_CASE` (e.g., `IOLINK_MAX_PAYLOAD`).
+- **Macros**: `UPPER_SNAKE_CASE` (e.g., `IOLINK_PD_IN_MAX_SIZE`).
 
 ## 3. Documentation
 - **Tool**: Doxygen.
