@@ -647,6 +647,11 @@ bool iolink_events_pop(iolink_events_ctx_t* ctx, iolink_event_t* event)
         if (ctx->count == 0U) {
             /* 即使应用通过 pop() 排空队列而不是确认事件存储器，
                也保持 flag == (count > 0)。 */
+            /* 无锁：队列、`flag` 与映像都由主上下文写；数据 ISR 只读
+               `flag`/`count` 与已发布的映像。因此顺序固定为“先归零计数 →
+               再落 flag → 最后发布一张空映像”：ISR 的 `flag && count > 0`
+               判据只会得到“无事件”，绝不会看到“有事件但槽位已空”，也不会
+               读到半清映像。顺序颠倒会让 ISR 在两级之间读到旧一代。 */
             ctx->flag = false;
             ctx->frozen = false;
             ctx->frozen_slots = 0U;

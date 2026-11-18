@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Tests (the event queue drain ordering is pinned)
+- `iolink_events_pop()` documents why it drains the queue without a lock
+  (`count` → `flag` → empty image) and `tests/test_events.c` pins that draining
+  to empty withdraws the published Table 58 image and keeps
+  `flag == (count > 0)` after every pop.
+
 ### Changed (the error-counter reset only locks the SPLIT counters)
 - `iolink_dll_reset_error_counters()` no longer takes a critical section in the
   default `IOLINK_STATS_MODE=SHARED` build: clearing the counters while the ISR
