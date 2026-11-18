@@ -213,7 +213,7 @@ static void test_master_lost_waits_for_known_cycle_time(void** state)
     g_now_ms = 10U;
     iolink_device_process(&dev.ctx);
     assert_false(iolink_device_master_lost(&dev.ctx));
-    assert_false(iolink_dll_timer_armed(test_dll(&dev.ctx), IOLINK_TIMER_MASTER_LOST));
+    assert_false(dll_timer_armed(test_dll(&dev.ctx), IOLINK_TIMER_MASTER_LOST));
 
     /* 周期时间可知后重新武装：同一轮即可判定（此处已错过 5 个周期）。 */
     test_dll(&dev.ctx)->min_cycle_time_us = 2000U;

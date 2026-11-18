@@ -228,16 +228,6 @@ bool dll_timer_due(const iolink_dll_main_t* ctx, iolink_timer_id_t id, uint64_t 
     return (deadline != 0U) && dll_time_reached(now_us, deadline);
 }
 
-uint64_t iolink_dll_timer_deadline(const iolink_dll_main_t* ctx, iolink_timer_id_t id)
-{
-    return dll_timer_deadline(ctx, id);
-}
-
-bool iolink_dll_timer_armed(const iolink_dll_main_t* ctx, iolink_timer_id_t id)
-{
-    return dll_timer_armed(ctx, id);
-}
-
 const iolink_timer_contract_t* iolink_dll_timer_contract(uint8_t* IOLINK_NULLABLE count)
 {
     if (count != NULL) {

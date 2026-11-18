@@ -1093,9 +1093,11 @@ DLL 时还要自行负责事件/ISDU/DS 集成。统计字段与 `iolink_dll_get
 
 `dll.h` 的公共入口按头文件的非空契约接收上下文：传 NULL 是调用方错误，不会被当作
 "取默认值"或静默忽略（只有显式声明为 `IOLINK_NULLABLE` 的参数按其自身语义处理）。
-只供库内与测试观测的入口 —— `iolink_dll_timer_deadline()`、`iolink_dll_timer_armed()`、
-`iolink_dll_expected_req_len()` 与 `iolink_dll_request_back_to_box()` —— 声明在
-`include/iolinki/internal/wiring.h`，不属于公开面。
+只供库内与测试观测的入口 —— `iolink_dll_expected_req_len()` 与
+`iolink_dll_request_back_to_box()` —— 声明在
+`include/iolinki/internal/wiring.h`，不属于公开面。定时表查询只有内部实现
+`dll_timer_deadline()` / `dll_timer_armed()`（`dll_main.h`），没有第二套
+`iolink_dll_*` 别名。
 
 ### 11.2 收发器、PHY 模板与常量头
 

@@ -918,12 +918,12 @@ static int test_type0_commands_fast_path(void)
 #endif
     if ((dll.main.shared.state != IOLINK_DLL_STATE_FALLBACK) || (tx_observed_len() != 1U) ||
         (dll.main.shared.isr_fallback_pending == 0U) ||
-        iolink_dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD)) {
+        dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD)) {
         return 3;
     }
     iolink_dll_process(&dll.main);
     if ((dll.main.shared.isr_fallback_pending != 0U) ||
-        !iolink_dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD)) {
+        !dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD)) {
         return 5;
     }
 
@@ -969,12 +969,12 @@ static int test_fallback_clear_is_staged(void)
     feed_chk(frame, 3U);
     iolink_dll_process_isr(&dll.main.shared);
 
-    if ((iolink_dll_timer_deadline(&dll.main, IOLINK_TIMER_T_FBD) != 0x0000000123456789ULL) ||
+    if ((dll_timer_deadline(&dll.main, IOLINK_TIMER_T_FBD) != 0x0000000123456789ULL) ||
         (dll.main.shared.fallback_clear_request == 0U)) {
         return 1; /* ISR 触碰了该 64 位字段 */
     }
     iolink_dll_process(&dll.main);
-    if (iolink_dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD) ||
+    if (dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD) ||
         (dll.main.shared.fallback_clear_request != 0U)) {
         return 2; /* 主泵未实施已暂存的清除 */
     }

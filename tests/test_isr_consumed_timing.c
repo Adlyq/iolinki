@@ -327,11 +327,10 @@ static int run_all(void)
     if (s_dll.main.last_response_us != t0) {
         return 4; /* 32 位截断会破坏高 32 位 */
     }
-    if (iolink_dll_timer_deadline(&s_dll.main, IOLINK_TIMER_T_CYCLE) != (t0 + 1000U)) {
+    if (dll_timer_deadline(&s_dll.main, IOLINK_TIMER_T_CYCLE) != (t0 + 1000U)) {
         return 5;
     }
-    if (iolink_dll_timer_deadline(&s_dll.main, IOLINK_TIMER_T_REN) !=
-        (t0 + (uint64_t) IOLINK_T_REN_US)) {
+    if (dll_timer_deadline(&s_dll.main, IOLINK_TIMER_T_REN) != (t0 + (uint64_t) IOLINK_T_REN_US)) {
         return 6;
     }
     if (s_dll.main.isr_consumed_seq_seen != s_dll.main.shared.isr_consumed_seq) {
@@ -356,7 +355,7 @@ static int run_all(void)
     if (s_dll.main.last_response_us != t1) {
         return 11;
     }
-    if (iolink_dll_timer_deadline(&s_dll.main, IOLINK_TIMER_T_CYCLE) != (t1 + 1000U)) {
+    if (dll_timer_deadline(&s_dll.main, IOLINK_TIMER_T_CYCLE) != (t1 + 1000U)) {
         return 12;
     }
 
@@ -374,7 +373,7 @@ static int run_all(void)
     if (s_dll.main.last_response_us != t2) {
         return 15;
     }
-    if (iolink_dll_timer_deadline(&s_dll.main, IOLINK_TIMER_T_CYCLE) != (t2 + 1000U)) {
+    if (dll_timer_deadline(&s_dll.main, IOLINK_TIMER_T_CYCLE) != (t2 + 1000U)) {
         return 16;
     }
 
@@ -390,7 +389,7 @@ static int run_all(void)
     if (s_dll.main.t_cycle_violations != 0U) {
         return 18;
     }
-    if (iolink_dll_timer_armed(&s_dll.main, IOLINK_TIMER_T_CYCLE)) {
+    if (dll_timer_armed(&s_dll.main, IOLINK_TIMER_T_CYCLE)) {
         return 19;
     }
     if (s_dll.main.last_response_us != (t2 + 100U)) {

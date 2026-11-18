@@ -93,8 +93,8 @@ static void test_next_deadline_is_minimum(void** state)
     dll_timer_arm(&ctx.main, IOLINK_TIMER_T_REN, 1U);
     dll_timer_arm(&ctx.main, IOLINK_TIMER_T_CYCLE, 2U);
     assert_int_equal(ctx.main.next_deadline, 0U);
-    assert_true(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_T_REN));
-    assert_true(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_T_CYCLE));
+    assert_true(dll_timer_armed(&ctx.main, IOLINK_TIMER_T_REN));
+    assert_true(dll_timer_armed(&ctx.main, IOLINK_TIMER_T_CYCLE));
 }
 
 /* 所有跨回绕比较只有一处实现。 */
@@ -176,9 +176,9 @@ static void test_same_instant_priority(void** state)
     assert_int_equal(ctx.main.idle_timeouts, 1U);
     assert_int_equal(ctx.main.shared.state, IOLINK_DLL_STATE_STARTUP);
     assert_int_equal(ctx.main.phy_mode, IOLINK_PHY_MODE_SIO);
-    assert_false(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_MASTER_LOST));
-    assert_false(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
-    assert_false(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_T_FBD));
+    assert_false(dll_timer_armed(&ctx.main, IOLINK_TIMER_MASTER_LOST));
+    assert_false(dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
+    assert_false(dll_timer_armed(&ctx.main, IOLINK_TIMER_T_FBD));
     /* 门控窗口不参与轮询：t_PD 已过期（关闭），但仍保留其绝对时间。 */
     assert_int_equal(ctx.main.next_deadline, 0U);
 }
@@ -196,38 +196,38 @@ static void test_t_byte_rearm_and_cancel(void** state)
     ctx.main.shared.last_byte_us = (uint32_t) g_now;
 
     iolink_dll_process(&ctx.main);
-    const uint64_t deadline = iolink_dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_BYTE);
+    const uint64_t deadline = dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_BYTE);
     assert_int_equal(deadline, g_now + 1001U); /* 严格 > limit */
 
     /* 新字节：截止时间随 last_byte 推进（同一 limit）。 */
     g_now += 400U;
     ctx.main.shared.last_byte_us = (uint32_t) g_now;
     iolink_dll_process(&ctx.main);
-    const uint64_t advanced = iolink_dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_BYTE);
+    const uint64_t advanced = dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_BYTE);
     assert_int_equal(advanced, g_now + 1001U);
     assert_true(advanced > deadline);
 
     g_now = advanced - 1U;
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.t_byte_violations, 0U);
-    assert_true(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_T_BYTE));
+    assert_true(dll_timer_armed(&ctx.main, IOLINK_TIMER_T_BYTE));
 
     g_now = advanced;
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.t_byte_violations, 1U);
     assert_int_equal(ctx.main.frame_index, 0U);
-    assert_false(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_T_BYTE));
+    assert_false(dll_timer_armed(&ctx.main, IOLINK_TIMER_T_BYTE));
 
     /* 帧结束后重新开始组装：再次装载。 */
     ctx.main.frame_index = 1U;
     ctx.main.shared.last_byte_us = (uint32_t) g_now;
     iolink_dll_process(&ctx.main);
-    assert_true(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_T_BYTE));
+    assert_true(dll_timer_armed(&ctx.main, IOLINK_TIMER_T_BYTE));
 
     /* 帧结束（frame_index = 0）取消。 */
     ctx.main.frame_index = 0U;
     iolink_dll_process(&ctx.main);
-    assert_false(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_T_BYTE));
+    assert_false(dll_timer_armed(&ctx.main, IOLINK_TIMER_T_BYTE));
 }
 
 /* t_PD 保护窗口：窗口内到达的帧被丢弃并计入 t_pd_violations，
@@ -303,7 +303,7 @@ static void test_millisecond_wrap(void** state)
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.idle_timeouts, 1U);
     assert_true(ctx.main.master_lost);
-    assert_false(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_MASTER_LOST));
+    assert_false(dll_timer_armed(&ctx.main, IOLINK_TIMER_MASTER_LOST));
 }
 
 /* 1 s 空闲诊断的 1 ms 边界：elapsed == 1000 差 1 ms，1001 立即到期。 */
@@ -319,21 +319,21 @@ static void test_idle_deadline_boundary(void** state)
 
     ctx.main.shared.last_activity_ms = (uint32_t) (g_now / 1000U) - 1000U;
     iolink_dll_process(&ctx.main);
-    assert_int_equal(iolink_dll_timer_deadline(&ctx.main, IOLINK_TIMER_IDLE), g_now + 1000U);
-    assert_true(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
+    assert_int_equal(dll_timer_deadline(&ctx.main, IOLINK_TIMER_IDLE), g_now + 1000U);
+    assert_true(dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
     assert_int_equal(ctx.main.idle_timeouts, 0U);
 
     g_now += 1000U;
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.idle_timeouts, 1U);
-    assert_false(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
+    assert_false(dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
 
     /* 更长的静默（2 s）同样必须判为过期；把截止时间算成"未来"的实现
      * 会在这里漏掉。 */
     ctx.main.shared.last_activity_ms = (uint32_t) (g_now / 1000U) - 2000U;
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.idle_timeouts, 2U);
-    assert_false(iolink_dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
+    assert_false(dll_timer_armed(&ctx.main, IOLINK_TIMER_IDLE));
 }
 
 int main(void)
