@@ -36,6 +36,49 @@ IOLINK_ASSUME_NONNULL_BEGIN
 /** @} */
 
 /**
+ * @defgroup iolinki_protocol_timing 物理层与周期时间常量
+ * @ingroup iolinki_protocol
+ * @brief Annex A.3、Table 43 与 Table B.3 的位时间、T_FBD 与 MinCycleTime 构成。
+ *
+ * MinCycleTime 的估算只由这里的基本位成本推导，公式见
+ * `iolink_dll_compute_min_cycle_time()`：请求八位组按 11 + t1(max) 位、
+ * 应答八位组按 11 + t2(max) 位、再加与八位组数无关的固定项
+ * t_A(max) - t1(max) - t2(max)。
+ * @{
+ */
+/** @brief 一个 UART 帧的位数：起始位 + 8 数据位 + 奇偶位 + 停止位（A.3.6）。 */
+#define IOLINK_UART_FRAME_BITS 11U
+/** @brief t1 的上限：主站两个 UART 帧之间的延迟（A.3.3，0..1 T_BIT）。 */
+#define IOLINK_T1_MAX_BITS 1U
+/** @brief t2 的上限：设备两个 UART 帧之间的延迟（A.3.4，0..3 T_BIT）。 */
+#define IOLINK_T2_MAX_BITS 3U
+/** @brief t_A 的上限：设备应答延迟（A.3.5，1..10 T_BIT）。 */
+#define IOLINK_T_A_MAX_BITS 10U
+/** @brief MinCycleTime 中一个主站请求八位组的位成本：11 + t1(max)（A.3.6）。 */
+#define IOLINK_MSEQ_MASTER_OCTET_BITS (IOLINK_UART_FRAME_BITS + IOLINK_T1_MAX_BITS)
+/** @brief MinCycleTime 中一个设备应答八位组的位成本：11 + t2(max)（A.3.6）。 */
+#define IOLINK_MSEQ_DEVICE_OCTET_BITS (IOLINK_UART_FRAME_BITS + IOLINK_T2_MAX_BITS)
+/** @brief MinCycleTime 中与八位组数无关的固定项：t_A(max) - t1(max) - t2(max)（A.3.6）。 */
+#define IOLINK_MSEQ_TIMING_FIXED_BITS \
+    (IOLINK_T_A_MAX_BITS - IOLINK_T1_MAX_BITS - IOLINK_T2_MAX_BITS)
+/**
+ * @brief 帧内相邻 UART 帧之间的接收超时，单位位时间。
+ *
+ * 实现取值；Table 47 的 MaxUARTFrameTime 为 11 + t1(max) = 12 T_BIT，这里给出
+ * 更宽的接收窗口，不改变任何协议字段。
+ */
+#define IOLINK_T_BYTE_WINDOW_BITS 16U
+/** @brief T_FBD 的 MasterCycle 倍数（Table 43）。 */
+#define IOLINK_T_FBD_MASTER_CYCLES 3U
+/** @brief T_FBD 的上限，单位毫秒（Table 43）。 */
+#define IOLINK_T_FBD_MAX_MS 500U
+/** @brief MasterCycleTime/MinCycleTime 的时间单位：0.1 ms，以微秒表示（Table B.3）。 */
+#define IOLINK_CYCLE_TIME_UNIT_US 100U
+/** @brief MinCycleTime 的可表示下限，单位 0.1 ms（Table B.3：0.4 ms）。 */
+#define IOLINK_MIN_CYCLE_TIME_UNITS 4U
+/** @} */
+
+/**
  * @defgroup iolinki_protocol_mc Master Command（MC）定义
  * @ingroup iolinki_protocol
  * @{

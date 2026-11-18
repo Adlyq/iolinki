@@ -76,7 +76,8 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.main.shared.m_seq_type = (uint8_t) stack->m_seq_type;
     ctx->dll.main.shared.pd_in_len = stack->pd_in_len;
     ctx->dll.main.shared.pd_out_len_current = stack->pd_out_len;
-    ctx->dll.main.min_cycle_time_app_us = (uint32_t) stack->min_cycle_time * 100U;
+    ctx->dll.main.min_cycle_time_app_us =
+        (uint32_t) stack->min_cycle_time * IOLINK_CYCLE_TIME_UNIT_US;
     ctx->dll.main.master_lost_cycles = stack->master_lost_cycles;
     const uint32_t t_pd_us = stack->t_pd_us;
     if (t_pd_us > 0U) {
@@ -93,7 +94,7 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     /* 通告/实际提供的最小周期时间由实际的
      * M-sequence（PD/OD 长度与波特率）推导，并受应用下限约束。 */
     ctx->dll.main.min_cycle_time_us =
-        (uint32_t) iolink_dll_compute_min_cycle_time(&ctx->dll.main) * 100U;
+        (uint32_t) iolink_dll_compute_min_cycle_time(&ctx->dll.main) * IOLINK_CYCLE_TIME_UNIT_US;
 
     /* 时序强制的默认值来自构建档位，栈配置可以显式覆盖。 */
     if (stack->timing_enforce == IOLINK_STACK_TIMING_ENFORCE) {
