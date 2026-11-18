@@ -618,23 +618,30 @@ DS 的语义是**对象字典的投影**：参数集合就是标准表与应用�
 
 <!-- BEGIN GENERATED: device_error_codes (tools/gen_docs.py) -->
 ```c
-typedef enum {
-    IOLINK_DEVICE_INIT_OK = 0,
-    IOLINK_DEVICE_INIT_ERR_NULL = -1,
-    IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE = -2,
-    IOLINK_DEVICE_INIT_ERR_PD_IN_LEN = -3,
-    IOLINK_DEVICE_INIT_ERR_PD_OUT_LEN = -4,
-    IOLINK_DEVICE_INIT_ERR_OD_WIDTH = -5,
-    IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6,
-    IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -7,
-    IOLINK_DEVICE_INIT_ERR_TIME = -8,       /* time_us 为 NULL */
-    IOLINK_DEVICE_INIT_ERR_CRITICAL = -9,   /* 仍在使用 weak 临界区默认实现 */
-    IOLINK_DEVICE_INIT_ERR_PD_INPUT = -10,  /* 回调路径上调用轮询更新 */
-    IOLINK_DEVICE_INIT_ERR_PHY = -11,       /* PHY 能力组合不可满足（如缺 request_service/tx_busy）或 init 失败 */
-    IOLINK_DEVICE_INIT_ERR_WORKSPACE = -12, /* IOLINK_WORKSPACE_EMBEDDED=0 且没有工作区 */
-    IOLINK_DEVICE_INIT_ERR_OD = -13,        /* 应用对象字典表存在未定义/自相矛盾配置 */
-    IOLINK_DEVICE_INIT_ERR_APP = -14,       /* config.app == NULL（缺少应用 trait） */
-    IOLINK_DEVICE_INIT_ERR_DEVICE_INFO = -15, /* config.device_info == NULL（设备没有默认身份） */
+typedef enum
+{
+    IOLINK_DEVICE_INIT_OK = 0,               /**< 初始化成功 */
+    IOLINK_DEVICE_INIT_ERR_NULL = -1,        /**< ctx、config、phy 或 stack 为 NULL */
+    IOLINK_DEVICE_INIT_ERR_MSEQ_TYPE = -2,   /**< m_seq_type 不是有效类型 */
+    IOLINK_DEVICE_INIT_ERR_PD_IN_LEN = -3,   /**< pd_in_len 超出缓冲区 */
+    IOLINK_DEVICE_INIT_ERR_PD_OUT_LEN = -4,  /**< pd_out_len 超出缓冲区 */
+    IOLINK_DEVICE_INIT_ERR_OD_WIDTH = -5,    /**< od_width 不是 1/2/8/32 */
+    IOLINK_DEVICE_INIT_ERR_OD_CAPACITY = -6, /**< od_width 超出 IOLINK_OD_MAX_SIZE */
+    IOLINK_DEVICE_INIT_ERR_MSEQ_LAYOUT = -7, /**< PD/OD 长度与 M-sequence 类型不兼容 */
+    IOLINK_DEVICE_INIT_ERR_TIME = -8,        /**< time_us 回调为 NULL */
+    IOLINK_DEVICE_INIT_ERR_CRITICAL = -9,    /**< 平台临界区为弱默认实现 */
+    IOLINK_DEVICE_INIT_ERR_PD_INPUT =
+        -10, /**< PD 回调路径与轮询调用混用（能力位已置位时调用轮询 API） */
+    IOLINK_DEVICE_INIT_ERR_PHY =
+        -11, /**< PHY 能力组合不可满足（例如要求 ISR 发送却没有 `request_service`，
+                  ISR/SMP 档有 TX 能力却没有 `request_service`，或构建承诺
+                  `tx_busy` 却缺少该钩子），或 PHY `init` 失败
+                  （原始驱动码见 iolink_device_get_phy_error()） */
+    IOLINK_DEVICE_INIT_ERR_WORKSPACE = -12, /**< `IOLINK_WORKSPACE_EMBEDDED=0` 但没有提供工作区 */
+    IOLINK_DEVICE_INIT_ERR_OD = -13,        /**< 应用对象字典表存在未定义/自相矛盾的配置 */
+    IOLINK_DEVICE_INIT_ERR_APP = -14,       /**< 未提供应用 trait（`config->app == NULL`） */
+    IOLINK_DEVICE_INIT_ERR_DEVICE_INFO =
+        -15, /**< 未提供设备身份（`config->device_info == NULL`） */
 } iolink_device_init_result_t;
 ```
 <!-- END GENERATED -->
@@ -666,28 +673,28 @@ iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_main_t* ctx);
 
 <!-- BEGIN GENERATED: dll_stats (tools/gen_docs.py) -->
 | 字段 | 类型 | 含义 |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | `crc_errors` | `uint32_t` | 累计 CRC 错误数 |
-| `timeout_errors` | `uint32_t` | 累计超时数：数据 ISR 的 t_A 超时与主泵的 T_DSIO 超时 |
+| `timeout_errors` | `uint32_t` | 累计超时数 |
 | `framing_errors` | `uint32_t` | 累计成帧错误数 |
 | `timing_errors` | `uint32_t` | 累计定时违规次数 |
 | `t_ren_violations` | `uint32_t` | t_ren 违规次数 |
 | `t_cycle_violations` | `uint32_t` | t_cycle 违规次数 |
 | `t_byte_violations` | `uint32_t` | 字节间定时违规次数 |
 | `t_pd_violations` | `uint32_t` | t_pd 违规次数 |
-| `total_retries` | `uint32_t` | CRC/协议错误处理路径的自增计数（见下方说明） |
-| `voltage_faults` | `uint32_t` | 电压故障计数：`get_faults()` 路径按故障边沿计，旧路径按轮询周期计 |
-| `overtemp_faults` | `uint32_t` | 过温故障计数：`get_faults()` 路径按故障边沿计，旧路径恒为 0 |
-| `short_circuits` | `uint32_t` | 短路计数：`get_faults()` 路径按故障边沿计，旧路径按轮询周期计 |
-| `isr_tx_dropped` | `uint32_t` | 传输层无法发送的应答数（主上下文与数据 ISR 都计入） |
-| `idle_timeouts` | `uint32_t` | 1 s 空闲链路诊断次数（不是 t_A 超时） |
-| `isr_od_overruns` | `uint32_t` | 已收齐的 ISDU 写请求被新 START 覆盖的次数 |
-| `isr_plan_misses` | `uint32_t` | 未命中应答计划而被丢弃的合法帧数 |
-| `isr_mailbox_drops` | `uint32_t` | 因帧邮箱满而丢弃的帧数 |
-| `isr_frames_consumed` | `uint32_t` | 由数据 ISR 完全处理、不再进入邮箱的帧数 |
-| `isr_frames_handoff` | `uint32_t` | 成功交给主泵的帧数 |
-| `t_pd_discards` | `uint32_t` | t_PD 保护窗口内丢弃的邮箱帧数 |
-| `reply_plan_overflows` | `uint32_t` | 计划表中因槽位耗尽而未发布的条目数 |
+| `total_retries` | `uint32_t` | 累计重试次数 |
+| `voltage_faults` | `uint32_t` | 累计电压故障数（走 get_faults() 时按故障边沿计数，走旧路径时按轮询周期计数） |
+| `overtemp_faults` | `uint32_t` | 累计过温故障数（走 get_faults() 时按故障边沿计数，走旧路径时为 0） |
+| `short_circuits` | `uint32_t` | 累计短路次数（走 get_faults() 时按故障边沿计数，走旧路径时按轮询周期计数） |
+| `isr_tx_dropped` | `uint32_t` | 传输层无法发送的应答（主上下文与 ISR） |
+| `idle_timeouts` | `uint32_t` | 1 s 空闲链路诊断（不是 t_A 超时） |
+| `isr_od_overruns` | `uint32_t` | 已收齐的写请求被新 START 覆盖的次数（ISDU 引擎的 `req_overruns`） |
+| `isr_plan_misses` | `uint32_t` | 未命中应答计划而被丢弃的合法帧 |
+| `isr_mailbox_drops` | `uint32_t` | 因帧邮箱满而丢弃的帧 |
+| `isr_frames_consumed` | `uint32_t` | 由 ISR 完全处理、不再进入邮箱的帧 |
+| `isr_frames_handoff` | `uint32_t` | 成功投递邮箱交给主泵的帧 |
+| `t_pd_discards` | `uint32_t` | 在 t_PD 保护窗口内丢弃的邮箱帧 |
+| `reply_plan_overflows` | `uint32_t` | 当前计划表中因槽位耗尽而未发布的条目数 |
 <!-- END GENERATED -->
 
 `total_retries` 不是独立的报文重试计数：CRC 校验失败时它与 `crc_errors` 同步自增
