@@ -344,16 +344,19 @@ fallback，必须提供工作区，否则初始化返回 `IOLINK_DEVICE_INIT_ERR
 ### 4.2 过程数据
 
 ```c
-int iolink_device_pd_input_update(iolink_device_ctx_t* ctx,
-                                  const uint8_t* data, size_t len, bool valid);
+iolink_device_pd_result_t iolink_device_pd_input_update(iolink_device_ctx_t* ctx,
+                                                        const uint8_t* data, size_t len,
+                                                        bool valid);
 int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx,
                                  uint8_t* data, size_t len);
 ```
 
 `pd_input_update()` 发布设备到主站的数据。`valid` 决定 CKS 中的 PD-invalid 位。
 PD 长度是初始化属性（`iolink_stack_config_t::pd_in_len`），运行期不可改变：
-@p len 必须等于配置的 PD-in 长度，否则返回 -1。
-参数非法或所有 PD-in 缓冲区都被 ISR 占用时返回负值。
+`len` 必须等于配置的 PD-in 长度，否则返回 `IOLINK_DEVICE_PD_ERR_LEN`。
+返回值是 `iolink_device_pd_result_t`：`IOLINK_DEVICE_PD_OK`、`_ERR_ARG`（ctx/data 为
+NULL）、`_ERR_MODE`（回调路径已生效）、`_ERR_LEN`、`_ERR_BUSY`（所有 PD-in 缓冲区
+都被 ISR 占用，并计入 `pd_in_skips`）。
 
 > **规范的宽度约束（V1.1.5 Table B.1 / A.14）**：DPP1 0x05/0x06 是只读字段，
 > `TYPE_2_V` 的 n/k 也是设备配置属性，由 DPP1 在启动阶段通告。因此 PD 宽度在
@@ -364,7 +367,7 @@ PD 长度是初始化属性（`iolink_stack_config_t::pd_in_len`），运行期�
 时置位 `IOLINK_CAP_PD_IN_CALLBACK`，DLL 每周期调用回调填充空闲缓冲区；为 NULL 时由
 `iolink_device_pd_input_update()` 轮询发布。`iolink_device_init()` 不检查两条路径是否同时
 提供，也不因混用而失败；回调路径生效后，轮询调用在运行期返回
-`IOLINK_DEVICE_INIT_ERR_PD_INPUT`（-10），避免线上 PD 在回调输出与调用方数据之间跳变。
+`IOLINK_DEVICE_PD_ERR_MODE`，避免线上 PD 在回调输出与调用方数据之间跳变。
 路径只由 `on_pd_input` 是否存在决定。
 
 `pd_output_read()` 最多复制 `len` 字节，并返回实际复制的字节数；参数非法时返回负值。
@@ -379,8 +382,9 @@ PD 长度是初始化属性（`iolink_stack_config_t::pd_in_len`），运行期�
 | --- | --- |
 | `on_startup(self)` | 进入 STARTUP。 |
 | `on_preoperate(self)`, `on_operate(self)` | 进入对应状态。 |
-| `on_pd_input(self, data, len)` | 提供时（非 NULL），每个 OPERATE 周期调用；填写一个 ISR 未占用的 PD-in 缓冲区，返回值作为 PD-valid 标志。未提供时改用 `iolink_device_pd_input_update()`。 |
-| `on_pd_output(self, data, len)` | 每个 OPERATE 周期调用，携带最新的主站输出数据。 |
+| `on_reset(self, type)` | SystemCommand 0x80/0x81 请求复位；`type` 为 `IOLINK_RESET_DEVICE` 或 `IOLINK_RESET_APPLICATION`。NULL = 不处理。 |
+| `on_pd_input(self, data)` | 提供时（非 NULL），每个 OPERATE 周期调用；填写一个 ISR 未占用的 PD-in 缓冲区（长度 = 配置的 `pd_in_len`），返回值作为 PD-valid 标志。未提供时改用 `iolink_device_pd_input_update()`。 |
+| `on_pd_output(self, data)` | 每个 OPERATE 周期调用，携带最新的主站输出数据（长度 = 配置的 `pd_out_len`）。 |
 | `on_state_change(self, state)` | 当前 DLL 状态（电平式）：状态变化时调用一次，主上下文迁移立即投递，ISR 期间的多次迁移合并为最终状态；例外是 ISR 进入 STARTUP 的复位迁移，会先于最终状态单独投递。 |
 | `on_master_lost(self)`, `on_master_online(self)` | 主站静默提示的边沿。 |
 
@@ -391,8 +395,6 @@ PD 长度是初始化属性（`iolink_stack_config_t::pd_in_len`），运行期�
 ### 4.4 复位与状态查询
 
 ```c
-void iolink_device_set_reset_handler(iolink_device_ctx_t* ctx,
-                                     iolink_reset_handler_t handler);
 iolink_dll_state_t iolink_device_get_state(const iolink_device_ctx_t* ctx);
 bool iolink_device_master_lost(const iolink_device_ctx_t* ctx);
 iolink_phy_mode_t iolink_device_get_phy_mode(const iolink_device_ctx_t* ctx);
@@ -404,9 +406,9 @@ void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx,
                                  iolink_dll_stats_t* out_stats);
 ```
 
-复位处理回调会收到 `IOLINK_RESET_DEVICE`（System Command 0x80）或
-`IOLINK_RESET_APPLICATION`（0x81）。本栈不会自行复位 MCU。`master_lost` 只是给应用的
-提示，不会改变 DLL 状态。
+复位通过 `iolink_device_app_t::on_reset(self, type)` 投递，回调收到
+`IOLINK_RESET_DEVICE`（System Command 0x80）或 `IOLINK_RESET_APPLICATION`（0x81）。
+本栈不会自行复位 MCU。`master_lost` 只是给应用的提示，不会改变 DLL 状态。
 
 `iolink_device_get_dll_stats()` 复制一份 `iolink_dll_stats_t` 快照。字段清单、类型与
 含义以 [API.md 的「DLL 统计（裸 DLL 集成）」](API.md) 为唯一出处，本文件不重复；
@@ -899,7 +901,7 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
    `iolink_device_process()`，并从数据中断调用 `iolink_device_process_isr()`。
 6. 选择一种 PD-in 来源：提供 `on_pd_input` 回调，或调用
    `iolink_device_pd_input_update()`。`iolink_device_init()` 不检查是否混用；回调路径
-   一旦生效，轮询调用在运行期返回 `IOLINK_DEVICE_INIT_ERR_PD_INPUT`。
+   一旦生效，轮询调用在运行期返回 `IOLINK_DEVICE_PD_ERR_MODE`。
 7. 为需要跨复位保留的参数加 `on_change`，由应用编码并写入自己的 NVM；启动时把
    保存的值恢复进应用变量并调用 `iolink_ds_refresh()`。`IOLINK_WORKSPACE_EMBEDDED=0`
    时还要提供 `iolink_workspace_t`。
@@ -923,10 +925,9 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 | `include/iolinki/device.h` | `iolink_device_get_phy_error` | 返回最近一次 `iolink_device_init()` 中 PHY `init` 回调的原始错误码 |
 | `include/iolinki/device.h` | `iolink_device_process` | 运行设备状态机的一次迭代（主循环） |
 | `include/iolinki/device.h` | `iolink_device_process_isr` | 双泵传输的 ISR 侧泵 |
-| `include/iolinki/device.h` | `iolink_device_pd_input_update` | 发布输入过程数据（设备 -> 主站）；回调路径生效时返回 PD_INPUT 错误码 |
+| `include/iolinki/device.h` | `iolink_device_pd_input_update` | 更新输入过程数据（设备 -> 主站）；回调路径生效时返回 `IOLINK_DEVICE_PD_ERR_MODE` |
 | `include/iolinki/device.h` | `iolink_device_capabilities` | 取本实例的能力位 |
 | `include/iolinki/device.h` | `iolink_device_pd_output_read` | 读取最新的输出过程数据（主站 -> 设备） |
-| `include/iolinki/device.h` | `iolink_device_set_reset_handler` | 注册在主站重置命令时调用的处理函数 |
 | `include/iolinki/device.h` | `iolink_device_get_events_ctx` | 获取事件处理上下文 |
 | `include/iolinki/device.h` | `iolink_device_get_ds_ctx` | 获取数据存储上下文 |
 | `include/iolinki/device.h` | `iolink_device_get_state` | 获取当前 DLL 状态 |
