@@ -140,25 +140,39 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
         ctx->frame_replied_by_isr = 0U;
         return;
     }
-    /* 应答开始边沿：关闭 t_A 软件镜像（PHY 的 response_timer_stop 另行停止）。 */
-    dll_timer_cancel(ctx, IOLINK_TIMER_T_A);
-    /* 数据 ISR 正在流式发送一帧应答：流式长度/CKS 只归 ISR，
-     * 此时暂存会在取走时替换在途帧。拒绝并计数，使丢弃可观测，
-     * 在途帧保持完整。 */
-    if (ctx->shared.isr_tx_active != 0U) {
-        ctx->shared.isr_tx_dropped++;
-        return;
-    }
     /* 仅主上下文槽位：ISR 有自己的槽位，因此该计数器只有
-     * 单个写者，无需读-改-写原子操作。 */
+     * 单个写者，无需读-改-写原子操作。槽内容在发布前写完。 */
     const uint8_t slot = ctx->isr_tx_next;
     ctx->isr_tx_next = (uint8_t) (ctx->isr_tx_next ^ 1U);
     (void) memcpy(ctx->shared.isr_tx_payload[slot], data, len);
-    ctx->shared.isr_tx_pending_slot = slot;
-    ctx->shared.stage_len = (uint8_t) len;
-    ctx->shared.stage_has_cks = 0U;
-    IOLINK_FENCE();                  /* 暂存字节先于发布 */
-    ctx->shared.isr_tx_pending = 1U; /* 最后发布 */
+
+    /* 检查“ISR 正在流式发送”与发布暂存必须对 ISR 是一次操作：
+     * 分开做时，ISR 可在检查之后启动即时应答，再由下一次取走把在途帧从
+     * 中间替换掉（在途帧因此丢掉后半段与 CKS）。SINGLE 档没有数据 ISR，
+     * 该检查不适用，由下面的直发分支结束上一帧。 */
+    bool rejected;
+    IOLINK_CRITICAL_ENTER();
+#if IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_ISR
+    rejected = (ctx->shared.isr_tx_active != 0U);
+#else
+    rejected = false;
+#endif
+    if (rejected) {
+        ctx->shared.isr_tx_dropped++;
+    }
+    else {
+        ctx->shared.isr_tx_pending_slot = slot;
+        ctx->shared.stage_len = (uint8_t) len;
+        ctx->shared.stage_has_cks = 0U;
+        IOLINK_FENCE();                  /* 暂存字节先于发布 */
+        ctx->shared.isr_tx_pending = 1U; /* 最后发布 */
+    }
+    IOLINK_CRITICAL_EXIT();
+    if (rejected) {
+        return;
+    }
+    /* 应答开始边沿：关闭 t_A 软件镜像（PHY 的 response_timer_stop 另行停止）。 */
+    dll_timer_cancel(ctx, IOLINK_TIMER_T_A);
 
     if (ctx->shared.phy->request_service != NULL) {
         /* 在发布之后、且在任何关中断窗口之外通知 PHY：
@@ -171,8 +185,15 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
 
 #if IOLINK_CONCURRENCY == IOLINK_CONCURRENCY_SINGLE
     /* SINGLE 档没有数据 ISR：主上下文是唯一发送者，只能自己驱动
-     * TX 钩子。暂存在发布之后由本上下文取走，不与其他上下文交错。 */
+     * TX 钩子。上一帧没有上下文可以推进它，因此先结束它再开始新帧，
+     * 否则 isr_tx_active 会永久保持。 */
     ctx->shared.isr_tx_pending = 0U;
+    if (ctx->shared.isr_tx_active != 0U) {
+        if (ctx->shared.phy->tx_done != NULL) {
+            ctx->shared.phy->tx_done(ctx->shared.phy->self);
+        }
+        ctx->shared.isr_tx_active = 0U;
+    }
     dll_isr_start_staged_tx(ctx, slot, (uint8_t) len, 0U);
 #else
     /* ISR/SMP 档没有 request_service()：暂存应答无人发送。

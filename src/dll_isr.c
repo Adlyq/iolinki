@@ -727,12 +727,26 @@ bool dll_isr_plan_execute(iolink_dll_main_t* ctx, const iolink_reply_plan_t* pla
 /** @brief 主上下文处理器暂存了一个逐字回复；现在发送它。 */
 static void dll_isr_tx_pending(iolink_dll_main_t* ctx)
 {
-    /* 取走暂存：{slot, len, has_cks} 由主泵在 isr_tx_pending 之前发布，
-     * 这里一次性搬进 ISR 独占的流式状态，再清标志并启动发送。 */
-    const uint8_t slot = ctx->shared.isr_tx_pending_slot;
-    const uint8_t len = ctx->shared.stage_len;
-    const uint8_t has_cks = ctx->shared.stage_has_cks;
+    /* 取走暂存必须与主泵的发布互斥：三字段分读时，主泵的新一轮暂存会让
+     * 这里拿到撕裂的 {slot, len, has_cks}，或把新发布连同 pending 一起吞掉。
+     * 在途帧仍在流式发送时丢弃本次暂存：接受它会从中间替换掉主站正在等的
+     * 那一帧（后半段与 CKS 永不发出）。 */
+    IOLINK_CRITICAL_ENTER();
+    const bool busy = (ctx->shared.isr_tx_active != 0U);
+    uint8_t slot = 0U;
+    uint8_t len = 0U;
+    uint8_t has_cks = 0U;
+    if (!busy) {
+        slot = ctx->shared.isr_tx_pending_slot;
+        len = ctx->shared.stage_len;
+        has_cks = ctx->shared.stage_has_cks;
+    }
     ctx->shared.isr_tx_pending = 0U;
+    IOLINK_CRITICAL_EXIT();
+    if (busy) {
+        IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
+        return;
+    }
     if (ctx->shared.phy->response_timer_stop != NULL) {
         ctx->shared.phy->response_timer_stop(ctx->shared.phy->self);
     }
