@@ -51,33 +51,33 @@ struct iolink_dll_shared
      * iolink_dll_publish_reply_plans）写入，此后主上下文与数据 ISR 都只读。
      * ===================================================================== */
 
-    iolink_dll_isr_t* isr; /**< 组装箱绑定：ISR 独占状态（不透明指针，主上下文无法解引用） */
+    iolink_dll_isr_t* c_isr; /**< 组装箱绑定：ISR 独占状态（不透明指针，主上下文无法解引用） */
 
-    const iolink_phy_api_t* phy; /**< 已绑定的 PHY API 实现 */
+    const iolink_phy_api_t* c_phy; /**< 已绑定的 PHY API 实现 */
 
     /* 实例能力位。iolink_caps_resolve() 在 init 时一次性解析；
      * 主上下文与 ISR 都只读它（位掩码是自然对齐的单字加载）。 */
-    iolink_caps_t caps;
+    iolink_caps_t c_caps;
 
     /* 应用时钟，来自 iolink_device_app_t::time_us。DLL 与
      * 事件引擎的每个时间戳都使用它。数据 ISR 会读取它，因此
      * 该回调必须是单调的且 ISR 安全的。未绑定时钟的裸 DLL
      * 上下文读取到的时间为 0。 */
-    iolink_clock_t clock;
+    iolink_clock_t c_clock;
 
-    uint8_t m_seq_type; /**< 支持的 M 序列类型 */
+    uint8_t c_m_seq_type; /**< 支持的 M 序列类型 */
 
-    uint8_t pd_in_len; /**< 输入过程数据长度（初始化时固定） */
+    uint8_t c_pd_in_len; /**< 输入过程数据长度（初始化时固定） */
 
-    uint8_t od_width; /**< OPERATE 的 OD 宽度 m（Table A.10）。某帧
+    uint8_t c_od_width; /**< OPERATE 的 OD 宽度 m（Table A.10）。某帧
                            是否携带 OD 由每帧的 MC R/W 位决定
                            （Figure A.14）：WRITE 请求在 PD-out 之后
                            携带 OD，READ 应答在 PD-in 之前携带 OD，
                            反方向则不携带。 */
 
-    uint8_t pd_out_len_current; /**< 初始化时固定的 PD_Out 长度 */
+    uint8_t c_pd_out_len_current; /**< 初始化时固定的 PD_Out 长度 */
 
-    uint32_t min_cycle_time_app_us; /**< 周期时间的应用层下限 */
+    uint32_t c_min_cycle_time_app_us; /**< 周期时间的应用层下限 */
 
     /**
      * @name 应答计划表（初始化时单次写入 / ISR 只读）
@@ -90,13 +90,13 @@ struct iolink_dll_shared
      * 需要序号校验。
      * @{
      */
-    volatile IOLINK_ATOMIC_UINT_T reply_plans_ready;         /**< 计划表已完整发布 */
-    uint8_t reply_plan_off[IOLINK_PLAN_SLOT_COUNT];          /**< 每状态切片起点 */
-    uint8_t reply_plan_cnt[IOLINK_PLAN_SLOT_COUNT];          /**< 每状态切片长度 */
-    iolink_reply_plan_t reply_plan[IOLINK_REPLY_PLAN_SLOTS]; /**< 计划槽位 */
+    volatile IOLINK_ATOMIC_UINT_T c_reply_plans_ready;         /**< 计划表已完整发布 */
+    uint8_t c_reply_plan_off[IOLINK_PLAN_SLOT_COUNT];          /**< 每状态切片起点 */
+    uint8_t c_reply_plan_cnt[IOLINK_PLAN_SLOT_COUNT];          /**< 每状态切片长度 */
+    iolink_reply_plan_t c_reply_plan[IOLINK_REPLY_PLAN_SLOTS]; /**< 计划槽位 */
     /** @} */
 
-    iolink_log_sink_t log; /**< 日志汇点（默认静默；设备层绑定） */
+    iolink_log_sink_t c_log; /**< 日志汇点（默认静默；设备层绑定） */
 
     /* =====================================================================
      * 区域 2：main -> ISR（m_）
@@ -372,23 +372,23 @@ static inline void dll_pd_publish(iolink_dll_shared_t* shared, uint8_t active, b
  * @brief PHY 传输能力辅助函数。
  *
  * 本库只有一条传输路径（ISR 分发泵）。PHY 的实际能力在 init 时由
- * `iolink_caps_resolve()` 解析成 `ctx->caps`（见 capability.h），这里
+ * `iolink_caps_resolve()` 解析成 `ctx->c_caps`（见 capability.h），这里
  * 只做薄委托：能力判定点唯一，且本文件不再出现 vtable 形状相关的
  * `#if`。
  */
 static inline bool dll_phy_has_rx(const iolink_dll_shared_t* ctx)
 {
-    return (ctx != NULL) && iolink_caps_has(ctx->caps, IOLINK_CAP_RX);
+    return (ctx != NULL) && iolink_caps_has(ctx->c_caps, IOLINK_CAP_RX);
 }
 
 static inline bool dll_phy_has_tx(const iolink_dll_shared_t* ctx)
 {
-    return (ctx != NULL) && iolink_caps_has(ctx->caps, IOLINK_CAP_TX);
+    return (ctx != NULL) && iolink_caps_has(ctx->c_caps, IOLINK_CAP_TX);
 }
 
 static inline bool dll_phy_has_wakeup(const iolink_dll_shared_t* ctx)
 {
-    return (ctx != NULL) && iolink_caps_has(ctx->caps, IOLINK_CAP_WAKEUP);
+    return (ctx != NULL) && iolink_caps_has(ctx->c_caps, IOLINK_CAP_WAKEUP);
 }
 
 static inline int dll_phy_detect_wakeup(iolink_dll_shared_t* ctx)
@@ -396,7 +396,7 @@ static inline int dll_phy_detect_wakeup(iolink_dll_shared_t* ctx)
     if (!dll_phy_has_wakeup(ctx)) {
         return 0;
     }
-    return ctx->phy->detect_wakeup(ctx->phy->self);
+    return ctx->c_phy->detect_wakeup(ctx->c_phy->self);
 }
 
 IOLINK_ASSUME_NONNULL_END

@@ -52,7 +52,7 @@ static void test_config_defaults(void** state)
     assert_true(IOLINK_MBX_SLOTS == 4);
     assert_true(IOLINK_REPLY_PLAN_SLOTS == 48);
     assert_true(sizeof(dll->isr_frame_slot) / sizeof(dll->isr_frame_slot[0]) == IOLINK_MBX_SLOTS);
-    assert_true(sizeof(dll->shared.reply_plan) / sizeof(dll->shared.reply_plan[0]) ==
+    assert_true(sizeof(dll->shared.c_reply_plan) / sizeof(dll->shared.c_reply_plan[0]) ==
                 IOLINK_REPLY_PLAN_SLOTS);
     assert_true(sizeof(dll->shared.isr_tx_payload) / sizeof(dll->shared.isr_tx_payload[0]) ==
                 IOLINK_TX_SLOTS);

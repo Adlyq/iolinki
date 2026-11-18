@@ -31,11 +31,11 @@ static void init_dll(iolink_dll_ctx_t* dll, iolink_m_seq_type_t type, uint8_t od
     /* 这些辅助函数是纯函数/只读的：不会产生 PHY 通信，因此仅需一个绑定了 PHY
      * 的空上下文即可（避免 CMocka 的期望设置）。 */
     (void) memset(dll, 0, sizeof(*dll));
-    dll->main.shared.phy = &g_phy_mock;
-    dll->main.shared.m_seq_type = (uint8_t) type;
-    dll->main.shared.od_width = od_width;
-    dll->main.shared.pd_in_len = pd_in;
-    dll->main.shared.pd_out_len_current = pd_out;
+    dll->main.shared.c_phy = &g_phy_mock;
+    dll->main.shared.c_m_seq_type = (uint8_t) type;
+    dll->main.shared.c_od_width = od_width;
+    dll->main.shared.c_pd_in_len = pd_in;
+    dll->main.shared.c_pd_out_len_current = pd_out;
 }
 
 /* Type 0（STARTUP/PREOPERATE）请求长度：Figure A.5。 */
@@ -94,14 +94,14 @@ static void test_expected_req_len_operate(void** state)
     assert_int_equal(iolink_dll_expected_req_len(&dll.main, 0x80U), 2U);
 }
 
-/* 未调用 iolink_dll_init() 时 shared.isr 为 NULL；所有 ISR 入口必须安全返回，
+/* 未调用 iolink_dll_init() 时 shared.c_isr 为 NULL；所有 ISR 入口必须安全返回，
  * 而不是在中断上下文里解引用空指针。 */
 static void test_isr_entries_without_binding_are_safe(void** state)
 {
     (void) state;
     iolink_dll_ctx_t dll;
     (void) memset(&dll, 0, sizeof(dll));
-    dll.main.shared.phy = &g_phy_mock;
+    dll.main.shared.c_phy = &g_phy_mock;
 
     iolink_dll_process_isr(&dll.main.shared);
     iolink_dll_on_rx_timeout(&dll.main.shared);

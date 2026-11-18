@@ -539,12 +539,12 @@ static void test_isdu_pdin_descriptor_read(void** state)
 
     /* 连接一个 PD-in 长度为 3 的 DLL 上下文（长度是初始化属性，
      * 0x0028 必须在该长度下提供过程数据）。 */
-    dll.shared.pd_in_len = 3U;
-    dll.shared.pd_out_len_current = 0U;
+    dll.shared.c_pd_in_len = 3U;
+    dll.shared.c_pd_out_len_current = 0U;
     test_pd_publish(&dll, 0U, true);
-    dll.shared.pd_in[0][dll.shared.od_width + 0U] = 0x11U;
-    dll.shared.pd_in[0][dll.shared.od_width + 1U] = 0x22U;
-    dll.shared.pd_in[0][dll.shared.od_width + 2U] = 0x33U;
+    dll.shared.pd_in[0][dll.shared.c_od_width + 0U] = 0x11U;
+    dll.shared.pd_in[0][dll.shared.c_od_width + 1U] = 0x22U;
+    dll.shared.pd_in[0][dll.shared.c_od_width + 2U] = 0x33U;
     ctx.dll_ctx = &dll;
 
     /* Table B.8/B.2.23：读操作返回运行时的 PD-in 数据（3 个八位组）。 */
@@ -1047,9 +1047,9 @@ static uint8_t page1_octet3(uint8_t m_seq_type, uint8_t pd_in, uint8_t pd_out)
     iolink_isdu_ctx_t ctx;
     iolink_dll_main_t dll;
     (void) memset(&dll, 0, sizeof(dll));
-    dll.shared.m_seq_type = m_seq_type;
-    dll.shared.pd_in_len = pd_in;
-    dll.shared.pd_out_len_current = pd_out;
+    dll.shared.c_m_seq_type = m_seq_type;
+    dll.shared.c_pd_in_len = pd_in;
+    dll.shared.c_pd_out_len_current = pd_out;
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     ctx.dll_ctx = &dll;
@@ -1082,13 +1082,13 @@ static void test_isdu_dp_page1_image_octets(void** state)
     uint8_t isdu_page[16];
 
     (void) memset(&dll, 0, sizeof(dll));
-    dll.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
-    dll.shared.od_width = 1U; /* TYPE_2_1 的 Annex A 固定布局 */
+    dll.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
+    dll.shared.c_od_width = 1U; /* TYPE_2_1 的 Annex A 固定布局 */
     dll.shared.master_cycle_time = 0x1AU;
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
-    dll.shared.pd_in_len = 2U;
-    dll.shared.pd_out_len_current = 1U;
+    dll.shared.c_pd_in_len = 2U;
+    dll.shared.c_pd_out_len_current = 1U;
 
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
@@ -1132,13 +1132,13 @@ static void test_isdu_dp_page1_read_range(void** state)
     uint8_t range[20];
 
     (void) memset(&dll, 0, sizeof(dll));
-    dll.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
-    dll.shared.od_width = 1U;
+    dll.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
+    dll.shared.c_od_width = 1U;
     dll.shared.master_cycle_time = 0x1AU;
     test_env_init(&g_test_env, NULL);
     test_env_reset_params(&g_test_env);
-    dll.shared.pd_in_len = 2U;
-    dll.shared.pd_out_len_current = 1U;
+    dll.shared.c_pd_in_len = 2U;
+    dll.shared.c_pd_out_len_current = 1U;
     iolink_isdu_init(&ctx);
     test_isdu_bind_params(&ctx, &g_test_env);
     ctx.dll_ctx = &dll;
@@ -1208,14 +1208,14 @@ static void test_isdu_dp_page1_refresh_tracks_inputs(void** state)
     assert_int_equal(value, 0x7AU);
 
     /* M-sequenceCapability 跟随 m_seq_type/od_width（写入点负责失效标记）。 */
-    dll.shared.m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
-    dll.shared.od_width = 8U;
+    dll.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
+    dll.shared.c_od_width = 8U;
     iolink_isdu_dp_page1_invalidate(&ctx);
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x03U), 0x0DU);
 
     /* PD 长度来自初始化配置，并出现在 DPP1 0x05/0x06。 */
-    dll.shared.pd_in_len = 3U;
-    dll.shared.pd_out_len_current = 0U;
+    dll.shared.c_pd_in_len = 3U;
+    dll.shared.c_pd_out_len_current = 0U;
     iolink_isdu_dp_page1_invalidate(&ctx);
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x05U), 0x82U);
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x06U), 0x00U);

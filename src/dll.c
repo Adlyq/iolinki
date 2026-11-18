@@ -277,7 +277,7 @@ void dll_set_state_shared(iolink_dll_shared_t* shared, iolink_dll_state_t new_st
         return;
     }
     /* ISR 驱动的迁移只在显式启用 ISR 日志时输出。 */
-    IOLINK_LOG_ISR_DEBUG(&shared->log, "dll state (isr) %u -> %u", (unsigned) shared->state,
+    IOLINK_LOG_ISR_DEBUG(&shared->c_log, "dll state (isr) %u -> %u", (unsigned) shared->state,
                          (unsigned) new_state);
     /* 单次对齐存储：数据 ISR 可能随时读取该状态，且
      * 两个上下文都可能转换它（ISR 快速路径为 t_A 这么做）。 */
@@ -300,7 +300,7 @@ void dll_set_state(iolink_dll_main_t* ctx, iolink_dll_state_t new_state)
     if (ctx->shared.state == new_state) {
         return;
     }
-    IOLINK_LOG_INFO(&ctx->shared.log, "dll state %u -> %u", (unsigned) ctx->shared.state,
+    IOLINK_LOG_INFO(&ctx->shared.c_log, "dll state %u -> %u", (unsigned) ctx->shared.state,
                     (unsigned) new_state);
     ctx->shared.state = new_state;
     if (new_state == IOLINK_DLL_STATE_OPERATE) {
@@ -366,14 +366,14 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
         (!dll_isr_reset(isr))) {
         return;
     }
-    ctx->shared.isr = isr;
+    ctx->shared.c_isr = isr;
     dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
     ctx->last_notified_state = IOLINK_DLL_STATE_STARTUP;
-    ctx->shared.phy = phy;
+    ctx->shared.c_phy = phy;
     /* UART 速率由 PHY 在自己的 init 中按编译期 IOLINK_COM 配置。 */
     /* 先解析实例能力，初始线路模式依赖"PHY 能否观测唤醒"这一位。
      * 设备层随后会用完整的 stack/app 配置重新解析一次。 */
-    ctx->shared.caps = iolink_caps_resolve(phy, NULL, NULL, NULL);
+    ctx->shared.c_caps = iolink_caps_resolve(phy, NULL, NULL, NULL);
     ctx->enforce_timing = (iolink_caps_build()->timing_enforce_default != 0U);
     ctx->master_last_activity_ms = dll_time_ms(&ctx->shared);
     ctx->master_lost_cycles = 0U;
@@ -629,7 +629,7 @@ static void dll_timer_sync_master_lost(iolink_dll_main_t* ctx)
     }
 
     if ((ctx->master_lost != was_lost) && !ctx->master_lost) {
-        IOLINK_LOG_INFO(&ctx->shared.log, "master online");
+        IOLINK_LOG_INFO(&ctx->shared.c_log, "master online");
     }
 }
 
@@ -659,7 +659,7 @@ static void dll_timer_expire_master_lost(iolink_dll_main_t* ctx)
     ctx->master_lost_count = (uint8_t) missed;
     ctx->master_lost = (ctx->master_lost_count >= ctx->master_lost_cycles);
     if (ctx->master_lost && !was_lost) {
-        IOLINK_LOG_WARN(&ctx->shared.log, "master lost: %u missed cycles",
+        IOLINK_LOG_WARN(&ctx->shared.c_log, "master lost: %u missed cycles",
                         (unsigned) ctx->master_lost_count);
     }
 }
@@ -728,7 +728,7 @@ static void dll_timer_expire_fbd(iolink_dll_main_t* ctx)
         (ctx->shared.state != IOLINK_DLL_STATE_PREOPERATE)) {
         return;
     }
-    IOLINK_LOG_WARN(&ctx->shared.log, "fallback timeout: switching to SIO");
+    IOLINK_LOG_WARN(&ctx->shared.c_log, "fallback timeout: switching to SIO");
     iolink_dll_set_sio_mode(ctx);
     dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
     ctx->frame_index = 0U;
@@ -811,7 +811,7 @@ static void dll_timer_expire_t_byte(iolink_dll_main_t* ctx)
 {
     dll_timer_cancel(ctx, IOLINK_TIMER_T_BYTE);
     IOLINK_LOG_DEBUG(
-        &ctx->shared.log, "t_byte violation: %lu us",
+        &ctx->shared.c_log, "t_byte violation: %lu us",
         (unsigned long) ((uint32_t) (dll_time_us(&ctx->shared) - ctx->shared.last_byte_us)));
     ctx->timing_errors++;
     ctx->t_byte_violations++;
@@ -987,7 +987,7 @@ static void dll_process_body(iolink_dll_main_t* ctx)
 
 void iolink_dll_process(iolink_dll_main_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->shared.phy == NULL)) {
+    if ((ctx == NULL) || (ctx->shared.c_phy == NULL)) {
         return;
     }
     dll_process_body(ctx);

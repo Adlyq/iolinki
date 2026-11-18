@@ -26,7 +26,7 @@ static void test_t_dsio_deadline_survives_ms_rollover(void** state)
     const iolink_phy_api_t phy = {.detect_wakeup = wake};
     iolink_dll_ctx_t ctx;
     iolink_dll_init(&ctx.main, &ctx.isr, &phy);
-    ctx.main.shared.clock.time_us = test_time_us;
+    ctx.main.shared.c_clock.time_us = test_time_us;
     now = ((uint64_t) UINT32_MAX - 100U) * 1000U;
     wake_pending = 1;
     iolink_dll_process(&ctx.main);
@@ -51,7 +51,7 @@ static void test_t_fbd_deadline_expires_in_fallback(void** state)
     const iolink_phy_api_t phy = {.detect_wakeup = wake};
     iolink_dll_ctx_t ctx;
     iolink_dll_init(&ctx.main, &ctx.isr, &phy);
-    ctx.main.shared.clock.time_us = test_time_us;
+    ctx.main.shared.c_clock.time_us = test_time_us;
     now = ((uint64_t) UINT32_MAX - 100U) * 1000U;
 
     ctx.main.shared.state = IOLINK_DLL_STATE_FALLBACK;

@@ -63,7 +63,7 @@ dll_frame_result_t dll_frame_validate(iolink_dll_main_t* ctx)
  */
 void dll_handle_frame_error(iolink_dll_main_t* ctx, dll_frame_result_t result)
 {
-    IOLINK_LOG_DEBUG(&ctx->shared.log, "frame error: result=%d state=%u", (int) result,
+    IOLINK_LOG_DEBUG(&ctx->shared.c_log, "frame error: result=%d state=%u", (int) result,
                      (unsigned) ctx->shared.state);
     if (result == DLL_FRAME_TYPE_ERROR) {
         ctx->frame_replied_by_isr = 0U;
@@ -226,10 +226,10 @@ static bool dll_sm_transition_illegal(iolink_dll_main_t* ctx)
 /** @brief OPERATE 中的 Type-0 页读：复位请求（兼容开关除外）。 */
 static bool dll_sm_operate_page_read(iolink_dll_main_t* ctx)
 {
-    if (!iolink_caps_has(ctx->shared.caps, IOLINK_CAP_COMPAT_T0_READ)) {
+    if (!iolink_caps_has(ctx->shared.c_caps, IOLINK_CAP_COMPAT_T0_READ)) {
         /* Table 57/67（SDCI_TC_0038/0049）：不复位兼容模式下，OPERATE 期间
            的 Type-0 页读是复位请求：不应答，返回 STARTUP。 */
-        if (ctx->shared.m_seq_type != IOLINK_M_SEQ_TYPE_0) {
+        if (ctx->shared.c_m_seq_type != IOLINK_M_SEQ_TYPE_0) {
             ctx->shared.framing_errors++;
             ctx->frame_index = 0U;
             dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
@@ -267,7 +267,7 @@ bool dll_handle_valid_frame(iolink_dll_main_t* ctx)
 {
     const bool was_establishing = (ctx->shared.state == IOLINK_DLL_STATE_AWAITING_COMM) ||
                                   (ctx->shared.state == IOLINK_DLL_STATE_STARTUP);
-    if (!iolink_caps_has(ctx->shared.caps, IOLINK_CAP_COMPAT_V10_OP) &&
+    if (!iolink_caps_has(ctx->shared.c_caps, IOLINK_CAP_COMPAT_V10_OP) &&
         dll_reject_startup_operate(ctx, was_establishing)) {
         return false;
     }

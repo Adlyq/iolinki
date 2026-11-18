@@ -295,7 +295,7 @@ typedef struct
  * @name 截止时间表
  *
  * DLL 的所有软件超时收敛为一张静态表：每个 timer 只保存一个绝对
- * 截止时间（微秒，来自唯一时钟源 @c shared.clock / dll_time_us()），
+ * 截止时间（微秒，来自唯一时钟源 @c shared.c_clock / dll_time_us()），
  * 主上下文再维护一个 @c next_deadline。主泵正常路径只把当前时间与
  * @c next_deadline 比较一次；表项装载/取消是边沿事件（收帧、唤醒、
  * 主站活动），不随 timer 数量线性扫描。
@@ -360,7 +360,7 @@ const iolink_timer_contract_t* iolink_dll_timer_contract(uint8_t* IOLINK_NULLABL
  * @brief 初始化 DLL 上下文
  *
  * 清零主上下文与 ISR 状态、设置状态/重试默认值并复位计数器，
- * 同时把 @p isr 绑定到主上下文的共享区（@c ctx->shared.isr）。
+ * 同时把 @p isr 绑定到主上下文的共享区（@c ctx->shared.c_isr）。
  *
  * @param ctx 主上下文（通常为 @c iolink_dll_ctx_t::main）
  * @param isr ISR 独占状态（通常为 @c iolink_dll_ctx_t::isr）
@@ -371,11 +371,11 @@ const iolink_timer_contract_t* iolink_dll_timer_contract(uint8_t* IOLINK_NULLABL
  *       时显式失败，而本函数要清零的正是 `shared.in_isr` 所在的对象，无法在
  *       清零之前判定调用上下文——误从数据 ISR 调用会直接破坏正在运行的泵。
  *       任一参数为 NULL 时本函数直接返回、不修改任何对象；
- *       `iolink_dll_publish_reply_plans()` 因此用 `shared.isr` 报告未初始化。
+ *       `iolink_dll_publish_reply_plans()` 因此用 `shared.c_isr` 报告未初始化。
  * @note 两个对象都会被清零，包括时钟。直接使用 DLL 的用户必须在此调用之后
- *       设置 @c ctx->shared.clock；此外还必须在数据 ISR 静止时设置
- *       `shared.m_seq_type` / `shared.od_width` / `shared.pd_in_len` /
- *       `shared.pd_out_len_current` / 能力位，并调用一次
+ *       设置 @c ctx->shared.c_clock；此外还必须在数据 ISR 静止时设置
+ *       `shared.c_m_seq_type` / `shared.c_od_width` / `shared.c_pd_in_len` /
+ *       `shared.c_pd_out_len_current` / 能力位，并调用一次
  *       `iolink_dll_publish_reply_plans()`：应答计划和 PD 长度都只在初始化时
  *       定义，本函数发布的是默认 `{Type-0, od=0, PD=0}` 表，之后
  *       `iolink_dll_process()` 不会再重发布。直接使用 DLL 时还应设置
@@ -489,8 +489,8 @@ void iolink_dll_on_stack_tick(iolink_dll_shared_t* shared);
 uint8_t iolink_dll_take_service_window(iolink_dll_main_t* ctx);
 
 /**
- * @brief 获取当前 PD 长度（初始化时由 `shared.pd_in_len` /
- *        `shared.pd_out_len_current` 固定）
+ * @brief 获取当前 PD 长度（初始化时由 `shared.c_pd_in_len` /
+ *        `shared.c_pd_out_len_current` 固定）
  *
  * @param ctx DLL 上下文
  * @param[out] pd_in_len 当前 PD_In 长度；可传 NULL 表示不需要该值

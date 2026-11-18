@@ -88,7 +88,7 @@ cat >"$tmp/probe_main.c" <<'PROBE'
 #include "iolinki/internal/dll_main.h"
 void probe(iolink_dll_main_t* ctx)
 {
-    ctx->shared.isr->isr_tx_flags = 1U;
+    ctx->shared.c_isr->isr_tx_flags = 1U;
 }
 PROBE
 

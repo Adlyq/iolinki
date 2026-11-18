@@ -260,11 +260,11 @@ static void init_state(iolink_dll_state_t state)
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     bind_test_identity(&s_dll.main);
-    s_dll.main.shared.clock.time_us = sm_time_us;
-    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_1_2;
-    s_dll.main.shared.od_width = 1U;
-    s_dll.main.shared.pd_in_len = 0U;
-    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.shared.c_clock.time_us = sm_time_us;
+    s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_1_2;
+    s_dll.main.shared.c_od_width = 1U;
+    s_dll.main.shared.c_pd_in_len = 0U;
+    s_dll.main.shared.c_pd_out_len_current = 0U;
     test_pd_set_valid(&s_dll.main, true);
     s_dll.main.shared.state = state;
     s_now_us = 1000000U;
@@ -379,13 +379,14 @@ static int test_plan_state_stamp(void)
     init_state(IOLINK_DLL_STATE_PREOPERATE);
 
     /* PREOPERATE 切片非空，且切片内的计划都标记为该状态。 */
-    const uint8_t off = s_dll.main.shared.reply_plan_off[IOLINK_PLAN_SLOT_PREOPERATE];
-    const uint8_t count = s_dll.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_PREOPERATE];
+    const uint8_t off = s_dll.main.shared.c_reply_plan_off[IOLINK_PLAN_SLOT_PREOPERATE];
+    const uint8_t count = s_dll.main.shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_PREOPERATE];
     if (count == 0U) {
         return 1;
     }
     for (uint8_t i = 0U; i < count; i++) {
-        if (s_dll.main.shared.reply_plan[off + i].state != (uint8_t) IOLINK_DLL_STATE_PREOPERATE) {
+        if (s_dll.main.shared.c_reply_plan[off + i].state !=
+            (uint8_t) IOLINK_DLL_STATE_PREOPERATE) {
             return 2;
         }
     }

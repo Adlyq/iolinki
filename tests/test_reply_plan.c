@@ -283,12 +283,12 @@ static void init_operate(void)
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     bind_test_identity(&s_dll.main);
-    s_dll.main.shared.clock.time_us = plan_time_us;
+    s_dll.main.shared.c_clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
-    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    s_dll.main.shared.od_width = 1U;
-    s_dll.main.shared.pd_in_len = 1U;
-    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    s_dll.main.shared.c_od_width = 1U;
+    s_dll.main.shared.c_pd_in_len = 1U;
+    s_dll.main.shared.c_pd_out_len_current = 0U;
     test_pd_publish(&s_dll.main, 0U, true);
     s_dll.main.shared.pd_in[0][1] = 0x5AU; /* PD-in 槽位（OD 头之后） */
     s_now_us = 1000000U;
@@ -304,12 +304,12 @@ static void init_preoperate(void)
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     bind_test_identity(&s_dll.main);
 
-    s_dll.main.shared.clock.time_us = plan_time_us;
+    s_dll.main.shared.c_clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
-    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    s_dll.main.shared.od_width = 1U;
-    s_dll.main.shared.pd_in_len = 0U;
-    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    s_dll.main.shared.c_od_width = 1U;
+    s_dll.main.shared.c_pd_in_len = 0U;
+    s_dll.main.shared.c_pd_out_len_current = 0U;
     test_pd_set_valid(&s_dll.main, true);
     s_now_us = 1000000U;
     tx_reset();
@@ -323,12 +323,12 @@ static void init_preoperate_rx_only(void)
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy_rx_only);
     bind_test_identity(&s_dll.main);
-    s_dll.main.shared.clock.time_us = plan_time_us;
+    s_dll.main.shared.c_clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
-    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    s_dll.main.shared.od_width = 1U;
-    s_dll.main.shared.pd_in_len = 0U;
-    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    s_dll.main.shared.c_od_width = 1U;
+    s_dll.main.shared.c_pd_in_len = 0U;
+    s_dll.main.shared.c_pd_out_len_current = 0U;
     test_pd_set_valid(&s_dll.main, true);
     s_now_us = 1000000U;
     tx_reset();
@@ -403,7 +403,7 @@ static int test_valid_miss_is_dropped(void)
     init_operate();
     /* 撤回全部计划：每个状态切片长度清零（计划表本身仍在）。 */
     for (uint8_t i = 0U; i < (uint8_t) IOLINK_PLAN_SLOT_COUNT; i++) {
-        s_dll.main.shared.reply_plan_cnt[i] = 0U;
+        s_dll.main.shared.c_reply_plan_cnt[i] = 0U;
     }
 
     feed_process_read();
@@ -538,7 +538,7 @@ static int test_pd_publish_is_single_word(void)
     }
 
     /* 第二代：active 1、无效。应答同时切换缓冲区与 CKS 位。 */
-    s_dll.main.shared.pd_in[1][s_dll.main.shared.od_width] = 0xA5U;
+    s_dll.main.shared.pd_in[1][s_dll.main.shared.c_od_width] = 0xA5U;
     test_pd_publish(&s_dll.main, 1U, false);
     tx_reset();
     feed_process_read();
@@ -615,11 +615,11 @@ static int test_page_read_without_identity_is_dropped(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
-    s_dll.main.shared.clock.time_us = plan_time_us;
-    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    s_dll.main.shared.od_width = 1U;
-    s_dll.main.shared.pd_in_len = 0U;
-    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.shared.c_clock.time_us = plan_time_us;
+    s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    s_dll.main.shared.c_od_width = 1U;
+    s_dll.main.shared.c_pd_in_len = 0U;
+    s_dll.main.shared.c_pd_out_len_current = 0U;
     test_pd_set_valid(&s_dll.main, true);
     s_now_us = 1000000U;
     tx_reset();
@@ -833,7 +833,7 @@ static int test_t_pd_discards_are_counted(void)
 {
     init_operate();
     for (uint8_t i = 0U; i < (uint8_t) IOLINK_PLAN_SLOT_COUNT; i++) {
-        s_dll.main.shared.reply_plan_cnt[i] = 0U;
+        s_dll.main.shared.c_reply_plan_cnt[i] = 0U;
     }
 
     /* 非法帧仍进邮箱（合法帧计划未命中会被丢弃，无法触发该路径）。 */
@@ -866,7 +866,7 @@ static int test_t_pd_discards_are_counted(void)
 static int test_unpublished_plans_block_the_isr(void)
 {
     init_operate();
-    iolink_atomic_store(&s_dll.main.shared.reply_plans_ready, 0U);
+    iolink_atomic_store(&s_dll.main.shared.c_reply_plans_ready, 0U);
 
     feed_process_read();
     iolink_dll_process_isr(&s_dll.main.shared);
@@ -881,7 +881,7 @@ static int test_unpublished_plans_block_the_isr(void)
         return 3; /* 传输泵未运行：帧连邮箱都不进 */
     }
 
-    iolink_atomic_store(&s_dll.main.shared.reply_plans_ready, 1U);
+    iolink_atomic_store(&s_dll.main.shared.c_reply_plans_ready, 1U);
     feed_process_read();
     iolink_dll_process_isr(&s_dll.main.shared);
     drain_tx();
@@ -1074,11 +1074,11 @@ static int test_startup_probe_plan(void)
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     bind_test_identity(&s_dll.main);
-    s_dll.main.shared.clock.time_us = plan_time_us;
-    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    s_dll.main.shared.od_width = 2U;
-    s_dll.main.shared.pd_in_len = 1U;
-    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.shared.c_clock.time_us = plan_time_us;
+    s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    s_dll.main.shared.c_od_width = 2U;
+    s_dll.main.shared.c_pd_in_len = 1U;
+    s_dll.main.shared.c_pd_out_len_current = 0U;
     s_now_us = 1000000U;
     tx_reset();
     TEST_TX_IDLE();
@@ -1277,10 +1277,10 @@ static int test_read_reset_keeps_write_entry(void)
 /** @brief OPERATE 切片中 Type-0 页读槽位的动作；未找到返回 0xFF。 */
 static uint8_t type0_page_read_action(void)
 {
-    const uint8_t off = s_dll.main.shared.reply_plan_off[IOLINK_PLAN_SLOT_OPERATE];
-    const uint8_t cnt = s_dll.main.shared.reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE];
+    const uint8_t off = s_dll.main.shared.c_reply_plan_off[IOLINK_PLAN_SLOT_OPERATE];
+    const uint8_t cnt = s_dll.main.shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE];
     for (uint8_t i = 0U; i < cnt; i++) {
-        const iolink_reply_plan_t* plan = &s_dll.main.shared.reply_plan[off + i];
+        const iolink_reply_plan_t* plan = &s_dll.main.shared.c_reply_plan[off + i];
         if ((plan->match_mask == (IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK)) &&
             (plan->match_value == (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE)) &&
             (plan->ckt_mask == IOLINK_MSEQ_TYPE_MASK) && (plan->ckt_value == IOLINK_MSEQ_TYPE_0)) {
@@ -1307,14 +1307,14 @@ static int test_publish_reflects_capability_bits(void)
 {
     init_operate();
     /* 非兼容模式：OPERATE 中的 Type-0 页读是复位请求（不应答）。 */
-    s_dll.main.shared.caps &= (iolink_caps_t) ~IOLINK_CAP_COMPAT_T0_READ;
+    s_dll.main.shared.c_caps &= (iolink_caps_t) ~IOLINK_CAP_COMPAT_T0_READ;
     iolink_dll_publish_reply_plans(&s_dll.main);
     if (type0_page_read_action() != IOLINK_REPLY_ACT_RESET_STARTUP) {
         return 1;
     }
 
     /* 兼容模式：同一张表按新能力位重建，页读改为普通应答。 */
-    s_dll.main.shared.caps |= IOLINK_CAP_COMPAT_T0_READ;
+    s_dll.main.shared.c_caps |= IOLINK_CAP_COMPAT_T0_READ;
     iolink_dll_publish_reply_plans(&s_dll.main);
     if (type0_page_read_action() != IOLINK_REPLY_ACT_NONE) {
         return 2;
@@ -1338,18 +1338,18 @@ static int test_publish_rejects_wrong_context(void)
         return 1;
     }
 
-    /* 未经 iolink_dll_init()：shared.isr 未绑定，计划表不存在。 */
+    /* 未经 iolink_dll_init()：shared.c_isr 未绑定，计划表不存在。 */
     (void) memset(&s_dll, 0, sizeof(s_dll));
     if (iolink_dll_publish_reply_plans(&s_dll.main) != IOLINK_DLL_PUBLISH_ERR_UNINIT) {
         return 2;
     }
-    if (iolink_atomic_load(&s_dll.main.shared.reply_plans_ready) != 0U) {
+    if (iolink_atomic_load(&s_dll.main.shared.c_reply_plans_ready) != 0U) {
         return 3;
     }
 
     /* 在数据 ISR 内：拒绝重建，已发布的表逐字节不变。 */
     init_operate();
-    s_dll.main.shared.caps |= IOLINK_CAP_COMPAT_T0_READ;
+    s_dll.main.shared.c_caps |= IOLINK_CAP_COMPAT_T0_READ;
     s_dll.main.shared.in_isr = 1U;
     const int rc = iolink_dll_publish_reply_plans(&s_dll.main);
     s_dll.main.shared.in_isr = 0U;
@@ -1359,7 +1359,7 @@ static int test_publish_rejects_wrong_context(void)
     if (type0_page_read_action() != IOLINK_REPLY_ACT_RESET_STARTUP) {
         return 5; /* 新能力位没有被发布进表 */
     }
-    if (iolink_atomic_load(&s_dll.main.shared.reply_plans_ready) != 1U) {
+    if (iolink_atomic_load(&s_dll.main.shared.c_reply_plans_ready) != 1U) {
         return 6; /* 就绪标志不得被撤下 */
     }
 
@@ -1379,12 +1379,12 @@ static int test_init_publishes_default_plan(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
-    s_dll.main.shared.clock.time_us = plan_time_us;
+    s_dll.main.shared.c_clock.time_us = plan_time_us;
     test_pd_set_valid(&s_dll.main, true);
     s_now_us = 1000000U;
     tx_reset();
     TEST_TX_IDLE();
-    if (iolink_atomic_load(&s_dll.main.shared.reply_plans_ready) == 0U) {
+    if (iolink_atomic_load(&s_dll.main.shared.c_reply_plans_ready) == 0U) {
         return 1; /* init 必须发布一次 */
     }
     if (s_dll.main.shared.state != IOLINK_DLL_STATE_STARTUP) {
@@ -1407,13 +1407,13 @@ static int test_init_publishes_default_plan(void)
 static int test_process_does_not_republish(void)
 {
     init_operate();
-    s_dll.main.shared.caps &= (iolink_caps_t) ~IOLINK_CAP_COMPAT_T0_READ;
+    s_dll.main.shared.c_caps &= (iolink_caps_t) ~IOLINK_CAP_COMPAT_T0_READ;
     iolink_dll_publish_reply_plans(&s_dll.main);
     if (type0_page_read_action() != IOLINK_REPLY_ACT_RESET_STARTUP) {
         return 1;
     }
 
-    s_dll.main.shared.caps |= IOLINK_CAP_COMPAT_T0_READ;
+    s_dll.main.shared.c_caps |= IOLINK_CAP_COMPAT_T0_READ;
     iolink_dll_process(&s_dll.main);
     if (type0_page_read_action() != IOLINK_REPLY_ACT_RESET_STARTUP) {
         return 2; /* 主泵不重编译：表保持发布时的能力位语义 */
@@ -1431,19 +1431,19 @@ static int test_tx_without_done_hook(void)
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &phy);
     bind_test_identity(&s_dll.main);
-    s_dll.main.shared.clock.time_us = plan_time_us;
+    s_dll.main.shared.c_clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
-    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    s_dll.main.shared.od_width = 1U;
-    s_dll.main.shared.pd_in_len = 1U;
-    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    s_dll.main.shared.c_od_width = 1U;
+    s_dll.main.shared.c_pd_in_len = 1U;
+    s_dll.main.shared.c_pd_out_len_current = 0U;
     test_pd_publish(&s_dll.main, 0U, true);
     s_dll.main.shared.pd_in[0][1] = 0x5AU;
     s_now_us = 1000000U;
     tx_reset();
     TEST_TX_IDLE();
 
-    if (!iolink_caps_has(s_dll.main.shared.caps, IOLINK_CAP_TX)) {
+    if (!iolink_caps_has(s_dll.main.shared.c_caps, IOLINK_CAP_TX)) {
         return 1;
     }
     iolink_dll_publish_reply_plans(&s_dll.main);

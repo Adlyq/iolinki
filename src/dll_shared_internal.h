@@ -46,10 +46,10 @@ static inline bool dll_dp_page1_available(const iolink_dll_shared_t* shared)
  */
 static inline uint64_t dll_time_us(const iolink_dll_shared_t* shared)
 {
-    if ((shared == NULL) || (shared->clock.time_us == NULL)) {
+    if ((shared == NULL) || (shared->c_clock.time_us == NULL)) {
         return 0U;
     }
-    return shared->clock.time_us(shared->clock.self);
+    return shared->c_clock.time_us(shared->c_clock.self);
 }
 
 static inline uint32_t dll_time_ms(const iolink_dll_shared_t* shared)

@@ -42,7 +42,7 @@ static void test_main_window_gated_by_tick(void** state)
     /* 安装带 Timer B 钩子的 PHY，使门控生效。 */
     iolink_phy_api_t gated = g_phy_mock;
     gated.stack_timer_start = timer_b_start;
-    test_dll_shared(&dev.ctx)->phy = &gated;
+    test_dll_shared(&dev.ctx)->c_phy = &gated;
 
     test_dll_shared(&dev.ctx)->isdu.reset_pending = true;
     reset_calls = 0;

@@ -193,12 +193,12 @@ static void init_preop(void)
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     harness_bind_identity();
-    s_dll.main.shared.clock.time_us = plan_time_us;
+    s_dll.main.shared.c_clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
-    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    s_dll.main.shared.od_width = 1U;
-    s_dll.main.shared.pd_in_len = 0U;
-    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    s_dll.main.shared.c_od_width = 1U;
+    s_dll.main.shared.c_pd_in_len = 0U;
+    s_dll.main.shared.c_pd_out_len_current = 0U;
     /* 主站写入的 MasterCycleTime 由 DPP1 0x01 镜像：用一个可辨识的值使
      * 页读场景的首字节断言能区分"读到页字节"与"空映像"。 */
     s_dll.main.shared.master_cycle_time = 0xA1U;
@@ -214,12 +214,12 @@ static void init_op_t1_od32(void)
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     harness_bind_identity();
-    s_dll.main.shared.clock.time_us = plan_time_us;
+    s_dll.main.shared.c_clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
-    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
-    s_dll.main.shared.od_width = 32U;
-    s_dll.main.shared.pd_in_len = 0U;
-    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
+    s_dll.main.shared.c_od_width = 32U;
+    s_dll.main.shared.c_pd_in_len = 0U;
+    s_dll.main.shared.c_pd_out_len_current = 0U;
     dll_pd_publish(&s_dll.main.shared, 0U, true);
     harness_reset();
     iolink_dll_publish_reply_plans(&s_dll.main);
@@ -230,12 +230,12 @@ static void init_op_t2_pd32(void)
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     harness_bind_identity();
-    s_dll.main.shared.clock.time_us = plan_time_us;
+    s_dll.main.shared.c_clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
-    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    s_dll.main.shared.od_width = 1U;
-    s_dll.main.shared.pd_in_len = 32U;
-    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    s_dll.main.shared.c_od_width = 1U;
+    s_dll.main.shared.c_pd_in_len = 32U;
+    s_dll.main.shared.c_pd_out_len_current = 0U;
     dll_pd_publish(&s_dll.main.shared, 0U, true);
     for (uint8_t i = 0U; i < 32U; i++) {
         s_dll.main.shared.pd_in[0][1U + i] = (uint8_t) (0x5AU + i);
@@ -262,7 +262,7 @@ static void init_preop_no_plans(void)
 {
     init_preop();
     for (uint8_t i = 0U; i < (uint8_t) IOLINK_PLAN_SLOT_COUNT; i++) {
-        s_dll.main.shared.reply_plan_cnt[i] = 0U;
+        s_dll.main.shared.c_reply_plan_cnt[i] = 0U;
     }
 }
 

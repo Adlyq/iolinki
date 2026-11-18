@@ -145,13 +145,13 @@ static void init_ctx(iolink_dll_ctx_t* dll)
 {
     g_phy.self = (iolink_app_t * IOLINK_NULLABLE) dll;
     iolink_dll_init(&dll->main, &dll->isr, &g_phy);
-    dll->main.shared.clock.time_us = test_time_us;
+    dll->main.shared.c_clock.time_us = test_time_us;
     dll->main.phy_mode = IOLINK_PHY_MODE_SDCI;
     dll->main.shared.state = IOLINK_DLL_STATE_OPERATE;
-    dll->main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    dll->main.shared.od_width = 1U;
-    dll->main.shared.pd_out_len_current = 0U;
-    dll->main.shared.pd_in_len = 0U;
+    dll->main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    dll->main.shared.c_od_width = 1U;
+    dll->main.shared.c_pd_out_len_current = 0U;
+    dll->main.shared.c_pd_in_len = 0U;
     test_pd_set_valid(&dll->main, true);
     /* 计划表只在初始化时编译；本用例在 init 之后改了类型/宽度，故显式重发。 */
     iolink_dll_publish_reply_plans(&dll->main);

@@ -273,10 +273,10 @@ static void reset_ctx(void)
     s_ctx.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     s_ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     s_ctx.main.enforce_timing = false;
-    s_ctx.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    s_ctx.main.shared.od_width = 1U;
-    s_ctx.main.shared.pd_in_len = 0U;
-    s_ctx.main.shared.pd_out_len_current = 0U;
+    s_ctx.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    s_ctx.main.shared.c_od_width = 1U;
+    s_ctx.main.shared.c_pd_in_len = 0U;
+    s_ctx.main.shared.c_pd_out_len_current = 0U;
     test_pd_set_valid(&s_ctx.main, true);
     /* 应答计划只在初始化时编译；本用例在 init 之后改了类型/宽度，因此
      * 在这里显式重发一次（ISR 尚未运行）。 */
@@ -595,10 +595,10 @@ static void test_busy_tx_frame_keeps_frame_for_main(void** state)
     uint8_t frame[4] = {IOLINK_MC_CHANNEL_PROCESS, (uint8_t) IOLINK_MSEQ_TYPE_2, 0xAAU, 0x55U};
 
     reset_ctx();
-    s_ctx.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
-    s_ctx.main.shared.od_width = 1U;
-    s_ctx.main.shared.pd_out_len_current = 1U;
-    s_ctx.main.shared.pd_in_len = 1U;
+    s_ctx.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
+    s_ctx.main.shared.c_od_width = 1U;
+    s_ctx.main.shared.c_pd_out_len_current = 1U;
+    s_ctx.main.shared.c_pd_in_len = 1U;
     /* 计划表按配置发布：改了 PD/OD 宽度后必须重发，否则请求长度
      * 与计划里的 req_len 不一致，帧会按"计划未命中"丢弃。 */
     iolink_dll_publish_reply_plans(&s_ctx.main);
@@ -772,10 +772,10 @@ static void test_isr_startup_defers_event_reset_to_main(void** state)
     reset_ctx();
     /* Type-1/2 配置才有 Tables 57/67 的 OPERATE 复位行；Type-0 配置的
        OPERATE 与 ESTAB 共享切片，页读按普通读取应答。 */
-    s_ctx.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
-    s_ctx.main.shared.od_width = 1U;
-    s_ctx.main.shared.pd_out_len_current = 1U;
-    s_ctx.main.shared.pd_in_len = 1U;
+    s_ctx.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_1;
+    s_ctx.main.shared.c_od_width = 1U;
+    s_ctx.main.shared.c_pd_out_len_current = 1U;
+    s_ctx.main.shared.c_pd_in_len = 1U;
     iolink_dll_publish_reply_plans(&s_ctx.main);
     iolink_event_trigger(events, 0x1000U, IOLINK_EVENT_TYPE_ERROR);
     assert_true(iolink_events_flag(events));

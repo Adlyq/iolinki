@@ -137,9 +137,9 @@ static void test_device_init_binds_config_sink(void** state)
     assert_ptr_equal(g_last_user, &token);
     assert_non_null(strstr(g_last_msg, "device init"));
 
-    assert_true(test_dll_shared(&ctx)->log.write == log_capture);
-    assert_ptr_equal(test_dll_shared(&ctx)->log.self, &token);
-    assert_int_equal(test_dll_shared(&ctx)->log.level, IOLINK_LOG_LEVEL_INFO);
+    assert_true(test_dll_shared(&ctx)->c_log.write == log_capture);
+    assert_ptr_equal(test_dll_shared(&ctx)->c_log.self, &token);
+    assert_int_equal(test_dll_shared(&ctx)->c_log.level, IOLINK_LOG_LEVEL_INFO);
     assert_true(test_dll_isdu(&ctx)->log->write == log_capture);
 #if IOLINK_FEATURE_DATA_STORAGE
     assert_true(iolink_device_get_ds_ctx(&ctx)->log->write == log_capture);
@@ -295,9 +295,9 @@ static void test_device_setter_propagates(void** state)
 
     iolink_device_set_log(&ctx, log_capture, IOLINK_LOG_LEVEL_INFO);
 
-    assert_true(test_dll_shared(&ctx)->log.write == log_capture);
-    assert_ptr_equal(test_dll_shared(&ctx)->log.self, &token);
-    assert_int_equal(test_dll_shared(&ctx)->log.level, IOLINK_LOG_LEVEL_INFO);
+    assert_true(test_dll_shared(&ctx)->c_log.write == log_capture);
+    assert_ptr_equal(test_dll_shared(&ctx)->c_log.self, &token);
+    assert_int_equal(test_dll_shared(&ctx)->c_log.level, IOLINK_LOG_LEVEL_INFO);
     assert_true(test_dll_isdu(&ctx)->log->write == log_capture);
     assert_ptr_equal(test_dll_isdu(&ctx)->log->self, &token);
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -317,8 +317,8 @@ static void test_device_setter_propagates(void** state)
     assert_true((g_calls == 1) && (strcmp(g_last_msg, "from isdu") == 0));
 
     iolink_device_set_log(&ctx, NULL, IOLINK_LOG_LEVEL_SILENT);
-    assert_true(test_dll_shared(&ctx)->log.write == NULL);
-    assert_int_equal(test_dll_shared(&ctx)->log.level, IOLINK_LOG_LEVEL_SILENT);
+    assert_true(test_dll_shared(&ctx)->c_log.write == NULL);
+    assert_int_equal(test_dll_shared(&ctx)->c_log.level, IOLINK_LOG_LEVEL_SILENT);
 }
 
 int main(void)

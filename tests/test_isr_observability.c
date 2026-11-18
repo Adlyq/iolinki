@@ -283,13 +283,13 @@ static void init_ctx(iolink_dll_ctx_t* dll)
     g_phy.detect_wakeup = mock_detect_wakeup;
     iolink_dll_init(&dll->main, &dll->isr, &g_phy);
     bind_test_identity(&dll->main);
-    dll->main.shared.clock.time_us = test_time_us;
+    dll->main.shared.c_clock.time_us = test_time_us;
     dll->main.phy_mode = IOLINK_PHY_MODE_SDCI;
     dll->main.shared.state = IOLINK_DLL_STATE_OPERATE;
-    dll->main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
-    dll->main.shared.od_width = 1U;
-    dll->main.shared.pd_out_len_current = 0U;
-    dll->main.shared.pd_in_len = 0U;
+    dll->main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
+    dll->main.shared.c_od_width = 1U;
+    dll->main.shared.c_pd_out_len_current = 0U;
+    dll->main.shared.c_pd_in_len = 0U;
     test_pd_set_valid(&dll->main, true);
     /* 计划表只在初始化时编译；本文件直接驱动 ISR 且在 init 之后才配置，
      * 故显式发布一次。 */
@@ -366,13 +366,13 @@ static void init_type0_ctx(iolink_dll_ctx_t* dll)
     g_phy.detect_wakeup = mock_detect_wakeup;
     iolink_dll_init(&dll->main, &dll->isr, &g_phy);
     bind_test_identity(&dll->main);
-    dll->main.shared.clock.time_us = test_time_us;
+    dll->main.shared.c_clock.time_us = test_time_us;
     dll->main.phy_mode = IOLINK_PHY_MODE_SDCI;
     dll->main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
-    dll->main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    dll->main.shared.od_width = 1U;
-    dll->main.shared.pd_out_len_current = 0U;
-    dll->main.shared.pd_in_len = 0U;
+    dll->main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    dll->main.shared.c_od_width = 1U;
+    dll->main.shared.c_pd_out_len_current = 0U;
+    dll->main.shared.c_pd_in_len = 0U;
     test_pd_set_valid(&dll->main, true);
     dll->main.shared.isdu.state = ISDU_STATE_RESPONSE_READY;
     dll->main.shared.isdu.resp_buf[0] = 0x11U;

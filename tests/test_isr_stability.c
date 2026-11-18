@@ -188,7 +188,7 @@ static int run_all(void)
     };
 
     iolink_dll_init(&ctx.main, &ctx.isr, &phy);
-    ctx.main.shared.clock.time_us = test_time_us;
+    ctx.main.shared.c_clock.time_us = test_time_us;
     ctx.main.shared.state = IOLINK_DLL_STATE_ESTAB_COM;
     ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
     ctx.main.enforce_timing = false;

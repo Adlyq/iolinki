@@ -62,7 +62,7 @@ static void IOLINK_NOINLINE dll_plan_push(iolink_dll_main_t* ctx, uint8_t* count
         ctx->reply_plan_overflows++;
         return;
     }
-    iolink_reply_plan_t* plan = &ctx->shared.reply_plan[*count];
+    iolink_reply_plan_t* plan = &ctx->shared.c_reply_plan[*count];
     plan->data = data;
     plan->match_mask = match_mask;
     plan->match_value = match_value;
@@ -86,9 +86,9 @@ static void IOLINK_NOINLINE dll_plan_push(iolink_dll_main_t* ctx, uint8_t* count
  */
 static void dll_plan_push_type12(iolink_dll_main_t* ctx, uint8_t* count, uint8_t state)
 {
-    const uint8_t od_w = ctx->shared.od_width;
+    const uint8_t od_w = ctx->shared.c_od_width;
     const uint8_t addr_max = IOLINK_MC_ADDR_MASK;
-    const uint8_t ckt = dll_mseq_type_bits(ctx->shared.m_seq_type);
+    const uint8_t ckt = dll_mseq_type_bits(ctx->shared.c_m_seq_type);
 
     /* 读：OD（按通道来源，宽度 od_width）+ PD-in。 */
     dll_plan_push(ctx, count, state, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
@@ -227,14 +227,14 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
     if (ctx == NULL) {
         return IOLINK_DLL_PUBLISH_ERR_NULL;
     }
-    if (ctx->shared.isr == NULL) {
+    if (ctx->shared.c_isr == NULL) {
         /* iolink_dll_init() 尚未成功完成：没有可发布的上下文。 */
         return IOLINK_DLL_PUBLISH_ERR_UNINIT;
     }
     /* 计划表由数据 ISR 查表读取：重建必须与泵互斥。这里显式拒绝误从数据
      * ISR 的调用，而不是静默重写正在被查的表。 */
     if (ctx->shared.in_isr != 0U) {
-        IOLINK_LOG_ISR_ERROR(&ctx->shared.log, "reply plan publish rejected inside the data ISR");
+        IOLINK_LOG_ISR_ERROR(&ctx->shared.c_log, "reply plan publish rejected inside the data ISR");
         return IOLINK_DLL_PUBLISH_ERR_ISR;
     }
     /* 计划内容是 {M-sequence 类型, OD 宽度, 能力位} 的纯函数，三项都只在
@@ -242,30 +242,30 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
      * 重发布。因此本函数只在初始化（或数据 ISR 静止时的重新初始化）里调用，
      * 没有运行期并发协议：先撤下"就绪"标志，整张表写完后原子置回，ISR 入口
      * 只在标志为 1 时进入传输泵。 */
-    iolink_atomic_store(&ctx->shared.reply_plans_ready, 0U);
+    iolink_atomic_store(&ctx->shared.c_reply_plans_ready, 0U);
     /* 该计数描述"当前这张表被截断了几条"，不是跨多次发布的累计值：
      * 设备初始化会发布两次（先默认配置、后最终配置），保留累计值会把
      * 被丢弃的那张表的截断也算进去。 */
     ctx->reply_plan_overflows = 0U;
     uint8_t count = 0U;
-    const bool type0 = (ctx->shared.m_seq_type == IOLINK_M_SEQ_TYPE_0);
+    const bool type0 = (ctx->shared.c_m_seq_type == IOLINK_M_SEQ_TYPE_0);
 
     /* 切片 0：STARTUP / AWAITING_COMM。 */
-    ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_STARTUP] = count;
+    ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_STARTUP] = count;
     dll_plan_push_type0(ctx, &count, (uint8_t) IOLINK_DLL_STATE_STARTUP, DLL_PLAN_MODE_STARTUP);
-    ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_STARTUP] =
-        (uint8_t) (count - ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_STARTUP]);
+    ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_STARTUP] =
+        (uint8_t) (count - ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_STARTUP]);
 
     /* 切片 1：PREOPERATE。 */
-    ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_PREOPERATE] = count;
+    ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_PREOPERATE] = count;
     dll_plan_push_type0(ctx, &count, (uint8_t) IOLINK_DLL_STATE_PREOPERATE,
                         DLL_PLAN_MODE_PREOPERATE);
-    ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_PREOPERATE] =
-        (uint8_t) (count - ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_PREOPERATE]);
+    ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_PREOPERATE] =
+        (uint8_t) (count - ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_PREOPERATE]);
 
     /* 切片 2：ESTAB_COM。Type-1/2 配置下首帧可能是 Type-0 页读（C5），
      * 由 ISR 应答后仍交主泵完成迁移；Type-0 配置与 OPERATE 内容相同。 */
-    ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM] = count;
+    ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM] = count;
     if (!type0) {
         dll_plan_push_type12(ctx, &count, (uint8_t) IOLINK_DLL_STATE_ESTAB_COM);
         dll_plan_push(ctx, &count, (uint8_t) IOLINK_DLL_STATE_ESTAB_COM,
@@ -279,28 +279,28 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
                       IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK, IOLINK_MC_CHANNEL_PAGE,
                       IOLINK_MC_ADDR_MASK, 3U, IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0,
                       IOLINK_REPLY_SRC_NONE, 0U, 0U, IOLINK_REPLY_ACT_NONE, NULL);
-        ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM] =
-            (uint8_t) (count - ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM]);
+        ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM] =
+            (uint8_t) (count - ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM]);
     }
     else {
         dll_plan_push_type0(ctx, &count, (uint8_t) IOLINK_DLL_STATE_ESTAB_COM,
                             DLL_PLAN_MODE_OPERATE);
-        ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM] =
-            (uint8_t) (count - ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM]);
+        ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM] =
+            (uint8_t) (count - ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM]);
     }
 
     /* 切片 3：OPERATE。 */
     if (type0) {
         /* Type-0 配置的 ESTAB 与 OPERATE 内容相同，共享同一切片。 */
-        ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_OPERATE] =
-            ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM];
-        ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE] =
-            ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM];
+        ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_OPERATE] =
+            ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_ESTAB_COM];
+        ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE] =
+            ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_ESTAB_COM];
     }
     else {
-        ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_OPERATE] = count;
+        ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_OPERATE] = count;
         dll_plan_push_type12(ctx, &count, (uint8_t) IOLINK_DLL_STATE_OPERATE);
-        if (iolink_caps_has(ctx->shared.caps, IOLINK_CAP_COMPAT_T0_READ)) {
+        if (iolink_caps_has(ctx->shared.c_caps, IOLINK_CAP_COMPAT_T0_READ)) {
             /* 兼容模式：OPERATE 中的 Type-0 页读仍按普通页读应答。 */
             dll_plan_push(ctx, &count, (uint8_t) IOLINK_DLL_STATE_OPERATE,
                           IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
@@ -324,11 +324,11 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
                       IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK, IOLINK_MC_CHANNEL_PAGE,
                       IOLINK_MC_ADDR_MASK, 3U, IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0,
                       IOLINK_REPLY_SRC_NONE, 0U, 0U, IOLINK_REPLY_ACT_NONE, NULL);
-        ctx->shared.reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE] =
-            (uint8_t) (count - ctx->shared.reply_plan_off[IOLINK_PLAN_SLOT_OPERATE]);
+        ctx->shared.c_reply_plan_cnt[IOLINK_PLAN_SLOT_OPERATE] =
+            (uint8_t) (count - ctx->shared.c_reply_plan_off[IOLINK_PLAN_SLOT_OPERATE]);
     }
 
-    iolink_atomic_store(&ctx->shared.reply_plans_ready, 1U);
+    iolink_atomic_store(&ctx->shared.c_reply_plans_ready, 1U);
     return IOLINK_DLL_PUBLISH_OK;
 }
 

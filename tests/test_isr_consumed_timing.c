@@ -287,12 +287,12 @@ static void init_operate_type0(void)
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
     bind_test_identity(&s_dll.main);
-    s_dll.main.shared.clock.time_us = test_time_us;
+    s_dll.main.shared.c_clock.time_us = test_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
-    s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
-    s_dll.main.shared.od_width = 1U;
-    s_dll.main.shared.pd_in_len = 0U;
-    s_dll.main.shared.pd_out_len_current = 0U;
+    s_dll.main.shared.c_m_seq_type = IOLINK_M_SEQ_TYPE_0;
+    s_dll.main.shared.c_od_width = 1U;
+    s_dll.main.shared.c_pd_in_len = 0U;
+    s_dll.main.shared.c_pd_out_len_current = 0U;
     test_pd_set_valid(&s_dll.main, true);
     s_dll.main.enforce_timing = true;
     s_dll.main.min_cycle_time_us = 1000U;

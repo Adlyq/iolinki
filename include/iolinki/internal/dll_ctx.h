@@ -25,7 +25,7 @@ IOLINK_ASSUME_NONNULL_BEGIN
  * 需要看到完整布局。主上下文翻译单元只包含 dll_main.h，看不到 ISR 字段。
  *
  * @warning 主上下文的共享区保存指向 @c isr 成员的指针
- *          （@c main.shared.isr）。容器只能原地初始化与使用；按值拷贝
+ *          （@c main.shared.c_isr）。容器只能原地初始化与使用；按值拷贝
  *          会让该指针继续指向原对象，必须整体重新初始化。
  */
 struct iolink_dll_ctx

@@ -102,7 +102,7 @@ void iolink_critical_exit(void);
 引擎的所有时间戳都从该回调获取。
 
 核心只通过应用提供的时间源取时，不调用平台时间函数；直接使用 `iolink_dll_*` 时，调用方必须在
-`iolink_dll_init()` 后自行绑定 `ctx->shared.clock`（回调 + 实例指针，
+`iolink_dll_init()` 后自行绑定 `ctx->shared.c_clock`（回调 + 实例指针，
 其中 `ctx` 是 `iolink_dll_main_t*`；初始化需要同时传入 ISR 对象）。未绑定时
 内部计时读数为 0。
 
@@ -811,7 +811,7 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 上下文。该回调为必需项：`config.app` 为 NULL 返回 `IOLINK_DEVICE_INIT_ERR_APP`，
 `app->time_us` 为 NULL 返回 `IOLINK_DEVICE_INIT_ERR_TIME`。绑定后，主循环、
 数据 ISR 和事件引擎都使用该回调，核心不再调用平台时间函数。直接使用
-`iolink_dll_*` 时，调用方需在初始化后自行绑定 `ctx->shared.clock`；事件引擎的
+`iolink_dll_*` 时，调用方需在初始化后自行绑定 `ctx->shared.c_clock`；事件引擎的
 `ctx->clock` 可指向同一个实例（设备层就是这么做的），也可以指向独立时钟。
 时间源必须在上下文生命周期内保持单调。
 
@@ -1001,7 +1001,7 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 | `include/iolinki/dll.h` | `iolink_dll_on_rx_timeout()` | Timer A（t_A 单次定时）在无应答的情况下到期。 |
 | `include/iolinki/dll.h` | `iolink_dll_on_stack_tick()` | Timer B 节拍：授权一个主上下文服务窗口。 |
 | `include/iolinki/dll.h` | `iolink_dll_take_service_window()` | 消费 Timer B 的授权（1 = 用户代码可以运行）。 |
-| `include/iolinki/dll.h` | `iolink_dll_get_pd_length()` | 获取当前 PD 长度（初始化时由 `shared.pd_in_len` / `shared.pd_out_len_current` 固定） |
+| `include/iolinki/dll.h` | `iolink_dll_get_pd_length()` | 获取当前 PD 长度（初始化时由 `shared.c_pd_in_len` / `shared.c_pd_out_len_current` 固定） |
 | `include/iolinki/dll.h` | `iolink_dll_get_phy_mode()` | 获取当前工作模式 |
 | `include/iolinki/dll.h` | `iolink_dll_get_baudrate()` | 获取当前协商后的波特率（编译期 `IOLINK_COM`） |
 | `include/iolinki/dll.h` | `iolink_dll_compute_min_cycle_time()` | 根据 M 序列定时计算设备的 MinCycleTime（单位 0.1 ms）。 |
@@ -1081,8 +1081,8 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 ### 11.1 裸 DLL 集成
 
 直接使用 `dll.h` 时，用 `iolink_dll_init(&ctx.main, &ctx.isr, phy)` 初始化，然后在数据
-ISR 静止时设置 `shared.clock`、`shared.m_seq_type`、`shared.od_width`、`shared.pd_in_len`、
-`shared.pd_out_len_current` 与能力位，并调用一次 `iolink_dll_publish_reply_plans()`。
+ISR 静止时设置 `shared.c_clock`、`shared.c_m_seq_type`、`shared.c_od_width`、`shared.c_pd_in_len`、
+`shared.c_pd_out_len_current` 与能力位，并调用一次 `iolink_dll_publish_reply_plans()`。
 这些字段和应答计划都只在初始化时定义，之后 `iolink_dll_process()` 不会重发布。
 该发布入口返回 `IOLINK_DLL_PUBLISH_OK`（0）表示表已发布；`ctx` 为 NULL、上下文未经
 `iolink_dll_init()` 初始化或在数据 ISR 内调用时返回负的 `iolink_dll_publish_result_t`，

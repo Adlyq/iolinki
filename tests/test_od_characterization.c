@@ -424,8 +424,8 @@ static void test_char_status_and_process_data(void** state)
     /* 绑定 DLL 后 PD 输入为当前长度的快照。 */
     char_prepare(&ctx, &k_char_info);
     ctx.dll_ctx = &dll_ctx.main;
-    dll_ctx.main.shared.od_width = 2U;
-    dll_ctx.main.shared.pd_in_len = 2U;
+    dll_ctx.main.shared.c_od_width = 2U;
+    dll_ctx.main.shared.c_pd_in_len = 2U;
     dll_ctx.main.shared.pd_in[0][0] = 0x11U;
     dll_ctx.main.shared.pd_in[0][1] = 0x22U;
     dll_ctx.main.shared.pd_in[0][2] = 0x33U;

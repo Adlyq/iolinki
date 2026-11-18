@@ -33,7 +33,7 @@ static void init_ctx(iolink_dll_ctx_t* ctx)
 {
     static const iolink_phy_api_t phy = {0};
     iolink_dll_init(&ctx->main, &ctx->isr, &phy);
-    ctx->main.shared.clock.time_us = test_time_us;
+    ctx->main.shared.c_clock.time_us = test_time_us;
     ctx->main.enforce_timing = true;
     g_now = 1000000U;
 }
