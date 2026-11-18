@@ -32,25 +32,27 @@ void isdu_respond_error(iolink_isdu_ctx_t* ctx, uint8_t error);
 /** @brief 将统一结果翻译为 ISDU 否定应答。 */
 void isdu_respond_result(iolink_isdu_ctx_t* ctx, iolink_result_t result);
 /**
- * @brief 整个传输层复位：主泵的读传输层字段与写入口相位都清零。
- *
- * 初始化与错误恢复路径使用；它会同时丢弃数据 ISR 正在累计的写请求。
- */
-void isdu_transport_reset(iolink_isdu_ctx_t* ctx);
-/**
  * @brief 只复位主泵独占的读传输层（`state`/`header`/应答缓冲/错误码）。
  *
- * 读方向的 IDLE/ABORT 与读完成复位走这里。写入口相位
- * （`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`）保持原样。
+ * 读方向的 IDLE/ABORT、读完成与错误恢复走这里。写入口相位
+ * （`stage_state`、累计位置与发布字）归数据 ISR，主泵从不改写，因此
+ * 该复位不需要临界区。
  */
 void isdu_read_reset(iolink_isdu_ctx_t* ctx);
 /**
- * @brief 释放写入口相位：`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`。
+ * @brief 发布字是否指向一条主泵尚未处理**且已收齐**的写请求（主泵只读）。
  *
- * 这些字段归数据 ISR 的写入口（@ref iolink_isdu_od_write）：START 建立、
- * COUNT 推进，主泵只在 COMPLETE/ABORT 接管时交还。不触碰读传输层。
+ * `gen != req_ack_gen` 且 `len > 0` 即为真：ISR 先写完槽内容、再发布
+ * 代号，因此为真时槽内容必然完整。
  */
-void isdu_stage_release(iolink_isdu_ctx_t* ctx);
+bool isdu_request_pending(const iolink_isdu_ctx_t* ctx);
+/**
+ * @brief 写入口是否有一代尚未被主泵处理（含"正在累计、len == 0"的那些代）。
+ *
+ * 主泵用它在写期间让已发布的读视图失效。只读发布字与主泵自己的 ack
+ * 序号，不读数据 ISR 的相位字段。
+ */
+bool isdu_write_in_progress(const iolink_isdu_ctx_t* ctx);
 void isdu_factory_reset(iolink_isdu_ctx_t* ctx);
 /** @} */
 

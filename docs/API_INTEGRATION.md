@@ -318,14 +318,16 @@ void iolink_device_process_isr(iolink_device_ctx_t* ctx);
 - 主站收到的是 ISR 按计划表给出的应答，不依赖主泵节奏；
 - 计划未命中的合法帧被丢弃（主站按自己的重试机制重发），不会产生迟到应答；
 - ISDU 写请求在数据 ISR 内按 FlowCTRL 位置去重累计：重发段只回 ACK、不消耗新位置，
-  因此主站重发风暴不会耗尽缓冲。若主泵尚未接管上一条已收齐的请求就收到新的 START，
-  前一条被覆盖并计入 `isr_od_overruns`。
+  因此主站重发风暴不会耗尽缓冲。写入口有**两个请求槽**：主泵解析一条已发布的请求时，
+  ISR 可以继续把下一条累计进另一个槽。只有两个槽都不可用（一条已发布未被接管、另一条
+  正在被解析）时，新 START 才覆盖那条已发布的请求并计入 `isr_od_overruns`——被覆盖的
+  请求不会被执行。
 
 排查主泵饥饿时读 `iolink_dll_get_stats()`：`isr_plan_misses`（合法帧计划未命中而被丢弃）、
-`isr_mailbox_drops`（邮箱满）、`isr_od_overruns`（已收齐请求被新 START 覆盖）、
+`isr_mailbox_drops`（邮箱满）、`isr_od_overruns`（已收齐但未被接管的请求被新 START 覆盖）、
 `t_pd_discards`（t_PD 窗口内丢弃的邮箱帧）、`reply_plan_overflows`（计划槽位耗尽）。
 `isr_plan_misses` 持续增长说明计划表缺少某种合法帧形状；`isr_od_overruns`
-持续增长说明主泵长时间未接管已收齐的请求。`isr_frames_consumed`（由 ISR 完全处理、不再进入邮箱的帧，含按规范有意不应答的转换/复位帧）
+持续增长说明主泵长时间未接管已收齐的请求（双槽只能吸收一条在途请求）。`isr_frames_consumed`（由 ISR 完全处理、不再进入邮箱的帧，含按规范有意不应答的转换/复位帧）
 与 `isr_frames_handoff`（成功交给主泵的帧）给出两类终局的数量，可用来核对"ISR 接管 / 交给主泵"
 的比例；被丢弃的帧见上列的丢弃计数（坏 ISDU 写计入 `isr_eager_rejects`）。
 
@@ -618,9 +620,10 @@ void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd);
 （`IOLINK_WORKSPACE_EMBEDDED=0` 时为未绑定状态）。
 只要调用者保证复制过程相对数据中断是原子的，`iolink_isdu_snapshot_response()`
 就是 ISR 安全的。`iolink_isdu_od_write()` 是数据 ISR 的写入口：只按 FlowCTRL 位置
-去重累计，不校验 CHKPDU、不解析、不执行；`iolink_isdu_process()` 在主上下文接管已
-收齐的请求（CHKPDU 校验 + 解析 + 执行）。直接使用引擎的测试可以在同一上下文依次
-调用两者，其余函数均在主上下文调用。
+去重累计，不校验 CHKPDU、不解析、不执行；收齐后把 `{len, sel, gen}` 发布到上下文内
+的发布字，主泵 `iolink_isdu_process()` 在**锁外**认领该槽并完成 CHKPDU 校验、解析与
+执行（两个请求槽因此允许下一条请求在主泵执行期间继续累计）。直接使用引擎的测试可以
+在同一上下文依次调用两者，其余函数均在主上下文调用。
 
 ## 7. 参数、Data Storage 与持久化
 

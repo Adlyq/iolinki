@@ -11,9 +11,9 @@
  * @brief ISDU 传输层复位的作用域：读复位不释放写入口相位。
  *
  * 读方向（IDLE/IDLE2/ABORT/读完成）只复位主泵独占的读传输层，数据 ISR
- * 已建立的写请求（`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`）保持
- * 原样；整个传输层复位（初始化与错误恢复）才同时释放两者。另外覆盖 DPP1
- * 映像在失效序号下的 ISR 读，以及数据 ISR 内的 workspace 重绑定拒绝。
+ * 已建立的写请求（`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`）
+ * 保持原样——主泵从不改写这些字段，这是无锁接管的全部前提。另外覆盖
+ * DPP1 映像在失效序号下的 ISR 读，以及数据 ISR 内的 workspace 重绑定拒绝。
  */
 
 #include <stdarg.h>
@@ -58,7 +58,7 @@ static void expect_write_protected(iolink_isdu_ctx_t* ctx)
     assert_int_equal(resp[3], (uint8_t) (resp[0] ^ resp[1] ^ resp[2]));
 }
 
-/* 读复位只清读传输层；整个传输层复位才释放写入口相位。 */
+/* 读复位只清读传输层；写入口相位与发布字都保持原样。 */
 static void test_read_reset_keeps_write_phase(void** state)
 {
     (void) state;
@@ -78,13 +78,9 @@ static void test_read_reset_keeps_write_phase(void** state)
     assert_true(ctx.flowctrl_seen);
     assert_int_equal(ctx.stage_state, IOLINK_ISDU_STAGE_RECEPTION);
     assert_int_equal(ctx.state, ISDU_STATE_IDLE);
-
-    isdu_transport_reset(&ctx);
-
-    assert_int_equal(ctx.req_idx, 0U);
-    assert_int_equal(ctx.req_total, 0U);
-    assert_false(ctx.flowctrl_seen);
-    assert_int_equal(ctx.stage_state, IOLINK_ISDU_STAGE_IDLE);
+    /* 读复位不推进 ack：写入口那一代仍然未处理。 */
+    assert_int_equal(ctx.req_ack_gen, 0U);
+    assert_int_not_equal(IOLINK_ISDU_REQ_PUB_GEN(ctx.req_pub), ctx.req_ack_gen);
 }
 
 /* 读 IDLE 不丢弃 ISR 正在累计的写请求：补齐 COUNT 后仍能执行。 */
@@ -129,7 +125,9 @@ static void test_read_idle_keeps_complete_request(void** state)
     assert_int_equal(ctx.req_idx, sizeof(k_page1_write));
 
     iolink_isdu_process(&ctx);
-    assert_int_equal(ctx.stage_state, IOLINK_ISDU_STAGE_IDLE);
+    /* 相位闩锁在 COMPLETE（ISR 单写），主泵以 ack 代号表达"已处理"。 */
+    assert_int_equal(ctx.stage_state, IOLINK_ISDU_STAGE_COMPLETE);
+    assert_int_equal(ctx.req_ack_gen, IOLINK_ISDU_REQ_PUB_GEN(ctx.req_pub));
     expect_write_protected(&ctx);
 }
 

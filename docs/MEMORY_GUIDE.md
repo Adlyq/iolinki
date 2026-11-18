@@ -17,10 +17,10 @@ Measured on a 64-bit host with the default buffers in
 
 | Component | Size (bytes) | Description |
 | :--- | ---: | :--- |
-| **`iolink_device_ctx_t`** | **4856** | The object the application allocates (includes everything below) |
-| `iolink_device_ctx_t` (FRAME/FRAME) | 4848 | `IOLINK_ISR_*_MODE` = FRAME; `iolink_dll_ctx_t` is 4656 |
-| `iolink_dll_ctx_t` | 4664 | DLL state, timers, reply-plan table (48×24 B, four state slices), frame mailbox; embeds ISDU, Events and DS |
-| `iolink_isdu_ctx_t` | 1336 | Transport state, buffer pointers, the DPP1 RAM image (16 B + seqlock) and the embedded ISDU scratch (1033 B) |
+| **`iolink_device_ctx_t`** | **5136** | The object the application allocates (includes everything below) |
+| `iolink_device_ctx_t` (FRAME/FRAME) | 5128 | `IOLINK_ISR_*_MODE` = FRAME; `iolink_dll_ctx_t` is 4936 |
+| `iolink_dll_ctx_t` | 4944 | DLL state, timers, reply-plan table (48×24 B, four state slices), frame mailbox; embeds ISDU, Events and DS |
+| `iolink_isdu_ctx_t` | 1616 | Transport state, the two request-slot publication words, the DPP1 RAM image (16 B + seqlock) and the embedded ISDU scratch (1295 B) |
 | `iolink_events_ctx_t` | 504 | Event queue, lifecycle records, the double event-memory image and the ISR reset-request handshake |
 | `iolink_ds_ctx_t` | 352 | DS state, buffer pointers, the OD set and the embedded download stage |
 | **PHY API** | 20-30 bytes | Function pointers (usually const/flash, but pointer storage in RAM) |
@@ -50,12 +50,12 @@ Transport scratch is no longer mixed into long-lived state. The optional
 
 | Region | Bytes (default) | Lifetime |
 | :--- | ---: | :--- |
-| `isdu.request` | 262 | one ISDU request |
+| `isdu.request` | 524 | **two** ISDU request slots (262 B each: one being accumulated by the data ISR, one published for the main pump) |
 | `isdu.payload` | 256 | one decoded ISDU service |
 | `isdu.response` | 256 | one application ISDU response |
 | `isdu.frame` | 259 | one framed ISDU response (single buffer, lease model) |
 | `ds_stage` | 256 | DS upload/download serialization scratch |
-| **Total** | **1289** | |
+| **Total** | **1551** | |
 
 Applications can supply the workspace (for example in DTCM or external RAM):
 
@@ -79,19 +79,19 @@ To move the scratch **out of the context entirely**, build with
 
 | Component | Embedded (default) | `IOLINK_WORKSPACE_EMBEDDED=0` |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 4856 | **3560** |
-| `iolink_isdu_ctx_t` | 1336 | **296** |
+| `iolink_device_ctx_t` | 5136 | **3584** |
+| `iolink_isdu_ctx_t` | 1616 | **320** |
 | `iolink_ds_ctx_t` | 352 | **96** |
-| `iolink_workspace_t` (separate allocation) | — | 1289 |
+| `iolink_workspace_t` (separate allocation) | — | 1551 |
 
-The trimmed build is the small-MCU path: place the 1289-byte workspace in
+The trimmed build is the small-MCU path: place the 1551-byte workspace in
 DTCM/CCM (or size it down with `IOLINK_ISDU_BUFFER_SIZE` / `IOLINK_DS_IMAGE_MAX`)
 instead of carrying it inside the main context. One measured example (`IOLINK_ISDU_BUFFER_SIZE=64`, `IOLINK_DS_IMAGE_MAX=64`):
 
 | Component | Embedded | External workspace |
 | :--- | ---: | ---: |
-| `iolink_device_ctx_t` | 3896 | **3560** |
-| `iolink_workspace_t` | — | 329 |
+| `iolink_device_ctx_t` | 3984 | **3584** |
+| `iolink_workspace_t` | — | 399 |
 
 > **Lease rule (ISDU response).** There is exactly one framed-response buffer.
 > Before writing it, the main pump publishes `{len=0, busy=1}` through the reply-plan
@@ -117,8 +117,8 @@ You can tune these values to fit your MCU.
 
 | Macro | Default | Bytes Used | Description |
 | :--- | :--- | :--- | :--- |
-| `IOLINK_ISDU_BUFFER_SIZE` | 256 | **1033** bytes | `request`(262) + `payload`(256) + `response`(256) + `frame`(259) |
-| `IOLINK_WORKSPACE_EMBEDDED` | 1 | 0 or 1289 | 1 = keep fallback scratch in the contexts; 0 = require an external workspace |
+| `IOLINK_ISDU_BUFFER_SIZE` | 256 | **1295** bytes | `request`(2 × 262) + `payload`(256) + `response`(256) + `frame`(259) |
+| `IOLINK_WORKSPACE_EMBEDDED` | 1 | 0 or 1551 | 1 = keep fallback scratch in the contexts; 0 = require an external workspace |
 | `IOLINK_EVENT_QUEUE_SIZE` | 4 | scales with queue | `iolink_event_t` queue plus `IOLINK_EVENT_PENDING_MAX` (8) lifecycle records, two 19-byte Table 58 memory images and a 6-entry frozen snapshot |
 | `IOLINK_PD_IN_MAX_SIZE` | 32 | 195 bytes | Three reply buffers of `od_max + pd_in + 1` (65 each) |
 | `IOLINK_PD_OUT_MAX_SIZE` | 32 | 32 bytes | Output Process Data buffer (also sizes the ISR RX buffer) |
@@ -128,7 +128,7 @@ You can tune these values to fit your MCU.
 
 ### Total RAM
 
-The default `iolink_device_ctx_t` is **4856 bytes** (64-bit host, default
+The default `iolink_device_ctx_t` is **5136 bytes** (64-bit host, default
 buffers); buffer arrays dominate it. On a 32-bit target the same layout is
 smaller. To measure your own build instead of relying on the table:
 

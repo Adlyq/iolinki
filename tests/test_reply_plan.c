@@ -610,9 +610,10 @@ static int test_isdu_write_retry_storm_is_deduped(void)
         return 3; /* 重发没有推进位置，也没有覆盖已接受的 COUNT1 */
     }
 
-    /* 主泵接管并执行：请求保持有效，产生否定应答。 */
+    /* 主泵接管并执行：请求被 ack，应答就绪。 */
     iolink_dll_process(&s_dll.main);
-    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_IDLE) ||
+    if ((s_dll.main.shared.isdu.req_ack_gen !=
+         IOLINK_ISDU_REQ_PUB_GEN(s_dll.main.shared.isdu.req_pub)) ||
         (s_dll.main.shared.isdu.state != ISDU_STATE_RESPONSE_READY)) {
         return 4;
     }
@@ -645,7 +646,7 @@ static int test_new_start_overwrites_undrained_request(void)
     if (s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE) {
         return 1;
     }
-    if (s_dll.main.shared.isr_od_overruns != 0U) {
+    if (s_dll.main.shared.isdu.req_overruns != 0U) {
         return 2;
     }
 
@@ -663,7 +664,7 @@ static int test_new_start_overwrites_undrained_request(void)
     if (tx_observed_len() == 0U) {
         return 3;
     }
-    if (s_dll.main.shared.isr_od_overruns != 1U) {
+    if (s_dll.main.shared.isdu.req_overruns != 1U) {
         return 4;
     }
     if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
@@ -962,7 +963,7 @@ static int test_isdu_write_invalidates_read_view(void)
     if (tx_observed_len() != 2U) {
         return 18;
     }
-    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_ABORT) ||
+    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_IDLE) ||
         (s_dll.main.shared.isr_isdu_write_gen != (gen_after_apply + 1U)) ||
         (s_dll.main.shared.isdu_write_gen_applied != gen_after_apply)) {
         return 19;
@@ -1108,13 +1109,13 @@ static int test_type0_idle_read_resets_transport(void)
     return 0;
 }
 
-/** @brief 读复位请求只能在写入口为 IDLE 时应用（见 dll_apply_isr_isdu_read_reset）。
+/** @brief 读复位立即应用，且不扰动数据 ISR 的写入口（无锁接管的契约）。
  *
- * 主站"读 ABORT 后立刻写 START"：ISR 已用新 START 重建了写入口，此时若
- * 照常复位，req_idx/req_total 被清零，后续 COUNT 全部被忽略、请求整段
- * 丢弃（即使每一段都被 ACK）。守卫让复位请求等到写入口回到 IDLE。
+ * 主站"读 ABORT 后立刻写 START"：ISR 已用新 START 建立写请求，主泵同一
+ * 轮里应用读复位。写入口归 ISR，主泵的复位只清读方向字段，因此请求不会
+ * 被整段丢弃——这个竞争在所有权层面消失，不需要相位守卫或临界区。
  */
-static int test_read_reset_waits_for_idle_write_entry(void)
+static int test_read_reset_keeps_write_entry(void)
 {
     init_preoperate();
 
@@ -1134,7 +1135,7 @@ static int test_read_reset_waits_for_idle_write_entry(void)
     }
 
     /* 2. 紧接一个写 START（Type-0 写：MC + CKT + 一个 OD 字节），
-     *    ISR 借此重建写入口（stage_state = RECEPTION，req_total = 4）。 */
+     *    ISR 借此建立写入口（stage_state = RECEPTION，req_total = 4）。 */
     static const uint8_t octets[4] = {0x14U, 0x10U, 0x00U, 0x04U};
     uint8_t start[3] = {(uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START),
                         IOLINK_MSEQ_TYPE_0, octets[0]};
@@ -1151,9 +1152,9 @@ static int test_read_reset_waits_for_idle_write_entry(void)
         return 4;
     }
 
-    /* 3. 主泵一轮：复位请求必须被保留，新请求的入口字段原样不动。 */
+    /* 3. 主泵一轮：复位在同一轮生效，写入口字段原样不动。 */
     iolink_dll_process(&s_dll.main);
-    if (s_dll.main.shared.isr_isdu_read_reset == 0U) {
+    if (s_dll.main.shared.isr_isdu_read_reset != 0U) {
         return 5;
     }
     if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
@@ -1175,16 +1176,16 @@ static int test_read_reset_waits_for_idle_write_entry(void)
     }
     if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE) ||
         (s_dll.main.shared.isdu.req_idx != 4U)) {
-        return 8; /* 请求被整段丢弃：读复位在错误相位应用了 */
+        return 8; /* 请求被整段丢弃：读复位动了写入口 */
     }
 
-    /* 5. 写被主泵应用后入口回到 IDLE，保留的复位请求在同一轮生效。 */
+    /* 5. 主泵接管：写被 ack，否定应答就绪（等待主站读出后才回到空闲）。 */
     iolink_dll_process(&s_dll.main);
-    if (s_dll.main.shared.isr_isdu_read_reset != 0U) {
+    if (s_dll.main.shared.isdu.req_ack_gen !=
+        IOLINK_ISDU_REQ_PUB_GEN(s_dll.main.shared.isdu.req_pub)) {
         return 9;
     }
-    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_IDLE) ||
-        !iolink_isdu_is_idle(&s_dll.main.shared.isdu)) {
+    if (s_dll.main.shared.isdu.state != ISDU_STATE_RESPONSE_READY) {
         return 10;
     }
     return 0;
@@ -1346,7 +1347,7 @@ IOLINK_TEST_RC(test_unpublished_plans_block_the_isr)
 IOLINK_TEST_RC(test_isdu_write_invalidates_read_view)
 IOLINK_TEST_RC(test_startup_probe_plan)
 IOLINK_TEST_RC(test_type0_idle_read_resets_transport)
-IOLINK_TEST_RC(test_read_reset_waits_for_idle_write_entry)
+IOLINK_TEST_RC(test_read_reset_keeps_write_entry)
 IOLINK_TEST_RC(test_publish_reflects_capability_bits)
 IOLINK_TEST_RC(test_init_publishes_default_plan)
 IOLINK_TEST_RC(test_process_does_not_republish)
@@ -1386,7 +1387,7 @@ int main(void)
         cmocka_unit_test(iolink_case_test_isdu_write_invalidates_read_view),
         cmocka_unit_test(iolink_case_test_startup_probe_plan),
         cmocka_unit_test(iolink_case_test_type0_idle_read_resets_transport),
-        cmocka_unit_test(iolink_case_test_read_reset_waits_for_idle_write_entry),
+        cmocka_unit_test(iolink_case_test_read_reset_keeps_write_entry),
         cmocka_unit_test(iolink_case_test_publish_reflects_capability_bits),
         cmocka_unit_test(iolink_case_test_init_publishes_default_plan),
         cmocka_unit_test(iolink_case_test_process_does_not_republish),

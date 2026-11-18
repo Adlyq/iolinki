@@ -841,8 +841,10 @@ static int test_isdu_write_consumed_by_isr(void)
         (IOLINK_ISDU_PUB_LEN(dll.main.shared.isr_isdu_pub) == 0U)) {
         return 3;
     }
-    /* 请求收齐后主泵已接管：写入口回到空闲。 */
-    if (dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_IDLE) {
+    /* 请求收齐后主泵已接管：发布字已 ack（相位闩锁留在 COMPLETE）。 */
+    if ((dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE) ||
+        (dll.main.shared.isdu.req_ack_gen !=
+         IOLINK_ISDU_REQ_PUB_GEN(dll.main.shared.isdu.req_pub))) {
         return 4;
     }
     return 0;

@@ -431,8 +431,9 @@ void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd)
     }
     handle_system_command(ctx, cmd);
     /* Direct Parameter page 1 上的 SystemCommand 不产生肯定或
-       否定应答（7.3.5.3）；丢弃 ISDU 处理器暂存的任何内容。 */
-    isdu_transport_reset(ctx);
+       否定应答（7.3.5.3）；丢弃主泵为 ISDU 处理器暂存的任何应答。
+       写入口与发布字归数据 ISR，这里不碰。 */
+    isdu_read_reset(ctx);
 }
 
 /* -------------------------------------------------------------------------

@@ -165,9 +165,6 @@ typedef struct iolink_dll_shared
 
     uint32_t isr_mailbox_drops; /**< 因邮箱已满而丢弃的帧 */
 
-    uint32_t isr_od_overruns; /**< 上一条写请求尚未被主泵接管时又收到 START，
-                                   导致前一条被覆盖的次数 */
-
     uint32_t isr_plan_misses; /**< ISR 未命中应答计划而丢弃的合法帧 */
 
     uint32_t isr_frames_consumed; /**< 由 ISR 完全处理、不再进入邮箱的帧

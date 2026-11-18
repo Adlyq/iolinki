@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (MAJOR: ISDU write entry is two request slots + a publication word)
+- **`iolink_isdu_scratch_t::request` is now two slots** of
+  `IOLINK_ISDU_BUFFER_SIZE + 6` bytes (one being accumulated by the data ISR,
+  one published for the main pump). This is a layout change of a public
+  struct: `iolink_workspace_t` grows by `IOLINK_ISDU_BUFFER_SIZE + 6` bytes
+  (1289 -> 1551 at the default 256-byte buffer); `iolink_isdu_ctx_t` grows by
+  the same amount when the scratch is embedded (1336 -> 1616), plus 18 bytes
+  of slot bookkeeping (24 bytes with `IOLINK_WORKSPACE_EMBEDDED=0`).
+  `IOLINK_ISDU_STAGE_ABORT` is gone: the ISR settles an ABORT itself.
+- The data ISR owns the write entry end to end (slot selection, accumulation
+  state, `stage_state`) and publishes `{len, sel, gen, receiving}` in a single
+  natural-atomic word (`iolink_isdu_ctx_t::req_pub`); the main pump only loads
+  that word. It claims the published slot (`req_busy_sel`), validates the
+  CHKPDU, parses the header and copies the payload **outside any critical
+  section**, then records `req_ack_gen` and releases the slot before running
+  the service and the application callbacks. `iolink_isdu_process()` no longer
+  takes a critical section and never re-reads `stage_state`.
+- While the main pump works on one request the ISR can complete the next one in
+  the other slot. A START never writes the slot being parsed; it replaces a
+  published but unclaimed request instead, which is withdrawn (`len = 0` with
+  a fresh generation) and counted in `iolink_isdu_ctx_t::req_overruns`,
+  exported unchanged as `iolink_dll_get_stats().isr_od_overruns`. A replaced
+  request is never executed.
+- `iolink_isdu_od_write()` publishes a `receiving` generation as soon as a
+  write START is accepted, so the main pump keeps the published read view
+  empty for the whole transfer without reading any ISR phase field. The
+  write-abort path also asks the main context to reset the read transport
+  (`isr_isdu_read_reset`, Table 52), which the main pump now applies
+  unconditionally: `isdu_read_reset()` touches only read-transport fields, so
+  the read-reset critical section and its write-entry phase guard are gone
+  ("read ABORT immediately followed by write START" can no longer drop the
+  write). `isdu_transport_reset()` is removed; `isdu_read_reset()` is the only
+  read-side reset.
+- `iolink_isdu_execute_system_command()` (Direct Parameter page 1) still drops
+  a staged read response but no longer discards an already received ISDU write:
+  every segment of that write was acknowledged, and the write entry now belongs
+  to the data ISR alone.
+- Ordering: slot contents are written before the publication word
+  (`IOLINK_FENCE()` + one atomic store) and the claiming side stores
+  `req_busy_sel` before reading the slot, so under
+  `IOLINK_CONCURRENCY=SMP` a reader never pairs a fresh generation with stale
+  bytes, and the ISR never overwrites a slot the main pump is parsing.
+- Tests: `tests/test_isdu_slots.c` drives the three cut points (new request
+  during service execution, replacement of an unclaimed request, slot reuse
+  after the ack);
+  `tests/test_isdu_slots_small.c` repeats the flow against a
+  `IOLINK_ISDU_BUFFER_SIZE=64` build.
+
 ### Changed (ISDU write invalidation uses a monotonic sequence)
 - The clearable `isr_isdu_invalidated` flag is gone. The data ISR bumps
   `isr_isdu_write_gen` on every accepted write START/ABORT; the main pump records
