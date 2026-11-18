@@ -1,0 +1,9 @@
+# Dead-field allowlist: <struct>.<field>  # reason
+#
+# A finding (no-use / write-only / test-only) is excused only by an entry here,
+# and every entry must still match a live finding: a stale entry is a hard
+# failure, so the list cannot quietly outlive the field it excuses.
+#
+# Retain an entry only when the field is genuinely observed outside the scanned
+# production tree. Fields that are dead today are deleted, not excused.
+iolink_dll_main_t.last_response_us  # 定时记账的时间戳，由 tests/test_timer_table.c 与 tests/test_isr_consumed_timing.c 断言；生产代码只写不读，删除会让 T_CYCLE/T_REN 回归不可观测
