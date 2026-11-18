@@ -112,6 +112,16 @@ void dll_isr_start_staged_tx(iolink_dll_main_t* ctx, uint8_t slot, uint8_t len, 
             }
         }
     }
+    else {
+        /* 本构建按 TX FRAME 交付，PHY 却没有 tx_frame()：能力位不会置 TX，
+         * 设备层校验因此看不见这种拼装错误。计数丢弃，使配置错误可观测。 */
+        if (ctx->shared.in_isr != 0U) {
+            IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
+        }
+        else {
+            ctx->shared.isr_tx_dropped++;
+        }
+    }
 #else
     if (ctx->shared.phy->tx_octet != NULL) {
         ctx->shared.isr->isr_tx_base = ctx->shared.isr_tx_payload[slot];
@@ -121,6 +131,15 @@ void dll_isr_start_staged_tx(iolink_dll_main_t* ctx, uint8_t slot, uint8_t len, 
         ctx->shared.isr->tx_stream_has_cks = (has_cks != 0U) ? 1U : 0U;
         ctx->shared.isr_tx_active = 1U;
         dll_isr_tx_step(ctx);
+    }
+    else {
+        /* TX BYTE 构建 + 只有 tx_frame() 的 PHY：同上，计数而不是静默丢弃。 */
+        if (ctx->shared.in_isr != 0U) {
+            IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
+        }
+        else {
+            ctx->shared.isr_tx_dropped++;
+        }
     }
 #endif
 }
