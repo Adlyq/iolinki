@@ -17,6 +17,12 @@ only through direct assignment/compound-assignment/increment on the name; a
 write performed through a pointer (``memcpy(&s.field, ...)``) is counted as a
 read, again erring on the quiet side.
 
+A separate, non-allowlistable check enforces the ownership prefix: every
+``iolink_dll_shared_t`` field must have a row in ``tools/shared_fields.csv``
+and its name must start with that row's category (``c_``/``m_``/``i_``/``b_``).
+A missing row or a mismatched prefix fails the gate; there is no allowlist for
+it, because the prefix is the classification made visible at every use site.
+
 Every finding must be covered by ``tools/dead_fields_allowlist.txt`` with a
 ``# reason``; an entry that no longer matches a finding is a hard failure, so
 the list cannot quietly outlive the code it excuses.
@@ -305,6 +311,62 @@ def compile_findings(root: Path) -> tuple[list[Finding], list[FieldDecl]]:
     return findings, decls
 
 
+def load_shared_fields(root: Path) -> list[dict[str, str]]:
+    """Read the ownership table that also defines the shared-field prefixes."""
+    path = root / "tools/shared_fields.csv"
+    if not path.is_file():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line or line.startswith("#"):
+            continue
+        cells = [cell.strip() for cell in line.split(",")]
+        if len(cells) < 3 or cells[0] == "struct":
+            continue
+        rows.append({"struct": cells[0], "field": cells[1], "category": cells[2]})
+    return rows
+
+
+def compile_prefix_findings(root: Path, decls: list[FieldDecl]) -> list[Finding]:
+    """Every shared field must be categorised in the CSV and carry that prefix."""
+    rows = load_shared_fields(root)
+    if not rows:
+        return []
+    findings: list[Finding] = []
+    categorised = {(row["struct"], row["field"]): row["category"] for row in rows}
+    for row in rows:
+        if row["struct"] != "iolink_dll_shared_t":
+            continue
+        if not row["field"].startswith(row["category"]):
+            findings.append(
+                Finding(
+                    row["struct"],
+                    row["field"],
+                    "prefix",
+                    f"tools/shared_fields.csv classifies it as {row['category']}",
+                )
+            )
+    for decl in decls:
+        if decl.struct != "iolink_dll_shared_t":
+            continue
+        category = categorised.get((decl.struct, decl.field))
+        if category is None:
+            findings.append(
+                Finding(decl.struct, decl.field, "prefix", "missing from tools/shared_fields.csv")
+            )
+        elif not decl.field.startswith(category):
+            findings.append(
+                Finding(
+                    decl.struct,
+                    decl.field,
+                    "prefix",
+                    f"name does not start with {category}",
+                )
+            )
+    findings.sort(key=lambda finding: (finding.struct, finding.field))
+    return findings
+
+
 def load_allowlist(path: Path) -> dict[str, str]:
     if not path.is_file():
         raise DeadFieldError(f"{path} is missing")
@@ -339,7 +401,14 @@ def apply_allowlist(findings: list[Finding], allow: dict[str, str]) -> list[Find
 def run(root: Path, allowlist: Path, enforce: bool) -> int:
     findings, decls = compile_findings(root)
     allow = load_allowlist(allowlist)
-    remaining = apply_allowlist(findings, allow)
+    prefix_findings = compile_prefix_findings(root, decls)
+    for finding in prefix_findings:
+        print(
+            f"dead-field: {finding.key} has an invalid category prefix "
+            f"({finding.detail})",
+            file=sys.stderr,
+        )
+    remaining = apply_allowlist(findings, allow) + prefix_findings
     for finding in remaining:
         print(
             f"dead-field: {finding.key} is {finding.kind} ({finding.detail})",
@@ -395,6 +464,29 @@ def selftest() -> int:
                 file=sys.stderr,
             )
 
+    prefix_root = ROOT / FIXTURE / "prefix"
+    try:
+        prefix_text = (prefix_root / "include/iolinki/internal/dll_shared.h").read_text(
+            encoding="utf-8"
+        )
+        prefix_decls = parse_struct_fields(
+            prefix_text, "include/iolinki/internal/dll_shared.h", {}
+        )
+        prefix = compile_prefix_findings(prefix_root, prefix_decls)
+        prefix_actual = {(finding.field, finding.kind) for finding in prefix}
+    except (OSError, DeadFieldError) as exc:
+        failures += 1
+        print(f"selftest FAIL: prefix fixture: {exc}", file=sys.stderr)
+    else:
+        prefix_expected = {("bad_name", "prefix"), ("b_missing", "prefix")}
+        if prefix_actual != prefix_expected:
+            failures += 1
+            print(
+                f"selftest FAIL: prefix fixture: expected {sorted(prefix_expected)}, "
+                f"got {sorted(prefix_actual)}",
+                file=sys.stderr,
+            )
+
     with tempfile.TemporaryDirectory() as temp:
         stale = Path(temp) / "allow.txt"
         stale.write_text("s_shared.ghost_field  # stale on purpose\n", encoding="utf-8")
@@ -419,7 +511,7 @@ def selftest() -> int:
 
     if failures:
         return 1
-    print("dead-fields selftest: OK (3 classes, clean tree, stale/bare allowlist)")
+    print("dead-fields selftest: OK (3 classes, prefix categories, clean tree, stale/bare allowlist)")
     return 0
 
 

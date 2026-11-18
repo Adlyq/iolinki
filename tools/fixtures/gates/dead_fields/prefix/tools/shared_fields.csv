@@ -1,0 +1,3 @@
+struct,field,category,writer,reader,note
+iolink_dll_shared_t,b_ok,b_,main,isr,a correctly prefixed field
+iolink_dll_shared_t,bad_name,c_,main,isr,deliberately wrong prefix
