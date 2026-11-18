@@ -273,9 +273,11 @@ void iolink_event_trigger(iolink_events_ctx_t* ctx, uint16_t code, iolink_event_
     IOLINK_LOG_DEBUG(ctx->log, "event trigger code=0x%04X type=%u", (unsigned) code,
                      (unsigned) type);
 
-    IOLINK_CRITICAL_ENTER();
-
+    /* 时钟回调属于应用代码，必须在关中断之前采样；本次触发只使用这一个
+       时间戳。 */
     const uint32_t now = events_now_ms(ctx);
+
+    IOLINK_CRITICAL_ENTER();
 
     /* 注册表登记的代码使用规范 EventType；未登记（厂商/应用）代码
      * 保留调用方输入，应用事件的自定义类型因此不受影响。 */
@@ -362,8 +364,11 @@ void iolink_events_process(iolink_events_ctx_t* ctx)
         return;
     }
 
-    IOLINK_CRITICAL_ENTER();
+    /* 时钟回调属于应用代码，必须在关中断之前采样；本轮处理只使用这一个
+       时间戳。 */
     const uint32_t now = events_now_ms(ctx);
+
+    IOLINK_CRITICAL_ENTER();
     bool queued = false;
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         iolink_event_pending_t* p = &ctx->pending[i];
@@ -405,6 +410,10 @@ void iolink_events_clear_diagnosis(iolink_events_ctx_t* ctx)
         return;
     }
 
+    /* 时钟回调属于应用代码，必须在关中断之前采样；本次清理只使用这一个
+       时间戳。 */
+    const uint32_t now = events_now_ms(ctx);
+
     IOLINK_CRITICAL_ENTER();
 
     /* Table 101 “Clear”：队列中的通知不携带诊断信息，在仍未确认时
@@ -422,7 +431,6 @@ void iolink_events_clear_diagnosis(iolink_events_ctx_t* ctx)
     /* 撤销所有已置位的错误/警告。复位是刻意的，因此“事件消失”会
        立即入队，而不等待常规的 A.6.4/10.10.2 间隔；DeviceStatus 随
        复位一并清除。 */
-    const uint32_t now = events_now_ms(ctx);
     for (uint8_t i = 0U; i < IOLINK_EVENT_PENDING_MAX; i++) {
         iolink_event_pending_t* p = &ctx->pending[i];
         if (!p->active || !p->present) {

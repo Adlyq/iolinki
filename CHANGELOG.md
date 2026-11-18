@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (event timestamps are sampled before the lock)
+- `iolink_event_trigger()`, `iolink_events_process()` and
+  `iolink_events_clear_diagnosis()` now read the bound application clock once,
+  before `IOLINK_CRITICAL_ENTER()`. The callback is application code, so the
+  time spent with interrupts disabled is now bounded by the event bookkeeping
+  itself instead of the clock read; each call still uses that single timestamp
+  throughout.
+
 ### Removed (reply plans carry no timing field and are compiled once)
 - `iolink_reply_plan_t::deadline_us` is gone. Nothing read it at run time: the
   ISR arms t_A from `10 * dll_get_t_bit_us()` when it starts a reply
