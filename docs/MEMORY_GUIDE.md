@@ -26,10 +26,13 @@ FRAME variants are pinned by `tests/test_ctx_sizes.c`):
 | `iolink_ds_ctx_t` | 352 | DS state, buffer pointers, the OD set and the embedded download stage |
 | `iolink_phy_api_t` | 112 (usually `.rodata`) | Driver vtable, not part of the device context; only the pointer in `iolink_device_config_t` costs RAM (8 B on 64-bit) |
 
-`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 8 bytes to `iolink_device_ctx_t`
-(5152 total: two counter sets plus padding). 32-bit targets are smaller because
-pointers are 4 bytes. One exception: `iolink_device_ctx_t::phy_error` (an `int`)
-can add 4 bytes there, because the 64-bit layout absorbs it in existing padding.
+`IOLINK_STATS_MODE=IOLINK_STATS_SPLIT` adds 8 bytes to `iolink_device_ctx_t` on
+both the 64-bit host (5152 total) and the Cortex-M0+ target (4328 → 4336 B with
+arm-none-eabi-gcc, 4456 → 4464 B with clang): `iolink_dll_shared_t` gains a
+12-byte ISR counter set, partly absorbed by existing padding. 32-bit targets are
+smaller because pointers are 4 bytes. One exception: `iolink_device_ctx_t::phy_error`
+(an `int`) can add 4 bytes there, because the 64-bit layout absorbs it in existing
+padding.
 
 The DLL state is owned by two sibling structures inside `iolink_dll_ctx_t`:
 `iolink_dll_main_t` (which nests the main/ISR shared region) and
@@ -180,19 +183,33 @@ request flag or queue item for the IO-Link task to serve).
 - **Critical Sections**: The stack uses `iolink_critical_enter/exit`. These should map to fast IRQ-disable routines to minimize latency.
 - **Queue Storage**: Events are stored in `iolink_events_ctx_t` (RAM), not on the task stack.
 
-Code size varies heavily by architecture (ARM Cortex-M vs AVR vs RISC-V) and compiler optimization (`-Os`, `-O3`).
+### Code size (ROM)
 
-These are ARM Cortex-M `-Os` estimates, not measurements of the default host
-build. The default CMake build sets no `CMAKE_BUILD_TYPE` (no optimisation) and
-`tools/gates.sh build` builds `Debug` (`-O0`), so both are much larger than `-Os`.
+Code size is measured, not estimated: `tools/size_matrix.py` links a minimal
+device application against every library source and records the section sizes
+in `tools/size_baseline.csv` (arm-none-eabi-gcc) and
+`tools/size_baseline.atfe.csv` (clang). The `c1_full` row is the full stack
+(DLL, ISDU, Data Storage, events, diagnostics, OD, device and the `phy_generic`
+template listed in `tools/size_matrix.py`) as reached by the probe application,
+plus that application's `memcpy`/`memset`/`strlen` stubs; no transceiver driver
+is linked. Section GC is on, so the row counts what the minimal application and
+the constant capability table keep, not every function of every source file.
 
-**Estimated Sizes (ARM Cortex-M, -Os):**
+Basis for the numbers below: `c1_full`, `source` delivery,
+`-Wl,--gc-sections`, LTO off, `-Os`, Cortex-M0+, `-nostdlib`, and
+`-DIOLINK_LOG_COMPILE_LEVEL=0`, so log format strings are **not** included.
+ROM total = `text` + `rodata` + `data`:
 
-| Module | Size (approx) |
-| :--- | :--- |
-| **Core (DLL/ISDU/Events)** | 4 - 6 KB |
-| **Data Storage** | ~1 KB |
-| **Total** | **~5 - 7 KB** |
+| Toolchain | CSV row | text | rodata | data | ROM total |
+| :--- | :--- | ---: | ---: | ---: | ---: |
+| arm-none-eabi-gcc 15.3.1 | `tools/size_baseline.csv` | 22952 | 3057 | 0 | **26009 B ≈ 25.4 KiB** |
+| clang 23.1.0 (ATFE) | `tools/size_baseline.atfe.csv` | 25468 | 3173 | 0 | **28641 B ≈ 28.0 KiB** |
+
+The same row with LTO on is 24276 B (gcc) and 27833 B (clang), i.e. LTO saves
+about 1.7 KiB and 0.8 KiB respectively. Host debug builds (`-O0`, the default
+CMake build type) are not comparable and are not used for these rows;
+`tools/size_matrix.py --check` enforces the baselines and `--table` prints the
+full matrix.
 
 The checksum in `src/crc.c` is computed on the fly (XOR + 6-bit compression);
 there are no lookup tables to size.
