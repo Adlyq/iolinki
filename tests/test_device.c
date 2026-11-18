@@ -216,7 +216,6 @@ static void test_device_init_maps_phy_error(void** state)
     assert_int_equal(g_phy_init_calls, 1);
     /* 默认日志是静默的，原始码必须能从上下文取回。 */
     assert_int_equal(iolink_device_get_phy_error(&ctx), -7);
-    assert_int_equal(iolink_device_get_phy_error(TEST_NULL(const iolink_device_ctx_t*)), 0);
 }
 
 static void test_device_init_clears_stale_phy_error(void** state)
@@ -463,12 +462,6 @@ static void test_device_introspection(void** state)
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
     assert_non_null(iolink_device_get_events_ctx(&dev.ctx));
     assert_non_null(iolink_device_get_ds_ctx(&dev.ctx));
-
-    /* 访问器的兜底路径：NULL 上下文返回默认值，契约仍要求非空。 */
-    assert_int_equal(iolink_device_get_state(TEST_NULL(const iolink_device_ctx_t*)),
-                     IOLINK_DLL_STATE_STARTUP);
-    assert_int_equal(iolink_device_get_m_seq_type(TEST_NULL(const iolink_device_ctx_t*)),
-                     IOLINK_M_SEQ_TYPE_0);
 }
 
 /* COM 是编译期常量：设备 getter 返回 IOLINK_COM，配置侧没有覆盖入口。 */

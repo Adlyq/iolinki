@@ -168,7 +168,6 @@ static void test_bind_null_is_ignored(void** state)
     /* 兜底路径：上下文为 NULL 时不得解引用，各自返回错误/空操作。 */
     iolink_isdu_bind_workspace(TEST_NULL(iolink_isdu_ctx_t*), NULL);
     iolink_ds_bind_workspace(TEST_NULL(iolink_ds_ctx_t*), NULL);
-    assert_null(iolink_device_get_workspace(TEST_NULL(iolink_device_ctx_t*)));
     assert_int_equal(iolink_device_init(TEST_NULL(iolink_device_ctx_t*),
                                         TEST_NULL(const iolink_device_config_t*)),
                      IOLINK_DEVICE_INIT_ERR_NULL);

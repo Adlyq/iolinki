@@ -383,23 +383,17 @@ int iolink_device_init(iolink_device_ctx_t* ctx, const iolink_device_config_t* c
 
 int iolink_device_get_phy_error(const iolink_device_ctx_t* ctx)
 {
-    return (ctx != NULL) ? ctx->phy_error : 0;
+    return ctx->phy_error;
 }
 
 iolink_workspace_t* IOLINK_NULLABLE iolink_device_get_workspace(const iolink_device_ctx_t* ctx)
 {
-    if (ctx == NULL) {
-        return NULL;
-    }
     return ctx->dll.main.shared.isdu.workspace;
 }
 
 void iolink_device_set_log(iolink_device_ctx_t* ctx, iolink_log_write_fn IOLINK_NULLABLE write,
                            iolink_log_level_t level)
 {
-    if (ctx == NULL) {
-        return;
-    }
     iolink_app_t* IOLINK_NULLABLE self = (ctx->config != NULL) ? ctx->config->app->self : NULL;
 
     /* 初始化期单写者：应用只能通过 config 给出日志汇点，运行期不再改写。
@@ -574,9 +568,6 @@ static void device_run_app_callbacks(iolink_device_ctx_t* ctx)
 
 void iolink_device_process(iolink_device_ctx_t* ctx)
 {
-    if (ctx == NULL) {
-        return;
-    }
     if (!device_service_window_ready(ctx)) {
         return;
     }
@@ -627,9 +618,6 @@ iolink_device_pd_result_t iolink_device_pd_input_update(iolink_device_ctx_t* ctx
 
 void iolink_device_process_isr(iolink_device_ctx_t* ctx)
 {
-    if (ctx == NULL) {
-        return;
-    }
     iolink_dll_process_isr(&ctx->dll.main);
 }
 
@@ -654,34 +642,34 @@ int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, 
 #if IOLINK_FEATURE_EVENTS
 iolink_events_ctx_t* iolink_device_get_events_ctx(iolink_device_ctx_t* ctx)
 {
-    return (ctx != NULL) ? &ctx->dll.main.shared.events : NULL;
+    return &ctx->dll.main.shared.events;
 }
 #endif
 #if IOLINK_FEATURE_DATA_STORAGE
 iolink_ds_ctx_t* iolink_device_get_ds_ctx(iolink_device_ctx_t* ctx)
 {
-    return (ctx != NULL) ? &ctx->dll.main.ds : NULL;
+    return &ctx->dll.main.ds;
 }
 #endif
 
 iolink_caps_t iolink_device_capabilities(const iolink_device_ctx_t* ctx)
 {
-    return (ctx != NULL) ? ctx->dll.main.shared.caps : (iolink_caps_t) 0U;
+    return ctx->dll.main.shared.caps;
 }
 
 bool iolink_device_master_lost(const iolink_device_ctx_t* ctx)
 {
-    return (ctx != NULL) && ctx->dll.main.master_lost;
+    return ctx->dll.main.master_lost;
 }
 
 iolink_dll_state_t iolink_device_get_state(const iolink_device_ctx_t* ctx)
 {
-    return (ctx != NULL) ? ctx->dll.main.shared.state : IOLINK_DLL_STATE_STARTUP;
+    return ctx->dll.main.shared.state;
 }
 
 iolink_phy_mode_t iolink_device_get_phy_mode(const iolink_device_ctx_t* ctx)
 {
-    return (ctx != NULL) ? iolink_dll_get_phy_mode(&ctx->dll.main) : IOLINK_PHY_MODE_SIO;
+    return iolink_dll_get_phy_mode(&ctx->dll.main);
 }
 
 iolink_baudrate_t iolink_device_get_baudrate(const iolink_device_ctx_t* ctx)
@@ -692,25 +680,19 @@ iolink_baudrate_t iolink_device_get_baudrate(const iolink_device_ctx_t* ctx)
 
 void iolink_device_get_dll_stats(const iolink_device_ctx_t* ctx, iolink_dll_stats_t* out_stats)
 {
-    if (ctx != NULL) {
-        iolink_dll_get_stats(&ctx->dll.main, out_stats);
-    }
+    iolink_dll_get_stats(&ctx->dll.main, out_stats);
 }
 
 iolink_m_seq_type_t iolink_device_get_m_seq_type(const iolink_device_ctx_t* ctx)
 {
-    return (ctx != NULL) ? (iolink_m_seq_type_t) ctx->dll.main.shared.m_seq_type
-                         : IOLINK_M_SEQ_TYPE_0;
+    return (iolink_m_seq_type_t) ctx->dll.main.shared.m_seq_type;
 }
 
 uint8_t iolink_device_get_pd_in_len(const iolink_device_ctx_t* ctx)
 {
     uint8_t pd_in_len = 0U;
 
-    if (ctx != NULL) {
-        iolink_dll_get_pd_length(&ctx->dll.main, &pd_in_len, NULL);
-    }
-
+    iolink_dll_get_pd_length(&ctx->dll.main, &pd_in_len, NULL);
     return pd_in_len;
 }
 
@@ -718,9 +700,6 @@ uint8_t iolink_device_get_pd_out_len(const iolink_device_ctx_t* ctx)
 {
     uint8_t pd_out_len = 0U;
 
-    if (ctx != NULL) {
-        iolink_dll_get_pd_length(&ctx->dll.main, NULL, &pd_out_len);
-    }
-
+    iolink_dll_get_pd_length(&ctx->dll.main, NULL, &pd_out_len);
     return pd_out_len;
 }
