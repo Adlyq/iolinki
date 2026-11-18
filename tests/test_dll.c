@@ -1620,14 +1620,14 @@ static void test_min_cycle_time_from_m_sequence(void** state)
 
     /* 应用层下限更高时以它为准（阈值按编译期 COM 选，确保高于自然值）。 */
 #if IOLINK_COM == 3
-    dll.min_cycle_time_app_us = 5000U;
+    dll.shared.min_cycle_time_app_us = 5000U;
     assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 50U);
 #elif IOLINK_COM == 2
-    dll.min_cycle_time_app_us = 21000U;
+    dll.shared.min_cycle_time_app_us = 21000U;
     assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 210U);
 #else
     /* COM1 的自然值已在上限 255，应用下限只会被钳制回 255。 */
-    dll.min_cycle_time_app_us = 30000U;
+    dll.shared.min_cycle_time_app_us = 30000U;
     assert_int_equal(iolink_dll_compute_min_cycle_time(&dll), 255U);
 #endif
 }

@@ -970,12 +970,12 @@ static int test_fallback_clear_is_staged(void)
     iolink_dll_process_isr(&dll.main);
 
     if ((iolink_dll_timer_deadline(&dll.main, IOLINK_TIMER_T_FBD) != 0x0000000123456789ULL) ||
-        (dll.main.fallback_clear_request == 0U)) {
+        (dll.main.shared.fallback_clear_request == 0U)) {
         return 1; /* ISR 触碰了该 64 位字段 */
     }
     iolink_dll_process(&dll.main);
     if (iolink_dll_timer_armed(&dll.main, IOLINK_TIMER_T_FBD) ||
-        (dll.main.fallback_clear_request != 0U)) {
+        (dll.main.shared.fallback_clear_request != 0U)) {
         return 2; /* 主泵未实施已暂存的清除 */
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME

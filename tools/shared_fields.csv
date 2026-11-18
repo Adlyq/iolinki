@@ -12,11 +12,15 @@ iolink_dll_shared_t,isr_consumed_us,i_,isr,main,ISR 完全消费帧的时间戳�
 iolink_dll_shared_t,isr_consumed_seq,i_,isr,main,消费帧发布序号（后写）
 iolink_dll_shared_t,isr_dsio_clear,i_,isr,main,启动探测一次性握手；主泵清除
 iolink_dll_shared_t,isr_fallback_pending,i_,isr,main,ISR 接受 FALLBACK 的一次性请求；主泵清除
+iolink_dll_shared_t,fallback_clear_request,b_,both,main,已应用非 FALLBACK 命令；主泵清 0 并取消 T_FBD
 iolink_dll_shared_t,isr_cycle_served,i_,isr,main,ISR 已服务一个周期的交接标志；主泵清除
 iolink_dll_shared_t,isdu_restart_pending,i_,isr,main,ISR 进入 STARTUP 的复位请求；主泵消费并清除
+iolink_dll_shared_t,startup_notification_pending,i_,isr,main,ISR 进入 STARTUP 的待投递复位通知；主泵投递后清 0
 iolink_dll_shared_t,m_seq_type,c_,init,both,支持的 M 序列类型
 iolink_dll_shared_t,pd_in_len,c_,init,both,输入过程数据长度
 iolink_dll_shared_t,od_width,c_,init,both,OPERATE 的 OD 宽度 m
+iolink_dll_shared_t,min_cycle_time_app_us,c_,init,both,周期时间的应用层下限
+iolink_dll_shared_t,master_cycle_time,m_,main,isr,DPP1 MasterCycleTime 字节（Table B.1/B.3）；0 = 尚未写入
 iolink_dll_shared_t,isr_isdu_pub,m_,main,isr,ISDU 读视图发布字；ISR 采纳
 iolink_dll_shared_t,isr_isdu_read_reset,i_,isr,main,ISDU 读传输层复位请求；主泵清除
 iolink_dll_shared_t,isr_isdu_last_flowctrl,i_,isr,isr,ISR 单写单读的 FlowCTRL 记忆；batch 2: move to iolink_dll_isr_t
@@ -52,5 +56,4 @@ iolink_dll_shared_t,isdu,b_,both,both,ISDU 引擎；ISR 走写入口与读范围
 iolink_dll_shared_t,framing_errors,b_,both,main,ISR 经统计宏自增；主泵复位并读取
 iolink_dll_shared_t,timeout_errors,b_,both,main,ISR 经统计宏自增；主泵复位并读取
 iolink_dll_shared_t,log,c_,init,both,日志汇点；init 绑定后两个上下文只读
-iolink_dll_main_t,startup_notification_pending,i_,isr,main,batch 2: move to iolink_dll_shared_t
 iolink_dll_isr_t,stack_tick_pending,i_,isr,main,Timer B 授权标志；ISR 置位，主上下文在服务窗口消费并清除

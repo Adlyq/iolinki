@@ -105,6 +105,8 @@ typedef struct iolink_dll_shared
 
     volatile uint8_t isr_fallback_pending; /**< ISR 已接受 FALLBACK：由主上下文启动 T_FBD */
 
+    volatile uint8_t fallback_clear_request; /**< 已应用非 FALLBACK 命令：清除 T_FBD */
+
     /**
      * @brief ISR 已完全服务一个 MasterCycle（ISR -> 主泵，一次性）。
      *
@@ -120,6 +122,9 @@ typedef struct iolink_dll_shared
     /** @brief ISR 触发了 STARTUP：主泵据此作废在途 ISDU 写并复位读传输层。 */
     volatile uint8_t isdu_restart_pending;
 
+    /** @brief ISR 进入了 STARTUP；主上下文必须上报该事件。 */
+    volatile uint8_t startup_notification_pending;
+
     /* 配置 */
     uint8_t m_seq_type; /**< 支持的 M 序列类型 */
 
@@ -130,6 +135,11 @@ typedef struct iolink_dll_shared
                            （Figure A.14）：WRITE 请求在 PD-out 之后
                            携带 OD，READ 应答在 PD-in 之前携带 OD，
                            反方向则不携带。 */
+
+    uint32_t min_cycle_time_app_us; /**< 周期时间的应用层下限 */
+
+    uint8_t master_cycle_time; /**< DPP1 0x01，由主站写入的周期时间字节
+                                    （Table B.1/B.3）；0 = 尚未写入 */
 
     /* ISR ISDU 读取视图。主泵将 {length, busy, buffer} 作为一个
      * 原子字发布，使 ISR 绝不会观察到半更新的元组；ISR 拥有

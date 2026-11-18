@@ -69,7 +69,8 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx)
     const uint32_t t = (t_write > t_read) ? t_write : t_read;
     uint32_t units = (t + (IOLINK_CYCLE_TIME_UNIT_US - 1U)) / IOLINK_CYCLE_TIME_UNIT_US;
     const uint32_t app_units =
-        (ctx->min_cycle_time_app_us + (IOLINK_CYCLE_TIME_UNIT_US - 1U)) / IOLINK_CYCLE_TIME_UNIT_US;
+        (ctx->shared.min_cycle_time_app_us + (IOLINK_CYCLE_TIME_UNIT_US - 1U)) /
+        IOLINK_CYCLE_TIME_UNIT_US;
     if (units < app_units) {
         units = app_units;
     }

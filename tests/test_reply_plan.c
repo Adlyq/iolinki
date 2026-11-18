@@ -481,7 +481,7 @@ static int test_type0_page_write_is_answered(void)
     tx_reset();
     iolink_dll_process(&s_dll.main);
     drain_tx();
-    if (s_dll.main.master_cycle_time != 0x4FU) {
+    if (s_dll.main.shared.master_cycle_time != 0x4FU) {
         return 4;
     }
     if (tx_observed_len() != 0U) {

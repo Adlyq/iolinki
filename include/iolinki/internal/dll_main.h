@@ -43,8 +43,6 @@ struct iolink_dll_main
     volatile uint8_t back_to_box_cycles; /**< 自请求 Back-to-box 以来已服务的
                                              MasterCycle 数（只由主上下文推进） */
 
-    volatile uint8_t fallback_clear_request; /**< 已应用非 FALLBACK 命令：清除 T_FBD */
-
     uint8_t isdu_pub_gen; /**< ISDU 应答代数（每份新应答翻转） */
 
     uint8_t isdu_pub_state; /**< 上次看到的 ISDU 状态（检测新应答边沿） */
@@ -56,20 +54,12 @@ struct iolink_dll_main
 
     uint32_t pd_in_skips; /**< 跳过的 PD-in 发布：所有空闲缓冲区均已被租用 */
 
-    volatile uint8_t startup_notification_pending; /**< ISR 进入了 STARTUP；主
-                                                        上下文必须上报该事件 */
-
     iolink_dll_state_t last_notified_state; /**< 已交付给 state_cb 的状态
                                                   （仅主上下文） */
 
     uint8_t isr_tx_next; /**< 主泵下一个填充的槽位（0/1） */
 
-    uint8_t master_cycle_time; /**< DPP1 0x01，由主站写入的周期时间字节
-                                    （Table B.1/B.3）；0 = 尚未写入 */
-
     uint32_t min_cycle_time_us; /**< 最小周期时间，单位为微秒 */
-
-    uint32_t min_cycle_time_app_us; /**< 周期时间的应用层下限 */
 
     bool enforce_timing; /**< 启用定时检查（t_ren / t_cycle） */
 

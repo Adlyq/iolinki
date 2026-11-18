@@ -316,7 +316,7 @@ void dll_set_state(iolink_dll_main_t* ctx, iolink_dll_state_t new_state)
         }
 #endif
         if (ctx->shared.in_isr != 0U) {
-            ctx->startup_notification_pending = 1U;
+            ctx->shared.startup_notification_pending = 1U;
             ctx->shared.isdu_restart_pending = 1U;
         }
         else {
@@ -348,12 +348,12 @@ void iolink_dll_flush_state_callbacks(iolink_dll_main_t* ctx)
     /* 来自 ISR 的 STARTUP 转换是一个边沿，不能在主上下文
      * 观察到更晚的 PREOPERATE 状态时丢失。绝不在中断上下文中
      * 调用，因此应用钩子不会进入 ISR。 */
-    if (ctx->startup_notification_pending != 0U) {
+    if (ctx->shared.startup_notification_pending != 0U) {
         if (ctx->last_notified_state != IOLINK_DLL_STATE_STARTUP) {
             ctx->last_notified_state = IOLINK_DLL_STATE_STARTUP;
             ctx->state_cb(ctx->state_cb_user, IOLINK_DLL_STATE_STARTUP);
         }
-        ctx->startup_notification_pending = 0U;
+        ctx->shared.startup_notification_pending = 0U;
     }
 
     /* 基于电平的通知：只投递当前状态一次。 */
@@ -557,8 +557,8 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
                           (uint64_t) (dll_time_us(ctx) / 1000U + t_fbd_ms) * 1000U);
         }
     }
-    if (ctx->fallback_clear_request != 0U) {
-        ctx->fallback_clear_request = 0U;
+    if (ctx->shared.fallback_clear_request != 0U) {
+        ctx->shared.fallback_clear_request = 0U;
         /* 已应用非 FALLBACK 的命令：丢弃任何待处理的 T_FBD。 */
         if (ctx->shared.state != IOLINK_DLL_STATE_FALLBACK) {
             dll_timer_cancel(ctx, IOLINK_TIMER_T_FBD);

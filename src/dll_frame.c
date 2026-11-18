@@ -361,16 +361,16 @@ bool dll_apply_master_command(iolink_dll_main_t* ctx, uint8_t cmd)
             dll_protocol_error_to_startup(ctx);
             return true;
         case IOLINK_CMD_DEVICE_PREOPERATE:
-            ctx->fallback_clear_request = 1U;
+            ctx->shared.fallback_clear_request = 1U;
             dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
             return true;
         case IOLINK_CMD_PROCESS_DATA_OPERATE:
-            ctx->fallback_clear_request = 1U;
+            ctx->shared.fallback_clear_request = 1U;
             dll_pd_valid_command(ctx, true);
             dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
             return true;
         case IOLINK_CMD_DEVICE_OPERATE:
-            ctx->fallback_clear_request = 1U;
+            ctx->shared.fallback_clear_request = 1U;
             dll_pd_valid_command(ctx, false);
             /* 来自 PREOPERATE 的 DeviceOperate 会建立通信
                （ESTAB_COM）；随后的 PDOperate 0x98 进入 OPERATE。
@@ -487,7 +487,7 @@ static bool dll_dispatch_od(iolink_dll_main_t* ctx, uint8_t mc, const uint8_t* o
         }
         if (((mc & IOLINK_MC_RW_MASK) == 0U) && (od_len > 0U) &&
             ((mc & IOLINK_MC_ADDR_MASK) == 0x01U)) {
-            ctx->master_cycle_time = od_in[0];
+            ctx->shared.master_cycle_time = od_in[0];
             /* DPP1 0x01 是页读应答的输入：ISR 的页读缓存必须失效。 */
             iolink_isdu_dp_page1_invalidate(&ctx->shared.isdu);
         }

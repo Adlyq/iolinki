@@ -572,7 +572,7 @@ static void test_isr_startup_notification_is_not_coalesced(void** state)
     /* 模拟 dll_set_state() 在数据 ISR 拥有上下文时执行的那两次写操作。
      * 挂起位即 ISR 到主泵的边沿通知。 */
     s_ctx.main.shared.state = IOLINK_DLL_STATE_STARTUP;
-    s_ctx.main.startup_notification_pending = 1U;
+    s_ctx.main.shared.startup_notification_pending = 1U;
     s_ctx.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
     s_ctx.main.shared.in_isr = 0U;
 
@@ -582,7 +582,7 @@ static void test_isr_startup_notification_is_not_coalesced(void** state)
     assert_int_equal(s_states[0], IOLINK_DLL_STATE_STARTUP);
     assert_int_equal(s_states[1], IOLINK_DLL_STATE_PREOPERATE);
     assert_false(s_cb_in_isr);
-    assert_int_equal(s_ctx.main.startup_notification_pending, 0U);
+    assert_int_equal(s_ctx.main.shared.startup_notification_pending, 0U);
 }
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
@@ -796,7 +796,7 @@ static void test_isr_startup_defers_event_reset_to_main(void** state)
     }
 
     assert_int_equal(s_ctx.main.shared.state, IOLINK_DLL_STATE_STARTUP);
-    assert_int_equal(s_ctx.main.startup_notification_pending, 1U);
+    assert_int_equal(s_ctx.main.shared.startup_notification_pending, 1U);
     /* ISR 只登记了请求：事件引擎的其余状态仍等主泵处置。 */
     assert_int_not_equal(events->reset_req, events->reset_applied);
     assert_int_equal(events->count, 1U);

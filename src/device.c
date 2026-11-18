@@ -76,7 +76,7 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     ctx->dll.main.shared.m_seq_type = (uint8_t) stack->m_seq_type;
     ctx->dll.main.shared.pd_in_len = stack->pd_in_len;
     ctx->dll.main.shared.pd_out_len_current = stack->pd_out_len;
-    ctx->dll.main.min_cycle_time_app_us =
+    ctx->dll.main.shared.min_cycle_time_app_us =
         (uint32_t) stack->min_cycle_time * IOLINK_CYCLE_TIME_UNIT_US;
     ctx->dll.main.master_lost_cycles = stack->master_lost_cycles;
     const uint32_t t_pd_us = stack->t_pd_us;
