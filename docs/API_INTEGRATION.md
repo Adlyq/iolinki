@@ -90,8 +90,9 @@ void iolink_critical_exit(void);
 `src/platform.c` 中的 weak no-op 只用于让库可链接。`iolink_device_init()` 会探测
 这两个钩子；如果仍在用 weak 默认实现，初始化返回
 `IOLINK_DEVICE_INIT_ERR_CRITICAL`。实现必须可嵌套（`exit` 恢复对应 `enter` 保存的
-屏蔽状态），并能在 ISR 双泵下保护库实际取锁的短操作：诊断条件表、事件队列的
-读/clear、计数器清零、SIO 切换的应答槽清理与 ISR 相位复位
+屏蔽状态），并能在 ISR 双泵下保护库实际取锁的短操作：诊断条件表的 `isr_pulse`
+消费与整表复位、`IOLINK_STATS_MODE=SPLIT` 下的计数器清零、应答暂存的发布/取走、
+SIO 切换的应答槽清理、读复位旗标与 ISR 相位复位
 （见 `docs/CODE_FLOW.md` 第 12 节的临界区审计）。PD-in 发布不取锁：主上下文
 用一次原子存储发布 `pd_pub`，数据 ISR 只加载一次。
 

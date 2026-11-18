@@ -1018,7 +1018,7 @@ flowchart LR
 并发边界：
 
 - `shared.isdu`、`shared.events`（含 `diag` 条件缓存）、`ds`、`timers` 的主要状态由主循环修改；`reply_plan` 只在初始化时写入后即只读；应用参数变量、`on_change` 与 `ds_flag_persist` 也只在主上下文被访问。
-- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（诊断条件表与 `isr_pulse` 消费、事件队列读/clear、计数器清零、SIO 切换的应答槽清理、ISR RX 相位复位、应答暂存的发布/取走）；状态迁移、PD-in 发布与 ISDU 写入口接管都不需要临界区。
+- 大块数据（帧邮箱、ISDU 写段、ISDU 响应、应答暂存、PD-in）全部走“单写者 + 发布字/槽环 + 显式租约”，不需要关中断；`IOLINK_CRITICAL_ENTER/EXIT()` 只包住标量与条件表的短操作（诊断条件表的 `isr_pulse` 消费与整表复位、`SPLIT` 档的计数器清零、应答暂存的发布/取走、SIO 切换的应答槽清理、读复位旗标、ISR RX 相位复位）；事件队列与 `pending[]` 的读写、PD-in 发布、状态迁移与 ISDU 写入口接管都不需要临界区。
 - 库不取线程锁：API 只有一个主上下文调用者；共享标量由平台临界区保护，数据交接无锁。
 - 平台默认临界区是 weak 空实现（`src/platform.c`）；`iolink_device_init()` 通过
   `iolink_platform_critical_sections_ready()` 探测并返回
