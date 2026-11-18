@@ -808,7 +808,7 @@ sequenceDiagram
 | `phy.response_timer_start/stop` | ISR RX/TX | t_A 看门狗 |
 | `phy.stack_timer_start` | ISR 收到有效帧后 / 计划的 `RESTART_TIMER_B` | 请求 Timer B 授权主循环服务窗口 |
 | `phy.detect_wakeup` | `dll_handle_sio_wakeup()` | SIO 唤醒检测 |
-| `iolink_critical_enter/exit` | 诊断条件表与 `isr_pulse` 消费、事件队列读/clear、计数器清零、应答暂存发布/取走、SIO 切换清理、Timer A 相位复位 | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
+| `iolink_critical_enter/exit` | 诊断条件表的 `isr_pulse` 消费与整表复位、计数器清零、应答暂存发布/取走、SIO 切换清理、读复位旗标、Timer A 相位复位 | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
 | `on_state_change` | `device_state_cb()` | 当前状态（电平式；主上下文迁移立即投递，ISR 迁移合并） |
 | `on_startup` | 初始化末尾 + 进入 STARTUP | 初始化时显式调用一次 |
 | `on_preoperate` / `on_operate` | `device_state_cb()` | 进入对应状态时 |
@@ -1105,8 +1105,13 @@ port 提供 `IOLINK_FENCE_DEVICE_IMPL()`）/ `SMP`（跨核或跨线程，port �
 | `iolink_dll_set_sio_mode()`（`dll_api.c`） | 清 `isr_tx_pending`/`isr_tx_active`/`isr_tx_idx`/`pd_in_captured` | 四个字段由 ISR 写：清理与中断互斥，否则 ISR 可在半帧处重新置上 active/idx。被丢弃的暂存/在途应答计 `isr_tx_dropped`（主上下文自增）；`phy.set_mode` 在区外调用 |
 | `iolink_dll_on_rx_timeout()`（`dll_isr.c`） | RX 组装状态 `isr_rx_cnt`/`isr_rx_expect` 的成对复位 | Timer A 与数据 ISR 的相位一致；短、无回调，向量优先级契约见 `docs/PORTING.md` |
 | `iolink_dll_reset_error_counters()`（`dll_api.c`） | 清零两个上下文共享的计数器 | 与 ISR 自增分开 |
-| `diag.c`（3 处） | ISR 脉冲消费、DeviceStatus 快照、DDS 快照 | 条件表内部不变式；ISR 只写 `isr_pulse[]` |
-| `events.c`（3 处） | `iolink_event_clear()`、`iolink_events_peek()`、`iolink_events_get_all()` | 队列读/clear 与 ISR 串行化；写路径（trigger/process/clear_diagnosis/reset/memory_write/pop）是主上下文单写者，不需要临界区 |
+| `iolink_diag_service()`（`diag.c`） | ISR one-shot `isr_pulse[]` 的读-清 | 脉冲只允许被消费一次；除该字节外条件表归主上下文单写 |
+| `iolink_events_reset()`（`events.c`） | 条件表整表清零（含 ISR 单字节写的 `isr_pulse[]`） | 与 ISR 的 one-shot 脉冲互斥；事件引擎其余字段由主上下文单写 |
+
+`iolink_event_clear()`、`iolink_events_peek()`、`iolink_events_get_all()`、
+`iolink_diag_device_status()`、`iolink_diag_dds_snapshot()` 已不在表中：它们读写的
+`pending[]` 与 `queue[]` 只有主上下文访问，数据 ISR 只读 `flag`、`count` 与已发布的
+Table 58 映像。
 
 `dll_set_state()` 已不在表中：状态是单字节原子写，通知以电平式为主；但
 ISR 迁入 STARTUP 时设置 `startup_notification_pending`，由主上下文优先投递

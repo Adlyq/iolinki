@@ -385,18 +385,17 @@ void iolink_event_clear(iolink_events_ctx_t* ctx, uint16_t code)
         return;
     }
 
-    IOLINK_CRITICAL_ENTER();
+    /* `pending[]` 只有主上下文读写：数据 ISR 读的是 `flag` 与已发布的
+     * Table 58 映像，不读 pending 表，因此这里不需要与中断串行化。 */
     iolink_event_pending_t* p = pending_find(ctx, code);
-    if ((p != NULL) && p->present) {
-        p->present = false; /* 由 iolink_events_process() 发出 */
-        if (ctx->pending_count > 0U) {
-            ctx->pending_count--;
-        }
-        IOLINK_CRITICAL_EXIT();
-        IOLINK_LOG_DEBUG(ctx->log, "event clear code=0x%04X", (unsigned) code);
+    if ((p == NULL) || !p->present) {
         return;
     }
-    IOLINK_CRITICAL_EXIT();
+    p->present = false; /* 由 iolink_events_process() 发出 */
+    if (ctx->pending_count > 0U) {
+        ctx->pending_count--;
+    }
+    IOLINK_LOG_DEBUG(ctx->log, "event clear code=0x%04X", (unsigned) code);
 }
 
 void iolink_events_process(iolink_events_ctx_t* ctx)
@@ -665,16 +664,13 @@ bool iolink_events_peek(const iolink_events_ctx_t* ctx, iolink_event_t* event)
         return false;
     }
 
-    /* 对小型结构体单次读取是原子的，但为安全仍使用临界区 */
-    IOLINK_CRITICAL_ENTER();
-
+    /* 队列只有主上下文读写（数据 ISR 只读 flag 与事件存储器），
+     * 因此不需要临界区。 */
     bool ret = false;
     if (ctx->count > 0U) {
         *event = ctx->queue[0];
         ret = true;
     }
-
-    IOLINK_CRITICAL_EXIT();
     return ret;
 }
 
@@ -685,8 +681,8 @@ uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_even
         return 0U;
     }
 
+    /* 同 peek：队列归主上下文，ISR 不读它。 */
     uint8_t copied = 0U;
-    IOLINK_CRITICAL_ENTER();
     uint8_t count = ctx->count;
     uint8_t to_copy = (count < max_count) ? count : max_count;
 
@@ -694,7 +690,6 @@ uint8_t iolink_events_get_all(iolink_events_ctx_t* ctx, iolink_event_t* out_even
         out_events[i] = ctx->queue[i];
         copied++;
     }
-    IOLINK_CRITICAL_EXIT();
     return copied;
 }
 

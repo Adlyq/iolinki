@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (the event queue and pending table need no lock)
+- `iolink_event_clear()`, `iolink_events_peek()`, `iolink_events_get_all()`,
+  `iolink_diag_device_status()` and `iolink_diag_dds_snapshot()` no longer take
+  `IOLINK_CRITICAL_ENTER/EXIT()`. They read or write `pending[]` and `queue[]`,
+  which only the main context touches; the data ISR reads `flag`, `count` and
+  the published Table 58 image. The event-side critical sections that remain
+  are the table-wide clear in `iolink_events_reset()` (it must not lose an ISR
+  one-shot pulse) and the pulse consumption in `iolink_diag_service()`.
+- `iolink_events_peek()` and `iolink_events_get_all()` are main-context only:
+  they read the queue. `iolink_events_flag()`, `iolink_events_pending()`,
+  `iolink_events_memory_read()` and `iolink_events_get_dropped_count()` stay
+  readable from either side.
+- `tests/test_locking.c` pins zero critical-section entries for these paths;
+  they previously asserted one entry for `iolink_event_clear()`.
+
 ### Changed (MAJOR: PD-in publication is one single-writer word)
 - `iolink_dll_main_t::pd_valid` and `iolink_dll_shared_t::pd_in_active` are
   gone. Process input is published through `iolink_dll_shared_t::pd_pub`
