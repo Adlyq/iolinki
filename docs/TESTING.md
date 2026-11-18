@@ -28,9 +28,9 @@ name, prints each group's wall time, and stops at the first failure
 
 | Group | Checks |
 | --- | --- |
-| `quick` | clang-format, per-file size (800 code lines, comments excluded), shellcheck, DLL ownership isolation, nullability regions (`check_nullability.sh`), test conventions (`check_test_whitebox.sh`, `check_test_gates.sh`), documentation references (`check_docs_refs.py`), dead fields (`check_dead_fields.py`, report-only) and the public-API surface (`check_public_api.py`, report-only); the three tree-wide checks run concurrently so the group stays at a few seconds |
+| `quick` | clang-format, per-file size (800 code lines, comments excluded), shellcheck, DLL ownership isolation, nullability regions (`check_nullability.sh`), test conventions (`check_test_whitebox.sh`, `check_test_gates.sh`), documentation references (`check_docs_refs.py`), dead fields (`check_dead_fields.py`) and the public-API surface (`check_public_api.py`); the three tree-wide checks run concurrently so the group stays at a few seconds |
 | `build` | strict `-Werror` compilation with clang, Debug (`-O0`) and Release (`-O3`) |
-| `context` | field ownership between the ISR and main contexts: the call graph of `src/` built from the clang AST and classified against `tools/shared_fields.csv` (`check_context.py`, report-only, ~3 s) |
+| `context` | field ownership between the ISR and main contexts: the call graph of `src/` built from the clang AST and classified against `tools/shared_fields.csv` (`check_context.py`, ~3 s) |
 | `test` | strict Debug build plus `ctest` |
 | `gcc` | the gcc-only strict diagnostics (`-DIOLINK_STRICT_GCC=ON`, library target) and `gcc -fanalyzer` as a report-only step |
 | `sanitize` | the unit suite under AddressSanitizer, UndefinedBehaviorSanitizer and `implicit-conversion` (clang only; a sanitizer report fails the run) |
@@ -107,15 +107,12 @@ the reason instead of one startup failure per binary; the Docker image installs
 `valgrind` and `libc6-dbg` and runs the group for real, with `-gdwarf-4` because
 valgrind 3.18 cannot parse DWARF 5.
 
-Three checks report before they enforce: `check_context.py` (fields written
-across the ISR/main boundary), `check_dead_fields.py` (fields production never
-reads) and `check_public_api.py` (public functions referenced only from tests or
-missing from the generated API table). Each exits 0 and prints its findings;
-together they are the work list of the context split and the field migration.
-The change that removes the last finding switches the same invocation in
-`tools/gates.sh` to `--enforce`, so enforcement needs no new rule later. Until
-then the findings stay visible in every `quick` and `context` run, and CI prints
-them from `static-analysis` and `docker-validation`.
+Three checks are enforced: `check_context.py` (fields written across the
+ISR/main boundary), `check_dead_fields.py` (fields production never reads) and
+`check_public_api.py` (public functions referenced only from tests or missing
+from the generated API table). The field migration removed the last known
+findings; a new one now fails `quick` or `context` and therefore CI. Findings
+that are intentional must be justified in the matching allowlist file.
 
 No level up to L2 builds a structural configuration or re-measures size,
 coverage or the WCET proxy, so a green L2 says nothing about those. Choose the

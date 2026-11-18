@@ -97,10 +97,8 @@ jobs:
   # suite under the sanitizers, the clang static analyzer and the ISR/main
   # field ownership gate.
   #
-  # `context` is report-only while the context split is in progress: it exits 0
-  # and prints the findings. The change that removes the last finding switches
-  # the checker to `--enforce` in tools/gates.sh; this job then fails on any
-  # new violation without a workflow edit.
+  # `context` is enforced: any new cross-context field write or read fails the
+  # job. The classification comes from tools/shared_fields.csv.
   static-analysis:
     runs-on: ubuntu-latest
     steps:

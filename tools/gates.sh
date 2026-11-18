@@ -220,15 +220,14 @@ check_docs_refs() {
     python3 tools/check_docs_refs.py --selftest && python3 tools/check_docs_refs.py
 }
 
-# The field and API-surface gates report their findings today; the field
-# migration removes them and switches the same checks to `--enforce` in that
-# change. Until then a finding prints but does not fail the group.
+# The field and API-surface gates fail on any finding. The field migration
+# removed the last known ones; a new finding is a regression.
 check_dead_fields() {
-    python3 tools/check_dead_fields.py --selftest && python3 tools/check_dead_fields.py
+    python3 tools/check_dead_fields.py --selftest && python3 tools/check_dead_fields.py --enforce
 }
 
 check_public_api() {
-    python3 tools/check_public_api.py --selftest && python3 tools/check_public_api.py
+    python3 tools/check_public_api.py --selftest && python3 tools/check_public_api.py --enforce
 }
 
 group_quick() {
@@ -236,8 +235,8 @@ group_quick() {
         skip "python3 missing: documentation references, dead fields and public API not checked"
     else
         parallel_start "documentation references" check_docs_refs
-        parallel_start "dead fields (report-only)" check_dead_fields
-        parallel_start "public API surface (report-only)" check_public_api
+        parallel_start "dead fields" check_dead_fields
+        parallel_start "public API surface" check_public_api
     fi
 
     # Every step runs even when an earlier one failed: the group's verdict is
@@ -549,13 +548,11 @@ group_static() {
 # --- context ---------------------------------------------------------------
 
 # The context gate builds a call graph from the clang AST of every src/ unit
-# and reports each write the ISR performs on main-owned state (and the reverse),
-# classified against tools/shared_fields.csv. The findings are the work items of
-# the context split, not regressions, so the group runs the checker plain and
-# exits 0 with the list; `--enforce` replaces the plain call in the change that
-# removes them.
+# and fails on each write the ISR performs on main-owned state (and the reverse),
+# classified against tools/shared_fields.csv. A new field or call edge that
+# crosses the boundary without a category is a hard failure.
 check_context() {
-    python3 tools/check_context.py --selftest && python3 tools/check_context.py
+    python3 tools/check_context.py --selftest && python3 tools/check_context.py --enforce
 }
 
 group_context() {
@@ -567,7 +564,7 @@ group_context() {
         skip "clang missing (the gate reads the clang AST)"
         return 0
     fi
-    step "ISR/main field ownership (report-only)" check_context
+    step "ISR/main field ownership" check_context
 }
 
 # --- docs ------------------------------------------------------------------
