@@ -30,6 +30,12 @@
  * docs/CODE_FLOW.md 第 12.1 节）。例外：SINGLE 档下
  * dll_isr_start_staged_tx() 也由主泵的 dll_send() 调用（该档没有数据 ISR）。
  *
+ * 本文件不是 ISR-only：除 ISR 泵入口（iolink_dll_process_isr、
+ * iolink_dll_on_rx_timeout、iolink_dll_on_stack_tick）外，还包含主上下文侧的
+ * 服务窗口消费入口 iolink_dll_take_service_window()。它是
+ * iolink_dll_on_stack_tick() 的对偶：Timer B 节拍在 ISR 内只置
+ * `stack_tick_pending`，由主泵在 iolink_dll_process() 中取走窗口后运行主循环。
+ *
  * ISR 泵（入口 iolink_dll_process_isr）：
  *
  *   iolink_dll_process_isr              重入保护：in_isr 加上
@@ -38,7 +44,7 @@
  *      |- isr_tx_pending -> dll_isr_tx_pending -> dll_isr_start_staged_tx
  *      |                    （发送由主泵暂存的回复）
  *      |- int_active() == 0 -> return  （电平复查）
- *      +- dll_isr_drain                突发循环，最多 64 次迭代
+ *      +- dll_isr_drain                每轮一个服务事件，最多 64 轮
  *         |- [TX BYTE] isr_tx_active -> dll_isr_tx_step （一个八位组，break）
  *         |- [RX FRAME] dll_isr_drain_rx_frame
  *         |  +- phy->rx_frame -> dll_isr_frame_len_ok ->

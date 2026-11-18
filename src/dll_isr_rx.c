@@ -383,7 +383,12 @@ static bool dll_isr_drain_rx_byte(iolink_dll_main_t* ctx)
 #endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
 
 /**
- * @brief 排空一个背靠背突发，设有上限，使卡死的线路无法无限自旋。
+ * @brief 处理本次中断请求的服务事件，设有迭代上限。
+ *
+ * 每轮只处理一个服务事件并让出：TX BYTE 喂一个应答八位组，RX FRAME 取走
+ * 一帧，RX BYTE 推进八位组直到本帧完成、遇到 CHK/间隙或读空。上限 64 次
+ * 只保证单个请求不会把中断钩子拖住：合法请求最多
+ * `IOLINK_M_SEQ_MAX_LEN` 个八位组，正常路径在单帧内返回。
  */
 void dll_isr_drain(iolink_dll_main_t* ctx)
 {

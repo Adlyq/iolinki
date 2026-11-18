@@ -171,17 +171,40 @@ static void harness_reset(void)
     s_tx_active = 0U;
 }
 
+/* Direct Parameter page 1 的读应答（IOLINK_REPLY_SRC_PAGE）要求绑定设备
+ * 身份：没有身份就没有 DPP1 映像，ISR 会按"计划无法执行"把帧交回主泵、
+ * 一个字节也不发。场景因此绑定一个固定身份。 */
+static iolink_device_info_ctx_t s_identity_ctx;
+
+static void harness_bind_identity(void)
+{
+    static const iolink_device_info_t identity = {
+        .vendor_id = 0x0402U,
+        .device_id = 0x010203U,
+        .min_cycle_time = 10U,
+        .revision_id = IOLINK_REVISION_ID_1_1,
+    };
+    (void) iolink_device_info_ctx_init(&s_identity_ctx, &identity);
+    s_dll.main.shared.isdu.device_info = &s_identity_ctx;
+}
+
 static void init_preop(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
+    harness_bind_identity();
     s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_0;
     s_dll.main.shared.od_width = 1U;
     s_dll.main.shared.pd_in_len = 0U;
     s_dll.main.shared.pd_out_len_current = 0U;
+    /* 主站写入的 MasterCycleTime 由 DPP1 0x01 镜像：用一个可辨识的值使
+     * 页读场景的首字节断言能区分"读到页字节"与"空映像"。 */
+    s_dll.main.master_cycle_time = 0xA1U;
     dll_pd_publish(&s_dll.main.shared, 0U, true);
+    /* 主上下文建一次 DPP1 映像：ISR 只读稳定副本，绝不重建整页。 */
+    iolink_dll_process(&s_dll.main);
     harness_reset();
     iolink_dll_publish_reply_plans(&s_dll.main);
 }
@@ -190,6 +213,7 @@ static void init_op_t1_od32(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
+    harness_bind_identity();
     s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_1_V;
@@ -205,6 +229,7 @@ static void init_op_t2_pd32(void)
 {
     (void) memset(&s_dll, 0, sizeof(s_dll));
     iolink_dll_init(&s_dll.main, &s_dll.isr, &s_phy);
+    harness_bind_identity();
     s_dll.main.shared.clock.time_us = plan_time_us;
     s_dll.main.shared.state = IOLINK_DLL_STATE_OPERATE;
     s_dll.main.shared.m_seq_type = IOLINK_M_SEQ_TYPE_2_V;
@@ -263,7 +288,8 @@ static void build_scenarios(void)
     sc->len = 2U;
     sc->expect_tx = 2U;
     sc->expect_miss = 0U;
-    sc->check_first = 0U;
+    sc->check_first = 1U;
+    sc->expect_first = 0xA1U;
 
     sc = &s_scenarios[1];
     sc->name = "type0_page_write_cks";
@@ -405,6 +431,19 @@ static int scenario_sanity(const scenario_t* sc)
         (void) fprintf(stderr, "sanity [%s]: first=0x%02X expected=0x%02X\n", sc->name, s_tx_q[0],
                        sc->expect_first);
         return 1;
+    }
+    /* 应答末字节是该帧的 A.1.6 校验和：对已发送的负载（不含末字节）用同一
+     * 种子计算后比较。CKS-only 应答的负载为空，checksum6() 退化为种子本身，
+     * 因此仍可比。当前全部场景的 CKS 状态位为 0（PD 有效、无待处理事件），
+     * flags 不参与比较；若将来加入状态位非 0 的场景，必须在场景表里显式
+     * 标注跳过，而不是放宽这里的比较。0 字节（不应答）场景无 CKS 可校验。 */
+    if (s_tx_n > 0U) {
+        const uint8_t cks = iolink_checksum6(s_tx_q, s_tx_n - 1U);
+        if (cks != s_tx_q[s_tx_n - 1U]) {
+            (void) fprintf(stderr, "sanity [%s]: cks=0x%02X expected=0x%02X\n", sc->name,
+                           s_tx_q[s_tx_n - 1U], cks);
+            return 1;
+        }
     }
     return 0;
 }
