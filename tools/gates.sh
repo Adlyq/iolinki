@@ -22,12 +22,19 @@ if [ -z "${IOLINK_GATES_SNAPSHOT:-}" ]; then
     IOLINK_GATES_SNAPSHOT="$snapshot" IOLINK_GATES_ROOT="$IOLINK_GATES_ROOT" \
         exec bash "$snapshot" "$@"
 fi
-trap 'rm -f "$IOLINK_GATES_SNAPSHOT"' EXIT
+PARALLEL_DIR=""
+cleanup() {
+    rm -f "${IOLINK_GATES_SNAPSHOT:-}"
+    if [ -n "$PARALLEL_DIR" ]; then
+        rm -rf "$PARALLEL_DIR"
+    fi
+}
+trap cleanup EXIT
 
 ROOT="${IOLINK_GATES_ROOT:?gates: snapshot re-exec lost the repository root}"
 cd "$ROOT"
 
-GATE_GROUPS=(quick build test gcc sanitize memcheck analyzer static docs matrix perf package fuzz)
+GATE_GROUPS=(quick build context test gcc sanitize memcheck analyzer static docs matrix perf package fuzz)
 
 STRICT_CFLAGS="-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow"
 # -Wnullable-to-nonnull-conversion rejects passing a nullable expression to a
@@ -69,8 +76,11 @@ Usage: tools/gates.sh [--keep-going] <group> [group ...]
 
 Groups:
   quick    clang-format, per-file size, shellcheck, DLL ownership, nullability
-           regions and the test conventions               (seconds, no build)
+           regions, test conventions, documentation references, dead fields and
+           the public-API surface                       (seconds, no build)
   build    strict -Werror compilation with clang, Debug (-O0) and Release (-O3)
+  context  field ownership between the ISR and main contexts, from the clang
+           AST (report-only until the context split lands, ~3 s)
   test     strict Debug build plus the unit suite (ctest)
   gcc      the gcc-only strict diagnostic set, plus -fanalyzer as a report
   sanitize the unit suite under AddressSanitizer + UndefinedBehaviorSanitizer
@@ -80,9 +90,10 @@ Groups:
   analyzer the clang static analyzer over the library (clang --analyze)
   static   cppcheck and the MISRA addon (report-only unless
            IOLINKI_MISRA_ENFORCE=1)
-  docs     Doxygen warnings
+  docs     Doxygen warnings and the generated documentation blocks
   matrix   compile matrix plus the differential frame gate
-  perf     coverage floor, WCET path proxy and size baseline
+  perf     coverage floor, WCET path proxy, size baseline and the stack-frame
+           baseline
   package  install the exported CMake package and build a consumer against it
   fuzz     libFuzzer over the frame, ISDU and OD parsers (60 s per target;
            clang + libFuzzer runtime required)
@@ -112,6 +123,47 @@ step() {
 }
 
 # --- quick ------------------------------------------------------------------
+
+# Three of the quick checks parse the whole tree (documentation references,
+# struct fields, public API surface) and cost a few seconds each, more than
+# every other quick step combined. They read nothing another step produces, so
+# they start first, write to a private log and are joined at the end of the
+# group: the group costs the slowest check instead of the sum. A failure still
+# fails the group, and the log of the failing check is printed with it.
+PARALLEL_LABELS=()
+PARALLEL_PIDS=()
+PARALLEL_LOGS=()
+
+parallel_start() {
+    local label="$1"
+    shift
+    if [ -z "$PARALLEL_DIR" ]; then
+        PARALLEL_DIR="$(mktemp -d "${TMPDIR:-/tmp}/iolink-gates-parallel.XXXXXX")"
+    fi
+    local log="$PARALLEL_DIR/${#PARALLEL_PIDS[@]}.log"
+    "$@" >"$log" 2>&1 &
+    PARALLEL_PIDS+=("$!")
+    PARALLEL_LABELS+=("$label")
+    PARALLEL_LOGS+=("$log")
+}
+
+parallel_join() {
+    local failed=0 index
+    for index in "${!PARALLEL_PIDS[@]}"; do
+        if wait "${PARALLEL_PIDS[$index]}"; then
+            printf '   ... %s\n' "${PARALLEL_LABELS[$index]}"
+            cat "${PARALLEL_LOGS[$index]}"
+        else
+            printf '   FAIL: %s\n' "${PARALLEL_LABELS[$index]}" >&2
+            cat "${PARALLEL_LOGS[$index]}" >&2
+            failed=1
+        fi
+    done
+    PARALLEL_LABELS=()
+    PARALLEL_PIDS=()
+    PARALLEL_LOGS=()
+    return "$failed"
+}
 
 check_format() {
     if ! have clang-format; then
@@ -160,14 +212,45 @@ check_test_conventions() {
         ./tools/check_test_gates.sh
 }
 
+check_nullability() {
+    ./tools/check_nullability.sh --selftest && ./tools/check_nullability.sh
+}
+
+check_docs_refs() {
+    python3 tools/check_docs_refs.py --selftest && python3 tools/check_docs_refs.py
+}
+
+# The field and API-surface gates report their findings today; the field
+# migration removes them and switches the same checks to `--enforce` in that
+# change. Until then a finding prints but does not fail the group.
+check_dead_fields() {
+    python3 tools/check_dead_fields.py --selftest && python3 tools/check_dead_fields.py
+}
+
+check_public_api() {
+    python3 tools/check_public_api.py --selftest && python3 tools/check_public_api.py
+}
+
 group_quick() {
-    step "clang-format" check_format || return 1
-    step "file size" check_file_size || return 1
-    step "shellcheck" check_shellcheck || return 1
-    step "DLL ownership isolation" ./tools/check_ownership.sh || return 1
-    step "nullability regions" ./tools/check_nullability.sh --selftest &&
-        ./tools/check_nullability.sh || return 1
-    step "test conventions (white-box, teardown)" check_test_conventions
+    if ! have python3; then
+        skip "python3 missing: documentation references, dead fields and public API not checked"
+    else
+        parallel_start "documentation references" check_docs_refs
+        parallel_start "dead fields (report-only)" check_dead_fields
+        parallel_start "public API surface (report-only)" check_public_api
+    fi
+
+    # Every step runs even when an earlier one failed: the group's verdict is
+    # the conjunction, and one pass over the tree reports every problem it has.
+    local status=0
+    step "clang-format" check_format || status=1
+    step "file size" check_file_size || status=1
+    step "shellcheck" check_shellcheck || status=1
+    step "DLL ownership isolation" ./tools/check_ownership.sh || status=1
+    step "nullability regions" check_nullability || status=1
+    step "test conventions (white-box, teardown)" check_test_conventions || status=1
+    parallel_join || status=1
+    return "$status"
 }
 
 # --- build / test -----------------------------------------------------------
@@ -463,7 +546,39 @@ group_static() {
     step "MISRA C:2012 (cppcheck addon)" check_misra
 }
 
+# --- context ---------------------------------------------------------------
+
+# The context gate builds a call graph from the clang AST of every src/ unit
+# and reports each write the ISR performs on main-owned state (and the reverse),
+# classified against tools/shared_fields.csv. The findings are the work items of
+# the context split, not regressions, so the group runs the checker plain and
+# exits 0 with the list; `--enforce` replaces the plain call in the change that
+# removes them.
+check_context() {
+    python3 tools/check_context.py --selftest && python3 tools/check_context.py
+}
+
+group_context() {
+    if ! have python3; then
+        skip "python3 missing"
+        return 0
+    fi
+    if ! have clang; then
+        skip "clang missing (the gate reads the clang AST)"
+        return 0
+    fi
+    step "ISR/main field ownership (report-only)" check_context
+}
+
 # --- docs ------------------------------------------------------------------
+
+check_docs_generated() {
+    if ! have python3; then
+        skip "python3 missing"
+        return 0
+    fi
+    python3 tools/gen_docs.py --selftest && python3 tools/gen_docs.py --check
+}
 
 check_doxygen() {
     if ! have doxygen; then
@@ -481,6 +596,7 @@ check_doxygen() {
 }
 
 group_docs() {
+    step "generated documentation blocks" check_docs_generated || return 1
     step "Doxygen" check_doxygen
 }
 
@@ -501,10 +617,22 @@ check_size_baseline() {
     python3 tools/size_matrix.py --check --selftest
 }
 
+# The stack report compiles every src/ unit for the target, so it needs the same
+# cross toolchain as the size baseline; without one it reports SKIP instead of a
+# measurement, exactly like the size gate.
+check_stack_baseline() {
+    if ! have arm-none-eabi-gcc && [ ! -x /opt/atfe/bin/clang ]; then
+        skip "no target compiler for the stack report (arm-none-eabi-gcc or ATFE)"
+        return 0
+    fi
+    python3 tools/stack_report.py --selftest && python3 tools/stack_report.py --check
+}
+
 group_perf() {
     step "coverage floor" ./tools/coverage.sh --check || return 1
     step "WCET path proxy" ./tools/wcet_run.sh --check || return 1
-    step "ROM/RAM size baseline" check_size_baseline
+    step "ROM/RAM size baseline" check_size_baseline || return 1
+    step "stack-frame baseline" check_stack_baseline
 }
 
 # --- fuzz -------------------------------------------------------------------
@@ -544,6 +672,7 @@ run_group() {
     case "$1" in
         quick) group_quick ;;
         build) group_build ;;
+        context) group_context ;;
         test) group_test ;;
         gcc) group_gcc ;;
         sanitize) group_sanitize ;;
