@@ -920,6 +920,8 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 | :--- | :--- | :--- |
 | `include/iolinki/capability.h` | `iolink_caps_build()` | 取本镜像的构建档位（单例，只读）。 |
 | `include/iolinki/capability.h` | `iolink_caps_resolve()` | 解析一个设备实例的能力位。 |
+| `include/iolinki/capability.h` | `iolink_caps_has()` | 测试能力位是否置位。 |
+| `include/iolinki/capability.h` | `iolink_caps_built()` | 测试构建特性位是否置位。 |
 | `include/iolinki/crc.h` | `iolink_checksum6()` | 计算 IO-Link 报文校验和（A.1.6）。 |
 | `include/iolinki/crc.h` | `iolink_checksum6_from_acc()` | 将已 XOR 累积的 A.1.6 种子压缩为 6 位校验和。 |
 | `include/iolinki/data_storage.h` | `iolink_ds_init()` | 初始化数据存储引擎 |
@@ -1022,6 +1024,10 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 | `include/iolinki/events.h` | `iolink_events_peek()` | 查看最旧的事件而不将其从队列中移除 |
 | `include/iolinki/events.h` | `iolink_event_qualifier()` | 由 EventType 和 MODE 生成 EventQualifier（A.6.4 / Figure A.24）。 |
 | `include/iolinki/events.h` | `iolink_events_get_all()` | 将所有待处理事件复制到缓冲区而不弹出它们 |
+| `include/iolinki/iolink.h` | `iolink_cycle_time_to_us()` | 将 Table B.3 的周期时间八位组解码为微秒。 |
+| `include/iolinki/iolink.h` | `iolink_cycle_time_encode()` | 将以 0.1 ms 为单位的周期时间编码为 Table B.3 八位组。 |
+| `include/iolinki/iolink.h` | `iolink_mseq_default_od_width()` | M 序列类型的默认 OD 八位组数量 m（Table A.10）。 |
+| `include/iolinki/iolink.h` | `iolink_mseq_operate_code()` | 给定类型与 OD 宽度时，返回 OPERATE M 序列代码（Table A.10）。 |
 | `include/iolinki/isdu.h` | `iolink_isdu_init()` | 初始化 ISDU 引擎 |
 | `include/iolinki/isdu.h` | `iolink_isdu_bind_workspace()` | 绑定外部工作区。 |
 | `include/iolinki/isdu.h` | `iolink_isdu_bind_od()` | 绑定应用对象字典。 |
@@ -1035,6 +1041,7 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 | `include/iolinki/isdu.h` | `iolink_isdu_get_response_byte()` | 取应用层 ISDU 应答载荷的下一个八位组。 |
 | `include/iolinki/isdu.h` | `iolink_isdu_direct_param_page1_octet()` | 读取单个 Direct Parameter page 1 八位组。 |
 | `include/iolinki/isdu.h` | `iolink_isdu_dp_page1_read_range()` | 读取 Direct Parameter page 1 的一段字节（单次 seqlock 窗口）。 |
+| `include/iolinki/log.h` | `iolink_log_sink_init()` | 初始化一个日志汇点。 |
 | `include/iolinki/od.h` | `iolink_od_codec()` | 取 datatype 的 codec 描述；越界返回 NULL。 |
 | `include/iolinki/od.h` | `iolink_od_check_value()` | 校验一个待写入值：线长、OctetString 长度上限、标量范围与表项 validate 钩子。 |
 | `include/iolinki/od.h` | `iolink_od_decode()` | 把标量线上字节解码为原生值。 |
@@ -1065,6 +1072,13 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
 | `include/iolinki/port.h` | `iolink_critical_enter()` |  |
 | `include/iolinki/port.h` | `iolink_critical_exit()` |  |
 | `include/iolinki/port.h` | `iolink_platform_critical_sections_ready()` | 探测平台是否提供了真正的临界区钩子。 |
+| `include/iolinki/port.h` | `iolink_atomic_load()` | 以获取语义读取发布字。 |
+| `include/iolinki/port.h` | `iolink_atomic_store()` | 以释放语义写入发布字。 |
+| `include/iolinki/result.h` | `iolink_result_ok()` | 构造成功结果。 |
+| `include/iolinki/result.h` | `iolink_result_error()` | 构造错误结果（负值内部错误或正值 ISDU ErrorCode）。 |
+| `include/iolinki/result.h` | `iolink_result_succeeded()` | 结果是否成功。 |
+| `include/iolinki/utils.h` | `iolink_buf_is_valid()` | 校验（指针，长度）缓冲区对。 |
+| `include/iolinki/utils.h` | `iolink_ctx_zero()` | 将上下文对象清零初始化。 |
 <!-- END GENERATED -->
 
 ### 11.1 裸 DLL 集成
