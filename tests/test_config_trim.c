@@ -68,7 +68,7 @@ static void test_capacity_overrides(void** state)
 #if IOLINK_WORKSPACE_EMBEDDED
     assert_int_equal(sizeof(((iolink_isdu_ctx_t*) 0)->scratch.payload), 64U);
     assert_int_equal(sizeof(((iolink_isdu_ctx_t*) 0)->scratch.response), 64U);
-    assert_int_equal(sizeof(((iolink_isdu_ctx_t*) 0)->scratch.request), 64U + 6U);
+    assert_int_equal(sizeof(((iolink_isdu_ctx_t*) 0)->scratch.request), 2U * (64U + 6U));
     assert_int_equal(sizeof(((iolink_isdu_ctx_t*) 0)->scratch.frame), 64U + 3U);
 #endif
 

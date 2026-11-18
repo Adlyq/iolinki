@@ -15,6 +15,7 @@
 #include "iolinki/internal/wiring.h"
 #include "dll_internal.h"
 #include "events_internal.h"
+#include "isdu_internal.h"
 #include "iolinki/internal/dll_sm.h"
 #include <string.h>
 
@@ -92,11 +93,12 @@
  *
  * 与数据 ISR 的交接（dll_isr.c）：
  *  - 主上下文 -> ISR：isr_tx_payload[0..1] + isr_tx_pending（dll_send）、ISDU
- *    发布字 isr_isdu_pub/resp_store（dll_isdu_sync_snapshot）以及
- *    pd_in_active（PD-in 发布）。
+ *    发布字 isr_isdu_pub/resp_store（dll_isdu_sync_snapshot）、
+ *    isdu.req_ack_gen/isdu.req_busy_sel（主泵对已发布写请求的 ack 与占用）
+ *    以及 pd_in_active（PD-in 发布）。
  *  - ISR -> 主上下文：isr_frame_ring（dll_consume_isr_mailbox）、
- *    shared.isdu.stage_state（写请求累计完成/中止）、isr_master_activity、
- *    isr_isdu_read_reset（IDLE/ABORT 读的传输层复位）、
+ *    isdu.req_pub（双请求槽的写请求发布字）、isr_master_activity、
+ *    isr_isdu_read_reset（IDLE/ABORT 读与写 ABORT 的传输层复位）、
  *    isr_consumed_us/isr_consumed_seq（CONSUME 帧的 T_CYCLE/T_REN 记账）、
  *    isr_cycle_served（ISR 服务的 MasterCycle，Back-to-box 计数由主泵推进）
  *    以及截止时间标志。
@@ -569,27 +571,19 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
 /**
  * @brief 应用数据 ISR 的 ISDU 读传输层复位请求。
  *
- * 复位经 `isdu_transport_reset()` 清空写入口的 `req_idx`/`req_total`/
- * `flowctrl_seen`/`stage_state`。ISR 在同一个中断里也可能刚收到一个写
- * START 并重建了入口（主站"读 ABORT 后立刻写 START"）：此时若照常复位，
- * 全部 COUNT 已被 ACK 的请求会被整段丢弃。因此只有写入口仍为 IDLE 时
- * 才应用复位，否则保留请求标志，等下一轮写入口回到 IDLE 再应用。
- *
- * 判定、清标志与复位在同一临界区内完成，ISR 无法在"读到 IDLE"与
- * "执行复位"之间开始新的写 START。区内只有字段清零，没有 PHY 或
- * 应用回调。
+ * 复位只经 `isdu_read_reset()` 清空读方向的字段（`state`/`header`/应答
+ * 缓冲/错误码）。写入口（累计槽、`req_idx`/`req_total`、`stage_state`、
+ * 发布字）归数据 ISR，主泵从不改写，所以这里既不需要临界区，也不会
+ * 丢掉 ISR 刚建立的新写请求——主站"读 ABORT 后立刻写 START"的竞争在
+ * 所有权层面消失，而不是靠相位守卫。
  */
 static void dll_apply_isr_isdu_read_reset(iolink_dll_main_t* ctx)
 {
     if (ctx->shared.isr_isdu_read_reset == 0U) {
         return;
     }
-    IOLINK_CRITICAL_ENTER();
-    if (ctx->shared.isdu.stage_state == IOLINK_ISDU_STAGE_IDLE) {
-        ctx->shared.isr_isdu_read_reset = 0U;
-        iolink_isdu_od_read(&ctx->shared.isdu, IOLINK_FLOWCTRL_IDLE, NULL, 0U);
-    }
-    IOLINK_CRITICAL_EXIT();
+    ctx->shared.isr_isdu_read_reset = 0U;
+    isdu_read_reset(&ctx->shared.isdu);
 }
 
 /** @brief 同步主站丢失 timer：活动边沿推进截止时间，丢失后保持直到新活动。 */

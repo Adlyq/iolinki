@@ -67,9 +67,11 @@
  * 交接与顺序约束：
  *  - 即时回复在邮箱发布*之前*启动（t_A）；记录随后
  *    连同其八位组一起携带 eager=1。
- *  - ctx->shared.isdu 的写入口（req_buf/req_idx/req_total/FlowCTRL 水位与
- *    stage_state）归数据 ISR；主泵只在 stage_state=COMPLETE 时于临界区
- *    内读取 req_buf。已发布的读视图与其写序号仍由两边按序号协议交接。
+ *  - ctx->shared.isdu 的写入口（累计槽、`req_idx`/`req_total`、FlowCTRL
+ *    水位、`stage_state` 与发布字 `req_pub`）**整体归数据 ISR**：主泵只读
+ *    发布字、认领槽并写 `req_ack_gen`/`req_busy_sel`，从不改写累计相位，
+ *    因此接管不需要临界区。已发布的读视图与其写序号仍由两边按序号协议
+ *    交接。
  *  - 应答计划表同样归主泵所有：ISR 只读，绝不修改。
  *  - 64 位截止时间与 last_response_us 归主泵所有：ISR 只设置一次性
  *    标志或写 32 位时间戳，主泵用无符号差值重建 64 位绝对时间。
@@ -382,12 +384,9 @@ bool dll_isr_consume_isdu_write(iolink_dll_main_t* ctx, const uint8_t* frame, ui
     const uint8_t flowctrl = (uint8_t) (frame[0] & IOLINK_MC_ADDR_MASK);
     const bool write_phase =
         (flowctrl == IOLINK_FLOWCTRL_START) || (flowctrl == IOLINK_FLOWCTRL_ABORT);
-    if (write_phase && (flowctrl == IOLINK_FLOWCTRL_START) &&
-        (ctx->shared.isdu.stage_state == IOLINK_ISDU_STAGE_COMPLETE)) {
-        /* 上一条已收齐但主泵尚未接管：新 START 覆盖它。 */
-        ctx->shared.isr_od_overruns++;
-    }
 
+    /* 选槽、覆盖计数与发布都在引擎内（iolink_isdu_od_write）：只有它
+     * 知道两个请求槽里哪一条已被主泵接管。 */
     iolink_isdu_od_write(&ctx->shared.isdu, flowctrl, &frame[od_off], od_n);
     if (write_phase) {
         /* 失效协议：先发布写入口相位（START/ABORT），再用序号发布这次写；

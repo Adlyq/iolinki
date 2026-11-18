@@ -272,7 +272,8 @@ typedef struct
                                        边沿计数，走旧路径时按轮询周期计数） */
     uint32_t isr_tx_dropped;       /**< 传输层无法发送的应答（主上下文与 ISR） */
     uint32_t idle_timeouts;        /**< 1 s 空闲链路诊断（不是 t_A 超时） */
-    uint32_t isr_od_overruns;      /**< 上一条写请求未被主泵接管时又收到 START */
+    uint32_t isr_od_overruns;      /**< 已收齐的写请求被新 START 覆盖的次数
+                                        （ISDU 引擎的 `req_overruns`） */
     uint32_t isr_plan_misses;      /**< 未命中应答计划而被丢弃的合法帧 */
     uint32_t isr_mailbox_drops;    /**< 因帧邮箱满而丢弃的帧 */
     uint32_t isr_frames_consumed;  /**< 由 ISR 完全处理、不再进入邮箱的帧 */
