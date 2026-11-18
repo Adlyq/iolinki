@@ -603,15 +603,22 @@ static void dll_apply_isr_isdu_read_reset(iolink_dll_main_t* ctx)
     IOLINK_CRITICAL_EXIT();
 }
 
-/** @brief 同步主站丢失 timer：活动边沿推进截止时间，丢失后保持直到新活动。 */
+/** @brief 同步主站丢失 timer：活动边沿推进截止时间，丢失后保持直到新活动。
+ *
+ * 周期时间未知（DPP1 MasterCycleTime 与 MinCycleTime 都为 0）时不武装：
+ * master_lost_cycles 无法折算成截止时间，虚构一个周期会制造假丢失。
+ * 此时取消表项并清掉丢失提示，等待周期时间可知后的下一次同步。
+ */
 static void dll_timer_sync_master_lost(iolink_dll_main_t* ctx)
 {
     const bool was_lost = ctx->master_lost;
-    if ((ctx->shared.state == IOLINK_DLL_STATE_OPERATE) && (ctx->master_lost_cycles != 0U)) {
+    const uint32_t cycle_us = dll_master_cycle_us(ctx);
+    if ((ctx->shared.state == IOLINK_DLL_STATE_OPERATE) && (ctx->master_lost_cycles != 0U) &&
+        (cycle_us != 0U)) {
         if (ctx->master_lost && (ctx->master_lost_activity_ms == ctx->master_last_activity_ms)) {
             return; /* 已判定丢失且无新活动：保持，不重复装载 */
         }
-        uint32_t cycle_ms = (dll_master_cycle_us(ctx) + 999U) / 1000U;
+        uint32_t cycle_ms = (cycle_us + 999U) / 1000U;
         if (cycle_ms == 0U) {
             cycle_ms = 1U;
         }
@@ -627,6 +634,7 @@ static void dll_timer_sync_master_lost(iolink_dll_main_t* ctx)
         dll_timer_arm(ctx, IOLINK_TIMER_MASTER_LOST, deadline);
     }
     else {
+        /* 离开 OPERATE、未配置周期数，或周期时间尚不可知：不检测。 */
         dll_timer_cancel(ctx, IOLINK_TIMER_MASTER_LOST);
         ctx->master_lost_count = 0U;
         ctx->master_lost = false;
@@ -644,7 +652,13 @@ static void dll_timer_expire_master_lost(iolink_dll_main_t* ctx)
     if ((ctx->shared.state != IOLINK_DLL_STATE_OPERATE) || (ctx->master_lost_cycles == 0U)) {
         return;
     }
-    uint32_t cycle_ms = (dll_master_cycle_us(ctx) + 999U) / 1000U;
+    const uint32_t cycle_us = dll_master_cycle_us(ctx);
+    if (cycle_us == 0U) {
+        /* 周期时间未知时本 timer 不会武装；到期说明配置刚被撤掉，
+         * 直接放弃本次判定，不虚构周期。 */
+        return;
+    }
+    uint32_t cycle_ms = (cycle_us + 999U) / 1000U;
     if (cycle_ms == 0U) {
         cycle_ms = 1U;
     }

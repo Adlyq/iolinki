@@ -958,7 +958,7 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 - `deadline == 0` 表示未装载；所有比较都走 `dll_time_reached()` / `dll_time_passed()` 的回绕安全减法（选择最早截止时间用同一族的符号差判定）。
 - ISR 在 `CONSUME` 计划下应答的帧不经过主泵帧尾：ISR 把帧时间的低 32 位写入 `shared.isr_consumed_us`，穿过 `IOLINK_FENCE()`（release）再自增 `isr_consumed_seq`；主泵读 `isr_consumed_seq` 后用 `IOLINK_FENCE()`（acquire）读时间戳，复读序号前同样有屏障，然后在下一次 process 用该时间戳补做 `dll_check_cycle_time_at()` 并更新 `last_response_us`，因此 T_CYCLE/T_REN 与最坏时序统计不会漏掉这些帧（重建依赖主泵两次运行间隔 < 2^31 us）。SMP 档下的双读校验依赖这对屏障：没有它，读到新序号的读者仍可能看到旧时间戳。
 - `device_apply_stack_config()` 在时钟绑定之后直接装载 T_PD 表项（`dll_timer_arm()`），截止时间表是唯一事实源；不存在单独的兼容字段。
-- T_FBD 的条款文字（`g_timer_contract[]`）写作 "3 × MasterCycleTime"，实现取的是 `min_cycle_time_us`（M-sequence 布局推导出的设备最小周期，受应用下限约束）；DPP1 的 `master_cycle_time` 只用于 MASTER_LOST 的周期估算（`dll_master_cycle_us()`）。`min_cycle_time_us` 为 0 时实现退到 500 ms 上限。
+- T_FBD 的条款文字（`g_timer_contract[]`）写作 "3 × MasterCycleTime"，实现取的是 `min_cycle_time_us`（M-sequence 布局推导出的设备最小周期，受应用下限约束）；DPP1 的 `master_cycle_time` 只用于 MASTER_LOST 的周期估算（`dll_master_cycle_us()`）。两者都为 0 时 `dll_master_cycle_us()` 返回 0，MASTER_LOST 因此不武装（没有可信周期就不做丢失提示），等周期时间可知后的下一次同步再恢复。`min_cycle_time_us` 为 0 时 T_FBD 退到 500 ms 上限。
 
 错误路径与计数：
 

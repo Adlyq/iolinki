@@ -198,6 +198,29 @@ static void test_isr_frame_counts_as_master_activity(void** state)
     assert_int_equal(online_calls, 0);
 }
 
+/* 周期时间未知（DPP1 MasterCycleTime 与 MinCycleTime 都为 0）时不做主站丢失判定：
+ * 没有可信的周期就没有可信的丢失窗口。等周期时间可知后恢复检测。 */
+static void test_master_lost_waits_for_known_cycle_time(void** state)
+{
+    (void) state;
+    iolink_test_device_t dev;
+    init_device(&dev, 3U, NULL);
+    move_to_operate_ctx(&dev.ctx);
+
+    test_dll(&dev.ctx)->master_cycle_time = 0U;
+    test_dll(&dev.ctx)->min_cycle_time_us = 0U;
+
+    g_now_ms = 10U;
+    iolink_device_process(&dev.ctx);
+    assert_false(iolink_device_master_lost(&dev.ctx));
+    assert_false(iolink_dll_timer_armed(test_dll(&dev.ctx), IOLINK_TIMER_MASTER_LOST));
+
+    /* 周期时间可知后重新武装：同一轮即可判定（此处已错过 5 个周期）。 */
+    test_dll(&dev.ctx)->min_cycle_time_us = 2000U;
+    iolink_device_process(&dev.ctx);
+    assert_true(iolink_device_master_lost(&dev.ctx));
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -205,6 +228,8 @@ int main(void)
         cmocka_unit_test_setup_teardown(test_master_lost_uses_master_cycle_time, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_master_lost_disabled, test_setup, test_teardown),
+        cmocka_unit_test_setup_teardown(test_master_lost_waits_for_known_cycle_time, test_setup,
+                                        test_teardown),
         cmocka_unit_test_setup_teardown(test_isr_frame_counts_as_master_activity, test_setup,
                                         test_teardown),
     };

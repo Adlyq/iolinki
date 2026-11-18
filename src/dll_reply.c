@@ -418,16 +418,17 @@ static uint16_t dll_decode_cycle_time_ticks(uint8_t value)
     return 0U;
 }
 
-/** @brief 主站轮询周期，单位微秒（优先 DPP1 MasterCycleTime，否则 MinCycleTime）。 */
+/** @brief 主站轮询周期，单位微秒（优先 DPP1 MasterCycleTime，否则 MinCycleTime）。
+ *
+ * 两个来源都未知时返回 0：本函数不提供默认周期，调用方必须把 0 当作
+ * "周期时间尚不可知"处理（master-lost 检测在此时不武装）。
+ */
 uint32_t dll_master_cycle_us(const iolink_dll_main_t* ctx)
 {
     uint16_t ticks = dll_decode_cycle_time_ticks(ctx->master_cycle_time);
     if (ticks == 0U) {
         ticks = (uint16_t) ((ctx->min_cycle_time_us + (IOLINK_CYCLE_TIME_UNIT_US - 1U)) /
                             IOLINK_CYCLE_TIME_UNIT_US);
-    }
-    if (ticks == 0U) {
-        ticks = 20U; /* 2 ms 回退 */
     }
     return (uint32_t) ticks * IOLINK_CYCLE_TIME_UNIT_US;
 }
