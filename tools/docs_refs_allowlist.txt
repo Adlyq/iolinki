@@ -1,0 +1,2 @@
+docs/TESTING.md:IOLINK_STRICT_GCC # CMake option，定义在 CMakeLists.txt，不是 C 符号
+docs/TESTING.md:iolink_test_transport_probe # ctest 可执行目标，定义在 tests/CMakeLists.txt
