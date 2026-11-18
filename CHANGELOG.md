@@ -7,16 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (BEHAVIOUR CHANGE: ISR/SMP reject a TX PHY without `request_service()`)
+- **Behaviour change:** under `IOLINK_CONCURRENCY=ISR` (the default) and `SMP`,
+  `iolink_device_init()` now returns `IOLINK_DEVICE_INIT_ERR_PHY` for a PHY that
+  has TX capability (`IOLINK_CAP_TX`), has no `request_service()` and does not
+  set `IOLINK_CAP_REQUIRE_ISR_TX`. Such a PHY initialised successfully before
+  and silently dropped every main-context reply (`dll.isr_tx_dropped`); it now
+  has to provide the hook or be built as `SINGLE`. The check lives with the
+  other PHY capability checks in `device_config_validate()`.
+  `IOLINK_CAP_REQUIRE_ISR_TX` keeps its own, stricter requirement (the hook is
+  mandatory when the bit is set).
+- The direct-send branch of `dll_send()` is now compiled only under
+  `IOLINK_CONCURRENCY_SINGLE`, the only profile without a data ISR: there the
+  main context is the only sender and drives the TX hooks itself. Under
+  `ISR`/`SMP` a staged reply reaches the line only through the pump, so the
+  remaining path counts `isr_tx_dropped` (reachable only by callers that use
+  `iolink_dll_init()` directly and skip the device-layer validation).
+- The `IOLINK_CRITICAL_ENTER/EXIT()` pair around that branch is gone; the
+  remaining branch runs only in `SINGLE`, where the macros are empty.
+- Local test PHYs with TX gained a no-op `request_service()` and their service
+  loops drain `isr_tx_pending`; `tests/test_capability.c` covers the rejection,
+  the accepted hook and the `REQUIRE_ISR_TX` interaction.
+
 ### Changed (PHY mocks hand main-context replies to the ISR pump)
 - The shared test mock (`g_phy_mock`), the frame fuzzer, the ISR latency
   harness, the generic template PHY and both host examples now provide
   `request_service()`. The test pump (`test_io_cycle()` and the helpers built on
   it) drains the staged reply through `iolink_dll_process_isr()` instead of
   letting `dll_send()` drive the PHY directly, so the harness models the port
-  contract the ISR profiles expect. Library behaviour is unchanged: the
-  direct-send fallback is still compiled in. `tests/test_capability.c` asserts
+  contract the ISR profiles expect. `tests/test_capability.c` asserts
   the capability bit for the mock and keeps the `IOLINK_CAP_REQUIRE_ISR_TX`
   rejection covered with a local PHY that has TX but no `request_service()`.
+  The direct-send branch itself is restricted to `SINGLE` (see the entry above).
 
 ### Fixed (DPP1 image reads acquire the sequence; workspace rebinding refuses in the ISR)
 - `iolink_isdu_direct_param_page1_octet()` and

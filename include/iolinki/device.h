@@ -185,7 +185,8 @@ typedef enum
         -10, /**< PD 回调路径与轮询调用混用（能力位已置位时调用轮询 API） */
     IOLINK_DEVICE_INIT_ERR_PHY =
         -11, /**< PHY 能力组合不可满足（例如要求 ISR 发送却没有 `request_service`，
-                  或构建承诺 `tx_busy` 却缺少该钩子），或 PHY `init` 失败
+                  ISR/SMP 档有 TX 能力却没有 `request_service`，或构建承诺
+                  `tx_busy` 却缺少该钩子），或 PHY `init` 失败
                   （原始驱动码见 iolink_device_get_phy_error()） */
     IOLINK_DEVICE_INIT_ERR_WORKSPACE = -12, /**< `IOLINK_WORKSPACE_EMBEDDED=0` 但没有提供工作区 */
     IOLINK_DEVICE_INIT_ERR_OD = -13,        /**< 应用对象字典表存在未定义/自相矛盾的配置 */

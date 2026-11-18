@@ -29,7 +29,9 @@ The PHY layer provides hardware abstraction for UART communication.
 
 **Location**: `include/iolinki/phy.h`
 
-**Interface**: copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `iolink_app_t* self` first (the application instance; the library forwards it unchanged and it may be NULL for a hook that does not use it). Every member is optional: `iolink_caps_resolve()` derives the capability bits from the hooks that are present, and the library calls a hook only when the matching bit is set. In practice a usable PHY provides the transport hooks of the configured granularity (`rx_octet`/`tx_octet` in BYTE mode, `rx_frame`/`tx_frame` in FRAME mode), `int_active` when the ISR pump is used (`dll_isr_process()` returns immediately without it), and `init`/`set_mode` when the hardware needs them — each is called only if present. `tx_done` (TX BYTE), `tx_busy` (TX FRAME), `detect_wakeup`, `set_cq_line`, `request_service`, the timer hooks and `get_faults` stay optional. `request_service()` is the key hook for the ISR TX path: without it a main-context reply cannot be handed to the ISR unless the direct-send fallback is compiled in.
+**Interface**: copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `iolink_app_t* self` first (the application instance; the library forwards it unchanged and it may be NULL for a hook that does not use it). Every member is optional: `iolink_caps_resolve()` derives the capability bits from the hooks that are present, and the library calls a hook only when the matching bit is set. In practice a usable PHY provides the transport hooks of the configured granularity (`rx_octet`/`tx_octet` in BYTE mode, `rx_frame`/`tx_frame` in FRAME mode), `int_active` when the ISR pump is used (`dll_isr_process()` returns immediately without it), and `init`/`set_mode` when the hardware needs them — each is called only if present. `tx_done` (TX BYTE), `tx_busy` (TX FRAME), `detect_wakeup`, `set_cq_line`, the timer hooks and `get_faults` stay optional.
+
+`request_service()` is required for every PHY that has TX capability in the `ISR` and `SMP` profiles: the main context only stages the reply and this hook must raise the data interrupt that sends it. `iolink_device_init()` returns `IOLINK_DEVICE_INIT_ERR_PHY` for a TX-capable PHY without it (a `REQUIRE_ISR_TX` port has the same requirement). Only the `SINGLE` profile has no data ISR: it drives the TX hooks from the main context when the hook is absent. There the hook stays optional (it is called when present) and becomes mandatory only when the port sets `IOLINK_STACK_FLAG_REQUIRE_ISR_TX`, so something still pumps the staged reply.
 
 The transmission rate is the build-time `IOLINK_COM` (1/2/3, `include/iolinki/config.h`), not a
 stack-config field: an IO-Link Device supports exactly one COM. The PHY's `init()` must
@@ -145,9 +147,13 @@ Select one with `-DIOLINK_CONCURRENCY=...`:
 
 | Profile | Use case | Required by the stack |
 | :--- | :--- | :--- |
-| `IOLINK_CONCURRENCY_SINGLE` | host simulation, cooperative loop, one context | nothing (the barrier and the critical section collapse to no-ops) |
-| `IOLINK_CONCURRENCY_ISR` (default) | one data ISR preempts one main loop (the dual-pump transport) | atomic width ≥ 32 bit + `COMPILER` barrier + the critical section |
-| `IOLINK_CONCURRENCY_SMP` | the pump and the main loop may run on different cores | atomic width + `SMP` barrier + the critical section |
+| `IOLINK_CONCURRENCY_SINGLE` | host simulation, cooperative loop, one context | nothing (the barrier and the critical section collapse to no-ops); replies are driven from the main context |
+| `IOLINK_CONCURRENCY_ISR` (default) | one data ISR preempts one main loop (the dual-pump transport) | atomic width ≥ 32 bit + `COMPILER` barrier + the critical section; `request_service()` for a TX-capable PHY |
+| `IOLINK_CONCURRENCY_SMP` | the pump and the main loop may run on different cores | atomic width + `SMP` barrier + the critical section; `request_service()` for a TX-capable PHY |
+
+`request_service()` is what makes the dual pump reachable from the main context:
+without it a staged reply is never sent in `ISR`/`SMP`, so `iolink_device_init()`
+rejects such a PHY instead of degrading silently.
 
 The RTOS tier was removed: an RTOS build uses `ISR` (or `SMP` on multiple
 cores) and must still keep exactly one task calling the API. The stack derives

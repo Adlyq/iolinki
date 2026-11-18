@@ -340,9 +340,10 @@ IOLINK_ASSUME_NONNULL_BEGIN
 /**
  * @brief 要求 PHY 为 ISR 泵应答提供 request_service() 钩子（运行时能力）。
  *
- * 该宏只提供 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 的构建默认值。回退路径
- * 常驻；"只有 ISR 能发"是运行时能力位 `IOLINK_CAP_REQUIRE_ISR_TX`，
- * 由 `iolink_device_init()` 校验（缺 request_service() 时拒绝初始化）。
+ * 该宏只提供 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 的构建默认值。"只有 ISR 能发"
+ * 是运行时能力位 `IOLINK_CAP_REQUIRE_ISR_TX`，由 `iolink_device_init()` 校验
+ * （缺少 request_service() 时拒绝初始化）。ISR/SMP 档下，任何具备 TX 能力的
+ * PHY 都必须提供该钩子，与这一位无关。
  */
 #ifndef IOLINK_PHY_FEATURE_ISR_TX_ONLY
 #define IOLINK_PHY_FEATURE_ISR_TX_ONLY 0

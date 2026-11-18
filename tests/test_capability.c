@@ -212,8 +212,9 @@ static void test_resolve_uses_build_override(void** state)
         iolink_caps_has(iolink_caps_resolve(NULL, NULL, NULL, &fake), IOLINK_CAP_REQUIRE_ISR_TX));
 }
 
-/* 本地 PHY：有 TX，但没有 request_service()。REQUIRE_ISR_TX 要求每个
- * 应答都由 ISR 发送，这样的 PHY 必须在初始化阶段被拒绝。 */
+/* 本地 PHY：有 TX，但没有 request_service()。ISR/SMP 档的应答只能由数据 ISR
+ * 发送，而 REQUIRE_ISR_TX 要求每个应答都由 ISR 发送：两种规则下这样的 PHY
+ * 都必须在初始化阶段被拒绝。 */
 static int no_service_init(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
@@ -278,6 +279,68 @@ static void test_require_isr_tx_needs_request_service(void** state)
     assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_PHY);
 }
 
+static void with_service_request_service(iolink_app_t* IOLINK_NULLABLE self)
+{
+    (void) self;
+}
+
+/* REQUIRE_ISR_TX 打开且 PHY 提供 request_service()：能力组合可满足。 */
+static void test_require_isr_tx_accepts_request_service(void** state)
+{
+    (void) state;
+    iolink_device_ctx_t ctx;
+    iolink_phy_api_t phy = s_no_service_phy;
+    iolink_stack_config_t stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_0,
+                                   .od_width = 1,
+                                   .flags = IOLINK_STACK_FLAG_REQUIRE_ISR_TX};
+    const iolink_device_config_t config = {
+        .phy = &phy,
+        .stack = &stack,
+        .app = iolink_test_default_app(),
+        .device_info = iolink_test_identity(),
+    };
+
+    phy.request_service = with_service_request_service;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
+}
+
+#if IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_ISR
+/* ISR/SMP 档没有主上下文直发路径：具备 TX 能力却没有 request_service() 的
+ * PHY 无法被唤醒发送暂存应答，init 必须在能力校验阶段拒绝。 */
+static void test_isr_profile_rejects_tx_without_request_service(void** state)
+{
+    (void) state;
+    iolink_device_ctx_t ctx;
+    iolink_stack_config_t stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1};
+    const iolink_device_config_t config = {
+        .phy = &s_no_service_phy,
+        .stack = &stack,
+        .app = iolink_test_default_app(),
+        .device_info = iolink_test_identity(),
+    };
+
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_ERR_PHY);
+}
+
+/* 同一 PHY 补上 request_service()：能力组合可满足，init 接受。 */
+static void test_isr_profile_accepts_tx_with_request_service(void** state)
+{
+    (void) state;
+    iolink_device_ctx_t ctx;
+    iolink_phy_api_t phy = s_no_service_phy;
+    iolink_stack_config_t stack = {.m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1};
+    const iolink_device_config_t config = {
+        .phy = &phy,
+        .stack = &stack,
+        .app = iolink_test_default_app(),
+        .device_info = iolink_test_identity(),
+    };
+
+    phy.request_service = with_service_request_service;
+    assert_int_equal(iolink_device_init(&ctx, &config), IOLINK_DEVICE_INIT_OK);
+}
+#endif
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -287,6 +350,11 @@ int main(void)
         cmocka_unit_test(test_resolve_uses_build_override),
         cmocka_unit_test(test_instance_caps_come_from_the_vtable),
         cmocka_unit_test(test_require_isr_tx_needs_request_service),
+        cmocka_unit_test(test_require_isr_tx_accepts_request_service),
+#if IOLINK_CONCURRENCY >= IOLINK_CONCURRENCY_ISR
+        cmocka_unit_test(test_isr_profile_rejects_tx_without_request_service),
+        cmocka_unit_test(test_isr_profile_accepts_tx_with_request_service),
+#endif
     };
     return cmocka_run_group_tests(tests, NULL, test_tx_all_asserted);
 }

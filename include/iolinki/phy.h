@@ -227,13 +227,15 @@ typedef struct
     void (*IOLINK_NULLABLE stack_timer_start)(iolink_app_t* IOLINK_NULLABLE self);
 
     /**
-     * @brief 请求 PHY 立即运行数据中断泵送（可选）。
+     * @brief 请求 PHY 立即运行数据中断泵送。
      *
      * ISR 双泵传输从中断上下文发送应答。当
      * 主上下文处理程序已暂存应答时，库调用该钩子，使
      * PHY 请求其数据中断（例如挂起 USART IRQ），而
-     * 实际的 TX 钩子只从 ISR 中调用。NULL 保持旧有的
-     * 直接发送行为（由调用方发送）。
+     * 实际的 TX 钩子只从 ISR 中调用。`ISR`/`SMP` 档下具备 TX
+     * 能力的 PHY 必须提供它，缺少时 `iolink_device_init()` 拒绝
+     * 初始化；只有 `SINGLE` 档（没有数据 ISR）由主上下文直接
+     * 发送，此时它可以为 NULL。
      */
     void (*IOLINK_NULLABLE request_service)(iolink_app_t* IOLINK_NULLABLE self);
 
