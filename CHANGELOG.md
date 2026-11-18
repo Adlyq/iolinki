@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Removed (reply plans carry no timing field and are compiled once)
+### Fixed (staged reply length and CKS are ISR-owned)
+- The staged reply's length and CKS flag were shared between the main pump and
+  the data ISR: `dll_send()` wrote `isr_tx_len`/`isr_tx_has_cks` while the ISR
+  re-read them for every streamed octet. A main-context `dll_send()` during an
+  in-flight reply could therefore shorten it (skipping CKS, ending the frame
+  early and releasing the PD-in lease) or hand a fresh staging to a stream that
+  was already running. The staging metadata is now main-context only
+  (`stage_len`/`stage_has_cks`, adjacent to `isr_tx_pending_slot`) and the ISR
+  copies `{slot, len, has_cks}` into its own stream state
+  (`iolink_dll_isr_t::tx_stream_len`/`tx_stream_has_cks`) when it takes
+  `isr_tx_pending`; `dll_isr_tx_step()` reads nothing else. `dll_send()` also
+  rejects a staging while `isr_tx_active != 0` and counts it in
+  `isr_tx_dropped`, and `dll_isr_start_staged_tx()` takes the CKS flag as a
+  parameter (TX BYTE no longer ignores the length). Context sizes are unchanged.
+  Regression: `test_isr_atomicity` covers a staging overwritten mid-stream and a
+  rejected staging during an in-flight reply.
+
+
 - `iolink_reply_plan_t::deadline_us` is gone. Nothing read it at run time: the
   ISR arms t_A from `10 * dll_get_t_bit_us()` when it starts a reply
   (`dll_sm.c`), and the PHY response timer is the authority. The field was

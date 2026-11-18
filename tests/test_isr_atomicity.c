@@ -94,13 +94,20 @@ static int phy_rx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t* data, uint8
 }
 #endif
 
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+/* 在途应答标志：TX BYTE 每步请求一次服务，int_active 据此复用同一条
+ * 中断入口。定义在 int_active 之前，记录缓冲在发送钩子旁。 */
+static bool s_streaming;
+#endif
+
 static uint8_t phy_int_active(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
     return s_frame_pending ? 1U : 0U;
 #else
-    return ((s_rxq_pos < s_rxq_len) || s_chk_pending) ? 1U : 0U;
+    /* 在途应答与接收一样会让收发器请求服务（TX BYTE 每步一个八位组）。 */
+    return ((s_rxq_pos < s_rxq_len) || s_chk_pending || s_streaming) ? 1U : 0U;
 #endif
 }
 
@@ -122,16 +129,29 @@ static int phy_tx_frame(iolink_app_t* IOLINK_NULLABLE self, const uint8_t* data,
     return s_tx_rc;
 }
 #else
+/* TX BYTE 观测：库逐字节喂送，帧结束由 tx_done 标记。
+ * 记录八位组使长度/CKS 成为可断言的对象。 */
+static uint8_t s_octets[IOLINK_M_SEQ_MAX_LEN];
+static uint8_t s_octet_n;
+static uint32_t s_frames_done;
+
 static int phy_tx_octet(iolink_app_t* IOLINK_NULLABLE self, uint8_t data)
 {
     (void) self;
-    (void) data;
+    s_streaming = true;
+    if (s_octet_n < (uint8_t) sizeof(s_octets)) {
+        s_octets[s_octet_n++] = data;
+    }
     return 0;
 }
 
 static void phy_tx_done(iolink_app_t* IOLINK_NULLABLE self)
 {
     (void) self;
+    if (s_streaming) {
+        s_streaming = false;
+        s_frames_done++;
+    }
 }
 #endif
 
@@ -227,6 +247,11 @@ static void reset_ctx(void)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     s_tx_calls = 0;
     s_tx_rc = 0;
+#else
+    memset(s_octets, 0, sizeof(s_octets));
+    s_octet_n = 0U;
+    s_frames_done = 0U;
+    s_streaming = false;
 #endif
     s_service_calls = 0U;
     s_service_in_critical = false;
@@ -482,6 +507,101 @@ static void test_busy_tx_frame_keeps_frame_for_main(void** state)
 }
 #endif
 
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
+/* 排空 ISR 正在流式发送的应答；测试 PHY 在流式期间保持 int_active。 */
+static void drain_isr_stream(void)
+{
+    for (uint8_t i = 0U; (i < 16U) && (s_ctx.main.shared.isr_tx_active != 0U); i++) {
+        iolink_dll_process_isr(&s_ctx.main);
+    }
+    assert_int_equal(s_ctx.main.shared.isr_tx_active, 0U);
+}
+
+/* 主泵暂存的 {槽位, 长度, CKS 标志} 只在 ISR 取走时一次性搬进流式状态：
+ * 取走之后主泵改写暂存元数据（例如为下一帧暂存）不得改变在途帧的
+ * 长度，也不得凭空追加或跳过 CKS。 */
+static void test_staged_reply_keeps_own_length_and_cks(void** state)
+{
+    (void) state;
+    /* STARTUP 的 MasterCommand 页写按 DEFER 计划交给主泵应答。 */
+    uint8_t frame[3] = {(uint8_t) IOLINK_MC_CHANNEL_PAGE, IOLINK_MSEQ_TYPE_0,
+                        IOLINK_CMD_DEVICE_PREOPERATE};
+
+    reset_ctx();
+    s_ctx.main.shared.state = IOLINK_DLL_STATE_STARTUP;
+    make_frame(frame, sizeof(frame));
+    feed_frame(frame, sizeof(frame));
+
+    iolink_dll_process_isr(&s_ctx.main);
+    assert_int_equal(s_ctx.main.shared.isr_tx_pending, 0U);
+
+    /* 主泵生成应答（载荷自带 CKS）并暂存。 */
+    iolink_dll_process(&s_ctx.main);
+    assert_int_equal(s_ctx.main.shared.isr_tx_pending, 1U);
+    assert_int_equal(s_ctx.main.shared.stage_len, 1U);
+    assert_int_equal(s_ctx.main.shared.stage_has_cks, 0U);
+    const uint8_t staged =
+        s_ctx.main.shared.isr_tx_payload[s_ctx.main.shared.isr_tx_pending_slot][0];
+
+    /* ISR 取走暂存并发出第一个八位组。 */
+    iolink_dll_process_isr(&s_ctx.main);
+    assert_int_equal(s_ctx.main.shared.isr_tx_pending, 0U);
+    assert_int_equal(s_ctx.main.shared.isr_tx_active, 1U);
+    assert_int_equal(s_octet_n, 1U);
+    assert_int_equal(s_octets[0], staged);
+
+    /* 模拟主泵为下一帧改写暂存元数据：在途帧只读 ISR 自己的副本。 */
+    s_ctx.main.shared.stage_len = 3U;
+    s_ctx.main.shared.stage_has_cks = 1U;
+    s_ctx.main.shared.isr_tx_pending_slot = IOLINK_TX_ISR_SLOT;
+
+    drain_isr_stream();
+
+    assert_int_equal(s_octet_n, 1U);
+    assert_int_equal(s_octets[0], staged);
+    assert_int_equal(s_frames_done, 1U);
+}
+
+/* isr_tx_active 期间 dll_send() 必须拒绝暂存并计数：接受它会改写
+ * 流式长度/CKS，使在途帧提前 tx_done（丢掉 CKS、提前释放 PD-in 租约）。 */
+static void test_staging_rejected_while_reply_streaming(void** state)
+{
+    (void) state;
+    uint8_t deferred[3] = {(uint8_t) IOLINK_MC_CHANNEL_PAGE, IOLINK_MSEQ_TYPE_0,
+                           IOLINK_CMD_DEVICE_PREOPERATE};
+    /* OPERATE/STARTUP 的 Type-0 页读：ISR 应答 OD + CKS 两个八位组。 */
+    uint8_t probe[2] = {(uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x02U), 0x00U};
+
+    reset_ctx();
+    s_ctx.main.shared.state = IOLINK_DLL_STATE_STARTUP;
+
+    /* 只有主泵处理的帧先入邮箱。 */
+    make_frame(deferred, sizeof(deferred));
+    feed_frame(deferred, sizeof(deferred));
+    iolink_dll_process_isr(&s_ctx.main);
+    assert_int_equal(iolink_ring_count(&s_ctx.main.shared.isr_frame_ring), 1U);
+
+    /* ISR 自己的计划应答开始流式发送（第一个八位组已发出）。 */
+    make_frame(probe, sizeof(probe));
+    feed_frame(probe, sizeof(probe));
+    iolink_dll_process_isr(&s_ctx.main);
+    assert_int_equal(s_ctx.main.shared.isr_tx_active, 1U);
+    assert_int_equal(s_octet_n, 1U);
+
+    /* 主泵此刻消费页写并调用 dll_send()：暂存被拒绝并计数。 */
+    const uint32_t dropped_before = s_ctx.main.shared.isr_tx_dropped;
+    iolink_dll_process(&s_ctx.main);
+    assert_int_equal(s_ctx.main.shared.isr_tx_dropped, dropped_before + 1U);
+    assert_int_equal(s_ctx.main.shared.isr_tx_pending, 0U);
+
+    /* 在途帧仍按自己的长度和 CKS 完成，没有被截断成新暂存应答。 */
+    drain_isr_stream();
+    assert_int_equal(s_octet_n, 2U);
+    assert_int_equal(s_frames_done, 1U);
+    assert_int_equal(s_ctx.main.shared.isr_tx_pending, 0U);
+}
+#endif /* IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE */
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -491,6 +611,9 @@ int main(void)
         cmocka_unit_test(test_isr_startup_notification_is_not_coalesced),
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
         cmocka_unit_test(test_busy_tx_frame_keeps_frame_for_main),
+#else
+        cmocka_unit_test(test_staged_reply_keeps_own_length_and_cks),
+        cmocka_unit_test(test_staging_rejected_while_reply_streaming),
 #endif
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
