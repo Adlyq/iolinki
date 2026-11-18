@@ -1,0 +1,2 @@
+# fixture allowlist
+docs/good.md:IOLINK_FIXTURE_GENERATED # fixture 宏由 config.h 生成，仓库文件里没有
