@@ -228,13 +228,13 @@ uint32_t dll_get_t_bit_us(const iolink_dll_main_t* ctx)
     return 1000000U / IOLINK_COM_HZ;
 }
 
-/** @brief 返回当前波特率下的字节间超时（16 个位时间），单位 us。 */
+/** @brief 返回当前波特率下的字节间超时（`IOLINK_T_BYTE_WINDOW_BITS` 个位时间），单位 us。 */
 uint32_t dll_get_t_byte_limit_us(const iolink_dll_main_t* ctx)
 {
     if (ctx == NULL) {
         return 0U;
     }
-    return dll_get_t_bit_us(ctx) * 16U;
+    return dll_get_t_bit_us(ctx) * IOLINK_T_BYTE_WINDOW_BITS;
 }
 
 /** @brief 当掉电/PD 保护窗口（t_PD）仍有效时返回 true。 */
@@ -304,11 +304,11 @@ void dll_handle_fallback_command(iolink_dll_main_t* ctx)
      * 不支持 FALLBACK 转换：应答该 Type-0 写而不改变
      * DL 模式。 */
     if (dll_phy_has_wakeup(&ctx->shared)) {
-        uint32_t t_fbd_ms = 500U;
+        uint32_t t_fbd_ms = IOLINK_T_FBD_MAX_MS;
         if (ctx->min_cycle_time_us > 0U) {
-            t_fbd_ms = (3U * ctx->min_cycle_time_us) / 1000U;
-            if (t_fbd_ms > 500U) {
-                t_fbd_ms = 500U;
+            t_fbd_ms = (IOLINK_T_FBD_MASTER_CYCLES * ctx->min_cycle_time_us) / 1000U;
+            if (t_fbd_ms > IOLINK_T_FBD_MAX_MS) {
+                t_fbd_ms = IOLINK_T_FBD_MAX_MS;
             }
         }
         IOLINK_LOG_WARN(&ctx->shared.log, "fallback command: SIO in %lu ms",

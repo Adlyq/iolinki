@@ -48,9 +48,10 @@ iolink_baudrate_t iolink_dll_get_baudrate(const iolink_dll_main_t* ctx)
 
 /** @brief 根据 M-sequence 时序计算设备 MinCycleTime（Table B.3）。
  *
- * 使用 ST ministry 公式：mseq_us = (reply_octets*14 + request_octets*12
- * + 6) * 1e6 / baud。取 PD 写与 PD/ISDU 读的最坏情况，
- * 向上取整到 0.1 ms 单位，并钳制到应用下限。 */
+ * 使用 A.3.6 的最坏情况：主站请求八位组按 11 + t1(max) 位、设备应答
+ * 八位组按 11 + t2(max) 位，再加固定项 t_A(max) - t1(max) - t2(max)，
+ * 乘以 1e6/baud 换算为微秒。取 PD 写与 PD/ISDU 读的最坏情况，
+ * 向上取整到 0.1 ms 单位，并钳制到 Table B.3 的 0.4 ms 下限与应用下限。 */
 uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx)
 {
     if (ctx == NULL) {
@@ -64,16 +65,23 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx)
      * 读请求：MC+CKT + PD-out（无 OD）；应答：OD + PD-in + CKS。
      * 这适用于所有 Annex A 类型：固定类型只是在不携带的
      * 字段中为 0 字节（参见 A.6-A.13）。 */
-    const uint32_t t_write = ((pdi + 1U) * 14U + (2U + pdo + od) * 12U + 6U) * 1000000U / baud;
-    const uint32_t t_read = ((od + pdi + 1U) * 14U + (2U + pdo) * 12U + 6U) * 1000000U / baud;
+    const uint32_t t_write = ((pdi + 1U) * IOLINK_MSEQ_DEVICE_OCTET_BITS +
+                              (IOLINK_M_SEQ_HEADER_LEN + pdo + od) * IOLINK_MSEQ_MASTER_OCTET_BITS +
+                              IOLINK_MSEQ_TIMING_FIXED_BITS) *
+                             1000000U / baud;
+    const uint32_t t_read = ((od + pdi + 1U) * IOLINK_MSEQ_DEVICE_OCTET_BITS +
+                             (IOLINK_M_SEQ_HEADER_LEN + pdo) * IOLINK_MSEQ_MASTER_OCTET_BITS +
+                             IOLINK_MSEQ_TIMING_FIXED_BITS) *
+                            1000000U / baud;
     const uint32_t t = (t_write > t_read) ? t_write : t_read;
-    uint32_t units = (t + 99U) / 100U; /* 向上取整到 0.1 ms */
-    const uint32_t app_units = (ctx->min_cycle_time_app_us + 99U) / 100U;
+    uint32_t units = (t + (IOLINK_CYCLE_TIME_UNIT_US - 1U)) / IOLINK_CYCLE_TIME_UNIT_US;
+    const uint32_t app_units =
+        (ctx->min_cycle_time_app_us + (IOLINK_CYCLE_TIME_UNIT_US - 1U)) / IOLINK_CYCLE_TIME_UNIT_US;
     if (units < app_units) {
         units = app_units;
     }
-    if (units < 4U) {
-        units = 4U; /* Table B.3 最小值为 0.4 ms。 */
+    if (units < IOLINK_MIN_CYCLE_TIME_UNITS) {
+        units = IOLINK_MIN_CYCLE_TIME_UNITS;
     }
     return (units > 255U) ? 255U : (uint8_t) units;
 }

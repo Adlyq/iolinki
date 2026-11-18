@@ -545,11 +545,11 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
              * 参考点是本次主上下文轮询，比帧结束晚一轮；
              * 这只会延长 T_FBD（绝不缩短它），
              * 至多一个主循环延迟。 */
-            uint32_t t_fbd_ms = 500U;
+            uint32_t t_fbd_ms = IOLINK_T_FBD_MAX_MS;
             if (ctx->min_cycle_time_us > 0U) {
-                t_fbd_ms = (3U * ctx->min_cycle_time_us) / 1000U;
-                if (t_fbd_ms > 500U) {
-                    t_fbd_ms = 500U;
+                t_fbd_ms = (IOLINK_T_FBD_MASTER_CYCLES * ctx->min_cycle_time_us) / 1000U;
+                if (t_fbd_ms > IOLINK_T_FBD_MAX_MS) {
+                    t_fbd_ms = IOLINK_T_FBD_MAX_MS;
                 }
             }
             /* 绝对截止时间仍按毫秒基准换算，与原比较（now_ms >= deadline_ms）逐拍一致。 */

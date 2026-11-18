@@ -323,7 +323,7 @@ void dll_process_complete_frame(iolink_dll_main_t* ctx)
         /* 请求结束边沿：装载 t_A 的软件镜像（PHY Timer A 仍是权威）。
          * 应答开始（dll_send）或到期时取消。 */
         dll_timer_arm(ctx, IOLINK_TIMER_T_A,
-                      dll_time_us(ctx) + (uint64_t) (10U * dll_get_t_bit_us(ctx)));
+                      dll_time_us(ctx) + (uint64_t) (IOLINK_T_A_MAX_BITS * dll_get_t_bit_us(ctx)));
         if (!dll_handle_valid_frame(ctx)) {
             return;
         }

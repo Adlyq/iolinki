@@ -4,6 +4,18 @@ Table 10,IOLINK_T_REN_US,500,Receive-enable upper bound; independent of the baud
 Table 42,IOLINK_T_DSIO_MS,300,60..300 ms window; the implementation uses the maximum
 10.10.2,IOLINK_EVENT_MIN_APPEAR_MS,50,No Event disappears within 50 ms of its appears
 10.10.2,IOLINK_EVENT_MIN_REPEAT_MS,1000,Same EventCode is not reported faster than 1 s
+A.3.6,IOLINK_UART_FRAME_BITS,11,One UART frame: start + 8 data + parity + stop
+A.3.3,IOLINK_T1_MAX_BITS,1,Master inter-frame delay upper bound
+A.3.4,IOLINK_T2_MAX_BITS,3,Device inter-frame delay upper bound
+A.3.5,IOLINK_T_A_MAX_BITS,10,Device response delay upper bound; the range is 1..10 T_BIT
+A.3.6,IOLINK_MSEQ_MASTER_OCTET_BITS,12,Request octet cost: 11 + t1(max)
+A.3.6,IOLINK_MSEQ_DEVICE_OCTET_BITS,14,Reply octet cost: 11 + t2(max)
+A.3.6,IOLINK_MSEQ_TIMING_FIXED_BITS,6,Fixed term: t_A(max) - t1(max) - t2(max)
+Table 47,IOLINK_T_BYTE_WINDOW_BITS,16,Implementation byte-gap window; MaxUARTFrameTime is 12 T_BIT
+Table 43,IOLINK_T_FBD_MASTER_CYCLES,3,Minimum delay in MasterCycleTimes
+Table 43,IOLINK_T_FBD_MAX_MS,500,Maximum delay in ms
+Table B.3,IOLINK_CYCLE_TIME_UNIT_US,100,Time base 00 is 0.1 ms
+Table B.3,IOLINK_MIN_CYCLE_TIME_UNITS,4,Representable minimum is 0.4 ms
 7.3.3.2,IOLINK_M_SEQ_HEADER_LEN,2,Master message starts with MC + CKT
 7.3.3.2,IOLINK_M_SEQ_TYPE0_LEN,2,Type 0 request without OD is MC + CKT
 7.3.3.2,IOLINK_M_SEQ_MIN_LEN,3,Shortest M-sequence is MC + CKT + CKS
