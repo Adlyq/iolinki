@@ -790,5 +790,5 @@ CPU 级的 `iolink_critical_*`（IRQ 屏蔽）。也不要用自己的锁包裹�
 `iolink_dll_publish_reply_plans()` 在数据 ISR 内调用时返回
 `IOLINK_DLL_PUBLISH_ERR_ISR`（`iolink_dll_publish_result_t`），
 `iolink_isdu_bind_workspace()` 在数据 ISR 内直接拒绝并记录，两者都不改动已有状态。
-`iolink_dll_init()` 没有这个判定：`shared.in_isr` 就在它清零的上下文里，误从数据 ISR
+`iolink_dll_init()` 没有这个判定：`shared.i_in_isr` 就在它清零的上下文里，误从数据 ISR
 调用会直接破坏正在运行的泵。

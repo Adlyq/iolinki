@@ -242,18 +242,18 @@ static void test_t_pd_window_drops_frames(void** state)
     dll_timer_arm(&ctx.main, IOLINK_TIMER_T_PD, g_now + 500U);
 
     iolink_frame_rec_t* rec =
-        (iolink_frame_rec_t*) iolink_ring_claim(&ctx.main.shared.isr_frame_ring);
+        (iolink_frame_rec_t*) iolink_ring_claim(&ctx.main.shared.i_isr_frame_ring);
     assert_non_null(rec);
     rec->len = 3U;
     rec->eager = 0U;
     rec->data[0] = 0x40U;
     rec->data[1] = 0x40U;
     rec->data[2] = 0x00U;
-    iolink_ring_publish(&ctx.main.shared.isr_frame_ring);
+    iolink_ring_publish(&ctx.main.shared.i_isr_frame_ring);
 
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.t_pd_violations, 1U);
-    assert_true(iolink_ring_is_empty(&ctx.main.shared.isr_frame_ring));
+    assert_true(iolink_ring_is_empty(&ctx.main.shared.i_isr_frame_ring));
 
     /* 窗口结束：送入一条校验和正确的 Type-0 页写（地址 0，命令
      * PDOperate 0x98）。它必须被真正处理：状态保持 OPERATE、PD 标记为
@@ -261,12 +261,12 @@ static void test_t_pd_window_drops_frames(void** state)
     g_now += 500U;
     uint8_t frame[3] = {IOLINK_MC_CHANNEL_PAGE, 0x00U, IOLINK_CMD_PROCESS_DATA_OPERATE};
     frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | test_expected_checksum6(frame, sizeof(frame)));
-    rec = (iolink_frame_rec_t*) iolink_ring_claim(&ctx.main.shared.isr_frame_ring);
+    rec = (iolink_frame_rec_t*) iolink_ring_claim(&ctx.main.shared.i_isr_frame_ring);
     assert_non_null(rec);
     rec->len = (uint8_t) sizeof(frame);
     rec->eager = 0U;
     (void) memcpy(rec->data, frame, sizeof(frame));
-    iolink_ring_publish(&ctx.main.shared.isr_frame_ring);
+    iolink_ring_publish(&ctx.main.shared.i_isr_frame_ring);
 
     test_pd_set_valid(&ctx.main, false);
     const uint32_t framing_before = ctx.main.shared.framing_errors;

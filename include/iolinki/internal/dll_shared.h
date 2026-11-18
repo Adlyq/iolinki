@@ -105,7 +105,7 @@ struct iolink_dll_shared
      * 区域 3 的一次性标志。
      * ===================================================================== */
 
-    /** @brief 主泵已应用的 ISDU 写序号（与 `isr_isdu_write_gen` 配对）。 */
+    /** @brief 主泵已应用的 ISDU 写序号（与 `i_isr_isdu_write_gen` 配对）。 */
     volatile uint32_t m_isdu_write_gen_applied;
 
     /* ISR ISDU 读取视图。主泵将 {length, busy, buffer} 作为一个
@@ -159,17 +159,17 @@ struct iolink_dll_shared
      * 回 0x00，"写后立刻读"因此不会读到旧应答；主站最多多看到一次
      * "无服务"。序号宽度必须容纳主泵可能错过的全部写实例，不能用 8 位。
      */
-    volatile IOLINK_ATOMIC_UINT_T isr_isdu_write_gen;
+    volatile IOLINK_ATOMIC_UINT_T i_isr_isdu_write_gen;
 
-    volatile uint8_t isr_master_activity; /**< ISR 观察到帧结束；由主上下文清除 */
+    volatile uint8_t i_isr_master_activity; /**< ISR 观察到帧结束；由主上下文清除 */
 
     /**
      * @brief ISR 完全消费（CONSUME 计划）的帧结束时间戳（ISR -> 主泵）。
      *
      * 这类帧不进邮箱，主泵因此看不到它们；但 T_CYCLE/T_REN 记账与
      * `last_response_us` 仍须覆盖每一个 MasterCycle。ISR 先写
-     * `isr_consumed_us`（32 位微秒，单字对齐存储），穿过 `IOLINK_FENCE()`
-     * 后再自增 `isr_consumed_seq` 作为发布（release）边沿。主泵按
+     * `i_isr_consumed_us`（32 位微秒，单字对齐存储），穿过 `IOLINK_FENCE()`
+     * 后再自增 `i_isr_consumed_seq` 作为发布（release）边沿。主泵按
      * seq -> `IOLINK_FENCE()` -> us -> `IOLINK_FENCE()` -> seq 的顺序做双读
      * 校验（acquire），两次 seq 相同才采纳该时间戳，并在
      * `iolink_dll_main_t::isr_consumed_seq_seen` 记录已消费的序号。
@@ -180,18 +180,18 @@ struct iolink_dll_shared
      * 又交接了一帧"（seq 变化即重试）。8 位序号是自由计数、永不清零；主泵
      * 两次运行之间恰好消费 256 帧时会漏掉一次更新，只影响一次 T_CYCLE 检查。
      */
-    volatile uint32_t isr_consumed_us; /**< ISR 消费帧的时间戳低 32 位 */
+    volatile uint32_t i_isr_consumed_us; /**< ISR 消费帧的时间戳低 32 位 */
 
-    volatile uint8_t isr_consumed_seq; /**< 消费帧发布序号（自由计数） */
+    volatile uint8_t i_isr_consumed_seq; /**< 消费帧发布序号（自由计数） */
 
     /* 一次性握手标志，由任一上下文置位、由主泵消费；
      * 64 位截止时间始终由主上下文拥有。每个标志由任一上下文置 1，
      * 且只能由主泵清 0；与消费竞争的一次置位是幂等的
      * （请求在本次或下一次处理中被应用）。
      * 诊断来源的 ISR 脉冲位于 iolink_conditions_t::isr_pulse。 */
-    volatile uint8_t isr_dsio_clear; /**< ISR 已处理启动探测：清除 T_DSIO */
+    volatile uint8_t i_isr_dsio_clear; /**< ISR 已处理启动探测：清除 T_DSIO */
 
-    volatile uint8_t isr_fallback_pending; /**< ISR 已接受 FALLBACK：由主上下文启动 T_FBD */
+    volatile uint8_t i_isr_fallback_pending; /**< ISR 已接受 FALLBACK：由主上下文启动 T_FBD */
 
     /**
      * @brief ISR 已完全服务一个 MasterCycle（ISR -> 主泵，一次性）。
@@ -203,16 +203,16 @@ struct iolink_dll_shared
      * `back_to_box_pending` 为真时推进一次。一个主泵周期因此最多推进一次
      * （ISR 在此期间消费多帧时计数偏保守：只会晚停，绝不早停）。
      */
-    volatile uint8_t isr_cycle_served;
+    volatile uint8_t i_isr_cycle_served;
 
     /** @brief ISR 触发了 STARTUP：主泵据此作废在途 ISDU 写并复位读传输层。 */
-    volatile uint8_t isdu_restart_pending;
+    volatile uint8_t i_isdu_restart_pending;
 
     /** @brief ISR 进入了 STARTUP；主上下文必须上报该事件。 */
-    volatile uint8_t startup_notification_pending;
+    volatile uint8_t i_startup_notification_pending;
 
     /** @brief ISR 收到 0x97 DeviceStartup：主泵完成协议错误记账与状态迁移。 */
-    volatile uint8_t isr_device_startup_requested;
+    volatile uint8_t i_isr_device_startup_requested;
 
     /**
      * @brief ISDU 读传输层复位请求（ISR -> 主泵，一次性）。
@@ -222,24 +222,24 @@ struct iolink_dll_shared
      * CONSUME 计划完全消费，主泵看不到该帧，复位只能经此标志传达。
      * 与 isr_dsio_clear 相同的一次性握手：ISR 置位幂等，只有主泵清 0。
      */
-    volatile uint8_t isr_isdu_read_reset;
+    volatile uint8_t i_isr_isdu_read_reset;
 
-    volatile uint8_t in_isr; /**< ISR 正在运行泵 */
+    volatile uint8_t i_in_isr; /**< ISR 正在运行泵 */
 
-    iolink_ring_t isr_frame_ring; /**< 帧邮箱（ISR -> 主上下文） */
+    iolink_ring_t i_isr_frame_ring; /**< 帧邮箱（ISR -> 主上下文） */
 
-    uint32_t isr_mailbox_drops; /**< 因邮箱已满而丢弃的帧 */
+    uint32_t i_isr_mailbox_drops; /**< 因邮箱已满而丢弃的帧 */
 
-    uint32_t isr_plan_misses; /**< ISR 未命中应答计划而丢弃的合法帧 */
+    uint32_t i_isr_plan_misses; /**< ISR 未命中应答计划而丢弃的合法帧 */
 
-    uint32_t isr_eager_rejects; /**< ISR 早期拒绝的帧（校验失败的 ISDU 写，以及带
+    uint32_t i_isr_eager_rejects; /**< ISR 早期拒绝的帧（校验失败的 ISDU 写，以及带
                                      TX 能力的 PHY 上非 Type-0 形状的校验失败帧）；
                                      主上下文只经 iolink_dll_get_stats() 读取 */
 
-    uint32_t isr_frames_consumed; /**< 由 ISR 完全处理、不再进入邮箱的帧
+    uint32_t i_isr_frames_consumed; /**< 由 ISR 完全处理、不再进入邮箱的帧
                                       （含按规范有意不应答的转换/复位帧） */
 
-    uint32_t isr_frames_handoff; /**< 成功投递邮箱交给主泵的帧 */
+    uint32_t i_isr_frames_handoff; /**< 成功投递邮箱交给主泵的帧 */
 
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
     iolink_dll_isr_stats_t isr_stat; /**< ISR 自有的计数器组（SPLIT 模式） */

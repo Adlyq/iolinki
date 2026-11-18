@@ -1703,7 +1703,7 @@ static void test_back_to_box_counts_isr_served_cycles_once_per_pump(void** state
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
 
     iolink_dll_main_t* dll = test_dll(&dev.ctx);
-    const uint32_t consumed_before = test_dll_shared(&dev.ctx)->isr_frames_consumed;
+    const uint32_t consumed_before = test_dll_shared(&dev.ctx)->i_isr_frames_consumed;
     iolink_dll_request_back_to_box(dll);
     assert_int_equal(dll->back_to_box_cycles, 0U);
 
@@ -1717,7 +1717,7 @@ static void test_back_to_box_counts_isr_served_cycles_once_per_pump(void** state
         assert_tx_len(2); /* DPP1 字节 + CKS */
     }
     mock_phy_clear_rx();
-    assert_int_equal(test_dll_shared(&dev.ctx)->isr_frames_consumed, consumed_before + 2U);
+    assert_int_equal(test_dll_shared(&dev.ctx)->i_isr_frames_consumed, consumed_before + 2U);
     assert_int_equal(dll->back_to_box_cycles, 0U);
 
     /* 一个泵周期推进一次。 */
@@ -1781,12 +1781,12 @@ static void test_dll_main_pump_type1_2_reply(void** state)
     shared->m_pd_in[active][shared->c_od_width + 1U] = 0x55U;
 
     /* 把该请求发布到邮箱环形缓冲区（即数据 ISR 所做的工作）。 */
-    iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&shared->isr_frame_ring);
+    iolink_frame_rec_t* rec = (iolink_frame_rec_t*) iolink_ring_claim(&shared->i_isr_frame_ring);
     assert_non_null(rec);
     rec->len = (uint8_t) sizeof(frame);
     rec->eager = 0U; /* 无 ISR 应答：必须由主循环泵回复 */
     (void) memcpy(rec->data, frame, sizeof(frame));
-    iolink_ring_publish(&shared->isr_frame_ring);
+    iolink_ring_publish(&shared->i_isr_frame_ring);
 
     iolink_device_process(&dev.ctx);
     test_pump_tx_idle(&dev.ctx);

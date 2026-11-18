@@ -508,7 +508,7 @@ void iolink_events_memory_write(iolink_events_ctx_t* ctx, uint8_t addr, uint8_t 
 写入口（`iolink_event_trigger`、`iolink_event_clear`、`iolink_events_process`、
 `iolink_events_reset`、`iolink_events_memory_write`、`iolink_events_pop`、
 `iolink_events_clear_diagnosis`）是主上下文专属：事件引擎只有一个写者，主上下文在
-`in_isr` 置位时会被拒绝。只读入口（`iolink_events_pending`、`iolink_events_flag`、
+`i_in_isr` 置位时会被拒绝。只读入口（`iolink_events_pending`、`iolink_events_flag`、
 `iolink_events_memory_read`、`iolink_events_peek`、`iolink_events_get_all`、
 `iolink_events_get_dropped_count`）可从任一侧读取：ISR 看到的是双映像 + 发布索引
 保证的完整一代。ISR 侧的写只有两处：`iolink_events_reset_request()`（登记复位，

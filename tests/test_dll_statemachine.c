@@ -415,7 +415,7 @@ static int test_plan_state_stamp(void)
         return 5; /* 页字节 + CKS */
     }
     const iolink_frame_rec_t* rec =
-        (const iolink_frame_rec_t*) iolink_ring_peek(&s_dll.main.shared.isr_frame_ring);
+        (const iolink_frame_rec_t*) iolink_ring_peek(&s_dll.main.shared.i_isr_frame_ring);
     if ((rec == NULL) || (rec->eager != 1U)) {
         return 6; /* 已应答但必须交给主泵 */
     }
@@ -429,7 +429,7 @@ static int test_plan_state_stamp(void)
     }
 
     /* OPERATE 切片：配置类型的过程读由 ISR 即时应答。 */
-    const uint32_t misses_after = s_dll.main.shared.isr_plan_misses;
+    const uint32_t misses_after = s_dll.main.shared.i_isr_plan_misses;
     make_frame((uint8_t) (IOLINK_MC_CHANNEL_PROCESS | IOLINK_MC_RW_MASK), IOLINK_MSEQ_TYPE_1, frame,
                2U);
     feed(frame, 2U);
@@ -438,7 +438,7 @@ static int test_plan_state_stamp(void)
     if (tx_observed_len() == 0U) {
         return 9;
     }
-    if (s_dll.main.shared.isr_plan_misses != misses_after) {
+    if (s_dll.main.shared.i_isr_plan_misses != misses_after) {
         return 10;
     }
     return 0;

@@ -663,7 +663,7 @@ static void build_direct_param_page1(iolink_isdu_ctx_t* ctx, const iolink_device
 bool dp_page1_main_context(const iolink_isdu_ctx_t* ctx)
 {
     const iolink_dll_main_t* dll = ctx->dll_ctx;
-    return (dll == NULL) || (dll->shared.in_isr == 0U);
+    return (dll == NULL) || (dll->shared.i_in_isr == 0U);
 }
 
 /** @brief 重建 DPP1 映像并按 seqlock 发布（主泵单写者）。

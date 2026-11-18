@@ -67,7 +67,7 @@
  *  3. 合法帧计划未命中：不应答、不解释内容，关闭 t_A 看门狗并直接
  *     丢弃（计划表是"哪些请求可被服务"的唯一出处）。
  *  4. 计划命中（CONSUME）的帧不再发布到邮箱，只在
- *     shared.isr_consumed_us/isr_consumed_seq 上交接帧结束时间戳，
+ *     shared.i_isr_consumed_us/i_isr_consumed_seq 上交接帧结束时间戳，
  *     由主泵补做 T_CYCLE/T_REN 记账与 last_response_us 更新。
  *  5. 校验失败的帧以 eager=0 发布到邮箱，由主泵完成错误/回退处理。
  *
@@ -115,7 +115,7 @@ void dll_isr_start_staged_tx(iolink_dll_shared_t* ctx, uint8_t slot, uint8_t len
             IOLINK_LOG_ISR_WARN(&ctx->c_log, "tx_frame failed: len=%u", (unsigned) len);
             /* 由 SINGLE 档主泵与 ISR 泵共享：将丢弃归属到
              * 正在运行的上下文，使 SPLIT 计数器保持精确。 */
-            if (ctx->in_isr != 0U) {
+            if (ctx->i_in_isr != 0U) {
                 IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
             }
             else {
@@ -126,7 +126,7 @@ void dll_isr_start_staged_tx(iolink_dll_shared_t* ctx, uint8_t slot, uint8_t len
     else {
         /* 本构建按 TX FRAME 交付，PHY 却没有 tx_frame()：能力位不会置 TX，
          * 设备层校验因此看不见这种拼装错误。计数丢弃，使配置错误可观测。 */
-        if (ctx->in_isr != 0U) {
+        if (ctx->i_in_isr != 0U) {
             IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
         }
         else {
@@ -144,7 +144,7 @@ void dll_isr_start_staged_tx(iolink_dll_shared_t* ctx, uint8_t slot, uint8_t len
     }
     else {
         /* TX BYTE 构建 + 只有 tx_frame() 的 PHY：同上，计数而不是静默丢弃。 */
-        if (ctx->in_isr != 0U) {
+        if (ctx->i_in_isr != 0U) {
             IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
         }
         else {
@@ -224,7 +224,7 @@ static void dll_isr_isdu_od(iolink_dll_shared_t* ctx, uint8_t flowctrl, uint8_t*
      * 总是应当复位传输层。 */
     if (flowctrl >= IOLINK_FLOWCTRL_IDLE) {
         od[0] = 0x00U;
-        ctx->isr_isdu_read_reset = 1U;
+        ctx->i_isr_isdu_read_reset = 1U;
         /* 在读传输层被主泵复位之前，主站不得继续旧段序列：清掉段索引，
          * 使后续 COUNT 只能得到"无服务"，直到新的 START 重新采纳视图。 */
         ctx->c_isr->isr_isdu_last_flowctrl = 0xFFU;
@@ -239,7 +239,7 @@ static void dll_isr_isdu_od(iolink_dll_shared_t* ctx, uint8_t flowctrl, uint8_t*
      * applied，相等时才读发布字。主泵先发布新视图、再追平 applied，因此
      * 两者相等时读到的必是已确认视图；不等时最多多拒一次，绝不放行
      * 写之前的旧视图。 */
-    const IOLINK_ATOMIC_UINT_T write_gen = ctx->isr_isdu_write_gen;
+    const IOLINK_ATOMIC_UINT_T write_gen = ctx->i_isr_isdu_write_gen;
     const uint32_t write_applied = ctx->m_isdu_write_gen_applied;
     if (write_gen != write_applied) {
         return;
@@ -428,7 +428,7 @@ bool dll_isr_consume_isdu_write(iolink_dll_shared_t* ctx, const uint8_t* frame, 
          * 发布新读视图之前，读路径因 gen != applied 一律回 0x00。序号只有
          * 本上下文自增，普通自增即可。 */
         IOLINK_FENCE();
-        ctx->isr_isdu_write_gen++;
+        ctx->i_isr_isdu_write_gen++;
     }
     return true;
 }
@@ -624,7 +624,7 @@ static bool dll_isr_plan_action(iolink_dll_shared_t* ctx, const iolink_reply_pla
             return true;
         case IOLINK_REPLY_ACT_ENTER_PREOPERATE:
             dll_set_state_shared(ctx, IOLINK_DLL_STATE_PREOPERATE);
-            ctx->isr_dsio_clear = 1U;
+            ctx->i_isr_dsio_clear = 1U;
             return true;
         case IOLINK_REPLY_ACT_ENTER_ESTAB_COM:
             dll_set_state_shared(ctx, IOLINK_DLL_STATE_ESTAB_COM);
@@ -637,7 +637,7 @@ static bool dll_isr_plan_action(iolink_dll_shared_t* ctx, const iolink_reply_pla
             if (cmd == IOLINK_CMD_FALLBACK) {
                 /* T_FBD 的 64 位截止时间归主泵所有：只递请求。 */
                 if (dll_phy_has_wakeup(ctx)) {
-                    ctx->isr_fallback_pending = 1U;
+                    ctx->i_isr_fallback_pending = 1U;
                     dll_set_state_shared(ctx, IOLINK_DLL_STATE_FALLBACK);
                 }
                 return true;
@@ -848,7 +848,7 @@ void iolink_dll_process_isr(iolink_dll_shared_t* ctx)
          * 传输泵不参与，绝不读取半更新的计划。 */
         return;
     }
-    if (ctx->in_isr != 0U) {
+    if (ctx->i_in_isr != 0U) {
         /* 更高优先级的中断在一个较低优先级中断
          * 已在运行泵时调用了该泵（在没有 BASEPRI 的板子上
          * 该泵绑定到多个向量）。泵状态只有一个写入者，
@@ -857,12 +857,12 @@ void iolink_dll_process_isr(iolink_dll_shared_t* ctx)
         ctx->c_isr->isr_reentry_pending = 1U;
         return;
     }
-    ctx->in_isr = 1U;
+    ctx->i_in_isr = 1U;
     do {
         ctx->c_isr->isr_reentry_pending = 0U;
         dll_isr_process(ctx);
     } while (ctx->c_isr->isr_reentry_pending != 0U);
-    ctx->in_isr = 0U;
+    ctx->i_in_isr = 0U;
 }
 
 void iolink_dll_on_rx_timeout(iolink_dll_shared_t* ctx)
@@ -870,7 +870,7 @@ void iolink_dll_on_rx_timeout(iolink_dll_shared_t* ctx)
     if ((ctx == NULL) || (ctx->c_isr == NULL)) {
         return;
     }
-    ctx->isr_master_activity = 1U;
+    ctx->i_isr_master_activity = 1U;
     IOLINK_LOG_ISR_DEBUG(&ctx->c_log, "rx timeout (t_A)");
     IOLINK_STAT_ISR(ctx, timeout_errors)++;
     DLL_DIAG_PULSE_ISR(&ctx->events, IOLINK_DIAG_SRC_COMM_TIMEOUT);

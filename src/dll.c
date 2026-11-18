@@ -290,8 +290,8 @@ void dll_set_state_shared(iolink_dll_shared_t* shared, iolink_dll_state_t new_st
 #if IOLINK_FEATURE_EVENTS
         iolink_events_reset_request(&shared->events);
 #endif
-        shared->startup_notification_pending = 1U;
-        shared->isdu_restart_pending = 1U;
+        shared->i_startup_notification_pending = 1U;
+        shared->i_isdu_restart_pending = 1U;
     }
 }
 
@@ -340,12 +340,12 @@ void iolink_dll_flush_state_callbacks(iolink_dll_main_t* ctx)
     /* 来自 ISR 的 STARTUP 转换是一个边沿，不能在主上下文
      * 观察到更晚的 PREOPERATE 状态时丢失。绝不在中断上下文中
      * 调用，因此应用钩子不会进入 ISR。 */
-    if (ctx->shared.startup_notification_pending != 0U) {
+    if (ctx->shared.i_startup_notification_pending != 0U) {
         if (ctx->last_notified_state != IOLINK_DLL_STATE_STARTUP) {
             ctx->last_notified_state = IOLINK_DLL_STATE_STARTUP;
             ctx->state_cb(ctx->state_cb_user, IOLINK_DLL_STATE_STARTUP);
         }
-        ctx->shared.startup_notification_pending = 0U;
+        ctx->shared.i_startup_notification_pending = 0U;
     }
 
     /* 基于电平的通知：只投递当前状态一次。 */
@@ -393,14 +393,14 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
     ctx->shared.pd_in_captured = 0xFFU; /* 无进行中的应答 */
 
     /* 帧邮箱：ISR 发布到环中，主泵消费。 */
-    iolink_ring_init(&ctx->shared.isr_frame_ring, (uint8_t*) ctx->isr_frame_slot, IOLINK_MBX_SLOTS,
-                     (uint8_t) sizeof(iolink_frame_rec_t));
+    iolink_ring_init(&ctx->shared.i_isr_frame_ring, (uint8_t*) ctx->isr_frame_slot,
+                     IOLINK_MBX_SLOTS, (uint8_t) sizeof(iolink_frame_rec_t));
 
     DLL_EVENTS_INIT(&ctx->shared.events);
 #if IOLINK_FEATURE_EVENTS
     /* 事件引擎唯一的 ISR 写入口是复位请求。绑定本上下文的 ISR 深度标志，
        使误从数据 ISR 调用的写入口被拒绝，而不是与主泵竞争。 */
-    ctx->shared.events.isr_active = &ctx->shared.in_isr;
+    ctx->shared.events.isr_active = &ctx->shared.i_in_isr;
 #endif
     iolink_isdu_init(&ctx->shared.isdu);
 #if IOLINK_FEATURE_DATA_STORAGE
@@ -450,8 +450,8 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
 /** @brief 消费 ISR 主站活动标志（仅时间戳，不计周期数）。 */
 static void dll_take_isr_master_activity(iolink_dll_main_t* ctx)
 {
-    if (ctx->shared.isr_master_activity != 0U) {
-        ctx->shared.isr_master_activity = 0U;
+    if (ctx->shared.i_isr_master_activity != 0U) {
+        ctx->shared.i_isr_master_activity = 0U;
         /* 只刷新活动时间戳。Back-to-box 计数由主上下文独占推进：
          * ISR 应答的帧经 isr_cycle_served 交接，主上下文应答的帧在
          * dll_process_complete_frame 中直接推进。 */
@@ -475,14 +475,14 @@ static bool dll_take_isr_consumed_frame(iolink_dll_main_t* ctx, uint32_t* stamp_
 {
     bool taken = false;
     for (uint8_t attempt = 0U; (attempt < 3U) && !taken; attempt++) {
-        const uint8_t seq = ctx->shared.isr_consumed_seq;
+        const uint8_t seq = ctx->shared.i_isr_consumed_seq;
         IOLINK_FENCE(); /* 获取：fence 之后的读取必须看到该序号对应的数据 */
         if (seq == ctx->isr_consumed_seq_seen) {
             break; /* 没有新帧 */
         }
-        const uint32_t stamp = ctx->shared.isr_consumed_us;
+        const uint32_t stamp = ctx->shared.i_isr_consumed_us;
         IOLINK_FENCE(); /* 复读序号前的屏障：序号变化必须能被看见 */
-        if (ctx->shared.isr_consumed_seq == seq) {
+        if (ctx->shared.i_isr_consumed_seq == seq) {
             ctx->isr_consumed_seq_seen = seq;
             *stamp_us = stamp;
             taken = true;
@@ -524,8 +524,8 @@ static void dll_apply_isr_consumed_frame(iolink_dll_main_t* ctx)
  */
 static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
 {
-    if (ctx->shared.isr_fallback_pending != 0U) {
-        ctx->shared.isr_fallback_pending = 0U;
+    if (ctx->shared.i_isr_fallback_pending != 0U) {
+        ctx->shared.i_isr_fallback_pending = 0U;
         /* 仅在 DL 模式仍为 FALLBACK 时设置：后续命令可能
          * 已离开该模式，此时 T_FBD 截止时间将是虚假的。 */
         if (ctx->shared.state == IOLINK_DLL_STATE_FALLBACK) {
@@ -552,16 +552,16 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
             dll_timer_cancel(ctx, IOLINK_TIMER_T_FBD);
         }
     }
-    if (ctx->shared.isr_dsio_clear != 0U) {
-        ctx->shared.isr_dsio_clear = 0U;
+    if (ctx->shared.i_isr_dsio_clear != 0U) {
+        ctx->shared.i_isr_dsio_clear = 0U;
         dll_timer_cancel(ctx, IOLINK_TIMER_T_DSIO);
     }
-    if (ctx->shared.isr_cycle_served != 0U) {
+    if (ctx->shared.i_isr_cycle_served != 0U) {
         /* ISR 完全服务了一个 MasterCycle：计数归主上下文（ISR 只置标志），
          * 一个泵周期最多推进一次。
          * 后续的 ISDU 服务与邮箱消费都在此之后运行，因此本轮的
          * Back-to-box 停止判定能看到这次推进。 */
-        ctx->shared.isr_cycle_served = 0U;
+        ctx->shared.i_isr_cycle_served = 0U;
         dll_count_served_cycle(ctx);
     }
 }
@@ -580,12 +580,12 @@ static void dll_apply_isr_isdu_read_reset(iolink_dll_main_t* ctx)
      * 有请求时读-清必须在同一临界区内，否则清 0 会吞掉刚好在两条指令
      * 之间到达的复位请求，主站 ABORT/IDLE 之后的下一次读就会重新拿到
      * 上一次的应答。 */
-    if (ctx->shared.isr_isdu_read_reset == 0U) {
+    if (ctx->shared.i_isr_isdu_read_reset == 0U) {
         return;
     }
     IOLINK_CRITICAL_ENTER();
-    if (ctx->shared.isr_isdu_read_reset != 0U) {
-        ctx->shared.isr_isdu_read_reset = 0U;
+    if (ctx->shared.i_isr_isdu_read_reset != 0U) {
+        ctx->shared.i_isr_isdu_read_reset = 0U;
         isdu_read_reset(&ctx->shared.isdu);
     }
     IOLINK_CRITICAL_EXIT();
@@ -842,7 +842,7 @@ static bool dll_wakeup_window_active(iolink_dll_main_t* ctx)
 static void dll_consume_isr_mailbox(iolink_dll_main_t* ctx)
 {
     const iolink_frame_rec_t* record =
-        (const iolink_frame_rec_t*) iolink_ring_peek(&ctx->shared.isr_frame_ring);
+        (const iolink_frame_rec_t*) iolink_ring_peek(&ctx->shared.i_isr_frame_ring);
     if (record == NULL) {
         return;
     }
@@ -858,7 +858,7 @@ static void dll_consume_isr_mailbox(iolink_dll_main_t* ctx)
     /* 拷贝后释放：ISR 随后可复用该槽位，而另一个
      * 槽位保持完整。无需临界区，因为 ISR 从不
      * 写入 'out' 处的槽位。 */
-    iolink_ring_release(&ctx->shared.isr_frame_ring);
+    iolink_ring_release(&ctx->shared.i_isr_frame_ring);
     /* 邮箱帧是接收流量：刷新不活动时间戳和字节间隙
        时间戳，与流式 RX 路径完全一致。否则 1 s 空闲
        监控会复位健康的 ISR 链路。 */
@@ -931,21 +931,21 @@ static void dll_process_body(iolink_dll_main_t* ctx)
        之前应用，使事件引擎的写状态始终只属于本上下文。 */
     dll_events_apply_isr_reset(ctx);
 #endif
-    if (ctx->shared.isr_device_startup_requested != 0U) {
+    if (ctx->shared.i_isr_device_startup_requested != 0U) {
         /* 0x97 DeviceStartup 由 ISR 只登记请求（应答已按计划发出）：
          * 协议错误记账与 STARTUP 迁移都在主上下文中完成。 */
-        ctx->shared.isr_device_startup_requested = 0U;
+        ctx->shared.i_isr_device_startup_requested = 0U;
         dll_protocol_error_to_startup(ctx);
     }
     dll_take_isr_master_activity(ctx);
     dll_apply_isr_consumed_frame(ctx);
     dll_apply_isr_deadline_requests(ctx);
 
-    if (ctx->shared.isdu_restart_pending != 0U) {
+    if (ctx->shared.i_isdu_restart_pending != 0U) {
         /* ISR 触发的重启：未收齐的写请求作废（已收齐的仍由本轮处理），
          * 读传输层回到 Idle——否则重启前的 RESPONSE_READY 视图会被重新
          * 发布，主站新一轮的读 START 拿到上一轮的应答。 */
-        ctx->shared.isdu_restart_pending = 0U;
+        ctx->shared.i_isdu_restart_pending = 0U;
         isdu_abandon_write(&ctx->shared.isdu);
         isdu_read_reset(&ctx->shared.isdu);
     }

@@ -367,8 +367,8 @@ const iolink_timer_contract_t* iolink_dll_timer_contract(uint8_t* IOLINK_NULLABL
  * @param phy 要绑定的 PHY 实现
  * @note 本函数与 `iolink_dll_publish_reply_plans()` / `iolink_isdu_bind_workspace()`
  *       有同一前置条件：主上下文调用，数据泵静止。三者都不会自行串行化，
- *       区别只在能否在运行期识别误调：另外两个入口在 `shared.in_isr != 0`
- *       时显式失败，而本函数要清零的正是 `shared.in_isr` 所在的对象，无法在
+ *       区别只在能否在运行期识别误调：另外两个入口在 `shared.i_in_isr != 0`
+ *       时显式失败，而本函数要清零的正是 `shared.i_in_isr` 所在的对象，无法在
  *       清零之前判定调用上下文——误从数据 ISR 调用会直接破坏正在运行的泵。
  *       任一参数为 NULL 时本函数直接返回、不修改任何对象；
  *       `iolink_dll_publish_reply_plans()` 因此用 `shared.c_isr` 报告未初始化。
@@ -405,7 +405,7 @@ typedef enum
     IOLINK_DLL_PUBLISH_OK = 0,          /**< 计划表已完整发布 */
     IOLINK_DLL_PUBLISH_ERR_NULL = -1,   /**< ctx 为 NULL */
     IOLINK_DLL_PUBLISH_ERR_UNINIT = -2, /**< 上下文未经 iolink_dll_init() 初始化 */
-    IOLINK_DLL_PUBLISH_ERR_ISR = -3     /**< 在数据 ISR 内调用（`shared.in_isr != 0`） */
+    IOLINK_DLL_PUBLISH_ERR_ISR = -3     /**< 在数据 ISR 内调用（`shared.i_in_isr != 0`） */
 } iolink_dll_publish_result_t;
 
 /**

@@ -251,10 +251,10 @@ bool dll_drain_rx(iolink_dll_main_t* ctx)
     /* ISR 泵填充邮箱；排空它会丢弃在 t_pd 保护窗口
      * 有效期间到达的帧。丢弃数量必须可观测：现场用它区分
      * “主泵被阻塞”与“暂存环满”。 */
-    if (!iolink_ring_is_empty(&ctx->shared.isr_frame_ring)) {
-        const uint32_t dropped = iolink_ring_count(&ctx->shared.isr_frame_ring);
-        while (iolink_ring_peek(&ctx->shared.isr_frame_ring) != NULL) {
-            iolink_ring_release(&ctx->shared.isr_frame_ring);
+    if (!iolink_ring_is_empty(&ctx->shared.i_isr_frame_ring)) {
+        const uint32_t dropped = iolink_ring_count(&ctx->shared.i_isr_frame_ring);
+        while (iolink_ring_peek(&ctx->shared.i_isr_frame_ring) != NULL) {
+            iolink_ring_release(&ctx->shared.i_isr_frame_ring);
         }
         ctx->t_pd_discards += dropped;
         return true;
@@ -384,7 +384,7 @@ bool dll_apply_master_command(iolink_dll_shared_t* ctx, uint8_t cmd)
     if (cmd == IOLINK_CMD_DEVICE_STARTUP) {
         /* 协议错误记账（invalid_frames/frame_index）与 STARTUP 迁移都是
          * 主上下文字段：只登记一次性请求，本帧应答仍按计划发出。 */
-        ctx->isr_device_startup_requested = 1U;
+        ctx->i_isr_device_startup_requested = 1U;
         return true;
     }
     iolink_dll_state_t target = ctx->state;

@@ -178,7 +178,7 @@ static void dll_plan_push_type0(iolink_dll_main_t* ctx, uint8_t* count, uint8_t 
                   IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0, IOLINK_REPLY_SRC_ISDU_SEG, 1U,
                   IOLINK_REPLY_FLAG_CONSUME, read_action, NULL);
     /* ISDU 读 IDLE/IDLE2/ABORT（0x11..0x1F）：回 0x00 并请求主泵复位读
-     * 传输层（shared.isr_isdu_read_reset）。线性查找顺序保证上面的
+     * 传输层（shared.i_isr_isdu_read_reset）。线性查找顺序保证上面的
      * START/COUNT 计划先命中，本条兜住其余读。 */
     dll_plan_push(ctx, count, state, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
                   IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU, IOLINK_MC_ADDR_MASK, 0U,
@@ -233,7 +233,7 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
     }
     /* 计划表由数据 ISR 查表读取：重建必须与泵互斥。这里显式拒绝误从数据
      * ISR 的调用，而不是静默重写正在被查的表。 */
-    if (ctx->shared.in_isr != 0U) {
+    if (ctx->shared.i_in_isr != 0U) {
         IOLINK_LOG_ISR_ERROR(&ctx->shared.c_log, "reply plan publish rejected inside the data ISR");
         return IOLINK_DLL_PUBLISH_ERR_ISR;
     }
@@ -344,7 +344,7 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
  *  - 每份**新**应答翻转代数位（位 10）。长度与缓冲区选择完全相同的
  *    两份应答因此仍是不同的发布字，ISR 的段索引序列会被打断；
  *  - 写失效用单调序号：ISR 每接受一个写 START/ABORT 就自增
- *    `isr_isdu_write_gen`。发布代号尚未被 ack 时这里发布
+ *    `i_isr_isdu_write_gen`。发布代号尚未被 ack 时这里发布
  *    len = 0（无服务），绝不让旧应答继续充当"当前值"；写被应用或
  *    中止后先发布新视图，再把 `isdu_write_gen_applied` 追平，
  *    确认必须放在发布之后：否则 ISR 可能在两者之间看到两值相等而
@@ -379,7 +379,7 @@ void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx)
     /* 写入口：发布字已有一代未被主泵处理（正在累计或已收齐待解析）时，
      * 写尚未生效，已发布读视图必须显示"无服务"。判据只读发布字与主泵
      * 自己的 ack 序号——数据 ISR 的累计字段（stage_state 等）不参与。 */
-    const IOLINK_ATOMIC_UINT_T write_gen = iolink_atomic_load(&ctx->shared.isr_isdu_write_gen);
+    const IOLINK_ATOMIC_UINT_T write_gen = iolink_atomic_load(&ctx->shared.i_isr_isdu_write_gen);
     const bool write_pending = isdu_write_in_progress(&ctx->shared.isdu);
     if (write_pending) {
         /* 写尚未应用：显式发布"无服务"，绝不重发旧应答。 */
@@ -436,10 +436,10 @@ uint32_t dll_master_cycle_us(const iolink_dll_main_t* ctx)
 /** @brief 刷新主站活动时间戳。
  *
  * 只由主上下文调用：主上下文自己完成的帧直接调用；ISR 完全消费的帧与
- * 进了邮箱的帧一样，由 ISR 置 `shared.isr_master_activity`，主泵在
+ * 进了邮箱的帧一样，由 ISR 置 `shared.i_isr_master_activity`，主泵在
  * `dll_take_isr_master_activity()` 中消费该标志后调用这里。只刷新时间戳与
  * 主站丢失提示，不涉及 Back-to-box 周期计数（该计数归主上下文独占，
- * 见 @ref dll_count_served_cycle 与 `shared.isr_cycle_served`）。 */
+ * 见 @ref dll_count_served_cycle 与 `shared.i_isr_cycle_served`）。 */
 void dll_mark_master_activity_ts(iolink_dll_main_t* ctx)
 {
     ctx->master_last_activity_ms = dll_time_ms(&ctx->shared);
@@ -450,7 +450,7 @@ void dll_mark_master_activity_ts(iolink_dll_main_t* ctx)
 /** @brief 服务了一个 MasterCycle：推进 Back-to-box 计数（10.7.5）。
  *
  * 只由主上下文调用：主上下文自己处理的帧直接调用；ISR 完全消费的帧经
- * `shared.isr_cycle_served` 交接后由主泵调用。 */
+ * `shared.i_isr_cycle_served` 交接后由主泵调用。 */
 void dll_count_served_cycle(iolink_dll_main_t* ctx)
 {
     /* 10.7.5：统计 Back-to-box 之后服务的帧数，以便设备在停止前

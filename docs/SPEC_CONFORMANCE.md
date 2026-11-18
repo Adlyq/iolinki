@@ -96,7 +96,7 @@ must be reachable from this document by case ID, test file or test function.
 | Checksum A.1.6 (incl. ISR accumulator) | PASS | `src/crc.c` | `test_crc`, `test_crc_vectors` |
 | Protocol constants (A.1/A.3/A.12/B.2/B.9/C.1/D.1) | PASS | `include/iolinki/protocol.h` | `test_protocol_constants` |
 | OPERATE TYPE_0 restart for non-TYPE_0 devices (Table 45 T11; SDCI_TC_0038/0049) | PASS | `dll_handle_operate_type0()` via `dll_sm_type0_read()` | `test_dll_operate_type0_read_resets`, `test_dll_operate_type0_min_cycle_time_read` |
-| ISR OPERATE → STARTUP notification remains observable before PREOPERATE | PASS | `startup_notification_pending`, `iolink_dll_flush_state_callbacks()` | `test_isr_startup_notification_is_not_coalesced` |
+| ISR OPERATE → STARTUP notification remains observable before PREOPERATE | PASS | `i_startup_notification_pending`, `iolink_dll_flush_state_callbacks()` | `test_isr_startup_notification_is_not_coalesced` |
 | RX FRAME receives complete frames only; truncated prefixes stay in PHY | PASS | `iolink_phy_api_t::rx_frame()` contract | `test_dll_isr` / PHY integration tests |
 
 ## Identification objects (Table B.8)

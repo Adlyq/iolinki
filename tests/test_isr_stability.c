@@ -44,14 +44,14 @@ static uint64_t test_time_us(iolink_app_t* IOLINK_NULLABLE self)
 static void push_mailbox(iolink_dll_ctx_t* ctx, const uint8_t* frame, uint8_t len)
 {
     iolink_frame_rec_t* rec =
-        (iolink_frame_rec_t*) iolink_ring_claim(&ctx->main.shared.isr_frame_ring);
+        (iolink_frame_rec_t*) iolink_ring_claim(&ctx->main.shared.i_isr_frame_ring);
     if (rec == NULL) {
         return;
     }
     rec->len = len;
     rec->eager = 0U;
     (void) memcpy(rec->data, frame, len);
-    iolink_ring_publish(&ctx->main.shared.isr_frame_ring);
+    iolink_ring_publish(&ctx->main.shared.i_isr_frame_ring);
 }
 
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_FRAME
@@ -148,7 +148,7 @@ static int run_cycles(iolink_dll_ctx_t* ctx, unsigned cycles, uint64_t step_us)
             iolink_dll_process_isr(&ctx->main.shared);
         }
 
-        if (!iolink_ring_is_empty(&ctx->main.shared.isr_frame_ring)) {
+        if (!iolink_ring_is_empty(&ctx->main.shared.i_isr_frame_ring)) {
             return 1; /* 邮箱未被消费 */
         }
         if (ctx->main.shared.timeout_errors != 0U) {

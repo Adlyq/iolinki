@@ -314,7 +314,7 @@ void dll_process_complete_frame(iolink_dll_main_t* ctx)
     /* ST 在帧结束时重启其回调定时器；一个完成的帧（即使是
        坏帧）证明链路仍被驱动。该帧由主上下文自己服务，因此
        Back-to-box 计数在这里直接推进；ISR 完全消费的帧经
-       shared.isr_cycle_served 交接，由主泵在下一轮计数。 */
+       shared.i_isr_cycle_served 交接，由主泵在下一轮计数。 */
     dll_mark_master_activity_ts(ctx);
     dll_count_served_cycle(ctx);
 

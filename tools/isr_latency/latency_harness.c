@@ -422,9 +422,9 @@ static int scenario_sanity(const scenario_t* sc)
                        (unsigned) sc->expect_tx);
         return 1;
     }
-    if (s_dll.main.shared.isr_plan_misses != sc->expect_miss) {
+    if (s_dll.main.shared.i_isr_plan_misses != sc->expect_miss) {
         (void) fprintf(stderr, "sanity [%s]: misses=%u expected=%u\n", sc->name,
-                       (unsigned) s_dll.main.shared.isr_plan_misses, (unsigned) sc->expect_miss);
+                       (unsigned) s_dll.main.shared.i_isr_plan_misses, (unsigned) sc->expect_miss);
         return 1;
     }
     if ((sc->check_first != 0U) && (s_tx_q[0] != sc->expect_first)) {

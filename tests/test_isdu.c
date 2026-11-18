@@ -1168,12 +1168,12 @@ static void test_isdu_dp_page1_read_range(void** state)
 
     /* 重建期间：ISR 视角不返回半更新/旧值。 */
     ctx.dp_page1_seq = (uint8_t) (ctx.dp_page1_seq | 1U);
-    dll.shared.in_isr = 1U;
+    dll.shared.i_in_isr = 1U;
     (void) memset(range, 0xAA, sizeof(range));
     assert_false(iolink_isdu_dp_page1_read_range(&ctx, 0U, range, 4U));
     assert_int_equal(range[0], 0x00U);
     assert_int_equal(range[3], 0x00U);
-    dll.shared.in_isr = 0U;
+    dll.shared.i_in_isr = 0U;
 
     /* 主泵侧读取先重建，恢复稳定的一代。 */
     assert_true(iolink_isdu_dp_page1_read_range(&ctx, 0U, range, 2U));
@@ -1240,23 +1240,23 @@ static void test_isdu_dp_page1_invalidate(void** state)
 
     /* 输入已改变但尚未刷新：失效期间 ISR 既不重建，也不发旧值。 */
     dll.shared.m_master_cycle_time = 0x33U;
-    dll.shared.in_isr = 1U; /* 先进入 ISR 侧：invalidate 只标记失效 */
+    dll.shared.i_in_isr = 1U; /* 先进入 ISR 侧：invalidate 只标记失效 */
     iolink_isdu_dp_page1_invalidate(&ctx);
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x00U);
     assert_int_equal((ctx.dp_page1_seq & 1U), 1U);
 
     /* 主泵侧读取重建并发布。 */
-    dll.shared.in_isr = 0U;
+    dll.shared.i_in_isr = 0U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x33U);
     assert_int_equal((ctx.dp_page1_seq & 1U), 0U);
 
     /* 主泵处理轮次重建"ISR 侧失效"的映像（直接置奇数序号模拟，
      * 避免 invalidate 在主泵上下文立即重建而让断言恒真）。 */
     dll.shared.m_master_cycle_time = 0x44U;
-    dll.shared.in_isr = 0U;
+    dll.shared.i_in_isr = 0U;
     ctx.dp_page1_seq = (uint8_t) (ctx.dp_page1_seq | 1U);
     iolink_isdu_process(&ctx);
-    dll.shared.in_isr = 1U;
+    dll.shared.i_in_isr = 1U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x44U);
 }
 
@@ -1284,14 +1284,14 @@ static void test_isdu_dp_page1_seqlock_tearing(void** state)
 
     /* 模拟主泵正处在序号奇数窗口内。 */
     ctx.dp_page1_seq = 1U;
-    dll.shared.in_isr = 1U;
+    dll.shared.i_in_isr = 1U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x00U);
     /* ISR 从不写发布字，也不改编排中的映像。 */
     assert_int_equal(ctx.dp_page1_seq, 1U);
     assert_int_equal(ctx.dp_page1[0x01], 0x5AU);
 
     /* 主泵侧读取重新发布会得到稳定值。 */
-    dll.shared.in_isr = 0U;
+    dll.shared.i_in_isr = 0U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x5AU);
     assert_int_equal((ctx.dp_page1_seq & 1U), 0U);
 
@@ -1319,11 +1319,11 @@ static void test_isdu_dp_page1_isr_read_only(void** state)
 
     /* ISR 只读稳定映像：输入变化只有主泵刷新后才可见。 */
     dll.shared.m_master_cycle_time = 0x66U;
-    dll.shared.in_isr = 1U;
+    dll.shared.i_in_isr = 1U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x00U);
     assert_int_equal(ctx.dp_page1_seq, stable_seq);
 
-    dll.shared.in_isr = 0U;
+    dll.shared.i_in_isr = 0U;
     assert_int_equal(iolink_isdu_direct_param_page1_octet(&ctx, 0x01U), 0x66U);
 }
 

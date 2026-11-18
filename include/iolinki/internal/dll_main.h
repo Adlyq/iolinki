@@ -123,7 +123,7 @@ struct iolink_dll_main
                                     微秒时间戳 */
 
     uint8_t isr_consumed_seq_seen; /**< 已消费的 ISR 消费帧序号
-                                        （与 shared.isr_consumed_seq 对应） */
+                                        （与 shared.i_isr_consumed_seq 对应） */
 
 #if IOLINK_FEATURE_DATA_STORAGE
     iolink_ds_ctx_t ds; /**< 数据存储引擎 */

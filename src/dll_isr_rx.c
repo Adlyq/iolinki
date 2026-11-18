@@ -77,17 +77,17 @@ static bool dll_isr_publish_frame(iolink_dll_shared_t* ctx, const uint8_t* frame
         DLL_DIAG_PULSE_ISR(&ctx->events, IOLINK_DIAG_SRC_COMM_FRAMING);
         return false;
     }
-    iolink_frame_rec_t* record = (iolink_frame_rec_t*) iolink_ring_claim(&ctx->isr_frame_ring);
+    iolink_frame_rec_t* record = (iolink_frame_rec_t*) iolink_ring_claim(&ctx->i_isr_frame_ring);
     if (record == NULL) {
         IOLINK_LOG_ISR_WARN(&ctx->c_log, "mailbox full: frame dropped");
-        ctx->isr_mailbox_drops++;
+        ctx->i_isr_mailbox_drops++;
         return false;
     }
     record->len = len;
     record->eager = eager;
     (void) memcpy(record->data, frame, len);
-    iolink_ring_publish(&ctx->isr_frame_ring); /* 最后发布 */
-    ctx->isr_frames_handoff++;
+    iolink_ring_publish(&ctx->i_isr_frame_ring); /* 最后发布 */
+    ctx->i_isr_frames_handoff++;
     return true;
 }
 
@@ -111,7 +111,7 @@ static inline void dll_isr_complete_frame(iolink_dll_shared_t* ctx, const uint8_
         /* 只缓冲有效请求：损坏的 ISDU 写绝不能到达
          * 传输层（ST 在 StackBaseOdWrite 之前校验）。 */
         if (!valid) {
-            ctx->isr_eager_rejects++;
+            ctx->i_isr_eager_rejects++;
             return;
         }
         staged = dll_isr_consume_isdu_write(ctx, frame, len);
@@ -120,7 +120,7 @@ static inline void dll_isr_complete_frame(iolink_dll_shared_t* ctx, const uint8_
         /* 与历史即时路径统计一致：非 Type-0 形状的坏帧计为拒绝，
          * 错误/回退处理仍由主泵负责。 */
         if (dll_phy_has_tx(ctx) && !dll_ckt_is_type0(frame[1])) {
-            ctx->isr_eager_rejects++;
+            ctx->i_isr_eager_rejects++;
         }
         /* 非法帧不解释内容、不计计划未命中：交给主泵做错误/状态处理。 */
         (void) dll_isr_publish_frame(ctx, frame, len, 0U);
@@ -146,19 +146,19 @@ static inline void dll_isr_complete_frame(iolink_dll_shared_t* ctx, const uint8_
         }
         replied = dll_isr_plan_execute(ctx, &plan, frame, len, staged);
         if (replied && ((plan.flags & IOLINK_REPLY_FLAG_CONSUME) != 0U) && !estab_com) {
-            /* 活动标志已在 RX 完成路径置位（shared.isr_master_activity），
+            /* 活动标志已在 RX 完成路径置位（shared.i_isr_master_activity），
              * 由主泵在 dll_take_isr_master_activity() 中刷新活动时间戳与
              * 主站丢失提示；这里不重复写主上下文字段。
              * 该帧不进邮箱，主泵看不到它：把帧结束时间戳交接给主泵，
              * 由它在下一轮补做 T_CYCLE/T_REN 记账。先写时间戳，穿过
              * IOLINK_FENCE() 后再自增序号作为发布（release）边沿。 */
-            ctx->isr_consumed_us = (uint32_t) dll_time_us(ctx);
+            ctx->i_isr_consumed_us = (uint32_t) dll_time_us(ctx);
             IOLINK_FENCE();
-            ctx->isr_consumed_seq = (uint8_t) (ctx->isr_consumed_seq + 1U);
-            ctx->isr_frames_consumed++;
+            ctx->i_isr_consumed_seq = (uint8_t) (ctx->i_isr_consumed_seq + 1U);
+            ctx->i_isr_frames_consumed++;
             /* 本周期已被服务：Back-to-box 计数归主上下文，这里只置
              * 一次性标志（记账完成后再发布）。 */
-            ctx->isr_cycle_served = 1U;
+            ctx->i_isr_cycle_served = 1U;
             return;
         }
     }
@@ -174,7 +174,7 @@ static inline void dll_isr_complete_frame(iolink_dll_shared_t* ctx, const uint8_
         }
         /* 合法帧计划未命中：不应答、不解释内容，关闭 t_A 看门狗并
          * 直接丢弃。主泵不再接手计划未命中的合法帧。 */
-        ctx->isr_plan_misses++;
+        ctx->i_isr_plan_misses++;
 #if IOLINK_LOG_ENABLE_ISR
         /* 计数是主信号，日志只是辅助。FALLBACK/COMM_DISABLED 下"无计划"是
          * 常态，记 DEBUG；OPERATE 下合法帧却没有计划更可疑，记 WARN。整块随
@@ -245,7 +245,7 @@ static void dll_isr_drain_rx_frame(iolink_dll_shared_t* ctx)
          * 很忙（例如慢速 ISDU 服务），无法及时消费邮箱；
          * 没有这一点，主站丢失监控会把一个繁忙的
          * 主窗口计为丢失。 */
-        ctx->isr_master_activity = 1U;
+        ctx->i_isr_master_activity = 1U;
         if (ctx->c_phy->response_timer_start != NULL) {
             /* 仅为将被应答的请求装载 t_A 看门狗：
              * 被拒绝或虚假的帧不得计为 t_A 超时。 */
@@ -340,7 +340,7 @@ static void dll_isr_rx_byte_complete(iolink_dll_shared_t* ctx)
     /* 长度完整的 M-sequence 证明主站在轮询；主泵
      * 可能在其监控窗口结束前无法消费邮箱（参见
      * RX FRAME 分支）。 */
-    ctx->isr_master_activity = 1U;
+    ctx->i_isr_master_activity = 1U;
     const bool valid = dll_isr_frame_valid_acc(ctx, ctx->c_isr->isr_rx_buf,
                                                ctx->c_isr->isr_rx_expect, ctx->c_isr->isr_rx_acc);
     dll_isr_complete_frame(ctx, ctx->c_isr->isr_rx_buf, ctx->c_isr->isr_rx_expect, valid);
