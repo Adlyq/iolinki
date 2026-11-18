@@ -52,9 +52,11 @@
  *      |                                     （补做 T_CYCLE/T_REN 记账）
  *      |- dll_apply_isr_deadline_requests    设置/清除 T_FBD 与 T_DSIO
  *      |                                     （64 位截止时间由主上下文持有）
+ *      |                                     并消费 isr_cycle_served（Back-to-box 计数）
  *      |- [TX FRAME] pd_in 租约释放          在临界区中轮询 tx_busy
  *      |- iolink_isdu_process                应用 ISR 累计完成的写请求并执行 ISDU 服务
- *      |- isr_isdu_read_reset                消费 ISR 的 IDLE/ABORT 读复位请求
+ *      |- dll_apply_isr_isdu_read_reset      消费 ISR 的 IDLE/ABORT 读复位请求
+ *      |                                     （仅当写入口为 IDLE）
  *      |- dll_isdu_sync_snapshot             发布 ISR 读取视图
  *      |- dll_poll_diagnostics
  *      |- dll_take_isr_master_activity       第二次采样：一帧可能已在上述步骤中
@@ -68,7 +70,7 @@
  *      |- dll_consume_isr_mailbox
  *      |  `- dll_process_complete_frame
  *      |     |- dll_frame_drop_if_stopped / dll_check_cycle_time /
- *      |     |  dll_mark_master_activity
+ *      |     |  dll_mark_master_activity_ts + dll_count_served_cycle
  *      |     |- dll_frame_validate -> dll_handle_valid_frame
  *      |     |  `- 状态机骨架表 g_dll_sm[state][event]（见 dll_sm.h）
  *      |     |     `- dll_handle_operate_type0 / dll_handle_type0_od_write /
@@ -94,7 +96,8 @@
  *  - ISR -> 主上下文：isr_frame_ring（dll_consume_isr_mailbox）、
  *    shared.isdu.stage_state（写请求累计完成/中止）、isr_master_activity、
  *    isr_isdu_read_reset（IDLE/ABORT 读的传输层复位）、
- *    isr_consumed_us/isr_consumed_seq（CONSUME 帧的 T_CYCLE/T_REN 记账）
+ *    isr_consumed_us/isr_consumed_seq（CONSUME 帧的 T_CYCLE/T_REN 记账）、
+ *    isr_cycle_served（ISR 服务的 MasterCycle，Back-to-box 计数由主泵推进）
  *    以及截止时间标志。
  *
  * ISR 双泵传送层位于 dll_isr.c；完整上下文契约与缓冲区归属表见
@@ -473,12 +476,13 @@ static void dll_apply_isr_consumed_frame(iolink_dll_main_t* ctx)
 }
 
 /**
- * @brief 应用数据 ISR 仅作标记的截止时间请求。
+ * @brief 应用数据 ISR 仅作标记的请求（截止时间与 Back-to-box 计数）。
  *
  * 两个 64 位截止时间由主上下文持有，因此绝不从
  * 中断上下文写入 64 位值（撕裂读会触发虚假的 T_DSIO/T_FBD）。
  * ISR 设置标志；主泵在同一轮的任何截止时间检查之前，
- * 在此设置或清除截止时间。
+ * 在此设置或清除截止时间。`isr_cycle_served` 同样在此消费：
+ * Back-to-box 的周期计数归主上下文独占，ISR 只置一次性标志。
  */
 static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
 {
@@ -514,6 +518,40 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
         ctx->shared.isr_dsio_clear = 0U;
         dll_timer_cancel(ctx, IOLINK_TIMER_T_DSIO);
     }
+    if (ctx->shared.isr_cycle_served != 0U) {
+        /* ISR 完全服务了一个 MasterCycle：计数归主上下文（ISR 只置标志），
+         * 一个泵周期最多推进一次。
+         * 后续的 tx_busy 轮询与 ISDU 服务都在此之后运行，因此本轮的
+         * Back-to-box 停止判定能看到这次推进。 */
+        ctx->shared.isr_cycle_served = 0U;
+        dll_count_served_cycle(ctx);
+    }
+}
+
+/**
+ * @brief 应用数据 ISR 的 ISDU 读传输层复位请求。
+ *
+ * 复位经 `isdu_transport_reset()` 清空写入口的 `req_idx`/`req_total`/
+ * `flowctrl_seen`/`stage_state`。ISR 在同一个中断里也可能刚收到一个写
+ * START 并重建了入口（主站"读 ABORT 后立刻写 START"）：此时若照常复位，
+ * 全部 COUNT 已被 ACK 的请求会被整段丢弃。因此只有写入口仍为 IDLE 时
+ * 才应用复位，否则保留请求标志，等下一轮写入口回到 IDLE 再应用。
+ *
+ * 判定、清标志与复位在同一临界区内完成，ISR 无法在"读到 IDLE"与
+ * "执行复位"之间开始新的写 START。区内只有字段清零，没有 PHY 或
+ * 应用回调。
+ */
+static void dll_apply_isr_isdu_read_reset(iolink_dll_main_t* ctx)
+{
+    if (ctx->shared.isr_isdu_read_reset == 0U) {
+        return;
+    }
+    IOLINK_CRITICAL_ENTER();
+    if (ctx->shared.isdu.stage_state == IOLINK_ISDU_STAGE_IDLE) {
+        ctx->shared.isr_isdu_read_reset = 0U;
+        iolink_isdu_od_read(&ctx->shared.isdu, IOLINK_FLOWCTRL_IDLE, NULL, 0U);
+    }
+    IOLINK_CRITICAL_EXIT();
 }
 
 /** @brief 同步主站丢失 timer：活动边沿推进截止时间，丢失后保持直到新活动。 */
@@ -692,7 +730,7 @@ static bool dll_handle_sio_wakeup(iolink_dll_main_t* ctx)
                重置不活动计时器，使先前交换后的再次唤醒
                不会被陈旧的活动时间戳立刻终止。 */
             ctx->shared.last_activity_ms = dll_time_ms(ctx);
-            dll_mark_master_activity(ctx); /* ST StackOnWakeUp 重启 Timer B */
+            dll_mark_master_activity_ts(ctx); /* ST StackOnWakeUp 重启 Timer B */
         }
     }
     return true;
@@ -862,10 +900,7 @@ static void dll_process_body(iolink_dll_main_t* ctx)
     iolink_isdu_process(&ctx->shared.isdu);
     /* ISR 对 IDLE/IDLE2/ABORT 读只回 0x00；读传输层复位归主泵。
      * Type-0 下该帧由 CONSUME 计划完全消费，主泵只能经此标志收到请求。 */
-    if (ctx->shared.isr_isdu_read_reset != 0U) {
-        ctx->shared.isr_isdu_read_reset = 0U;
-        iolink_isdu_od_read(&ctx->shared.isdu, IOLINK_FLOWCTRL_IDLE, NULL, 0U);
-    }
+    dll_apply_isr_isdu_read_reset(ctx);
     /* 服务可能已在此完成：刷新 ISR 响应快照。 */
     dll_isdu_sync_snapshot(ctx);
     dll_poll_diagnostics(ctx);

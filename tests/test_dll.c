@@ -1679,6 +1679,80 @@ static void test_dll_isr_back_to_box_counts_each_frame_once(void** state)
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_COMM_DISABLED);
 }
 
+/* Back-to-box（10.7.5）单写者：ISR 完全消费一帧后只置 isr_cycle_served，
+ * back_to_box_cycles 只由主泵推进（每个泵周期最多一次），主上下文自己处理
+ * 的帧仍直接推进；计数达到 3 后的停机判定不变。 */
+static void test_back_to_box_counts_isr_served_cycles_once_per_pump(void** state)
+{
+    (void) state;
+    iolink_stack_config_t config = {
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0,
+        .od_width = 1,
+        .pd_in_len = 0U,
+        .pd_out_len = 0U,
+    };
+    iolink_test_device_t dev;
+
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    assert_int_equal(iolink_test_device_init(&dev, &config, NULL), 0);
+
+    wake_device(&dev.ctx);
+    feed_type0_page_read(0x02U);
+    (void) deliver_type0_read(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
+
+    iolink_dll_main_t* dll = test_dll(&dev.ctx);
+    const uint32_t consumed_before = test_dll_shared(&dev.ctx)->isr_frames_consumed;
+    iolink_dll_request_back_to_box(dll);
+    assert_int_equal(dll->back_to_box_cycles, 0U);
+
+    /* 同一主泵窗口内 ISR 连续消费两帧：计数仍为 0（ISR 不再读改写）。 */
+    for (int i = 0; i < 2; i++) {
+        feed_type0_page_read(0x02U);
+        iolink_device_process_isr(&dev.ctx);
+        while (test_dll_shared(&dev.ctx)->isr_tx_active != 0U) {
+            iolink_device_process_isr(&dev.ctx);
+        }
+        assert_tx_len(2); /* DPP1 字节 + CKS */
+    }
+    mock_phy_clear_rx();
+    assert_int_equal(test_dll_shared(&dev.ctx)->isr_frames_consumed, consumed_before + 2U);
+    assert_int_equal(dll->back_to_box_cycles, 0U);
+
+    /* 一个泵周期推进一次。 */
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(dll->back_to_box_cycles, 1U);
+    /* 没有新的 ISR 服务：不重复计数。 */
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(dll->back_to_box_cycles, 1U);
+
+    /* 再接两个被 ISR 消费的周期：计数达到 3。 */
+    for (int i = 0; i < 2; i++) {
+        feed_type0_page_read(0x02U);
+        iolink_device_process_isr(&dev.ctx);
+        while (test_dll_shared(&dev.ctx)->isr_tx_active != 0U) {
+            iolink_device_process_isr(&dev.ctx);
+        }
+        assert_tx_len(2);
+        mock_phy_clear_rx();
+        iolink_device_process(&dev.ctx);
+    }
+    assert_int_equal(dll->back_to_box_cycles, 3U);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
+
+    /* 主上下文自己处理的帧仍直接推进，并触发 3 周期后的停止。 */
+    feed_type0_page_write(0x02U, 0x5AU);
+    iolink_device_process_isr(&dev.ctx);
+    while (test_dll_shared(&dev.ctx)->isr_tx_active != 0U) {
+        iolink_device_process_isr(&dev.ctx);
+    }
+    assert_tx_len(1); /* 页写应答只有 CKS */
+    iolink_device_process(&dev.ctx);
+    assert_false(dll->back_to_box_pending);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_COMM_DISABLED);
+}
+
 /* 主循环泵对 TYPE_1/2 帧的兜底应答：发布一个合法的过程 READ，
  * 但不提供 ISR 的提前应答（如同 ISR 无法预先准备），然后检查
  * dll_send_od_reply() 构建的 [OD][PD-in]CKS 应答。 */
@@ -1808,6 +1882,8 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_min_cycle_time_from_m_sequence, test_setup,
                                         test_teardown),
+        cmocka_unit_test_setup_teardown(test_back_to_box_counts_isr_served_cycles_once_per_pump,
+                                        test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_isr_back_to_box_counts_each_frame_once, test_setup,
                                         test_teardown),
     };

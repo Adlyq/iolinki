@@ -152,7 +152,6 @@ void dll_set_state(iolink_dll_main_t* ctx, iolink_dll_state_t new_state);
 bool dll_apply_master_command(iolink_dll_main_t* ctx, uint8_t cmd);
 bool dll_type_allowed(const iolink_dll_main_t* ctx, const uint8_t* frame);
 uint8_t dll_pd_status_flags(const iolink_dll_main_t* ctx);
-void dll_mark_master_activity(iolink_dll_main_t* ctx);
 void dll_isr_start_staged_tx(iolink_dll_main_t* ctx, uint8_t slot, uint8_t len, uint8_t has_cks);
 
 /**
@@ -231,6 +230,7 @@ void dll_process_complete_frame(iolink_dll_main_t* ctx);
 void dll_isdu_sync_snapshot(iolink_dll_main_t* ctx);
 uint32_t dll_master_cycle_us(const iolink_dll_main_t* ctx);
 void dll_mark_master_activity_ts(iolink_dll_main_t* ctx);
+void dll_count_served_cycle(iolink_dll_main_t* ctx);
 /** @} */
 
 /** @brief 清零 ISR 独占状态（由 iolink_dll_init 调用）。 */

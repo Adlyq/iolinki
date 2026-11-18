@@ -45,6 +45,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   COUNT is accepted while `resp_total != 0`, i.e. after a read START, so read
   segment sequencing cannot move the write dedupe position.
   The wire bytes of every read/write sequence are unchanged.
+### Fixed (Back-to-box cycles have a single writer)
+- `dll_mark_master_activity()` was called from the data ISR on the CONSUME path
+  and did `back_to_box_cycles++`, a read-modify-write on a field the main
+  context also advances. A lost update delayed the 10.7.5 "stop after 3
+  MasterCycles" decision. The function is now timestamp-only and renamed
+  `dll_mark_master_activity_ts()` (it no longer has a counting variant); ISR
+  frames set the one-shot `shared.isr_cycle_served` after their bookkeeping, and
+  the pump consumes it in `dll_apply_isr_deadline_requests()`: clear, then
+  `dll_count_served_cycle()` once if a Back-to-box is pending. A pump pass
+  therefore advances the counter at most once even when the ISR served several
+  frames in between (the count errs conservative — it never stops early).
+  Main-context frames keep advancing the counter directly in
+  `dll_process_complete_frame()`. The SIO wakeup path no longer counts a cycle:
+  no request was served.
+- `iolink_dll_shared_t` gains `isr_cycle_served` (one byte, absorbed by existing
+  padding: context sizes are unchanged).
+
+### Fixed (SIO switching clears the ISR reply state under the lock)
+- `iolink_dll_set_sio_mode()` cleared `isr_tx_pending`/`isr_tx_active`/
+  `isr_tx_has_cks`/`isr_tx_idx`/`pd_in_captured` with five plain stores. The data
+  ISR writes the same fields, so a switch between two byte steps left a
+  half-frame with `tx_done` never called (and a staged reply silently dropped),
+  with nothing counted. The cleanup now runs in one critical section; a staged
+  or in-flight reply that it discards counts once as `isr_tx_dropped`
+  (main-context field; `SPLIT` mode still sums it with the ISR copy in
+  `iolink_dll_get_stats()`). `phy.set_mode` stays outside the lock.
+
+### Fixed (an ISDU read reset no longer discards an in-flight write request)
+- `dll_process_body()` applied the ISR's IDLE/IDLE2/ABORT read-reset request
+  unconditionally. `iolink_isdu_od_read(IDLE)` ends in `isdu_transport_reset()`
+  → `isdu_stage_reset()`, which clears `req_idx`/`req_total`/`flowctrl_seen`/
+  `stage_state` — the write entry the data ISR may have just rebuilt in the same
+  exchange. A master that aborted a read and immediately started a write saw
+  every COUNT acknowledged while the request was dropped whole. The request is
+  now applied only when the write entry is back in `IOLINK_ISDU_STAGE_IDLE`,
+  otherwise the flag stays set for the next pump pass. The check, the flag clear
+  and the reset run in one critical section, so the ISR cannot open a new write
+  START in between; the section only clears fields (no PHY or application
+  callbacks).
 
 ### Removed (reply plans carry no timing field and are compiled once)
 ### Fixed (Timer A timeout resets RX assembly in one phase)

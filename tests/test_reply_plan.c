@@ -1004,6 +1004,88 @@ static int test_type0_idle_read_resets_transport(void)
     return 0;
 }
 
+/** @brief 读复位请求只能在写入口为 IDLE 时应用（见 dll_apply_isr_isdu_read_reset）。
+ *
+ * 主站"读 ABORT 后立刻写 START"：ISR 已用新 START 重建了写入口，此时若
+ * 照常复位，req_idx/req_total 被清零，后续 COUNT 全部被忽略、请求整段
+ * 丢弃（即使每一段都被 ACK）。守卫让复位请求等到写入口回到 IDLE。
+ */
+static int test_read_reset_waits_for_idle_write_entry(void)
+{
+    init_preoperate();
+
+    /* 1. Type-0 ISDU 读 IDLE：ISR 回 0x00 并置读传输层复位请求。 */
+    uint8_t idle_rd[2];
+    make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_IDLE),
+               IOLINK_MSEQ_TYPE_0, idle_rd, sizeof(idle_rd));
+    tx_reset();
+    feed(idle_rd, sizeof(idle_rd), 0U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if ((tx_observed_len() != 2U) || (s_tx_q[0] != 0x00U)) {
+        return 1;
+    }
+    if (s_dll.main.shared.isr_isdu_read_reset == 0U) {
+        return 2;
+    }
+
+    /* 2. 紧接一个写 START（Type-0 写：MC + CKT + 一个 OD 字节），
+     *    ISR 借此重建写入口（stage_state = RECEPTION，req_total = 4）。 */
+    static const uint8_t octets[4] = {0x14U, 0x10U, 0x00U, 0x04U};
+    uint8_t start[3] = {(uint8_t) (IOLINK_MC_CHANNEL_ISDU | IOLINK_FLOWCTRL_START),
+                        IOLINK_MSEQ_TYPE_0, octets[0]};
+    start[1] = (uint8_t) (start[1] | test_expected_checksum6(start, sizeof(start)));
+    tx_reset();
+    feed(start, sizeof(start), 1U);
+    iolink_dll_process_isr(&s_dll.main);
+    drain_tx();
+    if (tx_observed_len() == 0U) {
+        return 3; /* 写段必须被 ISR ACK */
+    }
+    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
+        (s_dll.main.shared.isdu.req_total != 4U)) {
+        return 4;
+    }
+
+    /* 3. 主泵一轮：复位请求必须被保留，新请求的入口字段原样不动。 */
+    iolink_dll_process(&s_dll.main);
+    if (s_dll.main.shared.isr_isdu_read_reset == 0U) {
+        return 5;
+    }
+    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_RECEPTION) ||
+        (s_dll.main.shared.isdu.req_idx != 1U) || (s_dll.main.shared.isdu.req_total != 4U)) {
+        return 6;
+    }
+
+    /* 4. 其余三段 COUNT：位置推进正常，请求得以收齐。 */
+    for (uint8_t i = 1U; i < 4U; i++) {
+        uint8_t count[3] = {(uint8_t) (IOLINK_MC_CHANNEL_ISDU | i), IOLINK_MSEQ_TYPE_0, octets[i]};
+        count[1] = (uint8_t) (count[1] | test_expected_checksum6(count, sizeof(count)));
+        tx_reset();
+        feed(count, sizeof(count), 1U);
+        iolink_dll_process_isr(&s_dll.main);
+        drain_tx();
+        if (tx_observed_len() == 0U) {
+            return 7;
+        }
+    }
+    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_COMPLETE) ||
+        (s_dll.main.shared.isdu.req_idx != 4U)) {
+        return 8; /* 请求被整段丢弃：读复位在错误相位应用了 */
+    }
+
+    /* 5. 写被主泵应用后入口回到 IDLE，保留的复位请求在同一轮生效。 */
+    iolink_dll_process(&s_dll.main);
+    if (s_dll.main.shared.isr_isdu_read_reset != 0U) {
+        return 9;
+    }
+    if ((s_dll.main.shared.isdu.stage_state != IOLINK_ISDU_STAGE_IDLE) ||
+        !iolink_isdu_is_idle(&s_dll.main.shared.isdu)) {
+        return 10;
+    }
+    return 0;
+}
+
 /** @brief OPERATE 切片中 Type-0 页读槽位的动作；未找到返回 0xFF。 */
 static uint8_t type0_page_read_action(void)
 {
@@ -1160,6 +1242,7 @@ IOLINK_TEST_RC(test_unpublished_plans_block_the_isr)
 IOLINK_TEST_RC(test_isdu_write_invalidates_read_view)
 IOLINK_TEST_RC(test_startup_probe_plan)
 IOLINK_TEST_RC(test_type0_idle_read_resets_transport)
+IOLINK_TEST_RC(test_read_reset_waits_for_idle_write_entry)
 IOLINK_TEST_RC(test_publish_reflects_capability_bits)
 IOLINK_TEST_RC(test_init_publishes_default_plan)
 IOLINK_TEST_RC(test_process_does_not_republish)
@@ -1199,6 +1282,7 @@ int main(void)
         cmocka_unit_test(iolink_case_test_isdu_write_invalidates_read_view),
         cmocka_unit_test(iolink_case_test_startup_probe_plan),
         cmocka_unit_test(iolink_case_test_type0_idle_read_resets_transport),
+        cmocka_unit_test(iolink_case_test_read_reset_waits_for_idle_write_entry),
         cmocka_unit_test(iolink_case_test_publish_reflects_capability_bits),
         cmocka_unit_test(iolink_case_test_init_publishes_default_plan),
         cmocka_unit_test(iolink_case_test_process_does_not_republish),

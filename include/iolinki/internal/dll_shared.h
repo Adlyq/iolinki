@@ -90,6 +90,18 @@ typedef struct iolink_dll_shared
 
     volatile uint8_t isr_fallback_pending; /**< ISR 已接受 FALLBACK：由主上下文启动 T_FBD */
 
+    /**
+     * @brief ISR 已完全服务一个 MasterCycle（ISR -> 主泵，一次性）。
+     *
+     * CONSUME 帧不进邮箱，主泵看不到它们；但 10.7.5 的 Back-to-box 判定
+     * 必须覆盖每一个服务过的周期。`back_to_box_cycles` 归主上下文独占，
+     * ISR 不对它做读改写，只置本标志。主泵在
+     * `dll_apply_isr_deadline_requests()` 中消费：标志为 1 时清 0，并在
+     * `back_to_box_pending` 为真时推进一次。一个主泵周期因此最多推进一次
+     * （ISR 在此期间消费多帧时计数偏保守：只会晚停，绝不早停）。
+     */
+    volatile uint8_t isr_cycle_served;
+
     /* 配置 */
     uint8_t m_seq_type; /**< 支持的 M 序列类型 */
 
