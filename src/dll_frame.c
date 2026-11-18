@@ -140,7 +140,8 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
         ctx->frame_replied_by_isr = 0U;
         return;
     }
-    uint8_t slot = 0U;
+    /* 槽位只在主上下文内推进；这里先取值，是否真正使用由下面的接受分支决定。 */
+    const uint8_t slot = ctx->isr_tx_next;
     /* 检查“ISR 正在流式发送”与发布暂存必须对 ISR 是一次操作：
      * 分开做时，ISR 可在检查之后启动即时应答，再由下一次取走把在途帧从
      * 中间替换掉（在途帧因此丢掉后半段与 CKS）。SINGLE 档没有数据 ISR，
@@ -157,7 +158,6 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
     }
     else {
         /* 槽位与载荷只在接受后推进：被拒绝的暂存不得碰在途槽。 */
-        slot = ctx->isr_tx_next;
         ctx->isr_tx_next = (uint8_t) (ctx->isr_tx_next ^ 1U);
         (void) memcpy(ctx->shared.isr_tx_payload[slot], data, len);
         ctx->shared.isr_tx_pending_slot = slot;
