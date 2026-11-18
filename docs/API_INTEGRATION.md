@@ -89,8 +89,10 @@ void iolink_critical_exit(void);
 
 `src/platform.c` 中的 weak no-op 只用于让库可链接。`iolink_device_init()` 会探测
 这两个钩子；如果仍在用 weak 默认实现，初始化返回
-`IOLINK_DEVICE_INIT_ERR_CRITICAL`。实现必须可嵌套，并能在 ISR 双泵下保护邮箱、
-ISDU 快照和应答暂存区。
+`IOLINK_DEVICE_INIT_ERR_CRITICAL`。实现必须可嵌套（`exit` 恢复对应 `enter` 保存的
+屏蔽状态），并能在 ISR 双泵下保护库实际取锁的短操作：诊断条件表、事件队列的
+读/clear、PD-in 索引发布、计数器清零、SIO 切换的应答槽清理与 ISR 相位复位
+（见 `docs/CODE_FLOW.md` 第 12 节的临界区审计）。
 
 `iolink_device_app_t::time_us` 是必需的。`iolink_device_init()` 在 `config.app`
 为 NULL 时返回 `IOLINK_DEVICE_INIT_ERR_APP`，在 `app->time_us` 为 NULL 时返回
@@ -913,7 +915,10 @@ DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检�
   `shared.clock`、`shared.m_seq_type`、`shared.od_width`、`shared.pd_in_len`、
   `shared.pd_out_len_current` 与能力位，并调用一次
   `iolink_dll_publish_reply_plans()`——这些字段和应答计划都只在初始化时定义，
-  之后 `iolink_dll_process()` 不会重发布。
+  之后 `iolink_dll_process()` 不会重发布。该发布入口返回 0
+  （`IOLINK_DLL_PUBLISH_OK`）表示表已发布；`ctx` 为 NULL、上下文未经
+  `iolink_dll_init()` 初始化或在数据 ISR 内调用时返回负的
+  `iolink_dll_publish_result_t`，且不改动已有的表。
   设备层已经完成这些接线；只有实现自定义传输时才直接使用，并且需要自行负责
   事件/ISDU/DS 集成。
 - `include/iolinki/phy_tiol112.h` 和 `phy_l6362a.h`：收发器驱动。用板级 IO 回调调用

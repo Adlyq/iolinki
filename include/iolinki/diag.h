@@ -129,7 +129,9 @@ typedef struct
  */
 typedef struct
 {
-    volatile uint8_t isr_pulse[IOLINK_DIAG_SRC_COUNT]; /**< ISR → 主：单字节 one-shot */
+    volatile uint8_t isr_pulse[IOLINK_DIAG_SRC_COUNT]; /**< ISR → 主：单字节 one-shot
+                                                           （ISR 只置 1，`iolink_diag_service()`
+                                                           在短临界区内读-清） */
     uint32_t quiet_since_ms[IOLINK_DIAG_SRC_COUNT];    /**< PULSE：最后一次发生时间 */
     uint32_t edges[IOLINK_DIAG_SRC_COUNT];             /**< 每来源 0→1 边沿/脉冲计数 */
 } iolink_conditions_t;

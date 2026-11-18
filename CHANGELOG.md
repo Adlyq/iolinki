@@ -26,6 +26,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/test_tx_busy.c` and `tests/test_pd_lease.c` assert the new release
   point; the new `tests/test_pd_lease_frame.c` pins the silent-period skip and
   the intact in-flight data.
+### Fixed (documentation matches the lock-free hand-off model)
+- `include/iolinki/port.h`, `docs/PORTING.md` and `docs/API_INTEGRATION.md`
+  claimed the critical section protects the frame mailbox, the ISDU snapshot,
+  reply staging or the event-queue write path. None of those take a section:
+  they are slot rings, publish words and leases. They now list the operations
+  that do take one — diagnostic condition table, event queue read/clear, PD-in
+  index publication, counter reset, the SIO-mode reply-slot cleanup and the ISR
+  RX phase reset — and drop the removed "a DLL state transition resets the
+  event queue under the lock" example from the nesting requirement.
+- `docs/CODE_FLOW.md`: the remaining-critical-section audit no longer names the
+  removed `isr_tx_has_cks` field (the SIO-mode entry clears four fields) or a
+  "log sink" section that does not exist, and the hook table states that
+  `iolink_dll_publish_reply_plans()` rejects a call from the data ISR.
+- `docs/API.md` documents the quiescent-entry contract shared by
+  `iolink_dll_init()`, `iolink_dll_publish_reply_plans()` and
+  `iolink_isdu_bind_workspace()`, including which of them can refuse at run
+  time.
+- `include/iolinki/diag.h` names both halves of the `isr_pulse[]` one-shot: the
+  ISR only stores 1, `iolink_diag_service()` reads and clears it inside one
+  short section.
+
+### Changed (MAJOR: `iolink_dll_publish_reply_plans()` reports misuse)
+- The reply-plan publisher returns `int` (`iolink_dll_publish_result_t`)
+  instead of `void`: `IOLINK_DLL_PUBLISH_OK` (0) when the table was published,
+  otherwise `IOLINK_DLL_PUBLISH_ERR_NULL` (`ctx == NULL`),
+  `IOLINK_DLL_PUBLISH_ERR_UNINIT` (the context never completed
+  `iolink_dll_init()`, detected by the unbound `shared.isr`) or
+  `IOLINK_DLL_PUBLISH_ERR_ISR` (`shared.in_isr != 0`). A rejected call writes
+  no plan slot, leaves `reply_plans_ready` alone and, for the ISR case, logs an
+  ISR error. Rebuilding the table from the data ISR used to rewrite the table
+  the pump was scanning, with no counter and no error.
+- The two in-library call sites (`iolink_dll_init()`, `iolink_device_init()`)
+  keep publishing at init time and ignore the result of the unreachable
+  refusal paths.
+- `include/iolinki/dll.h` and `include/iolinki/isdu.h` now state one
+  precondition for `iolink_dll_init()`, `iolink_dll_publish_reply_plans()` and
+  `iolink_isdu_bind_workspace()`: main context, data pump quiescent. The latter
+  two refuse a call from the data ISR at run time; `iolink_dll_init()` cannot,
+  because it clears the object that holds `shared.in_isr`.
+- Tests: `tests/test_reply_plan.c` pins the NULL, uninitialised and in-ISR
+  outcomes and checks that a refused call leaves the previous table and the
+  ready flag unchanged.
 
 ### Fixed (CONSUME frame timestamp handoff publishes with a fence)
 - `dll_isr_complete_frame()` now writes `isr_consumed_us`, passes
