@@ -195,7 +195,7 @@ static void test_fallback_command_ignored_without_wakeup(void** state)
     assert_tx_len(1); /* Type-0 写只回复 CKS */
 
     /* 无唤醒时不支持该命令：会确认应答，但 DL 模式/状态不变。 */
-    assert_false(iolink_dll_timer_armed(test_dll(&dev.ctx), IOLINK_TIMER_T_FBD));
+    assert_false(dll_timer_armed(test_dll(&dev.ctx), IOLINK_TIMER_T_FBD));
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
 

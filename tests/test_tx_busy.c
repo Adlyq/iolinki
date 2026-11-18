@@ -172,7 +172,7 @@ static void test_busy_defers_eager_reply(void** state)
     g_line_busy = 1U;
     feed_process_read();
 
-    iolink_dll_process_isr(&dll.main);
+    iolink_dll_process_isr(&dll.main.shared);
     assert_int_equal(tx_calls(), 0U);                     /* 即时应答被放弃 */
     assert_int_equal(dll.main.shared.isr_tx_pending, 0U); /* ISR 未暂存任何内容 */
     assert_int_equal(dll.main.shared.pd_in_captured, 0xFFU);
@@ -181,7 +181,7 @@ static void test_busy_defers_eager_reply(void** state)
     assert_int_equal(dll.main.shared.isr_tx_pending, 1U); /* 已暂存，等待 ISR */
 
     g_line_busy = 0U;
-    iolink_dll_process_isr(&dll.main); /* 排空已暂存的应答 */
+    iolink_dll_process_isr(&dll.main.shared); /* 排空已暂存的应答 */
     assert_int_equal(tx_calls(), 1U);
     assert_int_equal(dll.main.shared.isr_tx_pending, 0U);
 }
@@ -196,12 +196,12 @@ static void test_lease_released_when_line_free(void** state)
     init_ctx(&dll);
     feed_process_read();
 
-    iolink_dll_process_isr(&dll.main); /* 由 ISR 发出即时应答 */
+    iolink_dll_process_isr(&dll.main.shared); /* 由 ISR 发出即时应答 */
     assert_int_equal(tx_calls(), 1U);
     assert_int_not_equal(dll.main.shared.pd_in_captured, 0xFFU);
 
     g_line_busy = 1U; /* 仍在线路上 */
-    iolink_dll_process_isr(&dll.main);
+    iolink_dll_process_isr(&dll.main.shared);
     assert_int_not_equal(dll.main.shared.pd_in_captured, 0xFFU);
 
     /* 主泵周期不释放租约：释放路径只属于 ISR。 */
@@ -209,7 +209,7 @@ static void test_lease_released_when_line_free(void** state)
     iolink_dll_process(&dll.main);
     assert_int_not_equal(dll.main.shared.pd_in_captured, 0xFFU);
 
-    iolink_dll_process_isr(&dll.main); /* 下次 ISR 进入时回收 */
+    iolink_dll_process_isr(&dll.main.shared); /* 下次 ISR 进入时回收 */
     assert_int_equal(dll.main.shared.pd_in_captured, 0xFFU);
 }
 

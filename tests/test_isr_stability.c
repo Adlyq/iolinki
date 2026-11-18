@@ -145,7 +145,7 @@ static int run_cycles(iolink_dll_ctx_t* ctx, unsigned cycles, uint64_t step_us)
 
         iolink_dll_process(&ctx->main);
         while ((ctx->main.shared.isr_tx_pending != 0U) || (ctx->main.shared.isr_tx_active != 0U)) {
-            iolink_dll_process_isr(&ctx->main);
+            iolink_dll_process_isr(&ctx->main.shared);
         }
 
         if (!iolink_ring_is_empty(&ctx->main.shared.isr_frame_ring)) {

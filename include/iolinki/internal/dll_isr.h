@@ -33,6 +33,8 @@ struct iolink_dll_isr
 
     uint8_t isr_isdu_seg_idx; /**< 最后服务的段偏移 */
 
+    uint8_t isr_isdu_last_flowctrl; /**< 最后接受的 FlowCTRL（0xFF = 无） */
+
     /* 原始字节 ISR 泵状态（由库拥有，由 PHY 数据
      * 中断驱动）。ISR 上下文只触碰这些字段；应答
      * 暂存缓冲区与字节喂送由库拥有（PHY 只负责

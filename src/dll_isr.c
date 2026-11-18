@@ -12,7 +12,7 @@
 #include "iolinki/protocol.h"
 #include "iolinki/utils.h"
 #include "iolinki/port.h"
-#include "dll_internal.h"
+#include "dll_shared_internal.h"
 #include <string.h>
 #include "dll_isr_internal.h"
 
@@ -32,7 +32,8 @@
  *
  * 本文件不是 ISR-only：除 ISR 泵入口（iolink_dll_process_isr、
  * iolink_dll_on_rx_timeout、iolink_dll_on_stack_tick）外，还包含主上下文侧的
- * 服务窗口消费入口 iolink_dll_take_service_window()。它是
+ * 服务窗口消费实现 dll_service_window_take()（公共入口
+ * iolink_dll_take_service_window() 在 dll.c）。它是
  * iolink_dll_on_stack_tick() 的对偶：Timer B 节拍在 ISR 内只置
  * `stack_tick_pending`，由主泵在 iolink_dll_process() 中取走窗口后运行主循环。
  *
@@ -73,7 +74,7 @@
  * 交接与顺序约束：
  *  - 即时回复在邮箱发布*之前*启动（t_A）；记录随后
  *    连同其八位组一起携带 eager=1。
- *  - ctx->shared.isdu 的写入口（累计槽、`req_idx`/`req_total`、FlowCTRL
+ *  - ctx->isdu 的写入口（累计槽、`req_idx`/`req_total`、FlowCTRL
  *    水位、`stage_state` 与发布字 `req_pub`）**整体归数据 ISR**：主泵只读
  *    发布字、认领槽并写 `req_ack_gen`/`req_busy_sel`，从不改写累计相位，
  *    因此接管不需要临界区。已发布的读视图与其写序号仍由两边按序号协议
@@ -94,56 +95,60 @@
  */
 bool dll_isr_reset(iolink_dll_isr_t* isr)
 {
-    return iolink_ctx_zero(isr, sizeof(iolink_dll_isr_t));
+    if (!iolink_ctx_zero(isr, sizeof(iolink_dll_isr_t))) {
+        return false;
+    }
+    /* "尚未见到 START" 的哨兵：零值不是合法的 FlowCTRL 记忆。 */
+    isr->isr_isdu_last_flowctrl = 0xFFU;
+    return true;
 }
 
-void dll_isr_start_staged_tx(iolink_dll_main_t* ctx, uint8_t slot, uint8_t len, uint8_t has_cks)
+void dll_isr_start_staged_tx(iolink_dll_shared_t* ctx, uint8_t slot, uint8_t len, uint8_t has_cks)
 {
-    if (ctx->shared.isr == NULL) {
+    if (ctx->isr == NULL) {
         return; /* 尚未 iolink_dll_init()：没有可驱动的 ISR 状态 */
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     (void) has_cks; /* 整帧交付：CKS 已在暂存字节里 */
-    if (ctx->shared.phy->tx_frame != NULL) {
-        if (ctx->shared.phy->tx_frame(ctx->shared.phy->self, ctx->shared.isr_tx_payload[slot],
-                                      len) != 0) {
-            IOLINK_LOG_ISR_WARN(&ctx->shared.log, "tx_frame failed: len=%u", (unsigned) len);
+    if (ctx->phy->tx_frame != NULL) {
+        if (ctx->phy->tx_frame(ctx->phy->self, ctx->isr_tx_payload[slot], len) != 0) {
+            IOLINK_LOG_ISR_WARN(&ctx->log, "tx_frame failed: len=%u", (unsigned) len);
             /* 由 SINGLE 档主泵与 ISR 泵共享：将丢弃归属到
              * 正在运行的上下文，使 SPLIT 计数器保持精确。 */
-            if (ctx->shared.in_isr != 0U) {
+            if (ctx->in_isr != 0U) {
                 IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
             }
             else {
-                ctx->shared.isr_tx_dropped++;
+                ctx->isr_tx_dropped++;
             }
         }
     }
     else {
         /* 本构建按 TX FRAME 交付，PHY 却没有 tx_frame()：能力位不会置 TX，
          * 设备层校验因此看不见这种拼装错误。计数丢弃，使配置错误可观测。 */
-        if (ctx->shared.in_isr != 0U) {
+        if (ctx->in_isr != 0U) {
             IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
         }
         else {
-            ctx->shared.isr_tx_dropped++;
+            ctx->isr_tx_dropped++;
         }
     }
 #else
-    if (ctx->shared.phy->tx_octet != NULL) {
-        ctx->shared.isr->isr_tx_base = ctx->shared.isr_tx_payload[slot];
-        ctx->shared.isr_tx_idx = 0U;
-        ctx->shared.isr->tx_stream_len = len;
-        ctx->shared.isr->tx_stream_has_cks = (has_cks != 0U) ? 1U : 0U;
-        ctx->shared.isr_tx_active = 1U;
+    if (ctx->phy->tx_octet != NULL) {
+        ctx->isr->isr_tx_base = ctx->isr_tx_payload[slot];
+        ctx->isr_tx_idx = 0U;
+        ctx->isr->tx_stream_len = len;
+        ctx->isr->tx_stream_has_cks = (has_cks != 0U) ? 1U : 0U;
+        ctx->isr_tx_active = 1U;
         dll_isr_tx_step(ctx);
     }
     else {
         /* TX BYTE 构建 + 只有 tx_frame() 的 PHY：同上，计数而不是静默丢弃。 */
-        if (ctx->shared.in_isr != 0U) {
+        if (ctx->in_isr != 0U) {
             IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
         }
         else {
-            ctx->shared.isr_tx_dropped++;
+            ctx->isr_tx_dropped++;
         }
     }
 #endif
@@ -169,43 +174,43 @@ void dll_isr_start_staged_tx(iolink_dll_main_t* ctx, uint8_t slot, uint8_t len, 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
 /* 发送活动回复的一步：下一个负载八位组，然后是计算出的
  * CKS（CKS 模式），最后是帧结束。每次收发器请求调用一次。 */
-void dll_isr_tx_step(iolink_dll_main_t* ctx)
+void dll_isr_tx_step(iolink_dll_shared_t* ctx)
 {
-    const uint8_t len = ctx->shared.isr->tx_stream_len;
-    const uint8_t has_cks = ctx->shared.isr->tx_stream_has_cks;
+    const uint8_t len = ctx->isr->tx_stream_len;
+    const uint8_t has_cks = ctx->isr->tx_stream_has_cks;
 
-    if (ctx->shared.isr_tx_idx < len) {
-        const uint8_t octet = ctx->shared.isr->isr_tx_base[ctx->shared.isr_tx_idx];
-        (void) ctx->shared.phy->tx_octet(ctx->shared.phy->self, octet);
+    if (ctx->isr_tx_idx < len) {
+        const uint8_t octet = ctx->isr->isr_tx_base[ctx->isr_tx_idx];
+        (void) ctx->phy->tx_octet(ctx->phy->self, octet);
         if (has_cks != 0U) {
-            ctx->shared.isr->isr_tx_acc = (uint8_t) (ctx->shared.isr->isr_tx_acc ^ octet);
+            ctx->isr->isr_tx_acc = (uint8_t) (ctx->isr->isr_tx_acc ^ octet);
         }
-        ctx->shared.isr_tx_idx++;
+        ctx->isr_tx_idx++;
     }
-    else if ((has_cks != 0U) && (ctx->shared.isr_tx_idx == len)) {
+    else if ((has_cks != 0U) && (ctx->isr_tx_idx == len)) {
         /* 负载完成：输出 CKS = flags | checksum6(acc ^ flags)。 */
-        const uint8_t cks =
-            dll_reply_cks(ctx->shared.isr->isr_tx_acc, ctx->shared.isr->isr_tx_flags);
-        (void) ctx->shared.phy->tx_octet(ctx->shared.phy->self, cks);
-        ctx->shared.isr_tx_idx++;
+        const uint8_t cks = dll_reply_cks(ctx->isr->isr_tx_acc, ctx->isr->isr_tx_flags);
+        (void) ctx->phy->tx_octet(ctx->phy->self, cks);
+        ctx->isr_tx_idx++;
     }
     else {
-        if (ctx->shared.phy->tx_done != NULL) {
-            ctx->shared.phy->tx_done(ctx->shared.phy->self);
+        if (ctx->phy->tx_done != NULL) {
+            ctx->phy->tx_done(ctx->phy->self);
         }
-        if (ctx->shared.phy->stack_timer_start != NULL) {
-            ctx->shared.phy->stack_timer_start(ctx->shared.phy->self); /* 帧结束 -> Timer B */
+        if (ctx->phy->stack_timer_start != NULL) {
+            ctx->phy->stack_timer_start(ctx->phy->self); /* 帧结束 -> Timer B */
         }
-        ctx->shared.isr_tx_active = 0U;
+        ctx->isr_tx_active = 0U;
         /* TX BYTE：回复已完成，因此 ISR 租用的 PD-in 槽位
          * 再次对主泵可用。 */
-        ctx->shared.pd_in_captured = 0xFFU;
+        ctx->pd_in_captured = 0xFFU;
     }
 }
 #endif /* IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE */
 
 /* 从已发布的响应视图填充 ISDU 读回复的 OD 八位组。 */
-static void dll_isr_isdu_od(iolink_dll_main_t* ctx, uint8_t flowctrl, uint8_t* od, uint8_t od_width)
+static void dll_isr_isdu_od(iolink_dll_shared_t* ctx, uint8_t flowctrl, uint8_t* od,
+                            uint8_t od_width)
 {
     if (od_width == 0U) {
         return;
@@ -219,12 +224,12 @@ static void dll_isr_isdu_od(iolink_dll_main_t* ctx, uint8_t flowctrl, uint8_t* o
      * 总是应当复位传输层。 */
     if (flowctrl >= IOLINK_FLOWCTRL_IDLE) {
         od[0] = 0x00U;
-        ctx->shared.isr_isdu_read_reset = 1U;
+        ctx->isr_isdu_read_reset = 1U;
         /* 在读传输层被主泵复位之前，主站不得继续旧段序列：清掉段索引，
          * 使后续 COUNT 只能得到"无服务"，直到新的 START 重新采纳视图。 */
-        ctx->shared.isr_isdu_last_flowctrl = 0xFFU;
-        ctx->shared.isr->isr_isdu_idx = 0U;
-        ctx->shared.isr->isr_isdu_seg_idx = 0U;
+        ctx->isr->isr_isdu_last_flowctrl = 0xFFU;
+        ctx->isr->isr_isdu_idx = 0U;
+        ctx->isr->isr_isdu_seg_idx = 0U;
         return;
     }
 
@@ -234,15 +239,15 @@ static void dll_isr_isdu_od(iolink_dll_main_t* ctx, uint8_t flowctrl, uint8_t* o
      * applied，相等时才读发布字。主泵先发布新视图、再追平 applied，因此
      * 两者相等时读到的必是已确认视图；不等时最多多拒一次，绝不放行
      * 写之前的旧视图。 */
-    const IOLINK_ATOMIC_UINT_T write_gen = ctx->shared.isr_isdu_write_gen;
-    const uint32_t write_applied = ctx->shared.isdu_write_gen_applied;
+    const IOLINK_ATOMIC_UINT_T write_gen = ctx->isr_isdu_write_gen;
+    const uint32_t write_applied = ctx->isdu_write_gen_applied;
     if (write_gen != write_applied) {
         return;
     }
     IOLINK_FENCE();
 
     /* 一次原子加载得到一致的 {length, busy, buffer} 元组。 */
-    const IOLINK_ATOMIC_UINT_T pub = iolink_atomic_load(&ctx->shared.isr_isdu_pub);
+    const IOLINK_ATOMIC_UINT_T pub = iolink_atomic_load(&ctx->isr_isdu_pub);
     bool repeat = false;
 
     if (flowctrl == IOLINK_FLOWCTRL_START) {
@@ -256,51 +261,50 @@ static void dll_isr_isdu_od(iolink_dll_main_t* ctx, uint8_t flowctrl, uint8_t* o
         }
         /* 采纳已发布的响应：从此处起 ISR 拥有段
          * 索引，且缓冲区选择在下一次 START 之前保持稳定。 */
-        ctx->shared.isr->isr_isdu_adopted = pub;
-        ctx->shared.isr->isr_isdu_len = IOLINK_ISDU_PUB_LEN(pub);
-        ctx->shared.isr->isr_isdu_sel = IOLINK_ISDU_PUB_SEL(pub);
-        ctx->shared.isr->isr_isdu_idx = 0U;
-        ctx->shared.isr->isr_isdu_seg_idx = 0U;
-        ctx->shared.isr_isdu_last_flowctrl = IOLINK_FLOWCTRL_START;
+        ctx->isr->isr_isdu_adopted = pub;
+        ctx->isr->isr_isdu_len = IOLINK_ISDU_PUB_LEN(pub);
+        ctx->isr->isr_isdu_sel = IOLINK_ISDU_PUB_SEL(pub);
+        ctx->isr->isr_isdu_idx = 0U;
+        ctx->isr->isr_isdu_seg_idx = 0U;
+        ctx->isr->isr_isdu_last_flowctrl = IOLINK_FLOWCTRL_START;
     }
     else {
         /* COUNT（0x00..0x0F）。已发布视图发生变化（新响应或 Busy
          * 转换）会使段序列失效；主站必须
          * 以 START 重新开始。重复的 COUNT 重复前一个段；
          * 任何其他值必须是 +1。 */
-        if ((ctx->shared.isr->isr_isdu_adopted != pub) ||
-            (ctx->shared.isr_isdu_last_flowctrl == 0xFFU)) {
+        if ((ctx->isr->isr_isdu_adopted != pub) || (ctx->isr->isr_isdu_last_flowctrl == 0xFFU)) {
             od[0] = 0x00U; /* 无服务 */
-            ctx->shared.isr_isdu_last_flowctrl = 0xFFU;
+            ctx->isr->isr_isdu_last_flowctrl = 0xFFU;
             return;
         }
-        if (flowctrl == ctx->shared.isr_isdu_last_flowctrl) {
+        if (flowctrl == ctx->isr->isr_isdu_last_flowctrl) {
             repeat = true;
         }
         else {
             const uint8_t expected =
-                (uint8_t) ((ctx->shared.isr_isdu_last_flowctrl + 1U) & IOLINK_FLOWCTRL_COUNT_MASK);
+                (uint8_t) ((ctx->isr->isr_isdu_last_flowctrl + 1U) & IOLINK_FLOWCTRL_COUNT_MASK);
             if (flowctrl != expected) {
                 od[0] = 0x00U; /* 分段错误 -> 无服务 */
-                ctx->shared.isr_isdu_last_flowctrl = 0xFFU;
+                ctx->isr->isr_isdu_last_flowctrl = 0xFFU;
                 return;
             }
-            ctx->shared.isr_isdu_last_flowctrl = flowctrl;
+            ctx->isr->isr_isdu_last_flowctrl = flowctrl;
         }
     }
 
     /* START（就绪）、新的 COUNT 或重复：处理一个 od_width 段。
      * 重复会重新发送前一个段而不推进索引。 */
-    uint8_t idx = repeat ? ctx->shared.isr->isr_isdu_seg_idx : ctx->shared.isr->isr_isdu_idx;
-    const uint8_t len = ctx->shared.isr->isr_isdu_len;
-    const uint8_t* resp = ctx->shared.isdu.resp_store[ctx->shared.isr->isr_isdu_sel];
+    uint8_t idx = repeat ? ctx->isr->isr_isdu_seg_idx : ctx->isr->isr_isdu_idx;
+    const uint8_t len = ctx->isr->isr_isdu_len;
+    const uint8_t* resp = ctx->isdu.resp_store[ctx->isr->isr_isdu_sel];
     uint8_t count = 0U;
     while ((count < od_width) && (idx < len)) {
         od[count++] = resp[idx++];
     }
     if (!repeat) {
-        ctx->shared.isr->isr_isdu_seg_idx = ctx->shared.isr->isr_isdu_idx;
-        ctx->shared.isr->isr_isdu_idx = idx;
+        ctx->isr->isr_isdu_seg_idx = ctx->isr->isr_isdu_idx;
+        ctx->isr->isr_isdu_idx = idx;
     }
 }
 
@@ -308,10 +312,10 @@ static void dll_isr_isdu_od(iolink_dll_main_t* ctx, uint8_t flowctrl, uint8_t* o
  *
  * @p pub 是本帧开始时加载的 PD-in 发布字：状态位与稍后捕获的
  * active 索引因此取自同一代，主上下文的发布不会让一条应答混用两代。 */
-static uint8_t dll_isr_status_flags(const iolink_dll_main_t* ctx, IOLINK_ATOMIC_UINT_T pub)
+static uint8_t dll_isr_status_flags(const iolink_dll_shared_t* ctx, IOLINK_ATOMIC_UINT_T pub)
 {
     uint8_t flags = 0U;
-    if (DLL_EVENTS_FLAG(&ctx->shared.events)) {
+    if (DLL_EVENTS_FLAG(&ctx->events)) {
         flags |= 0x80U;
     }
     flags |= dll_pd_status_flags_at(ctx, pub);
@@ -325,46 +329,49 @@ static uint8_t dll_isr_status_flags(const iolink_dll_main_t* ctx, IOLINK_ATOMIC_
  * 短应答路径使用。负载缓冲区是库自己的暂存缓冲区，因此在 TX FRAME 传输
  * 期间保持有效。校验和以
  * flags | checksum6(acc ^ flags) 的形式追加到同一缓冲区。 */
-static void dll_isr_send_staged(iolink_dll_main_t* ctx, uint8_t slot, uint8_t len, uint8_t flags)
+static void dll_isr_send_staged(iolink_dll_shared_t* ctx, uint8_t slot, uint8_t len, uint8_t flags)
 {
-    if (ctx->shared.phy->response_timer_stop != NULL) {
-        ctx->shared.phy->response_timer_stop(ctx->shared.phy->self); /* 回复开始 -> 停止 t_A */
+    if (ctx->phy->response_timer_stop != NULL) {
+        ctx->phy->response_timer_stop(ctx->phy->self); /* 回复开始 -> 停止 t_A */
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     /* 短回复：第一个八位组一移入
      * 移位寄存器，DMA 就会读取 CKS（帧开始时 TDR 立即清空），因此
      * CKS 必须在 tx_frame() 之前就在缓冲区中。只有长 PD 回复
      * 才有足够的距离（>= 28 个八位组）在 DMA 启动后计算它。 */
-    uint8_t* payload = ctx->shared.isr_tx_payload[slot];
+    uint8_t* payload = ctx->isr_tx_payload[slot];
     uint8_t acc = 0x52U;
     for (uint8_t i = 0U; i < len; i++) {
         acc = (uint8_t) (acc ^ payload[i]);
     }
     payload[len] = dll_reply_cks(acc, flags);
     const uint8_t frame_len = (uint8_t) (len + 1U);
-    ctx->shared.isr_tx_active = 0U;
-    if (ctx->shared.phy->tx_frame != NULL) {
-        if (ctx->shared.phy->tx_frame(ctx->shared.phy->self, payload, frame_len) != 0) {
+    ctx->isr_tx_active = 0U;
+    if (ctx->phy->tx_frame != NULL) {
+        if (ctx->phy->tx_frame(ctx->phy->self, payload, frame_len) != 0) {
             IOLINK_STAT_ISR(ctx, isr_tx_dropped)++; /* PHY 忙：回复丢失 */
         }
     }
 #else
-    ctx->shared.isr->isr_tx_base = ctx->shared.isr_tx_payload[slot];
-    ctx->shared.isr->tx_stream_len = len;
-    ctx->shared.isr->isr_tx_flags = flags;
-    ctx->shared.isr_tx_idx = 0U;
-    ctx->shared.isr->isr_tx_acc = 0x52U;
-    ctx->shared.isr->tx_stream_has_cks = 1U;
-    ctx->shared.isr_tx_active = 1U;
+    ctx->isr->isr_tx_base = ctx->isr_tx_payload[slot];
+    ctx->isr->tx_stream_len = len;
+    ctx->isr->isr_tx_flags = flags;
+    ctx->isr_tx_idx = 0U;
+    ctx->isr->isr_tx_acc = 0x52U;
+    ctx->isr->tx_stream_has_cks = 1U;
+    ctx->isr_tx_active = 1U;
     dll_isr_tx_step(ctx);
 #endif
 }
 
-/** @brief 帧已由 ISR 处理：刷新活动时间戳。 */
-static void dll_isr_touch_activity(iolink_dll_main_t* ctx)
+/** @brief 帧已由 ISR 处理：刷新活动时间戳（单次时钟采样）。 */
+static void dll_isr_touch_activity(iolink_dll_shared_t* ctx)
 {
-    ctx->shared.last_activity_ms = dll_time_ms(ctx);
-    ctx->shared.last_byte_us = (uint32_t) dll_time_us(ctx);
+    /* 毫秒与微秒视图必须来自同一个瞬间：两次采样会让主泵的
+     * 经过时间减法看到比 now_ms 更新的字节时间戳。 */
+    const uint64_t now_us = dll_time_us(ctx);
+    ctx->last_activity_ms = (uint32_t) (now_us / 1000U);
+    ctx->last_byte_us = (uint32_t) now_us;
 }
 
 /** @brief 对 ISDU 写请求返回 true（其 OD 由引擎消费）。 */
@@ -379,7 +386,7 @@ bool dll_isr_is_isdu_write(const uint8_t* frame)
  * 主泵（iolink_isdu_process）。与 ST 的 StackBaseOdWrite /
  * StackISDUProcess 拆分一致。有效写段总是被消费（返回 true），
  * 因此写计划总是回 ACK；重发段覆盖同一位置，不消耗新缓冲。 */
-bool dll_isr_consume_isdu_write(iolink_dll_main_t* ctx, const uint8_t* frame, uint8_t len)
+bool dll_isr_consume_isdu_write(iolink_dll_shared_t* ctx, const uint8_t* frame, uint8_t len)
 {
     if ((frame == NULL) || (len < 2U)) {
         return false;
@@ -397,8 +404,8 @@ bool dll_isr_consume_isdu_write(iolink_dll_main_t* ctx, const uint8_t* frame, ui
         od_n = 1U;
     }
     else {
-        od_off = (uint8_t) (2U + ctx->shared.pd_out_len_current);
-        od_n = ctx->shared.od_width;
+        od_off = (uint8_t) (2U + ctx->pd_out_len_current);
+        od_n = ctx->od_width;
     }
     if (((uint16_t) od_off + (uint16_t) od_n) > (uint16_t) len) {
         return false;
@@ -413,26 +420,26 @@ bool dll_isr_consume_isdu_write(iolink_dll_main_t* ctx, const uint8_t* frame, ui
 
     /* 选槽、覆盖计数与发布都在引擎内（iolink_isdu_od_write）：只有它
      * 知道两个请求槽里哪一条已被主泵接管。 */
-    iolink_isdu_od_write(&ctx->shared.isdu, flowctrl, &frame[od_off], od_n);
+    iolink_isdu_od_write(&ctx->isdu, flowctrl, &frame[od_off], od_n);
     if (write_phase) {
         /* 失效协议：先发布写入口相位（START/ABORT），再用序号发布这次写；
          * 主泵读到新序号时必然已经看到新相位。在它应用（或中止）该写并
          * 发布新读视图之前，读路径因 gen != applied 一律回 0x00。序号只有
          * 本上下文自增，普通自增即可。 */
         IOLINK_FENCE();
-        ctx->shared.isr_isdu_write_gen++;
+        ctx->isr_isdu_write_gen++;
     }
     return true;
 }
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
 /** @brief TX FRAME：就地组装应答并交给 PHY。 */
-static bool dll_isr_start_reply_frame(iolink_dll_main_t* ctx, uint8_t* base, uint16_t out_len,
+static bool dll_isr_start_reply_frame(iolink_dll_shared_t* ctx, uint8_t* base, uint16_t out_len,
                                       uint8_t flags)
 {
-    ctx->shared.isr_tx_active = 0U;
-    if (ctx->shared.phy->response_timer_stop != NULL) {
-        ctx->shared.phy->response_timer_stop(ctx->shared.phy->self);
+    ctx->isr_tx_active = 0U;
+    if (ctx->phy->response_timer_stop != NULL) {
+        ctx->phy->response_timer_stop(ctx->phy->self);
     }
     /* 对于 1-2 个八位组的应答，DMA 几乎立即读取 CKS（TDR
      * 在帧开始时就清空）。只有当 CKS 之前至少有两个八位组时（out_len >= 3），
@@ -443,8 +450,8 @@ static bool dll_isr_start_reply_frame(iolink_dll_main_t* ctx, uint8_t* base, uin
      * 负责该帧。 */
     if (out_len >= 3U) {
         int tx_rc = -1;
-        if (ctx->shared.phy->tx_frame != NULL) {
-            tx_rc = ctx->shared.phy->tx_frame(ctx->shared.phy->self, base, out_len);
+        if (ctx->phy->tx_frame != NULL) {
+            tx_rc = ctx->phy->tx_frame(ctx->phy->self, base, out_len);
         }
         if (tx_rc != 0) {
             return false;
@@ -462,8 +469,8 @@ static bool dll_isr_start_reply_frame(iolink_dll_main_t* ctx, uint8_t* base, uin
             acc = (uint8_t) (acc ^ base[i]);
         }
         base[out_len - 1U] = dll_reply_cks(acc, flags);
-        if ((ctx->shared.phy->tx_frame == NULL) ||
-            (ctx->shared.phy->tx_frame(ctx->shared.phy->self, base, out_len) != 0)) {
+        if ((ctx->phy->tx_frame == NULL) ||
+            (ctx->phy->tx_frame(ctx->phy->self, base, out_len) != 0)) {
             return false;
         }
     }
@@ -471,18 +478,18 @@ static bool dll_isr_start_reply_frame(iolink_dll_main_t* ctx, uint8_t* base, uin
 }
 #else
 /** @brief TX BYTE：暂存应答；CKS 在发送过程中计算。 */
-static bool dll_isr_start_reply_byte(iolink_dll_main_t* ctx, uint8_t* base, uint16_t out_len,
+static bool dll_isr_start_reply_byte(iolink_dll_shared_t* ctx, uint8_t* base, uint16_t out_len,
                                      uint8_t flags)
 {
-    ctx->shared.isr->isr_tx_base = base;
-    ctx->shared.isr->tx_stream_len = (uint8_t) (out_len - 1U);
-    ctx->shared.isr->isr_tx_flags = flags;
-    ctx->shared.isr_tx_idx = 0U;
-    ctx->shared.isr->isr_tx_acc = 0x52U;
-    ctx->shared.isr->tx_stream_has_cks = 1U;
-    ctx->shared.isr_tx_active = 1U;
-    if (ctx->shared.phy->response_timer_stop != NULL) {
-        ctx->shared.phy->response_timer_stop(ctx->shared.phy->self);
+    ctx->isr->isr_tx_base = base;
+    ctx->isr->tx_stream_len = (uint8_t) (out_len - 1U);
+    ctx->isr->isr_tx_flags = flags;
+    ctx->isr_tx_idx = 0U;
+    ctx->isr->isr_tx_acc = 0x52U;
+    ctx->isr->tx_stream_has_cks = 1U;
+    ctx->isr_tx_active = 1U;
+    if (ctx->phy->response_timer_stop != NULL) {
+        ctx->phy->response_timer_stop(ctx->phy->self);
     }
     dll_isr_tx_step(ctx);
     return true;
@@ -528,7 +535,7 @@ static int dll_plan_slot_of(iolink_dll_state_t state)
  * 静止），因此查表不需要序号校验：只需扫描当前状态切片并拷贝命中项。
  * 切片内没有匹配项时返回 false，本帧按"计划未命中"处理（丢弃）。
  */
-bool dll_isr_plan_lookup(const iolink_dll_main_t* ctx, const uint8_t* frame, uint8_t len,
+bool dll_isr_plan_lookup(const iolink_dll_shared_t* ctx, const uint8_t* frame, uint8_t len,
                          iolink_reply_plan_t* out)
 {
     if ((ctx == NULL) || (frame == NULL) || (out == NULL) || (len < IOLINK_M_SEQ_HEADER_LEN)) {
@@ -538,20 +545,20 @@ bool dll_isr_plan_lookup(const iolink_dll_main_t* ctx, const uint8_t* frame, uin
     const uint8_t ckt = frame[1];
     const uint8_t addr = (uint8_t) (mc & IOLINK_MC_ADDR_MASK);
 
-    const int slot = dll_plan_slot_of(ctx->shared.state);
+    const int slot = dll_plan_slot_of(ctx->state);
     if (slot < 0) {
         return false; /* FALLBACK / 未定义状态：没有可提前应答的计划 */
     }
     {
-        const uint8_t off = ctx->shared.reply_plan_off[slot];
+        const uint8_t off = ctx->reply_plan_off[slot];
         const uint8_t room =
             (off <= IOLINK_REPLY_PLAN_SLOTS) ? (uint8_t) (IOLINK_REPLY_PLAN_SLOTS - off) : 0U;
-        uint8_t count = ctx->shared.reply_plan_cnt[slot];
+        uint8_t count = ctx->reply_plan_cnt[slot];
         if (count > room) {
             count = room;
         }
         for (uint8_t i = 0U; i < count; i++) {
-            const iolink_reply_plan_t* plan = &ctx->shared.reply_plan[off + i];
+            const iolink_reply_plan_t* plan = &ctx->reply_plan[off + i];
             if (((mc & plan->match_mask) != plan->match_value) || (addr > plan->addr_max) ||
                 ((plan->req_len != 0U) && (plan->req_len != len)) ||
                 ((plan->ckt_mask != 0U) && ((ckt & plan->ckt_mask) != plan->ckt_value))) {
@@ -570,7 +577,7 @@ bool dll_isr_plan_lookup(const iolink_dll_main_t* ctx, const uint8_t* frame, uin
  * 所有来源都是只读查找或已暂存的段：这里不做任何"这个通道意味着
  * 什么"的判断。@ref IOLINK_REPLY_SRC_PD_IN 只能通过 PD 尾部标志使用。
  */
-static bool dll_isr_plan_source(iolink_dll_main_t* ctx, const iolink_reply_plan_t* plan,
+static bool dll_isr_plan_source(iolink_dll_shared_t* ctx, const iolink_reply_plan_t* plan,
                                 uint8_t addr, uint8_t* out)
 {
     switch (plan->source) {
@@ -592,11 +599,11 @@ static bool dll_isr_plan_source(iolink_dll_main_t* ctx, const iolink_reply_plan_
             }
             /* 单次 seqlock 窗口复制整段：页读载荷整帧同代，且避免逐字节
              * 访问器的函数调用与序号双读（M0+ 上尤其明显）。 */
-            (void) iolink_isdu_dp_page1_read_range(&ctx->shared.isdu, addr, out, plan->len);
+            (void) iolink_isdu_dp_page1_read_range(&ctx->isdu, addr, out, plan->len);
             return true;
         case IOLINK_REPLY_SRC_EVENT_MEM:
             for (uint8_t i = 0U; i < plan->len; i++) {
-                out[i] = DLL_EVENTS_MEMORY_READ(&ctx->shared.events, (uint8_t) (addr + i));
+                out[i] = DLL_EVENTS_MEMORY_READ(&ctx->events, (uint8_t) (addr + i));
             }
             return true;
         case IOLINK_REPLY_SRC_ISDU_SEG:
@@ -608,29 +615,29 @@ static bool dll_isr_plan_source(iolink_dll_main_t* ctx, const iolink_reply_plan_
 }
 
 /** @brief 执行计划要求的应答前状态动作。 */
-static bool dll_isr_plan_action(iolink_dll_main_t* ctx, const iolink_reply_plan_t* plan,
+static bool dll_isr_plan_action(iolink_dll_shared_t* ctx, const iolink_reply_plan_t* plan,
                                 uint8_t cmd)
 {
     switch (plan->action) {
         case IOLINK_REPLY_ACT_NONE:
             return true;
         case IOLINK_REPLY_ACT_ENTER_PREOPERATE:
-            dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
-            ctx->shared.isr_dsio_clear = 1U;
+            dll_set_state_shared(ctx, IOLINK_DLL_STATE_PREOPERATE);
+            ctx->isr_dsio_clear = 1U;
             return true;
         case IOLINK_REPLY_ACT_ENTER_ESTAB_COM:
-            dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
-            ctx->shared.fallback_count = 0U;
+            dll_set_state_shared(ctx, IOLINK_DLL_STATE_ESTAB_COM);
+            ctx->fallback_count = 0U;
             return true;
         case IOLINK_REPLY_ACT_RESET_STARTUP:
-            dll_set_state(ctx, IOLINK_DLL_STATE_STARTUP);
+            dll_set_state_shared(ctx, IOLINK_DLL_STATE_STARTUP);
             return true;
         case IOLINK_REPLY_ACT_MASTER_COMMAND:
             if (cmd == IOLINK_CMD_FALLBACK) {
                 /* T_FBD 的 64 位截止时间归主泵所有：只递请求。 */
-                if (dll_phy_has_wakeup(&ctx->shared)) {
-                    ctx->shared.isr_fallback_pending = 1U;
-                    dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
+                if (dll_phy_has_wakeup(ctx)) {
+                    ctx->isr_fallback_pending = 1U;
+                    dll_set_state_shared(ctx, IOLINK_DLL_STATE_FALLBACK);
                 }
                 return true;
             }
@@ -642,10 +649,9 @@ static bool dll_isr_plan_action(iolink_dll_main_t* ctx, const iolink_reply_plan_
 
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
 /** @brief TX FRAME：报告线路状态的 PHY 表示上一应答可能仍在总线上。 */
-static bool dll_isr_phy_busy(const iolink_dll_main_t* ctx)
+static bool dll_isr_phy_busy(const iolink_dll_shared_t* ctx)
 {
-    return (ctx->shared.phy->tx_busy != NULL) &&
-           (ctx->shared.phy->tx_busy(ctx->shared.phy->self) != 0U);
+    return (ctx->phy->tx_busy != NULL) && (ctx->phy->tx_busy(ctx->phy->self) != 0U);
 }
 
 /** @brief 回收上一应答的 PD-in 租约（TX FRAME）。
@@ -655,15 +661,15 @@ static bool dll_isr_phy_busy(const iolink_dll_main_t* ctx)
  * 没有 tx_busy() 的 PHY 无法观测传输结束，租约保持到下一次捕获，
  * 由 `IOLINK_PD_IN_BUFFERS` 的第三个缓冲区吸收主泵的更新。
  */
-static void dll_isr_release_pd_lease(iolink_dll_main_t* ctx)
+static void dll_isr_release_pd_lease(iolink_dll_shared_t* ctx)
 {
-    if ((ctx->shared.pd_in_captured != 0xFFU) && (ctx->shared.phy->tx_busy != NULL) &&
-        (ctx->shared.phy->tx_busy(ctx->shared.phy->self) == 0U)) {
-        ctx->shared.pd_in_captured = 0xFFU;
+    if ((ctx->pd_in_captured != 0xFFU) && (ctx->phy->tx_busy != NULL) &&
+        (ctx->phy->tx_busy(ctx->phy->self) == 0U)) {
+        ctx->pd_in_captured = 0xFFU;
     }
 }
 #else
-static bool dll_isr_phy_busy(const iolink_dll_main_t* ctx)
+static bool dll_isr_phy_busy(const iolink_dll_shared_t* ctx)
 {
     (void) ctx;
     return false;
@@ -680,10 +686,10 @@ static bool dll_isr_phy_busy(const iolink_dll_main_t* ctx)
  * @param staged 本帧的 ISDU 写是否已成功暂存（STAGED 计划的先决条件）
  * @return true 表示 ISR 已应答（或按计划有意不应答但消费了该帧）
  */
-bool dll_isr_plan_execute(iolink_dll_main_t* ctx, const iolink_reply_plan_t* plan,
+bool dll_isr_plan_execute(iolink_dll_shared_t* ctx, const iolink_reply_plan_t* plan,
                           const uint8_t* frame, uint8_t len, bool staged)
 {
-    if (!dll_phy_has_tx(&ctx->shared)) {
+    if (!dll_phy_has_tx(ctx)) {
         return false; /* 只收不发的 PHY：交给主泵（其路径同样不发送） */
     }
     if (((plan->flags & IOLINK_REPLY_FLAG_STAGED) != 0U) && !staged) {
@@ -697,40 +703,39 @@ bool dll_isr_plan_execute(iolink_dll_main_t* ctx, const iolink_reply_plan_t* pla
 
     if ((plan->flags & IOLINK_REPLY_FLAG_CLOSE_WINDOW) != 0U) {
         /* 按规范有意不应答（转换命令、复位请求）：关闭 t_A 窗口。 */
-        if (ctx->shared.phy->response_timer_stop != NULL) {
-            ctx->shared.phy->response_timer_stop(ctx->shared.phy->self);
+        if (ctx->phy->response_timer_stop != NULL) {
+            ctx->phy->response_timer_stop(ctx->phy->self);
         }
         if (((plan->flags & IOLINK_REPLY_FLAG_RESTART_TIMER_B) != 0U) &&
-            (ctx->shared.phy->stack_timer_start != NULL)) {
-            ctx->shared.phy->stack_timer_start(ctx->shared.phy->self);
+            (ctx->phy->stack_timer_start != NULL)) {
+            ctx->phy->stack_timer_start(ctx->phy->self);
         }
         dll_isr_touch_activity(ctx);
         return true;
     }
 
-    const IOLINK_ATOMIC_UINT_T pd = dll_pd_pub_load(&ctx->shared);
+    const IOLINK_ATOMIC_UINT_T pd = dll_pd_pub_load(ctx);
     const uint8_t flags = dll_isr_status_flags(ctx, pd);
 
     if ((plan->flags & IOLINK_REPLY_FLAG_PD_TAIL) != 0U) {
         /* 长应答零拷贝：OD 头写入活动 PD-in 槽位，PD 尾部紧随其后。
          * 只有长应答在 DMA 启动后仍有足够距离计算 CKS，因此也只有在
          * 这里才需要 tx_busy 门控（短应答由 PHY 自行串行化）。 */
-        if (dll_isr_phy_busy(ctx) || (plan->len > ctx->shared.od_width)) {
+        if (dll_isr_phy_busy(ctx) || (plan->len > ctx->od_width)) {
             return false;
         }
         /* 与状态位同一个发布字：捕获的缓冲区就是这一代的 active 槽。 */
         const uint8_t captured = IOLINK_PD_PUB_ACTIVE(pd);
-        uint8_t* buf = ctx->shared.pd_in[captured];
+        uint8_t* buf = ctx->pd_in[captured];
         if (!dll_isr_plan_source(ctx, plan, addr, buf)) {
             return false;
         }
-        uint8_t* base = buf + (uint8_t) (ctx->shared.od_width - plan->len);
-        const uint16_t total =
-            (uint16_t) ((uint16_t) plan->len + (uint16_t) ctx->shared.pd_in_len + 1U);
+        uint8_t* base = buf + (uint8_t) (ctx->od_width - plan->len);
+        const uint16_t total = (uint16_t) ((uint16_t) plan->len + (uint16_t) ctx->pd_in_len + 1U);
         if (total > (uint16_t) IOLINK_PD_REPLY_MAX) {
             return false;
         }
-        ctx->shared.pd_in_captured = captured;
+        ctx->pd_in_captured = captured;
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
         return dll_isr_start_reply_frame(ctx, base, total, flags);
 #else
@@ -738,7 +743,7 @@ bool dll_isr_plan_execute(iolink_dll_main_t* ctx, const iolink_reply_plan_t* pla
 #endif
     }
 
-    uint8_t* payload = ctx->shared.isr_tx_payload[IOLINK_TX_ISR_SLOT];
+    uint8_t* payload = ctx->isr_tx_payload[IOLINK_TX_ISR_SLOT];
     if (!dll_isr_plan_source(ctx, plan, addr, payload)) {
         return false;
     }
@@ -752,30 +757,30 @@ bool dll_isr_plan_execute(iolink_dll_main_t* ctx, const iolink_reply_plan_t* pla
  * @return true 表示本次处理已经结束（发送已启动或已丢弃）；false 表示因
  *         在途帧仍在发送而丢弃，调用方应继续正常的服务流程。
  */
-static bool dll_isr_tx_pending(iolink_dll_main_t* ctx)
+static bool dll_isr_tx_pending(iolink_dll_shared_t* ctx)
 {
     /* 取走暂存必须与主泵的发布互斥：三字段分读时，主泵的新一轮暂存会让
      * 这里拿到撕裂的 {slot, len, has_cks}，或把新发布连同 pending 一起吞掉。
      * 在途帧仍在流式发送时丢弃本次暂存：接受它会从中间替换掉主站正在等的
      * 那一帧（后半段与 CKS 永不发出）。 */
     IOLINK_CRITICAL_ENTER();
-    const bool busy = (ctx->shared.isr_tx_active != 0U);
+    const bool busy = (ctx->isr_tx_active != 0U);
     uint8_t slot = 0U;
     uint8_t len = 0U;
     uint8_t has_cks = 0U;
     if (!busy) {
-        slot = ctx->shared.isr_tx_pending_slot;
-        len = ctx->shared.stage_len;
-        has_cks = ctx->shared.stage_has_cks;
+        slot = ctx->isr_tx_pending_slot;
+        len = ctx->stage_len;
+        has_cks = ctx->stage_has_cks;
     }
-    ctx->shared.isr_tx_pending = 0U;
+    ctx->isr_tx_pending = 0U;
     IOLINK_CRITICAL_EXIT();
     if (busy) {
         IOLINK_STAT_ISR(ctx, isr_tx_dropped)++;
         return false;
     }
-    if (ctx->shared.phy->response_timer_stop != NULL) {
-        ctx->shared.phy->response_timer_stop(ctx->shared.phy->self);
+    if (ctx->phy->response_timer_stop != NULL) {
+        ctx->phy->response_timer_stop(ctx->phy->self);
     }
     dll_isr_start_staged_tx(ctx, slot, len, has_cks);
     return true;
@@ -789,21 +794,21 @@ static bool dll_isr_tx_pending(iolink_dll_main_t* ctx)
  * 会重新对上当前一代。每次进入泵都检查一次，回绕因此需要连续
  * 256 次发布之间没有任何数据中断。
  */
-static void dll_isr_retire_pd_cmd(iolink_dll_main_t* ctx)
+static void dll_isr_retire_pd_cmd(iolink_dll_shared_t* ctx)
 {
-    const IOLINK_ATOMIC_UINT_T cmd = iolink_atomic_load(&ctx->shared.pd_valid_cmd);
+    const IOLINK_ATOMIC_UINT_T cmd = iolink_atomic_load(&ctx->pd_valid_cmd);
     if (IOLINK_PD_CMD_VALID(cmd) == 0U) {
         return;
     }
-    if (IOLINK_PD_CMD_BASE_GEN(cmd) == IOLINK_PD_PUB_GEN(dll_pd_pub_load(&ctx->shared))) {
+    if (IOLINK_PD_CMD_BASE_GEN(cmd) == IOLINK_PD_PUB_GEN(dll_pd_pub_load(ctx))) {
         return;
     }
-    iolink_atomic_store(&ctx->shared.pd_valid_cmd, 0U);
+    iolink_atomic_store(&ctx->pd_valid_cmd, 0U);
 }
 
-static void dll_isr_process(iolink_dll_main_t* ctx)
+static void dll_isr_process(iolink_dll_shared_t* ctx)
 {
-    if ((ctx == NULL) || !dll_phy_has_rx(&ctx->shared) || (ctx->shared.phy->int_active == NULL)) {
+    if ((ctx == NULL) || !dll_phy_has_rx(ctx) || (ctx->phy->int_active == NULL)) {
         return;
     }
 
@@ -817,7 +822,7 @@ static void dll_isr_process(iolink_dll_main_t* ctx)
 
     /* 在 int_active 门控之前检查：软件请求的服务没有
      * 自身的收发器 RX/TX 活动可报告。 */
-    if (ctx->shared.isr_tx_pending != 0U) {
+    if (ctx->isr_tx_pending != 0U) {
         if (dll_isr_tx_pending(ctx)) {
             return;
         }
@@ -827,80 +832,86 @@ static void dll_isr_process(iolink_dll_main_t* ctx)
 
     /* 电平复查：数据中断可能锁存串扰边沿；在零
      * 成本下退出，除非收发器确实在请求服务。 */
-    if (ctx->shared.phy->int_active(ctx->shared.phy->self) == 0U) {
+    if (ctx->phy->int_active(ctx->phy->self) == 0U) {
         return;
     }
 
     dll_isr_drain(ctx);
 }
 
-void iolink_dll_process_isr(iolink_dll_main_t* ctx)
+void iolink_dll_process_isr(iolink_dll_shared_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->shared.isr == NULL) ||
-        (iolink_atomic_load(&ctx->shared.reply_plans_ready) == 0U)) {
+    if ((ctx == NULL) || (ctx->isr == NULL) ||
+        (iolink_atomic_load(&ctx->reply_plans_ready) == 0U)) {
         /* 尚未 iolink_dll_init()，或应答计划表尚未完整发布（初始化窗口内）：
          * 传输泵不参与，绝不读取半更新的计划。 */
         return;
     }
-    if (ctx->shared.in_isr != 0U) {
+    if (ctx->in_isr != 0U) {
         /* 更高优先级的中断在一个较低优先级中断
          * 已在运行泵时调用了该泵（在没有 BASEPRI 的板子上
          * 该泵绑定到多个向量）。泵状态只有一个写入者，
          * 因此嵌套会破坏回复暂存和邮箱：推迟处理，
          * 让外层调用在返回前再运行一次。 */
-        ctx->shared.isr->isr_reentry_pending = 1U;
+        ctx->isr->isr_reentry_pending = 1U;
         return;
     }
-    ctx->shared.in_isr = 1U;
+    ctx->in_isr = 1U;
     do {
-        ctx->shared.isr->isr_reentry_pending = 0U;
+        ctx->isr->isr_reentry_pending = 0U;
         dll_isr_process(ctx);
-    } while (ctx->shared.isr->isr_reentry_pending != 0U);
-    ctx->shared.in_isr = 0U;
+    } while (ctx->isr->isr_reentry_pending != 0U);
+    ctx->in_isr = 0U;
 }
 
-void iolink_dll_on_rx_timeout(iolink_dll_main_t* ctx)
+void iolink_dll_on_rx_timeout(iolink_dll_shared_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->shared.isr == NULL)) {
+    if ((ctx == NULL) || (ctx->isr == NULL)) {
         return;
     }
-    ctx->shared.isr_master_activity = 1U;
-    IOLINK_LOG_ISR_DEBUG(&ctx->shared.log, "rx timeout (t_A)");
+    ctx->isr_master_activity = 1U;
+    IOLINK_LOG_ISR_DEBUG(&ctx->log, "rx timeout (t_A)");
     IOLINK_STAT_ISR(ctx, timeout_errors)++;
-    DLL_DIAG_PULSE_ISR(&ctx->shared.events, IOLINK_DIAG_SRC_COMM_TIMEOUT);
+    DLL_DIAG_PULSE_ISR(&ctx->events, IOLINK_DIAG_SRC_COMM_TIMEOUT);
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
     /* RX 组装状态只归数据 ISR，而本入口是 Timer A：两个字段必须作为
      * 一个相位复位，否则数据中断可能在其间重新播种半帧。短、无回调；
      * 向量优先级本身由端口保证（docs/PORTING.md）。 */
     IOLINK_CRITICAL_ENTER();
-    ctx->shared.isr->isr_rx_cnt = 0U;
-    ctx->shared.isr->isr_rx_expect = 0U;
+    ctx->isr->isr_rx_cnt = 0U;
+    ctx->isr->isr_rx_expect = 0U;
     IOLINK_CRITICAL_EXIT();
 #endif
-    if ((ctx->shared.phy != NULL) && (ctx->shared.phy->response_timer_stop != NULL)) {
-        ctx->shared.phy->response_timer_stop(ctx->shared.phy->self);
+    if ((ctx->phy != NULL) && (ctx->phy->response_timer_stop != NULL)) {
+        ctx->phy->response_timer_stop(ctx->phy->self);
     }
 }
 
-void iolink_dll_on_stack_tick(iolink_dll_main_t* ctx)
+void iolink_dll_on_stack_tick(iolink_dll_shared_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->shared.isr == NULL)) {
+    if ((ctx == NULL) || (ctx->isr == NULL)) {
         return;
     }
-    ctx->shared.isr->stack_tick_pending = 1U;
+    ctx->isr->stack_tick_pending = 1U;
 }
 
-uint8_t iolink_dll_take_service_window(iolink_dll_main_t* ctx)
+/**
+ * @brief 消费 Timer B 的授权（主上下文调用）。
+ *
+ * 公共入口 iolink_dll_take_service_window() 位于 src/dll.c：它只把
+ * `&ctx->shared` 传进来，因此本文件不必看到主上下文类型。
+ */
+uint8_t dll_service_window_take(iolink_dll_shared_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->shared.isr == NULL) || (ctx->shared.phy == NULL)) {
+    if ((ctx == NULL) || (ctx->isr == NULL) || (ctx->phy == NULL)) {
         return 0U;
     }
-    if (ctx->shared.phy->stack_timer_start == NULL) {
+    if (ctx->phy->stack_timer_start == NULL) {
         return 1U; /* 无硬件窗口：传统自由运行主循环 */
     }
-    if (ctx->shared.isr->stack_tick_pending == 0U) {
+    if (ctx->isr->stack_tick_pending == 0U) {
         return 0U;
     }
-    ctx->shared.isr->stack_tick_pending = 0U;
+    ctx->isr->stack_tick_pending = 0U;
     return 1U;
 }

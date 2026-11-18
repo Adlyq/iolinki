@@ -425,7 +425,7 @@ static uint16_t dll_decode_cycle_time_ticks(uint8_t value)
  */
 uint32_t dll_master_cycle_us(const iolink_dll_main_t* ctx)
 {
-    uint16_t ticks = dll_decode_cycle_time_ticks(ctx->master_cycle_time);
+    uint16_t ticks = dll_decode_cycle_time_ticks(ctx->shared.master_cycle_time);
     if (ticks == 0U) {
         ticks = (uint16_t) ((ctx->min_cycle_time_us + (IOLINK_CYCLE_TIME_UNIT_US - 1U)) /
                             IOLINK_CYCLE_TIME_UNIT_US);
@@ -442,7 +442,7 @@ uint32_t dll_master_cycle_us(const iolink_dll_main_t* ctx)
  * 见 @ref dll_count_served_cycle 与 `shared.isr_cycle_served`）。 */
 void dll_mark_master_activity_ts(iolink_dll_main_t* ctx)
 {
-    ctx->master_last_activity_ms = dll_time_ms(ctx);
+    ctx->master_last_activity_ms = dll_time_ms(&ctx->shared);
     ctx->master_lost_count = 0U;
     ctx->master_lost = false;
 }

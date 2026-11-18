@@ -59,19 +59,18 @@ uint8_t dll_mseq_type_bits(uint8_t m_seq_type)
  * 因此把它们当作非法类型会导致主站每次重发页面写入序列时
  * 链路都掉到 STARTUP。
  */
-bool dll_type_allowed(const iolink_dll_main_t* ctx, const uint8_t* frame)
+bool dll_type_allowed(const iolink_dll_shared_t* ctx, const uint8_t* frame)
 {
     const uint8_t rx_type = (uint8_t) (frame[1] & IOLINK_MSEQ_TYPE_MASK);
     const uint8_t ch = (uint8_t) (frame[0] & IOLINK_MC_COMM_CHANNEL_MASK);
     uint8_t exp_type = IOLINK_MSEQ_TYPE_0;
 
-    if ((ctx->shared.state == IOLINK_DLL_STATE_OPERATE) ||
-        ((ctx->shared.state == IOLINK_DLL_STATE_ESTAB_COM) &&
-         (frame[0] != IOLINK_MC_TRANSITION_COMMAND))) {
+    if ((ctx->state == IOLINK_DLL_STATE_OPERATE) || ((ctx->state == IOLINK_DLL_STATE_ESTAB_COM) &&
+                                                     (frame[0] != IOLINK_MC_TRANSITION_COMMAND))) {
         if ((ch == IOLINK_MC_CHANNEL_PAGE) && (rx_type == IOLINK_MSEQ_TYPE_0)) {
             return true;
         }
-        exp_type = dll_mseq_type_bits(ctx->shared.m_seq_type);
+        exp_type = dll_mseq_type_bits(ctx->m_seq_type);
     }
     return rx_type == exp_type;
 }
@@ -82,17 +81,16 @@ bool dll_type_allowed(const iolink_dll_main_t* ctx, const uint8_t* frame)
  * 在 STARTUP 和 PREOPERATE 中每条报文都是 Type 0（Table A.3，CKT 位 00）；
  * 在 OPERATE 中期望配置的 M-sequence 类型。
  */
-uint8_t dll_expected_type_bits(const iolink_dll_main_t* ctx)
+uint8_t dll_expected_type_bits(const iolink_dll_shared_t* ctx)
 {
-    if ((ctx->shared.state == IOLINK_DLL_STATE_OPERATE) ||
-        (ctx->shared.state == IOLINK_DLL_STATE_ESTAB_COM)) {
-        return dll_mseq_type_bits(ctx->shared.m_seq_type);
+    if ((ctx->state == IOLINK_DLL_STATE_OPERATE) || (ctx->state == IOLINK_DLL_STATE_ESTAB_COM)) {
+        return dll_mseq_type_bits(ctx->m_seq_type);
     }
     return IOLINK_MSEQ_TYPE_0;
 }
 
-/* 契约与参数含义见 dll_internal.h 的声明。 */
-uint8_t dll_req_len_for(const iolink_dll_main_t* ctx, uint8_t mc, uint8_t ckt)
+/* 契约与参数含义见 dll_shared_internal.h 的声明。 */
+uint8_t dll_req_len_for(const iolink_dll_shared_t* ctx, uint8_t mc, uint8_t ckt)
 {
     bool type0 = dll_ckt_is_type0(ckt);
     if (!type0) {
@@ -103,11 +101,11 @@ uint8_t dll_req_len_for(const iolink_dll_main_t* ctx, uint8_t mc, uint8_t ckt)
     if (type0) {
         return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + (dll_mc_is_type0_od_write(mc) ? 1U : 0U));
     }
-    if ((ctx->shared.state == IOLINK_DLL_STATE_ESTAB_COM) && (mc == IOLINK_MC_TRANSITION_COMMAND)) {
+    if ((ctx->state == IOLINK_DLL_STATE_ESTAB_COM) && (mc == IOLINK_MC_TRANSITION_COMMAND)) {
         return IOLINK_M_SEQ_HEADER_LEN;
     }
-    const uint8_t od_req = ((mc & IOLINK_MC_RW_MASK) == 0U) ? ctx->shared.od_width : 0U;
-    return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + ctx->shared.pd_out_len_current + od_req);
+    const uint8_t od_req = ((mc & IOLINK_MC_RW_MASK) == 0U) ? ctx->od_width : 0U;
+    return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + ctx->pd_out_len_current + od_req);
 }
 
 /**
@@ -194,7 +192,7 @@ void dll_send(iolink_dll_main_t* ctx, const uint8_t* data, size_t len)
         ctx->shared.isr_tx_active = 0U;
         ctx->shared.isr_tx_dropped++; /* 上一帧未发完即被收尾 */
     }
-    dll_isr_start_staged_tx(ctx, slot, (uint8_t) len, 0U);
+    dll_isr_start_staged_tx(&ctx->shared, slot, (uint8_t) len, 0U);
 #else
     /* ISR/SMP 档没有 request_service()：暂存应答无人发送。
      * iolink_device_init() 已拒绝这种 PHY；直接使用 DLL 的调用方
@@ -241,7 +239,7 @@ uint32_t dll_get_t_byte_limit_us(const iolink_dll_main_t* ctx)
 bool dll_t_pd_active(const iolink_dll_main_t* ctx)
 {
     return dll_timer_armed(ctx, IOLINK_TIMER_T_PD) &&
-           !dll_timer_due(ctx, IOLINK_TIMER_T_PD, dll_time_us(ctx));
+           !dll_timer_due(ctx, IOLINK_TIMER_T_PD, dll_time_us(&ctx->shared));
 }
 
 /** @brief 排空 PHY 中所有待处理的 RX 字节；若读到任何字节则返回 true。 */
@@ -269,7 +267,7 @@ bool dll_drain_rx(iolink_dll_main_t* ctx)
  * ST 6362 库只在 Fallback MasterCommand
  * （T8/T9）或 T_DSIO 唤醒超时（T10）时返回 SIO。成帧/CRC 错误
  * 本身从不会离开当前模式。 */
-static void dll_protocol_error_to_startup(iolink_dll_main_t* ctx)
+void dll_protocol_error_to_startup(iolink_dll_main_t* ctx)
 {
     if (ctx == NULL) {
         return;
@@ -315,7 +313,7 @@ void dll_handle_fallback_command(iolink_dll_main_t* ctx)
                         (unsigned long) t_fbd_ms);
         /* 绝对截止时间仍按毫秒基准换算，与原比较（now_ms >= deadline_ms）逐拍一致。 */
         dll_timer_arm(ctx, IOLINK_TIMER_T_FBD,
-                      (uint64_t) (dll_time_us(ctx) / 1000U + t_fbd_ms) * 1000U);
+                      (uint64_t) (dll_time_us(&ctx->shared) / 1000U + t_fbd_ms) * 1000U);
         dll_set_state(ctx, IOLINK_DLL_STATE_FALLBACK);
     }
 
@@ -323,70 +321,118 @@ void dll_handle_fallback_command(iolink_dll_main_t* ctx)
     resp[0] = 0x00U;
     resp[0] = iolink_checksum6(resp, 1U);
     dll_send(ctx, resp, 1);
-    ctx->last_response_us = dll_time_us(ctx);
+    ctx->last_response_us = dll_time_us(&ctx->shared);
+}
+
+/** @brief MasterCommand 的目标状态；返回 false 表示该命令不迁移状态。 */
+static bool dll_master_command_target(uint8_t cmd, iolink_dll_state_t current,
+                                      iolink_dll_state_t* out)
+{
+    switch (cmd) {
+        case IOLINK_CMD_DEVICE_PREOPERATE:
+            *out = IOLINK_DLL_STATE_PREOPERATE;
+            return true;
+        case IOLINK_CMD_PROCESS_DATA_OPERATE:
+            *out = IOLINK_DLL_STATE_OPERATE;
+            return true;
+        case IOLINK_CMD_DEVICE_OPERATE:
+            /* 来自 PREOPERATE 的 DeviceOperate 会建立通信
+               （ESTAB_COM）；随后的 PDOperate 0x98 进入 OPERATE。
+               在 OPERATE/ESTAB 中它只是幂等的确认。 */
+            *out = (current == IOLINK_DLL_STATE_PREOPERATE) ? IOLINK_DLL_STATE_ESTAB_COM
+                                                            : IOLINK_DLL_STATE_OPERATE;
+            return true;
+        default:
+            return false;
+    }
 }
 
 /**
- * @brief 将 MasterCommand 的 PD 有效位副作用落到对应的单写者字段。
+ * @brief 主上下文：将 MasterCommand 的 PD 有效位副作用落到发布字。
  *
- * 数据 ISR 执行 0x98/0x99 时是 `pd_valid_cmd` 的写者：命令字记录值与
- * 当时 `pd_pub` 的代号，主上下文下一次发布即让该覆盖失效。主上下文自己
- * 执行同一命令时本就是 `pd_pub` 的写者，直接发布新的一代（代号前进，
+ * 主上下文本就是 `pd_pub` 的写者：命令直接发布新的一代（代号前进，
  * 任何在途命令随之失效），语义与"只在本代有效"一致。
  */
 static void dll_pd_valid_command(iolink_dll_main_t* ctx, bool valid)
 {
     const IOLINK_ATOMIC_UINT_T pub = dll_pd_pub_load(&ctx->shared);
-    if (ctx->shared.in_isr != 0U) {
-        iolink_atomic_store(&ctx->shared.pd_valid_cmd,
-                            IOLINK_PD_CMD_WORD(valid, IOLINK_PD_PUB_GEN(pub)));
-        return;
-    }
     dll_pd_publish(&ctx->shared, IOLINK_PD_PUB_ACTIVE(pub), valid);
 }
 
 /**
- * @brief 以 ST 风格将 MasterCommand（Table B.2）应用到 DL 状态。
+ * @brief 数据 ISR：将 PD 有效位写进命令字（ISR 是该字段的唯一写者）。
  *
- * 对 FALLBACK（0x5A）返回 false，它需要 T_FBD 截止时间，并由
- * dll_handle_fallback_command() 处理。其余命令由调用方
- * 以仅含 CKS 的应答确认。
+ * 命令字记录值与当时 `pd_pub` 的代号，主上下文下一次发布即让该覆盖失效。
  */
-bool dll_apply_master_command(iolink_dll_main_t* ctx, uint8_t cmd)
+static void dll_pd_valid_command_isr(iolink_dll_shared_t* shared, bool valid)
 {
-    switch (cmd) {
-        case IOLINK_CMD_FALLBACK:
-            return false;
-        case IOLINK_CMD_DEVICE_STARTUP:
-            dll_protocol_error_to_startup(ctx);
-            return true;
-        case IOLINK_CMD_DEVICE_PREOPERATE:
-            ctx->fallback_clear_request = 1U;
-            dll_set_state(ctx, IOLINK_DLL_STATE_PREOPERATE);
-            return true;
-        case IOLINK_CMD_PROCESS_DATA_OPERATE:
-            ctx->fallback_clear_request = 1U;
-            dll_pd_valid_command(ctx, true);
-            dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
-            return true;
-        case IOLINK_CMD_DEVICE_OPERATE:
-            ctx->fallback_clear_request = 1U;
-            dll_pd_valid_command(ctx, false);
-            /* 来自 PREOPERATE 的 DeviceOperate 会建立通信
-               （ESTAB_COM）；随后的 PDOperate 0x98 进入 OPERATE。
-               在 OPERATE/ESTAB 中它只是幂等的确认。 */
-            if (ctx->shared.state == IOLINK_DLL_STATE_PREOPERATE) {
-                dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
-            }
-            else {
-                dll_set_state(ctx, IOLINK_DLL_STATE_OPERATE);
-            }
-            return true;
-        case IOLINK_CMD_MASTER_IDENT:
-        case IOLINK_CMD_DEVICE_IDENT:
-        default:
-            return true;
+    const IOLINK_ATOMIC_UINT_T pub = dll_pd_pub_load(shared);
+    iolink_atomic_store(&shared->pd_valid_cmd, IOLINK_PD_CMD_WORD(valid, IOLINK_PD_PUB_GEN(pub)));
+}
+
+/**
+ * @brief 数据 ISR 侧应用 MasterCommand（只写共享区）。
+ *
+ * 对 FALLBACK（0x5A）返回 false，它需要 T_FBD 截止时间，由主上下文的
+ * dll_handle_fallback_command() 处理。
+ */
+bool dll_apply_master_command(iolink_dll_shared_t* ctx, uint8_t cmd)
+{
+    if (cmd == IOLINK_CMD_FALLBACK) {
+        return false;
     }
+    if (cmd == IOLINK_CMD_DEVICE_STARTUP) {
+        /* 协议错误记账（invalid_frames/frame_index）与 STARTUP 迁移都是
+         * 主上下文字段：只登记一次性请求，本帧应答仍按计划发出。 */
+        ctx->isr_device_startup_requested = 1U;
+        return true;
+    }
+    iolink_dll_state_t target = ctx->state;
+    if (!dll_master_command_target(cmd, ctx->state, &target)) {
+        return true;
+    }
+    ctx->fallback_clear_request = 1U;
+    if (cmd == IOLINK_CMD_PROCESS_DATA_OPERATE) {
+        dll_pd_valid_command_isr(ctx, true);
+    }
+    else if (cmd == IOLINK_CMD_DEVICE_OPERATE) {
+        dll_pd_valid_command_isr(ctx, false);
+    }
+    if (target != ctx->state) {
+        dll_set_state_shared(ctx, target);
+    }
+    return true;
+}
+
+/**
+ * @brief 主上下文侧应用 MasterCommand（与 ISR 侧共享同一份目标状态推导）。
+ *
+ * 状态迁移通过 dll_set_state() 完成，保留主站丢失簿记与逐状态回调。
+ */
+bool dll_apply_master_command_main(iolink_dll_main_t* ctx, uint8_t cmd)
+{
+    if (cmd == IOLINK_CMD_FALLBACK) {
+        return false;
+    }
+    if (cmd == IOLINK_CMD_DEVICE_STARTUP) {
+        dll_protocol_error_to_startup(ctx);
+        return true;
+    }
+    iolink_dll_state_t target = ctx->shared.state;
+    if (!dll_master_command_target(cmd, ctx->shared.state, &target)) {
+        return true;
+    }
+    ctx->shared.fallback_clear_request = 1U;
+    if (cmd == IOLINK_CMD_PROCESS_DATA_OPERATE) {
+        dll_pd_valid_command(ctx, true);
+    }
+    else if (cmd == IOLINK_CMD_DEVICE_OPERATE) {
+        dll_pd_valid_command(ctx, false);
+    }
+    if (target != ctx->shared.state) {
+        dll_set_state(ctx, target);
+    }
+    return true;
 }
 
 /** @brief 主上下文中的 MasterCommand 页面写入：应用状态并发送 CKS。 */
@@ -394,17 +440,17 @@ bool dll_apply_master_command(iolink_dll_main_t* ctx, uint8_t cmd)
  * 没有输入 PD 的设备不可能有无效输入 PD，因此始终上报
  * 有效；否则上报 @p pub 这一代的 PD 有效位（含 ISR 命令字的覆盖）。
  * 数据 ISR 用它与自己捕获的发布字共用一次加载。 */
-uint8_t dll_pd_status_flags_at(const iolink_dll_main_t* ctx, IOLINK_ATOMIC_UINT_T pub)
+uint8_t dll_pd_status_flags_at(const iolink_dll_shared_t* ctx, IOLINK_ATOMIC_UINT_T pub)
 {
-    if ((ctx->shared.pd_in_len == 0U) && (ctx->shared.pd_out_len_current > 0U)) {
+    if ((ctx->pd_in_len == 0U) && (ctx->pd_out_len_current > 0U)) {
         return 0U;
     }
-    return dll_pd_valid_at(&ctx->shared, pub) ? 0U : 0x40U;
+    return dll_pd_valid_at(ctx, pub) ? 0U : 0x40U;
 }
 
 uint8_t dll_pd_status_flags(const iolink_dll_main_t* ctx)
 {
-    return dll_pd_status_flags_at(ctx, dll_pd_pub_load(&ctx->shared));
+    return dll_pd_status_flags_at(&ctx->shared, dll_pd_pub_load(&ctx->shared));
 }
 
 void dll_handle_master_command(iolink_dll_main_t* ctx, uint8_t cmd)
@@ -414,7 +460,7 @@ void dll_handle_master_command(iolink_dll_main_t* ctx, uint8_t cmd)
         return;
     }
 
-    (void) dll_apply_master_command(ctx, cmd);
+    (void) dll_apply_master_command_main(ctx, cmd);
 
     uint8_t resp[1];
     resp[0] = 0x00U;
@@ -424,7 +470,7 @@ void dll_handle_master_command(iolink_dll_main_t* ctx, uint8_t cmd)
     resp[0] |= dll_pd_status_flags(ctx);
     resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));
     dll_send(ctx, resp, 1);
-    ctx->last_response_us = dll_time_us(ctx);
+    ctx->last_response_us = dll_time_us(&ctx->shared);
 }
 
 /** @brief 处理 PREOPERATE 主站命令：在转换命令上推进到 ESTAB_COM。 */
@@ -448,7 +494,7 @@ void dll_handle_preoperate(iolink_dll_main_t* ctx, uint8_t mc, uint8_t ck)
  */
 void dll_handle_page_channel_read(iolink_dll_main_t* ctx, uint8_t mc)
 {
-    if (!dll_dp_page1_available(ctx)) {
+    if (!dll_dp_page1_available(&ctx->shared)) {
         /* 没有设备身份就没有 DPP1：保持沉默，不发全零页。 */
         return;
     }
@@ -458,7 +504,7 @@ void dll_handle_page_channel_read(iolink_dll_main_t* ctx, uint8_t mc)
     resp[1] = 0x00U;
     resp[1] = iolink_checksum6(resp, 2U);
     dll_send(ctx, resp, 2);
-    ctx->last_response_us = dll_time_us(ctx);
+    ctx->last_response_us = dll_time_us(&ctx->shared);
 }
 
 /**
@@ -483,11 +529,11 @@ static bool dll_dispatch_od(iolink_dll_main_t* ctx, uint8_t mc, const uint8_t* o
            OD 字节携带相同命令，因此在此应用该写入。 */
         if (((mc & IOLINK_MC_RW_MASK) == 0U) && (od_len > 0U) &&
             ((mc & IOLINK_MC_ADDR_MASK) == 0x00U)) {
-            (void) dll_apply_master_command(ctx, od_in[0]);
+            (void) dll_apply_master_command_main(ctx, od_in[0]);
         }
         if (((mc & IOLINK_MC_RW_MASK) == 0U) && (od_len > 0U) &&
             ((mc & IOLINK_MC_ADDR_MASK) == 0x01U)) {
-            ctx->master_cycle_time = od_in[0];
+            ctx->shared.master_cycle_time = od_in[0];
             /* DPP1 0x01 是页读应答的输入：ISR 的页读缓存必须失效。 */
             iolink_isdu_dp_page1_invalidate(&ctx->shared.isdu);
         }
@@ -500,7 +546,7 @@ static bool dll_dispatch_od(iolink_dll_main_t* ctx, uint8_t mc, const uint8_t* o
             /* 周期帧的 OD 槽位必须填满。没有可用的设备身份时不构造臆造页，
              * 该字节报 0（A.1.2 的"未实现地址"）；Type-0 页读由
              * dll_handle_operate_type0() 直接不应答。 */
-            od_out[0] = dll_dp_page1_available(ctx)
+            od_out[0] = dll_dp_page1_available(&ctx->shared)
                             ? iolink_isdu_direct_param_page1_octet(
                                   &ctx->shared.isdu, (uint8_t) (mc & IOLINK_MC_ADDR_MASK))
                             : 0U;
@@ -550,7 +596,7 @@ void dll_handle_operate_type0(iolink_dll_main_t* ctx, uint8_t mc, uint8_t cks)
     (void) cks;
     const bool type0_write = ((mc & IOLINK_MC_RW_MASK) == 0U);
     const bool page_channel = ((mc & IOLINK_MC_COMM_CHANNEL_MASK) == IOLINK_MC_CHANNEL_PAGE);
-    if (!type0_write && page_channel && !dll_dp_page1_available(ctx)) {
+    if (!type0_write && page_channel && !dll_dp_page1_available(&ctx->shared)) {
         /* DPP1 读需要绑定的设备身份：不答（主站超时），不发全零页。
          * 没有发出应答，因此也不刷新 last_response_us（t_A/T_REN 统计
          * 只记录真实应答）。 */
@@ -581,7 +627,7 @@ void dll_handle_operate_type0(iolink_dll_main_t* ctx, uint8_t mc, uint8_t cks)
         resp[1] = (uint8_t) (resp[1] | iolink_checksum6(resp, 2U));
         dll_send(ctx, resp, 2);
     }
-    ctx->last_response_us = dll_time_us(ctx);
+    ctx->last_response_us = dll_time_us(&ctx->shared);
 }
 
 /** @brief 处理 3 字节 Type-0 OD WRITE（MC、CKT、OD），仅用 CKS 应答（Figure A.5）。 */
@@ -594,7 +640,7 @@ void dll_handle_type0_od_write(iolink_dll_main_t* ctx, uint8_t mc, uint8_t od_in
      * CKS，帧仍进邮箱让主泵应用写入；此时主泵不得再发第二个应答。 */
     if (ctx->frame_replied_by_isr != 0U) {
         ctx->frame_replied_by_isr = 0U;
-        ctx->last_response_us = dll_time_us(ctx);
+        ctx->last_response_us = dll_time_us(&ctx->shared);
         return;
     }
 
@@ -606,7 +652,7 @@ void dll_handle_type0_od_write(iolink_dll_main_t* ctx, uint8_t mc, uint8_t od_in
     resp[0] |= dll_pd_status_flags(ctx);
     resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));
     dll_send(ctx, resp, 1);
-    ctx->last_response_us = dll_time_us(ctx);
+    ctx->last_response_us = dll_time_us(&ctx->shared);
 }
 
 /** @brief 处理 Type-1/Type-2 OPERATE 帧（PD+OD）并构建响应，同时强制执行 t_REN。 */
@@ -633,7 +679,7 @@ static bool dll_handle_eager_isdu_read(iolink_dll_main_t* ctx, bool write)
         dll_isdu_sync_snapshot(ctx);
     }
     ctx->frame_replied_by_isr = 0U;
-    ctx->last_response_us = dll_time_us(ctx);
+    ctx->last_response_us = dll_time_us(&ctx->shared);
     return true;
 }
 
@@ -688,7 +734,7 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
     if (DLL_EVENTS_FLAG(&ctx->shared.events)) {
         cks |= 0x80U;
     }
-    cks |= dll_pd_status_flags_at(ctx, pd);
+    cks |= dll_pd_status_flags_at(&ctx->shared, pd);
     resp[pos] = cks;
     resp[pos] = (uint8_t) (resp[pos] | iolink_checksum6(resp, pos + 1U));
     pos++;
@@ -696,7 +742,7 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
     if (dll_phy_has_tx(&ctx->shared)) {
         dll_send(ctx, resp, pos);
         ctx->shared.fallback_count = 0U;
-        const uint64_t end_us = dll_time_us(ctx);
+        const uint64_t end_us = dll_time_us(&ctx->shared);
         const uint32_t limit = dll_get_t_ren_limit_us();
         const uint64_t ren_deadline = dll_timer_deadline(ctx, IOLINK_TIMER_T_REN);
 
@@ -708,7 +754,7 @@ static void dll_send_od_reply(iolink_dll_main_t* ctx, bool write, const uint8_t*
         }
         dll_timer_cancel(ctx, IOLINK_TIMER_T_REN);
     }
-    ctx->last_response_us = dll_time_us(ctx);
+    ctx->last_response_us = dll_time_us(&ctx->shared);
 }
 
 void dll_handle_operate_type1_2(iolink_dll_main_t* ctx)
@@ -734,7 +780,7 @@ void dll_handle_operate_type1_2(iolink_dll_main_t* ctx)
         /* ISR 泵已在帧结束时发送了过程通道
          * 预暂存的周期应答。 */
         ctx->shared.fallback_count = 0U;
-        ctx->last_response_us = dll_time_us(ctx);
+        ctx->last_response_us = dll_time_us(&ctx->shared);
         ctx->frame_replied_by_isr = 0U;
         return;
     }
@@ -742,7 +788,7 @@ void dll_handle_operate_type1_2(iolink_dll_main_t* ctx)
         /* ISR 已确认该 ISDU 写；不要再发送第二个
          * 应答。ISDU 读在 dll_dispatch_od() 之前处理。 */
         ctx->frame_replied_by_isr = 0U;
-        ctx->last_response_us = dll_time_us(ctx);
+        ctx->last_response_us = dll_time_us(&ctx->shared);
         return;
     }
 
@@ -803,7 +849,7 @@ void dll_poll_diagnostics(iolink_dll_main_t* ctx)
     }
 
     /* ISR 只发布 one-shot；这里在主上下文完成条件锁存与事件发布。 */
-    DLL_DIAG_SERVICE(&ctx->shared.events, dll_time_ms(ctx));
+    DLL_DIAG_SERVICE(&ctx->shared.events, dll_time_ms(&ctx->shared));
 
     if (ctx->shared.phy == NULL) {
         return;
@@ -879,5 +925,5 @@ void dll_check_cycle_time_at(iolink_dll_main_t* ctx, uint64_t frame_us)
 /** @brief 主上下文路径的 T_CYCLE 检查：参考点即当前轮询时刻。 */
 void dll_check_cycle_time(iolink_dll_main_t* ctx)
 {
-    dll_check_cycle_time_at(ctx, dll_time_us(ctx));
+    dll_check_cycle_time_at(ctx, dll_time_us(&ctx->shared));
 }

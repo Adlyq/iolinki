@@ -73,8 +73,7 @@ static void test_initialization_uses_app_clock(void** state)
     init_device(&ctx, &app);
 
     /* T_PD 截止时间与主站活动种子都来自应用时钟。 */
-    assert_int_equal(iolink_dll_timer_deadline(test_dll(&ctx), IOLINK_TIMER_T_PD),
-                     (1000000ULL + 500ULL));
+    assert_int_equal(dll_timer_deadline(test_dll(&ctx), IOLINK_TIMER_T_PD), (1000000ULL + 500ULL));
     assert_int_equal(test_dll(&ctx)->master_last_activity_ms, 1000U);
 }
 

@@ -33,7 +33,7 @@ static void test_t_dsio_deadline_survives_ms_rollover(void** state)
     assert_int_equal(ctx.main.shared.state, IOLINK_DLL_STATE_AWAITING_COMM);
     /* 原条件为 now_ms > deadline_ms：绝对截止时间落在下一个毫秒起点。 */
     const uint64_t deadline = (now / 1000U + IOLINK_T_DSIO_MS + 1U) * 1000U;
-    assert_int_equal(iolink_dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_DSIO), deadline);
+    assert_int_equal(dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_DSIO), deadline);
     now += 150000U; /* 跨过发生回绕的毫秒 API，截止时间仍未到达 */
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.shared.state, IOLINK_DLL_STATE_AWAITING_COMM);

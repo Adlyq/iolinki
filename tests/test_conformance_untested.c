@@ -286,7 +286,7 @@ static void test_0124_error_count_increment_and_reset(void** state)
 
     /* 制造恰好一个计入 ErrorCount 的错误：RX 超时在 DLL 中
        只计一次。 */
-    iolink_dll_on_rx_timeout(test_dll(&dev.ctx));
+    iolink_dll_on_rx_timeout(&test_dll(&dev.ctx)->shared);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
     assert_int_equal(device_error_count(&dev.ctx), 1U);
 

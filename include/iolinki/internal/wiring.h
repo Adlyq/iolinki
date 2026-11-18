@@ -63,12 +63,6 @@ void iolink_dll_request_back_to_box(iolink_dll_main_t* ctx);
  */
 uint8_t iolink_dll_expected_req_len(const iolink_dll_main_t* ctx, uint8_t mc);
 
-/** @brief 查询一个 timer 的绝对截止时间（0 = 未装载）。 */
-uint64_t iolink_dll_timer_deadline(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
-
-/** @brief 查询一个 timer 是否已装载。 */
-bool iolink_dll_timer_armed(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
-
 /** @brief 复位 ErrorCount 计数器（SystemCommand 0x80/0x82/0x83）。
  *  @note 只清计数器，保留活动事件（Table 101 "Clear" 与 "Restore factory
  *        settings" 的区别由调用方选择）。

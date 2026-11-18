@@ -131,7 +131,7 @@ static void test_master_lost_uses_master_cycle_time(void** state)
     move_to_operate_ctx(&dev.ctx);
 
     /* DPP1 0x01 = 10 -> 10 * 100 us = 1 ms（而非 2 ms 的 MinCycleTime）。 */
-    test_dll(&dev.ctx)->master_cycle_time = 10U;
+    test_dll(&dev.ctx)->shared.master_cycle_time = 10U;
     g_now_ms = 4U;
     iolink_device_process(&dev.ctx);
     assert_true(iolink_device_master_lost(&dev.ctx));
@@ -207,13 +207,13 @@ static void test_master_lost_waits_for_known_cycle_time(void** state)
     init_device(&dev, 3U, NULL);
     move_to_operate_ctx(&dev.ctx);
 
-    test_dll(&dev.ctx)->master_cycle_time = 0U;
+    test_dll(&dev.ctx)->shared.master_cycle_time = 0U;
     test_dll(&dev.ctx)->min_cycle_time_us = 0U;
 
     g_now_ms = 10U;
     iolink_device_process(&dev.ctx);
     assert_false(iolink_device_master_lost(&dev.ctx));
-    assert_false(iolink_dll_timer_armed(test_dll(&dev.ctx), IOLINK_TIMER_MASTER_LOST));
+    assert_false(dll_timer_armed(test_dll(&dev.ctx), IOLINK_TIMER_MASTER_LOST));
 
     /* 周期时间可知后重新武装：同一轮即可判定（此处已错过 5 个周期）。 */
     test_dll(&dev.ctx)->min_cycle_time_us = 2000U;

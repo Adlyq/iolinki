@@ -103,9 +103,9 @@ static void test_isr_entries_without_binding_are_safe(void** state)
     (void) memset(&dll, 0, sizeof(dll));
     dll.main.shared.phy = &g_phy_mock;
 
-    iolink_dll_process_isr(&dll.main);
-    iolink_dll_on_rx_timeout(&dll.main);
-    iolink_dll_on_stack_tick(&dll.main);
+    iolink_dll_process_isr(&dll.main.shared);
+    iolink_dll_on_rx_timeout(&dll.main.shared);
+    iolink_dll_on_stack_tick(&dll.main.shared);
     assert_int_equal(iolink_dll_take_service_window(&dll.main), 0U);
 }
 

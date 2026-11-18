@@ -103,14 +103,14 @@ typedef struct
 } iolink_dll_isr_stats_t;
 
 #if IOLINK_STATS_MODE == IOLINK_STATS_SPLIT
-/** @brief 在 ISR 上下文中执行自增的计数器槽位。 */
-#define IOLINK_STAT_ISR(ctx, field) ((ctx)->shared.isr_stat.field)
-/** @brief 包含 ISR 自有计数的计数值（只读）。 */
+/** @brief 在 ISR 上下文中执行自增的计数器槽位（参数是共享区）。 */
+#define IOLINK_STAT_ISR(shared, field) ((shared)->isr_stat.field)
+/** @brief 包含 ISR 自有计数的计数值（只读，参数是主上下文）。 */
 #define IOLINK_STAT_TOTAL(ctx, field) ((ctx)->shared.field + (ctx)->shared.isr_stat.field)
 #else
-/** @brief 在 ISR 上下文中执行自增的计数器槽位。 */
-#define IOLINK_STAT_ISR(ctx, field) ((ctx)->shared.field)
-/** @brief 包含 ISR 自有计数的计数值（只读）。 */
+/** @brief 在 ISR 上下文中执行自增的计数器槽位（参数是共享区）。 */
+#define IOLINK_STAT_ISR(shared, field) ((shared)->field)
+/** @brief 包含 ISR 自有计数的计数值（只读，参数是主上下文）。 */
 #define IOLINK_STAT_TOTAL(ctx, field) ((ctx)->shared.field)
 #endif
 
@@ -243,6 +243,9 @@ typedef struct
  * 独占字段在 @ref iolink_dll_isr_t 中，主上下文翻译单元看不到它们。
  */
 typedef struct iolink_dll_main iolink_dll_main_t;
+
+/** @brief 主上下文与数据 ISR 共享的 DLL 状态。完整定义见 dll_shared.h。 */
+typedef struct iolink_dll_shared iolink_dll_shared_t;
 
 /** @brief 数据 ISR 独占状态。完整定义见 dll_isr.h。 */
 typedef struct iolink_dll_isr iolink_dll_isr_t;
@@ -451,9 +454,9 @@ int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx);
  * 完整发布（初始化窗口）时同样直接返回，不改任何状态、不计数；此时也
  * **不排空 PHY 的 RX**，因此窗口内到达的帧及其硬件状态由端口按自己的
  * 策略处理（不保证缓存）。
- * @param ctx DLL 上下文
+ * @param shared DLL 共享区（主上下文内嵌，`&ctx->shared`）
  */
-void iolink_dll_process_isr(iolink_dll_main_t* ctx);
+void iolink_dll_process_isr(iolink_dll_shared_t* shared);
 
 /**
  * @brief 把当前 DLL 状态交付给状态变更钩子。
@@ -474,11 +477,13 @@ void iolink_dll_process_isr(iolink_dll_main_t* ctx);
  */
 void iolink_dll_flush_state_callbacks(iolink_dll_main_t* ctx);
 
-/** @brief Timer A（t_A 单次定时）在无应答的情况下到期。 */
-void iolink_dll_on_rx_timeout(iolink_dll_main_t* ctx);
+/** @brief Timer A（t_A 单次定时）在无应答的情况下到期。
+ * @param shared DLL 共享区（`&ctx->shared`） */
+void iolink_dll_on_rx_timeout(iolink_dll_shared_t* shared);
 
-/** @brief Timer B 节拍：授权一个主上下文服务窗口。 */
-void iolink_dll_on_stack_tick(iolink_dll_main_t* ctx);
+/** @brief Timer B 节拍：授权一个主上下文服务窗口。
+ * @param shared DLL 共享区（`&ctx->shared`） */
+void iolink_dll_on_stack_tick(iolink_dll_shared_t* shared);
 
 /** @brief 消费 Timer B 的授权（1 = 用户代码可以运行）。 */
 uint8_t iolink_dll_take_service_window(iolink_dll_main_t* ctx);
