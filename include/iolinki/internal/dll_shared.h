@@ -44,9 +44,111 @@ typedef enum
  */
 struct iolink_dll_shared
 {
+    /* =====================================================================
+     * 区域 1：init 只读（c_）
+     *
+     * 初始化闭合（iolink_dll_init / iolink_device_init /
+     * iolink_dll_publish_reply_plans）写入，此后主上下文与数据 ISR 都只读。
+     * ===================================================================== */
+
     iolink_dll_isr_t* isr; /**< 组装箱绑定：ISR 独占状态（不透明指针，主上下文无法解引用） */
 
-    volatile iolink_dll_state_t state; /**< 当前 DLL 状态 */
+    const iolink_phy_api_t* phy; /**< 已绑定的 PHY API 实现 */
+
+    /* 实例能力位。iolink_caps_resolve() 在 init 时一次性解析；
+     * 主上下文与 ISR 都只读它（位掩码是自然对齐的单字加载）。 */
+    iolink_caps_t caps;
+
+    /* 应用时钟，来自 iolink_device_app_t::time_us。DLL 与
+     * 事件引擎的每个时间戳都使用它。数据 ISR 会读取它，因此
+     * 该回调必须是单调的且 ISR 安全的。未绑定时钟的裸 DLL
+     * 上下文读取到的时间为 0。 */
+    iolink_clock_t clock;
+
+    uint8_t m_seq_type; /**< 支持的 M 序列类型 */
+
+    uint8_t pd_in_len; /**< 输入过程数据长度（初始化时固定） */
+
+    uint8_t od_width; /**< OPERATE 的 OD 宽度 m（Table A.10）。某帧
+                           是否携带 OD 由每帧的 MC R/W 位决定
+                           （Figure A.14）：WRITE 请求在 PD-out 之后
+                           携带 OD，READ 应答在 PD-in 之前携带 OD，
+                           反方向则不携带。 */
+
+    uint8_t pd_out_len_current; /**< 初始化时固定的 PD_Out 长度 */
+
+    uint32_t min_cycle_time_app_us; /**< 周期时间的应用层下限 */
+
+    /**
+     * @name 应答计划表（初始化时单次写入 / ISR 只读）
+     *
+     * 计划内容是 {M-sequence 类型, OD 宽度, 能力位} 的纯函数，三项都只在
+     * 初始化期间定义。`reply_plans_ready` 由 `iolink_dll_publish_reply_plans()`
+     * 在整张表写完后置 1、写入前清 0：ISR 入口只在它为 1 时进入传输泵，
+     * 初始化窗口内到达的帧因此完全不被处理。该标志只保护入口，重建仍要求
+     * 数据 ISR 静止（初始化或重新初始化）：没有运行期并发协议，查表也就不
+     * 需要序号校验。
+     * @{
+     */
+    volatile IOLINK_ATOMIC_UINT_T reply_plans_ready;         /**< 计划表已完整发布 */
+    uint8_t reply_plan_off[IOLINK_PLAN_SLOT_COUNT];          /**< 每状态切片起点 */
+    uint8_t reply_plan_cnt[IOLINK_PLAN_SLOT_COUNT];          /**< 每状态切片长度 */
+    iolink_reply_plan_t reply_plan[IOLINK_REPLY_PLAN_SLOTS]; /**< 计划槽位 */
+    /** @} */
+
+    iolink_log_sink_t log; /**< 日志汇点（默认静默；设备层绑定） */
+
+    /* =====================================================================
+     * 区域 2：main -> ISR（m_）
+     *
+     * 主上下文写、数据 ISR 读。ISR 不得回写这些字段；需要回执时使用
+     * 区域 3 的一次性标志。
+     * ===================================================================== */
+
+    /** @brief 主泵已应用的 ISDU 写序号（与 `isr_isdu_write_gen` 配对）。 */
+    volatile uint32_t isdu_write_gen_applied;
+
+    /* ISR ISDU 读取视图。主泵将 {length, busy, buffer} 作为一个
+     * 原子字发布，使 ISR 绝不会观察到半更新的元组；ISR 拥有
+     * FlowCTRL 段索引，并在 START 处采纳新的字。 */
+    volatile IOLINK_ATOMIC_UINT_T isr_isdu_pub; /**< len | busy<<8 | sel<<9 | gen<<10 */
+
+    /* 应答发送，每次数据请求喂送一个字节。主泵
+     * 在槽位 0/1 之间交替，使在途的 TX-FRAME DMA 缓冲区在
+     * 准备下一个应答期间保持稳定；槽位 2 保留给
+     * 数据 ISR 自行生成的应答，因此两个上下文之间不共享
+     * 槽位计数器（PHY 会对传输进行串行化）。 */
+    uint8_t isr_tx_payload[IOLINK_TX_SLOTS][IOLINK_M_SEQ_MAX_LEN];
+
+    /* 主上下文独占的暂存元数据：主泵在 isr_tx_pending 发布之前写好，
+     * 数据 ISR 只在取走暂存时一次性读入自己独占的流式状态
+     * （iolink_dll_isr_t::tx_stream_len / tx_stream_has_cks）。 */
+    volatile uint8_t isr_tx_pending_slot; /**< 暂存的主上下文应答所在槽位 */
+
+    volatile uint8_t stage_len; /**< 暂存载荷字节数 */
+
+    volatile uint8_t stage_has_cks; /**< 1 = 发送时追加计算出的 CKS */
+
+    /* 过程数据缓冲区。PD-in 缓冲区同时用作应答发送缓冲区：
+     * 布局为 [OD][PD-in][CKS]。主上下文填充一个既非活动
+     * 也未被 ISR 持有的缓冲区，然后发布 `pd_pub`；ISR 在应答
+     * 开始时捕获同一代的 active 与 valid 并流式发送（零拷贝）。缓冲区数量
+     * 取决于 TX 模式（见 IOLINK_PD_IN_BUFFERS）：若无空闲缓冲区，
+     * 主上下文保留当前 PD-in 并在下一个周期重试。 */
+    uint8_t pd_in[IOLINK_PD_IN_BUFFERS][IOLINK_PD_REPLY_MAX]; /**< [OD][PD-in][CKS] 应答缓冲区 */
+
+    volatile IOLINK_ATOMIC_UINT_T pd_pub; /**< PD-in 发布字 `{active, valid, gen}`
+                                              （主上下文单写） */
+
+    uint8_t master_cycle_time; /**< DPP1 0x01，由主站写入的周期时间字节
+                                    （Table B.1/B.3）；0 = 尚未写入 */
+
+    /* =====================================================================
+     * 区域 3：ISR -> main（i_）
+     *
+     * 数据 ISR 写、主上下文读。主上下文只允许写字面量 0 作为消费/清除；
+     * 其余写操作属于 ISR。
+     * ===================================================================== */
 
     /**
      * @brief ISDU 写失效序号（ISR 单写、自由计数）。
@@ -58,23 +160,6 @@ struct iolink_dll_shared
      * "无服务"。序号宽度必须容纳主泵可能错过的全部写实例，不能用 8 位。
      */
     volatile IOLINK_ATOMIC_UINT_T isr_isdu_write_gen;
-
-    const iolink_phy_api_t* phy; /**< 已绑定的 PHY API 实现 */
-
-    /* 实例能力位。iolink_caps_resolve() 在 init 时一次性解析；
-     * 主上下文与 ISR 都只读它（位掩码是自然对齐的单字加载）。 */
-    iolink_caps_t caps;
-
-    /** @brief 主泵已应用的 ISDU 写序号（与 `isr_isdu_write_gen` 配对）。 */
-    volatile uint32_t isdu_write_gen_applied;
-
-    /* 应用时钟，来自 iolink_device_app_t::time_us。DLL 与
-     * 事件引擎的每个时间戳都使用它。数据 ISR 会读取它，因此
-     * 该回调必须是单调的且 ISR 安全的。未绑定时钟的裸 DLL
-     * 上下文读取到的时间为 0。 */
-    iolink_clock_t clock;
-
-    volatile uint32_t last_activity_ms; /**< 最后收到字节的时间戳 */
 
     volatile uint8_t isr_master_activity; /**< ISR 观察到帧结束；由主上下文清除 */
 
@@ -108,8 +193,6 @@ struct iolink_dll_shared
 
     volatile uint8_t isr_fallback_pending; /**< ISR 已接受 FALLBACK：由主上下文启动 T_FBD */
 
-    volatile uint8_t fallback_clear_request; /**< 已应用非 FALLBACK 命令：清除 T_FBD */
-
     /**
      * @brief ISR 已完全服务一个 MasterCycle（ISR -> 主泵，一次性）。
      *
@@ -131,27 +214,6 @@ struct iolink_dll_shared
     /** @brief ISR 收到 0x97 DeviceStartup：主泵完成协议错误记账与状态迁移。 */
     volatile uint8_t isr_device_startup_requested;
 
-    /* 配置 */
-    uint8_t m_seq_type; /**< 支持的 M 序列类型 */
-
-    uint8_t pd_in_len; /**< 输入过程数据长度（初始化时固定） */
-
-    uint8_t od_width; /**< OPERATE 的 OD 宽度 m（Table A.10）。某帧
-                           是否携带 OD 由每帧的 MC R/W 位决定
-                           （Figure A.14）：WRITE 请求在 PD-out 之后
-                           携带 OD，READ 应答在 PD-in 之前携带 OD，
-                           反方向则不携带。 */
-
-    uint32_t min_cycle_time_app_us; /**< 周期时间的应用层下限 */
-
-    uint8_t master_cycle_time; /**< DPP1 0x01，由主站写入的周期时间字节
-                                    （Table B.1/B.3）；0 = 尚未写入 */
-
-    /* ISR ISDU 读取视图。主泵将 {length, busy, buffer} 作为一个
-     * 原子字发布，使 ISR 绝不会观察到半更新的元组；ISR 拥有
-     * FlowCTRL 段索引，并在 START 处采纳新的字。 */
-    volatile IOLINK_ATOMIC_UINT_T isr_isdu_pub; /**< len | busy<<8 | sel<<9 | gen<<10 */
-
     /**
      * @brief ISDU 读传输层复位请求（ISR -> 主泵，一次性）。
      *
@@ -162,24 +224,7 @@ struct iolink_dll_shared
      */
     volatile uint8_t isr_isdu_read_reset;
 
-    uint8_t isr_isdu_last_flowctrl; /**< 最后接受的 FlowCTRL（0xFF = 无） */
-
-    /**
-     * @name 应答计划表（初始化时单次写入 / ISR 只读）
-     *
-     * 计划内容是 {M-sequence 类型, OD 宽度, 能力位} 的纯函数，三项都只在
-     * 初始化期间定义。`reply_plans_ready` 由 `iolink_dll_publish_reply_plans()`
-     * 在整张表写完后置 1、写入前清 0：ISR 入口只在它为 1 时进入传输泵，
-     * 初始化窗口内到达的帧因此完全不被处理。该标志只保护入口，重建仍要求
-     * 数据 ISR 静止（初始化或重新初始化）：没有运行期并发协议，查表也就不
-     * 需要序号校验。
-     * @{
-     */
-    volatile IOLINK_ATOMIC_UINT_T reply_plans_ready;         /**< 计划表已完整发布 */
-    uint8_t reply_plan_off[IOLINK_PLAN_SLOT_COUNT];          /**< 每状态切片起点 */
-    uint8_t reply_plan_cnt[IOLINK_PLAN_SLOT_COUNT];          /**< 每状态切片长度 */
-    iolink_reply_plan_t reply_plan[IOLINK_REPLY_PLAN_SLOTS]; /**< 计划槽位 */
-    /** @} */
+    volatile uint8_t in_isr; /**< ISR 正在运行泵 */
 
     iolink_ring_t isr_frame_ring; /**< 帧邮箱（ISR -> 主上下文） */
 
@@ -200,23 +245,20 @@ struct iolink_dll_shared
     iolink_dll_isr_stats_t isr_stat; /**< ISR 自有的计数器组（SPLIT 模式） */
 #endif
 
-    volatile uint8_t in_isr; /**< ISR 正在运行泵 */
+    /* =====================================================================
+     * 区域 4：双上下文（b_）
+     *
+     * 两个上下文都读、都写；写操作必须是单字存储或由文档化的临界区/序号
+     * 协议保护。
+     * ===================================================================== */
 
-    /* 应答发送，每次数据请求喂送一个字节。主泵
-     * 在槽位 0/1 之间交替，使在途的 TX-FRAME DMA 缓冲区在
-     * 准备下一个应答期间保持稳定；槽位 2 保留给
-     * 数据 ISR 自行生成的应答，因此两个上下文之间不共享
-     * 槽位计数器（PHY 会对传输进行串行化）。 */
-    uint8_t isr_tx_payload[IOLINK_TX_SLOTS][IOLINK_M_SEQ_MAX_LEN];
+    volatile iolink_dll_state_t state; /**< 当前 DLL 状态 */
 
-    /* 主上下文独占的暂存元数据：主泵在 isr_tx_pending 发布之前写好，
-     * 数据 ISR 只在取走暂存时一次性读入自己独占的流式状态
-     * （iolink_dll_isr_t::tx_stream_len / tx_stream_has_cks）。 */
-    volatile uint8_t isr_tx_pending_slot; /**< 暂存的主上下文应答所在槽位 */
+    volatile uint32_t last_activity_ms; /**< 最后收到字节的时间戳 */
 
-    volatile uint8_t stage_len; /**< 暂存载荷字节数 */
-
-    volatile uint8_t stage_has_cks; /**< 1 = 发送时追加计算出的 CKS */
+    volatile uint32_t last_byte_us; /**< 最后字节时间戳的低 32 位；两个
+                                         上下文都以抗回绕的无符号差值
+                                         比较它（t_byte 至多为毫秒级） */
 
     volatile uint8_t isr_tx_idx; /**< 下一个字节索引（ISR 流式状态） */
 
@@ -230,23 +272,6 @@ struct iolink_dll_shared
                                           request_service()，或暂存与在途
                                           应答冲突而丢弃的应答 */
 
-    uint8_t pd_out_len_current; /**< 初始化时固定的 PD_Out 长度 */
-
-    volatile uint32_t last_byte_us; /**< 最后字节时间戳的低 32 位；两个
-                                         上下文都以抗回绕的无符号差值
-                                         比较它（t_byte 至多为毫秒级） */
-
-    /* 过程数据缓冲区。PD-in 缓冲区同时用作应答发送缓冲区：
-     * 布局为 [OD][PD-in][CKS]。主上下文填充一个既非活动
-     * 也未被 ISR 持有的缓冲区，然后发布 `pd_pub`；ISR 在应答
-     * 开始时捕获同一代的 active 与 valid 并流式发送（零拷贝）。缓冲区数量
-     * 取决于 TX 模式（见 IOLINK_PD_IN_BUFFERS）：若无空闲缓冲区，
-     * 主上下文保留当前 PD-in 并在下一个周期重试。 */
-    uint8_t pd_in[IOLINK_PD_IN_BUFFERS][IOLINK_PD_REPLY_MAX]; /**< [OD][PD-in][CKS] 应答缓冲区 */
-
-    volatile IOLINK_ATOMIC_UINT_T pd_pub; /**< PD-in 发布字 `{active, valid, gen}`
-                                              （主上下文单写） */
-
     volatile IOLINK_ATOMIC_UINT_T pd_valid_cmd; /**< PD 有效位命令字
                                                     `{value, base_gen, valid}`（数据 ISR 单写） */
 
@@ -256,10 +281,7 @@ struct iolink_dll_shared
 
     volatile uint8_t fallback_count; /**< 连续 CRC 错误计数（诊断脉冲节流） */
 
-    /* 子模块 */
-#if IOLINK_FEATURE_EVENTS
-    iolink_events_ctx_t events; /**< 诊断事件引擎 */
-#endif
+    volatile uint8_t fallback_clear_request; /**< 已应用非 FALLBACK 命令：清除 T_FBD */
 
     iolink_isdu_ctx_t isdu; /**< ISDU 服务引擎 */
 
@@ -267,7 +289,10 @@ struct iolink_dll_shared
 
     uint32_t timeout_errors; /**< 累计 t_A 超时数（ISR 在 SHARED 统计模式下直接自增） */
 
-    iolink_log_sink_t log; /**< 日志汇点（默认静默；设备层绑定） */
+    /* 子模块 */
+#if IOLINK_FEATURE_EVENTS
+    iolink_events_ctx_t events; /**< 诊断事件引擎 */
+#endif
 };
 
 /**

@@ -24,7 +24,6 @@ iolink_dll_shared_t,min_cycle_time_app_us,c_,init,both,周期时间的应用层�
 iolink_dll_shared_t,master_cycle_time,m_,main,isr,DPP1 MasterCycleTime 字节（Table B.1/B.3）；0 = 尚未写入
 iolink_dll_shared_t,isr_isdu_pub,m_,main,isr,ISDU 读视图发布字；ISR 采纳
 iolink_dll_shared_t,isr_isdu_read_reset,i_,isr,main,ISDU 读传输层复位请求；主泵清除
-iolink_dll_shared_t,isr_isdu_last_flowctrl,i_,isr,isr,ISR 单写单读的 FlowCTRL 记忆；batch 2: move to iolink_dll_isr_t
 iolink_dll_shared_t,reply_plans_ready,c_,init,isr,计划表完整发布标志；ISR 入口只读
 iolink_dll_shared_t,reply_plan_off,c_,init,isr,每状态切片起点；init 发布后只读
 iolink_dll_shared_t,reply_plan_cnt,c_,init,isr,每状态切片长度；init 发布后只读
@@ -58,3 +57,4 @@ iolink_dll_shared_t,framing_errors,b_,both,main,ISR 经统计宏自增；主泵�
 iolink_dll_shared_t,timeout_errors,b_,both,main,ISR 经统计宏自增；主泵复位并读取
 iolink_dll_shared_t,log,c_,init,both,日志汇点；init 绑定后两个上下文只读
 iolink_dll_isr_t,stack_tick_pending,i_,isr,main,Timer B 授权标志；ISR 置位，主上下文在服务窗口消费并清除
+iolink_dll_isr_t,isr_isdu_last_flowctrl,i_,isr,isr,ISR 单写单读的 FlowCTRL 记忆；dll_isr_reset() 复位为 0xFF

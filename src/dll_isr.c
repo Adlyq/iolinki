@@ -95,7 +95,12 @@
  */
 bool dll_isr_reset(iolink_dll_isr_t* isr)
 {
-    return iolink_ctx_zero(isr, sizeof(iolink_dll_isr_t));
+    if (!iolink_ctx_zero(isr, sizeof(iolink_dll_isr_t))) {
+        return false;
+    }
+    /* "尚未见到 START" 的哨兵：零值不是合法的 FlowCTRL 记忆。 */
+    isr->isr_isdu_last_flowctrl = 0xFFU;
+    return true;
 }
 
 void dll_isr_start_staged_tx(iolink_dll_shared_t* ctx, uint8_t slot, uint8_t len, uint8_t has_cks)
@@ -222,7 +227,7 @@ static void dll_isr_isdu_od(iolink_dll_shared_t* ctx, uint8_t flowctrl, uint8_t*
         ctx->isr_isdu_read_reset = 1U;
         /* 在读传输层被主泵复位之前，主站不得继续旧段序列：清掉段索引，
          * 使后续 COUNT 只能得到"无服务"，直到新的 START 重新采纳视图。 */
-        ctx->isr_isdu_last_flowctrl = 0xFFU;
+        ctx->isr->isr_isdu_last_flowctrl = 0xFFU;
         ctx->isr->isr_isdu_idx = 0U;
         ctx->isr->isr_isdu_seg_idx = 0U;
         return;
@@ -261,30 +266,30 @@ static void dll_isr_isdu_od(iolink_dll_shared_t* ctx, uint8_t flowctrl, uint8_t*
         ctx->isr->isr_isdu_sel = IOLINK_ISDU_PUB_SEL(pub);
         ctx->isr->isr_isdu_idx = 0U;
         ctx->isr->isr_isdu_seg_idx = 0U;
-        ctx->isr_isdu_last_flowctrl = IOLINK_FLOWCTRL_START;
+        ctx->isr->isr_isdu_last_flowctrl = IOLINK_FLOWCTRL_START;
     }
     else {
         /* COUNT（0x00..0x0F）。已发布视图发生变化（新响应或 Busy
          * 转换）会使段序列失效；主站必须
          * 以 START 重新开始。重复的 COUNT 重复前一个段；
          * 任何其他值必须是 +1。 */
-        if ((ctx->isr->isr_isdu_adopted != pub) || (ctx->isr_isdu_last_flowctrl == 0xFFU)) {
+        if ((ctx->isr->isr_isdu_adopted != pub) || (ctx->isr->isr_isdu_last_flowctrl == 0xFFU)) {
             od[0] = 0x00U; /* 无服务 */
-            ctx->isr_isdu_last_flowctrl = 0xFFU;
+            ctx->isr->isr_isdu_last_flowctrl = 0xFFU;
             return;
         }
-        if (flowctrl == ctx->isr_isdu_last_flowctrl) {
+        if (flowctrl == ctx->isr->isr_isdu_last_flowctrl) {
             repeat = true;
         }
         else {
             const uint8_t expected =
-                (uint8_t) ((ctx->isr_isdu_last_flowctrl + 1U) & IOLINK_FLOWCTRL_COUNT_MASK);
+                (uint8_t) ((ctx->isr->isr_isdu_last_flowctrl + 1U) & IOLINK_FLOWCTRL_COUNT_MASK);
             if (flowctrl != expected) {
                 od[0] = 0x00U; /* 分段错误 -> 无服务 */
-                ctx->isr_isdu_last_flowctrl = 0xFFU;
+                ctx->isr->isr_isdu_last_flowctrl = 0xFFU;
                 return;
             }
-            ctx->isr_isdu_last_flowctrl = flowctrl;
+            ctx->isr->isr_isdu_last_flowctrl = flowctrl;
         }
     }
 

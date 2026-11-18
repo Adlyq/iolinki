@@ -386,10 +386,6 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
         ctx->timers[i].id = i;
     }
 
-    /* Table A.10：TYPE_2_1/TYPE_2_2 携带一个 On-request Data 字节；TYPE_2_V 是
-       双字节变体（OPERATE M-sequence 代码 5）。 */
-    ctx->shared.isr_isdu_last_flowctrl = 0xFFU; /* 尚未见到 START */
-
     /* PD-in 初值：缓冲区 0、有效（应用第一次发布之前），没有命令覆盖。
      * 发布字与命令字此后分别由主上下文与数据 ISR 单写。 */
     iolink_atomic_store(&ctx->shared.pd_pub, IOLINK_PD_PUB_WORD(0U, true, 0U));

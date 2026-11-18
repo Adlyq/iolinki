@@ -245,6 +245,7 @@ PHY 上下文，以及 `on_change`/`ds_flag_persist` 访问的应用 NVM。
 | `iolink_dll_shared_t.isr_cycle_served` | `i_` | isr | main | ISR 已服务一个周期的交接标志；主泵清除 |
 | `iolink_dll_shared_t.isdu_restart_pending` | `i_` | isr | main | ISR 进入 STARTUP 的复位请求；主泵消费并清除 |
 | `iolink_dll_shared_t.startup_notification_pending` | `i_` | isr | main | ISR 进入 STARTUP 的待投递复位通知；主泵投递后清 0 |
+| `iolink_dll_shared_t.isr_device_startup_requested` | `i_` | isr | main | ISR 收到 0x97 的一次性请求；主泵完成协议错误记账与 STARTUP 迁移后清 0 |
 | `iolink_dll_shared_t.m_seq_type` | `c_` | init | both | 支持的 M 序列类型 |
 | `iolink_dll_shared_t.pd_in_len` | `c_` | init | both | 输入过程数据长度 |
 | `iolink_dll_shared_t.od_width` | `c_` | init | both | OPERATE 的 OD 宽度 m |
@@ -252,7 +253,6 @@ PHY 上下文，以及 `on_change`/`ds_flag_persist` 访问的应用 NVM。
 | `iolink_dll_shared_t.master_cycle_time` | `m_` | main | isr | DPP1 MasterCycleTime 字节（Table B.1/B.3）；0 = 尚未写入 |
 | `iolink_dll_shared_t.isr_isdu_pub` | `m_` | main | isr | ISDU 读视图发布字；ISR 采纳 |
 | `iolink_dll_shared_t.isr_isdu_read_reset` | `i_` | isr | main | ISDU 读传输层复位请求；主泵清除 |
-| `iolink_dll_shared_t.isr_isdu_last_flowctrl` | `i_` | isr | isr | ISR 单写单读的 FlowCTRL 记忆；batch 2: move to iolink_dll_isr_t |
 | `iolink_dll_shared_t.reply_plans_ready` | `c_` | init | isr | 计划表完整发布标志；ISR 入口只读 |
 | `iolink_dll_shared_t.reply_plan_off` | `c_` | init | isr | 每状态切片起点；init 发布后只读 |
 | `iolink_dll_shared_t.reply_plan_cnt` | `c_` | init | isr | 每状态切片长度；init 发布后只读 |
@@ -286,6 +286,7 @@ PHY 上下文，以及 `on_change`/`ds_flag_persist` 访问的应用 NVM。
 | `iolink_dll_shared_t.timeout_errors` | `b_` | both | main | ISR 经统计宏自增；主泵复位并读取 |
 | `iolink_dll_shared_t.log` | `c_` | init | both | 日志汇点；init 绑定后两个上下文只读 |
 | `iolink_dll_isr_t.stack_tick_pending` | `i_` | isr | main | Timer B 授权标志；ISR 置位，主上下文在服务窗口消费并清除 |
+| `iolink_dll_isr_t.isr_isdu_last_flowctrl` | `i_` | isr | isr | ISR 单写单读的 FlowCTRL 记忆；dll_isr_reset() 复位为 0xFF |
 <!-- END GENERATED -->
 
 在表生成之前，下面只记录当前代码里**不能**用"主上下文独占"概括的部分：
