@@ -981,8 +981,8 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 `iolink_dll_get_stats()` 能直接读取；写请求覆盖计数属于双槽模型本身，位于
 `iolink_isdu_ctx_t::req_overruns`（ISR 单写），统计入口原样转出为 `isr_od_overruns`。
 
-`total_retries` 不是重传计数：库里没有重发/重试机制（`retry_count`/`max_retries` 只有声明，
-没有任何读写点），该字段只在上面两条路径自增（CRC 失败与 0x97 DeviceStartup）。
+`total_retries` 不是重传计数：库里没有重发/重试机制，该字段只在上面两条路径
+自增（CRC 失败与 0x97 DeviceStartup）。
 
 ---
 

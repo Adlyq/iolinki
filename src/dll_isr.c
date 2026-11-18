@@ -125,7 +125,6 @@ void dll_isr_start_staged_tx(iolink_dll_main_t* ctx, uint8_t slot, uint8_t len, 
 #else
     if (ctx->shared.phy->tx_octet != NULL) {
         ctx->shared.isr->isr_tx_base = ctx->shared.isr_tx_payload[slot];
-        ctx->shared.isr->isr_tx_slot = slot;
         ctx->shared.isr_tx_idx = 0U;
         ctx->shared.isr->tx_stream_len = len;
         ctx->shared.isr->tx_stream_has_cks = (has_cks != 0U) ? 1U : 0U;
@@ -345,7 +344,6 @@ static void dll_isr_send_staged(iolink_dll_main_t* ctx, uint8_t slot, uint8_t le
     }
 #else
     ctx->shared.isr->isr_tx_base = ctx->shared.isr_tx_payload[slot];
-    ctx->shared.isr->isr_tx_slot = slot;
     ctx->shared.isr->tx_stream_len = len;
     ctx->shared.isr->isr_tx_flags = flags;
     ctx->shared.isr_tx_idx = 0U;

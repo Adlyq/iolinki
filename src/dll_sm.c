@@ -265,7 +265,6 @@ const iolink_dll_sm_cell_t* IOLINK_NULLABLE iolink_dll_sm_cell(iolink_dll_state_
  */
 bool dll_handle_valid_frame(iolink_dll_main_t* ctx)
 {
-    ctx->last_valid_frame_ms = dll_time_ms(ctx);
     const bool was_establishing = (ctx->shared.state == IOLINK_DLL_STATE_AWAITING_COMM) ||
                                   (ctx->shared.state == IOLINK_DLL_STATE_STARTUP);
     if (!iolink_caps_has(ctx->shared.caps, IOLINK_CAP_COMPAT_V10_OP) &&

@@ -27,8 +27,6 @@ struct iolink_dll_main
 {
     iolink_dll_shared_t shared;
 
-    uint32_t last_valid_frame_ms; /**< 最后一个校验和/类型有效的帧的时间戳 */
-
     volatile uint32_t master_last_activity_ms; /**< 最后一次帧结束 / RX 超时的时间戳 */
 
     uint8_t master_lost_cycles; /**< 判定 master_lost 前可错过的周期数；0 = 禁用 */
@@ -39,8 +37,6 @@ struct iolink_dll_main
 
     uint32_t master_lost_activity_ms; /**< 上次武装 MASTER_LOST 时的活动时间戳
                                            （用于识别新活动边沿） */
-
-    bool wakeup_seen; /**< 检测到唤醒（若 PHY 支持） */
 
     volatile bool back_to_box_pending; /**< 已请求 Back-to-box；正在倒计帧数 */
 
@@ -101,8 +97,6 @@ struct iolink_dll_main
 
     uint8_t pd_out[IOLINK_PD_OUT_MAX_SIZE]; /**< 输出 PD 缓冲区（主站 -> 设备） */
 
-    bool pd_out_seen; /**< 已收到 PDout 帧（B.2.24） */
-
     /* 错误计数器与统计 */
     uint32_t crc_errors; /**< 累计 CRC 错误数 */
 
@@ -122,11 +116,7 @@ struct iolink_dll_main
 
     uint32_t reply_plan_overflows; /**< 因计划槽位耗尽而未发布的计划条目数 */
 
-    uint8_t retry_count; /**< 当前交换的重试计数器 */
-
     uint32_t total_retries; /**< 累计重试次数 */
-
-    uint8_t max_retries; /**< 配置的最大重试次数（默认 3） */
 
     uint32_t voltage_faults; /**< 累计电压故障数（走 get_faults() 时按故障
                                   边沿计数，走旧路径时按轮询周期计数） */

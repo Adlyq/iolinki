@@ -719,7 +719,6 @@ void dll_handle_operate_type1_2(iolink_dll_main_t* ctx)
 
     if (ctx->shared.pd_out_len_current > 0U) {
         (void) memcpy(ctx->pd_out, &ctx->frame_buf[pd_offset], ctx->shared.pd_out_len_current);
-        ctx->pd_out_seen = true; /* B.2.24：最后写入应用的 PDout */
     }
 
     const bool write = ((ctx->frame_buf[0] & IOLINK_MC_RW_MASK) == 0U);
