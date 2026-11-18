@@ -532,6 +532,9 @@ static void device_notify_master_lost(iolink_device_ctx_t* ctx)
 /** @brief 将延迟的 ISDU 复位请求递交给应用。 */
 static void device_dispatch_resets(iolink_device_ctx_t* ctx)
 {
+    if (ctx->config == NULL) {
+        return;
+    }
     const iolink_device_app_t* app = ctx->config->app;
 
     if (ctx->dll.main.shared.b_isdu.reset_pending) {

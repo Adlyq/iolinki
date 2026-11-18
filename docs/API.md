@@ -692,7 +692,7 @@ COM 切换，因此不接收上下文参数。
 | `t_cycle_violations` | `uint32_t` | t_cycle 违规次数 |
 | `t_byte_violations` | `uint32_t` | 字节间定时违规次数 |
 | `t_pd_violations` | `uint32_t` | t_pd 违规次数 |
-| `invalid_frames` | `uint32_t` | 判为无效的已收帧：CRC 校验失败（与 `crc_errors` 同步自增）与协议错误转 STARTUP 时各计一次。不是重传次数——库内没有重发路径 |
+| `invalid_frames` | `uint32_t` | 判为无效的已收帧：CRC 校验失败（与 `crc_errors` 同步自增）与 0x97 DeviceStartup 各计一次；校验和有效但类型非法转 STARTUP 的帧不计入。不是重传次数——库内没有重发路径 |
 | `voltage_faults` | `uint32_t` | 累计电压故障数（走 get_faults() 时按故障边沿计数，走旧路径时按轮询周期计数） |
 | `overtemp_faults` | `uint32_t` | 累计过温故障数（走 get_faults() 时按故障边沿计数，走旧路径时为 0） |
 | `short_circuits` | `uint32_t` | 累计短路次数（走 get_faults() 时按故障边沿计数，走旧路径时按轮询周期计数） |

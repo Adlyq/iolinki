@@ -187,12 +187,15 @@ previously missing:
   application owns the non-volatile copy; a `NULL` hook keeps the flag in RAM
   only. The library has no NVM backend and never reads storage — see
   [STORAGE.md](STORAGE.md).
-- **DS parameter set defaults to the three tags.** `ApplicationSpecificTag`
-  (0x0018, optional), `FunctionTag` (0x0019) and `LocationTag` (0x001A) are the
-  profile-conditional tags declared `IOLINK_OD_STORAGE_DS` in the standard
-  table, so they are always serialized. A build that must publish an empty
-  `Index_List` (10.4.5) omits `IOLINK_FEATURE_DATA_STORAGE`, which also removes
-  the mandatory 0x0003 object and is therefore non-conformant.
+- **The default DS parameter set is empty.** `ApplicationSpecificTag`
+  (0x0018, optional), `FunctionTag` (0x0019) and `LocationTag` (0x001A) are
+  profile-conditional tags; they enter the DS set only when the application
+  declares them in its OD table with `IOLINK_OD_STORAGE_DS`. The standard table
+  does not add them, so an instance without an application OD publishes an
+  empty `Index_List` (10.4.5). A build that omits
+  `IOLINK_FEATURE_DATA_STORAGE` also removes the mandatory 0x0003 object and is
+  therefore non-conformant; that switch is for trimming, not for publishing an
+  empty `Index_List`.
 
 ## Spec-mandated corrections
 

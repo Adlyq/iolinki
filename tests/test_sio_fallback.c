@@ -152,6 +152,41 @@ static void test_fallback_command_switches_to_sio_after_t_fbd(void** state)
     assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
 }
 
+static void test_fallback_uses_master_cycle_time(void** state)
+{
+    (void) state;
+
+    /* MinCycleTime alone would give 3 ms. DPP1 MasterCycleTime 0x50 decodes to
+     * 128 * 0.1 ms = 12.8 ms, so T_FBD is 3 * 12.8 ms = 38.4 ms (Table 43). */
+    iolink_stack_config_t config = {.pd_in_len = 0,
+                                    .pd_out_len = 0,
+                                    .m_seq_type = IOLINK_M_SEQ_TYPE_0,
+                                    .od_width = 1,
+                                    .min_cycle_time = 10U};
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+    iolink_test_device_t dev;
+    iolink_test_device_init(&dev, &config, NULL);
+    move_to_operate_ctx(&dev.ctx);
+    test_dll(&dev.ctx)->shared.m_master_cycle_time = 0x50U;
+
+    uint8_t frame[3] = {0x20U, 0x00U, IOLINK_CMD_FALLBACK};
+    frame[1] = test_expected_checksum6(frame, 3U);
+    for (size_t i = 0U; i < sizeof(frame); i++) {
+        mock_phy_feed_byte(frame[i]);
+    }
+    mock_phy_feed_chk();
+    test_io_cycle(&dev.ctx);
+    assert_tx_len(1);
+
+    test_clock_advance_ms(10U);
+    test_io_cycle(&dev.ctx);
+    assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SDCI);
+    test_clock_advance_ms(40U);
+    test_io_cycle(&dev.ctx);
+    assert_int_equal(iolink_device_get_phy_mode(&dev.ctx), IOLINK_PHY_MODE_SIO);
+}
+
 static void test_fallback_command_ignored_without_wakeup(void** state)
 {
     (void) state;
@@ -225,6 +260,7 @@ int main(void)
         cmocka_unit_test(test_valid_frame_after_crc_errors),
         cmocka_unit_test(test_t_dsio_returns_to_sio_without_message),
         cmocka_unit_test(test_fallback_command_switches_to_sio_after_t_fbd),
+        cmocka_unit_test(test_fallback_uses_master_cycle_time),
         cmocka_unit_test(test_fallback_command_ignored_without_wakeup),
     };
     return cmocka_run_group_tests(tests, group_setup, group_teardown);

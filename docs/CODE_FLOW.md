@@ -165,7 +165,7 @@ flowchart LR
     CFG["const iolink_device_config_t *<br/>必须比 ctx 活得久"] --> DEV["iolink_device_ctx_t"]
     DEV --> DLL["iolink_dll_ctx_t"]
     DEV --> DI["device_info ctx"]
-    DEV --> RH["reset_handler"]
+    DEV --> RH["on_reset (app trait)"]
     DEV --> P2["direct_param_page2[16]"]
 
     DLL --> MAIN["dll.main<br/>iolink_dll_main_t"]
@@ -905,7 +905,7 @@ sequenceDiagram
 | `on_master_lost` / `on_master_online` | `iolink_device_process()` | OPERATE 下 `master_lost` 边沿 |
 | `on_pd_output` | `device_run_app_callbacks()` | OPERATE 每周期，报告最新 PD-out |
 | `on_pd_input` | `device_run_app_callbacks()` | `IOLINK_CAP_PD_IN_CALLBACK` 置位时，OPERATE 每周期 |
-| `reset_handler` | `device_dispatch_resets()` | 0x80/0x81 请求后 |
+| `on_reset` | `device_dispatch_resets()` | 0x80/0x81 请求后 |
 | `od` 值后端（`STORAGE` 变量或 `HANDLER` `read`/`write`） | `iolink_od_read_value()` / `iolink_od_write_value()` | 所有应用参数与三个标签共用同一路径 |
 | 表项 `validate` / `on_change` | `iolink_od_write_value()` | 主上下文；`on_change` 是应用落盘与状态同步的唯一通知点 |
 | `config.ds_flag_persist` | `iolink_ds_request_upload()` / `iolink_ds_clear_upload()` | 主上下文；`DS_UPLOAD_FLAG` 变化时回调，应用在此写 NVM |

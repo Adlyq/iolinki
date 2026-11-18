@@ -263,7 +263,7 @@ IOLINK_ASSUME_NONNULL_BEGIN
 #endif
 
 /**
- * @brief 唤醒失败且无有效报文后回退到 SIO（T_DSIO），单位毫秒（Table 47，60..300 ms）。
+ * @brief 唤醒失败且无有效报文后回退到 SIO（T_DSIO），单位毫秒（Table 42，60..300 ms）。
  */
 #ifndef IOLINK_T_DSIO_MS
 #define IOLINK_T_DSIO_MS 300U

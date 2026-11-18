@@ -126,7 +126,7 @@ groups from what the change can break, not from the level:
 | A compile-time switch, an `#if` in `src/`/`include/`, or an `IOLINK_*` configuration macro | `./tools/build_matrix.sh`, plus `./tools/gates.sh quick` (delivery rule in §3) |
 | How the ISR and main contexts share state (`dll_shared.h`, `dll_main.h`, `dll_isr.h`, `tools/shared_fields.csv`) | `./tools/gates.sh quick context test`, and `context` must stay at zero findings (`--enforce` once the split lands) |
 | A specification constant, a state-machine transition, or ISDU/event/DS behaviour | `./tools/gates.sh test` |
-| Documentation only (`*.md`) | `./tools/gates.sh docs` (the generated blocks are compared, not regenerated) |
+| Documentation only (`*.md`) | `./tools/gates.sh quick docs` (`quick` checks the symbol/link references, `docs` the generated blocks; neither regenerates them) |
 | A tool, a CI workflow or a shell script | `./tools/gates.sh quick` |
 | A hot path, or anything that can move ROM/RAM, stack depth or coverage | `./tools/gates.sh perf` |
 | A PHY driver or an example firmware | nothing locally (`package` is already in L2); the `stm32g0-example` arm build exists only in CI |

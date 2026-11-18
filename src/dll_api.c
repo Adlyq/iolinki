@@ -16,7 +16,7 @@
 
 /**
  * @file dll_api.c
- * @brief DLL 公共查询与配置入口。
+ * @brief DLL 公共查询、配置与内部接线实现。
  *
  * 这些函数只读写上下文中的配置与统计字段，不参与
  * 帧处理；协议行为在 dll_frame.c / dll_sm.c。

@@ -35,7 +35,8 @@
  * 服务窗口消费实现 dll_service_window_take()（公共入口
  * iolink_dll_take_service_window() 在 dll.c）。它是
  * iolink_dll_on_stack_tick() 的对偶：Timer B 节拍在 ISR 内只置
- * `stack_tick_pending`，由主泵在 iolink_dll_process() 中取走窗口后运行主循环。
+ * `stack_tick_pending`，由主泵在进入 iolink_dll_process() 之前经
+ * iolink_device_process() 取走窗口后运行主循环。
  *
  * ISR 泵（入口 iolink_dll_process_isr）：
  *

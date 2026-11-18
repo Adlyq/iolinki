@@ -535,8 +535,9 @@ static void dll_apply_isr_deadline_requests(iolink_dll_main_t* ctx)
              * 这只会延长 T_FBD（绝不缩短它），
              * 至多一个主循环延迟。 */
             uint32_t t_fbd_ms = IOLINK_T_FBD_MAX_MS;
-            if (ctx->min_cycle_time_us > 0U) {
-                t_fbd_ms = (IOLINK_T_FBD_MASTER_CYCLES * ctx->min_cycle_time_us) / 1000U;
+            const uint32_t cycle_us = dll_master_cycle_us(ctx);
+            if (cycle_us > 0U) {
+                t_fbd_ms = (IOLINK_T_FBD_MASTER_CYCLES * cycle_us) / 1000U;
                 if (t_fbd_ms > IOLINK_T_FBD_MAX_MS) {
                     t_fbd_ms = IOLINK_T_FBD_MAX_MS;
                 }
@@ -988,7 +989,7 @@ static void dll_process_body(iolink_dll_main_t* ctx)
 
 void iolink_dll_process(iolink_dll_main_t* ctx)
 {
-    if ((ctx == NULL) || (ctx->shared.c_phy == NULL)) {
+    if (ctx->shared.c_phy == NULL) {
         return;
     }
     dll_process_body(ctx);

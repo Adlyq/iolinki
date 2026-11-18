@@ -47,8 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FreeRTOS sources to compile).
 
 ### Tooling and tests
-- `tests/spec_constants.csv` pins 111 specification constants (t_A, T_FSYNC,
-  T_FBD/T_CYCLE, the Annex A layout, Table B.8/B.9/B.12/C.1, the DPP1 offsets)
+- `tests/spec_constants.csv` pins 111 specification constants (t_A,
+  T_FBD/T_CYCLE, the Annex A layout, Table 10/42, Table B.8/B.9/B.12/B.13 and
+  the Table C.1 ISDU codes)
   and `test_spec_constants` fails both ways when the CSV and the code drift; the
   timing literals in `src/` are named `IOLINK_*` constants in `protocol.h`.
 - `tools/gen_docs.py` generates the error-code enum, the DLL stats table, the

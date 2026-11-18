@@ -79,7 +79,7 @@ STM32G0 ports and the conformance device.
 ```bash
 cmake -B build && cmake --build build
 ctest --test-dir build --output-on-failure
-./tools/gates.sh quick    # format, file size, shellcheck, ownership, nullability, test conventions
+./tools/gates.sh quick    # format, file size, shellcheck, ownership, nullability, docs refs, dead fields, public API
 ```
 
 The gate groups and the change-to-gate mapping are in

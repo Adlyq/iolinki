@@ -27,7 +27,7 @@ struct iolink_dll_main
 {
     iolink_dll_shared_t shared;
 
-    volatile uint32_t master_last_activity_ms; /**< 最后一次帧结束 / RX 超时的时间戳 */
+    volatile uint32_t master_last_activity_ms; /**< 主泵最后一次采纳活动标志时的时间戳 */
 
     uint8_t master_lost_cycles; /**< 判定 master_lost 前可错过的周期数；0 = 禁用 */
 

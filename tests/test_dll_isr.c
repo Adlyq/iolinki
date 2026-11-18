@@ -21,7 +21,6 @@
 #include "dll_access.h"
 #include "iolinki/protocol.h"
 #include "test_helpers.h"
-#include "test_null.h"
 
 #include "conformance_test.h"
 

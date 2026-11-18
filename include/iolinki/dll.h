@@ -268,8 +268,9 @@ typedef struct
     uint32_t t_byte_violations;    /**< 字节间定时违规次数 */
     uint32_t t_pd_violations;      /**< t_pd 违规次数 */
     uint32_t invalid_frames;       /**< 判为无效的已收帧：CRC 校验失败（与 `crc_errors` 同步
-                                        自增）与协议错误转 STARTUP 时各计一次。不是重传次数
-                                        ——库内没有重发路径 */
+                                        自增）与 0x97 DeviceStartup 各计一次；校验和有效但类型
+                                        非法转 STARTUP 的帧不计入。不是重传次数——库内没有
+                                        重发路径 */
     uint32_t voltage_faults;       /**< 累计电压故障数（走 get_faults() 时按故障
                                        边沿计数，走旧路径时按轮询周期计数） */
     uint32_t overtemp_faults;      /**< 累计过温故障数（走 get_faults() 时按故障
@@ -522,7 +523,7 @@ uint8_t iolink_dll_compute_min_cycle_time(const iolink_dll_main_t* ctx);
  * @brief 获取 DLL 统计
  *
  * @param ctx DLL 上下文
- * @param[out] out_stats 输出统计结构，填入计数器的快照
+ * @param[out] out_stats 输出统计结构，填入计数器的快照；必须非空（NULL 属调用方错误）
  */
 void iolink_dll_get_stats(const iolink_dll_main_t* ctx, iolink_dll_stats_t* out_stats);
 
