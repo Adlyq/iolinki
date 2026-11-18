@@ -222,10 +222,20 @@ static void dll_plan_push_type0(iolink_dll_main_t* ctx, uint8_t* count, uint8_t 
         0U, IOLINK_REPLY_FLAG_CONSUME | IOLINK_REPLY_FLAG_STAGED, IOLINK_REPLY_ACT_NONE, NULL);
 }
 
-void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
+int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
 {
     if (ctx == NULL) {
-        return;
+        return IOLINK_DLL_PUBLISH_ERR_NULL;
+    }
+    if (ctx->shared.isr == NULL) {
+        /* iolink_dll_init() 尚未成功完成：没有可发布的上下文。 */
+        return IOLINK_DLL_PUBLISH_ERR_UNINIT;
+    }
+    /* 计划表由数据 ISR 查表读取：重建必须与泵互斥。这里显式拒绝误从数据
+     * ISR 的调用，而不是静默重写正在被查的表。 */
+    if (ctx->shared.in_isr != 0U) {
+        IOLINK_LOG_ISR_ERROR(&ctx->shared.log, "reply plan publish rejected inside the data ISR");
+        return IOLINK_DLL_PUBLISH_ERR_ISR;
     }
     /* 计划内容是 {M-sequence 类型, OD 宽度, 能力位} 的纯函数，三项都只在
      * 初始化期间定义；各状态的应答差异由**状态切片**表达，状态迁移不需要
@@ -319,6 +329,7 @@ void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx)
     }
 
     iolink_atomic_store(&ctx->shared.reply_plans_ready, 1U);
+    return IOLINK_DLL_PUBLISH_OK;
 }
 
 /**

@@ -362,6 +362,13 @@ bool iolink_dll_timer_armed(const iolink_dll_main_t* ctx, iolink_timer_id_t id);
  * @param ctx 主上下文（通常为 @c iolink_dll_ctx_t::main）
  * @param isr ISR 独占状态（通常为 @c iolink_dll_ctx_t::isr）
  * @param phy 要绑定的 PHY 实现
+ * @note 本函数与 `iolink_dll_publish_reply_plans()` / `iolink_isdu_bind_workspace()`
+ *       有同一前置条件：主上下文调用，数据泵静止。三者都不会自行串行化，
+ *       区别只在能否在运行期识别误调：另外两个入口在 `shared.in_isr != 0`
+ *       时显式失败，而本函数要清零的正是 `shared.in_isr` 所在的对象，无法在
+ *       清零之前判定调用上下文——误从数据 ISR 调用会直接破坏正在运行的泵。
+ *       任一参数为 NULL 时本函数直接返回、不修改任何对象；
+ *       `iolink_dll_publish_reply_plans()` 因此用 `shared.isr` 报告未初始化。
  * @note 两个对象都会被清零，包括时钟。直接使用 DLL 的用户必须在此调用之后
  *       设置 @c ctx->shared.clock；此外还必须在数据 ISR 静止时设置
  *       `shared.m_seq_type` / `shared.od_width` / `shared.pd_in_len` /
@@ -389,8 +396,17 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
  */
 void iolink_dll_process(iolink_dll_main_t* ctx);
 
+/** @brief iolink_dll_publish_reply_plans() 的结果码。 */
+typedef enum
+{
+    IOLINK_DLL_PUBLISH_OK = 0,          /**< 计划表已完整发布 */
+    IOLINK_DLL_PUBLISH_ERR_NULL = -1,   /**< ctx 为 NULL */
+    IOLINK_DLL_PUBLISH_ERR_UNINIT = -2, /**< 上下文未经 iolink_dll_init() 初始化 */
+    IOLINK_DLL_PUBLISH_ERR_ISR = -3     /**< 在数据 ISR 内调用（`shared.in_isr != 0`） */
+} iolink_dll_publish_result_t;
+
 /**
- * @brief 编译并发布应答计划表（只允许在数据 ISR 静止时调用）。
+ * @brief 编译并发布应答计划表（主上下文调用，数据 ISR 静止）。
  *
  * 计划内容是 {M-sequence 类型, OD 宽度, 能力位} 的纯函数。三项都只能在
  * 初始化时定义：**能力位不支持运行期修改**，M-sequence 类型与 OD 宽度来自
@@ -402,13 +418,20 @@ void iolink_dll_process(iolink_dll_main_t* ctx);
  * 调用本函数期间**开始**的帧不会被处理（也不会计为任何错误）。
  *
  * 标志只保护 ISR 入口，不保护已经在传输泵内的调用：在数据 ISR 可能运行
- * 时重建计划表仍会与查表并发。这是本函数要求"数据 ISR 静止"的原因——
+ * 时重建计划表仍会与查表并发。因此本函数和 `iolink_dll_init()` /
+ * `iolink_isdu_bind_workspace()` 一样要求数据泵静止，并且和后者一样在
+ * 运行期拒绝误从数据 ISR 的调用：返回 ::IOLINK_DLL_PUBLISH_ERR_ISR 并记录
+ * 一条 ISR 错误，此时不写任何计划槽、也不改动 `reply_plans_ready`。
  * `iolink_dll_init()` / `iolink_device_init()` 在中断启用前完成这次编译。
  * 因为没有运行期并发协议，ISR 查表不需要任何序号校验。
  *
  * @param ctx DLL 上下文
+ * @return ::IOLINK_DLL_PUBLISH_OK（0）表示表已发布；否则为
+ *         ::IOLINK_DLL_PUBLISH_ERR_NULL、::IOLINK_DLL_PUBLISH_ERR_UNINIT
+ *         （`iolink_dll_init()` 未成功完成）或 ::IOLINK_DLL_PUBLISH_ERR_ISR，
+ *         失败时上下文保持不变。
  */
-void iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx);
+int iolink_dll_publish_reply_plans(iolink_dll_main_t* ctx);
 
 /**
  * @brief MC 字节为 @p mc 的主站请求的期望长度（字节）。

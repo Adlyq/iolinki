@@ -446,7 +446,7 @@ void iolink_dll_init(iolink_dll_main_t* ctx, iolink_dll_isr_t* isr, const iolink
         iolink_dll_set_sdci_mode(ctx);
     }
     /* 初始状态（STARTUP）的计划：第一个应答由 ISR 提前给出。 */
-    iolink_dll_publish_reply_plans(ctx);
+    (void) iolink_dll_publish_reply_plans(ctx);
 }
 
 /** @brief 消费 ISR 主站活动标志（仅时间戳，不计周期数）。 */

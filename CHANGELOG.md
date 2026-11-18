@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (MAJOR: `iolink_dll_publish_reply_plans()` reports misuse)
+- The reply-plan publisher returns `int` (`iolink_dll_publish_result_t`)
+  instead of `void`: `IOLINK_DLL_PUBLISH_OK` (0) when the table was published,
+  otherwise `IOLINK_DLL_PUBLISH_ERR_NULL` (`ctx == NULL`),
+  `IOLINK_DLL_PUBLISH_ERR_UNINIT` (the context never completed
+  `iolink_dll_init()`, detected by the unbound `shared.isr`) or
+  `IOLINK_DLL_PUBLISH_ERR_ISR` (`shared.in_isr != 0`). A rejected call writes
+  no plan slot, leaves `reply_plans_ready` alone and, for the ISR case, logs an
+  ISR error. Rebuilding the table from the data ISR used to rewrite the table
+  the pump was scanning, with no counter and no error.
+- The two in-library call sites (`iolink_dll_init()`, `iolink_device_init()`)
+  keep publishing at init time and ignore the result of the unreachable
+  refusal paths.
+- `include/iolinki/dll.h` and `include/iolinki/isdu.h` now state one
+  precondition for `iolink_dll_init()`, `iolink_dll_publish_reply_plans()` and
+  `iolink_isdu_bind_workspace()`: main context, data pump quiescent. The latter
+  two refuse a call from the data ISR at run time; `iolink_dll_init()` cannot,
+  because it clears the object that holds `shared.in_isr`.
+- Tests: `tests/test_reply_plan.c` pins the NULL, uninitialised and in-ISR
+  outcomes and checks that a refused call leaves the previous table and the
+  ready flag unchanged.
+
 ### Fixed (CONSUME frame timestamp handoff publishes with a fence)
 - `dll_isr_complete_frame()` now writes `isr_consumed_us`, passes
   `IOLINK_FENCE()` and only then bumps `isr_consumed_seq`, so the sequence

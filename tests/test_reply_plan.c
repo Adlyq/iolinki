@@ -720,9 +720,6 @@ static int test_invalid_frame_is_published(void)
  * 且不计入 isr_plan_misses。 */
 static int test_plan_hit_without_tx_is_deferred(void)
 {
-    /* 公共入口对 NULL 上下文是空操作。 */
-    iolink_dll_publish_reply_plans(TEST_NULL(iolink_dll_main_t*));
-
     init_preoperate_rx_only();
     uint8_t frame[2];
     make_frame((uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x01U), IOLINK_MSEQ_TYPE_0,
@@ -1246,6 +1243,50 @@ static int test_publish_reflects_capability_bits(void)
     return 0;
 }
 
+/* 发布入口的运行期守卫：NULL、未初始化与"在数据 ISR 内"都必须显式失败，
+ * 且失败时表保持上一次已发布的内容。 */
+static int test_publish_rejects_wrong_context(void)
+{
+    if (iolink_dll_publish_reply_plans(TEST_NULL(iolink_dll_main_t*)) !=
+        IOLINK_DLL_PUBLISH_ERR_NULL) {
+        return 1;
+    }
+
+    /* 未经 iolink_dll_init()：shared.isr 未绑定，计划表不存在。 */
+    (void) memset(&s_dll, 0, sizeof(s_dll));
+    if (iolink_dll_publish_reply_plans(&s_dll.main) != IOLINK_DLL_PUBLISH_ERR_UNINIT) {
+        return 2;
+    }
+    if (iolink_atomic_load(&s_dll.main.shared.reply_plans_ready) != 0U) {
+        return 3;
+    }
+
+    /* 在数据 ISR 内：拒绝重建，已发布的表逐字节不变。 */
+    init_operate();
+    s_dll.main.shared.caps |= IOLINK_CAP_COMPAT_T0_READ;
+    s_dll.main.shared.in_isr = 1U;
+    const int rc = iolink_dll_publish_reply_plans(&s_dll.main);
+    s_dll.main.shared.in_isr = 0U;
+    if (rc != IOLINK_DLL_PUBLISH_ERR_ISR) {
+        return 4;
+    }
+    if (type0_page_read_action() != IOLINK_REPLY_ACT_RESET_STARTUP) {
+        return 5; /* 新能力位没有被发布进表 */
+    }
+    if (iolink_atomic_load(&s_dll.main.shared.reply_plans_ready) != 1U) {
+        return 6; /* 就绪标志不得被撤下 */
+    }
+
+    /* 主上下文再次调用：同一份配置正常发布。 */
+    if (iolink_dll_publish_reply_plans(&s_dll.main) != IOLINK_DLL_PUBLISH_OK) {
+        return 7;
+    }
+    if (type0_page_read_action() != IOLINK_REPLY_ACT_NONE) {
+        return 8;
+    }
+    return 0;
+}
+
 /* 直接使用 DLL：iolink_dll_init() 自身必须发布默认表，数据 ISR 无需再被
  * 显式 publish 一次即可命中（设备层会在这之后按完整配置重发布）。 */
 static int test_init_publishes_default_plan(void)
@@ -1349,6 +1390,7 @@ IOLINK_TEST_RC(test_startup_probe_plan)
 IOLINK_TEST_RC(test_type0_idle_read_resets_transport)
 IOLINK_TEST_RC(test_read_reset_keeps_write_entry)
 IOLINK_TEST_RC(test_publish_reflects_capability_bits)
+IOLINK_TEST_RC(test_publish_rejects_wrong_context)
 IOLINK_TEST_RC(test_init_publishes_default_plan)
 IOLINK_TEST_RC(test_process_does_not_republish)
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE
@@ -1389,6 +1431,7 @@ int main(void)
         cmocka_unit_test(iolink_case_test_type0_idle_read_resets_transport),
         cmocka_unit_test(iolink_case_test_read_reset_keeps_write_entry),
         cmocka_unit_test(iolink_case_test_publish_reflects_capability_bits),
+        cmocka_unit_test(iolink_case_test_publish_rejects_wrong_context),
         cmocka_unit_test(iolink_case_test_init_publishes_default_plan),
         cmocka_unit_test(iolink_case_test_process_does_not_republish),
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_BYTE

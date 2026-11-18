@@ -224,8 +224,10 @@ void iolink_isdu_init(iolink_isdu_ctx_t* ctx);
  * fallback 存储。必须在 `iolink_isdu_init()` 之后调用；绑定不会清空
  * 传输状态。设备层由 `iolink_device_init()` 按 `config.workspace` 自动完成。
  *
- * 传输缓冲指针由数据 ISR 读取，因此绑定必须在数据泵静止时进行。从数据
- * ISR 内调用会被拒绝：指针与传输状态都不改变。
+ * 传输缓冲指针由数据 ISR 读取，因此和 `iolink_dll_publish_reply_plans()`
+ * 一样要求主上下文调用、数据泵静止。从数据 ISR 内
+ * （`shared.in_isr != 0`）调用会被拒绝：不改变任何指针与传输状态，并记录
+ * 一条 ISR 错误。
  *
  * @p ws 为 NULL 表示解绑：没有内嵌 fallback 的构建
  * （`IOLINK_WORKSPACE_EMBEDDED=0`）会显式清零全部缓冲指针与容量，

@@ -358,7 +358,7 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
      * 一致。位置必须在 `on_startup` 之前：应用常在该钩子里使能数据中断，而
      * 重建要求数据 ISR 静止。此后不再重发布——能力位与 M-sequence 配置只能
      * 在初始化时定义。 */
-    iolink_dll_publish_reply_plans(&ctx->dll.main);
+    (void) iolink_dll_publish_reply_plans(&ctx->dll.main);
 
     if (config->app->on_startup != NULL) {
         config->app->on_startup(config->app->self);
