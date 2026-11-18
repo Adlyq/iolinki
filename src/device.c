@@ -83,7 +83,7 @@ static void device_apply_stack_config(iolink_device_ctx_t* ctx)
     if (t_pd_us > 0U) {
         /* 时钟已在上文绑定：直接装载 T_PD 表项，deadline 是唯一事实源。 */
         dll_timer_arm(&ctx->dll.main, IOLINK_TIMER_T_PD,
-                      dll_time_us(&ctx->dll.main) + (uint64_t) t_pd_us);
+                      dll_time_us(&ctx->dll.main.shared) + (uint64_t) t_pd_us);
     }
 
     /* 双泵传输：ISR 组帧请求，并基于共享状态组装应答，因此 DLL 需要
@@ -324,7 +324,7 @@ static int device_init_with_workspace(iolink_device_ctx_t* ctx,
                              config->stack->event_min_repeat_ms);
 #endif
     /* iolink_dll_init() 在时钟绑定之前已采样了平台时钟。 */
-    ctx->dll.main.master_last_activity_ms = dll_time_ms(&ctx->dll.main);
+    ctx->dll.main.master_last_activity_ms = dll_time_ms(&ctx->dll.main.shared);
     ctx->dll.main.shared.isdu.direct_param_page2 = ctx->direct_param_page2;
     ctx->dll.main.shared.isdu.device_info = &ctx->device_info;
     ctx->dll.main.shared.isdu.od = config->od;
@@ -618,7 +618,7 @@ iolink_device_pd_result_t iolink_device_pd_input_update(iolink_device_ctx_t* ctx
 
 void iolink_device_process_isr(iolink_device_ctx_t* ctx)
 {
-    iolink_dll_process_isr(&ctx->dll.main);
+    iolink_dll_process_isr(&ctx->dll.main.shared);
 }
 
 int iolink_device_pd_output_read(const iolink_device_ctx_t* ctx, uint8_t* data, size_t len)

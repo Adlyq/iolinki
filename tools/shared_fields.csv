@@ -16,6 +16,7 @@ iolink_dll_shared_t,fallback_clear_request,b_,both,main,已应用非 FALLBACK �
 iolink_dll_shared_t,isr_cycle_served,i_,isr,main,ISR 已服务一个周期的交接标志；主泵清除
 iolink_dll_shared_t,isdu_restart_pending,i_,isr,main,ISR 进入 STARTUP 的复位请求；主泵消费并清除
 iolink_dll_shared_t,startup_notification_pending,i_,isr,main,ISR 进入 STARTUP 的待投递复位通知；主泵投递后清 0
+iolink_dll_shared_t,isr_device_startup_requested,i_,isr,main,ISR 收到 0x97 的一次性请求；主泵完成协议错误记账与 STARTUP 迁移后清 0
 iolink_dll_shared_t,m_seq_type,c_,init,both,支持的 M 序列类型
 iolink_dll_shared_t,pd_in_len,c_,init,both,输入过程数据长度
 iolink_dll_shared_t,od_width,c_,init,both,OPERATE 的 OD 宽度 m

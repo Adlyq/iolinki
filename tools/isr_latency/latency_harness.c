@@ -387,13 +387,13 @@ static void measure_once(const scenario_t* sc, uint64_t* win_ns, uint64_t* call_
     s_measure_armed = 1;
 
     const uint64_t t0 = now_ns();
-    iolink_dll_process_isr(&s_dll.main);
+    iolink_dll_process_isr(&s_dll.main.shared);
     const uint64_t t_call = now_ns();
 
     /* BYTE 模式若把首字节留到后续泵拍，最多补 96 拍。 */
     uint32_t guard = 0U;
     while ((s_t1_set == 0) && (s_dll.main.shared.isr_tx_active != 0U) && (guard < 96U)) {
-        iolink_dll_process_isr(&s_dll.main);
+        iolink_dll_process_isr(&s_dll.main.shared);
         guard++;
     }
     const uint64_t t1 = (s_t1_set != 0) ? s_t1_ns : t_call;
@@ -411,10 +411,10 @@ static int scenario_sanity(const scenario_t* sc)
     s_rx_n = sc->len;
     s_rx_i = 0U;
     s_chk_pending = 1U;
-    iolink_dll_process_isr(&s_dll.main);
+    iolink_dll_process_isr(&s_dll.main.shared);
     uint32_t guard = 0U;
     while ((s_dll.main.shared.isr_tx_active != 0U) && (guard < 96U)) {
-        iolink_dll_process_isr(&s_dll.main);
+        iolink_dll_process_isr(&s_dll.main.shared);
         guard++;
     }
     if (s_tx_n != sc->expect_tx) {

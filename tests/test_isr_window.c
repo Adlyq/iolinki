@@ -53,7 +53,7 @@ static void test_main_window_gated_by_tick(void** state)
     assert_true(test_dll_shared(&dev.ctx)->isdu.reset_pending);
 
     /* 一次 tick 只授权一个窗口。 */
-    iolink_dll_on_stack_tick(test_dll(&dev.ctx));
+    iolink_dll_on_stack_tick(&test_dll(&dev.ctx)->shared);
     iolink_device_process(&dev.ctx);
     assert_int_equal(reset_calls, 1);
 

@@ -230,7 +230,7 @@ static void feed(const uint8_t* frame, size_t len)
 static void drain_tx(void)
 {
     while ((s_dll.main.shared.isr_tx_pending != 0U) || (s_dll.main.shared.isr_tx_active != 0U)) {
-        iolink_dll_process_isr(&s_dll.main);
+        iolink_dll_process_isr(&s_dll.main.shared);
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     test_tx_frame_sync();
@@ -259,7 +259,7 @@ static bool run_consumed_page_read(void)
                frame, sizeof(frame));
     feed(frame, sizeof(frame));
     const uint8_t seq_before = s_dll.main.shared.isr_consumed_seq;
-    iolink_dll_process_isr(&s_dll.main);
+    iolink_dll_process_isr(&s_dll.main.shared);
     drain_tx();
     /* 读取捕获长度即算一次查看：teardown 要求每次交付都被查看过。 */
     const size_t tx_len = tx_observed_len();

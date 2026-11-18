@@ -37,9 +37,12 @@ typedef enum
 } iolink_reply_plan_slot_t;
 
 /**
- * @brief 主上下文与数据 ISR 共享的 DLL 状态。
+ * @brief 共享区（主上下文内嵌，ISR 入口只看它）。
+ *
+ * 完整定义见 dll_shared.h。数据 ISR 的入口与内部泵只接受本类型，
+ * 因此 ISR 翻译单元在编译期看不到 @ref iolink_dll_main_t 的字段。
  */
-typedef struct iolink_dll_shared
+struct iolink_dll_shared
 {
     iolink_dll_isr_t* isr; /**< 组装箱绑定：ISR 独占状态（不透明指针，主上下文无法解引用） */
 
@@ -124,6 +127,9 @@ typedef struct iolink_dll_shared
 
     /** @brief ISR 进入了 STARTUP；主上下文必须上报该事件。 */
     volatile uint8_t startup_notification_pending;
+
+    /** @brief ISR 收到 0x97 DeviceStartup：主泵完成协议错误记账与状态迁移。 */
+    volatile uint8_t isr_device_startup_requested;
 
     /* 配置 */
     uint8_t m_seq_type; /**< 支持的 M 序列类型 */
@@ -262,7 +268,7 @@ typedef struct iolink_dll_shared
     uint32_t timeout_errors; /**< 累计 t_A 超时数（ISR 在 SHARED 统计模式下直接自增） */
 
     iolink_log_sink_t log; /**< 日志汇点（默认静默；设备层绑定） */
-} iolink_dll_shared_t;
+};
 
 /**
  * @name PD-in 发布字

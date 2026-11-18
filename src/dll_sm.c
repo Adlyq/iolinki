@@ -42,7 +42,7 @@ dll_frame_result_t dll_frame_validate(iolink_dll_main_t* ctx)
     const uint8_t expected_ck = dll_rx_expected_cks(crc_buf);
     crc_buf[1] = (uint8_t) (crc_buf[1] & IOLINK_MSEQ_TYPE_MASK);
     const bool crc_ok = (iolink_checksum6(crc_buf, ctx->req_len) == expected_ck);
-    const bool type_ok = dll_type_allowed(ctx, ctx->frame_buf);
+    const bool type_ok = dll_type_allowed(&ctx->shared, ctx->frame_buf);
 
     if (crc_ok && type_ok) {
         return DLL_FRAME_VALID;
@@ -322,8 +322,9 @@ void dll_process_complete_frame(iolink_dll_main_t* ctx)
     if (result == DLL_FRAME_VALID) {
         /* 请求结束边沿：装载 t_A 的软件镜像（PHY Timer A 仍是权威）。
          * 应答开始（dll_send）或到期时取消。 */
-        dll_timer_arm(ctx, IOLINK_TIMER_T_A,
-                      dll_time_us(ctx) + (uint64_t) (IOLINK_T_A_MAX_BITS * dll_get_t_bit_us(ctx)));
+        dll_timer_arm(
+            ctx, IOLINK_TIMER_T_A,
+            dll_time_us(&ctx->shared) + (uint64_t) (IOLINK_T_A_MAX_BITS * dll_get_t_bit_us(ctx)));
         if (!dll_handle_valid_frame(ctx)) {
             return;
         }

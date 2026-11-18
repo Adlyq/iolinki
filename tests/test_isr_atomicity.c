@@ -320,7 +320,7 @@ static void test_reply_staging_pokes_phy_outside_critical(void** state)
     make_frame(frame, sizeof(frame));
     feed_frame(frame, sizeof(frame));
 
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
 
     /* dll_send() 用一次短临界区把“ISR 是否正在流式发送”的检查、
      * 槽位推进、载荷复制与 {长度, CKS, pending} 的发布合成一次操作；
@@ -417,7 +417,7 @@ static void test_isr_drops_a_staged_reply_while_a_frame_is_streaming(void** stat
 
     make_frame(probe, sizeof(probe));
     feed_frame(probe, sizeof(probe));
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
     assert_int_equal(s_ctx.main.shared.isr_tx_active, 1U);
 
     const uint32_t dropped = IOLINK_STAT_TOTAL(&s_ctx.main, isr_tx_dropped);
@@ -429,14 +429,14 @@ static void test_isr_drops_a_staged_reply_while_a_frame_is_streaming(void** stat
     s_ctx.main.shared.stage_has_cks = 0U;
     s_ctx.main.shared.isr_tx_pending = 1U;
 
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
 
     assert_int_equal(s_ctx.main.shared.isr_tx_pending, 0U);
     assert_int_equal(IOLINK_STAT_TOTAL(&s_ctx.main, isr_tx_dropped), dropped + 1U);
     /* 丢弃之后同一中断继续推进在途帧（边沿触发的 PHY 不保证再请求服务）。 */
     assert_int_equal(s_octet_n, octets + 1U);
     for (uint8_t i = 0U; (i < 8U) && (s_ctx.main.shared.isr_tx_active != 0U); i++) {
-        iolink_dll_process_isr(&s_ctx.main);
+        iolink_dll_process_isr(&s_ctx.main.shared);
     }
     assert_int_equal(s_ctx.main.shared.isr_tx_active, 0U);
     assert_int_equal(s_frames_done, 1U);
@@ -465,7 +465,7 @@ static void nested_pump_hook(void)
 {
     s_nested_calls++;
     /* 模拟更高优先级的向量在帧中途调用泵。 */
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
 }
 
 /* 抢占式的泵调用必须让位于外层调用，而不是
@@ -482,7 +482,7 @@ static void test_nested_pump_is_deferred(void** state)
     s_nested_calls = 0U;
     s_timer_start_hook = nested_pump_hook;
 
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
 
     assert_int_equal(s_nested_calls, 1U);
     assert_int_equal(s_ctx.isr.isr_reentry_pending, 0U);
@@ -527,9 +527,9 @@ static void test_state_notification_is_level_based(void** state)
     /* 启动探测（T1）：STARTUP -> PREOPERATE，由 ISR 应答。 */
     make_frame(probe, sizeof(probe));
     feed_frame(probe, sizeof(probe));
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
     while (s_ctx.main.shared.isr_tx_active != 0U) {
-        iolink_dll_process_isr(&s_ctx.main);
+        iolink_dll_process_isr(&s_ctx.main.shared);
     }
     assert_int_equal(s_ctx.main.shared.state, IOLINK_DLL_STATE_PREOPERATE);
     assert_int_equal(s_state_count, 0U); /* 推迟到主窗口 */
@@ -537,9 +537,9 @@ static void test_state_notification_is_level_based(void** state)
     /* 迁移命令：PREOPERATE -> ESTAB_COM，发生在主泵运行之前。 */
     make_frame(trans, sizeof(trans));
     feed_frame(trans, sizeof(trans));
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
     while (s_ctx.main.shared.isr_tx_active != 0U) {
-        iolink_dll_process_isr(&s_ctx.main);
+        iolink_dll_process_isr(&s_ctx.main.shared);
     }
     assert_int_equal(s_ctx.main.shared.state, IOLINK_DLL_STATE_ESTAB_COM);
     assert_int_equal(s_state_count, 0U);
@@ -569,8 +569,8 @@ static void test_isr_startup_notification_is_not_coalesced(void** state)
     s_cb_in_isr = false;
 
     s_ctx.main.shared.in_isr = 1U;
-    /* 模拟 dll_set_state() 在数据 ISR 拥有上下文时执行的那两次写操作。
-     * 挂起位即 ISR 到主泵的边沿通知。 */
+    /* 模拟 dll_set_state_shared() 在数据 ISR 中写的共享字段：
+     * 状态字 + STARTUP 挂起位（ISR 到主泵的边沿通知）。 */
     s_ctx.main.shared.state = IOLINK_DLL_STATE_STARTUP;
     s_ctx.main.shared.startup_notification_pending = 1U;
     s_ctx.main.shared.state = IOLINK_DLL_STATE_PREOPERATE;
@@ -606,7 +606,7 @@ static void test_busy_tx_frame_keeps_frame_for_main(void** state)
     feed_frame(frame, sizeof(frame));
 
     s_tx_rc = -1; /* 线路繁忙 */
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
 
     assert_int_equal(s_tx_calls, 1);
     /* 应答失败（线路繁忙），因此该记录携带 eager = 0，
@@ -623,7 +623,7 @@ static void test_busy_tx_frame_keeps_frame_for_main(void** state)
     assert_true(s_ctx.main.shared.isr_tx_pending != 0U);
 
     /* 下一次 ISR pass 会发送已暂存的应答。 */
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
     assert_int_equal(s_tx_calls, 2);
 }
 #endif
@@ -633,7 +633,7 @@ static void test_busy_tx_frame_keeps_frame_for_main(void** state)
 static void drain_isr_stream(void)
 {
     for (uint8_t i = 0U; (i < 16U) && (s_ctx.main.shared.isr_tx_active != 0U); i++) {
-        iolink_dll_process_isr(&s_ctx.main);
+        iolink_dll_process_isr(&s_ctx.main.shared);
     }
     assert_int_equal(s_ctx.main.shared.isr_tx_active, 0U);
 }
@@ -653,7 +653,7 @@ static void test_staged_reply_keeps_own_length_and_cks(void** state)
     make_frame(frame, sizeof(frame));
     feed_frame(frame, sizeof(frame));
 
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
     assert_int_equal(s_ctx.main.shared.isr_tx_pending, 0U);
 
     /* 主泵生成应答（载荷自带 CKS）并暂存。 */
@@ -665,7 +665,7 @@ static void test_staged_reply_keeps_own_length_and_cks(void** state)
         s_ctx.main.shared.isr_tx_payload[s_ctx.main.shared.isr_tx_pending_slot][0];
 
     /* ISR 取走暂存并发出第一个八位组。 */
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
     assert_int_equal(s_ctx.main.shared.isr_tx_pending, 0U);
     assert_int_equal(s_ctx.main.shared.isr_tx_active, 1U);
     assert_int_equal(s_octet_n, 1U);
@@ -699,13 +699,13 @@ static void test_staging_rejected_while_reply_streaming(void** state)
     /* 只有主泵处理的帧先入邮箱。 */
     make_frame(deferred, sizeof(deferred));
     feed_frame(deferred, sizeof(deferred));
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
     assert_int_equal(iolink_ring_count(&s_ctx.main.shared.isr_frame_ring), 1U);
 
     /* ISR 自己的计划应答开始流式发送（第一个八位组已发出）。 */
     make_frame(probe, sizeof(probe));
     feed_frame(probe, sizeof(probe));
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
     assert_int_equal(s_ctx.main.shared.isr_tx_active, 1U);
     assert_int_equal(s_octet_n, 1U);
 
@@ -740,7 +740,7 @@ static void test_rx_timeout_resets_assembly_in_one_phase(void** state)
     const uint32_t crit_before = s_crit_enters;
 #endif
 
-    iolink_dll_on_rx_timeout(&s_ctx.main);
+    iolink_dll_on_rx_timeout(&s_ctx.main.shared);
 
     assert_int_equal(s_ctx.isr.isr_rx_cnt, 0U);
     assert_int_equal(s_ctx.isr.isr_rx_expect, 0U);
@@ -790,9 +790,9 @@ static void test_isr_startup_defers_event_reset_to_main(void** state)
     /* OPERATE 中的 Type-0 页读：ISR 复位到 STARTUP，不应答。 */
     make_frame(frame, sizeof(frame));
     feed_frame(frame, sizeof(frame));
-    iolink_dll_process_isr(&s_ctx.main);
+    iolink_dll_process_isr(&s_ctx.main.shared);
     while (s_ctx.main.shared.isr_tx_active != 0U) {
-        iolink_dll_process_isr(&s_ctx.main);
+        iolink_dll_process_isr(&s_ctx.main.shared);
     }
 
     assert_int_equal(s_ctx.main.shared.state, IOLINK_DLL_STATE_STARTUP);

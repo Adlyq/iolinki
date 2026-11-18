@@ -442,7 +442,7 @@ uint32_t dll_master_cycle_us(const iolink_dll_main_t* ctx)
  * 见 @ref dll_count_served_cycle 与 `shared.isr_cycle_served`）。 */
 void dll_mark_master_activity_ts(iolink_dll_main_t* ctx)
 {
-    ctx->master_last_activity_ms = dll_time_ms(ctx);
+    ctx->master_last_activity_ms = dll_time_ms(&ctx->shared);
     ctx->master_lost_count = 0U;
     ctx->master_lost = false;
 }

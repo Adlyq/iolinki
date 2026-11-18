@@ -180,7 +180,7 @@ static uint8_t int_active(iolink_app_t* IOLINK_NULLABLE self)
 static void request_service(iolink_app_t* IOLINK_NULLABLE self)
 {
     request_calls++;
-    iolink_dll_process_isr(&((iolink_dll_ctx_t*) self)->main);
+    iolink_dll_process_isr(&((iolink_dll_ctx_t*) self)->main.shared);
 }
 
 static void feed(const uint8_t* frame, size_t n, uint8_t chk)
@@ -194,7 +194,7 @@ static void feed(const uint8_t* frame, size_t n, uint8_t chk)
 static void drain_tx(iolink_dll_ctx_t* ctx)
 {
     while (ctx->main.shared.isr_tx_active != 0U) {
-        iolink_dll_process_isr(&ctx->main);
+        iolink_dll_process_isr(&ctx->main.shared);
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     tx_frame_sync();
@@ -217,7 +217,7 @@ static void make_frame(uint8_t mc, uint8_t type_bits, uint8_t* frame, size_t len
 static void exchange(iolink_dll_ctx_t* ctx, const uint8_t* frame, size_t len, uint8_t chk)
 {
     feed(frame, len, chk);
-    iolink_dll_process_isr(&ctx->main);
+    iolink_dll_process_isr(&ctx->main.shared);
     drain_tx(ctx);
     iolink_dll_process(&ctx->main);
 }
@@ -372,7 +372,7 @@ static int test_request_service_staging(void)
     tx_reset();
     request_calls = 0U;
     feed(frame, sizeof(frame), 1U);
-    iolink_dll_process_isr(&dll.main); /* DEFER：不进 ISR 应答路径 */
+    iolink_dll_process_isr(&dll.main.shared); /* DEFER：不进 ISR 应答路径 */
     if (request_calls != 0U) {
         return 9;
     }

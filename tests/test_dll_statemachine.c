@@ -232,7 +232,7 @@ static void feed(const uint8_t* frame, size_t len)
 static void drain_tx(void)
 {
     while ((s_dll.main.shared.isr_tx_pending != 0U) || (s_dll.main.shared.isr_tx_active != 0U)) {
-        iolink_dll_process_isr(&s_dll.main);
+        iolink_dll_process_isr(&s_dll.main.shared);
     }
 #if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
     sm_tx_frame_sync();
@@ -303,7 +303,7 @@ static int test_phase_property(void)
         make_frame((uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK), IOLINK_MSEQ_TYPE_0,
                    frame, 2U);
         feed(frame, 2U);
-        iolink_dll_process_isr(&s_dll.main);
+        iolink_dll_process_isr(&s_dll.main.shared);
         drain_tx();
         iolink_dll_process(&s_dll.main);
         drain_tx();
@@ -328,7 +328,7 @@ static int test_phase_property(void)
         make_frame((uint8_t) (IOLINK_MC_CHANNEL_PROCESS | IOLINK_MC_RW_MASK), IOLINK_MSEQ_TYPE_0,
                    frame, 2U);
         feed(frame, 2U);
-        iolink_dll_process_isr(&s_dll.main);
+        iolink_dll_process_isr(&s_dll.main.shared);
         drain_tx();
         iolink_dll_process(&s_dll.main);
         drain_tx();
@@ -343,7 +343,7 @@ static int test_phase_property(void)
         make_frame((uint8_t) (IOLINK_MC_CHANNEL_PROCESS | IOLINK_MC_RW_MASK), IOLINK_MSEQ_TYPE_1,
                    frame, 2U);
         feed(frame, 2U);
-        iolink_dll_process_isr(&s_dll.main);
+        iolink_dll_process_isr(&s_dll.main.shared);
         drain_tx();
         iolink_dll_process(&s_dll.main);
         drain_tx();
@@ -361,7 +361,7 @@ static int test_phase_property(void)
         make_frame((uint8_t) (IOLINK_MC_CHANNEL_PROCESS | IOLINK_MC_RW_MASK), IOLINK_MSEQ_TYPE_2,
                    frame, 2U);
         feed(frame, 2U);
-        iolink_dll_process_isr(&s_dll.main);
+        iolink_dll_process_isr(&s_dll.main.shared);
         drain_tx();
         iolink_dll_process(&s_dll.main);
         drain_tx();
@@ -394,7 +394,7 @@ static int test_plan_state_stamp(void)
     uint8_t frame[2];
     make_frame(IOLINK_MC_TRANSITION_COMMAND, IOLINK_MSEQ_TYPE_0, frame, 2U);
     feed(frame, 2U);
-    iolink_dll_process_isr(&s_dll.main);
+    iolink_dll_process_isr(&s_dll.main.shared);
     drain_tx();
     if (s_dll.main.shared.state != IOLINK_DLL_STATE_ESTAB_COM) {
         return 3;
@@ -408,7 +408,7 @@ static int test_plan_state_stamp(void)
     make_frame((uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), IOLINK_MSEQ_TYPE_0,
                frame, 2U);
     feed(frame, 2U);
-    iolink_dll_process_isr(&s_dll.main);
+    iolink_dll_process_isr(&s_dll.main.shared);
     drain_tx();
     if (tx_observed_len() != 2U) {
         return 5; /* 页字节 + CKS */
@@ -432,7 +432,7 @@ static int test_plan_state_stamp(void)
     make_frame((uint8_t) (IOLINK_MC_CHANNEL_PROCESS | IOLINK_MC_RW_MASK), IOLINK_MSEQ_TYPE_1, frame,
                2U);
     feed(frame, 2U);
-    iolink_dll_process_isr(&s_dll.main);
+    iolink_dll_process_isr(&s_dll.main.shared);
     drain_tx();
     if (tx_observed_len() == 0U) {
         return 9;

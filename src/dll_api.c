@@ -179,5 +179,5 @@ uint8_t iolink_dll_expected_req_len(const iolink_dll_main_t* ctx, uint8_t mc)
 {
     /* 本查询问的是“若主站按当前配置发送，这条请求有多长”，
        所以 CKT 取期望的类型位，而不是某个真实帧自报的类型。 */
-    return dll_req_len_for(ctx, mc, dll_expected_type_bits(ctx));
+    return dll_req_len_for(&ctx->shared, mc, dll_expected_type_bits(&ctx->shared));
 }
