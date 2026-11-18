@@ -359,11 +359,14 @@ static void dll_isr_send_staged(iolink_dll_shared_t* ctx, uint8_t slot, uint8_t 
 #endif
 }
 
-/** @brief 帧已由 ISR 处理：刷新活动时间戳。 */
+/** @brief 帧已由 ISR 处理：刷新活动时间戳（单次时钟采样）。 */
 static void dll_isr_touch_activity(iolink_dll_shared_t* ctx)
 {
-    ctx->last_activity_ms = dll_time_ms(ctx);
-    ctx->last_byte_us = (uint32_t) dll_time_us(ctx);
+    /* 毫秒与微秒视图必须来自同一个瞬间：两次采样会让主泵的
+     * 经过时间减法看到比 now_ms 更新的字节时间戳。 */
+    const uint64_t now_us = dll_time_us(ctx);
+    ctx->last_activity_ms = (uint32_t) (now_us / 1000U);
+    ctx->last_byte_us = (uint32_t) now_us;
 }
 
 /** @brief 对 ISDU 写请求返回 true（其 OD 由引擎消费）。 */
