@@ -504,7 +504,7 @@ flowchart LR
 
 规则：
 
-- `iolink_device_pd_input_update()` 与 `on_pd_input()` 在同一构建内共存，按 `on_pd_input != NULL`（能力位 `IOLINK_CAP_PD_IN_CALLBACK`）在 `device_run_app_callbacks()` 中选路；回调路径已选中时，轮询 API 返回 `IOLINK_DEVICE_INIT_ERR_PD_INPUT`，不会静默覆盖回调输出。`on_pd_input()` 的返回值直接作为该次发布的有效位，返回 `false` 会置 CKS bit6。
+- `iolink_device_pd_input_update()` 与 `on_pd_input()` 在同一构建内共存，按 `on_pd_input != NULL`（能力位 `IOLINK_CAP_PD_IN_CALLBACK`）在 `device_run_app_callbacks()` 中选路；回调路径已选中时，轮询 API 返回 `IOLINK_DEVICE_PD_ERR_MODE`，不会静默覆盖回调输出。`on_pd_input()` 的返回值直接作为该次发布的有效位，返回 `false` 会置 CKS bit6。
 - PD-in 长度是初始化属性（`iolink_stack_config_t::pd_in_len`），所有类型都不可在运行期改变；`pd_input_update()` 只接受该配置长度。
 - PD-out 只在 Type-1/2 请求中携带；Type-0 不携带 PD。
 - 有效位为 `false` 会置 CKS bit6，Master 可据此判断 PD 无效；没有 PD-in 的设备恒报有效。0x98 `PROCESS_DATA_OPERATE` / 0x99 `DEVICE_OPERATE` 会临时把有效位置为 `true` / `false`，但只对一个发布代号有效：数据 ISR 执行时把命令值与当时的 `pd_pub.gen` 写进 `pd_valid_cmd`，主上下文下一次 PD-in 发布即恢复应用值；主上下文自己执行时直接发布新的一代。
@@ -659,7 +659,7 @@ flowchart TD
 | `0x84-0x9F` | 保留值（Table B.9），返回 `0x8035` |
 | 其他 | `0x8035` Function not available |
 
-`0x80/0x81` 不会自动重启设备；reset handler 由应用通过 `iolink_device_set_reset_handler()` 注册并决定动作。
+`0x80/0x81` 不会自动重启设备；复位动作由应用在 `iolink_device_app_t::on_reset` 中处理并决定。
 
 DPP1 地址 `0x0F` 的 SystemCommand 走 `iolink_isdu_execute_system_command()`：命令被执行，随后丢弃已暂存的 ISDU 应答（7.3.5.3 不提供肯定/否定应答）。
 
@@ -821,7 +821,7 @@ sequenceDiagram
 4. master-lost/online 边沿回调：只在 `state == OPERATE` 时比较 `master_lost` 与 `master_lost_last`；离开 OPERATE 时清空旧状态。
 5. reset handler：`isdu.reset_pending` / `isdu.app_reset_pending`。
 6. OPERATE 下（`device_run_app_callbacks()`）：
-   - `on_pd_output(app->self, ctx->dll.main.pd_out, pd_out_len_current)`；
+   - `on_pd_output(app->self, ctx->dll.main.pd_out)`；
    - 若 `IOLINK_CAP_PD_IN_CALLBACK`：用 `device_pd_in_free_index()` 取一个 ISR 未在发送的 PD-in 缓冲区，填完后发布一次 PD-in 发布字 `pd_pub`（`{active, valid, gen}`，`IOLINK_FENCE()` + 单次原子存储；长度在 init 固定）；无空闲缓冲时计 `pd_in_skips` 并在下个周期重试。
 
 ### 9.3 回调清单与实际调用点
