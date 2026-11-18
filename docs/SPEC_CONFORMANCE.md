@@ -11,23 +11,45 @@ Status: **PASS** (implemented + tested), **PARTIAL** (subset covered), **N/A**
 (conditional on a profile). All in-scope gaps are closed; the full suite
 (including `test_spec_conformance`) is green: `ctest --output-on-failure`.
 
-Final audit disposition is **111 direct / 19 n/a / 12 out-of-scope**. The
-out-of-scope set is physical/HIL or product-IODD work; the per-case status lives
-in [`tests/conformance_audit.csv`](../tests/conformance_audit.csv). The detailed
-2026-10-28 audit report is kept in the git history.
+Final audit disposition, counted from the `status` column of
+[`tests/conformance_audit.csv`](../tests/conformance_audit.csv) over its 142 case
+IDs: **116 direct / 19 n/a / 7 out-of-scope**. `direct` is the CSV's own status,
+not a claim that every row is covered by a C unit test: the `scope` column marks
+which rows are `library-core`, `library-optional`, `reference-integration` or
+external (the CSV records the evidence per row). The out-of-scope set is
+physical/HIL or product-IODD work, and each such row carries a residual reason.
+The CSV is authoritative for these counts; the detailed 2026-10-28 audit report
+is kept in the git history.
+
+## Traceability anchors
+
+Two identifier sets join this document to machine-readable data. Neither is
+cosmetic and neither may be renamed:
+
+- **Case IDs** — `SDCI_TC_*` (and the audit IDs written as
+  `IOLINK_CONFORMANCE_CASE("...")` in `tests/*.c`). The `case_id` column of
+  [`tests/conformance_audit.csv`](../tests/conformance_audit.csv) is
+  authoritative; an annotation without a CSV row fails
+  `tools/check_conformance_traceability.py`. Case IDs quoted in this document
+  must exist in that CSV.
+- **Clause labels** — the specification's own numbering (`A.1.6`, `10.10.2`,
+  `B.2.22`, `B.3`, `B.8`, `B.9`, `B.13`, `C.1`, `D.1`, `Table 10`, ...). These
+  labels are stable anchors: the constants table planned as
+  `tests/spec_constants.csv` joins its `clause` column on them, so change a
+  label only when the referenced clause itself changes.
 
 ## Transport
 
 | Item | Status | Implementation | Test |
 |---|---|---|---|
-| Two-pump ISR transport (RX/TX BYTE and RX/TX FRAME) | PASS | `src/dll.c` (`iolink_device_process_isr()`) | `test_dll_isr`, `test_isr_*`, plus the full protocol suite via the test warp |
-| M-sequence fixed types 0/1_2/1_V/2_1/2_2/2_3/2_4/2_5 | PASS | `src/device.c`, `src/dll.c` | `test_m_sequence_types`, `virtual_master/tests/test_mseq_layout.py` |
+| Two-pump ISR transport (RX/TX BYTE and RX/TX FRAME) | PASS | `src/device.c` (`iolink_device_process_isr()`), `src/dll_isr.c` (`iolink_dll_process_isr()`) | `test_dll_isr`, `test_isr_*`, plus the full protocol suite via the test warp |
+| M-sequence fixed types 0/1_2/1_V/2_1/2_2/2_3/2_4/2_5 | PASS | `src/device.c`, `src/dll.c` | `test_m_sequence_types`, `tools/virtual_master/tests/test_mseq_layout.py` |
 | TYPE_1_1 (legacy interleave) rejected by V1.1.5 Device | PASS | `src/device.c` | `test_m_sequence_types` |
 | TYPE_2_V (variable PD/OD) | PASS | `src/dll.c` | `test_pd_variable`, `test_dll` |
 | OD width / OPERATE codes 0-7 (Table A.10) | PASS | `include/iolinki/iolink.h` | `test_protocol_tables` |
 | Checksum A.1.6 (incl. ISR accumulator) | PASS | `src/crc.c` | `test_crc`, `test_crc_vectors` |
 | Protocol constants (A.1/A.3/A.12/B.2/B.9/C.1/D.1) | PASS | `include/iolinki/protocol.h` | `test_protocol_constants` |
-| OPERATE TYPE_0 restart for non-TYPE_0 devices (Table 45 T11; SDCI_TC_0038/0049) | PASS | `dll_dispatch_operate()`, `dll_isr_type0_read()` | `test_dll_operate_type0_read_resets`, `test_dll_operate_type0_min_cycle_time_read` |
+| OPERATE TYPE_0 restart for non-TYPE_0 devices (Table 45 T11; SDCI_TC_0038/0049) | PASS | `dll_handle_operate_type0()` via `dll_sm_type0_read()` | `test_dll_operate_type0_read_resets`, `test_dll_operate_type0_min_cycle_time_read` |
 | ISR OPERATE → STARTUP notification remains observable before PREOPERATE | PASS | `startup_notification_pending`, `iolink_dll_flush_state_callbacks()` | `test_isr_startup_notification_is_not_coalesced` |
 | RX FRAME receives complete frames only; truncated prefixes stay in PHY | PASS | `iolink_phy_api_t::rx_frame()` contract | `test_dll_isr` / PHY integration tests |
 
@@ -37,7 +59,7 @@ in [`tests/conformance_audit.csv`](../tests/conformance_audit.csv). The detailed
 |---|---|---|---|
 | 0x0000/0x0001 | Direct Parameter pages 1/2; DPP1 `0x00-0x0F`, DPP2 `0x10-0x1F`; unimplemented reads return 0 | PASS | `test_dll_type0_dpp2_unimplemented_read_returns_zero`, `test_isdu` |
 | 0x0002 | SystemCommand (0x01-0x06, 0x80-0x83; 0x84-0x9F reserved and rejected) | PASS | `test_system_commands`, `test_isdu`, `test_isdu_wire` |
-| 0x0003 | DataStorageIndex — sub 01 DS_Command, 02 State_Property, 03 Size (UInt32), 04 Parameter_Checksum (UInt32), 05 Index_List; sub 0 whole-image (legacy) | PASS | `test_ds`, `test_isdu`, `test_system_commands` |
+| 0x0003 | DataStorageIndex — sub 0 concatenated record (read-only); sub 01 DS_Command, 02 State_Property, 03 Size (UInt32), 04 Parameter_Checksum (UInt32), 05 Index_List. The pre-V1.1 whole-image sub 0 exists only under `IOLINK_CAP_DS_LEGACY_SUB0` | PASS | `test_ds`, `test_isdu`, `test_system_commands` |
 | 0x0004-0x000B | Reserved (VendorID/DeviceID are DPP1) | PASS | `test_vendor_device_id_indices_reserved` |
 | 0x000C | DeviceAccessLocks (RecordT; only subindex 0 is accessible, B.2.4) | PASS | `test_ident_indices`, `test_ds`, `test_spec_conformance`, `test_isdu` |
 | 0x000D | ProfileCharacteristic (ArrayT of UIntegerT16, profile-conditional; subindex 0/1) | PASS | `test_ident_indices`, `test_isdu` |
@@ -56,13 +78,12 @@ in [`tests/conformance_audit.csv`](../tests/conformance_audit.csv). The detailed
 | Area | Status | Test |
 |---|---|---|
 | Event queue, qualifier, classify (Annex D), memory | PASS | `test_events` |
-| Event appears/disappears lifecycle (A.6.4: pairing, 50 ms window, 1 s repeat limit, severity order, clear on comm loss) | PASS | `test_events` |
+| Event appears/disappears lifecycle (10.10.2: pairing, 50 ms appear window, 1 s repeat limit, severity order, clear on comm loss) | PASS | `test_events` |
 | Event memory frozen when the EventFlag is raised (Table 60 T3) | PASS | `test_events` |
 | DPP1 0x0F SystemCommand (executed, no response, 7.3.5.3) | PASS | `test_isdu` |
 | DeviceStatus mapping (B.13) + DetailedDeviceStatus filtering/order (B.2.22) | PASS | `test_isdu`, `test_events` |
 | DS parameter serialization/apply, Fletcher-32 checksum, locks, recovery | PASS | `test_ds`, `test_system_commands` |
 | DS block-download error classification (0x8040 malformed vs 0x8041 rejected parameter) | PASS | `test_ds` |
-| Unified NVM backend (callback-only), fixed region layout, magic/version, record checksum | PASS | `test_ds`, `test_params_persistence` |
 | DS parameter access: OD-derived set (`IOLINK_OD_STORAGE_DS`), entry backend, `block_len` | PASS | `test_ds`, `test_ds_app_od` |
 | DS bindable parameter set incl. device-specific parameters (0x0040+/0x0100+) | PASS | `test_ds` |
 | DS Index_List / Size / State_Property (incl. DS_UPLOAD_FLAG) / Checksum subindices | PASS | `test_isdu` |
@@ -114,9 +135,12 @@ previously missing:
   `reset_pending`; the application owns re-initialization, so the "since reset"
   part depends on the application. B.2.20 explicitly allows vendor/device
   specific usage.
-- **DS_UPLOAD_FLAG persistence** (B.2.10): the flag is persisted through the
-  unified NVM backend (flag region) and restored on init, in addition to being
-  exposed through State_Property bit 7.
+- **DS_UPLOAD_FLAG persistence** (Table B.10, State property): the flag is
+  exposed through State_Property bit 7 and
+  `iolink_device_config_t::ds_flag_persist` is called when it changes. The
+  application owns the non-volatile copy; a `NULL` hook keeps the flag in RAM
+  only. The library has no NVM backend and never reads storage — see
+  [STORAGE.md](STORAGE.md).
 - **DS parameter set defaults to the three tags.** `ApplicationSpecificTag`
   (0x0018, optional), `FunctionTag` (0x0019) and `LocationTag` (0x001A) are the
   profile-conditional tags declared `IOLINK_OD_STORAGE_DS` in the standard
