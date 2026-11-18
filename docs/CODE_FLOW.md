@@ -312,17 +312,18 @@ flowchart TD
     H --> I{"TX BYTE 正在发应答?"}
     I -- 是 --> I1["dll_isr_tx_step()<br/>发一个八位组后 break"]
     I -- 否 --> J["RX FRAME: dll_isr_drain_rx_frame()<br/>RX BYTE: dll_isr_drain_rx_byte()"]
-    J --> K["组装完整请求"]
+    J --> K["取得整帧（RX FRAME）<br/>或累计到完整帧（RX BYTE）"]
     K --> L["长度检查 + A.1.6 校验 + CKT 类型检查"]
     L --> M["dll_isr_complete_frame()"]
-    M --> M1{"ISDU 写且校验通过?"}
+    M --> M1{"ISDU 写?"}
+    M1 -- "是，校验失败" --> M0["丢弃 + isr_eager_rejects++"]
     M1 -- 是 --> M2["dll_isr_consume_isdu_write()<br/>累计到 shared.isdu（位置去重）<br/>自增 isr_isdu_write_gen"]
     M1 -- 否 --> N
     M2 --> N{"合法帧且当前状态切片命中?<br/>只读计划表"}
     N -- 是 --> N2{"计划带 DEFER?"}
     N2 -- 是 --> N3["以 eager=0 发布邮箱<br/>ISR 不应答"]
     N2 -- 否 --> N1["dll_isr_plan_execute()<br/>动作 → 取源 → 追加 CKS → 喂字节"]
-    N -- 否 --> O["丢弃 + isr_plan_misses++<br/>（非法帧则 eager=0 发布邮箱）"]
+    N -- 否 --> O["丢弃 + isr_plan_misses++<br/>不应答、不入邮箱"]
     N1 --> P{"执行成功且带 CONSUME<br/>且非 ESTAB_COM?"}
     P -- 是 --> P1["dll_mark_master_activity_ts()<br/>isr_cycle_served = 1<br/>本帧不再入邮箱"]
     P -- 否 --> Q["以 eager=1（成功）或 eager=0（失败）发布邮箱"]
@@ -330,7 +331,7 @@ flowchart TD
     N3 --> R
     O --> R
     P1 --> R
-    F1 --> R
+    M0 --> R
     I1 --> R
     R --> S{"isr_reentry_pending?"}
     S -- 是 --> E
