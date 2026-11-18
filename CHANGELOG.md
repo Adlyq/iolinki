@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (ISDU read reset keeps the write entry phase)
+- `isdu_transport_reset()` still resets the whole ISDU transport, and now names
+  its two owners explicitly: the main-context read transport fields and the
+  write-entry phase (`req_idx`/`req_total`/`flowctrl_seen`/`stage_state`). A new
+  `isdu_read_reset()` resets only the read side, and the read paths of
+  `iolink_isdu_od_read()` (IDLE, IDLE2, ABORT and a drained response) use it.
+  A read reset no longer clears a write request the data ISR has just started,
+  so a master that aborts an idle read and immediately starts a write keeps the
+  request instead of having every acknowledged COUNT dropped.
+- `isdu_stage_release()` names the write-entry phase reset that
+  `iolink_isdu_od_write()` and the main pump (on COMPLETE/ABORT takeover) use.
+- The read path no longer writes the write entry's FlowCTRL watermark: a read
+  COUNT is accepted while `resp_total != 0`, i.e. after a read START, so read
+  segment sequencing cannot move the write dedupe position.
+  The wire bytes of every read/write sequence are unchanged.
+
 ### Removed (reply plans carry no timing field and are compiled once)
 - `iolink_reply_plan_t::deadline_us` is gone. Nothing read it at run time: the
   ISR arms t_A from `10 * dll_get_t_bit_us()` when it starts a reply
