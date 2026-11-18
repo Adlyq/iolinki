@@ -33,9 +33,17 @@ int iolink_fixture_multiline(const iolink_fixture_ops_t* IOLINK_NONNULL ctx,
 /* 选择器返回一个函数指针。 */
 void (*iolink_fixture_selector(void))(int value);
 
-static inline int iolink_fixture_inline(int value)
+/**
+ * @brief 内联查询（公开头文件中的实现也是 API）。
+ * @param ops   操作表（必需）。
+ * @param flags 可选标志。
+ * @return 当前值。
+ */
+static inline int iolink_fixture_inline(const iolink_fixture_ops_t* IOLINK_NONNULL ops,
+                                        uint32_t IOLINK_NULLABLE flags)
 {
-    return value;
+    (void) ops;
+    return (int) flags;
 }
 
 #endif /* IOLINK_FIXTURE_API_H */

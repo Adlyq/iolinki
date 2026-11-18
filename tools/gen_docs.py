@@ -14,8 +14,9 @@ and each has exactly one source:
   * ``dll_stats`` -- ``iolink_dll_stats_t`` in ``include/iolinki/dll.h``; the
     meaning column is the member's trailing ``/**< ... */`` comment.
   * ``public_api`` -- every function declared in ``include/iolinki/*.h``
-    (``internal/`` excluded). Typedefs, macro constants, struct members and
-    ``static inline`` implementations are not declarations and are skipped.
+    (``internal/`` excluded), including ``static inline`` definitions, which
+    are part of the public API as well. Typedefs, macro constants, struct
+    members and function-pointer types are not functions and are skipped.
   * ``shared_ownership`` -- ``tools/shared_fields.csv``
     (``struct,field,category,writer,reader,note``). The CSV is required: a
     missing file is an error, because an empty ownership table would read as
@@ -351,7 +352,11 @@ def public_functions(source: str) -> list[tuple[str, str]]:
         if stripped.startswith("typedef"):
             continue
         words = re.findall(r"[A-Za-z_]\w*", stripped)
-        if not words or "static" in words:
+        if not words:
+            continue
+        # `static inline` in a public header is public API. A plain `static`
+        # definition (data, or a file-local helper) is not.
+        if "static" in words and "inline" not in words:
             continue
         name = None
         pointer_match = FUNCTION_POINTER_RETURN_RE.search(stripped)
@@ -670,9 +675,17 @@ def selftest() -> int:
         )
         expect("| `fixture_count` | `uint32_t` |" in api, "dll_stats row is missing")
         integration = (workspace / "docs" / "API_INTEGRATION.md").read_text(encoding="utf-8")
-        for name in ("iolink_fixture_multiline", "iolink_fixture_selector"):
+        for name in (
+            "iolink_fixture_multiline",
+            "iolink_fixture_selector",
+            "iolink_fixture_inline",
+        ):
             expect(f"`{name}()`" in integration, f"public_api misses {name}")
-        for name in ("iolink_fixture_inline", "iolink_fixture_fn_typedef", "IOLINK_FIXTURE_MAX"):
+        expect(
+            "内联查询（公开头文件中的实现也是 API）。" in integration,
+            "public_api drops the static inline @brief",
+        )
+        for name in ("iolink_fixture_fn_typedef", "IOLINK_FIXTURE_MAX", "member_cb"):
             expect(name not in integration, f"public_api must not list {name}")
         code_flow = (workspace / "docs" / "CODE_FLOW.md").read_text(encoding="utf-8")
         expect("iolink_dll_shared_t.b_state" in code_flow, "shared_ownership block is empty")
