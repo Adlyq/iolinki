@@ -438,26 +438,10 @@ static const iolink_od_app_t g_od = {
 
 ### 标签由应用提供
 
-`0x0018` Application Tag、`0x0019` Function Tag、`0x001A` Location Tag 不在标准表中；
-应用用 `IOLINK_OD_BYTES_STORAGE[_EX]` 把三个标签作为普通字节串参数提供：
-
-```c
-static char g_application_tag[32];
-static uint8_t g_application_tag_len = 0U;
-
-static const iolink_od_entry_t g_tag_entries[] = {
-    IOLINK_OD_BYTES_STORAGE(0x0018, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
-                            IOLINK_OD_STORAGE_DS, 32U, "ApplicationTag", g_application_tag,
-                            &g_application_tag_len),
-};
-```
-
-`block_len` 同时是长度上限和 IODD 的 `fixedLength`；长度变量是读取时的权威长度。
-应用未声明某个标签时，该索引返回 `0x80 0x11`（索引不可用）。`device_info` 中的
-`application_tag` 只是身份结构里的一个字段，不参与标签的 ISDU 读写；要提供
-`0x0018` 必须在 OD 表中声明表项。
-
-完整表（含校验与触发语义）见 `examples/switching_sensor/switching_sensor_od.c`。
+`0x0018` Application Tag、`0x0019` Function Tag、`0x001A` Location Tag 不在标准表中，
+由应用声明为普通字节串表项（`IOLINK_OD_BYTES_STORAGE[_EX]`）；未声明时索引返回
+`0x80 0x11`，`device_info.application_tag` 不参与应答。表项写法、`block_len`/
+`fixedLength` 与 DS 成员关系见 [STORAGE.md 第 3 节](STORAGE.md#3-三个可写标签-0x0018-0x001a)。
 
 ## 事件 API
 
@@ -562,8 +546,8 @@ DS 的语义是**对象字典的投影**：参数集合就是标准表与应用�
 - **下载**：先通过 `iolink_ds_stage_param()` 暂存写操作；`ParamDownloadEnd` 对整份
   镜像做无副作用预校验（线长、范围和表项 `validate`），全部通过后才逐条通过
   `iolink_od_write_value()` 写回，每条记录写回后触发该表项的 `on_change`。
-- **`DS_UPLOAD_FLAG`**：只保存在 RAM。置位和清除时库调用 `flag_persist`，由应用决定
-  是否、何时写入自己的 NVM。`NULL` 表示仅 RAM。
+- **`DS_UPLOAD_FLAG`**：只保存在 RAM，置位/清除时机与钩子契约见
+  [STORAGE.md 第 5 节](STORAGE.md#5-ds_upload_flag-持久化钩子)。
 - **出厂复位**：`iolink_ds_factory_reset()` 只把 DS 集合中的应用表项恢复为表项默认
   值（`iolink_od_restore_value()`，不执行钩子），不写 NVM，也不处理非 DS 参数。
 
@@ -589,30 +573,10 @@ DS 的语义是**对象字典的投影**：参数集合就是标准表与应用�
 
 ## 应用持久化契约
 
-库不拥有 NVM，也不规定存储格式。持久化完全由应用负责（完整约定与示例见
-[STORAGE.md](STORAGE.md)）：
-
-1. **参数值**：表项声明 `IOLINK_OD_WRITE_STORE` 时，写入只落到后端（应用变量）；
-   落盘时机和格式由应用决定。表项的 `on_change` 钩子在写入成功后调用（`TRIGGER`
-   语义下它是动作本身），应用在此通知后自行编码并写入自己的 NVM。
-2. **DS 备份**：Data Storage 的上传/下载是主站与设备之间的备份机制，不是本地
-   持久化。下载写回每条记录都会触发 `on_change`，应用可以立即落盘或延迟合并。
-   库不把参数镜像写入 NVM，也不在启动时恢复任何值。
-3. **DS_UPLOAD_FLAG**：通过 `config.ds_flag_persist` 通知应用；应用保存该标志并在
-   启动时读取。若保存的值为 true，应用调用 `iolink_ds_request_upload()` 重新置位
-   （该调用会再次触发一次钩子），使主站观察到待上传请求。
-4. **标签**：三个标签是普通应用参数（见“标签由应用提供”），声明
-   `IOLINK_OD_STORAGE_DS` 后进入 DS 备份集，持久化仍由应用在 `on_change` 中完成。
-5. **启动恢复**：库不读取任何 NVM，也不提供加载入口。应用在启动时把自己保存的值
-   写回 OD 表项指向的变量（或 HANDLER 后端），或用 `iolink_od_restore_value()` 写回
-   表项，再调用 `iolink_ds_refresh()` 让 `Data_Storage_Size`/`Parameter_Checksum`
-   反映恢复后的参数集。
-6. **出厂复位**：`iolink_ds_factory_reset()` 只改 RAM；非 DS 参数由应用自行复位，
-   默认值的落盘同样由应用决定。
-
-`on_change` 只看到表项和已接受的线上字节，不接收请求的子索引；需要区分元素时按
-`entry->subindex`/`max_subindex` 判断。返回正值为 ISDU ErrorCode，会被原样上送；
-返回错误时标量回滚，字节串不回滚。
+库不拥有 NVM：参数只在 OD 表里描述一次，落盘格式、介质和时机由应用在 `on_change`
+（`TRIGGER` 语义下它是动作本身）中决定，DS 下载与启动恢复不会替应用写 NVM。
+`DS_UPLOAD_FLAG` 通过 `config.ds_flag_persist` 交给应用保存，`NULL` 表示只存 RAM。
+完整契约（钩子语义、保存策略、启动恢复与出厂复位）见 [STORAGE.md](STORAGE.md)。
 
 ## 错误码
 

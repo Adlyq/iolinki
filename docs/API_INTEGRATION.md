@@ -672,27 +672,10 @@ void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd);
 
 ### 7.2 标签由应用提供
 
-`0x0018` Application Tag、`0x0019` Function Tag、`0x001A` Location Tag 不在内建标准
-表中，由应用用 `IOLINK_OD_BYTES_STORAGE[_EX]` 作为普通字节串参数提供：
-
-```c
-static char g_application_tag[32];
-static uint8_t g_application_tag_len = 0U;
-
-static const iolink_od_entry_t g_tag_entries[] = {
-    IOLINK_OD_BYTES_STORAGE(0x0018, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
-                            IOLINK_OD_STORAGE_DS, 32U, "ApplicationTag",
-                            g_application_tag, &g_application_tag_len),
-};
-```
-
-- `iolink_od_find()` 对这三个索引让应用表优先；应用未声明时索引返回
-  `0x80 0x11`。
-- `block_len` 同时是长度上限和 IODD 的 `fixedLength`；`str_len` 是读取时的权威
-  长度，库只复制原始字节，不添加 NUL。
-- 声明 `IOLINK_OD_STORAGE_DS` 后标签进入 DS 备份集；持久化仍由 `on_change` 通知
-  应用完成（见 7.1 节）。
-- `device_info.application_tag` 只是身份结构里的字段，不参与标签的 ISDU 读写。
+`0x0018`-`0x001A` 不是内建标准对象，而是由应用 OD 表提供的普通字节串参数；
+`device_info.application_tag` 只是身份字段，未声明表项时该索引返回 `0x80 0x11`。
+表项写法、`block_len`/`fixedLength`、`str_len` 语义与 DS 成员关系见
+[STORAGE.md 第 3 节](STORAGE.md#3-三个可写标签-0x0018-0x001a)。
 
 ### 7.3 Data Storage
 
@@ -748,11 +731,8 @@ DS 是对象字典的投影：参数集合就是标准表与应用表中 `storag
   后才逐条通过 `iolink_od_write_value()` 写回，每条记录触发该表项的 `on_change`。
   预校验失败时不会写入任何参数；逐条写回阶段仍可能失败，此时前缀记录已经生效，库
   不提供跨参数事务。未知索引会被跳过，以便替换设备缺少已备份参数时仍能恢复。
-- **`DS_UPLOAD_FLAG`**：只保存在 RAM。`iolink_ds_request_upload()` 置位并调用
-  `flag_persist(user, true)`，上传/下载序列结束或 `iolink_ds_clear_upload()` 清除时
-  调用 `flag_persist(user, false)`。钩子为 NULL 表示仅 RAM。应用保存该标志，启动时
-  若保存值为 true 则调用 `iolink_ds_request_upload()` 重新置位（该调用会再次触发
-  一次钩子），使主站观察到待上传请求。
+- **`DS_UPLOAD_FLAG`**：只保存在 RAM，置位/清除时机与启动恢复的完整契约见
+  [STORAGE.md 第 5 节](STORAGE.md#5-ds_upload_flag-持久化钩子)。
 - **出厂复位**：`iolink_ds_factory_reset()` 只恢复 DS 集合中的应用表项，不写 NVM。
 
 DS 映像不是常驻状态：上下文只持有指向暂存缓冲的指针（
