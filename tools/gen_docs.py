@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the derivable tables in docs/ from their single source of truth.
 
-Four blocks are generated. Each lives between the markers
+Each block lives between the markers
 
     <!-- BEGIN GENERATED: <name> (tools/gen_docs.py) -->
     ...
@@ -21,6 +21,15 @@ and each has exactly one source:
     (``struct,field,category,writer,reader,note``). The CSV is required: a
     missing file is an error, because an empty ownership table would read as
     "nothing is shared" instead of "the data is missing".
+  * ``spec_constants`` -- ``tests/spec_constants.csv`` (``clause,symbol,...``),
+    grouped by clause in first-appearance order.
+  * ``conformance_counts`` / ``conformance_counts_readme`` -- the ``status``
+    column of ``tests/conformance_audit.csv``; the same numbers in
+    ``docs/SPEC_CONFORMANCE.md`` and ``README.md``.
+  * ``direct_visibility`` -- ``tests/conformance_audit.csv``: the ``direct``
+    rows that no other part of ``docs/SPEC_CONFORMANCE.md`` names by case ID,
+    test file or test function. The block itself is excluded from that search,
+    so the table stays stable across regenerations.
 
 Prose is never generated. The block itself must already exist in the document:
 ``--write`` rewrites its contents, ``--check`` compares them byte for byte. A
@@ -50,6 +59,10 @@ FIXTURE = ROOT / "tools" / "fixtures" / "docs" / "gen"
 DEVICE_HEADER = Path("include/iolinki/device.h")
 DLL_HEADER = Path("include/iolinki/dll.h")
 SHARED_FIELDS = Path("tools/shared_fields.csv")
+SPEC_CONSTANTS = Path("tests/spec_constants.csv")
+CONFORMANCE_AUDIT = Path("tests/conformance_audit.csv")
+CONFORMANCE_DOC = Path("docs/SPEC_CONFORMANCE.md")
+README = Path("README.md")
 
 
 class DocsError(Exception):
@@ -81,6 +94,22 @@ BLOCKS = {
         "docs/CODE_FLOW.md",
         "「## 3. 上下文拓扑与所有权」末尾，生命周期段落之后",
     ),
+    "spec_constants": BlockLocation(
+        "docs/SPEC_CONFORMANCE.md",
+        "「## Spec constants」小节，条款表表体",
+    ),
+    "conformance_counts": BlockLocation(
+        "docs/SPEC_CONFORMANCE.md",
+        "开头「Final audit disposition ...」段落的计数句",
+    ),
+    "conformance_counts_readme": BlockLocation(
+        "README.md",
+        "「## IO-Link V1.1.5 Conformance」小节，当前统计段落",
+    ),
+    "direct_visibility": BlockLocation(
+        "docs/SPEC_CONFORMANCE.md",
+        "「## Direct case visibility index」小节，表体",
+    ),
 }
 
 BLOCK_NAMES = tuple(BLOCKS)
@@ -91,6 +120,16 @@ MARKER_RE = re.compile(r"<!-- BEGIN GENERATED: .*? -->|" + re.escape(END_MARKER)
 
 CATEGORIES = {"c_", "m_", "i_", "b_"}
 SHARED_HEADER = ["struct", "field", "category", "writer", "reader", "note"]
+SPEC_HEADER = ["clause", "symbol", "expected", "note"]
+AUDIT_COLUMNS = [
+    "case_id",
+    "title",
+    "status",
+    "unit_test_file",
+    "unit_test_function",
+    "scope",
+]
+AUDIT_STATUSES = ("direct", "n/a", "out-of-scope")
 STATS_MEMBER_RE = re.compile(
     r"([A-Za-z_]\w*(?:\s+[A-Za-z_]\w*)*\s*\*?)\s+([A-Za-z_]\w*)\s*;"
     r"\s*/\*\*<(?P<doc>.*?)\*/",
@@ -534,11 +573,154 @@ def render_shared_ownership(root: Path) -> str:
     return "\n".join(lines)
 
 
+def read_spec_constants(root: Path) -> list[tuple[str, str]]:
+    """Return (clause, symbol) per data row of tests/spec_constants.csv."""
+    path = root / SPEC_CONSTANTS
+    if not path.is_file():
+        raise DocsError(
+            f"{SPEC_CONSTANTS} is missing; the spec constants table has no source of truth"
+        )
+    with path.open(encoding="utf-8", newline="") as stream:
+        reader = csv.reader(stream)
+        try:
+            header = next(reader)
+        except StopIteration as exc:
+            raise DocsError(f"{SPEC_CONSTANTS}: empty file") from exc
+        if header != SPEC_HEADER:
+            raise DocsError(
+                f"{SPEC_CONSTANTS}: expected header {','.join(SPEC_HEADER)}, "
+                f"got {','.join(header)}"
+            )
+        rows: list[tuple[str, str]] = []
+        for line_number, fields in enumerate(reader, start=2):
+            if not fields or all(not field.strip() for field in fields):
+                continue
+            if len(fields) != len(SPEC_HEADER):
+                raise DocsError(
+                    f"{SPEC_CONSTANTS}:{line_number}: expected {len(SPEC_HEADER)} columns, "
+                    f"got {len(fields)}"
+                )
+            clause = fields[0].strip()
+            symbol = fields[1].strip()
+            if not clause or not symbol:
+                raise DocsError(f"{SPEC_CONSTANTS}:{line_number}: clause and symbol are required")
+            rows.append((clause, symbol))
+    if not rows:
+        raise DocsError(f"{SPEC_CONSTANTS}: no data rows")
+    return rows
+
+
+def render_spec_constants(root: Path) -> str:
+    by_clause: dict[str, list[str]] = {}
+    for clause, symbol in read_spec_constants(root):
+        by_clause.setdefault(clause, []).append(symbol)
+    lines = ["| Clause | Constants |", "| :--- | :--- |"]
+    for clause, symbols in by_clause.items():
+        lines.append(f"| {code(clause)} | " + ", ".join(code(s) for s in symbols) + " |")
+    return "\n".join(lines)
+
+
+def read_audit(root: Path) -> list[dict[str, str]]:
+    """Return the conformance audit rows, keeping only the columns rendered here."""
+    path = root / CONFORMANCE_AUDIT
+    if not path.is_file():
+        raise DocsError(
+            f"{CONFORMANCE_AUDIT} is missing; the conformance counts and the direct "
+            "visibility index have no source of truth"
+        )
+    with path.open(encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream)
+        columns = reader.fieldnames or []
+        missing = [column for column in AUDIT_COLUMNS if column not in columns]
+        if missing:
+            raise DocsError(f"{CONFORMANCE_AUDIT}: missing column(s) {', '.join(missing)}")
+        rows: list[dict[str, str]] = []
+        for line_number, raw in enumerate(reader, start=2):
+            row = {column: (raw.get(column) or "").strip() for column in AUDIT_COLUMNS}
+            if not any(row.values()):
+                continue
+            if not row["case_id"]:
+                raise DocsError(f"{CONFORMANCE_AUDIT}:{line_number}: empty case_id")
+            if row["status"] not in AUDIT_STATUSES:
+                raise DocsError(
+                    f"{CONFORMANCE_AUDIT}:{line_number}: status {row['status']!r} is not one "
+                    f"of {', '.join(AUDIT_STATUSES)}"
+                )
+            rows.append(row)
+    if not rows:
+        raise DocsError(f"{CONFORMANCE_AUDIT}: no data rows")
+    return rows
+
+
+def audit_counts(rows: list[dict[str, str]]) -> tuple[int, dict[str, int], str]:
+    """Return (total, per-status counts, "N direct / M n/a / K out-of-scope")."""
+    counts = {status: 0 for status in AUDIT_STATUSES}
+    for row in rows:
+        counts[row["status"]] += 1
+    summary = " / ".join(f"{counts[status]} {status}" for status in AUDIT_STATUSES)
+    return len(rows), counts, summary
+
+
+def render_conformance_counts(root: Path) -> str:
+    total, _, summary = audit_counts(read_audit(root))
+    return "\n".join(
+        [
+            f"**{summary}** of {total} case IDs, counted from the `status` column of",
+            "[`tests/conformance_audit.csv`](../tests/conformance_audit.csv).",
+        ]
+    )
+
+
+def render_conformance_counts_readme(root: Path) -> str:
+    total, counts, summary = audit_counts(read_audit(root))
+    lines = [f"**{summary}** of {total} Test Spec case IDs."]
+    if counts["out-of-scope"]:
+        lines.append(
+            "The out-of-scope items are physical/HIL or product-IODD work; they are not "
+            "claimed as library conformance."
+        )
+    return "\n".join(lines)
+
+
+GENERATED_BLOCK_RE = re.compile(
+    r"<!-- BEGIN GENERATED: .*? -->.*?<!-- END GENERATED -->", re.DOTALL
+)
+
+
+def render_direct_visibility(root: Path) -> str:
+    """Rows no other part of SPEC_CONFORMANCE.md names by ID, file or function."""
+    doc_path = root / CONFORMANCE_DOC
+    if not doc_path.is_file():
+        raise DocsError(f"{CONFORMANCE_DOC} does not exist")
+    prose = GENERATED_BLOCK_RE.sub("", doc_path.read_text(encoding="utf-8"))
+    lines = ["| Case ID | Case | Test evidence |", "| :--- | :--- | :--- |"]
+    for row in read_audit(root):
+        if row["status"] != "direct":
+            continue
+        evidence = {
+            row["case_id"],
+            row["unit_test_file"],
+            row["unit_test_function"],
+            Path(row["unit_test_file"]).stem,
+        }
+        if any(item and item in prose for item in evidence):
+            continue
+        lines.append(
+            f"| {code(row['case_id'])} | {md_cell(row['title'])} | "
+            f"{code(row['unit_test_function'])} (`{row['unit_test_file']}`) |"
+        )
+    return "\n".join(lines)
+
+
 RENDERERS = {
     "device_error_codes": render_device_error_codes,
     "dll_stats": render_dll_stats,
     "public_api": render_public_api,
     "shared_ownership": render_shared_ownership,
+    "spec_constants": render_spec_constants,
+    "conformance_counts": render_conformance_counts,
+    "conformance_counts_readme": render_conformance_counts_readme,
+    "direct_visibility": render_direct_visibility,
 }
 
 
@@ -691,11 +873,87 @@ def selftest() -> int:
         expect("iolink_dll_shared_t.b_state" in code_flow, "shared_ownership block is empty")
         expect("FOREIGN CONTENT" in code_flow, "a foreign generated block was rewritten")
 
+        conformance = (workspace / CONFORMANCE_DOC).read_text(encoding="utf-8")
+        expect(
+            "| `Table 10` | `IOLINK_FIXTURE_WU_US` |" in conformance,
+            "spec_constants block is not the fixture clause table",
+        )
+        expect(
+            "fixture wake-up" not in conformance and " 80" not in conformance.split("## Counts")[0],
+            "spec_constants block must not render the expected value or the note",
+        )
+        expect(
+            "of 4 case IDs" in conformance
+            and "**2 direct / 1 n/a / 1 out-of-scope**" in conformance,
+            "conformance_counts block does not summarise the fixture audit CSV",
+        )
+        expect(
+            "| `SDCI_TC_0001` | fixture_inline_case |" in conformance,
+            "direct_visibility block misses the unnamed direct row",
+        )
+        for case_id in ("SDCI_TC_0002", "SDCI_TC_0003", "SDCI_TC_0004"):
+            expect(
+                case_id not in conformance.split("## Direct case visibility index")[1],
+                f"direct_visibility must not list {case_id}",
+            )
+        fixture_readme = (workspace / README).read_text(encoding="utf-8")
+        expect(
+            "**2 direct / 1 n/a / 1 out-of-scope** of 4 Test Spec case IDs." in fixture_readme,
+            "conformance_counts_readme block does not summarise the fixture audit CSV",
+        )
+
         # Tampering with one number must make --check fail.
         tampered = api.replace("IOLINK_DEVICE_INIT_ERR_BAD = -7", "IOLINK_DEVICE_INIT_ERR_BAD = -8", 1)
         (workspace / "docs" / "API.md").write_text(tampered, encoding="utf-8")
         errors = verify(workspace, ("device_error_codes",))
         expect(bool(errors), "tampered enum value passed --check")
+
+        tampered_readme = fixture_readme.replace("**2 direct", "**3 direct", 1)
+        (workspace / README).write_text(tampered_readme, encoding="utf-8")
+        errors = verify(workspace, ("conformance_counts_readme",))
+        expect(bool(errors), "tampered audit count passed --check")
+        (workspace / README).write_text(fixture_readme, encoding="utf-8")
+
+        # Dropping a CSV row must make the generated table stale.
+        spec_csv = workspace / SPEC_CONSTANTS
+        spec_text = spec_csv.read_text(encoding="utf-8")
+        spec_csv.write_text(
+            "\n".join(line for line in spec_text.splitlines() if "IOLINK_FIXTURE_T1_BITS" not in line)
+            + "\n",
+            encoding="utf-8",
+        )
+        errors = verify(workspace, ("spec_constants",))
+        expect(bool(errors), "removing a spec_constants.csv row passed --check")
+        spec_csv.write_text(spec_text, encoding="utf-8")
+
+        # A new clause label needs no registry edit: the CSV is the data source.
+        spec_csv.write_text(
+            spec_text + "Table 99,IOLINK_FIXTURE_NEW,7,fixture new clause\n", encoding="utf-8"
+        )
+        errors = rewrite(workspace, ("spec_constants",))
+        expect(not errors, "a new clause label broke the spec table: " + "; ".join(errors))
+        errors = verify(workspace, ("spec_constants",))
+        expect(not errors, "rewritten spec table is stale: " + "; ".join(errors))
+        conformance = (workspace / CONFORMANCE_DOC).read_text(encoding="utf-8")
+        expect(
+            "| `Table 99` | `IOLINK_FIXTURE_NEW` |" in conformance,
+            "a new CSV clause did not reach the table",
+        )
+        spec_csv.write_text(spec_text, encoding="utf-8")
+        rewrite(workspace, ("spec_constants",))
+
+        # An unknown status in the audit CSV is a hard failure, not a count.
+        audit_csv = workspace / CONFORMANCE_AUDIT
+        audit_text = audit_csv.read_text(encoding="utf-8")
+        audit_csv.write_text(
+            audit_text.replace(",n/a,", ",partial,", 1), encoding="utf-8"
+        )
+        errors = verify(workspace, ("conformance_counts",))
+        expect(
+            any("status 'partial'" in error for error in errors),
+            "an unknown audit status was not rejected",
+        )
+        audit_csv.write_text(audit_text, encoding="utf-8")
 
         # Restore, then exercise the hard-failure paths.
         (workspace / "docs" / "API.md").write_text(api, encoding="utf-8")

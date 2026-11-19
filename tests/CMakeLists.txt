@@ -344,9 +344,29 @@ iolink_test(NAME test_crc_vectors SOURCES test_crc_vectors.c CMOCKA)
 iolink_test(NAME test_device SOURCES test_device.c CMOCKA)
 iolink_test(NAME test_ident_indices SOURCES test_ident_indices.c CMOCKA)
 iolink_test(NAME test_protocol_constants SOURCES test_protocol_constants.c CMOCKA)
-# 规范常量表：CSV 与 C 表必须双向一致（路径由编译定义传入）。
-iolink_test(NAME test_spec_constants SOURCES test_spec_constants.c NO_HELPERS
-    DEFS "IOLINK_SPEC_CONSTANTS_CSV=\"${CMAKE_CURRENT_SOURCE_DIR}/spec_constants.csv\"")
+# 规范常量表：CSV 与 C 表必须双向一致（路径由编译定义传入）。符号清单由
+# tools/gen_spec_constants.py 从同一个 CSV 生成，只有符号、没有数值。
+if(NOT Python3_FOUND)
+    message(FATAL_ERROR
+        "test_spec_constants needs python3 to generate its SPEC_ENTRY symbol list")
+endif()
+set(IOLINK_SPEC_CONSTANTS_CSV "${CMAKE_CURRENT_SOURCE_DIR}/spec_constants.csv")
+set(IOLINK_SPEC_CONSTANTS_TABLE "${CMAKE_CURRENT_BINARY_DIR}/gen/spec_constants_table.h")
+add_custom_command(
+    OUTPUT "${IOLINK_SPEC_CONSTANTS_TABLE}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/gen_spec_constants.py"
+            --csv "${IOLINK_SPEC_CONSTANTS_CSV}"
+            --output "${IOLINK_SPEC_CONSTANTS_TABLE}"
+    DEPENDS "${IOLINK_SPEC_CONSTANTS_CSV}"
+            "${CMAKE_SOURCE_DIR}/tools/gen_spec_constants.py"
+    COMMENT "Generating spec_constants_table.h from spec_constants.csv"
+    VERBATIM)
+set_source_files_properties("${IOLINK_SPEC_CONSTANTS_TABLE}" PROPERTIES GENERATED TRUE)
+iolink_test(NAME test_spec_constants
+    SOURCES test_spec_constants.c "${IOLINK_SPEC_CONSTANTS_TABLE}"
+    INCLUDES "${CMAKE_CURRENT_BINARY_DIR}/gen"
+    NO_HELPERS
+    DEFS "IOLINK_SPEC_CONSTANTS_CSV=\"${IOLINK_SPEC_CONSTANTS_CSV}\"")
 iolink_test(NAME test_system_commands SOURCES test_system_commands.c CMOCKA)
 iolink_test(NAME test_config_trim SOURCES test_config_trim.c CMOCKA)
 # Spec-conformance assertions for the B.2 / Table B.x object rules.

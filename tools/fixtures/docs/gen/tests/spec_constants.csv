@@ -1,0 +1,3 @@
+clause,symbol,expected,note
+Table 10,IOLINK_FIXTURE_WU_US,80,fixture wake-up pulse
+A.3.3,IOLINK_FIXTURE_T1_BITS,1,fixture inter-frame delay

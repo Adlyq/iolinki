@@ -11,10 +11,15 @@ Status: **PASS** (implemented + tested), **PARTIAL** (subset covered), **N/A**
 (conditional on a profile). All in-scope gaps are closed; the full suite
 (including `test_spec_conformance`) is green: `ctest --output-on-failure`.
 
-Final audit disposition, counted from the `status` column of
-[`tests/conformance_audit.csv`](../tests/conformance_audit.csv) over its 142 case
-IDs: **116 direct / 19 n/a / 7 out-of-scope**. `direct` is the CSV's own status,
-not a claim that every row is covered by a C unit test: the `scope` column marks
+Final audit disposition, generated from the CSV:
+
+<!-- BEGIN GENERATED: conformance_counts (tools/gen_docs.py) -->
+**116 direct / 19 n/a / 7 out-of-scope** of 142 case IDs, counted from the `status` column of
+[`tests/conformance_audit.csv`](../tests/conformance_audit.csv).
+<!-- END GENERATED -->
+
+`direct` is the CSV's own status, not a claim that every row is covered by a C
+unit test: the `scope` column marks
 which rows are `library-core`, `library-optional`, `reference-integration` or
 external (the CSV records the evidence per row). The out-of-scope set is
 physical/HIL or product-IODD work, and each such row carries a residual reason.
@@ -51,22 +56,24 @@ value mismatch prints the clause, symbol, expected and actual values. Both
 sides therefore change together; the CSV is the reviewable data, the C table is
 the compiled oracle.
 
-Every `clause` label must come from the hand-maintained list in
-`tools/check_conformance_traceability.py` (the checker does not parse the PDF),
-and every symbol below must exist in the CSV. `direct` rows of the audit CSV
-must be reachable from this document by case ID, test file or test function.
+Every `clause` label must be one the CSV uses: the checker derives the known
+labels from `tests/spec_constants.csv` and the table below, so there is no
+second list to update (it does not parse the PDF, but it does check the label
+grammar). Every symbol below must exist in the CSV. `direct` rows of the audit
+CSV must be reachable from this document by case ID, test file or test function.
 
+<!-- BEGIN GENERATED: spec_constants (tools/gen_docs.py) -->
 | Clause | Constants |
-|---|---|
+| :--- | :--- |
 | `Table 10` | `IOLINK_T_WU_US`, `IOLINK_T_REN_US` |
 | `Table 42` | `IOLINK_T_DSIO_MS` |
 | `10.10.2` | `IOLINK_EVENT_MIN_APPEAR_MS`, `IOLINK_EVENT_MIN_REPEAT_MS` |
+| `A.3.6` | `IOLINK_UART_FRAME_BITS`, `IOLINK_MSEQ_MASTER_OCTET_BITS`, `IOLINK_MSEQ_DEVICE_OCTET_BITS`, `IOLINK_MSEQ_TIMING_FIXED_BITS` |
 | `A.3.3` | `IOLINK_T1_MAX_BITS` |
 | `A.3.4` | `IOLINK_T2_MAX_BITS` |
 | `A.3.5` | `IOLINK_T_A_MAX_BITS` |
-| `A.3.6` | `IOLINK_UART_FRAME_BITS`, `IOLINK_MSEQ_MASTER_OCTET_BITS`, `IOLINK_MSEQ_DEVICE_OCTET_BITS`, `IOLINK_MSEQ_TIMING_FIXED_BITS` |
-| `Table 43` | `IOLINK_T_FBD_MASTER_CYCLES`, `IOLINK_T_FBD_MAX_MS` |
 | `Table 47` | `IOLINK_T_BYTE_WINDOW_BITS` |
+| `Table 43` | `IOLINK_T_FBD_MASTER_CYCLES`, `IOLINK_T_FBD_MAX_MS` |
 | `Table B.3` | `IOLINK_CYCLE_TIME_UNIT_US`, `IOLINK_MIN_CYCLE_TIME_UNITS` |
 | `7.3.3.2` | `IOLINK_M_SEQ_HEADER_LEN`, `IOLINK_M_SEQ_TYPE0_LEN`, `IOLINK_M_SEQ_MIN_LEN` |
 | `A.1.2` | `IOLINK_MC_RW_MASK`, `IOLINK_MC_COMM_CHANNEL_MASK`, `IOLINK_MC_ADDR_MASK` |
@@ -83,6 +90,7 @@ must be reachable from this document by case ID, test file or test function.
 | `Table C.1` | `IOLINK_ISDU_ERROR_IDX_NOT_AVAIL`, `IOLINK_ISDU_ERROR_SUBINDEX_NOT_AVAIL`, `IOLINK_ISDU_ERROR_SERVICE_TEMP_NOT_AVAIL`, `IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_LOCAL_CTRL`, `IOLINK_ISDU_ERROR_SERVICE_NOT_AVAIL_DEV_CTRL`, `IOLINK_ISDU_ERROR_NOT_ACCESSIBLE`, `IOLINK_ISDU_ERROR_WRITE_PROTECTED`, `IOLINK_ISDU_ERROR_PAR_VAL_OUT_OF_RNG`, `IOLINK_ISDU_ERROR_PAR_VAL_GT_LIM`, `IOLINK_ISDU_ERROR_PAR_VAL_LT_LIM`, `IOLINK_ISDU_ERROR_VAL_LEN_OVRRUN`, `IOLINK_ISDU_ERROR_VAL_LEN_UNDRUN`, `IOLINK_ISDU_ERROR_FUNCTION_NOT_AVAIL`, `IOLINK_ISDU_ERROR_FUNCTION_TEMP_UNAVAIL`, `IOLINK_ISDU_ERROR_PARAM_SET_INVALID`, `IOLINK_ISDU_ERROR_PARAM_INCONSISTENT`, `IOLINK_ISDU_ERROR_APP_DEV_NOT_READY` |
 | `Table B.13` | `IOLINK_DEVICE_STATUS_OK`, `IOLINK_DEVICE_STATUS_MAINTENANCE`, `IOLINK_DEVICE_STATUS_OUT_OF_SPEC`, `IOLINK_DEVICE_STATUS_FUNCTIONAL_CHECK`, `IOLINK_DEVICE_STATUS_FAILURE` |
 | `B.1.5` | `IOLINK_REVISION_ID_1_0`, `IOLINK_REVISION_ID_1_1` |
+<!-- END GENERATED -->
 
 ## Transport
 
@@ -188,28 +196,31 @@ must be reachable from this document by case ID, test file or test function.
 Every `direct` row of the audit CSV is reachable from this document by case ID,
 test file or test function. The rows below are the ones no area table names
 directly; each still carries its `IOLINK_CONFORMANCE_CASE` annotation in the
-test function itself.
+test function itself. The table is generated from the CSV (a row stops being
+listed here as soon as an area table names it).
 
-| Case ID | Test evidence | Pins |
-|---|---|---|
-| `SDCI_TC_0053` | `test_isr_observability` | Reserved FlowCTRL in the ISDU idle state answers "no service" |
-| `SDCI_TC_0063` | `test_conformance_untested` | Write-length overrun keeps the previous parameter value |
-| `SDCI_TC_0064` | `test_conformance_untested` | Write with a wrong length keeps the previous parameter value |
-| `SDCI_TC_0068` | `test_isr_observability` | Aborted read response handling |
-| `SDCI_TC_0122` | `test_conformance_untested` | Valid ApplicationSpecificTag write |
-| `SDCI_TC_0123` | `test_conformance_untested` | Over-long tag write is rejected without losing the value |
-| `SDCI_TC_0124` | `test_conformance_untested` | ErrorCount increments and resets |
-| `SDCI_TC_0128` | `test_conformance_untested` | DeviceStatus in OPERATE |
-| `SDCI_TC_0131` | `test_conformance_untested` | DetailedDeviceStatus is active after a restart |
-| `SDCI_TC_0145` | `test_conformance_untested` | Download break by reset |
-| `SDCI_TC_0146` | `test_conformance_device` | Illegal download breaks the block parameterization |
-| `SDCI_TC_0155` | `test_conformance_untested` | Restore-factory-settings sequence |
-| `SDCI_TC_0309` | `test_isr_observability` | ISDU segment repeat |
-| `SDCI_TC_0316` | `test_conformance_untested` | Device reset sequence |
-| `SDCI_TC_0317` | `test_conformance_untested` | Application reset sequence |
-| `SDCI_TC_0318` | `test_conformance_untested` | Back-to-box sequence |
-| `SDCI_TC_0329` | `test_conformance_untested` | Upload break by reset |
-| `SDCI_TC_0373` | `test_conformance_device` | Event-driven DeviceStatus |
+<!-- BEGIN GENERATED: direct_visibility (tools/gen_docs.py) -->
+| Case ID | Case | Test evidence |
+| :--- | :--- | :--- |
+| `SDCI_TC_0053` | TCD_DLIC_ISDU_IDLEBUSYCHECK | `test_0053_reserved_flowctrl_no_service` (`tests/test_isr_observability.c`) |
+| `SDCI_TC_0063` | TCD_DLIC_ISDU_WRITE8LENOVERRUN | `test_0063_0064_length_errors_preserve_config1` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0064` | TCD_DLIC_ISDU_WRITE8WRONGLEN | `test_0063_0064_length_errors_preserve_config1` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0068` | TCD_DLIC_ISDU_ABORTREADRESP | `test_0068_aborted_read_response` (`tests/test_isr_observability.c`) |
+| `SDCI_TC_0122` | TCD_DLIC_DEFP_TAGVALID | `test_0123_application_tag_overlong_preserves_value` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0123` | TCD_DLIC_DEFP_TAGINVALID | `test_0123_application_tag_overlong_preserves_value` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0124` | TCD_DLIC_DEFP_ERRCOUNT | `test_0124_error_count_increment_and_reset` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0128` | TCD_DLIC_DEFP_DEVSTAT | `test_0128_device_status_in_operate` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0131` | TCD_DLIC_DEFP_DETAILDEVSTATACTIVE | `test_0131_detailed_device_status_active_after_restart` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0145` | TCD_DSBP_APPL_BPBREAKRESET | `test_0145_download_break_by_reset` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0146` | TCD_DSBP_APPL_BPBREAKILLPARAM | `test_conformance_0146_illegal_download` (`tests/test_conformance_device.c`) |
+| `SDCI_TC_0155` | TCD_IODD_PARV_FACTORYSETTINGS | `test_0155_factory_settings_sequence` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0309` | TCD_DLIC_ISDU_ELEMENT_RETRY | `test_0309_isdu_segment_repeat` (`tests/test_isr_observability.c`) |
+| `SDCI_TC_0316` | TCD_IODD_PARV_DEVICERESET | `test_0316_device_reset_sequence` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0317` | TCD_IODD_PARV_APPLRESET | `test_0317_application_reset_sequence` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0318` | TCD_IODD_PARV_BACKTOBOX | `test_0318_back_to_box_sequence` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0329` | TCD_DSBP_APPL_UPBREAKRESET | `test_0329_upload_break_by_reset` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0373` | TCD_DLIC_DEFP_EVENTDEVSTAT | `test_conformance_event_device_status` (`tests/test_conformance_device.c`) |
+<!-- END GENERATED -->
 
 ## Related
 

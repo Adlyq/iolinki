@@ -152,9 +152,13 @@ Conformance status is tracked case by case, not by a headline test count:
 - **[Machine-readable audit](tests/conformance_audit.csv)** — authoritative per-case status.
 
 Current disposition, counted from the `status` column of the audit CSV:
-**116 direct / 19 n/a / 7 out-of-scope** of 142 Test Spec case IDs. The 7
-out-of-scope items are physical/HIL or product-IODD work; they are not claimed
-as library conformance. There are no in-scope `partial` or `gap` entries.
+
+<!-- BEGIN GENERATED: conformance_counts_readme (tools/gen_docs.py) -->
+**116 direct / 19 n/a / 7 out-of-scope** of 142 Test Spec case IDs.
+The out-of-scope items are physical/HIL or product-IODD work; they are not claimed as library conformance.
+<!-- END GENERATED -->
+
+There are no in-scope `partial` or `gap` entries.
 
 Run the host suite and the traceability gate with:
 

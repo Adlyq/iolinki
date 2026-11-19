@@ -2,7 +2,9 @@
 """Validate the conformance traceability matrix and test annotations."""
 from __future__ import annotations
 
+import contextlib
 import csv
+import io
 import os
 import re
 import sys
@@ -33,49 +35,15 @@ VALID_RESIDUAL = {
     "external-product-iodd",
 }
 
-# Clause labels a spec_constants.csv row may use. This is a hand-maintained
-# list of labels that exist in the bundled V1.1.5 PDF; the checker deliberately
-# does not parse the PDF, so a new label is an explicit edit here.
-SPEC_CLAUSES = {
-    "A.1.2",
-    "A.1.3",
-    "A.1.6",
-    "A.3.3",
-    "A.3.4",
-    "A.3.5",
-    "A.3.6",
-    "A.6.4",
-    "7.3.3.2",
-    "7.3.6.2",
-    "10.7.5",
-    "10.10.2",
-    "B.1.5",
-    "B.2.22",
-    "B.3",
-    "B.8",
-    "B.9",
-    "B.13",
-    "C.1",
-    "D.1",
-    "Table 10",
-    "Table 42",
-    "Table 43",
-    "Table 47",
-    "Table 52",
-    "Table A.1",
-    "Table A.3",
-    "Table A.6",
-    "Table A.10",
-    "Table A.12",
-    "Table B.1",
-    "Table B.2",
-    "Table B.3",
-    "Table B.8",
-    "Table B.9",
-    "Table B.12",
-    "Table B.13",
-    "Table C.1",
-}
+# A clause label as the specification writes it: a table reference
+# ("Table B.13"), an annex/table sub-clause ("A.1.6", "B.3", "C.1") or a
+# numbered section ("10.10.2"). The checker does not parse the bundled PDF, so
+# what it verifies is the label grammar plus the agreement between
+# tests/spec_constants.csv and the generated table: the CSV is the only label
+# registry, a new clause needs no edit here.
+CLAUSE_LABEL_RE = re.compile(
+    r"(?:Table\s+(?:[A-D]\.)?\d+(?:\.\d+)*|[A-D](?:\.\d+)+|\d+(?:\.\d+)+)"
+)
 SPEC_FIELDS = ["clause", "symbol", "expected", "note"]
 CASE_ID_RE = re.compile(r"\b(SDCI_TC_\d+|TC_[A-Za-z][A-Za-z0-9_]*)\b")
 SPEC_SYMBOL_RE = re.compile(r"^IOLINK_[A-Z0-9_]+$")
@@ -264,7 +232,7 @@ def load_spec_rows() -> list[dict[str, str]]:
     return rows
 
 
-def check_spec_csv(rows: list[dict[str, str]]) -> set[str]:
+def check_spec_csv(rows: list[dict[str, str]], allowed: set[str]) -> set[str]:
     symbols: set[str] = set()
     for index, row in enumerate(rows, start=2):
         clause = (row["clause"] or "").strip()
@@ -273,10 +241,15 @@ def check_spec_csv(rows: list[dict[str, str]]) -> set[str]:
         note = (row["note"] or "").strip()
         if not clause or not symbol or not expected or not note:
             fail(f"spec_constants.csv:{index}: empty field")
-        if clause not in SPEC_CLAUSES:
+        if not CLAUSE_LABEL_RE.fullmatch(clause):
+            fail(
+                f"spec_constants.csv:{index}: {symbol} uses clause {clause!r}, which is not a "
+                "specification label ('Table N', 'Annex.section' or 'chapter.section')"
+            )
+        if clause not in allowed:
             fail(
                 f"spec_constants.csv:{index}: {symbol} uses clause {clause!r}, "
-                "which is not in the hand-maintained clause list"
+                "which neither the CSV nor docs/SPEC_CONFORMANCE.md declares"
             )
         if not re.fullmatch(r"[A-Z][A-Z0-9_]*", symbol):
             fail(f"spec_constants.csv:{index}: {symbol!r} is not a C symbol name")
@@ -290,21 +263,24 @@ def check_spec_csv(rows: list[dict[str, str]]) -> set[str]:
     return symbols
 
 
+def spec_clauses(rows: list[dict[str, str]]) -> set[str]:
+    """The clause labels the CSV uses; there is no second registry to maintain."""
+    return {(row["clause"] or "").strip() for row in rows}
+
+
 def spec_doc_section(text: str) -> str:
     match = re.search(r"^## Spec constants\s*$", text, re.MULTILINE)
     if match is None:
         fail("SPEC_CONFORMANCE.md has no '## Spec constants' section")
-    rest = text[match.end():]
+    rest = text[match.end() :]
     end = re.search(r"^## ", rest, re.MULTILINE)
     return rest if end is None else rest[: end.start()]
 
 
-def check_spec_doc(symbols: set[str]) -> None:
-    doc = DOC.read_text(errors="replace")
-    section = spec_doc_section(doc)
-
-    documented: set[str] = set()
-    clause_rows = 0
+def spec_doc_clauses(text: str) -> set[str]:
+    """Clause labels of the generated table in SPEC_CONFORMANCE.md."""
+    section = spec_doc_section(text)
+    clauses: set[str] = set()
     for line in section.splitlines():
         stripped = line.strip()
         if not stripped.startswith("|"):
@@ -313,23 +289,59 @@ def check_spec_doc(symbols: set[str]) -> None:
         if len(cells) < 2 or cells[0] in {"Clause", "---"} or set(cells[0]) <= {"-", ":"}:
             continue
         clause = cells[0].strip("` ")
-        if clause not in SPEC_CLAUSES:
+        if not CLAUSE_LABEL_RE.fullmatch(clause):
             fail(f"SPEC_CONFORMANCE.md spec table uses unknown clause {clause!r}")
-        clause_rows += 1
-        documented.update(t for t in TICK_RE.findall(line) if SPEC_SYMBOL_RE.match(t))
-    if clause_rows == 0:
+        clauses.add(clause)
+    if not clauses:
         fail("SPEC_CONFORMANCE.md spec table has no clause rows")
+    return clauses
+
+
+def check_spec_doc(
+    text: str, symbols: set[str], csv_clauses: set[str], doc_clauses: set[str]
+) -> None:
+    section = spec_doc_section(text)
+    documented: set[str] = set()
+    for line in section.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) < 2 or cells[0] in {"Clause", "---"} or set(cells[0]) <= {"-", ":"}:
+            continue
+        documented.update(t for t in TICK_RE.findall(line) if SPEC_SYMBOL_RE.match(t))
+
+    # The doc table is generated from the CSV, so a label the CSV does not use
+    # is a real error: the row would document a constant the data source never
+    # declares. The reverse direction keeps a CSV-only clause visible.
+    unknown = sorted(doc_clauses - csv_clauses)
+    if unknown:
+        fail(
+            "SPEC_CONFORMANCE.md spec table uses unknown clause(s) "
+            + ", ".join(unknown)
+            + ": add the constants to tests/spec_constants.csv"
+        )
+    missing_clauses = sorted(csv_clauses - doc_clauses)
+    if missing_clauses:
+        fail(
+            "clause(s) in spec_constants.csv missing from the SPEC_CONFORMANCE.md table: "
+            + ", ".join(missing_clauses)
+        )
 
     # Documented constants must exist in the CSV, and the CSV must be fully
     # documented: a new row without a visible clause entry fails here.
     unknown = sorted(documented - symbols)
     if unknown:
-        fail("SPEC_CONFORMANCE.md names constants missing from spec_constants.csv: "
-             + ", ".join(unknown))
+        fail(
+            "SPEC_CONFORMANCE.md names constants missing from spec_constants.csv: "
+            + ", ".join(unknown)
+        )
     undocumented = sorted(symbols - documented)
     if undocumented:
-        fail("spec_constants.csv symbols missing from SPEC_CONFORMANCE.md: "
-             + ", ".join(undocumented))
+        fail(
+            "spec_constants.csv symbols missing from SPEC_CONFORMANCE.md: "
+            + ", ".join(undocumented)
+        )
 
 
 def check_doc_case_ids(doc: str, audit_ids: set[str], spec_symbols: set[str]) -> None:
@@ -402,7 +414,132 @@ def check_audit(rows: list[dict[str, str]]) -> int:
     return len(annotations)
 
 
+def selftest() -> int:
+    """Exercise clause derivation and the doc-table checks on synthetic input."""
+    failures: list[str] = []
+
+    def expect(condition: bool, message: str) -> None:
+        if not condition:
+            failures.append(message)
+
+    def rejected(action) -> bool:
+        sink = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(sink):
+                action()
+        except SystemExit:
+            return True
+        return False
+
+    for label in (
+        "Table 10",
+        "Table B.13",
+        "Table A.12",
+        "A.1.6",
+        "B.3",
+        "C.1",
+        "10.10.2",
+        "7.3.3.2",
+    ):
+        expect(bool(CLAUSE_LABEL_RE.fullmatch(label)), f"clause label {label!r} was rejected")
+    for label in ("Table", "Table Q.1", "Table A.", "A.", "10.", "7.3.3.2a", ""):
+        expect(CLAUSE_LABEL_RE.fullmatch(label) is None, f"clause label {label!r} was accepted")
+
+    def rows_of(*pairs: tuple[str, str]) -> list[dict[str, str]]:
+        return [
+            {"clause": clause, "symbol": symbol, "expected": "1", "note": "fixture"}
+            for clause, symbol in pairs
+        ]
+
+    csv_rows = rows_of(("A.1.6", "IOLINK_FIXTURE_A"))
+    expect(spec_clauses(csv_rows) == {"A.1.6"}, "spec_clauses does not mirror the CSV column")
+
+    # A clause the old hand-maintained list would not have known is accepted:
+    # the CSV is the registry.
+    new_rows = rows_of(("Table 99", "IOLINK_FIXTURE_NEW"))
+    expect(
+        not rejected(lambda: check_spec_csv(new_rows, spec_clauses(new_rows))),
+        "a clause label present in the CSV was rejected",
+    )
+
+    def doc_with(pairs: tuple[tuple[str, str], ...]) -> str:
+        lines = [
+            "# Fixture",
+            "",
+            "## Spec constants",
+            "",
+            "| Clause | Constants |",
+            "|---|:---|",
+        ]
+        lines += [f"| `{clause}` | `{symbol}` |" for clause, symbol in pairs]
+        lines += ["", "## Next", ""]
+        return "\n".join(lines)
+
+    good = doc_with((("A.1.6", "IOLINK_FIXTURE_A"),))
+    doc_clauses = spec_doc_clauses(good)
+    expect(doc_clauses == {"A.1.6"}, "spec_doc_clauses does not read the table")
+    expect(
+        not rejected(
+            lambda: check_spec_doc(good, {"IOLINK_FIXTURE_A"}, {"A.1.6"}, doc_clauses)
+        ),
+        "a consistent CSV and table was rejected",
+    )
+
+    unknown_clause = doc_with((("Z.9", "IOLINK_FIXTURE_A"),))
+    expect(
+        rejected(
+            lambda: check_spec_doc(
+                unknown_clause,
+                {"IOLINK_FIXTURE_A"},
+                {"A.1.6"},
+                spec_doc_clauses(unknown_clause),
+            )
+        ),
+        "a doc-table clause absent from the CSV was accepted",
+    )
+    expect(
+        rejected(
+            lambda: check_spec_doc(good, {"IOLINK_FIXTURE_A"}, {"A.1.6", "B.3"}, doc_clauses)
+        ),
+        "a CSV clause missing from the doc table was accepted",
+    )
+    unknown_symbol = doc_with((("A.1.6", "IOLINK_FIXTURE_B"),))
+    expect(
+        rejected(
+            lambda: check_spec_doc(
+                unknown_symbol,
+                {"IOLINK_FIXTURE_A"},
+                {"A.1.6"},
+                spec_doc_clauses(unknown_symbol),
+            )
+        ),
+        "a doc-table symbol absent from the CSV was accepted",
+    )
+    expect(
+        rejected(lambda: check_spec_csv(rows_of(("Table", "IOLINK_FIXTURE_A")), {"Table"})),
+        "a malformed clause label was accepted",
+    )
+    expect(
+        rejected(
+            lambda: check_spec_csv(
+                rows_of(("A.1.6", "IOLINK_FIXTURE_A"), ("A.1.6", "IOLINK_FIXTURE_A")),
+                {"A.1.6"},
+            )
+        ),
+        "a duplicate symbol was accepted",
+    )
+
+    if failures:
+        for failure in failures:
+            print(f"traceability selftest FAIL: {failure}", file=sys.stderr)
+        return 1
+    print("traceability selftest: OK (clause derivation and table checks)")
+    return 0
+
+
 def main(argv: list[str]) -> int:
+    if argv == ["--selftest"]:
+        return selftest()
     unknown_args = [a for a in argv if a not in {"--spec-constants"}]
     if unknown_args:
         print(f"FAIL: unknown argument(s): {' '.join(unknown_args)}", file=sys.stderr)
@@ -419,15 +556,17 @@ def main(argv: list[str]) -> int:
         annotations = 0
 
     spec_rows = load_spec_rows()
-    spec_symbols = check_spec_csv(spec_rows)
-    check_spec_doc(spec_symbols)
-    check_doc_case_ids(DOC.read_text(errors="replace"), {r["case_id"] for r in rows},
-                       spec_symbols)
+    doc_text = DOC.read_text(errors="replace")
+    csv_clauses = spec_clauses(spec_rows)
+    doc_clauses = spec_doc_clauses(doc_text)
+    spec_symbols = check_spec_csv(spec_rows, csv_clauses | doc_clauses)
+    check_spec_doc(doc_text, spec_symbols, csv_clauses, doc_clauses)
+    check_doc_case_ids(doc_text, {r["case_id"] for r in rows}, spec_symbols)
     check_direct_visibility(rows)
 
     if not spec_only:
         print(f"PASS: {len(rows)} audit rows; {annotations} annotated IDs")
-    print(f"PASS: {len(spec_rows)} spec constants; clause labels checked; "
+    print(f"PASS: {len(spec_rows)} spec constants; clause labels derived from the CSV; "
           "doc case IDs and direct rows visible")
     return 0
 
