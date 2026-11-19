@@ -36,8 +36,10 @@ ENV ARM_ATFE=/opt/atfe/bin
 
 # Pinned to match .pre-commit-config.yaml; tools/gates.sh enforces this version.
 RUN pip3 install --no-cache-dir clang-format==23.1.1
-# Same reason for shellcheck: the distro package is older than the hook's, and a
+# Same pinning for shellcheck: the distro package is older than the hook's, and a
 # gate that runs a different linter than the developer does is worse than none.
+# gates.sh checks the clang-format version explicitly; shellcheck is only pinned
+# here, so the image and the hook agree by construction.
 RUN pip3 install --no-cache-dir shellcheck-py==0.11.0.1
 
 WORKDIR /workspace

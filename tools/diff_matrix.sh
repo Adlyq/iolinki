@@ -127,7 +127,7 @@ for cfg in "${CONFIGS[@]}"; do
     # those would compare transcripts of code this commit does not have.
     if ! (
         names="$(ctest --test-dir "$MATRIX_ROOT/$cfg" -N 2>/dev/null \
-            | sed -nE 's/^[[:space:]]*Test[[:space:]]+#[0-9]+:[[:space:]]*//p' \
+            | sed -nE 's/^[[:space:]]*Test[[:space:]]+#[[:space:]]*[0-9]+:[[:space:]]*//p' \
             | grep '^test_' || true)"
         if [ -z "$names" ]; then
             echo "    ctest lists no test_* target; cannot derive the transcript set" >&2

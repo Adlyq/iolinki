@@ -485,6 +485,16 @@ other coverage, so a `v*` tag is otherwise the first place a break in them
 shows up. `workflow_dispatch` is not a substitute yet — the copy of this
 workflow on the default branch has no such trigger.
 
+A dry-run tag does publish a Release (`draft: false`), and a leftover tag also
+shifts the `git describe` base of the next real release. Use a tag with a `-`
+so the Release is a prerelease, then delete both:
+
+```bash
+git tag v5.0.0-verify && git push origin v5.0.0-verify
+# after the run: delete the Release in the UI, then
+git push --delete origin v5.0.0-verify && git tag -d v5.0.0-verify
+```
+
 ## 📊 Code Standards
 
 See [CODING_STANDARDS.md](CODING_STANDARDS.md) for naming, C standard,

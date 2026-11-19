@@ -122,7 +122,7 @@ mkdir -p "$work/layout"
 cat > "$work/layout/CMakeLists.txt" <<'EOF'
 cmake_minimum_required(VERSION 3.12)
 project(iolinki_layout_consumer C)
-find_package(iolinki ${IOLINKI_EXPECTED_VERSION} CONFIG REQUIRED)
+find_package(iolinki ${IOLINKI_EXPECTED_MAJOR} CONFIG REQUIRED)
 add_executable(consumer main.c)
 target_link_libraries(consumer PRIVATE iolinki::iolinki)
 EOF
