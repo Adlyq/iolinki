@@ -55,7 +55,7 @@ usual points of a change; each level adds groups to the one above it:
 | L3 | before a release, or a full local run | `./tools/gates.sh all` | ~4 min |
 
 The sums are group wall times on a 16-core host: `quick` ~3 s, `build` ~6 s,
-`test` ~14 s, `gcc` ~3 s, `context` ~2 s, `sanitize` ~15 s, `memcheck` ~7 s,
+`test` ~14 s, `gcc` ~3 s, `context` ~2 s, `sanitize` ~14 s, `memcheck` ~9 s,
 `analyzer` ~3 s, `static` ~3 s, `docs` ~2 s, `perf` ~21 s, `package` ~7 s,
 `matrix` ~95 s and `fuzz` ~`FUZZ_SECONDS` (the three targets run at the same
 time, so the group costs one budget, not three). `matrix` dominates L3 and
@@ -64,7 +64,10 @@ time, so the group costs one budget, not three). `matrix` dominates L3 and
 Checks that do not read each other's output run at the same time: the three
 fuzz targets, the four `perf` baselines, and every `ctest`/valgrind binary.
 That is why `test` is 14 s rather than the sum of its 85 cases, and why
-`sanitize` and `memcheck` cost about one suite each.
+`sanitize` costs about one suite. `memcheck` fans out up to eight valgrinds but
+runs `test_timing` on its own: that case measures wall-clock behaviour and a
+loaded host makes it fail for no reason. `IOLINKI_MEMCHECK_JOBS` lowers the
+fan-out on a small machine.
 
 Two compilers run, and they are not interchangeable:
 

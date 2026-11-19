@@ -414,23 +414,44 @@ build_memcheck() {
 # memory, which is the defect class the empty-context bugs belong to. Only the
 # unit binaries run: the PTY conformance examples spawn a device process and are
 # covered by the plain `test` group.
+_memcheck_one() {
+    local bin="$1" dir="$2" name
+    name="${bin##*/}"
+    if ! valgrind --error-exitcode=1 --leak-check=no --quiet \
+        --track-origins=yes "$bin" >/dev/null 2>"$dir/$name.log"; then
+        printf '   FAIL: %s\n' "$name" >&2
+        sed -n '1,12p' "$dir/$name.log" >&2
+        return 1
+    fi
+}
+export -f _memcheck_one
+
 run_memcheck() {
-    # Each binary is a separate process under valgrind; running them at once
-    # keeps the group at one binary's cost instead of the sum. stderr stays
-    # per-binary so a finding names its test.
-    local tmp rc
+    # Each binary is a separate process under valgrind, so they run at once and
+    # the group costs a fan-out's worth instead of the sum. `test_timing` is
+    # excluded: it measures wall-clock behaviour and a loaded host makes it
+    # flaky (a dozen concurrent valgrinds produced a false failure in L3), so it
+    # runs alone after the batch. IOLINKI_MEMCHECK_JOBS caps the fan-out.
+    local tmp rc jobs bin
+    local cores
+    cores="$(nproc)"
+    jobs="${IOLINKI_MEMCHECK_JOBS:-$((cores < 8 ? cores : 8))}"
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/iolink-memcheck.XXXXXX")"
-    find "$MEMCHECK_DIR/tests" -maxdepth 1 -type f -name 'test_*' -perm -u+x -print0 |
-        xargs -0 -P "$(nproc)" -I{} sh -c '
-            bin="$1"; dir="$2"; name="${bin##*/}"
-            if ! valgrind --error-exitcode=1 --leak-check=no --quiet \
-                --track-origins=yes "$bin" >/dev/null 2>"$dir/$name.log"; then
-                printf "   FAIL: %s\n" "$name" >&2
-                sed -n "1,12p" "$dir/$name.log" >&2
-                exit 1
-            fi
-        ' _ {} "$tmp"
+    local parallel=() serial=()
+    while IFS= read -r -d '' bin; do
+        case "${bin##*/}" in
+            test_timing) serial+=("$bin") ;;
+            *) parallel+=("$bin") ;;
+        esac
+    done < <(find "$MEMCHECK_DIR/tests" -maxdepth 1 -type f -name 'test_*' -perm -u+x -print0)
+    if [ "${#parallel[@]}" -gt 0 ]; then
+        printf '%s\0' "${parallel[@]}" |
+            xargs -0 -P "$jobs" -I{} bash -c '_memcheck_one "$@"' _ {} "$tmp"
+    fi
     rc=$?
+    for bin in "${serial[@]}"; do
+        _memcheck_one "$bin" "$tmp" || rc=1
+    done
     rm -rf "$tmp"
     return "$rc"
 }
