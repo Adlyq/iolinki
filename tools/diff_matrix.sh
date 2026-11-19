@@ -29,11 +29,17 @@
 #   compile the same configuration twice. An existing tree is re-configured with
 #   the row's declared CMAKE_C_FLAGS, BUILD_TESTING and test transport from
 #   tools/matrix_configs.sh and rebuilt in place, so a transcript can only come
-#   from binaries compiled with the parameters this gate declares. ctest is not
-#   re-run on a reused tree: the gate executes every tests/test_* binary itself
-#   under the trace hook and fails red on a non-zero exit. A missing tree (the
-#   gate run on its own) is configured, built and tested from scratch, and the
-#   gate prints that it built it instead of reusing it.
+#   from binaries compiled with the parameters this gate declares. The run set
+#   is what ctest registers for that tree, never a glob of the directory: a
+#   reused tree keeps the binaries of tests this commit no longer has, and
+#   running those would compare code that is not here. Each test runs under the
+#   trace hook and a non-zero exit is red. ctest itself is not re-run on a reused
+#   tree; the ctest-only entries (PTY conformance, IODD and generated-table
+#   checks) belong to tools/build_matrix.sh, so a standalone run does not cover
+#   them. A missing tree (the gate run on its own) is configured, built and
+#   tested from scratch, and the gate prints that it built it instead of reusing
+#   it. The two gates share the trees under IOLINKI_MATRIX_DIR, so they must not
+#   run concurrently.
 #
 # Usage:
 #   ./tools/diff_matrix.sh            # run the gate

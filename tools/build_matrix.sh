@@ -17,7 +17,11 @@
 # again with the row's declared arguments, so the cache and the compile commands
 # match tools/matrix_configs.sh, and the tree is then rebuilt incrementally.
 # ctest is not run in this mode, whether the tree existed or not: the caller owns
-# the suite (tools/diff_matrix.sh executes every tests/test_* binary itself).
+# the suite (tools/diff_matrix.sh runs the test binaries ctest registers).
+# Each row writes the arguments it was built with to .matrix_row_args; a changed
+# fingerprint discards the tree first, so a variable the row no longer declares
+# cannot survive in the cache. The gates share these trees, so only one of them
+# may run at a time.
 #
 # Usage:
 #   ./tools/build_matrix.sh                 # build everything; run the suite for
@@ -138,7 +142,9 @@ run_config() {
     local row_args
     row_args="$build_type|${IOLINKI_CC:-clang}|$cflags|$tests_flag|${transport:-BYTE}|$cmake_extra"
     if [ "$REUSE_TREE" -eq 1 ]; then
-        if [ -f "$dir/.matrix_row_args" ] && [ "$(cat "$dir/.matrix_row_args")" != "$row_args" ]; then
+        if [ -f "$dir/CMakeCache.txt" ] && [ ! -f "$dir/.matrix_row_args" ]; then
+            rm -rf "$dir" # built before the fingerprint existed: rebuild once
+        elif [ -f "$dir/.matrix_row_args" ] && [ "$(cat "$dir/.matrix_row_args")" != "$row_args" ]; then
             rm -rf "$dir"
         fi
         mkdir -p "$dir"
@@ -315,7 +321,11 @@ if [ "${#RESULTS[@]}" -eq 0 ]; then
     exit 1
 fi
 if [ "$FAILED" -eq 0 ]; then
-    echo "compile matrix: PASS (${#RESULTS[@]} jobs, ${#IOLINK_MATRIX_STRUCTURAL_CONFIGS[@]} structural configurations)"
+    if [ "$REUSE_TREE" -eq 1 ]; then
+        echo "compile matrix: PASS (${#RESULTS[@]} jobs, ${#IOLINK_MATRIX_STRUCTURAL_CONFIGS[@]} structural configurations; unit suite not run, see tools/diff_matrix.sh)"
+    else
+        echo "compile matrix: PASS (${#RESULTS[@]} jobs, ${#IOLINK_MATRIX_STRUCTURAL_CONFIGS[@]} structural configurations)"
+    fi
     exit 0
 fi
 
