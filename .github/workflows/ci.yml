@@ -124,27 +124,6 @@ jobs:
       - name: Generated documentation blocks and Doxygen
         run: ./tools/gates.sh docs
 
-  # Lint the maintained CI/test scripts. Keep this list in sync with the
-  # shellcheck step in tools/gates.sh.
-  lint-scripts:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install shellcheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
-      - name: Lint shell scripts
-        run: |
-          shellcheck -S warning tools/build_matrix.sh tools/coverage.sh \
-            tools/diff_matrix.sh tools/check_ownership.sh \
-            tools/check_test_whitebox.sh tools/check_test_gates.sh \
-            tools/check_nullability.sh tools/fuzz.sh \
-            tools/clean_builds.sh tools/test_install_consumer.sh \
-            tools/wcet_run.sh \
-            tools/check_profile_abi.sh tools/matrix_configs.sh \
-            test_all.sh tools/gates.sh .docker_test_entrypoint.sh
-
   # Coverage floor: line coverage of src/ must not drop below the checked-in
   # baseline in tools/coverage_baseline.txt.
   coverage-baseline:
