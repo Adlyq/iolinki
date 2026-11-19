@@ -136,20 +136,34 @@ seed "$corpus/od" 02 004200
 seed "$corpus/od" 03 00000000
 seed "$corpus/od" 04 ffff0001
 
+# The three targets are independent processes, so they run at the same time:
+# the gate used to spend three minutes where one minute does the same amount of
+# mutation work. Each target keeps its own log and artifact directory so a
+# finding is unambiguous.
 failed=0
-for target in frame isdu od; do
+pids=()
+targets=(frame isdu od)
+for target in "${targets[@]}"; do
     exe="$FUZZ_DIR/fuzz/fuzz_$target"
     log="$FUZZ_DIR/$target.log"
+    mkdir -p "$artifacts/$target"
     printf '   fuzz_%s: %s s\n' "$target" "$FUZZ_SECONDS"
     # -timeout turns a parser that stops making progress into a finding instead
     # of a hung gate; ASan's leak check runs at exit. -use_value_profile lets
     # the fuzzer learn the checksum bytes and the 16-bit OD indices instead of
     # waiting for a lucky mutation.
-    if ! "$exe" -max_total_time="$FUZZ_SECONDS" -timeout=10 -rss_limit_mb=2048 \
-        -max_len=256 -use_value_profile=1 -artifact_prefix="$artifacts/" \
-        "$corpus/$target" >"$log" 2>&1; then
-        printf '   fuzz_%s: FAIL (log %s, artifacts in %s)\n' "$target" "$log" "$artifacts" >&2
-        tail -n 20 "$log" >&2
+    "$exe" -max_total_time="$FUZZ_SECONDS" -timeout=10 -rss_limit_mb=2048 \
+        -max_len=256 -use_value_profile=1 -artifact_prefix="$artifacts/$target/" \
+        "$corpus/$target" >"$log" 2>&1 &
+    pids+=("$!")
+done
+
+for i in "${!targets[@]}"; do
+    target="${targets[$i]}"
+    if ! wait "${pids[$i]}"; then
+        printf '   fuzz_%s: FAIL (log %s, artifacts in %s/%s)\n' \
+            "$target" "$FUZZ_DIR/$target.log" "$artifacts" "$target" >&2
+        tail -n 20 "$FUZZ_DIR/$target.log" >&2
         failed=1
     fi
 done
@@ -157,4 +171,4 @@ done
 if [ "$failed" -ne 0 ]; then
     exit 1
 fi
-echo "fuzz: PASS (3 targets, ${FUZZ_SECONDS} s each)"
+echo "fuzz: PASS (3 targets in parallel, ${FUZZ_SECONDS} s each)"

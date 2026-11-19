@@ -178,7 +178,7 @@ build_transport() {
     echo "== building and testing the ${transport} transport in ${dir}" >&2
     cmake "${cmake_args[@]}"
     cmake --build "$dir" --parallel "$JOBS"
-    (cd "$dir" && ctest --output-on-failure)
+    (cd "$dir" && ctest --parallel "$(nproc)" --output-on-failure)
 }
 
 # Report from one build tree. gcovr's search path is passed explicitly: `-r

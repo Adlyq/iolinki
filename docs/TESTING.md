@@ -52,15 +52,19 @@ usual points of a change; each level adds groups to the one above it:
 | L0 | after every save | `./tools/gates.sh quick` | ~3 s, no build |
 | L1 | before every commit | `./tools/gates.sh quick build test gcc` | ~45 s |
 | L2 | before a push | `./tools/gates.sh quick build test gcc static docs package --keep-going` | ~1 min |
-| L3 | before a release, or a full local run | `./tools/gates.sh all` | ~9 min |
+| L3 | before a release, or a full local run | `./tools/gates.sh all` | ~4 min |
 
-The sums are group wall times on a 16-core host: `quick` ~3 s, `build` ~10 s,
-`test` ~22 s, `gcc` ~8 s, `context` ~3 s, `sanitize` ~27 s, `analyzer` ~12 s,
-`static` ~13 s, `docs` ~2 s, `perf` ~50 s, `package` ~2 s, `matrix` ~125 s and
-`fuzz` 3 × `FUZZ_SECONDS` (15 s at the CI smoke value, 180 s at the default
-that L3 uses). `build`, `test`, `sanitize`, `static`, `matrix` and `fuzz`
-scale with the machine; `matrix` dominates L3 and `fuzz` is the next largest
-item.
+The sums are group wall times on a 16-core host: `quick` ~3 s, `build` ~6 s,
+`test` ~14 s, `gcc` ~3 s, `context` ~2 s, `sanitize` ~15 s, `memcheck` ~7 s,
+`analyzer` ~3 s, `static` ~3 s, `docs` ~2 s, `perf` ~21 s, `package` ~7 s,
+`matrix` ~95 s and `fuzz` ~`FUZZ_SECONDS` (the three targets run at the same
+time, so the group costs one budget, not three). `matrix` dominates L3 and
+`fuzz` is the next largest item; both scale with the machine.
+
+Checks that do not read each other's output run at the same time: the three
+fuzz targets, the four `perf` baselines, and every `ctest`/valgrind binary.
+That is why `test` is 14 s rather than the sum of its 85 cases, and why
+`sanitize` and `memcheck` cost about one suite each.
 
 Two compilers run, and they are not interchangeable:
 

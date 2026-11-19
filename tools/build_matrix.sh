@@ -177,7 +177,7 @@ run_config() {
     fi
 
     if [ "$tests_flag" = "ON" ] && [ "$REUSE_TREE" -eq 0 ]; then
-        if ! (cd "$dir" && ctest --output-on-failure >"$dir/test.log" 2>&1); then
+        if ! (cd "$dir" && ctest --parallel "$JOBS" --output-on-failure >"$dir/test.log" 2>&1); then
             echo "TEST FAILED"
             tail -30 "$dir/test.log" | sed 's/^/    /'
             RESULTS+=("$name|test|fail")

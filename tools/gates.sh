@@ -311,7 +311,7 @@ group_build() {
 
 group_test() {
     step "strict Debug build ($CC_PRIMARY)" build_debug || return 1
-    step "unit suite (ctest)" ctest --test-dir "$BUILD_DIR" --output-on-failure
+    step "unit suite (ctest)" ctest --test-dir "$BUILD_DIR" --parallel "$(nproc)" --output-on-failure
 }
 
 # --- gcc supplement ---------------------------------------------------------
@@ -384,7 +384,7 @@ build_sanitize() {
 run_sanitize_tests() {
     ASAN_OPTIONS="detect_leaks=0" \
         UBSAN_OPTIONS="print_stacktrace=1" \
-        ctest --test-dir "$SANITIZE_DIR" --output-on-failure
+        ctest --test-dir "$SANITIZE_DIR" --parallel "$(nproc)" --output-on-failure
 }
 
 group_sanitize() {
@@ -415,20 +415,24 @@ build_memcheck() {
 # unit binaries run: the PTY conformance examples spawn a device process and are
 # covered by the plain `test` group.
 run_memcheck() {
-    local failed=0
-    local err
-    err="$(mktemp "${TMPDIR:-/tmp}/iolink-memcheck.XXXXXX")"
-    for test_bin in "$MEMCHECK_DIR"/tests/test_*; do
-        [ -x "$test_bin" ] || continue
-        if ! valgrind --error-exitcode=1 --leak-check=no --quiet \
-            --track-origins=yes "$test_bin" >/dev/null 2>"$err"; then
-            printf '   FAIL: %s\n' "${test_bin##*/}" >&2
-            sed -n '1,12p' "$err" >&2
-            failed=1
-        fi
-    done
-    rm -f "$err"
-    return "$failed"
+    # Each binary is a separate process under valgrind; running them at once
+    # keeps the group at one binary's cost instead of the sum. stderr stays
+    # per-binary so a finding names its test.
+    local tmp rc
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/iolink-memcheck.XXXXXX")"
+    find "$MEMCHECK_DIR/tests" -maxdepth 1 -type f -name 'test_*' -perm -u+x -print0 |
+        xargs -0 -P "$(nproc)" -I{} sh -c '
+            bin="$1"; dir="$2"; name="${bin##*/}"
+            if ! valgrind --error-exitcode=1 --leak-check=no --quiet \
+                --track-origins=yes "$bin" >/dev/null 2>"$dir/$name.log"; then
+                printf "   FAIL: %s\n" "$name" >&2
+                sed -n "1,12p" "$dir/$name.log" >&2
+                exit 1
+            fi
+        ' _ {} "$tmp"
+    rc=$?
+    rm -rf "$tmp"
+    return "$rc"
 }
 
 group_memcheck() {
@@ -460,10 +464,11 @@ group_memcheck() {
 # the code says.
 run_analyzer() {
     local out
-    out=$(for f in "$ROOT"/src/*.c; do
+    # One clang per translation unit, all at once: the analyzer is CPU-bound
+    # and each unit is independent.
+    out=$(printf '%s\n' "$ROOT"/src/*.c | xargs -P "$(nproc)" -I{} \
         "$CC_PRIMARY" --analyze -std=c99 -I"$ROOT/include" -I"$ROOT/src" \
-            -Xanalyzer -analyzer-output=text "$f" 2>&1 || true
-    done)
+        -Xanalyzer -analyzer-output=text {} 2>&1 || true)
     # A compile error means the file was not analysed at all; that is a gate
     # failure, not a finding.
     if printf '%s\n' "$out" | grep -q 'error:'; then
@@ -495,7 +500,7 @@ group_analyzer() {
 # --- static ----------------------------------------------------------------
 
 cppcheck_run() {
-    cppcheck --enable=warning,style,performance,portability \
+    cppcheck -j "$(nproc)" --enable=warning,style,performance,portability \
         --suppress=missingIncludeSystem \
         --suppress=constParameterPointer \
         --suppress=knownConditionTrueFalse \
@@ -602,10 +607,15 @@ check_stack_baseline() {
 }
 
 group_perf() {
-    step "coverage floor" ./tools/coverage.sh --check || return 1
-    step "WCET path proxy" ./tools/wcet_run.sh --check || return 1
-    step "ROM/RAM size baseline" check_size_baseline || return 1
-    step "stack-frame baseline" check_stack_baseline
+    # The four checks use separate build trees and toolchains and none of them
+    # reads another's output, so they run at the same time: the group costs its
+    # slowest check instead of the sum. A failure still fails the group and its
+    # log is printed.
+    parallel_start "coverage floor" ./tools/coverage.sh --check
+    parallel_start "WCET path proxy" ./tools/wcet_run.sh --check
+    parallel_start "ROM/RAM size baseline" check_size_baseline
+    parallel_start "stack-frame baseline" check_stack_baseline
+    parallel_join
 }
 
 # --- fuzz -------------------------------------------------------------------
