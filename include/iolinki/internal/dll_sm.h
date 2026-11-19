@@ -25,14 +25,13 @@ IOLINK_ASSUME_NONNULL_BEGIN
  * @ref DLL_SM_ROWS 是唯一事实源：`src/dll_sm.c` 用指定初始化器把它展开成
  * `g_dll_sm[state][event]` 常量表；`tools/gen_dll_statemachine.py`
  * 解析同一份宏行，生成 mermaid、CSV 与覆盖测试。新增/移动迁移时只改
- * 这里，脚本的 `--check` 会验证 7×8 网格无空洞、无重复。
+ * 这里，脚本的 `--check` 会验证 7×7 网格无空洞、无重复。
  */
 
 /** @brief 已校验帧的事件分类（互斥，按 dll_sm_classify() 的顺序判定）。 */
 typedef enum
 {
-    DLL_EV_TRANSITION = 0,   /**< 过渡命令（MC = 0x0F） */
-    DLL_EV_FALLBACK_CMD,     /**< FALLBACK MasterCommand（0x5A，3 字节） */
+    DLL_EV_FALLBACK_CMD = 0, /**< FALLBACK MasterCommand（0x5A，3 字节） */
     DLL_EV_PAGE_READ_T0,     /**< Type-0 页通道读（启动探测 / 复位请求） */
     DLL_EV_PAGE_WRITE_ADDR0, /**< Type-0 页通道写地址 0（MasterCommand） */
     DLL_EV_PAGE_WRITE,       /**< Type-0 页通道写其他地址（DPP 参数） */
@@ -63,8 +62,6 @@ typedef struct
  */
 /* clang-format off */
 #define DLL_SM_ROWS(X)                                                                          \
-    X(IOLINK_DLL_STATE_STARTUP, DLL_EV_TRANSITION, dll_sm_transition,                           \
-      IOLINK_DLL_STATE_PREOPERATE, "T1：启动探测前的过渡命令，先进入 PREOPERATE")               \
     X(IOLINK_DLL_STATE_STARTUP, DLL_EV_FALLBACK_CMD, dll_sm_fallback,                            \
       IOLINK_DLL_STATE_PREOPERATE, "Table B.2/43：FALLBACK 命令，T_FBD 由主泵计时")             \
     X(IOLINK_DLL_STATE_STARTUP, DLL_EV_PAGE_READ_T0, dll_sm_page_probe,                          \
@@ -79,8 +76,6 @@ typedef struct
       IOLINK_DLL_STATE_PREOPERATE, "7.3.6：OPERATE 前的 Type-0 ISDU/诊断读")                    \
     X(IOLINK_DLL_STATE_STARTUP, DLL_EV_PD_EXCHANGE, dll_sm_none,                                 \
       IOLINK_DLL_STATE_PREOPERATE, "不可达：校验前类型门控只放行 Type-0")                       \
-    X(IOLINK_DLL_STATE_AWAITING_COMM, DLL_EV_TRANSITION, dll_sm_transition,                      \
-      IOLINK_DLL_STATE_PREOPERATE, "T1：启动探测前的过渡命令，先进入 PREOPERATE")               \
     X(IOLINK_DLL_STATE_AWAITING_COMM, DLL_EV_FALLBACK_CMD, dll_sm_fallback,                      \
       IOLINK_DLL_STATE_PREOPERATE, "Table B.2/43：FALLBACK 命令，T_FBD 由主泵计时")             \
     X(IOLINK_DLL_STATE_AWAITING_COMM, DLL_EV_PAGE_READ_T0, dll_sm_page_probe,                    \
@@ -95,8 +90,6 @@ typedef struct
       IOLINK_DLL_STATE_PREOPERATE, "7.3.6：OPERATE 前的 Type-0 ISDU/诊断读")                    \
     X(IOLINK_DLL_STATE_AWAITING_COMM, DLL_EV_PD_EXCHANGE, dll_sm_none,                           \
       IOLINK_DLL_STATE_PREOPERATE, "不可达：校验前类型门控只放行 Type-0")                       \
-    X(IOLINK_DLL_STATE_PREOPERATE, DLL_EV_TRANSITION, dll_sm_transition,                         \
-      DLL_SM_STATE_KEEP, "T1：过渡命令进入 ESTAB_COM，不应答")                                  \
     X(IOLINK_DLL_STATE_PREOPERATE, DLL_EV_FALLBACK_CMD, dll_sm_fallback,                         \
       DLL_SM_STATE_KEEP, "Table B.2/43：FALLBACK 命令，T_FBD 由主泵计时")                       \
     X(IOLINK_DLL_STATE_PREOPERATE, DLL_EV_PAGE_READ_T0, dll_sm_type0_read,                       \
@@ -111,8 +104,6 @@ typedef struct
       DLL_SM_STATE_KEEP, "7.3.6：Type-0 ISDU/诊断读")                                           \
     X(IOLINK_DLL_STATE_PREOPERATE, DLL_EV_PD_EXCHANGE, dll_sm_none,                              \
       DLL_SM_STATE_KEEP, "不可达：校验前类型门控只放行 Type-0")                                 \
-    X(IOLINK_DLL_STATE_ESTAB_COM, DLL_EV_TRANSITION, dll_sm_transition,                          \
-      DLL_SM_STATE_KEEP, "T1：重复过渡命令，不应答")                                            \
     X(IOLINK_DLL_STATE_ESTAB_COM, DLL_EV_FALLBACK_CMD, dll_sm_master_command,                    \
       DLL_SM_STATE_KEEP, "Table B.2：ESTAB_COM 中 MasterCommand 立即应用")                      \
     X(IOLINK_DLL_STATE_ESTAB_COM, DLL_EV_PAGE_READ_T0, dll_sm_type0_read,                        \
@@ -127,8 +118,6 @@ typedef struct
       IOLINK_DLL_STATE_OPERATE, "C5：首个周期帧进入 OPERATE")                                   \
     X(IOLINK_DLL_STATE_ESTAB_COM, DLL_EV_PD_EXCHANGE, dll_sm_pd_exchange,                        \
       IOLINK_DLL_STATE_OPERATE, "C5：首个周期帧建立通信并进入 OPERATE")                         \
-    X(IOLINK_DLL_STATE_OPERATE, DLL_EV_TRANSITION, dll_sm_transition_illegal,                    \
-      DLL_SM_STATE_KEEP, "C5：OPERATE 中过渡命令非法，只计成帧错误")                            \
     X(IOLINK_DLL_STATE_OPERATE, DLL_EV_FALLBACK_CMD, dll_sm_fallback,                            \
       DLL_SM_STATE_KEEP, "Table 47 T9：FALLBACK 后由 T_FBD 切到 SIO")                           \
     X(IOLINK_DLL_STATE_OPERATE, DLL_EV_PAGE_READ_T0, dll_sm_operate_page_read,                   \
@@ -143,8 +132,6 @@ typedef struct
       DLL_SM_STATE_KEEP, "7.3.6：Type-0 ISDU/诊断读")                                           \
     X(IOLINK_DLL_STATE_OPERATE, DLL_EV_PD_EXCHANGE, dll_sm_pd_exchange,                          \
       DLL_SM_STATE_KEEP, "C5：周期数据交换")                                                    \
-    X(IOLINK_DLL_STATE_FALLBACK, DLL_EV_TRANSITION, dll_sm_none, DLL_SM_STATE_KEEP,              \
-      "Table 47 T9：FALLBACK 期间不应答，等待 T_FBD")                                            \
     X(IOLINK_DLL_STATE_FALLBACK, DLL_EV_FALLBACK_CMD, dll_sm_none, DLL_SM_STATE_KEEP,            \
       "Table 47 T9：FALLBACK 期间不应答，等待 T_FBD")                                            \
     X(IOLINK_DLL_STATE_FALLBACK, DLL_EV_PAGE_READ_T0, dll_sm_none, DLL_SM_STATE_KEEP,            \
@@ -159,8 +146,6 @@ typedef struct
       "Table 47 T9：FALLBACK 期间不应答，等待 T_FBD")                                            \
     X(IOLINK_DLL_STATE_FALLBACK, DLL_EV_PD_EXCHANGE, dll_sm_none, DLL_SM_STATE_KEEP,             \
       "不可达：校验前类型门控只放行 Type-0")                                                     \
-    X(IOLINK_DLL_STATE_COMM_DISABLED, DLL_EV_TRANSITION, dll_sm_none, DLL_SM_STATE_KEEP,         \
-      "10.7.5：Back-to-box 后停止服务，帧在校验前丢弃")                                          \
     X(IOLINK_DLL_STATE_COMM_DISABLED, DLL_EV_FALLBACK_CMD, dll_sm_none, DLL_SM_STATE_KEEP,       \
       "10.7.5：Back-to-box 后停止服务，帧在校验前丢弃")                                          \
     X(IOLINK_DLL_STATE_COMM_DISABLED, DLL_EV_PAGE_READ_T0, dll_sm_none, DLL_SM_STATE_KEEP,       \
@@ -193,8 +178,6 @@ typedef struct
     X("STARTUP → AWAITING_COMM", "SIO + `detect_wakeup()>0`", "`dll_handle_sio_wakeup()`")       \
     X("STARTUP/AWAITING → PREOPERATE", "首个有效帧",                                              \
       "`g_dll_sm` 表项的 `enter_state` / `dll_isr_plan_action()`（ENTER_PREOPERATE）")            \
-    X("PREOPERATE → ESTAB_COM", "MC=0x0F transition command",                                    \
-      "`dll_sm_transition()` → `dll_handle_preoperate()` / `dll_isr_plan_action()`")             \
     X("PREOPERATE → ESTAB_COM", "0x99 DeviceOperate",                                            \
       "`dll_sm_master_command()` → `dll_apply_master_command()`")                                \
     X("PREOPERATE → OPERATE", "0x98 PDOperate", "`dll_apply_master_command()`")                  \

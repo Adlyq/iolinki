@@ -627,10 +627,6 @@ static bool dll_isr_plan_action(iolink_dll_shared_t* ctx, const iolink_reply_pla
             dll_set_state_shared(ctx, IOLINK_DLL_STATE_PREOPERATE);
             ctx->i_isr_dsio_clear = 1U;
             return true;
-        case IOLINK_REPLY_ACT_ENTER_ESTAB_COM:
-            dll_set_state_shared(ctx, IOLINK_DLL_STATE_ESTAB_COM);
-            ctx->b_fallback_count = 0U;
-            return true;
         case IOLINK_REPLY_ACT_RESET_STARTUP:
             dll_set_state_shared(ctx, IOLINK_DLL_STATE_STARTUP);
             return true;
@@ -704,13 +700,9 @@ bool dll_isr_plan_execute(iolink_dll_shared_t* ctx, const iolink_reply_plan_t* p
     }
 
     if ((plan->flags & IOLINK_REPLY_FLAG_CLOSE_WINDOW) != 0U) {
-        /* 按规范有意不应答（转换命令、复位请求）：关闭 t_A 窗口。 */
+        /* 按规范有意不应答（复位请求）：关闭 t_A 窗口。 */
         if (ctx->c_phy->response_timer_stop != NULL) {
             ctx->c_phy->response_timer_stop(ctx->c_phy->self);
-        }
-        if (((plan->flags & IOLINK_REPLY_FLAG_RESTART_TIMER_B) != 0U) &&
-            (ctx->c_phy->stack_timer_start != NULL)) {
-            ctx->c_phy->stack_timer_start(ctx->c_phy->self);
         }
         dll_isr_touch_activity(ctx);
         return true;

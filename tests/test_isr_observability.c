@@ -868,23 +868,7 @@ static int test_type0_commands_fast_path(void)
     init_type0_ctx(&dll);
     uint8_t frame[3];
 
-    /* 迁移命令（PREOP -> ESTAB_COM），无应答。 */
-    make_type0(IOLINK_MC_TRANSITION_COMMAND, frame, 2U);
-    tx_reset();
-    feed_chk(frame, 2U);
-    iolink_dll_process_isr(&dll.main.shared);
-    while ((dll.main.shared.b_isr_tx_pending != 0U) || (dll.main.shared.b_isr_tx_active != 0U)) {
-        iolink_dll_process_isr(&dll.main.shared);
-    }
-#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
-    tx_frame_sync();
-#endif
-    if ((dll.main.shared.b_state != IOLINK_DLL_STATE_ESTAB_COM) || (tx_observed_len() != 0U)) {
-        return 1;
-    }
-
-    /* DeviceOperate（0x99，page 写地址 0）：ESTAB_COM + 仅 CKS。 */
-    dll.main.shared.b_state = IOLINK_DLL_STATE_PREOPERATE;
+    /* 0x99 DeviceOperate（页写地址 0）：PREOP -> ESTAB_COM + 仅 CKS。 */
     frame[0] = IOLINK_MC_CHANNEL_PAGE;
     frame[1] = IOLINK_MSEQ_TYPE_0;
     frame[2] = IOLINK_CMD_DEVICE_OPERATE;
@@ -899,6 +883,25 @@ static int test_type0_commands_fast_path(void)
     tx_frame_sync();
 #endif
     if ((dll.main.shared.b_state != IOLINK_DLL_STATE_ESTAB_COM) || (tx_observed_len() != 1U)) {
+        return 1;
+    }
+
+    /* 0x98 PDOperate（page 写地址 0）：PREOP -> OPERATE + 仅 CKS。 */
+    dll.main.shared.b_state = IOLINK_DLL_STATE_PREOPERATE;
+    frame[0] = IOLINK_MC_CHANNEL_PAGE;
+    frame[1] = IOLINK_MSEQ_TYPE_0;
+    frame[2] = IOLINK_CMD_PROCESS_DATA_OPERATE;
+    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, 3U));
+    tx_reset();
+    feed_chk(frame, 3U);
+    iolink_dll_process_isr(&dll.main.shared);
+    while ((dll.main.shared.b_isr_tx_pending != 0U) || (dll.main.shared.b_isr_tx_active != 0U)) {
+        iolink_dll_process_isr(&dll.main.shared);
+    }
+#if IOLINK_ISR_TX_MODE == IOLINK_ISR_TX_FRAME
+    tx_frame_sync();
+#endif
+    if ((dll.main.shared.b_state != IOLINK_DLL_STATE_OPERATE) || (tx_observed_len() != 1U)) {
         return 2;
     }
 
@@ -944,7 +947,7 @@ static int test_type0_commands_fast_path(void)
     if ((dll.main.shared.b_state != IOLINK_DLL_STATE_PREOPERATE) || (tx_observed_len() != 2U)) {
         return 4;
     }
-    /* 四帧都由 ISR 定案：转换命令按规范不应答，另外三条回 OD/CKS。 */
+    /* 四帧都由 ISR 定案：0x99/0x98 回 CKS、0x5A 回 CKS、探测回 OD/CKS。 */
     if (dll.main.shared.i_isr_frames_consumed != 4U) {
         return 5;
     }

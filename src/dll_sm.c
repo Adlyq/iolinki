@@ -131,7 +131,7 @@ static bool dll_reject_startup_operate(iolink_dll_main_t* ctx, bool was_establis
 /**
  * @brief 对已校验帧做互斥事件分类。
  *
- * 判定顺序与原 dispatch 的优先级一致：过渡命令 > FALLBACK > 非 Type-0
+ * 判定顺序与原 dispatch 的优先级一致：FALLBACK > 非 Type-0
  * > 2 字节 Type-0（页读 / 其他）> 页写地址 0 > 页写其他地址 > Type-0 写。
  * 长度参与分类，使畸形帧仍走与重构前完全相同的分支。
  */
@@ -143,9 +143,6 @@ static iolink_dll_event_t dll_sm_classify(const iolink_dll_main_t* ctx)
     const bool write = ((mc & IOLINK_MC_RW_MASK) == 0U);
     const uint8_t channel = (uint8_t) (mc & IOLINK_MC_COMM_CHANNEL_MASK);
 
-    if (mc == IOLINK_MC_TRANSITION_COMMAND) {
-        return DLL_EV_TRANSITION;
-    }
     if ((ctx->req_len == 3U) && dll_is_fallback_command(ctx)) {
         return DLL_EV_FALLBACK_CMD;
     }
@@ -170,12 +167,6 @@ static iolink_dll_event_t dll_sm_classify(const iolink_dll_main_t* ctx)
 static bool dll_sm_none(iolink_dll_main_t* ctx)
 {
     (void) ctx;
-    return true;
-}
-
-static bool dll_sm_transition(iolink_dll_main_t* ctx)
-{
-    dll_handle_preoperate(ctx, ctx->frame_buf[0], ctx->frame_buf[1]);
     return true;
 }
 
@@ -213,13 +204,6 @@ static bool dll_sm_type0_read(iolink_dll_main_t* ctx)
 static bool dll_sm_pd_exchange(iolink_dll_main_t* ctx)
 {
     dll_handle_operate_type1_2(ctx);
-    return true;
-}
-
-/** @brief OPERATE 中的过渡命令非法：计数但不改变 DL 模式（ST rc=2 语义）。 */
-static bool dll_sm_transition_illegal(iolink_dll_main_t* ctx)
-{
-    ctx->shared.b_framing_errors++;
     return true;
 }
 

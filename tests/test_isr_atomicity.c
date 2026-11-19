@@ -516,7 +516,7 @@ static void test_state_notification_is_level_based(void** state)
 {
     (void) state;
     uint8_t probe[2] = {(uint8_t) (IOLINK_MC_RW_MASK | IOLINK_MC_CHANNEL_PAGE | 0x02U), 0x00U};
-    uint8_t trans[2] = {IOLINK_MC_TRANSITION_COMMAND, 0x00U};
+    uint8_t operate[3] = {IOLINK_MC_CHANNEL_PAGE, IOLINK_MSEQ_TYPE_0, IOLINK_CMD_DEVICE_OPERATE};
 
     reset_ctx();
     s_ctx.main.state_cb = state_cb;
@@ -535,9 +535,9 @@ static void test_state_notification_is_level_based(void** state)
     assert_int_equal(s_ctx.main.shared.b_state, IOLINK_DLL_STATE_PREOPERATE);
     assert_int_equal(s_state_count, 0U); /* 推迟到主窗口 */
 
-    /* 迁移命令：PREOPERATE -> ESTAB_COM，发生在主泵运行之前。 */
-    make_frame(trans, sizeof(trans));
-    feed_frame(trans, sizeof(trans));
+    /* 0x99 DeviceOperate：PREOPERATE -> ESTAB_COM，发生在主泵运行之前。 */
+    make_frame(operate, sizeof(operate));
+    feed_frame(operate, sizeof(operate));
     iolink_dll_process_isr(&s_ctx.main.shared);
     while (s_ctx.main.shared.b_isr_tx_active != 0U) {
         iolink_dll_process_isr(&s_ctx.main.shared);

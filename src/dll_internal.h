@@ -66,7 +66,6 @@ void dll_poll_diagnostics(iolink_dll_main_t* ctx);
 bool dll_is_fallback_command(const iolink_dll_main_t* ctx);
 void dll_handle_fallback_command(iolink_dll_main_t* ctx);
 void dll_handle_master_command(iolink_dll_main_t* ctx, uint8_t cmd);
-void dll_handle_preoperate(iolink_dll_main_t* ctx, uint8_t mc, uint8_t ck);
 void dll_handle_page_channel_read(iolink_dll_main_t* ctx, uint8_t mc);
 void dll_handle_operate_type0(iolink_dll_main_t* ctx, uint8_t mc, uint8_t cks);
 void dll_handle_type0_od_write(iolink_dll_main_t* ctx, uint8_t mc, uint8_t od_in);

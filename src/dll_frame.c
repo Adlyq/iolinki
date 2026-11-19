@@ -66,8 +66,7 @@ bool dll_type_allowed(const iolink_dll_shared_t* ctx, const uint8_t* frame)
     uint8_t exp_type = IOLINK_MSEQ_TYPE_0;
 
     if ((ctx->b_state == IOLINK_DLL_STATE_OPERATE) ||
-        ((ctx->b_state == IOLINK_DLL_STATE_ESTAB_COM) &&
-         (frame[0] != IOLINK_MC_TRANSITION_COMMAND))) {
+        (ctx->b_state == IOLINK_DLL_STATE_ESTAB_COM)) {
         if ((ch == IOLINK_MC_CHANNEL_PAGE) && (rx_type == IOLINK_MSEQ_TYPE_0)) {
             return true;
         }
@@ -102,9 +101,6 @@ uint8_t dll_req_len_for(const iolink_dll_shared_t* ctx, uint8_t mc, uint8_t ckt)
     }
     if (type0) {
         return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + (dll_mc_is_type0_od_write(mc) ? 1U : 0U));
-    }
-    if ((ctx->b_state == IOLINK_DLL_STATE_ESTAB_COM) && (mc == IOLINK_MC_TRANSITION_COMMAND)) {
-        return IOLINK_M_SEQ_HEADER_LEN;
     }
     const uint8_t od_req = ((mc & IOLINK_MC_RW_MASK) == 0U) ? ctx->c_od_width : 0U;
     return (uint8_t) (IOLINK_M_SEQ_HEADER_LEN + ctx->c_pd_out_len_current + od_req);
@@ -474,17 +470,6 @@ void dll_handle_master_command(iolink_dll_main_t* ctx, uint8_t cmd)
     resp[0] = (uint8_t) (resp[0] | iolink_checksum6(resp, 1U));
     dll_send(ctx, resp, 1);
     ctx->last_response_us = dll_time_us(&ctx->shared);
-}
-
-/** @brief 处理 PREOPERATE 主站命令：在转换命令上推进到 ESTAB_COM。 */
-void dll_handle_preoperate(iolink_dll_main_t* ctx, uint8_t mc, uint8_t ck)
-{
-    (void) ck;
-    if (mc == IOLINK_MC_TRANSITION_COMMAND) {
-        dll_set_state(ctx, IOLINK_DLL_STATE_ESTAB_COM);
-        ctx->shared.b_fallback_count = 0U;
-        /* 按规范，转换命令无需响应 */
-    }
 }
 
 /**

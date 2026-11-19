@@ -392,17 +392,17 @@ static int test_plan_state_stamp(void)
         }
     }
 
-    /* 过渡命令由 ISR 计划消费并把状态推进到 ESTAB_COM（不应答）。 */
-    uint8_t frame[2];
-    make_frame(IOLINK_MC_TRANSITION_COMMAND, IOLINK_MSEQ_TYPE_0, frame, 2U);
-    feed(frame, 2U);
+    /* 0x99 DeviceOperate（页写地址 0）由 ISR 应用并推进到 ESTAB_COM，回 CKS。 */
+    uint8_t frame[3] = {IOLINK_MC_CHANNEL_PAGE, IOLINK_MSEQ_TYPE_0, IOLINK_CMD_DEVICE_OPERATE};
+    frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | test_expected_checksum6(frame, sizeof(frame)));
+    feed(frame, sizeof(frame));
     iolink_dll_process_isr(&s_dll.main.shared);
     drain_tx();
     if (s_dll.main.shared.b_state != IOLINK_DLL_STATE_ESTAB_COM) {
         return 3;
     }
-    if (tx_observed_len() != 0U) {
-        return 4;
+    if (tx_observed_len() != 1U) {
+        return 4; /* 仅 CKS */
     }
 
     /* ESTAB_COM 有独立切片：Type-0 页读由 ISR 即时应答（页字节 + CKS），
@@ -461,7 +461,7 @@ static int test_table_accessors(void)
             }
         }
     }
-    if (iolink_dll_sm_cell(IOLINK_DLL_STATE_COUNT, DLL_EV_TRANSITION) != NULL) {
+    if (iolink_dll_sm_cell(IOLINK_DLL_STATE_COUNT, DLL_EV_PD_EXCHANGE) != NULL) {
         return 20;
     }
     if (iolink_dll_sm_cell(IOLINK_DLL_STATE_STARTUP, DLL_EV_COUNT) != NULL) {
