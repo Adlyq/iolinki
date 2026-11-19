@@ -38,7 +38,7 @@ name, prints each group's wall time, and stops at the first failure
 | `analyzer` | the clang static analyzer over `src/` (`clang --analyze`); a finding fails the group |
 | `static` | cppcheck (warning, style, performance, portability) |
 | `docs` | the generated documentation blocks (`gen_docs.py --check`: error codes, stats fields, public API, field ownership) and Doxygen warnings |
-| `matrix` | `tools/build_matrix.sh` (clang) and `tools/diff_matrix.sh` |
+| `matrix` | `tools/build_matrix.sh` (clang) and `tools/diff_matrix.sh`, which reuses the trees the matrix just built |
 | `perf` | `tools/coverage.sh --check` (clang), `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` (ATFE; the ROM/RAM matrix is built with `-DIOLINK_LOG_COMPILE_LEVEL=0`, so the budget covers protocol code, not diagnostics) and `tools/stack_report.py --selftest --check` against `tools/stack_baseline.json` (target stack frames, `arm-none-eabi-gcc`) |
 | `package` | the exported package is installed into a scratch prefix and a two-file consumer is built against it |
 | `fuzz` | libFuzzer over the three parsers that take untrusted bytes (received octets, ISDU payloads, OD indices/values); 60 s per target (`FUZZ_SECONDS` overrides), a crash, timeout or leak fails the group |
@@ -235,6 +235,23 @@ number, because `tools/coverage_baseline.txt` is calibrated on the BYTE build.
 ./tools/build_matrix.sh --probes-only      # compile-only probes
 ```
 
+`tools/diff_matrix.sh` is the second half of the `matrix` group. It replays every
+`tests/test_*` binary of each runnable configuration through the mock PHY,
+records the reply frames and compares them byte for byte against `host_default`.
+It builds into `build/matrix/<cfg>`, the trees `build_matrix.sh` has just
+produced, and only re-configures and rebuilds them in place with the row's
+declared flags, so the `matrix` group does not compile the same configuration
+twice and a transcript cannot come from a binary built with other parameters.
+`ctest` is not repeated there: the gate runs the test binaries itself under the
+trace hook and fails on a non-zero exit. With no tree under `build/matrix` — the
+gate run on its own — each configuration is configured, built and tested from
+scratch and the gate prints that it did so. `IOLINKI_MATRIX_DIR` moves the build
+trees and `IOLINKI_DIFF_DIR` the logs and transcripts. A changed `IOLINKI_CC` is
+applied by reconfiguring the tree, which rebuilds the whole row. On a 16-core
+host the `matrix` group is ~130 s, about 2 s of it the differential gate on
+reused trees; a standalone `diff_matrix.sh` from an empty `build/matrix` is
+~50 s.
+
 **Delivery rule:** a change that touches any `#if`, a `IOLINK_*` switch, or a
 public header is not ready while `tools/build_matrix.sh` is red. Add a
 configuration to the script when you introduce a new build switch.
@@ -306,7 +323,8 @@ Every build goes below `build/`, one subdirectory per purpose:
 | Directory | Created by |
 | --- | --- |
 | `build/quality`, `build/quality_release` | `tools/gates.sh build` (Debug and `-O3`) |
-| `build/matrix`, `build/diff` | `build_matrix.sh`, `diff_matrix.sh` |
+| `build/matrix` | `build_matrix.sh` (`diff_matrix.sh` reuses and rebuilds these in place) |
+| `build/diff` | `diff_matrix.sh` (per-config logs and transcripts) |
 | `build/coverage` | `coverage.sh` |
 | `build/wcet`, `build/size` | `wcet_run.sh`, `size_matrix.py` |
 | `build/isr_latency` | `tools/isr_latency/run_isolated.sh` |
