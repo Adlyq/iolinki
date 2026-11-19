@@ -1002,7 +1002,7 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 | `IOLINK_TIMER_T_FBD` | Table 47 T8/T9；Table 43 | 按 `dll_master_cycle_us()`（DPP1 MasterCycleTime 优先，未知时退到 MinCycleTime）× 3 装载（上限 500 ms）→ SIO + STARTUP（UART 速率不变） | `dll_handle_fallback_command()` / `dll_apply_isr_deadline_requests()` / `dll_timer_expire_fbd()` |
 | `IOLINK_TIMER_T_PD` | A.2 / Table 47（WINDOW） | 上电保护窗口：截止前排空 RX 与邮箱（丢弃的邮箱帧计 `t_pd_discards`），收到字节计 `t_pd_violations` | `dll_check_t_pd()` / `dll_drain_rx()` |
 | `IOLINK_TIMER_T_WU` | Table 47（WINDOW） | 唤醒后首帧窗口（`IOLINK_T_WU_US`），截止前不处理 | `dll_handle_sio_wakeup()` / `dll_wakeup_window_active()` |
-| `IOLINK_TIMER_T_BYTE` | A.2 / Table 47（phase 1） | 帧内字节间隙超限 → `t_byte_violations` + `b_framing_errors`，中止当前帧 | `dll_timer_sync_t_byte()` / `dll_timer_expire_t_byte()` |
+| `IOLINK_TIMER_T_BYTE` | Table 47 (MaxUARTFrameTime) / A.3.3（phase 1） | 帧内字节间隙超限 → `t_byte_violations` + `b_framing_errors`，中止当前帧 | `dll_timer_sync_t_byte()` / `dll_timer_expire_t_byte()` |
 | `IOLINK_TIMER_T_REN` | C6 / Table 10（WINDOW） | 应答超出 t_ren 限制 → `t_ren_violations` | `dll_check_cycle_time()` / `dll_send_od_reply()` |
 | `IOLINK_TIMER_T_CYCLE` | C5 / Table 47（WINDOW） | 帧间隔 < MinCycleTime → `t_cycle_violations` | `dll_check_cycle_time()` |
 | `IOLINK_TIMER_T_A` | Table 47 / A.2（WINDOW） | 应答起始预算（10 个位时间）；PHY 的 Timer A 是权威，软件表项只做镜像/审计 | `dll_process_complete_frame()` / `dll_send()` |

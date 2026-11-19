@@ -66,7 +66,7 @@ IOLINK_ASSUME_NONNULL_BEGIN
  *
  * Table 47 的 MaxUARTFrameTime 为 11 + t1(max) = 12 T_BIT。
  */
-#define IOLINK_T_BYTE_WINDOW_BITS 12U
+#define IOLINK_T_BYTE_WINDOW_BITS (IOLINK_UART_FRAME_BITS + IOLINK_T1_MAX_BITS)
 /** @brief T_FBD 的 MasterCycle 倍数（Table 43）。 */
 #define IOLINK_T_FBD_MASTER_CYCLES 3U
 /** @brief T_FBD 的上限，单位毫秒（Table 43）。 */

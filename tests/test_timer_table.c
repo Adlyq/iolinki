@@ -232,6 +232,30 @@ static void test_t_byte_rearm_and_cancel(void** state)
 
 /* t_PD 保护窗口：窗口内到达的帧被丢弃并计入 t_pd_violations，
  * 窗口结束后同一帧被正常处理。 */
+/* The initialised window is the Table 47 value: 11 bit times stay inside it,
+ * and reaching the deadline trips. */
+static void test_t_byte_window_matches_table47(void** state)
+{
+    (void) state;
+    iolink_dll_ctx_t ctx;
+    init_ctx(&ctx);
+    ctx.main.shared.b_state = IOLINK_DLL_STATE_OPERATE;
+    ctx.main.phy_mode = IOLINK_PHY_MODE_SDCI;
+    ctx.main.frame_index = 1U;
+    ctx.main.shared.b_last_byte_us = (uint32_t) g_now;
+    iolink_dll_process(&ctx.main);
+    const uint64_t deadline = dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_BYTE);
+    const uint32_t t_bit = 1000000U / IOLINK_COM_HZ;
+
+    g_now = (uint64_t) ctx.main.shared.b_last_byte_us + 11U * t_bit;
+    iolink_dll_process(&ctx.main);
+    assert_int_equal(ctx.main.t_byte_violations, 0U);
+
+    g_now = deadline;
+    iolink_dll_process(&ctx.main);
+    assert_int_equal(ctx.main.t_byte_violations, 1U);
+}
+
 static void test_t_pd_window_drops_frames(void** state)
 {
     (void) state;
@@ -345,6 +369,7 @@ int main(void)
         cmocka_unit_test(test_next_deadline_wrap_safe),
         cmocka_unit_test(test_same_instant_priority),
         cmocka_unit_test(test_t_byte_rearm_and_cancel),
+        cmocka_unit_test(test_t_byte_window_matches_table47),
         cmocka_unit_test(test_t_pd_window_drops_frames),
         cmocka_unit_test(test_millisecond_wrap),
         cmocka_unit_test(test_idle_deadline_boundary),

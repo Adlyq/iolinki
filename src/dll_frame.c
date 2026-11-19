@@ -230,7 +230,9 @@ uint32_t dll_get_t_byte_limit_us(const iolink_dll_main_t* ctx)
     if (ctx == NULL) {
         return 0U;
     }
-    return dll_get_t_bit_us(ctx) * IOLINK_T_BYTE_WINDOW_BITS;
+    /* Round up: the window must not be shorter than the Table 47 bound, and
+     * the integer microsecond bit time is itself rounded down. */
+    return (IOLINK_T_BYTE_WINDOW_BITS * 1000000U + IOLINK_COM_HZ - 1U) / IOLINK_COM_HZ;
 }
 
 /** @brief 当掉电/PD 保护窗口（t_PD）仍有效时返回 true。 */

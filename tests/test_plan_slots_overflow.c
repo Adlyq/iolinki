@@ -11,7 +11,7 @@
  * @brief 计划槽位耗尽必须可观测，而不是静默截断。
  *
  * 本目标把 `IOLINK_REPLY_PLAN_SLOTS` 覆盖为 1（见 tests/CMakeLists.txt），
- * 因此 OPERATE/Type-2 的计划集合（8 条）必然溢出：第一条进入计划表，
+ * 因此 OPERATE/Type-2 的计划集合（40 条）必然溢出：第一条进入计划表，
  * 其余计入 `reply_plan_overflows`。若发布路径重新退化为静默返回，
  * 计数保持不变，测试失败。
  */

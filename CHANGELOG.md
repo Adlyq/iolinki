@@ -34,8 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `IOLINK_REPLY_FLAG_RESTART_TIMER_B`, `DLL_EV_TRANSITION` and
   `dll_handle_preoperate()` are gone; V1.1.5 Table B.1 defines `0x0F` only as
   the DPP1 SystemCommand address, and Table 45 reaches ESTAB_COM through
-  `0x99 DeviceOperate`. A 2-byte `MC = 0x0F` frame is now an ordinary Type-0
-  write (CKS reply, no state change).
+  `0x99 DeviceOperate`. A 2-byte `MC = 0x0F` frame is now an ordinary Type-0 write: it gets a CKS
+  reply and has the same state effect as any other Type-0 frame in that state
+  (it no longer jumps to ESTAB_COM). Type-1/2 process-channel writes at
+  addresses 0x0F..0x1F now use the generic write plan instead of being
+  discarded as unplanned frames.
 - **Breaking:** non-null public entry points no longer accept a NULL context and
   return a default. A missing required context is a contract violation, not a
   silent fallback.
@@ -56,11 +59,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed (spec alignment)
 - The byte-gap timeout uses the Table 47 `MaxUARTFrameTime` of **12 T_BIT**
   (11 + t1(max)), not the previous 16 T_BIT receive window. The COM1/COM2/COM3
-  byte-gap limits are now 2496/312/48 us.
+  byte-gap limits are now 2500/313/60 us (rounded up).
 - The unused `IOLINK_OD_LEN_8BIT`, `IOLINK_OD_LEN_16BIT` and
   `IOLINK_OD_LEN_32BIT` macros are removed. Table A.10 defines the OD width in
-  octets (1/2/8/32); `od_width` is validated against `IOLINK_OD_MAX_SIZE` and
-  the macros had no users.
+  octets (1/2/8/32); `od_width` is rejected otherwise
+  (`IOLINK_DEVICE_INIT_ERR_OD_WIDTH`) and above `IOLINK_OD_MAX_SIZE`
+  (`IOLINK_DEVICE_INIT_ERR_OD_CAPACITY`). The macros had no users.
 
 ### Tooling and tests
 - `tests/spec_constants.csv` pins 111 specification constants (e.g. t_A, the A.3.3-A.3.6 bit
