@@ -409,6 +409,10 @@ def public_functions(source: str) -> list[tuple[str, str]]:
     return found
 
 
+# Same label grammar as tools/check_conformance_traceability.py; a clause the
+# checker rejects must not reach the table either.
+SPEC_CLAUSE_RE = r"(?:Table\s+(?:[A-D]\.)?\d+(?:\.\d+)*|[A-D](?:\.\d+)+|\d+(?:\.\d+)+)"
+
 # --- Markdown helpers -------------------------------------------------------
 
 
@@ -417,6 +421,9 @@ def md_cell(text: str) -> str:
 
 
 def code(text: str) -> str:
+    """Wrap text in an inline code span; refuse text that would break the span."""
+    if "`" in text or "\n" in text:
+        raise DocsError(f"cannot render {text!r} as inline code")
     return f"`{text}`"
 
 
@@ -604,6 +611,10 @@ def read_spec_constants(root: Path) -> list[tuple[str, str]]:
             symbol = fields[1].strip()
             if not clause or not symbol:
                 raise DocsError(f"{SPEC_CONSTANTS}:{line_number}: clause and symbol are required")
+            if not re.fullmatch(SPEC_CLAUSE_RE, clause):
+                raise DocsError(f"{SPEC_CONSTANTS}:{line_number}: invalid clause label {clause!r}")
+            if not re.fullmatch(r"IOLINK_[A-Z0-9_]+", symbol):
+                raise DocsError(f"{SPEC_CONSTANTS}:{line_number}: invalid symbol {symbol!r}")
             rows.append((clause, symbol))
     if not rows:
         raise DocsError(f"{SPEC_CONSTANTS}: no data rows")
@@ -703,7 +714,10 @@ def render_direct_visibility(root: Path) -> str:
             row["unit_test_function"],
             Path(row["unit_test_file"]).stem,
         }
-        if any(item and item in prose for item in evidence):
+        if any(
+            item and re.search(rf"(?<![\w-]){re.escape(item)}(?![\w-])", prose)
+            for item in evidence
+        ):
             continue
         lines.append(
             f"| {code(row['case_id'])} | {md_cell(row['title'])} | "
@@ -878,8 +892,9 @@ def selftest() -> int:
             "| `Table 10` | `IOLINK_FIXTURE_WU_US` |" in conformance,
             "spec_constants block is not the fixture clause table",
         )
+        spec_section = conformance.split("## Spec constants", 1)[1].split("\n## ", 1)[0]
         expect(
-            "fixture wake-up" not in conformance and " 80" not in conformance.split("## Counts")[0],
+            "fixture wake-up" not in spec_section and " 80" not in spec_section,
             "spec_constants block must not render the expected value or the note",
         )
         expect(

@@ -8,11 +8,11 @@
 
 /**
  * @file test_spec_constants.c
- * @brief `tests/spec_constants.csv` 与实现常量的双向一致性。
+ * @brief `tests/spec_constants.csv` 的数值与实现常量一致、符号清单同步。
  *
- * 表格是规范条款到代码符号的映射，它只有在两个方向都被强制时才有意义：
- * CSV 里的每一行必须能在下面的 C 表里找到同名符号，C 表里的每一项也必须
- * 出现在 CSV 里，且两边的数值必须相等。新增或删除任一侧都会让本测试失败。
+ * 表格是规范条款到代码符号的映射。数值方向必须独立强制：CSV 每一行的
+ * `expected` 与宏展开值在运行时比较，任一侧写错都会失败。符号方向现在是
+ * "生成物是否过期"：CSV 增删符号而未重新生成会让本测试报缺号/多号。
  *
  * CSV 路径由 `IOLINK_SPEC_CONSTANTS_CSV` 编译定义传入（见
  * `tests/CMakeLists.txt`），因此测试不会依赖进程的工作目录。

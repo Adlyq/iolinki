@@ -149,6 +149,24 @@ CSV must be reachable from this document by case ID, test file or test function.
 | Access Locks read/write, DS lock | PASS | `test_ident_indices`, `test_ds` |
 | Parameter lock (bit 0) enforcement | PASS | `test_parameter_lock_blocks_tag_write` |
 
+## Behaviour notes
+
+- DetailedDeviceStatus (0x0025): subindex 0 lists the whole set (B.2.22);
+  element access through subindex 1..n is a device extension, not a spec
+  requirement.
+- DeviceStatus (0x0024) follows Table B.13: Failure 4, Maintenance 1,
+  Out-of-Spec 2, Functional-Check 3, normal 0; priority is
+  Failure > Functional-Check > Maintenance > Out-of-Spec.
+- DeviceAccessLocks bit 0 blocks parameter writes (tags and DPP2) only; reads
+  and Data Storage downloads are unaffected.
+- A StatusCode write confirms only the event slots that were presented while
+  the table was frozen; events queued during the readout survive to the next
+  round.
+- A re-raise inside the 1 s repeat window is deferred, not dropped.
+- ProcessDataInput/Output (0x0028/0x0029) answer `0x80 0x11` while no frame has
+  been received or while the DLL flags the data invalid; a device without PD
+  answers with an empty positive response.
+
 ## Deferred / known limitations
 
 - **ErrorCount reset semantics** (B.2.20): the stack sums the DLL communication
@@ -202,17 +220,42 @@ listed here as soon as an area table names it).
 <!-- BEGIN GENERATED: direct_visibility (tools/gen_docs.py) -->
 | Case ID | Case | Test evidence |
 | :--- | :--- | :--- |
+| `TC_Device_Identification` | TC_Device_Identification Device Identification | `main` (`tools/test_conformance_iodd_oracle.py`) |
 | `SDCI_TC_0053` | TCD_DLIC_ISDU_IDLEBUSYCHECK | `test_0053_reserved_flowctrl_no_service` (`tests/test_isr_observability.c`) |
 | `SDCI_TC_0063` | TCD_DLIC_ISDU_WRITE8LENOVERRUN | `test_0063_0064_length_errors_preserve_config1` (`tests/test_conformance_untested.c`) |
 | `SDCI_TC_0064` | TCD_DLIC_ISDU_WRITE8WRONGLEN | `test_0063_0064_length_errors_preserve_config1` (`tests/test_conformance_untested.c`) |
 | `SDCI_TC_0068` | TCD_DLIC_ISDU_ABORTREADRESP | `test_0068_aborted_read_response` (`tests/test_isr_observability.c`) |
+| `SDCI_TC_0069` | TCD_DLIC_EVNT_OPERSINGLEEVENT | `run` (`tools/conformance_device_master.py`) |
+| `SDCI_TC_0070` | TCD_DLIC_EVNT_PROPSINGLEEVENT | `run` (`tools/conformance_device_master.py`) |
+| `SDCI_TC_0071` | TCD_DLIC_EVNT_OPEREVENTCLEAR | `run` (`tools/conformance_device_master.py`) |
+| `SDCI_TC_0072` | TCD_DLIC_EVNT_OPERCOMMINTERRUPT | `run` (`tools/conformance_device_master.py`) |
+| `SDCI_TC_0073` | TCD_DLIC_EVNT_OPERPOWERINTERRUPT | `run` (`tools/conformance_device_master.py`) |
+| `SDCI_TC_0074` | TCD_DLIC_EVNT_OPERAPPEARDISAPPEAR | `run` (`tools/conformance_device_master.py`) |
+| `SDCI_TC_0075` | TCD_DLIC_EVNT_OPERMULTEVENT | `run` (`tools/conformance_device_master.py`) |
+| `SDCI_TC_0076` | TCD_DLIC_EVNT_OPERSHORTEVENT | `run` (`tools/conformance_device_master.py`) |
+| `SDCI_TC_0093` | TCD_DLPC_STDP_PDIN | `main` (`tools/test_conformance_iodd_oracle.py`) |
+| `SDCI_TC_0094` | TCD_DLPC_STDP_PDOUT | `main` (`tools/test_conformance_iodd_oracle.py`) |
+| `SDCI_TC_0114` | TCD_DLIC_DEFP_VENDORNAM | `main` (`tools/test_conformance_iodd_oracle.py`) |
+| `SDCI_TC_0115` | TCD_DLIC_DEFP_VENDORTEXT | `main` (`tools/test_conformance_iodd_oracle.py`) |
+| `SDCI_TC_0116` | TCD_DLIC_DEFP_PRODUCTNAM | `main` (`tools/test_conformance_iodd_oracle.py`) |
+| `SDCI_TC_0117` | TCD_DLIC_DEFP_PRODUCTID | `main` (`tools/test_conformance_iodd_oracle.py`) |
+| `SDCI_TC_0118` | TCD_DLIC_DEFP_PRODUCTTEXT | `main` (`tools/test_conformance_iodd_oracle.py`) |
+| `SDCI_TC_0119` | TCD_DLIC_DEFP_SERNUM | `main` (`tools/test_conformance_iodd_oracle.py`) |
+| `SDCI_TC_0120` | TCD_DLIC_DEFP_HARDREV | `main` (`tools/test_conformance_iodd_oracle.py`) |
+| `SDCI_TC_0121` | TCD_DLIC_DEFP_FIRMREV | `main` (`tools/test_conformance_iodd_oracle.py`) |
 | `SDCI_TC_0122` | TCD_DLIC_DEFP_TAGVALID | `test_0123_application_tag_overlong_preserves_value` (`tests/test_conformance_untested.c`) |
 | `SDCI_TC_0123` | TCD_DLIC_DEFP_TAGINVALID | `test_0123_application_tag_overlong_preserves_value` (`tests/test_conformance_untested.c`) |
 | `SDCI_TC_0124` | TCD_DLIC_DEFP_ERRCOUNT | `test_0124_error_count_increment_and_reset` (`tests/test_conformance_untested.c`) |
 | `SDCI_TC_0128` | TCD_DLIC_DEFP_DEVSTAT | `test_0128_device_status_in_operate` (`tests/test_conformance_untested.c`) |
 | `SDCI_TC_0131` | TCD_DLIC_DEFP_DETAILDEVSTATACTIVE | `test_0131_detailed_device_status_active_after_restart` (`tests/test_conformance_untested.c`) |
+| `SDCI_TC_0141` | TCD_DLIC_DEFP_WRITETOOSHORT | `main` (`tools/test_conformance_iodd_oracle.py`) |
+| `SDCI_TC_0142` | TCD_DLIC_DEFP_WRITETOOLONG | `main` (`tools/test_conformance_iodd_oracle.py`) |
 | `SDCI_TC_0145` | TCD_DSBP_APPL_BPBREAKRESET | `test_0145_download_break_by_reset` (`tests/test_conformance_untested.c`) |
 | `SDCI_TC_0146` | TCD_DSBP_APPL_BPBREAKILLPARAM | `test_conformance_0146_illegal_download` (`tests/test_conformance_device.c`) |
+| `SDCI_TC_0149` | TCD_IODD_PARV_IDENT | `main` (`tools/test_conformance_iodd_oracle.py`) |
+| `SDCI_TC_0150` | TCD_IODD_PARV_COMPROFILE | `main` (`tools/test_conformance_iodd_oracle.py`) |
+| `SDCI_TC_0151` | TCD_IODD_PARV_READVERIFY | `main` (`tools/test_conformance_iodd_oracle.py`) |
+| `SDCI_TC_0152` | TCD_IODD_PARV_WRITEVERIFY | `main` (`tools/test_conformance_iodd_oracle.py`) |
 | `SDCI_TC_0155` | TCD_IODD_PARV_FACTORYSETTINGS | `test_0155_factory_settings_sequence` (`tests/test_conformance_untested.c`) |
 | `SDCI_TC_0309` | TCD_DLIC_ISDU_ELEMENT_RETRY | `test_0309_isdu_segment_repeat` (`tests/test_isr_observability.c`) |
 | `SDCI_TC_0316` | TCD_IODD_PARV_DEVICERESET | `test_0316_device_reset_sequence` (`tests/test_conformance_untested.c`) |

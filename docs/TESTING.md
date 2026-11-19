@@ -41,7 +41,7 @@ name, prints each group's wall time, and stops at the first failure
 | `matrix` | `tools/build_matrix.sh` (clang) and `tools/diff_matrix.sh`, which reuses the trees the matrix just built |
 | `perf` | `tools/coverage.sh --check` (clang), `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` (ATFE; the ROM/RAM matrix is built with `-DIOLINK_LOG_COMPILE_LEVEL=0`, so the budget covers protocol code, not diagnostics) and `tools/stack_report.py --selftest --check` against `tools/stack_baseline.json` (target stack frames, `arm-none-eabi-gcc`) |
 | `package` | the exported package is installed into a scratch prefix and a two-file consumer is built against it |
-| `fuzz` | libFuzzer over the three parsers that take untrusted bytes (received octets, ISDU payloads, OD indices/values); 60 s per target by default, `FUZZ_SECONDS` overrides it (CI pull requests pass 5). A crash, timeout or leak fails the group |
+| `fuzz` | libFuzzer over the three parsers that take untrusted bytes (received octets, ISDU payloads, OD indices/values); 60 s per target by default, `FUZZ_SECONDS` overrides it (CI passes 5, `nightly.yml` keeps 60). A crash, timeout or leak fails the group |
 | `all` | every group above |
 
 Groups compose (`tools/gates.sh quick static`). Four cumulative levels cover the
@@ -124,7 +124,7 @@ groups from what the change can break, not from the level:
 | A compile-time switch, an `#if` in `src/`/`include/`, or an `IOLINK_*` configuration macro | `./tools/build_matrix.sh`, plus `./tools/gates.sh quick` (delivery rule in §3) |
 | How the ISR and main contexts share state (`dll_shared.h`, `dll_main.h`, `dll_isr.h`, `tools/shared_fields.csv`) | `./tools/gates.sh quick context test`, and `context` must stay at zero findings |
 | A parser that consumes untrusted bytes (`src/dll_frame.c`, `src/dll_isr_rx.c`, `src/isdu*.c`, `src/od.c`) | `./tools/gates.sh quick test fuzz` |
-| A specification constant, a state-machine transition, or ISDU/event/DS behaviour | `./tools/gates.sh test` |
+| A specification constant (`tests/spec_constants.csv`), a state-machine transition, or ISDU/event/DS behaviour | `./tools/gates.sh test docs`; a new constant also needs `python3 tools/gen_spec_constants.py` to refresh `tests/gen/spec_constants_table.h` |
 | Documentation only (`*.md`) | `./tools/gates.sh quick docs` (`quick` checks the symbol/link references, `docs` the generated blocks; neither regenerates them) |
 | A tool, a CI workflow or a shell script | `./tools/gates.sh quick` |
 | A hot path, a static table (timer table, OD/ISDU tables, size/stack baselines), or anything that can move ROM/RAM, stack depth or coverage | `./tools/gates.sh perf` |
@@ -246,22 +246,33 @@ number, because `tools/coverage_baseline.txt` is calibrated on the BYTE build.
 ./tools/build_matrix.sh --probes-only      # compile-only probes
 ```
 
-`tools/diff_matrix.sh` is the second half of the `matrix` group. It replays every
-`tests/test_*` binary of each runnable configuration through the mock PHY,
-records the reply frames and compares them byte for byte against `host_default`.
+`tools/diff_matrix.sh` is the second half of the `matrix` group. It runs the
+`test_*` binaries that `ctest` registers for each runnable configuration through
+the mock PHY, records the reply frames and compares them byte for byte against
+`host_default`. The run set comes from the registration, not from the directory:
+a reused tree keeps the binaries of tests that have since been removed, and
+executing those would compare code this commit no longer contains.
+
 It builds into `build/matrix/<cfg>`, the trees `build_matrix.sh` has just
-produced, and only re-configures and rebuilds them in place with the row's
-declared flags, so the `matrix` group does not compile the same configuration
-twice and a transcript cannot come from a binary built with other parameters.
+produced, and only re-configures and rebuilds them in place, so the `matrix`
+group does not compile the same configuration twice and a transcript cannot come
+from a binary built with other parameters. Each row records the arguments it was
+built with (`.matrix_row_args`); when that fingerprint changes — another
+`IOLINKI_CC`, a `-D` the row no longer declares — the tree is discarded and
+rebuilt instead of carrying the old cache forward.
+
 `ctest` is not repeated there: the gate runs the test binaries itself under the
-trace hook and fails on a non-zero exit. With no tree under `build/matrix` — the
-gate run on its own — each configuration is configured, built and tested from
-scratch and the gate prints that it did so. `IOLINKI_MATRIX_DIR` moves the build
-trees and `IOLINKI_DIFF_DIR` the logs and transcripts. A changed `IOLINKI_CC` is
-applied by reconfiguring the tree, which rebuilds the whole row. On a 16-core
-host the `matrix` group is ~130 s, about 2 s of it the differential gate on
-reused trees; a standalone `diff_matrix.sh` from an empty `build/matrix` is
-~50 s.
+trace hook and fails on a non-zero exit. The ctest-only entries (the PTY
+conformance tests, the IODD checks and the generated-table checks) belong to
+`build_matrix.sh`; a standalone `diff_matrix.sh` therefore does not cover them.
+With no tree under `build/matrix` each configuration is configured, built and
+tested from scratch and the gate prints that it did so. `IOLINKI_MATRIX_DIR`
+moves the build trees and `IOLINKI_DIFF_DIR` the logs and transcripts. The two
+gates share that tree, so they must not run concurrently.
+
+On a 16-core host the `matrix` group is ~130 s, about 2 s of it the differential
+gate on reused trees; a standalone `diff_matrix.sh` from an empty `build/matrix`
+is ~50 s.
 
 **Delivery rule:** a change that touches any `#if`, a `IOLINK_*` switch, or a
 public header is not ready while `tools/build_matrix.sh` is red. Add a
@@ -340,6 +351,7 @@ Every build goes below `build/`, one subdirectory per purpose:
 | `build/wcet`, `build/size` | `wcet_run.sh`, `size_matrix.py` |
 | `build/isr_latency` | `tools/isr_latency/run_isolated.sh` |
 | `build/linux`, `build/baremetal` | `test_all.sh` |
+| `build/fuzz` | `tools/fuzz.sh` |
 | `build/docker`, `build/bare` | `.docker_test_entrypoint.sh` |
 
 `build/` is ignored by git, so the repository root stays clean and one command

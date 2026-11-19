@@ -232,7 +232,7 @@ def load_spec_rows() -> list[dict[str, str]]:
     return rows
 
 
-def check_spec_csv(rows: list[dict[str, str]], allowed: set[str]) -> set[str]:
+def check_spec_csv(rows: list[dict[str, str]]) -> set[str]:
     symbols: set[str] = set()
     for index, row in enumerate(rows, start=2):
         clause = (row["clause"] or "").strip()
@@ -245,11 +245,6 @@ def check_spec_csv(rows: list[dict[str, str]], allowed: set[str]) -> set[str]:
             fail(
                 f"spec_constants.csv:{index}: {symbol} uses clause {clause!r}, which is not a "
                 "specification label ('Table N', 'Annex.section' or 'chapter.section')"
-            )
-        if clause not in allowed:
-            fail(
-                f"spec_constants.csv:{index}: {symbol} uses clause {clause!r}, "
-                "which neither the CSV nor docs/SPEC_CONFORMANCE.md declares"
             )
         if not re.fullmatch(r"[A-Z][A-Z0-9_]*", symbol):
             fail(f"spec_constants.csv:{index}: {symbol!r} is not a C symbol name")
@@ -454,11 +449,11 @@ def selftest() -> int:
     csv_rows = rows_of(("A.1.6", "IOLINK_FIXTURE_A"))
     expect(spec_clauses(csv_rows) == {"A.1.6"}, "spec_clauses does not mirror the CSV column")
 
-    # A clause the old hand-maintained list would not have known is accepted:
-    # the CSV is the registry.
+    # The CSV is the registry: a new, syntactically valid label needs no code
+    # change. Accuracy against the PDF is a review duty, not a machine check.
     new_rows = rows_of(("Table 99", "IOLINK_FIXTURE_NEW"))
     expect(
-        not rejected(lambda: check_spec_csv(new_rows, spec_clauses(new_rows))),
+        not rejected(lambda: check_spec_csv(new_rows)),
         "a clause label present in the CSV was rejected",
     )
 
@@ -516,14 +511,13 @@ def selftest() -> int:
         "a doc-table symbol absent from the CSV was accepted",
     )
     expect(
-        rejected(lambda: check_spec_csv(rows_of(("Table", "IOLINK_FIXTURE_A")), {"Table"})),
+        rejected(lambda: check_spec_csv(rows_of(("Table", "IOLINK_FIXTURE_A")))),
         "a malformed clause label was accepted",
     )
     expect(
         rejected(
             lambda: check_spec_csv(
-                rows_of(("A.1.6", "IOLINK_FIXTURE_A"), ("A.1.6", "IOLINK_FIXTURE_A")),
-                {"A.1.6"},
+                rows_of(("A.1.6", "IOLINK_FIXTURE_A"), ("A.1.6", "IOLINK_FIXTURE_A"))
             )
         ),
         "a duplicate symbol was accepted",
@@ -559,7 +553,7 @@ def main(argv: list[str]) -> int:
     doc_text = DOC.read_text(errors="replace")
     csv_clauses = spec_clauses(spec_rows)
     doc_clauses = spec_doc_clauses(doc_text)
-    spec_symbols = check_spec_csv(spec_rows, csv_clauses | doc_clauses)
+    spec_symbols = check_spec_csv(spec_rows)
     check_spec_doc(doc_text, spec_symbols, csv_clauses, doc_clauses)
     check_doc_case_ids(doc_text, {r["case_id"] for r in rows}, spec_symbols)
     check_direct_visibility(rows)

@@ -89,7 +89,8 @@ Groups:
            invalid accesses)
   analyzer the clang static analyzer over the library (clang --analyze)
   static   cppcheck (warning, style, performance, portability)
-  docs     Doxygen warnings and the generated documentation blocks
+  docs     Doxygen warnings, the generated documentation blocks and the
+           committed tests/gen/spec_constants_table.h
   matrix   compile matrix plus the differential frame gate
   perf     coverage floor, WCET path proxy, size baseline and the stack-frame
            baseline
@@ -546,7 +547,9 @@ check_docs_generated() {
         return 0
     fi
     python3 tools/gen_docs.py --selftest && python3 tools/gen_docs.py --check &&
-        python3 tools/gen_spec_constants.py --check
+        python3 tools/gen_spec_constants.py --selftest &&
+        python3 tools/gen_spec_constants.py --check &&
+        python3 tools/check_conformance_traceability.py --selftest
 }
 
 check_doxygen() {
