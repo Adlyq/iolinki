@@ -1,0 +1,5 @@
+case_id,title,status,unit_test_file,unit_test_function,scope
+SDCI_TC_0001,fixture_inline_case,direct,tests/test_fixture.c,test_fixture_inline,library-core
+SDCI_TC_0002,fixture_named_case,direct,tests/test_isdu.c,test_fixture_named,library-core
+SDCI_TC_0003,fixture_physical_case,out-of-scope,,,external-physical
+SDCI_TC_0004,fixture_conditional_case,n/a,tests/test_isdu.c,test_fixture_conditional,library-optional
