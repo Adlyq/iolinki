@@ -96,8 +96,8 @@ iolink_matrix_emit_probes()
     "$cb" isr_byte_frame "-DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_BYTE -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME"
     "$cb" tx_busy_lease "-DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME -DIOLINK_PHY_FEATURE_TX_BUSY=1"
     # Both features off is the C4 row; each one alone is a different
-    # translation-unit shape (data_storage.c and isdu_ds.c are only compiled
-    # when their own switch is on), so keep the single-switch probes.
+    # translation-unit shape (the bodies of data_storage.c and isdu_ds.c are
+    # compiled out by their own switch), so keep the single-switch probes.
     "$cb" no_data_storage "-DIOLINK_FEATURE_DATA_STORAGE=0"
     "$cb" no_events "-DIOLINK_FEATURE_EVENTS=0"
     "$cb" no_validate "-DIOLINK_FEATURE_VALIDATE=0"

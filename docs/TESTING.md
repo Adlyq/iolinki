@@ -178,7 +178,7 @@ trimmed stack still owes a master (missing DS index/commands, `0x0025` ->
 `IDX_NOTAVAIL`), so trimming proves behaviour, not only compilation. The
 remaining legal-but-uninstantiated switch combinations stay covered by the
 syntax-only probes — including each feature switched off on its own, because
-`data_storage.c` and `isdu_ds.c` are only compiled with their own switch on —
+`data_storage.c` and `isdu_ds.c` have their bodies compiled out by their own switch —
 and the link-time profile probes carry the layout ABI.
 
 Configurations marked tests=yes (`host_default`, `host_frame`, `host_smp_split`,
@@ -255,7 +255,7 @@ merges them into a combined report. `--check` still compares only the BYTE
 number, because `tools/coverage_baseline.txt` is calibrated on the BYTE build.
 
 ```bash
-./tools/build_matrix.sh                    # everything (~1-2 min)
+./tools/build_matrix.sh                    # everything (~50 s)
 ./tools/build_matrix.sh --filter host      # names containing "host"
 ./tools/build_matrix.sh --list             # configuration names
 ./tools/build_matrix.sh --probes-only      # compile-only probes
