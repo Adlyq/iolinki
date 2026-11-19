@@ -7,60 +7,58 @@
 # runnable subset and fails on a stale allowlist entry instead of silently
 # skipping a comparison that no longer exists.
 #
-# The matrix is **structure x platform**, not one entry per switch:
-#   C1 host_default   BYTE/BYTE, ISR + COMPILER fence, SHARED stats, full stack
-#                     (plus the Release build-type variant)
-#   C2 host_frame     FRAME/FRAME, SHARED stats, full stack
-#   C3 host_no_ds     BYTE/BYTE, full stack minus Data Storage
-#   C4 host_no_events BYTE/BYTE, full stack minus the event engine
+# The matrix is **structure x platform**, not one entry per switch. Five
+# configurations, one per axis that can actually break the library:
+#   C1 host_default  BYTE/BYTE, ISR + COMPILER fence, SHARED stats, full stack
+#   C2 host_frame    FRAME/FRAME, SHARED stats, full stack
+#   C3 host_smp_split BYTE/BYTE, SMP + SMP fence, SPLIT stats, ISR logging
+#   C4 host_trimmed  BYTE/BYTE, Data Storage and event engine compiled out
 #   C5 target_minimal BYTE/BYTE, SINGLE (no critical-section symbols), no DS,
-#                     no events, BAREMETAL platform, Release
-#   C6 host_smp_split BYTE/BYTE, SMP + SMP fence, SPLIT stats, full stack
+#                    no events, BAREMETAL platform, Release
 #
-# C1, C2, C3, C4 and C6 run tests; C3/C4 register only the trimmed-behaviour
-# contract.  host_isr_log is a C1 variant that also runs the suite with
-# IOLINK_LOG_ENABLE_ISR=1 (the former syntax-only probe). C2 passes -DIOLINK_TEST_TRANSPORT=FRAME
-# (build_matrix.sh derives it from the mode), which drops the targets that pin
-# a BYTE transport contract; see docs/TESTING.md. C2 carries no
-# IOLINK_PHY_FEATURE_TX_BUSY=1 because that build requires every PHY under test
-# to provide tx_busy(); that layout is compiled by the tx_busy_lease probe and
-# exercised by the test_tx_busy fixture.
+# C1, C2 and C3 run the full suite; C4 registers only the trimmed-behaviour
+# contract. The Release build type is covered by `tools/gates.sh build` and
+# `gcc`, so there is no second Release row here. ISR logging rides on C3
+# because both axes are about the lock contract (see `test_log`).
+# C2 passes -DIOLINK_TEST_TRANSPORT=FRAME (build_matrix.sh derives it from the
+# mode), which drops the targets that pin a BYTE transport contract; see
+# docs/TESTING.md. C2 carries no IOLINK_PHY_FEATURE_TX_BUSY=1 because that
+# build requires every PHY under test to provide tx_busy(); that layout is
+# compiled by the tx_busy_lease probe and exercised by the test_tx_busy
+# fixture.
 #
 # Everything that is no longer a structural difference (compat bits, system
 # command, wake-up, SIO C/Q, PD-input callback, ISR-tx-only) is a runtime
 # capability and is covered by expected-frame tests in the C1 suite, not by a
-# configuration here. The probe list below covers the legal-but-uninstantiated
-# combinations.
+# configuration here. The probe list below covers only the legal combinations
+# no row instantiates: FRAME/BYTE and BYTE/FRAME granularity, tx_busy, the
+# validate/log/workspace switches, capacity overrides and the two other COM
+# rates. FRAME/FRAME, trimming both features and SINGLE are rows, so probing
+# them again would only add names.
 
 # Structural configuration names (what --list reports as the matrix size).
 # shellcheck disable=SC2034 # consumed by the scripts that source this file
 IOLINK_MATRIX_STRUCTURAL_CONFIGS=(
-    host_default host_frame host_no_ds host_no_events target_minimal host_smp_split)
+    host_default host_frame host_smp_split host_trimmed target_minimal)
 
 # Emit every build row: <callback> <name> <mode> <build-type> <tests> <cmake-extra> <cflags-extra>
 #
-# host_default_release is the Release build-type variant of C1: it does not add
-# a structural configuration, it only exercises the optimisation level.
 iolink_matrix_emit()
 {
     local cb="$1"
     "$cb" host_default BYTE_BYTE Debug yes "" ""
-    "$cb" host_default_release BYTE_BYTE Release yes "" ""
     "$cb" host_frame FRAME_FRAME Debug yes "" ""
-    # Trimmed builds run only tests/test_trimmed_contract.c, which pins the
-    # responses the master can observe when a subsystem is compiled out.
-    "$cb" host_no_ds BYTE_BYTE Debug yes "-DIOLINK_FEATURE_DATA_STORAGE=OFF" ""
-    "$cb" host_no_events BYTE_BYTE Debug yes "-DIOLINK_FEATURE_EVENTS=OFF" ""
+    "$cb" host_smp_split BYTE_BYTE Debug yes \
+        "-DIOLINK_STATS_MODE=IOLINK_STATS_SPLIT" \
+        "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SMP -DIOLINK_FENCE_LEVEL=IOLINK_FENCE_SMP -DIOLINK_FENCE_SMP_IMPL=__sync_synchronize -DIOLINK_LOG_ENABLE_ISR=1"
+    # The trimmed build runs only tests/test_trimmed_contract.c, which pins the
+    # responses the master can observe when a subsystem is compiled out. Both
+    # subsystems are removed together: one configuration, not one per switch.
+    "$cb" host_trimmed BYTE_BYTE Debug yes \
+        "-DIOLINK_FEATURE_DATA_STORAGE=OFF -DIOLINK_FEATURE_EVENTS=OFF" ""
     "$cb" target_minimal BYTE_BYTE Release no \
         "-DIOLINK_FEATURE_DATA_STORAGE=OFF -DIOLINK_FEATURE_EVENTS=OFF -DIOLINK_PLATFORM=BAREMETAL" \
         "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE"
-    "$cb" host_smp_split BYTE_BYTE Debug yes \
-        "-DIOLINK_STATS_MODE=IOLINK_STATS_SPLIT" \
-        "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SMP -DIOLINK_FENCE_LEVEL=IOLINK_FENCE_SMP -DIOLINK_FENCE_SMP_IMPL=__sync_synchronize"
-    # Variant of C1: ISR logging changes the log-sink contract (the sink is
-    # locked once init returns), so build and run the suite with it instead of
-    # only syntax-checking the macro.
-    "$cb" host_isr_log BYTE_BYTE Debug yes "" "-DIOLINK_LOG_ENABLE_ISR=1"
 }
 
 # Configurations the differential gate rebuilds. It compares protocol reply
@@ -96,14 +94,10 @@ iolink_matrix_emit_probes()
     local cb="$1"
     "$cb" isr_frame_byte "-DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_BYTE"
     "$cb" isr_byte_frame "-DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_BYTE -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME"
-    "$cb" frame_three_buffers "-DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME"
     "$cb" tx_busy_lease "-DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME -DIOLINK_PHY_FEATURE_TX_BUSY=1"
-    "$cb" no_data_storage "-DIOLINK_FEATURE_DATA_STORAGE=0"
-    "$cb" no_events "-DIOLINK_FEATURE_EVENTS=0"
     "$cb" no_validate "-DIOLINK_FEATURE_VALIDATE=0"
     "$cb" logs_off "-DIOLINK_LOG_COMPILE_LEVEL=0"
     "$cb" workspace_external "-DIOLINK_WORKSPACE_EMBEDDED=0"
-    "$cb" single_no_critical "-DIOLINK_CONCURRENCY=IOLINK_CONCURRENCY_SINGLE"
     "$cb" capacity_overrides "-DIOLINK_MBX_SLOTS=8 -DIOLINK_REPLY_PLAN_SLOTS=12"
     "$cb" com1 "-DIOLINK_COM=1"
     "$cb" com3 "-DIOLINK_COM=3"

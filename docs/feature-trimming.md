@@ -46,24 +46,23 @@ source of "why did my build not behave as configured" reports.
 | `IOLINK_CONCURRENCY` | ISR | SINGLE / SMP synchronisation primitives |
 | `IOLINK_STATS_MODE` | `IOLINK_STATS_SHARED` | `IOLINK_STATS_SPLIT`: per-context counter sets. `iolink_dll_shared_t` grows by 12 B (three `uint32_t`), while `sizeof(iolink_device_ctx_t)` grows by 8 B because existing padding absorbs the rest (host and Cortex-M0+ layouts; see `tests/test_ctx_sizes.c`) |
 
-The matrix uses six structural configurations, defined once in
-`tools/matrix_configs.sh`:
+The matrix uses five structural configurations, defined once in
+`tools/matrix_configs.sh`, one per axis that can break the library:
 
 | # | Name | ISR | Concurrency/stats | Trim | Platform |
 |---|---|---|---|---|---|
 | C1 | `host_default` | BYTE/BYTE | ISR+COMPILER/SHARED | full | LINUX Debug |
-| C1r | `host_default_release` | BYTE/BYTE | ISR/SHARED | full | LINUX Release |
 | C2 | `host_frame` | FRAME/FRAME | ISR/SHARED | full | LINUX Debug |
-| C3 | `host_no_ds` | BYTE/BYTE | ISR/SHARED | no DS | LINUX Debug |
-| C4 | `host_no_events` | BYTE/BYTE | ISR/SHARED | no events | LINUX Debug |
+| C3 | `host_smp_split` | BYTE/BYTE | SMP/SMP barrier/SPLIT | full | LINUX Debug, `IOLINK_LOG_ENABLE_ISR=1` |
+| C4 | `host_trimmed` | BYTE/BYTE | ISR/SHARED | no DS, no events | LINUX Debug |
 | C5 | `target_minimal` | BYTE/BYTE | SINGLE/SHARED | no DS, no events | BAREMETAL Release |
-| C6 | `host_smp_split` | BYTE/BYTE | SMP/SMP barrier/SPLIT | full | LINUX Debug |
-| C1v | `host_isr_log` | BYTE/BYTE | ISR + COMPILER | full | LINUX Debug, `IOLINK_LOG_ENABLE_ISR=1` |
 
-The full unit suite runs on C1, C1r, C2 and C6. C3/C4 run
+The full unit suite runs on C1, C2 and C3. C4 runs
 `tests/test_trimmed_contract.c`, which asserts the replies a trimmed stack still
 owes a master (missing DS index/commands, `0x0025` -> `IDX_NOTAVAIL`); C5 is
 compile-only and the remaining cross-combinations are syntax-only probes.
+Trimming both subsystems in one configuration keeps the row count at five; the
+individual `IOLINK_FEATURE_*` switches are still compiled by their probes.
 
 ## Runtime capability bits
 

@@ -52,12 +52,12 @@ usual points of a change; each level adds groups to the one above it:
 | L0 | after every save | `./tools/gates.sh quick` | ~3 s, no build |
 | L1 | before every commit | `./tools/gates.sh quick build test gcc` | ~45 s |
 | L2 | before a push | `./tools/gates.sh quick build test gcc static docs package --keep-going` | ~1 min |
-| L3 | before a release, or a full local run | `./tools/gates.sh all` | ~4 min |
+| L3 | before a release, or a full local run | `./tools/gates.sh all` | ~3.5 min |
 
 The sums are group wall times on a 16-core host: `quick` ~3 s, `build` ~6 s,
 `test` ~14 s, `gcc` ~3 s, `context` ~2 s, `sanitize` ~14 s, `memcheck` ~9 s,
 `analyzer` ~3 s, `static` ~3 s, `docs` ~2 s, `perf` ~21 s, `package` ~7 s,
-`matrix` ~95 s and `fuzz` ~`FUZZ_SECONDS` (the three targets run at the same
+`matrix` ~52 s and `fuzz` ~`FUZZ_SECONDS` (the three targets run at the same
 time, so the group costs one budget, not three). `matrix` dominates L3 and
 `fuzz` is the next largest item; both scale with the machine.
 
@@ -165,17 +165,22 @@ installs the tools in the Docker image and the job setup, and
 
 ### 3. Run the Compile Matrix
 Every supported structural configuration must build. The matrix is defined once
-in `tools/matrix_configs.sh`: six structural configurations, plus the `host_isr_log` variant that runs the suite with `IOLINK_LOG_ENABLE_ISR=1` (`host_default`,
-`host_frame`, `host_no_ds`, `host_no_events`, `target_minimal` and
-`host_smp_split`, plus the Release variant `host_default_release`), the syntax-only
-combination probes, the link-time profile probes and the bare-metal platform.
-Feature trimming is expressed with the individual `IOLINK_FEATURE_*` switches;
-`host_no_ds` / `host_no_events` run `tests/test_trimmed_contract.c` so a
-trimmed build proves what the master observes, not only that it compiles.
+in `tools/matrix_configs.sh` as five configurations, one per axis that can break
+the library: `host_default` (BYTE/BYTE), `host_frame` (FRAME/FRAME),
+`host_smp_split` (SMP fence, SPLIT stats, ISR logging), `host_trimmed`
+(Data Storage and the event engine compiled out) and `target_minimal` (SINGLE,
+BAREMETAL, Release). The Release build type is covered by the `build` and `gcc`
+groups, so there is no second Release row.
 
-Configurations marked tests=yes (`host_default`, `host_default_release`,
-`host_frame`, `host_no_ds`, `host_no_events`, `host_smp_split`) also run their
-registered tests (the full suite except on the two trimmed rows). The suite is transport
+`host_trimmed` runs `tests/test_trimmed_contract.c`, which asserts the replies a
+trimmed stack still owes a master (missing DS index/commands, `0x0025` ->
+`IDX_NOTAVAIL`), so trimming proves behaviour, not only compilation. The
+remaining legal-but-uninstantiated switch combinations stay covered by the
+syntax-only probes, and the link-time profile probes carry the layout ABI.
+
+Configurations marked tests=yes (`host_default`, `host_frame`, `host_smp_split`,
+`host_trimmed`) also run their registered tests (the full suite except on the
+trimmed row). The suite is transport
 neutral: `tests/test_helpers.c` implements both PHY contracts — the BYTE hooks
 (`rx_octet`/`tx_octet`/`tx_done`) and the FRAME hooks
 (`rx_frame`/`tx_frame`/`tx_busy`) — over the same request queue, and
