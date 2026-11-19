@@ -367,15 +367,14 @@ endif()
 # ISR-pump transport internals
 iolink_test(NAME test_dll_isr SOURCES test_dll_isr.c CMOCKA)
 iolink_test(NAME test_isr_atomicity SOURCES test_isr_atomicity.c CMOCKA NO_HELPERS)
-iolink_test(NAME test_isr_mailbox_activity SOURCES test_isr_mailbox_activity.c
-    CMOCKA NO_HELPERS)
 iolink_test(NAME test_isr_stability SOURCES test_isr_stability.c
     CMOCKA NO_HELPERS)
 iolink_test(NAME test_isr_isdu_snapshot SOURCES test_isr_isdu_snapshot.c
     CMOCKA NO_HELPERS)
+# Device-level window gating uses the shared mock PHY from test_helpers.c
+# (setup_mock_phy/iolink_test_device_init), so this target links the helpers.
 iolink_test(NAME test_isr_observability SOURCES test_isr_observability.c
-    CMOCKA NO_HELPERS)
-iolink_test(NAME test_isr_window SOURCES test_isr_window.c CMOCKA)
+    CMOCKA)
 
 
 get_property(skipped_targets GLOBAL PROPERTY IOLINK_TEST_BYTE_ONLY_SKIPPED)

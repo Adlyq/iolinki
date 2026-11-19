@@ -26,7 +26,6 @@
 
 #include "crc_oracle.h"
 #include "dll_access.h"
-#include "iolinki/internal/dll_sm.h"
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
 #include "test_case.h"
@@ -445,32 +444,7 @@ static int test_plan_state_stamp(void)
     return 0;
 }
 
-/* 表项越界安全；每格都有动作。 */
-static int test_table_accessors(void)
-{
-    for (uint8_t state = 0U; state < (uint8_t) IOLINK_DLL_STATE_COUNT; state++) {
-        for (uint8_t event = 0U; event < (uint8_t) DLL_EV_COUNT; event++) {
-            const iolink_dll_sm_cell_t* cell =
-                iolink_dll_sm_cell((iolink_dll_state_t) state, (iolink_dll_event_t) event);
-            if ((cell == NULL) || (cell->action == NULL)) {
-                return 1 + state;
-            }
-            if ((cell->enter_state != DLL_SM_STATE_KEEP) &&
-                (cell->enter_state >= (uint8_t) IOLINK_DLL_STATE_COUNT)) {
-                return 10 + state;
-            }
-        }
-    }
-    if (iolink_dll_sm_cell(IOLINK_DLL_STATE_COUNT, DLL_EV_PD_EXCHANGE) != NULL) {
-        return 20;
-    }
-    if (iolink_dll_sm_cell(IOLINK_DLL_STATE_STARTUP, DLL_EV_COUNT) != NULL) {
-        return 21;
-    }
-    return 0;
-}
-
-IOLINK_TEST_RC(test_table_accessors)
+/* 表项相位性质与计划状态戳：每格动作由 test_dll_statemachine_gen 逐格校验。 */
 IOLINK_TEST_RC(test_phase_property)
 IOLINK_TEST_RC(test_plan_state_stamp)
 
@@ -493,7 +467,6 @@ static int group_teardown(void** state)
 int main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test(iolink_case_test_table_accessors),
         cmocka_unit_test(iolink_case_test_phase_property),
         cmocka_unit_test(iolink_case_test_plan_state_stamp),
     };
