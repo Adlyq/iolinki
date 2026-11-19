@@ -91,7 +91,7 @@ artifacts="$FUZZ_DIR/artifacts"
 mkdir -p "$corpus/frame" "$corpus/isdu" "$corpus/od" "$artifacts"
 
 # Seeds: byte patterns that reach past the first length/type check, plus the
-# checksum vectors from tests/test_crc.c (MC/CKT shapes the parser recognises).
+# checksum vectors from tests/test_crc_vectors.c (MC/CKT shapes the parser recognises).
 # The fuzzer grows the corpus from here; files are only written once so a
 # previous run's discoveries survive.
 seed() {

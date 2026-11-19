@@ -101,7 +101,7 @@ CSV must be reachable from this document by case ID, test file or test function.
 | TYPE_1_1 (legacy interleave) rejected by V1.1.5 Device | PASS | `src/device.c` | `test_m_sequence_types` |
 | TYPE_2_V (variable PD/OD) | PASS | `src/dll.c` | `test_pd_variable`, `test_dll` |
 | OD width / OPERATE codes 0-7 (Table A.10) | PASS | `include/iolinki/iolink.h` | `test_protocol_tables` |
-| Checksum A.1.6 (incl. ISR accumulator) | PASS | `src/crc.c` | `test_crc`, `test_crc_vectors` |
+| Checksum A.1.6 (incl. ISR accumulator) | PASS | `src/crc.c` | `test_crc_vectors` |
 | Protocol constants (A.1/A.3/A.12/B.2/B.9/C.1/D.1) | PASS | `include/iolinki/protocol.h` | `test_protocol_constants` |
 | OPERATE TYPE_0 restart for non-TYPE_0 devices (Table 45 T11; SDCI_TC_0038/0049) | PASS | `dll_handle_operate_type0()` via `dll_sm_type0_read()` | `test_dll_operate_type0_read_resets`, `test_dll_operate_type0_min_cycle_time_read` |
 | ISR OPERATE → STARTUP notification remains observable before PREOPERATE | PASS | `i_startup_notification_pending`, `iolink_dll_flush_state_callbacks()` | `test_isr_startup_notification_is_not_coalesced` |

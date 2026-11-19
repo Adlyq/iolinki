@@ -286,7 +286,6 @@ if(IOLINK_PLATFORM STREQUAL "LINUX")
         LIBS conformance_device_example
         CMOCKA)
 endif()
-iolink_test(NAME test_crc SOURCES test_crc.c CMOCKA)
 iolink_test(NAME test_dll SOURCES test_dll.c CMOCKA)
 iolink_test(NAME test_isdu SOURCES test_isdu.c CMOCKA)
 iolink_test(NAME test_isdu_wire SOURCES test_isdu_wire.c CMOCKA)
