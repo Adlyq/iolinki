@@ -72,9 +72,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   B.8/B.9/B.12/B.13 and the Table C.1 ISDU codes)
   and `test_spec_constants` fails both ways when the CSV and the code drift; the
   timing literals in `src/` are named `IOLINK_*` constants in `protocol.h`.
+  The test's `SPEC_ENTRY` symbol list is generated from the CSV by
+  `tools/gen_spec_constants.py` and carries no values, so the CSV and the
+  macros remain independent sources.
 - `tools/gen_docs.py` generates the error-code enum, the DLL stats table, the
-  public-API table and the shared-ownership table (`--check`/`--write`/
-  `--selftest`); `tools/check_docs_refs.py` checks symbols, links, script paths,
+  public-API table, the shared-ownership table, the spec-constants table and the
+  conformance counts plus the direct-case visibility index (the latter two from
+  `tests/conformance_audit.csv`) (`--check`/`--write`/`--selftest`);
+  `tools/check_docs_refs.py` checks symbols, links, script paths,
   shared-field names and error-code numbers.
 - `tools/check_dead_fields.py`, `tools/check_public_api.py`,
   `tools/check_context.py` and `tools/stack_report.py` are enforced (the context
