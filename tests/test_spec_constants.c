@@ -17,9 +17,10 @@
  * CSV 路径由 `IOLINK_SPEC_CONSTANTS_CSV` 编译定义传入（见
  * `tests/CMakeLists.txt`），因此测试不会依赖进程的工作目录。
  *
- * 符号清单不手写：`tools/gen_spec_constants.py` 从 CSV 生成
- * `spec_constants_table.h`，其中只有符号、没有数值。数值仍由宏展开得到，
- * 因此 CSV 与实现仍是两个独立来源，数值错误在运行时比较中失败。
+ * 符号清单不手写：`tools/gen_spec_constants.py` 从 CSV 生成并入库的
+ * `gen/spec_constants_table.h` 只有符号、没有数值。数值仍由宏展开得到，
+ * 因此 CSV 与实现仍是两个独立来源，数值错误在运行时比较中失败；生成物的
+ * 过期由 `tools/gen_spec_constants.py --check`（gates.sh docs）发现。
  */
 
 #include <ctype.h>
@@ -49,7 +50,7 @@ typedef struct
 #define SPEC_ENTRY(symbol_) {#symbol_, (long long) (symbol_)}
 
 static const spec_entry_t k_spec[] = {
-#include "spec_constants_table.h"
+#include "gen/spec_constants_table.h"
 };
 
 #define SPEC_COUNT (sizeof(k_spec) / sizeof(k_spec[0]))
