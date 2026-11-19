@@ -232,16 +232,6 @@ IOLINK_ASSUME_NONNULL_BEGIN
 /** @} */
 
 /**
- * @defgroup iolinki_protocol_od On-Request Data（OD）常量
- * @ingroup iolinki_protocol
- * @{
- */
-#define IOLINK_OD_LEN_8BIT 1U  /**< 1 字节 OD（Type 1_x）。 */
-#define IOLINK_OD_LEN_16BIT 2U /**< 2 字节 OD（Type 2_x）。 */
-#define IOLINK_OD_LEN_32BIT 4U /**< 4 字节 OD（Type 2_V 扩展）。 */
-/** @} */
-
-/**
  * @defgroup iolinki_protocol_device_status 设备状态标志
  * @ingroup iolinki_protocol
  * @{
