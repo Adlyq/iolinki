@@ -476,7 +476,10 @@ second toolchain:
 `verification-only` build). It builds Debug with coverage, runs `ctest` with
 JUnit output, validates the IODDs and the IAR project, generates SBOMs, packages
 the artifacts, and executes the released firmware in both LabWired engine modes.
-Tag only after CI on `own_dev` is green.
+Tag only after CI on `own_dev` is green, and run the chain once with
+`workflow_dispatch` first: the IAR packaging, the release notes and the
+LabWired runs have no other coverage, so a tag is otherwise the first place a
+break in them shows up.
 
 ## 📊 Code Standards
 

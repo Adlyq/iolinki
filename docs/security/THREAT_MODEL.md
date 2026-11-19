@@ -204,7 +204,7 @@ CMake/CTest, run in Docker in CI — see `run_all_tests_docker.sh`):
   `tests/test_error_recovery.c`, `tests/test_dll.c`
 - End-to-end device behavior: `tests/test_integration_full.c`
 
-Static analysis: cppcheck with MISRA-oriented rules (`tools/run-cppcheck.sh`)
+Static analysis: cppcheck with the project's warning/style/performance/portability set (`tools/gates.sh static`)
 runs in the CI quality gate.
 
 *Maintenance rule:* any PR that changes a file cited as an anchor here must

@@ -5,8 +5,9 @@ This document defines the coding style and engineering practices for the `iolink
 ## 1. C Language Standard
 - **Standard**: C99 (ISO/IEC 9899:1999). A few test targets use C11 for
   `_Static_assert`.
-- **Safety**: MISRA C:2012 subset (see `tools/gates.sh static`); the MISRA addon is
-  report-only unless `IOLINKI_MISRA_ENFORCE=1`.
+- **Safety**: MISRA C:2012 subset as a code-level guideline. It is not a gate:
+  `tools/gates.sh static` runs cppcheck, and the MISRA addon is a manual review
+  aid (`cppcheck --addon=misra`).
 
 ## 2. Naming Conventions
 - **Prefixes**: All public symbols (functions, structs, enums) must start with `iolink_`.
@@ -30,12 +31,13 @@ This document defines the coding style and engineering practices for the `iolink
 ## 4. Static Analysis
 - **Cppcheck**: Must pass with `--enable=warning,style,performance,portability`
   and `--error-exitcode=1`.
-- **MISRA**: Checked through the cppcheck MISRA addon; report-only by default
-  (`IOLINKI_MISRA_ENFORCE=1` makes it fail).
+- **MISRA**: A guideline, not a gate. Run `cppcheck --addon=misra` by hand on
+  the files you touched; its ~1500 pre-existing findings make it useless as a
+  pass/fail check.
 
 ## 5. Testing
-- **Unit Tests**: Every behaviour change needs a test. Coverage is reported in
-  the release notes and by `tools/coverage.sh`; there is no enforced threshold.
+- **Unit Tests**: Every behaviour change needs a test. Coverage of `src/` has an
+  enforced floor (`tools/coverage.sh --check`).
 - **Framework**: CMocka.
 - **Integration**: Major features need a full-stack integration test.
 
