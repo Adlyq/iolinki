@@ -59,11 +59,9 @@ the compiled oracle.
 The checker validates the label *grammar* (`Table N`, `Annex.section` or
 `chapter.section`) and that the table below matches the CSV; whether a label
 names the right clause is a review duty against the PDF, not a machine check.
-The previously hand-maintained label list therefore has no successor, so there
-is no
-second list to update (it does not parse the PDF, but it does check the label
-grammar). Every symbol below must exist in the CSV. `direct` rows of the audit
-CSV must be reachable from this document by case ID, test file or test function.
+The CSV is therefore the only label registry. Every symbol below must exist in
+the CSV, and every `direct` row of the audit CSV must be reachable from this
+document by case ID, test file or test function.
 
 <!-- BEGIN GENERATED: spec_constants (tools/gen_docs.py) -->
 | Clause | Constants |
@@ -154,8 +152,9 @@ CSV must be reachable from this document by case ID, test file or test function.
 
 ## Behaviour notes
 
-These describe the implementation, not a quotation of the PDF; the clause
-references point at the section they follow.
+These state what this implementation does; the clause references point at the
+section it follows. Claims about what the PDF leaves undefined were reviewed by
+hand and are not machine-checked.
 
 - DetailedDeviceStatus (0x0025): subindex 0 lists the whole set (B.2.22);
   element access through subindex 1..n is a device extension, not a spec
@@ -165,9 +164,9 @@ references point at the section they follow.
   Failure > Functional-Check > Maintenance > Out-of-Spec.
 - DeviceAccessLocks bit 0 (`IOLINK_LOCK_PARAM`) blocks writes to every entry
   declared `IOLINK_OD_ACCESS_*_LOCKED`, the standard tags and DPP2 included;
-  reads are unaffected. The DS command sequence is gated by bit 1
-  (`IOLINK_LOCK_DS`), not by bit 0, so a parameter download of a locked entry
-  is still refused.
+  reads are unaffected. The DS download commands are gated by bit 1
+  (`IOLINK_LOCK_DS`), not by bit 0, so downloading a locked entry is still
+  refused.
 - A StatusCode write confirms only the event slots that were presented while
   the table was frozen; events queued during the readout survive to the next
   round.

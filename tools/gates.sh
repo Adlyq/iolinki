@@ -549,7 +549,8 @@ check_docs_generated() {
     python3 tools/gen_docs.py --selftest && python3 tools/gen_docs.py --check &&
         python3 tools/gen_spec_constants.py --selftest &&
         python3 tools/gen_spec_constants.py --check &&
-        python3 tools/check_conformance_traceability.py --selftest
+        python3 tools/check_conformance_traceability.py --selftest &&
+        python3 tools/check_conformance_traceability.py
 }
 
 check_doxygen() {
