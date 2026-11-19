@@ -37,7 +37,7 @@ name, prints each group's wall time, and stops at the first failure
 | `memcheck` | the unit binaries under valgrind memcheck (uninitialised reads, invalid accesses); the PTY conformance examples are covered by `test` |
 | `analyzer` | the clang static analyzer over `src/` (`clang --analyze`); a finding fails the group |
 | `static` | cppcheck (warning, style, performance, portability) |
-| `docs` | the generated documentation blocks (`gen_docs.py --check`: error codes, stats fields, public API, field ownership, spec constants, conformance counts and the direct-case index) and Doxygen warnings |
+| `docs` | the generated documentation blocks (`gen_docs.py --check`: error codes, stats fields, public API, field ownership, spec constants, conformance counts and the direct-case index), the committed `tests/gen/spec_constants_table.h` (`gen_spec_constants.py --check`) and Doxygen warnings |
 | `matrix` | `tools/build_matrix.sh` (clang) and `tools/diff_matrix.sh` |
 | `perf` | `tools/coverage.sh --check` (clang), `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` (ATFE; the ROM/RAM matrix is built with `-DIOLINK_LOG_COMPILE_LEVEL=0`, so the budget covers protocol code, not diagnostics) and `tools/stack_report.py --selftest --check` against `tools/stack_baseline.json` (target stack frames, `arm-none-eabi-gcc`) |
 | `package` | the exported package is installed into a scratch prefix and a two-file consumer is built against it |

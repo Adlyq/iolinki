@@ -545,7 +545,8 @@ check_docs_generated() {
         skip "python3 missing"
         return 0
     fi
-    python3 tools/gen_docs.py --selftest && python3 tools/gen_docs.py --check
+    python3 tools/gen_docs.py --selftest && python3 tools/gen_docs.py --check &&
+        python3 tools/gen_spec_constants.py --check
 }
 
 check_doxygen() {
