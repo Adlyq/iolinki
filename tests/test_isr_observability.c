@@ -20,10 +20,12 @@
 
 #include "crc_oracle.h"
 #include "dll_access.h"
+#include "iolinki/device.h"
 #include "iolinki/iolink.h"
 #include "iolinki/protocol.h"
 #include "conformance_test.h"
 #include "test_case.h"
+#include "test_helpers.h"
 
 static uint64_t now_us;
 
@@ -687,6 +689,42 @@ static int test_mailbox_drop(void)
     return 0;
 }
 
+/* 回归：邮箱路径必须刷新活动时间戳。ISR 发布的请求被主泵消费时若不刷新
+ * b_last_activity_ms，1 s 无活动监控会在每个超时 tick 上把健康的
+ * ESTAB_COM 链路复位到 STARTUP。 */
+static int test_mailbox_frame_refreshes_activity(void)
+{
+    iolink_dll_ctx_t dll;
+    init_type0_ctx(&dll);
+    dll.main.shared.b_state = IOLINK_DLL_STATE_ESTAB_COM;
+    dll.main.enforce_timing = false;
+    dll.main.shared.b_last_activity_ms = (uint32_t) (now_us / 1000U);
+
+    uint8_t frame[2];
+    make_type0((uint8_t) (IOLINK_MC_CHANNEL_PROCESS | IOLINK_MC_RW_MASK), frame, sizeof(frame));
+
+    for (unsigned i = 0U; i < 3U; i++) {
+        /* 被服务的帧之间间隔 600 ms；在整个循环中累计会超过 1 s。 */
+        now_us += 600000U;
+        push_mailbox(&dll, frame, (uint8_t) sizeof(frame));
+        iolink_dll_process(&dll.main);
+
+        /* 邮箱帧属于活跃流量：它不得触发空闲计时器。
+           显式检查保证在设置 NDEBUG 时该测试仍然有效。 */
+        if (IOLINK_STAT_TOTAL(&dll.main, b_timeout_errors, timeout_errors) != 0U) {
+            return 1;
+        }
+        if (dll.main.shared.b_state == IOLINK_DLL_STATE_STARTUP) {
+            return 2;
+        }
+        if (dll.main.shared.b_last_activity_ms != (uint32_t) (now_us / 1000U)) {
+            return 3;
+        }
+    }
+
+    return 0;
+}
+
 /* 即时帧上的错误校验和必须被计数，而不能静默丢弃。 */
 static int test_eager_reject(void)
 {
@@ -1163,6 +1201,54 @@ static int test_stack_tick_window(void)
     return 0;
 }
 
+/* 安装硬件 Timer B 钩子时，设备层主服务窗口只有在
+ * iolink_dll_on_stack_tick() 授权之后才执行。 */
+static int device_reset_calls;
+
+static void device_reset_cb(iolink_app_t* IOLINK_NULLABLE self, iolink_reset_type_t type)
+{
+    (void) self;
+    (void) type;
+    device_reset_calls++;
+}
+
+static void test_device_main_window_gated_by_tick(void** state)
+{
+    (void) state;
+    setup_mock_phy();
+    will_return(mock_phy_init, 0);
+
+    iolink_test_device_t dev;
+    static const iolink_device_app_t app = {.time_us = iolink_test_time_us,
+                                            .on_reset = device_reset_cb};
+    assert_int_equal(iolink_test_device_init(&dev, NULL, &app), 0);
+
+    /* 安装带 Timer B 钩子的 PHY，使门控生效。 */
+    iolink_phy_api_t gated = g_phy_mock;
+    gated.stack_timer_start = timer_b_start;
+    test_dll_shared(&dev.ctx)->c_phy = &gated;
+
+    test_dll_shared(&dev.ctx)->b_isdu.reset_pending = true;
+    device_reset_calls = 0;
+
+    /* 尚无 tick：主窗口不得执行。 */
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(device_reset_calls, 0);
+    assert_true(test_dll_shared(&dev.ctx)->b_isdu.reset_pending);
+
+    /* 一次 tick 只授权一个窗口。 */
+    iolink_dll_on_stack_tick(&test_dll(&dev.ctx)->shared);
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(device_reset_calls, 1);
+
+    /* 授权已被消耗；没有 tick 的第二轮不会做任何事。 */
+    iolink_device_process(&dev.ctx);
+    assert_int_equal(device_reset_calls, 1);
+
+    /* 本用例走 test_helpers 的 mock PHY：其交付计数同样必须归零。 */
+    assert_int_equal(test_tx_all_asserted(NULL), 0);
+}
+
 /* RX BYTE CHK/间隔帧结束的表征。只有过短或不完整的
  * M 序列可能以间隔结束：长度完整的帧会在 CHK 指示之前
  * 就被字节引擎消费。该间隔必须丢弃帧、
@@ -1224,6 +1310,7 @@ static int test_byte_gap_incomplete(void)
 #endif /* IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE */
 
 IOLINK_TEST_RC(test_mailbox_drop)
+IOLINK_TEST_RC(test_mailbox_frame_refreshes_activity)
 IOLINK_TEST_RC(test_eager_reject)
 IOLINK_TEST_RC(test_valid_eager)
 IOLINK_TEST_RC(test_isdu_write_consumed_by_isr)
@@ -1264,6 +1351,7 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(iolink_case_test_mailbox_drop),
+        cmocka_unit_test(iolink_case_test_mailbox_frame_refreshes_activity),
         cmocka_unit_test(iolink_case_test_eager_reject),
         cmocka_unit_test(iolink_case_test_valid_eager),
         cmocka_unit_test(iolink_case_test_isdu_write_consumed_by_isr),
@@ -1280,6 +1368,7 @@ int main(void)
         cmocka_unit_test(iolink_case_test_rx_timeout),
 #endif
         cmocka_unit_test(iolink_case_test_stack_tick_window),
+        cmocka_unit_test(test_device_main_window_gated_by_tick),
 #if IOLINK_ISR_RX_MODE == IOLINK_ISR_RX_BYTE
         cmocka_unit_test(iolink_case_test_byte_gap_incomplete),
 #endif

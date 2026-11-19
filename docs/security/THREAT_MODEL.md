@@ -156,7 +156,7 @@ users, not a network device.
 | CR 2.8 auditable events (§7.3.5) | Security-relevant conditions are reported as protocol events with standard EventCodes (V1.1.5 Annex D constants) | `include/iolinki/events.h:34+`, `iolink_diag_type_for` `src/diag.c` |
 | CR 2.9 audit storage (§7.3.6) | Events queue until transmitted/acknowledged; bounded storage | `src/events.c`, `tests/test_events.c` |
 | CR 2.10 audit failure response (§7.3.7) | Queue overflow behavior is defined (oldest overwritten), never a crash | `src/events.c` |
-| CR 3.1 communication integrity (§7.4.2) | CRC6/checksum verified on every OPERATE frame; unintentional corruption detected | `src/dll.c`, `src/dll_isr.c`, `src/crc.c`, `tests/test_crc.c`, `tests/test_dll.c` |
+| CR 3.1 communication integrity (§7.4.2) | CRC6/checksum verified on every OPERATE frame; unintentional corruption detected | `src/dll.c`, `src/dll_isr.c`, `src/crc.c`, `tests/test_crc_vectors.c`, `tests/test_dll.c` |
 | CR 3.4 software/information integrity (§7.4.4) | Data Storage image checksummed (Fletcher-16), consistency-compared, recovered on mismatch | `src/data_storage.c:74,121,157`, `tests/test_ds.c` |
 | CR 3.5 input validation (§7.4.5) | Length, bounds, and sequence legality of every received frame and ISDU enforced before use | `dll_process_complete_frame()`, `dll_frame_validate()`, `dll_type_allowed()`, `isdu_parse_index()`, `isdu_copy_payload()`, `tests/test_isdu*.c` |
 | CR 3.6 deterministic output (§7.4.6) | Communication loss is an observable DLL state for actuator safe-state policies | `include/iolinki/dll.h:32,114-115`, `tests/test_sio_fallback.c` |
@@ -195,7 +195,7 @@ The claims above are regression-checked by the existing test suite (cmocka via
 CMake/CTest, run in Docker in CI — see `run_all_tests_docker.sh`):
 
 - Frame/CRC validation: `tests/test_dll.c`, `tests/test_dll_isr.c`,
-  `tests/test_crc.c`, `tests/test_crc_vectors.c`
+  `tests/test_crc_vectors.c`
 - ISDU parsing, segmentation and flow control: `tests/test_isdu.c`,
   `tests/test_isdu_wire.c`, `tests/test_spec_conformance.c`
 - Data Storage checksum/recovery/locks: `tests/test_ds.c`
