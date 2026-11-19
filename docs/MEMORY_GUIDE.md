@@ -126,7 +126,7 @@ asserted by `test_ctx_sizes.c`):
 ### Configurable Memory (via `include/iolinki/config.h`)
 
 The macro values, valid ranges and CMake options are defined in
-[feature-trimming](feature-trimming.md#capacity-overrides). This table only records
+[feature-trimming](feature-trimming.md). This table only records
 what the **default** configuration costs in RAM; tune through `config.h` or the build
 system.
 

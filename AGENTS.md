@@ -43,7 +43,7 @@ a current `build/compile_commands.json`:
 
 - `get_symbols_overview(relative_path="src/dll_sm.c")`
 - `find_referencing_symbols(name_path="dll_sm_classify", relative_path="src/dll_sm.c")`
-- also `find_declaration`, `find_implementations`, `safe_delete_symbol`, `rename_symbol`
+- also `find_declaration` and `find_implementations`
 - line numbers are 0-based; symbols inside disabled `#if` branches are invisible
 
 `codebase-memory` (project `iolinki`) answers whole-repository questions:
@@ -55,15 +55,15 @@ a current `build/compile_commands.json`:
 - `detect_changes(project="iolinki", scope="impact")` for a change's blast radius
 - `get_architecture(project="iolinki", aspects=["overview"])`
 
-Subagents do not inherit either server; they see the usual shell/read/grep plus
-the `codebase-memory` CLI, which reaches the same graph:
+A session whose tools do not include the MCP servers can still reach the graph
+through the CLI:
 `codebase-memory-mcp cli search_graph --project iolinki --query dll_sm_classify`,
 `codebase-memory-mcp cli trace_path --project iolinki --function_name <qn>`.
 `trace_path` and `get_code_snippet` need the qualified name. The graph is
 best-effort (`parse_partial` covers `include/iolinki/application.h` and some
 `examples/`) and is refreshed with
-`index_repository(repo_path="/home/adlyq/CLionProjects/iolinki", name="iolinki")`
-(about 3 s); confirm a symbol before citing it.
+`index_repository(repo_path=<repository root>, name="iolinki")`; confirm a
+symbol before citing it.
 
 ## Code constraints
 

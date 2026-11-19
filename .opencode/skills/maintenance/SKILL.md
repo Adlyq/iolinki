@@ -80,7 +80,7 @@ git branch --show-current                                    # expect own_dev or
 
 6. **Document.** Add a `CHANGELOG.md` `[Unreleased]` entry. If it changes a
    spec-level behaviour or closes a listed divergence, update
-   `CHANGELOG.md` (and mark the upstream PR status if relevant).
+   `CHANGELOG.md`, with the upstream PR link when one exists.
 
 ## Sending a fix upstream
 
