@@ -230,10 +230,8 @@ static void test_t_byte_rearm_and_cancel(void** state)
     assert_false(dll_timer_armed(&ctx.main, IOLINK_TIMER_T_BYTE));
 }
 
-/* t_PD 保护窗口：窗口内到达的帧被丢弃并计入 t_pd_violations，
- * 窗口结束后同一帧被正常处理。 */
-/* The initialised window is the Table 47 value: 11 bit times stay inside it,
- * and reaching the deadline trips. */
+/* The configured window is at least 12 T_BIT (Table 47): a floored
+ * multiplication (48 us at COM3) would fail this bound. */
 static void test_t_byte_window_matches_table47(void** state)
 {
     (void) state;
@@ -244,18 +242,22 @@ static void test_t_byte_window_matches_table47(void** state)
     ctx.main.frame_index = 1U;
     ctx.main.shared.b_last_byte_us = (uint32_t) g_now;
     iolink_dll_process(&ctx.main);
-    const uint64_t deadline = dll_timer_deadline(&ctx.main, IOLINK_TIMER_T_BYTE);
-    const uint32_t t_bit = 1000000U / IOLINK_COM_HZ;
 
-    g_now = (uint64_t) ctx.main.shared.b_last_byte_us + 11U * t_bit;
+    assert_true((uint64_t) ctx.main.t_byte_limit_us * IOLINK_COM_HZ >=
+                (uint64_t) IOLINK_T_BYTE_WINDOW_BITS * 1000000U);
+
+    /* Strictly greater than the limit: exactly the limit is still accepted. */
+    g_now = (uint64_t) ctx.main.shared.b_last_byte_us + ctx.main.t_byte_limit_us;
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.t_byte_violations, 0U);
 
-    g_now = deadline;
+    g_now = (uint64_t) ctx.main.shared.b_last_byte_us + ctx.main.t_byte_limit_us + 1U;
     iolink_dll_process(&ctx.main);
     assert_int_equal(ctx.main.t_byte_violations, 1U);
 }
 
+/* t_PD 保护窗口：窗口内到达的帧被丢弃并计入 t_pd_violations，
+ * 窗口结束后同一帧被正常处理。 */
 static void test_t_pd_window_drops_frames(void** state)
 {
     (void) state;

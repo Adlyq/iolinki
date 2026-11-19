@@ -127,13 +127,13 @@ static const iolink_timer_contract_t g_timer_contract[IOLINK_TIMER_COUNT] = {
     {"t_pd", "A.2 / Table 47（t_PD 上电与 PD 保护窗口）", IOLINK_TIMER_T_PD,
      IOLINK_TIMER_KIND_WINDOW, 0U},
     {"t_wu", "Table 47（T_WU 唤醒后首帧窗口）", IOLINK_TIMER_T_WU, IOLINK_TIMER_KIND_WINDOW, 0U},
-    {"t_byte", "Table 47 (MaxUARTFrameTime) / A.3.3（帧内字节间超时）", IOLINK_TIMER_T_BYTE, IOLINK_TIMER_KIND_DEADLINE,
-     1U},
+    {"t_byte", "Table 47 (MaxUARTFrameTime) / A.3.3", IOLINK_TIMER_T_BYTE,
+     IOLINK_TIMER_KIND_DEADLINE, 1U},
     {"t_ren", "C6 / Table 10（t_REN 应答时间上限）", IOLINK_TIMER_T_REN, IOLINK_TIMER_KIND_WINDOW,
      0U},
     {"t_cycle", "C5 / Table 47（MinCycleTime）", IOLINK_TIMER_T_CYCLE, IOLINK_TIMER_KIND_WINDOW,
      0U},
-    {"t_a", "Table 47 / A.2（t_A = 10 位时间；PHY 定时器为权威）", IOLINK_TIMER_T_A,
+    {"t_a", "A.3.5 / Table 47（t_A = 10 位时间；PHY 定时器为权威）", IOLINK_TIMER_T_A,
      IOLINK_TIMER_KIND_WINDOW, 0U},
 };
 

@@ -59,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed (spec alignment)
 - The byte-gap timeout uses the Table 47 `MaxUARTFrameTime` of **12 T_BIT**
   (11 + t1(max)), not the previous 16 T_BIT receive window. The COM1/COM2/COM3
-  byte-gap limits are now 2500/313/60 us (rounded up).
+  byte-gap limits are now 2500/313/53 us (rounded up to whole microseconds).
 - The unused `IOLINK_OD_LEN_8BIT`, `IOLINK_OD_LEN_16BIT` and
   `IOLINK_OD_LEN_32BIT` macros are removed. Table A.10 defines the OD width in
   octets (1/2/8/32); `od_width` is rejected otherwise

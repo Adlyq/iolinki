@@ -1005,7 +1005,7 @@ timer 的枚举顺序即同刻到期的执行优先级，运行语义与规范�
 | `IOLINK_TIMER_T_BYTE` | Table 47 (MaxUARTFrameTime) / A.3.3（phase 1） | 帧内字节间隙超限 → `t_byte_violations` + `b_framing_errors`，中止当前帧 | `dll_timer_sync_t_byte()` / `dll_timer_expire_t_byte()` |
 | `IOLINK_TIMER_T_REN` | C6 / Table 10（WINDOW） | 应答超出 t_ren 限制 → `t_ren_violations` | `dll_check_cycle_time()` / `dll_send_od_reply()` |
 | `IOLINK_TIMER_T_CYCLE` | C5 / Table 47（WINDOW） | 帧间隔 < MinCycleTime → `t_cycle_violations` | `dll_check_cycle_time()` |
-| `IOLINK_TIMER_T_A` | Table 47 / A.2（WINDOW） | 应答起始预算（10 个位时间）；PHY 的 Timer A 是权威，软件表项只做镜像/审计 | `dll_process_complete_frame()` / `dll_send()` |
+| `IOLINK_TIMER_T_A` | A.3.5 / Table 47（WINDOW） | 应答起始预算（10 个位时间）；PHY 的 Timer A 是权威，软件表项只做镜像/审计 | `dll_process_complete_frame()` / `dll_send()` |
 
 分发规则：
 
