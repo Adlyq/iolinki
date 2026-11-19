@@ -111,7 +111,9 @@ best-effort (`parse_partial` covers `include/iolinki/application.h` and some
   macros; Doxygen on public API in `include/`.
 - `clang-format` pinned to 23.1.1 (Google-based, 4 spaces, 100 cols), enforced
   by `tools/gates.sh quick`.
-- Conventional Commits (`feat(dll): ...`); add `[Unreleased]` to `CHANGELOG.md`.
+- Conventional Commits (`feat(dll): ...`). A `[Unreleased]` entry in
+  `CHANGELOG.md` is required only when behaviour, a public interface or a build
+  option changes; internal refactors, tests and tooling do not need one.
 - Topic branches `fix/*`/`feature/*` cut from `own_dev`; PRs target `own_dev`.
   `no-commit-to-branch` blocks `main` and `develop`.
 

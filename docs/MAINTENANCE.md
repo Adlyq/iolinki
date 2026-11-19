@@ -29,7 +29,8 @@ numbers as a target.
 ## 3. Development workflow
 
 1. Cut a topic branch from `own_dev`.
-2. Implement the change and its test. Update `CHANGELOG.md` under `[Unreleased]`.
+2. Implement the change and its test. Update `CHANGELOG.md` under `[Unreleased]`
+   when behaviour, a public interface or a build option changed.
 3. Run the local checks:
 
    ```bash

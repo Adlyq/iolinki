@@ -30,7 +30,8 @@
     ```
     `./tools/gates.sh all` adds the compile matrix, the differential gate and
     the coverage/WCET/size floors. See [TESTING.md](TESTING.md) for the groups.
-5.  **Update Changelog**: Add a matching entry in `CHANGELOG.md` under `[Unreleased]`.
+5.  **Update Changelog**: Add an entry under `[Unreleased]` only when behaviour,
+    a public interface or a build option changed.
 6.  **Submit Pull Request**: target **`own_dev`**; CI will automatically run the
     above checks.
 
