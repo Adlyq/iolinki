@@ -116,16 +116,28 @@ for cfg in "${CONFIGS[@]}"; do
     mkdir -p "$TRACE_ROOT/$cfg"
     # 测试失败必须让门禁变红：失败的二进制也可能会写出一份（空/半截）
     # transcript，静默忽略就会把"逐字节一致"变成空比较。
+    # The run set comes from ctest's registration, not from a directory glob: a
+    # reused tree keeps the binaries of tests that no longer exist, and running
+    # those would compare transcripts of code this commit does not have.
     if ! (
+        names="$(ctest --test-dir "$MATRIX_ROOT/$cfg" -N 2>/dev/null \
+            | sed -n 's/^ *Test *#[0-9][0-9]*: //p' | grep '^test_' || true)"
+        if [ -z "$names" ]; then
+            echo "    ctest lists no test_* target; cannot derive the transcript set" >&2
+            exit 1
+        fi
         cd "$MATRIX_ROOT/$cfg/tests" || exit 1
-        for test_bin in test_*; do
-            [ -x "$test_bin" ] || continue
+        while IFS= read -r test_bin; do
+            [ -x "$test_bin" ] || {
+                echo "    $test_bin is registered but not built" >&2
+                exit 1
+            }
             if ! IOLINK_DIFF_TRACE="$TRACE_ROOT/$cfg/$test_bin.txt" "./$test_bin" \
                     >/dev/null 2>&1; then
                 echo "    $test_bin failed" >&2
                 exit 1
             fi
-        done
+        done <<< "$names"
     ); then
         echo "TEST FAILED"
         STATUS=1

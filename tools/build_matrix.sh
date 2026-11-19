@@ -131,15 +131,22 @@ run_config() {
 
     printf '%-22s ' "$name"
 
+    # Everything this row decides; a reuse run compares it against the value the
+    # tree was built with. cmake re-applies the -D arguments, but a variable the
+    # row no longer declares would survive in the cache, so a changed row starts
+    # from an empty tree instead.
+    local row_args
+    row_args="$build_type|${IOLINKI_CC:-clang}|$cflags|$tests_flag|${transport:-BYTE}|$cmake_extra"
     if [ "$REUSE_TREE" -eq 1 ]; then
-        # Keep the tree. cmake re-applies this row's declared arguments, so a
-        # cache left behind by an older matrix_configs.sh is corrected before the
-        # binaries that produce the transcripts are rebuilt.
+        if [ -f "$dir/.matrix_row_args" ] && [ "$(cat "$dir/.matrix_row_args")" != "$row_args" ]; then
+            rm -rf "$dir"
+        fi
         mkdir -p "$dir"
     else
         rm -rf "$dir"
         mkdir -p "$dir"
     fi
+    printf '%s\n' "$row_args" >"$dir/.matrix_row_args"
     # shellcheck disable=SC2086 # intentional word splitting of the option list
     if ! cmake -S "$ROOT" -B "$dir" \
             "-DCMAKE_BUILD_TYPE=$build_type" \
