@@ -7,6 +7,11 @@
 # built with `-fsanitize=fuzzer-no-link` so the fuzzer gets coverage feedback
 # from the code under test. Reusing build/ would slow every other gate down and
 # mix instrumentation into binaries the memcheck/size gates measure.
+#
+# FUZZ_SECONDS (or IOLINKI_FUZZ_SECONDS) is the per-target budget in seconds and
+# defaults to 60. CI pull requests pass 5 for a smoke pass, the nightly workflow
+# keeps the default. The corpus under build/fuzz/corpus is reused when present,
+# so a longer run continues from what the previous one found.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

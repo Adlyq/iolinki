@@ -153,15 +153,22 @@ jobs:
   # libFuzzer over the three parsers that take untrusted bytes: received
   # octets, ISDU payloads and OD indices/values. A compiler without the
   # libFuzzer runtime skips the group (exit 0) instead of failing the job.
+  #
+  # PRs get a smoke pass only: FUZZ_SECONDS=5 (15 s for the three targets)
+  # still catches a parser that reads out of bounds or aborts on a short
+  # input, which is what a fresh corpus mostly finds. The sustained run with a
+  # cached corpus is `.github/workflows/nightly.yml` (60 s per target).
   fuzz:
     runs-on: ubuntu-latest
+    env:
+      FUZZ_SECONDS: '5'
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake clang
-      - name: Fuzz the parsers (60 s per target)
+      - name: Fuzz the parsers (5 s smoke per target)
         run: ./tools/gates.sh fuzz
       - name: Upload crash inputs
         if: failure()
