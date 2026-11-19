@@ -151,7 +151,7 @@ flowchart TB
 | `src/crc.c` | A.1.6 XOR + 8→6 bit 压缩校验 | 是 |
 | `include/iolinki/internal/dll_ctx.h` | `iolink_dll_ctx_t` = `main` + `isr` 单次分配容器与布局断言 | 否（类型） |
 | `include/iolinki/internal/dll_main.h` / `dll_shared.h` / `dll_isr.h` | 主上下文 / 双上下文共享 / ISR 独占三段状态分区；三者的划分是可见性与类型边界，字段读写归属见 3.1 节 | 否（类型） |
-| `include/iolinki/internal/dll_sm.h` | 状态机骨架表 `DLL_SM_ROWS`（7 状态 × 8 事件）唯一事实源 | 否（常量宏） |
+| `include/iolinki/internal/dll_sm.h` | 状态机骨架表 `DLL_SM_ROWS`（7 状态 × 7 事件）唯一事实源 | 否（常量宏） |
 | `include/iolinki/internal/ring.h` | ISR↔主上下文的无锁 SPSC 槽环 | 是（内联） |
 | `include/iolinki/workspace.h` | ISDU scratch 与 DS 暂存缓冲 | 是 |
 | `src/phy_*.c` | PHY 驱动/模拟 | 是（通过 vtable） |
@@ -399,7 +399,7 @@ flowchart TD
     S -- 否 --> T["i_in_isr = 0"]
 ```
 
-计划命中的应答来源由主泵编译：`IOLINK_REPLY_SRC_TEMPLATE`（静态模板）、`IOLINK_REPLY_SRC_PAGE`（DPP1 字节）、`IOLINK_REPLY_SRC_EVENT_MEM`（Table 58 事件内存）、`IOLINK_REPLY_SRC_ISDU_SEG`（已暂存的 ISDU 段），以及通过 `IOLINK_REPLY_FLAG_PD_TAIL` 表达的 PD-in 尾部。计划动作只有 `IOLINK_REPLY_ACT_*` 五种；ISR 执行动作时调用 `dll_set_state_shared()`，主上下文路径调用 `dll_set_state()`。
+计划命中的应答来源由主泵编译：`IOLINK_REPLY_SRC_TEMPLATE`（静态模板）、`IOLINK_REPLY_SRC_PAGE`（DPP1 字节）、`IOLINK_REPLY_SRC_EVENT_MEM`（Table 58 事件内存）、`IOLINK_REPLY_SRC_ISDU_SEG`（已暂存的 ISDU 段），以及通过 `IOLINK_REPLY_FLAG_PD_TAIL` 表达的 PD-in 尾部。计划动作只有 `IOLINK_REPLY_ACT_*` 四种；ISR 执行动作时调用 `dll_set_state_shared()`，主上下文路径调用 `dll_set_state()`。
 
 进入流程还有两步在图上省略：`dll_isr_process()` 先调用 `dll_isr_retire_pd_cmd()` 撤回已过代的 PD 有效位命令；TX FRAME 下再调用 `dll_isr_release_pd_lease()`，按 `tx_busy()` 释放上一次应答占用的 PD-in 缓冲区（两者都在 `b_isr_tx_pending` 检查之前）。`dll_isr_drain()` 的 64 轮上限只是防自旋：TX BYTE 每轮喂一个八位组就让出，TX FRAME 每轮只取一帧，RX BYTE 一直读到帧完成或线路空闲。
 
@@ -457,8 +457,7 @@ ISR 路径在第二个字节（CKT）到达后，用 `dll_req_len_for(ctx, mc, c
 `iolink_dll_expected_req_len()`（`include/iolinki/internal/wiring.h`）传当前**期望**的类型位（`dll_expected_type_bits()`），回答的是“若主站按配置发送会有多长”。两者共用同一份实现：
 
 - Type-0（帧自报，或设备此刻只接受 Type-0）：读 2 字节；Page/Diagnosis/ISDU 写 3 字节（Figure A.5：Type-0 写固定只带一个 OD 字节，与 OPERATE 的 OD 宽度无关）；
-- Type-1/2：`2 + c_pd_out_len_current + (写 ? c_od_width : 0)`；
-- ESTAB_COM 中的 transition command（`MC = 0x0F`）：2 字节。
+- Type-1/2：`2 + c_pd_out_len_current + (写 ? c_od_width : 0)`。
 
 Type-0 的读/写长度由 MC 通道和读写位决定；Type-1/2 的请求长度由配置的 PD-out 宽度与当前 OD 宽度决定，写请求才携带 OD。RX FRAME 粒度下 `dll_isr_frame_len_ok()` 用同一判据做长度合理性检查，并把不符的帧计入 `b_framing_errors` 后丢弃。
 
@@ -499,7 +498,6 @@ flowchart TD
 ```mermaid
 flowchart TD
     A["已校验 M-sequence"] --> B{"dll_sm_classify()"}
-    B -- "DLL_EV_TRANSITION" --> C1["dll_sm_transition()<br/>dll_handle_preoperate()"]
     B -- "DLL_EV_FALLBACK_CMD" --> C2["dll_sm_fallback()<br/>ESTAB_COM 中改走 dll_sm_master_command()"]
     B -- "DLL_EV_PAGE_READ_T0" --> C3["STARTUP/AWAITING: dll_sm_page_probe()<br/>PREOPERATE/ESTAB: dll_sm_type0_read()<br/>OPERATE: dll_sm_operate_page_read()"]
     B -- "DLL_EV_PAGE_WRITE_ADDR0" --> C4["dll_sm_master_command()"]
@@ -575,7 +573,6 @@ flowchart LR
 | 请求 | ISR 双泵（计划命中时） | 主循环 |
 | :--- | :--- | :--- |
 | Type-0 启动探测（STARTUP/AWAITING 的 Page READ） | 计划动作 `IOLINK_REPLY_ACT_ENTER_PREOPERATE` + `IOLINK_REPLY_SRC_PAGE`；回 DPP1 字节并置 `i_isr_dsio_clear` | `CONSUME` 帧不入邮箱；状态由下次 flush 以电平方式通知 |
-| Type-0 transition command（PREOPERATE） | 计划动作 `IOLINK_REPLY_ACT_ENTER_ESTAB_COM`，带 `CLOSE_WINDOW \| RESTART_TIMER_B \| CONSUME`：不应答 | 帧不入邮箱 |
 | Type-0 Page/Diag/Process READ | `IOLINK_REPLY_SRC_PAGE`（单窗口整段复制）/ `EVENT_MEM` / `TEMPLATE`，`CONSUME` | 帧不入邮箱 |
 | Type-0 ISDU READ（FlowCTRL 为 START/COUNT） | `IOLINK_REPLY_SRC_ISDU_SEG`，ISR 自己推进段索引；`CONSUME` | 帧不入邮箱 |
 | Type-0 ISDU READ（IDLE/IDLE2/ABORT） | 计划命中：ISR 回 `0x00` 并置 `i_isr_isdu_read_reset`；`CONSUME` | 主泵在临界区内读-清该旗标并调用 `isdu_read_reset()`（只复位读传输层，写入口相位归 ISR，不会被踩）；快路径无请求时不取锁 |
@@ -589,7 +586,7 @@ flowchart LR
 | Type-1/2 WRITE | 暂存 ISDU 写；其余只回 `[PD-in]CKS` | eager 帧仍入邮箱；主泵复制 PD-out、推进状态机 |
 | FALLBACK MasterCommand（0x5A，Type-0 页写 addr 0） | 命中 MasterCommand 计划且带唤醒能力时：回 CKS、置 `i_isr_fallback_pending`、迁移 FALLBACK | 主泵 `dll_apply_isr_deadline_requests()` 安装 T_FBD |
 
-计划表内容随配置不同：Type-1/2 配置下 OPERATE 的 Type-0 页读只在兼容位 `IOLINK_CAP_COMPAT_T0_READ` 置位时才有普通页读计划，否则计划显式表达“消费并回 STARTUP”；Type-1/2 的页写计划固定为 `[PD-in]CKS`，同时为 OPERATE/ESTAB 的 Type-0 页写补上“回 CKS + 交主泵”的计划（MasterCommand 的状态迁移与 DPP 写语义归主泵）。Type-0 下 addr 0 由 MasterCommand 计划在 ISR 内应用并 `CONSUME`，addr 1..0x1F 的页写、诊断写与过程写由 ISR 回 CKS、帧仍交给主泵应用。STARTUP/AWAITING 的 MasterCommand 与过渡命令用 `DEFER` 计划交主泵（接受/拒绝依赖命令字节；过渡命令需要 SM 的 PREOPERATE→ESTAB_COM 完整回调路径）。
+计划表内容随配置不同：Type-1/2 配置下 OPERATE 的 Type-0 页读只在兼容位 `IOLINK_CAP_COMPAT_T0_READ` 置位时才有普通页读计划，否则计划显式表达“消费并回 STARTUP”；Type-1/2 的页写计划固定为 `[PD-in]CKS`，同时为 OPERATE/ESTAB 的 Type-0 页写补上“回 CKS + 交主泵”的计划（MasterCommand 的状态迁移与 DPP 写语义归主泵）。Type-0 下 addr 0 由 MasterCommand 计划在 ISR 内应用并 `CONSUME`，addr 1..0x1F 的页写、诊断写与过程写由 ISR 回 CKS、帧仍交给主泵应用。STARTUP/AWAITING 的 MasterCommand 用 `DEFER` 计划交主泵（接受/拒绝依赖命令字节与兼容模式）。
 
 ---
 
@@ -896,7 +893,7 @@ sequenceDiagram
 | `phy.request_service` | `dll_send()` 暂存后 | 请求 PHY 触发数据中断 |
 | `phy.int_active` | ISR 门控 | 判断收发器是否请求服务 |
 | `phy.response_timer_start/stop` | ISR RX/TX | t_A 看门狗 |
-| `phy.stack_timer_start` | ISR 发完即时应答时（TX BYTE 帧末）/ 命中计划的 `RESTART_TIMER_B` | 请求 Timer B 授权主循环服务窗口 |
+| `phy.stack_timer_start` | ISR 发完即时应答时（TX BYTE 帧末） | 请求 Timer B 授权主循环服务窗口 |
 | `phy.detect_wakeup` | `dll_handle_sio_wakeup()` | SIO 唤醒检测 |
 | `iolink_critical_enter/exit` | 诊断条件表的 `isr_pulse` 消费与整表复位、`SPLIT` 档或 `IOLINK_CONCURRENCY=SMP` 下的计数器清零、应答暂存发布/取走、SIO 切换清理、读复位旗标、Timer A 相位复位 | 平台临界区；`IOLINK_CONCURRENCY >= ISR` 时必须真实可用（初始化会拒绝 weak 默认），`SINGLE` 档不引用 |
 | `on_state_change` | `device_state_cb()` | 当前状态（电平式；主上下文迁移立即投递，ISR 迁移合并） |
@@ -943,10 +940,9 @@ stateDiagram-v2
     STARTUP --> AWAITING_COMM: SIO 下检测到唤醒脉冲
     STARTUP --> PREOPERATE: 无唤醒检测时首个有效帧
     AWAITING_COMM --> PREOPERATE: 首个 CRC/类型有效帧
-    PREOPERATE --> ESTAB_COM: transition command 0x0F
     PREOPERATE --> ESTAB_COM: 0x99 DeviceOperate
     PREOPERATE --> OPERATE: 0x98 PDOperate
-    ESTAB_COM --> OPERATE: 首个非 transition 有效帧
+    ESTAB_COM --> OPERATE: 首个周期帧
     ESTAB_COM --> OPERATE: 0x98 / 0x99
     ESTAB_COM --> PREOPERATE: 0x9A DevicePreoperate
     OPERATE --> PREOPERATE: 0x9A DevicePreoperate
@@ -983,8 +979,7 @@ stateDiagram-v2
 
 - 0x97 DeviceStartup：ISR 计划动作只置 `shared.i_isr_device_startup_requested` 并按计划确认该写；`dll_protocol_error_to_startup()`（`invalid_frames` 记账 + STARTUP 迁移）由主泵在下一个 `iolink_dll_process()` 周期开头执行，因此状态迁移至多晚一个主泵周期。
 - 0x98/0x99/0x9A 的目标状态推导只有一份（`dll_master_command_target()`）：ISR 走 `dll_apply_master_command(shared)` 并调用 `dll_set_state_shared()`，主上下文走 `dll_apply_master_command_main()` 并调用 `dll_set_state()`（保留 master-lost 簿记与逐状态回调）。
-- 迁移由 `include/iolinki/internal/dll_sm.h` 描述：帧事件用 `DLL_SM_ROWS`（7 个状态 × 8 类事件，`src/dll_sm.c` 展开成 `g_dll_sm[state][event]`），定时器/管理类迁移（上表）用 `DLL_SM_ADMIN_ROWS`。`tools/gen_dll_statemachine.py` 解析这两份宏，生成 mermaid/CSV/覆盖测试与本节表格；`--check`（ctest `dll_statemachine_gen_check`）会拒绝过期的表格。帧事件迁移改 `DLL_SM_ROWS` 即可生效（表在 `src/dll_sm.c` 展开）；定时器/管理类迁移的**触发代码**分散在 `src/dll.c`、`src/dll_frame.c` 与 `src/dll_isr.c`，改代码时要同步 `DLL_SM_ADMIN_ROWS`。
-- 首个有效帧把 STARTUP/AWAITING_COMM 迁到 PREOPERATE 后，如果该帧本身就是 transition command（`MC=0x0F`），同一次 `dll_process_complete_frame()` 会继续调用 `dll_handle_preoperate()`，因此可以一帧内连续进入 ESTAB_COM。
+- 迁移由 `include/iolinki/internal/dll_sm.h` 描述：帧事件用 `DLL_SM_ROWS`（7 个状态 × 7 类事件，`src/dll_sm.c` 展开成 `g_dll_sm[state][event]`），定时器/管理类迁移（上表）用 `DLL_SM_ADMIN_ROWS`。`tools/gen_dll_statemachine.py` 解析这两份宏，生成 mermaid/CSV/覆盖测试与本节表格；`--check`（ctest `dll_statemachine_gen_check`）会拒绝过期的表格。帧事件迁移改 `DLL_SM_ROWS` 即可生效（表在 `src/dll_sm.c` 展开）；定时器/管理类迁移的**触发代码**分散在 `src/dll.c`、`src/dll_frame.c` 与 `src/dll_isr.c`，改代码时要同步 `DLL_SM_ADMIN_ROWS`。
 - `master_lost` 只在 OPERATE 且 `master_lost_cycles != 0` 时计算，超过阈值只置提示位并触发 `on_master_lost`，**不改变状态**（`dll_timer_expire_master_lost()`，`iolink_device_master_lost()`）。
 - CRC 错误不会单独导致 STARTUP；类型非法在 OPERATE/ESTAB 只计数并丢帧，避免链路抖动。
 - `COMM_DISABLED` 会把 PHY 置为 `INACTIVE`，之后主循环不再处理帧，直到重新上电。

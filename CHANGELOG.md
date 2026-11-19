@@ -29,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   carries its category prefix (`c_`, `m_`, `i_`, `b_`), enforced by
   `tools/check_dead_fields.py`. `IOLINK_STAT_ISR`/`IOLINK_STAT_TOTAL` take the
   shared and ISR-stat field names separately, so both stats modes stay valid.
+- **Breaking:** the non-standard `0x0F` transition command is removed.
+  `IOLINK_MC_TRANSITION_COMMAND`, `IOLINK_REPLY_ACT_ENTER_ESTAB_COM`,
+  `IOLINK_REPLY_FLAG_RESTART_TIMER_B`, `DLL_EV_TRANSITION` and
+  `dll_handle_preoperate()` are gone; V1.1.5 Table B.1 defines `0x0F` only as
+  the DPP1 SystemCommand address, and Table 45 reaches ESTAB_COM through
+  `0x99 DeviceOperate`. A 2-byte `MC = 0x0F` frame is now an ordinary Type-0
+  write (CKS reply, no state change).
 - **Breaking:** non-null public entry points no longer accept a NULL context and
   return a default. A missing required context is a contract violation, not a
   silent fallback.
