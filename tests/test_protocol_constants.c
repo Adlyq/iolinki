@@ -47,7 +47,6 @@ static void test_master_command_and_channels(void** state)
     assert_int_equal(IOLINK_MC_CHANNEL_PAGE, 0x20U);
     assert_int_equal(IOLINK_MC_CHANNEL_DIAGNOSIS, 0x40U);
     assert_int_equal(IOLINK_MC_CHANNEL_ISDU, 0x60U);
-    assert_int_equal(IOLINK_MC_TRANSITION_COMMAND, 0x0FU);
 
     /* Table 52：FlowCTRL 取值。 */
     assert_int_equal(IOLINK_FLOWCTRL_START, 0x10U);

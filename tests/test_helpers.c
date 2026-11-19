@@ -847,15 +847,32 @@ void move_to_operate_ctx(iolink_device_ctx_t* ctx)
     g_mock_wakeup = 1;
     test_io_cycle(ctx);
 
-    /* AWAITING_COMM -> PREOPERATE（转换命令 MC=0x0F）。 */
-    uint8_t mc = IOLINK_MC_TRANSITION_COMMAND;
-    uint8_t ck = test_frame_checksum(mc);
-    mock_phy_feed_byte(mc);
-    mock_phy_feed_byte(ck);
+    /* AWAITING_COMM -> PREOPERATE（T1：Type-0 页读，应答 DPP1 字节）。 */
+    uint8_t probe[2] = {(uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), 0x00U};
+    probe[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | test_expected_checksum6(probe, sizeof(probe)));
+    for (size_t i = 0U; i < sizeof(probe); i++) {
+        mock_phy_feed_byte(probe[i]);
+    }
     mock_phy_feed_chk();
     test_io_cycle(ctx);
+    assert_int_equal(iolink_device_get_state(ctx), IOLINK_DLL_STATE_PREOPERATE);
+    assert_tx_len(2); /* DPP1 页字节 + CKS */
+    mock_phy_clear_tx();
 
-    /* PREOPERATE/ESTAB_COM -> OPERATE（该类型下的第一个有效帧）。 */
+    /* PREOPERATE -> ESTAB_COM（0x99 DeviceOperate 页写地址 0）。 */
+    uint8_t operate[3] = {(uint8_t) IOLINK_MC_CHANNEL_PAGE, IOLINK_MSEQ_TYPE_0,
+                          IOLINK_CMD_DEVICE_OPERATE};
+    operate[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | test_expected_checksum6(operate, sizeof(operate)));
+    for (size_t i = 0U; i < sizeof(operate); i++) {
+        mock_phy_feed_byte(operate[i]);
+    }
+    mock_phy_feed_chk();
+    test_io_cycle(ctx);
+    assert_int_equal(iolink_device_get_state(ctx), IOLINK_DLL_STATE_ESTAB_COM);
+    assert_tx_len(1); /* 仅 CKS */
+    mock_phy_clear_tx();
+
+    /* ESTAB_COM -> OPERATE（该类型下的第一个周期帧）。 */
     iolink_m_seq_type_t type = iolink_device_get_m_seq_type(ctx);
     uint8_t pd_out_len = iolink_device_get_pd_out_len(ctx);
     uint8_t pd_in_len = iolink_device_get_pd_in_len(ctx);

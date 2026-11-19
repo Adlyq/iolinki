@@ -967,7 +967,6 @@ stateDiagram-v2
 | 初始化 → STARTUP | `iolink_dll_init()` | `dll_set_state(STARTUP)` |
 | STARTUP → AWAITING_COMM | SIO + `detect_wakeup()>0` | `dll_handle_sio_wakeup()` |
 | STARTUP/AWAITING → PREOPERATE | 首个有效帧 | `g_dll_sm` 表项的 `enter_state` / `dll_isr_plan_action()`（ENTER_PREOPERATE） |
-| PREOPERATE → ESTAB_COM | MC=0x0F transition command | `dll_sm_transition()` → `dll_handle_preoperate()` / `dll_isr_plan_action()` |
 | PREOPERATE → ESTAB_COM | 0x99 DeviceOperate | `dll_sm_master_command()` → `dll_apply_master_command()` |
 | PREOPERATE → OPERATE | 0x98 PDOperate | `dll_apply_master_command()` |
 | ESTAB_COM → OPERATE | 首个周期帧（Type-1/2 或任一 Type-0 周期帧） | `g_dll_sm` 表项的 `enter_state` |

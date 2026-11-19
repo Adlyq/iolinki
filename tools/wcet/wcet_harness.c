@@ -602,7 +602,7 @@ static int wcet_isdu_read_response(uint8_t* out, size_t cap, size_t* out_len)
 
 /* --- 场景公共步骤 ------------------------------------------------------- */
 
-/** @brief 唤醒 -> 过渡命令 -> 首条合法帧，把设备带到 OPERATE。 */
+/** @brief 唤醒 -> 启动探测 -> 0x99 DeviceOperate -> 首条合法帧，把设备带到 OPERATE。 */
 static int wcet_enter_operate(void)
 {
     uint8_t frame[WCET_FRAME_MAX];
@@ -615,10 +615,18 @@ static int wcet_enter_operate(void)
     WCET_CHECK(iolink_device_get_state(&g_dev.ctx) == IOLINK_DLL_STATE_AWAITING_COMM,
                "唤醒后未进入 AWAITING_COMM");
 
-    len = wcet_build_type0(IOLINK_MC_TRANSITION_COMMAND, -1, frame);
+    /* T1：Type-0 页读（DPP1 MinCycleTime）。 */
+    len = wcet_build_type0((uint8_t) (IOLINK_MC_CHANNEL_PAGE | IOLINK_MC_RW_MASK | 0x02U), -1,
+                           frame);
+    wcet_exchange(frame, len, true);
+    WCET_CHECK(iolink_device_get_state(&g_dev.ctx) == IOLINK_DLL_STATE_PREOPERATE,
+               "启动探测后未进入 PREOPERATE");
+
+    /* Table B.2：0x99 DeviceOperate（页写地址 0）。 */
+    len = wcet_build_type0(IOLINK_MC_CHANNEL_PAGE, (int) IOLINK_CMD_DEVICE_OPERATE, frame);
     wcet_exchange(frame, len, true);
     WCET_CHECK(iolink_device_get_state(&g_dev.ctx) == IOLINK_DLL_STATE_ESTAB_COM,
-               "过渡命令后未进入 ESTAB_COM");
+               "DeviceOperate 后未进入 ESTAB_COM");
 
     if (g_type == IOLINK_M_SEQ_TYPE_0) {
         len = wcet_build_type0(0x00U, -1, frame);

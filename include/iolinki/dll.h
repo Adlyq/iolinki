@@ -183,9 +183,8 @@ typedef enum
 {
     IOLINK_REPLY_ACT_NONE = 0U,             /**< 无副作用 */
     IOLINK_REPLY_ACT_ENTER_PREOPERATE = 1U, /**< 启动探测被接受 */
-    IOLINK_REPLY_ACT_ENTER_ESTAB_COM = 2U,  /**< 转换命令（不应答） */
-    IOLINK_REPLY_ACT_MASTER_COMMAND = 3U,   /**< 应用请求 OD 字节中的 MasterCommand */
-    IOLINK_REPLY_ACT_RESET_STARTUP = 4U     /**< OPERATE 中的 Type-0 页读：复位到 STARTUP */
+    IOLINK_REPLY_ACT_MASTER_COMMAND = 2U,   /**< 应用请求 OD 字节中的 MasterCommand */
+    IOLINK_REPLY_ACT_RESET_STARTUP = 3U     /**< OPERATE 中的 Type-0 页读：复位到 STARTUP */
 } iolink_reply_action_t;
 
 /** @brief 应答在列表尾追加活动 PD-in 字节（Type-1/2 长应答）。 */
@@ -194,8 +193,6 @@ typedef enum
 #define IOLINK_REPLY_FLAG_STAGED 0x02U
 /** @brief 不应答：关闭 t_A 窗口（计划自己消费该帧）。 */
 #define IOLINK_REPLY_FLAG_CLOSE_WINDOW 0x04U
-/** @brief 关闭 t_A 窗口后启动 Timer B（转换命令的时序语义）。 */
-#define IOLINK_REPLY_FLAG_RESTART_TIMER_B 0x10U
 /** @brief 该帧由 ISR 完全消费，不再发布到主泵邮箱。 */
 #define IOLINK_REPLY_FLAG_CONSUME 0x08U
 /** @brief ISR 不应答但帧仍交主泵：接受/拒绝依赖帧内容（如启动期 MasterCommand）。 */

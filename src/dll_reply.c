@@ -33,9 +33,9 @@ static const uint8_t dll_reply_zero[IOLINK_OD_MAX_SIZE] = {0U};
 /** @brief Type-0 短应答计划集的构建模式。 */
 typedef enum
 {
-    DLL_PLAN_MODE_STARTUP = 0,    /**< 读与过渡命令在 ISR 内推进到 PREOPERATE */
-    DLL_PLAN_MODE_PREOPERATE = 1, /**< 过渡命令进入 ESTAB_COM */
-    DLL_PLAN_MODE_OPERATE = 2     /**< OPERATE 中的过渡命令不是合法计划 */
+    DLL_PLAN_MODE_STARTUP = 0,    /**< 读在 ISR 内推进到 PREOPERATE */
+    DLL_PLAN_MODE_PREOPERATE = 1, /**< MasterCommand 由 ISR 直接应用 */
+    DLL_PLAN_MODE_OPERATE = 2     /**< Type-0 周期帧，ESTAB_COM 与 OPERATE 共用 */
 } dll_plan_mode_t;
 
 /**
@@ -108,10 +108,9 @@ static void dll_plan_push_type12(iolink_dll_main_t* ctx, uint8_t* count, uint8_t
                   ckt, IOLINK_REPLY_SRC_ISDU_SEG, od_w, IOLINK_REPLY_FLAG_PD_TAIL,
                   IOLINK_REPLY_ACT_NONE, NULL);
 
-    /* 写：无 OD，只有 PD-in。转换命令标记（MC 地址 0x0F）不由 ISR 应答。 */
-    const uint8_t wr_max = (uint8_t) (IOLINK_MC_TRANSITION_COMMAND - 1U);
+    /* 写：无 OD，只有 PD-in。 */
     dll_plan_push(ctx, count, state, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
-                  IOLINK_MC_CHANNEL_PROCESS, wr_max, 0U, IOLINK_MSEQ_TYPE_MASK, ckt,
+                  IOLINK_MC_CHANNEL_PROCESS, addr_max, 0U, IOLINK_MSEQ_TYPE_MASK, ckt,
                   IOLINK_REPLY_SRC_NONE, 0U, IOLINK_REPLY_FLAG_PD_TAIL, IOLINK_REPLY_ACT_NONE,
                   NULL);
     dll_plan_push(ctx, count, state, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,
@@ -132,32 +131,11 @@ static void dll_plan_push_type12(iolink_dll_main_t* ctx, uint8_t* count, uint8_t
 static void dll_plan_push_type0(iolink_dll_main_t* ctx, uint8_t* count, uint8_t state,
                                 dll_plan_mode_t mode)
 {
-    /* STARTUP/AWAITING 的所有读与过渡命令都由 ISR 推进到 PREOPERATE；
+    /* STARTUP/AWAITING 的读由 ISR 推进到 PREOPERATE；
      * 写帧交给主泵应用（主泵在同一帧上完成状态迁移）。 */
     const uint8_t read_action = (mode == DLL_PLAN_MODE_STARTUP)
                                     ? (uint8_t) IOLINK_REPLY_ACT_ENTER_PREOPERATE
                                     : (uint8_t) IOLINK_REPLY_ACT_NONE;
-
-    if (mode != DLL_PLAN_MODE_OPERATE) {
-        if (mode == DLL_PLAN_MODE_STARTUP) {
-            /* STARTUP/AWAITING 的过渡命令交给主泵：SM 先进入 PREOPERATE、
-             * 再由动作推进到 ESTAB_COM，应用层的状态回调依赖这条完整路径；
-             * 它本身没有应答，不存在 t_A 风险。 */
-            dll_plan_push(ctx, count, state, 0xFFU, IOLINK_MC_TRANSITION_COMMAND,
-                          IOLINK_MC_ADDR_MASK, 2U, IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0,
-                          IOLINK_REPLY_SRC_NONE, 0U, IOLINK_REPLY_FLAG_DEFER, IOLINK_REPLY_ACT_NONE,
-                          NULL);
-        }
-        else {
-            /* PREOPERATE 的过渡命令由 ISR 消费并推进到 ESTAB_COM（不应答）。 */
-            dll_plan_push(ctx, count, state, 0xFFU, IOLINK_MC_TRANSITION_COMMAND,
-                          IOLINK_MC_ADDR_MASK, 2U, IOLINK_MSEQ_TYPE_MASK, IOLINK_MSEQ_TYPE_0,
-                          IOLINK_REPLY_SRC_NONE, 0U,
-                          IOLINK_REPLY_FLAG_CLOSE_WINDOW | IOLINK_REPLY_FLAG_RESTART_TIMER_B |
-                              IOLINK_REPLY_FLAG_CONSUME,
-                          IOLINK_REPLY_ACT_ENTER_ESTAB_COM, NULL);
-        }
-    }
 
     /* 读：一个 OD 字节 + CKS。 */
     dll_plan_push(ctx, count, state, IOLINK_MC_RW_MASK | IOLINK_MC_COMM_CHANNEL_MASK,

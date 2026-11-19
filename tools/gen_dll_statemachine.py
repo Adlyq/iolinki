@@ -48,7 +48,6 @@ EXPECTED_STATES = [
 ]
 
 EXPECTED_EVENTS = [
-    "DLL_EV_TRANSITION",
     "DLL_EV_FALLBACK_CMD",
     "DLL_EV_PAGE_READ_T0",
     "DLL_EV_PAGE_WRITE_ADDR0",
@@ -262,7 +261,7 @@ static void test_rows_match_runtime_table(void** state)
 static void test_out_of_range_query_returns_null(void** state)
 {{
     (void) state;
-    assert_null(iolink_dll_sm_cell((iolink_dll_state_t) IOLINK_DLL_STATE_COUNT, DLL_EV_TRANSITION));
+    assert_null(iolink_dll_sm_cell((iolink_dll_state_t) IOLINK_DLL_STATE_COUNT, DLL_EV_PD_EXCHANGE));
     assert_null(iolink_dll_sm_cell(IOLINK_DLL_STATE_STARTUP, (iolink_dll_event_t) DLL_EV_COUNT));
 }}
 

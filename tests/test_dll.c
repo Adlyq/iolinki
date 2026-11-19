@@ -328,14 +328,12 @@ static void test_dll_preoperate_to_operate(void** state)
     test_io_cycle(&dev.ctx);
     test_clock_advance_ms(1);
 
-    /* PREOPERATE -> ESTAB_COM */
-    uint8_t trans_mc = IOLINK_MC_TRANSITION_COMMAND;
-    uint8_t trans_ck = test_frame_checksum(trans_mc);
-    mock_phy_feed_byte(trans_mc);
-    mock_phy_feed_byte(trans_ck);
-    mock_phy_feed_chk();
-    /* 在 PREOPERATE 中对 Transition Command 不应答 */
-    test_io_cycle(&dev.ctx);
+    /* PREOPERATE -> ESTAB_COM：0x99 DeviceOperate（Table B.2 页写地址 0）。 */
+    feed_type0_page_read(0x02U);
+    (void) deliver_type0_read(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
+    feed_master_command(IOLINK_CMD_DEVICE_OPERATE);
+    deliver_expect_type0_ack(&dev.ctx);
     assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_ESTAB_COM);
 
     /* 收到首个合法帧后从 ESTAB_COM 进入 OPERATE（WRITE 2_V：MC、CKT、
@@ -368,14 +366,12 @@ static void test_dll_crc_error_keeps_operate(void** state)
     test_io_cycle(&dev.ctx);
     test_clock_advance_ms(1);
 
-    /* PREOPERATE -> ESTAB_COM */
-    uint8_t mc = IOLINK_MC_TRANSITION_COMMAND;
-    uint8_t ck = test_frame_checksum(mc);
-    mock_phy_feed_byte(mc);
-    mock_phy_feed_byte(ck);
-    mock_phy_feed_chk();
-    /* 对 Transition Command 不应答 */
-    test_io_cycle(&dev.ctx);
+    /* PREOPERATE -> ESTAB_COM：0x99 DeviceOperate。 */
+    feed_type0_page_read(0x02U);
+    (void) deliver_type0_read(&dev.ctx);
+    feed_master_command(IOLINK_CMD_DEVICE_OPERATE);
+    deliver_expect_type0_ack(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_ESTAB_COM);
 
     /* ESTAB_COM -> OPERATE（WRITE 2_V：MC、CKT、PD-out(1)、OD(2)）。 */
     uint8_t ok_frame[5] = {0x00, IOLINK_MSEQ_TYPE_2, 0x00, 0x00, 0x00};
@@ -410,58 +406,69 @@ static void test_dll_crc_error_keeps_operate(void** state)
     assert_int_not_equal(stats.crc_errors, 0);
 }
 
-static void test_dll_reject_transition_in_operate(void** state)
+/* `MC = 0x0F` 不是 transition command：DPP1 的 0x0F 只是 SystemCommand 地址，
+   没有任何规范条款把它定义为状态迁移。这里钉住它在 PREOPERATE 下就是一个
+   普通的 2 字节 Type-0 过程通道写：按通用 Type-0 路径应答 CKS，状态不变。 */
+static void test_dll_preoperate_0f_is_plain_type0(void** state)
 {
     (void) state;
     iolink_stack_config_t config = {
-        .m_seq_type = IOLINK_M_SEQ_TYPE_2_V, .od_width = 2, .pd_in_len = 1, .pd_out_len = 1};
+        .m_seq_type = IOLINK_M_SEQ_TYPE_0, .od_width = 1, .pd_in_len = 0, .pd_out_len = 0};
     setup_mock_phy();
     will_return(mock_phy_init, 0);
     iolink_test_device_t dev;
     iolink_test_device_init(&dev, &config, NULL);
 
-    move_to_operate_ctx(&dev.ctx);
-    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
-    iolink_dll_stats_t stats_before;
-    iolink_device_get_dll_stats(&dev.ctx, &stats_before);
-    const uint32_t misses_before = stats_before.isr_plan_misses;
+    wake_device(&dev.ctx);
+    feed_type0_page_read(0x02U);
+    (void) deliver_type0_read(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
 
-    /* 主站在 OPERATE 状态下发送 0x0F（Transition）。2_V 的 WRITE 帧为
-       MC、CKT、PD-out(1)、OD(2)。 */
-    uint8_t mc = IOLINK_MC_TRANSITION_COMMAND;
-    uint8_t frame[5] = {mc, IOLINK_MSEQ_TYPE_2, 0x00, 0x00, 0x00};
-    frame[1] = (uint8_t) (frame[1] | test_expected_checksum6(frame, 5));
+    iolink_dll_stats_t before;
+    iolink_device_get_dll_stats(&dev.ctx, &before);
 
-    for (int i = 0; i < 5; i++) {
-        mock_phy_feed_byte(frame[i]);
-    }
-    mock_phy_feed_chk();
+    /* 2 字节 Type-0：WRITE、process 通道、地址 0x0F。 */
+    uint8_t frame[2] = {0x0FU, IOLINK_MSEQ_TYPE_0};
+    frame[1] = (uint8_t) (IOLINK_MSEQ_TYPE_0 | test_expected_checksum6(frame, sizeof(frame)));
+    feed_frame_bytes(frame, sizeof(frame));
 
     test_io_cycle(&dev.ctx);
 
-    /* 该帧合法但无计划（0x0F 被排除在所有写计划之外）：ISR 不应答、
-     * 丢弃并计一次计划未命中，状态与主泵错误计数都不变。 */
-    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_OPERATE);
-    iolink_dll_stats_t stats_after;
-    iolink_device_get_dll_stats(&dev.ctx, &stats_after);
-    assert_int_equal(stats_after.isr_plan_misses, misses_before + 1U);
-    assert_int_equal(stats_after.framing_errors, stats_before.framing_errors);
+    /* 普通 Type-0 写：仅 CKS，不迁移状态。 */
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_PREOPERATE);
+    assert_tx_len(1);
+    size_t tx_len = 0U;
+    const uint8_t* tx = mock_phy_tx(&tx_len);
+    assert_int_equal(tx_len, 1U);
+    /* 应答按 Figure A.5 的 CKS 布局：flags 位 6-7 + 对 flags 的校验和。 */
+    const uint8_t flags = (uint8_t) (tx[0] & 0xC0U);
+    assert_int_equal(flags & 0x80U, 0U); /* 无事件 */
+    const uint8_t cks_octets[1] = {flags};
+    assert_int_equal(tx[0],
+                     (uint8_t) (flags | test_expected_checksum6(cks_octets, sizeof(cks_octets))));
+    iolink_dll_stats_t after;
+    iolink_device_get_dll_stats(&dev.ctx, &after);
+    assert_int_equal(after.framing_errors, before.framing_errors);
+    assert_int_equal(after.isr_plan_misses, before.isr_plan_misses);
+    /* 仍在 PREOPERATE：可以继续走规范路径进入 ESTAB_COM。 */
+    feed_master_command(IOLINK_CMD_DEVICE_OPERATE);
+    deliver_expect_type0_ack(&dev.ctx);
+    assert_int_equal(iolink_device_get_state(&dev.ctx), IOLINK_DLL_STATE_ESTAB_COM);
 }
 
-/* 将 Type-0 设备带入 OPERATE：唤醒、PREOPERATE、Transition Command，
+/* 将 Type-0 设备带入 OPERATE：唤醒、PREOPERATE、0x99 DeviceOperate，
    然后下发一个合法的 Type-0 空闲帧。 */
 static void move_type0_to_operate(iolink_device_ctx_t* ctx)
 {
-    iolink_phy_mock_set_wakeup(1);
-    test_io_cycle(ctx);
-    test_clock_advance_ms(1);
+    wake_device(ctx);
 
-    uint8_t mc = IOLINK_MC_TRANSITION_COMMAND;
-    uint8_t ck = test_frame_checksum(mc);
-    mock_phy_feed_byte(mc);
-    mock_phy_feed_byte(ck);
-    mock_phy_feed_chk();
-    test_io_cycle(ctx);
+    feed_type0_page_read(0x02U);
+    (void) deliver_type0_read(ctx);
+    assert_int_equal(iolink_device_get_state(ctx), IOLINK_DLL_STATE_PREOPERATE);
+
+    feed_master_command(IOLINK_CMD_DEVICE_OPERATE);
+    deliver_expect_type0_ack(ctx);
+    assert_int_equal(iolink_device_get_state(ctx), IOLINK_DLL_STATE_ESTAB_COM);
 
     uint8_t idle = 0x00;
     uint8_t idle_ck = test_frame_checksum(idle);
@@ -1869,7 +1876,7 @@ int main(void)
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_crc_error_keeps_operate, test_setup,
                                         test_teardown),
-        cmocka_unit_test_setup_teardown(test_dll_reject_transition_in_operate, test_setup,
+        cmocka_unit_test_setup_teardown(test_dll_preoperate_0f_is_plain_type0, test_setup,
                                         test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_illegal_mseq_type, test_setup, test_teardown),
         cmocka_unit_test_setup_teardown(test_dll_isdu_channel_idle, test_setup, test_teardown),

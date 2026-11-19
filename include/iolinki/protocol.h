@@ -92,8 +92,6 @@ IOLINK_ASSUME_NONNULL_BEGIN
 #define IOLINK_MC_CHANNEL_DIAGNOSIS 0x40U /**< 诊断（事件存储器）通道。 */
 #define IOLINK_MC_CHANNEL_ISDU 0x60U      /**< ISDU 通道（FlowCTRL 位于地址位）。 */
 
-#define IOLINK_MC_TRANSITION_COMMAND 0x0FU /**< 用于过渡命令的地址。 */
-
 /** @brief CKT/CKS 中的 M 序列类型位（A.1.3，Table A.3）。 */
 #define IOLINK_MSEQ_TYPE_MASK 0xC0U     /**< CKT/CKS 八位组中的类型字段掩码。 */
 #define IOLINK_MSEQ_TYPE_0 0x00U        /**< Type 0。 */
