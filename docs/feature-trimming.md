@@ -53,9 +53,12 @@ The matrix uses five structural configurations, defined once in
 |---|---|---|---|---|---|
 | C1 | `host_default` | BYTE/BYTE | ISR+COMPILER/SHARED | full | LINUX Debug |
 | C2 | `host_frame` | FRAME/FRAME | ISR/SHARED | full | LINUX Debug |
-| C3 | `host_smp_split` | BYTE/BYTE | SMP/SMP barrier/SPLIT | full | LINUX Debug, `IOLINK_LOG_ENABLE_ISR=1` |
+| C3 | `host_smp_split` | BYTE/BYTE | SMP/SMP barrier/SPLIT | full | LINUX Debug |
 | C4 | `host_trimmed` | BYTE/BYTE | ISR/SHARED | no DS, no events | LINUX Debug |
 | C5 | `target_minimal` | BYTE/BYTE | SINGLE/SHARED | no DS, no events | BAREMETAL Release |
+
+C3 also builds with `IOLINK_LOG_ENABLE_ISR=1`: ISR logging freezes the log sink
+at init, so it is exercised rather than only compiled.
 
 The full unit suite runs on C1, C2 and C3. C4 runs
 `tests/test_trimmed_contract.c`, which asserts the replies a trimmed stack still

@@ -169,14 +169,17 @@ in `tools/matrix_configs.sh` as five configurations, one per axis that can break
 the library: `host_default` (BYTE/BYTE), `host_frame` (FRAME/FRAME),
 `host_smp_split` (SMP fence, SPLIT stats, ISR logging), `host_trimmed`
 (Data Storage and the event engine compiled out) and `target_minimal` (SINGLE,
-BAREMETAL, Release). The Release build type is covered by the `build` and `gcc`
-groups, so there is no second Release row.
+BAREMETAL, Release). There is no second Release row: `build` and `gcc` cover the
+`-O3` compile diagnostics (`clang` and `gcc`), and running the suite at `-O3` is
+the CI `release-build` job.
 
 `host_trimmed` runs `tests/test_trimmed_contract.c`, which asserts the replies a
 trimmed stack still owes a master (missing DS index/commands, `0x0025` ->
 `IDX_NOTAVAIL`), so trimming proves behaviour, not only compilation. The
 remaining legal-but-uninstantiated switch combinations stay covered by the
-syntax-only probes, and the link-time profile probes carry the layout ABI.
+syntax-only probes — including each feature switched off on its own, because
+`data_storage.c` and `isdu_ds.c` are only compiled with their own switch on —
+and the link-time profile probes carry the layout ABI.
 
 Configurations marked tests=yes (`host_default`, `host_frame`, `host_smp_split`,
 `host_trimmed`) also run their registered tests (the full suite except on the
@@ -282,7 +285,7 @@ tested from scratch and the gate prints that it did so. `IOLINKI_MATRIX_DIR`
 moves the build trees and `IOLINKI_DIFF_DIR` the logs and transcripts. The two
 gates share that tree, so they must not run concurrently.
 
-On a 16-core host the `matrix` group is ~130 s, about 2 s of it the differential
+On a 16-core host the `matrix` group is ~53 s, about 2 s of it the differential
 gate on reused trees; a standalone `diff_matrix.sh` from an empty `build/matrix`
 is ~50 s.
 

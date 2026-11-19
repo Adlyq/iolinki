@@ -288,9 +288,8 @@ in the middle of an M-sequence.
 #### Verification
 
 - `tests/test_port_capabilities.c` runs in the `ISR` (`host_default`) and `SMP`
-  (`host_smp_split`) rows of the matrix. `SINGLE` is built as a library row and
-  as a compile-only probe (`target_minimal`, `single_no_critical`), and no test
-  binary runs there.
+  (`host_smp_split`) rows of the matrix. `SINGLE` is built as a library row
+  (`target_minimal`) and no test binary runs there.
 - `tools/build_matrix.sh` builds the `SINGLE` and `SMP` profiles and checks
   that the `SINGLE` library archive has **no undefined
   `iolink_critical_*` symbols**.

@@ -32,9 +32,9 @@
 # capability and is covered by expected-frame tests in the C1 suite, not by a
 # configuration here. The probe list below covers only the legal combinations
 # no row instantiates: FRAME/BYTE and BYTE/FRAME granularity, tx_busy, the
-# validate/log/workspace switches, capacity overrides and the two other COM
-# rates. FRAME/FRAME, trimming both features and SINGLE are rows, so probing
-# them again would only add names.
+# validate/log/workspace switches, either feature switched off alone, capacity
+# overrides and the two other COM rates. FRAME/FRAME, trimming both features at
+# once and SINGLE are rows, so probing them again would only add names.
 
 # Structural configuration names (what --list reports as the matrix size).
 # shellcheck disable=SC2034 # consumed by the scripts that source this file
@@ -95,6 +95,11 @@ iolink_matrix_emit_probes()
     "$cb" isr_frame_byte "-DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_BYTE"
     "$cb" isr_byte_frame "-DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_BYTE -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME"
     "$cb" tx_busy_lease "-DIOLINK_ISR_RX_MODE=IOLINK_ISR_RX_FRAME -DIOLINK_ISR_TX_MODE=IOLINK_ISR_TX_FRAME -DIOLINK_PHY_FEATURE_TX_BUSY=1"
+    # Both features off is the C4 row; each one alone is a different
+    # translation-unit shape (data_storage.c and isdu_ds.c are only compiled
+    # when their own switch is on), so keep the single-switch probes.
+    "$cb" no_data_storage "-DIOLINK_FEATURE_DATA_STORAGE=0"
+    "$cb" no_events "-DIOLINK_FEATURE_EVENTS=0"
     "$cb" no_validate "-DIOLINK_FEATURE_VALIDATE=0"
     "$cb" logs_off "-DIOLINK_LOG_COMPILE_LEVEL=0"
     "$cb" workspace_external "-DIOLINK_WORKSPACE_EMBEDDED=0"

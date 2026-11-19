@@ -9,7 +9,7 @@
 #
 # Scope:
 #   - the gate guards **structural equivalence** between the remaining
-#     configurations (layout, concurrency tier, statistics mode);
+#     configurations (layout, concurrency tier, statistics mode, ISR logging);
 #   - switches that became runtime capabilities (compat bits, system command,
 #     wake-up, SIO C/Q, PD-input callback, ISR-tx-only) no longer produce a
 #     configuration here. Their behaviour is covered by the expected-frame
