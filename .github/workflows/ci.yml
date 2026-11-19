@@ -43,7 +43,7 @@ jobs:
             examples/stm32g0_tiol112/build/reference-device.hex
             examples/stm32g0_tiol112/build/reference-device.map
 
-  # Required gate: code quality, unit tests, and virtual-master conformance.
+  # Required gate: code quality, unit tests and the compile matrix.
   # Lightweight, so it is fast and reliable.
   docker-validation:
     runs-on: ubuntu-latest

@@ -97,7 +97,7 @@ CSV must be reachable from this document by case ID, test file or test function.
 | Item | Status | Implementation | Test |
 |---|---|---|---|
 | Two-pump ISR transport (RX/TX BYTE and RX/TX FRAME) | PASS | `src/device.c` (`iolink_device_process_isr()`), `src/dll_isr.c` (`iolink_dll_process_isr()`) | `test_dll_isr`, `test_isr_*`, plus the full protocol suite via the test warp |
-| M-sequence fixed types 0/1_2/1_V/2_1/2_2/2_3/2_4/2_5 | PASS | `src/device.c`, `src/dll.c` | `test_m_sequence_types`, `tools/virtual_master/tests/test_mseq_layout.py` |
+| M-sequence fixed types 0/1_2/1_V/2_1/2_2/2_3/2_4/2_5 | PASS | `src/device.c`, `src/dll.c` | `test_m_sequence_types` |
 | TYPE_1_1 (legacy interleave) rejected by V1.1.5 Device | PASS | `src/device.c` | `test_m_sequence_types` |
 | TYPE_2_V (variable PD/OD) | PASS | `src/dll.c` | `test_pd_variable`, `test_dll` |
 | OD width / OPERATE codes 0-7 (Table A.10) | PASS | `include/iolinki/iolink.h` | `test_protocol_tables` |

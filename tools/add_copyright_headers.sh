@@ -55,9 +55,4 @@ find src include tests examples -type f \( -name "*.c" -o -name "*.h" \) | while
     add_c_header "$file"
 done
 
-# Process Python files
-find tools/virtual_master -type f -name "*.py" | while read -r file; do
-    add_python_header "$file"
-done
-
 echo "Copyright headers added successfully!"

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- The Python virtual master (`tools/virtual_master/`, 38 files) and its
+  `tools/fix_imports.py` helper. Its host-side suites drove
+  `examples/host_demo` over a PTY but asserted only that a response was
+  non-empty, so a wrong payload passed; `tools/conformance_device_master.py`
+  (registered in `ctest`) drives the fuller `examples/conformance_device`
+  instead. `examples/host_demo` remains as a manual example.
+- The pyserial dependency and the `IOLINK_DEVICE_PATH` wiring that only the
+  virtual master used (`Dockerfile.test`, `.docker_test_entrypoint.sh`,
+  `test_all.sh`).
+
 ### Changed (MAJOR: device API, DLL surface and context boundary)
 - **Breaking:** the application trait owns reset handling. `iolink_device_app_t`
   gains `on_reset(self, type)`; `iolink_device_set_reset_handler()`,

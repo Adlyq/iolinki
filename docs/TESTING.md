@@ -10,12 +10,12 @@ We adhere to **Strict Coding Standards** to ensure safety, portability, and reli
   must pass. MISRA C:2012 is a code-level guideline here, not a gate.
 - **Portable C**: C99, context-based API, no dynamic memory, no global state.
 - **Automated Verification**: every push and PR runs the quality gate, unit
-  tests, virtual-master conformance and the compile matrix.
+  tests and the compile matrix.
 
 ## 🛠️ Local Testing
 
 ### 1. Run All Tests
-Runs the Linux build, the virtual-master tests and the bare-metal library build.
+Runs the Linux build and the bare-metal library build.
 ```bash
 ./test_all.sh
 ```
@@ -145,8 +145,8 @@ than per-commit gates: the combined run before delivery includes them, CI runs
 
 `all` is not the release gate either: it does not build the
 `examples/stm32g0_l6362a_raw` firmware with `arm-none-eabi`, run
-`.docker_test_entrypoint.sh` (Linux and BAREMETAL builds and the virtual-master
-suite), validate the IODDs or generate SBOMs. A release is "CI green on
+`.docker_test_entrypoint.sh` (Linux and BAREMETAL builds and the unit suite),
+validate the IODDs or generate SBOMs. A release is "CI green on
 `own_dev`, then tag"; locally that is `./tools/gates.sh all` followed by
 `./run_all_tests_docker.sh`.
 
@@ -358,8 +358,8 @@ To ensure a reproducible environment matching CI, run tests inside Docker:
 
 It builds `Dockerfile.test` and runs `tools/gates.sh quick build static docs
 package`, `tools/size_matrix.py --check --selftest` and
-`.docker_test_entrypoint.sh` (Linux and BAREMETAL builds, `ctest`, and the
-virtual-master tests) inside the container. The image installs clang (the
+`.docker_test_entrypoint.sh` (Linux and BAREMETAL builds and `ctest`) inside
+the container. The image installs clang (the
 primary compiler) and the pinned Arm Toolchain for Embedded tarball, so the
 ATFE size baseline is reproduced there; Arm publishes no container image, only
 checksummed release tarballs.
@@ -377,10 +377,8 @@ validates the descriptions, `nightly.yml` carries the sustained runs, and
 1.  **docker-validation**: `./run_all_tests_docker.sh host`, i.e.
     `tools/gates.sh quick build static docs package`,
     `tools/size_matrix.py --check --selftest`, `tools/gates.sh memcheck`, then
-    `.docker_test_entrypoint.sh` (Linux and BAREMETAL builds, `ctest`, and the
-    virtual-master suite: `test_automated_mandatory`, `test_pd_variable`,
-    `test_conformance_error_injection`, `test_conformance_isdu`,
-    `test_conformance_state_machine`, `test_conformance_timing`). `quick` is
+    `.docker_test_entrypoint.sh` (Linux and BAREMETAL builds and `ctest`).
+    `quick` is
     also the only shell-lint job: its shellcheck list is the one this project
     maintains, so a separate lint job would only run the same command twice.
 2.  **release-build**: strict `-Werror` build and `ctest` at `-O3`.

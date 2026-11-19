@@ -37,10 +37,6 @@ ENV ARM_ATFE=/opt/atfe/bin
 # Pinned to match .pre-commit-config.yaml; tools/gates.sh enforces this version.
 RUN pip3 install --no-cache-dir clang-format==23.1.1
 
-# Install Python Virtual Master dependencies
-COPY tools/virtual_master/requirements.txt /tmp/
-RUN pip3 install -r /tmp/requirements.txt
-
 WORKDIR /workspace
 
 # Copy source code
@@ -48,7 +44,4 @@ COPY . .
 
 # Build and test
 CMD ["bash", "-c", "rm -rf build && cmake -B build -DIOLINK_PLATFORM=LINUX && cmake --build build && \
-    cd build && ctest --output-on-failure && cd .. && \
-    export IOLINK_DEVICE_PATH=/workspace/build/examples/host_demo/host_demo && \
-    python3 tools/virtual_master/test_automated_mandatory.py && \
-    python3 tools/virtual_master/test_pd_variable.py"]
+    cd build && ctest --output-on-failure"]

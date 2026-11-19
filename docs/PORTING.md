@@ -573,7 +573,7 @@ config.log_level = IOLINK_LOG_LEVEL_INFO; /* SILENT disables */
    port introduces a switch or an `#if`
 2. **PHY test**: Test UART loopback
 3. **CRC test**: Run CRC unit tests
-4. **Integration test**: Use Virtual Master
+4. **Integration test**: Run the end-to-end device suite (`ctest -R conformance_device`)
 5. **Hardware test**: Connect to real IO-Link Master
 
 Which gates a change must pass is listed in [TESTING.md](TESTING.md); the compile

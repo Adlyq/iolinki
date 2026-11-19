@@ -25,7 +25,7 @@ stack is [iolinki-master](https://github.com/w1ne/iolinki-master).
 
 - **[CODE_FLOW](CODE_FLOW.md)** — main-loop/ISR call flow and ownership (中文)
 - **[CODING_STANDARDS](CODING_STANDARDS.md)** — style, naming and quality gates
-- **[TESTING](TESTING.md)** — unit, differential, matrix and virtual-master gates
+- **[TESTING](TESTING.md)** — unit, differential and matrix gates
 - **[CONTRIBUTING](CONTRIBUTING.md)** — workflow and commit conventions
 - **[MAINTENANCE](MAINTENANCE.md)** — branch model, releases and upstream adoption
 
