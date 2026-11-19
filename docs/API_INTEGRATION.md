@@ -463,13 +463,9 @@ storage 标志、默认值与可选钩子），ISDU 分发、Data Storage 成员
 应用需要做的是：用 `IOLINK_OD_SCALAR_STORAGE[_EX]` / `IOLINK_OD_BYTES_STORAGE[_EX]`
 绑定应用变量，或用 `IOLINK_OD_SCALAR_HANDLER[_EX]` / `IOLINK_OD_BYTES_HANDLER[_EX]`
 提供逐表项 `read`/`write` 函数（计算型对象）。表项只保存静态知识，运行期取值由
-表项自己的后端完成，`iolink_od_ctx_t::self` 只传给钩子与 HANDLER 函数。索引归属按域决定：
-
-- 规范固定索引（`< 0x0040`）由标准表提供、不可被应用表覆盖；唯一例外是标签
-  `0x0018-0x001A`，它们的数据归应用（见 7.2 节）。
-- 设备专用索引（`0x0040-0x00FE`、`0x0100+`）应用表优先，未声明时回落到内建标准表项
-  （`0x0040` 错误统计），仍未命中返回 `0x80 0x11`。
-- `iolink_od_find()` 实现同一规则，因此应用拥有的标签索引在应用表命中时优先于标准表。
+表项自己的后端完成，`iolink_od_ctx_t::self` 只传给钩子与 HANDLER 函数。索引归属按域
+决定，分发顺序、标签例外与保留索引见 [6.1 节](#61-协议栈支持的标准对象)；
+`iolink_od_find()` 实现同一规则，因此应用拥有的标签索引在应用表命中时优先于标准表。
 
 `storage` 只有两个取值：`IOLINK_OD_STORAGE_VOLATILE`（不进 DS 集合）和
 `IOLINK_OD_STORAGE_DS`（进入 DS 备份集）。库没有 NVM，写入成功后的落盘由表项的
