@@ -1,0 +1,82 @@
+name: iolinki nightly
+
+# Sustained gates: too slow for every PR, but they are the ones that find a
+# slow leak, a coverage regression or a fuzzer finding that needs more than a
+# few seconds of mutation. `ci.yml` keeps the PR-side versions (fuzz smoke at
+# FUZZ_SECONDS=5, the coverage/size/WCET gate jobs, no valgrind); this
+# workflow runs the long forms once a day and on demand.
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # 60 s per target, and the corpus survives between runs: a fresh PR run
+  # starts from the 20 seeds every time, so most of its budget is spent
+  # rediscovering inputs this job already found.
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang
+      - name: Restore corpus and previous findings
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/fuzz/corpus
+            build/fuzz/artifacts
+          # Caches are immutable, so each run saves a new entry under its own
+          # run_id and the restore-keys below pick up the newest one.
+          key: fuzz-corpus-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            fuzz-corpus-${{ github.ref_name }}-
+            fuzz-corpus-
+      - name: Fuzz the parsers (60 s per target)
+        run: ./tools/gates.sh fuzz
+      - name: Save corpus and findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-corpus
+          path: |
+            build/fuzz/corpus/
+            build/fuzz/artifacts/
+          if-no-files-found: ignore
+
+  # Coverage floor, host-side WCET path proxy, ROM/RAM matrix and target stack
+  # frames. The size baseline is the GNU one here (`size_baseline.csv`), the
+  # same toolchain `size-baseline` uses in ci.yml.
+  perf:
+    runs-on: ubuntu-latest
+    env:
+      IOLINKI_SIZE_TOOLCHAIN: gcc
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential clang libcmocka-dev \
+            gcovr gcc-arm-none-eabi binutils-arm-none-eabi python3
+      - name: Coverage, WCET, size and stack baselines
+        run: ./tools/gates.sh perf
+
+  # Uninitialised reads are the defect class the empty-context bugs belong to;
+  # valgrind runs the unit binaries only (the PTY conformance examples are
+  # covered by the `test` group in ci.yml).
+  memcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential clang libcmocka-dev \
+            valgrind libc6-dbg
+      - name: Unit binaries under valgrind
+        run: ./tools/gates.sh memcheck

@@ -41,7 +41,7 @@ name, prints each group's wall time, and stops at the first failure
 | `matrix` | `tools/build_matrix.sh` (clang) and `tools/diff_matrix.sh` |
 | `perf` | `tools/coverage.sh --check` (clang), `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` (ATFE; the ROM/RAM matrix is built with `-DIOLINK_LOG_COMPILE_LEVEL=0`, so the budget covers protocol code, not diagnostics) and `tools/stack_report.py --selftest --check` against `tools/stack_baseline.json` (target stack frames, `arm-none-eabi-gcc`) |
 | `package` | the exported package is installed into a scratch prefix and a two-file consumer is built against it |
-| `fuzz` | libFuzzer over the three parsers that take untrusted bytes (received octets, ISDU payloads, OD indices/values); 60 s per target (`FUZZ_SECONDS` overrides), a crash, timeout or leak fails the group |
+| `fuzz` | libFuzzer over the three parsers that take untrusted bytes (received octets, ISDU payloads, OD indices/values); 60 s per target by default, `FUZZ_SECONDS` overrides it (CI pull requests pass 5). A crash, timeout or leak fails the group |
 | `all` | every group above |
 
 Groups compose (`tools/gates.sh quick static`). Four cumulative levels cover the
@@ -49,14 +49,18 @@ usual points of a change; each level adds groups to the one above it:
 
 | Level | When | Command | Cost |
 | --- | --- | --- | --- |
-| L0 | after every save | `./tools/gates.sh quick` | ~4 s, no build |
+| L0 | after every save | `./tools/gates.sh quick` | ~3 s, no build |
 | L1 | before every commit | `./tools/gates.sh quick build test gcc` | ~45 s |
 | L2 | before a push | `./tools/gates.sh quick build test gcc static docs package --keep-going` | ~1 min |
-| L3 | before a release, or a full local run | `./tools/gates.sh all` | ~8 min |
+| L3 | before a release, or a full local run | `./tools/gates.sh all` | ~9 min |
 
-Times are the sum of the group wall times on a 16-core host; `build`, `test`,
-`static`, `matrix` and `fuzz` scale with the machine, and `fuzz` is 3 × what
-`FUZZ_SECONDS` says.
+The sums are group wall times on a 16-core host: `quick` ~3 s, `build` ~10 s,
+`test` ~22 s, `gcc` ~8 s, `context` ~3 s, `sanitize` ~27 s, `analyzer` ~12 s,
+`static` ~12 s, `docs` <1 s, `perf` ~52 s, `package` ~2 s, `matrix` ~176 s and
+`fuzz` 3 × `FUZZ_SECONDS` (15 s at the CI smoke value, 180 s at the default
+that L3 uses). `build`, `test`, `sanitize`, `static`, `matrix` and `fuzz`
+scale with the machine; `matrix` dominates L3 and `fuzz` is the next largest
+item.
 
 Two compilers run, and they are not interchangeable:
 
@@ -116,21 +120,28 @@ groups from what the change can break, not from the level:
 
 | The change touches | Run before it is ready |
 | --- | --- |
-| A public header (`include/iolinki/*.h`), the `iolink_phy_api_t` vtable, or a field of a public struct | `./tools/gates.sh quick build test gcc context fuzz` |
+| A public header (`include/iolinki/*.h`), the `iolink_phy_api_t` vtable, or a field of a public struct | `./tools/gates.sh quick build test gcc context` and `./tools/build_matrix.sh` |
 | A compile-time switch, an `#if` in `src/`/`include/`, or an `IOLINK_*` configuration macro | `./tools/build_matrix.sh`, plus `./tools/gates.sh quick` (delivery rule in §3) |
 | How the ISR and main contexts share state (`dll_shared.h`, `dll_main.h`, `dll_isr.h`, `tools/shared_fields.csv`) | `./tools/gates.sh quick context test`, and `context` must stay at zero findings |
+| A parser that consumes untrusted bytes (`src/dll_frame.c`, `src/dll_isr_rx.c`, `src/isdu*.c`, `src/od.c`) | `./tools/gates.sh quick test fuzz` |
 | A specification constant, a state-machine transition, or ISDU/event/DS behaviour | `./tools/gates.sh test` |
 | Documentation only (`*.md`) | `./tools/gates.sh quick docs` (`quick` checks the symbol/link references, `docs` the generated blocks; neither regenerates them) |
 | A tool, a CI workflow or a shell script | `./tools/gates.sh quick` |
-| A hot path, or anything that can move ROM/RAM, stack depth or coverage | `./tools/gates.sh perf` |
+| A hot path, a static table (timer table, OD/ISDU tables, size/stack baselines), or anything that can move ROM/RAM, stack depth or coverage | `./tools/gates.sh perf` |
 | A PHY driver or an example firmware | nothing locally (`package` is already in L2); the `stm32g0-example` arm build exists only in CI |
 
-`gcc`, `context` and `fuzz` are part of the public-header row because a header
-change reaches the second compiler's diagnostics, the ISR/main field ownership
-gate and the parser harnesses. `sanitize`, `memcheck`, `analyzer` and `static`
-are acceptance gates rather than per-commit gates: the combined run before
-delivery includes them, and CI runs `sanitize` and `analyzer` in
-`static-analysis`.
+`gcc` and `context` stay in the public-header row because a header change
+reaches the second compiler's diagnostics and the ISR/main field ownership
+gate; a header also decides which structural configurations exist, so the
+compile matrix belongs there too. `fuzz` follows the parsers instead: a header
+change alone is covered by the unit suite that `test` recompiles, while the
+harnesses only earn their time when the bytes they feed changed. The
+change-type rows name the gate that fits the surface; `fuzz` runs there at the
+smoke budget (`FUZZ_SECONDS=5`) and the nightly workflow carries the 60 s run.
+`sanitize`, `memcheck`, `analyzer` and `static` are acceptance gates rather
+than per-commit gates: the combined run before delivery includes them, CI runs
+`sanitize`, `gcc`, `analyzer` and `context` in `static-analysis`, and
+`memcheck` is in `docker-validation` and the nightly workflow.
 
 `all` is not the release gate either: it does not build the
 `examples/stm32g0_l6362a_raw` firmware with `arm-none-eabi`, run
@@ -355,8 +366,13 @@ checksummed release tarballs.
 
 ## ✅ Continuous Integration (CI)
 
-The CI workflow (`.github/workflows/ci.yml`) runs on every push and PR to
-`own_dev`/`develop`:
+Four workflows, split by cost: `ci.yml` is the pull-request gate, `iodd.yml`
+validates the descriptions, `nightly.yml` carries the sustained runs, and
+`release.yml` is tag-only.
+
+### Pull requests and pushes
+
+`.github/workflows/ci.yml` runs on every push and PR to `own_dev`/`develop`:
 
 1.  **docker-validation**: `./run_all_tests_docker.sh host`, i.e.
     `tools/gates.sh quick build static docs package`,
@@ -364,12 +380,17 @@ The CI workflow (`.github/workflows/ci.yml`) runs on every push and PR to
     `.docker_test_entrypoint.sh` (Linux and BAREMETAL builds, `ctest`, and the
     virtual-master suite: `test_automated_mandatory`, `test_pd_variable`,
     `test_conformance_error_injection`, `test_conformance_isdu`,
-    `test_conformance_state_machine`, `test_conformance_timing`).
+    `test_conformance_state_machine`, `test_conformance_timing`). `quick` is
+    also the only shell-lint job: its shellcheck list is the one this project
+    maintains, so a separate lint job would only run the same command twice.
 2.  **release-build**: strict `-Werror` build and `ctest` at `-O3`.
 3.  **build-matrix**: every structural configuration builds with clang
     (`IOLINKI_CC`), plus the syntax-only probes, the link-time profile gate
     (`tools/build_matrix.sh`), the differential gate (`tools/diff_matrix.sh`)
-    and the file-size, ownership, white-box and install/consume checks.
+    and the file-size, ownership, white-box and install/consume checks. The
+    install/consume step (`tools/test_install_consumer.sh`) is the PR-side
+    packaging gate, which is why `release.yml` does not need a pull-request
+    trigger.
 4.  **static-analysis**: `tools/gates.sh gcc sanitize analyzer context` — the
     gcc-only diagnostics, the unit suite under the sanitizers, the clang static
     analyzer and the ISR/main field ownership gate. `context` is enforced: a
@@ -386,16 +407,45 @@ The CI workflow (`.github/workflows/ci.yml`) runs on every push and PR to
     `IOLINKI_SIZE_TOOLCHAIN=gcc` and gates `tools/size_baseline.csv`; the ATFE
     baseline is measured where ATFE is installed. The target stack-frame
     baseline (`tools/stack_report.py --check`) has no CI job of its own: it
-    needs the cross compiler and runs in `perf` where the toolchain exists.
+    needs the cross compiler and runs in `perf` (nightly and locally).
 7.  **stm32g0-example**: STM32G0/TIOL112 firmware built with `arm-none-eabi`.
-8.  **lint-scripts** and **sbom-tools**: shellcheck and Python tool tests.
-9.  **fuzz**: `tools/gates.sh fuzz` builds the three libFuzzer harnesses and
-    runs each for `FUZZ_SECONDS` (60 s in CI). A crash, a parser that stops
-    making progress (`-timeout=10`), a sanitizer report or a leaked allocation
-    fails the job; the offending input is uploaded from
+8.  **sbom-tools**: the Python tests of the SBOM generator, the evidence
+    bundle and the bench record/run tools.
+9.  **fuzz**: `tools/gates.sh fuzz` with `FUZZ_SECONDS=5`, i.e. a 15 s smoke
+    pass over the three harnesses. It still fails on a parser that aborts,
+    reads out of bounds or ignores its length check for a short input, which is
+    what a run from the checked-in seeds can find; the sustained run with a
+    cached corpus is nightly. A `-timeout=10` stall, a sanitizer report or a
+    leaked allocation fails the job, and the offending input is uploaded from
     `build/fuzz/artifacts/`.
 
-The release workflow (tag push) builds Debug with coverage, runs `ctest` with
+`.github/workflows/iodd.yml` runs on the same pushes and PRs. It downloads the
+official IODD package, verifies its checksum, validates the generated
+descriptions against the official XSD and runs `tools/test_iodd_cli.py`, which
+also exercises `tools/package_release_iodds.py`. The release workflow does not
+repeat this on a PR.
+
+### Nightly
+
+`.github/workflows/nightly.yml` runs on a schedule (03:00 UTC) and on
+`workflow_dispatch`. These are the gates that need minutes, a warm corpus or a
+second toolchain:
+
+- **fuzz** at the default 60 s per target (three targets, 180 s of mutation).
+  `build/fuzz/corpus` and `build/fuzz/artifacts` are cached between runs, so
+  each night continues from what the previous one found instead of
+  rediscovering it from the 20 seeds; the corpus is also uploaded as an
+  artifact.
+- **perf**: `tools/gates.sh perf`, i.e. the coverage floor, the WCET path proxy,
+  the ROM/RAM matrix (GNU baseline, `IOLINKI_SIZE_TOOLCHAIN=gcc`, the same
+  toolchain the `size-baseline` job uses) and the target stack frames.
+- **memcheck**: `tools/gates.sh memcheck`, the unit binaries under valgrind.
+
+### Release
+
+`.github/workflows/release.yml` runs on a `v*` tag push and on
+`workflow_dispatch` (which packages the checked-out branch as a
+`verification-only` build). It builds Debug with coverage, runs `ctest` with
 JUnit output, validates the IODDs and the IAR project, generates SBOMs, packages
 the artifacts, and executes the released firmware in both LabWired engine modes.
 Tag only after CI on `own_dev` is green.

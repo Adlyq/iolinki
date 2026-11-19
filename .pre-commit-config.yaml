@@ -36,13 +36,6 @@ repos:
 
   - repo: local
     hooks:
-      - id: unit-tests
-        name: Run Unit Tests
-        entry: bash -c 'if command -v cmake >/dev/null 2>&1; then cmake -B build/precommit -DCMAKE_BUILD_TYPE=Debug >/dev/null 2>&1 && cmake --build build/precommit -j$(nproc) >/dev/null 2>&1 && ctest --test-dir build/precommit --output-on-failure; else echo "CMake not found, skipping tests"; fi'
-        language: system
-        pass_filenames: false
-        always_run: false
-        files: '\.(c|h)$'
       - id: cppcheck
         name: cppcheck
         entry: tools/run-cppcheck.sh
