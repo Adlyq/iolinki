@@ -12,16 +12,6 @@ C_HEADER='/*
 
 '
 
-PYTHON_HEADER='"""
-Copyright (C) 2026 Andrii Shylenko
-SPDX-License-Identifier: GPL-3.0-or-later
-
-This file is part of iolinki.
-See LICENSE for details.
-"""
-
-'
-
 # Function to add C/H header
 add_c_header() {
     local file="$1"
@@ -29,24 +19,6 @@ add_c_header() {
     if ! grep -q "Copyright (C) 2026 Andrii Shylenko" "$file"; then
         echo "Adding header to $file"
         echo "$C_HEADER$(cat "$file")" > "$file"
-    fi
-}
-
-# Function to add Python header
-add_python_header() {
-    local file="$1"
-    # Skip if already has copyright
-    if ! grep -q "Copyright (C) 2026 Andrii Shylenko" "$file"; then
-        # Check if file has shebang
-        if head -n1 "$file" | grep -q '^#!'; then
-            shebang=$(head -n1 "$file")
-            rest=$(tail -n +2 "$file")
-            echo "Adding header to $file (with shebang)"
-            echo -e "$shebang\n$PYTHON_HEADER$rest" > "$file"
-        else
-            echo "Adding header to $file"
-            echo "$PYTHON_HEADER$(cat "$file")" > "$file"
-        fi
     fi
 }
 

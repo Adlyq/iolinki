@@ -5,6 +5,9 @@ name: iolinki nightly
 # few seconds of mutation. `ci.yml` keeps the PR-side versions (fuzz smoke at
 # FUZZ_SECONDS=5, the coverage/size/WCET gate jobs, no valgrind); this
 # workflow runs the long forms once a day and on demand.
+# GitHub evaluates `schedule` only from the repository's default branch. This
+# repository's default is `develop`; until it is switched to `own_dev`, run this
+# workflow with `workflow_dispatch` (or mirror the file on the default branch).
 on:
   schedule:
     - cron: '0 3 * * *'

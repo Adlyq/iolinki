@@ -43,7 +43,8 @@ jobs:
             examples/stm32g0_tiol112/build/reference-device.hex
             examples/stm32g0_tiol112/build/reference-device.map
 
-  # Required gate: code quality, unit tests and the compile matrix.
+  # Required gate: code quality, unit tests and ctest (including the PTY
+  # conformance tests). The compile matrix is the separate build-matrix job.
   # Lightweight, so it is fast and reliable.
   docker-validation:
     runs-on: ubuntu-latest

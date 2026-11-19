@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libcmocka-dev \
     cppcheck \
+    shellcheck \
     pkg-config \
     git \
     python3 \
