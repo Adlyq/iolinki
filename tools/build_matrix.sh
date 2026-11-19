@@ -13,6 +13,12 @@
 #   - the SINGLE profile's "no iolink_critical_*" nm -u assertion;
 #   - the link-time profile gate (tools/check_profile_abi.sh).
 #
+# --reuse-tree keeps an existing build tree instead of recreating it: cmake runs
+# again with the row's declared arguments, so the cache and the compile commands
+# match tools/matrix_configs.sh, and the tree is then rebuilt incrementally.
+# ctest is not run in this mode, whether the tree existed or not: the caller owns
+# the suite (tools/diff_matrix.sh executes every tests/test_* binary itself).
+#
 # Usage:
 #   ./tools/build_matrix.sh                 # build everything; run the suite for
 #                                           # the configurations that support it
@@ -20,6 +26,8 @@
 #   ./tools/build_matrix.sh --filter host   # only names containing "host"
 #   ./tools/build_matrix.sh --only host_frame  # exactly this configuration
 #   ./tools/build_matrix.sh --probes-only   # only the compile-only probes
+#   ./tools/build_matrix.sh --reuse-tree    # configure and build the existing
+#                                           # trees in place; ctest is not re-run
 #   ./tools/build_matrix.sh --fail-fast     # stop at the first failure
 #   ./tools/build_matrix.sh --keep          # keep the logs of passing configs
 #
@@ -48,11 +56,12 @@ LIST=0
 FILTER=""
 ONLY=""
 PROBES_ONLY=0
+REUSE_TREE=0
 STOP=0
 RESULTS=()
 
 usage() {
-    sed -n '3,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '3,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -64,6 +73,7 @@ while [ $# -gt 0 ]; do
         --filter) shift; FILTER="${1:-}" ;;
         --only) shift; ONLY="${1:-}" ;;
         --probes-only) PROBES_ONLY=1 ;;
+        --reuse-tree) REUSE_TREE=1 ;;
         -h|--help) usage 0 ;;
         *) echo "unknown option: $1" >&2; usage 2 ;;
     esac
@@ -121,8 +131,15 @@ run_config() {
 
     printf '%-22s ' "$name"
 
-    rm -rf "$dir"
-    mkdir -p "$dir"
+    if [ "$REUSE_TREE" -eq 1 ]; then
+        # Keep the tree. cmake re-applies this row's declared arguments, so a
+        # cache left behind by an older matrix_configs.sh is corrected before the
+        # binaries that produce the transcripts are rebuilt.
+        mkdir -p "$dir"
+    else
+        rm -rf "$dir"
+        mkdir -p "$dir"
+    fi
     # shellcheck disable=SC2086 # intentional word splitting of the option list
     if ! cmake -S "$ROOT" -B "$dir" \
             "-DCMAKE_BUILD_TYPE=$build_type" \
@@ -146,7 +163,7 @@ run_config() {
         return 1
     fi
 
-    if [ "$tests_flag" = "ON" ]; then
+    if [ "$tests_flag" = "ON" ] && [ "$REUSE_TREE" -eq 0 ]; then
         if ! (cd "$dir" && ctest --output-on-failure >"$dir/test.log" 2>&1); then
             echo "TEST FAILED"
             tail -30 "$dir/test.log" | sed 's/^/    /'
@@ -155,6 +172,8 @@ run_config() {
             return 1
         fi
         echo "ok (built + tested)"
+    elif [ "$tests_flag" = "ON" ]; then
+        echo "ok (built, suite not run)"
     else
         echo "ok (built)"
     fi
