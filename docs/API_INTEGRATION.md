@@ -817,55 +817,10 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 
 ## 9. 构建期裁剪
 
-在包含 `config.h` 之前或通过构建系统设置特性宏：
-
-| 宏 | 默认值 | 为 0 时的效果 |
-| --- | --- | --- |
-| `IOLINK_FEATURE_DATA_STORAGE` | 1 | 无 DS 引擎/ISDU 索引；`0x0003` 返回索引不可用。 |
-| `IOLINK_FEATURE_SYSTEM_COMMAND` | 1 | SystemCommand 返回功能不可用。 |
-| `IOLINK_FEATURE_EVENTS` | 1 | 无事件引擎/DetailedDeviceStatus/事件标志；`0x0025` 返回索引不可用。 |
-| `IOLINK_FEATURE_VALIDATE` | 1 | 关闭初始化期配置自检；不再校验应用 OD 表（协议期数据校验仍生效）。 |
-| `IOLINK_WORKSPACE_EMBEDDED` | 1 | 上下文不再内嵌 ISDU/DS scratch，必须提供工作区（否则 `IOLINK_DEVICE_INIT_ERR_WORKSPACE`）。 |
-
-运行期能力的解析来源：
-
-| 能力位 | 解析来源 |
-| --- | --- |
-| `IOLINK_CAP_WAKEUP` | `detect_wakeup` 是否为 NULL |
-| `IOLINK_CAP_SIO_CQ` | `set_cq_line` 是否为 NULL |
-| `IOLINK_CAP_PD_IN_CALLBACK` | `on_pd_input` 是否为 NULL |
-| `IOLINK_CAP_REQUIRE_ISR_TX` | 构建档位 + `request_service` |
-| `IOLINK_CAP_COMPAT_*` | 构建档位的兼容位默认值，实例可在 `iolink_stack_config_t::compat_flags` 覆盖 |
-
-`IOLINK_PHY_FEATURE_ISR_TX_ONLY` 仍提供 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 的构建
-默认值，`IOLINK_PHY_FEATURE_TX_BUSY` 仍决定 TX FRAME 构建是否要求 `tx_busy()`。
-
-裁剪配置：
-
-裁剪只通过两条正交的途径：
-
-- 结构裁剪：显式关闭 `IOLINK_FEATURE_DATA_STORAGE` / `IOLINK_FEATURE_EVENTS`；
-- 行为裁剪：运行时能力位（见 `capability.h` 与 [feature-trimming](feature-trimming.md)）。
-
-缓冲区大小宏包括 `IOLINK_PD_IN_MAX_SIZE`、`IOLINK_PD_OUT_MAX_SIZE`、
-`IOLINK_OD_MAX_SIZE`、`IOLINK_ISDU_BUFFER_SIZE`、`IOLINK_DS_IMAGE_MAX`、
-`IOLINK_EVENT_QUEUE_SIZE` 和 `IOLINK_EVENT_PENDING_MAX`。`IOLINK_ISDU_BUFFER_SIZE`
-必须足够容纳最大字符串以及组帧余量；raw octet 传输会为请求额外增加 6 字节，为应答额外
-增加 3 字节。
-
-队列与暂存深度宏同样在 `config.h` 中用 `#ifndef` 保护，按需调整：
-
-| 宏 | 默认值 | 约束与溢出的可观测计数 |
-| --- | --- | --- |
-| `IOLINK_MBX_SLOTS` | 4 | 帧邮箱深度；2 的幂且 ≥2。满时丢帧并计 `isr_mailbox_drops`。 |
-| `IOLINK_REPLY_PLAN_SLOTS` | 48 | 应答计划槽位上限（4 个状态切片共用）。满时丢弃多余计划并计 `reply_plan_overflows`。 |
-
-调小深度会省 RAM，但会增加对应计数器的丢弃；`IOLINK_MBX_SLOTS` 用掩码取模，取非
-2 的幂会在编译期报错。ISDU 写请求复用现有请求缓冲（`IOLINK_ISDU_BUFFER_SIZE`），
-没有独立的段数上限。
-
-传输粒度由 `IOLINK_ISR_RX_MODE` 和 `IOLINK_ISR_TX_MODE` 选择（默认 `BYTE`，
-DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检查所需的模式组合。
+编译期开关、默认值、CMake 选项、容量宏和运行期能力的解析来源只在
+[feature-trimming.md](feature-trimming.md) 维护。传输粒度由 `IOLINK_ISR_RX_MODE` /
+`IOLINK_ISR_TX_MODE` 选择（默认 `BYTE`，DMA/整帧 PHY 用 `FRAME`）；PHY 源文件可以用
+`_Static_assert` 检查所需的模式组合。
 
 ## 10. 集成检查清单
 

@@ -125,18 +125,21 @@ asserted by `test_ctx_sizes.c`):
 
 ### Configurable Memory (via `include/iolinki/config.h`)
 
-You can tune these values to fit your MCU.
+The macro values, valid ranges and CMake options are defined in
+[feature-trimming](feature-trimming.md#capacity-overrides). This table only records
+what the **default** configuration costs in RAM; tune through `config.h` or the build
+system.
 
-| Macro | Default | Bytes Used | Description |
-| :--- | :--- | :--- | :--- |
-| `IOLINK_ISDU_BUFFER_SIZE` | 256 | **1295** bytes | `request`(2 × 262) + `payload`(256) + `response`(256) + `frame`(259) |
-| `IOLINK_WORKSPACE_EMBEDDED` | 1 | 0 or 1551 | 1 = keep fallback scratch in the contexts; 0 = require an external workspace |
-| `IOLINK_EVENT_QUEUE_SIZE` | 4 | scales with queue | `iolink_event_t` queue plus `IOLINK_EVENT_PENDING_MAX` (8) lifecycle records, two 19-byte Table 58 memory images and a 6-entry frozen snapshot |
-| `IOLINK_PD_IN_MAX_SIZE` | 32 | 130 bytes | `IOLINK_PD_IN_BUFFERS` PD-in reply buffers of `od_max + pd_in + 1` (65 each); the default BYTE profile uses 2, FRAME/FRAME without `tx_busy()` uses 3 (195) |
-| `IOLINK_PD_OUT_MAX_SIZE` | 32 | 32 bytes direct | `pd_out`; it also sets `IOLINK_M_SEQ_MAX_LEN`, which sizes the three ISR payload buffers, the ISR RX buffer, `frame_buf` and each mailbox record (4 × 68 B by default) |
-| `IOLINK_DS_IMAGE_MAX` | 256 | 256 bytes | DS serialization/download stage |
-| `IOLINK_MBX_SLOTS` | 4 | 272 bytes | Receive-frame mailbox depth; power of two in [2, 128], each record is 68 B |
-| `IOLINK_REPLY_PLAN_SLOTS` | 48 | 1152 bytes | Reply-plan entries published to the ISR (48 × 24 B, four state slices) |
+| Macro | Bytes Used | Composition |
+| :--- | :--- | :--- |
+| `IOLINK_ISDU_BUFFER_SIZE` | **1295** bytes | `request`(2 × 262) + `payload`(256) + `response`(256) + `frame`(259) |
+| `IOLINK_WORKSPACE_EMBEDDED` | 0 or 1551 | 1 = keep fallback scratch in the contexts; 0 = require an external workspace |
+| `IOLINK_EVENT_QUEUE_SIZE` | scales with queue | `iolink_event_t` queue plus `IOLINK_EVENT_PENDING_MAX` lifecycle records, two 19-byte Table 58 memory images and a 6-entry frozen snapshot |
+| `IOLINK_PD_IN_MAX_SIZE` | 130 bytes | `IOLINK_PD_IN_BUFFERS` PD-in reply buffers of `od_max + pd_in + 1` (65 each); the default BYTE profile uses 2, FRAME/FRAME without `tx_busy()` uses 3 (195) |
+| `IOLINK_PD_OUT_MAX_SIZE` | 32 bytes direct | `pd_out`; it also sets `IOLINK_M_SEQ_MAX_LEN`, which sizes the three ISR payload buffers, the ISR RX buffer, `frame_buf` and each mailbox record (4 × 68 B by default) |
+| `IOLINK_DS_IMAGE_MAX` | 256 bytes | DS serialization/download stage |
+| `IOLINK_MBX_SLOTS` | 272 bytes | Receive-frame mailbox depth; each record is 68 B |
+| `IOLINK_REPLY_PLAN_SLOTS` | 1152 bytes | Reply-plan entries published to the ISR (48 × 24 B, four state slices) |
 
 ### Total RAM
 

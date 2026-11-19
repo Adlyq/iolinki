@@ -682,24 +682,17 @@ COM 切换，因此不接收上下文参数。
 单独的平台时间 API；设备层只创建一个 `iolink_clock_t`（回调 + 实例指针，
 `shared.c_clock`），事件引擎的 `ctx->clock` 指向它。直接使用 DLL 的调用方必须在
 `iolink_dll_init()` 之后自行绑定 `ctx->shared.c_clock`；直接使用事件引擎的调用方把
-`ctx->clock` 指向自己的 `iolink_clock_t`（`NULL` 读作时间 0）。临界区
-使用 `include/iolinki/port.h` 中的 `iolink_critical_enter()` /
-`iolink_critical_exit()`；需要临界区的档位（`IOLINK_NEED_CRITICAL` 非零）下，
-`iolink_device_init()` 以 `IOLINK_DEVICE_INIT_ERR_CRITICAL` 拒绝库自带的 weak no-op
-默认实现。
+`ctx->clock` 指向自己的 `iolink_clock_t`（`NULL` 读作时间 0）。并发原语（原子宽度、
+`IOLINK_FENCE()` 分级和 `iolink_critical_enter()`/`_exit()` 契约）见
+`include/iolinki/port.h` 与
+[PORTING 2.1](PORTING.md#21-concurrency-primitives-graded)。
 
 ## 构建配置
 
-所有编译期开关、档位和容量覆盖见 [feature-trimming.md](feature-trimming.md)。传输粒度
-由 `IOLINK_ISR_RX_MODE` / `IOLINK_ISR_TX_MODE` 选择（BYTE 或 FRAME）。初始化期配置
-自检由 `IOLINK_FEATURE_VALIDATE`（默认 1）控制。
-
+编译期开关、档位、容量覆盖和能力位解析见 [feature-trimming.md](feature-trimming.md)。
 协议兼容开关 `IOLINK_COMPAT_V10_STARTUP_OPERATE`、
-`IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE` 和 `IOLINK_DS_LEGACY_IMAGE_SUB0` 是运行时位的
-构建期默认值：实际行为按实例通过 `iolink_stack_config_t::compat_flags` 选择。
-`IOLINK_FEATURE_*`、`IOLINK_PHY_FEATURE_ISR_TX_ONLY` 和
-`IOLINK_PHY_FEATURE_TX_BUSY` 在编译期生效。唤醒检测、SIO C/Q 和 PD-input 路径没有
-构建开关：唯一的选择依据是 PHY vtable 和 `on_pd_input` 是否存在。
+`IOLINK_COMPAT_TYPE0_PAGE_READ_OPERATE` 和 `IOLINK_DS_LEGACY_IMAGE_SUB0` 只是
+`iolink_stack_config_t::compat_flags` 对应运行期位的构建期默认值。
 
 ## 日志
 

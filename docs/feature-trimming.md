@@ -38,8 +38,11 @@ source of "why did my build not behave as configured" reports.
 | `IOLINK_FEATURE_DATA_STORAGE` | 1 | `src/data_storage.c` body and the `ds` context field are removed; index `0x0003` and the DS SystemCommands answer `FUNC_NOTAVAIL`/`IDX_NOTAVAIL`. The `iolink_ds_*` symbols stay exported: the reduction is a **link-time contract** (negative link probes in `tools/check_profile_abi.sh`) |
 | `IOLINK_FEATURE_EVENTS` | 1 | `src/events.c` is replaced by inert stubs (no queue, no classification); `0x0025` DetailedDeviceStatus answers `IDX_NOTAVAIL`. Same link-time contract |
 | `IOLINK_FEATURE_VALIDATE` | 1 | Compiles the init-time OD self-check (`od_validate_app`); `IOLINK_DEVICE_INIT_ERR_OD` is only produced when enabled. A `.text`-only switch, no link-time contract |
+| `IOLINK_WORKSPACE_EMBEDDED` | 1 | 0 removes the embedded ISDU/DS scratch; the application must provide a workspace, otherwise initialisation returns `IOLINK_DEVICE_INIT_ERR_WORKSPACE` |
 | `IOLINK_ISR_RX_MODE` / `IOLINK_ISR_TX_MODE` | BYTE/BYTE | FRAME transports: different PHY vtable and ISR buffering |
-| `IOLINK_PHY_FEATURE_TX_BUSY` | 0 | TX-FRAME line-state hook (two vs three PD-in slots) |
+| `IOLINK_PHY_FEATURE_TX_BUSY` | 0 | TX-FRAME line-state hook (two vs three PD-in slots, so the main pump still has a slot to fill) |
+| `IOLINK_PHY_FEATURE_ISR_TX_ONLY` | 0 | 只提供 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 的构建期默认值；实际作用点是该运行期位 |
+| `IOLINK_FEATURE_SYSTEM_COMMAND` | 1 | 只提供 `IOLINK_CAP_SYSTEM_COMMAND` 的构建期默认值；实例可用 `iolink_stack_config_t::flags` 关闭 |
 | `IOLINK_CONCURRENCY` | ISR | SINGLE / SMP synchronisation primitives |
 | `IOLINK_STATS_MODE` | `IOLINK_STATS_SHARED` | `IOLINK_STATS_SPLIT`: per-context counter sets. `iolink_dll_shared_t` grows by 12 B (three `uint32_t`), while `sizeof(iolink_device_ctx_t)` grows by 8 B because existing padding absorbs the rest (host and Cortex-M0+ layouts; see `tests/test_ctx_sizes.c`) |
 
@@ -97,13 +100,18 @@ compile-time switch selects a behaviour.
 These are not feature switches; they size the static buffers and are validated by
 `tests/test_config_trim.c`:
 
-- `IOLINK_ISDU_BUFFER_SIZE` (default 256)
+- `IOLINK_ISDU_BUFFER_SIZE` (default 256) — must hold the largest string plus
+  framing margin: raw octet transport adds 6 bytes to a request and 3 bytes to
+  a response. ISDU write requests reuse this buffer, so there is no separate
+  segment cap.
 - `IOLINK_EVENT_QUEUE_SIZE` (default 4)
+- `IOLINK_EVENT_PENDING_MAX` (default 8) — concurrent event lifecycle records
 - `IOLINK_PD_IN_MAX_SIZE` / `IOLINK_PD_OUT_MAX_SIZE` (default 32)
 - `IOLINK_OD_MAX_SIZE` (default 32)
 - `IOLINK_DS_IMAGE_MAX` (default 256)
 - `IOLINK_MBX_SLOTS` (default 4; power of two in `[2, 128]`) — frames the data
-  ISR may queue for the main pump
+  ISR may queue for the main pump; a full mailbox drops the frame and counts
+  `isr_mailbox_drops`
 - `IOLINK_REPLY_PLAN_SLOTS` (default 48) — reply-plan entries the main pump
   may publish to the ISR (four state slices share one table); overflow is
   counted in `reply_plan_overflows`
