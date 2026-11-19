@@ -29,30 +29,19 @@ The PHY layer provides hardware abstraction for UART communication.
 
 **Location**: `include/iolinki/phy.h`
 
-**Interface**: copy `iolink_phy_api_t` from `include/iolinki/phy.h`. Every callback takes `iolink_app_t* self` first (the application instance; the library forwards it unchanged and it may be NULL for a hook that does not use it). Every member is optional: `iolink_caps_resolve()` derives the capability bits from the hooks that are present, and the library calls a hook only when the matching bit is set. In practice a usable PHY provides the transport hooks of the configured granularity (`rx_octet`/`tx_octet` in BYTE mode, `rx_frame`/`tx_frame` in FRAME mode), `int_active` when the ISR pump is used (`dll_isr_process()` returns immediately without it), and `init`/`set_mode` when the hardware needs them — each is called only if present. `tx_done` (TX BYTE), `tx_busy` (TX FRAME), `detect_wakeup`, `set_cq_line`, the timer hooks and `get_faults` stay optional.
-
-`tx_busy()` (TX FRAME) is the only way the stack learns that a frame has left the line. The data ISR calls it on entry: a zero releases the PD-in response buffer lease of the previous reply, a non-zero defers an eager reply to the main-loop pump. It must therefore be read-only, non-blocking and callable from the data ISR. The main pump never polls it. Without the hook the end of a TX FRAME transfer is not observable, the captured buffer stays leased until the next capture, and `IOLINK_PD_IN_BUFFERS` becomes three so the main pump still has a slot to fill; set `IOLINK_PHY_FEATURE_TX_BUSY=1` for a FRAME PHY that provides it, and `iolink_device_init()` then rejects a PHY without the hook.
-
-`request_service()` is required for every PHY that has TX capability in the `ISR` and `SMP` profiles: the main context only stages the reply and this hook must raise the data interrupt that sends it. `iolink_device_init()` returns `IOLINK_DEVICE_INIT_ERR_PHY` for a TX-capable PHY without it (a `REQUIRE_ISR_TX` port has the same requirement). Only the `SINGLE` profile has no data ISR: it drives the TX hooks from the main context when the hook is absent. There the hook stays optional (it is called when present) and becomes mandatory only when the port sets `IOLINK_STACK_FLAG_REQUIRE_ISR_TX`, so something still pumps the staged reply.
-
-The transmission rate is the build-time `IOLINK_COM` (1/2/3, `include/iolinki/config.h`), not a
-stack-config field: an IO-Link Device supports exactly one COM. The PHY's `init()` must
-configure the UART from `IOLINK_COM_HZ` in `init()` or when switching to SDCI
-in `set_mode()` (the built-in drivers use the latter); there is no runtime
-rate-change callback.
-
-In RX FRAME mode, `rx_frame()` must return only a complete PHY-delimited
-M-sequence. A two-octet header or another truncated prefix is not a frame and
-must remain in the PHY until the configured end-of-frame condition is known.
-The stack validates the M-sequence checksum and type after receiving the frame;
-the PHY is responsible for frame completeness and must not use a partial frame
-as a substitute for checksum validation.
+**Interface**: copy `iolink_phy_api_t`. Every member is optional: `iolink_caps_resolve()`
+derives the capability bits from the hooks that are present and the library calls a hook
+only when the matching bit is set. Which hooks a usable PHY provides, the `tx_busy` and
+`request_service` requirements, the `rx_frame` completeness rule and how `IOLINK_COM`
+reaches the UART are defined per member in
+[API_INTEGRATION 2.4](API_INTEGRATION.md#24-phy-移植); implement only the hooks your
+transport and hardware need.
 
 **Implementation Steps**:
 
 1. Create `src/platform/<your_platform>/phy_<your_platform>.c`
-2. Implement the hooks your transport and hardware need (every member of
-   `iolink_phy_api_t` is optional; see 2.1 for what a usable PHY provides)
+2. Implement the hooks your transport and hardware need (see
+   [API_INTEGRATION 2.4](API_INTEGRATION.md#24-phy-移植))
 3. Export PHY API structure
 
 **Example** (STM32 HAL, BYTE mode). Every callback takes `iolink_app_t* self` first. Do not invent transceiver register addresses.
@@ -153,9 +142,9 @@ Select one with `-DIOLINK_CONCURRENCY=...`:
 | `IOLINK_CONCURRENCY_ISR` (default) | one data ISR preempts one main loop (the dual-pump transport) | atomic width ≥ 32 bit + `COMPILER` barrier + the critical section; `request_service()` for a TX-capable PHY |
 | `IOLINK_CONCURRENCY_SMP` | the pump and the main loop may run on different cores | atomic width + `SMP` barrier + the critical section; `request_service()` for a TX-capable PHY |
 
-`request_service()` is what makes the dual pump reachable from the main context:
-without it a staged reply is never sent in `ISR`/`SMP`, so `iolink_device_init()`
-rejects such a PHY instead of degrading silently.
+The `request_service()` requirement itself is defined in
+[API_INTEGRATION 2.4](API_INTEGRATION.md#24-phy-移植); in `ISR`/`SMP` a missing hook
+fails initialisation instead of silently degrading.
 
 The RTOS tier was removed: an RTOS build uses `ISR` (or `SMP` on multiple
 cores) and must still keep exactly one task calling the API. The stack derives

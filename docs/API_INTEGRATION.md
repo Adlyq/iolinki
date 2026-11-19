@@ -209,20 +209,21 @@ void data_irq_handler(void)
 ### 2.4 PHY 移植
 
 vtable 的每个成员在类型上都是可选的（`IOLINK_NULLABLE`）：`iolink_caps_resolve()`
-按"钩子是否存在"推导能力位，库只在对应能力位成立时调用。下表的"必需"指功能
-可用性，不是类型约束；钩子存在但实现错误仍然是 bug，"缺失"只表示这个 PHY 不
-提供该能力。
+按"钩子是否存在"推导能力位，库只在对应能力位成立时调用。每个回调都以
+`iolink_app_t* self` 开头，库原样转发（不使用该参数的回调可以让它为 NULL）。下表的
+"必需"指功能可用性，不是类型约束；钩子存在但实现错误仍然是 bug，"缺失"只表示这个
+PHY 不提供该能力。
 
 | 函数 | 是否必需 | 说明 |
 | --- | --- | --- |
 | `init` | 实际使用中必需 | 由 `iolink_device_init()` 调用一次；负返回值会中止初始化。允许为 NULL，但链路无法工作。 |
 | `set_mode` | 实际使用中必需 | 切换 SDCI/SIO/INACTIVE。 |
 | `rx_octet` | RX BYTE 模式 | 读到 octet 返回 1，无数据返回 0，出错返回负值。 |
-| `rx_frame` | RX FRAME 模式 | 返回 PHY 持有的完整帧，在下一次调用前有效；不得返回两字节帧头或其他截断片段。 |
+| `rx_frame` | RX FRAME 模式 | 返回 PHY 持有的完整帧，在下一次调用前有效；不得返回两字节帧头或其他截断片段。帧完整性由 PHY 负责，校验和与类型由协议栈在收帧后校验，不能用截断帧代替校验。 |
 | `tx_octet` | TX BYTE 模式 | 送入一个应答 octet。 |
 | `tx_frame` | TX FRAME 模式 | 发送完整应答，通常使用 DMA。 |
 | `tx_done` | TX BYTE 模式 | 发完最后一字节后释放线路；RX BYTE 的 gap 也会用它释放接收引擎。TX FRAME 下该成员不存在，由 PHY 自己在传输完成中断里收尾。 |
-| `tx_busy` | TX FRAME 可选 | 线路仍被占用时返回非 0；库据此推迟 ISR 应答，并由数据 ISR 在入口发现线路空闲时释放 PD-in 缓冲租约。为 NULL 时只能等下一次 capture 复用缓冲。 |
+| `tx_busy` | TX FRAME 可选 | 线路仍被占用时返回非 0；库据此推迟 ISR 应答，并由数据 ISR 在入口发现线路空闲时释放 PD-in 缓冲租约。必须只读、非阻塞、可从数据 ISR 调用，主泵从不轮询它。为 NULL 时缓冲租约持续到下一次 capture 复用。 |
 | `int_active` | ISR 泵需要 | 数据中断电平；`dll_isr_process()` 在它或 RX 能力缺失时直接返回，不泵送。 |
 | `request_service` | ISR/SMP 档必需 | 主上下文暂存应答后唤醒数据 ISR。`ISR`/`SMP` 档下具备 TX 能力的 PHY 缺少它会被初始化拒绝；`SINGLE` 档没有数据 ISR，主上下文直接驱动 TX 钩子，此时它只在设置 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 时必需。 |
 | `response_timer_start/stop` | 可选 | 硬件 t_A 定时器。为 NULL 时使用软件时间戳。 |
@@ -231,20 +232,20 @@ vtable 的每个成员在类型上都是可选的（`IOLINK_NULLABLE`）：`ioli
 | `set_cq_line` | 可选 | SIO 推挽输出。 |
 | `get_faults` | 可选 | 物理故障 API（`IOLINK_PHY_FAULT_*`）：DLL 按边沿上报映射事件；NULL 时诊断静默。 |
 
+TX FRAME 的 PHY 若提供 `tx_busy()`，构建时设置 `IOLINK_PHY_FEATURE_TX_BUSY=1`；
+该开关打开后初始化会拒绝缺少这个钩子的 PHY。
+
+传输速率是编译期 `IOLINK_COM`，PHY 的 `init()`（或切到 SDCI 的 `set_mode()`，内建
+驱动用后者）必须据此配置 UART；没有运行期改速回调。
+
 当 `detect_wakeup == NULL` 时，DLL 认为 PHY 自己管理线路状态，并直接从 SDCI 开始。
 这对自行执行唤醒握手的收发器很重要。该行为完全由运行时根据 `detect_wakeup`
 进行的推断决定，没有额外的编译期开关。
 
-“所有应答只能由 ISR 发送”是运行时能力位 `IOLINK_CAP_REQUIRE_ISR_TX`，由
-`iolink_stack_config_t::flags` 的 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 打开，构建期
-`IOLINK_PHY_FEATURE_ISR_TX_ONLY=1` 只是它的默认值。该位打开而 PHY 没有
-`request_service()` 时，`iolink_device_init()` 返回 `IOLINK_DEVICE_INIT_ERR_PHY`。
-
-`ISR`/`SMP` 档还要求所有具备 TX 能力的 PHY 提供 `request_service()`：主泵
-只能暂存应答，发送必须由数据 ISR 完成，没有该钩子就没有任何路径能唤醒 ISR。
-缺少它时 `iolink_device_init()` 同样返回 `IOLINK_DEVICE_INIT_ERR_PHY`。
-只有 `SINGLE` 档没有数据 ISR，`dll_send()` 才在主上下文中直接驱动 TX 钩子
-（该分支只在该档编译）。
+“所有应答只能由 ISR 发送”由 `iolink_stack_config_t::flags` 的
+`IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 打开运行期能力位 `IOLINK_CAP_REQUIRE_ISR_TX`；
+缺少 `request_service()` 时初始化返回 `IOLINK_DEVICE_INIT_ERR_PHY`（见上表）。
+构建期 `IOLINK_PHY_FEATURE_ISR_TX_ONLY` 只是该位的默认值。
 
 ## 3. 设备配置参考
 
@@ -463,13 +464,9 @@ storage 标志、默认值与可选钩子），ISDU 分发、Data Storage 成员
 应用需要做的是：用 `IOLINK_OD_SCALAR_STORAGE[_EX]` / `IOLINK_OD_BYTES_STORAGE[_EX]`
 绑定应用变量，或用 `IOLINK_OD_SCALAR_HANDLER[_EX]` / `IOLINK_OD_BYTES_HANDLER[_EX]`
 提供逐表项 `read`/`write` 函数（计算型对象）。表项只保存静态知识，运行期取值由
-表项自己的后端完成，`iolink_od_ctx_t::self` 只传给钩子与 HANDLER 函数。索引归属按域决定：
-
-- 规范固定索引（`< 0x0040`）由标准表提供、不可被应用表覆盖；唯一例外是标签
-  `0x0018-0x001A`，它们的数据归应用（见 7.2 节）。
-- 设备专用索引（`0x0040-0x00FE`、`0x0100+`）应用表优先，未声明时回落到内建标准表项
-  （`0x0040` 错误统计），仍未命中返回 `0x80 0x11`。
-- `iolink_od_find()` 实现同一规则，因此应用拥有的标签索引在应用表命中时优先于标准表。
+表项自己的后端完成，`iolink_od_ctx_t::self` 只传给钩子与 HANDLER 函数。索引归属按域
+决定，分发顺序、标签例外与保留索引见 [6.1 节](#61-协议栈支持的标准对象)；
+`iolink_od_find()` 实现同一规则，因此应用拥有的标签索引在应用表命中时优先于标准表。
 
 `storage` 只有两个取值：`IOLINK_OD_STORAGE_VOLATILE`（不进 DS 集合）和
 `IOLINK_OD_STORAGE_DS`（进入 DS 备份集）。库没有 NVM，写入成功后的落盘由表项的
@@ -672,27 +669,10 @@ void iolink_isdu_execute_system_command(iolink_isdu_ctx_t* ctx, uint8_t cmd);
 
 ### 7.2 标签由应用提供
 
-`0x0018` Application Tag、`0x0019` Function Tag、`0x001A` Location Tag 不在内建标准
-表中，由应用用 `IOLINK_OD_BYTES_STORAGE[_EX]` 作为普通字节串参数提供：
-
-```c
-static char g_application_tag[32];
-static uint8_t g_application_tag_len = 0U;
-
-static const iolink_od_entry_t g_tag_entries[] = {
-    IOLINK_OD_BYTES_STORAGE(0x0018, IOLINK_OD_ACCESS_RW_LOCKED, IOLINK_OD_WRITE_STORE,
-                            IOLINK_OD_STORAGE_DS, 32U, "ApplicationTag",
-                            g_application_tag, &g_application_tag_len),
-};
-```
-
-- `iolink_od_find()` 对这三个索引让应用表优先；应用未声明时索引返回
-  `0x80 0x11`。
-- `block_len` 同时是长度上限和 IODD 的 `fixedLength`；`str_len` 是读取时的权威
-  长度，库只复制原始字节，不添加 NUL。
-- 声明 `IOLINK_OD_STORAGE_DS` 后标签进入 DS 备份集；持久化仍由 `on_change` 通知
-  应用完成（见 7.1 节）。
-- `device_info.application_tag` 只是身份结构里的字段，不参与标签的 ISDU 读写。
+`0x0018`-`0x001A` 不是内建标准对象，而是由应用 OD 表提供的普通字节串参数；
+`device_info.application_tag` 只是身份字段，未声明表项时该索引返回 `0x80 0x11`。
+表项写法、`block_len`/`fixedLength`、`str_len` 语义与 DS 成员关系见
+[STORAGE.md 第 3 节](STORAGE.md#3-三个可写标签-0x0018-0x001a)。
 
 ### 7.3 Data Storage
 
@@ -748,11 +728,8 @@ DS 是对象字典的投影：参数集合就是标准表与应用表中 `storag
   后才逐条通过 `iolink_od_write_value()` 写回，每条记录触发该表项的 `on_change`。
   预校验失败时不会写入任何参数；逐条写回阶段仍可能失败，此时前缀记录已经生效，库
   不提供跨参数事务。未知索引会被跳过，以便替换设备缺少已备份参数时仍能恢复。
-- **`DS_UPLOAD_FLAG`**：只保存在 RAM。`iolink_ds_request_upload()` 置位并调用
-  `flag_persist(user, true)`，上传/下载序列结束或 `iolink_ds_clear_upload()` 清除时
-  调用 `flag_persist(user, false)`。钩子为 NULL 表示仅 RAM。应用保存该标志，启动时
-  若保存值为 true 则调用 `iolink_ds_request_upload()` 重新置位（该调用会再次触发
-  一次钩子），使主站观察到待上传请求。
+- **`DS_UPLOAD_FLAG`**：只保存在 RAM，置位/清除时机与启动恢复的完整契约见
+  [STORAGE.md 第 5 节](STORAGE.md#5-ds_upload_flag-持久化钩子)。
 - **出厂复位**：`iolink_ds_factory_reset()` 只恢复 DS 集合中的应用表项，不写 NVM。
 
 DS 映像不是常驻状态：上下文只持有指向暂存缓冲的指针（
@@ -840,55 +817,10 @@ void iolink_device_info_ctx_set_access_locks(iolink_device_info_ctx_t* ctx,
 
 ## 9. 构建期裁剪
 
-在包含 `config.h` 之前或通过构建系统设置特性宏：
-
-| 宏 | 默认值 | 为 0 时的效果 |
-| --- | --- | --- |
-| `IOLINK_FEATURE_DATA_STORAGE` | 1 | 无 DS 引擎/ISDU 索引；`0x0003` 返回索引不可用。 |
-| `IOLINK_FEATURE_SYSTEM_COMMAND` | 1 | SystemCommand 返回功能不可用。 |
-| `IOLINK_FEATURE_EVENTS` | 1 | 无事件引擎/DetailedDeviceStatus/事件标志；`0x0025` 返回索引不可用。 |
-| `IOLINK_FEATURE_VALIDATE` | 1 | 关闭初始化期配置自检；不再校验应用 OD 表（协议期数据校验仍生效）。 |
-| `IOLINK_WORKSPACE_EMBEDDED` | 1 | 上下文不再内嵌 ISDU/DS scratch，必须提供工作区（否则 `IOLINK_DEVICE_INIT_ERR_WORKSPACE`）。 |
-
-运行期能力的解析来源：
-
-| 能力位 | 解析来源 |
-| --- | --- |
-| `IOLINK_CAP_WAKEUP` | `detect_wakeup` 是否为 NULL |
-| `IOLINK_CAP_SIO_CQ` | `set_cq_line` 是否为 NULL |
-| `IOLINK_CAP_PD_IN_CALLBACK` | `on_pd_input` 是否为 NULL |
-| `IOLINK_CAP_REQUIRE_ISR_TX` | 构建档位 + `request_service` |
-| `IOLINK_CAP_COMPAT_*` | 构建档位的兼容位默认值，实例可在 `iolink_stack_config_t::compat_flags` 覆盖 |
-
-`IOLINK_PHY_FEATURE_ISR_TX_ONLY` 仍提供 `IOLINK_STACK_FLAG_REQUIRE_ISR_TX` 的构建
-默认值，`IOLINK_PHY_FEATURE_TX_BUSY` 仍决定 TX FRAME 构建是否要求 `tx_busy()`。
-
-裁剪配置：
-
-裁剪只通过两条正交的途径：
-
-- 结构裁剪：显式关闭 `IOLINK_FEATURE_DATA_STORAGE` / `IOLINK_FEATURE_EVENTS`；
-- 行为裁剪：运行时能力位（见 `capability.h` 与 [feature-trimming](feature-trimming.md)）。
-
-缓冲区大小宏包括 `IOLINK_PD_IN_MAX_SIZE`、`IOLINK_PD_OUT_MAX_SIZE`、
-`IOLINK_OD_MAX_SIZE`、`IOLINK_ISDU_BUFFER_SIZE`、`IOLINK_DS_IMAGE_MAX`、
-`IOLINK_EVENT_QUEUE_SIZE` 和 `IOLINK_EVENT_PENDING_MAX`。`IOLINK_ISDU_BUFFER_SIZE`
-必须足够容纳最大字符串以及组帧余量；raw octet 传输会为请求额外增加 6 字节，为应答额外
-增加 3 字节。
-
-队列与暂存深度宏同样在 `config.h` 中用 `#ifndef` 保护，按需调整：
-
-| 宏 | 默认值 | 约束与溢出的可观测计数 |
-| --- | --- | --- |
-| `IOLINK_MBX_SLOTS` | 4 | 帧邮箱深度；2 的幂且 ≥2。满时丢帧并计 `isr_mailbox_drops`。 |
-| `IOLINK_REPLY_PLAN_SLOTS` | 48 | 应答计划槽位上限（4 个状态切片共用）。满时丢弃多余计划并计 `reply_plan_overflows`。 |
-
-调小深度会省 RAM，但会增加对应计数器的丢弃；`IOLINK_MBX_SLOTS` 用掩码取模，取非
-2 的幂会在编译期报错。ISDU 写请求复用现有请求缓冲（`IOLINK_ISDU_BUFFER_SIZE`），
-没有独立的段数上限。
-
-传输粒度由 `IOLINK_ISR_RX_MODE` 和 `IOLINK_ISR_TX_MODE` 选择（默认 `BYTE`，
-DMA/整帧 PHY 使用 `FRAME`）。PHY 源文件可以用 `_Static_assert` 检查所需的模式组合。
+编译期开关、默认值、CMake 选项、容量宏和运行期能力的解析来源只在
+[feature-trimming.md](feature-trimming.md) 维护。传输粒度由 `IOLINK_ISR_RX_MODE` /
+`IOLINK_ISR_TX_MODE` 选择（默认 `BYTE`，DMA/整帧 PHY 用 `FRAME`）；PHY 源文件可以用
+`_Static_assert` 检查所需的模式组合。
 
 ## 10. 集成检查清单
 

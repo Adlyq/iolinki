@@ -40,8 +40,9 @@ typedef iolink_result_t (*iolink_od_change_fn)(iolink_app_t* self, const iolink_
 因为 OctetString 不回滚，需要在写入前拒绝的约束应放在 `validate` 钩子里。应用可在
 `on_change` 中立即写 NVM，也可只置脏标志、在主循环合并写入；库不关心具体策略。
 
-上电时应用把 NVM 中的值填回自己的变量（包括标签缓冲）。在 `iolink_device_init()`
-之前填回即可直接生效；在之后填回则要调用 `iolink_ds_refresh()`，让
+上电时应用把 NVM 中的值填回自己的变量（包括标签缓冲），或用
+`iolink_od_restore_value()` 写回表项。在 `iolink_device_init()` 之前填回即可直接
+生效；在之后填回则要调用 `iolink_ds_refresh()`，让
 `Data_Storage_Size`/`Parameter_Checksum` 反映恢复后的参数集。库不读取 NVM，也没有
 “加载持久化镜像”的入口。
 
@@ -116,9 +117,13 @@ static const iolink_od_entry_t k_app_entries[] = {
 };
 ```
 
-`block_len` 是该表项允许的最大字节数，也是编译期缓冲区大小检查的依据。标量写入时
-若 `on_change` 返回错误，RAM 值会回滚；如果应用不能保证 NVM 写入成功，应让
-`on_change` 返回错误，而不是静默吞掉失败。
+`block_len` 是该表项允许的最大字节数，也是编译期缓冲区大小检查的依据，同时作为
+IODD 的 `fixedLength` 导出；`str_len` 是读取时的权威长度，库只复制原始字节，不添加
+NUL。标量写入时若 `on_change` 返回错误，RAM 值会回滚；如果应用不能保证 NVM 写入成功，
+应让 `on_change` 返回错误，而不是静默吞掉失败。
+
+完整表（含校验与触发语义）见
+`examples/switching_sensor/switching_sensor_od.c`。
 
 ## 4. DS 是 OD 的投影
 
@@ -211,6 +216,7 @@ typedef void (*iolink_ds_flag_persist_fn)(iolink_app_t* self, bool flag);
 | UploadEnd（DS_Command 0x02）成功结束 | 清除 | 仅在标志确实变化时以 `false` 调用 |
 | DownloadEnd（DS_Command 0x04 / SystemCommand ParamDownloadEnd 0x04）成功结束 | 清除 | 同上 |
 | Restore factory settings（0x82）、Back-to-box（0x83） | 清除 | 同上 |
+| 应用调用 `iolink_ds_clear_upload()` | 清除 | 同上 |
 
 ParamDownloadStore 先完成 DownloadEnd（清除），再置位并请求上传，因此最终状态是
 “待上传”。钩子返回 `void`，保存失败无法上报给主站；实现应保证幂等，并按应用的
