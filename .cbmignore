@@ -1,0 +1,4 @@
+# codebase-memory index hygiene.
+# tools/fixtures mirrors src/ symbols for gate self-tests; indexing it shadows
+# real definitions in search_graph / trace_path results.
+tools/fixtures/

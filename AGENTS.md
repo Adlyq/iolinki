@@ -33,6 +33,38 @@ the only one that checks `IOLINK_NONNULL`/`IOLINK_NULLABLE`; `gcc` is the
 supplement for its own diagnostics and `-fanalyzer`. `IOLINKI_CC` overrides the
 compiler for the gates, the matrix, coverage and WCET.
 
+## Code navigation
+
+Two MCP servers index this repository; look symbols up there before reading
+whole files. Neither replaces reading the code you are about to change.
+
+`serena` (clangd, project `iolinki`) answers precise symbol questions and needs
+a current `build/compile_commands.json`:
+
+- `get_symbols_overview(relative_path="src/dll_sm.c")`
+- `find_referencing_symbols(name_path="dll_sm_classify", relative_path="src/dll_sm.c")`
+- also `find_declaration`, `find_implementations`, `safe_delete_symbol`, `rename_symbol`
+- line numbers are 0-based; symbols inside disabled `#if` branches are invisible
+
+`codebase-memory` (project `iolinki`) answers whole-repository questions:
+
+- `search_graph(project="iolinki", query="dll_sm_classify")` → definition site
+- `get_code_snippet(qualified_name="iolinki.src.dll_sm.dll_sm_classify")`,
+  `get_file_outline(project="iolinki", file_path="src/dll_sm.c")`
+- `trace_path(project="iolinki", function_name="<qn>", direction="inbound")`
+- `detect_changes(project="iolinki", scope="impact")` for a change's blast radius
+- `get_architecture(project="iolinki", aspects=["overview"])`
+
+Subagents do not inherit either server; they see the usual shell/read/grep plus
+the `codebase-memory` CLI, which reaches the same graph:
+`codebase-memory-mcp cli search_graph --project iolinki --query dll_sm_classify`,
+`codebase-memory-mcp cli trace_path --project iolinki --function_name <qn>`.
+`trace_path` and `get_code_snippet` need the qualified name. The graph is
+best-effort (`parse_partial` covers `include/iolinki/application.h` and some
+`examples/`) and is refreshed with
+`index_repository(repo_path="/home/adlyq/CLionProjects/iolinki", name="iolinki")`
+(about 3 s); confirm a symbol before citing it.
+
 ## Code constraints
 
 - No dynamic memory; context-based (no globals); `<stdint.h>` types; negative-int
@@ -89,4 +121,4 @@ compiler for the gates, the matrix, coverage and WCET.
   `develop` is a historical snapshot and `main` does not exist.
 - `upstream` (`w1ne/iolinki`) is read-only: **never merge or rebase onto
   `upstream/develop`**. Adopt changes by re-implementing them here with a
-  regression test. See `docs/MAINTENANCE.md` and `docs/UPSTREAM_DIVERGENCE.md`.
+  regression test. See `docs/MAINTENANCE.md`.
