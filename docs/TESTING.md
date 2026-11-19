@@ -37,7 +37,7 @@ name, prints each group's wall time, and stops at the first failure
 | `memcheck` | the unit binaries under valgrind memcheck (uninitialised reads, invalid accesses); the PTY conformance examples are covered by `test` |
 | `analyzer` | the clang static analyzer over `src/` (`clang --analyze`); a finding fails the group |
 | `static` | cppcheck (warning, style, performance, portability) |
-| `docs` | the generated documentation blocks (`gen_docs.py --check`: error codes, stats fields, public API, field ownership, spec constants, conformance counts and the direct-case index), the committed `tests/gen/spec_constants_table.h` (`gen_spec_constants.py --check`) and Doxygen warnings |
+| `docs` | the generated documentation blocks (`gen_docs.py --check`: error codes, stats fields, public API, field ownership, spec constants, conformance counts and the direct-case index), the committed `tests/gen/spec_constants_table.h` (`gen_spec_constants.py --check`), the selftests of both generators and of `check_conformance_traceability.py`, and Doxygen warnings |
 | `matrix` | `tools/build_matrix.sh` (clang) and `tools/diff_matrix.sh`, which reuses the trees the matrix just built |
 | `perf` | `tools/coverage.sh --check` (clang), `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` (ATFE; the ROM/RAM matrix is built with `-DIOLINK_LOG_COMPILE_LEVEL=0`, so the budget covers protocol code, not diagnostics) and `tools/stack_report.py --selftest --check` against `tools/stack_baseline.json` (target stack frames, `arm-none-eabi-gcc`) |
 | `package` | the exported package is installed into a scratch prefix and a two-file consumer is built against it |
@@ -456,7 +456,10 @@ repeat this on a PR.
 ### Nightly
 
 `.github/workflows/nightly.yml` runs on a schedule (03:00 UTC) and on
-`workflow_dispatch`. These are the gates that need minutes, a warm corpus or a
+`workflow_dispatch` — but GitHub only evaluates both from the default branch,
+and this repository's default is still `develop`. Until it is switched to
+`own_dev`, push a commit to `own_dev` whose message contains `[nightly]`; every
+other push skips the jobs. These are the gates that need minutes, a warm corpus or a
 second toolchain:
 
 - **fuzz** at the default 60 s per target (three targets, 180 s of mutation).
@@ -476,10 +479,11 @@ second toolchain:
 `verification-only` build). It builds Debug with coverage, runs `ctest` with
 JUnit output, validates the IODDs and the IAR project, generates SBOMs, packages
 the artifacts, and executes the released firmware in both LabWired engine modes.
-Tag only after CI on `own_dev` is green, and run the chain once with
-`workflow_dispatch` first: the IAR packaging, the release notes and the
-LabWired runs have no other coverage, so a tag is otherwise the first place a
-break in them shows up.
+Tag only after CI on `own_dev` is green, and run the chain once on a throwaway
+tag first: the IAR packaging, the release notes and the LabWired runs have no
+other coverage, so a `v*` tag is otherwise the first place a break in them
+shows up. `workflow_dispatch` is not a substitute yet — the copy of this
+workflow on the default branch has no such trigger.
 
 ## 📊 Code Standards
 

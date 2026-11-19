@@ -5,13 +5,18 @@ name: iolinki nightly
 # few seconds of mutation. `ci.yml` keeps the PR-side versions (fuzz smoke at
 # FUZZ_SECONDS=5, the coverage/size/WCET gate jobs, no valgrind); this
 # workflow runs the long forms once a day and on demand.
-# GitHub evaluates `schedule` only from the repository's default branch. This
-# repository's default is `develop`; until it is switched to `own_dev`, run this
-# workflow with `workflow_dispatch` (or mirror the file on the default branch).
+# GitHub evaluates `schedule` and `workflow_dispatch` only from the repository's
+# default branch, and this repository's default is still `develop`. Until it is
+# switched to `own_dev`, the push trigger below is the working entry point: a
+# commit on `own_dev` whose message contains `[nightly]` runs the jobs, and every
+# other push skips them. Once the default branch is `own_dev` the schedule takes
+# over and the marker is only needed for an ad-hoc run.
 on:
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
+  push:
+    branches: [own_dev]
 
 permissions:
   contents: read
@@ -21,6 +26,7 @@ jobs:
   # starts from the 20 seeds every time, so most of its budget is spent
   # rediscovering inputs this job already found.
   fuzz:
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[nightly]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +62,7 @@ jobs:
   # frames. The size baseline is the GNU one here (`size_baseline.csv`), the
   # same toolchain `size-baseline` uses in ci.yml.
   perf:
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[nightly]')
     runs-on: ubuntu-latest
     env:
       IOLINKI_SIZE_TOOLCHAIN: gcc
@@ -73,6 +80,7 @@ jobs:
   # valgrind runs the unit binaries only (the PTY conformance examples are
   # covered by the `test` group in ci.yml).
   memcheck:
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[nightly]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

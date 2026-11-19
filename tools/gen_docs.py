@@ -422,7 +422,7 @@ def md_cell(text: str) -> str:
 
 def code(text: str) -> str:
     """Wrap text in an inline code span; refuse text that would break the span."""
-    if "`" in text or "\n" in text:
+    if "`" in text or "|" in text or "\n" in text:
         raise DocsError(f"cannot render {text!r} as inline code")
     return f"`{text}`"
 
@@ -601,6 +601,8 @@ def read_spec_constants(root: Path) -> list[tuple[str, str]]:
         rows: list[tuple[str, str]] = []
         for line_number, fields in enumerate(reader, start=2):
             if not fields or all(not field.strip() for field in fields):
+                continue
+            if fields[0].lstrip().startswith("#"):
                 continue
             if len(fields) != len(SPEC_HEADER):
                 raise DocsError(

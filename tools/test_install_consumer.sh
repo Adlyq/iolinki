@@ -21,6 +21,10 @@ if [ -z "$expected_version" ]; then
     echo "FAIL: cannot read the project version from CMakeLists.txt" >&2
     exit 1
 fi
+# Ask for the MAJOR only: that is the compatibility the package config declares
+# (SameMajorVersion), and requesting the exact version would pass even if the
+# policy were wrong.
+expected_major="${expected_version%%.*}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -60,7 +64,7 @@ mkdir -p "$work/pkg"
 cat > "$work/pkg/CMakeLists.txt" <<'EOF'
 cmake_minimum_required(VERSION 3.12)
 project(iolinki_pkg_consumer C)
-find_package(iolinki ${IOLINKI_EXPECTED_VERSION} CONFIG REQUIRED)
+find_package(iolinki ${IOLINKI_EXPECTED_MAJOR} CONFIG REQUIRED)
 add_executable(consumer main.c)
 target_link_libraries(consumer PRIVATE iolinki::iolinki)
 EOF
@@ -83,7 +87,7 @@ EOF
 
 cmake -S "$work/pkg" -B "$work/pkg/build" \
     -DCMAKE_PREFIX_PATH="$work/prefix" \
-    -DIOLINKI_EXPECTED_VERSION="$expected_version" > "$work/pkg.log" 2>&1 \
+    -DIOLINKI_EXPECTED_MAJOR="$expected_major" > "$work/pkg.log" 2>&1 \
     || { cat "$work/pkg.log" >&2; exit 1; }
 cmake --build "$work/pkg/build" >> "$work/pkg.log" 2>&1 \
     || { cat "$work/pkg.log" >&2; exit 1; }
@@ -153,7 +157,7 @@ int main(void)
 EOF
 cmake -S "$work/layout" -B "$work/layout/build" \
     -DCMAKE_PREFIX_PATH="$work/prefix-layout" \
-    -DIOLINKI_EXPECTED_VERSION="$expected_version" > "$work/layout.log" 2>&1 \
+    -DIOLINKI_EXPECTED_MAJOR="$expected_major" > "$work/layout.log" 2>&1 \
     || { cat "$work/layout.log" >&2; exit 1; }
 cmake --build "$work/layout/build" >> "$work/layout.log" 2>&1 \
     || { cat "$work/layout.log" >&2; exit 1; }

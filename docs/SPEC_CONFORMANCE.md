@@ -56,8 +56,11 @@ value mismatch prints the clause, symbol, expected and actual values. Both
 sides therefore change together; the CSV is the reviewable data, the C table is
 the compiled oracle.
 
-Every `clause` label must be one the CSV uses: the checker derives the known
-labels from `tests/spec_constants.csv` and the table below, so there is no
+The checker validates the label *grammar* (`Table N`, `Annex.section` or
+`chapter.section`) and that the table below matches the CSV; whether a label
+names the right clause is a review duty against the PDF, not a machine check.
+The previously hand-maintained label list therefore has no successor, so there
+is no
 second list to update (it does not parse the PDF, but it does check the label
 grammar). Every symbol below must exist in the CSV. `direct` rows of the audit
 CSV must be reachable from this document by case ID, test file or test function.
@@ -151,21 +154,29 @@ CSV must be reachable from this document by case ID, test file or test function.
 
 ## Behaviour notes
 
+These describe the implementation, not a quotation of the PDF; the clause
+references point at the section they follow.
+
 - DetailedDeviceStatus (0x0025): subindex 0 lists the whole set (B.2.22);
   element access through subindex 1..n is a device extension, not a spec
   requirement.
 - DeviceStatus (0x0024) follows Table B.13: Failure 4, Maintenance 1,
   Out-of-Spec 2, Functional-Check 3, normal 0; priority is
   Failure > Functional-Check > Maintenance > Out-of-Spec.
-- DeviceAccessLocks bit 0 blocks parameter writes (tags and DPP2) only; reads
-  and Data Storage downloads are unaffected.
+- DeviceAccessLocks bit 0 (`IOLINK_LOCK_PARAM`) blocks writes to every entry
+  declared `IOLINK_OD_ACCESS_*_LOCKED`, the standard tags and DPP2 included;
+  reads are unaffected. The DS command sequence is gated by bit 1
+  (`IOLINK_LOCK_DS`), not by bit 0, so a parameter download of a locked entry
+  is still refused.
 - A StatusCode write confirms only the event slots that were presented while
   the table was frozen; events queued during the readout survive to the next
   round.
 - A re-raise inside the 1 s repeat window is deferred, not dropped.
-- ProcessDataInput/Output (0x0028/0x0029) answer `0x80 0x11` while no frame has
-  been received or while the DLL flags the data invalid; a device without PD
-  answers with an empty positive response.
+- ProcessDataInput/Output (0x0028/0x0029) always serve the configured-length
+  buffer (zero-filled before the first PDout frame); PD validity travels in the
+  PD status bits (A.1.5), not in an ISDU error, and B.2.23/B.2.24 do not define
+  a different answer for invalid data. A device without PD answers with an
+  empty positive response.
 
 ## Deferred / known limitations
 

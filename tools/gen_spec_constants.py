@@ -53,24 +53,29 @@ def read_symbols(csv_path: Path) -> list[str]:
     name = csv_path.as_posix()
     if not csv_path.is_file():
         raise GenError(f"{name} is missing")
-    data_lines = [
-        line
-        for line in csv_path.read_text(encoding="utf-8").splitlines()
+    # Keep the physical line number so an error points at the file the author
+    # edits, not at the position after the comments were dropped.
+    records = [
+        (number, line)
+        for number, line in enumerate(csv_path.read_text(encoding="utf-8").splitlines(), start=1)
         if line.strip() and not line.lstrip().startswith("#")
     ]
-    if not data_lines:
+    if not records:
         raise GenError(f"{name}: no data rows")
-    reader = csv.DictReader(data_lines)
-    if reader.fieldnames != FIELDS:
-        raise GenError(
-            f"{name}: header must be {','.join(FIELDS)} "
-            f"(got {','.join(reader.fieldnames or [])})"
-        )
+    rows = list(csv.reader([line for _, line in records]))
+    header, rows = rows[0], rows[1:]
+    if header != FIELDS:
+        raise GenError(f"{name}:{records[0][0]}: header must be {','.join(FIELDS)} "
+                       f"(got {','.join(header)})")
+    if not rows:
+        raise GenError(f"{name}: no data rows")
     symbols: list[str] = []
-    for line_number, row in enumerate(reader, start=2):
-        if any(value is None for value in row.values()):
-            raise GenError(f"{name}:{line_number}: expected {len(FIELDS)} columns")
-        symbol = (row["symbol"] or "").strip()
+    for (line_number, _), fields in zip(records[1:], rows):
+        if len(fields) != len(FIELDS):
+            raise GenError(
+                f"{name}:{line_number}: expected {len(FIELDS)} columns, got {len(fields)}"
+            )
+        symbol = fields[1].strip()
         if not symbol:
             raise GenError(f"{name}:{line_number}: empty symbol")
         if not SYMBOL_RE.fullmatch(symbol):
@@ -114,6 +119,7 @@ def selftest() -> int:
         ),
         "bad_prefix": ("clause,symbol,expected,note\nTable 47,NOT_A_MACRO,1,a\n", None),
         "empty_symbol": ("clause,symbol,expected,note\nTable 47,,1,a\n", None),
+        "extra_column": ("clause,symbol,expected,note\nTable 47,IOLINK_OK,1,a,extra\n", None),
         "header": ("clause,name,expected,note\nTable 47,IOLINK_OK,1,a\n", None),
         "no_rows": ("clause,symbol,expected,note\n", None),
     }

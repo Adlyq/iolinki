@@ -78,9 +78,8 @@ git branch --show-current                                    # expect own_dev or
    `test_spec_conformance.c` for ISDU behaviour, `test_dll.c` for framing).
    Prefer a test that fails before the change.
 
-6. **Document.** Add a `CHANGELOG.md` `[Unreleased]` entry. If it changes a
-   spec-level behaviour or closes a listed divergence, update
-   `CHANGELOG.md`, with the upstream PR link when one exists.
+6. **Document.** Record the spec-level behaviour change under `[Unreleased]`,
+   with the upstream PR link when one exists.
 
 ## Sending a fix upstream
 
