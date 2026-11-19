@@ -37,11 +37,11 @@ static void test_baudrate_is_compiled_in(void** state)
     assert_int_equal(iolink_dll_get_baudrate(), IOLINK_BAUDRATE_COM3);
 #endif
 #if IOLINK_COM == 1
-    assert_int_equal(ctx.main.t_byte_limit_us, 3328U);
+    assert_int_equal(ctx.main.t_byte_limit_us, 2496U);
 #elif IOLINK_COM == 2
-    assert_int_equal(ctx.main.t_byte_limit_us, 416U);
+    assert_int_equal(ctx.main.t_byte_limit_us, 312U);
 #else
-    assert_int_equal(ctx.main.t_byte_limit_us, 64U);
+    assert_int_equal(ctx.main.t_byte_limit_us, 48U);
 #endif
 }
 

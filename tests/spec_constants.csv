@@ -11,7 +11,7 @@ A.3.5,IOLINK_T_A_MAX_BITS,10,Device response delay upper bound; the range is 1..
 A.3.6,IOLINK_MSEQ_MASTER_OCTET_BITS,12,Request octet cost: 11 + t1(max)
 A.3.6,IOLINK_MSEQ_DEVICE_OCTET_BITS,14,Reply octet cost: 11 + t2(max)
 A.3.6,IOLINK_MSEQ_TIMING_FIXED_BITS,6,Fixed term: t_A(max) - t1(max) - t2(max)
-Table 47,IOLINK_T_BYTE_WINDOW_BITS,16,Implementation byte-gap window; MaxUARTFrameTime is 12 T_BIT
+Table 47,IOLINK_T_BYTE_WINDOW_BITS,12,MaxUARTFrameTime = 11 + t1(max) = 12 T_BIT
 Table 43,IOLINK_T_FBD_MASTER_CYCLES,3,Minimum delay in MasterCycleTimes
 Table 43,IOLINK_T_FBD_MAX_MS,500,Maximum delay in ms
 Table B.3,IOLINK_CYCLE_TIME_UNIT_US,100,Time base 00 is 0.1 ms

@@ -64,10 +64,9 @@ IOLINK_ASSUME_NONNULL_BEGIN
 /**
  * @brief 帧内相邻 UART 帧之间的接收超时，单位位时间。
  *
- * 实现取值；Table 47 的 MaxUARTFrameTime 为 11 + t1(max) = 12 T_BIT，这里给出
- * 更宽的接收窗口，不改变任何协议字段。
+ * Table 47 的 MaxUARTFrameTime 为 11 + t1(max) = 12 T_BIT。
  */
-#define IOLINK_T_BYTE_WINDOW_BITS 16U
+#define IOLINK_T_BYTE_WINDOW_BITS 12U
 /** @brief T_FBD 的 MasterCycle 倍数（Table 43）。 */
 #define IOLINK_T_FBD_MASTER_CYCLES 3U
 /** @brief T_FBD 的上限，单位毫秒（Table 43）。 */
