@@ -56,7 +56,7 @@ usual points of a change; each level adds groups to the one above it:
 
 The sums are group wall times on a 16-core host: `quick` ~3 s, `build` ~10 s,
 `test` ~22 s, `gcc` ~8 s, `context` ~3 s, `sanitize` ~27 s, `analyzer` ~12 s,
-`static` ~12 s, `docs` <1 s, `perf` ~52 s, `package` ~2 s, `matrix` ~176 s and
+`static` ~13 s, `docs` ~2 s, `perf` ~50 s, `package` ~2 s, `matrix` ~125 s and
 `fuzz` 3 × `FUZZ_SECONDS` (15 s at the CI smoke value, 180 s at the default
 that L3 uses). `build`, `test`, `sanitize`, `static`, `matrix` and `fuzz`
 scale with the machine; `matrix` dominates L3 and `fuzz` is the next largest
