@@ -1,6 +1,6 @@
 ---
 name: maintenance
-description: Use when maintaining the iolinki `own_dev` branch independently of upstream `w1ne/iolinki`, adopting or evaluating an upstream commit or patch, preparing a single-purpose PR back to upstream, updating `docs/UPSTREAM_DIVERGENCE.md`, or when a task mentions rebasing, merging or syncing with `upstream/develop` (do not — re-implement instead).
+description: Use when maintaining the iolinki `own_dev` branch independently of upstream `w1ne/iolinki`, adopting or evaluating an upstream commit or patch, preparing a single-purpose PR back to upstream or when a task mentions rebasing, merging or syncing with `upstream/develop` (do not — re-implement instead).
 ---
 
 # Maintenance playbook (`own_dev`)
@@ -19,7 +19,7 @@ Upstream changes are **re-implemented**, with a test, against this codebase.
 
 Priority when the PDF and upstream disagree: the bundled V1.1.5 PDF under
 `docs/IOL-Interface-Spec_10002_V1.1.5_Oct2025/` wins. See
-`docs/UPSTREAM_DIVERGENCE.md` for the decisions already taken.
+`CHANGELOG.md` for the decisions already taken.
 
 ## Topology
 
@@ -58,7 +58,7 @@ git branch --show-current                                    # expect own_dev or
    rg -n 'ProductURI|ErrorCount|process input' src include tests
    ```
 
-   Cross-check `docs/UPSTREAM_DIVERGENCE.md`; if it is already closed here, stop
+   Cross-check `CHANGELOG.md`; if it is already closed here, stop
    and say so.
 
 3. **Classify it.**
@@ -80,7 +80,7 @@ git branch --show-current                                    # expect own_dev or
 
 6. **Document.** Add a `CHANGELOG.md` `[Unreleased]` entry. If it changes a
    spec-level behaviour or closes a listed divergence, update
-   `docs/UPSTREAM_DIVERGENCE.md` (and mark the upstream PR status if relevant).
+   `CHANGELOG.md` (and mark the upstream PR status if relevant).
 
 ## Sending a fix upstream
 
@@ -93,7 +93,7 @@ Allowed and encouraged for self-contained spec corrections:
   design;
 - the local implementation must not depend on whether the PR is accepted.
 
-Record the PR link in `docs/UPSTREAM_DIVERGENCE.md` §8. Do not add a
+Record the PR link in `CHANGELOG.md`. Do not add a
 "rebase after it lands" step — nothing in this repo waits on upstream.
 
 ## Verification
@@ -104,7 +104,7 @@ cmake -B build && cmake --build build
 (cd build && ctest --output-on-failure)
 
 # grouped gates: quick (format/shellcheck/...), build (-Werror Debug+Release),
-# test (ctest), static (cppcheck/MISRA); `all` runs every group
+# test (ctest), static (cppcheck); `all` runs every group
 ./tools/gates.sh quick build test static
 
 # trimmed builds only build the library (the unit suite is skipped)

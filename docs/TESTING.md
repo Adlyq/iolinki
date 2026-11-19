@@ -6,8 +6,8 @@ This document describes the testing strategy, quality standards, and CI/CD workf
 We adhere to **Strict Coding Standards** to ensure safety, portability, and reliability in embedded environments.
 - **Zero Warnings**: Code must compile with
   `-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow`.
-- **Static Analysis**: `cppcheck` must pass; the MISRA C:2012 addon is
-  report-only unless `IOLINKI_MISRA_ENFORCE=1`.
+- **Static Analysis**: `cppcheck` (warning, style, performance, portability)
+  must pass. MISRA C:2012 is a code-level guideline here, not a gate.
 - **Portable C**: C99, context-based API, no dynamic memory, no global state.
 - **Automated Verification**: every push and PR runs the quality gate, unit
   tests, virtual-master conformance and the compile matrix.
@@ -36,7 +36,7 @@ name, prints each group's wall time, and stops at the first failure
 | `sanitize` | the unit suite under AddressSanitizer, UndefinedBehaviorSanitizer and `implicit-conversion` (clang only; a sanitizer report fails the run) |
 | `memcheck` | the unit binaries under valgrind memcheck (uninitialised reads, invalid accesses); the PTY conformance examples are covered by `test` |
 | `analyzer` | the clang static analyzer over `src/` (`clang --analyze`); a finding fails the group |
-| `static` | cppcheck and the MISRA addon (report-only unless `IOLINKI_MISRA_ENFORCE=1`) |
+| `static` | cppcheck (warning, style, performance, portability) |
 | `docs` | the generated documentation blocks (`gen_docs.py --check`: error codes, stats fields, public API, field ownership) and Doxygen warnings |
 | `matrix` | `tools/build_matrix.sh` (clang) and `tools/diff_matrix.sh` |
 | `perf` | `tools/coverage.sh --check` (clang), `tools/wcet_run.sh --check`, `tools/size_matrix.py --check --selftest` (ATFE; the ROM/RAM matrix is built with `-DIOLINK_LOG_COMPILE_LEVEL=0`, so the budget covers protocol code, not diagnostics) and `tools/stack_report.py --selftest --check` against `tools/stack_baseline.json` (target stack frames, `arm-none-eabi-gcc`) |
@@ -51,19 +51,12 @@ usual points of a change; each level adds groups to the one above it:
 | --- | --- | --- | --- |
 | L0 | after every save | `./tools/gates.sh quick` | ~4 s, no build |
 | L1 | before every commit | `./tools/gates.sh quick build test gcc` | ~45 s |
-| L2 | before a push | `./tools/gates.sh quick build test gcc static docs package --keep-going` | ~3 min |
-| L3 | before a release, or a full local run | `./tools/gates.sh all` | ~9 min |
+| L2 | before a push | `./tools/gates.sh quick build test gcc static docs package --keep-going` | ~1 min |
+| L3 | before a release, or a full local run | `./tools/gates.sh all` | ~8 min |
 
 Times are the sum of the group wall times on a 16-core host; `build`, `test`,
-`static`, `matrix` and `fuzz` scale with the machine, and `static` (cppcheck
-plus the MISRA addon) is about 100 s of L2 while `fuzz` is 3 × what
+`static`, `matrix` and `fuzz` scale with the machine, and `fuzz` is 3 × what
 `FUZZ_SECONDS` says.
-
-L2 is a superset of the old `check_quality.sh`, not an equivalent: all ten of
-its steps map onto `quick` (clang-format, per-file size, shellcheck, DLL
-ownership, nullability regions, test conventions), `build` (strict Debug *and*
-Release), `static` (cppcheck, MISRA), `docs` and `package`, and L2 adds `test`,
-which the old script never ran.
 
 Two compilers run, and they are not interchangeable:
 

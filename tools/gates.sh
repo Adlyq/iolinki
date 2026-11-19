@@ -88,8 +88,7 @@ Groups:
   memcheck the unit binaries under valgrind memcheck (uninitialised reads,
            invalid accesses)
   analyzer the clang static analyzer over the library (clang --analyze)
-  static   cppcheck and the MISRA addon (report-only unless
-           IOLINKI_MISRA_ENFORCE=1)
+  static   cppcheck (warning, style, performance, portability)
   docs     Doxygen warnings and the generated documentation blocks
   matrix   compile matrix plus the differential frame gate
   perf     coverage floor, WCET path proxy, size baseline and the stack-frame
@@ -513,40 +512,8 @@ check_cppcheck() {
     cppcheck_run --error-exitcode=1
 }
 
-check_misra() {
-    if ! have cppcheck; then
-        skip "cppcheck missing (apt-get install cppcheck)"
-        return 0
-    fi
-    # The MISRA addon is very noisy on this C99 codebase (~1500 pre-existing
-    # findings), so it is report-only unless enforcement is requested.
-    local addon=""
-    local path
-    for path in /usr/share/cppcheck/addons/misra.py /usr/lib/cppcheck/addons/misra.py; do
-        if [ -f "$path" ]; then
-            addon="$path"
-            break
-        fi
-    done
-    if [ -z "$addon" ]; then
-        if [ "${IOLINKI_MISRA_ENFORCE:-}" = "1" ]; then
-            echo "   FAIL: MISRA addon not available and IOLINKI_MISRA_ENFORCE=1" >&2
-            return 1
-        fi
-        skip "cppcheck MISRA addon not available"
-        return 0
-    fi
-    if [ "${IOLINKI_MISRA_ENFORCE:-}" = "1" ]; then
-        cppcheck_run --addon=misra --error-exitcode=1
-        return
-    fi
-    cppcheck_run --addon=misra || true
-    echo "   MISRA report generated (non-enforcing; IOLINKI_MISRA_ENFORCE=1 makes it fatal)"
-}
-
 group_static() {
-    step "cppcheck" check_cppcheck || return 1
-    step "MISRA C:2012 (cppcheck addon)" check_misra
+    step "cppcheck" check_cppcheck
 }
 
 # --- context ---------------------------------------------------------------
