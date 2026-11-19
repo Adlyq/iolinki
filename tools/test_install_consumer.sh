@@ -13,6 +13,14 @@
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# The consumers request the version the package actually declares, so the
+# project version has one source of truth (CMakeLists.txt) and a MAJOR bump
+# cannot leave this gate behind.
+expected_version="$(sed -n 's/^project(iolinki VERSION \([0-9][0-9.]*\).*/\1/p' "$ROOT/CMakeLists.txt")"
+if [ -z "$expected_version" ]; then
+    echo "FAIL: cannot read the project version from CMakeLists.txt" >&2
+    exit 1
+fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -52,7 +60,7 @@ mkdir -p "$work/pkg"
 cat > "$work/pkg/CMakeLists.txt" <<'EOF'
 cmake_minimum_required(VERSION 3.12)
 project(iolinki_pkg_consumer C)
-find_package(iolinki 4 CONFIG REQUIRED)
+find_package(iolinki ${IOLINKI_EXPECTED_VERSION} CONFIG REQUIRED)
 add_executable(consumer main.c)
 target_link_libraries(consumer PRIVATE iolinki::iolinki)
 EOF
@@ -74,7 +82,8 @@ int main(void)
 EOF
 
 cmake -S "$work/pkg" -B "$work/pkg/build" \
-    -DCMAKE_PREFIX_PATH="$work/prefix" > "$work/pkg.log" 2>&1 \
+    -DCMAKE_PREFIX_PATH="$work/prefix" \
+    -DIOLINKI_EXPECTED_VERSION="$expected_version" > "$work/pkg.log" 2>&1 \
     || { cat "$work/pkg.log" >&2; exit 1; }
 cmake --build "$work/pkg/build" >> "$work/pkg.log" 2>&1 \
     || { cat "$work/pkg.log" >&2; exit 1; }
@@ -109,7 +118,7 @@ mkdir -p "$work/layout"
 cat > "$work/layout/CMakeLists.txt" <<'EOF'
 cmake_minimum_required(VERSION 3.12)
 project(iolinki_layout_consumer C)
-find_package(iolinki 4 CONFIG REQUIRED)
+find_package(iolinki ${IOLINKI_EXPECTED_VERSION} CONFIG REQUIRED)
 add_executable(consumer main.c)
 target_link_libraries(consumer PRIVATE iolinki::iolinki)
 EOF
@@ -143,7 +152,8 @@ int main(void)
 }
 EOF
 cmake -S "$work/layout" -B "$work/layout/build" \
-    -DCMAKE_PREFIX_PATH="$work/prefix-layout" > "$work/layout.log" 2>&1 \
+    -DCMAKE_PREFIX_PATH="$work/prefix-layout" \
+    -DIOLINKI_EXPECTED_VERSION="$expected_version" > "$work/layout.log" 2>&1 \
     || { cat "$work/layout.log" >&2; exit 1; }
 cmake --build "$work/layout/build" >> "$work/layout.log" 2>&1 \
     || { cat "$work/layout.log" >&2; exit 1; }
