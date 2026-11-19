@@ -720,6 +720,9 @@ static int test_mailbox_frame_refreshes_activity(void)
         if (dll.main.shared.b_last_activity_ms != (uint32_t) (now_us / 1000U)) {
             return 3;
         }
+        if (dll.main.idle_timeouts != 0U) {
+            return 4;
+        }
     }
 
     return 0;
@@ -1244,9 +1247,6 @@ static void test_device_main_window_gated_by_tick(void** state)
     /* 授权已被消耗；没有 tick 的第二轮不会做任何事。 */
     iolink_device_process(&dev.ctx);
     assert_int_equal(device_reset_calls, 1);
-
-    /* 本用例走 test_helpers 的 mock PHY：其交付计数同样必须归零。 */
-    assert_int_equal(test_tx_all_asserted(NULL), 0);
 }
 
 /* RX BYTE CHK/间隔帧结束的表征。只有过短或不完整的
@@ -1337,6 +1337,11 @@ IOLINK_TEST_RC(test_consume_frame_activity_is_main_only)
 static int group_teardown(void** state)
 {
     (void) state;
+    /* 本文件混合使用两套 mock：test_helpers 的交付计数也必须归零。 */
+    if (test_tx_all_asserted(NULL) != 0) {
+        print_message("test_isr_observability: test_helpers replies were not asserted\n");
+        exit(EXIT_FAILURE);
+    }
     if ((tx_asserted != tx_delivered) || (tx_leaked != 0U)) {
         print_message(
             "test_isr_observability: %llu replies delivered, %llu asserted, %llu discarded\n",
