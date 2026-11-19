@@ -23,12 +23,27 @@
 # transcripts, not transports (host_frame runs the unit suite but no transcript
 # comparison).
 #
+# Build trees:
+#   Each configuration is configured and built into IOLINKI_MATRIX_DIR/<cfg>, the
+#   same tree tools/build_matrix.sh uses, so `tools/gates.sh matrix` does not
+#   compile the same configuration twice. An existing tree is re-configured with
+#   the row's declared CMAKE_C_FLAGS, BUILD_TESTING and test transport from
+#   tools/matrix_configs.sh and rebuilt in place, so a transcript can only come
+#   from binaries compiled with the parameters this gate declares. ctest is not
+#   re-run on a reused tree: the gate executes every tests/test_* binary itself
+#   under the trace hook and fails red on a non-zero exit. A missing tree (the
+#   gate run on its own) is configured, built and tested from scratch, and the
+#   gate prints that it built it instead of reusing it.
+#
 # Usage:
 #   ./tools/diff_matrix.sh            # run the gate
 #   ./tools/diff_matrix.sh --keep     # keep per-config matrix logs
 #
 # Environment:
-#   IOLINKI_DIFF_DIR   build root (default: <repo>/build/diff)
+#   IOLINKI_MATRIX_DIR build trees, shared with tools/build_matrix.sh
+#                      (default: <repo>/build/matrix)
+#   IOLINKI_DIFF_DIR   gate artifacts: per-config logs and transcripts
+#                      (default: <repo>/build/diff)
 #   JOBS               parallel build jobs (default: nproc)
 
 set -uo pipefail
@@ -36,8 +51,9 @@ set -uo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=tools/matrix_configs.sh
 . "$ROOT/tools/matrix_configs.sh"
-BUILD_ROOT="${IOLINKI_DIFF_DIR:-$ROOT/build/diff}"
-TRACE_ROOT="$BUILD_ROOT/traces"
+MATRIX_ROOT="${IOLINKI_MATRIX_DIR:-$ROOT/build/matrix}"
+DIFF_ROOT="${IOLINKI_DIFF_DIR:-$ROOT/build/diff}"
+TRACE_ROOT="$DIFF_ROOT/traces"
 if [ -z "${JOBS:-}" ]; then
     JOBS="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
 fi
@@ -45,7 +61,7 @@ fi
 KEEP=0
 
 usage() {
-    sed -n '3,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '3,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -66,18 +82,32 @@ if [ "${#CONFIGS[@]}" -eq 0 ]; then
     exit 1
 fi
 
-mkdir -p "$BUILD_ROOT"
+mkdir -p "$DIFF_ROOT"
 STATUS=0
+
+missing=()
+for cfg in "${CONFIGS[@]}"; do
+    [ -d "$MATRIX_ROOT/$cfg" ] || missing+=("$cfg")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+    echo "diff gate: no build tree for ${missing[*]} in $MATRIX_ROOT; building instead of reusing (standalone run)"
+fi
 
 for cfg in "${CONFIGS[@]}"; do
     printf '%-18s ' "$cfg"
     keep_flag=()
     [ "$KEEP" -eq 1 ] && keep_flag=(--keep)
-    if ! IOLINKI_MATRIX_DIR="$BUILD_ROOT" JOBS="$JOBS" \
-        "$ROOT/tools/build_matrix.sh" --only "$cfg" "${keep_flag[@]}" \
-        >"$BUILD_ROOT/$cfg.matrix.log" 2>&1; then
+    origin="reused tree"
+    reuse_flag=(--reuse-tree)
+    if [ ! -d "$MATRIX_ROOT/$cfg" ]; then
+        origin="built here"
+        reuse_flag=()
+    fi
+    if ! IOLINKI_MATRIX_DIR="$MATRIX_ROOT" JOBS="$JOBS" \
+        "$ROOT/tools/build_matrix.sh" --only "$cfg" "${reuse_flag[@]}" "${keep_flag[@]}" \
+        >"$DIFF_ROOT/$cfg.matrix.log" 2>&1; then
         echo "BUILD/TEST FAILED"
-        tail -20 "$BUILD_ROOT/$cfg.matrix.log" | sed 's/^/    /'
+        tail -20 "$DIFF_ROOT/$cfg.matrix.log" | sed 's/^/    /'
         STATUS=1
         continue
     fi
@@ -87,7 +117,7 @@ for cfg in "${CONFIGS[@]}"; do
     # 测试失败必须让门禁变红：失败的二进制也可能会写出一份（空/半截）
     # transcript，静默忽略就会把"逐字节一致"变成空比较。
     if ! (
-        cd "$BUILD_ROOT/$cfg/tests" || exit 1
+        cd "$MATRIX_ROOT/$cfg/tests" || exit 1
         for test_bin in test_*; do
             [ -x "$test_bin" ] || continue
             if ! IOLINK_DIFF_TRACE="$TRACE_ROOT/$cfg/$test_bin.txt" "./$test_bin" \
@@ -102,7 +132,7 @@ for cfg in "${CONFIGS[@]}"; do
         continue
     fi
     count="$(find "$TRACE_ROOT/$cfg" -name '*.txt' | wc -l)"
-    echo "ok (${count} transcripts)"
+    echo "ok (${count} transcripts, ${origin})"
 done
 
 BASE="$TRACE_ROOT/$BASELINE"

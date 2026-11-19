@@ -142,7 +142,7 @@ the context (see docs/MEMORY_GUIDE.md).
   vtable is the source of truth.
 - Verification: structural configurations are built by
   `tools/build_matrix.sh`; the byte-exact differential gate
-  (`tools/diff_matrix.sh`) compares `host_default` against
-  `host_default_release`; demoted switches are covered by expected-frame tests
+  (`tools/diff_matrix.sh`) compares `host_smp_split` against
+  `host_default`; demoted switches are covered by expected-frame tests
   in the default suite (`tests/test_capability.c`,
   `tests/test_system_commands.c`, ...).
