@@ -83,12 +83,11 @@ and silently drop behaviour.
 1. Read the upstream commit and the spec section it claims to implement
    (`git show upstream/develop -- <path>`, then check the bundled V1.1.5 PDF).
 2. Decide whether the behaviour is already present, spec-mandated, or
-   fork-private. `docs/UPSTREAM_DIVERGENCE.md` lists the known deviations.
+   fork-private. `CHANGELOG.md` records what has already been adopted.
 3. Re-implement the behaviour against **this** codebase — do not copy a diff.
    Upstream's context layout, storage API and transport differ.
 4. Add or extend a regression test in `tests/`.
-5. Record it in `CHANGELOG.md`; update `docs/UPSTREAM_DIVERGENCE.md` if it
-   changes a spec-level behaviour or closes a divergence.
+5. Record it in `CHANGELOG.md`, which is the only divergence record.
 
 ### Sending a fix upstream
 
@@ -105,5 +104,4 @@ Still possible and encouraged for self-contained spec corrections:
 | :--- | :--- |
 | `AGENTS.md` | current; agent rules for this repo |
 | `docs/MAINTENANCE.md` | current; this file |
-| `docs/UPSTREAM_DIVERGENCE.md` | historical divergence inventory; not a sync plan |
 | `docs/SPEC_CONFORMANCE.md` | current; feature -> implementation -> test matrix |

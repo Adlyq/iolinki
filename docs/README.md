@@ -28,8 +28,6 @@ stack is [iolinki-master](https://github.com/w1ne/iolinki-master).
 - **[TESTING](TESTING.md)** — unit, differential, matrix and virtual-master gates
 - **[CONTRIBUTING](CONTRIBUTING.md)** — workflow and commit conventions
 - **[MAINTENANCE](MAINTENANCE.md)** — branch model, releases and upstream adoption
-- **[UPSTREAM_DIVERGENCE](UPSTREAM_DIVERGENCE.md)** — divergence inventory against
-  `upstream/develop` (reference only, not a sync plan)
 
 ## Security and evidence
 

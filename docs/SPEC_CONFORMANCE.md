@@ -141,38 +141,6 @@ must be reachable from this document by case ID, test file or test function.
 | Access Locks read/write, DS lock | PASS | `test_ident_indices`, `test_ds` |
 | Parameter lock (bit 0) enforcement | PASS | `test_parameter_lock_blocks_tag_write` |
 
-## Conformance closures
-
-`tests/test_spec_conformance.c` now passes; it pins the behaviour that was
-previously missing:
-
-- 0x000A/0x000B are reserved (VendorID/DeviceID live in DPP1).
-- ErrorCount (0x0020) returns the summed DLL error counters.
-- ProductURI (0x001B) is served read-only.
-- ProcessDataInput/Output (0x0028/0x0029) return the last valid PD data: PDin
-  answers `0x80 0x11` while the DLL flags it invalid, PDout answers `0x80 0x11`
-  until a frame has been received; a device without PD answers with an empty
-  positive response.
-- A WRITE to a known read-only object answers `0x80 0x23`; an unknown index
-  keeps `0x80 0x11`.
-- DeviceAccessLocks bit 0 blocks parameter writes (tags and DPP2), not reads or
-  Data Storage downloads.
-- Identification strings are clamped to their object fixedLength (64, SerialNumber 16,
-  ProductURI up to 100, tags 32).
-- DeviceStatus (0x0024) follows Table B.13: Error → 4 (Failure), Warning → 2
-  (Out-of-Spec) or 1 (Maintenance), Notification → 0; priority order is
-  Failure > Functional-Check > Maintenance > Out-of-Spec.
-- DetailedDeviceStatus (0x0025) lists only Error/Warning events (no
-  Notifications), per B.2.22. Subindex 0 returns the whole list; element access
-  through subindex 1..n is a device extension (B.2.22 describes subindex 0
-  only).
-- A StatusCode write confirms only the event slots that were presented while
-  frozen; events queued during the readout survive to the next round.
-- A re-raise inside the 1 s repeat window is deferred (not dropped), and a full
-  pending table is observable through `iolink_events_get_dropped_count()`.
-- An ISDU write-channel FlowCTRL `0x1F` (ABORT) resets the transport to Idle
-  (Table 52), like the read channel.
-
 ## Deferred / known limitations
 
 - **ErrorCount reset semantics** (B.2.20): the stack sums the DLL communication
@@ -197,12 +165,10 @@ previously missing:
   therefore non-conformant; that switch is for trimming, not for publishing an
   empty `Index_List`.
 
-## Spec-mandated corrections
+## Spec points worth calling out
 
 - SystemCommand `Param*` codes use Table B.9 `0x01-0x06`; `0x84` is reserved.
-  (Historically upstream used `0x05-0x09`/`0x97`, but that comparison is no
-  longer maintained; the PDF is the reference.) Pinned by
-  `test_protocol_constants` / `test_system_commands`.
+  Pinned by `test_protocol_constants` / `test_system_commands`.
 - `PAR{M}_SETINVALID=0x40` / `PAR_SETINCONSIST=0x41` per Table C.1.
 - DPP1 `MinCycleTime` (0x02) is encoded as Table B.3 `time base | multiplier`
   and clamped to the 0.4 ms minimum; raw 0.1 ms units are only valid inside
@@ -213,8 +179,7 @@ previously missing:
   `test_protocol_constants` and `test_conformance_gaps` (SDCI_TC_0092).
 - `0x83` is **Back-to-box** (10.7.5): restore delivery values and stop
   communication after the ISDU response, not a plain "restore app defaults".
-- Event codes: 0x1800-0x18FF are vendor-specific (Table D.1); the conflicting
-  `APP_*`/`HW_*` duplicates and the stale `COMM_ERR_*` 0x18xx aliases are gone.
+- Event codes: 0x1800-0x18FF are vendor-specific (Table D.1).
   `IOLINK_EVENT_COMM_*` is the single vendor communication-event set.
 - ISDU "busy" answers use `SERV_NOTAVAIL` 0x20, not 0x30 (`PAR_VALOUTOFRNG`).
 
