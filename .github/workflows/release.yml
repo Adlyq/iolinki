@@ -1,11 +1,17 @@
 name: Create Release
 
+# Tag-only by design. Pull requests are covered by `ci.yml` (the build-matrix
+# job runs tools/test_install_consumer.sh) and by `iodd.yml` (the official XSD
+# check and tools/test_iodd_cli.py, which also exercises
+# tools/package_release_iodds.py). This chain builds the STM32G0 firmware, runs
+# the LabWired recipes, downloads the official IODD package and packages the
+# release; that belongs to a tag, not to every PR. `workflow_dispatch` runs the
+# same chain from a branch with TAG=verification-only.
 on:
   push:
     tags:
       - 'v*'
-  pull_request:
-    branches: [own_dev, develop]
+  workflow_dispatch:
 
 permissions:
   contents: write
